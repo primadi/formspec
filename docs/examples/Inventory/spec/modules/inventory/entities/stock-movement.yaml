@@ -1,0 +1,89 @@
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: stock-movement
+  module: inventory
+  description: Pergerakan stok — masuk, keluar, transfer antar gudang
+spec:
+  version: v1
+  characteristics: [transaction]
+
+  fields:
+    - name: number
+      type: string
+      natural_key: true
+      immutable: true
+      unique: true
+      index: true
+      natural_key_rule:
+        strategy: sequence
+        format: "MOV-{year}-{seq:06d}"
+        prefix: { value: "MOV" }
+        reset: yearly
+    - name: type
+      type: enum
+      enum_values: [in, out, transfer]
+      index: true
+      immutable: true
+    - name: warehouse_id
+      type: relation
+      relation: { type: belongs_to, resource: warehouse }
+      immutable: true
+    - name: reference
+      type: string
+      description: Dokumen sumber — "ORD-2026-000123", "PO-2026-000045"
+    - name: status
+      type: enum
+      enum_values: [draft, confirmed, applied]
+      index: true
+    - name: lines
+      type: child
+      child:
+        storage: table
+        sequence_field: line_number
+        fields:
+          - { name: line_number, type: integer, immutable: true }
+          - { name: product_id, type: uuid, rules: [required, {exists: product}] }
+          - { name: quantity, type: decimal, rules: [required, positive] }
+          - { name: unit, type: string }
+          - { name: notes, type: string }
+
+  state_machine:
+    field: status
+    initial: draft
+    transitions:
+      - { from: draft, to: confirmed, via: confirm }
+      - { from: confirmed, to: applied, via: apply,
+          guard: "not would_cause_negative_stock(resource)" }
+
+  actions:
+    - name: confirm
+      description: Konfirmasi movement — belum mempengaruhi stok
+      required_permission: stock-movements.confirm
+      audit: true
+      impl: { type: script_ref, ref: inventory/movement_confirm }
+
+    - name: apply
+      description: Terapkan movement ke stok — cek & update stock level
+      required_permission: stock-movements.apply
+      audit: true
+      emits: stock-applied
+      uses:
+        primitives: [lock]
+      conditions:
+        - script: "resource.status == 'confirmed'"
+          message: "Hanya movement confirmed yang bisa di-apply"
+      impl: { type: script_ref, ref: inventory/movement_apply }
+
+  events:
+    - name: stock-applied
+      description: Movement berhasil diterapkan — update stock level
+      publish:
+        durable: true
+      payload:
+        fields: [id, number, type, warehouse_id]
+      deliver:
+        - channel: reliable_event
+          target: { resource: inventory.stock-level, action: update }
+          retry: { max: 5, backoff: exponential }
+          idempotency_key: "stock-level.{id}"

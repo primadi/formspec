@@ -1,0 +1,28 @@
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: product
+  module: inventory
+  description: Produk yang di-stock
+spec:
+  version: v1
+  characteristics: [master]
+
+  fields:
+    - name: sku
+      type: string
+      natural_key: true
+      immutable: true
+      unique: true
+      index: true
+      rules: [required]
+    - name: name
+      type: string
+      rules: [required]
+    - name: unit
+      type: enum
+      enum_values: [pcs, kg, liter, box, pack]
+      default: pcs
+    - name: is_active
+      type: boolean
+      default: true

@@ -1,0 +1,24 @@
+apiVersion: forma.dev/v1alpha1
+kind: Service
+metadata:
+  name: payment-gateway
+  module: billing
+  description: Wrapper Midtrans/Xendit (mockup saat dev)
+spec:
+  version: v1
+
+  actions:
+    - name: create-session
+      required_permission: payment-gateway.create-session
+      uses:
+        config: { read: [billing.midtrans.server_key, billing.midtrans.api_url] }
+      impl: { type: native, ref: "PaymentGateway.CreateSession" }
+
+    - name: webhook
+      description: Callback dari gateway — verifikasi lalu teruskan ke order
+      required_permission: payment-gateway.webhook
+      idempotent: true
+      idempotency_key: { from: param, field: event_id }
+      uses:
+        resources: [order.mark-paid]
+      impl: { type: native, ref: "PaymentGateway.Webhook" }

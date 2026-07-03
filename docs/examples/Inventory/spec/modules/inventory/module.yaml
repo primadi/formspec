@@ -1,0 +1,10 @@
+apiVersion: forma.dev/v1alpha1
+kind: Module
+metadata:
+  name: inventory
+  description: Multi-warehouse inventory management
+spec:
+  version: 1.0.0
+  vendor: forma-dev
+  depends:
+    - module: forma/core

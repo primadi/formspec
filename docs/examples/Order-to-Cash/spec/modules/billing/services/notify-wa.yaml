@@ -1,0 +1,14 @@
+apiVersion: forma.dev/v1alpha1
+kind: Service
+metadata:
+  name: notify-wa
+  module: billing
+  description: Wrapper WhatsApp Business API
+spec:
+  version: v1
+
+  actions:
+    - name: send
+      call: async
+      required_permission: notify-wa.send
+      impl: { type: native, ref: "NotifyWA.Send" }

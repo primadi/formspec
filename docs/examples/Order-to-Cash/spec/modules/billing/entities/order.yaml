@@ -1,0 +1,122 @@
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: order
+  module: billing
+  description: Order pelanggan dari checkout sampai lunas
+spec:
+  version: v1
+  characteristics: [transaction]
+
+  auth: { required: true, strategies: [token] }
+
+  fields:
+    - name: number
+      type: string
+      natural_key: true
+      immutable: true
+      unique: true
+      index: true
+      natural_key_rule:
+        strategy: sequence
+        format: "{prefix}-{year}-{seq:06d}"
+        prefix: { config: billing.order_number_prefix, default: "ORD" }
+        reset: yearly
+    - name: customer_id
+      type: relation
+      relation: { type: belongs_to, resource: customer }
+    - name: items
+      type: child
+      child:
+        storage: jsonb
+        sequence_field: line_number
+        fields:
+          - { name: line_number, type: integer, immutable: true }
+          - { name: product_id, type: uuid, rules: [required, {exists: product}] }
+          - { name: quantity, type: integer, rules: [required, positive] }
+          - { name: price, type: decimal, rules: [required, positive] }
+    - name: total
+      type: decimal
+      rules: [required, positive]
+    - name: member_tier
+      type: enum
+      enum_values: [regular, silver, gold]
+    - name: status
+      type: enum
+      enum_values: [draft, awaiting_payment, paid, fulfilled, void]
+      index: true
+    - name: gateway_reference
+      type: string
+    - name: paid_at
+      type: datetime
+
+  state_machine:
+    field: status
+    initial: draft
+    transitions:
+      - { from: draft, to: awaiting_payment, via: checkout,
+          guard: "len(resource.items) > 0 and resource.total > 0" }
+      - { from: awaiting_payment, to: paid, via: mark-paid }
+      - { from: [draft, awaiting_payment], to: void, via: void }
+
+  actions:
+    - name: update
+      conditions:
+        - script: "resource.status == 'draft'"
+          message: "Order yang sudah checkout tidak bisa diedit — gunakan 'void'"
+
+    - name: delete
+      disabled: true
+
+    - name: checkout
+      description: Generate nomor order & buat sesi pembayaran
+      required_permission: orders.checkout
+      audit: true
+      conditions:
+        - script: "not customer.load(resource.field.customer_id).field.is_blacklisted"
+          message: "Customer diblokir, tidak bisa checkout"
+      uses:
+        resources: [payment-gateway.create-session, customer.find]
+        config: { read: [billing.order_number_prefix] }
+        primitives: [lock]
+      impl: { type: script_ref, ref: billing/order_checkout }
+
+    - name: mark-paid
+      description: Transisi ke paid — dipanggil oleh payment-gateway.webhook
+      required_permission: orders.mark-paid
+      idempotent: true
+      idempotency_key: { from: param, field: event_id }
+      audit: true
+      emits: paid
+      params:
+        validate:
+          - { field: gateway_reference, rules: [required] }
+      impl: { type: script_ref, ref: billing/order_mark_paid }
+
+    - name: update-discount-rule
+      description: Admin mengubah persen diskon satu tier — invalidasi cache
+      required_permission: orders.manage-discount
+      audit: true
+      uses:
+        db: { write: [billing] }
+        primitives: [cache]
+      impl: { type: native, ref: "OrderResource.UpdateDiscountRule" }
+
+  events:
+    - name: paid
+      description: Order berhasil dibayar
+      publish:
+        durable: true
+      payload:
+        fields: [id, number, total, customer_id, paid_at]
+      deliver:
+        - channel: audit_log
+        - channel: websocket
+          target: { scope: tenant }
+        - { channel: queue, job: generate-receipt }
+        - { channel: queue, job: send-receipt-email }
+        - channel: reliable_event
+          target: { resource: gl.journal-entry, action: create }
+          retry: { max: 10, backoff: exponential, initial_delay_ms: 1000 }
+          dead_letter: { resource: failed-event, action: create }
+          idempotency_key: "order.paid.{id}"

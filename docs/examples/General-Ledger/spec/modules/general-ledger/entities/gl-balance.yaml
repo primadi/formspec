@@ -1,0 +1,40 @@
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: gl-balance
+  module: general-ledger
+  description: Saldo per akun per periode — di-update otomatis via reliable event
+spec:
+  version: v1
+  characteristics: [summary]
+
+  fields:
+    - name: account_id
+      type: relation
+      relation: { type: belongs_to, resource: account }
+      immutable: true
+    - name: period
+      type: string
+      immutable: true
+      index: true
+      description: Periode — "2026-07"
+    - name: currency
+      type: string
+      immutable: true
+    - name: opening_balance
+      type: decimal
+    - name: debit_movement
+      type: decimal
+      default: 0
+    - name: credit_movement
+      type: decimal
+      default: 0
+    - name: closing_balance
+      type: decimal
+      description: computed — opening + debit - credit (asset) atau opening + credit - debit (liability/revenue)
+
+  actions:
+    - name: update
+      description: Dipanggil outbox worker saat journal-posted/reversed
+      idempotent: true
+      impl: { type: script_ref, ref: general-ledger/gl_balance_update }

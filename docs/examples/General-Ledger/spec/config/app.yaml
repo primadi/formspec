@@ -1,0 +1,11 @@
+apiVersion: forma.dev/v1alpha1
+kind: Config
+metadata:
+  name: app
+  module: core
+  description: App-level config untuk General Ledger
+spec:
+  keys:
+    workspace_name:
+      type: string
+      default: "default"

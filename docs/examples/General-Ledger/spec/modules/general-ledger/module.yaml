@@ -1,0 +1,13 @@
+apiVersion: forma.dev/v1alpha1
+kind: Module
+metadata:
+  name: general-ledger
+  description: Double-entry accounting core
+spec:
+  version: 1.0.0
+  vendor: forma-dev
+  depends:
+    - module: forma/core
+  config:
+    default_currency: IDR
+    fiscal_year_start: "01-01"

@@ -1,0 +1,38 @@
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: gl-balance
+  module: gl
+  description: Saldo per akun per periode — system-managed
+spec:
+  version: v1
+  characteristics: [summary]
+
+  fields:
+    - name: account_id
+      type: uuid
+      immutable: true
+      index: true
+    - name: period
+      type: string
+      immutable: true
+      index: true
+    - name: currency
+      type: string
+      immutable: true
+    - name: opening_balance
+      type: decimal
+    - name: debit_movement
+      type: decimal
+      default: 0
+    - name: credit_movement
+      type: decimal
+      default: 0
+    - name: closing_balance
+      type: decimal
+
+  actions:
+    - name: update
+      description: Dipanggil outbox worker — update saldo
+      idempotent: true
+      impl: { type: script_ref, ref: gl/gl_balance_update }

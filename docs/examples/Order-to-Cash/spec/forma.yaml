@@ -1,0 +1,9 @@
+apiVersion: forma.dev/v1alpha1
+kind: App
+metadata:
+  name: tokoku
+  description: Mini order-to-cash — contoh kanonik Forma
+spec:
+  version: 1.0.0
+  vendor: acme-corp
+  modules: [billing, notifications, gl]

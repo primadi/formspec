@@ -1,0 +1,9 @@
+apiVersion: forma.dev/v1alpha1
+kind: Module
+metadata:
+  name: billing
+  description: Modul billing — order, customer, payment gateway
+spec:
+  version: 1.0.0
+  depends:
+    - module: forma/core

@@ -1,0 +1,33 @@
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: account
+  module: general-ledger
+  description: Chart of accounts — satu bagan akun standar per workspace
+spec:
+  version: v1
+  characteristics: [reference]
+
+  fields:
+    - name: code
+      type: string
+      natural_key: true
+      immutable: true
+      unique: true
+      index: true
+      description: Kode akun — "1-10001" (Kas), "4-40001" (Pendapatan)
+    - name: name
+      type: string
+      rules: [required]
+      description: Nama akun — "Kas", "Pendapatan Penjualan"
+    - name: type
+      type: enum
+      enum_values: [asset, liability, equity, revenue, expense]
+      index: true
+    - name: normal_balance
+      type: enum
+      enum_values: [debit, credit]
+      description: Saldo normal — asset=debit, revenue=credit
+    - name: is_active
+      type: boolean
+      default: true

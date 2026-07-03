@@ -1,0 +1,15 @@
+apiVersion: forma.dev/v1alpha1
+kind: Config
+metadata:
+  name: inventory
+  module: inventory
+  description: Konfigurasi Inventory
+spec:
+  keys:
+    default_warehouse:
+      type: string
+      description: Gudang default untuk auto-movement dari order
+    allow_negative_stock:
+      type: bool
+      default: false
+      description: Jika true, stok boleh negatif (tidak direkomendasikan)
