@@ -4,7 +4,7 @@
 **License:** Creative Commons CC0
 **Repository:** github.com/forma-dev/spec
 **Supersedes:** v0.1.9 (archived)
-**Governed by:** Forma Foundation Document v1.9 (Decisions D1–D35)
+**Governed by:** Forma Foundation Document v1.1 (Decisions D1–D16)
 
 > This document defines the minimum specification required to build a working
 > Forma-compatible implementation. Features not listed here are defined in
@@ -56,11 +56,9 @@ is the minimum subset required for a working implementation supporting:
 ### 1.1 Not in Core Basic
 
 Deferred to **Core Extended**: hooks, validation levels 4–6, streaming event
-delivery, storage/file field types (note: the `ctx.storage` primitive for
-object storage read/write IS in Core Basic — see §4.3; only declaring a
-`type: storage` field on an Entity is Extended), notification & webhook,
-module registry, load balancing & circuit breaker, i18n, query builder,
-frontend kinds (Page, Form, Table, Dashboard, Menu).
+delivery, storage/file fields, notification & webhook, module registry, load
+balancing & circuit breaker, i18n, query builder, frontend kinds (Page, Form,
+Table, Dashboard, Menu).
 
 Defined in **separate specs**: Control Plane governance (`forma-control.md`),
 inter-plane protocol (`forma-plane-protocol.md`).
@@ -190,11 +188,6 @@ NOT kinds. Users cannot define them. Accessed only via `ctx`:
 primitives (mail, notify, scheduler, seed) are official modules — the closed
 set never grows for convenience. (Foundation D5, D12)
 
-`ctx.storage` (the primitive for reading/writing objects to blob storage)
-is Core Basic. Declaring a `type: storage` field on an Entity — which would
-expose a file upload/download surface on the auto-generated API — is
-Extended.
-
 ### 4.4 `kind: App`
 
 The root manifest of a project. An App is the unit of **deployment, trust
@@ -305,10 +298,6 @@ myapp/
       services/tax-calculator.yaml
       scripts/invoice_send.star   # script (Starlark)
       assets/                     # static files, custom UI bundles
-  impl/                           # Go source for impl: native/compiled (build-time only)
-    billing/
-      tax_calculator.go
-      invoice_handler.go
   config/
     app.yaml                      # kind: Config
 ```
@@ -316,26 +305,6 @@ myapp/
 Folder names above are convention, not contract: loaders MUST discover
 manifests by scanning `*.yaml`, not by path. The only hard rule is the three
 file types (`.yaml`, `.star`, `assets/*`).
-
-### 5.1 `impl/` directory (build-time only)
-
-`impl/` contains Go source code for `impl: native` and `impl: compiled`
-handlers. It is **build-time only** — committed to the repository but
-**excluded from deployment artifacts**.
-
-| Directory | Git | Deploy artifact | Contents |
-|---|---|---|---|
-| `spec/` (manifests + `.star`) | ✅ committed | ✅ included | YAML manifests, Starlark scripts, assets |
-| `impl/` | ✅ committed | ❌ excluded | Go source for native/compiled handlers |
-| `.forma/` | ❌ git-ignored | ❌ excluded | Compiled output (`.forma/build/`), cache |
-
-During `forma build`, `impl/` is compiled and the resulting binary is fused
-into the `forma-resource` runtime. During `forma deploy`, only `spec/` and
-the compiled binary are shipped — `impl/` source is never sent to production.
-
-During `forma dev`, `impl/` is compiled on-the-fly and hot-reloaded when
-source files change (alongside `.star` scripts which are natively
-hot-updatable).
 
 ## 6. Compilation & Process Model
 
@@ -372,46 +341,6 @@ Resolution priority: `native > compiled > sidecar > script_ref > script`.
 Sidecar trust model equals native — identity proxy and Signed Query Registry
 apply regardless of language (Foundation D6).
 
-### 6.2 `ref` resolution for `native` and `compiled`
-
-For `native` and `compiled` types, `ref` uses the format
-`{TypeName}.{MethodName}`:
-
-```yaml
-impl: { type: native, ref: "PaymentGateway.CreateSession" }
-```
-
-The framework resolves this by scanning all `*.go` files under `impl/` for
-an exported type `PaymentGateway` with an exported method `CreateSession`
-matching the action's signature. Resolution rules:
-
-1. **Type name** (`PaymentGateway`) MUST be unique across the entire `impl/`
-   tree — duplicate type names across packages are a compile error.
-2. **Method name** (`CreateSession`) MUST be an exported method on that type.
-3. **Method signature** MUST match the action's declared params and return
-   types (validated at `forma build` time).
-4. The file path is irrelevant — only the Go type + method name matter.
-   Developers MAY organize `impl/` files however they choose.
-
-For `compiled` (Go plugin / WASM), the same resolution applies, with the
-additional requirement that the plugin binary exports the type.
-
-### 6.3 Choosing `script_ref` vs `native` (non-normative)
-
-| Kebutuhan | Gunakan | Alasan |
-|---|---|---|
-| Update field + save | `script_ref` | Ringan, hot-updatable dari admin panel |
-| Orchestration ringan (panggil 1-2 resource lain) | `script_ref` | Cukup ekspresif, tidak perlu compile |
-| Validasi sederhana | `script_ref` | `conditions` + script handler |
-| HTTP call ke API eksternal | `native` | Sandbox Starlark tidak punya network |
-| Komputasi / business rule kompleks | `native` | Performa, type safety, debugging |
-| File generation (PDF, image) | `native` | Butuh library Go |
-| Integrasi dengan sistem legacy | `native` atau `sidecar` | Tergantung ekosistem |
-
-Litmus test: kalau handler hanya membaca/menulis field resource sendiri
-atau memanggil resource Forma lain, `script_ref` cukup. Kalau butuh
-network, filesystem, atau library eksternal, harus `native`.
-
 ## 7. Config
 
 Config is a manifest, not a dotenv file:
@@ -431,13 +360,6 @@ spec:
 Values are resolved per environment; secrets and environment definitions are
 governed by Control Plane (`forma-control.md`). Scripts read via
 `ctx.config.get("invoice_due_days")` — never via raw env vars.
-
-**Environment awareness:** the active environment name is available at
-runtime via `ctx.environment` (e.g. `"dev"`, `"staging"`, `"production"`).
-Service-to-Mockup routing is resolved by the framework based on
-environment-scoped config (see Core Extended: `kind: Mockup`). Handler code
-MUST NOT branch on `ctx.environment` — the framework routes to mockup or
-real connector transparently.
 
 ## 8. Tenancy Model — Workspace
 
@@ -579,20 +501,6 @@ Decision test: does it have meaning outside the parent? Yes → relation.
 | Direct query/index on child | no | yes |
 | PK | — | composite (parent_id, sequence) — never UUID |
 | Best for | few, simple items | many items, direct queries |
-
-**When to use `jsonb` vs `table`:**
-
-- **`jsonb`** (default) — child items are few (<100 per parent record),
-  always accessed together with the parent, and never queried independently.
-  Examples: order → line items, invoice → tax breakdown.
-
-- **`table`** — child items are many (hundreds+ per parent) or need
-  independent queries, indexes, or aggregation. Examples: journal entry →
-  lines (query by account_id across all journals), stock movement → lines
-  (aggregate quantity by product).
-
-Rule of thumb: if you'd ever write `SELECT ... FROM child WHERE ...` without
-joining through the parent, use `table`.
 
 ### 10.4 Natural key & generation
 
@@ -843,11 +751,6 @@ event belong here in `deliver`; steps *inside* an action belong in its
 `impl`. The deliver vocabulary is closed — new business cases never add
 YAML syntax.
 
-**Cross-module target qualification:** targets referencing a resource in
-another module MUST use the fully qualified form `{module}.{resource}`
-(e.g. `gl.journal-entry`). Targets within the same module MAY omit the
-module prefix; the loader resolves unqualified names to the current module.
-
 Realtime per-entity subscription convention (D10/PocketBase): Extended.
 
 ### 12.4 Outbox (normative)
@@ -884,10 +787,6 @@ Normative rules:
   (e.g. billing promises a journal entry) stay in the publisher's
   `deliver`; optional, third-party, or added-later reactions are
   Subscriptions.
-- **Resource qualification:** `on.resource` follows the same rules as
-  `deliver` targets (§12.3): cross-module references MUST use
-  `{module}.{resource}` (e.g. `billing.order`); same-module references
-  MAY omit the module prefix.
 - **Compiled fan-out:** `forma describe entity <name>` and the admin panel
   MUST display the merged consequence map — publisher `deliver` plus every
   Subscription targeting it, across all modules. Scattered files never mean
@@ -1009,6 +908,28 @@ kvstore outside declared module/scope → `KVSTORE_ACCESS_DENIED` (keys
 auto-namespaced `{tenant}:{module}:{key}`); any other undeclared `ctx.*` →
 `USES_VIOLATION`. Config writes from code are always audit-logged.
 Finer-grained/pattern-based infrastructure scoping: Extended.
+
+Scoping and violation rules (D45/D46):
+
+- `uses.db` **defaults to the module's own tables**; cross-module access
+  MUST be declared and appears in the consent footprint; **cross-module
+  `write` is high-risk consent** — implementations MUST present it
+  distinctly (never a reflex tap).
+- A `USES_VIOLATION` at runtime triggers, atomically: request blocked,
+  alert raised, **offending module auto-suspended**, incident recorded in
+  audit. Probing for another module's data existence is itself a
+  violation.
+- Module-created tables (`kind: Migration` custom DDL) MUST carry a
+  `tenant_id` column and live in their category schema — free structure,
+  same guarantees (backup, isolation, audit). Persistent state outside
+  `ctx.*` does not exist in a conforming implementation; sidecars are
+  stateless (ephemeral scratch only).
+- For `native`, ctx-layer enforcement is best-effort (in-process full
+  trust, D6 — credentials brokered, never exposed to handlers); the real
+  control is provenance: **impl types are gated by trust tier** —
+  unverified modules: sandboxed impls only (`script`, `script_ref`,
+  WASM `compiled`); Verified Badge: + `sidecar`; verified + security scan
+  + layered approval (Control §3): + `native`.
 
 ### 15.4 Workspace isolation
 
@@ -1241,7 +1162,9 @@ is a Platform Operator concern.
 
 ## 23. forma.core Resources
 
-All implementations MUST provide: `workspace`, `user`, `role`,
+All implementations MUST provide: `workspace`, `user`, `app-membership`
+(per-app membership + role assignments — D37; manageable by in-app admin
+roles holding `core.members.*` permissions), `role`,
 `role-assignment`, `api-key`, `session`, `job`, `audit-log` (append-only,
 framework-written, read-only API), `setting` (entities); `health`,
 `metrics` (services). Notable shapes: `job` tracks async execution

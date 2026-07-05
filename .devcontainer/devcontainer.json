@@ -9,7 +9,8 @@
 	"customizations": {
 		"vscode": {
 			"extensions": [
-				"Vizards.deepseek-v4-for-copilot"
+				"Vizards.deepseek-v4-for-copilot",
+				"ltmoerdani.opencode-copilot-chat"
 			]
 		}
 	}
