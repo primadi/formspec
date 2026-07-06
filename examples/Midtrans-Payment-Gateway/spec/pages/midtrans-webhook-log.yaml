@@ -1,0 +1,16 @@
+# Webhook log viewer — audit trail for all incoming payment webhooks
+apiVersion: forma.dev/v1alpha1
+kind: Page
+metadata:
+  name: midtrans-webhook-log
+  module: billing
+  description: Log webhook yang diterima dari Midtrans
+spec:
+  route: /settings/payment/midtrans/webhooks
+  title: "Log Webhook Midtrans"
+  icon: "webhook"
+  permissions: [midtrans.view-webhook-log]
+  blocks:
+    - table:
+        ref: midtrans-webhook-table
+        entity: webhook_log

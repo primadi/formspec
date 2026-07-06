@@ -1,0 +1,17 @@
+# Orders by status widget — pie/bar chart
+apiVersion: forma.dev/v1alpha1
+kind: Widget
+metadata:
+  name: orders-by-status
+  module: billing
+  description: Widget chart distribusi order per status
+spec:
+  title: "Order per Status"
+  type: chart
+  entity: order
+  query: "1 = 1"
+  refresh_secs: 300
+  config:
+    chart_type: pie
+    group_by: status
+    aggregate: count

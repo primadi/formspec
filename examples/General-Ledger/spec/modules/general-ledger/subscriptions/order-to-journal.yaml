@@ -1,0 +1,11 @@
+apiVersion: forma.dev/v1alpha1
+kind: Subscription
+metadata:
+  name: order-to-journal
+  module: general-ledger
+  description: Auto-create journal entry setiap order dibayar
+spec:
+  on: { resource: billing.order, event: paid }
+  deliver:
+    - channel: queue
+      job: create-sales-journal

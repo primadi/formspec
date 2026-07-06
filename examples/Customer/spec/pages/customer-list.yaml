@@ -1,0 +1,16 @@
+# Customer list page — table view with search, filter, and row actions
+apiVersion: forma.dev/v1alpha1
+kind: Page
+metadata:
+  name: customer-list
+  module: billing
+  description: Halaman daftar pelanggan dengan pencarian dan filter
+spec:
+  route: /customers
+  title: "Pelanggan"
+  icon: "users"
+  permissions: [customers.list]
+  blocks:
+    - table:
+        ref: customer-table
+        entity: customer

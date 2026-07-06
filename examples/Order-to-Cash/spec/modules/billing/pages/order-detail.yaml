@@ -1,0 +1,27 @@
+# Order detail page — full view with items, payments, timeline
+apiVersion: forma.dev/v1alpha1
+kind: Page
+metadata:
+  name: order-detail
+  module: billing
+  description: Halaman detail order lengkap
+spec:
+  route: /app/orders/:id
+  title: "Order #{order.number}"
+  permissions: [orders.view]
+  blocks:
+    - form:
+        ref: order-view
+        entity: order
+        id: ":id"
+        mode: view
+    - table:
+        ref: order-items-table
+        entity: order_item
+        param:
+          order_id: ":id"
+    - table:
+        ref: order-payments-table
+        entity: payment
+        param:
+          order_id: ":id"

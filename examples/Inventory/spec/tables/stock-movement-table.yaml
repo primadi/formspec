@@ -1,0 +1,42 @@
+# Stock movement table — inbound/outbound movements
+apiVersion: forma.dev/v1alpha1
+kind: Table
+metadata:
+  name: stock-movement-table
+  module: inventory
+  description: Tabel mutasi stok — masuk/keluar
+spec:
+  entity: stock_movement
+  default_sort: "-movement_date"
+  page_size: 50
+  columns:
+    - field: movement_date
+      label: "Tanggal"
+      sortable: true
+      width: "120px"
+    - field: reference
+      label: "Referensi"
+      sortable: true
+    - field: type
+      label: "Tipe"
+      width: "80px"
+      align: "center"
+    - field: product_name
+      label: "Produk"
+    - field: warehouse_name
+      label: "Gudang"
+      width: "120px"
+    - field: quantity
+      label: "Qty"
+      width: "80px"
+      align: "right"
+  filters:
+    - field: "type"
+      label: "Tipe"
+      type: "select"
+    - field: "movement_date"
+      label: "Tanggal"
+      type: "date_range"
+    - field: "product_name"
+      label: "Produk"
+      type: "text"

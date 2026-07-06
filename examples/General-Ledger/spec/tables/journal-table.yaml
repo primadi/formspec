@@ -1,0 +1,40 @@
+# Journal entry table — general journal with debit/credit columns
+apiVersion: forma.dev/v1alpha1
+kind: Table
+metadata:
+  name: journal-table
+  module: general-ledger
+  description: Tabel jurnal umum — debit/kredit
+spec:
+  entity: journal_entry
+  default_sort: "-entry_date"
+  page_size: 50
+  columns:
+    - field: entry_date
+      label: "Tanggal"
+      sortable: true
+      width: "120px"
+    - field: reference
+      label: "Referensi"
+      sortable: true
+    - field: description
+      label: "Deskripsi"
+    - field: debit
+      label: "Debit"
+      width: "130px"
+      align: "right"
+    - field: credit
+      label: "Kredit"
+      width: "130px"
+      align: "right"
+  row_actions:
+    - action: "view"
+      label: "Detail"
+      icon: "eye"
+  filters:
+    - field: "entry_date"
+      label: "Tanggal"
+      type: "date_range"
+    - field: "reference"
+      label: "Referensi"
+      type: "text"

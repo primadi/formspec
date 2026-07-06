@@ -1,0 +1,13 @@
+# Subscription: listen for order checkout events → create payment session
+apiVersion: forma.dev/v1alpha1
+kind: Subscription
+metadata:
+  name: order-checkout-create-payment
+  module: billing
+  description: Saat order di-checkout, buat sesi pembayaran di Midtrans
+spec:
+  events:
+    - order.checkout
+  handler:
+    type: script_ref
+    ref: billing/midtrans_create_session

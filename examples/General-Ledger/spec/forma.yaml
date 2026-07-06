@@ -1,0 +1,9 @@
+apiVersion: forma.dev/v1alpha1
+kind: App
+metadata:
+  name: general-ledger
+  description: Double-entry accounting core — standalone app
+spec:
+  version: 1.0.0
+  vendor: forma-dev
+  modules: [general-ledger]

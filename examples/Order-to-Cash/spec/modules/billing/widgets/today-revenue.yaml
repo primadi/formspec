@@ -1,0 +1,18 @@
+# Today's revenue widget — metric card showing daily revenue
+apiVersion: forma.dev/v1alpha1
+kind: Widget
+metadata:
+  name: today-revenue
+  module: billing
+  description: Widget metrik pendapatan hari ini
+spec:
+  title: "Pendapatan Hari Ini"
+  type: metric
+  entity: payment
+  query: "status = 'success' AND paid_at >= today()"
+  refresh_secs: 60
+  config:
+    aggregate: sum
+    field: amount
+    format: currency
+    currency: IDR

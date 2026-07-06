@@ -1,0 +1,35 @@
+# Customer edit form — update existing customer (separate page)
+apiVersion: forma.dev/v1alpha1
+kind: Form
+metadata:
+  name: customer-edit
+  module: billing
+  description: Form edit pelanggan — full-page
+spec:
+  entity: customer
+  render:
+    mode: separate_page
+  sections:
+    - title: "Informasi Dasar"
+      fields:
+        - name: name
+          label: "Nama Lengkap"
+        - name: email
+          label: "Email"
+        - name: phone
+          label: "Telepon"
+    - title: "Klasifikasi"
+      fields:
+        - name: member_tier
+          label: "Tier Membership"
+        - name: is_blacklisted
+          label: "Blacklist"
+          help: "Pelanggan blacklist tidak bisa melakukan transaksi"
+    - title: "Catatan"
+      fields:
+        - name: notes
+          label: "Catatan"
+  submit:
+    label: "Update Pelanggan"
+    redirect: "/customers/{id}"
+    message: "Data pelanggan berhasil diperbarui"

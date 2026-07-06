@@ -1,0 +1,23 @@
+apiVersion: forma.dev/v1alpha1
+kind: Config
+metadata:
+  name: midtrans
+  module: billing
+  description: Konfigurasi Midtrans — nilai berbeda per environment
+spec:
+  keys:
+    mock_enabled:
+      type: bool
+      default: true
+      description: true = pakai mockup; false = konektor asli
+    server_key:
+      type: string
+      secret: true
+      description: Midtrans server key (sandbox atau live)
+    merchant_id:
+      type: string
+      description: Midtrans merchant ID
+    api_url:
+      type: string
+      default: "https://api.midtrans.com/v2"
+      description: Base URL Midtrans API

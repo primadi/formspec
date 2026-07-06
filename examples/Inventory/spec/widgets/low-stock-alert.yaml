@@ -1,0 +1,15 @@
+# Low stock alert widget — highlights items below minimum stock level
+apiVersion: forma.dev/v1alpha1
+kind: Widget
+metadata:
+  name: low-stock-alert
+  module: inventory
+spec:
+  title: "Stok Menipis"
+  type: table
+  entity: stock_balance
+  query: "quantity <= min_stock"
+  refresh_secs: 300
+  config:
+    display_fields: [product_name, warehouse_name, quantity, min_stock]
+    max_items: 20

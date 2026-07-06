@@ -1,0 +1,42 @@
+# Customer create form — new customer entry
+# Renders as separate_page (many fields), not modal
+apiVersion: forma.dev/v1alpha1
+kind: Form
+metadata:
+  name: customer-create
+  module: billing
+  description: Form tambah pelanggan — full-page
+spec:
+  entity: customer
+  render:
+    mode: separate_page
+  sections:
+    - title: "Informasi Dasar"
+      description: "Data utama pelanggan"
+      fields:
+        - name: name
+          label: "Nama Lengkap"
+          placeholder: "Masukkan nama pelanggan"
+        - name: email
+          label: "Email"
+          placeholder: "contoh@email.com"
+        - name: phone
+          label: "Telepon"
+          placeholder: "08123456789"
+    - title: "Klasifikasi"
+      description: "Status & tier pelanggan"
+      fields:
+        - name: member_tier
+          label: "Tier Membership"
+        - name: is_blacklisted
+          label: "Blacklist"
+          help: "Centang jika pelanggan diblokir dari transaksi"
+    - title: "Catatan"
+      fields:
+        - name: notes
+          label: "Catatan"
+          placeholder: "Catatan internal (opsional)"
+  submit:
+    label: "Simpan Pelanggan"
+    redirect: "/customers/{id}"
+    message: "Pelanggan berhasil ditambahkan"

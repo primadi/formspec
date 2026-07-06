@@ -1,0 +1,11 @@
+# Invoice print template — multi-format output
+apiVersion: forma.dev/v1alpha1
+kind: Print
+metadata:
+  name: invoice-print
+  module: billing
+  description: Template cetak invoice/receipt — PDF, thermal, HTML
+spec:
+  entity: invoice
+  template: invoice-standard
+  formats: [pdf, thermal, html]

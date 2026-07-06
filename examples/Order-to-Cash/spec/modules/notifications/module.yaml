@@ -1,0 +1,10 @@
+apiVersion: forma.dev/v1alpha1
+kind: Module
+metadata:
+  name: notifications
+  description: Notifikasi — email, WA, push
+spec:
+  version: 1.0.0
+  depends:
+    - module: forma/core
+    - module: billing

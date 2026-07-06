@@ -1,0 +1,120 @@
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: journal-entry
+  module: general-ledger
+  description: Satu journal entry — selalu double-entry (min 2 baris)
+spec:
+  version: v1
+  characteristics: [transaction]
+
+  fields:
+    - name: number
+      type: string
+      natural_key: true
+      immutable: true
+      unique: true
+      index: true
+      natural_key_rule:
+        strategy: sequence
+        format: "JRN-{year}-{seq:06d}"
+        prefix: { value: "JRN" }
+        reset: yearly
+    - name: entry_date
+      type: date
+      rules: [required]
+    - name: reference
+      type: string
+      description: Referensi dokumen sumber — "ORD-2026-000123"
+    - name: source
+      type: string
+      immutable: true
+      index: true
+      description: Resource asal — "billing.order"
+    - name: source_id
+      type: uuid
+      immutable: true
+      index: true
+    - name: description
+      type: string
+      rules: [required]
+    - name: currency
+      type: string
+      default: "IDR"
+    - name: status
+      type: enum
+      enum_values: [draft, posted, reversed]
+      index: true
+    - name: lines
+      type: child
+      child:
+        storage: table
+        sequence_field: line_number
+        fields:
+          - { name: line_number, type: integer, immutable: true }
+          - { name: account_id, type: uuid, rules: [required, {exists: account}] }
+          - { name: description, type: string }
+          - { name: debit, type: decimal, rules: [min: 0] }
+          - { name: credit, type: decimal, rules: [min: 0] }
+
+  state_machine:
+    field: status
+    initial: draft
+    transitions:
+      - { from: draft, to: posted, via: post,
+          guard: "sum_line('debit') == sum_line('credit') and sum_line('debit') > 0" }
+      - { from: posted, to: reversed, via: reverse }
+
+  actions:
+    - name: post
+      description: Posting journal entry — update GL balance
+      required_permission: journal-entries.post
+      idempotent: true
+      idempotency_key: { from: server }
+      audit: true
+      emits: journal-posted
+      uses:
+        primitives: [lock]
+      impl: { type: script_ref, ref: general-ledger/journal_post }
+
+    - name: reverse
+      description: Reverse (batalkan) journal entry yang sudah posted
+      required_permission: journal-entries.reverse
+      audit: true
+      emits: journal-reversed
+      conditions:
+        - script: "resource.status == 'posted'"
+          message: "Hanya journal posted yang bisa di-reverse"
+      impl: { type: script_ref, ref: general-ledger/journal_reverse }
+
+    - name: create
+      idempotent: true
+      idempotency_key: { from: server }
+      conditions:
+        - script: "len(resource.lines) >= 2"
+          message: "Journal entry harus punya minimal 2 baris (debit + credit)"
+
+  events:
+    - name: journal-posted
+      description: Journal entry berhasil diposting
+      publish:
+        durable: true
+      payload:
+        fields: [id, number, entry_date, source, source_id, currency]
+      deliver:
+        - channel: reliable_event
+          target: { resource: general-ledger.gl-balance, action: update }
+          retry: { max: 5, backoff: exponential }
+          idempotency_key: "balance.{id}"
+
+    - name: journal-reversed
+      description: Journal entry di-reverse
+      publish:
+        durable: true
+      payload:
+        fields: [id, number, entry_date]
+      deliver:
+        - channel: reliable_event
+          target: { resource: general-ledger.gl-balance, action: reverse }
+          retry: { max: 5, backoff: exponential }
+          idempotency_key: "balance-reverse.{id}"

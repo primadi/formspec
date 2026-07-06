@@ -1,0 +1,31 @@
+# Address table — child table shown in customer detail page
+apiVersion: forma.dev/v1alpha1
+kind: Table
+metadata:
+  name: customer-address-table
+  module: billing
+  description: Tabel alamat milik satu pelanggan
+spec:
+  entity: address
+  default_sort: "type"
+  page_size: 10
+  columns:
+    - field: type
+      label: "Tipe"
+      width: "100px"
+    - field: street
+      label: "Alamat"
+    - field: city
+      label: "Kota"
+      width: "150px"
+    - field: postal_code
+      label: "Kode Pos"
+      width: "100px"
+  row_actions:
+    - action: "edit"
+      label: "Edit"
+      icon: "pencil"
+    - action: "delete"
+      label: "Hapus"
+      icon: "trash"
+      confirm_msg: "Hapus alamat ini?"

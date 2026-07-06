@@ -1,0 +1,59 @@
+# Order table — main order list with status indicators and actions
+apiVersion: forma.dev/v1alpha1
+kind: Table
+metadata:
+  name: order-table
+  module: billing
+  description: Tabel daftar order dengan kolom status dan aksi
+spec:
+  entity: order
+  default_sort: "-created_at"
+  page_size: 25
+  columns:
+    - field: number
+      label: "No. Order"
+      sortable: true
+      width: "160px"
+    - field: customer_name
+      label: "Pelanggan"
+      sortable: true
+    - field: status
+      label: "Status"
+      sortable: true
+      width: "120px"
+      align: "center"
+    - field: total
+      label: "Total"
+      sortable: true
+      width: "130px"
+      align: "right"
+    - field: created_at
+      label: "Tanggal"
+      sortable: true
+      width: "160px"
+  row_actions:
+    - action: "view"
+      label: "Detail"
+      icon: "eye"
+    - action: "confirm"
+      label: "Konfirmasi"
+      icon: "check"
+      confirm_msg: "Konfirmasi order ini?"
+    - action: "mark-paid"
+      label: "Tandai Lunas"
+      icon: "cash"
+      confirm_msg: "Tandai order ini sebagai sudah dibayar?"
+    - action: "cancel"
+      label: "Batalkan"
+      icon: "x"
+      confirm_msg: "Batalkan order ini? Tindakan tidak bisa dibatalkan."
+  filters:
+    - field: "status"
+      label: "Status"
+      type: "select"
+    - field: "created_at"
+      label: "Tanggal"
+      type: "date_range"
+    - field: "number"
+      label: "Cari No. Order"
+      type: "text"

@@ -1,0 +1,21 @@
+# Sales dashboard — main business overview
+apiVersion: forma.dev/v1alpha1
+kind: Page
+metadata:
+  name: billing-dashboard
+  module: billing
+  description: Dashboard utama billing — overview penjualan
+spec:
+  route: /app/dashboard
+  title: "Dashboard"
+  icon: "dashboard"
+  permissions: [dashboard.view]
+  blocks:
+    - widget:
+        ref: live-payment-ticker
+    - widget:
+        ref: today-revenue
+    - widget:
+        ref: orders-by-status
+    - widget:
+        ref: top-products

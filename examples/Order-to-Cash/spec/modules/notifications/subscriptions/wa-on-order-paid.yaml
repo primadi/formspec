@@ -1,0 +1,11 @@
+apiVersion: forma.dev/v1alpha1
+kind: Subscription
+metadata:
+  name: wa-on-order-paid
+  module: notifications
+  description: Kirim notifikasi WhatsApp setiap order dibayar
+spec:
+  on: { resource: billing.order, event: paid }
+  deliver:
+    - channel: queue
+      job: send-wa-notification

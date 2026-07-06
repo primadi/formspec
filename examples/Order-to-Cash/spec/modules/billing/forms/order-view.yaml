@@ -1,0 +1,42 @@
+# Order view form — read-only display of order details
+apiVersion: forma.dev/v1alpha1
+kind: Form
+metadata:
+  name: order-view
+  module: billing
+  description: Tampilan read-only detail order
+spec:
+  entity: order
+  render:
+    mode: separate_page
+  sections:
+    - title: "Informasi Order"
+      fields:
+        - name: number
+          label: "No. Order"
+          read_only: true
+        - name: status
+          label: "Status"
+          read_only: true
+        - name: customer_name
+          label: "Pelanggan"
+          read_only: true
+        - name: created_at
+          label: "Tanggal Order"
+          read_only: true
+    - title: "Rincian"
+      fields:
+        - name: subtotal
+          label: "Subtotal"
+          read_only: true
+        - name: discount
+          label: "Diskon"
+          read_only: true
+        - name: total
+          label: "Total"
+          read_only: true
+    - title: "Catatan"
+      fields:
+        - name: notes
+          label: "Catatan"
+          read_only: true

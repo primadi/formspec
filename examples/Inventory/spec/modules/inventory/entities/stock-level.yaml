@@ -1,0 +1,43 @@
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: stock-level
+  module: inventory
+  description: Level stok per produk per gudang — system-managed
+spec:
+  version: v1
+  characteristics: [summary]
+
+  fields:
+    - name: product_id
+      type: relation
+      relation: { type: belongs_to, resource: product }
+      immutable: true
+      index: true
+    - name: warehouse_id
+      type: relation
+      relation: { type: belongs_to, resource: warehouse }
+      immutable: true
+      index: true
+    - name: quantity_on_hand
+      type: decimal
+      default: 0
+      description: Stok fisik saat ini
+    - name: quantity_reserved
+      type: decimal
+      default: 0
+      description: Stok yang sudah di-reserve (order confirmed, belum shipped)
+    - name: quantity_available
+      type: decimal
+      default: 0
+      description: on_hand - reserved — yang bisa dijual
+    - name: last_movement_at
+      type: datetime
+
+  actions:
+    - name: update
+      description: Dipanggil outbox worker — tambah/kurangi stok
+      idempotent: true
+      uses:
+        primitives: [lock]
+      impl: { type: script_ref, ref: inventory/stock_level_update }

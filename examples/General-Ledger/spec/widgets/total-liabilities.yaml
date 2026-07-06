@@ -1,0 +1,16 @@
+# Total liabilities widget
+apiVersion: forma.dev/v1alpha1
+kind: Widget
+metadata:
+  name: total-liabilities
+  module: general-ledger
+spec:
+  title: "Total Liabilitas"
+  type: metric
+  entity: ledger
+  query: "account_type = 'liability'"
+  refresh_secs: 300
+  config:
+    aggregate: sum
+    field: ending_balance
+    format: currency

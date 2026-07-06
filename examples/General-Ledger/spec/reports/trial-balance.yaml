@@ -1,0 +1,40 @@
+# Trial balance report
+apiVersion: forma.dev/v1alpha1
+kind: Report
+metadata:
+  name: trial-balance
+  module: general-ledger
+  description: Laporan neraca saldo — summary per akun
+spec:
+  title: "Neraca Saldo"
+  entity: ledger
+  parameters:
+    - name: as_of_date
+      label: "Per Tanggal"
+      type: "date"
+      default: "today"
+  columns:
+    - field: account_code
+      label: "Kode Akun"
+    - field: account_name
+      label: "Nama Akun"
+    - field: beginning_balance
+      label: "Saldo Awal"
+      format: "currency"
+    - field: debit_movement
+      label: "Mutasi Debit"
+      aggregate: "sum"
+      format: "currency"
+    - field: credit_movement
+      label: "Mutasi Kredit"
+      aggregate: "sum"
+      format: "currency"
+    - field: ending_balance
+      label: "Saldo Akhir"
+      format: "currency"
+  groups: [account_type]
+  totals:
+    - label: "TOTAL"
+      field: ending_balance
+      fn: "sum"
+  export: [pdf, csv, xlsx]

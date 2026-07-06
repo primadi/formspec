@@ -1,0 +1,41 @@
+# Membership tier discount rules configuration
+# Tenant-isolated — each workspace can set their own rules
+apiVersion: forma.dev/v1alpha1
+kind: Config
+metadata:
+  name: member-tier-discounts
+  module: billing
+  description: Aturan diskon per tier membership
+spec:
+  schema:
+    type: object
+    properties:
+      tiers:
+        type: object
+        properties:
+          regular:
+            type: object
+            properties:
+              discount_percent: { type: number, default: 0 }
+              label: { type: string, default: "Regular" }
+          silver:
+            type: object
+            properties:
+              discount_percent: { type: number, default: 5 }
+              label: { type: string, default: "Silver" }
+          gold:
+            type: object
+            properties:
+              discount_percent: { type: number, default: 10 }
+              label: { type: string, default: "Gold" }
+  values:
+    tiers:
+      regular:
+        discount_percent: 0
+        label: "Regular"
+      silver:
+        discount_percent: 5
+        label: "Silver"
+      gold:
+        discount_percent: 10
+        label: "Gold"

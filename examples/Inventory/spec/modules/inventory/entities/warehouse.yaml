@@ -1,0 +1,23 @@
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: warehouse
+  module: inventory
+  description: Gudang / lokasi penyimpanan
+spec:
+  version: v1
+  characteristics: [master]
+
+  fields:
+    - name: code
+      type: string
+      natural_key: true
+      immutable: true
+      unique: true
+      rules: [required]
+    - name: name
+      type: string
+      rules: [required]
+    - name: is_active
+      type: boolean
+      default: true

@@ -1,0 +1,16 @@
+# Order kanban board — drag-and-drop by status
+apiVersion: forma.dev/v1alpha1
+kind: Page
+metadata:
+  name: order-kanban
+  module: billing
+  description: Board order — drag-and-drop antar status
+spec:
+  route: /app/orders/board
+  title: "Board Order"
+  icon: "columns"
+  permissions: [orders.list]
+  blocks:
+    - component:
+        ref: order-kanban-board
+        entity: order

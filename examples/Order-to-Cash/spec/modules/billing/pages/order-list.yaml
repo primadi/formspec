@@ -1,0 +1,16 @@
+# Order list page — table view with filters for status, date range
+apiVersion: forma.dev/v1alpha1
+kind: Page
+metadata:
+  name: order-list
+  module: billing
+  description: Daftar semua order dengan filter status dan tanggal
+spec:
+  route: /app/orders
+  title: "Order"
+  icon: "clipboard-list"
+  permissions: [orders.list]
+  blocks:
+    - table:
+        ref: order-table
+        entity: order

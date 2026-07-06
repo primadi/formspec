@@ -1,0 +1,15 @@
+# Checkout wizard page — multi-step order process
+apiVersion: forma.dev/v1alpha1
+kind: Page
+metadata:
+  name: checkout-wizard-page
+  module: billing
+  description: Wizard checkout — step-by-step order creation
+spec:
+  route: /app/orders/new
+  title: "Buat Order Baru"
+  permissions: [orders.create]
+  blocks:
+    - component:
+        ref: checkout-wizard
+        entity: order

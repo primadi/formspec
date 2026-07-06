@@ -1,0 +1,14 @@
+apiVersion: forma.dev/v1alpha1
+kind: Config
+metadata:
+  name: gl
+  module: general-ledger
+  description: Konfigurasi General Ledger
+spec:
+  keys:
+    default_currency:
+      type: string
+      default: "IDR"
+    fiscal_year_start:
+      type: string
+      default: "01-01"

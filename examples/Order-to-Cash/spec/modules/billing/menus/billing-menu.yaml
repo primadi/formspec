@@ -1,0 +1,37 @@
+# Billing module — main navigation for the Order-to-Cash app
+apiVersion: forma.dev/v1alpha1
+kind: Menu
+metadata:
+  name: billing-main
+  module: billing
+  description: Menu utama modul billing
+spec:
+  label: "Billing"
+  icon: "shopping-cart"
+  order: 10
+  children:
+    - label: "Dashboard"
+      icon: "dashboard"
+      route: "/app/dashboard"
+      order: 1
+    - label: "Order"
+      icon: "clipboard-list"
+      order: 2
+      children:
+        - label: "Semua Order"
+          icon: "list"
+          route: "/app/orders"
+        - label: "Board Order"
+          icon: "columns"
+          route: "/app/orders/board"
+        - label: "Buat Order Baru"
+          icon: "plus-circle"
+          route: "/app/orders/new"
+    - label: "Invoice"
+      icon: "file-invoice"
+      route: "/app/invoices"
+      order: 3
+    - label: "Pelanggan"
+      icon: "users"
+      route: "/app/customers"
+      order: 4

@@ -1,0 +1,18 @@
+# GL Dashboard — account summary widgets
+apiVersion: forma.dev/v1alpha1
+kind: Dashboard
+metadata:
+  name: gl-dashboard
+  module: general-ledger
+  description: Dashboard akuntansi — ringkasan saldo dan transaksi terbaru
+spec:
+  title: "Dashboard Akuntansi"
+  widgets:
+    - ref: total-assets
+      layout: { x: 0, y: 0, w: 4, h: 2 }
+    - ref: total-liabilities
+      layout: { x: 4, y: 0, w: 4, h: 2 }
+    - ref: total-equity
+      layout: { x: 8, y: 0, w: 4, h: 2 }
+    - ref: recent-journals
+      layout: { x: 0, y: 2, w: 12, h: 4 }

@@ -1,0 +1,10 @@
+{
+  "json.schemaDownload.enable": true,
+  "chat.mcp.autoStart": true,
+  "json.schemas": [
+    {
+      "fileMatch": ["components.json"],
+      "url": "https://ui.shadcn.com/schema.json"
+    }
+  ]
+}

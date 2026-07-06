@@ -1,19 +1,32 @@
 // For format details, see https://aka.ms/devcontainer.json. For config options, see the
 // README at: https://github.com/devcontainers/templates/tree/main/src/go-postgres
 {
-	"name": "Go & PostgreSQL",
+	"name": "Go",
 	"dockerComposeFile": "compose.yaml",
 	"service": "app",
 	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
-	"features": {},
+	"features": {
+		"ghcr.io/devcontainers/features/python:1": {
+			"version": "latest"
+		},
+		"ghcr.io/devcontainers/features/node:1": {
+			"version": "lts"
+		}
+	},
 	"customizations": {
 		"vscode": {
 			"extensions": [
 				"Vizards.deepseek-v4-for-copilot",
-				"ltmoerdani.opencode-copilot-chat"
+				"ltmoerdani.opencode-copilot-chat",
+				"phgn.vscode-starlark",
+				"dbaeumer.vscode-eslint",
+				"esbenp.prettier-vscode",
+				"bradlc.vscode-tailwindcss",
+				"dbcode.dbcode",
+				"vijaynirmal.playwright-mcp-relay"
 			]
 		}
-	}
+	},
 
 	// Features to add to the dev container. More info: https:// containers.dev/features.
 	// "features": {},
@@ -21,12 +34,13 @@
 	// Configure tool-specific properties.
 	// "customizations": {},
 
-	// Gunakan "forwardPorts" hanya jika perlu akses dari host, dan tambahkan
-	// manual via VS Code Ports panel untuk menghindari konflik port.
-	// "forwardPorts": [],
+	// Forward ports ke host (Windows/Mac). Prefix 1 untuk menghindari tabrakan.
+	// 18080 = forma-resource API | 19000 = MinIO API | 19001 = MinIO Console
+	// 16379 = Valkey | 11025 = Mailpit SMTP | 18025 = Mailpit UI
+	"forwardPorts": [18080, 19000, 19001, 16379, 11025, 18025],
 
 	// Use 'postCreateCommand' to run commands after the container is created.
-	// "postCreateCommand": "go version",
+	"postCreateCommand": "mkdir -p web && cd web && [ -f package.json ] && npm install || true"
 
 	// Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
 	// "remoteUser": "root"

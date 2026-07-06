@@ -1,0 +1,31 @@
+# Customer view form — read-only display (used in detail page)
+apiVersion: forma.dev/v1alpha1
+kind: Form
+metadata:
+  name: customer-view
+  module: billing
+  description: Tampilan read-only detail pelanggan
+spec:
+  entity: customer
+  render:
+    mode: separate_page
+  sections:
+    - title: "Informasi Dasar"
+      fields:
+        - name: name
+          label: "Nama"
+          read_only: true
+        - name: email
+          label: "Email"
+          read_only: true
+        - name: phone
+          label: "Telepon"
+          read_only: true
+    - title: "Status"
+      fields:
+        - name: member_tier
+          label: "Tier"
+          read_only: true
+        - name: is_blacklisted
+          label: "Blacklist"
+          read_only: true

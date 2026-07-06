@@ -1,0 +1,16 @@
+# Customer create page — full-page form
+apiVersion: forma.dev/v1alpha1
+kind: Page
+metadata:
+  name: customer-create-page
+  module: billing
+  description: Halaman tambah pelanggan baru
+spec:
+  route: /customers/new
+  title: "Tambah Pelanggan Baru"
+  permissions: [customers.create]
+  blocks:
+    - form:
+        ref: customer-create
+        entity: customer
+        mode: edit

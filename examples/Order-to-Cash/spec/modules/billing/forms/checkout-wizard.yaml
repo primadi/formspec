@@ -1,0 +1,29 @@
+# Checkout wizard — multi-step order creation
+# Step 1: Select customer → Step 2: Add items → Step 3: Apply discount → Step 4: Review & confirm
+apiVersion: forma.dev/v1alpha1
+kind: Wizard
+metadata:
+  name: checkout-wizard
+  module: billing
+  description: Wizard checkout order 4 langkah
+spec:
+  title: "Checkout Order Baru"
+  entity: order
+  save: partial
+  steps:
+    - title: "Pilih Pelanggan"
+      description: "Cari atau pilih pelanggan yang akan order"
+      form: checkout-customer-select
+    - title: "Tambah Item"
+      description: "Tambahkan produk ke order"
+      form: checkout-item-select
+      depends_on: "Pilih Pelanggan"
+    - title: "Diskon & Catatan"
+      description: "Terapkan diskon membership dan tambahkan catatan"
+      form: checkout-discount
+      depends_on: "Tambah Item"
+    - title: "Review & Konfirmasi"
+      description: "Review order sebelum checkout"
+      form: checkout-review
+      action: checkout
+      depends_on: "Diskon & Catatan"

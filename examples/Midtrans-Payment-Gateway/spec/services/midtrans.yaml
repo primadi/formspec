@@ -1,0 +1,34 @@
+apiVersion: forma.dev/v1alpha1
+kind: Service
+metadata:
+  name: midtrans
+  module: billing
+  description: Wrapper Midtrans payment gateway (konektor asli)
+spec:
+  version: v1
+
+  actions:
+    - name: create-session
+      description: Buat sesi pembayaran di Midtrans (Snap/popup)
+      required_permission: midtrans.create-session
+      audit: true
+      uses:
+        config: { read: [billing.midtrans.server_key, billing.midtrans.api_url] }
+      impl: { type: native, ref: "PaymentGateway.CreateSession" }
+
+    - name: webhook
+      description: Terima callback pembayaran — verifikasi oleh framework
+      required_permission: midtrans.webhook
+      idempotent: true
+      idempotency_key: { from: param, field: transaction_id }
+      audit: true
+      uses:
+        resources: [order.mark-paid]
+      impl: { type: native, ref: "PaymentGateway.Webhook" }
+
+    - name: check-status
+      description: Cek status transaksi ke Midtrans API
+      required_permission: midtrans.check-status
+      uses:
+        config: { read: [billing.midtrans.server_key, billing.midtrans.api_url] }
+      impl: { type: native, ref: "PaymentGateway.CheckStatus" }

@@ -1,0 +1,17 @@
+# Live payment ticker widget — realtime payment notifications via WebSocket
+apiVersion: forma.dev/v1alpha1
+kind: Widget
+metadata:
+  name: live-payment-ticker
+  module: billing
+  description: Widget ticker pembayaran realtime — muncul di dashboard
+spec:
+  title: "Pembayaran Terbaru"
+  type: list
+  entity: payment
+  query: "status = 'success'"
+  refresh_secs: 0
+  config:
+    event_source: "entity:billing.payment"
+    display_fields: [order_number, amount, customer_name, paid_at]
+    max_items: 10

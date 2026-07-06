@@ -1,0 +1,60 @@
+# Customer table — list view with columns, actions, and filters
+apiVersion: forma.dev/v1alpha1
+kind: Table
+metadata:
+  name: customer-table
+  module: billing
+  description: Tabel daftar pelanggan
+spec:
+  entity: customer
+  default_sort: "-created_at"
+  page_size: 25
+  columns:
+    - field: name
+      label: "Nama"
+      sortable: true
+      width: "2fr"
+    - field: email
+      label: "Email"
+      sortable: true
+      width: "2fr"
+    - field: phone
+      label: "Telepon"
+      width: "1fr"
+    - field: member_tier
+      label: "Tier"
+      sortable: true
+      width: "100px"
+      align: "center"
+    - field: is_blacklisted
+      label: "Blacklist"
+      width: "100px"
+      align: "center"
+  row_actions:
+    - action: "view"
+      label: "Detail"
+      icon: "eye"
+    - action: "edit"
+      label: "Edit"
+      icon: "pencil"
+    - action: "blacklist"
+      label: "Blacklist"
+      icon: "ban"
+      confirm_msg: "Tandai pelanggan ini sebagai blacklist?"
+    - action: "update-tier"
+      label: "Ubah Tier"
+      icon: "star"
+  bulk_actions:
+    - action: "blacklist"
+      label: "Blacklist Terpilih"
+      confirm_msg: "Tandai {count} pelanggan sebagai blacklist?"
+  filters:
+    - field: "member_tier"
+      label: "Tier"
+      type: "select"
+    - field: "is_blacklisted"
+      label: "Status Blacklist"
+      type: "select"
+    - field: "name"
+      label: "Cari Nama"
+      type: "text"

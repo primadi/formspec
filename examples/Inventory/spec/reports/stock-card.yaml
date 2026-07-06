@@ -1,0 +1,37 @@
+# Stock card report — per-product movement history
+apiVersion: forma.dev/v1alpha1
+kind: Report
+metadata:
+  name: stock-card
+  module: inventory
+  description: Kartu stok — riwayat mutasi per produk per gudang
+spec:
+  title: "Kartu Stok"
+  entity: stock_movement
+  parameters:
+    - name: product_id
+      label: "Produk"
+      type: "select"
+    - name: warehouse_id
+      label: "Gudang"
+      type: "select"
+    - name: date_from
+      label: "Dari Tanggal"
+      type: "date"
+    - name: date_to
+      label: "Sampai Tanggal"
+      type: "date"
+  columns:
+    - field: movement_date
+      label: "Tanggal"
+    - field: reference
+      label: "Referensi"
+    - field: type
+      label: "Tipe"
+    - field: quantity_in
+      label: "Masuk"
+    - field: quantity_out
+      label: "Keluar"
+    - field: running_balance
+      label: "Saldo"
+  export: [pdf, csv]

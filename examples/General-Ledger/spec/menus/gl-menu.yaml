@@ -1,0 +1,34 @@
+# General Ledger — navigation menu
+apiVersion: forma.dev/v1alpha1
+kind: Menu
+metadata:
+  name: gl-main
+  module: general-ledger
+  description: Menu navigasi General Ledger
+spec:
+  label: "Akuntansi"
+  icon: "calculator"
+  order: 30
+  children:
+    - label: "Dashboard"
+      icon: "dashboard"
+      route: "/app/gl/dashboard"
+      order: 1
+    - label: "Jurnal Umum"
+      icon: "book"
+      route: "/app/gl/journal"
+      order: 2
+    - label: "Buku Besar"
+      icon: "book-open"
+      route: "/app/gl/ledger"
+      order: 3
+    - label: "Laporan"
+      icon: "file-text"
+      order: 4
+      children:
+        - label: "Neraca Saldo"
+          route: "/app/gl/reports/trial-balance"
+        - label: "Laba Rugi"
+          route: "/app/gl/reports/income-statement"
+        - label: "Neraca"
+          route: "/app/gl/reports/balance-sheet"

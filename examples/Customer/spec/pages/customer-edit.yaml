@@ -1,0 +1,17 @@
+# Customer edit page — full-page edit form
+apiVersion: forma.dev/v1alpha1
+kind: Page
+metadata:
+  name: customer-edit-page
+  module: billing
+  description: Halaman edit pelanggan
+spec:
+  route: /customers/:id/edit
+  title: "Edit Pelanggan — {customer.name}"
+  permissions: [customers.update]
+  blocks:
+    - form:
+        ref: customer-edit
+        entity: customer
+        id: ":id"
+        mode: edit

@@ -1,0 +1,18 @@
+# Midtrans payment gateway — configuration page
+# Admin sets server key, API URL, and simulation mode here
+apiVersion: forma.dev/v1alpha1
+kind: Page
+metadata:
+  name: midtrans-config-page
+  module: billing
+  description: Konfigurasi payment gateway Midtrans
+spec:
+  route: /settings/payment/midtrans
+  title: "Konfigurasi Midtrans"
+  icon: "settings"
+  permissions: [midtrans.configure]
+  blocks:
+    - form:
+        ref: midtrans-config-form
+        entity: config/billing.midtrans
+        mode: edit

@@ -1,0 +1,18 @@
+apiVersion: forma.dev/v1alpha1
+kind: Webhook
+metadata:
+  name: midtrans-webhook
+  module: billing
+  description: Verifikasi signature HMAC-SHA512 sebelum handler jalan
+spec:
+  for: payment-gateway.webhook
+  method: POST
+  path: /webhooks/midtrans
+  auth:
+    strategy: signature
+    signature:
+      algorithm: hmac-sha512
+      header: X-Midtrans-Signature
+      key: { config: billing.midtrans.server_key, secret: true }
+  idempotent: true
+  idempotency_key: { from: param, field: transaction_id }

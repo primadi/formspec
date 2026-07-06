@@ -1,0 +1,26 @@
+# Order kanban board — drag-and-drop status board
+apiVersion: forma.dev/v1alpha1
+kind: Kanban
+metadata:
+  name: order-kanban-board
+  module: billing
+  description: Board order dengan drag-and-drop antar status
+spec:
+  entity: order
+  status_field: status
+  columns:
+    - status: draft
+      label: "Draft"
+    - status: confirmed
+      label: "Dikonfirmasi"
+    - status: paid
+      label: "Lunas"
+    - status: fulfilled
+      label: "Dikirim"
+    - status: completed
+      label: "Selesai"
+    - status: cancelled
+      label: "Dibatalkan"
+  card_template:
+    title: "number"
+    fields: [customer_name, total, created_at]

@@ -1,0 +1,21 @@
+# Billing module — navigation menu
+# Renders in sidebar: Pelanggan (with sub-items: Daftar, Tambah Baru)
+apiVersion: forma.dev/v1alpha1
+kind: Menu
+metadata:
+  name: billing-main
+  module: billing
+  description: Menu navigasi untuk modul billing
+spec:
+  label: "Billing"
+  icon: "receipt"
+  order: 10
+  children:
+    - label: "Pelanggan"
+      icon: "users"
+      route: "/customers"
+      order: 1
+    - label: "Tambah Pelanggan"
+      icon: "user-plus"
+      route: "/customers/new"
+      order: 2

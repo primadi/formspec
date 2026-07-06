@@ -1,0 +1,17 @@
+apiVersion: forma.dev/v1alpha1
+kind: Mockup
+metadata:
+  name: midtrans-mock
+  module: billing
+  description: 'Simulasi Midtrans API — aktif saat mock_enabled: true'
+spec:
+  for: midtrans
+
+  actions:
+    - name: create-session
+      description: Kembalikan URL pembayaran dummy + transaction_id fiktif
+      impl: { type: script_ref, ref: billing/midtrans_mock_create_session }
+
+    - name: webhook
+      description: Simulasi callback sukses — langsung panggil order.mark-paid
+      impl: { type: script_ref, ref: billing/midtrans_mock_webhook }
