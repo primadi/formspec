@@ -97,14 +97,26 @@ type ValidationRule struct {
 }
 
 // UnmarshalYAML implements custom YAML decoding for ValidationRule.
-// Supports three formats:
+// Supports four formats:
 //   - String shorthand: "required" → {Name: "required"}
+//   - Colon shorthand: "after:end_date" → {Name: "after", Value: "end_date"}
 //   - Map shorthand: {min_length: 1} → {Name: "min_length", Value: 1}
 //   - Full format: {name: "required", value: true} → {Name: "required", Value: true}
 func (r *ValidationRule) UnmarshalYAML(value *yaml.Node) error {
 	// Try string shorthand: "required"
 	var s string
 	if err := value.Decode(&s); err == nil {
+		// Check for colon shorthand: "after:end_date", "before:start_date", "exists:customers"
+		if colonIdx := strings.Index(s, ":"); colonIdx > 0 {
+			prefix := s[:colonIdx]
+			suffix := s[colonIdx+1:]
+			switch prefix {
+			case "after", "before", "exists":
+				r.Name = prefix
+				r.Value = suffix
+				return nil
+			}
+		}
 		r.Name = s
 		return nil
 	}

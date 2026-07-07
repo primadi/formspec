@@ -3,7 +3,9 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -39,8 +41,13 @@ func (f *HandlerFactory) HandleList(module, entity string) http.HandlerFunc {
 		}
 
 		tenantID := tenantFromContext(ctx)
-		page, _ := strconv.Atoi(r.URL.Query().Get("page"))
-		perPage, _ := strconv.Atoi(r.URL.Query().Get("per_page"))
+
+		// Pagination: spec §558-559 — non-numeric/negative → VALIDATION_ERROR (422)
+		page, perPage, err := parsePaginationParams(r)
+		if err != nil {
+			writeError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", err.Error())
+			return
+		}
 
 		result, err := store.List(ctx, db.ListParams{
 			TenantID: tenantID,
@@ -61,6 +68,7 @@ func (f *HandlerFactory) HandleList(module, entity string) http.HandlerFunc {
 				Total:      result.Total,
 				TotalPages: result.TotalPages,
 			},
+			Links: buildListLinks(r.URL, result.Page, result.PerPage, result.TotalPages),
 		})
 	}
 }
@@ -213,6 +221,37 @@ func (f *HandlerFactory) HandleDelete(module, entity string) http.HandlerFunc {
 	}
 }
 
+// parsePaginationParams parses and validates pagination query parameters.
+// Spec §558-559: non-numeric or negative values → error for VALIDATION_ERROR (422).
+func parsePaginationParams(r *http.Request) (page, perPage int, err error) {
+	pageStr := r.URL.Query().Get("page")
+	perPageStr := r.URL.Query().Get("per_page")
+
+	page = 1
+	if pageStr != "" {
+		n, e := strconv.Atoi(pageStr)
+		if e != nil || n < 0 {
+			return 0, 0, fmt.Errorf("page: invalid value %q", pageStr)
+		}
+		if n > 0 {
+			page = n
+		}
+	}
+
+	perPage = 20
+	if perPageStr != "" {
+		n, e := strconv.Atoi(perPageStr)
+		if e != nil || n < 0 {
+			return 0, 0, fmt.Errorf("per_page: invalid value %q", perPageStr)
+		}
+		if n > 0 {
+			perPage = n
+		}
+	}
+
+	return page, perPage, nil
+}
+
 // --- Response envelopes (Core §16) ---
 
 // SingleResponse wraps a single record.
@@ -228,9 +267,11 @@ type MetaSingle struct {
 }
 
 // ListResponse wraps a paginated list.
+// Spec §16: list { data, meta: {page, per_page, total, total_pages}, links }
 type ListResponse struct {
-	Data any      `json:"data"`
-	Meta MetaList `json:"meta"`
+	Data  any       `json:"data"`
+	Meta  MetaList  `json:"meta"`
+	Links ListLinks `json:"links"`
 }
 
 // MetaList is metadata for list responses.
@@ -241,15 +282,32 @@ type MetaList struct {
 	TotalPages int `json:"total_pages"`
 }
 
+// ListLinks contains pagination links per spec §16.
+type ListLinks struct {
+	First string `json:"first,omitempty"`
+	Last  string `json:"last,omitempty"`
+	Next  string `json:"next,omitempty"`
+	Prev  string `json:"prev,omitempty"`
+}
+
 // ErrorResponse is the standard error envelope.
+// Spec §16: error { error: {code, message, details}, meta }
 type ErrorResponse struct {
 	Error ErrorDetail `json:"error"`
 	Meta  MetaSingle  `json:"meta"`
 }
 
-// ErrorDetail holds error information.
+// ErrorDetail holds error information with optional structured details.
 type ErrorDetail struct {
-	Code    string `json:"code"`
+	Code    string            `json:"code"`
+	Message string            `json:"message"`
+	Details []ErrorDetailItem `json:"details,omitempty"`
+}
+
+// ErrorDetailItem is a single structured error detail.
+type ErrorDetailItem struct {
+	Level   string `json:"level"`
+	Field   string `json:"field,omitempty"`
 	Message string `json:"message"`
 }
 
@@ -262,6 +320,7 @@ const (
 	ctxUserID    contextKey = "user_id"
 	ctxIdentity  contextKey = "identity"
 	ctxRequestID contextKey = "request_id"
+	ctxURLTenant contextKey = "url_tenant" // extracted from URL before identity override
 )
 
 // IdentityFromContext extracts the authenticated identity from the request context.
@@ -274,6 +333,17 @@ func IdentityFromContext(ctx context.Context) *auth.Identity {
 // WithIdentity stores an Identity on the context.
 func WithIdentity(ctx context.Context, id *auth.Identity) context.Context {
 	return context.WithValue(ctx, ctxIdentity, id)
+}
+
+// URLTenantFromContext extracts the URL-original tenant (before identity override).
+func URLTenantFromContext(ctx context.Context) string {
+	v, _ := ctx.Value(ctxURLTenant).(string)
+	return v
+}
+
+// WithURLTenant stores the URL-original tenant on the context.
+func WithURLTenant(ctx context.Context, tenantID string) context.Context {
+	return context.WithValue(ctx, ctxURLTenant, tenantID)
 }
 
 // tenantFromContext extracts the tenant ID from the request context.
@@ -340,6 +410,45 @@ func writeError(w http.ResponseWriter, status int, code, message string) {
 	})
 }
 
+// writeErrorWithDetails writes an error with structured details.
+func writeErrorWithDetails(w http.ResponseWriter, status int, code, message string, details []ErrorDetailItem) {
+	writeJSON(w, status, ErrorResponse{
+		Error: ErrorDetail{Code: code, Message: message, Details: details},
+		Meta:  MetaSingle{Timestamp: time.Now().UTC().Format(time.RFC3339)},
+	})
+}
+
+// buildListLinks constructs pagination links for list responses per spec §16.
+func buildListLinks(u *url.URL, page, perPage, totalPages int) ListLinks {
+	q := u.Query()
+	links := ListLinks{}
+
+	q.Set("page", "1")
+	q.Set("per_page", fmt.Sprintf("%d", perPage))
+	u.RawQuery = q.Encode()
+	links.First = u.String()
+
+	if totalPages > 0 {
+		q.Set("page", fmt.Sprintf("%d", totalPages))
+		u.RawQuery = q.Encode()
+		links.Last = u.String()
+	}
+
+	if page < totalPages {
+		q.Set("page", fmt.Sprintf("%d", page+1))
+		u.RawQuery = q.Encode()
+		links.Next = u.String()
+	}
+
+	if page > 1 {
+		q.Set("page", fmt.Sprintf("%d", page-1))
+		u.RawQuery = q.Encode()
+		links.Prev = u.String()
+	}
+
+	return links
+}
+
 func isConflictError(err error) bool {
 	s := err.Error()
 	return contains(s, "version conflict") || contains(s, "not found")
@@ -355,15 +464,22 @@ func contains(s, substr string) bool {
 }
 
 // writeValidationErrors writes one or more validation errors as 422 VALIDATION_ERROR.
+// Spec §16: errors include structured details array with level, optional field, and message.
 func writeValidationErrors(w http.ResponseWriter, errs []error) {
 	msg := ""
+	details := make([]ErrorDetailItem, 0, len(errs))
 	for i, e := range errs {
 		if i > 0 {
 			msg += "; "
 		}
-		msg += e.Error()
+		errStr := e.Error()
+		msg += errStr
+		details = append(details, ErrorDetailItem{
+			Level:   "error",
+			Message: errStr,
+		})
 	}
-	writeError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", msg)
+	writeErrorWithDetails(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", msg, details)
 }
 
 // HandleCustomAction returns a handler for a named custom action on an entity.

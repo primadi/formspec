@@ -1,7 +1,7 @@
 # Forma Implementation Progress
 
-**Last Updated:** 2026-07-06  
-**Total Tests:** ~152 (all passing)
+**Last Updated:** 2026-07-07  
+**Total Tests:** ~175 (all passing)
 
 > Checklist implementasi Forma framework. Setiap task ditandai saat selesai.
 
@@ -33,7 +33,7 @@
 | # | Task | Status | Tests |
 |---|---|---|---|
 | 1.2.1 | Registry core (`registry.go`) — LoadEntities, SyncSchema, GetEntityStore | ✅ | — |
-| 1.2.2 | Info & Query Helpers — ListEntities, GetEntity, GetByCharacteristic | ✅ | — |
+| 1.2.2 | Info & Query Helpers — ListEntities, GetEntity, GetEntitiesByCharacteristic | ✅ | — |
 | 1.2.3 | CLI Entity Sync (`cmd/forma-entity-sync/`) — load → register → sync | ✅ | — |
 | 1.2.4 | Unit tests — load, filter, sync, CRUD, General-Ledger example | ✅ | 9 |
 | 1.2.5 | Spec update: `ValidationRule.UnmarshalYAML` shorthand | ✅ | — |
@@ -154,6 +154,19 @@
 - `exists:<resource>` full DB query → Fase 2 (needs EntityStore reference in handler)
 - Starlark inline validator escape hatch (`script` rule) → Fase 2
 
+### 1.7 Core Basic Conformance Gaps
+
+> Identified in `docs/audit/todo-spec-*.md` (plan-vs-spec audit): Core Basic (`02-core-basic.md` Part VII Conformance) declares these MUST, but no task anywhere in this file covers them. Tracked here so they aren't dropped.
+
+| # | Task | Status | Spec ref |
+|---|---|---|---|
+| 1.7.1 | `forma.core` resource set — entities `workspace`, `user`, `app-membership`, `role`, `role-assignment`, `api-key`, `session`, `job`, `setting` (`audit-log` and `failed-event` partially covered by 1.1's Audit Logger / Outbox, but not exposed as `forma.core` resources); services `health`, `metrics` | ⏳ | §22, Conformance §10 |
+| 1.7.2 | Cross-app grant verification — runtime MUST verify a signed grant before routing cross-app calls; ungranted → 404 | ⏳ | §15.3, Conformance §7 |
+| 1.7.3 | Category → PostgreSQL schema mapping + cross-category join guard (`CROSS_CATEGORY_ACCESS_DENIED`) | ⏳ | §19, §16, Conformance §8 |
+| 1.7.4 | `kind: Migration` — custom DDL kind with runtime DML rejection (distinct from the 1.1.6 structural migration runner) | ⏳ | §20, Conformance §9 |
+| 1.7.5 | Loading/serving `kind: Service` (stateless compute), `kind: Config` (`ctx.config.get`), `kind: App` root manifest | ⏳ | §4.2, §4.4, §7, Conformance §2 |
+| 1.7.6 | Workspace provisioning lifecycle — `create → provisioning → seed default roles + reference seeds → active` (emits `workspace.activated`), `suspend ⇄ reactivate`, `terminate`, `ctx.tenant.config()` | ⏳ | §21 |
+
 ---
 
 ## Fase 2 — Business Logic Engine
@@ -248,7 +261,7 @@ Admin grant: "role kasir → Page Order Management"
 | 5.3 | `kind: Policy` (OPA/Rego) | ⏳ |
 | 5.4 | Artifact signing (ed25519) per D11 | ⏳ |
 | 5.5 | Transparency log (Merkle tree) per D30 | ⏳ |
-| 5.6 | Plane Protocol (gRPC + mTLS) per D50 | ⏳ |
+| 5.6 | Plane Protocol (gRPC + mTLS) per D47 | ⏳ |
 
 ---
 
@@ -284,24 +297,27 @@ Admin grant: "role kasir → Page Order Management"
 | Item | Reason | Revisit |
 |---|---|---|
 | PostgreSQL in devcontainer | SQLite sufficient for dev; PG for integration tests | Fase 5 |
-| Smart Internal Dispatch (1.3.8) | D50: same-process = direct call; cross-process = gRPC. Registry.IsLocal() needed first | Fase 2 |
+| Smart Internal Dispatch (1.3.8) | IMP-5: same-process = direct call; cross-process = configured adapter. Registry.IsLocal() needed first | Fase 2 |
 | Page-Scoped Routing (4.7) | BFF pattern: `/{ws}/{app}/{page}/api/v1/...`. Browser never hits backend directly | Fase 4 |
 | gRPC / WebSocket adapters | REST is priority; descriptors already designed | Fase 3 |
 
 ---
 
-## Key Design Decisions (from 1.4 implementation discussions)
+## Key Implementation Notes (from 1.4 implementation discussions)
 
-| ID | Decision | Impact |
+> Implementation notes (IMP-1..IMP-8) are distinct from canonical spec decisions (D1–D50 in `docs/spec/11-reference.md`).
+> They record design rationale from implementation discussions but are not ratified spec decisions.
+
+| ID | Note | Impact |
 |---|---|---|
-| D51 | **Spec = data, not code.** Permission + auth config in YAML, loaded at runtime. Hot-reload via atomic `http.Handler` swap. | No recompile; ~0ms downtime on spec change |
-| D52 | **Dual namespace routing.** Internal: `/_/api/v1/...` (auto, all entities). External: `/{ws}/api/v1/...` (only if `expose`). | Admin panel works without `expose`; public API is deliberate |
-| D53 | **Page-scoped routing (BFF).** Browser → SPA → `/{ws}/{app}/{page}/api/v1/...`. Browser never hits backend directly. | Consistent latency; single auth boundary; no endpoint leak |
-| D54 | **Page → permission materialization (D38).** Admin grants page access; framework derives resource permissions from page composition. | Admin UX: 1 checkbox; backend: N permissions auto-granted |
-| D55 | **Smart internal dispatch (D50).** Same-process = direct Go call; cross-process = gRPC (binary, faster); REST as fallback. | Zero serialization overhead for local calls |
-| D56 | **URL transparency.** No obfuscation. Readable URLs = debuggable, AI-friendly, diff-able. Security at auth + permission layer. | Consistent with D24 (manifests never encrypted) |
-| D57 | **Starlark not encrypted.** IP protection via binary handlers (`compiled`/`native`/WASM), not via script encryption. | Consent + audit + AI remain functional |
-| D58 | **Three impl tiers.** Local script (Tier 1) → Local binary/WASM (Tier 2) → Cloud-hosted handler (Tier 3). Same `ref` syntax. | Progressive complexity; vendor chooses trade-off |
+| IMP-1 | **Spec = data, not code.** Permission + auth config in YAML, loaded at runtime. Hot-reload via atomic `http.Handler` swap. | No recompile; ~0ms downtime on spec change |
+| IMP-2 | **Dual namespace routing.** Internal: `/_/api/v1/...` (auto, all entities). External: `/{ws}/api/v1/...` (only if `expose`). ⚠️ NOT IMPLEMENTED — contradicts D49 deny-by-default; proposed extension only. | Admin panel works without `expose`; public API is deliberate |
+| IMP-3 | **Page-scoped routing (BFF).** Browser → SPA → `/{ws}/{app}/{page}/api/v1/...`. ⚠️ NOT IMPLEMENTED — Fase 4 proposal; conflicts with normative REST path §16. | Consistent latency; single auth boundary; no endpoint leak |
+| IMP-4 | **Page → permission materialization (D38).** Admin grants page access; framework derives resource permissions from page composition. | Admin UX: 1 checkbox; backend: N permissions auto-granted |
+| IMP-5 | **Smart internal dispatch (D50).** Same-process = direct Go call; cross-process = configured protocol adapter (REST required, gRPC recommended). | Zero serialization overhead for local calls |
+| IMP-6 | **URL transparency.** No obfuscation. Readable URLs = debuggable, AI-friendly, diff-able. Security at auth + permission layer. | Consistent with D24 (manifests never encrypted) |
+| IMP-7 | **Starlark not encrypted.** IP protection via binary handlers (`compiled`/`native`/WASM), not via script encryption. | Consent + audit + AI remain functional |
+| IMP-8 | **Three impl tiers.** Local script (Tier 1) → Local binary/WASM (Tier 2) → Cloud-hosted handler (Tier 3). ⚠️ NOT RECONCILED with Five Implementation Types (§10) + D46 trust tiers; needs re-grounding. | Progressive complexity; vendor chooses trade-off |
 
 ---
 
@@ -309,16 +325,16 @@ Admin grant: "role kasir → Page Order Management"
 
 | Package | Tests | Status |
 |---|---|---|
-| `internal/db` | 89 | ✅ |
+| `internal/db` | 103 | ✅ |
 | `internal/entity` | 9 | ✅ |
-| `internal/api` | 23 | ✅ |
-| `internal/auth` | 7 | ✅ |
-| `internal/permission` | 18 | ✅ |
+| `internal/api` | 21 | ✅ |
+| `internal/auth` | 5 | ✅ |
+| `internal/permission` | 14 | ✅ |
 | `internal/validation` | 9 | ✅ |
-| `internal/manifest` | 2 | ✅ |
+| `internal/manifest` | 6 | ✅ |
 | `internal/starlark` | 0 | Stub |
-| `pkg/spec` | 1 | ✅ |
-| **Total** | **~166** | **✅ All passing** |
+| `pkg/spec` | 8 | ✅ |
+| **Total** | **~175** | **✅ All passing** |
 
 ---
 

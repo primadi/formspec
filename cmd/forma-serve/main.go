@@ -18,6 +18,8 @@ import (
 	"github.com/forma/forma/internal/db"
 	"github.com/forma/forma/internal/entity"
 	"github.com/forma/forma/internal/permission"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 func main() {
@@ -25,9 +27,11 @@ func main() {
 	specPath := flag.String("spec", "./examples/Customer/spec", "Path to spec directory")
 	addr := flag.String("addr", ":8080", "Listen address")
 	prodMode := flag.Bool("prod", false, "Enable production mode (JWT auth)")
-	jwtSecret := flag.String("jwt-secret", "", "JWT signing secret (required in prod mode)")
+	jwtSecret := flag.String("jwt-secret", "", "JWT signing secret (required in prod mode for HMAC)")
 	jwtIssuer := flag.String("jwt-issuer", "forma", "JWT issuer")
+	jwtPublicKey := flag.String("jwt-public-key", "", "Path to RSA/ECDSA public key file (PEM) for asymmetric JWT validation")
 	strictMode := flag.Bool("strict", false, "Enable strict enforcement of uses declarations")
+	idempotencyTTL := flag.Duration("idempotency-ttl", db.DefaultIdempotencyTTL, "TTL for idempotency keys (default 24h; config key: core.idempotency_retention)")
 	flag.Parse()
 
 	ctx := context.Background()
@@ -37,11 +41,29 @@ func main() {
 
 	// 0. Auth: configure token validator
 	if *prodMode {
-		if *jwtSecret == "" {
-			log.Fatal("❌ --jwt-secret is required in --prod mode")
+		if *jwtSecret == "" && *jwtPublicKey == "" {
+			log.Fatal("❌ --jwt-secret or --jwt-public-key is required in --prod mode")
 		}
-		api.SetAuthValidator(auth.NewJWTValidator(*jwtSecret, *jwtIssuer, ""))
-		fmt.Printf("🔐 Auth: JWT (prod mode, issuer=%s)\n", *jwtIssuer)
+		if *jwtPublicKey != "" {
+			// Read PEM file and parse public key (RSA or ECDSA)
+			pemData, err := os.ReadFile(*jwtPublicKey)
+			if err != nil {
+				log.Fatalf("❌ reading public key file: %v", err)
+			}
+			var key any
+			key, err = jwt.ParseECPublicKeyFromPEM(pemData)
+			if err != nil {
+				key, err = jwt.ParseRSAPublicKeyFromPEM(pemData)
+				if err != nil {
+					log.Fatalf("❌ parsing public key (tried ECDSA and RSA): %v", err)
+				}
+			}
+			api.SetAuthValidator(auth.NewJWTValidatorWithKey(key, *jwtIssuer, ""))
+			fmt.Printf("🔐 Auth: JWT (prod mode, asymmetric key from %s, issuer=%s)\n", *jwtPublicKey, *jwtIssuer)
+		} else {
+			api.SetAuthValidator(auth.NewJWTValidator(*jwtSecret, *jwtIssuer, ""))
+			fmt.Printf("🔐 Auth: JWT (prod mode, HMAC, issuer=%s)\n", *jwtIssuer)
+		}
 	} else {
 		api.SetAuthValidator(auth.NewDevValidator())
 		fmt.Println("🔓 Auth: dev mode (all requests pass through)")
@@ -67,6 +89,7 @@ func main() {
 		driver = db.DriverPostgres
 	}
 	fmt.Printf("✓ Database: %s (%s)\n", *dsn, driver)
+	fmt.Printf("✓ Idempotency TTL: %v (config key: core.idempotency_retention)\n", *idempotencyTTL)
 
 	// 2. Registry → load → sync
 	reg := entity.NewRegistry(database, driver, *specPath)

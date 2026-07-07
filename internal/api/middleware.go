@@ -30,6 +30,7 @@ func SetAuthValidator(v auth.TokenValidator) {
 // Falls back to "demo" for development.
 // Cross-tenant isolation (§15.2): the tenant ID is set once here and all
 // downstream handlers MUST use it from context — never from request body.
+// Cross-tenant mismatch is enforced in AuthMiddleware (identity workspace vs URL).
 func TenantMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Extract workspace slug from path: /{workspace}/api/...
@@ -44,9 +45,11 @@ func TenantMiddleware(next http.Handler) http.Handler {
 			workspaceID = "demo"
 		}
 
+		// Save URL-extracted tenant separately for cross-tenant check in AuthMiddleware
+		ctx := WithURLTenant(r.Context(), workspaceID)
 		// In production: lookup workspace slug → tenant UUID
 		// For dev: slug = tenant ID directly
-		ctx := WithTenant(r.Context(), workspaceID)
+		ctx = WithTenant(ctx, workspaceID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -57,6 +60,10 @@ func TenantMiddleware(next http.Handler) http.Handler {
 // Dev mode: all requests get a synthetic developer identity with full permissions.
 // Prod mode: validates JWT via the configured TokenValidator.
 // Anonymous access is only allowed for routes with required_permission: "public".
+//
+// Cross-tenant enforcement (§15.2): if the identity's workspace does not match
+// the URL workspace, returns 404 (NOT_FOUND) — per spec, cross-workspace access
+// is indistinguishable from the resource not existing.
 func AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
@@ -80,6 +87,16 @@ func AuthMiddleware(next http.Handler) http.Handler {
 				}
 			}
 			if identity != nil {
+				// Cross-tenant enforcement: identity workspace must match URL workspace.
+				// Spec §15.2: cross-tenant access → 404 NOT_FOUND (not 403).
+				urlTenant := URLTenantFromContext(ctx)
+				if identity.WorkspaceID != "" && urlTenant != "" &&
+					identity.WorkspaceID != urlTenant {
+					writeError(w, http.StatusNotFound, "NOT_FOUND",
+						"workspace not found")
+					return
+				}
+
 				ctx = WithIdentity(ctx, identity)
 				// Also set legacy context values for backward compatibility
 				ctx = WithUser(ctx, identity.UserID)

@@ -7,6 +7,11 @@ import (
 	"time"
 )
 
+// DefaultIdempotencyTTL is the default TTL for idempotency keys (24 hours).
+// Spec §11.3/§420: implementations MUST NOT hard-code the window.
+// Production deployments SHOULD configure this via core.idempotency_retention.
+const DefaultIdempotencyTTL = 24 * time.Hour
+
 // IdempotencyStore manages idempotency keys for action deduplication.
 //
 // When a client sends a request with an idempotency key:
@@ -14,7 +19,9 @@ import (
 //  2. If the key EXISTS and status=pending/failed → retry (previous attempt failed)
 //  3. If the key does NOT exist → create new pending entry, execute, record result
 //
-// Keys expire after TTL (default 24 hours) and are automatically cleaned up.
+// Keys expire after TTL (default DefaultIdempotencyTTL) and are automatically
+// cleaned up. The TTL MUST be configurable via WithTTL; hard-coding is a spec
+// violation per §11.3/§420.
 type IdempotencyStore struct {
 	db     DB
 	driver DriverType
@@ -32,12 +39,13 @@ type IdempotencyRecord struct {
 	CreatedAt string
 }
 
-// NewIdempotencyStore creates a new idempotency store with default 24h TTL.
+// NewIdempotencyStore creates a new idempotency store with DefaultIdempotencyTTL.
+// Call WithTTL to override — production deployments MUST configure this.
 func NewIdempotencyStore(db DB, driver DriverType) *IdempotencyStore {
 	return &IdempotencyStore{
 		db:     db,
 		driver: driver,
-		ttl:    24 * time.Hour,
+		ttl:    DefaultIdempotencyTTL,
 	}
 }
 

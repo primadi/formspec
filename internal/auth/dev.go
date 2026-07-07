@@ -5,8 +5,11 @@ import "context"
 // DevValidator returns a synthetic identity with wildcard permissions.
 // Used only in development mode — all requests pass through with full access.
 //
-// The identity maps to workspace "demo" with user "developer" and permission "*"
-// which matches everything (see Identity.HasPermission).
+// The identity maps to user "developer" with permission "*" which matches
+// everything (see Identity.HasPermission). WorkspaceID is left empty so the
+// identity adopts whatever workspace is in the URL — this lets dev mode
+// reach any workspace slug without tripping the cross-tenant 404 check in
+// AuthMiddleware (which only compares when both sides are non-empty).
 type DevValidator struct{}
 
 // NewDevValidator creates a dev-mode validator that always returns a synthetic identity.
@@ -19,7 +22,7 @@ func NewDevValidator() *DevValidator {
 func (v *DevValidator) Validate(_ context.Context, _ string) (*Identity, error) {
 	return &Identity{
 		UserID:      "developer",
-		WorkspaceID: "demo",
+		WorkspaceID: "",
 		Permissions: []string{"*"},
 		Roles:       []string{"admin"},
 	}, nil

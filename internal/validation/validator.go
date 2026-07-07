@@ -12,6 +12,7 @@ package validation
 import (
 	"fmt"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/forma/forma/pkg/spec"
@@ -160,11 +161,12 @@ func ValidateActionParams(params map[string]any, validate []spec.ParamValidation
 }
 
 // validateActionParamRule validates a single rule against an action parameter value.
-// Supports the same rule set as field validation.
+// Supports all Core Basic field validation rules (§10.6).
 func validateActionParamRule(fieldName string, val any, rule spec.ValidationRule) error {
 	switch rule.Name {
-	case "min_length", "max_length", "min", "max", "positive", "email", "pattern", "url":
-		// Reuse: delegate to a simple inline check
+	case "min_length", "max_length", "min", "max", "positive", "email", "pattern", "url",
+		"precision", "future", "past", "min_items", "max_items":
+		// Reuse: delegate to applyInlineRule
 		return applyInlineRule(fieldName, val, rule)
 	default:
 		return fmt.Errorf("unsupported action param rule: %s", rule.Name)
@@ -241,6 +243,58 @@ func applyInlineRule(fieldName string, val any, rule spec.ValidationRule) error 
 		if !urlRegex.MatchString(str) {
 			return fmt.Errorf("%s: invalid URL format", fieldName)
 		}
+	case "precision":
+		num := toFloat(val)
+		prec := toInt(rule.Value)
+		if prec < 0 {
+			return fmt.Errorf("%s: precision must be non-negative", fieldName)
+		}
+		dp := countDecimalPlaces(num)
+		if dp > prec {
+			return fmt.Errorf("%s: max %d decimal places, got %d", fieldName, prec, dp)
+		}
+	case "future":
+		str, ok := val.(string)
+		if !ok {
+			return fmt.Errorf("%s: must be a datetime string", fieldName)
+		}
+		t, err := parseDateTime(str)
+		if err != nil {
+			return fmt.Errorf("%s: invalid datetime: %v", fieldName, err)
+		}
+		if !t.After(time.Now().UTC()) {
+			return fmt.Errorf("%s: must be in the future", fieldName)
+		}
+	case "past":
+		str, ok := val.(string)
+		if !ok {
+			return fmt.Errorf("%s: must be a datetime string", fieldName)
+		}
+		t, err := parseDateTime(str)
+		if err != nil {
+			return fmt.Errorf("%s: invalid datetime: %v", fieldName, err)
+		}
+		if !t.Before(time.Now().UTC()) {
+			return fmt.Errorf("%s: must be in the past", fieldName)
+		}
+	case "min_items":
+		items, ok := val.([]any)
+		if !ok {
+			return fmt.Errorf("%s: must be an array", fieldName)
+		}
+		minLen := toInt(rule.Value)
+		if len(items) < minLen {
+			return fmt.Errorf("%s: min %d items, got %d", fieldName, minLen, len(items))
+		}
+	case "max_items":
+		items, ok := val.([]any)
+		if !ok {
+			return fmt.Errorf("%s: must be an array", fieldName)
+		}
+		maxLen := toInt(rule.Value)
+		if len(items) > maxLen {
+			return fmt.Errorf("%s: max %d items, got %d", fieldName, maxLen, len(items))
+		}
 	}
 	return nil
 }
@@ -275,3 +329,16 @@ func toFloat(v any) float64 {
 
 var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
 var urlRegex = regexp.MustCompile(`^https?://[^\s/$.?#].[^\s]*$`)
+
+// countDecimalPlaces returns the number of decimal places in a float64 value
+// using string-based counting to avoid floating-point precision issues.
+func countDecimalPlaces(num float64) int {
+	s := fmt.Sprintf("%.10f", num)
+	for len(s) > 0 && s[len(s)-1] == '0' {
+		s = s[:len(s)-1]
+	}
+	if dotIdx := strings.Index(s, "."); dotIdx >= 0 {
+		return len(s) - dotIdx - 1
+	}
+	return 0
+}

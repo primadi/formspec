@@ -556,7 +556,7 @@ Every action with `audit: true` records: who, what, resource, workspace, before/
 - **WebSocket (required when exposed):** all actions; channel convention in §19.4.
 - **Admin panel (recommended):** auto-generated from manifests.
 - **Query conventions:** `?page&per_page&sort&direction&fields&filter[field][op]=value&search&include`. Filter operators: `eq neq gt gte lt lte between in nin like ilike null notnull`.
-- **Pagination bounds:** `per_page` defaults to **20**, maximum **100**; values above the maximum are clamped to it; non-numeric or negative values → `400 VALIDATION_ERROR`. Implementations MAY lower the maximum per entity but MUST NOT raise it above 100.
+- **Pagination bounds:** `per_page` defaults to **20**, maximum **100**; values above the maximum are clamped to it; non-numeric or negative values → `VALIDATION_ERROR` (422). Implementations MAY lower the maximum per entity but MUST NOT raise it above 100.
 
 Response envelopes: list `{ data, meta: {page, per_page, total, total_pages}, links }`. Single `{ data, meta: {request_id, timestamp} }`. Error `{ error: {code, message, details}, meta }`.
 

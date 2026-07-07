@@ -142,6 +142,29 @@ func (r *Registry) LoadEntities() []error {
 			if plural == "" {
 				plural = entityName + "s"
 			}
+
+			// Register each standard CRUD action in the permission registry
+			// so PermissionExists() and ctx.auth.has() work for these.
+			standardActions := []struct {
+				name       string
+				permission string
+			}{
+				{"list", module + "." + plural + ".list"},
+				{"view", module + "." + plural + ".view"},
+				{"create", module + "." + plural + ".create"},
+				{"update", module + "." + plural + ".update"},
+				{"delete", module + "." + plural + ".delete"},
+			}
+			for _, sa := range standardActions {
+				r.permRegistry.RegisterAction(
+					module, entityName, sa.name,
+					sa.permission,
+					&permission.UsesEntry{}, // standard CRUD has no uses
+					raw.Source,
+					false,
+				)
+			}
+
 			// Set module description from entity metadata
 			r.permRegistry.SetModuleDescription(module, raw.Metadata.Description)
 		}

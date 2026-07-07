@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"regexp"
 	"strings"
 	"time"
@@ -176,8 +177,8 @@ func (s *EntityStore) Insert(ctx context.Context, params InsertParams) (string, 
 	changesJSON := toJSONString(params.Data)
 	if err := writeAuditLog(ctx, s.db, s.driver, params.TenantID, resource, id,
 		string(AuditActionCreate), params.CreatedBy, changesJSON); err != nil {
-		// Audit failure is non-fatal — log but don't fail the insert
-		_ = err
+		// Audit failure is non-fatal — log warning but don't fail the insert
+		log.Printf("[WARN] audit write failed (create %s/%s): %v", resource, id, err)
 	}
 
 	return id, nil
@@ -331,8 +332,8 @@ func (s *EntityStore) Update(ctx context.Context, params UpdateParams) (int, err
 		changesJSON := serializeChangeMap(changes)
 		if err := writeAuditLog(ctx, s.db, s.driver, params.TenantID, resource, params.ID,
 			string(AuditActionUpdate), params.UpdatedBy, changesJSON); err != nil {
-			// Audit failure is non-fatal
-			_ = err
+			// Audit failure is non-fatal — log warning but don't fail the update
+			log.Printf("[WARN] audit write failed (update %s/%s): %v", resource, params.ID, err)
 		}
 	}
 
@@ -378,8 +379,8 @@ func (s *EntityStore) SoftDelete(ctx context.Context, tenantID, id string) error
 	resource := s.module + "/" + s.entity
 	if err := writeAuditLog(ctx, s.db, s.driver, tenantID, resource, id,
 		string(AuditActionDelete), "system", "{}"); err != nil {
-		// Audit failure is non-fatal
-		_ = err
+		// Audit failure is non-fatal — log warning but don't fail the delete
+		log.Printf("[WARN] audit write failed (delete %s/%s): %v", resource, id, err)
 	}
 	return nil
 }
@@ -414,7 +415,10 @@ func (s *EntityStore) List(ctx context.Context, params ListParams) (*ListResult,
 	if params.Page < 1 {
 		params.Page = 1
 	}
-	if params.PerPage < 1 || params.PerPage > 100 {
+	// Spec §558-559: default 20, max 100, values above max clamped to 100
+	if params.PerPage > 100 {
+		params.PerPage = 100
+	} else if params.PerPage < 1 {
 		params.PerPage = 20
 	}
 
@@ -901,14 +905,11 @@ func validateSingleRule(fieldName string, val any, rule spec.ValidationRule) err
 		if prec < 0 {
 			return fmt.Errorf("%w: %q: precision value must be non-negative", ErrValidationRule, fieldName)
 		}
-		// Check decimal places: shift by 10^prec and compare with truncated version
-		multiplier := 1.0
-		for i := 0; i < prec; i++ {
-			multiplier *= 10
-		}
-		truncated := float64(int(num*multiplier)) / multiplier
-		if num != truncated {
-			return fmt.Errorf("%w: %q: maximum %d decimal places allowed", ErrValidationRule, fieldName, prec)
+		// Check decimal places using string-based counting instead of float truncation
+		// to avoid floating-point precision issues with large/float-imprecise numbers.
+		decimalPlaces := countDecimalPlaces(num)
+		if decimalPlaces > prec {
+			return fmt.Errorf("%w: %q: maximum %d decimal places allowed, got %d", ErrValidationRule, fieldName, prec, decimalPlaces)
 		}
 
 	case "future":
@@ -1024,6 +1025,20 @@ func toFloat(v any) float64 {
 	default:
 		return 0
 	}
+}
+
+// countDecimalPlaces returns the number of decimal places in a float64 value
+// using string-based counting to avoid floating-point precision issues.
+func countDecimalPlaces(num float64) int {
+	s := fmt.Sprintf("%.10f", num)
+	// Remove trailing zeros
+	for len(s) > 0 && s[len(s)-1] == '0' {
+		s = s[:len(s)-1]
+	}
+	if dotIdx := strings.Index(s, "."); dotIdx >= 0 {
+		return len(s) - dotIdx - 1
+	}
+	return 0
 }
 
 // serializeChangeMap converts a map[string]map[string]any to a JSON string.

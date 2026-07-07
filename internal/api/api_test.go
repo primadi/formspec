@@ -768,3 +768,76 @@ func TestTenantMiddleware_Isolation(t *testing.T) {
 		})
 	}
 }
+
+// TestDevMode_AnyWorkspace_NotBlockedByCrossTenantCheck is a regression test:
+// DevValidator must not hard-code a workspace, or every URL workspace slug
+// except that one hard-coded value would 404 under the cross-tenant check
+// in AuthMiddleware (identity.WorkspaceID vs URL workspace).
+func TestDevMode_AnyWorkspace_NotBlockedByCrossTenantCheck(t *testing.T) {
+	SetAuthValidator(auth.NewDevValidator())
+	defer SetAuthValidator(nil)
+
+	chain := TenantMiddleware(AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})))
+
+	for _, ws := range []string{"acme", "demo", "some-other-workspace"} {
+		t.Run(ws, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/"+ws+"/api/v1/billing/customers", nil)
+			rec := httptest.NewRecorder()
+			chain.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Errorf("workspace %q: expected 200 in dev mode, got %d", ws, rec.Code)
+			}
+		})
+	}
+}
+
+// TestAuthMiddleware_CrossTenant404 verifies that a prod-mode identity whose
+// workspace does not match the URL workspace is rejected with 404 (not 403),
+// per spec §15.2 — cross-workspace access must be indistinguishable from the
+// resource not existing.
+func TestAuthMiddleware_CrossTenant404(t *testing.T) {
+	SetAuthValidator(auth.NewDevValidator()) // stand-in validator that returns a fixed identity below
+	defer SetAuthValidator(nil)
+
+	// Use a validator returning a fixed non-empty workspace to simulate prod JWT behavior.
+	SetAuthValidator(fixedWorkspaceValidator{workspaceID: "acme"})
+
+	chain := TenantMiddleware(AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})))
+
+	req := httptest.NewRequest("GET", "/other-workspace/api/v1/billing/customers", nil)
+	req.Header.Set("Authorization", "Bearer sometoken")
+	rec := httptest.NewRecorder()
+	chain.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("cross-tenant access: expected 404, got %d", rec.Code)
+	}
+
+	// Same-workspace request must pass through.
+	req2 := httptest.NewRequest("GET", "/acme/api/v1/billing/customers", nil)
+	req2.Header.Set("Authorization", "Bearer sometoken")
+	rec2 := httptest.NewRecorder()
+	chain.ServeHTTP(rec2, req2)
+
+	if rec2.Code != http.StatusOK {
+		t.Errorf("same-workspace access: expected 200, got %d", rec2.Code)
+	}
+}
+
+// fixedWorkspaceValidator is a test double returning an identity scoped to a fixed workspace.
+type fixedWorkspaceValidator struct {
+	workspaceID string
+}
+
+func (v fixedWorkspaceValidator) Validate(_ context.Context, _ string) (*auth.Identity, error) {
+	return &auth.Identity{
+		UserID:      "user1",
+		WorkspaceID: v.workspaceID,
+		Permissions: []string{"*"},
+	}, nil
+}

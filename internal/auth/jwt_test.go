@@ -176,8 +176,8 @@ func TestDevValidator(t *testing.T) {
 	if id.UserID != "developer" {
 		t.Errorf("UserID = %q, want %q", id.UserID, "developer")
 	}
-	if id.WorkspaceID != "demo" {
-		t.Errorf("WorkspaceID = %q, want %q", id.WorkspaceID, "demo")
+	if id.WorkspaceID != "" {
+		t.Errorf("WorkspaceID = %q, want empty (adopts URL workspace, avoids cross-tenant 404 in dev mode)", id.WorkspaceID)
 	}
 	if !id.HasPermission("anything.at.all") {
 		t.Error("dev identity should have wildcard '*' permission")
