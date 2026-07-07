@@ -12,12 +12,16 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
+	"github.com/forma/forma/internal/action"
 	"github.com/forma/forma/internal/api"
 	"github.com/forma/forma/internal/auth"
 	"github.com/forma/forma/internal/db"
 	"github.com/forma/forma/internal/entity"
 	"github.com/forma/forma/internal/permission"
+	"github.com/forma/forma/internal/validation"
+	"github.com/forma/forma/pkg/spec"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -129,6 +133,77 @@ func main() {
 	// 3. Build router
 	rb := api.NewRouterBuilder(reg)
 	rb.BuildRoutes()
+
+	// 3a. Wire action dispatcher with executors
+	disp := action.NewDispatcher()
+
+	// Script executor (script and script_ref)
+	scriptEx := action.NewScriptExecutor(*specPath)
+	scriptEx.SetSaveHandler(func(module, entity, id string, data map[string]any) error {
+		store, err := reg.GetEntityStore(module, entity)
+		if err != nil {
+			return fmt.Errorf("get store: %w", err)
+		}
+		_, err = store.Update(ctx, db.UpdateParams{
+			TenantID:  "demo",
+			ID:        id,
+			Version:   0, // TODO: fetch current version for CAS
+			UpdatedBy: "script",
+			Data:      data,
+		})
+		return err
+	})
+	scriptEx.SetCallHandler(func(fromModule, targetModule, targetEntity, actionName string, p map[string]any) (any, error) {
+		if targetModule == "" {
+			targetModule = fromModule
+		}
+		// TODO: dispatch to action dispatcher for cross-resource calls
+		return map[string]any{"status": "called", "target": fmt.Sprintf("%s.%s.%s", targetModule, targetEntity, actionName)}, nil
+	})
+	scriptEx.SetLoadHandler(func(module, entity, id string) (map[string]any, error) {
+		store, err := reg.GetEntityStore(module, entity)
+		if err != nil {
+			return nil, fmt.Errorf("get store: %w", err)
+		}
+		rec, err := store.GetByID(ctx, db.GetByIDParams{TenantID: "demo", ID: id})
+		if err != nil {
+			return nil, err
+		}
+		if rec == nil {
+			return nil, fmt.Errorf("record not found")
+		}
+		return rec.Data, nil
+	})
+	scriptEx.SetNextKeyHandler(func(fieldName string) (string, error) {
+		// Delegate to the counter store — the script doesn't know which entity,
+		// so we generate a generic key for dev mode.
+		return fmt.Sprintf("KEY-%d", time.Now().UnixNano()), nil
+	})
+	disp.RegisterExecutor(spec.ImplScript, scriptEx)
+	disp.RegisterExecutor(spec.ImplScriptRef, scriptEx)
+
+	// Native executor
+	nativeEx := action.NewNativeExecutor()
+	disp.RegisterExecutor(spec.ImplNative, nativeEx)
+
+	// Sidecar executor (stub)
+	disp.RegisterExecutor(spec.ImplSidecar, action.NewSidecarExecutor())
+
+	rb.SetDispatcher(disp)
+
+	// 3b. Wire exists:<resource> validator
+	validation.SetEntityLookup(func(module, entityName, id string) (bool, error) {
+		store, err := reg.GetEntityStore(module, entityName)
+		if err != nil {
+			return false, err
+		}
+		_, err = store.GetByID(ctx, db.GetByIDParams{TenantID: "demo", ID: id})
+		if err != nil {
+			return false, nil // not found = exists check fails
+		}
+		return true, nil
+	})
+
 	fmt.Printf("✓ Routes generated: %d\n", rb.RouteCount())
 
 	for _, rd := range rb.Routes() {

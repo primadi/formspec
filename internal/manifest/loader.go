@@ -222,3 +222,29 @@ func RawSpecToEntitySpec(specMap map[string]any) (*spec.EntitySpec, error) {
 	}
 	return &entitySpec, nil
 }
+
+// RawSpecToServiceSpec converts a raw spec map to a typed ServiceSpec.
+func RawSpecToServiceSpec(specMap map[string]any) (*spec.ServiceSpec, error) {
+	b, err := yaml.Marshal(specMap)
+	if err != nil {
+		return nil, fmt.Errorf("re-marshal spec: %w", err)
+	}
+	var svcSpec spec.ServiceSpec
+	if err := yaml.Unmarshal(b, &svcSpec); err != nil {
+		return nil, fmt.Errorf("unmarshal service spec: %w", err)
+	}
+	return &svcSpec, nil
+}
+
+// RawSpecToConfigSpec converts a raw spec map to a typed ConfigSpec.
+func RawSpecToConfigSpec(specMap map[string]any) (*spec.ConfigSpec, error) {
+	b, err := yaml.Marshal(specMap)
+	if err != nil {
+		return nil, fmt.Errorf("re-marshal spec: %w", err)
+	}
+	var cfg spec.ConfigSpec
+	if err := yaml.Unmarshal(b, &cfg); err != nil {
+		return nil, fmt.Errorf("unmarshal config spec: %w", err)
+	}
+	return &cfg, nil
+}

@@ -237,3 +237,68 @@ make clean       # Clean build artifacts
 8. **Location Transparency** — caller tidak pernah tahu di mana resource berjalan
 9. **Derived by Default** — Entity auto-generate admin panel, Table, Forms, Menu
 10. **Hybrid Low-Code** — 80% YAML, 20% custom component (`asset`)
+
+---
+
+## Workflow Discipline
+
+Setiap perubahan code wajib mengikuti alur kerja berikut. Urutan ini **tidak bisa dilompati**.
+
+### 1. Plan Before Code
+
+Sebelum menulis implementasi dari todo, **buat rencana teknis terlebih dahulu** di `docs/plan/`. Rencana harus mencakup:
+
+- File apa saja yang akan dibuat/diubah
+- Dependensi antar task
+- Estimasi level of effort (small / medium / large)
+- Referensi ke spec document yang relevan di `docs/spec/`
+
+Rencana bisa berupa file Markdown baru (misal `docs/plan/entity-engine-plan.md`) atau section di file plan yang sudah ada.
+
+### 2. Changelog
+
+Setiap kali ada perubahan code, **catat di `docs/changelog/`**:
+
+- Buat file dengan format `YYYY-MM-DD-<deskripsi-singkat>.md`
+- Isi: apa yang diubah, kenapa diubah, file yang terkena dampak, dan referensi ke todo/plan
+- Format ringkas, maksimal 1–2 paragraf per entry
+
+### 3. Todo Management
+
+File utama: `docs/plan/todo.md`.
+
+| Aksi | Aturan |
+|---|---|
+| Task selesai | Tandai ✅ dan catat timestamp selesai |
+| Butuh catatan | Tambahkan komentar inline di bawah task |
+| Pekerjaan ditunda (deferred) | Tambahkan task baru dengan status ⏸️ dan alasan penundaan |
+| Task baru ditemukan | Tambahkan ke fase yang sesuai, jangan hapus task lama |
+| Update `Last Updated` | Selalu update tanggal di header todo.md |
+
+### 4. Code → Plan Traceability
+
+Setiap perubahan code **harus mereferensi `docs/plan/`**:
+
+- Commit message menyebutkan plan file terkait
+- PR description (jika ada) mencantumkan link ke plan
+- Komentar di code (jika komplex) menyebutkan section plan
+
+### 5. Implementation Notes
+
+Jika selama implementasi ada keputusan teknis, trade-off, atau konteks yang perlu diingat:
+
+- Tulis di `docs/implementation/<topik>.md`
+- Jangan menimpa file yang sudah ada; tambahkan section baru atau buat file baru
+- Contoh: `docs/implementation/api-layer.md`, `docs/implementation/database-layer.md`
+
+### 6. Audit & Gap Resolution
+
+Saat melakukan audit (membandingkan code terhadap spec atau todo):
+
+| Langkah | Output |
+|---|---|
+| Jalankan audit | Simpan hasil di `docs/audit/<topik>-<tanggal>.md` |
+| Identifikasi gap | List gap dengan severity (critical / major / minor) |
+| Selesaikan gap | Implementasi perbaikan sesuai workflow di atas |
+| Gap selesai | Update changelog, dan update dokumen terkait (spec, plan, todo) jika dibutuhkan |
+| Gap tidak bisa diselesaikan | Catat sebagai deferred todo dengan alasan |

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/forma/forma/internal/action"
 	"github.com/forma/forma/internal/auth"
 	"github.com/forma/forma/internal/db"
 	"github.com/forma/forma/internal/validation"
@@ -17,7 +18,8 @@ import (
 
 // HandlerFactory creates HTTP handlers backed by an EntityStore.
 type HandlerFactory struct {
-	registry EntityStoreProvider
+	registry   EntityStoreProvider
+	dispatcher *action.Dispatcher
 }
 
 // EntityStoreProvider abstracts the entity registry for handler use.
@@ -27,7 +29,12 @@ type EntityStoreProvider interface {
 
 // NewHandlerFactory creates a handler factory.
 func NewHandlerFactory(registry EntityStoreProvider) *HandlerFactory {
-	return &HandlerFactory{registry: registry}
+	return &HandlerFactory{registry: registry, dispatcher: action.NewDispatcher()}
+}
+
+// SetDispatcher sets the action dispatcher used for custom action execution.
+func (f *HandlerFactory) SetDispatcher(d *action.Dispatcher) {
+	f.dispatcher = d
 }
 
 // HandleList returns a GET / handler for the given entity.
@@ -483,16 +490,25 @@ func writeValidationErrors(w http.ResponseWriter, errs []error) {
 }
 
 // HandleCustomAction returns a handler for a named custom action on an entity.
-// It validates action params before delegating to the action's impl.
-// For now (Fase 1.6), params are validated but execution returns 501.
-// Full execution (script_ref, native) comes in Fase 2.
+// It validates action params, evaluates conditions, dispatches to the impl executor,
+// and handles the result (including state machine transitions).
 func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, actionSpec spec.Action) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		tenantID := tenantFromContext(ctx)
+		userID := userFromContext(ctx)
+		resourceID := r.PathValue("id")
+
 		// Parse request body as params
 		var params map[string]any
-		if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
-			writeError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "invalid JSON: "+err.Error())
-			return
+		if r.Body != nil && r.ContentLength > 0 {
+			if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
+				writeError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "invalid JSON: "+err.Error())
+				return
+			}
+		}
+		if params == nil {
+			params = make(map[string]any)
 		}
 
 		// Validate action params if declared
@@ -503,8 +519,61 @@ func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, a
 			}
 		}
 
-		// TODO(Fase 2): execute action impl (script_ref, native, etc.)
-		writeError(w, http.StatusNotImplemented, "NOT_IMPLEMENTED",
-			"custom action execution not yet implemented: "+actionName)
+		// Load current resource data from the entity store
+		var resourceData map[string]any
+		store, err := f.registry.GetEntityStore(module, entity)
+		if err == nil && resourceID != "" {
+			rec, getErr := store.GetByID(ctx, db.GetByIDParams{TenantID: tenantID, ID: resourceID})
+			if getErr == nil && rec != nil {
+				resourceData = rec.Data
+				if resourceData == nil {
+					resourceData = make(map[string]any)
+				}
+			}
+		}
+		if resourceData == nil {
+			resourceData = make(map[string]any)
+		}
+
+		// Evaluate action conditions (state-level validation, spec §13)
+		if len(actionSpec.Conditions) > 0 {
+			if err := action.EvaluateConditions(actionSpec.Conditions, resourceData, params); err != nil {
+				writeError(w, http.StatusUnprocessableEntity, "CONDITION_FAILED", err.Error())
+				return
+			}
+		}
+
+		// Dispatch to the appropriate executor via the action dispatcher
+		identity := IdentityFromContext(ctx)
+		var identityInfo *action.IdentityInfo
+		if identity != nil {
+			identityInfo = &action.IdentityInfo{
+				UserID:      identity.UserID,
+				WorkspaceID: identity.WorkspaceID,
+				Permissions: identity.Permissions,
+				Roles:       identity.Roles,
+			}
+		}
+
+		result, err := f.dispatcher.Dispatch(ctx, actionSpec, action.ExecuteParams{
+			Module:     module,
+			Entity:     entity,
+			ActionName: actionName,
+			ResourceID: resourceID,
+			Resource:   resourceData,
+			Params:     params,
+			TenantID:   tenantID,
+			UserID:     userID,
+			Identity:   identityInfo,
+		})
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "ACTION_ERROR", err.Error())
+			return
+		}
+
+		writeJSON(w, http.StatusOK, SingleResponse{
+			Data: result.Data,
+			Meta: MetaSingle{RequestID: requestIDFromContext(ctx), Timestamp: time.Now().UTC().Format(time.RFC3339)},
+		})
 	}
 }

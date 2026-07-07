@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 
+	"github.com/forma/forma/internal/action"
 	"github.com/forma/forma/internal/entity"
 	"github.com/forma/forma/pkg/spec"
 	"github.com/go-chi/chi/v5"
@@ -11,9 +12,10 @@ import (
 // RouterBuilder constructs a Forma API router.
 // It wires middleware, route generation, and handler dispatch together.
 type RouterBuilder struct {
-	registry *entity.Registry
-	routes   []RouteDescriptor
-	factory  *HandlerFactory
+	registry   *entity.Registry
+	routes     []RouteDescriptor
+	factory    *HandlerFactory
+	dispatcher *action.Dispatcher
 }
 
 // NewRouterBuilder creates a new router builder backed by the entity registry.
@@ -22,6 +24,13 @@ func NewRouterBuilder(registry *entity.Registry) *RouterBuilder {
 		registry: registry,
 		factory:  NewHandlerFactory(registry),
 	}
+}
+
+// SetDispatcher sets the action dispatcher used for custom action execution.
+// Call this before BuildHTTP to wire the action execution engine.
+func (b *RouterBuilder) SetDispatcher(d *action.Dispatcher) {
+	b.dispatcher = d
+	b.factory.SetDispatcher(d)
 }
 
 // BuildRoutes generates route descriptors and stores them in the builder.

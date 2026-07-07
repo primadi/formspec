@@ -18,6 +18,24 @@ import (
 	"github.com/forma/forma/pkg/spec"
 )
 
+// ─── Entity Lookup for exists:<resource> ───
+
+// EntityLookup checks whether a record exists in the given entity.
+// Module and entity are derived from the exists target (e.g. "billing.product" → module="billing", entity="product").
+// ID is the field value being validated.
+// Returns (true, nil) if the record exists, (false, nil) if it doesn't.
+type EntityLookup func(module, entity, id string) (bool, error)
+
+// existsLookup holds the current entity lookup implementation.
+// It is set via SetEntityLookup during server initialization and defaults to a no-op (always-true for dev).
+var existsLookup EntityLookup
+
+// SetEntityLookup installs the entity lookup function used by the exists:<resource> validator.
+// Call this during server startup with a function that queries the entity registry.
+func SetEntityLookup(fn EntityLookup) {
+	existsLookup = fn
+}
+
 // ============================================================================
 // Cross-Field Validators
 // ============================================================================
@@ -54,15 +72,12 @@ func ValidateCrossField(fieldName string, val any, rule spec.ValidationRule, dat
 		return compareDateTime(fieldName, val, refField, refVal, false)
 
 	case "exists":
-		// Format: {exists: billing.product} or just "product" with module prefix
+		// Format: {exists: billing.product} — check that field value references an existing record
 		target, ok := rule.Value.(string)
 		if !ok {
 			return fmt.Errorf("exists rule for %q: value must be a resource reference", fieldName)
 		}
-		_ = target
-		// TODO(Fase 2): actual DB query to check record existence
-		// For now, accept all values (stub)
-		return nil
+		return checkExists(fieldName, val, target)
 	}
 	return nil
 }
@@ -341,4 +356,45 @@ func countDecimalPlaces(num float64) int {
 		return len(s) - dotIdx - 1
 	}
 	return 0
+}
+
+// ─── exists:<resource> implementation ───
+
+// checkExists validates that a field value references an existing record.
+// target is formatted as "module.entity" (e.g. "billing.product").
+// The field value (val) is the UUID of the referenced record.
+func checkExists(fieldName string, val any, target string) error {
+	if val == nil || val == "" {
+		return nil // empty value is not an existence violation (required rule handles emptiness)
+	}
+
+	// Parse target into module and entity
+	parts := strings.SplitN(target, ".", 2)
+	if len(parts) != 2 {
+		return fmt.Errorf("%s: invalid exists target %q — must be \"module.entity\"", fieldName, target)
+	}
+	module, entity := parts[0], parts[1]
+
+	id, ok := val.(string)
+	if !ok {
+		return fmt.Errorf("%s: exists check requires a string value, got %T", fieldName, val)
+	}
+	if id == "" {
+		return nil
+	}
+
+	if existsLookup == nil {
+		// No lookup registered (dev mode without DB) — accept all values
+		return nil
+	}
+
+	found, err := existsLookup(module, entity, id)
+	if err != nil {
+		return fmt.Errorf("%s: exists(%s) lookup error: %w", fieldName, target, err)
+	}
+	if !found {
+		return fmt.Errorf("%s: referenced %s record %q does not exist", fieldName, target, id)
+	}
+
+	return nil
 }

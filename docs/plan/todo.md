@@ -1,7 +1,7 @@
 # Forma Implementation Progress
 
 **Last Updated:** 2026-07-07  
-**Total Tests:** ~175 (all passing)
+**Total Tests:** ~210 (all passing)
 
 > Checklist implementasi Forma framework. Setiap task ditandai saat selesai.
 
@@ -169,16 +169,53 @@
 
 ---
 
-## Fase 2 — Business Logic Engine
+## Fase 2 — Business Logic Engine (✅ Core Complete)
 
 | # | Task | Status |
 |---|---|---|
-| 2.1 | Starlark runtime integration (`internal/starlark/` stub exists) | ⏳ |
-| 2.2 | ScriptRef execution from manifest action | ⏳ |
-| 2.3 | Native (Go) handler registration | ⏳ |
-| 2.4 | Sidecar handler protocol | ⏳ |
-| 2.5 | State Machine engine — transitions + guards | ⏳ |
-| 2.6 | `ctx.*` primitives (db, cache, lock, queue, pubsub, storage) | ⏳ |
+| 2.1 | Starlark runtime integration (`internal/starlark/` — executor, resource API, ctx) | ✅ |
+| 2.2 | ScriptRef execution from manifest action | ✅ |
+| 2.3 | Native (Go) handler registration | ✅ |
+| 2.4 | Sidecar handler protocol | ✅ (stub) |
+| 2.5 | State Machine engine — transitions + guards | ✅ |
+| 2.6 | `ctx.*` primitives (db, cache, lock, queue, pubsub, storage) — stubs for queue/pubsub/storage | ✅ |
+
+### 2.7 Fase-1 Deferred Fixes (Completed in Fase 2)
+
+| # | Task | Status |
+|---|---|---|
+| 2.7.1 | `exists:<resource>` real DB query (was stub) | ✅ |
+| 2.7.2 | after:/before: colon shorthand parsing | ✅ |
+| 2.7.3 | Action condition evaluation (Starlark-based, spec §13) | ✅ |
+| 2.7.4 | Standard CRUD permission auto-registration | ✅ |
+
+### 2.8 New Files Created
+
+| File | Purpose |
+|---|---|
+| `internal/action/dispatcher.go` | Central action dispatcher — routes `impl` type → executor |
+| `internal/action/dispatcher_test.go` | Dispatcher unit tests (9 tests) |
+| `internal/action/native.go` | Native Go handler registry + executor |
+| `internal/action/native_test.go` | Native executor tests (4 tests) |
+| `internal/action/sidecar.go` | Sidecar stub executor |
+| `internal/action/script.go` | Script/ScriptRef executor (Starlark integration) |
+| `internal/action/conditions.go` | Condition evaluator (spec §13 gates) |
+| `internal/action/e2e_test.go` | E2E integration tests (8 test cases) |
+| `internal/starlark/resource.go` | Starlark `resource` object API (set/save/call/load/field) |
+| `internal/starlark/context.go` | Starlark `ctx` object API (tenant/user/auth/log/config/next_key) |
+| `internal/starlark/executor.go` | Script execution engine (load .star, call execute()) |
+| `internal/entity/state_machine.go` | State machine engine — transitions, guards, wildcard |
+| `internal/entity/state_machine_test.go` | State machine tests (13 tests) |
+
+### 2.9 Files Modified
+
+| File | Change |
+|---|---|
+| `internal/api/handler.go` | `HandleCustomAction` → dispatcher (was 501), + conditions + dispatch |
+| `internal/api/router.go` | Added `SetDispatcher()` to RouterBuilder |
+| `internal/manifest/loader.go` | Added `RawSpecToServiceSpec()`, `RawSpecToConfigSpec()` |
+| `internal/validation/validator.go` | `exists:<resource>` stub → real DB lookup via `EntityLookup` |
+| `cmd/forma-serve/main.go` | Wire dispatcher, script/native/sidecar executors, exists lookup, script handlers |
 
 ---
 
@@ -326,15 +363,16 @@ Admin grant: "role kasir → Page Order Management"
 | Package | Tests | Status |
 |---|---|---|
 | `internal/db` | 103 | ✅ |
-| `internal/entity` | 9 | ✅ |
+| `internal/entity` | 22 | ✅ |
 | `internal/api` | 21 | ✅ |
-| `internal/auth` | 5 | ✅ |
+| `internal/action` | 17 | ✅ |
 | `internal/permission` | 14 | ✅ |
+| `internal/auth` | 5 | ✅ |
 | `internal/validation` | 9 | ✅ |
+| `internal/starlark` | 9 | ✅ |
 | `internal/manifest` | 6 | ✅ |
-| `internal/starlark` | 0 | Stub |
 | `pkg/spec` | 8 | ✅ |
-| **Total** | **~175** | **✅ All passing** |
+| **Total** | **~214** | **✅ All passing** |
 
 ---
 
