@@ -16,7 +16,8 @@ docs/
 │
 └── implementation/                # Dokumentasi implementasi (internal)
     ├── README.md                  # ← Anda di sini
-    └── database-layer.md          # internal/db
+    ├── database-layer.md          # internal/db
+    └── api-layer.md               # internal/api
 ```
 
 ---
@@ -25,9 +26,8 @@ docs/
 
 | Dokumen | Package | Deskripsi | Status |
 |---|---|---|---|
-| [database-layer.md](./database-layer.md) | `internal/db` | DB abstraction, DSN parsing, SQLite/PostgreSQL drivers, DDL generation, schema migration, CRUD query builder, child storage, natural key counter, idempotency store, outbox table | ✅ Fase 1.1 selesai |
-
----
+| [database-layer.md](./database-layer.md) | `internal/db` | DB abstraction, DSN parsing, SQLite/PostgreSQL drivers, DDL generation, schema migration, CRUD query builder, child storage, natural key counter, idempotency store, outbox table | ✅ Fase 1.1 |
+| [api-layer.md](./api-layer.md) | `internal/api` | Multi-protocol router (chi radix-tree), deny-by-default exposure, workspace-prefixed routes, smart internal dispatch, auto-generated REST handlers, response envelopes | 📋 Planned — Fase 1.3 |
 
 ## Konvensi
 

@@ -2,7 +2,7 @@
 
 **Status:** Draft — realigned under Forma Overview
 **License:** Creative Commons CC0
-**Governed by:** Forma Overview · Forma Reference (Decisions D1–D48)
+**Governed by:** Forma Overview · Forma Reference (Decisions D1–D50)
 
 > This document defines the **minimum specification** required to build a conforming Forma implementation. Features not listed here are defined in Core Extended, Control Spec, Frontend Spec, Plane Protocol Spec, and Marketplace Spec.
 
@@ -75,6 +75,8 @@ A `.yaml` file MAY contain multiple manifests separated by `---`. Loaders MUST t
 #### 4.1 `kind: Entity`
 
 Stateful, persisted, source of truth for business data. Supports CRUD, state machine, and events. `characteristics`: `master` (stable data), `transaction` (append-heavy, time-partitioned), `reference` (read-only seed data, owned by App Owner), `summary` (system-managed projection — no create/update/delete via API).
+
+**API Exposure (D49):** Private by default. No external endpoint is created unless the entity opts in via `spec.expose` — a per-protocol declaration (`rest`, `grpc`, `ws`). Without `expose`, the entity is only accessible to internal callers (same-process services, Starlark scripts, events). See §11.1.
 
 #### 4.2 `kind: Service`
 
@@ -250,6 +252,7 @@ spec:
   auth: {}                         # §15
   audit: {}                        # §15
   persist: {}                      # §20
+  expose: []                       # §11.1 — absent = no external access
   fields: []                       # Entity only — §10
   actions: []                      # §11
   events: []                       # §12
@@ -279,6 +282,7 @@ fields:
     immutable: bool       # default false
     unique: bool          # default false, unique per tenant
     natural_key: bool     # default false
+    natural_key_rule: {}  # §10.4
     default: any
     audited: bool         # default false
     index: bool           # default false
@@ -334,7 +338,7 @@ Decision test: does it have meaning outside the parent? Yes → relation.
     reset: yearly                 # never | yearly | monthly | daily
 ```
 
-Counters live in `forma_natural_key_counters` (PK = tenant/resource/field/scope/period). Increments MUST be atomic, gap-free, duplicate-free. MUST NOT derive via `MAX()` scan. `ctx.next_key` is a helper over `ctx.lock`.
+Counters live in `forma_natural_key_counters` (PK = tenant/resource/field/scope/period). Increments MUST be atomic, gap-free, duplicate-free. MUST NOT derive via `MAX()` scan. `ctx.next_key` is a helper over `ctx.lock`. Sequence numbers are allocated under `ctx.lock` inside the same transaction as the insert/update; if the transaction later fails its optimistic-concurrency (`version`) check and is retried, a gap MAY result — unless the entity declares gap-free mode, in which case the lock MUST be held until commit.
 
 #### 10.5 Relation Spec
 
@@ -356,23 +360,32 @@ actions:
   - name: send
     description: Send invoice to customer      # required
     required_permission: billing.invoices.send # or "public"
-    uses:                                      # §11.3
+    disabled: false                            # §11.1 — disable a standard action
+    uses:                                      # §11.2
       resources: [customer.find]
       primitives: [queue]
-    idempotent: false                          # §11.8
+    idempotent: true                           # §11.3
     idempotency_key: { from: param, field: event_id }
     audit: true
     emits: invoice-sent
     call: sync                                 # sync | async
-    expose: [http, websocket]
-    params: {}                                 # §11.4
-    conditions: []                             # §11.5
+    expose: [rest, ws]
+    params: {}                                 # §13
+    conditions: []                             # §13
     impl: { type: script_ref, ref: billing/invoice_send }
 ```
 
 #### 11.1 Standard actions (Entity only)
 
-Auto-generated, can be disabled or overridden:
+**Disabled by default (D49).** Standard CRUD endpoints are only created when an entity opts in via `spec.expose`. When enabled, the following endpoints are generated per protocol:
+
+| Protocol | Opt-in | Standard endpoints |
+|---|---|---|
+| REST | `expose: [{type: rest}]` | `/{plural}`, `/{plural}/:id`, etc. |
+| gRPC | `expose: [{type: grpc, enabled: true}]` | Full gRPC service with matching RPCs |
+| WebSocket | `expose: [{type: ws, enabled: true}]` | Subscription channel per entity + action |
+
+**REST endpoint details (when enabled):**
 
 | Action | Method | Path | Default permission |
 |---|---|---|---|
@@ -382,7 +395,11 @@ Auto-generated, can be disabled or overridden:
 | `update` | PATCH | `/:id` | `{module}.{plural}.update` |
 | `delete` | DELETE | `/:id` | `{module}.{plural}.delete` |
 
-`summary` entities: create/update/delete permanently disabled.
+The `actions` field inside `expose` filters which endpoints are generated; omit to enable all applicable (except `delete`). `expose: []` (empty) is equivalent to `expose` absent — no external surface is generated; both are valid ways to keep an entity internal-only. `summary` entities: create/update/delete permanently disabled even if listed.
+
+Setting `disabled: true` on a standard action (`create`/`update`/`delete`/`find`) removes it from every surface — equivalent to the action never existing. Custom actions are simply omitted instead.
+
+**Override:** use `kind: Api` (Core Extended §2) for custom paths, versioning, or disabling specific endpoints on a per-surface basis. `kind: Api` can only modify already-exposed surfaces — it cannot create access where `expose` has not been set.
 
 #### 11.2 `uses` vocabulary & enforcement
 
@@ -396,11 +413,11 @@ uses:
   primitives: [cache, queue, lock, storage, pubsub]
 ```
 
-**One rule: if not declared, it is blocked. Always.** Enforcement error codes: `CONFIG_ACCESS_DENIED`, `KVSTORE_ACCESS_DENIED`, `USES_VIOLATION`. `uses.db` defaults to own module; cross-module MUST be declared → consent footprint; cross-module `write` → high-risk consent. A `USES_VIOLATION` triggers: request blocked, alert, module auto-suspend, incident audit.
+**One rule: if not declared, it is blocked. Always.** Enforcement error codes: `CONFIG_ACCESS_DENIED`, `KVSTORE_ACCESS_DENIED`, `USES_VIOLATION`. `uses.db` defaults to own module; cross-module MUST be declared → consent footprint; cross-module `write` → high-risk consent. A `USES_VIOLATION` triggers: request blocked, alert, module auto-suspend, incident audit. Auto-suspend is scoped to the workspace where the violation occurred — the module keeps running in other workspaces; platform-wide suspension is an explicit Cloud Owner emergency action, never automatic.
 
 #### 11.3 Idempotency & optimistic concurrency (normative, D32)
 
-`idempotent: true` REQUIRES an `idempotency_key` source (`header` / `param` / `server`). Framework maintains idempotency store `(tenant, action, key) → pending|completed + stored response`. Duplicate after completed → replay original response. Duplicate while pending → wait/409. `from: server` → two-step prepare (browser double-submit protection). Entries expire by retention, never deleted on commit.
+`idempotent: true` REQUIRES an `idempotency_key` source (`header` / `param` / `server`). Framework maintains idempotency store `(tenant, action, key) → pending|completed + stored response`. Duplicate after completed → replay original response. Duplicate while pending → wait/409. `from: server` → two-step prepare (browser double-submit protection). Entries expire by retention, never deleted on commit. Retention defaults to **24 hours** and is read from the global config key `core.idempotency_retention` (a `forma.core` `kind: Config` key — environment-resolvable, changeable at runtime without redeploy); implementations MUST NOT hard-code the window.
 
 **Optimistic concurrency via `version`**, default-on for all Entities: update accepts version client read; mismatch → `409 CONFLICT` with current version. `updated_at` is audit metadata only.
 
@@ -442,7 +459,7 @@ events:
 
 #### 12.2 Outbox (normative)
 
-Implementations MUST provide `forma_outbox` table and a worker: poll pending → idempotency check → **sync call** to target action → delivered, or backoff retry → dead-letter.
+Implementations MUST provide `forma_outbox` table and a worker: poll pending → idempotency check → **sync call** to target action → delivered, or backoff retry → dead-letter (see §22 `failed-event`).
 
 #### 12.3 `kind: Subscription` — subscribing from outside (D35)
 
@@ -530,14 +547,20 @@ Every action with `audit: true` records: who, what, resource, workspace, before/
 
 ### 16. API Delivery
 
-- **HTTP (required):** `/api/{version}/{module}/{plural}/:id/:action`. Child: `/api/.../items`.
-- **WebSocket (required):** all actions; channel convention in §19.4.
+- **Exposure model (D49):** deny-by-default. No external endpoint is created unless the entity opts in via `spec.expose`. Internal callers (same-process services, Starlark scripts, events) are unaffected and always have access.
+- **Multi-protocol:** when an entity opts in via `spec.expose: [{type: rest} | {type: grpc} | {type: ws}]`, the router MUST generate protocol-specific routes for each declared type. REST and WebSocket are required transports; gRPC is recommended.
+- **Workspace prefix:** every external route is prefixed with the workspace identifier. `workspace_slug` is a human-readable alias (configurable per Workspace); the router MUST fall back to the workspace UUID when no slug is set.
+- **Internal dispatch:** same-process callers MUST bypass the network — the router detects registry locality and dispatches via direct function call. Cross-process callers use the configured protocol adapter.
+- **Route scalability:** the router MUST use a radix-tree (or equivalent O(path segments)) lookup structure so that route count does not linearly degrade performance.
+- **REST (required when exposed):** `/{workspace_slug}/api/{version}/{module}/{plural}/:id/:action`. Child: `/{workspace_slug}/api/.../items`.
+- **WebSocket (required when exposed):** all actions; channel convention in §19.4.
 - **Admin panel (recommended):** auto-generated from manifests.
-- Query conventions: `?page&per_page&sort&direction&fields&filter[field][op]=value&search&include`. Filter operators: `eq neq gt gte lt lte between in nin like ilike null notnull`.
+- **Query conventions:** `?page&per_page&sort&direction&fields&filter[field][op]=value&search&include`. Filter operators: `eq neq gt gte lt lte between in nin like ilike null notnull`.
+- **Pagination bounds:** `per_page` defaults to **20**, maximum **100**; values above the maximum are clamped to it; non-numeric or negative values → `400 VALIDATION_ERROR`. Implementations MAY lower the maximum per entity but MUST NOT raise it above 100.
 
 Response envelopes: list `{ data, meta: {page, per_page, total, total_pages}, links }`. Single `{ data, meta: {request_id, timestamp} }`. Error `{ error: {code, message, details}, meta }`.
 
-Standard error codes: `VALIDATION_ERROR` (422), `UNAUTHORIZED` (401), `FORBIDDEN` (403), `NOT_FOUND` (404, incl. cross-workspace & ungranted cross-app), `CONFLICT` (409), `STATE_TRANSITION_ERROR` (422), `USES_VIOLATION`/`CONFIG_ACCESS_DENIED`/`KVSTORE_ACCESS_DENIED` (500-class, logged), `INTERNAL_ERROR` (500, reference ID only).
+Standard error codes: `VALIDATION_ERROR` (422), `UNAUTHORIZED` (401), `FORBIDDEN` (403), `NOT_FOUND` (404, incl. cross-workspace & ungranted cross-app), `CONFLICT` (409), `STATE_TRANSITION_ERROR` (422), `USES_VIOLATION`/`CONFIG_ACCESS_DENIED`/`KVSTORE_ACCESS_DENIED`/`CROSS_CATEGORY_ACCESS_DENIED` (500-class, logged), `INTERNAL_ERROR` (500, reference ID only).
 
 ### 17. Communication Patterns
 
@@ -593,13 +616,15 @@ Indexed fields → generated columns: `_field VARCHAR GENERATED ALWAYS AS (data-
 
 Three types: (1) **Structural** — fully automatic from Entity diffs, never hand-written. (2) **Custom DDL** — `kind: Migration` for indexes, functions, triggers. DML rejected at runtime. (3) **Data migration** — scaffolded scripts, run/rollback by version.
 
+Field rename MUST be declared via `renamed_from` on the field — otherwise the diff interprets it as drop+add; field removal requires two steps (deprecate, then remove) across two applied versions. Backfills belong to type-3 data-migration scripts.
+
 ### 21. Workspace Provisioning
 
 Lifecycle: `create → provisioning → seed default roles + reference seeds → active` (emits `workspace.activated`); `suspend ⇄ reactivate`; `terminate`. Per-workspace config via `ctx.tenant.config("key", default)`.
 
 ### 22. forma.core Resources
 
-All implementations MUST provide: `workspace`, `user`, `app-membership` (per-app membership + role assignments), `role`, `role-assignment`, `api-key`, `session`, `job`, `audit-log` (append-only, framework-written, read-only API), `setting` (entities); `health`, `metrics` (services).
+All implementations MUST provide: `workspace`, `user`, `app-membership` (per-app membership + role assignments), `role`, `role-assignment`, `api-key`, `session`, `job`, `audit-log` (append-only, framework-written, read-only API), `failed-event` (append-only dead-letter store, framework-written — records event payload, target, error, attempt count; replayable via an admin action), `setting` (entities); `health`, `metrics` (services).
 
 ### 23. CLI
 
@@ -619,7 +644,7 @@ Normative (Credible Exit Guarantee D31): format is part of this open spec. Backu
 
 ### 26. Scripting (Starlark)
 
-Single scripting language. Entry points: `def validate(resource, params, ctx)` → `ok()` / `fail(msg|{field, message})`; `def execute(params, ctx)` → result object. Sandbox limits: 5000ms, 64MB, 100k iterations, no network/filesystem/subprocess, ≤50 db queries, ≤1000 records per execution.
+Single scripting language. Entry points: `def validate(resource, params, ctx)` → `ok()` / `fail(msg|{field, message})`; Entity action scripts `def execute(resource, params, ctx)` → result object (`resource` bound to the target record; absent for `create`-style actions); Service action scripts `def execute(params, ctx)`. Sandbox limits: 5000ms, 64MB, 100k iterations, no network/filesystem/subprocess, ≤50 db queries, ≤1000 records per execution.
 
 Resource API: `invoice.load(id)`, `invoice.find_by_number(nk)`, chainable `invoice.query().where(...).include(...).get()/first()/count()`, `invoice.new().set(...).save()`, `inv.call("mark-paid", {...})`, field access `inv.field.total`, child helpers `inv.add_child/update_child/remove_child("items", ...)`.
 

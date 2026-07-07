@@ -33,7 +33,7 @@ ALTER TABLE financial.billing_invoices
   ADD COLUMN ext_kastem1 jsonb NOT NULL DEFAULT '{}';
 ```
 
-The extension manifest:
+The extension manifest (`spec.extend_storage` is a Core Extended-scope entity-spec attribute, and this document is its normative definition; implementations claiming only Core Basic conformance MAY ignore it):
 
 ```yaml
 apiVersion: forma.dev/v1alpha1
@@ -98,7 +98,7 @@ Extending an extension (`kastem1` → `kastem1_special1`) is technically possibl
 2. **Creates a migration ordering dependency** that did not previously exist (`kastem1` must be applied before `special1`).
 3. **Leaks abstraction** — the `special1` module now knows that `kastem1` is an extension, not a regular entity.
 
-**Recommended alternative:** all extensions remain **flat siblings** against the base entity, regardless of how many there are. If modules depend on each other's extensions, declare the dependency via `module.requires` in the Module manifest, and access cross-extension fields through code — not through column naming:
+**Recommended alternative:** all extensions remain **flat siblings** against the base entity, regardless of how many there are. If modules depend on each other's extensions, declare the dependency via `spec.depends` in the Module manifest (Core Basic §4.5), and access cross-extension fields through code — not through column naming:
 
 ```python
 # In a script or handler
@@ -112,10 +112,10 @@ invoice.ext("kastem1").project_code
 Fields with `index: true` in an extension still mean altering the base module's table DDL:
 
 ```sql
-ALTER TABLE billing_invoices
+ALTER TABLE financial.billing_invoices
   ADD COLUMN _project_code VARCHAR
     GENERATED ALWAYS AS (ext_kastem1->>'project_code') STORED;
-CREATE INDEX ON billing_invoices (tenant_id, _project_code) WHERE deleted_at IS NULL;
+CREATE INDEX ON financial.billing_invoices (tenant_id, _project_code) WHERE deleted_at IS NULL;
 ```
 
 This is a coupling point, but it is controlled:

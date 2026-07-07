@@ -161,6 +161,24 @@ func (l *Loader) parseFile(path string) ([]RawManifest, []ParseError) {
 	return manifests, errs
 }
 
+// KnownKinds is the catalog of built-in resource kinds across the spec documents
+// (Core Basic §4, Core Extended, Frontend, Control Plane). Unknown kinds MUST
+// fail validation (Core Basic §4). Third-party kinds are registered via
+// KindDefinition; until that mechanism lands, only built-ins are accepted.
+var KnownKinds = map[string]bool{
+	// Core Basic
+	"App": true, "Module": true, "Entity": true, "Service": true,
+	"Config": true, "Migration": true, "Subscription": true,
+	// Core Extended
+	"Workflow": true, "Api": true, "Webhook": true, "Mockup": true, "KindDefinition": true,
+	// Frontend
+	"Page": true, "Form": true, "Table": true, "Dashboard": true, "Widget": true,
+	"Report": true, "Wizard": true, "Kanban": true, "Timeline": true,
+	"Menu": true, "Print": true, "Theme": true,
+	// Control Plane
+	"Environment": true, "Policy": true,
+}
+
 // Validate performs basic validation on a raw manifest.
 func (l *Loader) Validate(raw RawManifest) error {
 	if raw.APIVersion == "" {
@@ -169,13 +187,16 @@ func (l *Loader) Validate(raw RawManifest) error {
 	if raw.Kind == "" {
 		return fmt.Errorf("%s: kind is required", raw.Source)
 	}
+	if !KnownKinds[raw.Kind] {
+		return fmt.Errorf("%s: unknown kind %q", raw.Source, raw.Kind)
+	}
 	if raw.Metadata.Name == "" {
 		return fmt.Errorf("%s: metadata.name is required", raw.Source)
 	}
 
 	// Type-specific validation
 	if raw.Kind == "Entity" && raw.Spec != nil {
-		entitySpec, err := rawSpecToEntitySpec(raw.Spec)
+		entitySpec, err := RawSpecToEntitySpec(raw.Spec)
 		if err != nil {
 			return fmt.Errorf("%s: invalid spec: %w", raw.Source, err)
 		}
@@ -187,8 +208,8 @@ func (l *Loader) Validate(raw RawManifest) error {
 	return nil
 }
 
-// rawSpecToEntitySpec converts a raw spec map to a typed EntitySpec.
-func rawSpecToEntitySpec(specMap map[string]any) (*spec.EntitySpec, error) {
+// RawSpecToEntitySpec converts a raw spec map to a typed EntitySpec.
+func RawSpecToEntitySpec(specMap map[string]any) (*spec.EntitySpec, error) {
 	// Marshal back to YAML bytes, then unmarshal into typed struct.
 	// This ensures proper type conversion via yaml tags.
 	b, err := yaml.Marshal(specMap)

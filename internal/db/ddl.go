@@ -117,8 +117,8 @@ func GenerateEntityDDL(meta spec.Metadata, entity *spec.EntitySpec, driver Drive
 
 	// Soft delete column
 	softDelete := true
-	if entity.Persist != nil {
-		softDelete = entity.Persist.SoftDelete
+	if entity.Persist != nil && entity.Persist.SoftDelete != nil {
+		softDelete = *entity.Persist.SoftDelete
 	}
 	if softDelete {
 		columns = append(columns, fmt.Sprintf("deleted_at  %s", dl.timestamptz))
@@ -288,7 +288,9 @@ func fieldTypeToSQL(ft spec.FieldType, _ []string) string {
 	switch ft {
 	case spec.FieldString:
 		return "text"
-	case spec.FieldNumber:
+	case spec.FieldInteger:
+		return "bigint"
+	case spec.FieldDecimal, spec.FieldNumber:
 		return "numeric(20,8)"
 	case spec.FieldBoolean:
 		return "boolean"

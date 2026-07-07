@@ -42,10 +42,10 @@ The same requirements, built with Forma (see the [tutorial](./08-order-to-cash-t
 | FR5 — Email reliability | `deliver channel: queue` (publisher) | Email is a billing promise → in publisher's deliver |
 | FR5 — WA reliability | `kind: Subscription` (D35) | Added later without touching order.yaml |
 | FR6 — Live ticker | `deliver channel: websocket` | Deliberately lossy — cannot be confused with FR5 |
-| FR7 — Cached discount | `ctx.cache` + invalidation | |
-| FR8 — Config per workspace | `kind: Config` + `ctx.config()` | |
-| FR9 — Structured logging | `ctx.log` — tenant/request/user auto | |
-| FR10 — PDF storage | `ctx.storage.write()` | Object storage, not filesystem |
+| FR7 — Cached discount | `ctx.cache` + invalidation | Cache is a declared, tenant-scoped primitive gated by `uses` — not an ad-hoc Redis client with invalidation left to memory |
+| FR8 — Config per workspace | `kind: Config` + `ctx.config()` | Workspace-scoped config is first-class — no hand-rolled settings table, no redeploy to change a prefix or template |
+| FR9 — Structured logging | `ctx.log` — tenant/request/user auto | Correlation ID and tenant/request/user context are injected by the framework — not dependent on each handler's discipline |
+| FR10 — PDF storage | `ctx.storage.write()` | Object storage is the only storage primitive offered — files cannot end up on an ephemeral container filesystem |
 
 **Key differences from Scenario A:**
 - Auth is mandatory by default + `required_permission` per action (without auth = impossible, not forgotten)

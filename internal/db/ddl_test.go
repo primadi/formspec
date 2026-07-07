@@ -301,9 +301,10 @@ func TestGenerateEntityDDL_VerifiesBuild(t *testing.T) {
 
 func TestGenerateEntityDDL_SoftDeleteDisabled(t *testing.T) {
 	meta := spec.Metadata{Name: "log", Module: "system"}
+	softDelete := false
 	entity := &spec.EntitySpec{
 		Version: "v1",
-		Persist: &spec.PersistSpec{SoftDelete: false},
+		Persist: &spec.PersistSpec{SoftDelete: &softDelete},
 		Fields: []spec.Field{
 			{Name: "message", Type: spec.FieldString},
 		},

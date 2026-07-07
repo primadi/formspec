@@ -83,8 +83,8 @@ Forma has **two planes**, running as two separate processes always — even in d
 │  Signing  ·  Approval  ·  Transparency Log       │
 │  Contracts (grants, consents, licenses)          │
 │                                                  │
-│  x Never reads business data                     │
-│  x Never executes business logic                 │
+│  [x] Never reads business data                   │
+│  [x] Never executes business logic               │
 └──────────────────┬───────────────────────────────┘
                    │  mTLS (pull policy every 5 min)
                    │  Desired-state channel ────────►
@@ -131,7 +131,7 @@ Every workspace has an environment flag — **dev** or **prod** — set by the C
 
 ## 6. Who Runs Forma?
 
-Forma has **three owner roles** at the platform level. These are not users of a business application — they are the people who operate the Forma platform itself. **One identity can hold multiple roles** (e.g., a solo developer building an app for their own use is both a Workspace Owner and an App Owner).
+Forma has **four symmetric owner roles** at the platform level. These are not users of a business application — they are the people who operate the Forma platform itself. **One identity can hold multiple roles** (e.g., a solo developer building an app for their own use is both a Workspace Owner and an App Owner).
 
 Each owner can appoint **admins** via delegation certificates: the admin has their own key, the owner signs a certificate (scope + validity window + revocable), and every admin action carries the certificate — the cryptographic chain always terminates at the owner key. Owner-only acts (accept/relinquish ownership, issue/revoke delegations, rotate owner key) cannot be delegated.
 
@@ -160,13 +160,13 @@ Each owner can appoint **admins** via delegation certificates: the admin has the
 
 ### B. App/Module Owner
 
-**Owns:** application or module artifacts — code, versions, and marketplace listings.
+**Owns:** application or module artifacts — code, versions, and marketplace listings. **App Owner** and **Module Owner** are two distinct roles with the same capability set over their respective artifact type — an app vs a reusable module. They are frequently held by the same person, so they are presented together here.
 
 | Capability | Details |
 |---|---|
 | **Development** | Develop apps/modules locally with `forma dev`; write spec YAML + Starlark scripts + Go impl |
 | **Versioning & release** | Sign artifacts with owner key; publish new versions to the registry |
-| **Marketplace listing** | Set pricing (free / one_time / subscription / per_seat / per_call); set description, category; apply for Verified Badge |
+| **Marketplace listing** | Set pricing (free / one_time / subscription / per_seat / per_call / per_transaction / metered_passthrough — see Marketplace spec §2); set description, category; apply for Verified Badge |
 | **Monitoring** | **View usage metrics:** who installed the app/module, which workspaces, user count, usage volume; data is sanitized — no access to tenant data contents |
 | **Billing (as vendor)** | View marketplace revenue; track payouts |
 | **License management** | Issue license tokens for enterprise customers; manage validity periods |
@@ -213,7 +213,7 @@ All three web console apps (`forma/console`, `forma/studio`, `forma/ops`) are **
 | Scenario | Personas |
 |---|---|
 | Solo developer building an app for their own use | Workspace Owner + App Owner |
-| SaaS startup building an app, selling on the marketplace, using Forma Cloud | App Owner + Module Vendor |
+| SaaS startup building an app, selling on the marketplace, using Forma Cloud | App Owner + Module Owner |
 | Self-hosted enterprise tenant | Workspace Owner + Cloud Owner (via enterprise license) |
 | IT consultant managing apps for a client | Admin (delegated by client Workspace Owner) + App Owner |
 
@@ -270,7 +270,7 @@ All kinds share the manifest format. The catalog is governed by concern:
 | **Business processes** | `Workflow` | Core Extended |
 | **API surface** | `Api`, `Webhook`, `Mockup` | Core Extended |
 | **Extension mechanism** | `KindDefinition` | Core Extended |
-| **UI / Frontend** | `Page`, `Form`, `Table`, `Dashboard`, `Widget`, `Report`, `Menu`, `Print`, `Theme` | Frontend Spec |
+| **UI / Frontend** | `Page`, `Form`, `Table`, `Dashboard`, `Widget`, `Report`, `Wizard`, `Kanban`, `Timeline`, `Menu`, `Print`, `Theme` | Frontend Spec |
 | **Governance** | `Environment`, `Policy` | Control Spec |
 
 **Derived by default:** CRUD API endpoints, the admin panel, and API documentation are generated automatically from an `Entity` manifest — no additional manifest is required. The `Page`, `Form`, `Table`, and `Menu` kinds exist only to **override** those defaults.
@@ -388,4 +388,4 @@ Choose your path:
 | **Platform Operator** — managing Forma infrastructure | [`04-control-plane.md`](./04-control-plane.md) → [`06-plane-protocol.md`](./06-plane-protocol.md) |
 | **Investor** — business model & monetization strategy | §13 (Licensing & Business Model) above + [`07-marketplace.md`](./07-marketplace.md) |
 
-For the full glossary, all design decisions (D1–D48), the Laravel → Forma feature map, and the complete kind catalog, see [`11-reference.md`](./11-reference.md).
+For the full glossary, all design decisions (D1–D50), the Laravel → Forma feature map, and the complete kind catalog, see [`11-reference.md`](./11-reference.md).

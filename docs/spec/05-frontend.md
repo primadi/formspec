@@ -2,7 +2,7 @@
 
 **Status:** Draft
 **License:** Creative Commons CC0
-**Governed by:** Forma Overview · Forma Reference (D10, D14, D17, D20, D33, D35, D36, D38)
+**Governed by:** Forma Overview · Forma Reference (D10, D14, D17, D20, D24, D33, D35, D36, D38)
 **Requires:** Core Basic v0.2.0
 **Source inspiration:** frontend-concept.md (8+1 page type taxonomy — incorporated as Kinds and pattern guidance)
 
@@ -95,7 +95,7 @@ spec:
   route: /orders/:id
   title: "Order {order.number}"
   blocks:
-    - form:  { ref: order-view, entity: order, id: ":id", mode: view }
+    - form:  { ref: order-edit, entity: order, id: ":id", mode: view }
     - table: { ref: order-payments, param: { order_id: ":id" } }
     - component:
         asset: billing/assets/payment-timeline.js
@@ -224,7 +224,7 @@ spec:
     - component: { asset: billing/assets/heatmap.js }
 ```
 
-Dashboard widgets read **summary entities or `list` actions only**. Custom aggregations become summary entities fed by durable events (Core §9.1). **Customizable dashboards:** user layouts stored as runtime preferences in `forma.core` — **manifests define what is possible; preferences record what is chosen.** Never written back to YAML.
+Dashboard widgets read **summary entities or `list` actions only**. Custom aggregations become summary entities fed by durable events (Core §12.1). **Customizable dashboards:** user layouts stored as runtime preferences in `forma.core` — **manifests define what is possible; preferences record what is chosen.** Never written back to YAML.
 
 ### Widget (module-contributed)
 ```yaml
@@ -253,11 +253,14 @@ spec:
   columns: [number, customer.name, category, total]
   group_by: [category]
   totals: [total]
-  exports: [xlsx, csv, print: receipt-style]      # print → kind: Print
+  exports:                                        # print → kind: Print
+    - xlsx
+    - csv
+    - print: receipt-style
 ```
 
 - `source` is an entity query — always permission-checked. Report never embeds SQL.
-- Exports run as **async jobs** (Core §17.1); files land in the download tray.
+- Exports run as **async jobs** (Core §17); files land in the download tray.
 
 ---
 
@@ -471,7 +474,7 @@ spec:
 ```
 
 **Rules:**
-- `composite_action` is the server-side action (Core §18) that atomically writes all step data. It MUST exist on at least one entity involved in the wizard. The action handler receives the accumulated wizard state as input.
+- `composite_action` is the server-side action (Core §11) that atomically writes all step data. It MUST exist on at least one entity involved in the wizard. The action handler receives the accumulated wizard state as input.
 - `allow_partial_save: true` persists intermediate step data as a draft. The Wizard resumes from the last saved step when reopened. Draft rows are tenant-scoped and cleaned up on completion or after a configurable TTL.
 - `depends_on` establishes a client-side filter chain: when `polyclinic_id` changes, the `doctor_id` dropdown re-fetches with the new filter. This is UX-only; server-side validation in `composite_action` is the authority.
 - Steps are sequential — the renderer enforces completion of step N before step N+1 is accessible. Back navigation is always allowed (step N-1 data is preserved).
@@ -515,7 +518,7 @@ spec:
 
 **Rules:**
 - **Drag-drop = `update` action on `status_field`:** The renderer calls the entity's `update` action with the new status value. Optimistic UI — card moves immediately; on 409 (CAS conflict) the card snaps back and a toast shows the conflict.
-- **`status_field` values MUST match `columns[].value` exactly.** A drop to an unlisted value is rejected client-side. The entity's state machine (Core §8) MAY define valid transitions; the renderer consults it to prevent invalid column moves (snap-back + toast).
+- **`status_field` values MUST match `columns[].value` exactly.** A drop to an unlisted value is rejected client-side. The entity's state machine (Core §14) MAY define valid transitions; the renderer consults it to prevent invalid column moves (snap-back + toast).
 - **`realtime: true` is default and strongly recommended.** Other users' card movements are reflected live. Without realtime, stale column counts are possible.
 - Each column shows a **count badge**. The renderer fetches counts via `list` with `group_by: status_field`.
 - **Permission-driven:** drag is disabled if the user lacks the entity's `update` permission. Row actions are permission-gated per §1.4.
@@ -552,7 +555,7 @@ spec:
 ```
 
 **Rules:**
-- **Append-only enforcement:** The renderer MUST NOT render create, edit, or delete buttons for a Timeline entity. The entity SHOULD be declared `readonly: true` or have only the `create` action on the server side (Core §7.3). If the entity has `update`/`delete` actions, the renderer ignores them for Timeline — the kind is the guard.
+- **Append-only enforcement:** The renderer MUST NOT render create, edit, or delete buttons for a Timeline entity. The entity SHOULD disable its `update` and `delete` actions via per-action `disabled: true` (Core §11.1), leaving only `create` on the server side. If the entity still has `update`/`delete` actions, the renderer ignores them for Timeline — the kind is the guard.
 - **`bind_param` + `bind_value`:** The Timeline is always filtered to a parent context — a patient, an order, a machine. `bind_param` names the entity field used as filter; `bind_value` is the value, typically a route `:param` or a fixed ID.
 - **Grouping:** Cards are visually grouped under date headers ("Today", "Yesterday", "12 June 2026"). `group_by: none` renders a flat continuous feed.
 - **Infinite scroll:** The renderer fetches pages as the user scrolls down (cursor-based, using `created_at`). `page_size` controls batch size.

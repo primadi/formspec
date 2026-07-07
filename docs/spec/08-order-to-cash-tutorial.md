@@ -78,9 +78,27 @@ This declares our app composes three modules. No `publishes` or `consumes` — t
 
 ---
 
-## 4. Step 2 — Order Entity
+## 4. Step 2 — Customer & Order Entities
 
-Create `modules/billing/entities/order.yaml`:
+First, the customer entity the order will reference. Create `modules/billing/entities/customer.yaml`:
+
+```yaml
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: customer
+  module: billing
+  description: Customer master record
+spec:
+  version: v1
+  characteristics: [master]
+  fields:
+    - { name: name,           type: string,  rules: [required] }
+    - { name: email,          type: string }
+    - { name: is_blacklisted, type: boolean, default: false }
+```
+
+Now the order itself. Create `modules/billing/entities/order.yaml`:
 
 ```yaml
 apiVersion: forma.dev/v1alpha1
@@ -168,6 +186,7 @@ spec:
         - script: "not customer.load(resource.customer_id).is_blacklisted"
           message: "Customer is blacklisted, cannot checkout"
       uses:
+        # payment-gateway is a Service (defined in Step 5)
         resources: [payment-gateway.create-session, customer.find]
         config: { read: [billing.order_number_prefix] }
         primitives: [lock]
@@ -199,8 +218,10 @@ spec:
         - { channel: queue, job: generate-receipt }        # FR10 + FR7
         - { channel: queue, job: send-receipt-email }      # FR5 — receipt = billing promise
         - channel: reliable_event                 # FR4 — journal, no loss
-          target: { resource: gl.journal-entry, action: create }
+          target: { resource: gl.journal-entry, action: create }   # defined in Step 6
           retry: { max: 10, backoff: exponential, initial_delay_ms: 1000 }
+          # failed-event is the built-in forma.core dead-letter entity
+          # (Core Basic §22) — nothing to define in this tutorial
           dead_letter: { resource: failed-event, action: create }
           idempotency_key: "order.paid.{id}"
 ```
@@ -225,7 +246,7 @@ def execute(resource, params, ctx):
     number = ctx.next_key("number")
     resource.set("number", number).save()
 
-    # FR2 — Gateway called ONLY via the declared Service wrapper.
+    # FR2 — Gateway called ONLY via the declared Service wrapper (defined in Step 5).
     # In dev: auto-routes to mockup. In prod: real connector.
     session = payment_gateway.call("create-session", {
         "order_id": resource.id,
@@ -250,7 +271,7 @@ def execute(resource, params, ctx):
     resource.set("paid_at", ctx.now())
     resource.save()   # Transitions awaiting_payment→paid AND writes the "paid"
                       # event to the outbox — ONE DB transaction (answers the
-                      # Szenario A Bug #2: non-atomic status+journal).
+                      # second Scenario A bug: non-atomic status+journal).
     return ok()
 ```
 
@@ -312,6 +333,12 @@ spec:
     - name: create
       required_permission: journal-entries.create
       idempotent: true      # Outbox worker may retry — duplicates rejected here too
+      # §11.3: idempotent requires a key source. The outbox worker passes the
+      # publisher's delivery key ("order.paid.{id}") as the source_ref param.
+      idempotency_key: { from: param, field: source_ref }
+      params:
+        validate:
+          - { field: source_ref, rules: [required] }
       audit: true
 ```
 
@@ -363,11 +390,12 @@ This starts the complete local environment: Postgres, Valkey, Mailpit, MinIO, `f
 | FR2 — Payment gateway | `kind: Service` | External integration wrapped; mockup in dev via config |
 | FR3 — Webhook idempotency | `idempotent: true` | Framework-enforced store + response replay |
 | FR4 — Reliable journal | `publish.durable` + `deliver.reliable_event` | Outbox in same DB transaction, sync delivery with idempotency |
-| FR5 — Email/WA reliability | `deliver channel: queue` | Background jobs with retry |
+| FR5 — Email reliability | publisher `deliver channel: queue` | Background job with retry — email is a billing promise, so it lives in `order`'s deliver |
+| FR5 — WA reliability | `kind: Subscription` (Step 7) | Same queue-with-retry guarantee, added later without touching `order.yaml` |
 | FR6 — Live dashboard | `deliver channel: websocket` | Non-durable — loss acceptable |
-| FR7 — Cached discount | `ctx.cache` + manual invalidation | |
-| FR8 — Config per workspace | `kind: Config` + `ctx.config()` | |
-| FR9 — Structured logging | `ctx.log` — tenant/request/user auto-injected | |
+| FR7 — Cached discount | `ctx.cache` + manual invalidation | Cache is volatile by contract — a discount rule change explicitly invalidates, so stale tiers never linger |
+| FR8 — Config per workspace | `kind: Config` + `ctx.config()` | Values are read per workspace at runtime — prefix and templates change without redeploy |
+| FR9 — Structured logging | `ctx.log` — tenant/request/user auto-injected | One correlation ID follows the whole flow — nothing to wire by hand |
 | FR10 — PDF storage | `ctx.storage.write()` | Object storage, not filesystem |
 
 ---

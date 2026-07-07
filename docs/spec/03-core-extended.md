@@ -2,7 +2,7 @@
 
 **Status:** Draft
 **License:** Creative Commons CC0
-**Governed by:** Forma Overview · Forma Reference (Decisions D10, D33, D35, D46, D48)
+**Governed by:** Forma Overview · Forma Reference (Decisions D10, D20, D33, D35, D46, D48, D49)
 **Requires:** Core Basic v0.2.0
 **Related:** Frontend Spec · Control Spec
 
@@ -38,7 +38,7 @@ spec:
 
 ### 2. `kind: Api` — Exposure Override
 
-Derived REST endpoints need no manifest. `Api` exists only to deviate: custom paths, versioning, disabling endpoints, and external gRPC.
+An entity must first opt into exposure via `spec.expose` (§Core 11.1, D49). `kind: Api` only overrides **already-exposed** surfaces — it cannot create access where `expose` has not been set. Used for: custom paths, versioning, disabling specific endpoints, and gRPC configuration.
 
 ```yaml
 apiVersion: forma.dev/v1alpha1
@@ -55,7 +55,7 @@ spec:
     package: acme.billing.v2
 ```
 
-One resource may have multiple `Api` surfaces (public vs partner). Permissions are unchanged — surfaces never widen access. Exposure is presentation; enforcement stays on the resource.
+One resource may have multiple `Api` surfaces (public vs partner). Permissions are unchanged — surfaces never widen access beyond what `expose` allows. Exposure is presentation; enforcement stays on the resource.
 
 ### 3. `kind: Webhook` — Verified Inbound Endpoints
 
@@ -167,6 +167,8 @@ All three are subject to `uses`. A level-4 rule reading `customer` must declare 
 
 ### 8. Hook Spec
 
+The `hooks:` block lives at the top level of an Entity or Service `spec` — a sibling of `actions`/`events`.
+
 ```yaml
 hooks:
   - { on: before | after | on_error, action: "send" | "*",
@@ -245,6 +247,8 @@ spec:
   deliver:
     - { channel: queue, job: record-analytics }
 ```
+
+In `filter` and `transform`, `event` exposes the declared event payload fields (Core §12 payload contract) plus envelope metadata `event.name`, `event.resource_id`, `event.occurred_at`.
 
 | | Tier 1 (Core — outbox) | Tier 2 (streaming) |
 |---|---|---|

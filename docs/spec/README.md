@@ -89,13 +89,13 @@ graph TD
 | 02 | **Core Basic** | Minimum spec: Entity, Service, App, Module, Config, Migration, Subscription; fields, actions, events, state machines, security, tenancy, primitives |
 | 03 | **Core Extended** | Advanced spec: Workflow, Api, Webhook, Mockup, KindDefinition, hooks, validation 4–6, storage, streaming, query builder, rate limiting |
 | 04 | **Control Plane** | Governance spec: Environment, Policy (OPA/Rego), keys & delegation, artifact lifecycle, contracts, transparency log, REPL governance |
-| 05 | **Frontend** | UI spec: Page, Form, Table, Dashboard, Widget, Report, Menu, Print, Theme; FormaExpr, component contract, realtime convention |
+| 05 | **Frontend** | UI spec: Page, Form, Table, Dashboard, Widget, Report, Wizard, Kanban, Timeline, Menu, Print, Theme; FormaExpr, component contract, realtime convention |
 | 06 | **Plane Protocol** | Wire contract between Control Plane and Resource Plane: mTLS, snapshots, evidence, outage semantics |
 | 07 | **Marketplace** | Economic layer: pricing vocabulary, Verified Badge, verifiable metering, ledger, revenue sharing, license tokens |
 | 08 | **O2C Tutorial** | Step-by-step: build an Order-to-Cash app from scratch with Forma |
 | 09 | **O2C Companion** | Technical deep-dive: "without Forma vs with Forma" comparison, test-drive findings |
 | 10 | **Entity Extension** | How to add custom fields to marketplace module entities without forking |
-| 11 | **Reference** | Glossary, all 48 design decisions (D1–D48), Laravel → Forma feature map, Concern → Kind catalog, admin layers |
+| 11 | **Reference** | Glossary, all 50 design decisions (D1–D50), Laravel → Forma feature map, Concern → Kind catalog, admin layers |
 
 ---
 
@@ -114,3 +114,5 @@ graph TD
 | Version | Date | Notes |
 |---|---|---|
 | 1.0-draft | 2026-07-05 | Initial restructured release — all 11 documents extracted and reorganized from the original 8 documents in `/reff_docs` |
+
+Each spec document carries its own independent version number (e.g. Core Basic v0.2.0, Frontend v0.5.0); the version in this table is the release tag of the spec folder as a whole, not of individual documents.

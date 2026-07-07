@@ -48,6 +48,8 @@ spec:
 
 Environment identity reaches the Resource Plane only through infrastructure (`FORMA_ENVIRONMENT`, or K8s namespace labels) — never application code. Environment mode and resource pool determine infrastructure: dev uses the shared free pool; prod chooses between shared-prod (isolated from dev, cost-efficient, production guarantees) or exclusive (dedicated per-workspace instances).
 
+Only two modes exist — `dev` and `prod`; "staging" is not a third mode but a conventional name for a prod-mode environment whose Policy profile is relaxed-but-recorded.
+
 ## 3. `kind: Policy` — Structured YAML + Rego Escape Hatch
 
 The D33 pattern applied to governance: **declared vocabulary for common cases, scripted escape hatch for the rest** — here the script is Rego, evaluated by **OPA embedded as a Go library** inside `forma-control` (no extra process).
@@ -133,6 +135,8 @@ forma apply -f order.yaml            # → approval request per policy
 forma promote order --from staging --to production   # same checksum verified
 ```
 
+Here `staging` and `production` are environment *names*: both are `mode: prod` environments (§2); what distinguishes them is the Policy each one applies.
+
 Approvals are signed statements by approver identities; the full set is one chain in the transparency log.
 
 ### 5.2 Consent Gates (D20/D21/D38)
@@ -181,13 +185,13 @@ Normative rules: `backup create` is delegable; **`restore` that overwrites requi
 
 ## 9. REPL Governance
 
-`forma repl` scope is environment policy:
+`forma repl` scope is environment policy. Since `mode` is binary (§2), the tiers below key off the environment's Policy profile — not a three-value mode; "staging" means a prod-mode environment designated as staging by its policy:
 
-| Environment | Default scope | Extras |
+| Policy profile | Default scope | Extras |
 |---|---|---|
-| dev | full `ctx.*` | — |
-| staging | read-write | session recorded in audit |
-| production | **read-only** | write requires explicit, time-boxed policy approval; every session recorded in transparency log |
+| dev-mode environment | full `ctx.*` | — |
+| prod-mode environment, staging profile | read-write | session recorded in audit |
+| prod-mode environment, production profile | **read-only** | write requires explicit, time-boxed policy approval; every session recorded in transparency log |
 
 The REPL always runs under a real user identity with that identity's permissions — it is never a superuser shell.
 
@@ -198,6 +202,8 @@ The REPL always runs under a real user identity with that identity's permissions
 | **Standalone** (free) | Same binary, relaxed dev policy; workspace primitive included | Single org self-host |
 | **Control Cloud** | Shared stateless compute; **per-tenant keys + audit partitions** | Uptime target stricter than any Resource Plane |
 | **Control Enterprise** | Self-hosted by customer under enterprise license — customer becomes Platform Operator (D29) | Premium = location, not features |
+
+The display names map onto the `Environment.spec.tier` enum (§2): **Standalone** = `standalone`, **Control Cloud** = `cloud`, **Control Enterprise** = `enterprise`.
 
 Enterprise governance features gated by license token (D8): HSM integration, SSO/SCIM, advanced approval chains, log-mirror tooling.
 

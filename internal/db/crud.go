@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/forma/forma/internal/starlark"
+	"github.com/forma/forma/internal/validation"
 	"github.com/forma/forma/pkg/spec"
 )
 
@@ -42,8 +44,8 @@ func NewEntityStore(db DB, driver DriverType, meta spec.Metadata, entity *spec.E
 	}
 
 	softDelete := true
-	if entity.Persist != nil {
-		softDelete = entity.Persist.SoftDelete
+	if entity.Persist != nil && entity.Persist.SoftDelete != nil {
+		softDelete = *entity.Persist.SoftDelete
 	}
 
 	var sm *spec.StateMachine
@@ -747,7 +749,7 @@ func (s *EntityStore) validateStateTransition(oldData, newData map[string]any) e
 
 	// Look for a matching transition
 	for _, t := range s.stateMachine.Transitions {
-		if (t.From == oldState || t.From == "*") && t.To == newState {
+		if t.From.Matches(oldState) && t.To == newState {
 			// Evaluate guard if present
 			if t.Guard != nil && t.Guard.Expression != "" {
 				// Build env from combined old+new data (new values take precedence)
@@ -801,6 +803,14 @@ func (s *EntityStore) validateFieldRules(data map[string]any) error {
 		for _, rule := range f.Rules {
 			if err := validateSingleRule(f.Name, val, rule); err != nil {
 				return err
+			}
+			// Cross-field validators need access to the full data map
+			if rule.Name == "after" || rule.Name == "after_field" ||
+				rule.Name == "before" || rule.Name == "before_field" ||
+				rule.Name == "exists" {
+				if err := validation.ValidateCrossField(f.Name, val, rule, data); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -875,6 +885,77 @@ func validateSingleRule(fieldName string, val any, rule spec.ValidationRule) err
 		if num <= 0 {
 			return fmt.Errorf("%w: %q: must be a positive number", ErrValidationRule, fieldName)
 		}
+
+	case "url":
+		str, ok := val.(string)
+		if !ok {
+			return fmt.Errorf("%w: %q: url must be a string", ErrValidationRule, fieldName)
+		}
+		if !urlRegex.MatchString(str) {
+			return fmt.Errorf("%w: %q: invalid URL format", ErrValidationRule, fieldName)
+		}
+
+	case "precision":
+		num := toFloat(val)
+		prec := toInt(rule.Value)
+		if prec < 0 {
+			return fmt.Errorf("%w: %q: precision value must be non-negative", ErrValidationRule, fieldName)
+		}
+		// Check decimal places: shift by 10^prec and compare with truncated version
+		multiplier := 1.0
+		for i := 0; i < prec; i++ {
+			multiplier *= 10
+		}
+		truncated := float64(int(num*multiplier)) / multiplier
+		if num != truncated {
+			return fmt.Errorf("%w: %q: maximum %d decimal places allowed", ErrValidationRule, fieldName, prec)
+		}
+
+	case "future":
+		str, ok := val.(string)
+		if !ok {
+			return fmt.Errorf("%w: %q: future requires a datetime string", ErrValidationRule, fieldName)
+		}
+		t, err := parseDateTime(str)
+		if err != nil {
+			return fmt.Errorf("%w: %q: invalid datetime format for future check: %v", ErrValidationRule, fieldName, err)
+		}
+		if !t.After(timeNow()) {
+			return fmt.Errorf("%w: %q: must be in the future", ErrValidationRule, fieldName)
+		}
+
+	case "past":
+		str, ok := val.(string)
+		if !ok {
+			return fmt.Errorf("%w: %q: past requires a datetime string", ErrValidationRule, fieldName)
+		}
+		t, err := parseDateTime(str)
+		if err != nil {
+			return fmt.Errorf("%w: %q: invalid datetime format for past check: %v", ErrValidationRule, fieldName, err)
+		}
+		if !t.Before(timeNow()) {
+			return fmt.Errorf("%w: %q: must be in the past", ErrValidationRule, fieldName)
+		}
+
+	case "min_items":
+		items, ok := val.([]any)
+		if !ok {
+			return fmt.Errorf("%w: %q: min_items requires an array value", ErrValidationRule, fieldName)
+		}
+		minLen := toInt(rule.Value)
+		if len(items) < minLen {
+			return fmt.Errorf("%w: %q: minimum %d items required, got %d", ErrValidationRule, fieldName, minLen, len(items))
+		}
+
+	case "max_items":
+		items, ok := val.([]any)
+		if !ok {
+			return fmt.Errorf("%w: %q: max_items requires an array value", ErrValidationRule, fieldName)
+		}
+		maxLen := toInt(rule.Value)
+		if len(items) > maxLen {
+			return fmt.Errorf("%w: %q: maximum %d items allowed, got %d", ErrValidationRule, fieldName, maxLen, len(items))
+		}
 	}
 
 	return nil
@@ -882,6 +963,31 @@ func validateSingleRule(fieldName string, val any, rule spec.ValidationRule) err
 
 // emailRegex validates basic email format.
 var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
+
+// urlRegex validates basic URL format.
+var urlRegex = regexp.MustCompile(`^https?://[^\s/$.?#].[^\s]*$`)
+
+// timeNow returns the current UTC time. Extracted for testability.
+var timeNow = func() time.Time {
+	return time.Now().UTC()
+}
+
+// parseDateTime attempts to parse a datetime string in ISO 8601 or similar formats.
+func parseDateTime(s string) (time.Time, error) {
+	formats := []string{
+		time.RFC3339,
+		"2006-01-02T15:04:05Z",
+		"2006-01-02T15:04:05",
+		"2006-01-02 15:04:05",
+		"2006-01-02",
+	}
+	for _, f := range formats {
+		if t, err := time.Parse(f, s); err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("cannot parse %q as datetime", s)
+}
 
 // toInt converts a value to int for validation comparisons.
 func toInt(v any) int {

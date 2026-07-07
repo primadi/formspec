@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestNaturalKeyCounter_NextSequence(t *testing.T) {
@@ -136,8 +137,8 @@ func TestNaturalKeyCounter_ResetPeriod(t *testing.T) {
 	if v1 != 1 {
 		t.Errorf("expected counter=1, got %d", v1)
 	}
-	if period != "2026" {
-		t.Errorf("expected period=2026, got %q", period)
+	if want := time.Now().Format("2006"); period != want {
+		t.Errorf("expected period=%s, got %q", want, period)
 	}
 
 	// Monthly
@@ -148,8 +149,8 @@ func TestNaturalKeyCounter_ResetPeriod(t *testing.T) {
 	if v2 != 1 {
 		t.Errorf("expected counter=1, got %d", v2)
 	}
-	if period2 != "2026-07" {
-		t.Errorf("expected period=2026-07, got %q", period2)
+	if want := time.Now().Format("2006-01"); period2 != want {
+		t.Errorf("expected period=%s, got %q", want, period2)
 	}
 
 	// Daily
@@ -160,8 +161,8 @@ func TestNaturalKeyCounter_ResetPeriod(t *testing.T) {
 	if v3 != 1 {
 		t.Errorf("expected counter=1, got %d", v3)
 	}
-	if period3 != "2026-07-05" {
-		t.Errorf("expected period=2026-07-05, got %q", period3)
+	if want := time.Now().Format("2006-01-02"); period3 != want {
+		t.Errorf("expected period=%s, got %q", want, period3)
 	}
 
 	// Same period should continue counting
@@ -169,8 +170,8 @@ func TestNaturalKeyCounter_ResetPeriod(t *testing.T) {
 	if v4 != 2 {
 		t.Errorf("expected counter=2 for same year, got %d", v4)
 	}
-	if period4 != "2026" {
-		t.Errorf("expected period=2026, got %q", period4)
+	if want := time.Now().Format("2006"); period4 != want {
+		t.Errorf("expected period=%s, got %q", want, period4)
 	}
 }
 
@@ -216,21 +217,21 @@ func TestNaturalKeyCounter_GenerateNaturalKey(t *testing.T) {
 			resource: "inv3",
 			format:   "INV-{period}-{counter:04d}",
 			reset:    "yearly",
-			wantPat:  "INV-2026-0001",
+			wantPat:  "INV-" + time.Now().Format("2006") + "-0001",
 		},
 		{
 			name:     "with period monthly",
 			resource: "inv4",
 			format:   "ORD-{period}-{counter:03d}",
 			reset:    "monthly",
-			wantPat:  "ORD-2026-07-001",
+			wantPat:  "ORD-" + time.Now().Format("2006-01") + "-001",
 		},
 		{
 			name:     "with period daily",
 			resource: "inv5",
 			format:   "TXN-{period}-{counter:02d}",
 			reset:    "daily",
-			wantPat:  "TXN-2026-07-05-01",
+			wantPat:  "TXN-" + time.Now().Format("2006-01-02") + "-01",
 		},
 		{
 			name:     "with resource and field",

@@ -1,0 +1,347 @@
+# Forma Implementation Progress
+
+**Last Updated:** 2026-07-06  
+**Total Tests:** ~152 (all passing)
+
+> Checklist implementasi Forma framework. Setiap task ditandai saat selesai.
+
+---
+
+## Fase 1 — Core Runtime (Entity Engine & API)
+
+### 1.1 Database Layer (`internal/db/`)
+
+| # | Task | Status | Tests |
+|---|---|---|---|
+| 1.1.1 | DB Interface + Factory (`interface.go`, `db.go`) | ✅ | 5 |
+| 1.1.2 | DSN Config Parser (`config.go`) | ✅ | 9 |
+| 1.1.3 | SQLite Driver (`sqlite_db.go`) — WAL, FK, busy_timeout | ✅ | 7 |
+| 1.1.4 | PostgreSQL Driver (`postgres_db.go`) — pgx/stdlib, pool | ✅ | — |
+| 1.1.5 | Entity → DDL Generator (`ddl.go`) — dialect-aware, child tables | ✅ | 7 |
+| 1.1.6 | Schema Migration Runner (`migrate.go`) — idempotent, checksum | ✅ | 7 |
+| 1.1.7 | CRUD Query Builder (`crud.go`) — tenant isolation, CAS, pagination | ✅ | 8 |
+| 1.1.8 | Child Storage (`child.go`) — JSONB inline + table mode | ✅ | 6 |
+| 1.1.9 | Natural Key Counter (`counter.go`) — yearly/monthly/daily/never | ✅ | 8 |
+| 1.1.10 | Idempotency Store (`idempotency.go`) — TryClaim/Complete/Fail | ✅ | 8 |
+| 1.1.11 | Outbox Table (`outbox.go`) — at-least-once, exponential backoff | ✅ | 10 |
+| — | Audit Logger (`audit.go`) — write-once audit trail | ✅ | — |
+| — | Outbox Worker (`outbox_worker.go`) — background poll + deliver | ✅ | — |
+| — | DB Dev Init (`cmd/forma-dev-init/`) — bootstrap SQLite sample | ✅ | — |
+
+### 1.2 Entity Registry (`internal/entity/`)
+
+| # | Task | Status | Tests |
+|---|---|---|---|
+| 1.2.1 | Registry core (`registry.go`) — LoadEntities, SyncSchema, GetEntityStore | ✅ | — |
+| 1.2.2 | Info & Query Helpers — ListEntities, GetEntity, GetByCharacteristic | ✅ | — |
+| 1.2.3 | CLI Entity Sync (`cmd/forma-entity-sync/`) — load → register → sync | ✅ | — |
+| 1.2.4 | Unit tests — load, filter, sync, CRUD, General-Ledger example | ✅ | 9 |
+| 1.2.5 | Spec update: `ValidationRule.UnmarshalYAML` shorthand | ✅ | — |
+
+### 1.3 REST API (`internal/api/`)
+
+| # | Task | Status | Tests |
+|---|---|---|---|
+| 1.3.1 | Spec: deny-by-default exposure (D49), multi-protocol router (D50) | ✅ | — |
+| 1.3.2 | Route Descriptor + Generator (`descriptor.go`, `generator.go`) | ✅ | 5 |
+| 1.3.3 | Handler Factory (`handler.go`) — 5 auto-handlers | ✅ | — |
+| 1.3.4 | Middleware Stack (`middleware.go`) — Tenant, Auth, RequestID, CORS, Recovery, Log | ✅ | — |
+| 1.3.5 | Router Builder (`router.go`) — chi, `/{workspace}/api/v1/...` | ✅ | 2 |
+| 1.3.6 | CLI Serve (`cmd/forma-serve/`) — load → sync → routes → serve HTTP | ✅ | — |
+| 1.3.7 | Response Envelopes — SingleResponse, ListResponse, ErrorResponse | ✅ | 2 |
+
+### 1.4 Auth & Tenant Middleware
+
+| # | Task | Status | Tests |
+|---|---|---|---|
+| 1.4.1 | JWT/Session auth (prod mode) | ✅ | 8 |
+| 1.4.2 | Token validation + identity resolution | ✅ | 8 |
+| 1.4.3 | Permission enforcement middleware per `required_permission` | ✅ | 7 |
+| 1.4.4 | Cross-tenant isolation at API level | ✅ | 3 |
+
+**Files created:**
+- `internal/auth/auth.go` — `Identity` struct, `TokenValidator` interface, `HasPermission()` (wildcard + exact)
+- `internal/auth/jwt.go` — `JWTValidator` (HS256/RS256/ES256)
+- `internal/auth/dev.go` — `DevValidator` (synthetic identity with `*` perm)
+- `internal/auth/auth_test.go` — 19 test cases (permission matching, authentication)
+- `internal/auth/jwt_test.go` — 8 test cases (valid/invalid/expired/wrong issuer/wrong key)
+
+**Files modified:**
+- `internal/api/descriptor.go` — `RouteDescriptor.RequiredPermission` field
+- `internal/api/handler.go` — `IdentityFromContext`, `WithIdentity`, updated `tenantFromContext`/`userFromContext` to prefer identity
+- `internal/api/middleware.go` — `SetAuthValidator`, refactored `AuthMiddleware` (dev/prod), `RequirePermission` factory
+- `internal/api/generator.go` — populate `RequiredPermission` as `{module}.{plural}.{action}` per route
+- `internal/api/router.go` — wire `RequirePermission` via chi `r.With()` per-route
+- `internal/api/api_test.go` — 14 new test cases (permission middleware, identity helpers, auth middleware)
+- `cmd/forma-serve/main.go` — `--prod`/`--jwt-secret`/`--jwt-issuer` flags, `SetAuthValidator` init
+- `go.mod` — added `github.com/golang-jwt/jwt/v5`
+
+**Design decisions for 1.4:**
+- **Spec = data, not code** — permission strings and auth config live in YAML manifests, loaded at runtime. No recompile needed for spec changes.
+- **Atomic-swap ready** — `RouterBuilder.BuildHTTP()` can be called again and swapped via `sync.RWMutex` for hot-reload. Middleware is stateless.
+- **Dev mode default** — `NewDevValidator()` returns `Identity{UserID:"developer", Permissions:["*"]}` — all requests pass through.
+- **Prod mode** — `--prod --jwt-secret <key>` enables JWT validation. Claims: `sub`, `ws`, `perms`, `roles`, `iss`, `exp`.
+- **Permission model** — `{module}.{plural}.{action}` for standard CRUD. Wildcard: `*` (everything), `module.entity.*` (all actions on entity). `public` = anonymous.
+- **Cross-tenant isolation** — workspace slug extracted from URL path → tenant ID in context → all DB queries scoped. Identity's workspace overrides URL tenant.
+
+### 1.5 Permission Enforcement
+
+| # | Task | Status | Tests |
+|---|---|---|---|
+| 1.5.1 | Permission data model — `PermissionEntry`, `UsesEntry`, `ModuleFootprint` (`internal/permission/`) | ✅ | 9 |
+| 1.5.2 | PermissionRegistry — register, aggregate, query per module | ✅ | 4 |
+| 1.5.3 | Permission string + uses validator — format check, auto-prefix, cross-module detection | ✅ | 7 |
+| 1.5.4 | `ctx.auth.has()` — integrate `Identity.HasPermission()` into auth package | ✅ | 2 |
+| 1.5.5 | Hook into entity registry — auto-register on `LoadEntities()` | ✅ | — |
+| 1.5.6 | Route descriptor enrichment — custom action `RequiredPermission` from YAML | ✅ | — |
+| 1.5.7 | `UsesEnforcement` middleware stub — error codes (`USES_VIOLATION`, `CONFIG_ACCESS_DENIED`) | ✅ | — |
+| 1.5.8 | `forma-serve` — print module footprint, `--strict` flag | ✅ | — |
+| 1.5.9 | Tests — validation, registry, footprint, middleware | ✅ | 22 |
+
+**Files created:**
+- `internal/permission/permission.go` — `PermissionEntry`, `UsesEntry`, `ModuleFootprint`, `AuthChecker`, `ValidatePermissionFormat`, `AutoPrefixPermission`, `ParseResourceTarget`
+- `internal/permission/registry.go` — `Registry` (thread-safe, module→footprint), `RegisterAction`, `GetModuleFootprint`, `FindPermission`
+- `internal/permission/validator.go` — `ValidateUses`, `ValidateAction`, `BuildUsesEntry`, `ValidateEntitySpec`
+- `internal/permission/permission_test.go` — 22 test cases
+
+**Files modified:**
+- `internal/auth/auth.go` — `PermissionChecker` interface, `SetPermissionChecker`, `CtxAuthHas`, `defaultPermissionChecker`
+- `internal/entity/registry.go` — `permRegistry` field, auto-register permissions in `LoadEntities()`, `GetPermissionRegistry()`, `GetModuleFootprint()`
+- `internal/api/generator.go` — `GenerateCustomActionRoutes()`, `mergeRoutes()`, `isStandardAction()`
+- `internal/api/router.go` — `BuildRoutes()` includes custom actions, `registerRoute()` handles `"custom"` handler type
+- `internal/api/middleware.go` — `SetStrictMode()`, `UsesEnforcement()` stub, `writeUsesViolation()`, `writeConfigAccessDenied()`, `writeKvstoreAccessDenied()`
+- `cmd/forma-serve/main.go` — `--strict` flag, permission registry wiring, footprint display
+
+**Deferred to Fase 2:**
+- Starlark runtime intercept `ctx.*` calls for `uses` enforcement
+- `impl/**/*.go` honesty scan for undeclared `uses`
+- Auto-suspend on `USES_VIOLATION` (needs outbox + incident audit from 3.x)
+
+**Deferred to Fase 6:**
+- `forma module install` consent UI — display `ModuleFootprint` at install time
+- `forma validate` — scan scripts for undeclared uses (requires Starlark)
+
+### 1.6 Validation Engine
+
+| # | Task | Status | Tests |
+|---|---|---|---|
+| 1.6.1 | Field validation from YAML rules | ✅ | 5 |
+| 1.6.2 | Custom action validation | ✅ | 5 |
+| 1.6.3 | Cross-field validation | ✅ | 4 |
+
+**Existing validators (in `internal/db/crud.go`):** `email`, `pattern`, `min_length`, `max_length`, `min`, `max`, `required`, `default`
+
+**New validators added (1.6):**
+- `positive` — numeric value must be > 0
+- `url` — URL format validation (regex)
+- `precision` — maximum decimal places (accounting-grade)
+- `future` — datetime must be in the future
+- `past` — datetime must be in the past
+- `min_items` / `max_items` — array length validation (for JSON fields)
+- `after:<field>` / `before:<field>` — cross-field date comparison
+
+**Files created:**
+- `internal/validation/validator.go` — `ValidateCrossField`, `ValidateActionParams`, cross-field date comparison, action param rule engine
+- `internal/validation/validation_test.go` — 9 test cases
+
+**Files modified:**
+- `internal/db/crud.go` — `positive`, `url`, `precision`, `future`, `past`, `min_items`, `max_items` validators; cross-field wiring in `validateFieldRules`; `urlRegex`, `timeNow()`, `parseDateTime()` helpers
+- `internal/db/crud_test.go` — 5 new test cases (positive, url, precision, future, min_items/max_items)
+- `internal/api/handler.go` — `HandleCustomAction()` with param validation, `writeValidationErrors()`
+- `internal/api/router.go` — custom action routes resolve entity spec from registry, wire `HandleCustomAction`
+
+**Deferred:**
+- `exists:<resource>` full DB query → Fase 2 (needs EntityStore reference in handler)
+- Starlark inline validator escape hatch (`script` rule) → Fase 2
+
+---
+
+## Fase 2 — Business Logic Engine
+
+| # | Task | Status |
+|---|---|---|
+| 2.1 | Starlark runtime integration (`internal/starlark/` stub exists) | ⏳ |
+| 2.2 | ScriptRef execution from manifest action | ⏳ |
+| 2.3 | Native (Go) handler registration | ⏳ |
+| 2.4 | Sidecar handler protocol | ⏳ |
+| 2.5 | State Machine engine — transitions + guards | ⏳ |
+| 2.6 | `ctx.*` primitives (db, cache, lock, queue, pubsub, storage) | ⏳ |
+
+---
+
+## Fase 3 — Events & Async
+
+| # | Task | Status |
+|---|---|---|
+| 3.1 | Event dispatch from EntityStore (Insert/Update/Delete hooks) | ⏳ |
+| 3.2 | `deliver` declarative consumers | ⏳ |
+| 3.3 | `kind: Subscription` runtime (D35) | ⏳ |
+| 3.4 | Outbox → Event Bus bridge (outbox table already exists from 1.1.11) | ⏳ |
+| 3.5 | Realtime WebSocket push | ⏳ |
+
+---
+
+## Fase 4 — Frontend Renderer
+
+| # | Task | Status |
+|---|---|---|
+| 4.1 | Meta API (`/_meta/ui`) — read-only UI manifests | ⏳ |
+| 4.2 | Manifest-driven renderer core — SPA shell + per-kind renderers | ⏳ |
+| 4.3 | FormaExpr AST interpreter (`visible_when`, `readonly_when`, `compute`) | ⏳ |
+| 4.4 | shadcn/ui component library (`@/components/ui`) | ⏳ |
+| 4.5 | Auto-generated admin panel from Entity manifests | ⏳ |
+| 4.6 | Frontend Kinds: Page, Form, Table, Dashboard, Widget, Report, Wizard, Kanban, Timeline, Menu, Print, Theme | ⏳ |
+| **4.7** | **Page-Scoped Routing (BFF)** — `/{ws}/{app}/{page}/api/v1/{module}/{plural}` | ⏳ |
+
+### 4.7 Page-Scoped Routing Design
+
+**Concept (Backend-for-Frontend at page level):**
+
+```
+Browser → SPA shell → page-gated API proxy → forma-serve handler
+         ↑                                     ↑
+    React Router                        EntityStore action
+    PageGate check                      Resource permission (verification)
+    Render page / 403                   Audit log granular
+```
+
+**URL structure:**
+
+| Surface | URL Pattern | Auth |
+|---|---|---|
+| **Admin panel** (internal) | `/{ws}/{app}/{page}/api/v1/{module}/{plural}` | Page gate + resource permission |
+| **Public API** (external) | `/{ws}/api/v1/{module}/{plural}` | Resource permission only |
+| **Meta API** | `/_meta/ui` | Read-only, same-origin |
+
+**Page footprint materialization (D38):**
+
+```
+Page "Order Management" composed from:
+  └─ Table: orders        → orders.list
+  └─ Form: order-edit     → orders.find, orders.update
+  └─ Action: checkout     → orders.checkout
+  └─ Widget: revenue      → gl-balances.view
+
+Admin grant: "role kasir → Page Order Management"
+  → auto-materialize 5 resource permissions
+  → admin UX: 1 checkbox, backend: 5 permissions
+```
+
+**Why this is good:**
+
+| Benefit | Mechanism |
+|---|---|
+| Consistent latency | Browser never hits backend directly; all through SPA → backend proxy |
+| Single auth boundary | Page gate = one permission check per page entry |
+| No backend leak | Backend endpoints hidden behind page namespace |
+| Clean separation | Public API (`expose`) deliberate; admin panel auto-generated |
+| Audit granularity | Resource-level enforcement preserves per-action audit trail |
+
+---
+
+## Fase 5 — Control Plane
+
+| # | Task | Status |
+|---|---|---|
+| 5.1 | `forma-control` binary (stub exists) | ⏳ |
+| 5.2 | `kind: Environment` | ⏳ |
+| 5.3 | `kind: Policy` (OPA/Rego) | ⏳ |
+| 5.4 | Artifact signing (ed25519) per D11 | ⏳ |
+| 5.5 | Transparency log (Merkle tree) per D30 | ⏳ |
+| 5.6 | Plane Protocol (gRPC + mTLS) per D50 | ⏳ |
+
+---
+
+## Fase 6 — CLI & DX
+
+| # | Task | Status |
+|---|---|---|
+| 6.1 | `forma validate` | ⏳ |
+| 6.2 | `forma new <kind>` scaffold | ⏳ |
+| 6.3 | `forma dev` (hot-reload) | ⏳ |
+| 6.4 | `forma generate` (TypeScript types) | ⏳ |
+| 6.5 | `forma migrate` | ⏳ |
+| 6.6 | `forma backup create\|inspect\|restore` (D41) | ⏳ |
+| 6.7 | LSP / JSON Schema per kind (D34) | ⏳ |
+
+---
+
+## Infrastructure
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| INF-1 | Devcontainer: Go, MinIO, Valkey, Mailpit | ✅ | `compose.yaml` |
+| INF-2 | PostgreSQL in devcontainer | ❌ Removed | SQLite for dev; PG for integration tests only |
+| INF-3 | DBCode SQLite viewer | ✅ | Via `.forma/data.db` |
+| INF-4 | Docs: specs (01–11) | ✅ | `docs/spec/` |
+| INF-5 | Docs: implementation (db-layer, api-layer) | ✅ | `docs/implementation/` |
+| INF-6 | Docs: plan tracking | ✅ | This file |
+
+---
+
+## Skipped / Deferred
+
+| Item | Reason | Revisit |
+|---|---|---|
+| PostgreSQL in devcontainer | SQLite sufficient for dev; PG for integration tests | Fase 5 |
+| Smart Internal Dispatch (1.3.8) | D50: same-process = direct call; cross-process = gRPC. Registry.IsLocal() needed first | Fase 2 |
+| Page-Scoped Routing (4.7) | BFF pattern: `/{ws}/{app}/{page}/api/v1/...`. Browser never hits backend directly | Fase 4 |
+| gRPC / WebSocket adapters | REST is priority; descriptors already designed | Fase 3 |
+
+---
+
+## Key Design Decisions (from 1.4 implementation discussions)
+
+| ID | Decision | Impact |
+|---|---|---|
+| D51 | **Spec = data, not code.** Permission + auth config in YAML, loaded at runtime. Hot-reload via atomic `http.Handler` swap. | No recompile; ~0ms downtime on spec change |
+| D52 | **Dual namespace routing.** Internal: `/_/api/v1/...` (auto, all entities). External: `/{ws}/api/v1/...` (only if `expose`). | Admin panel works without `expose`; public API is deliberate |
+| D53 | **Page-scoped routing (BFF).** Browser → SPA → `/{ws}/{app}/{page}/api/v1/...`. Browser never hits backend directly. | Consistent latency; single auth boundary; no endpoint leak |
+| D54 | **Page → permission materialization (D38).** Admin grants page access; framework derives resource permissions from page composition. | Admin UX: 1 checkbox; backend: N permissions auto-granted |
+| D55 | **Smart internal dispatch (D50).** Same-process = direct Go call; cross-process = gRPC (binary, faster); REST as fallback. | Zero serialization overhead for local calls |
+| D56 | **URL transparency.** No obfuscation. Readable URLs = debuggable, AI-friendly, diff-able. Security at auth + permission layer. | Consistent with D24 (manifests never encrypted) |
+| D57 | **Starlark not encrypted.** IP protection via binary handlers (`compiled`/`native`/WASM), not via script encryption. | Consent + audit + AI remain functional |
+| D58 | **Three impl tiers.** Local script (Tier 1) → Local binary/WASM (Tier 2) → Cloud-hosted handler (Tier 3). Same `ref` syntax. | Progressive complexity; vendor chooses trade-off |
+
+---
+
+## Test Summary
+
+| Package | Tests | Status |
+|---|---|---|
+| `internal/db` | 89 | ✅ |
+| `internal/entity` | 9 | ✅ |
+| `internal/api` | 23 | ✅ |
+| `internal/auth` | 7 | ✅ |
+| `internal/permission` | 18 | ✅ |
+| `internal/validation` | 9 | ✅ |
+| `internal/manifest` | 2 | ✅ |
+| `internal/starlark` | 0 | Stub |
+| `pkg/spec` | 1 | ✅ |
+| **Total** | **~166** | **✅ All passing** |
+
+---
+
+## Legend
+
+| Symbol | Meaning |
+|---|---|
+| ✅ Done | Completed + tests passing |
+| ⏳ Pending | Planned, not started |
+| ❌ Removed | Deliberately removed from scope |
+
+---
+
+## Key Design Decisions (from Reference)
+
+See `docs/spec/11-reference.md` for full list. Highlights relevant to implementation:
+
+| ID | Decision | Impact |
+|---|---|---|
+| D3 | Two processes even in dev (`forma-control` + `forma-resource`) | `forma serve` must run both |
+| D17 | Derived by default — API/admin/docs born from Entity manifest | Registry → auto-generate routes |
+| D20 | Explicit permission model — every action declares `required_permission` + `uses` | Fase 1.5 |
+| D29 | Workspace = the one and only multi-tenancy model | `/{workspace}/api/...` prefix |
+| D32 | Idempotency + optimistic concurrency enforced by framework | 1.1.10 + CAS in 1.1.7 |
+| D49 | API exposure deny-by-default via `spec.expose` | Generator skips unexposed entities |
+| D50 | Multi-protocol router, workspace slug, internal dispatch | chi router in 1.3.5 |

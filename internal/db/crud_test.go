@@ -606,9 +606,9 @@ func TestEntityStore_StateMachineTransition(t *testing.T) {
 				{Name: "rejected"},
 			},
 			Transitions: []spec.TransitionDecl{
-				{From: "draft", To: "submitted", Action: "submit"},
-				{From: "submitted", To: "approved", Action: "approve"},
-				{From: "submitted", To: "rejected", Action: "reject"},
+				{From: spec.StateList{"draft"}, To: "submitted", Action: "submit"},
+				{From: spec.StateList{"submitted"}, To: "approved", Action: "approve"},
+				{From: spec.StateList{"submitted"}, To: "rejected", Action: "reject"},
 			},
 		},
 	}
@@ -684,7 +684,7 @@ func TestEntityStore_StateMachineGuard_Passes(t *testing.T) {
 			},
 			Transitions: []spec.TransitionDecl{
 				{
-					From: "draft", To: "submitted", Action: "submit",
+					From: spec.StateList{"draft"}, To: "submitted", Action: "submit",
 					Guard: &spec.GuardDecl{
 						Expression: "total > 0",
 						Message:    "Order total must be positive before submitting",
@@ -749,7 +749,7 @@ func TestEntityStore_StateMachineGuard_Rejects(t *testing.T) {
 			},
 			Transitions: []spec.TransitionDecl{
 				{
-					From: "draft", To: "submitted", Action: "submit",
+					From: spec.StateList{"draft"}, To: "submitted", Action: "submit",
 					Guard: &spec.GuardDecl{
 						Expression: "total > 0",
 						Message:    "Order total must be positive before submitting",
@@ -1018,4 +1018,268 @@ func TestEntityStore_ComputedField(t *testing.T) {
 	if total2 < 219 || total2 > 221 {
 		t.Errorf("expected total ~220 in list, got %v", total2)
 	}
+}
+
+// ============================================================================
+// 1.6 New Validator Tests
+// ============================================================================
+
+func TestEntityStore_FieldRule_Positive(t *testing.T) {
+	dir := t.TempDir()
+	d, err := OpenSQLite(filepath.Join(dir, "crud_rules_positive.db"), nil)
+	if err != nil {
+		t.Fatalf("OpenSQLite failed: %v", err)
+	}
+	defer d.Close()
+
+	meta := spec.Metadata{Name: "product", Module: "inventory"}
+	entity := &spec.EntitySpec{
+		Version: "v1",
+		Fields: []spec.Field{
+			{Name: "name", Type: spec.FieldString},
+			{Name: "price", Type: spec.FieldNumber, Rules: []spec.ValidationRule{{Name: "positive"}}},
+		},
+	}
+
+	r := NewMigrationRunner(d, DriverSQLite)
+	ctx := context.Background()
+	if _, err := r.ApplyMigrations(ctx, []EntityMigration{{Metadata: meta, EntitySpec: *entity}}); err != nil {
+		t.Fatalf("ApplyMigrations failed: %v", err)
+	}
+
+	store := NewEntityStore(d, DriverSQLite, meta, entity)
+
+	// Zero price → should fail
+	_, err = store.Insert(ctx, InsertParams{
+		TenantID: "t1", CreatedBy: "u1",
+		Data: map[string]any{"name": "Item", "price": float64(0)},
+	})
+	if err == nil {
+		t.Fatal("expected error for zero price (positive rule)")
+	}
+
+	// Negative price → should fail
+	_, err = store.Insert(ctx, InsertParams{
+		TenantID: "t1", CreatedBy: "u1",
+		Data: map[string]any{"name": "Item", "price": float64(-5)},
+	})
+	if err == nil {
+		t.Fatal("expected error for negative price (positive rule)")
+	}
+
+	// Positive price → should succeed
+	id, err := store.Insert(ctx, InsertParams{
+		TenantID: "t1", CreatedBy: "u1",
+		Data: map[string]any{"name": "Item", "price": float64(9.99)},
+	})
+	if err != nil {
+		t.Fatalf("Insert with positive price failed: %v", err)
+	}
+	if id == "" {
+		t.Fatal("expected non-empty ID")
+	}
+	t.Log("✓ positive validator works")
+}
+
+func TestEntityStore_FieldRule_URL(t *testing.T) {
+	dir := t.TempDir()
+	d, err := OpenSQLite(filepath.Join(dir, "crud_rules_url.db"), nil)
+	if err != nil {
+		t.Fatalf("OpenSQLite failed: %v", err)
+	}
+	defer d.Close()
+
+	meta := spec.Metadata{Name: "link", Module: "content"}
+	entity := &spec.EntitySpec{
+		Version: "v1",
+		Fields: []spec.Field{
+			{Name: "name", Type: spec.FieldString},
+			{Name: "website", Type: spec.FieldString, Rules: []spec.ValidationRule{{Name: "url"}}},
+		},
+	}
+
+	r := NewMigrationRunner(d, DriverSQLite)
+	ctx := context.Background()
+	if _, err := r.ApplyMigrations(ctx, []EntityMigration{{Metadata: meta, EntitySpec: *entity}}); err != nil {
+		t.Fatalf("ApplyMigrations failed: %v", err)
+	}
+
+	store := NewEntityStore(d, DriverSQLite, meta, entity)
+
+	// Invalid URL → should fail
+	_, err = store.Insert(ctx, InsertParams{
+		TenantID: "t1", CreatedBy: "u1",
+		Data: map[string]any{"name": "Test", "website": "not-a-url"},
+	})
+	if err == nil {
+		t.Fatal("expected error for invalid URL")
+	}
+
+	// Valid HTTP URL → should succeed
+	_, err = store.Insert(ctx, InsertParams{
+		TenantID: "t1", CreatedBy: "u1",
+		Data: map[string]any{"name": "Test", "website": "https://example.com"},
+	})
+	if err != nil {
+		t.Fatalf("Insert with valid URL failed: %v", err)
+	}
+	t.Log("✓ url validator works")
+}
+
+func TestEntityStore_FieldRule_Precision(t *testing.T) {
+	dir := t.TempDir()
+	d, err := OpenSQLite(filepath.Join(dir, "crud_rules_precision.db"), nil)
+	if err != nil {
+		t.Fatalf("OpenSQLite failed: %v", err)
+	}
+	defer d.Close()
+
+	meta := spec.Metadata{Name: "invoice", Module: "billing"}
+	entity := &spec.EntitySpec{
+		Version: "v1",
+		Fields: []spec.Field{
+			{Name: "number", Type: spec.FieldString},
+			{Name: "amount", Type: spec.FieldNumber, Rules: []spec.ValidationRule{{Name: "precision", Value: 2}}},
+		},
+	}
+
+	r := NewMigrationRunner(d, DriverSQLite)
+	ctx := context.Background()
+	if _, err := r.ApplyMigrations(ctx, []EntityMigration{{Metadata: meta, EntitySpec: *entity}}); err != nil {
+		t.Fatalf("ApplyMigrations failed: %v", err)
+	}
+
+	store := NewEntityStore(d, DriverSQLite, meta, entity)
+
+	// Too many decimal places → should fail
+	_, err = store.Insert(ctx, InsertParams{
+		TenantID: "t1", CreatedBy: "u1",
+		Data: map[string]any{"number": "INV-001", "amount": float64(100.123)},
+	})
+	if err == nil {
+		t.Fatal("expected error for too many decimal places")
+	}
+
+	// Exactly 2 decimal places → should succeed
+	_, err = store.Insert(ctx, InsertParams{
+		TenantID: "t1", CreatedBy: "u1",
+		Data: map[string]any{"number": "INV-002", "amount": float64(100.12)},
+	})
+	if err != nil {
+		t.Fatalf("Insert with 2 decimal places failed: %v", err)
+	}
+
+	// Integer (0 decimal places) → should succeed
+	_, err = store.Insert(ctx, InsertParams{
+		TenantID: "t1", CreatedBy: "u1",
+		Data: map[string]any{"number": "INV-003", "amount": float64(100)},
+	})
+	if err != nil {
+		t.Fatalf("Insert with integer value failed: %v", err)
+	}
+	t.Log("✓ precision validator works")
+}
+
+func TestEntityStore_FieldRule_Future(t *testing.T) {
+	dir := t.TempDir()
+	d, err := OpenSQLite(filepath.Join(dir, "crud_rules_future.db"), nil)
+	if err != nil {
+		t.Fatalf("OpenSQLite failed: %v", err)
+	}
+	defer d.Close()
+
+	meta := spec.Metadata{Name: "event", Module: "calendar"}
+	entity := &spec.EntitySpec{
+		Version: "v1",
+		Fields: []spec.Field{
+			{Name: "title", Type: spec.FieldString},
+			{Name: "date", Type: spec.FieldDateTime, Rules: []spec.ValidationRule{{Name: "future"}}},
+		},
+	}
+
+	r := NewMigrationRunner(d, DriverSQLite)
+	ctx := context.Background()
+	if _, err := r.ApplyMigrations(ctx, []EntityMigration{{Metadata: meta, EntitySpec: *entity}}); err != nil {
+		t.Fatalf("ApplyMigrations failed: %v", err)
+	}
+
+	store := NewEntityStore(d, DriverSQLite, meta, entity)
+
+	// Past date → should fail
+	_, err = store.Insert(ctx, InsertParams{
+		TenantID: "t1", CreatedBy: "u1",
+		Data: map[string]any{"title": "Past Event", "date": "2020-01-01T00:00:00Z"},
+	})
+	if err == nil {
+		t.Fatal("expected error for past date (future rule)")
+	}
+
+	// Future date → should succeed
+	_, err = store.Insert(ctx, InsertParams{
+		TenantID: "t1", CreatedBy: "u1",
+		Data: map[string]any{"title": "Future Event", "date": "2030-01-01T00:00:00Z"},
+	})
+	if err != nil {
+		t.Fatalf("Insert with future date failed: %v", err)
+	}
+	t.Log("✓ future validator works")
+}
+
+func TestEntityStore_FieldRule_MinMaxItems(t *testing.T) {
+	dir := t.TempDir()
+	d, err := OpenSQLite(filepath.Join(dir, "crud_rules_items.db"), nil)
+	if err != nil {
+		t.Fatalf("OpenSQLite failed: %v", err)
+	}
+	defer d.Close()
+
+	meta := spec.Metadata{Name: "config", Module: "core"}
+	entity := &spec.EntitySpec{
+		Version: "v1",
+		Fields: []spec.Field{
+			{Name: "name", Type: spec.FieldString},
+			{Name: "tags", Type: spec.FieldJSON,
+				Rules: []spec.ValidationRule{
+					{Name: "min_items", Value: 1},
+					{Name: "max_items", Value: 5},
+				},
+			},
+		},
+	}
+
+	r := NewMigrationRunner(d, DriverSQLite)
+	ctx := context.Background()
+	if _, err := r.ApplyMigrations(ctx, []EntityMigration{{Metadata: meta, EntitySpec: *entity}}); err != nil {
+		t.Fatalf("ApplyMigrations failed: %v", err)
+	}
+
+	store := NewEntityStore(d, DriverSQLite, meta, entity)
+
+	// Empty array → should fail (min_items: 1)
+	_, err = store.Insert(ctx, InsertParams{
+		TenantID: "t1", CreatedBy: "u1",
+		Data: map[string]any{"name": "Test", "tags": []any{}},
+	})
+	if err == nil {
+		t.Fatal("expected error for empty array (min_items)")
+	}
+
+	// 6 items → should fail (max_items: 5)
+	_, err = store.Insert(ctx, InsertParams{
+		TenantID: "t1", CreatedBy: "u1",
+		Data: map[string]any{"name": "Test", "tags": []any{"a", "b", "c", "d", "e", "f"}},
+	})
+	if err == nil {
+		t.Fatal("expected error for too many items (max_items)")
+	}
+
+	// 2 items → should succeed
+	_, err = store.Insert(ctx, InsertParams{
+		TenantID: "t1", CreatedBy: "u1",
+		Data: map[string]any{"name": "Test", "tags": []any{"a", "b"}},
+	})
+	if err != nil {
+		t.Fatalf("Insert with valid array failed: %v", err)
+	}
+	t.Log("✓ min_items/max_items validators work")
 }
