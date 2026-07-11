@@ -1,0 +1,21 @@
+# SHOWCASE kind: Menu module kedua — sidebar harus menampilkan
+# dua grup module (Klinik + Farmasi) terurut `order`.
+apiVersion: forma.dev/v1alpha1
+kind: Menu
+metadata:
+  name: pharmacy-main
+  module: pharmacy
+  description: Navigasi modul farmasi
+spec:
+  label: "Farmasi"
+  icon: "pill"
+  order: 20
+  children:
+    - label: "Antrian Resep"
+      icon: "columns-3"
+      route: "/kanban/pharmacy-queue"
+      order: 1
+    - label: "Semua Resep"
+      icon: "list"
+      route: "/pharmacy/prescriptions"
+      order: 2

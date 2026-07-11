@@ -1,0 +1,18 @@
+# SHOWCASE kind: Widget tipe chart — line chart 30 hari dari summary entity.
+apiVersion: forma.dev/v1alpha1
+kind: Widget
+metadata:
+  name: visits-by-polyclinic
+  module: clinic
+  description: Tren kunjungan per poliklinik
+spec:
+  title: "Kunjungan per Poliklinik"
+  type: chart
+  entity: daily-visit-summary
+  refresh_secs: 300
+  config:
+    chart_type: line
+    x: date
+    y: visit_count
+    group_by: polyclinic_id
+    range: 30d

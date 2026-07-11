@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 3,
   "targets": {
     "net8.0": {}
   },
@@ -8,29 +8,35 @@
     "net8.0": []
   },
   "packageFolders": {
-    "/home/vscode/.nuget/packages/": {}
+    "C:\\Users\\prima\\.nuget\\packages\\": {},
+    "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages": {}
   },
   "project": {
     "version": "0.1.0",
     "restore": {
-      "projectUniqueName": "/workspaces/forma/sdk/dotnet/src/FormaLib/FormaLib.csproj",
+      "projectUniqueName": "\\\\wsl.localhost\\Ubuntu\\home\\primadi\\forma\\sdk\\dotnet\\src\\FormaLib\\FormaLib.csproj",
       "projectName": "Forma.LibForma",
-      "projectPath": "/workspaces/forma/sdk/dotnet/src/FormaLib/FormaLib.csproj",
-      "packagesPath": "/home/vscode/.nuget/packages/",
-      "outputPath": "/workspaces/forma/sdk/dotnet/src/FormaLib/obj/",
+      "projectPath": "\\\\wsl.localhost\\Ubuntu\\home\\primadi\\forma\\sdk\\dotnet\\src\\FormaLib\\FormaLib.csproj",
+      "packagesPath": "C:\\Users\\prima\\.nuget\\packages\\",
+      "outputPath": "\\\\wsl.localhost\\Ubuntu\\home\\primadi\\forma\\sdk\\dotnet\\src\\FormaLib\\obj\\",
       "projectStyle": "PackageReference",
+      "fallbackFolders": [
+        "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+      ],
       "configFilePaths": [
-        "/home/vscode/.nuget/NuGet/NuGet.Config"
+        "C:\\Users\\prima\\AppData\\Roaming\\NuGet\\NuGet.Config",
+        "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+        "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
       ],
       "originalTargetFrameworks": [
         "net8.0"
       ],
       "sources": {
+        "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
         "https://api.nuget.org/v3/index.json": {}
       },
       "frameworks": {
         "net8.0": {
-          "framework": "net8.0",
           "targetAlias": "net8.0",
           "projectReferences": {}
         }
@@ -45,11 +51,10 @@
         "auditLevel": "low",
         "auditMode": "direct"
       },
-      "SdkAnalysisLevel": "10.0.300"
+      "SdkAnalysisLevel": "10.0.100"
     },
     "frameworks": {
       "net8.0": {
-        "framework": "net8.0",
         "targetAlias": "net8.0",
         "imports": [
           "net461",
@@ -62,22 +67,12 @@
         ],
         "assetTargetFallback": true,
         "warn": true,
-        "downloadDependencies": [
-          {
-            "name": "Microsoft.AspNetCore.App.Ref",
-            "version": "[8.0.28, 8.0.28]"
-          },
-          {
-            "name": "Microsoft.NETCore.App.Ref",
-            "version": "[8.0.28, 8.0.28]"
-          }
-        ],
         "frameworkReferences": {
           "Microsoft.NETCore.App": {
             "privateAssets": "all"
           }
         },
-        "runtimeIdentifierGraphPath": "/usr/share/dotnet/sdk/10.0.301/PortableRuntimeIdentifierGraph.json"
+        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.103/PortableRuntimeIdentifierGraph.json"
       }
     }
   }

@@ -1,0 +1,10 @@
+apiVersion: forma.dev/v1alpha1
+kind: Module
+metadata:
+  name: pharmacy
+  description: Farmasi — obat, resep, antrian peracikan
+spec:
+  version: 1.0.0
+  depends:
+    - module: forma/core
+    - module: clinic

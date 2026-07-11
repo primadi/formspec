@@ -1,12 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "kcDvETQDowY=",
+  "dgSpecHash": "u34V/JxaSEc=",
   "success": true,
-  "projectFilePath": "/workspaces/forma/sdk/dotnet/examples/examples.csproj",
-  "expectedPackageFiles": [
-    "/home/vscode/.nuget/packages/microsoft.netcore.app.ref/8.0.28/microsoft.netcore.app.ref.8.0.28.nupkg.sha512",
-    "/home/vscode/.nuget/packages/microsoft.aspnetcore.app.ref/8.0.28/microsoft.aspnetcore.app.ref.8.0.28.nupkg.sha512",
-    "/home/vscode/.nuget/packages/microsoft.netcore.app.host.linux-x64/8.0.28/microsoft.netcore.app.host.linux-x64.8.0.28.nupkg.sha512"
-  ],
+  "projectFilePath": "\\\\wsl.localhost\\Ubuntu\\home\\primadi\\forma\\sdk\\dotnet\\examples\\examples.csproj",
+  "expectedPackageFiles": [],
   "logs": []
 }

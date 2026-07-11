@@ -1,0 +1,29 @@
+# SHOWCASE kind: Form — modal + pola 1-step create-submit (§1.7)
+# + required_when/visible_when bergantung nilai field lain (FormaExpr).
+apiVersion: forma.dev/v1alpha1
+kind: Form
+metadata:
+  name: payment-quick
+  module: clinic
+  description: Terima pembayaran — quick entry kasir
+spec:
+  entity: payment
+  render:
+    mode: modal
+  sections:
+    - title: "Pembayaran"
+      fields:
+        - name: visit_id
+          label: "Kunjungan"
+        - name: amount
+          label: "Jumlah"
+        - name: method
+          label: "Metode"
+        - name: reference
+          label: "No. Referensi"
+          help: "Wajib untuk pembayaran non-tunai"
+          visible_when: "fields.method != 'cash'"
+          required_when: "fields.method != 'cash'"
+  submit:
+    label: "Terima & Simpan"
+    message: "Pembayaran diterima"

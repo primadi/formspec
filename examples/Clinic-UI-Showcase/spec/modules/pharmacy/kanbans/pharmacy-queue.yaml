@@ -1,0 +1,19 @@
+# SHOWCASE kind: Kanban flagship — antrian farmasi (contoh kanonik §12 spec).
+# Drag = update status optimistic (409 CAS → snap-back + toast).
+apiVersion: forma.dev/v1alpha1
+kind: Kanban
+metadata:
+  name: pharmacy-queue
+  module: pharmacy
+  description: Board antrian peracikan obat
+spec:
+  entity: prescription
+  status_field: status
+  columns:
+    - { status: queued, label: "Menunggu" }
+    - { status: compounding, label: "Diracik" }
+    - { status: ready, label: "Siap Diambil" }
+    - { status: dispensed, label: "Diserahkan" }
+  card_template:
+    title: number
+    fields: [patient_name, priority, transaction_date]

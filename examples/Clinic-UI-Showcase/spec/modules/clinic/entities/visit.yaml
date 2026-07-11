@@ -1,0 +1,137 @@
+# SHOWCASE: dokumen transaksi flagship — state machine + child table + natural key
+# + custom actions ber-script + event realtime. Lifecycle default (submit aktif)
+# → pola "2-step + auto-save" (§1.7 spec frontend).
+# UI-nya di-override penuh: tables/visit-table.yaml, forms/visit-edit.yaml,
+# kanbans/consultation-board.yaml, prints/queue-ticket.yaml.
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: visit
+  module: clinic
+  description: Kunjungan pasien — dari antrian sampai selesai konsultasi
+spec:
+  version: v1
+  characteristic: transaction
+
+  auth: { required: true, strategies: [token] }
+  expose:
+    - { type: rest, enabled: true }
+
+  fields:
+    - name: transaction_date
+      type: date
+      required: true
+      index: true
+    - name: queue_number
+      type: string
+      natural_key: true
+      immutable: true
+      unique: true
+      index: true
+      natural_key_rule:
+        strategy: sequence
+        format: "{prefix}-{seq:03d}"
+        prefix: { config: clinic.queue_prefix, default: "Q" }
+        reset: daily
+    - name: patient_id
+      type: relation
+      relation: { type: belongs_to, resource: patient }
+      required: true
+    - name: polyclinic_id
+      type: relation
+      relation: { type: belongs_to, resource: polyclinic }
+      required: true
+    - name: doctor_id
+      type: relation
+      relation: { type: belongs_to, resource: doctor }
+      required: true
+    - name: complaint
+      type: string
+      rules: [required, max_length: 1000]
+    - name: diagnosis
+      type: string
+      rules: [max_length: 2000]
+    - name: status
+      type: enum
+      enum_values: [waiting, in_consultation, completed, cancelled]
+      index: true
+    - name: treatments
+      type: child
+      child:
+        storage: jsonb
+        sequence_field: line_number
+        fields:
+          - { name: line_number, type: integer, immutable: true }
+          - { name: treatment_name, type: string, rules: [required] }
+          - { name: quantity, type: integer, rules: [required, positive] }
+          - { name: price, type: decimal, rules: [required, positive] }
+    - name: total
+      type: decimal
+      rules: [positive]
+    - name: started_at
+      type: datetime
+    - name: completed_at
+      type: datetime
+
+  state_machine:
+    field: status
+    initial: waiting
+    transitions:
+      - { from: waiting, to: in_consultation, via: start-consultation }
+      - { from: in_consultation, to: completed, via: complete,
+          guard: "resource.diagnosis != None and len(resource.diagnosis) > 0" }
+      - { from: [waiting, in_consultation], to: cancelled, via: cancel }
+
+  actions:
+    - name: update
+      conditions:
+        - script: "resource.status in ['waiting', 'in_consultation']"
+          message: "Kunjungan yang selesai/batal tidak bisa diedit"
+
+    - name: delete
+      disabled: true
+
+    - name: start-consultation
+      description: Pasien dipanggil masuk ruang konsultasi
+      required_permission: visits.start-consultation
+      audit: true
+      impl: { type: script_ref, ref: clinic/visit_start_consultation }
+
+    - name: complete
+      description: Konsultasi selesai — diagnosis wajib terisi (guard state machine)
+      required_permission: visits.complete
+      audit: true
+      emits: completed
+      impl: { type: script_ref, ref: clinic/visit_complete }
+
+    - name: cancel
+      description: Batalkan kunjungan
+      required_permission: visits.cancel
+      audit: true
+      impl: { type: script_ref, ref: clinic/visit_cancel }
+
+    - name: register-patient
+      description: >
+        Commit action untuk wizard patient-registration (§11 spec frontend):
+        menerima akumulasi state wizard, buat pasien bila baru, buat visit —
+        atomik di server.
+      required_permission: visits.register
+      audit: true
+      params:
+        validate:
+          - { field: polyclinic_id, rules: [required, exists: polyclinic] }
+          - { field: doctor_id, rules: [required, exists: doctor] }
+      uses:
+        resources: [patient.find, patient.create]
+      impl: { type: script_ref, ref: clinic/register_patient }
+
+  events:
+    - name: completed
+      type: async
+      description: Konsultasi selesai — realtime board + summary
+      payload:
+        fields: [id, queue_number, patient_id, doctor_id, total, completed_at]
+      deliver:
+        - channel: audit_log
+        - channel: websocket
+          target: { scope: tenant }

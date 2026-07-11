@@ -1,0 +1,16 @@
+# SHOWCASE kind: Widget lintas module — dipasang di dashboard modul clinic.
+# Visibility di katalog derived dari permission list prescription (D20).
+apiVersion: forma.dev/v1alpha1
+kind: Widget
+metadata:
+  name: pharmacy-queue-count
+  module: pharmacy
+  description: Jumlah resep dalam antrian
+spec:
+  title: "Antrian Farmasi"
+  type: metric
+  entity: prescription
+  query: "status in ['queued', 'compounding']"
+  refresh_secs: 30
+  config:
+    aggregate: count

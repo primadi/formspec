@@ -1,0 +1,20 @@
+# SHOWCASE: form kedua Configuration Page (tab "Billing & Struk"), row id="billing".
+apiVersion: forma.dev/v1alpha1
+kind: Form
+metadata:
+  name: settings-billing
+  module: clinic
+  description: Pengaturan pajak & struk
+spec:
+  entity: setting
+  render:
+    mode: separate_page
+  sections:
+    - title: "Pajak"
+      fields:
+        - { name: tax_percent, label: "PPN (%)" }
+    - title: "Struk"
+      fields:
+        - { name: receipt_footer, label: "Footer Struk" }
+  submit:
+    label: "Simpan Pengaturan"

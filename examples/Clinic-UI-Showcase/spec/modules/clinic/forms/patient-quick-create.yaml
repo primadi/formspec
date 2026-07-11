@@ -1,0 +1,31 @@
+# SHOWCASE kind: Form — render MODAL (dialog overlay, §1.6):
+# entity ringan ≤5 field, user tetap di konteks list/wizard,
+# dikendalikan query string (?action=create&form=patient-quick-create).
+# Entity patient juga tetap punya derived full form — dua Form untuk
+# satu entity dengan render berbeda adalah pola yang disengaja (§1.6).
+apiVersion: forma.dev/v1alpha1
+kind: Form
+metadata:
+  name: patient-quick-create
+  module: clinic
+  description: Quick-create pasien — modal, dipakai wizard step 1
+spec:
+  entity: patient
+  render:
+    mode: modal
+  sections:
+    - title: "Pasien Baru"
+      fields:
+        - name: nik
+          label: "NIK"
+          placeholder: "16 digit"
+        - name: name
+          label: "Nama Lengkap"
+        - name: birth_date
+          label: "Tanggal Lahir"
+        - name: gender
+          label: "Jenis Kelamin"
+        - name: phone
+          label: "No. HP"
+  submit:
+    label: "Simpan Pasien"

@@ -1,0 +1,28 @@
+# SHOWCASE: form untuk Configuration Page (tab "Klinik" di pages/system-settings.yaml).
+# Mode edit atas row tetap id="clinic". Tanpa create — struktur di-seed module.
+apiVersion: forma.dev/v1alpha1
+kind: Form
+metadata:
+  name: settings-clinic
+  module: clinic
+  description: Pengaturan identitas klinik
+spec:
+  entity: setting
+  render:
+    mode: separate_page
+  sections:
+    - title: "Identitas Klinik"
+      fields:
+        - { name: clinic_name, label: "Nama Klinik" }
+        - { name: address, label: "Alamat" }
+        - { name: phone, label: "Telepon" }
+        - { name: queue_prefix, label: "Prefix No. Antrian", help: "Maks 4 karakter" }
+    - title: "Notifikasi"
+      fields:
+        - { name: enable_whatsapp, label: "Aktifkan WhatsApp" }
+        - name: whatsapp_number
+          label: "Nomor WhatsApp"
+          visible_when: "fields.enable_whatsapp"
+          required_when: "fields.enable_whatsapp"
+  submit:
+    label: "Simpan Pengaturan"

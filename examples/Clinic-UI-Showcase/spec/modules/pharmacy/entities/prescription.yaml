@@ -1,0 +1,95 @@
+# SHOWCASE: transaksi dengan relation LINTAS MODULE (clinic.visit) +
+# state machine 4 kolom untuk kanban antrian farmasi (contoh kanonik §12 spec).
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: prescription
+  module: pharmacy
+  description: Resep — antrian peracikan sampai penyerahan obat
+spec:
+  version: v1
+  characteristic: transaction
+
+  auth: { required: true, strategies: [token] }
+  expose:
+    - { type: rest, enabled: true }
+
+  fields:
+    - name: transaction_date
+      type: date
+      required: true
+      index: true
+    - name: number
+      type: string
+      natural_key: true
+      immutable: true
+      unique: true
+      natural_key_rule:
+        strategy: sequence
+        format: "RX-{year}{month}{day}-{seq:03d}"
+        reset: daily
+    - name: visit_id
+      type: relation
+      relation: { type: belongs_to, resource: clinic.visit }
+      required: true
+    - name: patient_name
+      type: string
+      description: Denormalisasi untuk kartu kanban
+      rules: [required]
+    - name: priority
+      type: enum
+      enum_values: [normal, urgent]
+      default: normal
+      index: true
+    - name: status
+      type: enum
+      enum_values: [queued, compounding, ready, dispensed, cancelled]
+      index: true
+    - name: items
+      type: child
+      child:
+        storage: jsonb
+        sequence_field: line_number
+        fields:
+          - { name: line_number, type: integer, immutable: true }
+          - { name: medicine_id, type: uuid, rules: [required, exists: medicine] }
+          - { name: quantity, type: integer, rules: [required, positive] }
+          - { name: dosage_instructions, type: string, rules: [required] }
+    - name: notes
+      type: string
+
+  state_machine:
+    field: status
+    initial: queued
+    transitions:
+      - { from: queued, to: compounding, via: start-compounding }
+      - { from: compounding, to: ready, via: mark-ready }
+      - { from: ready, to: dispensed, via: dispense }
+      - { from: [queued, compounding], to: cancelled, via: cancel }
+
+  actions:
+    - name: delete
+      disabled: true
+
+    - name: start-compounding
+      required_permission: prescriptions.compound
+      audit: true
+      impl: { type: script_ref, ref: pharmacy/rx_start_compounding }
+
+    - name: mark-ready
+      required_permission: prescriptions.compound
+      audit: true
+      impl: { type: script_ref, ref: pharmacy/rx_mark_ready }
+
+    - name: dispense
+      description: Serahkan obat — kurangi stok
+      required_permission: prescriptions.dispense
+      audit: true
+      uses:
+        resources: [medicine.find, medicine.update]
+      impl: { type: script_ref, ref: pharmacy/rx_dispense }
+
+    - name: cancel
+      required_permission: prescriptions.cancel
+      audit: true
+      impl: { type: script_ref, ref: pharmacy/rx_cancel }

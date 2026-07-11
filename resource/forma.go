@@ -37,6 +37,7 @@ import (
 	"github.com/primadi/forma/internal/db"
 	"github.com/primadi/forma/internal/entity"
 	"github.com/primadi/forma/internal/permission"
+	"github.com/primadi/forma/internal/ui"
 	"github.com/primadi/forma/internal/validation"
 	"github.com/primadi/forma/pkg/spec"
 
@@ -63,6 +64,11 @@ type Config struct {
 	// Set by cmd/forma-sidecar (docs/runtimes/04-forma-sidecar.md §4.2).
 	SidecarEndpoint      string
 	SidecarInvokeTimeout time.Duration // per-invoke timeout (default: action.DefaultSidecarInvokeTimeout)
+
+	// WebDir is the built renderer SPA root (web/dist). When set, the app
+	// serves it at /{ws}/_admin and /{ws}/app with an index.html fallback
+	// for client-side routes. Empty = API only.
+	WebDir string
 }
 
 func (c *Config) applyDefaults() {
@@ -86,13 +92,65 @@ func (c *Config) applyDefaults() {
 	}
 }
 
+// ─── Public Native Handler API ───
+
+// NativeHandler is a Go function that implements a business-logic action.
+// Register it via App.RegisterNative so the framework can dispatch YAML
+// actions with spec: { impl: { type: native, ref: "..." } } to your code.
+//
+// The ref format is "Module.Entity.Action" or "TypeName.MethodName".
+// Example: "Billing.Order.CalculateTax"
+//
+// See examples/reference-app/ for a complete usage example.
+type NativeHandler func(ctx context.Context, params NativeParams) (any, error)
+
+// NativeParams mirrors internal/action.ExecuteParams for public consumption.
+type NativeParams struct {
+	Module     string         // owning module (e.g. "billing")
+	Entity     string         // entity or service name (e.g. "order")
+	ActionName string         // action being invoked (e.g. "checkout")
+	ResourceID string         // entity record ID (empty for service actions)
+	Resource   map[string]any // current entity record data
+	Params     map[string]any // action parameters from request body
+	TenantID   string         // current workspace tenant
+	UserID     string         // authenticated user
+}
+
 // App is a running Forma entity engine: loaded manifests, a synced schema,
 // and a generated REST API handler.
 type App struct {
-	cfg     Config
-	reg     *entity.Registry
-	rb      *api.RouterBuilder
-	handler http.Handler
+	cfg      Config
+	reg      *entity.Registry
+	rb       *api.RouterBuilder
+	handler  http.Handler
+	disp     *action.Dispatcher
+	nativeEx *action.NativeExecutor
+}
+
+// RegisterNative registers a Go native handler so the action dispatcher can
+// route impl: { type: native, ref: "Module.Entity.Action" } calls to it.
+//
+// Panics if a handler is already registered for the same ref.
+func (a *App) RegisterNative(ref string, handler NativeHandler) {
+	a.nativeEx.Register(ref, func(ctx context.Context, params action.ExecuteParams) (any, error) {
+		return handler(ctx, NativeParams{
+			Module:     params.Module,
+			Entity:     params.Entity,
+			ActionName: params.ActionName,
+			ResourceID: params.ResourceID,
+			Resource:   params.Resource,
+			Params:     params.Params,
+			TenantID:   params.TenantID,
+			UserID:     params.UserID,
+		})
+	})
+}
+
+// RegisterNatives registers multiple native handlers at once (convenience).
+func (a *App) RegisterNatives(handlers map[string]NativeHandler) {
+	for ref, handler := range handlers {
+		a.RegisterNative(ref, handler)
+	}
 }
 
 // New loads entities from cfg.SpecPath, syncs the database schema, and
@@ -132,9 +190,31 @@ func New(cfg Config) (*App, error) {
 		return nil, fmt.Errorf("sync schema: %w", err)
 	}
 
+	// Frontend UI kinds (Page/Form/Table/... — Frontend Spec §2) + Meta API.
+	uiReg := ui.NewRegistry()
+	for _, loadErr := range uiReg.LoadDir(cfg.SpecPath) {
+		fmt.Fprintf(os.Stderr, "forma: ui load warning: %v\n", loadErr)
+	}
+	resolveEntity := func(module, name string) (*spec.EntitySpec, bool) {
+		info, ok := reg.GetEntity(module, name)
+		if !ok || info.EntitySpec == nil {
+			return nil, false
+		}
+		return info.EntitySpec, true
+	}
+	for _, valErr := range uiReg.Validate(resolveEntity) {
+		fmt.Fprintf(os.Stderr, "forma: ui validate warning: %v\n", valErr)
+	}
+
 	rb := api.NewRouterBuilder(reg)
 	rb.BuildRoutes()
-	rb.SetDispatcher(newDispatcher(reg, cfg))
+	disp := newDispatcher(reg, cfg)
+	nativeEx := disp.NativeExecutor() // get the native executor from dispatcher
+	rb.SetDispatcher(disp)
+	rb.SetUIRegistry(uiReg)
+	if cfg.WebDir != "" {
+		rb.SetWebDir(cfg.WebDir)
+	}
 
 	validation.SetEntityLookup(func(module, entityName, id string) (bool, error) {
 		store, err := reg.GetEntityStore(module, entityName)
@@ -147,7 +227,7 @@ func New(cfg Config) (*App, error) {
 		return true, nil
 	})
 
-	return &App{cfg: cfg, reg: reg, rb: rb, handler: rb.BuildHTTP()}, nil
+	return &App{cfg: cfg, reg: reg, rb: rb, handler: rb.BuildHTTP(), disp: disp, nativeEx: nativeEx}, nil
 }
 
 // Handler returns the generated REST API handler, for mounting into your
@@ -243,9 +323,11 @@ func newDispatcher(reg *entity.Registry, cfg Config) *action.Dispatcher {
 	disp.RegisterExecutor(spec.ImplScript, scriptEx)
 	disp.RegisterExecutor(spec.ImplScriptRef, scriptEx)
 
-	disp.RegisterExecutor(spec.ImplNative, action.NewNativeExecutor())
+	nativeEx := action.NewNativeExecutor()
+	disp.RegisterExecutor(spec.ImplNative, nativeEx)
 	disp.RegisterExecutor(spec.ImplSidecar, newSidecarExecutor(cfg))
 
+	disp.SetNativeExecutor(nativeEx)
 	return disp
 }
 

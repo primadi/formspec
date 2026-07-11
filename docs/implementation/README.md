@@ -17,7 +17,8 @@ docs/
 └── implementation/                # Dokumentasi implementasi (internal)
     ├── README.md                  # ← Anda di sini
     ├── database-layer.md          # internal/db
-    └── api-layer.md               # internal/api
+    ├── api-layer.md               # internal/api
+    └── frontend-renderer.md       # web/ + internal/ui (Meta API)
 ```
 
 ---
@@ -28,6 +29,7 @@ docs/
 |---|---|---|---|
 | [database-layer.md](./database-layer.md) | `internal/db` | DB abstraction, DSN parsing, SQLite/PostgreSQL drivers, DDL generation, schema migration, CRUD query builder, child storage, natural key counter, idempotency store, outbox table | ✅ Fase 1.1 |
 | [api-layer.md](./api-layer.md) | `internal/api` | Multi-protocol router (chi radix-tree), deny-by-default exposure, workspace-prefixed routes, smart internal dispatch, auto-generated REST handlers, response envelopes | 📋 Planned — Fase 1.3 |
+| [frontend-renderer.md](./frontend-renderer.md) | `web/`, `internal/ui` | Manifest-driven renderer: Meta API, derivation engine (D17 — auto Table/Form/Page/Menu dari Entity), 12 kind renderers, FormaExpr interpreter, permission-driven UI, modal/drawer/page containers | 📋 Design — Fase 4 |
 
 ## Konvensi
 

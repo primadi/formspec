@@ -24,6 +24,7 @@ func main() {
 	jwtIssuer := flag.String("jwt-issuer", "forma", "JWT issuer")
 	jwtPublicKey := flag.String("jwt-public-key", "", "Path to RSA/ECDSA public key file (PEM) for asymmetric JWT validation")
 	strictMode := flag.Bool("strict", false, "Enable strict enforcement of uses declarations")
+	webDir := flag.String("web-dir", "", "Renderer SPA root (web/dist) — serves /{ws}/_admin and /{ws}/app")
 	flag.Parse()
 
 	fmt.Println("🚀 Forma Reference App")
@@ -38,6 +39,7 @@ func main() {
 		JWTIssuer:        *jwtIssuer,
 		JWTPublicKeyPath: *jwtPublicKey,
 		StrictMode:       *strictMode,
+		WebDir:           *webDir,
 	})
 	if err != nil {
 		log.Fatalf("❌ %v", err)

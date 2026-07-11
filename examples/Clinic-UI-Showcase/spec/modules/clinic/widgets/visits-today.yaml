@@ -1,0 +1,16 @@
+# SHOWCASE kind: Widget tipe metric — stat card dari summary entity.
+apiVersion: forma.dev/v1alpha1
+kind: Widget
+metadata:
+  name: visits-today
+  module: clinic
+  description: Jumlah kunjungan hari ini
+spec:
+  title: "Kunjungan Hari Ini"
+  type: metric
+  entity: daily-visit-summary
+  query: "date = today()"
+  refresh_secs: 60
+  config:
+    aggregate: sum
+    field: visit_count

@@ -1,0 +1,19 @@
+# SHOWCASE kind: Page varian TABS + Configuration Page pattern (§3 spec frontend).
+# Tiap tab = Form mode edit atas entity `setting` (characteristic: reference)
+# dengan id row tetap. Renderer: tanpa tombol New/Delete, hanya Update.
+apiVersion: forma.dev/v1alpha1
+kind: Page
+metadata:
+  name: system-settings
+  module: clinic
+  description: Pengaturan sistem — tabs, satu form per grup setting
+spec:
+  route: /app/settings
+  title: "Pengaturan Sistem"
+  icon: "settings"
+  permissions: [settings.update]
+  tabs:
+    - label: "Klinik"
+      form: { ref: settings-clinic, entity: setting, id: "clinic" }
+    - label: "Billing & Struk"
+      form: { ref: settings-billing, entity: setting, id: "billing" }

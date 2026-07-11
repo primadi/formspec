@@ -1,0 +1,24 @@
+# SHOWCASE kind: Timeline — feed kronologis append-only (§13 spec frontend).
+# Entity medical-record punya update/delete disabled → renderer tanpa tombol
+# edit/hapus; infinite scroll + date grouping.
+apiVersion: forma.dev/v1alpha1
+kind: Timeline
+metadata:
+  name: patient-medical-history
+  module: clinic
+  description: Riwayat rekam medis satu pasien
+spec:
+  entity: medical-record
+  event_field: diagnosis_and_notes
+  date_field: transaction_date
+  bind_param: patient_id            # timeline selalu ter-filter konteks pasien
+  bind_value: ":patient_id"         # dari route param
+  display:
+    title_field: transaction_date
+    subtitle_field: doctor.name
+    content_field: diagnosis_and_notes
+    icon_field: visit_type
+  group_by: date
+  sort: desc
+  page_size: 20
+  empty_state: "Belum ada rekam medis untuk pasien ini."

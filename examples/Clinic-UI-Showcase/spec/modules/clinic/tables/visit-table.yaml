@@ -1,0 +1,69 @@
+# SHOWCASE kind: Table — fitur terlengkap: kolom dot-path relation
+# (patient.name — renderer resolve via relation), sortable, width/align,
+# default_sort, page_size, 3 tipe filter (select/date_range/text),
+# row_actions permission-gated + confirm dialog, bulk_actions.
+# Row action custom (start-consultation/complete/cancel) hanya muncul bila
+# user punya permission-nya DAN state machine mengizinkan dari status row.
+apiVersion: forma.dev/v1alpha1
+kind: Table
+metadata:
+  name: visit-table
+  module: clinic
+  description: Tabel kunjungan — override derived table entity visit
+spec:
+  entity: visit
+  default_sort: "-transaction_date"
+  page_size: 20
+  columns:
+    - field: queue_number
+      label: "No. Antrian"
+      sortable: true
+      width: "110px"
+    - field: patient.name
+      label: "Pasien"
+      sortable: true
+    - field: polyclinic.name
+      label: "Poliklinik"
+      width: "140px"
+    - field: doctor.name
+      label: "Dokter"
+    - field: status
+      label: "Status"
+      sortable: true
+      width: "140px"
+      align: "center"
+    - field: total
+      label: "Total"
+      sortable: true
+      width: "120px"
+      align: "right"
+    - field: transaction_date
+      label: "Tanggal"
+      sortable: true
+      width: "130px"
+  filters:
+    - { field: status, label: "Status", type: select }
+    - { field: transaction_date, label: "Tanggal", type: date_range }
+    - { field: polyclinic_id, label: "Poliklinik", type: select }
+    - { field: queue_number, label: "Cari No. Antrian", type: text }
+  row_actions:
+    - action: "view"
+      label: "Detail"
+      icon: "eye"
+    - action: "start-consultation"
+      label: "Mulai Konsultasi"
+      icon: "play"
+      confirm_msg: "Panggil pasien ini ke ruang konsultasi?"
+    - action: "complete"
+      label: "Selesai"
+      icon: "check"
+    - action: "cancel"
+      label: "Batalkan"
+      icon: "x"
+      confirm_msg: "Batalkan kunjungan ini? Nomor antrian hangus."
+  bulk_actions:
+    - action: "export"
+      label: "Export CSV"
+      icon: "download"
+  search: true
+  realtime: true   # transport WebSocket menyusul Fase 3.5 — renderer fallback refetch

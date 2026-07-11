@@ -1,0 +1,43 @@
+# SHOWCASE: master derived (tanpa manifest UI) di module kedua —
+# menguji derived module menu grouping per module di sidebar.
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: medicine
+  module: pharmacy
+  description: Obat — master derived UI
+spec:
+  version: v1
+  characteristic: master
+
+  auth: { required: true, strategies: [token] }
+  expose:
+    - { type: rest, enabled: true }
+
+  fields:
+    - name: sku
+      type: string
+      unique: true
+      rules: [required]
+    - name: name
+      type: string
+      index: true
+      rules: [required, min_length: 2]
+    - name: unit
+      type: enum
+      enum_values: [tablet, capsule, syrup, ointment, injection]
+      required: true
+    - name: stock
+      type: integer
+      default: 0
+      rules: [min: 0]
+    - name: price
+      type: decimal
+      rules: [required, positive, precision: 2]
+    - name: expiry_date
+      type: date
+      rules: [future]
+
+  actions:
+    - name: submit
+      disabled: true

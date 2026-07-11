@@ -99,7 +99,7 @@ func GenerateEntityDDL(meta spec.Metadata, entity *spec.EntitySpec, driver Drive
 	if plural == "" {
 		plural = inflectPlural(meta.Name)
 	}
-	ti.TableName = meta.Module + "_" + plural
+	ti.TableName = sanitizeIdent(meta.Module + "_" + plural)
 
 	// Collect columns
 	var columns []string
@@ -321,7 +321,7 @@ func fieldTypeToSQL(ft spec.FieldType, _ []string) string {
 // generateChildTableDDL generates DDL for a child with storage: table.
 func generateChildTableDDL(parentTable string, field spec.Field, driver DriverType) ChildTableInfo {
 	dl := dialectFor(driver)
-	tableName := parentTable + "__" + field.Name
+	tableName := parentTable + "__" + sanitizeIdent(field.Name)
 
 	var columns []string
 
@@ -402,7 +402,14 @@ func TableName(module, entity, plural string) string {
 	if plural == "" {
 		plural = inflectPlural(entity)
 	}
-	return module + "_" + plural
+	return sanitizeIdent(module + "_" + plural)
+}
+
+// sanitizeIdent makes a manifest name safe as an unquoted SQL identifier:
+// kebab-case resource names (e.g. "medical-record") become snake_case table
+// names. Manifest names stay kebab-case everywhere else (routes, permissions).
+func sanitizeIdent(s string) string {
+	return strings.ReplaceAll(s, "-", "_")
 }
 
 // ExtensionDDLInfo holds the DDL for an entity extension.

@@ -1,0 +1,12 @@
+apiVersion: forma.dev/v1alpha1
+kind: App
+metadata:
+  name: klinik-sehat
+  description: >
+    UI Showcase — contoh yang meng-exercise SEMUA fitur frontend renderer
+    (docs/implementation/frontend-renderer.md). Setiap UI kind, setiap pola
+    lifecycle, dan derived-by-default (D17) punya perwakilan di sini.
+spec:
+  version: 1.0.0
+  vendor: forma-examples
+  modules: [clinic, pharmacy]

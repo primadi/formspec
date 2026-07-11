@@ -14,7 +14,7 @@ func TestNativeExecutor_RegisterAndExecute(t *testing.T) {
 		return map[string]any{"result": "success"}, nil
 	})
 
-	result, err := ex.Execute(nil, spec.Action{
+	result, err := ex.Execute(context.TODO(), spec.Action{
 		Name: "do-stuff",
 		Impl: &spec.ImplDecl{Type: spec.ImplNative, Ref: "test.thing.do-stuff"},
 	}, ExecuteParams{
@@ -38,7 +38,7 @@ func TestNativeExecutor_ResolveByTypeName(t *testing.T) {
 		return map[string]any{"discount": "updated"}, nil
 	})
 
-	result, err := ex.Execute(nil, spec.Action{
+	result, err := ex.Execute(context.TODO(), spec.Action{
 		Name: "update-discount-rule",
 		Impl: &spec.ImplDecl{Type: spec.ImplNative, Ref: "OrderResource.UpdateDiscountRule"},
 	}, ExecuteParams{
@@ -59,7 +59,7 @@ func TestNativeExecutor_ResolveByTypeName(t *testing.T) {
 func TestNativeExecutor_NotRegistered(t *testing.T) {
 	ex := NewNativeExecutor()
 
-	_, err := ex.Execute(nil, spec.Action{
+	_, err := ex.Execute(context.TODO(), spec.Action{
 		Name: "missing",
 		Impl: &spec.ImplDecl{Type: spec.ImplNative, Ref: "Missing.Method"},
 	}, ExecuteParams{
@@ -88,7 +88,7 @@ func TestNativeExecutor_DuplicatePanics(t *testing.T) {
 func TestSidecarExecutor_NotImplemented(t *testing.T) {
 	ex := NewSidecarExecutor()
 
-	_, err := ex.Execute(nil, spec.Action{
+	_, err := ex.Execute(context.TODO(), spec.Action{
 		Name: "sidecar-action",
 		Impl: &spec.ImplDecl{Type: spec.ImplSidecar, Ref: "some-sidecar"},
 	}, ExecuteParams{

@@ -1,0 +1,48 @@
+# SHOWCASE: entity master sedang (6–12 field) TANPA manifest UI.
+# Derived form → heuristik drawer. Relation belongs_to → relation-picker derived.
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: doctor
+  module: clinic
+  description: Dokter — derived UI, target relation-picker & depends_on wizard
+spec:
+  version: v1
+  characteristic: master
+
+  auth: { required: true, strategies: [token] }
+  expose:
+    - { type: rest, enabled: true }
+
+  fields:
+    - name: name
+      type: string
+      rules: [required, min_length: 2]
+    - name: polyclinic_id
+      type: relation
+      relation: { type: belongs_to, resource: polyclinic }
+      required: true
+    - name: specialty
+      type: enum
+      enum_values: [umum, gigi, anak, penyakit-dalam, kandungan]
+      default: umum
+    - name: license_number
+      type: string
+      unique: true
+      rules: [required]
+    - name: phone
+      type: string
+      rules: [pattern: "^\\+?[0-9]{7,15}$"]
+    - name: consultation_fee
+      type: decimal
+      rules: [required, positive, precision: 2]
+    - name: joined_at
+      type: date
+      rules: [past]
+    - name: active
+      type: boolean
+      default: true
+
+  actions:
+    - name: submit
+      disabled: true

@@ -1,0 +1,40 @@
+# SHOWCASE kind: Form — create mode dengan multi-kolom layout (§1.6):
+# section pertama 2 kolom (data kunjungan), section kedua 1 kolom (keluhan),
+# section ketiga 2 kolom (biaya).
+# Dipilih oleh resolveForm() untuk mode create karena naming pattern:
+# {entity.name}-create = visit-create.
+apiVersion: forma.dev/v1alpha1
+kind: Form
+metadata:
+  name: visit-create
+  module: clinic
+  description: Form create kunjungan — multi-section, 2 kolom
+spec:
+  entity: visit
+  sections:
+    - title: "Data Kunjungan"
+      columns: 2
+      fields:
+        - name: transaction_date
+          label: "Tanggal Kunjungan"
+        - name: patient_id
+          label: "Pasien"
+        - name: polyclinic_id
+          label: "Poliklinik"
+        - name: doctor_id
+          label: "Dokter"
+    - title: "Keluhan"
+      columns: 1
+      fields:
+        - name: complaint
+          label: "Keluhan Awal"
+          placeholder: "Keluhan utama pasien…"
+    - title: "Biaya & Status"
+      columns: 2
+      fields:
+        - name: total
+          label: "Total Biaya"
+        - name: status
+          label: "Status"
+  submit:
+    label: "Simpan Kunjungan Baru"

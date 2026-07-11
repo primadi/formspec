@@ -1,0 +1,24 @@
+# SHOWCASE kind: Kanban — board status kunjungan. Drag antar kolom =
+# transisi state machine (drop yang tidak punya transisi valid → snap-back).
+# Kolom `cancelled` sengaja tidak ditampilkan (subset kolom sah).
+apiVersion: forma.dev/v1alpha1
+kind: Kanban
+metadata:
+  name: consultation-board
+  module: clinic
+  description: Board antrian konsultasi per status
+spec:
+  entity: visit
+  status_field: status
+  columns:
+    - { status: waiting, label: "Menunggu" }
+    - { status: in_consultation, label: "Konsultasi" }
+    - { status: completed, label: "Selesai" }
+  card_template:
+    title: queue_number
+    subtitle: patient.name
+    fields: [polyclinic.name, doctor.name, complaint]
+  realtime: true
+  filters: [polyclinic_id]
+  search: true
+  max_cards_per_column: 50

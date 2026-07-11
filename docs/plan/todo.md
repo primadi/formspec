@@ -300,15 +300,51 @@ Foundation phase: two-stage YAML pipeline (register → deploy) replacing direct
 
 ## Fase 4 — Frontend Renderer
 
+> **Design doc:** `docs/implementation/frontend-renderer.md` (komprehensif — arsitektur, Meta API, derivation engine, kind renderers, plan). Checklist di bawah mengikuti fase B/F1–F6 dokumen tersebut.
+
+### 4.B Backend Prasyarat (Go) — ✅ Selesai 2026-07-11
+
 | # | Task | Status |
 |---|---|---|
-| 4.1 | Meta API (`/_meta/ui`) — read-only UI manifests | ⏳ |
-| 4.2 | Manifest-driven renderer core — SPA shell + per-kind renderers | ⏳ |
-| 4.3 | FormaExpr AST interpreter (`visible_when`, `readonly_when`, `compute`) | ⏳ |
-| 4.4 | shadcn/ui component library (`@/components/ui`) | ⏳ |
-| 4.5 | Auto-generated admin panel from Entity manifests | ⏳ |
-| 4.6 | Frontend Kinds: Page, Form, Table, Dashboard, Widget, Report, Wizard, Kanban, Timeline, Menu, Print, Theme | ⏳ |
-| **4.7** | **Page-Scoped Routing (BFF)** — `/{ws}/{app}/{page}/api/v1/{module}/{plural}` | ⏳ |
+| 4.B1 | `internal/manifest` — generic `RawSpecTo[T]()`; struct 12 kinds dilengkapi sesuai spec 05 (tabs, widget/compute, search/realtime, wizard search_select, kanban card penuh, timeline bind/display, print output/body, `MenuSpec.when`, `Action.ui`) + `ThemeSpec` baru | ✅ |
+| 4.B2 | `internal/ui` — UIRegistry (parse + index 12 kinds by name) + cross-validation: entity/field refs (dot-path lewat relation & child), action refs (builtin view/edit/delete/export/print), route unik, blocks⊕tabs, kanban columns vs enum, dashboard/wizard refs. 10 test | ✅ |
+| 4.B3 | Meta API — `GET /_meta/ui` (bundle permission-filtered per caller, ETag/304), `GET /_meta/me`, `GET /_meta/entities/{module}/{name}`; entity schema: label_field heuristik, lifecycle §1.7, permission per action | ✅ |
+| 4.B4 | `sort` + `filters` query params ke `HandleList` — `?sort=-f&f=v&f[op]=v`, op eq/neq/gt/gte/lt/lte/like/in/nin; hanya field ber-index/unique/natural_key + kolom normatif; unknown → 422. Fix `in`/`nin` multi-placeholder di crud | ✅ |
+| 4.B5 | Static SPA serving — `Config.WebDir`/`--web-dir`, mount di `/{ws}/_admin` + `/{ws}/app` dengan index.html fallback | ✅ |
+
+> Bug diperbaiki dalam fase ini: (1) DDL nama tabel ber-hyphen → `sanitizeIdent` (`internal/db/ddl.go`); (2) error validasi Insert/Update dipetakan 500 → kini 422 `VALIDATION_ERROR` / 409 `CONFLICT` (`writeStoreError`).
+
+### 4.F Frontend Renderer (`web/`)
+
+| # | Task | Status |
+|---|---|---|
+| 4.F1.1 | API client (ky) — envelope unwrap, typed errors, CAS version, list params | ⏳ |
+| 4.F1.2 | Meta client + zustand stores (session, meta, prefs) + TS types mirror `pkg/spec/frontend.go` | ⏳ |
+| 4.F1.3 | FormaExpr interpreter (lexer + Pratt parser + evaluator, TS murni) + table-driven tests | ⏳ |
+| 4.F1.4 | Permission gate — port `Identity.HasPermission` (wildcard) + test paritas dengan Go | ⏳ |
+| 4.F2.1 | App shell — layout, topbar, breadcrumb, 403/404, login token screen | ⏳ |
+| 4.F2.2 | Sidebar menu — merge derived module menus + `kind: Menu`, permission-filtered, `when:` expr | ⏳ |
+| 4.F2.3 | Router dinamis dari meta bundle (Page routes + derived CRUD routes + wizard/kanban/timeline) | ⏳ |
+| 4.F2.4 | OverlayHost — modal/drawer via query string (`?action=edit&id=`), design-time locking §1.6 | ⏳ |
+| 4.F3.1 | Derivation engine — entity schema → default Table/Form/Detail/Menu + override resolution | ⏳ |
+| 4.F3.2 | Table renderer — TanStack + server-side pagination/sort/filter/search, row actions + confirm | ⏳ |
+| 4.F3.3 | Form renderer — react-hook-form + zod dari rules, 3 mode render, auto-save, CAS 409 handling | ⏳ |
+| 4.F3.4 | Detail page + state machine transition buttons + lifecycle patterns §1.7 | ⏳ |
+| 4.F3.5 | Field widget library — text/number/date/enum/relation-picker/child-grid/computed/badge | ⏳ |
+| 4.F3.6 | ⭐ **Milestone D10**: app tanpa manifest frontend → `/_admin` CRUD lengkap (PocketBase benchmark) | ⏳ |
+| 4.F4.1 | Page renderer — blocks + tabs variant + layout columns | ⏳ |
+| 4.F4.2 | Dashboard + Widget (stat, chart line/bar dari summary entities) | ⏳ |
+| 4.F4.3 | Wizard — stepper, `?step=N`, `depends_on` filter chain, final action submit | ⏳ |
+| 4.F4.4 | Kanban — dnd-kit, optimistic status PATCH, 409 snap-back, state machine guard | ⏳ |
+| 4.F4.5 | Timeline — infinite scroll, date grouping, read-only enforcement | ⏳ |
+| 4.F4.6 | ⭐ **Milestone**: seluruh YAML UI `examples/Order-to-Cash` ter-render sesuai manifest | ⏳ |
+| 4.F5.1 | Report — param form, group/totals, CSV export client-side | ⏳ |
+| 4.F5.2 | Print `format: html` (window.print + `@page` CSS) | ⏳ |
+| 4.F5.3 | Theme tokens → CSS custom properties | ⏳ |
+| 4.F6 | Escape hatch — component contract (`mount/unmount`, `forma` client, `needs:`), headless form, `<FormaPage/>` embed | ⏳ |
+| **4.7** | **Page-Scoped Routing (BFF)** — `/{ws}/{app}/{page}/api/v1/{module}/{plural}` — ⚠️ belum direkonsiliasi dgn §16 (IMP-3) | ⏳ |
+
+**Blocked oleh fase lain:** realtime transport (Fase 3.5 — subscription manager didesain swap-able, v1 = polling/refetch), export async + download tray (job runtime Core §17), Print pdf/thermal/dotmatrix (server pipeline), codegen TS resmi (Fase 6.4).
 
 ### 4.7 Page-Scoped Routing Design
 

@@ -1,0 +1,20 @@
+apiVersion: forma.dev/v1alpha1
+kind: Config
+metadata:
+  name: clinic
+  module: clinic
+  description: Konfigurasi klinik — dipakai natural key & settings page
+spec:
+  keys:
+    queue_prefix:
+      type: string
+      default: "Q"
+      description: Prefix nomor antrian kunjungan
+    tax_percent:
+      type: number
+      default: 11
+      description: PPN untuk invoice
+    receipt_footer:
+      type: string
+      default: "Semoga lekas sembuh"
+      description: Footer struk pembayaran

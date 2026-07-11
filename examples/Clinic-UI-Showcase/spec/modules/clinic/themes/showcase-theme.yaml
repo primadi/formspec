@@ -1,0 +1,14 @@
+# SHOWCASE kind: Theme — token → CSS custom properties (§10 spec frontend).
+apiVersion: forma.dev/v1alpha1
+kind: Theme
+metadata:
+  name: showcase-theme
+  module: clinic
+  description: Tema hijau klinik — token + radius
+spec:
+  tokens:
+    color.primary: "#0F766E"
+    color.accent: "#14B8A6"
+    radius.md: "10px"
+    font.family: "Geist Variable"
+  # stylesheet & widget skin overrides (assets/) menyusul di fase escape hatch.

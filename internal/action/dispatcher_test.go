@@ -141,7 +141,6 @@ func TestRuntimeContext_Defaults(t *testing.T) {
 	rc := &RuntimeContext{
 		Tenant: &TenantInfo{ID: "demo", Name: "Demo Workspace"},
 		User:   &UserInfo{ID: "user-1", Role: "admin"},
-		Logger: DefaultLogger,
 	}
 
 	if rc.Tenant.ID != "demo" {

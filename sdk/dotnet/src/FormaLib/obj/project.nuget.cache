@@ -1,11 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "V/xUCadhmf0=",
+  "dgSpecHash": "rX0aWNVGHeU=",
   "success": true,
-  "projectFilePath": "/workspaces/forma/sdk/dotnet/src/FormaLib/FormaLib.csproj",
-  "expectedPackageFiles": [
-    "/home/vscode/.nuget/packages/microsoft.netcore.app.ref/8.0.28/microsoft.netcore.app.ref.8.0.28.nupkg.sha512",
-    "/home/vscode/.nuget/packages/microsoft.aspnetcore.app.ref/8.0.28/microsoft.aspnetcore.app.ref.8.0.28.nupkg.sha512"
-  ],
+  "projectFilePath": "\\\\wsl.localhost\\Ubuntu\\home\\primadi\\forma\\sdk\\dotnet\\src\\FormaLib\\FormaLib.csproj",
+  "expectedPackageFiles": [],
   "logs": []
 }

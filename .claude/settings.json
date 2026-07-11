@@ -30,7 +30,17 @@
       "Bash(go run *)",
       "Bash(gofmt -l cmd/forma/generate_test.go)",
       "Bash(gofmt -w cmd/forma/generate_test.go cmd/forma/generate.go)",
-      "Bash(gofmt -l cmd/forma/*.go)"
+      "Bash(gofmt -l cmd/forma/*.go)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(curl -sg \"http://localhost:18099/demo/api/v1/clinic/polyclinics?code[in]=P1,P3\")",
+      "Bash(python3 -c \"import json,sys; print\\('filter in:', sorted\\(r['code'] for r in json.load\\(sys.stdin\\)['data']\\)\\)\")",
+      "Bash(curl -sg \"http://localhost:18099/demo/api/v1/clinic/polyclinics?floor[gte]=2\")",
+      "Bash(python3 -c \"import json,sys; print\\('filter gte:', sorted\\(r['code'] for r in json.load\\(sys.stdin\\)['data']\\)\\)\")",
+      "Bash(curl -sS -m 5 -w \"\\\\nHTTP:%{http_code} time:%{time_total}\\\\n\" http://localhost:8080/default/api/v1/_meta/me)",
+      "Bash(curl -sS -m 5 -w \"\\\\nHTTP:%{http_code} time:%{time_total}\\\\n\" http://localhost:8080/default/api/v1/_meta/ui)",
+      "Bash(curl -sS -m 5 -w \"\\\\nHTTP:%{http_code} time:%{time_total}\\\\n\" http://localhost:5173/default/api/v1/_meta/me)",
+      "Bash(curl -sS -m 5 -w \"\\\\nHTTP:%{http_code} time:%{time_total}\\\\n\" http://localhost:5173/default/_admin)",
+      "Bash(npx --yes playwright --version)"
     ]
   }
 }

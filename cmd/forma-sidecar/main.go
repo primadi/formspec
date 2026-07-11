@@ -40,10 +40,13 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -71,12 +74,33 @@ func main() {
 		addr          = flag.String("addr", ":8080", "REST API listen address (end-user traffic)")
 		stateDir      = flag.String("state-dir", ".forma", "Local state directory (artifact manifest, evidence buffer, extracted specs)")
 		devMode       = flag.Bool("dev", false, "Development mode (dev auth, unsigned artifacts, fast poll)")
+		force         = flag.Bool("force", false, "Kill previous forma-sidecar on the same ports instead of failing (errors if ports are held by a different program)")
+		webDir        = flag.String("web-dir", "", "Built SPA directory (e.g. web/dist). When set, serves SPA at /{ws}/_admin and /{ws}/app")
+		devUI         = flag.Bool("dev-ui", false, "Development UI: start Vite dev server as a child process (implies --dev, ignores --web-dir)")
 	)
 	flag.Parse()
+
+	if *devUI {
+		*devMode = true
+		*webDir = ""
+	}
 
 	if *controlURL == "" && *specPath == "" {
 		fmt.Fprintln(os.Stderr, "forma-sidecar: need --control-cluster-url (artifact pull) or --spec (local manifests)")
 		os.Exit(1)
+	}
+
+	// ── Port conflict resolution (--force) ──
+	// If --force is set, check all ports and kill previous forma-sidecar
+	// instances holding them. Error out if a different program owns the port.
+	if *force {
+		addrs := []string{*addr, *listen, *appEndpoint}
+		for _, a := range addrs {
+			if err := ensurePort(a, "forma-sidecar"); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+		}
 	}
 
 	appDir := *appDirFlag
@@ -111,6 +135,7 @@ func main() {
 		SidecarEndpoint:      *appEndpoint,
 		SidecarInvokeTimeout: *invokeTimeout,
 		TenantID:             *workspaceID,
+		WebDir:               *webDir,
 	})
 	if err != nil {
 		log.Fatalf("[forma-sidecar] engine boot: %v", err)
@@ -162,6 +187,23 @@ func main() {
 		}
 	}
 
+	// ── Dev UI: start Vite dev server as a child process ──
+	// When --dev-ui is set, spawn npm run dev in the web/ directory so the
+	// developer gets HMR without a second terminal. The Vite proxy in
+	// vite.config.ts routes API calls back to this sidecar.
+	var viteProc *appProcess
+	if *devUI {
+		webDir, err := findWebDir()
+		if err != nil {
+			log.Fatalf("[forma-sidecar] %v", err)
+		}
+		viteProc, err = startVite(ctx, webDir)
+		if err != nil {
+			log.Fatalf("[forma-sidecar] vite: %v", err)
+		}
+		log.Printf("[forma-sidecar] Vite dev server started (http://localhost:5173)")
+	}
+
 	// ── Background convergence loop (control mode) ──
 	if deployer != nil {
 		go deployer.RunLoop(ctx)
@@ -190,6 +232,42 @@ func main() {
 	restSrv.Shutdown(shutdownCtx)
 	socketSrv.Shutdown(shutdownCtx)
 	appProc.Shutdown(5 * time.Second) // no-op if nil (separate-container mode)
+	if viteProc != nil {
+		viteProc.Shutdown(5 * time.Second)
+	}
+}
+
+// ─── Dev UI Helpers ───
+
+// findWebDir locates the web/ directory relative to the sidecar binary.
+func findWebDir() (string, error) {
+	// Try several locations in order
+	candidates := []string{"web", "../web", "./web"}
+	for _, c := range candidates {
+		info, err := os.Stat(filepath.Join(c, "package.json"))
+		if err == nil && !info.IsDir() {
+			abs, _ := filepath.Abs(c)
+			return abs, nil
+		}
+	}
+	// Fall back to ./web and let the user get a clear error
+	abs, _ := filepath.Abs("web")
+	if _, err := os.Stat(filepath.Join(abs, "package.json")); err != nil {
+		return "", fmt.Errorf("cannot find web/ directory (checked %v): %w", candidates, err)
+	}
+	return abs, nil
+}
+
+// startVite spawns npm run dev in the given directory as a managed child process.
+func startVite(ctx context.Context, webDir string) (*appProcess, error) {
+	cmd := exec.CommandContext(ctx, "npm", "run", "dev")
+	cmd.Dir = webDir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("start npm run dev: %w", err)
+	}
+	return &appProcess{cmd: cmd}, nil
 }
 
 // pullArtifacts runs one convergence cycle against Cluster Control and
@@ -260,4 +338,182 @@ func pullArtifacts(ctx context.Context, controlURL, workspaceID, stateDir, appDi
 	}
 	booted = true
 	return specDir, deployer, nil
+}
+
+// ─── Port Conflict Resolution ───
+
+// ensurePort checks whether the given address is free. If it is in use and
+// --force was passed, it kills previous forma-sidecar instances holding it;
+// if a different program holds the port, it returns a descriptive error.
+func ensurePort(addr, ownProcessName string) error {
+	// Extract port from various address formats:
+	//   ":8080", "http://127.0.0.1:9090", "unix:///path.sock"
+	port, err := extractPort(addr)
+	if err != nil {
+		// Unix sockets can't conflict across programs easily; skip check
+		return nil
+	}
+	if port == 0 {
+		return nil
+	}
+
+	// Probe the port — if listen succeeds, it's free (close immediately)
+	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	if err == nil {
+		ln.Close()
+		return nil // port is free
+	}
+
+	// Port is in use — find the owner
+	pid, procName, err := findProcessOnPort(port)
+	if err != nil {
+		return fmt.Errorf("port %d is in use but cannot identify the owner: %w", port, err)
+	}
+
+	if procName == ownProcessName || procName == "exe" || strings.Contains(procName, ownProcessName) {
+		fmt.Fprintf(os.Stderr, "port %d is held by a previous %s (PID %d) — killing it...\n", port, ownProcessName, pid)
+		proc, err := os.FindProcess(pid)
+		if err == nil {
+			proc.Signal(syscall.SIGTERM)
+			// Wait briefly for graceful shutdown
+			time.Sleep(500 * time.Millisecond)
+			// Force kill if still alive
+			proc.Signal(syscall.SIGKILL)
+		}
+		return nil
+	}
+
+	// Different program — return a clear error
+	return fmt.Errorf(
+		"port %d is already in use by %q (PID %d). Use --force to kill a previous %s, or stop the other program manually",
+		port, procName, pid, ownProcessName,
+	)
+}
+
+// extractPort extracts the TCP port number from various address formats.
+// Returns 0 for Unix sockets or invalid formats.
+func extractPort(addr string) (int, error) {
+	// Strip scheme prefix
+	raw := addr
+	if strings.Contains(raw, "://") {
+		parts := strings.Split(raw, "://")
+		if len(parts) < 2 {
+			return 0, nil
+		}
+		scheme := parts[0]
+		rest := parts[1]
+		switch scheme {
+		case "unix":
+			return 0, nil // Unix socket — skip
+		case "http", "https", "tcp":
+			raw = rest
+		default:
+			return 0, nil
+		}
+	}
+
+	// raw is now "host:port" or ":port"
+	_, portStr, err := net.SplitHostPort(raw)
+	if err != nil {
+		return 0, err
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return 0, err
+	}
+	return port, nil
+}
+
+// findProcessOnPort returns the PID and process name of the program listening
+// on the given TCP port. Uses /proc filesystem on Linux.
+func findProcessOnPort(port int) (int, string, error) {
+	// Strategy: read /proc/<pid>/net/tcp to find the inode, then match
+	// against /proc/<pid>/fd/ entries. Simpler: try lsof first, fall back
+	// to /proc scanning.
+
+	// Attempt lsof (most reliable)
+	pid, name, err := findProcessByLsof(port)
+	if err == nil {
+		return pid, name, nil
+	}
+
+	// Fall back to /proc scanning
+	return findProcessByProcFS(port)
+}
+
+func findProcessByLsof(port int) (int, string, error) {
+	cmd := exec.Command("lsof", "-i", fmt.Sprintf(":%d", port), "-sTCP:LISTEN", "-F", "pcn")
+	out, err := cmd.Output()
+	if err != nil {
+		return 0, "", fmt.Errorf("lsof failed: %w", err)
+	}
+
+	lines := strings.Split(string(out), "\n")
+	var pid int
+	var name string
+	for _, line := range lines {
+		if len(line) < 2 {
+			continue
+		}
+		switch line[0] {
+		case 'p':
+			pid, _ = strconv.Atoi(line[1:])
+		case 'c':
+			name = line[1:]
+		case 'n':
+			// File descriptor — skip
+		}
+	}
+	if pid == 0 {
+		return 0, "", fmt.Errorf("no PID found for port %d", port)
+	}
+	return pid, name, nil
+}
+
+func findProcessByProcFS(port int) (int, string, error) {
+	// Read all /proc/*/net/tcp to find the inode matching our port
+	portHex := strings.ToUpper(fmt.Sprintf("%04X", port))
+
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		return 0, "", fmt.Errorf("cannot read /proc: %w", err)
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		pid, err := strconv.Atoi(entry.Name())
+		if err != nil {
+			continue
+		}
+
+		tcpFile := fmt.Sprintf("/proc/%d/net/tcp", pid)
+		data, err := os.ReadFile(tcpFile)
+		if err != nil {
+			continue
+		}
+		lines := strings.Split(string(data), "\n")
+		for _, line := range lines {
+			fields := strings.Fields(line)
+			if len(fields) < 2 {
+				continue
+			}
+			// Field 2 is "local_address:port" in hex
+			localAddr := fields[1]
+			parts := strings.Split(localAddr, ":")
+			if len(parts) != 2 {
+				continue
+			}
+			if parts[1] == portHex {
+				// Found the PID — read process name
+				comm, err := os.ReadFile(fmt.Sprintf("/proc/%d/comm", pid))
+				if err != nil {
+					return pid, "unknown", nil
+				}
+				return pid, strings.TrimSpace(string(comm)), nil
+			}
+		}
+	}
+	return 0, "", fmt.Errorf("no process found listening on port %d", port)
 }

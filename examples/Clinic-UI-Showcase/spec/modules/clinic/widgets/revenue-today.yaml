@@ -1,0 +1,18 @@
+# SHOWCASE kind: Widget tipe metric dengan format currency.
+apiVersion: forma.dev/v1alpha1
+kind: Widget
+metadata:
+  name: revenue-today
+  module: clinic
+  description: Pendapatan hari ini
+spec:
+  title: "Pendapatan Hari Ini"
+  type: metric
+  entity: daily-visit-summary
+  query: "date = today()"
+  refresh_secs: 60
+  config:
+    aggregate: sum
+    field: revenue
+    format: currency
+    currency: IDR

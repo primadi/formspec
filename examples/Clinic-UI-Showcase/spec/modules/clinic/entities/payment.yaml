@@ -1,0 +1,60 @@
+# SHOWCASE: pola lifecycle "1-step (create-submit)" — quick entry kasir (§1.7).
+# Tombol tunggal "Terima & Simpan" memakai reserved action create-submit.
+# Form quick-nya modal (forms/payment-quick.yaml), struk thermal (prints/receipt.yaml).
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: payment
+  module: clinic
+  description: Pembayaran kunjungan — high-volume quick entry
+spec:
+  version: v1
+  characteristic: transaction
+
+  auth: { required: true, strategies: [token] }
+  expose:
+    - { type: rest, enabled: true }
+
+  fields:
+    - name: transaction_date
+      type: date
+      required: true
+      index: true
+    - name: number
+      type: string
+      natural_key: true
+      immutable: true
+      unique: true
+      natural_key_rule:
+        strategy: sequence
+        format: "PAY-{year}{month}-{seq:05d}"
+        reset: monthly
+    - name: visit_id
+      type: relation
+      relation: { type: belongs_to, resource: visit }
+      required: true
+    - name: amount
+      type: decimal
+      rules: [required, positive, precision: 2]
+    - name: method
+      type: enum
+      enum_values: [cash, qris, card, transfer]
+      default: cash
+      required: true
+    - name: reference
+      type: string
+      description: Nomor referensi — wajib untuk non-cash (required_when di form)
+    - name: paid_at
+      type: datetime
+
+  actions:
+    # Reserved action create-submit (§Core 4.1b) — fast path 1 tombol,
+    # dengan hint rendering `ui:` (spec frontend §1.7).
+    - name: create-submit
+      ui:
+        button_label: "Terima & Simpan"
+        style: primary
+        icon: "wallet"
+
+    - name: delete
+      disabled: true

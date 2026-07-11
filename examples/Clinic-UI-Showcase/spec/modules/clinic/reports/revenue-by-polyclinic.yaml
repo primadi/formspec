@@ -1,0 +1,26 @@
+# SHOWCASE kind: Report — param wajib (date range), grouping, totals,
+# export multi-format. Source selalu entity query ber-permission, tanpa SQL.
+apiVersion: forma.dev/v1alpha1
+kind: Report
+metadata:
+  name: revenue-by-polyclinic
+  module: clinic
+  description: Pendapatan per poliklinik dalam rentang tanggal
+spec:
+  title: "Laporan Pendapatan per Poliklinik"
+  entity: daily-visit-summary
+  parameters:
+    - { name: date_from, label: "Dari Tanggal", type: date }
+    - { name: date_to, label: "Sampai Tanggal", type: date }
+    - { name: polyclinic_id, label: "Poliklinik (opsional)", type: select }
+  columns:
+    - { field: date, label: "Tanggal" }
+    - { field: polyclinic.name, label: "Poliklinik" }
+    - { field: visit_count, label: "Kunjungan", aggregate: sum }
+    - { field: completed_count, label: "Selesai", aggregate: sum }
+    - { field: revenue, label: "Pendapatan", aggregate: sum, format: currency }
+  groups: [polyclinic_id]
+  totals:
+    - { label: "Total Kunjungan", field: visit_count, fn: sum }
+    - { label: "Total Pendapatan", field: revenue, fn: sum }
+  export: [csv, xlsx]

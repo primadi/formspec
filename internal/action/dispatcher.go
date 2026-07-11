@@ -89,7 +89,17 @@ type Executor interface {
 // Dispatcher routes action invocations to the correct Executor based on impl type.
 type Dispatcher struct {
 	executors map[spec.ImplType]Executor
+	nativeEx  *NativeExecutor // exposed via NativeExecutor() for public registration
 }
+
+// NativeExecutor returns the native executor, allowing external callers to
+// register Go handlers through App.RegisterNative without importing internal/.
+func (d *Dispatcher) NativeExecutor() *NativeExecutor { return d.nativeEx }
+
+// SetNativeExecutor stores the native executor reference so that
+// Dispatcher.NativeExecutor() returns the same instance used for dispatch.
+// Called by resource/forma.go's newDispatcher after registering it.
+func (d *Dispatcher) SetNativeExecutor(ex *NativeExecutor) { d.nativeEx = ex }
 
 // NewDispatcher creates an action dispatcher with no executors registered.
 // Use RegisterExecutor to add executors for each impl type.

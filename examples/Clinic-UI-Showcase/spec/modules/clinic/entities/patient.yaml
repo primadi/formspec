@@ -1,0 +1,61 @@
+# SHOWCASE: coverage TIPE FIELD terluas (string/enum/date/boolean/json/…)
+# + plain CRUD eksplisit (submit disabled). Table & form default = derived;
+# hanya detail page-nya yang di-override (pages/patient-detail.yaml).
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: patient
+  module: clinic
+  description: Pasien — coverage semua tipe field untuk field-widget library
+spec:
+  version: v1
+  characteristic: master
+
+  auth: { required: true, strategies: [token] }
+  expose:
+    - { type: rest, enabled: true }
+
+  fields:
+    - name: nik
+      type: string
+      unique: true
+      index: true
+      rules: [required, pattern: "^[0-9]{16}$"]
+      description: NIK 16 digit
+    - name: name
+      type: string
+      index: true
+      rules: [required, min_length: 2, max_length: 120]
+    - name: birth_date
+      type: date
+      rules: [required, past]
+    - name: gender
+      type: enum
+      enum_values: [male, female]
+      required: true
+    - name: blood_type
+      type: enum
+      enum_values: [A, B, AB, O, unknown]
+      default: unknown
+    - name: phone
+      type: string
+      rules: [pattern: "^\\+?[0-9]{7,15}$"]
+    - name: email
+      type: string
+      rules: [email]
+    - name: address
+      type: string
+      rules: [max_length: 500]
+    - name: allergies
+      type: json
+      description: Daftar alergi — widget JSON editor
+    - name: is_bpjs
+      type: boolean
+      default: false
+    - name: notes
+      type: string
+
+  actions:
+    - name: submit
+      disabled: true
+    - name: find

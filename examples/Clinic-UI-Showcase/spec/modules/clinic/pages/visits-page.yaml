@@ -1,0 +1,16 @@
+# SHOWCASE kind: Page — komposisi blocks paling sederhana (1 table block).
+apiVersion: forma.dev/v1alpha1
+kind: Page
+metadata:
+  name: visits-page
+  module: clinic
+  description: Daftar kunjungan hari ini
+spec:
+  route: /app/visits
+  title: "Kunjungan"
+  icon: "clipboard-list"
+  permissions: [visits.list]
+  blocks:
+    - table:
+        ref: visit-table
+        entity: visit

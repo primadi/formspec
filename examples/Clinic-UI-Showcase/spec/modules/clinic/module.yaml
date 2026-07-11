@@ -1,0 +1,9 @@
+apiVersion: forma.dev/v1alpha1
+kind: Module
+metadata:
+  name: clinic
+  description: Operasional klinik — pasien, dokter, kunjungan, pembayaran, pengaturan
+spec:
+  version: 1.0.0
+  depends:
+    - module: forma/core

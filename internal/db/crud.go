@@ -38,7 +38,7 @@ func NewEntityStore(db DB, driver DriverType, meta spec.Metadata, entity *spec.E
 	if plural == "" {
 		plural = inflectPlural(meta.Name)
 	}
-	tableName := meta.Module + "_" + plural
+	tableName := sanitizeIdent(meta.Module + "_" + plural)
 
 	schema := DefaultSchema
 	if entity.Persist != nil && entity.Persist.Category != "" {
@@ -565,6 +565,45 @@ func (s *EntityStore) Amend(ctx context.Context, tenantID, originalID, userID st
 	return newID, nil
 }
 
+// normativeListColumns are real table columns (Core §19) addressable in
+// filters and sort without a generated-column mapping.
+var normativeListColumns = map[string]bool{
+	"id": true, "tenant_id": true, "version": true, "created_at": true,
+	"updated_at": true, "created_by": true, "updated_by": true, "doc_status": true,
+}
+
+// IsNormativeColumn reports whether name is a framework-managed table column
+// (Core §19) addressable directly in filters and sort.
+func IsNormativeColumn(name string) bool { return normativeListColumns[name] }
+
+// columnRef maps a field name to its SQL column: normative columns as-is,
+// data fields through their generated column (only indexed/unique/natural-key
+// fields have one — the HTTP layer validates before passing a field here).
+func columnRef(field string) string {
+	if normativeListColumns[field] {
+		return field
+	}
+	return generatedColumnName(field)
+}
+
+// toAnySlice normalizes a filter value into a flat []any for IN/NOT IN.
+func toAnySlice(v any) []any {
+	switch t := v.(type) {
+	case []any:
+		return t
+	case []string:
+		out := make([]any, len(t))
+		for i, s := range t {
+			out[i] = s
+		}
+		return out
+	case nil:
+		return nil
+	default:
+		return []any{v}
+	}
+}
+
 // ListParams holds pagination, sorting, and filtering for List queries.
 type ListParams struct {
 	TenantID string
@@ -617,7 +656,7 @@ func (s *EntityStore) List(ctx context.Context, params ListParams) (*ListResult,
 
 	// Custom filters
 	for field, filter := range params.Filters {
-		col := generatedColumnName(field)
+		col := columnRef(field)
 		switch filter.Op {
 		case "eq":
 			whereClauses = append(whereClauses, fmt.Sprintf("%s = ?", col))
@@ -640,9 +679,19 @@ func (s *EntityStore) List(ctx context.Context, params ListParams) (*ListResult,
 		case "like":
 			whereClauses = append(whereClauses, fmt.Sprintf("%s LIKE ?", col))
 			args = append(args, filter.Value)
-		case "in":
-			whereClauses = append(whereClauses, fmt.Sprintf("%s IN (?)", col)) // simplified
-			args = append(args, filter.Value)
+		case "in", "nin":
+			values := toAnySlice(filter.Value)
+			if len(values) == 0 {
+				continue
+			}
+			placeholders := strings.Repeat("?,", len(values))
+			placeholders = placeholders[:len(placeholders)-1]
+			op := "IN"
+			if filter.Op == "nin" {
+				op = "NOT IN"
+			}
+			whereClauses = append(whereClauses, fmt.Sprintf("%s %s (%s)", col, op, placeholders))
+			args = append(args, values...)
 		}
 	}
 
@@ -676,7 +725,7 @@ func (s *EntityStore) List(ctx context.Context, params ListParams) (*ListResult,
 			direction = "DESC"
 			field = field[1:]
 		}
-		orderClause = fmt.Sprintf("ORDER BY %s %s", generatedColumnName(field), direction)
+		orderClause = fmt.Sprintf("ORDER BY %s %s", columnRef(field), direction)
 	}
 
 	// Pagination

@@ -1,0 +1,21 @@
+# SHOWCASE kind: Print — tiket antrian THERMAL 58mm (POS pipeline).
+apiVersion: forma.dev/v1alpha1
+kind: Print
+metadata:
+  name: queue-ticket
+  module: clinic
+  description: Tiket antrian — printer thermal 58mm
+spec:
+  entity: visit
+  output:
+    format: thermal
+    paper: { size: thermal_58mm }
+  header:
+    logo: true
+    title: "NOMOR ANTRIAN"
+  body:
+    - fields: [queue_number, polyclinic.name, doctor.name]
+    - separator: "------------------------------"
+    - fields: [transaction_date]
+  footer:
+    text: "Mohon menunggu nomor Anda dipanggil"

@@ -1,0 +1,133 @@
+// ─── App Shell ───
+//
+// Main application layout: sidebar + header/breadcrumb + content area.
+//
+// Renders inside a BrowserRouter context via Outlet.
+// Wraps children with TooltipProvider for sidebar tooltips.
+
+import { Outlet, useParams, useLocation, Link } from "react-router-dom"
+import {
+  ChevronLeft,
+  ChevronRight,
+  Menu,
+  Home,
+} from "lucide-react"
+import { usePrefsStore } from "@/stores/prefs"
+import { ErrorBoundary } from "@/components/ErrorBoundary"
+import { ThemeSwitcher } from "@/components/ThemeSwitcher"
+import { Sidebar } from "./Sidebar"
+import { OverlayHost } from "./OverlayHost"
+import { Button } from "@/components/ui/button"
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { TooltipProvider } from "@/components/ui/tooltip"
+
+export function AppShell() {
+  const { workspace } = useParams<{ workspace: string }>()
+  const location = useLocation()
+  const sidebarCollapsed = usePrefsStore((s) => s.sidebarCollapsed)
+  const toggleSidebar = usePrefsStore((s) => s.toggleSidebar)
+
+  // Build breadcrumbs from current path
+  const pathParts = location.pathname
+    .split("/")
+    .filter(Boolean)
+    .slice(1) // remove workspace
+
+
+  const breadcrumbs = pathParts.map((part, idx) => {
+    const href = `/${workspace}/${pathParts.slice(0, idx + 1).join("/")}`
+    const label = part
+      .replace(/[-_]/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase())
+    return { label, href, isLast: idx === pathParts.length - 1 }
+  })
+
+  return (
+    <TooltipProvider>
+      <div className="flex h-screen overflow-hidden">
+        {/* Sidebar */}
+        <Sidebar
+          collapsed={sidebarCollapsed}
+          onToggle={toggleSidebar}
+        />
+
+        {/* Main content */}
+        <div className="flex flex-1 flex-col overflow-hidden">
+          {/* Header */}
+          <header className="flex h-14 items-center gap-4 border-b px-4">
+            {/* Mobile menu toggle */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="md:hidden"
+              onClick={toggleSidebar}
+            >
+              <Menu className="size-4" />
+            </Button>
+
+            {/* Sidebar toggle (desktop) */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="hidden md:inline-flex"
+              onClick={toggleSidebar}
+            >
+              {sidebarCollapsed ? (
+                <ChevronRight className="size-4" />
+              ) : (
+                <ChevronLeft className="size-4" />
+              )}
+            </Button>
+
+            {/* Breadcrumb */}
+            <Breadcrumb>
+              <BreadcrumbList>
+                <BreadcrumbItem>
+                  <BreadcrumbLink render={<Link to={`/${workspace}/_admin`} />}>
+                    <Home className="size-3.5" />
+                  </BreadcrumbLink>
+                </BreadcrumbItem>
+                {breadcrumbs.map((crumb, _idx) => (
+                  <BreadcrumbItem key={crumb.href}>
+                    <BreadcrumbSeparator />
+                    {crumb.isLast ? (
+                      <BreadcrumbPage>{crumb.label}</BreadcrumbPage>
+                    ) : (
+                      <BreadcrumbLink render={<Link to={crumb.href} />}>
+                        {crumb.label}
+                      </BreadcrumbLink>
+                    )}
+                  </BreadcrumbItem>
+                ))}
+              </BreadcrumbList>
+            </Breadcrumb>
+
+            {/* Spacer */}
+            <div className="flex-1" />
+
+            {/* Theme switcher */}
+            <ThemeSwitcher />
+
+            {/* User avatar */}
+            <Avatar className="size-8">
+              <AvatarFallback className="text-xs">
+                {workspace?.charAt(0).toUpperCase() ?? "F"}
+              </AvatarFallback>
+            </Avatar>
+          </header>
+
+          {/* Page content */}
+          <main className="flex-1 overflow-auto p-6">
+            <ErrorBoundary>
+              <Outlet />
+            </ErrorBoundary>
+          </main>
+        </div>
+
+        {/* Overlay host for modal/drawer forms */}
+        <OverlayHost />
+      </div>
+    </TooltipProvider>
+  )
+}

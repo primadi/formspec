@@ -3,10 +3,12 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/primadi/forma/internal/action"
@@ -20,6 +22,7 @@ import (
 type HandlerFactory struct {
 	registry   EntityStoreProvider
 	dispatcher *action.Dispatcher
+	specLookup func(module, name string) (*spec.EntitySpec, bool) // optional — enables sort/filter validation
 }
 
 // EntityStoreProvider abstracts the entity registry for handler use.
@@ -35,6 +38,12 @@ func NewHandlerFactory(registry EntityStoreProvider) *HandlerFactory {
 // SetDispatcher sets the action dispatcher used for custom action execution.
 func (f *HandlerFactory) SetDispatcher(d *action.Dispatcher) {
 	f.dispatcher = d
+}
+
+// SetSpecLookup wires entity-spec resolution, enabling `sort` and field
+// filter query params on list endpoints (validated against the spec).
+func (f *HandlerFactory) SetSpecLookup(fn func(module, name string) (*spec.EntitySpec, bool)) {
+	f.specLookup = fn
 }
 
 // HandleList returns a GET / handler for the given entity.
@@ -56,10 +65,18 @@ func (f *HandlerFactory) HandleList(module, entity string) http.HandlerFunc {
 			return
 		}
 
+		sortParam, filters, err := f.parseListQuery(r, module, entity)
+		if err != nil {
+			writeError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", err.Error())
+			return
+		}
+
 		result, err := store.List(ctx, db.ListParams{
 			TenantID: tenantID,
 			Page:     page,
 			PerPage:  perPage,
+			Sort:     sortParam,
+			Filters:  filters,
 			Search:   r.URL.Query().Get("search"),
 		})
 		if err != nil {
@@ -78,6 +95,114 @@ func (f *HandlerFactory) HandleList(module, entity string) http.HandlerFunc {
 			Links: buildListLinks(r.URL, result.Page, result.PerPage, result.TotalPages),
 		})
 	}
+}
+
+// reservedListParams are query keys with framework meaning — everything else
+// is treated as a field filter.
+var reservedListParams = map[string]bool{
+	"page": true, "per_page": true, "search": true, "sort": true,
+}
+
+// filterOps are the supported bracket operators: field[op]=value.
+var filterOps = map[string]bool{
+	"eq": true, "neq": true, "gt": true, "gte": true, "lt": true, "lte": true,
+	"like": true, "in": true, "nin": true,
+}
+
+// parseListQuery extracts sort + field filters from the query string
+// (design doc §4.3):
+//
+//	?sort=-created_at&status=confirmed&total[gte]=100&status[in]=a,b
+//
+// Fields must exist on the entity and be addressable in SQL — normative
+// columns, or data fields declared with index/unique/natural_key (those have
+// generated columns). Unknown or non-filterable fields → error (422 upstream).
+// Without a spec lookup wired, sort/filters are rejected rather than passed
+// through to fail obscurely in SQL.
+func (f *HandlerFactory) parseListQuery(r *http.Request, module, entity string) (string, map[string]db.FilterOp, error) {
+	q := r.URL.Query()
+
+	hasExtras := q.Get("sort") != ""
+	if !hasExtras {
+		for key := range q {
+			if !reservedListParams[key] {
+				hasExtras = true
+				break
+			}
+		}
+	}
+	if !hasExtras {
+		return "", nil, nil
+	}
+
+	if f.specLookup == nil {
+		return "", nil, fmt.Errorf("sort/filter params are not supported on this deployment")
+	}
+	es, ok := f.specLookup(module, entity)
+	if !ok {
+		return "", nil, fmt.Errorf("entity spec not found: %s/%s", module, entity)
+	}
+
+	filterable := map[string]bool{}
+	for _, fld := range es.Fields {
+		if fld.Index || fld.Unique || fld.NaturalKey {
+			filterable[fld.Name] = true
+		}
+	}
+	checkField := func(name string) error {
+		if db.IsNormativeColumn(name) || filterable[name] {
+			return nil
+		}
+		for _, fld := range es.Fields {
+			if fld.Name == name {
+				return fmt.Errorf("field %q is not filterable/sortable — declare index: true on it", name)
+			}
+		}
+		return fmt.Errorf("unknown field %q", name)
+	}
+
+	// Sort
+	sortParam := q.Get("sort")
+	if sortParam != "" {
+		if err := checkField(strings.TrimPrefix(sortParam, "-")); err != nil {
+			return "", nil, fmt.Errorf("sort: %w", err)
+		}
+	}
+
+	// Filters
+	var filters map[string]db.FilterOp
+	for key, values := range q {
+		if reservedListParams[key] || len(values) == 0 {
+			continue
+		}
+		field, op := key, "eq"
+		if i := strings.IndexByte(key, '['); i > 0 && strings.HasSuffix(key, "]") {
+			field, op = key[:i], key[i+1:len(key)-1]
+			if !filterOps[op] {
+				return "", nil, fmt.Errorf("filter %q: unknown operator %q", field, op)
+			}
+		}
+		if err := checkField(field); err != nil {
+			return "", nil, err
+		}
+
+		var value any = values[0]
+		if op == "in" || op == "nin" {
+			parts := strings.Split(values[0], ",")
+			anyParts := make([]any, len(parts))
+			for i, p := range parts {
+				anyParts[i] = strings.TrimSpace(p)
+			}
+			value = anyParts
+		}
+
+		if filters == nil {
+			filters = map[string]db.FilterOp{}
+		}
+		filters[field] = db.FilterOp{Op: op, Value: value}
+	}
+
+	return sortParam, filters, nil
 }
 
 // HandleFind returns a GET /{id} handler for the given entity.
@@ -131,7 +256,7 @@ func (f *HandlerFactory) HandleCreate(module, entity string) http.HandlerFunc {
 			Data:      body,
 		})
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
+			writeStoreError(w, err)
 			return
 		}
 
@@ -184,11 +309,7 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 			Data:      body,
 		})
 		if err != nil {
-			code := http.StatusInternalServerError
-			if isConflictError(err) {
-				code = http.StatusConflict
-			}
-			writeError(w, code, "INTERNAL_ERROR", err.Error())
+			writeStoreError(w, err)
 			return
 		}
 
@@ -459,6 +580,28 @@ func buildListLinks(u *url.URL, page, perPage, totalPages int) ListLinks {
 func isConflictError(err error) bool {
 	s := err.Error()
 	return contains(s, "version conflict") || contains(s, "not found")
+}
+
+// isValidationError reports whether err stems from a field/rule validation
+// failure in the storage layer (required, rule, or immutable violations).
+func isValidationError(err error) bool {
+	return errors.Is(err, db.ErrValidationRule) ||
+		errors.Is(err, db.ErrValidationRequired) ||
+		errors.Is(err, db.ErrImmutableFieldChanged)
+}
+
+// writeStoreError maps a storage-layer error to the right HTTP status + code:
+// validation → 422 VALIDATION_ERROR, version conflict → 409 CONFLICT,
+// anything else → 500 INTERNAL_ERROR.
+func writeStoreError(w http.ResponseWriter, err error) {
+	switch {
+	case isValidationError(err):
+		writeError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", err.Error())
+	case isConflictError(err):
+		writeError(w, http.StatusConflict, "CONFLICT", err.Error())
+	default:
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
+	}
 }
 
 func contains(s, substr string) bool {

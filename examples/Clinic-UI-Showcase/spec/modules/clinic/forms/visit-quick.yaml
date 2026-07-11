@@ -1,0 +1,18 @@
+# SHOWCASE: form step-2 wizard — dropdown berantai (doctor_id ter-filter
+# polyclinic_id, dinyatakan depends_on di WizardStep).
+apiVersion: forma.dev/v1alpha1
+kind: Form
+metadata:
+  name: visit-quick
+  module: clinic
+  description: Pilih poliklinik & dokter — step 2 wizard pendaftaran
+spec:
+  entity: visit
+  render:
+    mode: modal
+  sections:
+    - title: "Tujuan Kunjungan"
+      fields:
+        - { name: polyclinic_id, label: "Poliklinik" }
+        - { name: doctor_id, label: "Dokter", help: "Ter-filter sesuai poliklinik" }
+        - { name: complaint, label: "Keluhan Awal", placeholder: "Keluhan utama…" }

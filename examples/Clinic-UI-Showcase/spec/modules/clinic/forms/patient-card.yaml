@@ -1,0 +1,25 @@
+# SHOWCASE kind: Form dipakai mode VIEW sebagai block di Page (patient-detail).
+# BlockRef.mode: view membuat semua field readonly — form yang sama bisa
+# dipakai view/edit tergantung konteks block.
+apiVersion: forma.dev/v1alpha1
+kind: Form
+metadata:
+  name: patient-card
+  module: clinic
+  description: Kartu profil pasien — subset field untuk halaman detail
+spec:
+  entity: patient
+  sections:
+    - title: "Profil"
+      fields:
+        - { name: nik, label: "NIK" }
+        - { name: name, label: "Nama" }
+        - { name: birth_date, label: "Tgl. Lahir" }
+        - { name: gender, label: "Jenis Kelamin" }
+        - { name: blood_type, label: "Gol. Darah" }
+    - title: "Kontak & Lainnya"
+      fields:
+        - { name: phone, label: "No. HP" }
+        - { name: address, label: "Alamat" }
+        - { name: allergies, label: "Alergi" }
+        - { name: is_bpjs, label: "Peserta BPJS" }

@@ -277,6 +277,21 @@ func RawSpecToEntitySpec(specMap map[string]any) (*spec.EntitySpec, error) {
 	return &entitySpec, nil
 }
 
+// RawSpecTo converts a raw spec map into any typed kind spec via YAML
+// round-trip (same mechanism as RawSpecToEntitySpec). Used for the frontend
+// kinds (PageSpec, FormSpec, TableSpec, ...) and any future simple kind.
+func RawSpecTo[T any](specMap map[string]any) (*T, error) {
+	b, err := yaml.Marshal(specMap)
+	if err != nil {
+		return nil, fmt.Errorf("re-marshal spec: %w", err)
+	}
+	var out T
+	if err := yaml.Unmarshal(b, &out); err != nil {
+		return nil, fmt.Errorf("unmarshal spec: %w", err)
+	}
+	return &out, nil
+}
+
 // RawSpecToServiceSpec converts a raw spec map to a typed ServiceSpec.
 func RawSpecToServiceSpec(specMap map[string]any) (*spec.ServiceSpec, error) {
 	b, err := yaml.Marshal(specMap)

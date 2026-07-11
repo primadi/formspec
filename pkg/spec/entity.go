@@ -371,6 +371,16 @@ type Action struct {
 	Uses               *UsesDecl        `yaml:"uses,omitempty" json:"uses,omitempty"`
 	Params             *ParamsDecl      `yaml:"params,omitempty" json:"params,omitempty"`
 	Conditions         []ConditionDecl  `yaml:"conditions,omitempty" json:"conditions,omitempty"`
+	UI                 *ActionUIHint    `yaml:"ui,omitempty" json:"ui,omitempty"` // Frontend §1.7 — button rendering hints
+}
+
+// ActionUIHint carries frontend rendering hints for an action button (Frontend §1.7).
+type ActionUIHint struct {
+	ButtonLabel string `yaml:"button_label,omitempty" json:"button_label,omitempty"`
+	Style       string `yaml:"style,omitempty" json:"style,omitempty"` // primary | secondary | danger
+	Icon        string `yaml:"icon,omitempty" json:"icon,omitempty"`
+	Confirm     string `yaml:"confirm,omitempty" json:"confirm,omitempty"`
+	ShowWhen    string `yaml:"show_when,omitempty" json:"show_when,omitempty"` // FormaExpr
 }
 
 // ImplDecl specifies how an action is implemented.

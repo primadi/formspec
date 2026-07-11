@@ -1,0 +1,36 @@
+# SHOWCASE: entity master kecil (≤5 field) TANPA manifest UI apapun.
+# Renderer harus men-derive: Table, Form (heuristik → modal), detail, menu entry.
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: polyclinic
+  module: clinic
+  description: Poliklinik — master kecil, 100% derived UI (D17)
+spec:
+  version: v1
+  characteristic: master
+
+  auth: { required: true, strategies: [token] }
+  expose:
+    - { type: rest, enabled: true }
+
+  fields:
+    - name: name
+      type: string
+      rules: [required, min_length: 2]
+    - name: code
+      type: string
+      unique: true
+      rules: [required, max_length: 8]
+    - name: floor
+      type: integer
+      rules: [min: 1, max: 20]
+    - name: active
+      type: boolean
+      default: true
+
+  actions:
+    # Master data tanpa lifecycle → plain CRUD (§1.7 spec frontend):
+    # tombol "Save" saja, tanpa Submit/draft.
+    - name: submit
+      disabled: true

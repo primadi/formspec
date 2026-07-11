@@ -1,0 +1,23 @@
+# SHOWCASE kind: Print — invoice PDF A5 + varian HTML (window.print, tanpa server).
+# `html` adalah format pertama yang diimplementasi renderer (Fase 4.F5).
+apiVersion: forma.dev/v1alpha1
+kind: Print
+metadata:
+  name: visit-invoice
+  module: clinic
+  description: Invoice kunjungan — PDF untuk arsip, HTML untuk print browser
+spec:
+  entity: visit
+  formats: [pdf, html]     # html = client-side window.print, pdf = pipeline server
+  output:
+    format: pdf
+    paper: { size: A5, margin: 12mm }
+  header:
+    logo: true
+    title: "Invoice Kunjungan {visit.queue_number}"
+  body:
+    - fields: [queue_number, transaction_date, patient.name, doctor.name, diagnosis]
+    - child_table: { field: treatments, columns: [treatment_name, quantity, price] }
+    - totals: { field: total, format: currency }
+  footer:
+    text: "Terima kasih — {tenant.name}"

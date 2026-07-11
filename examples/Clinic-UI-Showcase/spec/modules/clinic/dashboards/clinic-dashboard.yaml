@@ -1,0 +1,25 @@
+# SHOWCASE kind: Dashboard — grid layout x/y/w/h, widget lintas module
+# (pharmacy-queue-count dari modul pharmacy — visibility katalog derived
+# dari permission user, D20). Widget hanya membaca summary entity / list.
+apiVersion: forma.dev/v1alpha1
+kind: Dashboard
+metadata:
+  name: clinic-dashboard
+  module: clinic
+  description: Dashboard operasional klinik
+spec:
+  title: "Dashboard Klinik"
+  description: "Ringkasan operasional hari ini"
+  widgets:
+    - ref: visits-today
+      layout: { x: 0, y: 0, w: 1, h: 1 }
+    - ref: revenue-today
+      layout: { x: 1, y: 0, w: 1, h: 1 }
+    - ref: pharmacy-queue-count        # ← widget milik modul pharmacy
+      layout: { x: 2, y: 0, w: 1, h: 1 }
+    - ref: visits-by-polyclinic
+      layout: { x: 0, y: 1, w: 2, h: 2 }
+      config: { range: 30d }
+  customizable: true                  # user boleh tambah/kurangi widget dari katalog
+  defaults: [visits-today, revenue-today]
+  refresh: 60

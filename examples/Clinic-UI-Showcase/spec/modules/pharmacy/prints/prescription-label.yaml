@@ -1,0 +1,16 @@
+# SHOWCASE kind: Print — label obat thermal (satu label per item resep).
+apiVersion: forma.dev/v1alpha1
+kind: Print
+metadata:
+  name: prescription-label
+  module: pharmacy
+  description: Label obat — printer thermal 58mm
+spec:
+  entity: prescription
+  output:
+    format: thermal
+    paper: { size: thermal_58mm }
+  body:
+    - fields: [number, patient_name]
+    - separator: "------------------------------"
+    - child_table: { field: items, columns: [medicine_id, quantity, dosage_instructions] }
