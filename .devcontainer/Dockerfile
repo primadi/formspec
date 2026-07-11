@@ -3,9 +3,12 @@ FROM mcr.microsoft.com/devcontainers/go:2-1.26-trixie
 # Install additional OS packages
 #
 # php-cli + php-curl: needed to run/test sdk/php (lib-forma-php) — the
-# SidecarClient uses ext-curl for unix-socket HTTP. Python 3 and Node.js are
-# already provided by this base devcontainer image (via its features), so
-# sdk/python and sdk/typescript need no extra packages here.
+# SidecarClient uses ext-curl for unix-socket HTTP. Python 3 and Node.js
+# are provided by devcontainer.json features (see .devcontainer/devcontainer.json),
+# so sdk/python and sdk/typescript need no extra packages here.
+# Java (JDK 17 + Maven), .NET SDK, and Ruby are COMMENTED OUT by default to save
+# ~1.1 GB disk + JVM RAM. Uncomment in devcontainer.json when working on
+# sdk/java, sdk/dotnet, or sdk/ruby, then rebuild the container.
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     && apt-get -y install --no-install-recommends sqlite3 php-cli php-curl composer
 

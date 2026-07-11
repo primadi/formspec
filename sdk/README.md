@@ -5,7 +5,7 @@ them, they talk to different servers for different purposes:
 
 | Family | Talks to | Audience | Docs |
 |---|---|---|---|
-| `lib-forma-*` ([php/](php/), [python/](python/), [typescript/](typescript/)) | `forma-sidecar`, over a local unix socket | Non-Go app processes implementing `impl: {type: sidecar}` action handlers | This file, §"lib-forma-* — Sidecar Protocol" below; `docs/runtimes/04-forma-sidecar.md` |
+| `lib-forma-*` ([php/](php/), [python/](python/), [typescript/](typescript/), [java/](java/), [dotnet/](dotnet/), [ruby/](ruby/)) | `forma-sidecar`, over a local unix socket | Non-Go app processes implementing `impl: {type: sidecar}` action handlers | This file, §"lib-forma-* — Sidecar Protocol" below; `docs/runtimes/04-forma-sidecar.md` |
 | `@forma/client` ([browser/](browser/)) | `forma-resource`'s generated REST API, over HTTPS | Frontend developers building pages against Forma entities | [`browser/README.md`](browser/README.md); `docs/cli-tools/03-forma-generate.md` |
 
 ---
@@ -32,6 +32,9 @@ checks, no entity storage. All of that stays in `forma-sidecar`.
 | `lib-forma-php` | [php/](php/) | PHP ≥ 8.1 | ext-curl, ext-json (stdlib only) |
 | `lib-forma-python` | [python/](python/) | Python ≥ 3.9 | none (stdlib only) |
 | `lib-forma` (TypeScript) | [typescript/](typescript/) | Node ≥ 18 | none at runtime |
+| `lib-forma-java` | [java/](java/) | Java ≥ 17 | none (stdlib only) |
+| `lib-forma-dotnet` | [dotnet/](dotnet/) | .NET ≥ 8.0 | none (stdlib only) |
+| `lib-forma-ruby` | [ruby/](ruby/) | Ruby ≥ 3.0 | none (stdlib only) |
 
 ## Wire contract
 

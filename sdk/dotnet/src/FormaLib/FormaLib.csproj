@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <PackageId>Forma.LibForma</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Forma</Authors>
+    <Description>Thin client SDK bridging a .NET app to forma-sidecar: /invoke listener + ctx.* proxy client</Description>
+    <PackageLicenseExpression>FSL-1.1-ALv2</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/primadi/forma</PackageProjectUrl>
+    <RootNamespace>Forma</RootNamespace>
+    <AssemblyName>Forma.LibForma</AssemblyName>
+  </PropertyGroup>
+
+  <!-- No NuGet dependencies — stdlib only -->
+
+</Project>

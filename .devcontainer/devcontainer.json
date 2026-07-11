@@ -12,6 +12,29 @@
 		"ghcr.io/devcontainers/features/node:2.1.0": {
 			"version": "lts"
 		}
+		// Java (JDK 17 + Maven) — commented out to save ~319 MB disk + JVM RAM.
+		// Enable when working on sdk/java:
+		// 1. Uncomment the block below
+		// 2. Dev Containers: Rebuild and Reopen in Container
+		//"ghcr.io/devcontainers/features/java:1": {
+		//	"version": "17",
+		//	"installMaven": true,
+		//	"installGradle": false
+		//},
+		// .NET SDK — commented out to save ~613 MB disk.
+		// Enable when working on sdk/dotnet:
+		// 1. Uncomment the block below
+		// 2. Dev Containers: Rebuild and Reopen in Container
+		//"ghcr.io/devcontainers/features/dotnet:2.5.0": {
+		//	"version": "lts"
+		//},
+		// Ruby — commented out to save ~151 MB disk (rarely needed).
+		// Enable when working on sdk/ruby:
+		// 1. Uncomment the block below
+		// 2. Dev Containers: Rebuild and Reopen in Container
+		//"ghcr.io/devcontainers/features/ruby:2.0.0": {
+		//	"version": "latest"
+		//}
 	},
 	"customizations": {
 		"vscode": {
