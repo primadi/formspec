@@ -6,11 +6,15 @@ metadata:
   description: Order pelanggan dari checkout sampai lunas
 spec:
   version: v1
-  characteristics: [transaction]
+  characteristic: transaction
 
   auth: { required: true, strategies: [token] }
 
   fields:
+    - name: transaction_date
+      type: date
+      required: true
+      index: true
     - name: number
       type: string
       natural_key: true
@@ -104,6 +108,7 @@ spec:
 
   events:
     - name: paid
+      type: async
       description: Order berhasil dibayar
       publish:
         durable: true

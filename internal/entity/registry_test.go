@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/forma/forma/internal/db"
+	"github.com/primadi/forma/internal/db"
 )
 
 func setupTestRegistry(t *testing.T, specRelPath string) (*Registry, db.DB) {
@@ -95,8 +95,8 @@ func TestRegistry_ListEntities(t *testing.T) {
 
 	// Verify fields
 	for _, info := range list {
-		if info.Kind != "Entity" {
-			t.Errorf("expected kind=Entity, got %s", info.Kind)
+		if info.Kind != "Document" {
+			t.Errorf("expected kind=Document, got %s", info.Kind)
 		}
 		if info.Characteristic != "master" {
 			t.Errorf("expected characteristic=master, got %s", info.Characteristic)

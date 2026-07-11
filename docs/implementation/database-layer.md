@@ -2,7 +2,7 @@
 
 **Category:** Implementation Documentation  
 **Status:** Implemented (Fase 1.1 — 84 tests)  
-**Package:** `github.com/forma/forma/internal/db`  
+**Package:** `github.com/primadi/forma/internal/db`  
 **Last Updated:** 2026-07-05
 
 ---
@@ -463,8 +463,8 @@ package main
 import (
     "context"
     "log"
-    "github.com/forma/forma/internal/db"
-    "github.com/forma/forma/pkg/spec"
+    "github.com/primadi/forma/internal/db"
+    "github.com/primadi/forma/pkg/spec"
 )
 
 func main() {

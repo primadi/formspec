@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/forma/forma/pkg/spec"
+	"github.com/primadi/forma/pkg/spec"
 )
 
 // ─── Types ───

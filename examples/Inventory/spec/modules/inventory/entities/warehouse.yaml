@@ -6,7 +6,7 @@ metadata:
   description: Gudang / lokasi penyimpanan
 spec:
   version: v1
-  characteristics: [master]
+  characteristic: master
 
   fields:
     - name: code

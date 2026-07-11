@@ -4,6 +4,7 @@
 **License:** Creative Commons CC0
 **Governed by:** Forma Overview · Forma Reference (D2, D3, D8, D11, D20–D22, D25, D27, D29–D32, D37, D39–D46)
 **Companions:** Core Basic v0.2.0 · Plane Protocol Spec
+**Architecture:** See `docs/architecture/` for multi-region topology, cluster control, resource registration, and failover — this document defines the normative spec for Control Plane kinds.
 
 > The Control Plane governs *who may change what, where, with whose approval, and with what proof*. It never reads business data and never executes business logic — that line is the first conformance item.
 
@@ -31,6 +32,7 @@
 |---|---|
 | `Environment` | One deployment target: identity, endpoints, resource pool mapping, tier, mode (dev/prod) |
 | `Policy` | Rules evaluated on control-plane decisions |
+| `Datastore` | Named infrastructure backend — provisions databases, caches, queues for workspaces |
 
 ```yaml
 apiVersion: forma.dev/v1alpha1

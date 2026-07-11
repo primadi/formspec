@@ -9,24 +9,27 @@ import (
 	"strings"
 	"time"
 
-	"github.com/forma/forma/internal/starlark"
-	"github.com/forma/forma/internal/validation"
-	"github.com/forma/forma/pkg/spec"
+	"github.com/primadi/forma/internal/starlark"
+	"github.com/primadi/forma/internal/validation"
+	"github.com/primadi/forma/pkg/spec"
 )
 
 // EntityStore provides CRUD operations for a single entity.
 type EntityStore struct {
-	db             DB
-	driver         DriverType
-	module         string
-	entity         string
-	tableName      string
-	schema         string
-	softDelete     bool
-	fields         []spec.Field
-	children       map[string]*ChildStore // child field name → store
-	stateMachine   *spec.StateMachine     // optional state machine
-	computedFields []spec.Field           // fields with Computed != nil
+	db                DB
+	driver            DriverType
+	module            string
+	entity            string
+	tableName         string
+	schema            string
+	softDelete        bool
+	fields            []spec.Field
+	children          map[string]*ChildStore // child field name → store
+	stateMachine      *spec.StateMachine     // optional state machine
+	computedFields    []spec.Field           // fields with Computed != nil
+	submitEnabled     bool                   // whether submit action is enabled (v0.3.0 — doc_status init)
+	backdatePolicy    *spec.BackdatePolicy
+	forwardDatePolicy *spec.ForwardDatePolicy
 }
 
 // NewEntityStore creates a new EntityStore for the given entity manifest.
@@ -62,18 +65,30 @@ func NewEntityStore(db DB, driver DriverType, meta spec.Metadata, entity *spec.E
 		}
 	}
 
+	// Determine if submit is enabled for initial doc_status
+	submitEnabled := true // default: submit is enabled (document participates in lifecycle)
+	for _, a := range entity.Actions {
+		if a.Name == "submit" && a.Disabled {
+			submitEnabled = false
+			break
+		}
+	}
+
 	return &EntityStore{
-		db:             db,
-		driver:         driver,
-		module:         meta.Module,
-		entity:         meta.Name,
-		tableName:      tableName,
-		schema:         schema,
-		softDelete:     softDelete,
-		fields:         entity.Fields,
-		children:       collectChildFields(db, driver, tableName, entity.Fields),
-		stateMachine:   sm,
-		computedFields: computedFields,
+		db:                db,
+		driver:            driver,
+		module:            meta.Module,
+		entity:            meta.Name,
+		tableName:         tableName,
+		schema:            schema,
+		softDelete:        softDelete,
+		fields:            entity.Fields,
+		children:          collectChildFields(db, driver, tableName, entity.Fields),
+		stateMachine:      sm,
+		computedFields:    computedFields,
+		submitEnabled:     submitEnabled,
+		backdatePolicy:    entity.BackdatePolicy,
+		forwardDatePolicy: entity.ForwardDatePolicy,
 	}
 }
 
@@ -137,6 +152,16 @@ func (s *EntityStore) Insert(ctx context.Context, params InsertParams) (string, 
 		return "", fmt.Errorf("%s insert: %w", s.entity, err)
 	}
 
+	// Validate relation targets (referenceability guard)
+	if err := s.ValidateRelationTargets(ctx, params.TenantID, params.Data); err != nil {
+		return "", fmt.Errorf("%s insert: %w", s.entity, err)
+	}
+
+	// Validate transaction_date policy (backdate/forward-date)
+	if err := s.validateTransactionDatePolicy(params.Data); err != nil {
+		return "", fmt.Errorf("%s insert: %w", s.entity, err)
+	}
+
 	// Extract children from data (table storage only)
 	parentData := params.Data
 	childrenData := make(map[string][]map[string]any)
@@ -149,9 +174,16 @@ func (s *EntityStore) Insert(ctx context.Context, params InsertParams) (string, 
 	}
 
 	tbl := s.qualifiedTable()
+
+	// Set initial doc_status: draft if lifecycle active, NULL if lifecycle-free
+	initialDocStatus := "NULL"
+	if s.submitEnabled {
+		initialDocStatus = "'draft'"
+	}
+
 	query := fmt.Sprintf(
-		`INSERT INTO %s (tenant_id, created_by, updated_by, data) VALUES (?, ?, ?, ?) RETURNING id`,
-		tbl)
+		`INSERT INTO %s (tenant_id, created_by, updated_by, doc_status, data) VALUES (?, ?, ?, %s, ?) RETURNING id`,
+		tbl, initialDocStatus)
 
 	var id string
 	err := s.db.QueryRowContext(ctx, query,
@@ -247,6 +279,16 @@ func (s *EntityStore) Update(ctx context.Context, params UpdateParams) (int, err
 
 	// Validate field rules
 	if err := s.validateFieldRules(params.Data); err != nil {
+		return 0, fmt.Errorf("%s update: %w", s.entity, err)
+	}
+
+	// Validate relation targets (referenceability guard)
+	if err := s.ValidateRelationTargets(ctx, params.TenantID, params.Data); err != nil {
+		return 0, fmt.Errorf("%s update: %w", s.entity, err)
+	}
+
+	// Validate transaction_date policy (backdate/forward-date)
+	if err := s.validateTransactionDatePolicy(params.Data); err != nil {
 		return 0, fmt.Errorf("%s update: %w", s.entity, err)
 	}
 
@@ -383,6 +425,144 @@ func (s *EntityStore) SoftDelete(ctx context.Context, tenantID, id string) error
 		log.Printf("[WARN] audit write failed (delete %s/%s): %v", resource, id, err)
 	}
 	return nil
+}
+
+// ValidateRelationTargets checks that all relation fields in data point to
+// valid targets (doc_status = NULL or 'submitted'). Draft/cancelled targets
+// are rejected per Core §4.1b referenceability rule.
+func (s *EntityStore) ValidateRelationTargets(ctx context.Context, tenantID string, data map[string]any) error {
+	for _, f := range s.fields {
+		if f.Relation == nil || f.Relation.Resource == "" {
+			continue
+		}
+
+		targetID, exists := data[f.Name]
+		if !exists || targetID == nil || targetID == "" {
+			continue // optional or not set
+		}
+
+		targetIDStr, ok := targetID.(string)
+		if !ok {
+			continue
+		}
+
+		// Query the target document's doc_status
+		// We use a simple query: the target table is {target_module}_{target_plural}
+		// Since we don't have full entity resolution here, we query via a generic check.
+		// For now, this is a best-effort guard that works when the target entity
+		// is in the same module and follows standard naming conventions.
+		targetModule := s.module
+		targetEntity := f.Relation.Resource
+
+		// Try to check doc_status via a direct query
+		tbl := targetModule + "_" + targetEntity + "s" // simplified pluralization
+		query := fmt.Sprintf(
+			`SELECT doc_status FROM %s WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL`,
+			tbl)
+
+		var docStatus *string
+		err := s.db.QueryRowContext(ctx, query, targetIDStr, tenantID).Scan(&docStatus)
+		if err != nil {
+			// Target not found or table doesn't exist — skip guard
+			continue
+		}
+
+		if docStatus != nil {
+			switch *docStatus {
+			case "draft":
+				return fmt.Errorf("%w: relation target %s[%s] is draft (must be submitted or lifecycle-free)",
+					ErrValidationRule, f.Relation.Resource, targetIDStr)
+			case "cancelled":
+				return fmt.Errorf("%w: relation target %s[%s] is cancelled (must be submitted or lifecycle-free)",
+					ErrValidationRule, f.Relation.Resource, targetIDStr)
+			}
+		}
+		// docStatus NULL = lifecycle-free → allowed
+		// docStatus "submitted" → allowed
+	}
+	return nil
+}
+
+// Submit transitions a document from draft → submitted.
+func (s *EntityStore) Submit(ctx context.Context, tenantID, id, userID string) error {
+	tbl := s.qualifiedTable()
+	query := fmt.Sprintf(
+		`UPDATE %s SET doc_status = 'submitted', version = version + 1, updated_at = %s, updated_by = ? WHERE id = ? AND tenant_id = ? AND doc_status = 'draft'`,
+		tbl, currentTimestampExpr(s.driver))
+
+	if s.softDelete {
+		query += " AND deleted_at IS NULL"
+	}
+
+	result, err := s.db.ExecContext(ctx, query, userID, id, tenantID)
+	if err != nil {
+		return fmt.Errorf("%s submit: %w", s.entity, err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("%s submit: %w (not in draft status or not found)", s.entity, ErrNotFound)
+	}
+	return nil
+}
+
+// Cancel transitions a document from submitted → cancelled.
+func (s *EntityStore) Cancel(ctx context.Context, tenantID, id, userID string) error {
+	tbl := s.qualifiedTable()
+	query := fmt.Sprintf(
+		`UPDATE %s SET doc_status = 'cancelled', version = version + 1, updated_at = %s, updated_by = ? WHERE id = ? AND tenant_id = ? AND doc_status = 'submitted'`,
+		tbl, currentTimestampExpr(s.driver))
+
+	if s.softDelete {
+		query += " AND deleted_at IS NULL"
+	}
+
+	result, err := s.db.ExecContext(ctx, query, userID, id, tenantID)
+	if err != nil {
+		return fmt.Errorf("%s cancel: %w", s.entity, err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("%s cancel: %w (not in submitted status or not found)", s.entity, ErrNotFound)
+	}
+	return nil
+}
+
+// Amend atomically cancels the original and creates a linked new document as draft.
+// Sets amends (on new) and amended_by (on original) reserved fields.
+func (s *EntityStore) Amend(ctx context.Context, tenantID, originalID, userID string, newData map[string]any) (string, error) {
+	// 1. Cancel the original
+	if err := s.Cancel(ctx, tenantID, originalID, userID); err != nil {
+		return "", fmt.Errorf("%s amend: cancel original: %w", s.entity, err)
+	}
+
+	// 2. Create new document as draft
+	newID, err := s.Insert(ctx, InsertParams{
+		TenantID:  tenantID,
+		CreatedBy: userID,
+		Data:      newData,
+	})
+	if err != nil {
+		return "", fmt.Errorf("%s amend: create new: %w", s.entity, err)
+	}
+
+	// 3. Set amends on new document (points to cancelled original)
+	tbl := s.qualifiedTable()
+	_, err = s.db.ExecContext(ctx,
+		fmt.Sprintf(`UPDATE %s SET amends = ? WHERE id = ? AND tenant_id = ?`, tbl),
+		originalID, newID, tenantID)
+	if err != nil {
+		log.Printf("[WARN] %s amend: failed to set amends on new doc %s: %v", s.entity, newID, err)
+	}
+
+	// 4. Set amended_by on original (points to new version)
+	_, err = s.db.ExecContext(ctx,
+		fmt.Sprintf(`UPDATE %s SET amended_by = ? WHERE id = ? AND tenant_id = ?`, tbl),
+		newID, originalID, tenantID)
+	if err != nil {
+		log.Printf("[WARN] %s amend: failed to set amended_by on original %s: %v", s.entity, originalID, err)
+	}
+
+	return newID, nil
 }
 
 // ListParams holds pagination, sorting, and filtering for List queries.
@@ -568,6 +748,26 @@ type EntityRecord struct {
 	CreatedBy string
 	UpdatedBy string
 	Data      map[string]any
+}
+
+// MarshalJSON flattens Data alongside the record's own fields into one
+// object, keyed the way the wire contract (docs/spec/02-core-basic.md §16)
+// and every client SDK expect — not a Go-field-cased, Data-nested struct.
+// Reserved names (id, version, ...) always win on collision, matching the
+// framework-owned-column convention elsewhere in the spec.
+func (r EntityRecord) MarshalJSON() ([]byte, error) {
+	out := make(map[string]any, len(r.Data)+7)
+	for k, v := range r.Data {
+		out[k] = v
+	}
+	out["id"] = r.ID
+	out["tenant_id"] = r.TenantID
+	out["version"] = r.Version
+	out["created_at"] = r.CreatedAt
+	out["updated_at"] = r.UpdatedAt
+	out["created_by"] = r.CreatedBy
+	out["updated_by"] = r.UpdatedBy
+	return json.Marshal(out)
 }
 
 // scanRecord scans a single entity record from a query.

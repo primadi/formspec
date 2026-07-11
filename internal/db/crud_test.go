@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/forma/forma/pkg/spec"
+	"github.com/primadi/forma/pkg/spec"
 )
 
 func TestEntityStore_InsertAndGetByID(t *testing.T) {
@@ -1282,4 +1282,280 @@ func TestEntityStore_FieldRule_MinMaxItems(t *testing.T) {
 		t.Fatalf("Insert with valid array failed: %v", err)
 	}
 	t.Log("✓ min_items/max_items validators work")
+}
+
+// ============================================================================
+// v0.3.0 Lifecycle Method Tests
+// ============================================================================
+
+func TestEntityStore_Submit_Success(t *testing.T) {
+	dir := t.TempDir()
+	d, err := OpenSQLite(filepath.Join(dir, "crud_submit.db"), nil)
+	if err != nil {
+		t.Fatalf("OpenSQLite failed: %v", err)
+	}
+	defer d.Close()
+
+	meta := spec.Metadata{Name: "order", Module: "billing"}
+	entity := &spec.EntitySpec{
+		Version: "v1",
+		Fields:  []spec.Field{{Name: "total", Type: spec.FieldNumber}},
+	}
+
+	r := NewMigrationRunner(d, DriverSQLite)
+	ctx := context.Background()
+	if _, err := r.ApplyMigrations(ctx, []EntityMigration{{Metadata: meta, EntitySpec: *entity}}); err != nil {
+		t.Fatalf("ApplyMigrations failed: %v", err)
+	}
+
+	store := NewEntityStore(d, DriverSQLite, meta, entity)
+
+	// Insert: doc_status should be 'draft' (submitEnabled defaults to true)
+	id, err := store.Insert(ctx, InsertParams{
+		TenantID: "t1", CreatedBy: "u1",
+		Data: map[string]any{"total": float64(100)},
+	})
+	if err != nil {
+		t.Fatalf("Insert failed: %v", err)
+	}
+
+	// Submit: draft → submitted
+	if err := store.Submit(ctx, "t1", id, "u1"); err != nil {
+		t.Fatalf("Submit failed: %v", err)
+	}
+
+	// Verify doc_status changed — check via raw query (doc_status is a column, not in Data)
+	var docStatus string
+	d.QueryRowContext(ctx,
+		"SELECT doc_status FROM billing_orders WHERE id = ? AND tenant_id = ?",
+		id, "t1").Scan(&docStatus)
+	if err != nil {
+		t.Fatalf("Query doc_status failed: %v", err)
+	}
+	if docStatus != "submitted" {
+		t.Errorf("expected doc_status='submitted', got %q", docStatus)
+	}
+}
+
+func TestEntityStore_Submit_AlreadySubmitted(t *testing.T) {
+	dir := t.TempDir()
+	d, err := OpenSQLite(filepath.Join(dir, "crud_submit_dup.db"), nil)
+	if err != nil {
+		t.Fatalf("OpenSQLite failed: %v", err)
+	}
+	defer d.Close()
+
+	meta := spec.Metadata{Name: "order", Module: "billing"}
+	entity := &spec.EntitySpec{
+		Version: "v1",
+		Fields:  []spec.Field{{Name: "total", Type: spec.FieldNumber}},
+	}
+
+	r := NewMigrationRunner(d, DriverSQLite)
+	ctx := context.Background()
+	if _, err := r.ApplyMigrations(ctx, []EntityMigration{{Metadata: meta, EntitySpec: *entity}}); err != nil {
+		t.Fatalf("ApplyMigrations failed: %v", err)
+	}
+
+	store := NewEntityStore(d, DriverSQLite, meta, entity)
+
+	id, _ := store.Insert(ctx, InsertParams{
+		TenantID: "t1", CreatedBy: "u1",
+		Data: map[string]any{"total": float64(100)},
+	})
+	store.Submit(ctx, "t1", id, "u1")
+
+	// Second submit should fail
+	err = store.Submit(ctx, "t1", id, "u1")
+	if err == nil {
+		t.Fatal("expected error on second submit (already submitted)")
+	}
+}
+
+func TestEntityStore_Cancel_Success(t *testing.T) {
+	dir := t.TempDir()
+	d, err := OpenSQLite(filepath.Join(dir, "crud_cancel.db"), nil)
+	if err != nil {
+		t.Fatalf("OpenSQLite failed: %v", err)
+	}
+	defer d.Close()
+
+	meta := spec.Metadata{Name: "order", Module: "billing"}
+	entity := &spec.EntitySpec{
+		Version: "v1",
+		Fields:  []spec.Field{{Name: "total", Type: spec.FieldNumber}},
+	}
+
+	r := NewMigrationRunner(d, DriverSQLite)
+	ctx := context.Background()
+	if _, err := r.ApplyMigrations(ctx, []EntityMigration{{Metadata: meta, EntitySpec: *entity}}); err != nil {
+		t.Fatalf("ApplyMigrations failed: %v", err)
+	}
+
+	store := NewEntityStore(d, DriverSQLite, meta, entity)
+
+	id, _ := store.Insert(ctx, InsertParams{
+		TenantID: "t1", CreatedBy: "u1",
+		Data: map[string]any{"total": float64(100)},
+	})
+	store.Submit(ctx, "t1", id, "u1")
+
+	// Cancel: submitted → cancelled
+	if err := store.Cancel(ctx, "t1", id, "u1"); err != nil {
+		t.Fatalf("Cancel failed: %v", err)
+	}
+
+	var docStatus string
+	d.QueryRowContext(ctx,
+		"SELECT doc_status FROM billing_orders WHERE id = ? AND tenant_id = ?",
+		id, "t1").Scan(&docStatus)
+	if docStatus != "cancelled" {
+		t.Errorf("expected doc_status='cancelled', got %q", docStatus)
+	}
+}
+
+func TestEntityStore_Cancel_NotSubmitted(t *testing.T) {
+	dir := t.TempDir()
+	d, err := OpenSQLite(filepath.Join(dir, "crud_cancel_bad.db"), nil)
+	if err != nil {
+		t.Fatalf("OpenSQLite failed: %v", err)
+	}
+	defer d.Close()
+
+	meta := spec.Metadata{Name: "order", Module: "billing"}
+	entity := &spec.EntitySpec{
+		Version: "v1",
+		Fields:  []spec.Field{{Name: "total", Type: spec.FieldNumber}},
+	}
+
+	r := NewMigrationRunner(d, DriverSQLite)
+	ctx := context.Background()
+	if _, err := r.ApplyMigrations(ctx, []EntityMigration{{Metadata: meta, EntitySpec: *entity}}); err != nil {
+		t.Fatalf("ApplyMigrations failed: %v", err)
+	}
+
+	store := NewEntityStore(d, DriverSQLite, meta, entity)
+
+	id, _ := store.Insert(ctx, InsertParams{
+		TenantID: "t1", CreatedBy: "u1",
+		Data: map[string]any{"total": float64(100)},
+	})
+	// Don't submit — try to cancel directly from draft
+
+	err = store.Cancel(ctx, "t1", id, "u1")
+	if err == nil {
+		t.Fatal("expected error cancelling draft document")
+	}
+}
+
+func TestEntityStore_Amend_Success(t *testing.T) {
+	dir := t.TempDir()
+	d, err := OpenSQLite(filepath.Join(dir, "crud_amend.db"), nil)
+	if err != nil {
+		t.Fatalf("OpenSQLite failed: %v", err)
+	}
+	defer d.Close()
+
+	meta := spec.Metadata{Name: "order", Module: "billing"}
+	entity := &spec.EntitySpec{
+		Version: "v1",
+		Fields:  []spec.Field{{Name: "total", Type: spec.FieldNumber}},
+	}
+
+	r := NewMigrationRunner(d, DriverSQLite)
+	ctx := context.Background()
+	if _, err := r.ApplyMigrations(ctx, []EntityMigration{{Metadata: meta, EntitySpec: *entity}}); err != nil {
+		t.Fatalf("ApplyMigrations failed: %v", err)
+	}
+
+	store := NewEntityStore(d, DriverSQLite, meta, entity)
+
+	// Create + submit original
+	origID, _ := store.Insert(ctx, InsertParams{
+		TenantID: "t1", CreatedBy: "u1",
+		Data: map[string]any{"total": float64(100)},
+	})
+	store.Submit(ctx, "t1", origID, "u1")
+
+	// Amend: creates new doc, cancels original, links both
+	newID, err := store.Amend(ctx, "t1", origID, "u1", map[string]any{"total": float64(200)})
+	if err != nil {
+		t.Fatalf("Amend failed: %v", err)
+	}
+	if newID == "" {
+		t.Fatal("expected non-empty new ID from amend")
+	}
+	if newID == origID {
+		t.Fatal("new ID should differ from original")
+	}
+
+	// Verify original is cancelled
+	var origStatus string
+	d.QueryRowContext(ctx,
+		"SELECT doc_status FROM billing_orders WHERE id = ? AND tenant_id = ?",
+		origID, "t1").Scan(&origStatus)
+	if origStatus != "cancelled" {
+		t.Errorf("expected original doc_status='cancelled', got %q", origStatus)
+	}
+
+	// Verify new doc has amends set
+	var amends string
+	d.QueryRowContext(ctx,
+		"SELECT amends FROM billing_orders WHERE id = ? AND tenant_id = ?",
+		newID, "t1").Scan(&amends)
+	if amends != origID {
+		t.Errorf("expected amends=%s on new doc, got %s", origID, amends)
+	}
+
+	// Verify original has amended_by set
+	var amendedBy string
+	d.QueryRowContext(ctx,
+		"SELECT amended_by FROM billing_orders WHERE id = ? AND tenant_id = ?",
+		origID, "t1").Scan(&amendedBy)
+	if amendedBy != newID {
+		t.Errorf("expected amended_by=%s on original, got %s", newID, amendedBy)
+	}
+}
+
+func TestEntityStore_LifecycleFree_NoDocStatus(t *testing.T) {
+	dir := t.TempDir()
+	d, err := OpenSQLite(filepath.Join(dir, "crud_lifecycle_free.db"), nil)
+	if err != nil {
+		t.Fatalf("OpenSQLite failed: %v", err)
+	}
+	defer d.Close()
+
+	meta := spec.Metadata{Name: "customer", Module: "billing"}
+	entity := &spec.EntitySpec{
+		Version: "v1",
+		Fields:  []spec.Field{{Name: "name", Type: spec.FieldString}},
+		Actions: []spec.Action{
+			{Name: "submit", Disabled: true}, // lifecycle-free
+		},
+	}
+
+	r := NewMigrationRunner(d, DriverSQLite)
+	ctx := context.Background()
+	if _, err := r.ApplyMigrations(ctx, []EntityMigration{{Metadata: meta, EntitySpec: *entity}}); err != nil {
+		t.Fatalf("ApplyMigrations failed: %v", err)
+	}
+
+	store := NewEntityStore(d, DriverSQLite, meta, entity)
+
+	id, err := store.Insert(ctx, InsertParams{
+		TenantID: "t1", CreatedBy: "u1",
+		Data: map[string]any{"name": "John"},
+	})
+	if err != nil {
+		t.Fatalf("Insert failed: %v", err)
+	}
+
+	// Verify doc_status is NULL (lifecycle-free)
+	var docStatus *string
+	d.QueryRowContext(ctx,
+		"SELECT doc_status FROM billing_customers WHERE id = ? AND tenant_id = ?",
+		id, "t1").Scan(&docStatus)
+	if docStatus != nil {
+		t.Errorf("expected doc_status=NULL (lifecycle-free), got %v", *docStatus)
+	}
 }

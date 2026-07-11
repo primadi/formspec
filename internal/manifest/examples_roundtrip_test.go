@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/forma/forma/pkg/spec"
+	"github.com/primadi/forma/pkg/spec"
 )
 
 // examplesDir points at the runnable example projects shipped with the repo.

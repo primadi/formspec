@@ -17,7 +17,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/forma/forma/pkg/spec"
+	"github.com/primadi/forma/pkg/spec"
 )
 
 // Loader reads Forma manifests from a spec directory.
@@ -119,6 +119,43 @@ func (l *Loader) LoadAll() (*LoadResult, error) {
 	return result, nil
 }
 
+// ParseBytes parses YAML content from a byte slice, treating it as a single
+// file that may contain multiple documents (separated by ---).
+// It returns parsed raw manifests and any parse errors.
+func (l *Loader) ParseBytes(data []byte, source string) ([]RawManifest, []ParseError) {
+	decoder := yaml.NewDecoder(strings.NewReader(string(data)))
+
+	var manifests []RawManifest
+	var errs []ParseError
+	docIndex := 0
+
+	for {
+		var raw RawManifest
+		err := decoder.Decode(&raw)
+		if err != nil {
+			if err.Error() == "EOF" {
+				break
+			}
+			errs = append(errs, ParseError{
+				File:    source,
+				Message: fmt.Sprintf("yaml decode error: %v", err),
+			})
+			break
+		}
+
+		if raw.APIVersion == "" && raw.Kind == "" {
+			docIndex++
+			continue
+		}
+
+		raw.Source = fmt.Sprintf("%s#%d", source, docIndex)
+		manifests = append(manifests, raw)
+		docIndex++
+	}
+
+	return manifests, errs
+}
+
 // parseFile parses a single YAML file that may contain multiple documents.
 func (l *Loader) parseFile(path string) ([]RawManifest, []ParseError) {
 	data, err := os.ReadFile(path)
@@ -165,18 +202,22 @@ func (l *Loader) parseFile(path string) ([]RawManifest, []ParseError) {
 // (Core Basic §4, Core Extended, Frontend, Control Plane). Unknown kinds MUST
 // fail validation (Core Basic §4). Third-party kinds are registered via
 // KindDefinition; until that mechanism lands, only built-ins are accepted.
+// KnownKinds is the catalog of built-in resource kinds across the spec documents
+// (Core Basic §4, Core Extended, Frontend, Control Plane). Unknown kinds MUST
+// fail validation (Core Basic §4). Third-party kinds are registered via
+// KindDefinition; until that mechanism lands, only built-ins are accepted.
 var KnownKinds = map[string]bool{
 	// Core Basic
-	"App": true, "Module": true, "Entity": true, "Service": true,
+	"App": true, "Module": true, "Document": true, "Entity": true, "Service": true,
 	"Config": true, "Migration": true, "Subscription": true,
 	// Core Extended
-	"Workflow": true, "Api": true, "Webhook": true, "Mockup": true, "KindDefinition": true,
+	"Workflow": true, "Api": true, "Webhook": true, "Mockup": true, "KindDefinition": true, "Integrator": true,
 	// Frontend
 	"Page": true, "Form": true, "Table": true, "Dashboard": true, "Widget": true,
 	"Report": true, "Wizard": true, "Kanban": true, "Timeline": true,
 	"Menu": true, "Print": true, "Theme": true,
 	// Control Plane
-	"Environment": true, "Policy": true,
+	"Environment": true, "Policy": true, "Datastore": true,
 }
 
 // Validate performs basic validation on a raw manifest.
@@ -195,12 +236,12 @@ func (l *Loader) Validate(raw RawManifest) error {
 	}
 
 	// Type-specific validation
-	if raw.Kind == "Entity" && raw.Spec != nil {
+	if (raw.Kind == "Entity" || raw.Kind == "Document") && raw.Spec != nil {
 		entitySpec, err := RawSpecToEntitySpec(raw.Spec)
 		if err != nil {
 			return fmt.Errorf("%s: invalid spec: %w", raw.Source, err)
 		}
-		if err := spec.ValidateEntitySpec(entitySpec); err != nil {
+		if err := spec.ValidateDocumentSpec(entitySpec); err != nil {
 			return fmt.Errorf("%s: %w", raw.Source, err)
 		}
 	}
@@ -208,8 +249,21 @@ func (l *Loader) Validate(raw RawManifest) error {
 	return nil
 }
 
-// RawSpecToEntitySpec converts a raw spec map to a typed EntitySpec.
+// RawSpecToEntitySpec converts a raw spec map to a typed EntitySpec (DocumentSpec).
+// Handles backward compatibility:
+//   - `characteristics: [X]` (deprecated array) → `characteristic: X`
 func RawSpecToEntitySpec(specMap map[string]any) (*spec.EntitySpec, error) {
+	// Backward compat: characteristics (plural array) → characteristic (singular)
+	if chars, ok := specMap["characteristics"]; ok {
+		switch v := chars.(type) {
+		case []any:
+			if len(v) > 0 {
+				specMap["characteristic"] = v[0]
+				delete(specMap, "characteristics")
+			}
+		}
+	}
+
 	// Marshal back to YAML bytes, then unmarshal into typed struct.
 	// This ensures proper type conversion via yaml tags.
 	b, err := yaml.Marshal(specMap)

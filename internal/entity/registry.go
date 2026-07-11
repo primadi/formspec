@@ -14,10 +14,10 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/forma/forma/internal/db"
-	"github.com/forma/forma/internal/manifest"
-	"github.com/forma/forma/internal/permission"
-	"github.com/forma/forma/pkg/spec"
+	"github.com/primadi/forma/internal/db"
+	"github.com/primadi/forma/internal/manifest"
+	"github.com/primadi/forma/internal/permission"
+	"github.com/primadi/forma/pkg/spec"
 )
 
 // Registry is the central entity registry for the Forma runtime.
@@ -45,7 +45,7 @@ type SpecInfo struct {
 type EntityInfo struct {
 	Name           string `json:"name"`
 	Module         string `json:"module"`
-	Kind           string `json:"kind"` // always "Entity"
+	Kind           string `json:"kind"` // "Document" (v0.3.0)
 	Characteristic string `json:"characteristic,omitempty"`
 	TableName      string `json:"table_name,omitempty"`
 	FieldCount     int    `json:"field_count"`
@@ -87,9 +87,9 @@ func (r *Registry) LoadEntities() []error {
 		allErrors = append(allErrors, &pe)
 	}
 
-	// Filter and register only Entity manifests
+	// Filter and register only Document (or Entity) manifests
 	for _, raw := range result.Manifests {
-		if raw.Kind != string(spec.KindEntity) {
+		if !spec.IsDocumentKind(spec.Kind(raw.Kind)) {
 			continue
 		}
 
@@ -103,7 +103,7 @@ func (r *Registry) LoadEntities() []error {
 		}
 
 		// Validate
-		if err := spec.ValidateEntitySpec(entitySpec); err != nil {
+		if err := spec.ValidateDocumentSpec(entitySpec); err != nil {
 			allErrors = append(allErrors, fmt.Errorf("%s: validate: %w", raw.Source, err))
 			continue
 		}
@@ -171,6 +171,87 @@ func (r *Registry) LoadEntities() []error {
 	}
 
 	return allErrors
+}
+
+// RegisterArtifactManifest registers a single manifest from an artifact
+// (non-filesystem source) into the registry. This is the method called by
+// the Resource Plane deployer when loading artifacts from the Control Plane.
+//
+// Unlike LoadEntities, this does NOT read from the filesystem. It accepts
+// a pre-parsed raw manifest and its corresponding entity spec.
+func (r *Registry) RegisterArtifactManifest(raw manifest.RawManifest, entitySpec *spec.EntitySpec) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if !spec.IsDocumentKind(spec.Kind(raw.Kind)) {
+		return nil // silently skip non-Document kinds
+	}
+
+	key := entityKey(raw.Metadata.Module, raw.Metadata.Name)
+
+	// Validate
+	if err := spec.ValidateDocumentSpec(entitySpec); err != nil {
+		return fmt.Errorf("%s: validate: %w", raw.Source, err)
+	}
+
+	// Register
+	r.specs[key] = &SpecInfo{
+		Metadata: spec.Metadata{
+			Name:        raw.Metadata.Name,
+			Module:      raw.Metadata.Module,
+			Description: raw.Metadata.Description,
+			Labels:      raw.Metadata.Labels,
+			Annotations: raw.Metadata.Annotations,
+		},
+		EntitySpec: entitySpec,
+		Source:     raw.Source,
+	}
+
+	// Register permissions
+	module := raw.Metadata.Module
+	entityName := raw.Metadata.Name
+	for _, action := range entitySpec.Actions {
+		usesEntry := permission.BuildUsesEntry(module, entityName, action.Name, action.Uses)
+		r.permRegistry.RegisterAction(
+			module, entityName, action.Name,
+			action.RequiredPermission,
+			usesEntry,
+			raw.Source,
+			action.Audit,
+		)
+	}
+
+	// Register standard CRUD permissions if exposed
+	if len(entitySpec.Expose) > 0 {
+		plural := entitySpec.Plural
+		if plural == "" {
+			plural = entityName + "s"
+		}
+
+		standardActions := []struct {
+			name       string
+			permission string
+		}{
+			{"list", module + "." + plural + ".list"},
+			{"view", module + "." + plural + ".view"},
+			{"create", module + "." + plural + ".create"},
+			{"update", module + "." + plural + ".update"},
+			{"delete", module + "." + plural + ".delete"},
+		}
+		for _, sa := range standardActions {
+			r.permRegistry.RegisterAction(
+				module, entityName, sa.name,
+				sa.permission,
+				&permission.UsesEntry{},
+				raw.Source,
+				false,
+			)
+		}
+
+		r.permRegistry.SetModuleDescription(module, raw.Metadata.Description)
+	}
+
+	return nil
 }
 
 // SyncSchema applies all registered entity schemas to the database.
@@ -261,10 +342,7 @@ func (r *Registry) ListEntities() []EntityInfo {
 
 	result := make([]EntityInfo, 0, len(r.specs))
 	for _, info := range r.specs {
-		char := ""
-		if len(info.EntitySpec.Characteristics) > 0 {
-			char = string(info.EntitySpec.Characteristics[0])
-		}
+		char := string(info.EntitySpec.Characteristic)
 
 		tableName := ""
 		if info.TableInfo != nil {
@@ -274,7 +352,7 @@ func (r *Registry) ListEntities() []EntityInfo {
 		result = append(result, EntityInfo{
 			Name:           info.Metadata.Name,
 			Module:         info.Metadata.Module,
-			Kind:           "Entity",
+			Kind:           "Document",
 			Characteristic: char,
 			TableName:      tableName,
 			FieldCount:     len(info.EntitySpec.Fields),

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/forma/forma/pkg/spec"
+	"github.com/primadi/forma/pkg/spec"
 )
 
 // TableInfo holds the result of DDL generation for one entity.
@@ -127,6 +127,13 @@ func GenerateEntityDDL(meta spec.Metadata, entity *spec.EntitySpec, driver Drive
 	columns = append(columns,
 		fmt.Sprintf("created_by  %s", dl.uuid),
 		fmt.Sprintf("updated_by  %s", dl.uuid),
+	)
+
+	// 1b. Document Model reserved columns (v0.3.0)
+	columns = append(columns,
+		fmt.Sprintf("doc_status  VARCHAR(20) DEFAULT NULL"),                    // NULL = lifecycle-free
+		fmt.Sprintf("amends      %s REFERENCES %s(id)", dl.uuid, ti.TableName), // FK to original document
+		fmt.Sprintf("amended_by  %s REFERENCES %s(id)", dl.uuid, ti.TableName), // FK to new version
 	)
 
 	// 2. Data JSONB column

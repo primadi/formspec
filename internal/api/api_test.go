@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/forma/forma/internal/auth"
-	"github.com/forma/forma/internal/db"
-	"github.com/forma/forma/internal/entity"
-	"github.com/forma/forma/pkg/spec"
+	"github.com/primadi/forma/internal/auth"
+	"github.com/primadi/forma/internal/db"
+	"github.com/primadi/forma/internal/entity"
+	"github.com/primadi/forma/pkg/spec"
 )
 
 // setupAPIEnv creates an in-memory registry with test entities that expose REST.
@@ -45,9 +45,9 @@ func setupAPIEnv(t *testing.T) (*entity.Registry, db.DB) {
 	// Migrate with expose config
 	customerMeta := spec.Metadata{Name: "customer", Module: "billing"}
 	customerSpec := spec.EntitySpec{
-		Version:         "v1",
-		Plural:          "customers",
-		Characteristics: []spec.Characteristic{spec.CharMaster},
+		Version:        "v1",
+		Plural:         "customers",
+		Characteristic: spec.CharMaster,
 		Fields: []spec.Field{
 			{Name: "name", Type: spec.FieldString},
 			{Name: "email", Type: spec.FieldString, Unique: true},
@@ -59,9 +59,9 @@ func setupAPIEnv(t *testing.T) (*entity.Registry, db.DB) {
 
 	orderMeta := spec.Metadata{Name: "order", Module: "billing"}
 	orderSpec := spec.EntitySpec{
-		Version:         "v1",
-		Plural:          "orders",
-		Characteristics: []spec.Characteristic{spec.CharTransaction},
+		Version:        "v1",
+		Plural:         "orders",
+		Characteristic: spec.CharTransaction,
 		Fields: []spec.Field{
 			{Name: "number", Type: spec.FieldString, Unique: true},
 		},
@@ -174,10 +174,10 @@ func TestRouteDescriptor(t *testing.T) {
 
 	meta := spec.Metadata{Name: "invoice", Module: "billing"}
 	entitySpec := spec.EntitySpec{
-		Version:         "v1",
-		Plural:          "invoices",
-		Characteristics: []spec.Characteristic{spec.CharTransaction},
-		Fields:          []spec.Field{{Name: "number", Type: spec.FieldString}},
+		Version:        "v1",
+		Plural:         "invoices",
+		Characteristic: spec.CharTransaction,
+		Fields:         []spec.Field{{Name: "number", Type: spec.FieldString}},
 		Expose: []spec.ExposeConfig{
 			{Type: spec.ProtocolREST, Actions: []string{"list", "find", "create"}},
 		},

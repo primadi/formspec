@@ -37,3 +37,5 @@ Thumbs.db
 node_modules/
 web/dist/
 web/build/
+sdk/typescript/dist/
+sdk/browser/dist/

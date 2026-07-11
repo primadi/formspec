@@ -11,6 +11,7 @@
 
 ```mermaid
 graph TD
+    mapping[00-kind-plane-mapping.md<br/>Kind → Plane Mapping]
     overview[01-overview.md<br/>Forma at a Glance]
     core-basic[02-core-basic.md<br/>Core Basic Spec]
     core-ext[03-core-extended.md<br/>Core Extended Spec]
@@ -20,9 +21,12 @@ graph TD
     marketplace[07-marketplace.md<br/>Marketplace Spec]
     tutorial[08-order-to-cash-tutorial.md<br/>O2C Tutorial]
     companion[09-order-to-cash-companion.md<br/>O2C Companion]
-    extension[10-entity-extension.md<br/>Entity Extension]
+    extension[10-entity-extension.md<br/>Document Extension]
     reference[11-reference.md<br/>Reference]
+    datastore[12-datastore.md<br/>Datastore Spec]
+    errors[error-glossary.yaml<br/>Error Glossary]
 
+    mapping --> overview
     overview --> core-basic
     overview --> reference
     core-basic --> core-ext
@@ -32,8 +36,10 @@ graph TD
     core-basic --> marketplace
     core-ext --> protocol
     control --> protocol
+    control --> datastore
     frontend --> tutorial
     tutorial --> companion
+    core-basic --> errors
     core-ext --> extension
 ```
 
@@ -46,11 +52,11 @@ graph TD
 | Order | Document | What you'll learn |
 |---|---|---|
 | 1 | [`01-overview.md`](./01-overview.md) | What Forma is, core principles, architecture |
-| 2 | [`02-core-basic.md`](./02-core-basic.md) | The manifest format, Entity, Service, actions, events, state machines, security |
+| 2 | [`02-core-basic.md`](./02-core-basic.md) | The manifest format, Document, Service, actions, events, lifecycle, state machines, security |
 | 3 | [`08-order-to-cash-tutorial.md`](./08-order-to-cash-tutorial.md) | Step-by-step: build a real Order-to-Cash app |
 | 4 | [`03-core-extended.md`](./03-core-extended.md) | Workflow, Webhooks, Mockups, advanced validation, hooks |
 | 5 | [`05-frontend.md`](./05-frontend.md) | UI kinds: Page, Form, Table, Dashboard — how to build the UI |
-| 6 | [`10-entity-extension.md`](./10-entity-extension.md) | How to extend entities from marketplace modules |
+| 6 | [`10-entity-extension.md`](./10-entity-extension.md) | How to extend documents from marketplace modules |
 
 ### 📦 Module Vendor — Selling on the Marketplace
 
@@ -67,9 +73,14 @@ graph TD
 | Order | Document | What you'll learn |
 |---|---|---|
 | 1 | [`01-overview.md`](./01-overview.md) | Architecture, two planes, personas, deployment tiers |
-| 2 | [`04-control-plane.md`](./04-control-plane.md) | Governance, Policy (OPA/Rego), keys, contracts, transparency log, emergency controls |
-| 3 | [`06-plane-protocol.md`](./06-plane-protocol.md) | Wire contract between planes, mTLS, snapshots, evidence, outage semantics |
-| 4 | [`07-marketplace.md`](./07-marketplace.md) | Operating the marketplace, settlement, platform fees |
+| 2 | [`../architecture/01-architecture-overview.md`](../architecture/01-architecture-overview.md) | **NEW** — Multi-region topology, control levels, ClusterClass, security model |
+| 3 | [`../architecture/04-resource-registration.md`](../architecture/04-resource-registration.md) | Server, DB, Valkey/Redis registration lifecycle |
+| 4 | [`../architecture/05-failover.md`](../architecture/05-failover.md) | HA, auto-failover, recovery |
+| 5 | [`../architecture/06-k8s-operator.md`](../architecture/06-k8s-operator.md) | Forma Operator, CRD, ClusterClass, K8s integration |
+| 6 | [`04-control-plane.md`](./04-control-plane.md) | Governance, Policy (OPA/Rego), keys, contracts, transparency log, emergency controls |
+| 7 | [`12-datastore.md`](./12-datastore.md) | Named datastores — provisioning databases, caches, queues for workspaces |
+| 8 | [`06-plane-protocol.md`](./06-plane-protocol.md) | Wire contract between planes, mTLS, snapshots, evidence, outage semantics |
+| 9 | [`07-marketplace.md`](./07-marketplace.md) | Operating the marketplace, settlement, platform fees |
 
 ### 💰 Investor — Business Model & Monetization
 
@@ -86,16 +97,18 @@ graph TD
 | # | Document | Description |
 |---|---|---|
 | 01 | **Overview** | What Forma is, why it exists, architecture, principles, personas, ecosystem, roadmap |
-| 02 | **Core Basic** | Minimum spec: Entity, Service, App, Module, Config, Migration, Subscription; fields, actions, events, state machines, security, tenancy, primitives |
+| 02 | **Core Basic** | Minimum spec: Document, Service, App, Module, Config, Migration, Subscription; fields, actions, events, lifecycle, state machines, security, tenancy, primitives |
 | 03 | **Core Extended** | Advanced spec: Workflow, Api, Webhook, Mockup, KindDefinition, hooks, validation 4–6, storage, streaming, query builder, rate limiting |
 | 04 | **Control Plane** | Governance spec: Environment, Policy (OPA/Rego), keys & delegation, artifact lifecycle, contracts, transparency log, REPL governance |
-| 05 | **Frontend** | UI spec: Page, Form, Table, Dashboard, Widget, Report, Wizard, Kanban, Timeline, Menu, Print, Theme; FormaExpr, component contract, realtime convention |
+| 05 | **Frontend** | UI spec for **business applications** (Page, Form, Table, etc.). Admin UI for Control/Resource Plane has separate docs in `docs/architecture/` |
 | 06 | **Plane Protocol** | Wire contract between Control Plane and Resource Plane: mTLS, snapshots, evidence, outage semantics |
+| — | **[Architecture](../architecture/)** | **NEW** — Multi-region topology, admin surfaces, deployment flow, resource registration, failover, K8s operator |
 | 07 | **Marketplace** | Economic layer: pricing vocabulary, Verified Badge, verifiable metering, ledger, revenue sharing, license tokens |
 | 08 | **O2C Tutorial** | Step-by-step: build an Order-to-Cash app from scratch with Forma |
 | 09 | **O2C Companion** | Technical deep-dive: "without Forma vs with Forma" comparison, test-drive findings |
-| 10 | **Entity Extension** | How to add custom fields to marketplace module entities without forking |
+| 10 | **Document Extension** | How to add custom fields to marketplace module documents without forking |
 | 11 | **Reference** | Glossary, all 50 design decisions (D1–D50), Laravel → Forma feature map, Concern → Kind catalog, admin layers |
+| — | **Error Glossary** | `error-glossary.yaml` — canonical `FORMA.*` error codes with params and default messages for all framework-enforced mechanisms |
 
 ---
 

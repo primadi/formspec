@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go build *)",
+      "Bash(go vet *)",
+      "Bash(gofmt -l .)",
+      "Bash(gofmt -w syncagent.go)",
+      "Bash(rm -f /tmp/forma-ctl-bin /tmp/forma-bin /tmp/reference-app-bin)",
+      "Bash(timeout 6 go run ./cmd/forma-ctl serve --dev --port 8443)",
+      "Bash(timeout 5 go run ./examples/reference-app --spec examples/Customer/spec --addr :8080)",
+      "Read(//tmp/**)",
+      "Bash(curl -s http://localhost:8080/health)",
+      "Bash(wait)",
+      "Bash(gofmt -w internal/api/router.go)",
+      "Bash(go get *)",
+      "Bash(go mod *)",
+      "Bash(go test *)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(make build *)",
+      "Bash(python3 -c ' *)",
+      "Bash(npm install *)",
+      "Bash(npx tsc *)",
+      "Bash(echo \"exit=$?\")",
+      "Read(//usr/lib/**)",
+      "Bash(apt-cache policy *)",
+      "Bash(sudo apt-get update -qq)",
+      "Bash(sudo apt-get install -y --no-install-recommends php-cli php-curl composer)",
+      "Bash(composer install *)",
+      "Bash(sed -i 's/characteristic: transaction/characteristic: master/' /tmp/claude-1000/-workspaces-forma/4032b714-fbe5-4188-88ed-245425ed6ea5/scratchpad/gen-test-spec/entities/invoice.yaml)",
+      "Bash(go run *)",
+      "Bash(gofmt -l cmd/forma/generate_test.go)",
+      "Bash(gofmt -w cmd/forma/generate_test.go cmd/forma/generate.go)",
+      "Bash(gofmt -l cmd/forma/*.go)"
+    ]
+  }
+}

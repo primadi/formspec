@@ -35,7 +35,8 @@ type Kind string
 const (
 	KindApp          Kind = "App"
 	KindModule       Kind = "Module"
-	KindEntity       Kind = "Entity"
+	KindDocument     Kind = "Document" // v0.3.0 — Entity renamed to Document
+	KindEntity       Kind = "Entity"   // deprecated alias for KindDocument
 	KindService      Kind = "Service"
 	KindConfig       Kind = "Config"
 	KindMigration    Kind = "Migration"
@@ -49,12 +50,14 @@ const (
 	KindKindDefinition Kind = "KindDefinition"
 	KindWebhook        Kind = "Webhook"
 	KindMockup         Kind = "Mockup"
+	KindIntegrator     Kind = "Integrator" // cross-module bridge (Core Extended §5)
 )
 
-// Control Plane kinds (Control §2).
+// Control Plane kinds (Control §2, Datastore Spec).
 const (
 	KindEnvironment Kind = "Environment"
 	KindPolicy      Kind = "Policy"
+	KindDatastore   Kind = "Datastore"
 )
 
 // Frontend kinds (Frontend §2).
@@ -105,13 +108,18 @@ const (
 // IsValidKind returns true if k is a known Forma kind.
 func IsValidKind(k Kind) bool {
 	switch k {
-	case KindApp, KindModule, KindEntity, KindService, KindConfig, KindMigration, KindSubscription,
-		KindWorkflow, KindApi, KindKindDefinition, KindWebhook, KindMockup,
-		KindEnvironment, KindPolicy,
+	case KindApp, KindModule, KindDocument, KindEntity, KindService, KindConfig, KindMigration, KindSubscription,
+		KindWorkflow, KindApi, KindKindDefinition, KindWebhook, KindMockup, KindIntegrator,
+		KindEnvironment, KindPolicy, KindDatastore,
 		KindPage, KindForm, KindTable, KindDashboard, KindWidget, KindReport,
 		KindWizard, KindKanban, KindTimeline, KindMenu, KindPrint, KindTheme:
 		return true
 	default:
 		return false
 	}
+}
+
+// IsDocumentKind returns true if k is Document (or deprecated Entity alias).
+func IsDocumentKind(k Kind) bool {
+	return k == KindDocument || k == KindEntity
 }

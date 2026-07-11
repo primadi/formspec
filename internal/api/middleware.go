@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/forma/forma/internal/auth"
-	"github.com/forma/forma/pkg/spec"
+	"github.com/primadi/forma/internal/auth"
+	"github.com/primadi/forma/pkg/spec"
 )
 
 // Middleware chains for the Forma API router.

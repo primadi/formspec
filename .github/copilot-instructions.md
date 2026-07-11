@@ -23,7 +23,7 @@ Tiga tipe file: `yaml` (deskripsi), `script` (Starlark logic), `asset` (static/c
 
 | Layer | Teknologi |
 |---|---|
-| Backend | Go 1.26, module `github.com/forma/forma` |
+| Backend | Go 1.26, module `github.com/primadi/forma` |
 | YAML | `gopkg.in/yaml.v3` |
 | Frontend | React 19 + TypeScript 6 + Vite 8 |
 | UI | shadcn/ui (Nova preset) + Tailwind CSS v4 |
@@ -259,9 +259,12 @@ Rencana bisa berupa file Markdown baru (misal `docs/plan/entity-engine-plan.md`)
 
 Setiap kali ada perubahan code, **catat di `docs/changelog/`**:
 
-- Buat file dengan format `YYYY-MM-DD-<deskripsi-singkat>.md`
+- Buat file dengan format `YYYY-MM-DD-NNN-<deskripsi-singkat>.md`  
+  — `NNN` adalah 3-digit sequence number (001, 002, …) yang **reset setiap hari**  
+  — Contoh: `2026-07-08-001-integrasi-document-model-spec.md`
 - Isi: apa yang diubah, kenapa diubah, file yang terkena dampak, dan referensi ke todo/plan
 - Format ringkas, maksimal 1–2 paragraf per entry
+- Urutan `NNN` harus sesuai kronologi perubahan — file dengan NNN lebih kecil terjadi lebih dulu
 
 ### 3. Todo Management
 

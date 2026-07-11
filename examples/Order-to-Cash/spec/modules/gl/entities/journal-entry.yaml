@@ -6,9 +6,13 @@ metadata:
   description: Satu journal entry — selalu double-entry (min 2 baris)
 spec:
   version: v1
-  characteristics: [transaction]
+  characteristic: transaction
 
   fields:
+    - name: transaction_date
+      type: date
+      required: true
+      index: true
     - name: source
       type: string
       immutable: true

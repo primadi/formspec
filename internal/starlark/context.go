@@ -8,6 +8,8 @@
 //	ctx.now()
 //	ctx.log.info("event", {"key": "val"})
 //	ctx.next_key("field_name")
+//	ctx.db().query("SELECT ...")         // default datastore
+//	ctx.db().named("analytics-db").query(...)   // named datastore
 package starlark
 
 import (
@@ -27,6 +29,16 @@ type CtxAPI struct {
 	Log     *logAPI
 	NextKey func(fieldName string) (string, error)
 	Config  *configAPI
+
+	// Primitive handles — callable starlark values with .named() support.
+	// Each is lazily initialized via the getter methods.
+	db      *primitiveHandle
+	cache   *primitiveHandle
+	lock    *primitiveHandle
+	queue   *primitiveHandle
+	pubsub  *primitiveHandle
+	storage *primitiveHandle
+	kvstore *primitiveHandle
 }
 
 var _ starlark.Value = (*CtxAPI)(nil)
@@ -42,6 +54,19 @@ func NewCtxAPI(tenantID, tenantName, userID, userRole string, userPerms []string
 	}
 }
 
+// SetDatastoreResolver sets the resolver function for named datastore lookups.
+// The resolver receives (primitiveType, name) and returns the underlying connection or error.
+// This is called by the runtime after boot to wire the datastore registry into ctx.*.
+func (c *CtxAPI) SetDatastoreResolver(resolver func(primitiveType, name string) (interface{}, error)) {
+	c.db = newPrimitiveHandle("db", resolver)
+	c.cache = newPrimitiveHandle("cache", resolver)
+	c.lock = newPrimitiveHandle("lock", resolver)
+	c.queue = newPrimitiveHandle("queue", resolver)
+	c.pubsub = newPrimitiveHandle("pubsub", resolver)
+	c.storage = newPrimitiveHandle("storage", resolver)
+	c.kvstore = newPrimitiveHandle("kvstore", resolver)
+}
+
 // ─── starlark.Value interface ───
 
 func (c *CtxAPI) String() string        { return "<ctx>" }
@@ -50,7 +75,8 @@ func (c *CtxAPI) Freeze()               {}
 func (c *CtxAPI) Truth() starlark.Bool  { return starlark.True }
 func (c *CtxAPI) Hash() (uint32, error) { return 0, fmt.Errorf("ctx is not hashable") }
 
-// Attr returns ctx attributes: .tenant, .user, .auth, .now, .log, .next_key, .config
+// Attr returns ctx attributes: .tenant, .user, .auth, .now, .log, .next_key, .config,
+// plus primitives: .db, .cache, .lock, .queue, .pubsub, .storage, .kvstore
 func (c *CtxAPI) Attr(name string) (starlark.Value, error) {
 	switch name {
 	case "tenant":
@@ -67,13 +93,49 @@ func (c *CtxAPI) Attr(name string) (starlark.Value, error) {
 		return c.builtinNextKey(), nil
 	case "config":
 		return c.Config, nil
+	case "db":
+		if c.db == nil {
+			return starlark.None, fmt.Errorf("ctx.db: datastore resolver not configured")
+		}
+		return c.db, nil
+	case "cache":
+		if c.cache == nil {
+			return starlark.None, fmt.Errorf("ctx.cache: datastore resolver not configured")
+		}
+		return c.cache, nil
+	case "lock":
+		if c.lock == nil {
+			return starlark.None, fmt.Errorf("ctx.lock: datastore resolver not configured")
+		}
+		return c.lock, nil
+	case "queue":
+		if c.queue == nil {
+			return starlark.None, fmt.Errorf("ctx.queue: datastore resolver not configured")
+		}
+		return c.queue, nil
+	case "pubsub":
+		if c.pubsub == nil {
+			return starlark.None, fmt.Errorf("ctx.pubsub: datastore resolver not configured")
+		}
+		return c.pubsub, nil
+	case "storage":
+		if c.storage == nil {
+			return starlark.None, fmt.Errorf("ctx.storage: datastore resolver not configured")
+		}
+		return c.storage, nil
+	case "kvstore":
+		if c.kvstore == nil {
+			return starlark.None, fmt.Errorf("ctx.kvstore: datastore resolver not configured")
+		}
+		return c.kvstore, nil
 	default:
 		return nil, starlark.NoSuchAttrError(fmt.Sprintf("ctx has no .%s attribute", name))
 	}
 }
 
 func (c *CtxAPI) AttrNames() []string {
-	return []string{"tenant", "user", "auth", "now", "log", "next_key", "config"}
+	return []string{"tenant", "user", "auth", "now", "log", "next_key", "config",
+		"db", "cache", "lock", "queue", "pubsub", "storage", "kvstore"}
 }
 
 func (c *CtxAPI) builtinNow() *starlark.Builtin {

@@ -1,10 +1,12 @@
-# Forma Core Basic Spec v0.2.0
+# Forma Core Basic Spec v0.3.0
 
-**Status:** Draft — realigned under Forma Overview
+**Status:** Draft — realigned under Forma Overview; Document Model integration
 **License:** Creative Commons CC0
 **Governed by:** Forma Overview · Forma Reference (Decisions D1–D50)
 
 > This document defines the **minimum specification** required to build a conforming Forma implementation. Features not listed here are defined in Core Extended, Control Spec, Frontend Spec, Plane Protocol Spec, and Marketplace Spec.
+
+> **v0.3.0:** `kind: Entity` renamed to `kind: Document` (see §4.1). Introduces built-in document lifecycle (`doc_status` — draft/submitted/cancelled/NULL), eight reserved actions with framework-enforced guards (`create`, `update`, `submit`, `cancel`, `delete`, `amend`, `create-submit`, `amend-submit`), transaction date semantics, period closing, data archiving, and a canonical error glossary. All previous `kind: Entity` manifests remain loadable (backward-compatible deprecated path) but new manifests SHOULD use `kind: Document`.
 
 ---
 
@@ -12,9 +14,9 @@
 
 ### 1. Scope
 
-Core Basic covers: multi-tenant CRUD applications with auto-generated API, admin panel, and docs; background job processing; transactional event delivery between resources; type-safe code generation from manifests; business rules via sandboxed scripting (Starlark).
+Core Basic covers: multi-tenant CRUD applications with auto-generated API, admin panel, and docs; document lifecycle (draft / submitted / cancelled) with framework-enforced guards; background job processing; transactional event delivery between resources; transaction date semantics with period closing; data archiving and retention; type-safe code generation from manifests; business rules via sandboxed scripting (Starlark).
 
-**Not in Core Basic:** Workflow, Webhook, Mockup, Hooks, Query Builder, streaming, file fields → Core Extended. Control Plane governance → Control Spec. Frontend kinds → Frontend Spec. Scheduler, mail, notifications, seeding → official modules (not spec).
+**Not in Core Basic:** Workflow, `kind: Integrator`, Webhook, Mockup, Hooks, Query Builder, streaming, file fields → Core Extended. Control Plane governance → Control Spec. Frontend kinds → Frontend Spec. Scheduler, mail, notifications, seeding → official modules (not spec). Boundary detection, saga/compensation → Core Basic §14d (spec) but deferred as implementation concern.
 
 ### 2. Core Philosophy
 
@@ -26,6 +28,7 @@ Core Basic covers: multi-tenant CRUD applications with auto-generated API, admin
 6. **Security by Default.** Auth required; anonymous access must be explicit; tenant isolation automatic and non-bypassable; cross-tenant → 404.
 7. **Location Transparency.** Callers never know where a resource runs — the registry resolves it.
 8. **Contract before Implementation.** Manifest first, `impl` second.
+9. **Lifecycle by Convention.** Every Document has a built-in lifecycle (`doc_status`: draft → submitted → cancelled) enforced by the framework. Developers define business-specific state machines on separate fields — the two layers are independent.
 
 ---
 
@@ -37,7 +40,7 @@ All Forma YAML files contain one or more **manifests**. A manifest MUST have exa
 
 ```yaml
 apiVersion: forma.dev/v1alpha1
-kind: Entity
+kind: Document
 metadata:
   name: invoice
   module: billing
@@ -52,9 +55,10 @@ spec:
 
 #### 3.2 `kind`
 
-PascalCase. Core Basic built-in kinds: `App`, `Module`, `Entity`, `Service`, `Config`, `Migration`, `Subscription`. Additional kinds are defined in other specs and registered by modules via `KindDefinition` (Extended). Unknown kinds MUST fail validation.
+PascalCase. Core Basic built-in kinds: `App`, `Module`, `Document`, `Service`, `Config`, `Migration`, `Subscription`. Additional kinds are defined in other specs and registered by modules via `KindDefinition` (Extended). Unknown kinds MUST fail validation.
 
-> **Guardrail:** application developers should almost never define new kinds. In 95% of cases, the right answer is an `Entity`.
+> **Guardrail:** application developers should almost never define new kinds. In 95% of cases, the right answer is a `Document`.
+> **Backward compatibility:** `kind: Entity` is accepted as a deprecated alias for `kind: Document`. Loaders MUST treat them identically but MAY emit a deprecation warning.
 
 #### 3.3 `metadata`
 
@@ -72,15 +76,198 @@ A `.yaml` file MAY contain multiple manifests separated by `---`. Loaders MUST t
 
 ### 4. Resource Kinds
 
-#### 4.1 `kind: Entity`
+#### 4.1 `kind: Document`
 
-Stateful, persisted, source of truth for business data. Supports CRUD, state machine, and events. `characteristics`: `master` (stable data), `transaction` (append-heavy, time-partitioned), `reference` (read-only seed data, owned by App Owner), `summary` (system-managed projection — no create/update/delete via API).
+Stateful, persisted, source of truth for business data. Supports CRUD, built-in lifecycle, state machine, and events.
 
-**API Exposure (D49):** Private by default. No external endpoint is created unless the entity opts in via `spec.expose` — a per-protocol declaration (`rest`, `grpc`, `ws`). Without `expose`, the entity is only accessible to internal callers (same-process services, Starlark scripts, events). See §11.1.
+**Resource taxonomy — two types only:**
+
+```
+Resource (umbrella term — unchanged: "Resource Plane", resource.call())
+├── type: document   → business term: "Dokumen"
+│     characteristic:           # single value, mutually exclusive:
+│       - master        → stable reference data (Customer, Product)
+│                          MAY have lifecycle (if submit enabled) or not
+│       - transaction    → append-heavy, time-partitioned (Invoice, JE)
+│                          REQUIRES transaction_date field (§14a)
+│       - reference      → read-only seed data, owned by App Owner (Provinces, Tax Rates)
+│       - summary        → system-managed projection (GL Balance)
+│                          create/update/delete via API permanently disabled
+└── type: service    (unchanged)  → business term: "Layanan"
+```
+
+**Characteristic rules:**
+- Exactly **one** value per Document (mutually exclusive). `forma apply` MUST reject documents with multiple characteristic values.
+- Lifecycle behavior (`doc_status` / reserved actions) is **independent** of characteristic — it is controlled by `spec.actions.submit.disabled`. A `master` Document with `submit` enabled has a full lifecycle; a `master` with `submit` disabled does not.
+- `summary` documents always have lifecycle bypassed (`submit` implicitly disabled).
+
+`summary` is **not** a separate resource type — it is a characteristic value on `type: document`, exactly like `master`/`transaction`/`reference`. "Laporan" (report) is a Document with `characteristic: summary`, not a third resource type.
+
+**API Exposure (D49):** Private by default. No external endpoint is created unless the document opts in via `spec.expose` — a per-protocol declaration (`rest`, `grpc`, `ws`). Without `expose`, the document is only accessible to internal callers (same-process services, Starlark scripts, events). See §11.1.
+
+##### 4.1a Reserved Fields
+
+The following fields are **reserved** — they MUST NOT be reused as custom field names. They apply automatically to all `type: document`, are set by the framework, and are read-only from developer code.
+
+| Field | Function | Written manually by developer? |
+|---|---|---|
+| `owner` | Who created it | No |
+| `created_at` | System timestamp — when the record was created, actual event order | No |
+| `modified` | System timestamp — last modified | No |
+| `doc_status` | Standard lifecycle status (see §4.1b) | No — only changes via reserved actions |
+| `amends` | UUID of the cancelled original (set by `amend`, §4.1b) | No |
+| `amended_by` | UUID of the new version (set on the cancelled original by `amend`, §4.1b) | No |
+| `version` | Optimistic concurrency counter — auto-incremented on every update | No |
+| `transaction_date` | Business date / accounting period (see §14a) — **MUST be explicitly declared** when `characteristic: transaction`. `forma apply` REJECTS if missing. NOT auto-injected like `doc_status`. | Yes, but subject to `backdate_policy` / `forward_date_policy` |
+
+**Principle:** business fields are freely named by the developer (including names like `status`, `fulfillment_stage`, etc. — these are valid and encouraged so they don't conflict in meaning with the already-reserved `doc_status`).
+
+##### 4.1b Reserved Actions — Standard Lifecycle
+
+Six actions are **reserved words**. If an action name matches exactly, the standard guard activates automatically. Developers MAY add extra `conditions` on top, but CANNOT remove the base guard.
+
+```yaml
+doc_status:
+  values: [draft, submitted, cancelled]   # CLOSED — no new states can be added.
+                                            # Granular business process needs → separate field
+                                            # (see "Order" example below)
+
+actions:
+  guards:
+    create: "doc_status auto-set = draft"
+    update: "doc_status == draft"
+    submit: "doc_status == draft  →  doc_status = submitted"
+    cancel: "doc_status == submitted  AND  no_pending_references  →  doc_status = cancelled"
+    delete: "doc_status == draft  AND  no_referencing_documents"   # CANNOT be overridden
+    amend:  "doc_status == submitted OR doc_status == cancelled  →
+             if submitted: doc_status = cancelled, set amended_by
+             →  create new linked Document (with amends link), start as draft"
+```
+
+**`delete` vs `cancel` — two different reference-guard strictness levels:**
+
+- `delete` **removes the row entirely**. If another Document with a `relation` field points here, the guard is **absolute — no `override_permission`** — exactly `ON DELETE RESTRICT` in relational databases. This is data integrity violation (dangling reference), not a business process concern.
+- `cancel` **does not remove the row**, only changes `doc_status`. The guard can be opened via a `before_cancel` handler that unwinds dependencies first (§4.1c), or via `override_permission` in certain cases.
+
+The `delete` guard is purely based on the field type (`relation`) in other resources pointing here — applies automatically regardless of this resource's `doc_status`, regardless of whether it was ever `submit`-ted. Documents that are lifecycle-free (see §4.1d) are still protected from `delete` if referenced by other transactions.
+
+**`update` after `submit` is always rejected — no exceptions.** This is what makes a Document "immutable" after submit. However, custom actions MAY still change specific fields after submit (e.g., `mark-paid` setting `paid_at`), as long as they go through a named path with explicit guards and are recorded in the audit log *by name* (not "document updated", but "action mark-paid executed").
+
+**Lifecycle transitive gating:** Lifecycle reserved actions have a dependency chain: `submit ← cancel ← amend`. If `submit` is disabled, `cancel` and `amend` are **implicitly disabled** regardless of their explicit `disabled` value. If `cancel` is disabled, `amend` is implicitly disabled. The loader MUST enforce this at `forma apply` time — overriding `disabled` values where necessary — and MUST emit a warning when doing so. When all three (`submit`, `cancel`, `amend`) are disabled (explicitly or implicitly), the Document is **lifecycle-free**: `doc_status` is `null`, all lifecycle guards on `update`/`delete` are bypassed, and the Document behaves as plain CRUD (see §4.1d).
+
+**`create-submit` — standard derived composite action (7th reserved action):** When both `create` AND `submit` are enabled (neither is `disabled: true`), a standard composite action `create-submit` is **automatically available** without needing to be declared in the manifest. It executes `create` + `submit` atomically in a single database transaction. Developers MAY override it with additional `conditions` but CANNOT weaken the base guards. `forma apply` MUST reject a declared `create-submit` action when `submit` is disabled.
+
+**`amend-submit` — standard derived composite action (8th reserved action):** When both `amend` AND `submit` are enabled, a standard composite action `amend-submit` is automatically available. It executes `amend` (cancel original + create new draft + link) then `submit` (submit the new document) atomically — a single-click correction with immediate re-approval.
+
+For custom multi-step actions beyond these built-ins, use an inline Starlark script that calls `ctx.call_action()` sequentially.
+
+**Referenceability rule:** Only `doc_status = null` (lifecycle-free, §4.1d) and `doc_status = 'submitted'` documents can be targeted by `relation` fields created via `create`/`update`. Documents with `doc_status = 'draft'` or `'cancelled'` MUST be rejected as relation targets at runtime. This is enforced by the framework during `create`/`update` of the referencing Document.
+
+**Amend version chain:** The `amend` action sets two reserved metadata fields:
+- `amends` (on the new document) — UUID of the cancelled original
+- `amended_by` (on the cancelled original) — UUID of the new version
+Both are read-only, set by the framework, and form an audit trail of corrections. The `version` column (normative table §19) increments per amend cycle: 1 → 2 → 3.
+
+**The reference guard (`cancel`) is generic based on field type, not manual self-awareness:** fields of type `relation`/reference — both standard fields and extension fields (`ext_*`) — are automatically included in the check "is this document still referenced by another submitted Document?" Documents don't need to write custom code for this.
+
+**Never write to a controlled field directly** (`resource.doc_status = "x"`). If a custom action needs to trigger a transition, it **MUST** call the reserved action as a method (`ctx.call_action(resource, "submit")`), not write the raw field — so that guards, hooks, and audit are fully executed.
+
+**Example: Base `doc_status` vs Granular Business Field**
+
+```yaml
+resource:
+  name: order
+  type: document
+
+fields:
+  - name: fulfillment_stage        # free name, does NOT conflict with doc_status
+    type: enum
+    enum_values: [awaiting_payment, paid, fulfilled]
+  # doc_status is NOT written here — reserved, automatically present
+
+state_machine:
+  field: fulfillment_stage         # purely business, independent from doc_status
+  initial: awaiting_payment
+  transitions:
+    - from: awaiting_payment
+      to: paid
+      via: mark-paid
+    - from: paid
+      to: fulfilled
+      via: fulfill
+
+actions:
+  - name: mark-paid                 # free name -> custom, guard written manually
+    conditions:
+      - script: "doc_status == 'submitted'"
+      - script: "fulfillment_stage == 'awaiting_payment'"
+```
+
+There is no `maps_to` between `fulfillment_stage` and `doc_status` — the two are independent. Any relationship between them (if needed) is expressed through ordinary `conditions` on actions, not a new mechanism.
+
+##### 4.1c Multi-Step Actions via Inline Script
+
+For custom actions that need to call multiple reserved or custom actions sequentially, write an inline Starlark script handler that calls `ctx.call_action()`:
+
+```python
+def handle(params, ctx):
+    order = ctx.call_action("order", "create", params)
+    ctx.call_action("order", "submit", {"id": order.id})
+    return order
+```
+
+The framework executes each `ctx.call_action()` within the same request context. When the calls target resources in the same dataspace, the entire sequence runs inside a single database transaction — if any step fails, all prior changes roll back automatically via standard ACID properties. No separate composite action mechanism is needed.
+
+For the specific case of `create` + `submit`, use the built-in `create-submit` action (§4.1b) which is auto-derived and requires no handler at all.
+
+Cross-boundary calls (different dataspace/process) enter the Saga flow (§14d) for compensation.
+
+##### 4.1d Master Data: Lifecycle-Free, No Fourth Resource Category
+
+A `type: document` resource where all lifecycle actions (`submit`, `cancel`, `amend`) are disabled (explicitly or via transitive gating) is **lifecycle-free**. The Document has no `doc_status` — the framework does not enforce any lifecycle guards. `update` and `delete` are always allowed as long as other guards (notably referential integrity for `delete`) are satisfied.
+
+This covers Master Data (Customer, Product) — documents that exist as reference data and never go through a draft→submitted lifecycle. No fourth resource category is needed: a Document with lifecycle disabled is zero-cost, no special type.
+
+**Implementation detail:** `doc_status` is `null` in the database. The lifecycle column exists structurally but carries no semantics. All lifecycle reserved actions (`submit`/`cancel`/`amend`) are implicitly disabled.
+
+Protection from dangerous `delete` (§4.1b, guard revision) still applies automatically based on the `relation` field type in other resources — it does not depend on lifecycle status. So no lifecycle-based guidance is needed — the reference guard on `delete` is strict enough on its own.
+
+**Explicit signal for the UI generator (see Frontend Spec §1.7):** a resource that genuinely never intends to have a submit lifecycle should explicitly disable the lifecycle actions:
+
+```yaml
+resource:
+  name: customer
+  type: document
+  characteristic: master
+
+actions:
+  - name: submit
+    disabled: true
+  # cancel and amend are implicitly disabled via transitive gating
+```
+
+This is not just documentation of intent — it's the signal the UI generator uses to decide between displaying plain CRUD (§Frontend 1.7) versus the draft→submit lifecycle pattern.
+
+##### 4.1e Summary Documents: Bypass Lifecycle, Forever Active
+
+`characteristic: summary` is not just a documentation hint — it **totally changes** how this Document is written. Standard actions `create`/`update`/`delete` are automatically **disabled via API** — only `list`/`find` are available to regular callers. Values are written **only** through the internal compute engine (trigger-driven), not through regular action calls from outside.
+
+**Important consequence: `doc_status` is not meaningful for Summary.** The entire draft→submit→cancel lifecycle mechanism (§4.1b) operates through action calls, and Summary never receives external action calls — so the `doc_status` field that is normally auto-injected for all `type: document` has **no operational meaning** here. Implementations MAY keep it for structural consistency, but its value MUST remain static/ignored, not something that changes via submit/cancel like regular Documents.
+
+```yaml
+resource:
+  name: gl-balance
+  type: document
+  characteristic: summary
+  # Standard actions create/update/delete automatically disabled — only list/find
+  # doc_status: NOT relevant, never changes via submit/cancel
+```
+
+Summary is **forever active, never archived** — if source transactions remain queryable (live or via archive access), Summary can be rebuilt. Archiving a Summary would turn it into a "static snapshot" that no longer reflects data reality — contradicting the purpose of Summary as a "live projection." See also §14a (period finalization) and Core Extended §26 (compute engine syntax).
 
 #### 4.2 `kind: Service`
 
-Stateless, pure computation. MUST NOT hold internal state. External integrations (SFTP, third-party APIs) MUST be wrapped as Services — auth, permission, audit, and tenant isolation apply uniformly.
+Stateless, pure computation. MUST NOT hold internal state. External integrations (SFTP, third-party APIs) MUST be wrapped as Services — auth, permission, audit, and tenant isolation apply uniformly. Services do NOT have `characteristics`, `doc_status`, or lifecycle guards — those are exclusive to `kind: Document`.
 
 #### 4.3 Infrastructure primitives (closed set)
 
@@ -134,7 +321,7 @@ Module permission footprint is **derived** — the aggregate of `required_permis
 
 #### 4.6 `kind: Migration`
 
-Developer-written **custom DDL only** (indexes, functions, triggers, extensions, materialized views). No DML — enforced at runtime. Structural migrations are derived automatically from Entity diffs.
+Developer-written **custom DDL only** (indexes, functions, triggers, extensions, materialized views). No DML — enforced at runtime. Structural migrations are derived automatically from Document diffs.
 
 #### 4.7 Permission model
 
@@ -163,7 +350,7 @@ myapp/
   modules/
     billing/
       module.yaml                 # kind: Module
-      entities/invoice.yaml       # kind: Entity
+      documents/invoice.yaml      # kind: Document
       services/tax-calculator.yaml
       scripts/invoice_send.star   # Starlark script
       assets/                     # static files, custom UI
@@ -178,7 +365,26 @@ Folder names are convention. Loaders MUST discover by scanning `*.yaml`, not by 
 
 ### 6. Compilation & Process Model
 
-Two binaries, always — including development: `forma-resource` (Resource Plane runtime) and `forma-control` (Control Plane: governance, policy, signing — see Control Spec). Planes communicate via Plane Protocol (mTLS, policy pull on boot + 5-minute refresh, no write-back).
+Two binaries, always — including development: `forma-resource` (Resource Plane runtime) and `forma-control` (Control Plane: governance, policy, signing — see Control Spec). Planes communicate via Plane Protocol (ETag-based conditional pull, no persistent stream, no write-back).
+
+#### 6.0 Two-Stage YAML Pipeline
+
+YAML manifests MUST go through a **two-stage pipeline** in all environments (including dev). Direct filesystem loading by the Resource Plane is non-conformant.
+
+**Stage 1 — Registration:** Developer runs `forma apply -f <path>` (or `forma apply --watch` for hot-reload). The Control Plane validates, computes sha256, signs, and stores the artifact in its database.
+
+**Stage 2 — Deployment:** The Resource Plane pulls the desired-state snapshot from Control Plane via `GET /v1/snapshot` (ETag-conditional). It compares sha256 hashes against its local deployment manifest. Only changed artifacts are fetched, verified, and loaded.
+
+**Dev mode** (`make dev` or `forma-resource --dev` + `forma-control --dev`):
+- Both planes start on localhost
+- `forma apply --watch` auto-detects file changes and re-registers
+- Resource Plane polls every 10 seconds (prod: 5 minutes)
+- `POST /v1/poll` trigger reduces latency to ~100ms
+- Self-signed signatures, no approval required
+
+**Architectural rule:** The `loader` and `entity registry` MUST NOT read YAML from the filesystem at runtime. All manifest data enters through the Control Plane artifact API.
+
+See [Plane Protocol Spec §0](../06-plane-protocol.md) for full pipeline specification.
 
 #### 6.1 Five implementation types
 
@@ -228,8 +434,8 @@ Workspace → App → Module → Resource
 ```
 
 - **Applications are 100% tenancy-blind.** No tenancy switch, no single/multi mode, no tenant code. `tenant_id` exists only as internal isolation mechanism.
-- Every Entity is workspace-isolated at the query level — no exceptions, no global storage. Cross-workspace → **404**.
-- `characteristics: [reference]` is a domain marker: seeded per-tenant by App Owner, read-only for Data Owner. Live/large shared datasets → provider apps publishing services.
+- Every Document is workspace-isolated at the query level — no exceptions, no global storage. Cross-workspace → **404**.
+- `characteristic: reference` is a domain marker: seeded per-tenant by App Owner, read-only for Data Owner. Live/large shared datasets → provider apps publishing services.
 - Installing multiple apps into one Workspace unifies tenant identity — basis for cross-app grants.
 - Data belongs to the owner of the Workspace where the resource runs. Expired module licenses degrade to read-only; `list/find/export/backup` MUST NOT be license-gateable.
 
@@ -237,27 +443,29 @@ Workspace → App → Module → Resource
 
 ## Part III — Resource Definition
 
-### 9. Entity & Service Anatomy
+### 9. Document & Service Anatomy
 
 ```yaml
 apiVersion: forma.dev/v1alpha1
-kind: Entity                       # or Service
+kind: Document                    # or Service
 metadata:
   name: invoice                    # singular, kebab-case
   module: billing
 spec:
   version: v1
   plural: invoices                 # optional, auto-derived
-  characteristics: [transaction]   # Entity only
+  characteristic: transaction   # Document only — §4.1
   auth: {}                         # §15
   audit: {}                        # §15
   persist: {}                      # §20
   expose: []                       # §11.1 — absent = no external access
-  fields: []                       # Entity only — §10
+  fields: []                       # Document only — §10
   actions: []                      # §11
   events: []                       # §12
-  state_machine: {}                # Entity only — §14
+  state_machine: {}                # Document only — §14
 ```
+
+Note: `doc_status` is NOT listed under `fields:` — it is a reserved field (§4.1a), always present, framework-managed.
 
 #### 9.1 Naming conventions
 
@@ -271,7 +479,9 @@ spec:
 
 ### 10. Field Spec
 
-Fields are valid only on `kind: Entity`.
+Fields are valid only on `kind: Document`.
+
+**Reserved field names** (§4.1a) — `owner`, `created_at`, `modified`, `doc_status`, `amends`, `amended_by`, `version` — MUST NOT be reused as custom field names. `forma apply` MUST reject any field declaration using a reserved name. `transaction_date` MUST be explicitly declared when `characteristic: transaction` (§14a).
 
 ```yaml
 fields:
@@ -298,10 +508,23 @@ fields:
 
 #### 10.2 Child vs Relation
 
-- **`child`** — no own UUID; key = `parent_id + sequence`. No independent identity or lifecycle. Created atomically with parent. Example: invoice → line_items.
-- **`relation`** — separate entity with own UUID, independent identity and lifecycle. Example: order → customer.
+The line between `child` and `relation` is determined by **lifecycle ownership**:
 
-Decision test: does it have meaning outside the parent? Yes → relation.
+| Aspect | `child` | `relation` |
+|---|---|---|
+| Lifecycle | **Follows parent** — when parent is submitted/cancelled, all children follow automatically | **Independent** — own `doc_status`, own lifecycle |
+| Identity | `storage: jsonb` → no UUID, embedded in parent. `storage: table` → own UUID v7. | **Own UUID v7** — independent identity |
+| Existence | Cannot exist without parent — atomically created/deleted with parent | Can exist independently |
+| Query ability | `jsonb`: via parent only. `table`: direct queries + joins. | Direct query via own table |
+| Example | Invoice → line_items (jsonb or table), Customer → addresses (table) | Order → customer (both independent) |
+
+**Decision test — does it have meaning outside the parent?**
+
+- Invoice line items have no meaning without the Invoice → **`child`**
+- Customer Addresses have no meaning without the Customer → **`child`** (stored as `table` for queryability, but still follows Customer's lifecycle)
+- An Order refers to a Customer, but both exist independently → **`relation`**
+
+**Lifecycle is the only real distinction.** A child follows the parent's lifecycle always. Even a child stored as `table` with its own UUID gets submitted when the parent submits, and cancelled when the parent cancels. The child's `doc_status` column mirrors the parent's — it is never directly managed by the developer.
 
 #### 10.3 Child Spec
 
@@ -309,7 +532,7 @@ Decision test: does it have meaning outside the parent? Yes → relation.
 - name: items
   type: child
   child:
-    storage: jsonb            # jsonb | table
+    storage: jsonb            # jsonb (default) | table
     sequence_field: line_number
     fields:
       - { name: line_number, type: integer, immutable: true }
@@ -317,11 +540,28 @@ Decision test: does it have meaning outside the parent? Yes → relation.
       - { name: quantity,    type: integer, rules: [required, positive] }
 ```
 
-| | `jsonb` | `table` |
+| | `jsonb` (default) | `table` |
 |---|---|---|
-| Atomic with parent | always | same transaction |
-| Direct query/index on child | no | yes |
-| Best for | <100 items, simple | many items, direct queries |
+| Storage | Embedded in parent's `data` JSONB | Separate PostgreSQL table |
+| UUID PK | ❌ No | ✅ Yes (auto-generated UUID v7) |
+| Atomic with parent | Always (same JSONB document) | Same transaction |
+| Direct query/index on child | ❌ No | ✅ Yes |
+| Referencable from other documents | ❌ No | ✅ Yes (via UUID) |
+| Best for | <100 items, simple structure | Many items, needs direct query or reference |
+
+When `storage: table`, the child table includes a UUID primary key:
+
+```sql
+CREATE TABLE {schema}.{parent_module}_{parent_plural}__{child_name} (
+  id          uuid        PRIMARY KEY DEFAULT gen_uuid_v7(),
+  parent_id   uuid        NOT NULL REFERENCES {parent_table}(id) ON DELETE CASCADE,
+  seq         integer     NOT NULL,                        -- ordering counter
+  doc_status  text        GENERATED ALWAYS AS ... STORED,   -- mirrors parent's doc_status
+  ...child fields...
+);
+```
+
+The `doc_status` column mirrors the parent's — child lifecycle is always derived from parent, never independent.
 
 #### 10.4 Natural key & generation
 
@@ -338,7 +578,7 @@ Decision test: does it have meaning outside the parent? Yes → relation.
     reset: yearly                 # never | yearly | monthly | daily
 ```
 
-Counters live in `forma_natural_key_counters` (PK = tenant/resource/field/scope/period). Increments MUST be atomic, gap-free, duplicate-free. MUST NOT derive via `MAX()` scan. `ctx.next_key` is a helper over `ctx.lock`. Sequence numbers are allocated under `ctx.lock` inside the same transaction as the insert/update; if the transaction later fails its optimistic-concurrency (`version`) check and is retried, a gap MAY result — unless the entity declares gap-free mode, in which case the lock MUST be held until commit.
+Counters live in `forma_natural_key_counters` (PK = tenant/resource/field/scope/period). Increments MUST be atomic, gap-free, duplicate-free. MUST NOT derive via `MAX()` scan. `ctx.next_key` is a helper over `ctx.lock`. Sequence numbers are allocated under `ctx.lock` inside the same transaction as the insert/update; if the transaction later fails its optimistic-concurrency (`version`) check and is retried, a gap MAY result — unless the document declares gap-free mode, in which case the lock MUST be held until commit.
 
 #### 10.5 Relation Spec
 
@@ -347,7 +587,18 @@ relation:
   type: belongs_to        # belongs_to | has_many | has_one
   resource: customer
   foreign_key: customer_id   # optional, auto-derived
+  on_delete: restrict        # restrict (default) | cascade | set_null
 ```
+
+**`on_delete` behavior when the target document is deleted:**
+
+| Value | Behavior | Use case |
+|---|---|---|
+| `restrict` (default) | **Absolute.** Cannot delete target if any reference exists. Same guard as `delete` action (§4.1b). Cannot be overridden. | Default safest behavior — prevents data integrity violations. |
+| `cascade` | Deletes the referencing document too. Only applies if the referencing document is `draft` or lifecycle-free. `submitted` documents require cancel first before cascade can proceed. | Dependent documents that should not outlive their parent (e.g., Order → Order Allocation). |
+| `set_null` | Sets the foreign key to `null` on referencing documents. Only valid if the field is NOT `required`. | Optional references that should be cleared on deletion (e.g., Task → Assignee). |
+
+**For `child` fields** (type: child), `on_delete` is not applicable — children are always cascade-deleted with the parent atomically.
 
 #### 10.6 Field rules
 
@@ -375,15 +626,34 @@ actions:
     impl: { type: script_ref, ref: billing/invoice_send }
 ```
 
-#### 11.1 Standard actions (Entity only)
+#### 11.1 Reserved actions (Document only)
 
-**Disabled by default (D49).** Standard CRUD endpoints are only created when an entity opts in via `spec.expose`. When enabled, the following endpoints are generated per protocol:
+Six actions are **reserved** — they have framework-enforced base guards (§4.1b). Developers MAY add extra `conditions` but CANNOT weaken or remove the base guard:
+
+| Action | Base Guard | Post-condition |
+|---|---|---|
+| `create` | none | `doc_status = draft` |
+| `update` | `doc_status == draft` | — |
+| `submit` | `doc_status == draft` | `doc_status = submitted` |
+| `cancel` | `doc_status == submitted AND no_pending_references` | `doc_status = cancelled` |
+| `delete` | `doc_status == draft AND no_referencing_documents` | row removed (see §4.1b — guard is absolute, no override) |
+| `amend` | `doc_status == submitted OR doc_status == cancelled` | atomic: cancels original + creates linked new Document as `draft` |
+| `create-submit` | same as `create` + `submit` composited (auto-derived) | atomic: `create` + `submit` in one transaction |
+| `amend-submit` | same as `amend` + `submit` composited (auto-derived) | atomic: `amend` (cancel+new) + `submit` new Document in one transaction |
+
+`create-submit` is available only when both `create` AND `submit` are enabled (neither is `disabled: true`). It is automatically derived by the framework — no manifest declaration needed. Developers MAY override it with additional `conditions` but CANNOT weaken the base guards of either `create` or `submit`. `forma apply` MUST reject a declared `create-submit` when `submit` is disabled.
+
+`amend-submit` is available only when both `amend` AND `submit` are enabled. Same auto-derivation rules.
+
+For lifecycle-free documents (§4.1d) where `submit`, `cancel`, and `amend` are all disabled, the lifecycle guard on `update` and `delete` is also bypassed (since `doc_status` is `null`). The `delete` referential integrity guard still applies regardless.
+
+**Standard CRUD endpoints** (when exposed via `spec.expose`) are the same reserved actions — `list` / `find` / `create` / `update` / `delete`. The exposure model (§§4.1, D49) remains deny-by-default; no external endpoint is created unless the Document opts in via `spec.expose`. When enabled, the following endpoints are generated per protocol:
 
 | Protocol | Opt-in | Standard endpoints |
 |---|---|---|
 | REST | `expose: [{type: rest}]` | `/{plural}`, `/{plural}/:id`, etc. |
 | gRPC | `expose: [{type: grpc, enabled: true}]` | Full gRPC service with matching RPCs |
-| WebSocket | `expose: [{type: ws, enabled: true}]` | Subscription channel per entity + action |
+| WebSocket | `expose: [{type: ws, enabled: true}]` | Subscription channel per document + action |
 
 **REST endpoint details (when enabled):**
 
@@ -395,9 +665,9 @@ actions:
 | `update` | PATCH | `/:id` | `{module}.{plural}.update` |
 | `delete` | DELETE | `/:id` | `{module}.{plural}.delete` |
 
-The `actions` field inside `expose` filters which endpoints are generated; omit to enable all applicable (except `delete`). `expose: []` (empty) is equivalent to `expose` absent — no external surface is generated; both are valid ways to keep an entity internal-only. `summary` entities: create/update/delete permanently disabled even if listed.
+The `actions` field inside `expose` filters which endpoints are generated; omit to enable all applicable (except `delete`). `expose: []` (empty) is equivalent to `expose` absent — no external surface is generated; both are valid ways to keep a document internal-only. `characteristic: summary` Documents: create/update/delete permanently disabled even if listed (§4.1e).
 
-Setting `disabled: true` on a standard action (`create`/`update`/`delete`/`find`) removes it from every surface — equivalent to the action never existing. Custom actions are simply omitted instead.
+Setting `disabled: true` on a reserved action removes it from every surface — equivalent to the action never existing. Custom actions are simply omitted instead.
 
 **Override:** use `kind: Api` (Core Extended §2) for custom paths, versioning, or disabling specific endpoints on a per-surface basis. `kind: Api` can only modify already-exposed surfaces — it cannot create access where `expose` has not been set.
 
@@ -419,7 +689,7 @@ uses:
 
 `idempotent: true` REQUIRES an `idempotency_key` source (`header` / `param` / `server`). Framework maintains idempotency store `(tenant, action, key) → pending|completed + stored response`. Duplicate after completed → replay original response. Duplicate while pending → wait/409. `from: server` → two-step prepare (browser double-submit protection). Entries expire by retention, never deleted on commit. Retention defaults to **24 hours** and is read from the global config key `core.idempotency_retention` (a `forma.core` `kind: Config` key — environment-resolvable, changeable at runtime without redeploy); implementations MUST NOT hard-code the window.
 
-**Optimistic concurrency via `version`**, default-on for all Entities: update accepts version client read; mismatch → `409 CONFLICT` with current version. `updated_at` is audit metadata only.
+**Optimistic concurrency via `version`**, default-on for all Documents: update accepts version client read; mismatch → `409 CONFLICT` with current version. `updated_at` is audit metadata only.
 
 #### 11.4 Async actions
 
@@ -432,6 +702,24 @@ Optional, runs alongside any impl. Core Basic scope: `after` timing only; read-o
 ### 12. Event Spec
 
 Every event MUST be declared and linked from an action via `emits`.
+
+**Event naming convention:** reserved prefixes lock the event type.
+
+- `before_*` events (e.g., `before_cancel`, `before_submit`, `before_delete`) → **always `sync`**. They are gates that must complete before state changes — logically impossible to be async.
+- `on_*` events (e.g., `on_cancel`, `on_submit`, `on_delete`) → **always `async`**. They occur after commit, pure notifications — logically impossible to be sync and cancel something already committed.
+- Custom events NOT following the `before_*`/`on_*` pattern (e.g., `reconcile_needed`, `stock_low_alert`) → **`type` MUST be written explicitly**, because there is no signal from the name.
+
+`forma apply` MUST **reject** any event whose `type` contradicts the prefix (e.g., `type: async` under `before_cancel`).
+
+These rules automatically apply to all reserved actions (§11.1) — every reserved action has a paired `before_{action}` (sync) and `on_{action}` (async) without needing to be manually specified per action.
+
+**Event handler priority (sync events only):** handlers on a sync event run in order of `priority` (smaller runs first). Use multiples of 10 so new handlers can be inserted between existing ones without renumbering.
+
+| Tier | Range | When to use | Default (if not written) |
+|---|---|---|---|
+| **Critical** | 1–9 | Gate that must be checked first, before any business logic — e.g., fraud check, compliance block. Use sparingly. | — |
+| **Normal** | 10–89 | Majority of business logic handlers — Integrator, custom hooks. | **10** |
+| **Low** | 90–99 | Non-critical side-effects that must still be sync but order-unimportant vs other handlers — e.g., local cache update. | — |
 
 ```yaml
 events:
@@ -455,7 +743,7 @@ events:
 
 #### 12.1 Durability contract
 
-`publish.durable: true` → event written to outbox before action returns. Entity: same DB transaction as data change (atomic). Service: independent outbox. Reliability requires **both** sides: publisher durable + subscriber durable = reliable. Non-durable publisher + durable subscriber = validation error.
+`publish.durable: true` → event written to outbox before action returns. Document: same DB transaction as data change (atomic). Service: independent outbox. Reliability requires **both** sides: publisher durable + subscriber durable = reliable. Non-durable publisher + durable subscriber = validation error.
 
 #### 12.2 Outbox (normative)
 
@@ -478,7 +766,7 @@ spec:
 ```
 
 - Publisher's contract consequences stay in publisher's `deliver`; optional/third-party reactions → Subscription.
-- `forma describe entity <name>` MUST display merged fan-out (publisher deliver + all Subscriptions).
+- `forma describe document <name>` MUST display merged fan-out (publisher deliver + all Subscriptions).
 - Subscriptions enter consumer module's consent footprint.
 - Two-sided durability contract applies unchanged.
 
@@ -488,26 +776,256 @@ Three levels in Core Basic, evaluated in order:
 
 1. **Field** — per-field `rules` (§10.6), automatic, before handler.
 2. **Input** — per-action `params.validate`.
-3. **State** — per-action `conditions`, Entity only.
+3. **State** — per-action `conditions`, Document only.
 
 Error response: `{ error: { code, message, details: [{level, field?, message}] }, meta: { request_id } }`.
 
 ### 14. State Machine Spec
 
-Entity only.
+Document only. Forma has a **two-layer** state model:
+
+1. **`doc_status`** — built-in lifecycle, framework-enforced (§4.1b). Three values: `draft`, `submitted`, `cancelled`. This is a CLOSED set — no new values can be added. Granular business process needs use a separate field (layer 2).
+2. **User-defined state machine** — for business-specific processes on a separate field, independent of `doc_status`.
 
 ```yaml
 state_machine:
-  field: status
-  initial: draft
+  field: fulfillment_stage        # a business field, independent from doc_status
+  initial: awaiting_payment
   transitions:
-    - from: draft
-      to: sent
-      via: send                  # action name
-      guard: "len(resource.items) > 0 and resource.total > 0"
+    - from: awaiting_payment
+      to: paid
+      via: mark-paid              # action name
+      guard: "doc_status == 'submitted'"
+    - from: paid
+      to: fulfilled
+      via: fulfill
 ```
 
+The two layers are **independent** — there is no `maps_to` between a business field and `doc_status`. Any relationship between them (if needed) is expressed through ordinary `conditions` on actions, not a new mechanism.
+
 Only declared transitions allowed; anything else → `STATE_TRANSITION_ERROR`. Guards are inline Starlark. Role-based approval on transitions is `kind: Workflow` (Extended).
+
+#### 14a Transaction Date & Period Closing
+
+For Documents with `characteristic: transaction`, a field named `transaction_date` (type: `date` or `datetime`) MUST be explicitly declared. `forma apply` REJECTS a `characteristic: transaction` Document without this field. Unlike `doc_status` (always auto-injected), `transaction_date` is explicitly declared so the developer is fully aware it exists and where its value comes from.
+
+**`transaction_date` vs `created_at`:**
+
+| | `created_at` (system date) | `transaction_date` (business date) |
+|---|---|---|
+| Function | Actual event order, audit | Which accounting/reporting period recognizes it |
+| Can be manipulated? | No | Yes, subject to `backdate_policy` / `forward_date_policy` |
+| Used for sequencing/audit? | **Yes, always** | **Never** |
+
+Sequencing/audit is always based on `created_at`. `transaction_date` purely determines which reporting period recognizes it. Using `transaction_date` for sequencing causes cascading recompute on backdate — an expensive real-world problem.
+
+**Backdate & Forward-date Policy:**
+
+```yaml
+# Global default (forma.yaml)
+transaction_defaults:
+  backdate_policy:
+    max_days_back: 3
+    override_permission: null       # null = nobody can override
+  forward_date_policy:
+    max_days_forward: 0             # most conservative default
+    override_permission: accounting.post_forward_dated
+  period_guard:
+    enabled: true
+
+# Per-resource override
+resource:
+  name: journal-entry
+backdate_policy:
+  max_days_back: 7
+  override_permission: accounting.post_backdated
+```
+
+**Period Closing** is modeled as a **Document itself** (`period-closing`), not just a CLI command — so it gets all the built-in infrastructure for free: `doc_status`, reference guards, audit trail, permission model.
+
+```yaml
+resource:
+  name: period-closing
+  type: document
+  characteristic: transaction
+
+fields:
+  - name: transaction_date
+    type: date
+  - name: period_ref
+    type: relation
+    relation: gl/gl-monthly-balance
+
+actions:
+  - name: submit                 # submit = trigger forma summary finalize
+    conditions:
+      - script: "all_reconciliations_done(period_ref)"
+  - name: cancel                 # cancel = trigger forma summary unfinalize
+    required_permission: accounting.reopen_period
+    conditions:
+      - script: "reason != ''"
+```
+
+Documents targeting a closed period need an explicit `period_guard.override_permission`.
+
+#### 14b Data Archiving & Retention
+
+**Only transactions are archived; masters are snapshot to preserve temporal consistency.** The principle: a view-only app archive must be self-contained and consistent — it must not query the live DB. When old transactions are archived, referenced masters are snapshot "as-of" the archive date and stored together in the archive in Parquet format.
+
+**What gets archived:**
+- **Transactions (`characteristic: transaction`)** — always archived when age ≥ `max_age`: Invoices, Payments, Journal Entries, Purchase Orders, Stock Movements, etc.
+- **Masters (`characteristic: master`)** — ONLY snapshot, if referenced by an archived transaction. The snapshot is stored alongside the transaction archive; the master row in production remains intact (not deleted). Master is flagged `locked_for_deletion = true` while any archived transaction references it.
+
+**`forma archive run`:**
+
+```bash
+forma archive run --max-age 3y --dry-run
+# Scans for transactions older than cutoff date
+# Identifies master references
+# Shows plan: what gets archived, what masters get snapshot
+# Requires operator confirmation
+
+forma archive run --max-age 3y
+# Executes archive: writes transactions + master snapshots to Parquet
+# Sets locked_for_deletion flags on referenced masters
+# Removes archived transaction rows from production (optional: --delete-masters for orphaned masters)
+```
+
+**Archive storage format:**
+
+```
+archive-2021-2023.parquet/
+  manifest.yaml
+    archive_date: 2023-07-08
+    max_age: 3y
+    record_count: ...
+  transactions/
+    journal_entries.parquet
+    invoices.parquet
+  masters/
+    customers.parquet      # snapshot as-of archive_date
+    products.parquet
+```
+
+**View-only access:** `forma archive view --batch-id archive-2021-2023` — queries Parquet directly, no live DB. **Restore:** only to staging environment (`forma archive restore-batch`), with dependency-ordered restore. Selective per-document restore is NOT supported (risk of corrupt state).
+
+**Retention config:**
+
+```yaml
+# forma.yaml
+retention:
+  archive_after: "3y"           # calculated from transaction_date
+  strategy: cold_storage        # cold_storage | delete
+  destination: s3://archive-bucket
+  master_delete_allowed: true   # allow orphan master deletion from live (requires approval)
+```
+
+Documents may opt out: `resource.retention.disabled: true`.
+
+**Master locking fields** (auto-injected when archiving is active):
+
+```yaml
+fields:
+  - name: locked_for_deletion    # set true when archived transactions reference this master
+    type: boolean
+    default: false
+    immutable: true
+  - name: archived_reference_count
+    type: integer
+    default: 0
+    audited: true
+```
+
+Summary Documents (`characteristic: summary`) are **never archived** — if source transactions remain queryable, the summary can be rebuilt. Archiving a summary would turn it into a static snapshot that no longer reflects data reality.
+
+#### 14c Error Glossary
+
+Framework-enforced errors (reserved action guards, period locks, saga, etc.) use standardized error codes — not hardcoded inline messages — for consistency when multi-language support is needed. A single file (`forma-error-glossary.yaml`) distributed as part of Core Basic, versioned with Core Basic.
+
+Format: `code` (serves both as programmatic matcher AND i18n lookup key — no separate `key` field needed), `params`, `default_message`.
+
+```yaml
+- code: FORMA.DOC.UPDATE_NOT_DRAFT
+  params: [resource_name, doc_status]
+  default_message: "{resource_name} cannot be modified because it is {doc_status}, not draft"
+
+- code: FORMA.DOC.DELETE_REFERENCED
+  params: [resource_name, blocking_resource, blocking_id]
+  default_message: "{resource_name} cannot be deleted because it is still referenced by {blocking_resource} #{blocking_id}"
+
+- code: FORMA.DOC.CANCEL_REFERENCED
+  params: [resource_name, blocking_resource, blocking_id]
+  default_message: "{resource_name} cannot be cancelled because it is still referenced by {blocking_resource} #{blocking_id}"
+
+- code: FORMA.DOC.SUBMIT_NOT_DRAFT
+  params: [resource_name, doc_status]
+  default_message: "{resource_name} cannot be submitted because it is {doc_status}, not draft"
+
+- code: FORMA.PERIOD.CLOSED
+  params: [transaction_date, period_ref]
+  default_message: "Cannot post to {transaction_date}, period {period_ref} is closed"
+
+- code: FORMA.TXN.BACKDATE_EXCEEDED
+  params: [transaction_date, max_days_back]
+  default_message: "Transaction date exceeds backdate limit of {max_days_back} days"
+
+- code: FORMA.TXN.TRANSACTION_DATE_MISSING
+  params: [resource_name]
+  default_message: "{resource_name} has characteristic: transaction but no transaction_date field declared"
+
+- code: FORMA.DOC.CREATE_SUBMIT_NOT_AVAILABLE
+  params: [resource_name]
+  default_message: "create-submit is not available on {resource_name}: submit action is disabled"
+
+- code: FORMA.SAGA.OUTCOME_UNKNOWN
+  params: [event_name, target_resource]
+  default_message: "Call to {target_resource} result cannot be determined after retries exhausted — manual verification required"
+```
+
+**Rules:**
+- `code` is never changed or reused after release — third-party integrations that `switch(error.code)` must not silently break. Add new entries for new situations.
+- Only covers errors from framework-enforced mechanisms. Custom `conditions:` errors from developers are free to use their own messages but SHOULD follow the same `code` + `params` format with an App-specific namespace (not `FORMA.*`).
+
+#### 14d Saga & Manual Intervention
+
+When a custom action invokes `ctx.call_action()` on a resource in a **different dataspace or process** (cross-boundary), the framework detects this at runtime and manages compensation through a Saga log. Same-dataspace calls benefit from standard ACID rollback — no Saga needed.
+
+**Error classification:**
+
+| Class | Nature | Handling |
+|---|---|---|
+| Business error | Definitive response (validation rejected) | Compensate immediately |
+| Server error | Definitive response (500-class, but reply did arrive) | Compensate immediately |
+| Network error | **Unknown** whether execution happened or not | Idempotent retry first, NOT immediate compensate |
+
+Network errors must not trigger immediate compensation: if the remote side already succeeded (only the response was lost), compensating would create new inconsistency, not fix it.
+
+**Requirements for cross-boundary calls:**
+- Target action MUST be `idempotent: true` — `forma apply` rejects Integrators targeting non-idempotent actions.
+- Idempotency key is generated once at the start (stored in `ctx.kvstore`), reused across all retries — never regenerated per attempt.
+- After retries exhausted without definitive response → enters `outcome_unknown`, NOT assumed success or failure.
+
+**Config (default + per-Integrator override):**
+
+```yaml
+# Global
+integrator_defaults:
+  retry:
+    max_attempts: 5
+    backoff: exponential
+    base_delay_ms: 500
+    max_delay_ms: 30000
+  outcome_unknown_after: 5
+```
+
+**Manual intervention queue** — resource: `compensation-failure-log` (`forma.core`, `persist.category: compliance`).
+
+| Sub-status | Meaning | Correct action |
+|---|---|---|
+| `compensation_failed` | Step failed, undo attempted, undo also failed | Human fixes manually, state is known |
+| `outcome_unknown` | Unknown whether step succeeded, retries exhausted | Human **verifies actual state first** before any action — must NOT present an automatic retry/compensate button |
+
+CLI: `forma saga list` / `forma saga resolve <id>`. No unbounded automatic retry — when a human is needed, the system does not pretend it can resolve itself.
 
 ---
 
@@ -547,8 +1065,8 @@ Every action with `audit: true` records: who, what, resource, workspace, before/
 
 ### 16. API Delivery
 
-- **Exposure model (D49):** deny-by-default. No external endpoint is created unless the entity opts in via `spec.expose`. Internal callers (same-process services, Starlark scripts, events) are unaffected and always have access.
-- **Multi-protocol:** when an entity opts in via `spec.expose: [{type: rest} | {type: grpc} | {type: ws}]`, the router MUST generate protocol-specific routes for each declared type. REST and WebSocket are required transports; gRPC is recommended.
+- **Exposure model (D49):** deny-by-default. No external endpoint is created unless the document opts in via `spec.expose`. Internal callers (same-process services, Starlark scripts, events) are unaffected and always have access.
+- **Multi-protocol:** when a document opts in via `spec.expose: [{type: rest} | {type: grpc} | {type: ws}]`, the router MUST generate protocol-specific routes for each declared type. REST and WebSocket are required transports; gRPC is recommended.
 - **Workspace prefix:** every external route is prefixed with the workspace identifier. `workspace_slug` is a human-readable alias (configurable per Workspace); the router MUST fall back to the workspace UUID when no slug is set.
 - **Internal dispatch:** same-process callers MUST bypass the network — the router detects registry locality and dispatches via direct function call. Cross-process callers use the configured protocol adapter.
 - **Route scalability:** the router MUST use a radix-tree (or equivalent O(path segments)) lookup structure so that route count does not linearly degrade performance.
@@ -556,7 +1074,7 @@ Every action with `audit: true` records: who, what, resource, workspace, before/
 - **WebSocket (required when exposed):** all actions; channel convention in §19.4.
 - **Admin panel (recommended):** auto-generated from manifests.
 - **Query conventions:** `?page&per_page&sort&direction&fields&filter[field][op]=value&search&include`. Filter operators: `eq neq gt gte lt lte between in nin like ilike null notnull`.
-- **Pagination bounds:** `per_page` defaults to **20**, maximum **100**; values above the maximum are clamped to it; non-numeric or negative values → `VALIDATION_ERROR` (422). Implementations MAY lower the maximum per entity but MUST NOT raise it above 100.
+- **Pagination bounds:** `per_page` defaults to **20**, maximum **100**; values above the maximum are clamped to it; non-numeric or negative values → `VALIDATION_ERROR` (422). Implementations MAY lower the maximum per document but MUST NOT raise it above 100.
 
 Response envelopes: list `{ data, meta: {page, per_page, total, total_pages}, links }`. Single `{ data, meta: {request_id, timestamp} }`. Error `{ error: {code, message, details}, meta }`.
 
@@ -594,7 +1112,7 @@ persist:
     - { field: status, type: btree }
 ```
 
-Categories map to PostgreSQL schemas. Cross-category SQL joins forbidden (`CROSS_CATEGORY_ACCESS_DENIED`). Primary key: **UUID v7** (time-ordered) for all entities. Natural keys = unique constraint per tenant, never the PK.
+Categories map to PostgreSQL schemas. Cross-category SQL joins forbidden (`CROSS_CATEGORY_ACCESS_DENIED`). Primary key: **UUID v7** (time-ordered) for all documents. Natural keys = unique constraint per tenant, never the PK.
 
 Normative table structure:
 ```sql
@@ -602,6 +1120,9 @@ CREATE TABLE {schema}.{module}_{plural} (
   id          uuid        PRIMARY KEY DEFAULT gen_uuid_v7(),
   tenant_id   uuid        NOT NULL,
   version     integer     NOT NULL DEFAULT 1,      -- optimistic concurrency
+  doc_status  text,                                 -- reserved lifecycle (§4.1b)
+                                                    -- NULL = lifecycle-free (§4.1d)
+                                                    -- 'draft' | 'submitted' | 'cancelled'
   created_at  timestamptz NOT NULL DEFAULT now(),
   updated_at  timestamptz NOT NULL DEFAULT now(),
   deleted_at  timestamptz,
@@ -610,11 +1131,13 @@ CREATE TABLE {schema}.{module}_{plural} (
 );
 ```
 
+The `doc_status` column is auto-injected by the framework for all `kind: Document`. It is NOT declared in `fields:` — it is a reserved field (§4.1a). Valid values: `NULL` (lifecycle-free), `'draft'`, `'submitted'`, `'cancelled'`.
+
 Indexed fields → generated columns: `_field VARCHAR GENERATED ALWAYS AS (data->>'field') STORED`. Natural key → `UNIQUE (tenant_id, _field) WHERE deleted_at IS NULL`.
 
 ### 20. Migration
 
-Three types: (1) **Structural** — fully automatic from Entity diffs, never hand-written. (2) **Custom DDL** — `kind: Migration` for indexes, functions, triggers. DML rejected at runtime. (3) **Data migration** — scaffolded scripts, run/rollback by version.
+Three types: (1) **Structural** — fully automatic from Document diffs, never hand-written. (2) **Custom DDL** — `kind: Migration` for indexes, functions, triggers. DML rejected at runtime. (3) **Data migration** — scaffolded scripts, run/rollback by version.
 
 Field rename MUST be declared via `renamed_from` on the field — otherwise the diff interprets it as drop+add; field removal requires two steps (deprecate, then remove) across two applied versions. Backfills belong to type-3 data-migration scripts.
 
@@ -624,7 +1147,7 @@ Lifecycle: `create → provisioning → seed default roles + reference seeds →
 
 ### 22. forma.core Resources
 
-All implementations MUST provide: `workspace`, `user`, `app-membership` (per-app membership + role assignments), `role`, `role-assignment`, `api-key`, `session`, `job`, `audit-log` (append-only, framework-written, read-only API), `failed-event` (append-only dead-letter store, framework-written — records event payload, target, error, attempt count; replayable via an admin action), `setting` (entities); `health`, `metrics` (services).
+All implementations MUST provide: `workspace`, `user`, `app-membership` (per-app membership + role assignments), `role`, `role-assignment`, `api-key`, `session`, `job`, `audit-log` (append-only, framework-written, read-only API), `failed-event` (append-only dead-letter store, framework-written — records event payload, target, error, attempt count; replayable via an admin action), `setting` (documents); `health`, `metrics` (services).
 
 ### 23. CLI
 
@@ -644,7 +1167,7 @@ Normative (Credible Exit Guarantee D31): format is part of this open spec. Backu
 
 ### 26. Scripting (Starlark)
 
-Single scripting language. Entry points: `def validate(resource, params, ctx)` → `ok()` / `fail(msg|{field, message})`; Entity action scripts `def execute(resource, params, ctx)` → result object (`resource` bound to the target record; absent for `create`-style actions); Service action scripts `def execute(params, ctx)`. Sandbox limits: 5000ms, 64MB, 100k iterations, no network/filesystem/subprocess, ≤50 db queries, ≤1000 records per execution.
+Single scripting language. Entry points: `def validate(resource, params, ctx)` → `ok()` / `fail(msg|{field, message})`; Document action scripts `def execute(resource, params, ctx)` → result object (`resource` bound to the target record; absent for `create`-style actions); Service action scripts `def execute(params, ctx)`. Sandbox limits: 5000ms, 64MB, 100k iterations, no network/filesystem/subprocess, ≤50 db queries, ≤1000 records per execution.
 
 Resource API: `invoice.load(id)`, `invoice.find_by_number(nk)`, chainable `invoice.query().where(...).include(...).get()/first()/count()`, `invoice.new().set(...).save()`, `inv.call("mark-paid", {...})`, field access `inv.field.total`, child helpers `inv.add_child/update_child/remove_child("items", ...)`.
 
@@ -660,14 +1183,18 @@ Context: `ctx.user.{id,role,permissions}`, `ctx.tenant.{id,name,config()}`, `ctx
 
 An implementation is Core Basic-conforming when it provides:
 
-1. **Manifest loader:** `apiVersion/kind/metadata/spec`, unknown apiVersion/kind rejected, multi-doc ≡ multi-file, discovery by scan.
-2. **Kinds:** App, Module, Entity, Service, Config, Migration with specs as defined; derived surfaces (HTTP, WebSocket, docs) from Entity.
-3. **Fields:** incl. child (jsonb+table), relation, natural key with atomic gap-free generation.
-4. **Actions:** standard set, five impl types, `required_permission` + `uses` with runtime enforcement and validate-time honesty scan; framework-enforced idempotency store with response replay and prepare step; optimistic concurrency via `version` CAS.
-5. **Events:** durability contract, transactional outbox + worker with idempotent sync delivery; `kind: Subscription` with compiled fan-out and consent-time footprint.
-6. **Validation:** levels 1–3 with normative error envelope; state machine with guards.
+1. **Manifest loader:** `apiVersion/kind/metadata/spec`, unknown apiVersion/kind rejected, multi-doc ≡ multi-file, discovery by scan. `kind: Entity` accepted as deprecated alias for `kind: Document`.
+2. **Kinds:** App, Module, Document, Service, Config, Migration with specs as defined; derived surfaces (HTTP, WebSocket, docs) from Document.
+3. **Fields:** incl. child (jsonb+table), relation, natural key with atomic gap-free generation. Reserved field names (`owner`, `created_at`, `modified`, `doc_status`, `amends`, `amended_by`, `version`) enforced — custom fields MUST NOT reuse them; `transaction_date` validated for `characteristic: transaction`.
+3. **Fields:** incl. child (jsonb+table), relation, natural key with atomic gap-free generation. Reserved field names (`owner`, `created_at`, `modified`, `doc_status`, `amends`, `amended_by`, `version`) enforced — custom fields MUST NOT reuse them; `transaction_date` validated for `characteristic: transaction`.
+4. **Actions:** eight reserved actions (`create`, `update`, `submit`, `cancel`, `delete`, `amend`, `create-submit`, `amend-submit`) with framework-enforced base guards (§4.1b, §11.1) — developers MAY add conditions but CANNOT weaken guards; auto-derived `create-submit` and `amend-submit` when applicable; five impl types; `required_permission` + `uses` with runtime enforcement and validate-time honesty scan; framework-enforced idempotency store with response replay and prepare step; optimistic concurrency via `version` CAS.
+5. **Events:** event naming convention enforced (`before_*` = sync, `on_*` = async); durability contract; transactional outbox + worker with idempotent sync delivery; `kind: Subscription` with compiled fan-out and consent-time footprint.
+6. **Validation:** levels 1–3 with normative error envelope; two-layer state machine (`doc_status` built-in lifecycle + user-defined business state machine); `STATE_TRANSITION_ERROR` for invalid transitions.
 7. **Security:** auth strategies, RBAC catalog-on-declaration, workspace isolation at query level (404), cross-app grant verification, audit.
-8. **Persist:** category schemas, UUID v7, normative table structure, cross-category SQL block.
-9. **Migration:** structural derivation; `kind: Migration` DDL-only execution.
-10. **Operations:** forma.core resources; CLI verbs; dev environment contract; backup format + restore (transform, remap, dry-run) — never license-gated.
-11. **Scripting:** Starlark sandbox with stated limits and script context.
+8. **Persist:** category schemas, UUID v7, normative table structure (including `doc_status` column), cross-category SQL block.
+9. **Migration:** structural derivation from Document diffs; `kind: Migration` DDL-only execution.
+10. **Operations:** forma.core resources (incl. `compensation-failure-log`); CLI verbs (incl. `forma archive run|view|restore-batch`, `forma saga list|resolve`); dev environment contract; backup format + restore (transform, remap, dry-run) — never license-gated.
+11. **Scripting:** Starlark sandbox with stated limits; Document action scripts (with `resource` bound) and Service action scripts; script context.
+12. **Lifecycle:** `doc_status` (draft/submitted/cancelled/NULL) enforced at runtime; lifecycle-free detection (submit/cancel/amend all disabled → `doc_status = NULL`, guards bypassed); referenceability rule (only `submitted`/`null` documents can be targeted by `relation` fields); amendment version chain (`amends`/`amended_by`); reference guard on `delete` (ON DELETE RESTRICT) and `cancel` (with `before_cancel` unwind path).
+13. **Transaction date:** `transaction_date` field validation for `characteristic: transaction`; backdate/forward-date policy enforcement; period closing guard.
+14. **Error codes:** standard `FORMA.*` error codes per the error glossary (§14c), returned in normative error envelope.

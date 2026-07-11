@@ -1,0 +1,23 @@
+{
+  "name": "@forma/client",
+  "version": "0.1.0",
+  "description": "Typed browser/Node client runtime for the Forma generated REST API — the hand-written half of forma.api; `forma generate` emits the typed half on top of it",
+  "license": "FSL-1.1-ALv2",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "tsc"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.0"
+  }
+}

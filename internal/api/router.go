@@ -3,10 +3,10 @@ package api
 import (
 	"net/http"
 
-	"github.com/forma/forma/internal/action"
-	"github.com/forma/forma/internal/entity"
-	"github.com/forma/forma/pkg/spec"
 	"github.com/go-chi/chi/v5"
+	"github.com/primadi/forma/internal/action"
+	"github.com/primadi/forma/internal/entity"
+	"github.com/primadi/forma/pkg/spec"
 )
 
 // RouterBuilder constructs a Forma API router.

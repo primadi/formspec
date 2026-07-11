@@ -47,7 +47,7 @@ Forma is not built from a blank slate. It synthesizes the best ideas from six pr
 
 | Source | What Forma took from it |
 |---|---|
-| **Frappe** (ERPNext) | How to define business entities, workflows, and modules **declaratively**. DocType → `kind: Entity`. Vertical modules (accounting, HRM, inventory) as first-class ecosystem citizens. Form layout hints, print formats, and approval workflows attached to state machines. |
+| **Frappe** (ERPNext) | How to define business entities, workflows, and modules **declaratively**. DocType → `kind: Document`. Vertical modules (accounting, HRM, inventory) as first-class ecosystem citizens. Form layout hints, print formats, and approval workflows attached to state machines. |
 | **PocketBase** | The principle of **"One Definition, Many Protocols"** — from a single resource definition, you automatically get HTTP endpoints, WebSocket handlers, admin panel UI, API docs, and generated types. Auth required by default; anonymous access must be explicitly declared. DX benchmark: `forma dev` — one command, everything runs. Realtime subscription conventions. |
 | **Dapr** | **Patterns, not a runtime dependency.** The sidecar contract for polyglot business logic. The component model as inspiration: the backend behind `ctx.*` primitives can be swapped (Valkey ↔ Redis ↔ NATS) without changing the contract. Dapr is not used as infrastructure because its building blocks are not tenant-aware, its sidecar breaks the single-binary story, and Forma needs semantics (registry, `tenant_affinity`, circuit breaker) that Dapr does not provide out of the box. |
 | **OPA** (Open Policy Agent) | A **declarative policy engine for governance**. Rego as an auditable rule language. Forma embeds OPA as a Go library inside `forma-control` — applied strictly to governance (deployment, approval, key management), never to business data authorization. |
@@ -58,7 +58,7 @@ Forma is not built from a blank slate. It synthesizes the best ideas from six pr
 
 ## 4. Core Principles
 
-1. **Everything is a Resource.** All concepts — entities, services, pages, dashboards, config, modules, policies — are modeled as resources using the same manifest format (`apiVersion/kind/metadata/spec`). `Entity` handles stateful data with CRUD and state machines; `Service` handles stateless computation. Many other kinds cover UI, governance, packaging, and configuration. External integrations must be wrapped as Services.
+1. **Everything is a Resource.** All concepts — documents, services, pages, dashboards, config, modules, policies — are modeled as resources using the same manifest format (`apiVersion/kind/metadata/spec`). `Document` handles stateful data with CRUD, a built-in lifecycle (`doc_status`: draft → submitted → cancelled), and state machines; `Service` handles stateless computation. Many other kinds cover UI, governance, packaging, and configuration. External integrations must be wrapped as Services.
 2. **One Definition, Many Protocols.** A resource YAML is the single source of truth for all surfaces: REST API, WebSocket, admin panel, documentation, and generated types.
 3. **Convention over Configuration.** Sensible defaults for everything; override only what you need.
 4. **Security by Default.** Auth is mandatory. Tenant isolation is automatic and cannot be bypassed. No implicit permissions. Cross-tenant access returns 404 (not 403 — existence is not leaked).
@@ -272,6 +272,7 @@ All kinds share the manifest format. The catalog is governed by concern:
 | **Extension mechanism** | `KindDefinition` | Core Extended |
 | **UI / Frontend** | `Page`, `Form`, `Table`, `Dashboard`, `Widget`, `Report`, `Wizard`, `Kanban`, `Timeline`, `Menu`, `Print`, `Theme` | Frontend Spec |
 | **Governance** | `Environment`, `Policy` | Control Spec |
+| **Infrastructure** | `Datastore` | Datastore Spec |
 
 **Derived by default:** CRUD API endpoints, the admin panel, and API documentation are generated automatically from an `Entity` manifest — no additional manifest is required. The `Page`, `Form`, `Table`, and `Menu` kinds exist only to **override** those defaults.
 

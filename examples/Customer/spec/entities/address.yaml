@@ -6,7 +6,7 @@ metadata:
   description: Alamat pelanggan — billing, shipping, dll.
 spec:
   version: v1
-  characteristics: [master]
+  characteristic: master
 
   fields:
     - name: customer_id

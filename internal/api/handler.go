@@ -9,11 +9,11 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/forma/forma/internal/action"
-	"github.com/forma/forma/internal/auth"
-	"github.com/forma/forma/internal/db"
-	"github.com/forma/forma/internal/validation"
-	"github.com/forma/forma/pkg/spec"
+	"github.com/primadi/forma/internal/action"
+	"github.com/primadi/forma/internal/auth"
+	"github.com/primadi/forma/internal/db"
+	"github.com/primadi/forma/internal/validation"
+	"github.com/primadi/forma/pkg/spec"
 )
 
 // HandlerFactory creates HTTP handlers backed by an EntityStore.

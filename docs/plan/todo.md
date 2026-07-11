@@ -1,9 +1,76 @@
 # Forma Implementation Progress
 
-**Last Updated:** 2026-07-07  
+**Last Updated:** 2026-07-10  
 **Total Tests:** ~210 (all passing)
 
 > Checklist implementasi Forma framework. Setiap task ditandai saat selesai.
+
+---
+
+## Fase 0 — Plane Protocol & YAML Pipeline
+
+Foundation phase: two-stage YAML pipeline (register → deploy) replacing direct filesystem loading.
+
+### 0.1 Spec Updates
+
+| # | Task | Status |
+|---|---|---|
+| 0.1.1 | Update `06-plane-protocol.md`: YAML Registration Pipeline §0, ETag conditional pull, hash optimization, dev mode, evidence types | ✅ |
+| 0.1.2 | Update `02-core-basic.md` §6: two-stage pipeline, dev workflow, architectural rule | ✅ |
+| 0.1.3 | Create changelog entry for v0.2.0 plane protocol | ✅ |
+
+### 0.2 Control Plane — Artifact & Deployment API (`internal/artifact/`, `internal/control/`)
+
+| # | Task | Status |
+|---|---|---|
+| 0.2.1 | `internal/artifact/artifact.go` — `Artifact`, `ArtifactEnvelope`, `FileManifest` types, sha256 computation | ⏳ |
+| 0.2.2 | `internal/artifact/signing.go` — Ed25519 signing, envelope creation, verification | ⏳ |
+| 0.2.3 | `internal/artifact/store.go` — DB-backed artifact CRUD with hash indexing (`forma_control.artifacts`, `deployments`, `evidence` tables) | ⏳ |
+| 0.2.4 | `internal/control/register.go` — `POST /v1/artifacts`: receive YAML, validate, hash, sign, store | ⏳ |
+| 0.2.5 | `internal/control/snapshot.go` — `GET /v1/snapshot`: build signed snapshot, ETag support, 304 handling | ⏳ |
+| 0.2.6 | `internal/control/evidence.go` — `POST /v1/evidence`: receive deploy_status, health; append-only store | ⏳ |
+| 0.2.7 | `internal/control/poll.go` — `POST /v1/poll` (dev-only): trigger immediate pull | ⏳ |
+| 0.2.8 | `internal/control/server.go` — HTTP/gRPC server, middleware, routing | ⏳ |
+| 0.2.9 | `cmd/forma-control/main.go` — Wire all components, `--dev` flag, SQLite control DB | ⏳ |
+
+### 0.3 Resource Plane — Pull-Based Deployment (`internal/resource/`)
+
+| # | Task | Status |
+|---|---|---|
+| 0.3.1 | `internal/resource/snapshot.go` — Snapshot fetcher, ETag tracking, version management | ⏳ |
+| 0.3.2 | `internal/resource/artifact.go` — Artifact fetcher, verifier (signature chain), loader | ⏳ |
+| 0.3.3 | `internal/resource/deployer.go` — Convergence engine: diff → hash compare → fetch → load → emit evidence | ⏳ |
+| 0.3.4 | `internal/resource/evidence.go` — Evidence buffer (disk-backed), sender, retry | ⏳ |
+| 0.3.5 | `internal/resource/local.go` — Local deployment manifest read/write (`deployment_manifest.json`) | ⏳ |
+| 0.3.6 | `internal/resource/dev.go` — Dev mode: `POST /v1/poll` handler, 10s poll interval | ⏳ |
+
+### 0.4 Modify Existing Code
+
+| # | Task | Status |
+|---|---|---|
+| 0.4.1 | `internal/manifest/loader.go` — Add `LoadFromBytes()` for loading from artifact envelope | ⏳ |
+| 0.4.2 | `internal/entity/registry.go` — Add `LoadFromArtifact()`, track deployment state (artifact_id, sha256, version) | ⏳ |
+| 0.4.3 | `internal/entity/registry.go` — Replace `LoadEntities()` direct filesystem loading with artifact-based loading | ⏳ |
+| 0.4.4 | `cmd/forma-resource/main.go` — Replace `--spec` with `--control-url`, implement deploy loop | ⏳ |
+| 0.4.5 | `cmd/forma-dev-init/main.go` — Route through Control Plane registration API | ⏳ |
+| 0.4.6 | `cmd/forma-entity-sync/main.go` — Mark obsolete; rewrite as `forma apply` or remove | ⏳ |
+
+### 0.5 Dev Workflow
+
+| # | Task | Status |
+|---|---|---|
+| 0.5.1 | `Makefile` — `make dev` starts both planes + watcher | ⏳ |
+| 0.5.2 | `forma apply` CLI (in `cmd/forma-apply/`) — upload YAML to Control, `--watch` for hot-reload | ⏳ |
+| 0.5.3 | Integration test: `forma apply` → Control receives → Resource pulls → deploys → API works | ⏳ |
+
+### 0.6 Testing & Verification
+
+| # | Task | Status |
+|---|---|---|
+| 0.6.1 | Unit tests: artifact signing/verification, snapshot generation | ⏳ |
+| 0.6.2 | Unit tests: evidence buffering + flush | ⏳ |
+| 0.6.3 | Integration test: hash optimization (deploy same artifact twice = no-op) | ⏳ |
+| 0.6.4 | Integration test: dev mode hot-reload (file change → auto-register → auto-deploy) | ⏳ |
 
 ---
 
@@ -289,16 +356,19 @@ Admin grant: "role kasir → Page Order Management"
 
 ---
 
-## Fase 5 — Control Plane
+## Fase 5 — Control Plane Governance
+
+> **Note:** Plane Protocol implementation (artifact API, snapshot, evidence, deploy) moved to **Fase 0** (foundation). This fase covers pure governance features only.
 
 | # | Task | Status |
 |---|---|---|
-| 5.1 | `forma-control` binary (stub exists) | ⏳ |
-| 5.2 | `kind: Environment` | ⏳ |
-| 5.3 | `kind: Policy` (OPA/Rego) | ⏳ |
-| 5.4 | Artifact signing (ed25519) per D11 | ⏳ |
-| 5.5 | Transparency log (Merkle tree) per D30 | ⏳ |
-| 5.6 | Plane Protocol (gRPC + mTLS) per D47 | ⏳ |
+| 5.1 | `kind: Environment` — validation, lifecycle | ⏳ |
+| 5.2 | `kind: Policy` — OPA/Rego integration, `forma-ctl policy test` | ⏳ |
+| 5.3 | Transparency log — Merkle tree, inclusion proofs (D30) | ⏳ |
+| 5.4 | Two key classes: owner keys (public-only storage) + platform keys (HSM/KMS) | ⏳ |
+| 5.5 | Contract model — grants, consents, licenses (D25, D27, D30, D31) | ⏳ |
+| 5.6 | Deployment approval chains — multi-signer, consent delta | ⏳ |
+| 5.7 | `forma-ctl` emergency CLI — freeze, revoke sessions, key rotate | ⏳ |
 
 ---
 

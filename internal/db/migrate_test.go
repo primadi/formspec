@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/forma/forma/pkg/spec"
+	"github.com/primadi/forma/pkg/spec"
 )
 
 func TestMigrationRunner_EnsureSystemTables(t *testing.T) {

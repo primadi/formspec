@@ -6,7 +6,7 @@ metadata:
   description: Level stok per produk per gudang — system-managed
 spec:
   version: v1
-  characteristics: [summary]
+  characteristic: summary
 
   fields:
     - name: product_id

@@ -6,7 +6,7 @@ metadata:
   description: Saldo per akun per periode — di-update otomatis via reliable event
 spec:
   version: v1
-  characteristics: [summary]
+  characteristic: summary
 
   fields:
     - name: account_id

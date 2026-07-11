@@ -7,22 +7,89 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// DocStatus is the built-in document lifecycle state (Core §4.1).
+// NULL means lifecycle-free — the document does not participate in the lifecycle.
+type DocStatus string
+
+const (
+	DocStatusDraft     DocStatus = "draft"
+	DocStatusSubmitted DocStatus = "submitted"
+	DocStatusCancelled DocStatus = "cancelled"
+)
+
+// IsValidDocStatus returns true if s is a recognized doc_status value (including empty for lifecycle-free).
+func IsValidDocStatus(s string) bool {
+	switch DocStatus(s) {
+	case DocStatusDraft, DocStatusSubmitted, DocStatusCancelled, "":
+		return true
+	default:
+		return false
+	}
+}
+
+// ReservedFieldNames lists fields auto-managed by the framework. Custom fields MUST NOT use these names.
+var ReservedFieldNames = []string{"owner", "created_at", "modified", "doc_status", "amends", "amended_by", "version"}
+
+// IsReservedField returns true if name is a reserved field.
+func IsReservedField(name string) bool {
+	for _, r := range ReservedFieldNames {
+		if name == r {
+			return true
+		}
+	}
+	return false
+}
+
+// ReservedActionNames lists built-in actions with framework-enforced guards.
+var ReservedActionNames = []string{"create", "update", "submit", "cancel", "delete", "amend", "create-submit", "amend-submit"}
+
+// IsReservedAction returns true if name is a reserved action.
+func IsReservedAction(name string) bool {
+	for _, a := range ReservedActionNames {
+		if a == name {
+			return true
+		}
+	}
+	return false
+}
+
+// IsDerivedReservedAction returns true for auto-derived actions (create-submit, amend-submit).
+func IsDerivedReservedAction(name string) bool {
+	return name == "create-submit" || name == "amend-submit"
+}
+
+// OnDelete specifies behavior when a referenced document is deleted (Core §10.5).
+type OnDelete string
+
+const (
+	OnDeleteRestrict OnDelete = "restrict" // default — block deletion
+	OnDeleteCascade  OnDelete = "cascade"  // delete child rows
+	OnDeleteSetNull  OnDelete = "set_null" // set FK to NULL
+)
+
 // EntitySpec defines a stateful, persisted business data resource (Core §4.1).
-type EntitySpec struct {
-	Version         string           `yaml:"version" json:"version"`
-	Plural          string           `yaml:"plural,omitempty" json:"plural,omitempty"`
-	Characteristics []Characteristic `yaml:"characteristics,omitempty" json:"characteristics,omitempty"`
-	Auth            *EntityAuth      `yaml:"auth,omitempty" json:"auth,omitempty"`
-	Persist         *PersistSpec     `yaml:"persist,omitempty" json:"persist,omitempty"`
-	Fields          []Field          `yaml:"fields" json:"fields"`
-	Actions         []Action         `yaml:"actions" json:"actions"`
-	StateMachine    *StateMachine    `yaml:"state_machine,omitempty" json:"state_machine,omitempty"`
-	Events          []EventDecl      `yaml:"events,omitempty" json:"events,omitempty"`
-	Deliver         []DeliveryDecl   `yaml:"deliver,omitempty" json:"deliver,omitempty"`
-	Indexes         []IndexDecl      `yaml:"indexes,omitempty" json:"indexes,omitempty"`
-	Tenant          *TenantDecl      `yaml:"tenant,omitempty" json:"tenant,omitempty"`
-	ExtendStorage   *ExtendStorage   `yaml:"extend_storage,omitempty" json:"extend_storage,omitempty"`
-	Expose          []ExposeConfig   `yaml:"expose,omitempty" json:"expose,omitempty"` // D49 — absent = no external access
+// Deprecated: Use DocumentSpec for new code. EntitySpec is kept for backward compatibility.
+type EntitySpec = DocumentSpec
+
+// DocumentSpec defines a stateful, persisted business data resource (Core §4.1).
+// Renamed from EntitySpec in v0.3.0.
+type DocumentSpec struct {
+	Version           string             `yaml:"version" json:"version"`
+	Plural            string             `yaml:"plural,omitempty" json:"plural,omitempty"`
+	Characteristic    Characteristic     `yaml:"characteristic,omitempty" json:"characteristic,omitempty"`
+	Auth              *EntityAuth        `yaml:"auth,omitempty" json:"auth,omitempty"`
+	Persist           *PersistSpec       `yaml:"persist,omitempty" json:"persist,omitempty"`
+	Fields            []Field            `yaml:"fields" json:"fields"`
+	Actions           []Action           `yaml:"actions" json:"actions"`
+	StateMachine      *StateMachine      `yaml:"state_machine,omitempty" json:"state_machine,omitempty"`
+	Events            []EventDecl        `yaml:"events,omitempty" json:"events,omitempty"`
+	Deliver           []DeliveryDecl     `yaml:"deliver,omitempty" json:"deliver,omitempty"`
+	Indexes           []IndexDecl        `yaml:"indexes,omitempty" json:"indexes,omitempty"`
+	Tenant            *TenantDecl        `yaml:"tenant,omitempty" json:"tenant,omitempty"`
+	ExtendStorage     *ExtendStorage     `yaml:"extend_storage,omitempty" json:"extend_storage,omitempty"`
+	Expose            []ExposeConfig     `yaml:"expose,omitempty" json:"expose,omitempty"`
+	BackdatePolicy    *BackdatePolicy    `yaml:"backdate_policy,omitempty" json:"backdate_policy,omitempty"`
+	ForwardDatePolicy *ForwardDatePolicy `yaml:"forward_date_policy,omitempty" json:"forward_date_policy,omitempty"`
 }
 
 // ExposeConfig declares one external protocol surface for an Entity (D49).
@@ -163,7 +230,88 @@ type ComputedDecl struct {
 	Formula string `yaml:"formula" json:"formula"`
 }
 
-// ValidateEntitySpec validates an EntitySpec, returning an error if any constraint is violated.
+// ValidateEvents validates event naming conventions per Core §12:
+//   - Events named before_* are sync gates and must not claim to be async.
+//   - Events named on_* are async notifications and must not claim to be sync.
+//   - Custom event names (no before_/on_ prefix) require an explicit type field.
+func ValidateEvents(events []EventDecl) error {
+	for _, e := range events {
+		if err := ValidateEventNaming(e); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ValidateDocumentSpec validates a DocumentSpec, returning an error if any constraint is violated.
+// In addition to extension validation, it enforces:
+//   - Reserved field names MUST NOT be reused.
+//   - transaction_date field MUST be declared when characteristic: transaction.
+//   - Event naming convention: before_* = sync, on_* = async (Core §12).
+func ValidateDocumentSpec(d *DocumentSpec) error {
+	// Reserved field name check
+	for _, f := range d.Fields {
+		if IsReservedField(f.Name) {
+			return fmt.Errorf("field %q is a reserved field name and cannot be used as a custom field", f.Name)
+		}
+	}
+
+	// transaction_date required for characteristic: transaction
+	if d.Characteristic == CharTransaction {
+		hasTransactionDate := false
+		for _, f := range d.Fields {
+			if f.Name == "transaction_date" && (f.Type == FieldDate || f.Type == FieldDateTime) {
+				hasTransactionDate = true
+				break
+			}
+		}
+		if !hasTransactionDate {
+			return fmt.Errorf("document has characteristic: transaction but no transaction_date field declared (type: date or datetime)")
+		}
+	}
+
+	// Extension validation
+	if d.ExtendStorage != nil {
+		for _, f := range d.Fields {
+			if f.Required {
+				return fmt.Errorf("extension field %q cannot be required", f.Name)
+			}
+		}
+
+		target := d.ExtendStorage.Target
+		if target == "" {
+			return fmt.Errorf("extend_storage.target is required")
+		}
+		parts := strings.Split(target, "/")
+		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+			return fmt.Errorf("extend_storage.target must be in format \"module/entity\", got %q", target)
+		}
+
+		ns := d.ExtendStorage.Namespace
+		if ns == "" {
+			return fmt.Errorf("extend_storage.namespace is required")
+		}
+		if len(ns) < 3 || len(ns) > 32 {
+			return fmt.Errorf("extend_storage.namespace must be 3-32 characters, got %d", len(ns))
+		}
+		for i, r := range ns {
+			if i == 0 && !(r >= 'a' && r <= 'z') {
+				return fmt.Errorf("extend_storage.namespace must start with a lowercase letter")
+			}
+			if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_') {
+				return fmt.Errorf("extend_storage.namespace must contain only lowercase letters, digits, and underscores")
+			}
+		}
+	}
+
+	// Event naming validation (Core §12)
+	if err := ValidateEvents(d.Events); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // Currently checks:
 //   - Extension (ExtendStorage) fields cannot be Required.
 //   - Extension target must be in "module/entity" format.
@@ -239,11 +387,12 @@ type IdempotencyDecl struct {
 
 // UsesDecl declares what resources/primitives/config an action needs (§11.2).
 type UsesDecl struct {
-	Resources  []string         `yaml:"resources,omitempty" json:"resources,omitempty"`
-	Db         *UsesDbDecl      `yaml:"db,omitempty" json:"db,omitempty"`
-	Config     *UsesConfigDecl  `yaml:"config,omitempty" json:"config,omitempty"`
-	Kvstore    []KvstoreUseDecl `yaml:"kvstore,omitempty" json:"kvstore,omitempty"`
-	Primitives []string         `yaml:"primitives,omitempty" json:"primitives,omitempty"`
+	Resources  []string          `yaml:"resources,omitempty" json:"resources,omitempty"`
+	Db         *UsesDbDecl       `yaml:"db,omitempty" json:"db,omitempty"`
+	Config     *UsesConfigDecl   `yaml:"config,omitempty" json:"config,omitempty"`
+	Kvstore    []KvstoreUseDecl  `yaml:"kvstore,omitempty" json:"kvstore,omitempty"`
+	Primitives []string          `yaml:"primitives,omitempty" json:"primitives,omitempty"`
+	Datastores map[string]string `yaml:"datastores,omitempty" json:"datastores,omitempty"` // primitive → datastore name binding
 }
 
 // UsesDbDecl specifies raw database access per category/module (§11.2).
@@ -395,9 +544,49 @@ func (g *GuardDecl) UnmarshalYAML(value *yaml.Node) error {
 type EventDecl struct {
 	Name        string              `yaml:"name" json:"name"`
 	Description string              `yaml:"description,omitempty" json:"description,omitempty"`
+	Type        string              `yaml:"type,omitempty" json:"type,omitempty"` // sync | async — auto-derived from name prefix if not explicit
 	Publish     *PublishDecl        `yaml:"publish,omitempty" json:"publish,omitempty"`
 	Payload     *PayloadDecl        `yaml:"payload,omitempty" json:"payload,omitempty"`
 	Deliver     []EventDeliveryDecl `yaml:"deliver,omitempty" json:"deliver,omitempty"`
+}
+
+// EventType constants.
+const (
+	EventTypeSync  = "sync"
+	EventTypeAsync = "async"
+)
+
+// ValidateEventNaming checks event name prefix convention and returns the implied type.
+// Rules per §12:
+//   - before_* → sync
+//   - on_* → async
+//   - custom names → type MUST be explicit
+func ValidateEventNaming(event EventDecl) error {
+	isBefore := strings.HasPrefix(event.Name, "before_")
+	isOn := strings.HasPrefix(event.Name, "on_")
+
+	if !isBefore && !isOn {
+		if event.Type == "" {
+			return fmt.Errorf("event %q: type is required for custom events (not prefixed before_/on_)", event.Name)
+		}
+		if event.Type != EventTypeSync && event.Type != EventTypeAsync {
+			return fmt.Errorf("event %q: type must be 'sync' or 'async', got %q", event.Name, event.Type)
+		}
+		return nil
+	}
+
+	if isBefore {
+		if event.Type != "" && event.Type != EventTypeSync {
+			return fmt.Errorf("event %q: before_* events must be 'sync', got %q", event.Name, event.Type)
+		}
+	}
+	if isOn {
+		if event.Type != "" && event.Type != EventTypeAsync {
+			return fmt.Errorf("event %q: on_* events must be 'async', got %q", event.Name, event.Type)
+		}
+	}
+
+	return nil
 }
 
 // PublishDecl configures how an event is published.
@@ -458,9 +647,10 @@ type TenantDecl struct {
 
 // RelationDecl defines a relation to another entity.
 type RelationDecl struct {
-	Type       string `yaml:"type" json:"type"` // belongs_to | has_many | has_one
-	Resource   string `yaml:"resource" json:"resource"`
-	ForeignKey string `yaml:"foreign_key,omitempty" json:"foreign_key,omitempty"`
+	Type       string   `yaml:"type" json:"type"` // belongs_to | has_many | has_one
+	Resource   string   `yaml:"resource" json:"resource"`
+	ForeignKey string   `yaml:"foreign_key,omitempty" json:"foreign_key,omitempty"`
+	OnDelete   OnDelete `yaml:"on_delete,omitempty" json:"on_delete,omitempty"` // restrict | cascade | set_null (v0.3.0)
 }
 
 // NaturalKeyRuleDecl defines how a natural key is generated.
@@ -490,6 +680,19 @@ type NaturalKeyPrefix struct {
 type ExtendStorage struct {
 	Target    string `yaml:"target" json:"target"`
 	Namespace string `yaml:"namespace" json:"namespace"`
+}
+
+// BackdatePolicy controls how far back a transaction_date can be set (§14a).
+type BackdatePolicy struct {
+	MaxDaysBack        int    `yaml:"max_days_back,omitempty" json:"max_days_back,omitempty"`
+	OverridePermission string `yaml:"override_permission,omitempty" json:"override_permission,omitempty"`
+}
+
+// ForwardDatePolicy controls how far forward a transaction_date can be set (§14a).
+// Default max_days_forward = 0 (no forward dating allowed).
+type ForwardDatePolicy struct {
+	MaxDaysForward     int    `yaml:"max_days_forward,omitempty" json:"max_days_forward,omitempty"`
+	OverridePermission string `yaml:"override_permission,omitempty" json:"override_permission,omitempty"`
 }
 
 // PersistSpec controls how an entity is stored (Core §19).

@@ -1,0 +1,16 @@
+{
+    "name": "forma/lib-forma",
+    "description": "Thin client SDK bridging a PHP app to forma-sidecar: /invoke listener + ctx.* proxy client",
+    "type": "library",
+    "license": "FSL-1.1-ALv2",
+    "require": {
+        "php": ">=8.1",
+        "ext-curl": "*",
+        "ext-json": "*"
+    },
+    "autoload": {
+        "psr-4": {
+            "Forma\\": "src/"
+        }
+    }
+}

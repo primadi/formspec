@@ -3,7 +3,7 @@ package entity
 import (
 	"testing"
 
-	"github.com/forma/forma/pkg/spec"
+	"github.com/primadi/forma/pkg/spec"
 )
 
 func mkSM(field, initial string, transitions []spec.TransitionDecl) *spec.EntitySpec {

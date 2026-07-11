@@ -14,7 +14,7 @@
 
 ### 1. `kind: Workflow` — Approval Attached to a State Machine
 
-Simple lifecycles stay inline in the Entity (Core §14). Role-based approval lives in Workflow and **attaches without modifying the entity** — the Subscription pattern (D35) applied to transitions.
+Simple lifecycles stay inline in the Document (Core §14). Role-based approval lives in Workflow and **attaches without modifying the document** — the Subscription pattern (D35) applied to transitions.
 
 ```yaml
 apiVersion: forma.dev/v1alpha1
@@ -34,11 +34,11 @@ spec:
 **Rules:**
 - The intercepted transition executes only after all applicable steps reach quorum. Approvals are signed statements recorded in audit.
 - Approver eligibility = role membership per-app (Core D37). The submitter can never approve their own request (the D39 floor applied to business workflows).
-- A Workflow appears in `forma describe entity` merged output — attached behavior is always compiled, never hidden.
+- A Workflow appears in `forma describe document` merged output — attached behavior is always compiled, never hidden.
 
 ### 2. `kind: Api` — Exposure Override
 
-An entity must first opt into exposure via `spec.expose` (§Core 11.1, D49). `kind: Api` only overrides **already-exposed** surfaces — it cannot create access where `expose` has not been set. Used for: custom paths, versioning, disabling specific endpoints, and gRPC configuration.
+A document must first opt into exposure via `spec.expose` (§Core 11.1, D49). `kind: Api` only overrides **already-exposed** surfaces — it cannot create access where `expose` has not been set. Used for: custom paths, versioning, disabling specific endpoints, and gRPC configuration.
 
 ```yaml
 apiVersion: forma.dev/v1alpha1
@@ -122,7 +122,48 @@ spec:
 - **Namespacing by apiVersion group** (CRD pattern): built-in kinds own `forma.dev`; module kinds live under their own group (`seed.forma.dev`, `gl.acme-corp.dev`) — collisions structurally impossible.
 - The handler runs under the module's declared `uses` — a KindDefinition grants no runtime power beyond its module's footprint.
 - Published JSON Schemas feed the LSP/tooling ladder automatically.
-- Application developers almost never define kinds; 95% of the time the answer is an Entity.
+- Application developers almost never define kinds; 95% of the time the answer is a Document.
+
+### 5. `kind: Integrator` — Cross-Module Bridge (NEW in v0.3.0)
+
+Bridges two Documents/Modules that **do not directly know each other** — consistent with the principle "Modules do not directly know each other."
+
+```yaml
+kind: Integrator
+name: invoice-to-gl
+listen:
+  resource: billing.Invoice
+  event: before_cancel        # or on_paid, etc. — event name from the publisher's Contract
+call:
+  resource: gl.GLJournal
+  action: cancel
+compensate: recreate_gl_journal   # optional; the framework decides whether to call it
+```
+
+`listen.resource` and `call.resource` are resolved through the registry (`forma.resource:{name}:{version}`) — an Integrator never `import`s the definition of Invoice or GLJournal directly.
+
+**Mandatory rule:** every Integrator that creates a side-effect from one event MUST also provide a symmetric handler for its cancellation event — otherwise, cancel on the source side will permanently block because the generic reference guard always blocks without anyone knowing how to open the path.
+
+**Config:**
+
+```yaml
+# Global defaults
+integrator_defaults:
+  retry:
+    max_attempts: 5
+    backoff: exponential
+    base_delay_ms: 500
+    max_delay_ms: 30000
+  outcome_unknown_after: 5
+
+# Per-Integrator override
+kind: Integrator
+name: invoice-to-payment-gateway
+retry:
+  max_attempts: 10      # third-party gateway: more lenient
+```
+
+The `compensate` field lists an action on the target resource that reverses the effect. At runtime, the framework detects whether the call resolves within the same database transaction or crosses a boundary (§Core 14d). If same-transaction: compensate is never called (ACID rollback handles it). If cross-boundary: compensate is registered in the Saga log.
 
 ---
 
@@ -167,7 +208,7 @@ All three are subject to `uses`. A level-4 rule reading `customer` must declare 
 
 ### 8. Hook Spec
 
-The `hooks:` block lives at the top level of an Entity or Service `spec` — a sibling of `actions`/`events`.
+The `hooks:` block lives at the top level of a Document or Service `spec` — a sibling of `actions`/`events`.
 
 ```yaml
 hooks:
@@ -281,7 +322,7 @@ The only path to `secret: true` config values. Declared via `uses: { secrets: [m
 
 ### 16. Summary Spec
 
-`characteristics: [summary]` entities are populated exclusively by durable events. Extended adds the rebuild contract: `forma summary rebuild <entity>` replays the source event stream into a fresh projection — which is why backups exclude summaries.
+`characteristics: [summary]` documents are populated exclusively by durable events. Extended adds the rebuild contract: `forma summary rebuild <document>` replays the source event stream into a fresh projection — which is why backups exclude summaries.
 
 ### 17. i18n
 

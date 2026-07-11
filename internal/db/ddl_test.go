@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/forma/forma/pkg/spec"
+	"github.com/primadi/forma/pkg/spec"
 )
 
 func customerEntity() (spec.Metadata, *spec.EntitySpec) {
@@ -12,8 +12,8 @@ func customerEntity() (spec.Metadata, *spec.EntitySpec) {
 			Name:   "customer",
 			Module: "billing",
 		}, &spec.EntitySpec{
-			Version:         "v1",
-			Characteristics: []spec.Characteristic{spec.CharMaster},
+			Version:        "v1",
+			Characteristic: spec.CharMaster,
 			Fields: []spec.Field{
 				{Name: "name", Type: spec.FieldString, Required: true},
 				{Name: "email", Type: spec.FieldString, Unique: true, Index: true, Required: true},
@@ -30,8 +30,8 @@ func orderEntity() (spec.Metadata, *spec.EntitySpec) {
 			Name:   "order",
 			Module: "billing",
 		}, &spec.EntitySpec{
-			Version:         "v1",
-			Characteristics: []spec.Characteristic{spec.CharTransaction},
+			Version:        "v1",
+			Characteristic: spec.CharTransaction,
 			Fields: []spec.Field{
 				{
 					Name: "number", Type: spec.FieldString,

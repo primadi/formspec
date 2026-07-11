@@ -18,7 +18,11 @@ These terms are **canonical** and binding for all Forma documents and discussion
 | **Workspace** | The umbrella owned by one Data Owner: where data and compute live, the tenant identity across apps, the billing boundary. Has a flag: `dev` (free shared resources, data not guaranteed) or `prod` (dedicated resources, backups, retention). |
 | **App** | The unit of deployment and trust boundary. Installed into a Workspace. Composed of Modules. Publishes cross-app interfaces. `kind: App` is the root project manifest. |
 | **Module** | A package of code and manifests — static, without tenant or data. Purchased or rented, never "owns" data. Modules are composed into Apps. |
-| **Resource** | An Entity, Service, Workflow, etc. inside a Module. The smallest addressable unit. |
+| **Resource** | A Document, Service, Workflow, etc. inside a Module. The smallest addressable unit. Two types: `document` (stateful, with lifecycle) and `service` (stateless). |
+| **Document** | A stateful, persisted resource (`kind: Document`). Has a built-in lifecycle (`doc_status`: draft → submitted → cancelled), characteristics (master/transaction/reference/summary), and user-defined business state machines on separate fields. Previously named `Entity` (deprecated alias). |
+| **doc_status** | The built-in, framework-enforced lifecycle field on every Document. CLOSED 3-value set: `draft`, `submitted`, `cancelled`. Cannot be extended. Business process granularity uses separate fields with independent state machines. |
+| **transaction_date** | A required field for Documents with `characteristics: [transaction]`. Represents the business/accounting date — determines which reporting period recognizes the transaction. Subject to backdate/forward-date policy. Distinct from `created_at` (system/audit timestamp). |
+| **Integrator** | A `kind: Integrator` resource that bridges two Documents/Modules that do not directly know each other. Listens to events on one resource and calls actions on another, with optional compensation handlers for cancellations. |
 | **Tenant** | The representation of a Workspace inside an app's storage — an internal runtime isolation mechanism, not a business concept. One Workspace = the same tenant identity across all its apps. |
 | **Data Owner** | = **Workspace Owner** (canonical term): the one identity that owns a workspace — its data, users, grants, compute, and billing. |
 | **App Owner** | The vendor of an application (one identity): owns the artifact, versions, and reference seed content. Has no access to production tenant data. |

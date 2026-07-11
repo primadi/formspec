@@ -5,7 +5,7 @@
 // to the correct protocol adapter (REST via chi, gRPC, WebSocket).
 package api
 
-import "github.com/forma/forma/pkg/spec"
+import "github.com/primadi/forma/pkg/spec"
 
 // ProtocolType mirrors spec.ProtocolType for local convenience.
 type ProtocolType = spec.ProtocolType

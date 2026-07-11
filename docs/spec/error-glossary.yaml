@@ -1,0 +1,105 @@
+# Forma Error Glossary v1.0.0
+# Canonical error codes for all framework-enforced mechanisms.
+# Distributed as part of Core Basic Spec — version follows Core Basic.
+#
+# Rules:
+# 1. `code` is never changed or reused after release — integrations that
+#    switch(error.code) must not silently break. Add new entries for new situations.
+# 2. Only covers errors from framework-enforced mechanisms. Custom `conditions:`
+#    errors from developers are free to use their own messages but SHOULD follow
+#    the same code+params format with an App-specific namespace (not FORMA.*).
+# 3. A single `code` field serves both programmatic matching AND i18n lookup key
+#    — no separate `key` field is needed. Both are permanent after release.
+
+glossary:
+  # --- Document Lifecycle (§4.1b) ---
+  - code: FORMA.DOC.UPDATE_NOT_DRAFT
+    params: [resource_name, doc_status]
+    default_message: "{resource_name} cannot be modified because it is {doc_status}, not draft"
+
+  - code: FORMA.DOC.DELETE_REFERENCED
+    params: [resource_name, blocking_resource, blocking_id]
+    default_message: "{resource_name} cannot be deleted because it is still referenced by {blocking_resource} #{blocking_id}"
+
+  - code: FORMA.DOC.CANCEL_REFERENCED
+    params: [resource_name, blocking_resource, blocking_id]
+    default_message: "{resource_name} cannot be cancelled because it is still referenced by {blocking_resource} #{blocking_id}"
+
+  - code: FORMA.DOC.SUBMIT_NOT_DRAFT
+    params: [resource_name, doc_status]
+    default_message: "{resource_name} cannot be submitted because it is {doc_status}, not draft"
+
+  - code: FORMA.DOC.ALREADY_SUBMITTED
+    params: [resource_name]
+    default_message: "{resource_name} is already submitted"
+
+  - code: FORMA.DOC.ALREADY_CANCELLED
+    params: [resource_name]
+    default_message: "{resource_name} is already cancelled"
+
+  - code: FORMA.DOC.RESERVED_FIELD
+    params: [field_name]
+    default_message: "'{field_name}' is a reserved field name and cannot be used as a custom field"
+
+  # --- Transaction Date (§14a) ---
+  - code: FORMA.TXN.TRANSACTION_DATE_MISSING
+    params: [resource_name]
+    default_message: "{resource_name} has characteristic: transaction but no transaction_date field declared"
+
+  - code: FORMA.TXN.BACKDATE_EXCEEDED
+    params: [transaction_date, max_days_back]
+    default_message: "Transaction date {transaction_date} exceeds backdate limit of {max_days_back} days"
+
+  - code: FORMA.TXN.FORWARD_DATE_EXCEEDED
+    params: [transaction_date, max_days_forward]
+    default_message: "Transaction date {transaction_date} exceeds forward-date limit of {max_days_forward} days"
+
+  # --- Period Closing (§14a) ---
+  - code: FORMA.PERIOD.CLOSED
+    params: [transaction_date, period_ref]
+    default_message: "Cannot post to {transaction_date}, period {period_ref} is closed"
+
+  - code: FORMA.PERIOD.REOPEN_DENIED
+    params: [period_ref]
+    default_message: "Cannot reopen period {period_ref}: insufficient permission or invalid reason"
+
+  # --- Event Naming Convention (§12) ---
+  - code: FORMA.EVENT.TYPE_MISMATCH
+    params: [event_name, declared_type, required_type]
+    default_message: "Event '{event_name}' declared type '{declared_type}' conflicts with prefix-required type '{required_type}'"
+
+  - code: FORMA.EVENT.TYPE_MISSING
+    params: [event_name]
+    default_message: "Custom event '{event_name}' (no before_/on_ prefix) must declare an explicit type"
+
+  # --- Saga & Manual Intervention (§14d) ---
+  - code: FORMA.SAGA.OUTCOME_UNKNOWN
+    params: [event_name, target_resource]
+    default_message: "Call to {target_resource} via {event_name} result cannot be determined after retries exhausted — manual verification required"
+
+  - code: FORMA.SAGA.COMPENSATION_FAILED
+    params: [event_name, target_resource]
+    default_message: "Compensation for {event_name} on {target_resource} failed — manual intervention required"
+
+  # --- Reference Guard (§4.1b) ---
+  - code: FORMA.REF.DELETE_BLOCKED
+    params: [resource_name, blocking_resource, blocking_id]
+    default_message: "{resource_name} cannot be deleted: referenced by {blocking_resource} #{blocking_id}"
+
+  - code: FORMA.REF.CANCEL_BLOCKED
+    params: [resource_name, blocking_resource, blocking_id]
+    default_message: "{resource_name} cannot be cancelled: referenced by {blocking_resource} #{blocking_id}"
+
+  # --- Archiving (§14b) ---
+  - code: FORMA.ARCHIVE.LOCKED_FOR_DELETION
+    params: [resource_name, archived_reference_count]
+    default_message: "{resource_name} cannot be deleted: {archived_reference_count} archived transactions still reference it"
+
+  # --- General ---
+  - code: FORMA.VALIDATE.RESERVED_ACTION_MODIFIED
+    params: [action_name]
+    default_message: "Cannot weaken or remove the base guard on reserved action '{action_name}'"
+
+  - code: FORMA.DOC.CREATE_SUBMIT_NOT_AVAILABLE
+    params: [resource_name]
+    default_message: "create-submit is not available on {resource_name}: submit action is disabled"

@@ -6,9 +6,13 @@ metadata:
   description: Pergerakan stok — masuk, keluar, transfer antar gudang
 spec:
   version: v1
-  characteristics: [transaction]
+  characteristic: transaction
 
   fields:
+    - name: transaction_date
+      type: date
+      required: true
+      index: true
     - name: number
       type: string
       natural_key: true
@@ -77,6 +81,7 @@ spec:
 
   events:
     - name: stock-applied
+      type: async
       description: Movement berhasil diterapkan — update stock level
       publish:
         durable: true

@@ -6,7 +6,7 @@ metadata:
   description: Data pelanggan — dipakai order, invoice, dll.
 spec:
   version: v1
-  characteristics: [master]
+  characteristic: master
 
   auth: { required: true, strategies: [token] }
 

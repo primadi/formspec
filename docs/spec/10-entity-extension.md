@@ -1,16 +1,16 @@
-# Entity Extension
+# Document Extension
 
 **Status:** Draft
 **Audience:** Module Vendors & App Developers
 **Prerequisites:** [Core Basic Spec](./02-core-basic.md) · [Core Extended Spec](./03-core-extended.md)
 
-> How to add custom fields to an entity owned by another module (e.g., a vertical `billing/invoice` module) — without forking the module, without breaking its upgrade path, and without sacrificing query performance.
+> How to add custom fields to a document owned by another module (e.g., a vertical `billing/invoice` module) — without forking the module, without breaking its upgrade path, and without sacrificing query performance.
 
 ---
 
 ## 1. Problem
 
-You are using a vertical module from the marketplace — for example, `billing/invoice`. You need to add custom business fields (e.g., `project_code`, `cost_center`, `approval_notes`) to the invoice entity. You cannot fork the module (it receives updates and is signed by its vendor). You need the fields to be queryable, and you need to be able to uninstall your extension cleanly.
+You are using a vertical module from the marketplace — for example, `billing/invoice`. You need to add custom business fields (e.g., `project_code`, `cost_center`, `approval_notes`) to the invoice document. You cannot fork the module (it receives updates and is signed by its vendor). You need the fields to be queryable, and you need to be able to uninstall your extension cleanly.
 
 ---
 
@@ -33,11 +33,11 @@ ALTER TABLE financial.billing_invoices
   ADD COLUMN ext_kastem1 jsonb NOT NULL DEFAULT '{}';
 ```
 
-The extension manifest (`spec.extend_storage` is a Core Extended-scope entity-spec attribute, and this document is its normative definition; implementations claiming only Core Basic conformance MAY ignore it):
+The extension manifest (`spec.extend_storage` is a Core Extended-scope document-spec attribute, and this document is its normative definition; implementations claiming only Core Basic conformance MAY ignore it):
 
 ```yaml
 apiVersion: forma.dev/v1alpha1
-kind: Entity
+kind: Document
 metadata:
   name: invoice-ext
   module: my-customization
@@ -67,7 +67,7 @@ The Odoo pattern merges extension fields directly into the base module's field l
 - Creates high upgrade risk (vendor changes a field name → your extension breaks)
 - Makes uninstall destructive (must rewrite the entire `data` column)
 
-Forma's approach: the extension gets its **own column**, prefixed `ext_` to avoid collisions with framework-reserved columns (`data`, `tenant_id`, `version`, etc.).
+Forma's approach: the extension gets its **own column**, prefixed `ext_` to avoid collisions with framework-reserved columns (`data`, `tenant_id`, `version`, `doc_status`, etc.).
 
 ---
 
@@ -96,9 +96,9 @@ Extending an extension (`kastem1` → `kastem1_special1`) is technically possibl
 
 1. **Permanent coupling to physical column names** — hard to rename or de-orphan safely if the base extension is replaced or removed.
 2. **Creates a migration ordering dependency** that did not previously exist (`kastem1` must be applied before `special1`).
-3. **Leaks abstraction** — the `special1` module now knows that `kastem1` is an extension, not a regular entity.
+3. **Leaks abstraction** — the `special1` module now knows that `kastem1` is an extension, not a regular document.
 
-**Recommended alternative:** all extensions remain **flat siblings** against the base entity, regardless of how many there are. If modules depend on each other's extensions, declare the dependency via `spec.depends` in the Module manifest (Core Basic §4.5), and access cross-extension fields through code — not through column naming:
+**Recommended alternative:** all extensions remain **flat siblings** against the base document, regardless of how many there are. If modules depend on each other's extensions, declare the dependency via `spec.depends` in the Module manifest (Core Basic §4.5), and access cross-extension fields through code — not through column naming:
 
 ```python
 # In a script or handler
@@ -133,10 +133,10 @@ Forma intentionally separates two kinds of change with different barriers to ent
 
 | Layer | Examples | Path | Requires git/devcontainer? |
 |---|---|---|---|
-| **Structure** | Fields, entities, relations, DB migrations | `forma apply` from resource YAML | Yes — risk equivalent to changing a production schema |
+| **Structure** | Fields, documents, relations, DB migrations | `forma apply` from resource YAML | Yes — risk equivalent to changing a production schema |
 | **Business logic** | Validation rules, conditions, action handlers | Starlark `script`/`script_ref`, editable from admin panel | **No** — already editable from admin panel without redeploy, with built-in versioning & rollback |
 
-Entity extension sits in the **structure** layer — it modifies DDL and is committed to git. Business rules that reference extension fields can stay in the **business logic** layer — editable from the admin panel.
+Document extension sits in the **structure** layer — it modifies DDL and is committed to git. Business rules that reference extension fields can stay in the **business logic** layer — editable from the admin panel.
 
 ### Git as Source of Truth
 

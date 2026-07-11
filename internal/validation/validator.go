@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/forma/forma/pkg/spec"
+	"github.com/primadi/forma/pkg/spec"
 )
 
 // ─── Entity Lookup for exists:<resource> ───

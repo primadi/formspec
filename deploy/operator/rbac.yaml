@@ -1,0 +1,73 @@
+# RBAC for forma-operator (docs/runtimes/03-forma-operator.md §3.4).
+# Namespace-scoped Secret access tightening (one namespace per workspace)
+# is an open design decision — this grants the cluster-wide superset.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: forma-operator
+  namespace: forma-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: forma-operator
+rules:
+  - apiGroups: ["forma.dev"]
+    resources: ["workspaces", "datastores", "resourceclaims", "clusterclasses"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: ["forma.dev"]
+    resources: ["workspaces/status", "datastores/status", "resourceclaims/status"]
+    verbs: ["update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["services", "secrets", "configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]  # node health reporting
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: forma-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: forma-operator
+subjects:
+  - kind: ServiceAccount
+    name: forma-operator
+    namespace: forma-system
+---
+# Leader election needs Lease access only in the operator's own namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: forma-operator-leader-election
+  namespace: forma-system
+rules:
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: forma-operator-leader-election
+  namespace: forma-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: forma-operator-leader-election
+subjects:
+  - kind: ServiceAccount
+    name: forma-operator
+    namespace: forma-system

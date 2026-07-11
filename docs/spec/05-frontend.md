@@ -29,12 +29,14 @@ The renderer MUST also be consumable **as a library**: an existing React/Vue app
 
 | Surface | Source | Setup required |
 |---|---|---|
-| **Admin panel** (`/_admin`) | Derived 100% from Entity manifests | Zero — the PocketBase benchmark (D10) |
+| **Admin panel** (`/_admin`) | Derived 100% from Document manifests | Zero — the PocketBase benchmark (D10) |
 | **App UI** (`/app`) | Composed via the kinds in this spec | Only what deviates from defaults |
+
+> **Important scope note:** This spec defines UI kinds for **business applications** built with Forma (Page, Form, Table, Dashboard, etc.). It does **NOT** define admin UIs for the Control Plane (`forma/ops`) or Resource Plane admin console (`forma/console`). Those are first-party Forma applications with separate architecture documentation in `docs/architecture/02-admin-surfaces.md`. The business app admin panel (`/_admin`) IS part of this spec — it is auto-generated from Document manifests via the renderer defined here.
 
 ### 1.3 Derived by Default (D17)
 
-Every Entity automatically yields, with no UI manifest at all: a list **Table**, **create/edit Forms**, a detail **Page**, and **Menu** entries per module. UI kinds exist to *override* these defaults. A team can ship a complete internal tool with zero frontend manifests.
+Every Document automatically yields, with no UI manifest at all: a list **Table**, **create/edit Forms**, a detail **Page**, and **Menu** entries per module. UI kinds exist to *override* these defaults. A team can ship a complete internal tool with zero frontend manifests.
 
 ### 1.4 Permission-Driven UI
 
@@ -51,10 +53,49 @@ A programmer never writes boilerplate CRUD, filtering, pagination, or realtime s
 Container decisions — whether a form opens in a **modal**, a **drawer**, or a **separate page** — are made at *design time* through the manifest, never at runtime by user preference or ad-hoc code. This preserves UX consistency across the application and protects state-management stability (route-based vs overlay-based state have different lifecycle implications).
 
 - **Modal / Drawer:** Lightweight entities (≤5 fields). User stays in list context. Controlled via query string (`?action=edit&id=1`).
-- **Separate Page:** Dense entities (many fields, complex validation, child tables). Has its own route (`/entity/:id/edit`).
-- **Decision is per-Form, not per-entity:** The same entity may have a modal quick-create form and a separate-page full-edit form — each is a distinct `kind: Form` with its own `render` declaration.
+- **Separate Page:** Dense documents (many fields, complex validation, child tables). Has its own route (`/document/:id/edit`).
+- **Decision is per-Form, not per-document:** The same document may have a modal quick-create form and a separate-page full-edit form — each is a distinct `kind: Form` with its own `render` declaration.
 
 This principle is enforced by the renderer: no runtime switching between modes for the same Form manifest. If a different context is needed, declare a second Form.
+
+### 1.7 UI Patterns — Lifecycle vs Plain CRUD
+
+The renderer determines which UI pattern to use based on whether the reserved action `submit` is enabled or disabled on the Document — **not** based on `characteristic: transaction` alone. These two flags are independent: `characteristic: transaction` is purely about date/accounting period semantics (§Core 14a), while the UI pattern is purely about whether the draft→submit lifecycle is meaningful in business terms.
+
+```
+Action "submit" explicitly disabled (see §Core 4.1d)
+  → Plain CRUD: one "Save" button, no Submit button,
+    no concept of draft displayed to the user
+    (doc_status is null — lifecycle-free, no lifecycle concept)
+
+Action "submit" ACTIVE (default if not written)
+  → Choose one of three patterns below, via manifest `ui:` hint.
+    Default if not declared: 2-step + auto-save.
+```
+
+**Three patterns for resources with active lifecycle:**
+
+| Pattern | When to use | UI displayed |
+|---|---|---|
+| **2-step + auto-save** (default) | Complex documents, needs review (Invoice, Order, Contract) | Silent auto-save while draft (debounced `update`), one explicit "Submit" button |
+| **2-step manual** | Draft intentionally split to another person for review first | Separate "Save Draft" + "Submit" buttons |
+| **1-step (create-submit)** | High-volume quick entry (POS, clinic queue) | One button, uses built-in `create-submit` action (§Core 4.1b) — no concept of draft visible in UI, atomic (all-or-nothing) |
+
+```yaml
+resource:
+  name: invoice
+  type: document
+  characteristic: transaction
+
+actions:
+  - name: create-submit          # built-in reserved action, auto-derived
+    ui:
+      button_label: "Save & Submit"
+      style: primary
+      show_when: "quick_entry_mode"
+```
+
+Two standard buttons (**Save Draft**/auto-save, **Submit**) are always automatically available from the model without needing to be declared. The built-in `create-submit` action adds a third button as an optional fast path — it does not replace the two basic buttons.
 
 ---
 
@@ -65,16 +106,16 @@ Twelve kinds, one concern each:
 | Kind | Concern | Overrides |
 |---|---|---|
 | `Page` | Route + composition (blocks, tabs, or one full component) | Derived detail pages |
-| `Form` | Input/edit layout for one entity | Derived forms |
-| `Table` | List/browse for one entity | Derived list |
+| `Form` | Input/edit layout for one document | Derived forms |
+| `Table` | List/browse for one document | Derived list |
 | `Dashboard` | Widget canvas — defaults + user customization | — |
 | `Widget` | One dashboard widget, publishable by any module | — |
 | `Report` | Parameterized tabular report + export | — |
 | `Wizard` | Multi-step business process with stepper navigation | — |
-| `Kanban` | Drag-and-drop status board per entity | — |
+| `Kanban` | Drag-and-drop status board per document | — |
 | `Timeline` | Chronological, append-only event journal | — |
 | `Menu` | Navigation tree | Derived module menus |
-| `Print` | Printable document for one entity — multi-target output | — |
+| `Print` | Printable document for one document — multi-target output | — |
 | `Theme` | Look & feel — distributable, marketplace artifact | Default theme |
 
 All share the manifest format (Core §3). `metadata.module` scopes them like any resource. The vocabulary is **closed** (D33): new UI needs never add YAML syntax — they become components (§7). The kinds added in v0.5.0 (Wizard, Kanban, Timeline) are generic UI patterns, not business-case-specific syntax; they pass the D33 litmus test.
@@ -119,7 +160,7 @@ spec:
 
 **Tabbed Resources rationale:** When an app has many small master-data entities (genders, marital statuses, specialties, categories), giving each its own sidebar menu entry creates navigation clutter. Group related small resources under one `kind: Page` with `tabs` — each tab hosts one Table or Form. The user sees one menu entry, one route, organized sub-screens. This is a *design-time grouping decision*; the renderer treats each tab as an independently permission-checked resource.
 
-**Configuration Page pattern:** For system settings — key-value parameters whose *structure* is locked by the developer and whose *values* the administrator may update — use a `kind: Page` with `tabs` variant. Each tab references a `kind: Form` in `mode: edit` backed by an entity with `characteristics: [reference]`. The renderer MUST NOT render a "New Item" or "Delete" button for reference entities; only the Update action is surfaced. Example:
+**Configuration Page pattern:** For system settings — key-value parameters whose *structure* is locked by the developer and whose *values* the administrator may update — use a `kind: Page` with `tabs` variant. Each tab references a `kind: Form` in `mode: edit` backed by a document with `characteristic: reference`. The renderer MUST NOT render a "New Item" or "Delete" button for reference documents; only the Update action is surfaced. Example:
 
 ```yaml
 apiVersion: forma.dev/v1alpha1
@@ -134,13 +175,13 @@ spec:
     - { label: Billing,  form: { ref: settings-billing, entity: config, id: "billing" } }
 ```
 
-The backing entity (`config`) has `characteristics: [reference]` and one row per settings group. The Form `mode: edit` over `id` surfaces the key-value fields; no `mode: create` form is needed because the structure is seeded by the module, not created at runtime.
+The backing document (`config`) has `characteristic: reference` and one row per settings group. The Form `mode: edit` over `id` surfaces the key-value fields; no `mode: create` form is needed because the structure is seeded by the module, not created at runtime.
 
 ---
 
 ## 4. `kind: Form`
 
-Layout + behavior for one entity's input, replacing the derived form.
+Layout + behavior for one document's input, replacing the derived form.
 
 ```yaml
 apiVersion: forma.dev/v1alpha1
@@ -181,9 +222,9 @@ spec:
 | `drawer` | Slide-in panel from the right. Same overlay behavior as modal but wider, suited for forms with side-by-side sections. | Medium forms (5–12 fields), especially with `columns: 2` layout. |
 | `separate_page` | Dedicated route. Full-page form with its own breadcrumb and URL. Back navigation returns to the calling context. | Dense entities (12+ fields, child tables, complex validation). Needs deep-linking. |
 
-The same entity may have multiple Forms with different `render` values — e.g., a `modal` quick-create form and a `separate_page` full-edit form. The decision is per-Form, declared in the manifest, and enforced by the renderer (no runtime switching).
+The same document may have multiple Forms with different `render` values — e.g., a `modal` quick-create form and a `separate_page` full-edit form. The decision is per-Form, declared in the manifest, and enforced by the renderer (no runtime switching).
 
-**Rules:** every `field` MUST exist on the entity; every `action` MUST exist and is permission-gated automatically (§1.4). **Closed client-behavior vocabulary** (FormaExpr, §6): `visible_when`, `readonly_when`, `required_when`, `compute`. The moment imperative side effects are needed, the field becomes a custom widget (§7). Field `rules` from the entity manifest are enforced client-side for UX; **server-side validation remains the authority — client checks are never security.**
+**Rules:** every `field` MUST exist on the document; every `action` MUST exist and is permission-gated automatically (§1.4). **Closed client-behavior vocabulary** (FormaExpr, §6): `visible_when`, `readonly_when`, `required_when`, `compute`. The moment imperative side effects are needed, the field becomes a custom widget (§7). Field `rules` from the document manifest are enforced client-side for UX; **server-side validation remains the authority — client checks are never security.**
 
 ---
 
@@ -448,7 +489,7 @@ metadata:
   module: clinic
 spec:
   title: "Patient Registration — {step.title}"
-  composite_action: register_patient     # server-side action that atomically commits all steps
+  action: register_patient               # server-side action that atomically commits all steps
   allow_partial_save: true               # draft/resume — saves progress as draft entity row
   steps:
     - step: 1
@@ -474,15 +515,15 @@ spec:
 ```
 
 **Rules:**
-- `composite_action` is the server-side action (Core §11) that atomically writes all step data. It MUST exist on at least one entity involved in the wizard. The action handler receives the accumulated wizard state as input.
+- `action` is the server-side action that atomically writes all step data. It MUST exist on at least one document involved in the wizard. The action handler receives the accumulated wizard state as input.
 - `allow_partial_save: true` persists intermediate step data as a draft. The Wizard resumes from the last saved step when reopened. Draft rows are tenant-scoped and cleaned up on completion or after a configurable TTL.
-- `depends_on` establishes a client-side filter chain: when `polyclinic_id` changes, the `doctor_id` dropdown re-fetches with the new filter. This is UX-only; server-side validation in `composite_action` is the authority.
+- `depends_on` establishes a client-side filter chain: when `polyclinic_id` changes, the `doctor_id` dropdown re-fetches with the new filter. This is UX-only; server-side validation in the wizard's `action` is the authority.
 - Steps are sequential — the renderer enforces completion of step N before step N+1 is accessible. Back navigation is always allowed (step N-1 data is preserved).
-- Each step's fields are validated client-side on "Next"; the `composite_action` runs full validation server-side on final submit.
+- Each step's fields are validated client-side on "Next"; the wizard's `action` runs full validation server-side on final submit.
 - A Wizard page has its own route (`/wizard/:name`); step state is tracked in the URL (`?step=2`) for deep-linking and browser back-button support.
 - When a wizard step needs custom UI beyond fields/dropdowns, use `component:` within the step — the component receives `{ wizard, step, data, forma }` props.
 
-**Relationship to other kinds:** A Wizard is essentially a stateful composition of Form-like steps with a stepper shell. If a process needs only linear form sections without sequential enforcement, use `kind: Form` with `layout.sections`. Wizard exists for the pattern where each step depends on the previous, partial saves are expected, and the final commit is a composite server-side action (D38).
+**Relationship to other kinds:** A Wizard is essentially a stateful composition of Form-like steps with a stepper shell. If a process needs only linear form sections without sequential enforcement, use `kind: Form` with `layout.sections`. Wizard exists for the pattern where each step depends on the previous, partial saves are expected, and the final commit is a single server-side action (D38).
 
 ---
 

@@ -2,7 +2,7 @@
 
 **Category:** Implementation Documentation  
 **Status:** Partially implemented — REST routing, D49 expose gating, and standard/custom handlers are live; workspace-slug resolution, versioned paths, smart internal dispatch, gRPC, and WebSocket are still planned  
-**Package:** `github.com/forma/forma/internal/api`  
+**Package:** `github.com/primadi/forma/internal/api`  
 **Implements:** Core §11.1, §16 / D49, D50
 
 ---
@@ -155,6 +155,8 @@ func (a *RESTAdapter) RegisterRoutes(r chi.Router, routes []RouteDescriptor) {
 { "error": { "code": "NOT_FOUND", "message": "...", "details": [...] }, "meta": {...} }
 ```
 
+Each `data` record is the entity's own fields flattened alongside the reserved framework columns (`id, tenant_id, version, created_at, updated_at, created_by, updated_by`) at the same level, snake_case — enforced by `EntityRecord.MarshalJSON` (`internal/db/crud.go`). Until that method was added, `EntityRecord`'s lack of JSON tags meant Go's default marshaling leaked PascalCase field names with entity data nested under a `"Data"` key — a real bug (no test exercised the full HTTP path to catch it), fixed while building the browser client SDK (`sdk/browser`, `docs/cli-tools/03-forma-generate.md`).
+
 ---
 
 ## 5. Handler Functions
@@ -195,8 +197,8 @@ Ketika `Action.Impl` di-set, handler mendispatch ke implementation yang sesuai (
 | Package | Version | Purpose |
 |---|---|---|
 | `github.com/go-chi/chi/v5` | v5 | Radix-tree HTTP router |
-| `github.com/forma/forma/internal/entity` | — | Entity registry |
-| `github.com/forma/forma/internal/db` | — | EntityStore CRUD |
+| `github.com/primadi/forma/internal/entity` | — | Entity registry |
+| `github.com/primadi/forma/internal/db` | — | EntityStore CRUD |
 
 ---
 

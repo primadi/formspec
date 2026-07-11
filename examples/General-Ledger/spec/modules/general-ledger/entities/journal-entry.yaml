@@ -6,9 +6,13 @@ metadata:
   description: Satu journal entry — selalu double-entry (min 2 baris)
 spec:
   version: v1
-  characteristics: [transaction]
+  characteristic: transaction
 
   fields:
+    - name: transaction_date
+      type: date
+      required: true
+      index: true
     - name: number
       type: string
       natural_key: true
@@ -96,6 +100,7 @@ spec:
 
   events:
     - name: journal-posted
+      type: async
       description: Journal entry berhasil diposting
       publish:
         durable: true
@@ -108,7 +113,7 @@ spec:
           idempotency_key: "balance.{id}"
 
     - name: journal-reversed
-      description: Journal entry di-reverse
+      type: async
       publish:
         durable: true
       payload:

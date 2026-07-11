@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/forma/forma/internal/starlark"
-	"github.com/forma/forma/pkg/spec"
+	"github.com/primadi/forma/internal/starlark"
+	"github.com/primadi/forma/pkg/spec"
 )
 
 // StateMachineEngine evaluates and enforces state machine transitions.

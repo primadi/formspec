@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/forma/forma/pkg/spec"
+	"github.com/primadi/forma/pkg/spec"
 )
 
 // MigrationRecord tracks a completed migration.

@@ -6,7 +6,7 @@ metadata:
   description: Chart of accounts — satu bagan akun standar per workspace
 spec:
   version: v1
-  characteristics: [reference]
+  characteristic: reference
 
   fields:
     - name: code

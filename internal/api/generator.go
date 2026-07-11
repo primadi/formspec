@@ -1,8 +1,8 @@
 package api
 
 import (
-	"github.com/forma/forma/internal/entity"
-	"github.com/forma/forma/pkg/spec"
+	"github.com/primadi/forma/internal/entity"
+	"github.com/primadi/forma/pkg/spec"
 )
 
 // GenerateRoutes produces RouteDescriptors for all registered entities
@@ -28,13 +28,7 @@ func GenerateRoutes(registry *entity.Registry) []RouteDescriptor {
 			plural = info.Name + "s" // simple default
 		}
 
-		isSummary := false
-		for _, c := range es.Characteristics {
-			if c == spec.CharSummary {
-				isSummary = true
-				break
-			}
-		}
+		isSummary := es.Characteristic == spec.CharSummary
 
 		// Standard actions disabled via `disabled: true` (§11.1) are removed
 		// from every surface, equivalent to never existing.
