@@ -153,7 +153,7 @@ public final class SidecarClient {
             body = baos.toString("UTF-8");
         }
 
-        var decoded = JsonCodec.decode(body);
+        Map<String, Object> decoded = (Map<String, Object>) JsonCodec.decode(body);
         if (statusCode != 200) {
             var errMsg = decoded != null
                     ? (String) decoded.getOrDefault("error", "HTTP " + statusCode)

@@ -16,7 +16,7 @@ import java.util.Map;
 public class AppExample {
 
     public static void main(String[] args) {
-        var app = new App();
+        try (var app = new App()) {
 
         app.handle("billing.invoice.approve", (Invocation inv, Ctx ctx) -> {
             var lockKey = "invoice:" + inv.resourceId();
@@ -43,5 +43,8 @@ public class AppExample {
         });
 
         app.run();
+        } catch (Exception e) {
+            System.err.println("Error: " + e.getMessage());
+        }
     }
 }

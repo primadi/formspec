@@ -30,6 +30,7 @@ final class JsonCodec {
 
     // ---- Encoder ----
 
+    @SuppressWarnings("unchecked")
     private static void encodeValue(StringWriter w, Object val) {
         if (val == null) {
             w.write("null");

@@ -131,9 +131,9 @@ public final class App implements AutoCloseable {
             var bodyBytes = exchange.getRequestBody().readAllBytes();
             var bodyStr = new String(bodyBytes, "UTF-8");
             @SuppressWarnings("unchecked")
-            var body = bodyStr.isBlank()
-                    ? new LinkedHashMap<String, Object>()
-                    : JsonCodec.decode(bodyStr);
+            Map<String, Object> body = bodyStr.isBlank()
+                    ? new LinkedHashMap<>()
+                    : (Map<String, Object>) JsonCodec.decode(bodyStr);
 
             var inv = Invocation.fromRequest(module, entity, action, body);
             var result = handler.apply(inv, ctx);
