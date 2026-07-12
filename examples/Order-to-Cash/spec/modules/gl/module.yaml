@@ -1,9 +1,0 @@
-apiVersion: forma.dev/v1alpha1
-kind: Module
-metadata:
-  name: gl
-  description: General Ledger — double-entry accounting
-spec:
-  version: 1.0.0
-  depends:
-    - module: forma/core
