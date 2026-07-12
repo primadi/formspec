@@ -576,9 +576,12 @@ The `doc_status` column mirrors the parent's — child lifecycle is always deriv
     format: "{prefix}-{year}-{seq:06d}"
     prefix: { config: billing.invoice_prefix, default: "INV" }
     reset: yearly                 # never | yearly | monthly | daily
+    scope_field: branch_id        # optional — see below
 ```
 
 Counters live in `forma_natural_key_counters` (PK = tenant/resource/field/scope/period). Increments MUST be atomic, gap-free, duplicate-free. MUST NOT derive via `MAX()` scan. `ctx.next_key` is a helper over `ctx.lock`. Sequence numbers are allocated under `ctx.lock` inside the same transaction as the insert/update; if the transaction later fails its optimistic-concurrency (`version`) check and is retried, a gap MAY result — unless the document declares gap-free mode, in which case the lock MUST be held until commit.
+
+`scope_field` (optional) names a field on the same entity whose value becomes the counter's `scope` component — e.g. a document with `branch_id` and `scope_field: branch_id` gets one independent sequence per branch instead of one shared across the whole tenant. Omitted (the default) reproduces prior behavior — one counter per tenant/resource/field/period, with `scope` always empty. `scope_field` currently applies only to automatic natural-key generation on `create` (`db.EntityStore.Insert`) — an explicit `ctx.next_key(field)` call from a script always uses the tenant-wide scope regardless of `scope_field`, since that path has no resource data available to resolve the scope value from. Wiring `ctx.next_key` the same way is a known follow-up, not yet implemented.
 
 #### 10.5 Relation Spec
 

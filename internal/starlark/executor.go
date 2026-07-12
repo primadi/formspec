@@ -90,12 +90,26 @@ func ExecuteScript(scriptPath string, resource *ResourceAPI, params map[string]a
 		}),
 	}
 
-	// Execute the .star file as a module
-	globals, err := starlark.ExecFile(thread, scriptPath, nil, predeclared)
+	// Compile (or reuse the cached compiled program for) the .star file, then
+	// initialize it fresh for this call — Init() must run per-invocation to
+	// get a private globals dict, even though the compiled *Program itself
+	// is shared/cached across calls.
+	prog, err := globalProgramCache.getProgram(scriptPath, func(name string) bool {
+		_, ok := predeclared[name]
+		return ok
+	})
 	if err != nil {
 		return &ScriptResult{
 			OK:      false,
 			Error:   fmt.Sprintf("script compile error: %v", err),
+			Elapsed: time.Since(start),
+		}, nil
+	}
+	globals, err := prog.Init(thread, predeclared)
+	if err != nil {
+		return &ScriptResult{
+			OK:      false,
+			Error:   fmt.Sprintf("script runtime error: %v", err),
 			Elapsed: time.Since(start),
 		}, nil
 	}
@@ -182,17 +196,23 @@ type ScriptExecutor struct {
 	// absolute file paths (e.g. "/spec/modules/billing/scripts/order_checkout.star").
 	ScriptPathResolver func(ref string) (string, error)
 
-	// SaveHandler is the save function for resource operations.
-	SaveHandler func(module, entity, id string, data map[string]any) error
+	// SaveHandler is the save function for resource operations. version is the
+	// caller's current known record version, threaded through for optimistic
+	// concurrency (CAS) — see db.UpdateParams.Version.
+	SaveHandler func(tenantID, module, entity, id string, version int, data map[string]any) error
 
 	// CallHandler is the cross-resource call function.
-	CallHandler func(fromModule, targetModule, targetEntity, action string, params map[string]any) (any, error)
+	CallHandler func(tenantID, fromModule, targetModule, targetEntity, action string, params map[string]any) (any, error)
 
-	// LoadHandler loads another entity by ID.
-	LoadHandler func(module, entity, id string) (map[string]any, error)
+	// LoadHandler loads another entity by ID, returning its data and version.
+	LoadHandler func(tenantID, module, entity, id string) (map[string]any, int, error)
 
-	// NextKeyHandler generates natural keys.
-	NextKeyHandler func(fieldName string) (string, error)
+	// CreateHandler creates a new record of another entity, returning its ID.
+	CreateHandler func(tenantID, module, entity string, data map[string]any) (string, error)
+
+	// NextKeyHandler generates natural keys, scoped to the entity that owns
+	// the field (natural key counters are per module/entity/field).
+	NextKeyHandler func(tenantID, module, entity, fieldName string) (string, error)
 }
 
 // NewScriptExecutor creates a ScriptExecutor with the given resolution function.
@@ -202,13 +222,14 @@ func NewScriptExecutor(resolver func(ref string) (string, error)) *ScriptExecuto
 	}
 }
 
-// Execute runs a Starlark script for an action.
-func (e *ScriptExecutor) Execute(scriptPath string, module, entity, id string, resourceData map[string]any, params map[string]any, tenantID, userID string) (*ScriptResult, error) {
+// Execute runs a Starlark script for an action. resourceVersion is the
+// current known version of the record (for CAS on resource.save()).
+func (e *ScriptExecutor) Execute(scriptPath string, module, entity, id string, resourceData map[string]any, params map[string]any, tenantID, userID string, resourceVersion int) (*ScriptResult, error) {
 	// Build resource API
-	res := NewResourceAPI(module, entity, id, resourceData)
+	res := NewResourceAPI(module, entity, id, resourceVersion, resourceData)
 	if e.SaveHandler != nil {
-		res.SetSaveFunc(func(data map[string]any) error {
-			return e.SaveHandler(module, entity, id, data)
+		res.SetSaveFunc(func(m, ent, rid string, v int, data map[string]any) error {
+			return e.SaveHandler(tenantID, m, ent, rid, v, data)
 		})
 	}
 	if e.CallHandler != nil {
@@ -217,18 +238,27 @@ func (e *ScriptExecutor) Execute(scriptPath string, module, entity, id string, r
 			if targetModule == "" {
 				targetModule = module
 			}
-			return e.CallHandler(module, targetModule, targetEntity, actionName, p)
+			return e.CallHandler(tenantID, module, targetModule, targetEntity, actionName, p)
 		})
 	}
 	if e.LoadHandler != nil {
-		res.SetLoadFunc(func(m, ent, eid string) (map[string]any, error) {
-			return e.LoadHandler(m, ent, eid)
+		res.SetLoadFunc(func(m, ent, eid string) (map[string]any, int, error) {
+			return e.LoadHandler(tenantID, m, ent, eid)
+		})
+	}
+	if e.CreateHandler != nil {
+		res.SetCreateFunc(func(m, ent string, data map[string]any) (string, error) {
+			return e.CreateHandler(tenantID, m, ent, data)
 		})
 	}
 
 	// Build ctx
 	ctxObj := NewCtxAPI(tenantID, "", userID, "", nil)
-	ctxObj.NextKey = e.NextKeyHandler
+	if e.NextKeyHandler != nil {
+		ctxObj.NextKey = func(fieldName string) (string, error) {
+			return e.NextKeyHandler(tenantID, module, entity, fieldName)
+		}
+	}
 	ctxObj.Now = now
 
 	return ExecuteScript(scriptPath, res, params, ctxObj)

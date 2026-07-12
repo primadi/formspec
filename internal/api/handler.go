@@ -20,9 +20,10 @@ import (
 
 // HandlerFactory creates HTTP handlers backed by an EntityStore.
 type HandlerFactory struct {
-	registry   EntityStoreProvider
-	dispatcher *action.Dispatcher
-	specLookup func(module, name string) (*spec.EntitySpec, bool) // optional — enables sort/filter validation
+	registry     EntityStoreProvider
+	dispatcher   *action.Dispatcher
+	specLookup   func(module, name string) (*spec.EntitySpec, bool) // optional — enables sort/filter validation, hooks, and event resolution
+	deliveryDeps action.DeliveryDeps
 }
 
 // EntityStoreProvider abstracts the entity registry for handler use.
@@ -41,9 +42,41 @@ func (f *HandlerFactory) SetDispatcher(d *action.Dispatcher) {
 }
 
 // SetSpecLookup wires entity-spec resolution, enabling `sort` and field
-// filter query params on list endpoints (validated against the spec).
+// filter query params on list endpoints (validated against the spec), and
+// hook/event resolution on create, update, and custom actions.
 func (f *HandlerFactory) SetSpecLookup(fn func(module, name string) (*spec.EntitySpec, bool)) {
 	f.specLookup = fn
+}
+
+// SetDeliveryDeps wires the event-delivery dependencies (hub, outbox, event
+// log) used to fan out declared events after a successful action.
+func (f *HandlerFactory) SetDeliveryDeps(deps action.DeliveryDeps) {
+	f.deliveryDeps = deps
+}
+
+// resolveAction returns the *spec.Action named name from es, or nil if es
+// is nil or declares no such action — the common case for most
+// entities/actions today, in which case the hook/impl execution wired into
+// HandleCreate/HandleUpdate below is a complete no-op (preserves exact
+// prior behavior).
+func resolveAction(es *spec.EntitySpec, name string) *spec.Action {
+	if es == nil {
+		return nil
+	}
+	for i, a := range es.Actions {
+		if a.Name == name {
+			return &es.Actions[i]
+		}
+	}
+	return nil
+}
+
+// emitsOf returns a's declared Emits event name, or "" if a is nil.
+func emitsOf(a *spec.Action) string {
+	if a == nil {
+		return ""
+	}
+	return a.Emits
 }
 
 // HandleList returns a GET / handler for the given entity.
@@ -231,7 +264,13 @@ func (f *HandlerFactory) HandleFind(module, entity string) http.HandlerFunc {
 	}
 }
 
-// HandleCreate returns a POST / handler for the given entity.
+// HandleCreate returns a POST / handler for the given entity. If the entity
+// declares a create action with its own impl and/or hooks: entries scoped
+// to create, they run as a synchronous, cancelable before-phase (Core
+// Extended §8) ahead of the actual insert — the base guard (Insert itself)
+// always runs afterward and can never be skipped or replaced. Most entities
+// declare neither, in which case this is byte-for-byte the original
+// decode → Insert → fetch flow.
 func (f *HandlerFactory) HandleCreate(module, entity string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
@@ -246,14 +285,36 @@ func (f *HandlerFactory) HandleCreate(module, entity string) http.HandlerFunc {
 			writeError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "invalid JSON: "+err.Error())
 			return
 		}
+		if body == nil {
+			body = make(map[string]any)
+		}
 
 		tenantID := tenantFromContext(ctx)
 		createdBy := userFromContext(ctx)
 
+		var entitySpec *spec.EntitySpec
+		if f.specLookup != nil {
+			entitySpec, _ = f.specLookup(module, entity)
+		}
+		actionSpec := resolveAction(entitySpec, "create")
+		var hooks []spec.HookDecl
+		if entitySpec != nil {
+			hooks = entitySpec.Hooks
+		}
+
+		execParams := &action.ExecuteParams{
+			Module: module, Entity: entity, ActionName: "create",
+			Resource: body, Params: body, TenantID: tenantID, UserID: createdBy,
+		}
+		if err := action.RunBeforePhase(ctx, f.dispatcher, hooks, actionSpec, "create", execParams); err != nil {
+			writeError(w, http.StatusUnprocessableEntity, "HOOK_ABORTED", err.Error())
+			return
+		}
+
 		id, err := store.Insert(ctx, db.InsertParams{
 			TenantID:  tenantID,
 			CreatedBy: createdBy,
-			Data:      body,
+			Data:      execParams.Resource,
 		})
 		if err != nil {
 			writeStoreError(w, err)
@@ -267,6 +328,18 @@ func (f *HandlerFactory) HandleCreate(module, entity string) http.HandlerFunc {
 			return
 		}
 
+		if rec != nil {
+			action.RunAfterPhase(ctx, f.dispatcher, hooks, actionSpec, "create", action.ExecuteParams{
+				Module: module, Entity: entity, ActionName: "create", ResourceID: id,
+				Resource: rec.Data, TenantID: tenantID, UserID: createdBy,
+			})
+			if entitySpec != nil {
+				if emitted := action.ResolveEmission(entitySpec.Events, emitsOf(actionSpec), rec.Data); emitted != nil {
+					action.DeliverEvents(ctx, f.deliveryDeps, tenantID, module+"/"+entity, []action.EventEmission{*emitted})
+				}
+			}
+		}
+
 		writeJSON(w, http.StatusCreated, SingleResponse{
 			Data: rec,
 			Meta: MetaSingle{RequestID: requestIDFromContext(ctx), Timestamp: time.Now().UTC().Format(time.RFC3339)},
@@ -274,7 +347,10 @@ func (f *HandlerFactory) HandleCreate(module, entity string) http.HandlerFunc {
 	}
 }
 
-// HandleUpdate returns a PATCH /{id} handler for the given entity.
+// HandleUpdate returns a PATCH /{id} handler for the given entity. Like
+// HandleCreate, an entity-declared update action's impl and hooks: entries
+// run as a synchronous, cancelable before-phase ahead of the actual update;
+// the base guard (Update itself) always runs afterward.
 func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
@@ -294,10 +370,42 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 		updatedBy := userFromContext(ctx)
 		id := r.PathValue("id")
 
-		// Get current version
+		// Get current version and data — PATCH is a partial update, so the
+		// submitted body is merged onto the existing record rather than
+		// replacing it outright (Update()'s SQL overwrites the whole JSON
+		// blob, and required-field validation runs against the merged
+		// result, not just the fields the caller happened to resend).
 		current, err := store.GetByID(ctx, db.GetByIDParams{TenantID: tenantID, ID: id})
 		if err != nil {
 			writeError(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+			return
+		}
+
+		merged := current.Data
+		if merged == nil {
+			merged = make(map[string]any, len(body))
+		}
+		for k, v := range body {
+			merged[k] = v
+		}
+
+		var entitySpec *spec.EntitySpec
+		if f.specLookup != nil {
+			entitySpec, _ = f.specLookup(module, entity)
+		}
+		actionSpec := resolveAction(entitySpec, "update")
+		var hooks []spec.HookDecl
+		if entitySpec != nil {
+			hooks = entitySpec.Hooks
+		}
+
+		execParams := &action.ExecuteParams{
+			Module: module, Entity: entity, ActionName: "update", ResourceID: id,
+			Resource: merged, ResourceVersion: current.Version, Params: body,
+			TenantID: tenantID, UserID: updatedBy,
+		}
+		if err := action.RunBeforePhase(ctx, f.dispatcher, hooks, actionSpec, "update", execParams); err != nil {
+			writeError(w, http.StatusUnprocessableEntity, "HOOK_ABORTED", err.Error())
 			return
 		}
 
@@ -306,7 +414,7 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 			ID:        id,
 			Version:   current.Version,
 			UpdatedBy: updatedBy,
-			Data:      body,
+			Data:      execParams.Resource,
 		})
 		if err != nil {
 			writeStoreError(w, err)
@@ -318,6 +426,15 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 		// Attach new version
 		if rec != nil {
 			rec.Version = newVersion
+			action.RunAfterPhase(ctx, f.dispatcher, hooks, actionSpec, "update", action.ExecuteParams{
+				Module: module, Entity: entity, ActionName: "update", ResourceID: id,
+				Resource: rec.Data, TenantID: tenantID, UserID: updatedBy,
+			})
+			if entitySpec != nil {
+				if emitted := action.ResolveEmission(entitySpec.Events, emitsOf(actionSpec), rec.Data); emitted != nil {
+					action.DeliverEvents(ctx, f.deliveryDeps, tenantID, module+"/"+entity, []action.EventEmission{*emitted})
+				}
+			}
 		}
 
 		writeJSON(w, http.StatusOK, SingleResponse{
@@ -664,11 +781,13 @@ func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, a
 
 		// Load current resource data from the entity store
 		var resourceData map[string]any
+		var resourceVersion int
 		store, err := f.registry.GetEntityStore(module, entity)
 		if err == nil && resourceID != "" {
 			rec, getErr := store.GetByID(ctx, db.GetByIDParams{TenantID: tenantID, ID: resourceID})
 			if getErr == nil && rec != nil {
 				resourceData = rec.Data
+				resourceVersion = rec.Version
 				if resourceData == nil {
 					resourceData = make(map[string]any)
 				}
@@ -698,20 +817,48 @@ func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, a
 			}
 		}
 
-		result, err := f.dispatcher.Dispatch(ctx, actionSpec, action.ExecuteParams{
-			Module:     module,
-			Entity:     entity,
-			ActionName: actionName,
-			ResourceID: resourceID,
-			Resource:   resourceData,
-			Params:     params,
-			TenantID:   tenantID,
-			UserID:     userID,
-			Identity:   identityInfo,
-		})
+		var entitySpec *spec.EntitySpec
+		if f.specLookup != nil {
+			entitySpec, _ = f.specLookup(module, entity)
+		}
+		var hooks []spec.HookDecl
+		if entitySpec != nil {
+			hooks = entitySpec.Hooks
+		}
+
+		execParams := action.ExecuteParams{
+			Module:          module,
+			Entity:          entity,
+			ActionName:      actionName,
+			ResourceID:      resourceID,
+			Resource:        resourceData,
+			ResourceVersion: resourceVersion,
+			Params:          params,
+			TenantID:        tenantID,
+			UserID:          userID,
+			Identity:        identityInfo,
+		}
+
+		// hooks: entries scoped to this action name run as a before-phase
+		// around the dispatch below. actionSpec itself is NOT passed as the
+		// "own impl" (unlike create/update) — Dispatch already executes it;
+		// passing it here too would run it twice.
+		if err := action.RunBeforePhase(ctx, f.dispatcher, hooks, nil, actionName, &execParams); err != nil {
+			writeError(w, http.StatusUnprocessableEntity, "HOOK_ABORTED", err.Error())
+			return
+		}
+
+		result, err := f.dispatcher.Dispatch(ctx, actionSpec, execParams)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "ACTION_ERROR", err.Error())
 			return
+		}
+
+		action.RunAfterPhase(ctx, f.dispatcher, hooks, nil, actionName, execParams)
+		if entitySpec != nil {
+			if emitted := action.ResolveEmission(entitySpec.Events, actionSpec.Emits, execParams.Resource); emitted != nil {
+				action.DeliverEvents(ctx, f.deliveryDeps, tenantID, module+"/"+entity, []action.EventEmission{*emitted})
+			}
 		}
 
 		writeJSON(w, http.StatusOK, SingleResponse{

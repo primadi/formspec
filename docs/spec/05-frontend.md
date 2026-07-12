@@ -479,7 +479,7 @@ spec:
 
 ## 11. `kind: Wizard` — Multi-Step Process
 
-A Wizard guides the user through a sequential business process that spans multiple steps, potentially touching multiple entities. The framework manages stepper navigation, step validation, partial saves (draft/resume), and inter-step field dependencies.
+A Wizard guides the user through a sequential business process that spans multiple steps, potentially touching multiple entities. The framework manages stepper navigation, step validation, inter-step field dependencies, per-instance autosave, and completion behavior.
 
 ```yaml
 apiVersion: forma.dev/v1alpha1
@@ -489,41 +489,48 @@ metadata:
   module: clinic
 spec:
   title: "Patient Registration — {step.title}"
-  action: register_patient               # server-side action that atomically commits all steps
-  allow_partial_save: true               # draft/resume — saves progress as draft entity row
+  entity: visit             # no `action`: final step does a plain create on this entity
+                             # using the accumulated step data
+  on_complete:
+    restart: true            # reset stepData/currentStep to 0 instead of navigating away
+    redirect: null           # path to navigate to instead; ignored when restart: true
+    banner:
+      - { label: "Queue Number", field: response.queue_number }
   steps:
-    - step: 1
-      title: "Find Patient"
+    - title: "Find Patient"
       layout: search_select
       entity: patient
       search_fields: [nik, name, phone]
       allow_create: true                 # "New Patient" button if not found
-    - step: 2
-      title: "Select Poly & Doctor"
+    - title: "Select Poly & Doctor"
+      required: [polyclinic_id, doctor_id]
       fields:
         - { field: polyclinic_id, entity: polyclinic, type: dropdown, required: true }
         - { field: doctor_id, entity: doctor, type: dropdown, required: true,
             depends_on: polyclinic_id }  # filter doctors by selected polyclinic
-    - step: 3
-      title: "Confirm & Submit"
+      on_prev: discard-poly-selection    # optional action fired when leaving via Previous
+    - title: "Confirm & Submit"
+      on_enter: prefill-visit-defaults   # optional action fired when the step becomes active
       summary:
         - { label: "Patient", field: patient.name }
         - { label: "Polyclinic", field: polyclinic.name }
         - { label: "Doctor", field: doctor.name }
-      actions:
-        - { action: register_patient, label: "Confirm Registration", style: primary }
 ```
 
 **Rules:**
-- `action` is the server-side action that atomically writes all step data. It MUST exist on at least one document involved in the wizard. The action handler receives the accumulated wizard state as input.
-- `allow_partial_save: true` persists intermediate step data as a draft. The Wizard resumes from the last saved step when reopened. Draft rows are tenant-scoped and cleaned up on completion or after a configurable TTL.
-- `depends_on` establishes a client-side filter chain: when `polyclinic_id` changes, the `doctor_id` dropdown re-fetches with the new filter. This is UX-only; server-side validation in the wizard's `action` is the authority.
+- `action` (wizard-level) is optional. If set, it's a server-side action that atomically writes all step data on final submit — it MUST exist on at least one document involved in the wizard, and receives the accumulated wizard state as input. If omitted (as above), the final step does a plain `create` on `entity` using the accumulated step data — every field the entity needs must already be resolved by prior steps (e.g. a `patient_id` captured via an eager `search_select` create in step 1).
+- `on_complete` controls what happens after a successful final submit:
+  - `restart: true` clears `stepData` and returns to step 0 instead of navigating away — for front-desk-style flows where one completion should immediately make way for the next (e.g. register one patient, then the next).
+  - `redirect` navigates to the given path instead. Ignored when `restart: true`.
+  - `banner` renders info from the just-completed submission using the same dotted-path resolution as step `summary`, but resolved against `response.*` (the API response of the final submit) rather than `stepData` — required because `stepData` itself is cleared on restart.
+- Step-level `required: [field, ...]` gates the Next button — Next is disabled until every listed field has a value in `stepData`.
+- Step-level hooks: `on_enter` fires an action when the step becomes active (including on Back); `on_next` (previously the bare `action` property) fires on Next before advancing; `on_prev` fires when leaving the step via Previous. All three are optional and best-effort — a failing hook does not block navigation.
+- `depends_on` establishes a client-side filter chain: when `polyclinic_id` changes, the `doctor_id` dropdown re-fetches with the new filter. This is UX-only; server-side validation is the authority.
 - Steps are sequential — the renderer enforces completion of step N before step N+1 is accessible. Back navigation is always allowed (step N-1 data is preserved).
-- Each step's fields are validated client-side on "Next"; the wizard's `action` runs full validation server-side on final submit.
-- A Wizard page has its own route (`/wizard/:name`); step state is tracked in the URL (`?step=2`) for deep-linking and browser back-button support.
+- A Wizard page has its own route (`/wizard/:name`); step state is tracked in the URL (`?step=2`) for deep-linking and browser back-button support. Each open wizard is additionally identified by a `?instance=<id>` param (auto-generated if absent) — `stepData` autosaves to `localStorage` under `wizard:{name}:{instance}`, so ordinary multi-tab use (Ctrl+click) and page refresh don't clobber or lose in-progress data. There is no server-side draft row.
 - When a wizard step needs custom UI beyond fields/dropdowns, use `component:` within the step — the component receives `{ wizard, step, data, forma }` props.
 
-**Relationship to other kinds:** A Wizard is essentially a stateful composition of Form-like steps with a stepper shell. If a process needs only linear form sections without sequential enforcement, use `kind: Form` with `layout.sections`. Wizard exists for the pattern where each step depends on the previous, partial saves are expected, and the final commit is a single server-side action (D38).
+**Relationship to other kinds:** A Wizard is essentially a stateful composition of Form-like steps with a stepper shell. If a process needs only linear form sections without sequential enforcement, use `kind: Form` with `layout.sections`. Wizard exists for the pattern where each step depends on the previous and the final commit is either a single server-side action or a plain create on the target entity (D38).
 
 ---
 

@@ -2,7 +2,7 @@ apiVersion: forma.dev/v1alpha1
 kind: Config
 metadata:
   name: gl
-  module: general-ledger
+  module: gl
   description: Konfigurasi General Ledger
 spec:
   keys:

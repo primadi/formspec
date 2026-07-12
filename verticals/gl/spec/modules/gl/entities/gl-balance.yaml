@@ -2,7 +2,7 @@ apiVersion: forma.dev/v1alpha1
 kind: Entity
 metadata:
   name: gl-balance
-  module: general-ledger
+  module: gl
   description: Saldo per akun per periode — di-update otomatis via reliable event
 spec:
   version: v1
@@ -37,4 +37,4 @@ spec:
     - name: update
       description: Dipanggil outbox worker saat journal-posted/reversed
       idempotent: true
-      impl: { type: script_ref, ref: general-ledger/gl_balance_update }
+      impl: { type: script_ref, ref: gl/gl_balance_update }

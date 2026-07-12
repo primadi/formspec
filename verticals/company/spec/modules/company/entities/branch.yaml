@@ -1,0 +1,27 @@
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: branch
+  module: company
+  description: Cabang — satu tenant/workspace bisa punya banyak cabang
+spec:
+  version: v1
+  characteristic: master
+
+  fields:
+    - name: code
+      type: string
+      natural_key: true
+      immutable: true
+      unique: true
+      rules: [required]
+    - name: name
+      type: string
+      rules: [required]
+    - name: parent_id
+      type: relation
+      relation: { type: belongs_to, resource: company.branch }
+      description: Cabang induk — opsional, untuk hierarki (mis. kantor wilayah -> outlet)
+    - name: is_active
+      type: boolean
+      default: true

@@ -681,16 +681,24 @@ export interface WizardSpec {
   title: string
   entity?: string
   action?: string
-  allow_partial_save?: boolean
+  on_complete?: WizardOnComplete
   steps: WizardStep[]
-  save?: "draft" | "partial" | "full"
+}
+
+export interface WizardOnComplete {
+  restart?: boolean
+  redirect?: string | null
+  banner?: WizardSummaryItem[]
 }
 
 export interface WizardStep {
   title: string
   description?: string
   form?: string
-  action?: string
+  on_enter?: string
+  on_next?: string
+  on_prev?: string
+  required?: string[]
   depends_on?: string
   entity?: string
   layout?: string

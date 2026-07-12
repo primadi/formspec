@@ -1,10 +1,10 @@
-// impl/general-ledger/create_sales_journal.go
+// impl/sales-gl-integrator/create_sales_journal.go
 //
 // Implementasi native untuk Subscription job "create-sales-journal".
 // Dipicu oleh kind: Subscription → on: billing.order, event: paid → deliver: queue, job: create-sales-journal.
 // File ini TIDAK termasuk dalam deployment artifact.
 
-package generalledger
+package salesglintegrator
 
 import (
 	"context"

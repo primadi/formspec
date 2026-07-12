@@ -196,6 +196,7 @@ func TestNaturalKeyCounter_GenerateNaturalKey(t *testing.T) {
 		resource string
 		format   string
 		reset    string
+		prefix   string
 		wantPat  string
 	}{
 		{
@@ -240,11 +241,29 @@ func TestNaturalKeyCounter_GenerateNaturalKey(t *testing.T) {
 			reset:    "never",
 			wantPat:  "invoice-number-00001",
 		},
+		{
+			// {seq...} is the placeholder name every manifest in this repo
+			// actually uses (e.g. Clinic's visit.queue_number: "{prefix}-{seq:03d}") —
+			// must be supported as an alias of {counter...}, not just {counter...}.
+			name:     "seq placeholder with prefix (visit.queue_number shape)",
+			resource: "visit",
+			format:   "{prefix}-{seq:03d}",
+			reset:    "never",
+			prefix:   "Q",
+			wantPat:  "Q-001",
+		},
+		{
+			name:     "bare seq placeholder",
+			resource: "inv6",
+			format:   "{seq}",
+			reset:    "never",
+			wantPat:  "1",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			key, err := c.GenerateNaturalKey(ctx, "t1", tt.resource, "number", "", tt.reset, tt.format)
+			key, err := c.GenerateNaturalKey(ctx, "t1", tt.resource, "number", "", tt.reset, tt.format, tt.prefix)
 			if err != nil {
 				t.Fatalf("GenerateNaturalKey failed: %v", err)
 			}
@@ -271,9 +290,9 @@ func TestNaturalKeyCounter_GenerateNaturalKey_Sequential(t *testing.T) {
 
 	c := NewNaturalKeyCounter(d, DriverSQLite)
 
-	key1, _ := c.GenerateNaturalKey(ctx, "t1", "invoice", "number", "", "never", "INV-{counter:05d}")
-	key2, _ := c.GenerateNaturalKey(ctx, "t1", "invoice", "number", "", "never", "INV-{counter:05d}")
-	key3, _ := c.GenerateNaturalKey(ctx, "t1", "invoice", "number", "", "never", "INV-{counter:05d}")
+	key1, _ := c.GenerateNaturalKey(ctx, "t1", "invoice", "number", "", "never", "INV-{counter:05d}", "")
+	key2, _ := c.GenerateNaturalKey(ctx, "t1", "invoice", "number", "", "never", "INV-{counter:05d}", "")
+	key3, _ := c.GenerateNaturalKey(ctx, "t1", "invoice", "number", "", "never", "INV-{counter:05d}", "")
 
 	if key1 != "INV-00001" {
 		t.Errorf("expected INV-00001, got %q", key1)
@@ -312,7 +331,7 @@ func TestNaturalKeyCounter_PeekCounter(t *testing.T) {
 	}
 
 	// Generate first key
-	key1, _ := c.GenerateNaturalKey(ctx, "t1", "invoice", "number", "", "never", "INV-{counter:05d}")
+	key1, _ := c.GenerateNaturalKey(ctx, "t1", "invoice", "number", "", "never", "INV-{counter:05d}", "")
 	if key1 != "INV-00001" {
 		t.Errorf("expected INV-00001, got %q", key1)
 	}
@@ -344,9 +363,9 @@ func TestNaturalKeyCounter_ResetCounter(t *testing.T) {
 	c := NewNaturalKeyCounter(d, DriverSQLite)
 
 	// Generate some keys
-	c.GenerateNaturalKey(ctx, "t1", "invoice", "number", "", "never", "INV-{counter:05d}")
-	c.GenerateNaturalKey(ctx, "t1", "invoice", "number", "", "never", "INV-{counter:05d}")
-	c.GenerateNaturalKey(ctx, "t1", "invoice", "number", "", "never", "INV-{counter:05d}")
+	c.GenerateNaturalKey(ctx, "t1", "invoice", "number", "", "never", "INV-{counter:05d}", "")
+	c.GenerateNaturalKey(ctx, "t1", "invoice", "number", "", "never", "INV-{counter:05d}", "")
+	c.GenerateNaturalKey(ctx, "t1", "invoice", "number", "", "never", "INV-{counter:05d}", "")
 
 	// Peek → should be 3
 	val, _, _ := c.PeekCounter(ctx, "t1", "invoice", "number", "", "never")
@@ -366,7 +385,7 @@ func TestNaturalKeyCounter_ResetCounter(t *testing.T) {
 	}
 
 	// Next should be 1
-	key, _ := c.GenerateNaturalKey(ctx, "t1", "invoice", "number", "", "never", "INV-{counter:05d}")
+	key, _ := c.GenerateNaturalKey(ctx, "t1", "invoice", "number", "", "never", "INV-{counter:05d}", "")
 	if key != "INV-00001" {
 		t.Errorf("expected INV-00001 after reset, got %q", key)
 	}

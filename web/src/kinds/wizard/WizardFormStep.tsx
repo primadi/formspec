@@ -106,14 +106,6 @@ export default function WizardFormStep({
   const dependsOnField = step.depends_on
   const dependsOnValue = dependsOnField ? stepData[dependsOnField] : undefined
 
-  // Find the field that depends on another
-  const dependentField = dependsOnField
-    ? allFields.find((f) => {
-        const entityField = entity?.fields.find((ef) => ef.name === f.name)
-        return entityField?.type === "relation" && entityField.relation?.resource
-      })
-    : undefined
-
   // ── Render a single form field ──
 
   const renderField = (field: FormField) => {
@@ -130,7 +122,10 @@ export default function WizardFormStep({
       const resource = entityField.relation.resource
       const options = optionsCache[resource] ?? []
       const isLoading = loadingOptions[resource] ?? false
-      const isDependent = dependsOnField === field.name
+      // This field is the *dependent* one (e.g. doctor_id) when a depends_on
+      // is declared and it isn't the trigger field itself (e.g. polyclinic_id)
+      // — the trigger field's own options are never filtered by themselves.
+      const isDependent = dependsOnField !== undefined && field.name !== dependsOnField
       const dependentId = isDependent ? dependsOnValue : undefined
 
       // Filter options if this field depends on another
@@ -155,7 +150,16 @@ export default function WizardFormStep({
           <select
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
             value={value}
-            onChange={(e) => onFieldChange(field.name, e.target.value)}
+            onChange={(e) => {
+              const id = e.target.value
+              onFieldChange(field.name, id)
+              // Also store the full record under the resource name (e.g.
+              // "polyclinic"/"doctor") so wizard summary steps can resolve
+              // dotted paths like "polyclinic.name" — mirrors how
+              // SearchSelect stores the full patient record.
+              const full = filteredOptions.find((o) => o.id === id)
+              onFieldChange(resource, full ?? null)
+            }}
           >
             <option value="">Pilih {label}</option>
             {isLoading ? (

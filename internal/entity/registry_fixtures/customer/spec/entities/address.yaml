@@ -1,0 +1,21 @@
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: address
+  module: billing
+  description: Alamat pelanggan — registry-test fixture
+spec:
+  version: v1
+  characteristic: master
+
+  fields:
+    - name: customer_id
+      type: relation
+      relation: { type: belongs_to, resource: customer }
+      immutable: true
+    - name: street
+      type: string
+      rules: [required]
+    - name: city
+      type: string
+      rules: [required]

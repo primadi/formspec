@@ -1,6 +1,10 @@
 # Forma Examples
 
-Kumpulan contoh aplikasi bisnis yang dibangun dengan **Forma Core Basic v0.2.0** + **Core Extended stub**.
+Kumpulan contoh yang dibangun dengan **Forma Core Basic v0.2.0** + **Core Extended stub** — spec-conformance dan DX test-drive fixtures, bukan produk vertikal yang nyata.
+
+> **Vertical modules pindah ke [`verticals/`](../verticals/).** `Customer`, `General-Ledger`, `Inventory`, dan `Order-to-Cash` dulu ada di sini, tapi ternyata itu App standalone yang bisa di-install ke workspace client — bukan sekadar demo (lihat `Order-to-Cash/README.md`'s klasifikasi lama: "App standalone"). Empat-empatnya sudah dipindah + direstrukturisasi jadi App independen (`company`, `billing`, `inventory`, `gl`, `notifications`, `sales-inventory-integrator`, `sales-gl-integrator`) di bawah `verticals/`. Lihat [`verticals/README.md`](../verticals/README.md) dan [`docs/architecture/07-vertical-modules.md`](../docs/architecture/07-vertical-modules.md) untuk rasionalnya dan pembagian modul ERP secara keseluruhan.
+>
+> Yang tetap tinggal di `examples/` adalah fixture konformansi spec/renderer murni: `Clinic-UI-Showcase` (frontend-renderer coverage), `Midtrans-Payment-Gateway` (payment gateway adapter demo), dan `reference-app` (minimal engine-embedding demo).
 
 ## Tujuan
 
@@ -11,11 +15,11 @@ Kumpulan contoh aplikasi bisnis yang dibangun dengan **Forma Core Basic v0.2.0**
 
 | Example | Klasifikasi | Deskripsi | `forma.yaml` |
 |---|---|---|---|
-| [Customer](./Customer/) | **Module** (`billing`) | Data pelanggan & alamat | ❌ (murni module) |
+| [Clinic-UI-Showcase](./Clinic-UI-Showcase/) | **App** (`klinik-sehat`) | Coverage penuh 12 kind frontend renderer | ✅ standalone |
 | [Midtrans Payment Gateway](./Midtrans-Payment-Gateway/) | **Module** (`billing`) | Service wrapper payment gateway + mockup + webhook | ❌ (murni module) |
-| [General Ledger](./General-Ledger/) | **App** (`general-ledger`) | Double-entry accounting core | ✅ standalone |
-| [Inventory](./Inventory/) | **App** (`inventory`) | Multi-warehouse stock tracking | ✅ standalone |
-| [Order-to-Cash](./Order-to-Cash/) | **App** (`tokoku`) | Contoh kanonik: order → bayar → jurnal → nota | ✅ (compose 3 module) |
+| [reference-app](./reference-app/) | Go embedding demo | Minimal `main.go` untuk embed `resource.New(cfg)` | n/a |
+
+Vertical modules yang tadinya di sini: lihat tabel di [`verticals/README.md`](../verticals/README.md).
 
 ## Pembagian Module vs App
 
@@ -23,10 +27,6 @@ Kumpulan contoh aplikasi bisnis yang dibangun dengan **Forma Core Basic v0.2.0**
 |---|---|---|
 | **App** | Unit deployment & trust boundary | Punya `forma.yaml`, di-install ke Workspace |
 | **Module** | Package of manifests | `module.yaml` saja, di-compose oleh App |
-
-**Customer** dan **Midtrans PG** adalah module di bawah namespace `billing` — mereka tidak berdiri sendiri, melainkan di-compose oleh App `tokoku` (Order-to-Cash).
-
-**General Ledger** dan **Inventory** adalah App standalone — bisa di-install ke workspace client secara independen, atau di-compose sebagai module oleh App lain.
 
 ## Struktur Setiap Example
 
@@ -66,6 +66,8 @@ Kumpulan contoh aplikasi bisnis yang dibangun dengan **Forma Core Basic v0.2.0**
 | **Core Extended stub** | `Mockup`, `Webhook` + environment binding |
 
 ## Coverage Matrix
+
+**Historical** — dari `SPEC-COMPATIBILITY-NOTES.md`'s test-drive (2026-07-03), dari saat Customer/GL/Inventory/O2C masih di sini. Kolom-kolom itu sekarang adalah `billing`/`gl`/`inventory` di `verticals/`; tabel ini dibiarkan sebagai catatan konformansi spec, bukan diperbarui per lokasi baru.
 
 | Konsep | Customer | Midtrans | GL | Inventory | O2C |
 |---|---|---|---|---|---|

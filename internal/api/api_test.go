@@ -114,14 +114,14 @@ func TestGenerateRoutes_NoExpose(t *testing.T) {
 	reg, d := setupTestRegistryWithExpose(t)
 	defer d.Close()
 
-	// Load from Customer spec which has no expose
-	reg = entity.NewRegistry(d, db.DriverSQLite, "../../examples/Customer/spec")
+	// Load from the billing vertical spec, none of whose entities declare expose
+	reg = entity.NewRegistry(d, db.DriverSQLite, "../../verticals/billing/spec")
 	reg.LoadEntities()
 	reg.SyncSchema(context.Background())
 
 	routes := GenerateRoutes(reg)
 	if len(routes) != 0 {
-		t.Fatalf("expected 0 routes (no expose in Customer spec), got %d", len(routes))
+		t.Fatalf("expected 0 routes (no expose in billing spec), got %d", len(routes))
 	}
 	t.Log("✓ deny-by-default: 0 routes for entities without expose")
 }

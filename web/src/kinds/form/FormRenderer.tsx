@@ -24,6 +24,7 @@ import { TextInput } from "@/widgets/TextInput"
 import { NumberInput } from "@/widgets/NumberInput"
 import { Select } from "@/widgets/Select"
 import { Switch } from "@/widgets/Switch"
+import { RelationPicker } from "@/widgets/RelationPicker"
 
 interface FormRendererProps {
   entity: EntitySchema
@@ -218,6 +219,7 @@ export default function FormRenderer({ entity, mode }: FormRendererProps) {
                       value={formValues[field.name as keyof FormData]}
                       error={errors[field.name]?.message as string | undefined}
                       readonly={isReadonly || isView}
+                      currentModule={entity.module}
                       onChange={(value) => form.setValue(field.name as any, value, { shouldValidate: true })}
                     />
                     {field.help && !isView && (
@@ -266,6 +268,7 @@ function FormFieldWidget({
   value,
   error,
   readonly,
+  currentModule,
   onChange,
 }: {
   field: import("@/types/manifest").FormField
@@ -273,6 +276,7 @@ function FormFieldWidget({
   value: unknown
   error?: string
   readonly: boolean
+  currentModule?: string
   onChange: (value: any) => void
 }) {
   const widget = field.widget ?? entityField.type
@@ -335,6 +339,19 @@ function FormFieldWidget({
         </div>
       )
 
+    case "relation":
+      return (
+        <RelationPicker
+          value={value as string ?? ""}
+          onChange={(v) => onChange(v)}
+          entityField={entityField}
+          currentModule={currentModule ?? ""}
+          placeholder={field.placeholder}
+          readonly={readonly}
+          error={error}
+        />
+      )
+
     default:
       return (
         <TextInput
@@ -383,6 +400,11 @@ function buildZodField(
     case "datetime":
       schema = z.string()
       if (!entityField.required) schema = schema.optional().or(z.literal(""))
+      break
+    case "relation":
+      schema = z.string()
+      if (entityField.required) schema = (schema as z.ZodString).min(1, "Required")
+      else schema = (schema as z.ZodString).optional().or(z.literal(""))
       break
     default:
       schema = z.any()

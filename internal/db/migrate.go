@@ -101,6 +101,18 @@ func SystemTableDDLs(driver DriverType) []string {
 			"changes     text    NOT NULL DEFAULT '{}'",
 			fmt.Sprintf("created_at  %s NOT NULL DEFAULT %s", ts, ts),
 		),
+
+		// forma_event_log — durable record of delivered declared business
+		// events (deliver: {channel: audit_log}), distinct from
+		// forma_audit_log's CRUD-diff change history.
+		createTableSQL(driver, "forma_event_log",
+			idColumn(driver),
+			"tenant_id    text    NOT NULL",
+			"event_name   text    NOT NULL",
+			"resource     text    NOT NULL",
+			"payload      text    NOT NULL DEFAULT '{}'",
+			fmt.Sprintf("delivered_at %s NOT NULL DEFAULT %s", ts, ts),
+		),
 	}
 }
 
@@ -131,7 +143,7 @@ func (r *MigrationRunner) EnsureSystemTables(ctx context.Context) error {
 	ddlNames := []string{
 		"forma_schema_migrations", "forma_natural_key_counters",
 		"forma_idempotency_keys", "forma_outbox",
-		"forma_extensions", "forma_audit_log",
+		"forma_extensions", "forma_audit_log", "forma_event_log",
 	}
 	for i, ddl := range ddls {
 		if _, err := r.db.ExecContext(ctx, ddl); err != nil {

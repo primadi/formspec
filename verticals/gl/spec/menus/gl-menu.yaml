@@ -3,7 +3,7 @@ apiVersion: forma.dev/v1alpha1
 kind: Menu
 metadata:
   name: gl-main
-  module: general-ledger
+  module: gl
   description: Menu navigasi General Ledger
 spec:
   label: "Akuntansi"

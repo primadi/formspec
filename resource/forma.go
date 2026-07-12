@@ -27,8 +27,10 @@ package forma
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/primadi/forma/internal/action"
@@ -67,8 +69,13 @@ type Config struct {
 
 	// WebDir is the built renderer SPA root (web/dist). When set, the app
 	// serves it at /{ws}/_admin and /{ws}/app with an index.html fallback
-	// for client-side routes. Empty = API only.
+	// for client-side routes. Empty = API only (unless WebFS is set).
 	WebDir string
+
+	// WebFS is an embed.FS (or any fs.FS) containing the built SPA files
+	// at the root. When set, serves SPA at /{ws}/_admin and /{ws}/app
+	// with index.html fallback. Takes precedence over WebDir.
+	WebFS fs.FS
 }
 
 func (c *Config) applyDefaults() {
@@ -119,12 +126,14 @@ type NativeParams struct {
 // App is a running Forma entity engine: loaded manifests, a synced schema,
 // and a generated REST API handler.
 type App struct {
-	cfg      Config
-	reg      *entity.Registry
-	rb       *api.RouterBuilder
-	handler  http.Handler
-	disp     *action.Dispatcher
-	nativeEx *action.NativeExecutor
+	cfg          Config
+	reg          *entity.Registry
+	rb           *api.RouterBuilder
+	handler      http.Handler
+	disp         *action.Dispatcher
+	nativeEx     *action.NativeExecutor
+	outboxWorker *db.OutboxWorker
+	httpServer   *http.Server
 }
 
 // RegisterNative registers a Go native handler so the action dispatcher can
@@ -215,6 +224,9 @@ func New(cfg Config) (*App, error) {
 	if cfg.WebDir != "" {
 		rb.SetWebDir(cfg.WebDir)
 	}
+	if cfg.WebFS != nil {
+		rb.SetWebFS(cfg.WebFS)
+	}
 
 	validation.SetEntityLookup(func(module, entityName, id string) (bool, error) {
 		store, err := reg.GetEntityStore(module, entityName)
@@ -227,7 +239,44 @@ func New(cfg Config) (*App, error) {
 		return true, nil
 	})
 
-	return &App{cfg: cfg, reg: reg, rb: rb, handler: rb.BuildHTTP(), disp: disp, nativeEx: nativeEx}, nil
+	// Event delivery (Core §12): hub for immediate websocket push, outbox
+	// for durable (publish.durable: true) at-least-once redelivery, event
+	// log for the audit_log channel's durable record.
+	outboxStore := db.NewOutboxStore(database, driver)
+	eventLogStore := db.NewEventLogStore(database, driver)
+	hub := rb.Hub()
+	rb.SetDeliveryDeps(action.DeliveryDeps{Hub: hub, Outbox: outboxStore, EventLog: eventLogStore})
+
+	// eventChannelLookup re-resolves an event's declared deliver: channels
+	// from the live registry at delivery time (not a snapshot taken at
+	// enqueue time), so a hot-reloaded manifest fix is picked up by outbox
+	// retries automatically.
+	eventChannelLookup := func(resource, eventName string) ([]spec.EventDeliveryDecl, bool) {
+		module, name, ok := strings.Cut(resource, "/")
+		if !ok {
+			return nil, false
+		}
+		info, ok := reg.GetEntity(module, name)
+		if !ok || info.EntitySpec == nil {
+			return nil, false
+		}
+		for _, e := range info.EntitySpec.Events {
+			if e.Name == eventName {
+				return e.Deliver, true
+			}
+		}
+		return nil, false
+	}
+	outboxWorker := db.NewOutboxWorker(outboxStore, &db.DeliveryEventHandler{
+		Hub:      hub,
+		EventLog: eventLogStore,
+		Lookup:   eventChannelLookup,
+	})
+
+	return &App{
+		cfg: cfg, reg: reg, rb: rb, handler: rb.BuildHTTP(), disp: disp, nativeEx: nativeEx,
+		outboxWorker: outboxWorker,
+	}, nil
 }
 
 // Handler returns the generated REST API handler, for mounting into your
@@ -244,9 +293,26 @@ func (a *App) RouteCount() int { return a.rb.RouteCount() }
 // (inspecting loaded entities, fetching an EntityStore directly).
 func (a *App) Registry() *entity.Registry { return a.reg }
 
-// ListenAndServe starts the HTTP server on cfg.Addr.
+// ListenAndServe starts the HTTP server on cfg.Addr. It also starts the
+// outbox worker (background delivery of durable events) — started here
+// rather than in New() so building an App for tests (which typically only
+// call Handler()) never spins up a background poller.
 func (a *App) ListenAndServe() error {
-	return http.ListenAndServe(a.cfg.Addr, a.handler)
+	a.outboxWorker.Start(context.Background())
+	a.httpServer = &http.Server{Addr: a.cfg.Addr, Handler: a.handler}
+	return a.httpServer.ListenAndServe()
+}
+
+// Close gracefully stops the outbox worker and, if ListenAndServe started
+// one, the HTTP server. Safe to call even when ListenAndServe was never
+// used — OutboxWorker.Stop() is a no-op if never started, and httpServer
+// is nil.
+func (a *App) Close(ctx context.Context) error {
+	a.outboxWorker.Stop()
+	if a.httpServer != nil {
+		return a.httpServer.Shutdown(ctx)
+	}
+	return nil
 }
 
 func configureAuth(cfg Config) error {
@@ -281,44 +347,56 @@ func newDispatcher(reg *entity.Registry, cfg Config) *action.Dispatcher {
 	disp := action.NewDispatcher()
 
 	scriptEx := action.NewScriptExecutor(cfg.SpecPath)
-	scriptEx.SetSaveHandler(func(module, entityName, id string, data map[string]any) error {
+	scriptEx.SetSaveHandler(func(tenantID, module, entityName, id string, version int, data map[string]any) error {
+		if id == "" {
+			return fmt.Errorf("resource.save: cannot save before the record exists — use resource.set() during a before-create hook/impl; the framework persists automatically")
+		}
 		store, err := reg.GetEntityStore(module, entityName)
 		if err != nil {
 			return fmt.Errorf("get store: %w", err)
 		}
 		_, err = store.Update(context.Background(), db.UpdateParams{
-			TenantID:  cfg.TenantID,
+			TenantID:  tenantID,
 			ID:        id,
-			Version:   0, // TODO: fetch current version for CAS
+			Version:   version,
 			UpdatedBy: "script",
 			Data:      data,
 		})
 		return err
 	})
-	scriptEx.SetCallHandler(func(fromModule, targetModule, targetEntity, actionName string, _ map[string]any) (any, error) {
+	scriptEx.SetCallHandler(func(tenantID, fromModule, targetModule, targetEntity, actionName string, params map[string]any) (any, error) {
 		if targetModule == "" {
 			targetModule = fromModule
 		}
-		// TODO: dispatch to the action dispatcher for cross-resource calls
-		return map[string]any{"status": "called", "target": fmt.Sprintf("%s.%s.%s", targetModule, targetEntity, actionName)}, nil
+		return invokeAction(context.Background(), reg, disp, tenantID, targetModule, targetEntity, actionName, "", params)
 	})
-	scriptEx.SetLoadHandler(func(module, entityName, id string) (map[string]any, error) {
+	scriptEx.SetLoadHandler(func(tenantID, module, entityName, id string) (map[string]any, int, error) {
 		store, err := reg.GetEntityStore(module, entityName)
 		if err != nil {
-			return nil, fmt.Errorf("get store: %w", err)
+			return nil, 0, fmt.Errorf("get store: %w", err)
 		}
-		rec, err := store.GetByID(context.Background(), db.GetByIDParams{TenantID: cfg.TenantID, ID: id})
+		rec, err := store.GetByID(context.Background(), db.GetByIDParams{TenantID: tenantID, ID: id})
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		if rec == nil {
-			return nil, fmt.Errorf("record not found")
+			return nil, 0, fmt.Errorf("record not found")
 		}
-		return rec.Data, nil
+		return rec.Data, rec.Version, nil
 	})
-	scriptEx.SetNextKeyHandler(func(_ string) (string, error) {
-		// TODO: delegate to db.NaturalKeyCounter instead of a timestamp placeholder
-		return fmt.Sprintf("KEY-%d", time.Now().UnixNano()), nil
+	scriptEx.SetCreateHandler(func(tenantID, module, entityName string, data map[string]any) (string, error) {
+		store, err := reg.GetEntityStore(module, entityName)
+		if err != nil {
+			return "", fmt.Errorf("get store: %w", err)
+		}
+		return store.Insert(context.Background(), db.InsertParams{
+			TenantID:  tenantID,
+			CreatedBy: "script",
+			Data:      data,
+		})
+	})
+	scriptEx.SetNextKeyHandler(func(tenantID, module, entityName, fieldName string) (string, error) {
+		return generateNextKey(context.Background(), reg, tenantID, module, entityName, fieldName)
 	})
 	disp.RegisterExecutor(spec.ImplScript, scriptEx)
 	disp.RegisterExecutor(spec.ImplScriptRef, scriptEx)
@@ -329,6 +407,63 @@ func newDispatcher(reg *entity.Registry, cfg Config) *action.Dispatcher {
 
 	disp.SetNativeExecutor(nativeEx)
 	return disp
+}
+
+// generateNextKey is the ctx.next_key(field) backing for scripts — delegates
+// to the entity registry's natural-key counter. Automatic natural-key
+// generation on plain Create is separate (wired directly into
+// db.EntityStore.Insert, since it must run before required-field validation).
+func generateNextKey(ctx context.Context, reg *entity.Registry, tenantID, module, entityName, fieldName string) (string, error) {
+	return reg.GenerateNaturalKey(ctx, tenantID, module, entityName, fieldName)
+}
+
+// invokeAction runs a named action on module/entity — the resource.call()
+// backing for cross-resource script calls. If resourceID is non-empty, the
+// current record (data + version) is loaded first so the target action's
+// script sees real data and can save with correct CAS, exactly like an
+// HTTP-triggered custom action would.
+//
+// Note: unlike the HTTP path (internal/api/handler.go's HandleCustomAction),
+// this does not re-run EvaluateConditions before dispatch — no current
+// script exercises resource.call(), so that parity gap is deferred rather
+// than spending plumbing on an untested path.
+func invokeAction(ctx context.Context, reg *entity.Registry, disp *action.Dispatcher, tenantID, module, entityName, actionName, resourceID string, params map[string]any) (any, error) {
+	actionSpec, ok := reg.GetActionSpec(module, entityName, actionName)
+	if !ok {
+		return nil, fmt.Errorf("resource.call: action %s.%s.%s not found", module, entityName, actionName)
+	}
+
+	resourceData := make(map[string]any)
+	resourceVersion := 0
+	if resourceID != "" {
+		store, err := reg.GetEntityStore(module, entityName)
+		if err != nil {
+			return nil, fmt.Errorf("resource.call: get store: %w", err)
+		}
+		rec, err := store.GetByID(ctx, db.GetByIDParams{TenantID: tenantID, ID: resourceID})
+		if err != nil {
+			return nil, fmt.Errorf("resource.call: load %s.%s(%s): %w", module, entityName, resourceID, err)
+		}
+		if rec != nil {
+			resourceData = rec.Data
+			resourceVersion = rec.Version
+		}
+	}
+
+	result, err := disp.Dispatch(ctx, *actionSpec, action.ExecuteParams{
+		Module:          module,
+		Entity:          entityName,
+		ActionName:      actionName,
+		ResourceID:      resourceID,
+		Resource:        resourceData,
+		ResourceVersion: resourceVersion,
+		Params:          params,
+		TenantID:        tenantID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result.Data, nil
 }
 
 func newSidecarExecutor(cfg Config) action.Executor {

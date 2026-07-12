@@ -6,7 +6,7 @@
 // 3. Build route table from meta bundle
 // 4. Render AppShell with router
 
-import { useEffect } from "react"
+import { useEffect, useMemo } from "react"
 import {
   BrowserRouter,
   Routes,
@@ -59,6 +59,21 @@ function SurfaceShell({ surface }: { surface: "admin" | "app" }) {
   const metaError = useMetaStore((s) => s.error)
   const loadMeta = useMetaStore((s) => s.load)
 
+  // Build routes from meta bundle.
+  // Memoized: buildRoutes() constructs a fresh Component closure per route
+  // on every call, and React Router treats a changed Component reference as
+  // a different element type — remounting it and wiping any local state
+  // (e.g. a Wizard's step data) on every re-render, including re-renders
+  // triggered by navigation events unrelated to the bundle itself (like a
+  // wizard's own setSearchParams() step change). Keying on bundle/surfacePath
+  // keeps the same Component references across those re-renders.
+  // Must run before any early return below — Hooks can't be conditional.
+  const surfacePath = `/${workspace}/${surface === "admin" ? "_admin" : "app"}`
+  const surfaceRoutes = useMemo(
+    () => (bundle ? buildRoutes({ bundle, basePath: surfacePath }) : []),
+    [bundle, surfacePath],
+  )
+
   // Boot: fetch session + meta
   useEffect(() => {
     if (!sessionLoaded) {
@@ -110,13 +125,6 @@ function SurfaceShell({ surface }: { surface: "admin" | "app" }) {
       </div>
     )
   }
-
-  // Build routes from meta bundle
-  const surfacePath = `/${workspace}/${surface === "admin" ? "_admin" : "app"}`
-  const surfaceRoutes = buildRoutes({
-    bundle,
-    basePath: surfacePath,
-  })
 
   // Apply themes
   const themeBundle = bundle.themes?.[0]

@@ -1,9 +1,12 @@
 apiVersion: forma.dev/v1alpha1
 kind: App
 metadata:
-  name: general-ledger
+  name: gl
   description: Double-entry accounting core — standalone app
 spec:
   version: 1.0.0
   vendor: forma-dev
-  modules: [general-ledger]
+  modules: [gl]
+  publishes:
+    - service: journal-entries
+      actions: [create, post]

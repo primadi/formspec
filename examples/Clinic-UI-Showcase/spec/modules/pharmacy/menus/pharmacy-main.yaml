@@ -19,3 +19,7 @@ spec:
       icon: "list"
       route: "/pharmacy/prescriptions"
       order: 2
+    - label: "Jual Bebas (OTC)"
+      icon: "shopping-cart"
+      route: "/pharmacy/otc-sales"
+      order: 3

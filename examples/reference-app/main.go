@@ -4,7 +4,7 @@
 //
 // Usage:
 //
-//	go run ./examples/reference-app [--dsn sqlite:.forma/data.db] [--spec ./examples/Customer/spec] [--addr :8080]
+//	go run ./examples/reference-app [--dsn sqlite:.forma/data.db] [--spec ./verticals/billing/spec] [--addr :8080]
 package main
 
 import (
@@ -17,7 +17,7 @@ import (
 
 func main() {
 	dsn := flag.String("dsn", "sqlite:.forma/data.db", "Database DSN")
-	specPath := flag.String("spec", "./examples/Customer/spec", "Path to spec directory")
+	specPath := flag.String("spec", "./verticals/billing/spec", "Path to spec directory")
 	addr := flag.String("addr", ":8080", "Listen address")
 	prodMode := flag.Bool("prod", false, "Enable production mode (JWT auth)")
 	jwtSecret := flag.String("jwt-secret", "", "JWT signing secret (required in prod mode for HMAC)")

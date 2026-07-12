@@ -1,0 +1,9 @@
+apiVersion: forma.dev/v1alpha1
+kind: Module
+metadata:
+  name: sales-gl-integrator
+  description: Connects billing (sales) to gl (accounting) — no entities of its own, Subscription only
+spec:
+  version: 1.0.0
+  depends:
+    - module: forma/core

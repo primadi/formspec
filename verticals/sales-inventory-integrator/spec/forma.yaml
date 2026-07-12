@@ -1,0 +1,19 @@
+apiVersion: forma.dev/v1alpha1
+kind: App
+metadata:
+  name: sales-inventory-integrator
+  description: >
+    Integrator app — reacts to billing.order.paid and creates an outbound
+    stock movement in inventory. Optional: a workspace can run billing +
+    inventory without this app, or swap in a different vendor's connector.
+spec:
+  version: 1.0.0
+  vendor: forma-dev
+  modules: [sales-inventory-integrator]
+  consumes:
+    - app: billing
+      service: order-events
+      actions: [read]
+    - app: inventory
+      service: stock-movements
+      actions: [create, apply]

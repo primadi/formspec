@@ -1,4 +1,4 @@
-# modules/general-ledger/scripts/gl_balance_update.star
+# modules/gl/scripts/gl_balance_update.star
 
 def execute(resource, params, ctx):
     # Dipanggil oleh outbox worker via reliable_event.

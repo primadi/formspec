@@ -1,0 +1,12 @@
+apiVersion: forma.dev/v1alpha1
+kind: App
+metadata:
+  name: company
+  description: Shared org-structure — branch directory used by other verticals
+spec:
+  version: 1.0.0
+  vendor: forma-dev
+  modules: [company]
+  publishes:
+    - service: branch-directory
+      actions: [read]

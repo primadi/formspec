@@ -1,24 +1,25 @@
-# General Ledger — Spec
+# gl (General Ledger) — Spec
 
-**Klasifikasi:** **App** standalone. Bisa di-install ke workspace client, atau di-compose sebagai module oleh App lain (misal O2C `tokoku`).
+**Klasifikasi:** **App** standalone, independently installable — see [`docs/architecture/07-vertical-modules.md`](../../../docs/architecture/07-vertical-modules.md).
 **Spec target:** Forma Core Basic v0.2.0.
+
+> Formerly `examples/General-Ledger`, module name `general-ledger`. Moved to `verticals/gl` and the module renamed to `gl` (matching the `gl.journal-entry` references already used by `billing.order`'s event target and by `internal/manifest/examples_roundtrip_test.go`). The `order-to-journal` Subscription that used to live here was extracted to its own app, `verticals/sales-gl-integrator` — gl no longer reaches into `billing` itself.
 
 ## Struktur
 
 ```
-General-Ledger/
+verticals/gl/
 ├── spec/
 │   ├── README.md
-│   ├── forma.yaml                                    # kind: App "general-ledger"
+│   ├── forma.yaml                                    # kind: App "gl", publishes: journal-entries
+│   ├── menus/, widgets/, reports/, tables/, dashboards/  # App-level UI
 │   ├── modules/
-│   │   └── general-ledger/
+│   │   └── gl/
 │   │       ├── module.yaml                           # kind: Module
 │   │       ├── entities/
 │   │       │   ├── account.yaml                      # [reference] — chart of accounts
-│   │       │   ├── journal-entry.yaml                # [transaction] — double-entry journal
-│   │       │   └── gl-balance.yaml                   # [summary] — saldo per akun
-│   │       ├── subscriptions/
-│   │       │   └── order-to-journal.yaml             # kind: Subscription → order.paid
+│   │       │   ├── journal-entry.yaml                 # [transaction] — double-entry journal
+│   │       │   └── gl-balance.yaml                    # [summary] — saldo per akun
 │   │       ├── scripts/
 │   │       │   ├── journal_post.star
 │   │       │   ├── journal_reverse.star
@@ -28,17 +29,17 @@ General-Ledger/
 │   └── config/
 │       └── app.yaml
 │
-└── impl/
-    └── general-ledger/
-        └── create_sales_journal.go                   # native Go handler untuk Subscription job
+└── impl/                                             # (none currently — the one Go stub moved to
+                                                        #  sales-gl-integrator/impl/ with the subscription)
 ```
 
 ## App Identity
 
-- **Name:** `general-ledger`
+- **Name:** `gl`
 - **Vendor:** `forma-dev`
-- **Modules:** `general-ledger` (self-titled module)
-- **Permission namespace:** `general-ledger.*` (contoh: `general-ledger.journal-entries.post`)
+- **Modules:** `gl`
+- **Permission namespace:** `gl.*` (e.g. `gl.journal-entries.post`)
+- **Publishes:** `journal-entries` service (`create`, `post`) — consumed by `sales-gl-integrator`
 
 ## Konsep yang di-cover
 
@@ -52,22 +53,8 @@ General-Ledger/
 | `child: { storage: table }` — large child data | journal-entry.lines | Core Basic §10.3 |
 | Double-entry validation via `guard` | journal-entry state_machine | Core Basic §14 |
 | `deliver.reliable_event` — tak boleh hilang | journal-entry events | Core Basic §12.3 |
-| Cross-module `kind: Subscription` | order-to-journal.yaml | Core Basic §12.5/D35 |
 | `idempotent: true` + `idempotency_key: { from: server }` | journal-entry.post | Core Basic §11.8/D32 |
 
-## Relasi dengan Example Lain
+## Relasi dengan vertical lain
 
-| Example | Hubungan |
-|---|---|
-| **Order-to-Cash** | `order.paid` → reliable_event → `gl.journal-entry.create`; Subscription `order-to-journal` |
-| **Inventory** | Tidak langsung — GL bisa menerima journal dari modul lain via Subscription |
-
-## impl/
-
-Satu Go stub: `impl/general-ledger/create_sales_journal.go` — handler untuk Subscription job `create-sales-journal`.
-
-## Catatan: GL sebagai Module vs App
-
-GL bisa di-deploy dalam dua mode:
-1. **Standalone App** (ditunjukkan di sini) — punya `forma.yaml`, di-install ke workspace client.
-2. **Module di App lain** — `forma.yaml` dihapus, `modules/general-ledger/` di-copy ke App target (seperti di O2C).
+gl does not depend on any other vertical. `billing.order`'s `paid` event targets `gl.journal-entry` directly via `deliver.reliable_event` (see `verticals/billing/spec/modules/billing/entities/order.yaml`) — that's an existing direct cross-app reference, distinct from the `sales-gl-integrator` app, which additionally creates the sales journal entry itself via its own Subscription (`order-to-journal`) + job handler. See `docs/architecture/07-vertical-modules.md` for why both patterns currently coexist and which is preferred going forward.

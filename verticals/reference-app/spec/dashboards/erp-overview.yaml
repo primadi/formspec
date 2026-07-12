@@ -1,0 +1,19 @@
+# The one new cross-module artifact reference-app adds on top of what each
+# composed vertical already ships — proves cross-module UI composition works.
+apiVersion: forma.dev/v1alpha1
+kind: Dashboard
+metadata:
+  name: erp-overview
+  module: core
+  description: Ringkasan lintas-modul — pendapatan (billing) dan stok (inventory) dalam satu layar
+spec:
+  title: "ERP Overview"
+  widgets:
+    # Widget refs are matched by bare metadata.name, not module-qualified
+    # (internal/ui/registry.go indexes Widgets by name only) — that's fine
+    # here since "today-revenue" and "low-stock-alert" are unique across the
+    # composed set, but would collide if two modules ever reused a name.
+    - ref: today-revenue
+      layout: { x: 0, y: 0, w: 6, h: 2 }
+    - ref: low-stock-alert
+      layout: { x: 6, y: 0, w: 6, h: 4 }

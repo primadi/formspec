@@ -1,4 +1,4 @@
-# modules/general-ledger/scripts/journal_reverse.star
+# modules/gl/scripts/journal_reverse.star
 
 def execute(resource, params, ctx):
     # Reverse journal entry yang sudah posted.

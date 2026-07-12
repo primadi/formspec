@@ -337,7 +337,7 @@ Foundation phase: two-stage YAML pipeline (register → deploy) replacing direct
 | 4.F4.3 | Wizard — stepper, `?step=N`, `depends_on` filter chain, final action submit | ⏳ |
 | 4.F4.4 | Kanban — dnd-kit, optimistic status PATCH, 409 snap-back, state machine guard | ⏳ |
 | 4.F4.5 | Timeline — infinite scroll, date grouping, read-only enforcement | ⏳ |
-| 4.F4.6 | ⭐ **Milestone**: seluruh YAML UI `examples/Order-to-Cash` ter-render sesuai manifest | ⏳ |
+| 4.F4.6 | ⭐ **Milestone**: seluruh YAML UI `verticals/billing` (dulu `examples/Order-to-Cash`) ter-render sesuai manifest | ⏳ |
 | 4.F5.1 | Report — param form, group/totals, CSV export client-side | ⏳ |
 | 4.F5.2 | Print `format: html` (window.print + `@page` CSS) | ⏳ |
 | 4.F5.3 | Theme tokens → CSS custom properties | ⏳ |

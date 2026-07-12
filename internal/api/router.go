@@ -1,10 +1,12 @@
 package api
 
 import (
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/primadi/forma/internal/action"
@@ -22,6 +24,8 @@ type RouterBuilder struct {
 	dispatcher *action.Dispatcher
 	uiRegistry *ui.Registry
 	webDir     string // static SPA root (web/dist); empty = no static serving
+	webFS      fs.FS  // embedded SPA (embed.FS); empty = no static serving
+	hub        *WSHub
 }
 
 // NewRouterBuilder creates a new router builder backed by the entity registry.
@@ -29,6 +33,7 @@ func NewRouterBuilder(registry *entity.Registry) *RouterBuilder {
 	b := &RouterBuilder{
 		registry: registry,
 		factory:  NewHandlerFactory(registry),
+		hub:      NewWSHub(),
 	}
 	// Entity-spec lookup enables sort/filter validation on list endpoints.
 	b.factory.SetSpecLookup(func(module, name string) (*spec.EntitySpec, bool) {
@@ -48,6 +53,13 @@ func (b *RouterBuilder) SetDispatcher(d *action.Dispatcher) {
 	b.factory.SetDispatcher(d)
 }
 
+// SetDeliveryDeps wires the event-delivery dependencies (hub, outbox, event
+// log) used by HandleCreate/HandleUpdate/HandleCustomAction to fan out
+// declared events after a successful action.
+func (b *RouterBuilder) SetDeliveryDeps(deps action.DeliveryDeps) {
+	b.factory.SetDeliveryDeps(deps)
+}
+
 // SetUIRegistry wires the frontend UI registry; enables the Meta API
 // (/{ws}/api/v1/_meta/...). Call before BuildHTTP.
 func (b *RouterBuilder) SetUIRegistry(r *ui.Registry) {
@@ -59,6 +71,19 @@ func (b *RouterBuilder) SetUIRegistry(r *ui.Registry) {
 // routes. Call before BuildHTTP.
 func (b *RouterBuilder) SetWebDir(dir string) {
 	b.webDir = dir
+}
+
+// SetWebFS enables static SPA serving from an embed.FS (or any fs.FS) at
+// /{ws}/_admin and /{ws}/app with index.html fallback. Takes precedence
+// over SetWebDir. Call before BuildHTTP.
+func (b *RouterBuilder) SetWebFS(spaFS fs.FS) {
+	b.webFS = spaFS
+}
+
+// Hub returns the websocket hub backing /_ws, so callers (resource/forma.go)
+// can wire it into action.DeliveryDeps for event delivery.
+func (b *RouterBuilder) Hub() *WSHub {
+	return b.hub
 }
 
 // BuildRoutes generates route descriptors and stores them in the builder.
@@ -94,6 +119,9 @@ func (b *RouterBuilder) BuildHTTP() http.Handler {
 				r.Get("/entities/{module}/{name}", b.HandleMetaEntity())
 			})
 
+			// Realtime event push (Frontend kanban/board realtime: true).
+			r.Get("/_ws", b.HandleWS())
+
 			for _, rd := range b.routes {
 				if rd.Protocol != ProtocolREST {
 					continue
@@ -103,14 +131,37 @@ func (b *RouterBuilder) BuildHTTP() http.Handler {
 		})
 
 		// Static SPA (renderer) — /{ws}/_admin and /{ws}/app.
-		if b.webDir != "" {
-			spa := spaHandler(b.webDir)
+		// Priority: webFS (embed) > webDir (file system) > none.
+		var spa http.HandlerFunc
+		switch {
+		case b.webFS != nil:
+			spa = spaHandlerFS(b.webFS)
+		case b.webDir != "":
+			spa = spaHandler(b.webDir)
+		}
+		if spa != nil {
 			r.Get("/_admin", spa)
 			r.Get("/_admin/*", spa)
 			r.Get("/app", spa)
 			r.Get("/app/*", spa)
 		}
 	})
+
+	// Root-level static assets (Vite generates /assets/... absolute paths).
+	// These need to be accessible at the root so the SPA index.html can find them.
+	if b.webFS != nil {
+		assetHandler := spaAssetHandler(b.webFS)
+		r.Get("/assets/*", assetHandler)
+		r.Get("/favicon.svg", assetHandler)
+		r.Get("/icons.svg", assetHandler)
+		r.Get("/manifest.json", assetHandler)
+	} else if b.webDir != "" {
+		assetHandler := spaAssetHandlerDir(b.webDir)
+		r.Get("/assets/*", assetHandler)
+		r.Get("/favicon.svg", assetHandler)
+		r.Get("/icons.svg", assetHandler)
+		r.Get("/manifest.json", assetHandler)
+	}
 
 	// Health check
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -124,8 +175,11 @@ func (b *RouterBuilder) BuildHTTP() http.Handler {
 // If RequiredPermission is set, the route is wrapped with RequirePermission
 // middleware via chi's r.With() pattern.
 func (b *RouterBuilder) registerRoute(r chi.Router, rd RouteDescriptor) {
-	// Route pattern: /{module}/{plural}[/{id}]
-	pattern := "/" + rd.Module + "/" + rd.Plural + rd.PathSuffix()
+	// rd.Path is already the correct, fully-qualified path for every route
+	// kind (standard CRUD and custom actions alike — see generator.go). This
+	// router is mounted under /{workspace}/api/v1, so strip that prefix to
+	// get the pattern relative to this sub-router.
+	pattern := strings.TrimPrefix(rd.Path, "/api/v1")
 
 	// Resolve the handler for this action
 	var handler http.HandlerFunc
@@ -199,16 +253,6 @@ func (b *RouterBuilder) registerRoute(r chi.Router, rd RouteDescriptor) {
 	}
 }
 
-// PathSuffix returns the ID suffix part of the path if needed.
-func (rd RouteDescriptor) PathSuffix() string {
-	switch rd.Action {
-	case "find", "update", "delete":
-		return "/{id}"
-	default:
-		return ""
-	}
-}
-
 // Routes returns the generated route descriptors.
 func (b *RouterBuilder) Routes() []RouteDescriptor {
 	return b.routes
@@ -246,5 +290,98 @@ func spaHandler(dir string) http.HandlerFunc {
 		*r2.URL = *r.URL
 		r2.URL.Path = clean
 		fs.ServeHTTP(w, r2)
+	}
+}
+
+// spaHandlerFS serves static renderer assets from an embed.FS with an
+// index.html fallback for client-side routing.
+func spaHandlerFS(spaFS fs.FS) http.HandlerFunc {
+	fsrv := http.FileServer(http.FS(spaFS))
+	return func(w http.ResponseWriter, r *http.Request) {
+		path := chi.URLParam(r, "*")
+		if path == "" {
+			serveFileFS(w, r, spaFS, "index.html")
+			return
+		}
+
+		clean := filepath.Clean("/" + path)
+		clean = strings.TrimPrefix(clean, "/")
+		if _, err := fs.Stat(spaFS, clean); err != nil {
+			serveFileFS(w, r, spaFS, "index.html")
+			return
+		}
+
+		r2 := new(http.Request)
+		*r2 = *r
+		r2.URL = new(url.URL)
+		*r2.URL = *r.URL
+		r2.URL.Path = "/" + clean
+		fsrv.ServeHTTP(w, r2)
+	}
+}
+
+// serveFileFS serves a single file from an fs.FS (like http.ServeFile for embed).
+func serveFileFS(w http.ResponseWriter, r *http.Request, spaFS fs.FS, name string) {
+	data, err := fs.ReadFile(spaFS, name)
+	if err != nil {
+		http.Error(w, "Not Found", http.StatusNotFound)
+		return
+	}
+	// Guess content type based on extension
+	ct := mimeTypeByExtension(name)
+	w.Header().Set("Content-Type", ct)
+	w.Write(data)
+}
+
+// mimeTypeByExtension returns a MIME type for common web file extensions.
+func mimeTypeByExtension(name string) string {
+	switch {
+	case strings.HasSuffix(name, ".html"):
+		return "text/html; charset=utf-8"
+	case strings.HasSuffix(name, ".css"):
+		return "text/css; charset=utf-8"
+	case strings.HasSuffix(name, ".js"):
+		return "application/javascript; charset=utf-8"
+	case strings.HasSuffix(name, ".svg"):
+		return "image/svg+xml"
+	case strings.HasSuffix(name, ".png"):
+		return "image/png"
+	case strings.HasSuffix(name, ".woff2"):
+		return "font/woff2"
+	case strings.HasSuffix(name, ".json"):
+		return "application/json"
+	default:
+		return "application/octet-stream"
+	}
+}
+
+// spaAssetHandler serves static assets from an embed.FS at root level
+// (/assets/*, /favicon.svg, etc.) for Vite-generated absolute paths.
+// Uses serveFileFS to ensure correct Content-Type headers.
+func spaAssetHandler(spaFS fs.FS) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		path := chi.URLParam(r, "*")
+		if path == "" {
+			// /favicon.svg or /icons.svg — serve from root of FS
+			name := strings.TrimPrefix(r.URL.Path, "/")
+			serveFileFS(w, r, spaFS, name)
+			return
+		}
+		// /assets/index-xxx.js — chi strips /assets/, so path is the filename
+		serveFileFS(w, r, spaFS, "assets/"+path)
+	}
+}
+
+// spaAssetHandlerDir serves static assets from a file system directory at root level.
+func spaAssetHandlerDir(dir string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		path := chi.URLParam(r, "*")
+		if path == "" {
+			// /favicon.svg or /icons.svg — serve from root of directory
+			http.ServeFile(w, r, filepath.Join(dir, filepath.Base(r.URL.Path)))
+			return
+		}
+		// /assets/index-xxx.js
+		http.ServeFile(w, r, filepath.Join(dir, "assets", path))
 	}
 }

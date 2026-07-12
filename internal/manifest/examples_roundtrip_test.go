@@ -7,17 +7,32 @@ import (
 	"github.com/primadi/forma/pkg/spec"
 )
 
-// examplesDir points at the runnable example projects shipped with the repo.
-// They are written in the spec's canonical manifest vocabulary, so loading
-// them end-to-end guards against drift between docs/spec and pkg/spec.
+// examplesDir points at the conformance/demo projects shipped with the repo
+// (Clinic-UI-Showcase, Midtrans-Payment-Gateway, reference-app). They are
+// written in the spec's canonical manifest vocabulary, so loading them
+// end-to-end guards against drift between docs/spec and pkg/spec.
 const examplesDir = "../../examples"
 
-// TestExamplesLoadAndValidate walks every example project and asserts that
-// all manifests parse, use known kinds, and pass entity-spec validation.
+// verticalsDir points at the real, independently-installable vertical Apps
+// (company, billing, inventory, gl, notifications, and the two integrator
+// apps) — see docs/architecture/07-vertical-modules.md. Each is its own
+// project root exactly like an examplesDir entry.
+const verticalsDir = "../../verticals"
+
+// TestExamplesLoadAndValidate walks every example and vertical project and
+// asserts that all manifests parse, use known kinds, and pass entity-spec
+// validation.
 func TestExamplesLoadAndValidate(t *testing.T) {
-	projects, err := filepath.Glob(filepath.Join(examplesDir, "*"))
-	if err != nil || len(projects) == 0 {
-		t.Fatalf("no example projects found under %s (err=%v)", examplesDir, err)
+	var projects []string
+	for _, dir := range []string{examplesDir, verticalsDir} {
+		found, err := filepath.Glob(filepath.Join(dir, "*"))
+		if err != nil {
+			t.Fatalf("glob %s: %v", dir, err)
+		}
+		projects = append(projects, found...)
+	}
+	if len(projects) == 0 {
+		t.Fatalf("no example/vertical projects found under %s or %s", examplesDir, verticalsDir)
 	}
 
 	total := 0
@@ -38,17 +53,18 @@ func TestExamplesLoadAndValidate(t *testing.T) {
 		}
 	}
 	if total == 0 {
-		t.Fatal("no manifests loaded from examples — glob or discovery is broken")
+		t.Fatal("no manifests loaded — glob or discovery is broken")
 	}
 	t.Logf("validated %d manifests", total)
 }
 
-// TestOrderEntityRoundTrip pins the Order-to-Cash order entity — the canonical
-// spec example — field by field against the typed structs. Each assertion here
-// corresponds to a construct documented in Core Basic (§10–§14) that the YAML
-// layer must be able to represent.
+// TestOrderEntityRoundTrip pins the billing order entity — the canonical
+// spec example, formerly shipped as Order-to-Cash's order.yaml, now the
+// billing vertical App — field by field against the typed structs. Each
+// assertion here corresponds to a construct documented in Core Basic
+// (§10–§14) that the YAML layer must be able to represent.
 func TestOrderEntityRoundTrip(t *testing.T) {
-	loader := NewLoader(filepath.Join(examplesDir, "Order-to-Cash"))
+	loader := NewLoader(filepath.Join(verticalsDir, "billing"))
 	result, err := loader.LoadAll()
 	if err != nil {
 		t.Fatalf("LoadAll failed: %v", err)
@@ -65,7 +81,7 @@ func TestOrderEntityRoundTrip(t *testing.T) {
 		}
 	}
 	if order == nil {
-		t.Fatal("order entity not found in Order-to-Cash example")
+		t.Fatal("order entity not found in billing vertical")
 	}
 
 	// §10.1 field types: integer / decimal must survive parsing

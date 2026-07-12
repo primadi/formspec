@@ -93,19 +93,21 @@ func (c *NaturalKeyCounter) nextSequenceFallback(ctx context.Context, tenantID, 
 }
 
 // GenerateNaturalKey generates a formatted natural key using the counter.
-// The format string supports:
-//   - {counter}       → raw counter value (e.g. "1", "42")
-//   - {counter:05d}   → zero-padded counter (e.g. "00001", "00042")
-//   - {counter:04d}   → zero-padded (e.g. "0001")
+// The format string supports (both "counter" and "seq" are accepted as the
+// same placeholder — manifests in this repo use {seq...}, some older docs
+// use {counter...}):
+//   - {seq} / {counter}             → raw counter value (e.g. "1", "42")
+//   - {seq:05d} / {counter:05d}     → zero-padded counter (e.g. "00001")
 //   - {period}        → computed period string
 //   - {year}          → current year "2026"
 //   - {month}         → current month "07"
 //   - {day}           → current day "05"
 //   - {resource}      → entity name
 //   - {field}         → field name
-func (c *NaturalKeyCounter) GenerateNaturalKey(ctx context.Context, tenantID, resource, field, scope, reset, format string) (string, error) {
+//   - {prefix}        → the prefix argument, verbatim
+func (c *NaturalKeyCounter) GenerateNaturalKey(ctx context.Context, tenantID, resource, field, scope, reset, format, prefix string) (string, error) {
 	if format == "" {
-		format = "{prefix}-{period}-{counter:05d}"
+		format = "{prefix}-{period}-{seq:05d}"
 	}
 
 	counter, period, err := c.NextSequence(ctx, tenantID, resource, field, scope, reset)
@@ -113,7 +115,7 @@ func (c *NaturalKeyCounter) GenerateNaturalKey(ctx context.Context, tenantID, re
 		return "", fmt.Errorf("generate natural key for %s.%s: %w", resource, field, err)
 	}
 
-	return renderFormat(format, counter, period, resource, field, ""), nil
+	return renderFormat(format, counter, period, resource, field, prefix), nil
 }
 
 // PeekCounter returns the current counter value WITHOUT incrementing.
@@ -165,14 +167,17 @@ func computePeriod(reset string) string {
 func renderFormat(format string, counter int64, period, resource, field, prefix string) string {
 	result := format
 
-	// Replace {counter} variants
-	result = strings.ReplaceAll(result, "{counter}", fmt.Sprintf("%d", counter))
+	// Replace {counter}/{seq} and their zero-padded {…:0Nd} variants — both
+	// names refer to the same counter value; manifests in this repo use
+	// {seq...}, so both must be supported.
+	for _, name := range []string{"counter", "seq"} {
+		result = strings.ReplaceAll(result, "{"+name+"}", fmt.Sprintf("%d", counter))
 
-	// Find and replace {counter:WIDTHd} patterns
-	for i := 1; i <= 20; i++ {
-		placeholder := fmt.Sprintf("{counter:0%dd}", i)
-		replacement := fmt.Sprintf(fmt.Sprintf("%%0%dd", i), counter)
-		result = strings.ReplaceAll(result, placeholder, replacement)
+		for i := 1; i <= 20; i++ {
+			placeholder := fmt.Sprintf("{%s:0%dd}", name, i)
+			replacement := fmt.Sprintf(fmt.Sprintf("%%0%dd", i), counter)
+			result = strings.ReplaceAll(result, placeholder, replacement)
+		}
 	}
 
 	result = strings.ReplaceAll(result, "{period}", period)

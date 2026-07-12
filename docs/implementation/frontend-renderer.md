@@ -33,7 +33,7 @@ Non-goal (fase ini): `forma/ops`, `forma/console` (closed-source, arsitektur ter
 | **Entity schema lengkap** | `pkg/spec/entity.go` | `Field` (name, type, required, enum_values, rules, relation, child, computed), `Action`, `StateMachine`, `Characteristic`, `Expose` — semua bahan derivasi UI tersedia |
 | **REST API** | `internal/api/` | Route `/{ws}/api/v1/{module}/{plural}` untuk list/find/create/update/delete + custom action `POST .../{id}/{action}`; envelope `SingleResponse`/`ListResponse`/`ErrorResponse`; permission middleware per route |
 | **Auth** | `internal/auth/` | Dev mode (identity sintetis `perms: ["*"]`) + prod JWT Bearer (HS256/RS256/ES256). Stateless, tanpa cookie |
-| **Contoh YAML UI nyata** | `examples/Clinic-UI-Showcase/` (dibuat sebagai fixture Fase 4 — coverage penuh 12 kinds + derived), `examples/Order-to-Cash/spec/modules/billing/{pages,tables,menus,forms,widgets}/` | Material uji utama renderer |
+| **Contoh YAML UI nyata** | `examples/Clinic-UI-Showcase/` (dibuat sebagai fixture Fase 4 — coverage penuh 12 kinds + derived), `verticals/billing/spec/modules/billing/{pages,tables,menus,forms,widgets}/` | Material uji utama renderer |
 | **Web scaffold** | `web/` | React 19, Vite 8, TS 6, Tailwind 4, shadcn (style `base-nova`), react-router-dom 7, TanStack Table, react-hook-form + zod, dnd-kit, zustand, ky, sonner, lucide. `src/` masih kosong (satu route `<h1>Forma</h1>`) |
 
 ### 2.2 Gap backend yang menjadi prasyarat
@@ -257,7 +257,7 @@ Override resolution: `authored manifest (nama sama / entity sama) > derived defa
 | `Page` | **F3** | Komposisi blocks (form/table/widget/html) grid `layout.columns`; varian tabs; `component:` block = placeholder "custom component belum didukung" sampai F6 |
 | `Menu` | **F3** | Lihat §5.4 |
 | `Dashboard`/`Widget` | **F4** | stat + chart (line/bar) via komponen chart ringan; sumber = entity summary via list API; `customizable` (user layout, dnd-kit) fase belakangan |
-| `Wizard` | **F4** | Stepper; step state di `?step=N`; `depends_on` refetch dropdown; final submit = satu custom action; `allow_partial_save` menyusul (butuh draft server) |
+| `Wizard` | **F4** | Stepper; step state di `?step=N`, instance di `?instance=<id>` (autosave `stepData` ke localStorage per instance); `depends_on` refetch dropdown; `required` gate tombol Next; `on_enter`/`on_next`/`on_prev` hooks best-effort; final submit = custom action atau plain create ke `entity`; `on_complete` (restart/redirect/banner) |
 | `Kanban` | **F4** | dnd-kit; drag = PATCH `status_field` optimistic, 409 → snap back; kolom dari manifest, validasi transisi dari state machine |
 | `Timeline` | **F4** | Infinite scroll cursor `created_at`; group by date; read-only enforced |
 | `Report` | **F5** | Param form → filtered list + group/totals client-side; export CSV client-side dulu (async job menyusul) |
@@ -300,10 +300,10 @@ Semua widget themeable (token) dan menerima `readonly`/`required`/`visible` hasi
 | FormaExpr | vitest, table-driven | grammar penuh, edge cases, rejection non-expression |
 | Derivation engine | vitest | entity schema fixture (order, customer, config) → snapshot manifest derived; presedensi override |
 | Permission gate | vitest | paritas dengan test Go `auth_test.go` |
-| Kind renderers | testing-library + jsdom | render dari manifest fixture Order-to-Cash; interaksi (sort, filter, submit, 409, confirm dialog) |
-| E2E smoke | menyusul (Playwright) | boot → sidebar → list → create via modal → submit → detail; jalan lawan `forma-resource` + Order-to-Cash |
+| Kind renderers | testing-library + jsdom | render dari manifest fixture billing; interaksi (sort, filter, submit, 409, confirm dialog) |
+| E2E smoke | menyusul (Playwright) | boot → sidebar → list → create via modal → submit → detail; jalan lawan `forma-resource` + billing |
 
-Fixture utama: **`examples/Clinic-UI-Showcase`** — dibuat khusus untuk meng-exercise semua fitur renderer (12 kinds, semua pola lifecycle, derived-by-default, semua tipe field; lihat matriks coverage di README-nya — terverifikasi load bersih: 10 entities, 45 routes). Fixture kedua: `examples/Order-to-Cash` (Page/Table/Menu/Widget nyata dengan business logic lengkap).
+Fixture utama: **`examples/Clinic-UI-Showcase`** — dibuat khusus untuk meng-exercise semua fitur renderer (12 kinds, semua pola lifecycle, derived-by-default, semua tipe field; lihat matriks coverage di README-nya — terverifikasi load bersih: 10 entities, 45 routes). Fixture kedua: `verticals/billing` (Page/Table/Menu/Widget nyata dengan business logic lengkap, dulu `examples/Order-to-Cash`).
 
 ---
 

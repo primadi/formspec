@@ -7,3 +7,10 @@ spec:
   version: 1.0.0
   vendor: forma-dev
   modules: [inventory]
+  publishes:
+    - service: stock-movements
+      actions: [create, apply]
+  consumes:
+    - app: company
+      service: branch-directory
+      actions: [read]

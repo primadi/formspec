@@ -15,7 +15,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyDescriptionAttribute(("Thin client SDK bridging a .NET app to forma-sidecar: /invoke listener + ctx.* pr" +
     "oxy client"))]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("0.1.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("0.1.0+fa39192510729f95f6cbcc350aeb5146ffbe23da")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("0.1.0+5955d56849640abbec2df3f0a5dda26dfc76ef06")]
 [assembly: System.Reflection.AssemblyProductAttribute("Forma.LibForma")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Forma.LibForma")]
 [assembly: System.Reflection.AssemblyVersionAttribute("0.1.0.0")]

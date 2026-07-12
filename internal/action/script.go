@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	starlark "github.com/primadi/forma/internal/starlark"
 	"github.com/primadi/forma/pkg/spec"
@@ -17,7 +18,7 @@ import (
 // ScriptExecutor implements action.Executor for script and script_ref impl types.
 // It resolves script refs to .star file paths and executes them via starlark.
 type ScriptExecutor struct {
-	// basePath is the root of the spec directory (e.g. "./examples/Order-to-Cash/spec").
+	// basePath is the root of the spec directory (e.g. "./verticals/billing/spec").
 	basePath string
 	// engine is the underlying Starlark execution engine.
 	engine *starlark.ScriptExecutor
@@ -34,22 +35,27 @@ func NewScriptExecutor(basePath string) *ScriptExecutor {
 }
 
 // SetSaveHandler sets the save callback used by resource.save() in scripts.
-func (e *ScriptExecutor) SetSaveHandler(fn func(module, entity, id string, data map[string]any) error) {
+func (e *ScriptExecutor) SetSaveHandler(fn func(tenantID, module, entity, id string, version int, data map[string]any) error) {
 	e.engine.SaveHandler = fn
 }
 
 // SetCallHandler sets the cross-resource call callback.
-func (e *ScriptExecutor) SetCallHandler(fn func(fromModule, targetModule, targetEntity, action string, params map[string]any) (any, error)) {
+func (e *ScriptExecutor) SetCallHandler(fn func(tenantID, fromModule, targetModule, targetEntity, action string, params map[string]any) (any, error)) {
 	e.engine.CallHandler = fn
 }
 
 // SetLoadHandler sets the entity load callback.
-func (e *ScriptExecutor) SetLoadHandler(fn func(module, entity, id string) (map[string]any, error)) {
+func (e *ScriptExecutor) SetLoadHandler(fn func(tenantID, module, entity, id string) (map[string]any, int, error)) {
 	e.engine.LoadHandler = fn
 }
 
+// SetCreateHandler sets the entity create callback used by resource.create() in scripts.
+func (e *ScriptExecutor) SetCreateHandler(fn func(tenantID, module, entity string, data map[string]any) (string, error)) {
+	e.engine.CreateHandler = fn
+}
+
 // SetNextKeyHandler sets the natural key generation callback.
-func (e *ScriptExecutor) SetNextKeyHandler(fn func(fieldName string) (string, error)) {
+func (e *ScriptExecutor) SetNextKeyHandler(fn func(tenantID, module, entity, fieldName string) (string, error)) {
 	e.engine.NextKeyHandler = fn
 }
 
@@ -75,6 +81,7 @@ func (e *ScriptExecutor) Execute(ctx context.Context, action spec.Action, params
 		params.Params,
 		params.TenantID,
 		params.UserID,
+		params.ResourceVersion,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("script execution error: %w", err)
@@ -89,28 +96,45 @@ func (e *ScriptExecutor) Execute(ctx context.Context, action spec.Action, params
 
 // resolveScriptPath returns a function that resolves script refs to file paths.
 //
-// Resolution rules:
+// Resolution rules (first match wins):
 //   - "module/script_name" → "{basePath}/modules/{module}/scripts/{script_name}.star"
-//   - Also checks "{basePath}/scripts/{script_name}.star" (top-level scripts)
+//     (the layout used by every module-scoped example: Clinic, Inventory,
+//     General-Ledger, Order-to-Cash — a per-module "scripts/" subdirectory)
+//   - "module/script_name" → "{basePath}/modules/{ref}.star"
+//     (flat ref-as-path, kept for backward compatibility)
+//   - "{basePath}/scripts/{script_name}.star" (top-level scripts, used by
+//     examples with a flat spec layout, e.g. Customer, Midtrans-Payment-Gateway)
 func resolveScriptPath(basePath string) func(ref string) (string, error) {
 	return func(ref string) (string, error) {
-		// Parse ref format: "module/script_name" or "module/sub/script_name"
-		candidate := filepath.Join(basePath, "modules", ref+".star")
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate, nil
-		}
-
-		// Try top-level scripts directory
 		parts := parseRef(ref)
+		tried := make([]string, 0, 3)
+
 		if len(parts) >= 2 {
-			scriptName := parts[len(parts)-1]
-			candidate = filepath.Join(basePath, "scripts", scriptName+".star")
+			module := parts[0]
+			scriptName := strings.Join(parts[1:], "/")
+			candidate := filepath.Join(basePath, "modules", module, "scripts", scriptName+".star")
+			tried = append(tried, candidate)
 			if _, err := os.Stat(candidate); err == nil {
 				return candidate, nil
 			}
 		}
 
-		return "", fmt.Errorf("script not found for ref %q (tried: %s)", ref, candidate)
+		candidate := filepath.Join(basePath, "modules", ref+".star")
+		tried = append(tried, candidate)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		}
+
+		if len(parts) >= 2 {
+			scriptName := parts[len(parts)-1]
+			candidate = filepath.Join(basePath, "scripts", scriptName+".star")
+			tried = append(tried, candidate)
+			if _, err := os.Stat(candidate); err == nil {
+				return candidate, nil
+			}
+		}
+
+		return "", fmt.Errorf("script not found for ref %q (tried: %s)", ref, strings.Join(tried, ", "))
 	}
 }
 

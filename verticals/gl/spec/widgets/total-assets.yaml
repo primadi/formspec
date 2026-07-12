@@ -3,7 +3,7 @@ apiVersion: forma.dev/v1alpha1
 kind: Widget
 metadata:
   name: total-assets
-  module: general-ledger
+  module: gl
 spec:
   title: "Total Aset"
   type: metric

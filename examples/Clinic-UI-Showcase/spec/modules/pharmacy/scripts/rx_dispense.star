@@ -3,8 +3,8 @@
 
 def execute(resource, params, ctx):
     for item in resource.field.items:
-        med = medicine.load(item.medicine_id)
-        med.set("stock", med.field.stock - item.quantity)
+        med = resource.fetch("medicine", item["medicine_id"])
+        med.set("stock", med.field.stock - item["quantity"])
         med.save()
 
     resource.set("status", "dispensed")

@@ -1,0 +1,105 @@
+# SHOWCASE: penjualan obat bebas (OTC) — tanpa resep sama sekali, transaksi
+# instan di loket farmasi. Entity terpisah dari prescription: state machine
+# prescription (queued→compounding→ready→dispensed) memodelkan alur racik
+# yang tidak relevan untuk pembelian instan, dan memaksa OTC lewat situ akan
+# mengotori board antrian farmasi (pharmacy-queue kanban) dengan kartu yang
+# tak perlu ditindaklanjuti siapa pun.
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: otc-sale
+  module: pharmacy
+  description: Penjualan obat bebas (OTC) — tanpa resep, transaksi instan di loket farmasi
+spec:
+  version: v1
+  characteristic: transaction
+
+  auth: { required: true, strategies: [token] }
+  expose:
+    - { type: rest, enabled: true }
+
+  fields:
+    - name: transaction_date
+      type: date
+      required: true
+      index: true
+    - name: number
+      type: string
+      natural_key: true
+      immutable: true
+      unique: true
+      natural_key_rule:
+        strategy: sequence
+        format: "OTC-{year}{month}{day}-{seq:03d}"
+        reset: daily
+    - name: patient_id
+      type: relation
+      relation: { type: belongs_to, resource: clinic.patient }
+      description: Opsional — pembeli walk-in belum tentu pasien terdaftar
+    - name: buyer_name
+      type: string
+      description: Opsional — pembeli walk-in yang benar-benar anonim itu wajar untuk OTC
+    - name: status
+      type: enum
+      enum_values: [pending, completed, cancelled]
+      index: true
+    - name: items
+      type: child
+      child:
+        storage: jsonb
+        sequence_field: line_number
+        fields:
+          - { name: line_number, type: integer, immutable: true }
+          - { name: medicine_id, type: uuid, rules: [required, exists: medicine] }
+          - { name: quantity, type: integer, rules: [required, positive] }
+          - { name: unit_price, type: decimal, rules: [required, positive] }
+    - name: total
+      type: decimal
+      rules: [positive]
+    - name: notes
+      type: string
+
+  state_machine:
+    field: status
+    initial: pending
+    transitions:
+      - { from: pending, to: completed, via: sell,
+          guard: "items != None and len(items) > 0" }
+      - { from: pending, to: cancelled, via: cancel }
+
+  actions:
+    - name: delete
+      disabled: true
+
+    - name: sell
+      description: Selesaikan penjualan — kurangi stok & hitung total
+      required_permission: otc-sales.sell
+      audit: true
+      emits: completed
+      uses:
+        resources: [medicine.find, medicine.update]
+      impl: { type: script_ref, ref: pharmacy/otc_sell }
+
+    - name: cancel
+      required_permission: otc-sales.cancel
+      audit: true
+      impl: { type: script_ref, ref: pharmacy/otc_cancel }
+
+  events:
+    - name: completed
+      type: async
+      description: Penjualan OTC selesai
+      payload:
+        fields: [id, number, total, patient_id, buyer_name]
+      deliver:
+        - channel: audit_log
+        - channel: websocket
+          target: { scope: tenant }
+
+  # SHOWCASE: hooks before/create — batalkan create bila stok tidak
+  # mencukupi, sebelum baris otc-sale pernah dibuat (fail() = abort).
+  hooks:
+    - on: before
+      action: create
+      priority: 5
+      impl: { type: script_ref, ref: pharmacy/otc_sale_stock_guard }

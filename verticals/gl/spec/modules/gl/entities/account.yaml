@@ -2,7 +2,7 @@ apiVersion: forma.dev/v1alpha1
 kind: Entity
 metadata:
   name: account
-  module: general-ledger
+  module: gl
   description: Chart of accounts — satu bagan akun standar per workspace
 spec:
   version: v1

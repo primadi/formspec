@@ -335,6 +335,63 @@ func (r *Registry) GetEntity(module, name string) (*SpecInfo, bool) {
 	return info, ok
 }
 
+// GetActionSpec returns a named action's spec for a module/entity pair, e.g.
+// for cross-resource resource.call() dispatch or route generation.
+func (r *Registry) GetActionSpec(module, name, actionName string) (*spec.Action, bool) {
+	info, ok := r.GetEntity(module, name)
+	if !ok || info.EntitySpec == nil {
+		return nil, false
+	}
+	for i := range info.EntitySpec.Actions {
+		if info.EntitySpec.Actions[i].Name == actionName {
+			return &info.EntitySpec.Actions[i], true
+		}
+	}
+	return nil, false
+}
+
+// GenerateNaturalKey generates a formatted natural key for the given field on
+// module/name, per its natural_key_rule (strategy/format/prefix/reset). It is
+// the runtime backing for a script's ctx.next_key(field) call — automatic
+// natural-key generation on Insert() is handled separately, inline in
+// db.EntityStore (natural keys need to be present before required-field
+// validation runs on create).
+//
+// Known gap: rule.ScopeField (branch-scoped numbering, see db.EntityStore.
+// generateNaturalKeys) is not wired here — this path has no resource data in
+// scope to resolve the scope field's value from, only tenantID/module/name.
+// ctx.next_key() calls therefore always use the tenant-wide scope, same as
+// before ScopeField was introduced.
+func (r *Registry) GenerateNaturalKey(ctx context.Context, tenantID, module, name, fieldName string) (string, error) {
+	info, ok := r.GetEntity(module, name)
+	if !ok || info.EntitySpec == nil {
+		return "", fmt.Errorf("entity %s/%s not found", module, name)
+	}
+
+	var rule *spec.NaturalKeyRuleDecl
+	for _, f := range info.EntitySpec.Fields {
+		if f.Name == fieldName && f.NaturalKey && f.NaturalKeyRule != nil {
+			rule = f.NaturalKeyRule
+			break
+		}
+	}
+	if rule == nil {
+		return "", fmt.Errorf("field %q on %s/%s has no natural_key_rule", fieldName, module, name)
+	}
+
+	prefix := ""
+	if rule.Prefix != nil {
+		if rule.Prefix.Value != "" {
+			prefix = rule.Prefix.Value
+		} else if rule.Prefix.Default != "" {
+			prefix = rule.Prefix.Default
+		}
+	}
+
+	counter := db.NewNaturalKeyCounter(r.db, r.driver)
+	return counter.GenerateNaturalKey(ctx, tenantID, name, fieldName, "", rule.Reset, rule.Format, prefix)
+}
+
 // ListEntities returns a sorted summary of all registered entities.
 func (r *Registry) ListEntities() []EntityInfo {
 	r.mu.RLock()

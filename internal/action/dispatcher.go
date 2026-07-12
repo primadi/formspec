@@ -36,6 +36,10 @@ type ExecuteParams struct {
 	ResourceID string
 	// Resource is the current entity record data (for entity actions).
 	Resource map[string]any
+	// ResourceVersion is the current known version of the record (for entity
+	// actions), threaded through so script/native saves can use real
+	// optimistic-concurrency (CAS) instead of a hardcoded version.
+	ResourceVersion int
 	// Params are the action parameters from the request body.
 	Params map[string]any
 	// TenantID is the current workspace tenant.

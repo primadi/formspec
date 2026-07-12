@@ -61,58 +61,65 @@ graph TD
 
 ## 2. Component Inventory
 
-Forma terdiri dari **3 binary runtime** (`forma-ctl`, `forma-operator`, `forma-sidecar`) + **1 Go library** (`forma-resource`) + **CLI tools**:
+Forma terdiri dari **1 unified binary** (`forma`) + **1 Go library** (`forma-resource`) + **2 infrastructure binaries**:
 
 | Komponen | Tipe | Fungsi | Lisensi |
 |---|---|---|---|
+| `forma` | **Binary** (unified CLI) | Satu binary untuk semua persona: `dev` (development server), `apply` (Control Plane registration), `generate` (codegen), dan subcommand lainnya | FSL |
 | `forma-ctl` | **Binary** — `--mode=region` | Region Control Plane — source of truth: artifact store, policy, signing, deployment routing | FSL |
 | | `--mode=cluster` | Cluster cache proxy — artifact cache, snapshot proxy, evidence relay | FSL |
 | | `--mode=standalone` | All-in-one region+cluster untuk dev/small deployment | FSL |
 | `forma-resource` | **Go library** (`github.com/primadi/forma/resource`) | Business logic runtime: entity engine, state machine, API, admin panel. **Di-compile menjadi satu binary dengan app Go.** | FSL |
 | `forma-operator` | **Binary** (K8s pod) | CRD controller — Workspace, Datastore, ResourceClaim reconciliation | **Closed source** |
-| `forma-sidecar` | **Binary** (language-agnostic) | Socket/HTTP listener wrapper — menjembatani app non-Go dengan Forma ecosystem | FSL |
+| `forma-sidecar` | **Binary** (legacy) | ⚠️ **Deprecated.** Digantikan oleh `forma dev --listen local_http`. Masih ada untuk backward compat | FSL |
 
 **Catatan:**
-- **Tidak ada `forma-server` binary.** K8s worker node dengan label `forma.dev/*` sudah cukup.
-- **`forma-resource` adalah Go library, bukan binary terpisah.** Untuk app Go: `import "github.com/primadi/forma/resource"` → compile jadi satu binary. Untuk app non-Go: sidecar + language runtime + app code dalam pod.
+- **`forma` adalah satu-satunya binary utama.** Backend API + SPA frontend + CLI dalam satu binary. SPA di-embed via `//go:embed web/dist/*`.
+- **`forma-sidecar` sudah deprecated.** Fungsinya (ctx listener untuk non-Go runtimes) sudah terintegrasi ke `forma dev --listen local_http`.
 - **Tidak ada binary terpisah untuk dev/prod.** Dev vs prod ditentukan oleh infrastructure (Environment).
 - **Hanya `forma-operator` yang closed source.** Semua komponen lain FSL open source.
-- **`forma-sidecar` adalah wrapper tipis.** Sidecar hanya listener (socket/HTTP). Language-specific parts: `lib-forma-php`, `lib-forma-python`, `lib-forma-java`, `lib-forma-node` — library per bahasa yang handle serialization/deserialization tipe Forma.
 
 ### Deployment Models
 
 ```
-Go App (single binary)              Non-Go App (sidecar pod)
-──────────────────────              ──────────────────────────
-┌──────────────────┐                ┌──────────────────────┐
-│ myapp (Go binary)│                │ Pod                   │
-│                  │                │                       │
-│ import "github.  │                │ ┌───────────────────┐ │
-│ com/forma/forma" │                │ │ app.php (lib-     │ │
-│                  │                │ │ forma-php)        │ │
-│ • Business logic │                │ │ + PHP runtime     │ │
-│ • Entity engine  │                │ └────────┬──────────┘ │
-│ • State machine  │                │          │            │
-│ • REST API       │                │ ┌────────▼──────────┐ │
-│ • Admin panel    │                │ │ forma-sidecar     │ │
-│ • ctx.* primitives│               │ │ (socket/HTTP)     │ │
-└──────────────────┘                │ └───────────────────┘ │
-                                    └──────────────────────┘
+Go App (single binary)              Non-Go App (via forma dev)
+──────────────────────              ─────────────────────────────
+┌──────────────────┐                ┌────────────────────────┐
+│ myapp (Go binary)│                │ Pod                     │
+│                  │                │                         │
+│ import "github.  │                │ ┌─────────────────────┐ │
+│ com/forma/forma" │                │ │ app.php (lib-       │ │
+│                  │                │ │ forma-php)          │ │
+│ • Business logic │                │ │ + PHP runtime       │ │
+│ • Entity engine  │                │ └────────┬────────────┘ │
+│ • State machine  │                │          │ ctx.* calls  │
+│ • REST API       │                │ ┌────────▼────────────┐ │
+│ • Admin panel    │                │ │ forma dev            │ │
+│ • ctx.* primitives│               │ │ (--listen local_http)│ │
+└──────────────────┘                │ └─────────────────────┘ │
+                                    └────────────────────────┘
 ```
 
 ### Struktur `cmd/`
 
 ```
 cmd/
-  forma-ctl/           # Binary: region, cluster, standalone (3 mode) + emergency CLI (forma-ctl serve|freeze|...)
+  forma-ctl/           # Binary: region, cluster, standalone (3 mode) + emergency CLI
   forma-operator/      # Binary: CRD controller (closed source, repo terpisah)
-  forma-sidecar/       # Binary: polyglot adapter
-  forma/               # CLI: developer tool — `forma apply` implemented, other verbs roadmap
-  # forma-resource TIDAK ADA di cmd/ — ini Go library (forma.go, syncagent.go di repo root),
+  forma-sidecar/       # Binary: ⚠️ legacy — digantikan oleh `forma dev`
+  forma/               # Binary utama (CLI + dev server):
+  │                    #   apply, generate, dev (subcommands)
+  │                    #   SPA embedded via //go:embed dist/*
+  │                    #   Config auto-discover (forma-sidecar.yaml)
+  └── dev.go           #   Development server (ex-sidecar logic)
+  └── dev_config.go    #   Config file loader
+  └── dev_runtime.go   #   Runtime auto-detect
+  └── dev_vite.go      #   Vite process management
+  # forma-resource TIDAK ADA di cmd/ — ini Go library (resource/forma.go),
   # bukan binary. examples/reference-app mendemonstrasikan cara import-nya.
 ```
 
-> **Catatan CLI:** `forma apply` adalah subcommand dari binary `cmd/forma`, bukan binary terpisah. Verb lain (`dev`, `generate`, `validate`, dst) adalah roadmap — lihat `docs/cli-tools/01-forma-cli.md`.
+> **Catatan:** `forma dev` adalah pengganti `forma-sidecar` untuk development. Untuk production, Go library `forma-resource` di-embed ke binary sendiri, atau gunakan `forma dev --listen local_http` sebagai sidecar untuk non-Go runtimes.
 
 ### Command Matrix
 

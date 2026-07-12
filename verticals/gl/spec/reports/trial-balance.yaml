@@ -3,7 +3,7 @@ apiVersion: forma.dev/v1alpha1
 kind: Report
 metadata:
   name: trial-balance
-  module: general-ledger
+  module: gl
   description: Laporan neraca saldo — summary per akun
 spec:
   title: "Neraca Saldo"

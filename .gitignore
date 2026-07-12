@@ -39,3 +39,6 @@ web/dist/
 web/build/
 sdk/typescript/dist/
 sdk/browser/dist/
+
+# Embedded SPA (copied from web/dist/ during build)
+cmd/forma/dist/

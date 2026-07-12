@@ -3,7 +3,7 @@ apiVersion: forma.dev/v1alpha1
 kind: Dashboard
 metadata:
   name: gl-dashboard
-  module: general-ledger
+  module: gl
   description: Dashboard akuntansi — ringkasan saldo dan transaksi terbaru
 spec:
   title: "Dashboard Akuntansi"

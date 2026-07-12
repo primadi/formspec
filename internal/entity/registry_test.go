@@ -24,7 +24,7 @@ func setupTestRegistry(t *testing.T, specRelPath string) (*Registry, db.DB) {
 
 // TestRegistry_LoadEntities verifies entity loading from a real spec directory.
 func TestRegistry_LoadEntities(t *testing.T) {
-	reg, d := setupTestRegistry(t, "testdata/Customer/spec")
+	reg, d := setupTestRegistry(t, "registry_fixtures/customer/spec")
 	defer d.Close()
 
 	errs := reg.LoadEntities()
@@ -60,7 +60,7 @@ func TestRegistry_LoadEntities(t *testing.T) {
 // TestRegistry_LoadEntities_FiltersNonEntity verifies that only kind: Entity
 // manifests are registered (Module, Config, Table, Form, etc. are skipped).
 func TestRegistry_LoadEntities_FiltersNonEntity(t *testing.T) {
-	reg, d := setupTestRegistry(t, "testdata/Customer/spec")
+	reg, d := setupTestRegistry(t, "registry_fixtures/customer/spec")
 	defer d.Close()
 
 	errs := reg.LoadEntities()
@@ -75,7 +75,7 @@ func TestRegistry_LoadEntities_FiltersNonEntity(t *testing.T) {
 
 // TestRegistry_ListEntities verifies the ListEntities helper.
 func TestRegistry_ListEntities(t *testing.T) {
-	reg, d := setupTestRegistry(t, "testdata/Customer/spec")
+	reg, d := setupTestRegistry(t, "registry_fixtures/customer/spec")
 	defer d.Close()
 
 	reg.LoadEntities()
@@ -109,7 +109,7 @@ func TestRegistry_ListEntities(t *testing.T) {
 
 // TestRegistry_GetEntitiesByCharacteristic verifies filtering.
 func TestRegistry_GetEntitiesByCharacteristic(t *testing.T) {
-	reg, d := setupTestRegistry(t, "testdata/Customer/spec")
+	reg, d := setupTestRegistry(t, "registry_fixtures/customer/spec")
 	defer d.Close()
 
 	reg.LoadEntities()
@@ -127,7 +127,7 @@ func TestRegistry_GetEntitiesByCharacteristic(t *testing.T) {
 
 // TestRegistry_SyncSchema verifies that SyncSchema creates tables in the database.
 func TestRegistry_SyncSchema(t *testing.T) {
-	reg, d := setupTestRegistry(t, "testdata/Customer/spec")
+	reg, d := setupTestRegistry(t, "registry_fixtures/customer/spec")
 	defer d.Close()
 
 	ctx := context.Background()
@@ -192,7 +192,7 @@ func TestRegistry_SyncSchema(t *testing.T) {
 
 // TestRegistry_GetEntityStore verifies that GetEntityStore returns a working store.
 func TestRegistry_GetEntityStore(t *testing.T) {
-	reg, d := setupTestRegistry(t, "testdata/Customer/spec")
+	reg, d := setupTestRegistry(t, "registry_fixtures/customer/spec")
 	defer d.Close()
 
 	ctx := context.Background()
@@ -245,7 +245,7 @@ func TestRegistry_GetEntityStore(t *testing.T) {
 
 // TestRegistry_GetEntityStore_NotFound verifies error for non-existent entity.
 func TestRegistry_GetEntityStore_NotFound(t *testing.T) {
-	reg, d := setupTestRegistry(t, "testdata/Customer/spec")
+	reg, d := setupTestRegistry(t, "registry_fixtures/customer/spec")
 	defer d.Close()
 
 	_, err := reg.GetEntityStore("billing", "nonexistent")
@@ -276,7 +276,7 @@ func TestRegistry_EmptySpecPath(t *testing.T) {
 // TestRegistry_LoadEntities_FromGeneralLedger tests loading from a different
 // example module with more entities.
 func TestRegistry_LoadEntities_FromGeneralLedger(t *testing.T) {
-	reg, d := setupTestRegistry(t, "testdata/General-Ledger/spec")
+	reg, d := setupTestRegistry(t, "../../verticals/gl/spec")
 	defer d.Close()
 
 	errs := reg.LoadEntities()

@@ -1,21 +1,30 @@
-.PHONY: all build clean test lint run-example dev web-deps web-dev web-build apply
+.PHONY: all build clean test lint run-example dev web-deps web-dev web-build apply build-spa
 
 # Build all binaries
 all: build
 
-build: build-ctl build-forma build-sidecar build-operator
+build: build-spa build-ctl build-forma build-operator
 
 build-ctl:
 	go build -o bin/forma-ctl ./cmd/forma-ctl
 
-build-forma:
+# Build the forma CLI with embedded SPA.
+# build-spa ensures web/dist/ is built and copied to cmd/forma/dist/.
+build-forma: build-spa
 	go build -o bin/forma ./cmd/forma
 
 build-sidecar:
+	@echo "⚠️  cmd/forma-sidecar is deprecated — use 'forma dev' instead"
 	go build -o bin/forma-sidecar ./cmd/forma-sidecar
 
 build-operator:
 	go build -o bin/forma-operator ./cmd/forma-operator
+
+# Build the frontend SPA. Requires npm dependencies installed (make web-deps).
+build-spa: web-deps
+	cd web && npm run build
+	@mkdir -p cmd/forma/dist
+	cp -r web/dist/* cmd/forma/dist/
 
 # forma-resource is a Go library (import "github.com/forma/forma"), not a
 # binary — see docs/runtimes/02-forma-resource.md. examples/reference-app
@@ -34,8 +43,8 @@ lint:
 
 # Run dev environment — starts both planes + watcher
 # Usage:
-#   make dev              # start with default app in examples/Customer
-#   make dev EXAMPLE=gl   # start with General-Ledger example
+#   make dev              # start with default vertical (billing)
+#   make dev EXAMPLE=gl   # start with the gl vertical instead
 dev:
 	@echo "🔧 Forma Dev Environment"
 	@echo "========================"
@@ -44,10 +53,10 @@ dev:
 	go run ./cmd/forma-ctl serve --dev &
 	@echo "Starting reference app on :8080 ..."
 	@sleep 1
-	go run ./examples/reference-app --spec examples/Customer/spec &
+	go run ./examples/reference-app --spec verticals/billing/spec &
 	@echo ""
 	@echo "📝 To register specs, run:"
-	@echo "   go run ./cmd/forma apply --control http://localhost:8443 examples/Customer/spec"
+	@echo "   go run ./cmd/forma apply --control http://localhost:8443 verticals/billing/spec"
 	@echo ""
 	@echo "🌐 Reference app:  http://localhost:8080"
 	@echo "🛂 Control Plane:  http://localhost:8443"
@@ -58,7 +67,7 @@ dev:
 # Run specific example (legacy — use forma apply instead)
 run-example:
 	@echo "⚠️  Deprecated: use 'forma apply' to register specs to Control Plane"
-	@echo "   Example: go run ./cmd/forma apply --control http://localhost:8443 examples/Customer/spec"
+	@echo "   Example: go run ./cmd/forma apply --control http://localhost:8443 verticals/billing/spec"
 
 # Clean build artifacts
 clean:

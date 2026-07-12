@@ -216,12 +216,18 @@ type ReportTotal struct {
 
 // WizardSpec defines a multi-step business process (Frontend §11).
 type WizardSpec struct {
-	Title            string       `yaml:"title" json:"title"`
-	Entity           string       `yaml:"entity,omitempty" json:"entity,omitempty"`
-	Action           string       `yaml:"action,omitempty" json:"action,omitempty"` // server action that commits all steps
-	AllowPartialSave bool         `yaml:"allow_partial_save,omitempty" json:"allow_partial_save,omitempty"`
-	Steps            []WizardStep `yaml:"steps" json:"steps"`
-	Save             string       `yaml:"save,omitempty" json:"save,omitempty"` // draft | partial | full (legacy alias of allow_partial_save)
+	Title      string            `yaml:"title" json:"title"`
+	Entity     string            `yaml:"entity,omitempty" json:"entity,omitempty"`
+	Action     string            `yaml:"action,omitempty" json:"action,omitempty"` // server action that commits all steps; if empty, final step plain-creates Entity
+	OnComplete *WizardOnComplete `yaml:"on_complete,omitempty" json:"on_complete,omitempty"`
+	Steps      []WizardStep      `yaml:"steps" json:"steps"`
+}
+
+// WizardOnComplete controls what happens after a successful final submit.
+type WizardOnComplete struct {
+	Restart  bool                `yaml:"restart,omitempty" json:"restart,omitempty"`
+	Redirect string              `yaml:"redirect,omitempty" json:"redirect,omitempty"`
+	Banner   []WizardSummaryItem `yaml:"banner,omitempty" json:"banner,omitempty"`
 }
 
 // WizardStep is one step in a multi-step wizard.
@@ -229,7 +235,10 @@ type WizardStep struct {
 	Title        string              `yaml:"title" json:"title"`
 	Description  string              `yaml:"description,omitempty" json:"description,omitempty"`
 	Form         string              `yaml:"form,omitempty" json:"form,omitempty"`
-	Action       string              `yaml:"action,omitempty" json:"action,omitempty"`
+	OnEnter      string              `yaml:"on_enter,omitempty" json:"on_enter,omitempty"` // fires when the step becomes active
+	OnNext       string              `yaml:"on_next,omitempty" json:"on_next,omitempty"`   // fires on Next, before advancing
+	OnPrev       string              `yaml:"on_prev,omitempty" json:"on_prev,omitempty"`   // fires on Previous, before going back
+	Required     []string            `yaml:"required,omitempty" json:"required,omitempty"` // fields that gate the Next button
 	DependsOn    string              `yaml:"depends_on,omitempty" json:"depends_on,omitempty"`
 	Entity       string              `yaml:"entity,omitempty" json:"entity,omitempty"`
 	Layout       string              `yaml:"layout,omitempty" json:"layout,omitempty"` // search_select | ...

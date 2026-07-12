@@ -1,4 +1,4 @@
-# modules/general-ledger/scripts/journal_post.star
+# modules/gl/scripts/journal_post.star
 
 def execute(resource, params, ctx):
     # Guard state machine sudah memvalidasi debit == credit sebelum jalan.

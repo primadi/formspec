@@ -1,0 +1,19 @@
+apiVersion: forma.dev/v1alpha1
+kind: App
+metadata:
+  name: sales-gl-integrator
+  description: >
+    Integrator app — reacts to billing.order.paid and creates a sales
+    journal entry in gl. Optional: a workspace can run billing + gl without
+    this app, or swap in a different vendor's connector.
+spec:
+  version: 1.0.0
+  vendor: forma-dev
+  modules: [sales-gl-integrator]
+  consumes:
+    - app: billing
+      service: order-events
+      actions: [read]
+    - app: gl
+      service: journal-entries
+      actions: [create, post]

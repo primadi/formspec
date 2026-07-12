@@ -1,25 +1,27 @@
 # Inventory — Spec
 
-**Klasifikasi:** **App** standalone. Bisa di-install ke workspace client, atau di-compose sebagai module oleh App lain.
+**Klasifikasi:** **App** standalone, independently installable — see [`docs/architecture/07-vertical-modules.md`](../../../docs/architecture/07-vertical-modules.md).
 **Spec target:** Forma Core Basic v0.2.0.
+
+> Formerly `examples/Inventory`. Moved to `verticals/inventory`; the `order-to-movement` Subscription that used to live here was extracted to its own app, `verticals/sales-inventory-integrator` — inventory no longer reaches into `billing` itself. `warehouse` now has a `branch_id` relation to `company.branch` for multi-branch support (see the architecture doc for why that's a plain field, not new framework machinery).
 
 ## Struktur
 
 ```
-Inventory/
+verticals/inventory/
 ├── spec/
 │   ├── README.md
-│   ├── forma.yaml                                    # kind: App "inventory"
+│   ├── forma.yaml                                    # kind: App "inventory", publishes: stock-movements,
+│   │                                                  #   consumes: company (branch-directory)
+│   ├── menus/, widgets/, reports/, tables/            # App-level UI
 │   ├── modules/
 │   │   └── inventory/
 │   │       ├── module.yaml                           # kind: Module
 │   │       ├── entities/
 │   │       │   ├── product.yaml                      # [master] — produk
-│   │       │   ├── warehouse.yaml                    # [master] — gudang
+│   │       │   ├── warehouse.yaml                    # [master] — gudang, punya branch_id
 │   │       │   ├── stock-movement.yaml               # [transaction] — pergerakan stok
 │   │       │   └── stock-level.yaml                  # [summary] — level stok real-time
-│   │       ├── subscriptions/
-│   │       │   └── order-to-movement.yaml            # kind: Subscription → order.paid
 │   │       ├── scripts/
 │   │       │   ├── movement_confirm.star
 │   │       │   ├── movement_apply.star
@@ -29,9 +31,8 @@ Inventory/
 │   └── config/
 │       └── app.yaml
 │
-└── impl/
-    └── inventory/
-        └── create_out_movement.go                    # native Go handler untuk Subscription job
+└── impl/                                             # (none currently — the one Go stub moved to
+                                                        #  sales-inventory-integrator/impl/ with the subscription)
 ```
 
 ## App Identity
@@ -40,6 +41,8 @@ Inventory/
 - **Vendor:** `forma-dev`
 - **Modules:** `inventory`
 - **Permission namespace:** `inventory.*` (contoh: `inventory.stock-movements.apply`)
+- **Publishes:** `stock-movements` service (`create`, `apply`) — consumed by `sales-inventory-integrator`
+- **Consumes:** `company`'s `branch-directory` service (`read`) — for `warehouse.branch_id`
 
 ## Konsep yang di-cover
 
@@ -54,7 +57,7 @@ Inventory/
 | `natural_key_rule: { strategy: sequence }` | stock-movement.number | Core Basic §10.4 |
 | `guard` — would_cause_negative_stock | stock-movement state_machine | Core Basic §14 |
 | `deliver.reliable_event` | stock-movement events | Core Basic §12.3 |
-| Cross-module `kind: Subscription` | order-to-movement.yaml | Core Basic §12.5/D35 |
+| Cross-app `belongs_to` relation | warehouse.branch_id → company.branch | Core Basic §10.5 |
 
 ## Pola Race Condition
 
@@ -75,13 +78,14 @@ DENGAN LOCK (benar):
                                       Kasir B: release lock
 ```
 
-## Relasi dengan Example Lain
+## Relasi dengan vertical lain
 
-| Example | Hubungan |
+| Vertical | Hubungan |
 |---|---|
-| **Order-to-Cash** | `order.paid` → Subscription → stock-movement (type=out), mengurangi stok |
-| **General Ledger** | Tidak langsung |
+| **company** | `warehouse.branch_id` → cross-app relation ke `company.branch` |
+| **billing** | Tidak langsung sekarang — dulu via Subscription `order-to-movement` yang sudah dipindah ke app terpisah `sales-inventory-integrator` |
+| **gl** | Tidak langsung |
 
 ## impl/
 
-Satu Go stub: `impl/inventory/create_out_movement.go` — handler untuk Subscription job `create-out-movement`.
+Kosong — satu Go stub yang dulu ada di sini (`create_out_movement.go`) sekarang di `verticals/sales-inventory-integrator/impl/`.

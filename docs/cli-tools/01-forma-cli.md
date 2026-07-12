@@ -98,15 +98,54 @@ forma new document invoice           # scaffold Document + field dasar
 
 ### `forma dev`
 
-Satu perintah, seluruh environment dev lewat Docker Compose: Postgres 16, Valkey/Redis, Mailpit, MinIO, `forma-ctl:dev` (relaxed policy).
+Development server — satu perintah untuk menjalankan backend API + SPA frontend.
+SPA sudah embedded dalam binary (`//go:embed web/dist/*`), tidak perlu npm.
 
 ```bash
+# Single process — API + SPA di :8080
+forma dev --spec ./my-app/spec
+
+# Dengan Vite HMR (edit frontend)
+forma dev --spec ./my-app/spec --dev-ui
+
+# Auto-detect config file (forma-sidecar.yaml)
 forma dev
 ```
 
-Startup sequence: health check semua service → migrate → seed → hot reload aktif → regenerate types saat YAML berubah → buka dashboard.
+**Behavior:**
+- Membaca YAML manifests dari `--spec` (default: `./spec`)
+- Generate tabel database sesuai entity spec
+- Serve REST API di `--addr` (default: `:8080`)
+- Serve SPA (embedded atau dari `--web-dir`)
+- Auto-detect runtime dari project files (`composer.json` → PHP, dll.)
+- `--dev-ui`: spawn Vite HMR (cari `web/` dari CWD atau module cache)
+- `--force` implied oleh `--dev` / `--dev-ui`
 
-Untuk standalone mode tanpa Docker Compose (single Go binary + `forma-ctl --mode=standalone`), lihat `docs/architecture/01-architecture-overview.md` §10 — `forma dev` di skenario itu cukup menjalankan dua proses lokal.
+**Flag referensi:**
+
+| Flag | Default | Fungsi |
+|---|---|---|
+| `--spec` | `./spec` | Path ke direktori YAML manifests |
+| `--dsn` | `sqlite:.forma/data.db` | Database DSN |
+| `--addr` | `:8080` | REST API listen address |
+| `--listen` | `none` | Ctx listener mode: `none`, `local_http`, `unix_socket` |
+| `--app-endpoint` | `none` | App endpoint mode: `none`, `local_http`, `unix_socket` |
+| `--runtime` | auto | Runtime auto-detect (php/python/node) |
+| `--dev-ui` | `false` | Start Vite HMR (implies `--dev`) |
+| `--dev` | `false` | Dev mode (auth bypass) |
+| `--force` | `false` | Kill previous instance. Implied oleh `--dev` / `--dev-ui` |
+| `--web-dir` | auto | Override SPA directory |
+| `--state-dir` | `.forma` | State directory (auto-create) |
+
+**Runtime auto-detect:**
+
+| File di CWD | Runtime |
+|---|---|
+| `composer.json` | php |
+| `package.json` | node |
+| `pyproject.toml` / `requirements.txt` | python |
+| `go.mod` | local (Go) |
+| (none) | local (API-only) |
 
 ### `forma repl`
 

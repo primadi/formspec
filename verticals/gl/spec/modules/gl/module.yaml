@@ -1,7 +1,7 @@
 apiVersion: forma.dev/v1alpha1
 kind: Module
 metadata:
-  name: general-ledger
+  name: gl
   description: Double-entry accounting core
 spec:
   version: 1.0.0

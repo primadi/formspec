@@ -1,8 +1,12 @@
 # SHOWCASE kind: Wizard — proses 3 langkah (§11 spec frontend):
-# step form → step form ber-depends_on → step commit action.
-# Renderer: stepper, step di URL (?step=2), back selalu boleh,
-# step N+1 terkunci sebelum N selesai, final submit = SATU action server
-# (visit.register-patient) yang atomik.
+# step form → step form ber-depends_on → step ringkasan.
+# Renderer: stepper, step di URL (?step=2 & instance=<id>, autosave ke
+# localStorage), back selalu boleh, step N+1 terkunci bila `required` step
+# sebelumnya belum terisi. Pasien baru dibuat eager di step 1 (patient.create
+# langsung, lepas dari kelanjutan wizard) — jadi final submit tinggal plain
+# create ke entity visit, tanpa custom action. on_complete.restart membawa
+# loket langsung ke pendaftaran berikutnya, banner menampilkan nomor antrian
+# dari response submit terakhir.
 apiVersion: forma.dev/v1alpha1
 kind: Wizard
 metadata:
@@ -12,24 +16,27 @@ metadata:
 spec:
   title: "Pendaftaran Pasien"
   entity: visit
-  action: register-patient      # commit atomik seluruh state wizard (§11)
-  allow_partial_save: true      # draft/resume — lanjut dari step terakhir bila dibuka ulang
+  on_complete:
+    restart: true               # langsung siap daftarkan pasien berikutnya (loket)
+    banner:
+      - { label: "Nomor Antrian", field: response.queue_number }
   steps:
     - title: "Data Pasien"
       description: "Cari pasien lama atau daftarkan pasien baru"
       layout: search_select
       entity: patient
       search_fields: [nik, name, phone]
-      allow_create: true        # tombol "Pasien Baru" → form modal
+      allow_create: true        # tombol "Pasien Baru" → form modal, patient.create langsung
       form: patient-quick-create
+      required: [patient_id]
     - title: "Pilih Poli & Dokter"
       description: "Dropdown dokter ter-filter poliklinik terpilih"
       form: visit-quick
       depends_on: polyclinic_id
+      required: [polyclinic_id, doctor_id]
     - title: "Konfirmasi"
-      description: "Ringkasan sebelum commit atomik"
+      description: "Ringkasan sebelum membuat kunjungan"
       summary:
         - { label: "Pasien", field: patient.name }
         - { label: "Poliklinik", field: polyclinic.name }
         - { label: "Dokter", field: doctor.name }
-      action: register-patient

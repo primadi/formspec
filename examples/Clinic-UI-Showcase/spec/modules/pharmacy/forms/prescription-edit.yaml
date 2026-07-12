@@ -1,0 +1,54 @@
+# SHOWCASE kind: Form — resep internal (dari kunjungan) atau eksternal
+# (dibawa pasien dari dokter luar). visible_when/required_when (§6 FormaExpr)
+# menunjukkan sumber resep tanpa perlu validasi server (create tetap
+# unconditional-required, lihat entities/prescription.yaml). First Form di
+# modul pharmacy — CRUD resep sebelumnya 100% derived UI.
+apiVersion: forma.dev/v1alpha1
+kind: Form
+metadata:
+  name: prescription-edit
+  module: pharmacy
+  description: Form resep — internal (dari kunjungan) atau eksternal (dibawa pasien)
+spec:
+  entity: prescription
+  render:
+    mode: separate_page
+  sections:
+    - title: "Resep"
+      fields:
+        - name: transaction_date
+          label: "Tanggal"
+        - name: number
+          label: "No. Resep"
+          read_only: true
+          help: "Digenerate otomatis saat simpan (natural key, reset harian)"
+        - name: source
+          label: "Sumber Resep"
+        - name: visit_id
+          label: "Kunjungan"
+          visible_when: "fields.source == 'internal'"
+        - name: prescriber_name
+          label: "Nama Dokter (Luar)"
+          placeholder: "Nama dokter penulis resep…"
+          visible_when: "fields.source == 'external'"
+          required_when: "fields.source == 'external'"
+        - name: patient_id
+          label: "Pasien Terdaftar"
+          help: "Pilih untuk auto-isi nama pasien"
+        - name: patient_name
+          label: "Nama Pasien"
+        - name: priority
+          label: "Prioritas"
+    - title: "Item Obat"
+      fields:
+        - name: items
+          label: "Item"
+          widget: child-grid
+    - title: "Catatan"
+      fields:
+        - name: notes
+          label: "Catatan"
+  submit:
+    label: "Simpan Resep"
+    message: "Resep tersimpan"
+    redirect: "/pharmacy/prescriptions"

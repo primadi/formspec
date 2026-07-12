@@ -1,0 +1,12 @@
+apiVersion: forma.dev/v1alpha1
+kind: App
+metadata:
+  name: billing
+  description: Order-to-cash — customer, order, checkout, payment gateway
+spec:
+  version: 1.0.0
+  vendor: forma-dev
+  modules: [billing]
+  publishes:
+    - service: order-events
+      actions: [read]

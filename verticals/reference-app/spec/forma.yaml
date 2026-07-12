@@ -1,0 +1,21 @@
+apiVersion: forma.dev/v1alpha1
+kind: App
+metadata:
+  name: erp-reference
+  description: >
+    Dev-mode composition of every vertical under verticals/ — NOT the
+    production path. Run compose.sh first (see README.md). Production
+    composition is per-App `forma apply` into one workspace.
+spec:
+  version: 1.0.0
+  vendor: forma-dev
+  modules:
+    [
+      company,
+      billing,
+      inventory,
+      gl,
+      notifications,
+      sales-inventory-integrator,
+      sales-gl-integrator,
+    ]

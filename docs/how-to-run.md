@@ -301,12 +301,12 @@ Backend otomatis mengganti `-` dengan `_` di nama tabel SQL. Jika masih error, p
 
 ## 6. Contoh Lain
 
-### Order-to-Cash
+### Billing (formerly Order-to-Cash)
 
 ```bash
 go run ./cmd/forma-sidecar/ \
-  --spec examples/Order-to-Cash/spec \
-  --dsn "sqlite:.forma/order-to-cash.db" \
+  --spec verticals/billing/spec \
+  --dsn "sqlite:.forma/billing.db" \
   --addr :8080 \
   --listen "http://127.0.0.1:9090" \
   --app-endpoint "http://127.0.0.1:9091" \

@@ -166,7 +166,7 @@ func ValidateActionParams(params map[string]any, validate []spec.ParamValidation
 			}
 
 			// Delegate to same validation rules as field validators
-			if err := validateActionParamRule(pv.Field, val, rule); err != nil {
+			if err := validateActionParamRule(pv.Field, val, rule, params); err != nil {
 				errs = append(errs, err)
 			}
 		}
@@ -176,13 +176,19 @@ func ValidateActionParams(params map[string]any, validate []spec.ParamValidation
 }
 
 // validateActionParamRule validates a single rule against an action parameter value.
-// Supports all Core Basic field validation rules (§10.6).
-func validateActionParamRule(fieldName string, val any, rule spec.ValidationRule) error {
+// Supports all Core Basic field validation rules (§10.6), plus the
+// cross-field rules (exists/after/before) also used by entity field rules —
+// e.g. an action's params.validate declaring { field: doctor_id, rules:
+// [required, exists: clinic.doctor] } needs the exact same existence check
+// as a field-level rule of the same shape.
+func validateActionParamRule(fieldName string, val any, rule spec.ValidationRule, params map[string]any) error {
 	switch rule.Name {
 	case "min_length", "max_length", "min", "max", "positive", "email", "pattern", "url",
 		"precision", "future", "past", "min_items", "max_items":
 		// Reuse: delegate to applyInlineRule
 		return applyInlineRule(fieldName, val, rule)
+	case "exists", "after", "after_field", "before", "before_field":
+		return ValidateCrossField(fieldName, val, rule, params)
 	default:
 		return fmt.Errorf("unsupported action param rule: %s", rule.Name)
 	}

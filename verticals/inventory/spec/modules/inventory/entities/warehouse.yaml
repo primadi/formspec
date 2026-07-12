@@ -18,6 +18,10 @@ spec:
     - name: name
       type: string
       rules: [required]
+    - name: branch_id
+      type: relation
+      relation: { type: belongs_to, resource: company.branch }
+      description: Cabang pemilik gudang ini — cross-app relation ke App "company"
     - name: is_active
       type: boolean
       default: true

@@ -18,6 +18,7 @@
 04-resource-registration.md   ← Server, DB, Valkey lifecycle
 05-failover.md                ← HA, auto-failover, recovery
 06-k8s-operator.md            ← Forma Operator, CRD, ClusterClass
+07-vertical-modules.md        ← ERP module division: verticals/, App/Workspace composition, branch model
 ```
 
 ---
@@ -47,6 +48,12 @@
 | 1 | [`01-architecture-overview.md`](./01-architecture-overview.md) — Regions, ClusterClass, tiers |
 | 2 | [`02-admin-surfaces.md`](./02-admin-surfaces.md) — forma/console features |
 
+### 🏢 ERP Vertical Author
+
+| Order | Document |
+|---|---|
+| 1 | [`07-vertical-modules.md`](./07-vertical-modules.md) — Module taxonomy, App/Workspace composition, branch model, ERPNext comparison |
+
 ---
 
 ## Architecture Decisions Index
@@ -65,3 +72,4 @@ Semua keputusan desain arsitektur tercatat sebagai D-ARCH-1 sampai D-ARCH-31 di 
 | `04-resource-registration.md` | `12-datastore.md`, `04-control-plane.md` |
 | `05-failover.md` | `06-plane-protocol.md` §1 |
 | `06-k8s-operator.md` | `00-kind-plane-mapping.md` |
+| `07-vertical-modules.md` | `02-core-basic.md` §4.4/§4.5/§8, `11-reference.md` D25/D35/D37, `docs/comparison/forma-vs-frappe.md` |

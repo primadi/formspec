@@ -233,8 +233,14 @@ func (r *Registry) Validate(resolve EntityResolver) []error {
 					addf("%s: Wizard %q: steps[%d]: form %q not found", e.Source, name, i, s.Form)
 				}
 			}
-			if s.Action != "" && es != nil && !actionExists(es, s.Action) {
-				addf("%s: Wizard %q: steps[%d]: action %q not on entity %q", e.Source, name, i, s.Action, e.Spec.Entity)
+			for _, hook := range []struct{ name, action string }{
+				{"on_enter", s.OnEnter},
+				{"on_next", s.OnNext},
+				{"on_prev", s.OnPrev},
+			} {
+				if hook.action != "" && es != nil && !actionExists(es, hook.action) {
+					addf("%s: Wizard %q: steps[%d]: %s %q not on entity %q", e.Source, name, i, hook.name, hook.action, e.Spec.Entity)
+				}
 			}
 		}
 	}

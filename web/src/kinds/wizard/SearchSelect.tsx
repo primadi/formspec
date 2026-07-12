@@ -35,7 +35,11 @@ export default function SearchSelect({ step, module, stepData, onSelect, getClie
   const [query, setQuery] = useState("")
   const [results, setResults] = useState<SearchResult[]>([])
   const [loading, setLoading] = useState(false)
-  const [selected, setSelected] = useState<SearchResult | null>(null)
+  // Rehydrate from stepData on mount — covers both page refresh (autosaved
+  // stepData restored from localStorage) and navigating back to this step.
+  const [selected, setSelected] = useState<SearchResult | null>(
+    () => (stepData[step.entity ?? "selected"] as SearchResult | undefined) ?? null,
+  )
   const [createOpen, setCreateOpen] = useState(false)
   const [formData, setFormData] = useState<Record<string, string>>({})
   const [creating, setCreating] = useState(false)
@@ -91,13 +95,17 @@ export default function SearchSelect({ step, module, stepData, onSelect, getClie
     setSelected(item)
     setResults([])
     setQuery("")
-    // Store the full selected record keyed by entity name
+    // Store the full record (for summary display, e.g. "patient.name") and
+    // its id under "{entity}_id" (the field name the target entity's create
+    // payload expects, e.g. visit.patient_id).
     onSelect(step.entity ?? "selected", item)
+    onSelect(`${step.entity ?? "selected"}_id`, item.id)
   }
 
   const handleClear = () => {
     setSelected(null)
     onSelect(step.entity ?? "selected", null)
+    onSelect(`${step.entity ?? "selected"}_id`, null)
   }
 
   // ── Create form handler ──
@@ -109,9 +117,12 @@ export default function SearchSelect({ step, module, stepData, onSelect, getClie
       const path = `${moduleName}/${pluralName}`
       const record = await apiPost<SearchResult>(client, path, formData)
 
-      // Select the newly created record
+      // Select the newly created record — created eagerly, on dialog save,
+      // regardless of whether the wizard is completed or abandoned (the
+      // patient record is real master data, not wizard-scoped draft state).
       setSelected(record)
       onSelect(step.entity ?? "selected", record)
+      onSelect(`${step.entity ?? "selected"}_id`, record.id)
       setCreateOpen(false)
       setFormData({})
       toast.success("Pasien berhasil didaftarkan")
@@ -134,11 +145,6 @@ export default function SearchSelect({ step, module, stepData, onSelect, getClie
   const highlightField = (item: SearchResult, field: string) => {
     return String(item[field] ?? "")
   }
-
-  /** Gather all fields from all sections of the create form */
-  const allFormFields: FormField[] = createForm
-    ? createForm.spec.sections.flatMap((s) => s.fields)
-    : []
 
   /** Render a single form field input */
   const renderField = (field: FormField) => {
@@ -281,9 +287,9 @@ export default function SearchSelect({ step, module, stepData, onSelect, getClie
                       </span>
                     ))}
                   </p>
-                  {item.description && (
-                    <p className="text-xs text-muted-foreground mt-0.5">{item.description as string}</p>
-                  )}
+                  {item.description ? (
+                    <p className="text-xs text-muted-foreground mt-0.5">{String(item.description)}</p>
+                  ) : null}
                 </button>
               ))}
             </div>

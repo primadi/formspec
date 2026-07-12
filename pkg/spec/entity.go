@@ -90,6 +90,7 @@ type DocumentSpec struct {
 	Expose            []ExposeConfig     `yaml:"expose,omitempty" json:"expose,omitempty"`
 	BackdatePolicy    *BackdatePolicy    `yaml:"backdate_policy,omitempty" json:"backdate_policy,omitempty"`
 	ForwardDatePolicy *ForwardDatePolicy `yaml:"forward_date_policy,omitempty" json:"forward_date_policy,omitempty"`
+	Hooks             []HookDecl         `yaml:"hooks,omitempty" json:"hooks,omitempty"`
 }
 
 // ExposeConfig declares one external protocol surface for an Entity (D49).
@@ -306,6 +307,16 @@ func ValidateDocumentSpec(d *DocumentSpec) error {
 
 	// Event naming validation (Core §12)
 	if err := ValidateEvents(d.Events); err != nil {
+		return err
+	}
+
+	// emits: must reference a declared event (Core §12)
+	if err := ValidateActionEmits(d.Actions, d.Events); err != nil {
+		return err
+	}
+
+	// Hooks spec validation (Core Extended §8)
+	if err := ValidateHooks(d.Hooks, d.Actions); err != nil {
 		return err
 	}
 
@@ -550,6 +561,98 @@ func (g *GuardDecl) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
+// HookTiming is when a hook runs relative to its action or event (Core Extended §8).
+type HookTiming string
+
+const (
+	HookOnBefore        HookTiming = "before"         // sync, gates the action — may abort via fail()
+	HookOnAfter         HookTiming = "after"          // sync, runs post-commit — best-effort, cannot abort
+	HookOnError         HookTiming = "on_error"       // runs when the action (or a before hook) failed
+	HookOnBeforeDeliver HookTiming = "before_deliver" // sync, gates event delivery — may suppress it
+	HookOnAfterDeliver  HookTiming = "after_deliver"  // runs after an event was delivered
+)
+
+// HookDecl attaches handler code to an action's before/after/on_error point,
+// or an event's before_deliver/after_deliver point (Core Extended §8). A
+// reserved action's own Impl (Action.Impl) is equivalent to one hook scoped
+// to that action, running last in the before-phase — hooks: entries let
+// other modules/scripts attach additional code to the same points, by name
+// or via the "*" wildcard, with priority ordering (default 10; lower runs
+// first).
+type HookDecl struct {
+	On       HookTiming `yaml:"on" json:"on"`
+	Action   string     `yaml:"action,omitempty" json:"action,omitempty"` // action name or "*" — before/after/on_error only
+	Event    string     `yaml:"event,omitempty" json:"event,omitempty"`   // event name or "*" — before_deliver/after_deliver only
+	Impl     *ImplDecl  `yaml:"impl" json:"impl"`
+	Priority int        `yaml:"priority,omitempty" json:"priority,omitempty"` // 0 → default 10
+}
+
+// ValidateHooks checks each hook's on/action/event shape against actions.
+// A hook on: before|after|on_error must set action (name or "*") and must
+// not set event; a hook on: before_deliver|after_deliver is the reverse.
+func ValidateHooks(hooks []HookDecl, actions []Action) error {
+	for _, h := range hooks {
+		switch h.On {
+		case HookOnBefore, HookOnAfter, HookOnError:
+			if h.Action == "" {
+				return fmt.Errorf("hook on:%s requires action (name or \"*\")", h.On)
+			}
+			if h.Event != "" {
+				return fmt.Errorf("hook on:%s must not set event", h.On)
+			}
+			if h.Action != "*" && !actionExists(h.Action, actions) {
+				return fmt.Errorf("hook action %q does not match any declared action", h.Action)
+			}
+		case HookOnBeforeDeliver, HookOnAfterDeliver:
+			if h.Event == "" {
+				return fmt.Errorf("hook on:%s requires event (name or \"*\")", h.On)
+			}
+			if h.Action != "" {
+				return fmt.Errorf("hook on:%s must not set action", h.On)
+			}
+		default:
+			return fmt.Errorf("hook on:%q invalid — must be before|after|on_error|before_deliver|after_deliver", h.On)
+		}
+		if h.Impl == nil {
+			return fmt.Errorf("hook on:%s action:%s event:%s has no impl", h.On, h.Action, h.Event)
+		}
+	}
+	return nil
+}
+
+func actionExists(name string, actions []Action) bool {
+	if IsReservedAction(name) {
+		return true // reserved actions (create/update/...) are always implicitly available as hook points, even if not explicitly declared in actions:
+	}
+	for _, a := range actions {
+		if a.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// ValidateActionEmits checks that every action's emits (if set) names a
+// declared event.
+func ValidateActionEmits(actions []Action, events []EventDecl) error {
+	for _, a := range actions {
+		if a.Emits == "" {
+			continue
+		}
+		found := false
+		for _, e := range events {
+			if e.Name == a.Emits {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("action %q emits %q, which is not declared in events:", a.Name, a.Emits)
+		}
+	}
+	return nil
+}
+
 // EventDecl declares an event an entity can publish (Core §12).
 type EventDecl struct {
 	Name        string              `yaml:"name" json:"name"`
@@ -665,10 +768,16 @@ type RelationDecl struct {
 
 // NaturalKeyRuleDecl defines how a natural key is generated.
 type NaturalKeyRuleDecl struct {
-	Strategy string            `yaml:"strategy" json:"strategy"` // sequence | custom
-	Format   string            `yaml:"format,omitempty" json:"format,omitempty"`
-	Prefix   *NaturalKeyPrefix `yaml:"prefix,omitempty" json:"prefix,omitempty"`
-	Reset    string            `yaml:"reset,omitempty" json:"reset,omitempty"` // never | yearly | monthly | daily
+	Strategy   string            `yaml:"strategy" json:"strategy"` // sequence | custom
+	Format     string            `yaml:"format,omitempty" json:"format,omitempty"`
+	Prefix     *NaturalKeyPrefix `yaml:"prefix,omitempty" json:"prefix,omitempty"`
+	Reset      string            `yaml:"reset,omitempty" json:"reset,omitempty"` // never | yearly | monthly | daily
+	ScopeField string            `yaml:"scope_field,omitempty" json:"scope_field,omitempty"`
+	// ScopeField names a field on the same entity (e.g. "branch_id") whose value
+	// isolates the counter — the counter table is already keyed by
+	// (tenant_id, resource, field, scope, period); ScopeField supplies that
+	// scope. Empty (the default) reproduces prior behavior: one counter shared
+	// across the whole tenant.
 }
 
 // NaturalKeyPrefix defines the prefix for a natural key.

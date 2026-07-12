@@ -32,6 +32,7 @@ func TestMigrationRunner_EnsureSystemTables(t *testing.T) {
 		"forma_outbox",
 		"forma_extensions",
 		"forma_audit_log",
+		"forma_event_log",
 	}
 	for _, tbl := range systemTables {
 		exists, err := d.HasTable(ctx, "", tbl)

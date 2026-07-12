@@ -113,6 +113,60 @@ func (s *EntityStore) applyDefaults(data map[string]any) {
 			data[f.Name] = f.Default
 		}
 	}
+
+	// An entity with a state_machine must start in its declared initial
+	// state — otherwise the very first transition looks like an invalid
+	// "no old state, and new state != initial" case in
+	// validateStateTransition, since Insert() never had a chance to set it.
+	if s.stateMachine != nil && s.stateMachine.Initial != "" {
+		field := s.stateMachine.Field
+		if val, exists := data[field]; !exists || val == nil || val == "" {
+			data[field] = s.stateMachine.Initial
+		}
+	}
+}
+
+// generateNaturalKeys fills in any field with NaturalKey: true + a
+// NaturalKeyRule whose value is not already present in data (a caller may
+// still supply an explicit value, e.g. migrations/imports — those are left
+// untouched). Uses NaturalKeyCounter for atomic, per-tenant/resource/field
+// sequence generation.
+func (s *EntityStore) generateNaturalKeys(ctx context.Context, tenantID string, data map[string]any) error {
+	for _, f := range s.fields {
+		if !f.NaturalKey || f.NaturalKeyRule == nil {
+			continue
+		}
+		if val, exists := data[f.Name]; exists && val != nil && val != "" {
+			continue
+		}
+
+		rule := f.NaturalKeyRule
+		prefix := ""
+		if rule.Prefix != nil {
+			if rule.Prefix.Value != "" {
+				prefix = rule.Prefix.Value
+			} else if rule.Prefix.Default != "" {
+				prefix = rule.Prefix.Default
+			}
+			// rule.Prefix.Config (tenant-config-driven override) is not wired
+			// yet — no tenant-config store exists in this codebase.
+		}
+
+		scope := ""
+		if rule.ScopeField != "" {
+			if val, exists := data[rule.ScopeField]; exists && val != nil {
+				scope = fmt.Sprintf("%v", val)
+			}
+		}
+
+		counter := NewNaturalKeyCounter(s.db, s.driver)
+		key, err := counter.GenerateNaturalKey(ctx, tenantID, s.entity, f.Name, scope, rule.Reset, rule.Format, prefix)
+		if err != nil {
+			return fmt.Errorf("generate natural key %q: %w", f.Name, err)
+		}
+		data[f.Name] = key
+	}
+	return nil
 }
 
 // validateRequired checks that all required fields are present in data.
@@ -141,6 +195,13 @@ type InsertParams struct {
 func (s *EntityStore) Insert(ctx context.Context, params InsertParams) (string, error) {
 	// Apply default values for fields not present in data
 	s.applyDefaults(params.Data)
+
+	// Generate natural keys (e.g. queue_number, invoice number) for fields
+	// that declare natural_key: true + natural_key_rule, before required-field
+	// validation — a generated key must count as present.
+	if err := s.generateNaturalKeys(ctx, params.TenantID, params.Data); err != nil {
+		return "", fmt.Errorf("%s insert: %w", s.entity, err)
+	}
 
 	// Validate required fields
 	if err := s.validateRequired(params.Data); err != nil {

@@ -2,8 +2,8 @@ apiVersion: forma.dev/v1alpha1
 kind: Subscription
 metadata:
   name: order-to-movement
-  module: inventory
-  description: Auto-create stock movement (type=out) setiap order dibayar
+  module: sales-inventory-integrator
+  description: Auto-create stock movement (type=out) setiap order dibayar — connects billing to inventory
 spec:
   on: { resource: billing.order, event: paid }
   deliver:

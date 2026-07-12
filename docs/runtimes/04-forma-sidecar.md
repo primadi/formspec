@@ -1,7 +1,14 @@
 # Forma Sidecar — Binary Reference
 
-**Version:** 1.0
-**Status:** Draft (belum diimplementasikan — lihat §8)
+> ⚠️ **DEPRECATED** — `forma-sidecar` sebagai binary terpisah sudah digantikan
+> oleh `forma dev --listen local_http`. Semua fungsionalitas sidecar (ctx listener,
+> app monitor, child process management) sudah terintegrasi ke dalam `forma` CLI.
+>
+> `cmd/forma-sidecar` masih ada untuk backward compatibility tetapi akan dihapus
+> di rilis mendatang. Gunakan `forma dev --listen local_http` sebagai pengganti.
+
+**Version:** 1.0 (deprecated)
+**Status:** Draft
 **License:** Creative Commons CC0 (dokumen) — binary-nya sendiri FSL (open source)
 **Governed by:** `docs/architecture/01-architecture-overview.md` §2, `docs/runtimes/02-forma-resource.md`
 

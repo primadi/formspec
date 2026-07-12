@@ -3,7 +3,7 @@ apiVersion: forma.dev/v1alpha1
 kind: Table
 metadata:
   name: journal-table
-  module: general-ledger
+  module: gl
   description: Tabel jurnal umum — debit/kredit
 spec:
   entity: journal_entry

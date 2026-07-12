@@ -2,7 +2,7 @@ apiVersion: forma.dev/v1alpha1
 kind: Entity
 metadata:
   name: journal-entry
-  module: general-ledger
+  module: gl
   description: Satu journal entry — selalu double-entry (min 2 baris)
 spec:
   version: v1
@@ -79,7 +79,7 @@ spec:
       emits: journal-posted
       uses:
         primitives: [lock]
-      impl: { type: script_ref, ref: general-ledger/journal_post }
+      impl: { type: script_ref, ref: gl/journal_post }
 
     - name: reverse
       description: Reverse (batalkan) journal entry yang sudah posted
@@ -89,7 +89,7 @@ spec:
       conditions:
         - script: "resource.status == 'posted'"
           message: "Hanya journal posted yang bisa di-reverse"
-      impl: { type: script_ref, ref: general-ledger/journal_reverse }
+      impl: { type: script_ref, ref: gl/journal_reverse }
 
     - name: create
       idempotent: true
@@ -108,7 +108,7 @@ spec:
         fields: [id, number, entry_date, source, source_id, currency]
       deliver:
         - channel: reliable_event
-          target: { resource: general-ledger.gl-balance, action: update }
+          target: { resource: gl.gl-balance, action: update }
           retry: { max: 5, backoff: exponential }
           idempotency_key: "balance.{id}"
 
@@ -120,6 +120,6 @@ spec:
         fields: [id, number, entry_date]
       deliver:
         - channel: reliable_event
-          target: { resource: general-ledger.gl-balance, action: reverse }
+          target: { resource: gl.gl-balance, action: reverse }
           retry: { max: 5, backoff: exponential }
           idempotency_key: "balance-reverse.{id}"

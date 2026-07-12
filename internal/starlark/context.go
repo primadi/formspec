@@ -87,6 +87,8 @@ func (c *CtxAPI) Attr(name string) (starlark.Value, error) {
 		return c.Auth, nil
 	case "now":
 		return c.builtinNow(), nil
+	case "today":
+		return c.builtinToday(), nil
 	case "log":
 		return c.Log, nil
 	case "next_key":
@@ -134,7 +136,7 @@ func (c *CtxAPI) Attr(name string) (starlark.Value, error) {
 }
 
 func (c *CtxAPI) AttrNames() []string {
-	return []string{"tenant", "user", "auth", "now", "log", "next_key", "config",
+	return []string{"tenant", "user", "auth", "now", "today", "log", "next_key", "config",
 		"db", "cache", "lock", "queue", "pubsub", "storage", "kvstore"}
 }
 
@@ -149,6 +151,22 @@ func (c *CtxAPI) builtinNow() *starlark.Builtin {
 			return starlark.String(time.Now().UTC().Format(time.RFC3339)), nil
 		}
 		return starlark.String(c.Now().UTC().Format(time.RFC3339)), nil
+	})
+}
+
+// builtinToday returns ctx.today(), a date-only (YYYY-MM-DD) counterpart to
+// ctx.now() for scripts that set `date`-typed fields (e.g. transaction_date).
+func (c *CtxAPI) builtinToday() *starlark.Builtin {
+	return starlark.NewBuiltin("ctx.today", func(
+		thread *starlark.Thread,
+		fn *starlark.Builtin,
+		args starlark.Tuple,
+		kwargs []starlark.Tuple,
+	) (starlark.Value, error) {
+		if c.Now == nil {
+			return starlark.String(time.Now().UTC().Format("2006-01-02")), nil
+		}
+		return starlark.String(c.Now().UTC().Format("2006-01-02")), nil
 	})
 }
 

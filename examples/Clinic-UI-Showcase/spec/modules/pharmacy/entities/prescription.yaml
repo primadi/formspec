@@ -1,5 +1,8 @@
 # SHOWCASE: transaksi dengan relation LINTAS MODULE (clinic.visit) +
 # state machine 4 kolom untuk kanban antrian farmasi (contoh kanonik §12 spec).
+# Resep bisa berasal dari kunjungan internal (visit_id) ATAU resep luar
+# (source: external + prescriber_name) — visit_id sengaja tidak required.
+# hooks: before/create menunjukkan cross-module resource.fetch (§0 fix).
 apiVersion: forma.dev/v1alpha1
 kind: Entity
 metadata:
@@ -31,7 +34,19 @@ spec:
     - name: visit_id
       type: relation
       relation: { type: belongs_to, resource: clinic.visit }
-      required: true
+      description: Diisi bila resep berasal dari kunjungan internal (source=internal)
+    - name: patient_id
+      type: relation
+      relation: { type: belongs_to, resource: clinic.patient }
+      description: Pasien terdaftar (opsional) — dipakai hook before/create untuk auto-fill patient_name
+    - name: source
+      type: enum
+      enum_values: [internal, external]
+      default: internal
+      index: true
+    - name: prescriber_name
+      type: string
+      description: Nama dokter penulis resep, untuk source=external (dokter luar, tidak ada di sistem)
     - name: patient_name
       type: string
       description: Denormalisasi untuk kartu kanban
@@ -68,6 +83,9 @@ spec:
       - { from: [queued, compounding], to: cancelled, via: cancel }
 
   actions:
+    - name: create
+      emits: created
+
     - name: delete
       disabled: true
 
@@ -93,3 +111,23 @@ spec:
       required_permission: prescriptions.cancel
       audit: true
       impl: { type: script_ref, ref: pharmacy/rx_cancel }
+
+  events:
+    - name: created
+      type: async
+      description: Resep baru masuk — antrian farmasi
+      payload:
+        fields: [id, number, source, patient_name, priority, status]
+      deliver:
+        - channel: audit_log
+        - channel: websocket
+          target: { scope: tenant }
+
+  # SHOWCASE: hooks (Core Extended §8) — before/create runs synchronously
+  # ahead of the insert. If patient_id is set, cross-module resource.fetch
+  # (§0 fix) pulls the registered patient's name so patient_name doesn't
+  # have to be retyped by hand.
+  hooks:
+    - on: before
+      action: create
+      impl: { type: script_ref, ref: pharmacy/prescription_derive_patient_name }

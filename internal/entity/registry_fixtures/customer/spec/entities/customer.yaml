@@ -1,0 +1,19 @@
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: customer
+  module: billing
+  description: Data pelanggan — registry-test fixture
+spec:
+  version: v1
+  characteristic: master
+
+  fields:
+    - name: name
+      type: string
+      rules: [required, min_length: 1]
+    - name: email
+      type: string
+      unique: true
+      index: true
+      rules: [required, email]

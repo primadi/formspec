@@ -79,13 +79,13 @@ spec:
     transitions:
       - { from: waiting, to: in_consultation, via: start-consultation }
       - { from: in_consultation, to: completed, via: complete,
-          guard: "resource.diagnosis != None and len(resource.diagnosis) > 0" }
+          guard: "diagnosis != None and len(diagnosis) > 0" }
       - { from: [waiting, in_consultation], to: cancelled, via: cancel }
 
   actions:
     - name: update
       conditions:
-        - script: "resource.status in ['waiting', 'in_consultation']"
+        - script: "status in ['waiting', 'in_consultation']"
           message: "Kunjungan yang selesai/batal tidak bisa diedit"
 
     - name: delete
@@ -110,20 +110,11 @@ spec:
       audit: true
       impl: { type: script_ref, ref: clinic/visit_cancel }
 
-    - name: register-patient
-      description: >
-        Commit action untuk wizard patient-registration (§11 spec frontend):
-        menerima akumulasi state wizard, buat pasien bila baru, buat visit —
-        atomik di server.
-      required_permission: visits.register
-      audit: true
-      params:
-        validate:
-          - { field: polyclinic_id, rules: [required, exists: polyclinic] }
-          - { field: doctor_id, rules: [required, exists: doctor] }
-      uses:
-        resources: [patient.find, patient.create]
-      impl: { type: script_ref, ref: clinic/register_patient }
+  # Wizard patient-registration (§11 spec frontend) commits via a plain
+  # create — no custom action needed. The patient is created eagerly in
+  # step 1 (a normal patient.create, independent of wizard completion), so
+  # by the final "Konfirmasi" step every required field (patient_id,
+  # polyclinic_id, doctor_id, complaint, transaction_date) is already known.
 
   events:
     - name: completed
