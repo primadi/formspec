@@ -227,6 +227,7 @@ export interface PersistSpec {
 export interface Field {
   name: string
   type: FieldType
+  title?: string
   description?: string
   default?: unknown
   required?: boolean

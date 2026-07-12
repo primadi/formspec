@@ -232,7 +232,7 @@ export function resolveForm(
 // ── Field mapping helpers ──
 
 function fieldLabel(field: Field): string {
-  if (field.description) return field.description
+  if (field.title) return field.title
   return field.name
     .replace(/_/g, " ")
     .replace(/\bid\b/i, "ID")

@@ -121,6 +121,7 @@ type EntityAuth struct {
 type Field struct {
 	Name           string              `yaml:"name" json:"name"`
 	Type           FieldType           `yaml:"type" json:"type"`
+	Title          string              `yaml:"title,omitempty" json:"title,omitempty"`
 	Description    string              `yaml:"description,omitempty" json:"description,omitempty"`
 	Default        any                 `yaml:"default,omitempty" json:"default,omitempty"`
 	Required       bool                `yaml:"required,omitempty" json:"required,omitempty"`

@@ -72,11 +72,21 @@ const (
 	defaultWorkspaceID = "default"
 	defaultStateDir    = ".forma"
 	defaultRuntime     = "auto"
+
+	pidFileName = "dev.pid"
 )
 
 // ─── Entry point: runDev ───
 
 func runDev(args []string) {
+	// ── 0. Kill previous instance via PID file ──
+	autoKillPrevious()
+
+	// ── 0b. Optional positional directory argument ──
+	// `forma dev .` or `forma dev /path/to/project`
+	// Changes working directory before flag/config discovery.
+	args = chdirIfPositionalArg(args)
+
 	// ── 1. Parse flags with defaults ──
 	cfg := parseDevFlags(args)
 
@@ -111,9 +121,18 @@ func runDev(args []string) {
 		log.Fatalf("[forma] create state dir %s: %v", cfg.StateDir, err)
 	}
 
+	// ── 7b. Write PID file for auto-kill on next run ──
+	writePIDFile()
+
 	// ── 8. Port conflict resolution ──
+	// Main REST API port: always resolve (auto-kill previous forma instance)
+	if err := ensurePort(cfg.Addr, "forma"); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	// Extra listen/app ports: only resolve with --force
 	if cfg.Force {
-		addrs := []string{cfg.Addr}
+		addrs := []string{}
 		if listenURL != "" {
 			addrs = append(addrs, listenURL)
 		}
@@ -149,9 +168,14 @@ func runDev(args []string) {
 		TenantID:             cfg.WorkspaceID,
 	}
 
-	// SPA serving priority: --web-dir > embedded FS
+	// SPA serving priority: --web-dir > auto-detect web/dist/ > embedded FS
 	if cfg.WebDir != "" {
 		formaCfg.WebDir = cfg.WebDir
+	} else if found := findWebDist(); found != "" {
+		// Auto-detect web/dist/ — picks up npm run rebuilds immediately
+		cfg.WebDir = found
+		formaCfg.WebDir = cfg.WebDir
+		log.Printf("[forma] SPA from folder: %s", cfg.WebDir)
 	} else {
 		// embed.FS stores files with their relative path (dist/index.html).
 		// Use fs.Sub to strip the dist/ prefix so the FS is rooted at dist/.
@@ -255,6 +279,9 @@ func runDev(args []string) {
 		log.Printf("[forma] server error: %v", err)
 	}
 
+	// Cleanup PID file
+	cleanupPIDFile()
+
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	restSrv.Shutdown(shutdownCtx)
@@ -270,6 +297,114 @@ func runDev(args []string) {
 }
 
 // ─── Flag Parsing ───
+
+// ─── PID File Helpers ───
+
+// pidFilePath returns the full path to the PID file in the state directory.
+func pidFilePath() string {
+	return filepath.Join(".forma", pidFileName)
+}
+
+// autoKillPrevious reads the PID file from .forma/dev.pid, kills the process
+// if it still exists and is a forma dev instance, then removes the stale file.
+func autoKillPrevious() {
+	pidPath := pidFilePath()
+	data, err := os.ReadFile(pidPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return
+		}
+		log.Printf("[forma] warning: cannot read PID file %s: %v", pidPath, err)
+		return
+	}
+
+	oldPID, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil {
+		log.Printf("[forma] warning: invalid PID in %s, removing...", pidPath)
+		os.Remove(pidPath)
+		return
+	}
+
+	proc, err := os.FindProcess(oldPID)
+	if err != nil {
+		// Process not found, clean up stale PID file
+		os.Remove(pidPath)
+		return
+	}
+
+	// Send SIGTERM; if it fails, process is already dead
+	if err := proc.Signal(syscall.SIGTERM); err != nil {
+		os.Remove(pidPath)
+		return
+	}
+
+	log.Printf("[forma] killing previous instance (PID %d)...", oldPID)
+	time.Sleep(500 * time.Millisecond)
+
+	// SIGKILL if still alive
+	proc.Signal(syscall.SIGKILL)
+	time.Sleep(200 * time.Millisecond)
+
+	os.Remove(pidPath)
+}
+
+// writePIDFile writes the current PID to the PID file.
+func writePIDFile() {
+	pidPath := pidFilePath()
+	if err := os.MkdirAll(filepath.Dir(pidPath), 0755); err != nil {
+		log.Printf("[forma] warning: cannot create state dir for PID file: %v", err)
+		return
+	}
+	if err := os.WriteFile(pidPath, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0644); err != nil {
+		log.Printf("[forma] warning: cannot write PID file: %v", err)
+	}
+}
+
+// cleanupPIDFile removes the PID file.
+func cleanupPIDFile() {
+	if err := os.Remove(pidFilePath()); err != nil && !os.IsNotExist(err) {
+		log.Printf("[forma] warning: cannot remove PID file: %v", err)
+	}
+}
+
+// chdirIfPositionalArg checks if the first arg is a directory (not a flag).
+// If so, it changes to that directory and returns the remaining args.
+func chdirIfPositionalArg(args []string) []string {
+	if len(args) == 0 || args[0] == "" || args[0][0] == '-' {
+		return args
+	}
+	dir := args[0]
+	info, err := os.Stat(dir)
+	if err != nil || !info.IsDir() {
+		return args
+	}
+	if err := os.Chdir(dir); err != nil {
+		log.Fatalf("[forma] cannot chdir to %s: %v", dir, err)
+	}
+	log.Printf("[forma] working directory: %s", dir)
+	return args[1:]
+}
+
+// findWebDist walks up from CWD looking for web/dist/ directory.
+// Returns the absolute path if found, empty string otherwise.
+func findWebDist() string {
+	dir, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	for {
+		candidate := filepath.Join(dir, "web", "dist")
+		if st, err := os.Stat(candidate); err == nil && st.IsDir() {
+			return candidate
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break // reached filesystem root
+		}
+		dir = parent
+	}
+	return ""
+}
 
 func parseDevFlags(args []string) DevConfig {
 	fs := flag.NewFlagSet("dev", flag.ExitOnError)
