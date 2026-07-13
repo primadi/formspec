@@ -57,10 +57,10 @@ type Config struct {
 	JWTPublicKeyPath string        // PEM file for asymmetric JWT validation (ProdMode)
 	StrictMode       bool          // Force strict `uses` enforcement even outside ProdMode
 	IdempotencyTTL   time.Duration // TTL for idempotency keys (default: db.DefaultIdempotencyTTL)
-	TenantID         string        // Tenant scope used by script save/load/call handlers (default: "demo")
+	WorkspaceID      string        // Tenant scope used by script save/load/call handlers (default: "demo")
 
 	// SidecarEndpoint is the app-process endpoint for impl: {type: sidecar}
-	// actions ("unix:///var/run/forma/app.sock" or "http://localhost:9000").
+	// actions ("unix:///tmp/forma/app.sock" or "http://localhost:9000").
 	// Empty means sidecar actions fail with a not-configured error — the
 	// correct behavior for embedded Go apps, where no app process exists.
 	// Set by cmd/forma-sidecar (docs/runtimes/04-forma-sidecar.md §4.2).
@@ -94,8 +94,8 @@ func (c *Config) applyDefaults() {
 	if c.IdempotencyTTL == 0 {
 		c.IdempotencyTTL = db.DefaultIdempotencyTTL
 	}
-	if c.TenantID == "" {
-		c.TenantID = "demo"
+	if c.WorkspaceID == "" {
+		c.WorkspaceID = "demo"
 	}
 }
 
@@ -113,14 +113,14 @@ type NativeHandler func(ctx context.Context, params NativeParams) (any, error)
 
 // NativeParams mirrors internal/action.ExecuteParams for public consumption.
 type NativeParams struct {
-	Module     string         // owning module (e.g. "billing")
-	Entity     string         // entity or service name (e.g. "order")
-	ActionName string         // action being invoked (e.g. "checkout")
-	ResourceID string         // entity record ID (empty for service actions)
-	Resource   map[string]any // current entity record data
-	Params     map[string]any // action parameters from request body
-	TenantID   string         // current workspace tenant
-	UserID     string         // authenticated user
+	Module      string         // owning module (e.g. "billing")
+	Entity      string         // entity or service name (e.g. "order")
+	ActionName  string         // action being invoked (e.g. "checkout")
+	ResourceID  string         // entity record ID (empty for service actions)
+	Resource    map[string]any // current entity record data
+	Params      map[string]any // action parameters from request body
+	WorkspaceID string         // current workspace identifier
+	UserID      string         // authenticated user
 }
 
 // App is a running Forma entity engine: loaded manifests, a synced schema,
@@ -136,6 +136,13 @@ type App struct {
 	httpServer   *http.Server
 }
 
+// GetEntityStore returns the EntityStore for a given module/entity pair.
+// This is used by the sidecar ctx handler for entity primitive operations
+// (fetch, save, update, increment, decrement).
+func (a *App) GetEntityStore(module, name string) (*db.EntityStore, error) {
+	return a.reg.GetEntityStore(module, name)
+}
+
 // RegisterNative registers a Go native handler so the action dispatcher can
 // route impl: { type: native, ref: "Module.Entity.Action" } calls to it.
 //
@@ -143,14 +150,14 @@ type App struct {
 func (a *App) RegisterNative(ref string, handler NativeHandler) {
 	a.nativeEx.Register(ref, func(ctx context.Context, params action.ExecuteParams) (any, error) {
 		return handler(ctx, NativeParams{
-			Module:     params.Module,
-			Entity:     params.Entity,
-			ActionName: params.ActionName,
-			ResourceID: params.ResourceID,
-			Resource:   params.Resource,
-			Params:     params.Params,
-			TenantID:   params.TenantID,
-			UserID:     params.UserID,
+			Module:      params.Module,
+			Entity:      params.Entity,
+			ActionName:  params.ActionName,
+			ResourceID:  params.ResourceID,
+			Resource:    params.Resource,
+			Params:      params.Params,
+			WorkspaceID: params.WorkspaceID,
+			UserID:      params.UserID,
 		})
 	})
 }
@@ -233,7 +240,7 @@ func New(cfg Config) (*App, error) {
 		if err != nil {
 			return false, err
 		}
-		if _, err := store.GetByID(context.Background(), db.GetByIDParams{TenantID: cfg.TenantID, ID: id}); err != nil {
+		if _, err := store.GetByID(context.Background(), db.GetByIDParams{WorkspaceID: cfg.WorkspaceID, ID: id}); err != nil {
 			return false, nil // not found = exists check fails
 		}
 		return true, nil
@@ -347,7 +354,7 @@ func newDispatcher(reg *entity.Registry, cfg Config) *action.Dispatcher {
 	disp := action.NewDispatcher()
 
 	scriptEx := action.NewScriptExecutor(cfg.SpecPath)
-	scriptEx.SetSaveHandler(func(tenantID, module, entityName, id string, version int, data map[string]any) error {
+	scriptEx.SetSaveHandler(func(workspaceID, module, entityName, id string, version int, data map[string]any) error {
 		if id == "" {
 			return fmt.Errorf("resource.save: cannot save before the record exists — use resource.set() during a before-create hook/impl; the framework persists automatically")
 		}
@@ -356,26 +363,26 @@ func newDispatcher(reg *entity.Registry, cfg Config) *action.Dispatcher {
 			return fmt.Errorf("get store: %w", err)
 		}
 		_, err = store.Update(context.Background(), db.UpdateParams{
-			TenantID:  tenantID,
-			ID:        id,
-			Version:   version,
-			UpdatedBy: "script",
-			Data:      data,
+			WorkspaceID: workspaceID,
+			ID:          id,
+			Version:     version,
+			UpdatedBy:   "script",
+			Data:        data,
 		})
 		return err
 	})
-	scriptEx.SetCallHandler(func(tenantID, fromModule, targetModule, targetEntity, actionName string, params map[string]any) (any, error) {
+	scriptEx.SetCallHandler(func(workspaceID, fromModule, targetModule, targetEntity, actionName string, params map[string]any) (any, error) {
 		if targetModule == "" {
 			targetModule = fromModule
 		}
-		return invokeAction(context.Background(), reg, disp, tenantID, targetModule, targetEntity, actionName, "", params)
+		return invokeAction(context.Background(), reg, disp, workspaceID, targetModule, targetEntity, actionName, "", params)
 	})
-	scriptEx.SetLoadHandler(func(tenantID, module, entityName, id string) (map[string]any, int, error) {
+	scriptEx.SetLoadHandler(func(workspaceID, module, entityName, id string) (map[string]any, int, error) {
 		store, err := reg.GetEntityStore(module, entityName)
 		if err != nil {
 			return nil, 0, fmt.Errorf("get store: %w", err)
 		}
-		rec, err := store.GetByID(context.Background(), db.GetByIDParams{TenantID: tenantID, ID: id})
+		rec, err := store.GetByID(context.Background(), db.GetByIDParams{WorkspaceID: workspaceID, ID: id})
 		if err != nil {
 			return nil, 0, err
 		}
@@ -384,19 +391,19 @@ func newDispatcher(reg *entity.Registry, cfg Config) *action.Dispatcher {
 		}
 		return rec.Data, rec.Version, nil
 	})
-	scriptEx.SetCreateHandler(func(tenantID, module, entityName string, data map[string]any) (string, error) {
+	scriptEx.SetCreateHandler(func(workspaceID, module, entityName string, data map[string]any) (string, error) {
 		store, err := reg.GetEntityStore(module, entityName)
 		if err != nil {
 			return "", fmt.Errorf("get store: %w", err)
 		}
 		return store.Insert(context.Background(), db.InsertParams{
-			TenantID:  tenantID,
-			CreatedBy: "script",
-			Data:      data,
+			WorkspaceID: workspaceID,
+			CreatedBy:   "script",
+			Data:        data,
 		})
 	})
-	scriptEx.SetNextKeyHandler(func(tenantID, module, entityName, fieldName string) (string, error) {
-		return generateNextKey(context.Background(), reg, tenantID, module, entityName, fieldName)
+	scriptEx.SetNextKeyHandler(func(workspaceID, module, entityName, fieldName string) (string, error) {
+		return generateNextKey(context.Background(), reg, workspaceID, module, entityName, fieldName)
 	})
 	disp.RegisterExecutor(spec.ImplScript, scriptEx)
 	disp.RegisterExecutor(spec.ImplScriptRef, scriptEx)
@@ -413,8 +420,8 @@ func newDispatcher(reg *entity.Registry, cfg Config) *action.Dispatcher {
 // to the entity registry's natural-key counter. Automatic natural-key
 // generation on plain Create is separate (wired directly into
 // db.EntityStore.Insert, since it must run before required-field validation).
-func generateNextKey(ctx context.Context, reg *entity.Registry, tenantID, module, entityName, fieldName string) (string, error) {
-	return reg.GenerateNaturalKey(ctx, tenantID, module, entityName, fieldName)
+func generateNextKey(ctx context.Context, reg *entity.Registry, workspaceID, module, entityName, fieldName string) (string, error) {
+	return reg.GenerateNaturalKey(ctx, workspaceID, module, entityName, fieldName)
 }
 
 // invokeAction runs a named action on module/entity — the resource.call()
@@ -427,7 +434,7 @@ func generateNextKey(ctx context.Context, reg *entity.Registry, tenantID, module
 // this does not re-run EvaluateConditions before dispatch — no current
 // script exercises resource.call(), so that parity gap is deferred rather
 // than spending plumbing on an untested path.
-func invokeAction(ctx context.Context, reg *entity.Registry, disp *action.Dispatcher, tenantID, module, entityName, actionName, resourceID string, params map[string]any) (any, error) {
+func invokeAction(ctx context.Context, reg *entity.Registry, disp *action.Dispatcher, workspaceID, module, entityName, actionName, resourceID string, params map[string]any) (any, error) {
 	actionSpec, ok := reg.GetActionSpec(module, entityName, actionName)
 	if !ok {
 		return nil, fmt.Errorf("resource.call: action %s.%s.%s not found", module, entityName, actionName)
@@ -440,7 +447,7 @@ func invokeAction(ctx context.Context, reg *entity.Registry, disp *action.Dispat
 		if err != nil {
 			return nil, fmt.Errorf("resource.call: get store: %w", err)
 		}
-		rec, err := store.GetByID(ctx, db.GetByIDParams{TenantID: tenantID, ID: resourceID})
+		rec, err := store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: resourceID})
 		if err != nil {
 			return nil, fmt.Errorf("resource.call: load %s.%s(%s): %w", module, entityName, resourceID, err)
 		}
@@ -458,7 +465,7 @@ func invokeAction(ctx context.Context, reg *entity.Registry, disp *action.Dispat
 		Resource:        resourceData,
 		ResourceVersion: resourceVersion,
 		Params:          params,
-		TenantID:        tenantID,
+		WorkspaceID:     workspaceID,
 	})
 	if err != nil {
 		return nil, err

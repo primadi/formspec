@@ -1,0 +1,20 @@
+{
+  "name": "@forma/clinic-showcase-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Clinic UI Showcase — TypeScript sidecar app for OTC sell demo",
+  "type": "commonjs",
+  "dependencies": {
+    "@forma/lib-forma": "file:../../../sdk/typescript"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "@types/node": "^20.14.0",
+    "tsx": "^4.19.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx --watch src/app.ts",
+    "start": "node dist/app.js"
+  }
+}

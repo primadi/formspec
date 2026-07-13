@@ -13,38 +13,38 @@ import (
 )
 
 type wsConn struct {
-	id     string
-	tenant string
-	conn   *websocket.Conn
-	send   chan events.EventMessage
+	id        string
+	workspace string
+	conn      *websocket.Conn
+	send      chan events.EventMessage
 }
 
-// WSHub is a tenant-scoped websocket connection manager implementing
+// WSHub is a workspace-scoped websocket connection manager implementing
 // events.Hub. Broadcast is a hot, read-heavy path (called once per
 // delivered event, potentially many times/sec), so a mutex-protected map is
 // used rather than an actor/channel design — each connection additionally
 // has its own buffered send channel and dedicated writer goroutine, so a
 // slow/blocked individual socket can't stall the hub or other connections.
-// Only target: {scope: tenant} is supported (the only documented/used
+// Only target: {scope: workspace} is supported (the only documented/used
 // scope anywhere in the repo) — a later scope: user would be an additive
 // second index, not a redesign.
 type WSHub struct {
-	mu       sync.RWMutex
-	byTenant map[string]map[string]*wsConn
+	mu          sync.RWMutex
+	byWorkspace map[string]map[string]*wsConn
 }
 
 // NewWSHub creates an empty hub.
 func NewWSHub() *WSHub {
-	return &WSHub{byTenant: make(map[string]map[string]*wsConn)}
+	return &WSHub{byWorkspace: make(map[string]map[string]*wsConn)}
 }
 
 func (h *WSHub) register(c *wsConn) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	conns, ok := h.byTenant[c.tenant]
+	conns, ok := h.byWorkspace[c.workspace]
 	if !ok {
 		conns = make(map[string]*wsConn)
-		h.byTenant[c.tenant] = conns
+		h.byWorkspace[c.workspace] = conns
 	}
 	conns[c.id] = c
 }
@@ -52,21 +52,21 @@ func (h *WSHub) register(c *wsConn) {
 func (h *WSHub) unregister(c *wsConn) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	conns, ok := h.byTenant[c.tenant]
+	conns, ok := h.byWorkspace[c.workspace]
 	if !ok {
 		return
 	}
 	delete(conns, c.id)
 	if len(conns) == 0 {
-		delete(h.byTenant, c.tenant)
+		delete(h.byWorkspace, c.workspace)
 	}
 }
 
-// Broadcast implements events.Hub. Zero connections for tenantID is a
+// Broadcast implements events.Hub. Zero connections for workspaceID is a
 // cheap no-op — reading a nil map entry is safe in Go.
-func (h *WSHub) Broadcast(tenantID string, msg events.EventMessage) {
+func (h *WSHub) Broadcast(workspaceID string, msg events.EventMessage) {
 	h.mu.RLock()
-	conns := h.byTenant[tenantID]
+	conns := h.byWorkspace[workspaceID]
 	targets := make([]*wsConn, 0, len(conns))
 	for _, c := range conns {
 		targets = append(targets, c)
@@ -93,17 +93,17 @@ func nextConnID() string {
 }
 
 // HandleWS upgrades an authenticated request to a websocket connection and
-// registers it in the hub, scoped to the caller's tenant. Push-only for
+// registers it in the hub, scoped to the caller's workspace. Push-only for
 // v1 — no inbound application protocol is defined; the read loop exists
 // solely to detect client disconnects and service ping/close control
 // frames (required by the underlying library to keep the connection
 // alive).
 func (b *RouterBuilder) HandleWS() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// tenantFromContext already carries AuthMiddleware's dev/prod fallback
-		// (identity workspace > explicit tenant > "demo"), matching every
+		// workspaceFromContext already carries AuthMiddleware's dev/prod fallback
+		// (identity workspace > explicit workspace > "demo"), matching every
 		// other handler in this package — no separate identity gate here.
-		tenantID := tenantFromContext(r.Context())
+		workspaceID := workspaceFromContext(r.Context())
 
 		c, err := websocket.Accept(w, r, nil)
 		if err != nil {
@@ -111,7 +111,7 @@ func (b *RouterBuilder) HandleWS() http.HandlerFunc {
 		}
 		defer c.CloseNow()
 
-		conn := &wsConn{id: nextConnID(), tenant: tenantID, conn: c, send: make(chan events.EventMessage, 32)}
+		conn := &wsConn{id: nextConnID(), workspace: workspaceID, conn: c, send: make(chan events.EventMessage, 32)}
 		b.hub.register(conn)
 		defer b.hub.unregister(conn)
 

@@ -211,7 +211,7 @@ func TestRegistry_GetEntityStore(t *testing.T) {
 
 	// Insert
 	id, err := store.Insert(ctx, db.InsertParams{
-		TenantID: "t1", CreatedBy: "user",
+		WorkspaceID: "t1", CreatedBy: "user",
 		Data: map[string]any{"name": "Bob", "email": "bob@test.com"},
 	})
 	if err != nil {
@@ -222,7 +222,7 @@ func TestRegistry_GetEntityStore(t *testing.T) {
 	}
 
 	// GetByID
-	rec, err := store.GetByID(ctx, db.GetByIDParams{TenantID: "t1", ID: id})
+	rec, err := store.GetByID(ctx, db.GetByIDParams{WorkspaceID: "t1", ID: id})
 	if err != nil {
 		t.Fatalf("GetByID failed: %v", err)
 	}

@@ -13,7 +13,7 @@ import (
 func TestEntityRecord_MarshalJSON_FlattensAndUsesSnakeCase(t *testing.T) {
 	rec := EntityRecord{
 		ID:        "inv-1",
-		TenantID:  "acme",
+		WorkspaceID:  "acme",
 		Version:   3,
 		CreatedAt: "2026-07-11T00:00:00Z",
 		UpdatedAt: "2026-07-11T01:00:00Z",

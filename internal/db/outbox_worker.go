@@ -12,16 +12,16 @@ import (
 type EventHandler interface {
 	// HandleEvent delivers an event from the outbox.
 	// Returns an error if delivery fails permanently (worker will mark as failed).
-	HandleEvent(ctx context.Context, tenantID, eventName, resource, payload string) error
+	HandleEvent(ctx context.Context, workspaceID, eventName, resource, payload string) error
 }
 
 // EventHandlerFunc is an adapter that allows a plain function to be used as
 // an EventHandler.
-type EventHandlerFunc func(ctx context.Context, tenantID, eventName, resource, payload string) error
+type EventHandlerFunc func(ctx context.Context, workspaceID, eventName, resource, payload string) error
 
 // HandleEvent implements EventHandler by calling f.
-func (f EventHandlerFunc) HandleEvent(ctx context.Context, tenantID, eventName, resource, payload string) error {
-	return f(ctx, tenantID, eventName, resource, payload)
+func (f EventHandlerFunc) HandleEvent(ctx context.Context, workspaceID, eventName, resource, payload string) error {
+	return f(ctx, workspaceID, eventName, resource, payload)
 }
 
 // OutboxWorkerConfig configures the outbox background worker.
@@ -181,7 +181,7 @@ func (w *OutboxWorker) processBatch(ctx context.Context) {
 		default:
 		}
 
-		err := w.handler.HandleEvent(ctx, rec.TenantID, rec.EventName, rec.Resource, rec.Payload)
+		err := w.handler.HandleEvent(ctx, rec.WorkspaceID, rec.EventName, rec.Resource, rec.Payload)
 		if err != nil {
 			log.Printf("[outbox-worker] deliver failed event=%s id=%s: %v", rec.EventName, rec.ID, err)
 			if markErr := w.store.MarkFailed(ctx, rec.ID, w.config.MaxRetries); markErr != nil {

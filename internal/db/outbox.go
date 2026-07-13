@@ -24,7 +24,7 @@ type OutboxStore struct {
 // OutboxRecord represents a row in forma_outbox.
 type OutboxRecord struct {
 	ID          string
-	TenantID    string
+	WorkspaceID    string
 	EventName   string
 	Resource    string
 	Payload     string
@@ -41,7 +41,7 @@ func NewOutboxStore(db DB, driver DriverType) *OutboxStore {
 }
 
 // Enqueue inserts a new event into the outbox for processing.
-func (s *OutboxStore) Enqueue(ctx context.Context, tenantID, eventName, resource, payload string) (string, error) {
+func (s *OutboxStore) Enqueue(ctx context.Context, workspaceID, eventName, resource, payload string) (string, error) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	query := `
 		INSERT INTO forma_outbox (tenant_id, event_name, resource, payload, status, created_at, next_retry_at)
@@ -51,20 +51,20 @@ func (s *OutboxStore) Enqueue(ctx context.Context, tenantID, eventName, resource
 
 	var id string
 	err := s.db.QueryRowContext(ctx, query,
-		tenantID, eventName, resource, payload, now, now,
+		workspaceID, eventName, resource, payload, now, now,
 	).Scan(&id)
 	if err != nil {
 		// SQLite may not support RETURNING
-		return s.enqueueFallback(ctx, tenantID, eventName, resource, payload, now)
+		return s.enqueueFallback(ctx, workspaceID, eventName, resource, payload, now)
 	}
 	return id, nil
 }
 
-func (s *OutboxStore) enqueueFallback(ctx context.Context, tenantID, eventName, resource, payload, now string) (string, error) {
+func (s *OutboxStore) enqueueFallback(ctx context.Context, workspaceID, eventName, resource, payload, now string) (string, error) {
 	_, err := s.db.ExecContext(ctx, `
 		INSERT INTO forma_outbox (tenant_id, event_name, resource, payload, status, created_at, next_retry_at)
 		VALUES (?, ?, ?, ?, 'pending', ?, ?)
-	`, tenantID, eventName, resource, payload, now, now)
+	`, workspaceID, eventName, resource, payload, now, now)
 	if err != nil {
 		return "", fmt.Errorf("outbox enqueue: %w", err)
 	}
@@ -102,7 +102,7 @@ func (s *OutboxStore) Dequeue(ctx context.Context, batchSize int) ([]OutboxRecor
 	var records []OutboxRecord
 	for rows.Next() {
 		var rec OutboxRecord
-		if err := rows.Scan(&rec.ID, &rec.TenantID, &rec.EventName, &rec.Resource,
+		if err := rows.Scan(&rec.ID, &rec.WorkspaceID, &rec.EventName, &rec.Resource,
 			&rec.Payload, &rec.Status, &rec.RetryCount, &rec.MaxRetries,
 			&rec.CreatedAt, &rec.NextRetryAt); err != nil {
 			return nil, fmt.Errorf("outbox scan: %w", err)
@@ -221,7 +221,7 @@ func (s *OutboxStore) Peek(ctx context.Context, limit int) ([]OutboxRecord, erro
 	var records []OutboxRecord
 	for rows.Next() {
 		var rec OutboxRecord
-		if err := rows.Scan(&rec.ID, &rec.TenantID, &rec.EventName, &rec.Resource,
+		if err := rows.Scan(&rec.ID, &rec.WorkspaceID, &rec.EventName, &rec.Resource,
 			&rec.Payload, &rec.Status, &rec.RetryCount, &rec.MaxRetries,
 			&rec.CreatedAt, &rec.NextRetryAt); err != nil {
 			return nil, fmt.Errorf("outbox peek scan: %w", err)
@@ -239,7 +239,7 @@ func (s *OutboxStore) GetByID(ctx context.Context, id string) (*OutboxRecord, er
 	err := s.db.QueryRowContext(ctx, `
 		SELECT id, tenant_id, event_name, resource, payload, status, retry_count, max_retries, created_at, next_retry_at
 		FROM forma_outbox WHERE id = ?
-	`, id).Scan(&rec.ID, &rec.TenantID, &rec.EventName, &rec.Resource,
+	`, id).Scan(&rec.ID, &rec.WorkspaceID, &rec.EventName, &rec.Resource,
 		&payload, &rec.Status, &rec.RetryCount, &rec.MaxRetries,
 		&rec.CreatedAt, &rec.NextRetryAt)
 	if err == sql.ErrNoRows {

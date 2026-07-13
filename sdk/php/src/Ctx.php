@@ -54,4 +54,10 @@ final class Ctx
     {
         return new CtxPrimitive($this->client, 'kvstore');
     }
+
+    /** Entity primitive — access entity records via named('module/entity'). */
+    public function entity(): CtxPrimitive
+    {
+        return new CtxPrimitive($this->client, 'entity');
+    }
 }

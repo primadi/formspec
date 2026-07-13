@@ -37,7 +37,7 @@ func (d DeliveryDeps) logger() RuntimeLogger {
 // an immediate best-effort push always happens regardless of durability —
 // the outbox enqueue on top is insurance for a client that was
 // disconnected at the moment of the immediate push.
-func DeliverEvents(ctx context.Context, deps DeliveryDeps, tenantID, resource string, emissions []EventEmission) {
+func DeliverEvents(ctx context.Context, deps DeliveryDeps, workspaceID, resource string, emissions []EventEmission) {
 	for _, ev := range emissions {
 		msg := events.EventMessage{
 			Event:    ev.Name,
@@ -55,22 +55,22 @@ func DeliverEvents(ctx context.Context, deps DeliveryDeps, tenantID, resource st
 			switch ch.Channel {
 			case "websocket":
 				if deps.Hub != nil {
-					deps.Hub.Broadcast(tenantID, msg)
+					deps.Hub.Broadcast(workspaceID, msg)
 				}
 				if ev.Durable && deps.Outbox != nil {
-					if _, err := deps.Outbox.Enqueue(ctx, tenantID, ev.Name, resource, string(payloadJSON)); err != nil {
+					if _, err := deps.Outbox.Enqueue(ctx, workspaceID, ev.Name, resource, string(payloadJSON)); err != nil {
 						deps.logger().Error("event.outbox_enqueue_failed", map[string]any{"event": ev.Name, "channel": ch.Channel, "error": err.Error()})
 					}
 				}
 			case "audit_log":
 				if ev.Durable && deps.Outbox != nil {
-					if _, err := deps.Outbox.Enqueue(ctx, tenantID, ev.Name, resource, string(payloadJSON)); err != nil {
+					if _, err := deps.Outbox.Enqueue(ctx, workspaceID, ev.Name, resource, string(payloadJSON)); err != nil {
 						deps.logger().Error("event.outbox_enqueue_failed", map[string]any{"event": ev.Name, "channel": ch.Channel, "error": err.Error()})
 					}
 					continue
 				}
 				if deps.EventLog != nil {
-					if err := deps.EventLog.Write(ctx, tenantID, ev.Name, resource, payloadJSON); err != nil {
+					if err := deps.EventLog.Write(ctx, workspaceID, ev.Name, resource, payloadJSON); err != nil {
 						deps.logger().Error("event.audit_log_write_failed", map[string]any{"event": ev.Name, "error": err.Error()})
 					}
 				}

@@ -50,11 +50,32 @@ type (
 		Acquire(ctx context.Context, key string, ttl time.Duration) (bool, error)
 		Release(ctx context.Context, key string) error
 	}
+	// EntityLoader serves POST /ctx/entity/get — fetch full record by ID.
+	EntityLoader interface {
+		Fetch(ctx context.Context, workspaceID, id string) (map[string]any, error)
+	}
+	// EntityFullSaver serves POST /ctx/entity/set — full data replace.
+	EntityFullSaver interface {
+		Save(ctx context.Context, workspaceID, id string, data map[string]any) error
+	}
+	// EntityFieldUpdater serves POST /ctx/entity/update — atomic per-field jsonb_set.
+	EntityFieldUpdater interface {
+		UpdateFields(ctx context.Context, workspaceID, id string, fields map[string]any) error
+	}
+	// EntityFieldCounter serves POST /ctx/entity/increment and /ctx/entity/decrement
+	// — atomic arithmetic on a numeric JSONB field, single SQL statement.
+	EntityFieldCounter interface {
+		IncrementField(ctx context.Context, workspaceID, id, field string, amount float64) error
+		DecrementField(ctx context.Context, workspaceID, id, field string, amount float64) (float64, error)
+	}
 )
 
 // ctxRequest is the union request body for all /ctx/{prim}/{op} calls
 // (docs/runtimes/04-forma-sidecar.md §4.3). Named selects a named datastore;
-// empty means the default one.
+// empty means the default one. Entity-specific fields (Field, Amount,
+// Fields) are used by the entity primitive for atomic field operations.
+// Tenant isolation is NOT a request parameter — it is bound at connection
+// time via CtxHandler.defaultWorkspaceID.
 type ctxRequest struct {
 	Named      string         `json:"named,omitempty"`
 	SQL        string         `json:"sql,omitempty"`
@@ -63,6 +84,9 @@ type ctxRequest struct {
 	Key        string         `json:"key,omitempty"`
 	Value      any            `json:"value,omitempty"`
 	TTLSeconds int            `json:"ttl_seconds,omitempty"`
+	Field      string         `json:"field,omitempty"`
+	Amount     float64        `json:"amount,omitempty"`
+	Fields     map[string]any `json:"fields,omitempty"`
 }
 
 type ctxResponse struct {
@@ -73,19 +97,22 @@ type ctxResponse struct {
 
 var knownPrimitives = map[string]bool{
 	"db": true, "cache": true, "lock": true, "queue": true,
-	"pubsub": true, "storage": true, "kvstore": true,
+	"pubsub": true, "storage": true, "kvstore": true, "entity": true,
 }
 
 // CtxHandler serves the App → Sidecar direction: /ctx/{prim}/{op}.
 type CtxHandler struct {
-	resolver PrimitiveResolver
+	resolver           PrimitiveResolver
+	defaultWorkspaceID string // from auth context, immutable per connection
 }
 
-// NewCtxHandler creates the ctx.* proxy handler. A nil resolver makes every
-// call fail with "datastore resolver not configured" — matching the Starlark
-// behavior when SetDatastoreResolver was never called.
-func NewCtxHandler(resolver PrimitiveResolver) *CtxHandler {
-	return &CtxHandler{resolver: resolver}
+// NewCtxHandler creates the ctx.* proxy handler with the given workspace scope.
+// A nil resolver makes every call fail with "datastore resolver not configured" —
+// matching the Starlark behavior when SetDatastoreResolver was never called.
+// defaultWorkspaceID is the workspace's internal identifier, derived from
+// the auth token at connection time — it MUST NOT be overridable per-request.
+func NewCtxHandler(resolver PrimitiveResolver, defaultWorkspaceID string) *CtxHandler {
+	return &CtxHandler{resolver: resolver, defaultWorkspaceID: defaultWorkspaceID}
 }
 
 // ServeHTTP handles POST /ctx/{prim}/{op}.
@@ -161,6 +188,21 @@ func (h *CtxHandler) dispatch(w http.ResponseWriter, ctx context.Context, prim, 
 		writeCtxJSON(w, ctxResponse{Data: rows})
 
 	case "get":
+		// Entity get = fetch full record by ID
+		if prim == "entity" {
+			loader, ok := conn.(EntityLoader)
+			if !ok {
+				notImplemented()
+				return
+			}
+			record, err := loader.Fetch(ctx, h.defaultWorkspaceID, req.Key)
+			if err != nil {
+				writeCtxError(w, http.StatusBadGateway, err.Error())
+				return
+			}
+			writeCtxJSON(w, ctxResponse{Data: record})
+			return
+		}
 		g, ok := conn.(KVGetter)
 		if !ok {
 			notImplemented()
@@ -174,6 +216,21 @@ func (h *CtxHandler) dispatch(w http.ResponseWriter, ctx context.Context, prim, 
 		writeCtxJSON(w, ctxResponse{Data: val})
 
 	case "set":
+		// Entity set = full data replace
+		if prim == "entity" {
+			saver, ok := conn.(EntityFullSaver)
+			if !ok {
+				notImplemented()
+				return
+			}
+			data, _ := req.Value.(map[string]any)
+			if err := saver.Save(ctx, h.defaultWorkspaceID, req.Key, data); err != nil {
+				writeCtxError(w, http.StatusBadGateway, err.Error())
+				return
+			}
+			writeCtxJSON(w, ctxResponse{OK: boolPtr(true)})
+			return
+		}
 		s, ok := conn.(KVSetter)
 		if !ok {
 			notImplemented()
@@ -222,7 +279,61 @@ func (h *CtxHandler) dispatch(w http.ResponseWriter, ctx context.Context, prim, 
 		}
 		writeCtxJSON(w, ctxResponse{OK: boolPtr(true)})
 
+	case "update":
+		// Entity update = atomic per-field jsonb_set (entity primitive only)
+		if prim != "entity" {
+			writeCtxError(w, http.StatusNotFound, fmt.Sprintf("unknown operation %q for primitive %q", op, prim))
+			return
+		}
+		updater, ok := conn.(EntityFieldUpdater)
+		if !ok {
+			notImplemented()
+			return
+		}
+		if err := updater.UpdateFields(ctx, h.defaultWorkspaceID, req.Key, req.Fields); err != nil {
+			writeCtxError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		writeCtxJSON(w, ctxResponse{OK: boolPtr(true)})
+
+	case "increment":
+		if prim != "entity" {
+			writeCtxError(w, http.StatusNotFound, fmt.Sprintf("unknown operation %q for primitive %q", op, prim))
+			return
+		}
+		counter, ok := conn.(EntityFieldCounter)
+		if !ok {
+			notImplemented()
+			return
+		}
+		if err := counter.IncrementField(ctx, h.defaultWorkspaceID, req.Key, req.Field, req.Amount); err != nil {
+			writeCtxError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		writeCtxJSON(w, ctxResponse{OK: boolPtr(true)})
+
+	case "decrement":
+		if prim != "entity" {
+			writeCtxError(w, http.StatusNotFound, fmt.Sprintf("unknown operation %q for primitive %q", op, prim))
+			return
+		}
+		counter, ok := conn.(EntityFieldCounter)
+		if !ok {
+			notImplemented()
+			return
+		}
+		newVal, err := counter.DecrementField(ctx, h.defaultWorkspaceID, req.Key, req.Field, req.Amount)
+		if err != nil {
+			writeCtxError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		writeCtxJSON(w, ctxResponse{Data: newVal, OK: boolPtr(true)})
+
 	default:
+		if prim == "entity" {
+			writeCtxError(w, http.StatusNotFound, fmt.Sprintf("unknown operation %q for entity primitive (want get/set/update/increment/decrement)", op))
+			return
+		}
 		writeCtxError(w, http.StatusNotFound, fmt.Sprintf("unknown operation %q (want query/get/set/delete/acquire/release)", op))
 	}
 }

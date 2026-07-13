@@ -1,6 +1,7 @@
 // ─── Runtime Auto-Detect ───
 //
-// Detects the app runtime from project files in the current directory.
+// Detects the app runtime from project files in a given directory (scoped
+// to the app folder, not the project root — see cfg.AppDir).
 package main
 
 import (
@@ -9,7 +10,9 @@ import (
 )
 
 // knownRuntimeFiles maps project indicator files to runtime names.
-// Ordered by priority (most specific first).
+// Ordered by priority (most specific first). Every entry here should be a
+// full-fledged sidecar runtime — the only runtime that maps to "local" is
+// the fallback when nothing matches (detectRuntime returns "local").
 var knownRuntimeFiles = []struct {
 	filenames []string // any of these files indicate this runtime
 	runtime   string
@@ -17,20 +20,23 @@ var knownRuntimeFiles = []struct {
 	{[]string{"composer.json"}, "php"},
 	{[]string{"package.json"}, "node"},
 	{[]string{"pyproject.toml", "requirements.txt", "setup.py", "setup.cfg"}, "python"},
-	{[]string{"Cargo.toml"}, "local"},        // Rust — embedded mode
-	{[]string{"go.mod"}, "local"},            // Go — use `go run .` for server
-	{[]string{"*.csproj", "*.sln"}, "local"}, // .NET — no SDK yet
+	{[]string{"Gemfile"}, "ruby"},
+	{[]string{"pom.xml", "build.gradle", "build.gradle.kts"}, "java"},
+	{[]string{"*.csproj", "*.sln"}, "dotnet"},
+	{[]string{"go.mod"}, "go"},
+	{[]string{"Cargo.toml"}, "rust"},
 }
 
-// detectRuntime scans the current directory for project indicator files
-// and returns the matching runtime. Returns "local" if nothing is detected.
-func detectRuntime() string {
-	entries, err := os.ReadDir(".")
+// detectRuntime scans dir for project indicator files and returns the
+// matching runtime name. Returns "local" if nothing is detected (the engine
+// runs in embedded mode, no child process).
+func detectRuntime(dir string) string {
+	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return "local"
 	}
 
-	// Build a set of filenames in CWD
+	// Build a set of filenames in the app directory
 	fileSet := make(map[string]bool, len(entries))
 	extSet := make(map[string]bool)
 	for _, e := range entries {

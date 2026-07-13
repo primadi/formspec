@@ -3,7 +3,7 @@ kind: Entity
 metadata:
   name: branch
   module: company
-  description: Cabang — satu tenant/workspace bisa punya banyak cabang
+  description: Cabang — satu workspace bisa punya banyak cabang
 spec:
   version: v1
   characteristic: master

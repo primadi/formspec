@@ -35,7 +35,7 @@ type ScriptResult struct {
 //   - scriptPath: absolute path to the .star file
 //   - resource: the ResourceAPI for the current entity record
 //   - params: input parameters from the action request
-//   - ctx: the CtxAPI providing tenant, user, log, etc.
+//   - ctx: the CtxAPI providing workspace, user, log, etc.
 //
 // The script MUST define: def execute(resource, params, ctx)
 // It signals success via: return ok(data)  or  return ok()
@@ -199,20 +199,20 @@ type ScriptExecutor struct {
 	// SaveHandler is the save function for resource operations. version is the
 	// caller's current known record version, threaded through for optimistic
 	// concurrency (CAS) — see db.UpdateParams.Version.
-	SaveHandler func(tenantID, module, entity, id string, version int, data map[string]any) error
+	SaveHandler func(workspaceID, module, entity, id string, version int, data map[string]any) error
 
 	// CallHandler is the cross-resource call function.
-	CallHandler func(tenantID, fromModule, targetModule, targetEntity, action string, params map[string]any) (any, error)
+	CallHandler func(workspaceID, fromModule, targetModule, targetEntity, action string, params map[string]any) (any, error)
 
 	// LoadHandler loads another entity by ID, returning its data and version.
-	LoadHandler func(tenantID, module, entity, id string) (map[string]any, int, error)
+	LoadHandler func(workspaceID, module, entity, id string) (map[string]any, int, error)
 
 	// CreateHandler creates a new record of another entity, returning its ID.
-	CreateHandler func(tenantID, module, entity string, data map[string]any) (string, error)
+	CreateHandler func(workspaceID, module, entity string, data map[string]any) (string, error)
 
 	// NextKeyHandler generates natural keys, scoped to the entity that owns
 	// the field (natural key counters are per module/entity/field).
-	NextKeyHandler func(tenantID, module, entity, fieldName string) (string, error)
+	NextKeyHandler func(workspaceID, module, entity, fieldName string) (string, error)
 }
 
 // NewScriptExecutor creates a ScriptExecutor with the given resolution function.
@@ -224,12 +224,12 @@ func NewScriptExecutor(resolver func(ref string) (string, error)) *ScriptExecuto
 
 // Execute runs a Starlark script for an action. resourceVersion is the
 // current known version of the record (for CAS on resource.save()).
-func (e *ScriptExecutor) Execute(scriptPath string, module, entity, id string, resourceData map[string]any, params map[string]any, tenantID, userID string, resourceVersion int) (*ScriptResult, error) {
+func (e *ScriptExecutor) Execute(scriptPath string, module, entity, id string, resourceData map[string]any, params map[string]any, workspaceID, userID string, resourceVersion int) (*ScriptResult, error) {
 	// Build resource API
 	res := NewResourceAPI(module, entity, id, resourceVersion, resourceData)
 	if e.SaveHandler != nil {
 		res.SetSaveFunc(func(m, ent, rid string, v int, data map[string]any) error {
-			return e.SaveHandler(tenantID, m, ent, rid, v, data)
+			return e.SaveHandler(workspaceID, m, ent, rid, v, data)
 		})
 	}
 	if e.CallHandler != nil {
@@ -238,25 +238,25 @@ func (e *ScriptExecutor) Execute(scriptPath string, module, entity, id string, r
 			if targetModule == "" {
 				targetModule = module
 			}
-			return e.CallHandler(tenantID, module, targetModule, targetEntity, actionName, p)
+			return e.CallHandler(workspaceID, module, targetModule, targetEntity, actionName, p)
 		})
 	}
 	if e.LoadHandler != nil {
 		res.SetLoadFunc(func(m, ent, eid string) (map[string]any, int, error) {
-			return e.LoadHandler(tenantID, m, ent, eid)
+			return e.LoadHandler(workspaceID, m, ent, eid)
 		})
 	}
 	if e.CreateHandler != nil {
 		res.SetCreateFunc(func(m, ent string, data map[string]any) (string, error) {
-			return e.CreateHandler(tenantID, m, ent, data)
+			return e.CreateHandler(workspaceID, m, ent, data)
 		})
 	}
 
 	// Build ctx
-	ctxObj := NewCtxAPI(tenantID, "", userID, "", nil)
+	ctxObj := NewCtxAPI(workspaceID, "", userID, "", nil)
 	if e.NextKeyHandler != nil {
 		ctxObj.NextKey = func(fieldName string) (string, error) {
-			return e.NextKeyHandler(tenantID, module, entity, fieldName)
+			return e.NextKeyHandler(workspaceID, module, entity, fieldName)
 		}
 	}
 	ctxObj.Now = now

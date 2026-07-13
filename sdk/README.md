@@ -5,14 +5,14 @@ them, they talk to different servers for different purposes:
 
 | Family | Talks to | Audience | Docs |
 |---|---|---|---|
-| `lib-forma-*` ([php/](php/), [python/](python/), [typescript/](typescript/), [java/](java/), [dotnet/](dotnet/), [ruby/](ruby/)) | `forma-sidecar`, over a local unix socket | Non-Go app processes implementing `impl: {type: sidecar}` action handlers | This file, §"lib-forma-* — Sidecar Protocol" below; `docs/runtimes/04-forma-sidecar.md` |
+| `lib-forma-*` ([go/](go/), [php/](php/), [python/](python/), [typescript/](typescript/), [java/](java/), [dotnet/](dotnet/), [ruby/](ruby/), [rust/](rust/)) | `forma dev` / `forma serve`, over a local unix socket | App processes in any language implementing `impl: {type: sidecar}` action handlers | This file, §"lib-forma-* — Sidecar Protocol" below; `docs/runtimes/04-forma-sidecar.md` |
 | `@forma/client` ([browser/](browser/)) | `forma-resource`'s generated REST API, over HTTPS | Frontend developers building pages against Forma entities | [`browser/README.md`](browser/README.md); `docs/cli-tools/03-forma-generate.md` |
 
 ---
 
 ## `lib-forma-*` — Sidecar Protocol
 
-Thin client SDKs that bridge a non-Go app process to `forma-sidecar`
+Thin client SDKs that bridge an app process to `forma dev` / `forma serve`
 (docs/runtimes/04-forma-sidecar.md §4.4). Each SDK does exactly three
 things — and deliberately nothing more:
 
@@ -25,16 +25,18 @@ things — and deliberately nothing more:
 3. Serializes/deserializes the wire types.
 
 **No Forma business logic lives here** — no state machine, no permission
-checks, no entity storage. All of that stays in `forma-sidecar`.
+checks, no entity storage. All of that stays in the `forma` binary.
 
 | SDK | Directory | Runtime | Dependencies |
 |---|---|---|---|
+| `lib-forma-go` | [go/](go/) | Go ≥ 1.22 | none (stdlib only) |
 | `lib-forma-php` | [php/](php/) | PHP ≥ 8.1 | ext-curl, ext-json (stdlib only) |
 | `lib-forma-python` | [python/](python/) | Python ≥ 3.9 | none (stdlib only) |
-| `lib-forma` (TypeScript) | [typescript/](typescript/) | Node ≥ 18 | none at runtime |
+| `lib-forma-ts` | [typescript/](typescript/) | Node ≥ 18 | none at runtime |
 | `lib-forma-java` | [java/](java/) | Java ≥ 17 | none (stdlib only) |
 | `lib-forma-dotnet` | [dotnet/](dotnet/) | .NET ≥ 8.0 | none (stdlib only) |
 | `lib-forma-ruby` | [ruby/](ruby/) | Ruby ≥ 3.0 | none (stdlib only) |
+| `lib-forma-rust` | [rust/](rust/) | Rust ≥ 1.75 | `ureq`, `serde`/`serde_json` |
 
 ## Wire contract
 
@@ -43,13 +45,28 @@ localhost TCP. Default socket paths (override via env vars):
 
 | Env var | Default | Direction |
 |---|---|---|
-| `FORMA_APP_SOCKET` | `/var/run/forma/app.sock` | sidecar → app (`/invoke/...`, `/health`) |
-| `FORMA_SIDECAR_SOCKET` | `/var/run/forma/sidecar.sock` | app → sidecar (`/ctx/...`) |
+| `FORMA_APP_SOCKET` | `/tmp/forma/app.sock` | sidecar → app (`/invoke/...`, `/health`) |
+| `FORMA_SIDECAR_SOCKET` | `/tmp/forma/sidecar.sock` | app → sidecar (`/ctx/...`) |
 
-Invoke request body: `{resource_id, resource, params, tenant_id, user_id}`.
+### Invoke (sidecar → app)
+
+Invoke request body: `{resource_id, resource, params, user_id}`.
 Invoke response: `{data, new_state?, events?: [{name, durable?, payload?}]}`,
-or non-200 with `{error}`. Ctx request: `{named?, sql?, args?, key?, value?,
-ttl_seconds?}`; ctx response: `{data?, ok?, error?}`.
+or non-200 with `{error}`.
+
+**Note:** `tenant_id` is NOT in the wire — it is derived by the sidecar from the
+`X-Forma-Workspace` header that the SDK auto-injects on every request.
+The Invocation struct exposed to handlers has no `tenantId`/`workspaceId`
+field. If the handler needs workspace info, it calls `ctx.workspace.id`.
+
+### Ctx (app → sidecar)
+
+Ctx request: `{named?, sql?, args?, key?, value?, ttl_seconds?}`.
+Ctx response: `{data?, ok?, error?}`.
+
+**Note:** Entity operations (`update`, `increment`, `decrement`) do NOT accept
+`tenant_id` as a parameter. Workspace isolation is enforced by the sidecar
+from the `X-Forma-Workspace` header — cannot be overridden per-request.
 
 The authoritative Go counterparts are `internal/action/sidecar.go`
 (invoke) and `internal/sidecar/ctx.go` (ctx proxy) — change those and these

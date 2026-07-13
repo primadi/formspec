@@ -26,7 +26,7 @@ export class SidecarClient {
     endpoint?: string,
     private readonly timeoutMs: number = 30_000,
   ) {
-    endpoint ??= `unix://${process.env.FORMA_SIDECAR_SOCKET ?? "/var/run/forma/sidecar.sock"}`;
+    endpoint ??= `unix://${process.env.FORMA_SIDECAR_SOCKET ?? "/tmp/forma/sidecar.sock"}`;
     if (endpoint.startsWith("unix://")) {
       this.socketPath = endpoint.slice("unix://".length);
     } else if (endpoint.startsWith("http://")) {
@@ -129,6 +129,34 @@ export class CtxPrimitive {
     await this.call("release", { key });
   }
 
+  // ── Entity atomic operations ──
+
+  /** Atomically merge fields into an entity record (entity/update).
+   *  Uses jsonb_merge / json_patch — single SQL statement, no race condition.
+   *  Workspace isolation is enforced by the sidecar — not a parameter. */
+  async update(id: string, fields: Record<string, unknown>): Promise<void> {
+    const body: Record<string, unknown> = { key: id, fields };
+    await this.call("update", body);
+  }
+
+  /** Atomically increment a numeric field on an entity record.
+   *  Single SQL statement — no read-modify-write race condition.
+   *  Workspace isolation is enforced by the sidecar — not a parameter. */
+  async increment(id: string, field: string, amount: number): Promise<void> {
+    const body: Record<string, unknown> = { key: id, field, amount };
+    await this.call("increment", body);
+  }
+
+  /** Atomically decrement a numeric field on an entity record.
+   *  Includes a guard against negative values.
+   *  Returns the new field value after decrement.
+   *  Workspace isolation is enforced by the sidecar — not a parameter. */
+  async decrement(id: string, field: string, amount: number): Promise<number> {
+    const body: Record<string, unknown> = { key: id, field, amount };
+    const resp = await this.call("decrement", body);
+    return (resp.data as number) ?? 0;
+  }
+
   private call(op: string, body: Record<string, unknown>): Promise<CtxResponse> {
     if (this.boundName) body.named = this.boundName;
     return this.client.post(`/ctx/${this.type}/${op}`, body);
@@ -165,5 +193,17 @@ export class Ctx {
   }
   kvstore(): CtxPrimitive {
     return new CtxPrimitive(this.client, "kvstore");
+  }
+
+  /** Entity primitive — access entity records via named("module/entity").
+   *
+   * Usage:
+   *   const med = await ctx.entity().named("pharmacy/medicine").get(id);
+   *   await ctx.entity().named("pharmacy/medicine").set(id, newData);
+   *   await ctx.entity().named("pharmacy/medicine").update(id, { stock: 100 });
+   *   await ctx.entity().named("pharmacy/medicine").decrement(id, "stock", 4);
+   */
+  entity(): CtxPrimitive {
+    return new CtxPrimitive(this.client, "entity");
   }
 }

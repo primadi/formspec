@@ -14,7 +14,7 @@ type fakeHub struct {
 	broadcasts []events.EventMessage
 }
 
-func (f *fakeHub) Broadcast(tenantID string, msg events.EventMessage) {
+func (f *fakeHub) Broadcast(workspaceID string, msg events.EventMessage) {
 	f.broadcasts = append(f.broadcasts, msg)
 }
 
@@ -102,9 +102,9 @@ func TestDeliverEvents_AuditLog_NonDurable_WritesEventLogDirectly(t *testing.T) 
 
 	DeliverEvents(context.Background(), deps, "demo", "clinic/visit", emissions)
 
-	records, err := deps.EventLog.ListByTenant(context.Background(), "demo", "clinic/visit", 10, 0)
+	records, err := deps.EventLog.ListByWorkspace(context.Background(), "demo", "clinic/visit", 10, 0)
 	if err != nil {
-		t.Fatalf("ListByTenant: %v", err)
+		t.Fatalf("ListByWorkspace: %v", err)
 	}
 	if len(records) != 1 {
 		t.Fatalf("event log has %d records, want 1", len(records))
@@ -129,9 +129,9 @@ func TestDeliverEvents_AuditLog_Durable_GoesThroughOutboxNotDirectWrite(t *testi
 
 	DeliverEvents(context.Background(), deps, "demo", "clinic/visit", emissions)
 
-	records, err := deps.EventLog.ListByTenant(context.Background(), "demo", "clinic/visit", 10, 0)
+	records, err := deps.EventLog.ListByWorkspace(context.Background(), "demo", "clinic/visit", 10, 0)
 	if err != nil {
-		t.Fatalf("ListByTenant: %v", err)
+		t.Fatalf("ListByWorkspace: %v", err)
 	}
 	if len(records) != 0 {
 		t.Errorf("event log has %d records, want 0 — durable audit_log delivery goes through the outbox worker, not a direct write", len(records))

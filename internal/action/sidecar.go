@@ -49,7 +49,7 @@ func NewSidecarExecutor() *SidecarExecutor {
 // NewSidecarExecutorWithEndpoint creates a sidecar executor that invokes
 // app handlers at endpoint. Supported endpoint forms:
 //
-//	unix:///var/run/forma/app.sock   — HTTP/1.1 over a unix domain socket
+//	unix:///tmp/forma/app.sock   — HTTP/1.1 over a unix domain socket
 //	http://localhost:9000            — HTTP over localhost TCP
 //
 // timeout bounds each handler invocation; zero means DefaultSidecarInvokeTimeout.
@@ -99,7 +99,6 @@ type sidecarInvokeRequest struct {
 	ResourceID string         `json:"resource_id,omitempty"`
 	Resource   map[string]any `json:"resource,omitempty"`
 	Params     map[string]any `json:"params,omitempty"`
-	TenantID   string         `json:"tenant_id,omitempty"`
 	UserID     string         `json:"user_id,omitempty"`
 }
 
@@ -135,7 +134,6 @@ func (e *SidecarExecutor) Execute(ctx context.Context, action spec.Action, param
 		ResourceID: params.ResourceID,
 		Resource:   params.Resource,
 		Params:     params.Params,
-		TenantID:   params.TenantID,
 		UserID:     params.UserID,
 	})
 	if err != nil {

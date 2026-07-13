@@ -139,7 +139,7 @@ forma-ctl serve --mode=standalone --port=8443
 ./myapp --control-url=http://localhost:8443 --db=sqlite:data.db
 
 # Sidecar — Non-Go app (language-agnostic wrapper)
-forma-sidecar --listen=unix:///var/run/forma/sidecar.sock --handler=./app.php
+forma-sidecar --listen=unix:///tmp/forma/sidecar.sock --handler=./app.php
 # Language library (lib-forma-php) handles Forma type serialization inside app.php
 
 # Emergency (Cloud Owner, same forma-ctl binary — see docs/cli-tools/02-forma-ctl.md)

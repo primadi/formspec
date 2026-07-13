@@ -112,7 +112,7 @@ spec:
       deliver:
         - channel: audit_log
         - channel: websocket
-          target: { scope: tenant }
+          target: { scope: workspace }
         - { channel: queue, job: generate-receipt }
         - { channel: queue, job: send-receipt-email }
         - channel: reliable_event

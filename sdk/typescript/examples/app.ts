@@ -1,8 +1,8 @@
 // Example lib-forma (TypeScript) app: the business-logic side of an
 // impl: {type: sidecar} action. Run inside a pod next to forma-sidecar:
 //
-//   FORMA_APP_SOCKET=/var/run/forma/app.sock \
-//   FORMA_SIDECAR_SOCKET=/var/run/forma/sidecar.sock \
+//   FORMA_APP_SOCKET=/tmp/forma/app.sock \
+//   FORMA_SIDECAR_SOCKET=/tmp/forma/sidecar.sock \
 //   npx ts-node examples/app.ts
 
 import { ActionResult, App } from "@forma/lib-forma";

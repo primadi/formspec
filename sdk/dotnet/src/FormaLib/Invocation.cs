@@ -11,7 +11,6 @@ public sealed record Invocation(
     string ResourceId,
     Dictionary<string, object?> Resource,
     Dictionary<string, object?> Params,
-    string TenantId,
     string UserId)
 {
     internal static Invocation FromRequest(
@@ -25,7 +24,6 @@ public sealed record Invocation(
             (string)body.GetValueOrDefault("resource_id", "")!,
             (Dictionary<string, object?>)body.GetValueOrDefault("resource", new())!,
             (Dictionary<string, object?>)body.GetValueOrDefault("params", new())!,
-            (string)body.GetValueOrDefault("tenant_id", "")!,
             (string)body.GetValueOrDefault("user_id", "")!);
     }
 }

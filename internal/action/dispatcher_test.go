@@ -139,12 +139,12 @@ func TestDispatch_ExecutorError(t *testing.T) {
 
 func TestRuntimeContext_Defaults(t *testing.T) {
 	rc := &RuntimeContext{
-		Tenant: &TenantInfo{ID: "demo", Name: "Demo Workspace"},
-		User:   &UserInfo{ID: "user-1", Role: "admin"},
+		Workspace: &WorkspaceInfo{ID: "demo", Name: "Demo Workspace"},
+		User:      &UserInfo{ID: "user-1", Role: "admin"},
 	}
 
-	if rc.Tenant.ID != "demo" {
-		t.Errorf("expected tenant id 'demo', got %q", rc.Tenant.ID)
+	if rc.Workspace.ID != "demo" {
+		t.Errorf("expected tenant id 'demo', got %q", rc.Workspace.ID)
 	}
 	if rc.User.Role != "admin" {
 		t.Errorf("expected role 'admin', got %q", rc.User.Role)

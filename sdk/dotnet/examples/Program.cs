@@ -4,7 +4,7 @@ using Forma;
 // impl: {type: sidecar} action. Run inside a pod next to forma-sidecar:
 //
 //   FORMA_APP_SOCKET=http://localhost:9802 \
-//   FORMA_SIDECAR_SOCKET=unix:///var/run/forma/sidecar.sock \
+//   FORMA_SIDECAR_SOCKET=unix:///tmp/forma/sidecar.sock \
 //   dotnet run --project examples
 
 var app = new App();

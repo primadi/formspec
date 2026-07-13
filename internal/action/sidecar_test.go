@@ -55,7 +55,7 @@ func TestSidecarExecutor_InvokeRoundTrip(t *testing.T) {
 		ResourceID: "inv-001",
 		Resource:   map[string]any{"status": "draft"},
 		Params:     map[string]any{"note": "ok"},
-		TenantID:   "acme", UserID: "u-1",
+		UserID:     "u-1",
 	})
 	if err != nil {
 		t.Fatalf("execute: %v", err)
@@ -64,7 +64,7 @@ func TestSidecarExecutor_InvokeRoundTrip(t *testing.T) {
 	if gotPath != "/invoke/billing/invoice/approve" {
 		t.Errorf("path = %q, want /invoke/billing/invoice/approve", gotPath)
 	}
-	if gotReq.ResourceID != "inv-001" || gotReq.TenantID != "acme" {
+	if gotReq.ResourceID != "inv-001" {
 		t.Errorf("request not serialized: %+v", gotReq)
 	}
 	if result.NewState != "approved" {

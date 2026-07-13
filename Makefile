@@ -14,8 +14,7 @@ build-forma: build-spa
 	go build -o bin/forma ./cmd/forma
 
 build-sidecar:
-	@echo "⚠️  cmd/forma-sidecar is deprecated — use 'forma dev' instead"
-	go build -o bin/forma-sidecar ./cmd/forma-sidecar
+	@echo "✅ Build complete: bin/forma"
 
 build-operator:
 	go build -o bin/forma-operator ./cmd/forma-operator

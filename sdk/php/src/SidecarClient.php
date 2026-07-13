@@ -14,7 +14,7 @@ final class SidecarClient
     private readonly ?string $socketPath;
 
     /**
-     * @param string $endpoint "unix:///var/run/forma/sidecar.sock" or "http://localhost:PORT"
+     * @param string $endpoint "unix:///tmp/forma/sidecar.sock" or "http://localhost:PORT"
      */
     public function __construct(string $endpoint, private readonly int $timeoutSeconds = 30)
     {

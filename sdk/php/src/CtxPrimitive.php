@@ -56,6 +56,38 @@ final class CtxPrimitive
         $this->call('delete', ['key' => $key]);
     }
 
+    // ---- entity atomic operations ----
+
+    /**
+     * Atomically merge fields into an entity record (entity/update).
+     * Uses jsonb_merge / json_patch — single SQL statement, no race condition.
+     */
+    public function update(string $id, array $fields): void
+    {
+        $body = ['key' => $id, 'fields' => $fields];
+        $this->call('update', $body);
+    }
+
+    /**
+     * Atomically increment a numeric field on an entity record.
+     * Single SQL statement — no read-modify-write race condition.
+     */
+    public function increment(string $id, string $field, float $amount): void
+    {
+        $body = ['key' => $id, 'field' => $field, 'amount' => $amount];
+        $this->call('increment', $body);
+    }
+
+    /**
+     * Atomically decrement a numeric field on an entity record.
+     * Includes a guard against negative values. Returns the new field value.
+     */
+    public function decrement(string $id, string $field, float $amount): mixed
+    {
+        $body = ['key' => $id, 'field' => $field, 'amount' => $amount];
+        return $this->call('decrement', $body)['data'] ?? null;
+    }
+
     /** @return bool true if the lock was acquired */
     public function acquire(string $key, int $ttlSeconds = 30): bool
     {

@@ -359,10 +359,10 @@ func (r *Registry) GetActionSpec(module, name, actionName string) (*spec.Action,
 //
 // Known gap: rule.ScopeField (branch-scoped numbering, see db.EntityStore.
 // generateNaturalKeys) is not wired here — this path has no resource data in
-// scope to resolve the scope field's value from, only tenantID/module/name.
-// ctx.next_key() calls therefore always use the tenant-wide scope, same as
+// scope to resolve the scope field's value from, only workspaceID/module/name.
+// ctx.next_key() calls therefore always use the workspace-wide scope, same as
 // before ScopeField was introduced.
-func (r *Registry) GenerateNaturalKey(ctx context.Context, tenantID, module, name, fieldName string) (string, error) {
+func (r *Registry) GenerateNaturalKey(ctx context.Context, workspaceID, module, name, fieldName string) (string, error) {
 	info, ok := r.GetEntity(module, name)
 	if !ok || info.EntitySpec == nil {
 		return "", fmt.Errorf("entity %s/%s not found", module, name)
@@ -389,7 +389,7 @@ func (r *Registry) GenerateNaturalKey(ctx context.Context, tenantID, module, nam
 	}
 
 	counter := db.NewNaturalKeyCounter(r.db, r.driver)
-	return counter.GenerateNaturalKey(ctx, tenantID, name, fieldName, "", rule.Reset, rule.Format, prefix)
+	return counter.GenerateNaturalKey(ctx, workspaceID, name, fieldName, "", rule.Reset, rule.Format, prefix)
 }
 
 // ListEntities returns a sorted summary of all registered entities.

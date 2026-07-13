@@ -53,7 +53,7 @@ func TestChildStorage_JSONB(t *testing.T) {
 	}
 
 	id, err := store.Insert(ctx, InsertParams{
-		TenantID:  "tenant-1",
+		WorkspaceID:  "tenant-1",
 		CreatedBy: "user-1",
 		Data:      data,
 	})
@@ -62,7 +62,7 @@ func TestChildStorage_JSONB(t *testing.T) {
 	}
 
 	// GetByID — children should be in data
-	rec, err := store.GetByID(ctx, GetByIDParams{TenantID: "tenant-1", ID: id})
+	rec, err := store.GetByID(ctx, GetByIDParams{WorkspaceID: "tenant-1", ID: id})
 	if err != nil {
 		t.Fatalf("GetByID failed: %v", err)
 	}
@@ -137,7 +137,7 @@ func TestChildStorage_Table(t *testing.T) {
 	}
 
 	id, err := store.Insert(ctx, InsertParams{
-		TenantID:  "tenant-1",
+		WorkspaceID:  "tenant-1",
 		CreatedBy: "user-1",
 		Data:      data,
 	})
@@ -146,7 +146,7 @@ func TestChildStorage_Table(t *testing.T) {
 	}
 
 	// --- GetByID — children should be hydrated from child table ---
-	rec, err := store.GetByID(ctx, GetByIDParams{TenantID: "tenant-1", ID: id})
+	rec, err := store.GetByID(ctx, GetByIDParams{WorkspaceID: "tenant-1", ID: id})
 	if err != nil {
 		t.Fatalf("GetByID failed: %v", err)
 	}
@@ -181,7 +181,7 @@ func TestChildStorage_Table(t *testing.T) {
 	}
 
 	newVersion, err := store.Update(ctx, UpdateParams{
-		TenantID:  "tenant-1",
+		WorkspaceID:  "tenant-1",
 		ID:        id,
 		Version:   rec.Version,
 		UpdatedBy: "user-1",
@@ -195,7 +195,7 @@ func TestChildStorage_Table(t *testing.T) {
 	}
 
 	// Verify updated children
-	rec2, err := store.GetByID(ctx, GetByIDParams{TenantID: "tenant-1", ID: id})
+	rec2, err := store.GetByID(ctx, GetByIDParams{WorkspaceID: "tenant-1", ID: id})
 	if err != nil {
 		t.Fatalf("GetByID after update failed: %v", err)
 	}
@@ -221,7 +221,7 @@ func TestChildStorage_Table(t *testing.T) {
 	}
 
 	// Verify record is gone
-	_, err = store.GetByID(ctx, GetByIDParams{TenantID: "tenant-1", ID: id})
+	_, err = store.GetByID(ctx, GetByIDParams{WorkspaceID: "tenant-1", ID: id})
 	if err == nil {
 		t.Fatal("expected not found after soft delete")
 	}
@@ -270,7 +270,7 @@ func TestChildStorage_Table_SequenceField(t *testing.T) {
 	}
 
 	id, err := store.Insert(ctx, InsertParams{
-		TenantID:  "tenant-1",
+		WorkspaceID:  "tenant-1",
 		CreatedBy: "user-1",
 		Data:      data,
 	})
@@ -278,7 +278,7 @@ func TestChildStorage_Table_SequenceField(t *testing.T) {
 		t.Fatalf("Insert failed: %v", err)
 	}
 
-	rec, err := store.GetByID(ctx, GetByIDParams{TenantID: "tenant-1", ID: id})
+	rec, err := store.GetByID(ctx, GetByIDParams{WorkspaceID: "tenant-1", ID: id})
 	if err != nil {
 		t.Fatalf("GetByID failed: %v", err)
 	}
@@ -340,7 +340,7 @@ func TestChildStorage_MultipleChildren(t *testing.T) {
 	}
 
 	id, err := store.Insert(ctx, InsertParams{
-		TenantID:  "tenant-1",
+		WorkspaceID:  "tenant-1",
 		CreatedBy: "user-1",
 		Data:      data,
 	})
@@ -348,7 +348,7 @@ func TestChildStorage_MultipleChildren(t *testing.T) {
 		t.Fatalf("Insert failed: %v", err)
 	}
 
-	rec, err := store.GetByID(ctx, GetByIDParams{TenantID: "tenant-1", ID: id})
+	rec, err := store.GetByID(ctx, GetByIDParams{WorkspaceID: "tenant-1", ID: id})
 	if err != nil {
 		t.Fatalf("GetByID failed: %v", err)
 	}
@@ -411,7 +411,7 @@ func TestChildStorage_EmptyChildren(t *testing.T) {
 		"title": "Empty note",
 	}
 	id, err := store.Insert(ctx, InsertParams{
-		TenantID:  "tenant-1",
+		WorkspaceID:  "tenant-1",
 		CreatedBy: "user-1",
 		Data:      data,
 	})
@@ -419,7 +419,7 @@ func TestChildStorage_EmptyChildren(t *testing.T) {
 		t.Fatalf("Insert failed: %v", err)
 	}
 
-	rec, err := store.GetByID(ctx, GetByIDParams{TenantID: "tenant-1", ID: id})
+	rec, err := store.GetByID(ctx, GetByIDParams{WorkspaceID: "tenant-1", ID: id})
 	if err != nil {
 		t.Fatalf("GetByID failed: %v", err)
 	}

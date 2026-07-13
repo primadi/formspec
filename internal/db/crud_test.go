@@ -37,7 +37,7 @@ func TestEntityStore_InsertAndGetByID(t *testing.T) {
 
 	// Insert
 	id, err := store.Insert(ctx, InsertParams{
-		TenantID:  "tenant-1",
+		WorkspaceID:  "tenant-1",
 		CreatedBy: "user-1",
 		Data:      map[string]any{"name": "John Doe", "email": "john@example.com"},
 	})
@@ -49,7 +49,7 @@ func TestEntityStore_InsertAndGetByID(t *testing.T) {
 	}
 
 	// GetByID
-	rec, err := store.GetByID(ctx, GetByIDParams{TenantID: "tenant-1", ID: id})
+	rec, err := store.GetByID(ctx, GetByIDParams{WorkspaceID: "tenant-1", ID: id})
 	if err != nil {
 		t.Fatalf("GetByID failed: %v", err)
 	}
@@ -85,7 +85,7 @@ func TestEntityStore_Update(t *testing.T) {
 
 	// Insert
 	id, err := store.Insert(ctx, InsertParams{
-		TenantID:  "t1",
+		WorkspaceID:  "t1",
 		CreatedBy: "u1",
 		Data:      map[string]any{"name": "Widget", "price": 9.99},
 	})
@@ -94,14 +94,14 @@ func TestEntityStore_Update(t *testing.T) {
 	}
 
 	// Get to capture version
-	rec, err := store.GetByID(ctx, GetByIDParams{TenantID: "t1", ID: id})
+	rec, err := store.GetByID(ctx, GetByIDParams{WorkspaceID: "t1", ID: id})
 	if err != nil {
 		t.Fatalf("GetByID failed: %v", err)
 	}
 
 	// Update
 	newVersion, err := store.Update(ctx, UpdateParams{
-		TenantID:  "t1",
+		WorkspaceID:  "t1",
 		ID:        id,
 		Version:   rec.Version,
 		UpdatedBy: "u2",
@@ -134,14 +134,14 @@ func TestEntityStore_Update_VersionConflict(t *testing.T) {
 
 	store := NewEntityStore(d, DriverSQLite, meta, entity)
 
-	id, err := store.Insert(ctx, InsertParams{TenantID: "t1", CreatedBy: "u1", Data: map[string]any{"name": "test"}})
+	id, err := store.Insert(ctx, InsertParams{WorkspaceID: "t1", CreatedBy: "u1", Data: map[string]any{"name": "test"}})
 	if err != nil {
 		t.Fatalf("Insert failed: %v", err)
 	}
 
 	// Update with wrong version → should fail
 	_, err = store.Update(ctx, UpdateParams{
-		TenantID: "t1", ID: id, Version: 999, UpdatedBy: "u2",
+		WorkspaceID: "t1", ID: id, Version: 999, UpdatedBy: "u2",
 		Data: map[string]any{"name": "updated"},
 	})
 	if err == nil {
@@ -171,7 +171,7 @@ func TestEntityStore_SoftDelete(t *testing.T) {
 
 	store := NewEntityStore(d, DriverSQLite, meta, entity)
 
-	id, err := store.Insert(ctx, InsertParams{TenantID: "t1", CreatedBy: "u1", Data: map[string]any{"name": "John"}})
+	id, err := store.Insert(ctx, InsertParams{WorkspaceID: "t1", CreatedBy: "u1", Data: map[string]any{"name": "John"}})
 	if err != nil {
 		t.Fatalf("Insert failed: %v", err)
 	}
@@ -182,7 +182,7 @@ func TestEntityStore_SoftDelete(t *testing.T) {
 	}
 
 	// Should not be found after delete
-	_, err = store.GetByID(ctx, GetByIDParams{TenantID: "t1", ID: id})
+	_, err = store.GetByID(ctx, GetByIDParams{WorkspaceID: "t1", ID: id})
 	if err == nil || err.Error() != "not found" {
 		t.Fatalf("expected not found after delete, got: %v", err)
 	}
@@ -216,7 +216,7 @@ func TestEntityStore_List(t *testing.T) {
 	// Insert multiple records
 	for i := 0; i < 5; i++ {
 		_, err := store.Insert(ctx, InsertParams{
-			TenantID: "t1", CreatedBy: "u1",
+			WorkspaceID: "t1", CreatedBy: "u1",
 			Data: map[string]any{"total": float64(100 + i*10), "status": "draft"},
 		})
 		if err != nil {
@@ -226,7 +226,7 @@ func TestEntityStore_List(t *testing.T) {
 
 	// List with pagination
 	result, err := store.List(ctx, ListParams{
-		TenantID: "t1",
+		WorkspaceID: "t1",
 		Page:     1,
 		PerPage:  3,
 	})
@@ -272,7 +272,7 @@ func TestEntityStore_List_FilterByField(t *testing.T) {
 	// Insert records with different tiers
 	for _, name := range []string{"Alice", "Bob", "Charlie"} {
 		_, err := store.Insert(ctx, InsertParams{
-			TenantID: "t1", CreatedBy: "u1",
+			WorkspaceID: "t1", CreatedBy: "u1",
 			Data: map[string]any{"name": name, "tier": "regular"},
 		})
 		if err != nil {
@@ -280,7 +280,7 @@ func TestEntityStore_List_FilterByField(t *testing.T) {
 		}
 	}
 	_, err = store.Insert(ctx, InsertParams{
-		TenantID: "t1", CreatedBy: "u1",
+		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"name": "Diana", "tier": "gold"},
 	})
 	if err != nil {
@@ -289,7 +289,7 @@ func TestEntityStore_List_FilterByField(t *testing.T) {
 
 	// Filter by generated column
 	result, err := store.List(ctx, ListParams{
-		TenantID: "t1",
+		WorkspaceID: "t1",
 		Filters:  map[string]FilterOp{"name": {Op: "eq", Value: "Alice"}},
 	})
 	if err != nil {
@@ -325,7 +325,7 @@ func TestEntityStore_FindByField(t *testing.T) {
 	store := NewEntityStore(d, DriverSQLite, meta, entity)
 
 	id, err := store.Insert(ctx, InsertParams{
-		TenantID: "t1", CreatedBy: "user-1",
+		WorkspaceID: "t1", CreatedBy: "user-1",
 		Data: map[string]any{"email": "test@example.com"},
 	})
 	if err != nil {
@@ -365,19 +365,19 @@ func TestEntityStore_TenantIsolation(t *testing.T) {
 	store := NewEntityStore(d, DriverSQLite, meta, entity)
 
 	// Insert for tenant-a
-	idA, err := store.Insert(ctx, InsertParams{TenantID: "tenant-a", CreatedBy: "u1", Data: map[string]any{"name": "Alice"}})
+	idA, err := store.Insert(ctx, InsertParams{WorkspaceID: "tenant-a", CreatedBy: "u1", Data: map[string]any{"name": "Alice"}})
 	if err != nil {
 		t.Fatalf("Insert tenant-a failed: %v", err)
 	}
 
 	// Insert for tenant-b
-	_, err = store.Insert(ctx, InsertParams{TenantID: "tenant-b", CreatedBy: "u1", Data: map[string]any{"name": "Bob"}})
+	_, err = store.Insert(ctx, InsertParams{WorkspaceID: "tenant-b", CreatedBy: "u1", Data: map[string]any{"name": "Bob"}})
 	if err != nil {
 		t.Fatalf("Insert tenant-b failed: %v", err)
 	}
 
 	// Tenant-a should see only their record
-	result, err := store.List(ctx, ListParams{TenantID: "tenant-a"})
+	result, err := store.List(ctx, ListParams{WorkspaceID: "tenant-a"})
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}
@@ -386,7 +386,7 @@ func TestEntityStore_TenantIsolation(t *testing.T) {
 	}
 
 	// Tenant-b should NOT see tenant-a's record
-	_, err = store.GetByID(ctx, GetByIDParams{TenantID: "tenant-b", ID: idA})
+	_, err = store.GetByID(ctx, GetByIDParams{WorkspaceID: "tenant-b", ID: idA})
 	if err == nil || err.Error() != "not found" {
 		t.Errorf("expected tenant-b to not find tenant-a's record, got %v", err)
 	}
@@ -421,14 +421,14 @@ func TestEntityStore_DefaultValue(t *testing.T) {
 
 	// Insert without any optional fields — defaults should apply
 	id, err := store.Insert(ctx, InsertParams{
-		TenantID: "t1", CreatedBy: "u1",
+		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"name": "Widget"},
 	})
 	if err != nil {
 		t.Fatalf("Insert failed: %v", err)
 	}
 
-	rec, err := store.GetByID(ctx, GetByIDParams{TenantID: "t1", ID: id})
+	rec, err := store.GetByID(ctx, GetByIDParams{WorkspaceID: "t1", ID: id})
 	if err != nil {
 		t.Fatalf("GetByID failed: %v", err)
 	}
@@ -445,14 +445,14 @@ func TestEntityStore_DefaultValue(t *testing.T) {
 
 	// Insert with explicit values should NOT use defaults
 	id2, err := store.Insert(ctx, InsertParams{
-		TenantID: "t1", CreatedBy: "u1",
+		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"name": "Widget Pro", "price": float64(49.99), "active": false, "tier": "premium"},
 	})
 	if err != nil {
 		t.Fatalf("Insert with explicit values failed: %v", err)
 	}
 
-	rec2, err := store.GetByID(ctx, GetByIDParams{TenantID: "t1", ID: id2})
+	rec2, err := store.GetByID(ctx, GetByIDParams{WorkspaceID: "t1", ID: id2})
 	if err != nil {
 		t.Fatalf("GetByID failed: %v", err)
 	}
@@ -496,7 +496,7 @@ func TestEntityStore_RequiredField(t *testing.T) {
 
 	// Insert without required field → should fail
 	_, err = store.Insert(ctx, InsertParams{
-		TenantID: "t1", CreatedBy: "u1",
+		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"name": "John"}, // missing email
 	})
 	if err == nil {
@@ -508,7 +508,7 @@ func TestEntityStore_RequiredField(t *testing.T) {
 
 	// Insert with all required fields → should succeed
 	id, err := store.Insert(ctx, InsertParams{
-		TenantID: "t1", CreatedBy: "u1",
+		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"name": "John", "email": "john@example.com"},
 	})
 	if err != nil {
@@ -545,21 +545,21 @@ func TestEntityStore_ImmutableField(t *testing.T) {
 	store := NewEntityStore(d, DriverSQLite, meta, entity)
 
 	id, err := store.Insert(ctx, InsertParams{
-		TenantID: "t1", CreatedBy: "u1",
+		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"number": "ORD-001", "status": "draft"},
 	})
 	if err != nil {
 		t.Fatalf("Insert failed: %v", err)
 	}
 
-	rec, err := store.GetByID(ctx, GetByIDParams{TenantID: "t1", ID: id})
+	rec, err := store.GetByID(ctx, GetByIDParams{WorkspaceID: "t1", ID: id})
 	if err != nil {
 		t.Fatalf("GetByID failed: %v", err)
 	}
 
 	// Try to update immutable field → should fail
 	_, err = store.Update(ctx, UpdateParams{
-		TenantID: "t1", ID: id, Version: rec.Version, UpdatedBy: "u2",
+		WorkspaceID: "t1", ID: id, Version: rec.Version, UpdatedBy: "u2",
 		Data: map[string]any{"number": "ORD-002"},
 	})
 	if err == nil {
@@ -571,7 +571,7 @@ func TestEntityStore_ImmutableField(t *testing.T) {
 
 	// Update non-immutable field → should succeed
 	newVersion, err := store.Update(ctx, UpdateParams{
-		TenantID: "t1", ID: id, Version: rec.Version, UpdatedBy: "u2",
+		WorkspaceID: "t1", ID: id, Version: rec.Version, UpdatedBy: "u2",
 		Data: map[string]any{"status": "paid"},
 	})
 	if err != nil {
@@ -622,21 +622,21 @@ func TestEntityStore_StateMachineTransition(t *testing.T) {
 	store := NewEntityStore(d, DriverSQLite, meta, entity)
 
 	id, err := store.Insert(ctx, InsertParams{
-		TenantID: "t1", CreatedBy: "u1",
+		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"status": "draft"},
 	})
 	if err != nil {
 		t.Fatalf("Insert failed: %v", err)
 	}
 
-	rec, err := store.GetByID(ctx, GetByIDParams{TenantID: "t1", ID: id})
+	rec, err := store.GetByID(ctx, GetByIDParams{WorkspaceID: "t1", ID: id})
 	if err != nil {
 		t.Fatalf("GetByID failed: %v", err)
 	}
 
 	// Valid transition: draft → submitted
 	_, err = store.Update(ctx, UpdateParams{
-		TenantID: "t1", ID: id, Version: rec.Version, UpdatedBy: "u2",
+		WorkspaceID: "t1", ID: id, Version: rec.Version, UpdatedBy: "u2",
 		Data: map[string]any{"status": "submitted"},
 	})
 	if err != nil {
@@ -644,12 +644,12 @@ func TestEntityStore_StateMachineTransition(t *testing.T) {
 	}
 
 	// Invalid transition: submitted → draft (not allowed)
-	rec, err = store.GetByID(ctx, GetByIDParams{TenantID: "t1", ID: id})
+	rec, err = store.GetByID(ctx, GetByIDParams{WorkspaceID: "t1", ID: id})
 	if err != nil {
 		t.Fatalf("GetByID failed: %v", err)
 	}
 	_, err = store.Update(ctx, UpdateParams{
-		TenantID: "t1", ID: id, Version: rec.Version, UpdatedBy: "u3",
+		WorkspaceID: "t1", ID: id, Version: rec.Version, UpdatedBy: "u3",
 		Data: map[string]any{"status": "draft"},
 	})
 	if err == nil {
@@ -703,21 +703,21 @@ func TestEntityStore_StateMachineGuard_Passes(t *testing.T) {
 	store := NewEntityStore(d, DriverSQLite, meta, entity)
 
 	id, err := store.Insert(ctx, InsertParams{
-		TenantID: "t1", CreatedBy: "u1",
+		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"status": "draft", "total": float64(100)},
 	})
 	if err != nil {
 		t.Fatalf("Insert failed: %v", err)
 	}
 
-	rec, err := store.GetByID(ctx, GetByIDParams{TenantID: "t1", ID: id})
+	rec, err := store.GetByID(ctx, GetByIDParams{WorkspaceID: "t1", ID: id})
 	if err != nil {
 		t.Fatalf("GetByID failed: %v", err)
 	}
 
 	// Guard should pass: total > 0
 	_, err = store.Update(ctx, UpdateParams{
-		TenantID: "t1", ID: id, Version: rec.Version, UpdatedBy: "u2",
+		WorkspaceID: "t1", ID: id, Version: rec.Version, UpdatedBy: "u2",
 		Data: map[string]any{"status": "submitted"},
 	})
 	if err != nil {
@@ -768,21 +768,21 @@ func TestEntityStore_StateMachineGuard_Rejects(t *testing.T) {
 	store := NewEntityStore(d, DriverSQLite, meta, entity)
 
 	id, err := store.Insert(ctx, InsertParams{
-		TenantID: "t1", CreatedBy: "u1",
+		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"status": "draft", "total": float64(0)},
 	})
 	if err != nil {
 		t.Fatalf("Insert failed: %v", err)
 	}
 
-	rec, err := store.GetByID(ctx, GetByIDParams{TenantID: "t1", ID: id})
+	rec, err := store.GetByID(ctx, GetByIDParams{WorkspaceID: "t1", ID: id})
 	if err != nil {
 		t.Fatalf("GetByID failed: %v", err)
 	}
 
 	// Guard should reject: total is 0, not > 0
 	_, err = store.Update(ctx, UpdateParams{
-		TenantID: "t1", ID: id, Version: rec.Version, UpdatedBy: "u2",
+		WorkspaceID: "t1", ID: id, Version: rec.Version, UpdatedBy: "u2",
 		Data: map[string]any{"status": "submitted"},
 	})
 	if err == nil {
@@ -823,7 +823,7 @@ func TestEntityStore_FieldRules_Email(t *testing.T) {
 
 	// Invalid email → should fail
 	_, err = store.Insert(ctx, InsertParams{
-		TenantID: "t1", CreatedBy: "u1",
+		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"name": "John", "email": "not-an-email"},
 	})
 	if err == nil {
@@ -835,7 +835,7 @@ func TestEntityStore_FieldRules_Email(t *testing.T) {
 
 	// Valid email → should succeed
 	id, err := store.Insert(ctx, InsertParams{
-		TenantID: "t1", CreatedBy: "u1",
+		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"name": "John", "email": "john@example.com"},
 	})
 	if err != nil {
@@ -843,12 +843,12 @@ func TestEntityStore_FieldRules_Email(t *testing.T) {
 	}
 
 	// Update with invalid email → should fail
-	rec, err := store.GetByID(ctx, GetByIDParams{TenantID: "t1", ID: id})
+	rec, err := store.GetByID(ctx, GetByIDParams{WorkspaceID: "t1", ID: id})
 	if err != nil {
 		t.Fatalf("GetByID failed: %v", err)
 	}
 	_, err = store.Update(ctx, UpdateParams{
-		TenantID: "t1", ID: id, Version: rec.Version, UpdatedBy: "u2",
+		WorkspaceID: "t1", ID: id, Version: rec.Version, UpdatedBy: "u2",
 		Data: map[string]any{"email": "bad"},
 	})
 	if err == nil {
@@ -903,7 +903,7 @@ func TestEntityStore_FieldRules_MinMax(t *testing.T) {
 
 	// Negative price → fail
 	_, err = store.Insert(ctx, InsertParams{
-		TenantID: "t1", CreatedBy: "u1",
+		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"name": "Widget", "price": float64(-5), "sku": "ABC123", "code": "ABC-0001"},
 	})
 	if err == nil {
@@ -912,7 +912,7 @@ func TestEntityStore_FieldRules_MinMax(t *testing.T) {
 
 	// SKU too short → fail
 	_, err = store.Insert(ctx, InsertParams{
-		TenantID: "t1", CreatedBy: "u1",
+		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"name": "Widget", "price": float64(10), "sku": "AB", "code": "ABC-0001"},
 	})
 	if err == nil {
@@ -921,7 +921,7 @@ func TestEntityStore_FieldRules_MinMax(t *testing.T) {
 
 	// Invalid code pattern → fail
 	_, err = store.Insert(ctx, InsertParams{
-		TenantID: "t1", CreatedBy: "u1",
+		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"name": "Widget", "price": float64(10), "sku": "ABC123", "code": "invalid"},
 	})
 	if err == nil {
@@ -930,7 +930,7 @@ func TestEntityStore_FieldRules_MinMax(t *testing.T) {
 
 	// All valid → succeed
 	id, err := store.Insert(ctx, InsertParams{
-		TenantID: "t1", CreatedBy: "u1",
+		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"name": "Widget", "price": float64(19.99), "sku": "ABC123", "code": "ABC-0001"},
 	})
 	if err != nil {
@@ -981,7 +981,7 @@ func TestEntityStore_ComputedField(t *testing.T) {
 	store := NewEntityStore(d, DriverSQLite, meta, entity)
 
 	id, err := store.Insert(ctx, InsertParams{
-		TenantID: "t1", CreatedBy: "u1",
+		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"subtotal": float64(200), "tax_rate": float64(10)},
 	})
 	if err != nil {
@@ -989,7 +989,7 @@ func TestEntityStore_ComputedField(t *testing.T) {
 	}
 
 	// GetByID should evaluate computed fields
-	rec, err := store.GetByID(ctx, GetByIDParams{TenantID: "t1", ID: id})
+	rec, err := store.GetByID(ctx, GetByIDParams{WorkspaceID: "t1", ID: id})
 	if err != nil {
 		t.Fatalf("GetByID failed: %v", err)
 	}
@@ -1004,7 +1004,7 @@ func TestEntityStore_ComputedField(t *testing.T) {
 	}
 
 	// List should also evaluate computed fields
-	result, err := store.List(ctx, ListParams{TenantID: "t1"})
+	result, err := store.List(ctx, ListParams{WorkspaceID: "t1"})
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}
@@ -1051,7 +1051,7 @@ func TestEntityStore_FieldRule_Positive(t *testing.T) {
 
 	// Zero price → should fail
 	_, err = store.Insert(ctx, InsertParams{
-		TenantID: "t1", CreatedBy: "u1",
+		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"name": "Item", "price": float64(0)},
 	})
 	if err == nil {
@@ -1060,7 +1060,7 @@ func TestEntityStore_FieldRule_Positive(t *testing.T) {
 
 	// Negative price → should fail
 	_, err = store.Insert(ctx, InsertParams{
-		TenantID: "t1", CreatedBy: "u1",
+		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"name": "Item", "price": float64(-5)},
 	})
 	if err == nil {
@@ -1069,7 +1069,7 @@ func TestEntityStore_FieldRule_Positive(t *testing.T) {
 
 	// Positive price → should succeed
 	id, err := store.Insert(ctx, InsertParams{
-		TenantID: "t1", CreatedBy: "u1",
+		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"name": "Item", "price": float64(9.99)},
 	})
 	if err != nil {
@@ -1108,7 +1108,7 @@ func TestEntityStore_FieldRule_URL(t *testing.T) {
 
 	// Invalid URL → should fail
 	_, err = store.Insert(ctx, InsertParams{
-		TenantID: "t1", CreatedBy: "u1",
+		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"name": "Test", "website": "not-a-url"},
 	})
 	if err == nil {
@@ -1117,7 +1117,7 @@ func TestEntityStore_FieldRule_URL(t *testing.T) {
 
 	// Valid HTTP URL → should succeed
 	_, err = store.Insert(ctx, InsertParams{
-		TenantID: "t1", CreatedBy: "u1",
+		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"name": "Test", "website": "https://example.com"},
 	})
 	if err != nil {
@@ -1153,7 +1153,7 @@ func TestEntityStore_FieldRule_Precision(t *testing.T) {
 
 	// Too many decimal places → should fail
 	_, err = store.Insert(ctx, InsertParams{
-		TenantID: "t1", CreatedBy: "u1",
+		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"number": "INV-001", "amount": float64(100.123)},
 	})
 	if err == nil {
@@ -1162,7 +1162,7 @@ func TestEntityStore_FieldRule_Precision(t *testing.T) {
 
 	// Exactly 2 decimal places → should succeed
 	_, err = store.Insert(ctx, InsertParams{
-		TenantID: "t1", CreatedBy: "u1",
+		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"number": "INV-002", "amount": float64(100.12)},
 	})
 	if err != nil {
@@ -1171,7 +1171,7 @@ func TestEntityStore_FieldRule_Precision(t *testing.T) {
 
 	// Integer (0 decimal places) → should succeed
 	_, err = store.Insert(ctx, InsertParams{
-		TenantID: "t1", CreatedBy: "u1",
+		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"number": "INV-003", "amount": float64(100)},
 	})
 	if err != nil {
@@ -1207,7 +1207,7 @@ func TestEntityStore_FieldRule_Future(t *testing.T) {
 
 	// Past date → should fail
 	_, err = store.Insert(ctx, InsertParams{
-		TenantID: "t1", CreatedBy: "u1",
+		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"title": "Past Event", "date": "2020-01-01T00:00:00Z"},
 	})
 	if err == nil {
@@ -1216,7 +1216,7 @@ func TestEntityStore_FieldRule_Future(t *testing.T) {
 
 	// Future date → should succeed
 	_, err = store.Insert(ctx, InsertParams{
-		TenantID: "t1", CreatedBy: "u1",
+		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"title": "Future Event", "date": "2030-01-01T00:00:00Z"},
 	})
 	if err != nil {
@@ -1257,7 +1257,7 @@ func TestEntityStore_FieldRule_MinMaxItems(t *testing.T) {
 
 	// Empty array → should fail (min_items: 1)
 	_, err = store.Insert(ctx, InsertParams{
-		TenantID: "t1", CreatedBy: "u1",
+		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"name": "Test", "tags": []any{}},
 	})
 	if err == nil {
@@ -1266,7 +1266,7 @@ func TestEntityStore_FieldRule_MinMaxItems(t *testing.T) {
 
 	// 6 items → should fail (max_items: 5)
 	_, err = store.Insert(ctx, InsertParams{
-		TenantID: "t1", CreatedBy: "u1",
+		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"name": "Test", "tags": []any{"a", "b", "c", "d", "e", "f"}},
 	})
 	if err == nil {
@@ -1275,7 +1275,7 @@ func TestEntityStore_FieldRule_MinMaxItems(t *testing.T) {
 
 	// 2 items → should succeed
 	_, err = store.Insert(ctx, InsertParams{
-		TenantID: "t1", CreatedBy: "u1",
+		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"name": "Test", "tags": []any{"a", "b"}},
 	})
 	if err != nil {
@@ -1312,7 +1312,7 @@ func TestEntityStore_Submit_Success(t *testing.T) {
 
 	// Insert: doc_status should be 'draft' (submitEnabled defaults to true)
 	id, err := store.Insert(ctx, InsertParams{
-		TenantID: "t1", CreatedBy: "u1",
+		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"total": float64(100)},
 	})
 	if err != nil {
@@ -1326,7 +1326,7 @@ func TestEntityStore_Submit_Success(t *testing.T) {
 
 	// Verify doc_status changed — check via raw query (doc_status is a column, not in Data)
 	var docStatus string
-	d.QueryRowContext(ctx,
+	err = d.QueryRowContext(ctx,
 		"SELECT doc_status FROM billing_orders WHERE id = ? AND tenant_id = ?",
 		id, "t1").Scan(&docStatus)
 	if err != nil {
@@ -1360,7 +1360,7 @@ func TestEntityStore_Submit_AlreadySubmitted(t *testing.T) {
 	store := NewEntityStore(d, DriverSQLite, meta, entity)
 
 	id, _ := store.Insert(ctx, InsertParams{
-		TenantID: "t1", CreatedBy: "u1",
+		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"total": float64(100)},
 	})
 	store.Submit(ctx, "t1", id, "u1")
@@ -1395,7 +1395,7 @@ func TestEntityStore_Cancel_Success(t *testing.T) {
 	store := NewEntityStore(d, DriverSQLite, meta, entity)
 
 	id, _ := store.Insert(ctx, InsertParams{
-		TenantID: "t1", CreatedBy: "u1",
+		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"total": float64(100)},
 	})
 	store.Submit(ctx, "t1", id, "u1")
@@ -1437,7 +1437,7 @@ func TestEntityStore_Cancel_NotSubmitted(t *testing.T) {
 	store := NewEntityStore(d, DriverSQLite, meta, entity)
 
 	id, _ := store.Insert(ctx, InsertParams{
-		TenantID: "t1", CreatedBy: "u1",
+		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"total": float64(100)},
 	})
 	// Don't submit — try to cancel directly from draft
@@ -1472,7 +1472,7 @@ func TestEntityStore_Amend_Success(t *testing.T) {
 
 	// Create + submit original
 	origID, _ := store.Insert(ctx, InsertParams{
-		TenantID: "t1", CreatedBy: "u1",
+		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"total": float64(100)},
 	})
 	store.Submit(ctx, "t1", origID, "u1")
@@ -1543,7 +1543,7 @@ func TestEntityStore_LifecycleFree_NoDocStatus(t *testing.T) {
 	store := NewEntityStore(d, DriverSQLite, meta, entity)
 
 	id, err := store.Insert(ctx, InsertParams{
-		TenantID: "t1", CreatedBy: "u1",
+		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"name": "John"},
 	})
 	if err != nil {

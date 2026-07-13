@@ -73,6 +73,32 @@ module Forma
       call("release", { "key" => key })
     end
 
+    # ---- entity atomic operations ----
+
+    # Atomically merge fields into an entity record (entity/update).
+    # Uses jsonb_merge / json_patch — single SQL statement, no race condition.
+    #
+    # @param id       [String]  record ID
+    # @param fields   [Hash]    fields to merge
+    def update(id, fields)
+      body = { "key" => id, "fields" => fields }
+      call("update", body)
+    end
+
+    # Atomically increment a numeric field on an entity record.
+    # Single SQL statement — no read-modify-write race condition.
+    def increment(id, field, amount)
+      body = { "key" => id, "field" => field, "amount" => amount }
+      call("increment", body)
+    end
+
+    # Atomically decrement a numeric field on an entity record.
+    # Includes a guard against negative values. Returns the new field value.
+    def decrement(id, field, amount)
+      body = { "key" => id, "field" => field, "amount" => amount }
+      call("decrement", body)["data"]
+    end
+
     private
 
     def call(op, body)

@@ -14,7 +14,7 @@ internal sealed class SidecarClient
     private readonly int _tcpPort;
     private readonly int _timeoutMillis;
 
-    /// <param name="endpoint">"unix:///var/run/forma/sidecar.sock" or "http://localhost:PORT"</param>
+    /// <param name="endpoint">"unix:///tmp/forma/sidecar.sock" or "http://localhost:PORT"</param>
     public SidecarClient(string endpoint, int timeoutMillis = 30_000)
     {
         _timeoutMillis = timeoutMillis;

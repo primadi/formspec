@@ -13,7 +13,6 @@ import java.util.Map;
  * @param resourceId identifier of the resource being acted upon
  * @param resource   current entity record
  * @param params     action parameters from the request body
- * @param tenantId   tenant context
  * @param userId     user context
  */
 public record Invocation(
@@ -23,7 +22,6 @@ public record Invocation(
         String resourceId,
         Map<String, Object> resource,
         Map<String, Object> params,
-        String tenantId,
         String userId) {
 
     @SuppressWarnings("unchecked")
@@ -35,7 +33,6 @@ public record Invocation(
                 (String) body.getOrDefault("resource_id", ""),
                 (Map<String, Object>) body.getOrDefault("resource", Collections.emptyMap()),
                 (Map<String, Object>) body.getOrDefault("params", Collections.emptyMap()),
-                (String) body.getOrDefault("tenant_id", ""),
                 (String) body.getOrDefault("user_id", ""));
     }
 }

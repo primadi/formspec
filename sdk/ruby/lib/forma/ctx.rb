@@ -14,5 +14,8 @@ module Forma
     def pubsub  = CtxPrimitive.new(@client, "pubsub")
     def storage = CtxPrimitive.new(@client, "storage")
     def kvstore = CtxPrimitive.new(@client, "kvstore")
+
+    # Entity primitive — access entity records via named('module/entity').
+    def entity = CtxPrimitive.new(@client, "entity")
   end
 end

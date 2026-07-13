@@ -64,7 +64,7 @@ func TestResourceClaimReconcile(t *testing.T) {
 		reason    string
 	}{
 		{
-			name:      "valid signature and allowed tenant",
+			name:      "valid signature and allowed workspace",
 			mutate:    func(*formav1alpha1.ResourceClaim, *formav1alpha1.Datastore) {},
 			wantReady: true,
 			reason:    "ClaimVerified",

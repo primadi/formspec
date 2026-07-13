@@ -28,14 +28,14 @@ func NewNaturalKeyCounter(db DB, driver DriverType) *NaturalKeyCounter {
 
 // NextSequence atomically increments and returns the next counter value.
 // Parameters:
-//   - tenantID:  tenant scope
+//   - workspaceID:  workspace scope
 //   - resource:  entity name (e.g. "invoice")
 //   - field:     field name (e.g. "number")
 //   - scope:     additional scoping (e.g. "sales-channel-1")
 //   - reset:     reset strategy: "never", "yearly", "monthly", "daily"
 //
 // Returns the next counter value (1-based).
-func (c *NaturalKeyCounter) NextSequence(ctx context.Context, tenantID, resource, field, scope, reset string) (int64, string, error) {
+func (c *NaturalKeyCounter) NextSequence(ctx context.Context, workspaceID, resource, field, scope, reset string) (int64, string, error) {
 	period := computePeriod(reset)
 
 	// Use INSERT ... ON CONFLICT DO UPDATE (UPSERT) for atomicity
@@ -49,24 +49,24 @@ func (c *NaturalKeyCounter) NextSequence(ctx context.Context, tenantID, resource
 
 	var counter int64
 	err := c.db.QueryRowContext(ctx, query,
-		tenantID, resource, field, scope, period,
+		workspaceID, resource, field, scope, period,
 	).Scan(&counter)
 	if err != nil {
 		// SQLite compatibility: ON CONFLICT ... RETURNING may not work
 		// Fallback: explicit insert-or-increment
-		return c.nextSequenceFallback(ctx, tenantID, resource, field, scope, period)
+		return c.nextSequenceFallback(ctx, workspaceID, resource, field, scope, period)
 	}
 
 	return counter, period, nil
 }
 
 // nextSequenceFallback uses a two-step approach for SQLite compatibility.
-func (c *NaturalKeyCounter) nextSequenceFallback(ctx context.Context, tenantID, resource, field, scope, period string) (int64, string, error) {
+func (c *NaturalKeyCounter) nextSequenceFallback(ctx context.Context, workspaceID, resource, field, scope, period string) (int64, string, error) {
 	// Try insert first
 	_, err := c.db.ExecContext(ctx, `
 		INSERT INTO forma_natural_key_counters (tenant_id, resource, field, scope, period, counter)
 		VALUES (?, ?, ?, ?, ?, 1)
-	`, tenantID, resource, field, scope, period)
+	`, workspaceID, resource, field, scope, period)
 
 	if err != nil && strings.Contains(err.Error(), "UNIQUE") ||
 		err != nil && strings.Contains(err.Error(), "PRIMARY KEY") {
@@ -77,7 +77,7 @@ func (c *NaturalKeyCounter) nextSequenceFallback(ctx context.Context, tenantID, 
 			SET counter = counter + 1
 			WHERE tenant_id = ? AND resource = ? AND field = ? AND scope = ? AND period = ?
 			RETURNING counter
-		`, tenantID, resource, field, scope, period).Scan(&counter)
+		`, workspaceID, resource, field, scope, period).Scan(&counter)
 		if err2 != nil {
 			return 0, period, fmt.Errorf("counter increment: %w", err2)
 		}
@@ -105,12 +105,12 @@ func (c *NaturalKeyCounter) nextSequenceFallback(ctx context.Context, tenantID, 
 //   - {resource}      → entity name
 //   - {field}         → field name
 //   - {prefix}        → the prefix argument, verbatim
-func (c *NaturalKeyCounter) GenerateNaturalKey(ctx context.Context, tenantID, resource, field, scope, reset, format, prefix string) (string, error) {
+func (c *NaturalKeyCounter) GenerateNaturalKey(ctx context.Context, workspaceID, resource, field, scope, reset, format, prefix string) (string, error) {
 	if format == "" {
 		format = "{prefix}-{period}-{seq:05d}"
 	}
 
-	counter, period, err := c.NextSequence(ctx, tenantID, resource, field, scope, reset)
+	counter, period, err := c.NextSequence(ctx, workspaceID, resource, field, scope, reset)
 	if err != nil {
 		return "", fmt.Errorf("generate natural key for %s.%s: %w", resource, field, err)
 	}
@@ -120,14 +120,14 @@ func (c *NaturalKeyCounter) GenerateNaturalKey(ctx context.Context, tenantID, re
 
 // PeekCounter returns the current counter value WITHOUT incrementing.
 // Useful for display purposes. Returns 0 if no counter exists yet.
-func (c *NaturalKeyCounter) PeekCounter(ctx context.Context, tenantID, resource, field, scope, reset string) (int64, string, error) {
+func (c *NaturalKeyCounter) PeekCounter(ctx context.Context, workspaceID, resource, field, scope, reset string) (int64, string, error) {
 	period := computePeriod(reset)
 
 	var counter int64
 	err := c.db.QueryRowContext(ctx, `
 		SELECT counter FROM forma_natural_key_counters
 		WHERE tenant_id = ? AND resource = ? AND field = ? AND scope = ? AND period = ?
-	`, tenantID, resource, field, scope, period).Scan(&counter)
+	`, workspaceID, resource, field, scope, period).Scan(&counter)
 	if err != nil {
 		return 0, period, nil // no counter yet
 	}
@@ -136,13 +136,13 @@ func (c *NaturalKeyCounter) PeekCounter(ctx context.Context, tenantID, resource,
 
 // ResetCounter resets the counter for a given scope to 0.
 // This is used for testing or manual correction.
-func (c *NaturalKeyCounter) ResetCounter(ctx context.Context, tenantID, resource, field, scope, reset string) error {
+func (c *NaturalKeyCounter) ResetCounter(ctx context.Context, workspaceID, resource, field, scope, reset string) error {
 	period := computePeriod(reset)
 	_, err := c.db.ExecContext(ctx, `
 		UPDATE forma_natural_key_counters
 		SET counter = 0
 		WHERE tenant_id = ? AND resource = ? AND field = ? AND scope = ? AND period = ?
-	`, tenantID, resource, field, scope, period)
+	`, workspaceID, resource, field, scope, period)
 	return err
 }
 

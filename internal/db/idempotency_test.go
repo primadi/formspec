@@ -219,10 +219,10 @@ func TestIdempotencyStore_TenantIsolation(t *testing.T) {
 	// Tenant B should get a fresh claim
 	claimed, _, err := store.TryClaim(ctx, "tb", "checkout", "key-001")
 	if err != nil {
-		t.Fatalf("TryClaim tenant B failed: %v", err)
+		t.Fatalf("TryClaim workspace B failed: %v", err)
 	}
 	if !claimed {
-		t.Fatal("expected claimed=true for different tenant")
+		t.Fatal("expected claimed=true for different workspace")
 	}
 }
 

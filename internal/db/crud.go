@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -129,9 +130,9 @@ func (s *EntityStore) applyDefaults(data map[string]any) {
 // generateNaturalKeys fills in any field with NaturalKey: true + a
 // NaturalKeyRule whose value is not already present in data (a caller may
 // still supply an explicit value, e.g. migrations/imports — those are left
-// untouched). Uses NaturalKeyCounter for atomic, per-tenant/resource/field
+// untouched). Uses NaturalKeyCounter for atomic, per-workspace/resource/field
 // sequence generation.
-func (s *EntityStore) generateNaturalKeys(ctx context.Context, tenantID string, data map[string]any) error {
+func (s *EntityStore) generateNaturalKeys(ctx context.Context, workspaceID string, data map[string]any) error {
 	for _, f := range s.fields {
 		if !f.NaturalKey || f.NaturalKeyRule == nil {
 			continue
@@ -148,8 +149,8 @@ func (s *EntityStore) generateNaturalKeys(ctx context.Context, tenantID string, 
 			} else if rule.Prefix.Default != "" {
 				prefix = rule.Prefix.Default
 			}
-			// rule.Prefix.Config (tenant-config-driven override) is not wired
-			// yet — no tenant-config store exists in this codebase.
+			// rule.Prefix.Config (workspace-config-driven override) is not wired
+			// yet — no workspace-config store exists in this codebase.
 		}
 
 		scope := ""
@@ -160,7 +161,7 @@ func (s *EntityStore) generateNaturalKeys(ctx context.Context, tenantID string, 
 		}
 
 		counter := NewNaturalKeyCounter(s.db, s.driver)
-		key, err := counter.GenerateNaturalKey(ctx, tenantID, s.entity, f.Name, scope, rule.Reset, rule.Format, prefix)
+		key, err := counter.GenerateNaturalKey(ctx, workspaceID, s.entity, f.Name, scope, rule.Reset, rule.Format, prefix)
 		if err != nil {
 			return fmt.Errorf("generate natural key %q: %w", f.Name, err)
 		}
@@ -185,7 +186,7 @@ func (s *EntityStore) validateRequired(data map[string]any) error {
 
 // InsertParams holds the data for creating a new entity record.
 type InsertParams struct {
-	TenantID  string
+	WorkspaceID  string
 	CreatedBy string
 	Data      map[string]any
 }
@@ -199,7 +200,7 @@ func (s *EntityStore) Insert(ctx context.Context, params InsertParams) (string, 
 	// Generate natural keys (e.g. queue_number, invoice number) for fields
 	// that declare natural_key: true + natural_key_rule, before required-field
 	// validation — a generated key must count as present.
-	if err := s.generateNaturalKeys(ctx, params.TenantID, params.Data); err != nil {
+	if err := s.generateNaturalKeys(ctx, params.WorkspaceID, params.Data); err != nil {
 		return "", fmt.Errorf("%s insert: %w", s.entity, err)
 	}
 
@@ -214,7 +215,7 @@ func (s *EntityStore) Insert(ctx context.Context, params InsertParams) (string, 
 	}
 
 	// Validate relation targets (referenceability guard)
-	if err := s.ValidateRelationTargets(ctx, params.TenantID, params.Data); err != nil {
+	if err := s.ValidateRelationTargets(ctx, params.WorkspaceID, params.Data); err != nil {
 		return "", fmt.Errorf("%s insert: %w", s.entity, err)
 	}
 
@@ -248,7 +249,7 @@ func (s *EntityStore) Insert(ctx context.Context, params InsertParams) (string, 
 
 	var id string
 	err := s.db.QueryRowContext(ctx, query,
-		params.TenantID,
+		params.WorkspaceID,
 		params.CreatedBy,
 		params.CreatedBy,
 		toJSONString(parentData),
@@ -268,7 +269,7 @@ func (s *EntityStore) Insert(ctx context.Context, params InsertParams) (string, 
 	// Write audit log
 	resource := s.module + "/" + s.entity
 	changesJSON := toJSONString(params.Data)
-	if err := writeAuditLog(ctx, s.db, s.driver, params.TenantID, resource, id,
+	if err := writeAuditLog(ctx, s.db, s.driver, params.WorkspaceID, resource, id,
 		string(AuditActionCreate), params.CreatedBy, changesJSON); err != nil {
 		// Audit failure is non-fatal — log warning but don't fail the insert
 		log.Printf("[WARN] audit write failed (create %s/%s): %v", resource, id, err)
@@ -279,7 +280,7 @@ func (s *EntityStore) Insert(ctx context.Context, params InsertParams) (string, 
 
 // GetByIDParams holds the data for fetching an entity record.
 type GetByIDParams struct {
-	TenantID string
+	WorkspaceID string
 	ID       string
 }
 
@@ -316,12 +317,12 @@ func (s *EntityStore) getByIDRaw(ctx context.Context, params GetByIDParams) (*En
 		query += " AND deleted_at IS NULL"
 	}
 
-	return s.scanRecord(ctx, query, params.ID, params.TenantID)
+	return s.scanRecord(ctx, query, params.ID, params.WorkspaceID)
 }
 
 // UpdateParams holds the data for updating an entity record.
 type UpdateParams struct {
-	TenantID  string
+	WorkspaceID  string
 	ID        string
 	Version   int // optimistic concurrency: update only if version matches
 	UpdatedBy string
@@ -344,7 +345,7 @@ func (s *EntityStore) Update(ctx context.Context, params UpdateParams) (int, err
 	}
 
 	// Validate relation targets (referenceability guard)
-	if err := s.ValidateRelationTargets(ctx, params.TenantID, params.Data); err != nil {
+	if err := s.ValidateRelationTargets(ctx, params.WorkspaceID, params.Data); err != nil {
 		return 0, fmt.Errorf("%s update: %w", s.entity, err)
 	}
 
@@ -369,7 +370,7 @@ func (s *EntityStore) Update(ctx context.Context, params UpdateParams) (int, err
 	// Check immutable fields: fetch existing record and compare values
 	var existingData map[string]any
 	{
-		rec, err := s.getByIDRaw(ctx, GetByIDParams{TenantID: params.TenantID, ID: params.ID})
+		rec, err := s.getByIDRaw(ctx, GetByIDParams{WorkspaceID: params.WorkspaceID, ID: params.ID})
 		if err != nil {
 			return 0, fmt.Errorf("%s update: fetch existing: %w", s.entity, err)
 		}
@@ -410,7 +411,7 @@ func (s *EntityStore) Update(ctx context.Context, params UpdateParams) (int, err
 		toJSONString(parentData),
 		params.UpdatedBy,
 		params.ID,
-		params.TenantID,
+		params.WorkspaceID,
 		params.Version,
 	).Scan(&newVersion)
 	if err != nil {
@@ -433,7 +434,7 @@ func (s *EntityStore) Update(ctx context.Context, params UpdateParams) (int, err
 	changes := computeChanges(existingData, parentData)
 	if len(changes) > 0 {
 		changesJSON := serializeChangeMap(changes)
-		if err := writeAuditLog(ctx, s.db, s.driver, params.TenantID, resource, params.ID,
+		if err := writeAuditLog(ctx, s.db, s.driver, params.WorkspaceID, resource, params.ID,
 			string(AuditActionUpdate), params.UpdatedBy, changesJSON); err != nil {
 			// Audit failure is non-fatal — log warning but don't fail the update
 			log.Printf("[WARN] audit write failed (update %s/%s): %v", resource, params.ID, err)
@@ -446,7 +447,7 @@ func (s *EntityStore) Update(ctx context.Context, params UpdateParams) (int, err
 // SoftDelete marks an entity record as deleted.
 // Children in child tables are cascade-deleted (ON DELETE CASCADE from DDL handles this
 // for hard deletes; for soft deletes we explicitly remove child rows).
-func (s *EntityStore) SoftDelete(ctx context.Context, tenantID, id string) error {
+func (s *EntityStore) SoftDelete(ctx context.Context, workspaceID, id string) error {
 	if !s.softDelete {
 		// Delete children first (child tables have ON DELETE CASCADE,
 		// but we do it explicitly for clarity).
@@ -460,7 +461,7 @@ func (s *EntityStore) SoftDelete(ctx context.Context, tenantID, id string) error
 		tbl := s.qualifiedTable()
 		_, err := s.db.ExecContext(ctx,
 			fmt.Sprintf("DELETE FROM %s WHERE id = ? AND tenant_id = ?", tbl),
-			id, tenantID)
+			id, workspaceID)
 		return err
 	}
 
@@ -469,7 +470,7 @@ func (s *EntityStore) SoftDelete(ctx context.Context, tenantID, id string) error
 		`UPDATE %s SET deleted_at = %s WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL`,
 		tbl, currentTimestampExpr(s.driver))
 
-	result, err := s.db.ExecContext(ctx, query, id, tenantID)
+	result, err := s.db.ExecContext(ctx, query, id, workspaceID)
 	if err != nil {
 		return fmt.Errorf("%s soft delete: %w", s.entity, err)
 	}
@@ -480,7 +481,7 @@ func (s *EntityStore) SoftDelete(ctx context.Context, tenantID, id string) error
 
 	// Write audit log
 	resource := s.module + "/" + s.entity
-	if err := writeAuditLog(ctx, s.db, s.driver, tenantID, resource, id,
+	if err := writeAuditLog(ctx, s.db, s.driver, workspaceID, resource, id,
 		string(AuditActionDelete), "system", "{}"); err != nil {
 		// Audit failure is non-fatal — log warning but don't fail the delete
 		log.Printf("[WARN] audit write failed (delete %s/%s): %v", resource, id, err)
@@ -488,10 +489,122 @@ func (s *EntityStore) SoftDelete(ctx context.Context, tenantID, id string) error
 	return nil
 }
 
+// UpdateFields atomically merges specific fields into the JSONB data column
+// without fetching first — single SQL statement.
+// PostgreSQL: data || ?::jsonb (jsonb merge)
+// SQLite:     json_patch(data, ?)  (RFC 6902 JSON Patch merge)
+func (s *EntityStore) UpdateFields(ctx context.Context, workspaceID, id string, fields map[string]any) error {
+	if len(fields) == 0 {
+		return nil
+	}
+
+	tbl := s.qualifiedTable()
+	dataJSON := toJSONString(fields)
+
+	softDeleteClause := ""
+	if s.softDelete {
+		softDeleteClause = "AND deleted_at IS NULL"
+	}
+
+	var query string
+	if s.driver == DriverPostgres {
+		query = fmt.Sprintf(
+			`UPDATE %s SET data = data || ?::jsonb, version = version + 1, updated_at = %s WHERE id = ? AND tenant_id = ? %s`,
+			tbl, currentTimestampExpr(s.driver), softDeleteClause)
+	} else {
+		query = fmt.Sprintf(
+			`UPDATE %s SET data = json_patch(data, ?), version = version + 1, updated_at = %s WHERE id = ? AND tenant_id = ? %s`,
+			tbl, currentTimestampExpr(s.driver), softDeleteClause)
+	}
+
+	result, err := s.db.ExecContext(ctx, query, dataJSON, id, workspaceID)
+	if err != nil {
+		return fmt.Errorf("%s update fields: %w", s.entity, err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("%s update fields: %w (not found)", s.entity, ErrNotFound)
+	}
+	return nil
+}
+
+// IncrementField atomically adds amount to a numeric JSONB field.
+// Single SQL statement — no read-modify-write race condition.
+func (s *EntityStore) IncrementField(ctx context.Context, workspaceID, id, field string, amount float64) error {
+	tbl := s.qualifiedTable()
+
+	var query string
+	if s.driver == DriverPostgres {
+		query = fmt.Sprintf(
+			`UPDATE %s SET data = jsonb_set(data, '{%s}', to_jsonb(COALESCE((data->>'%s')::numeric, 0) + ?)),
+				version = version + 1, updated_at = %s
+			WHERE id = ? AND tenant_id = ?`,
+			tbl, field, field, currentTimestampExpr(s.driver))
+	} else {
+		query = fmt.Sprintf(
+			`UPDATE %s SET data = json_set(data, '$.%s', CAST(json_extract(data, '$.%s') AS numeric) + ?),
+				version = version + 1, updated_at = %s
+			WHERE id = ? AND tenant_id = ?`,
+			tbl, field, field, currentTimestampExpr(s.driver))
+	}
+	if s.softDelete {
+		query += " AND deleted_at IS NULL"
+	}
+
+	result, err := s.db.ExecContext(ctx, query, amount, id, workspaceID)
+	if err != nil {
+		return fmt.Errorf("%s increment field %s: %w", s.entity, field, err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("%s increment field %s: %w (not found)", s.entity, field, ErrNotFound)
+	}
+	return nil
+}
+
+// DecrementField atomically subtracts amount from a numeric JSONB field.
+// Includes a guard (WHERE ... >= amount) to prevent negative values.
+// Returns the new field value after decrement.
+func (s *EntityStore) DecrementField(ctx context.Context, workspaceID, id, field string, amount float64) (float64, error) {
+	tbl := s.qualifiedTable()
+
+	softDeleteClause := ""
+	if s.softDelete {
+		softDeleteClause = "AND deleted_at IS NULL"
+	}
+
+	var query string
+	if s.driver == DriverPostgres {
+		query = fmt.Sprintf(
+			`UPDATE %s SET data = jsonb_set(data, '{%s}', to_jsonb(COALESCE((data->>'%s')::numeric, 0) - ?)),
+				version = version + 1, updated_at = %s
+			WHERE id = ? AND tenant_id = ? %s AND COALESCE((data->>'%s')::numeric, 0) >= ?
+			RETURNING COALESCE((data->>'%s')::numeric, 0)`,
+			tbl, field, field, currentTimestampExpr(s.driver), softDeleteClause, field, field)
+	} else {
+		query = fmt.Sprintf(
+			`UPDATE %s SET data = json_set(data, '$.%s', CAST(json_extract(data, '$.%s') AS numeric) - ?),
+				version = version + 1, updated_at = %s
+			WHERE id = ? AND tenant_id = ? %s AND CAST(COALESCE(json_extract(data, '$.%s'), '0') AS numeric) >= ?
+			RETURNING CAST(COALESCE(json_extract(data, '$.%s'), '0') AS numeric)`,
+			tbl, field, field, currentTimestampExpr(s.driver), softDeleteClause, field, field)
+	}
+
+	var newVal float64
+	err := s.db.QueryRowContext(ctx, query, amount, id, workspaceID, amount).Scan(&newVal)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return 0, fmt.Errorf("%s decrement field %s: %w (not found or insufficient %s)", s.entity, field, ErrNotFound, field)
+		}
+		return 0, fmt.Errorf("%s decrement field %s: %w", s.entity, field, err)
+	}
+	return newVal, nil
+}
+
 // ValidateRelationTargets checks that all relation fields in data point to
 // valid targets (doc_status = NULL or 'submitted'). Draft/cancelled targets
 // are rejected per Core §4.1b referenceability rule.
-func (s *EntityStore) ValidateRelationTargets(ctx context.Context, tenantID string, data map[string]any) error {
+func (s *EntityStore) ValidateRelationTargets(ctx context.Context, workspaceID string, data map[string]any) error {
 	for _, f := range s.fields {
 		if f.Relation == nil || f.Relation.Resource == "" {
 			continue
@@ -522,7 +635,7 @@ func (s *EntityStore) ValidateRelationTargets(ctx context.Context, tenantID stri
 			tbl)
 
 		var docStatus *string
-		err := s.db.QueryRowContext(ctx, query, targetIDStr, tenantID).Scan(&docStatus)
+		err := s.db.QueryRowContext(ctx, query, targetIDStr, workspaceID).Scan(&docStatus)
 		if err != nil {
 			// Target not found or table doesn't exist — skip guard
 			continue
@@ -545,7 +658,7 @@ func (s *EntityStore) ValidateRelationTargets(ctx context.Context, tenantID stri
 }
 
 // Submit transitions a document from draft → submitted.
-func (s *EntityStore) Submit(ctx context.Context, tenantID, id, userID string) error {
+func (s *EntityStore) Submit(ctx context.Context, workspaceID, id, userID string) error {
 	tbl := s.qualifiedTable()
 	query := fmt.Sprintf(
 		`UPDATE %s SET doc_status = 'submitted', version = version + 1, updated_at = %s, updated_by = ? WHERE id = ? AND tenant_id = ? AND doc_status = 'draft'`,
@@ -555,7 +668,7 @@ func (s *EntityStore) Submit(ctx context.Context, tenantID, id, userID string) e
 		query += " AND deleted_at IS NULL"
 	}
 
-	result, err := s.db.ExecContext(ctx, query, userID, id, tenantID)
+	result, err := s.db.ExecContext(ctx, query, userID, id, workspaceID)
 	if err != nil {
 		return fmt.Errorf("%s submit: %w", s.entity, err)
 	}
@@ -567,7 +680,7 @@ func (s *EntityStore) Submit(ctx context.Context, tenantID, id, userID string) e
 }
 
 // Cancel transitions a document from submitted → cancelled.
-func (s *EntityStore) Cancel(ctx context.Context, tenantID, id, userID string) error {
+func (s *EntityStore) Cancel(ctx context.Context, workspaceID, id, userID string) error {
 	tbl := s.qualifiedTable()
 	query := fmt.Sprintf(
 		`UPDATE %s SET doc_status = 'cancelled', version = version + 1, updated_at = %s, updated_by = ? WHERE id = ? AND tenant_id = ? AND doc_status = 'submitted'`,
@@ -577,7 +690,7 @@ func (s *EntityStore) Cancel(ctx context.Context, tenantID, id, userID string) e
 		query += " AND deleted_at IS NULL"
 	}
 
-	result, err := s.db.ExecContext(ctx, query, userID, id, tenantID)
+	result, err := s.db.ExecContext(ctx, query, userID, id, workspaceID)
 	if err != nil {
 		return fmt.Errorf("%s cancel: %w", s.entity, err)
 	}
@@ -590,15 +703,15 @@ func (s *EntityStore) Cancel(ctx context.Context, tenantID, id, userID string) e
 
 // Amend atomically cancels the original and creates a linked new document as draft.
 // Sets amends (on new) and amended_by (on original) reserved fields.
-func (s *EntityStore) Amend(ctx context.Context, tenantID, originalID, userID string, newData map[string]any) (string, error) {
+func (s *EntityStore) Amend(ctx context.Context, workspaceID, originalID, userID string, newData map[string]any) (string, error) {
 	// 1. Cancel the original
-	if err := s.Cancel(ctx, tenantID, originalID, userID); err != nil {
+	if err := s.Cancel(ctx, workspaceID, originalID, userID); err != nil {
 		return "", fmt.Errorf("%s amend: cancel original: %w", s.entity, err)
 	}
 
 	// 2. Create new document as draft
 	newID, err := s.Insert(ctx, InsertParams{
-		TenantID:  tenantID,
+		WorkspaceID:  workspaceID,
 		CreatedBy: userID,
 		Data:      newData,
 	})
@@ -610,7 +723,7 @@ func (s *EntityStore) Amend(ctx context.Context, tenantID, originalID, userID st
 	tbl := s.qualifiedTable()
 	_, err = s.db.ExecContext(ctx,
 		fmt.Sprintf(`UPDATE %s SET amends = ? WHERE id = ? AND tenant_id = ?`, tbl),
-		originalID, newID, tenantID)
+		originalID, newID, workspaceID)
 	if err != nil {
 		log.Printf("[WARN] %s amend: failed to set amends on new doc %s: %v", s.entity, newID, err)
 	}
@@ -618,7 +731,7 @@ func (s *EntityStore) Amend(ctx context.Context, tenantID, originalID, userID st
 	// 4. Set amended_by on original (points to new version)
 	_, err = s.db.ExecContext(ctx,
 		fmt.Sprintf(`UPDATE %s SET amended_by = ? WHERE id = ? AND tenant_id = ?`, tbl),
-		newID, originalID, tenantID)
+		newID, originalID, workspaceID)
 	if err != nil {
 		log.Printf("[WARN] %s amend: failed to set amended_by on original %s: %v", s.entity, originalID, err)
 	}
@@ -667,7 +780,7 @@ func toAnySlice(v any) []any {
 
 // ListParams holds pagination, sorting, and filtering for List queries.
 type ListParams struct {
-	TenantID string
+	WorkspaceID string
 	Page     int    // 1-based
 	PerPage  int    // default 20
 	Sort     string // field name, prefixed with - for DESC
@@ -708,7 +821,7 @@ func (s *EntityStore) List(ctx context.Context, params ListParams) (*ListResult,
 
 	// Tenant isolation
 	whereClauses = append(whereClauses, "tenant_id = ?")
-	args = append(args, params.TenantID)
+	args = append(args, params.WorkspaceID)
 
 	// Soft delete filter
 	if s.softDelete {
@@ -825,7 +938,7 @@ func (s *EntityStore) List(ctx context.Context, params ListParams) (*ListResult,
 }
 
 // FindByField finds a single entity record by a specific field value.
-func (s *EntityStore) FindByField(ctx context.Context, tenantID, field, value string) (*EntityRecord, error) {
+func (s *EntityStore) FindByField(ctx context.Context, workspaceID, field, value string) (*EntityRecord, error) {
 	tbl := s.qualifiedTable()
 	col := generatedColumnName(field)
 
@@ -837,7 +950,7 @@ func (s *EntityStore) FindByField(ctx context.Context, tenantID, field, value st
 	}
 	query += " LIMIT 1"
 
-	rec, err := s.scanRecord(ctx, query, value, tenantID)
+	rec, err := s.scanRecord(ctx, query, value, workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -851,7 +964,7 @@ func (s *EntityStore) FindByField(ctx context.Context, tenantID, field, value st
 // EntityRecord represents a single row from an entity table.
 type EntityRecord struct {
 	ID        string
-	TenantID  string
+	WorkspaceID  string
 	Version   int
 	CreatedAt string
 	UpdatedAt string
@@ -871,7 +984,7 @@ func (r EntityRecord) MarshalJSON() ([]byte, error) {
 		out[k] = v
 	}
 	out["id"] = r.ID
-	out["tenant_id"] = r.TenantID
+	out["tenant_id"] = r.WorkspaceID
 	out["version"] = r.Version
 	out["created_at"] = r.CreatedAt
 	out["updated_at"] = r.UpdatedAt
@@ -890,12 +1003,12 @@ func (s *EntityStore) scanRecord(ctx context.Context, query string, args ...any)
 func scanEntityRecord(row interface {
 	Scan(dest ...any) error
 }) (*EntityRecord, error) {
-	var id, tenantID, createdBy, updatedBy string
+	var id, workspaceID, createdBy, updatedBy string
 	var version int
 	var createdAt, updatedAt string
 	var dataStr string
 
-	err := row.Scan(&id, &tenantID, &version, &createdAt, &updatedAt, &createdBy, &updatedBy, &dataStr)
+	err := row.Scan(&id, &workspaceID, &version, &createdAt, &updatedAt, &createdBy, &updatedBy, &dataStr)
 	if err != nil {
 		if strings.Contains(err.Error(), "no rows") {
 			return nil, fmt.Errorf("%w", ErrNotFound)
@@ -910,7 +1023,7 @@ func scanEntityRecord(row interface {
 
 	return &EntityRecord{
 		ID:        id,
-		TenantID:  tenantID,
+		WorkspaceID:  workspaceID,
 		Version:   version,
 		CreatedAt: createdAt,
 		UpdatedAt: updatedAt,

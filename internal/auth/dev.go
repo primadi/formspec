@@ -8,7 +8,7 @@ import "context"
 // The identity maps to user "developer" with permission "*" which matches
 // everything (see Identity.HasPermission). WorkspaceID is left empty so the
 // identity adopts whatever workspace is in the URL — this lets dev mode
-// reach any workspace slug without tripping the cross-tenant 404 check in
+// reach any workspace slug without tripping the cross-workspace 404 check in
 // AuthMiddleware (which only compares when both sides are non-empty).
 type DevValidator struct{}
 

@@ -30,7 +30,7 @@ type IdempotencyStore struct {
 
 // IdempotencyRecord represents a row in forma_idempotency_keys.
 type IdempotencyRecord struct {
-	TenantID  string
+	WorkspaceID  string
 	Action    string
 	Key       string
 	Status    string // pending | completed | failed
@@ -61,9 +61,9 @@ func (s *IdempotencyStore) WithTTL(ttl time.Duration) *IdempotencyStore {
 //   - claimed=true, record=nil      → key is new, caller should execute
 //   - claimed=false, record!=nil    → existing completed result available (replay)
 //   - claimed=false, record=nil, err!=nil → error
-func (s *IdempotencyStore) TryClaim(ctx context.Context, tenantID, action, key string) (claimed bool, existing *IdempotencyRecord, err error) {
+func (s *IdempotencyStore) TryClaim(ctx context.Context, workspaceID, action, key string) (claimed bool, existing *IdempotencyRecord, err error) {
 	// 1. Check for existing completed key
-	existing, err = s.getByPK(ctx, tenantID, action, key)
+	existing, err = s.getByPK(ctx, workspaceID, action, key)
 	if err != nil {
 		return false, nil, fmt.Errorf("idempotency check: %w", err)
 	}
@@ -79,7 +79,7 @@ func (s *IdempotencyStore) TryClaim(ctx context.Context, tenantID, action, key s
 			// Check if expired
 			if s.isExpired(existing) {
 				// Expired: reset to pending and allow retry
-				if err := s.updateStatus(ctx, tenantID, action, key, "pending", ""); err != nil {
+				if err := s.updateStatus(ctx, workspaceID, action, key, "pending", ""); err != nil {
 					return false, nil, fmt.Errorf("idempotency reset expired: %w", err)
 				}
 				return true, nil, nil
@@ -99,7 +99,7 @@ func (s *IdempotencyStore) TryClaim(ctx context.Context, tenantID, action, key s
 	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO forma_idempotency_keys (tenant_id, action, key, status, expires_at)
 		VALUES (?, ?, ?, 'pending', ?)
-	`, tenantID, action, key, expiresStr)
+	`, workspaceID, action, key, expiresStr)
 	if err != nil {
 		return false, nil, fmt.Errorf("idempotency insert: %w", err)
 	}
@@ -108,16 +108,16 @@ func (s *IdempotencyStore) TryClaim(ctx context.Context, tenantID, action, key s
 }
 
 // RecordCompleted marks an idempotency key as completed with a response.
-func (s *IdempotencyStore) RecordCompleted(ctx context.Context, tenantID, action, key, response string) error {
-	if err := s.updateStatus(ctx, tenantID, action, key, "completed", response); err != nil {
+func (s *IdempotencyStore) RecordCompleted(ctx context.Context, workspaceID, action, key, response string) error {
+	if err := s.updateStatus(ctx, workspaceID, action, key, "completed", response); err != nil {
 		return fmt.Errorf("idempotency record completed: %w", err)
 	}
 	return nil
 }
 
 // RecordFailed marks an idempotency key as failed.
-func (s *IdempotencyStore) RecordFailed(ctx context.Context, tenantID, action, key, response string) error {
-	if err := s.updateStatus(ctx, tenantID, action, key, "failed", response); err != nil {
+func (s *IdempotencyStore) RecordFailed(ctx context.Context, workspaceID, action, key, response string) error {
+	if err := s.updateStatus(ctx, workspaceID, action, key, "failed", response); err != nil {
 		return fmt.Errorf("idempotency record failed: %w", err)
 	}
 	return nil
@@ -125,8 +125,8 @@ func (s *IdempotencyStore) RecordFailed(ctx context.Context, tenantID, action, k
 
 // GetResult retrieves the result for a completed idempotency key.
 // Returns nil if the key doesn't exist or isn't completed.
-func (s *IdempotencyStore) GetResult(ctx context.Context, tenantID, action, key string) (*IdempotencyRecord, error) {
-	rec, err := s.getByPK(ctx, tenantID, action, key)
+func (s *IdempotencyStore) GetResult(ctx context.Context, workspaceID, action, key string) (*IdempotencyRecord, error) {
+	rec, err := s.getByPK(ctx, workspaceID, action, key)
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +152,7 @@ func (s *IdempotencyStore) CleanupExpired(ctx context.Context) (int64, error) {
 
 // --- internal helpers ---
 
-func (s *IdempotencyStore) getByPK(ctx context.Context, tenantID, action, key string) (*IdempotencyRecord, error) {
+func (s *IdempotencyStore) getByPK(ctx context.Context, workspaceID, action, key string) (*IdempotencyRecord, error) {
 	var rec IdempotencyRecord
 	var response sql.NullString
 
@@ -160,8 +160,8 @@ func (s *IdempotencyStore) getByPK(ctx context.Context, tenantID, action, key st
 		SELECT tenant_id, action, key, status, response, expires_at, created_at
 		FROM forma_idempotency_keys
 		WHERE tenant_id = ? AND action = ? AND key = ?
-	`, tenantID, action, key).Scan(
-		&rec.TenantID, &rec.Action, &rec.Key, &rec.Status,
+	`, workspaceID, action, key).Scan(
+		&rec.WorkspaceID, &rec.Action, &rec.Key, &rec.Status,
 		&response, &rec.ExpiresAt, &rec.CreatedAt,
 	)
 	if err == sql.ErrNoRows {
@@ -177,13 +177,13 @@ func (s *IdempotencyStore) getByPK(ctx context.Context, tenantID, action, key st
 	return &rec, nil
 }
 
-func (s *IdempotencyStore) updateStatus(ctx context.Context, tenantID, action, key, status, response string) error {
+func (s *IdempotencyStore) updateStatus(ctx context.Context, workspaceID, action, key, status, response string) error {
 	if response != "" {
 		_, err := s.db.ExecContext(ctx, `
 			UPDATE forma_idempotency_keys
 			SET status = ?, response = ?
 			WHERE tenant_id = ? AND action = ? AND key = ?
-		`, status, response, tenantID, action, key)
+		`, status, response, workspaceID, action, key)
 		return err
 	}
 
@@ -191,7 +191,7 @@ func (s *IdempotencyStore) updateStatus(ctx context.Context, tenantID, action, k
 		UPDATE forma_idempotency_keys
 		SET status = ?
 		WHERE tenant_id = ? AND action = ? AND key = ?
-	`, status, tenantID, action, key)
+	`, status, workspaceID, action, key)
 	return err
 }
 

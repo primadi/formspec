@@ -23,15 +23,15 @@ func SetAuthValidator(v auth.TokenValidator) {
 	authValidator = v
 }
 
-// TenantMiddleware extracts the workspace slug from the URL, resolves it,
-// and injects tenant_id into the request context.
+// WorkspaceMiddleware extracts the workspace slug from the URL, resolves it,
+// and injects the workspace ID into the request context.
 //
 // URL format: /{workspace_slug}/api/...
 // Falls back to "demo" for development.
-// Cross-tenant isolation (§15.2): the tenant ID is set once here and all
+// Workspace isolation (§15.2): the workspace ID is set once here and all
 // downstream handlers MUST use it from context — never from request body.
-// Cross-tenant mismatch is enforced in AuthMiddleware (identity workspace vs URL).
-func TenantMiddleware(next http.Handler) http.Handler {
+// Cross-workspace mismatch is enforced in AuthMiddleware (identity workspace vs URL).
+func WorkspaceMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Extract workspace slug from path: /{workspace}/api/...
 		path := strings.TrimPrefix(r.URL.Path, "/")
@@ -45,11 +45,10 @@ func TenantMiddleware(next http.Handler) http.Handler {
 			workspaceID = "demo"
 		}
 
-		// Save URL-extracted tenant separately for cross-tenant check in AuthMiddleware
-		ctx := WithURLTenant(r.Context(), workspaceID)
-		// In production: lookup workspace slug → tenant UUID
-		// For dev: slug = tenant ID directly
-		ctx = WithTenant(ctx, workspaceID)
+		// Save URL-extracted workspace for cross-workspace check in AuthMiddleware
+		ctx := WithURLWorkspace(r.Context(), workspaceID)
+		// In production: lookup workspace slug → internal workspace UUID
+		ctx = WithWorkspace(ctx, workspaceID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -61,7 +60,7 @@ func TenantMiddleware(next http.Handler) http.Handler {
 // Prod mode: validates JWT via the configured TokenValidator.
 // Anonymous access is only allowed for routes with required_permission: "public".
 //
-// Cross-tenant enforcement (§15.2): if the identity's workspace does not match
+// Cross-workspace enforcement (§15.2): if the identity's workspace does not match
 // the URL workspace, returns 404 (NOT_FOUND) — per spec, cross-workspace access
 // is indistinguishable from the resource not existing.
 func AuthMiddleware(next http.Handler) http.Handler {
@@ -87,11 +86,11 @@ func AuthMiddleware(next http.Handler) http.Handler {
 				}
 			}
 			if identity != nil {
-				// Cross-tenant enforcement: identity workspace must match URL workspace.
-				// Spec §15.2: cross-tenant access → 404 NOT_FOUND (not 403).
-				urlTenant := URLTenantFromContext(ctx)
-				if identity.WorkspaceID != "" && urlTenant != "" &&
-					identity.WorkspaceID != urlTenant {
+				// Cross-workspace enforcement: identity workspace must match URL workspace.
+				// Spec §15.2: cross-workspace access → 404 NOT_FOUND (not 403).
+				urlWorkspace := URLWorkspaceFromContext(ctx)
+				if identity.WorkspaceID != "" && urlWorkspace != "" &&
+					identity.WorkspaceID != urlWorkspace {
 					writeError(w, http.StatusNotFound, "NOT_FOUND",
 						"workspace not found")
 					return
@@ -100,15 +99,15 @@ func AuthMiddleware(next http.Handler) http.Handler {
 				ctx = WithIdentity(ctx, identity)
 				// Also set legacy context values for backward compatibility
 				ctx = WithUser(ctx, identity.UserID)
-				// Override tenant with identity's workspace
+				// Override workspace with identity's workspace
 				if identity.WorkspaceID != "" {
-					ctx = WithTenant(ctx, identity.WorkspaceID)
+					ctx = WithWorkspace(ctx, identity.WorkspaceID)
 				}
 			}
 		} else {
 			// No validator configured — dev fallback (should not happen if SetAuthValidator is called)
 			ctx = WithUser(ctx, "developer")
-			ctx = WithTenant(ctx, "demo")
+			ctx = WithWorkspace(ctx, "demo")
 		}
 
 		next.ServeHTTP(w, r.WithContext(ctx))
@@ -208,9 +207,9 @@ func generateRequestID() string {
 }
 
 // contextKey and context functions are defined in handler.go.
-// Ensure GetTenant is available for middleware consumers.
-func GetTenant(ctx context.Context) string {
-	return tenantFromContext(ctx)
+// GetWorkspace returns the current workspace ID from the request context.
+func GetWorkspace(ctx context.Context) string {
+	return workspaceFromContext(ctx)
 }
 
 // GetUser returns the authenticated user from context.

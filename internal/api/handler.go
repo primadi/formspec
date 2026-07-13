@@ -89,7 +89,7 @@ func (f *HandlerFactory) HandleList(module, entity string) http.HandlerFunc {
 			return
 		}
 
-		tenantID := tenantFromContext(ctx)
+		workspaceID := workspaceFromContext(ctx)
 
 		// Pagination: spec §558-559 — non-numeric/negative → VALIDATION_ERROR (422)
 		page, perPage, err := parsePaginationParams(r)
@@ -105,12 +105,12 @@ func (f *HandlerFactory) HandleList(module, entity string) http.HandlerFunc {
 		}
 
 		result, err := store.List(ctx, db.ListParams{
-			TenantID: tenantID,
-			Page:     page,
-			PerPage:  perPage,
-			Sort:     sortParam,
-			Filters:  filters,
-			Search:   r.URL.Query().Get("search"),
+			WorkspaceID: workspaceID,
+			Page:        page,
+			PerPage:     perPage,
+			Sort:        sortParam,
+			Filters:     filters,
+			Search:      r.URL.Query().Get("search"),
 		})
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
@@ -248,10 +248,10 @@ func (f *HandlerFactory) HandleFind(module, entity string) http.HandlerFunc {
 			return
 		}
 
-		tenantID := tenantFromContext(ctx)
+		workspaceID := workspaceFromContext(ctx)
 		id := r.PathValue("id")
 
-		rec, err := store.GetByID(ctx, db.GetByIDParams{TenantID: tenantID, ID: id})
+		rec, err := store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: id})
 		if err != nil {
 			writeError(w, http.StatusNotFound, "NOT_FOUND", err.Error())
 			return
@@ -289,7 +289,7 @@ func (f *HandlerFactory) HandleCreate(module, entity string) http.HandlerFunc {
 			body = make(map[string]any)
 		}
 
-		tenantID := tenantFromContext(ctx)
+		workspaceID := workspaceFromContext(ctx)
 		createdBy := userFromContext(ctx)
 
 		var entitySpec *spec.EntitySpec
@@ -304,7 +304,7 @@ func (f *HandlerFactory) HandleCreate(module, entity string) http.HandlerFunc {
 
 		execParams := &action.ExecuteParams{
 			Module: module, Entity: entity, ActionName: "create",
-			Resource: body, Params: body, TenantID: tenantID, UserID: createdBy,
+			Resource: body, Params: body, WorkspaceID: workspaceID, UserID: createdBy,
 		}
 		if err := action.RunBeforePhase(ctx, f.dispatcher, hooks, actionSpec, "create", execParams); err != nil {
 			writeError(w, http.StatusUnprocessableEntity, "HOOK_ABORTED", err.Error())
@@ -312,9 +312,9 @@ func (f *HandlerFactory) HandleCreate(module, entity string) http.HandlerFunc {
 		}
 
 		id, err := store.Insert(ctx, db.InsertParams{
-			TenantID:  tenantID,
-			CreatedBy: createdBy,
-			Data:      execParams.Resource,
+			WorkspaceID: workspaceID,
+			CreatedBy:   createdBy,
+			Data:        execParams.Resource,
 		})
 		if err != nil {
 			writeStoreError(w, err)
@@ -322,7 +322,7 @@ func (f *HandlerFactory) HandleCreate(module, entity string) http.HandlerFunc {
 		}
 
 		// Fetch the created record to return
-		rec, err := store.GetByID(ctx, db.GetByIDParams{TenantID: tenantID, ID: id})
+		rec, err := store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: id})
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "created but fetch failed: "+err.Error())
 			return
@@ -331,11 +331,11 @@ func (f *HandlerFactory) HandleCreate(module, entity string) http.HandlerFunc {
 		if rec != nil {
 			action.RunAfterPhase(ctx, f.dispatcher, hooks, actionSpec, "create", action.ExecuteParams{
 				Module: module, Entity: entity, ActionName: "create", ResourceID: id,
-				Resource: rec.Data, TenantID: tenantID, UserID: createdBy,
+				Resource: rec.Data, WorkspaceID: workspaceID, UserID: createdBy,
 			})
 			if entitySpec != nil {
 				if emitted := action.ResolveEmission(entitySpec.Events, emitsOf(actionSpec), rec.Data); emitted != nil {
-					action.DeliverEvents(ctx, f.deliveryDeps, tenantID, module+"/"+entity, []action.EventEmission{*emitted})
+					action.DeliverEvents(ctx, f.deliveryDeps, workspaceID, module+"/"+entity, []action.EventEmission{*emitted})
 				}
 			}
 		}
@@ -366,7 +366,7 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 			return
 		}
 
-		tenantID := tenantFromContext(ctx)
+		workspaceID := workspaceFromContext(ctx)
 		updatedBy := userFromContext(ctx)
 		id := r.PathValue("id")
 
@@ -375,7 +375,7 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 		// replacing it outright (Update()'s SQL overwrites the whole JSON
 		// blob, and required-field validation runs against the merged
 		// result, not just the fields the caller happened to resend).
-		current, err := store.GetByID(ctx, db.GetByIDParams{TenantID: tenantID, ID: id})
+		current, err := store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: id})
 		if err != nil {
 			writeError(w, http.StatusNotFound, "NOT_FOUND", err.Error())
 			return
@@ -402,7 +402,7 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 		execParams := &action.ExecuteParams{
 			Module: module, Entity: entity, ActionName: "update", ResourceID: id,
 			Resource: merged, ResourceVersion: current.Version, Params: body,
-			TenantID: tenantID, UserID: updatedBy,
+			WorkspaceID: workspaceID, UserID: updatedBy,
 		}
 		if err := action.RunBeforePhase(ctx, f.dispatcher, hooks, actionSpec, "update", execParams); err != nil {
 			writeError(w, http.StatusUnprocessableEntity, "HOOK_ABORTED", err.Error())
@@ -410,11 +410,11 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 		}
 
 		newVersion, err := store.Update(ctx, db.UpdateParams{
-			TenantID:  tenantID,
-			ID:        id,
-			Version:   current.Version,
-			UpdatedBy: updatedBy,
-			Data:      execParams.Resource,
+			WorkspaceID: workspaceID,
+			ID:          id,
+			Version:     current.Version,
+			UpdatedBy:   updatedBy,
+			Data:        execParams.Resource,
 		})
 		if err != nil {
 			writeStoreError(w, err)
@@ -422,17 +422,17 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 		}
 
 		// Fetch updated record
-		rec, _ := store.GetByID(ctx, db.GetByIDParams{TenantID: tenantID, ID: id})
+		rec, _ := store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: id})
 		// Attach new version
 		if rec != nil {
 			rec.Version = newVersion
 			action.RunAfterPhase(ctx, f.dispatcher, hooks, actionSpec, "update", action.ExecuteParams{
 				Module: module, Entity: entity, ActionName: "update", ResourceID: id,
-				Resource: rec.Data, TenantID: tenantID, UserID: updatedBy,
+				Resource: rec.Data, WorkspaceID: workspaceID, UserID: updatedBy,
 			})
 			if entitySpec != nil {
 				if emitted := action.ResolveEmission(entitySpec.Events, emitsOf(actionSpec), rec.Data); emitted != nil {
-					action.DeliverEvents(ctx, f.deliveryDeps, tenantID, module+"/"+entity, []action.EventEmission{*emitted})
+					action.DeliverEvents(ctx, f.deliveryDeps, workspaceID, module+"/"+entity, []action.EventEmission{*emitted})
 				}
 			}
 		}
@@ -454,10 +454,10 @@ func (f *HandlerFactory) HandleDelete(module, entity string) http.HandlerFunc {
 			return
 		}
 
-		tenantID := tenantFromContext(ctx)
+		workspaceID := workspaceFromContext(ctx)
 		id := r.PathValue("id")
 
-		if err := store.SoftDelete(ctx, tenantID, id); err != nil {
+		if err := store.SoftDelete(ctx, workspaceID, id); err != nil {
 			writeError(w, http.StatusNotFound, "NOT_FOUND", err.Error())
 			return
 		}
@@ -561,11 +561,11 @@ type ErrorDetailItem struct {
 type contextKey string
 
 const (
-	ctxTenantID  contextKey = "tenant_id"
-	ctxUserID    contextKey = "user_id"
-	ctxIdentity  contextKey = "identity"
-	ctxRequestID contextKey = "request_id"
-	ctxURLTenant contextKey = "url_tenant" // extracted from URL before identity override
+	ctxWorkspaceID  contextKey = "tenant_id"
+	ctxUserID       contextKey = "user_id"
+	ctxIdentity     contextKey = "identity"
+	ctxRequestID    contextKey = "request_id"
+	ctxURLWorkspace contextKey = "url_workspace" // extracted from URL before identity override
 )
 
 // IdentityFromContext extracts the authenticated identity from the request context.
@@ -580,25 +580,25 @@ func WithIdentity(ctx context.Context, id *auth.Identity) context.Context {
 	return context.WithValue(ctx, ctxIdentity, id)
 }
 
-// URLTenantFromContext extracts the URL-original tenant (before identity override).
-func URLTenantFromContext(ctx context.Context) string {
-	v, _ := ctx.Value(ctxURLTenant).(string)
+// URLWorkspaceFromContext extracts the URL-original workspace (before identity override).
+func URLWorkspaceFromContext(ctx context.Context) string {
+	v, _ := ctx.Value(ctxURLWorkspace).(string)
 	return v
 }
 
-// WithURLTenant stores the URL-original tenant on the context.
-func WithURLTenant(ctx context.Context, tenantID string) context.Context {
-	return context.WithValue(ctx, ctxURLTenant, tenantID)
+// WithURLWorkspace stores the URL-original workspace on the context.
+func WithURLWorkspace(ctx context.Context, workspaceID string) context.Context {
+	return context.WithValue(ctx, ctxURLWorkspace, workspaceID)
 }
 
-// tenantFromContext extracts the tenant ID from the request context.
-// Priority: Identity.WorkspaceID > explicit tenant_id > default "demo".
-func tenantFromContext(ctx context.Context) string {
+// workspaceFromContext extracts the workspace ID from the request context.
+// Priority: Identity.WorkspaceID > context value > default "demo".
+func workspaceFromContext(ctx context.Context) string {
 	// Prefer workspace from identity (set by auth middleware)
 	if id := IdentityFromContext(ctx); id != nil && id.WorkspaceID != "" {
 		return id.WorkspaceID
 	}
-	v, _ := ctx.Value(ctxTenantID).(string)
+	v, _ := ctx.Value(ctxWorkspaceID).(string)
 	if v == "" {
 		return "demo"
 	}
@@ -625,9 +625,9 @@ func requestIDFromContext(ctx context.Context) string {
 	return v
 }
 
-// WithTenant sets the tenant ID on the context.
-func WithTenant(ctx context.Context, tenantID string) context.Context {
-	return context.WithValue(ctx, ctxTenantID, tenantID)
+// WithWorkspace sets the workspace ID on the context.
+func WithWorkspace(ctx context.Context, workspaceID string) context.Context {
+	return context.WithValue(ctx, ctxWorkspaceID, workspaceID)
 }
 
 // WithUser sets the user ID on the context.
@@ -755,7 +755,7 @@ func writeValidationErrors(w http.ResponseWriter, errs []error) {
 func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, actionSpec spec.Action) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		tenantID := tenantFromContext(ctx)
+		workspaceID := workspaceFromContext(ctx)
 		userID := userFromContext(ctx)
 		resourceID := r.PathValue("id")
 
@@ -784,7 +784,7 @@ func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, a
 		var resourceVersion int
 		store, err := f.registry.GetEntityStore(module, entity)
 		if err == nil && resourceID != "" {
-			rec, getErr := store.GetByID(ctx, db.GetByIDParams{TenantID: tenantID, ID: resourceID})
+			rec, getErr := store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: resourceID})
 			if getErr == nil && rec != nil {
 				resourceData = rec.Data
 				resourceVersion = rec.Version
@@ -834,7 +834,7 @@ func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, a
 			Resource:        resourceData,
 			ResourceVersion: resourceVersion,
 			Params:          params,
-			TenantID:        tenantID,
+			WorkspaceID:     workspaceID,
 			UserID:          userID,
 			Identity:        identityInfo,
 		}
@@ -857,7 +857,7 @@ func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, a
 		action.RunAfterPhase(ctx, f.dispatcher, hooks, nil, actionName, execParams)
 		if entitySpec != nil {
 			if emitted := action.ResolveEmission(entitySpec.Events, actionSpec.Emits, execParams.Resource); emitted != nil {
-				action.DeliverEvents(ctx, f.deliveryDeps, tenantID, module+"/"+entity, []action.EventEmission{*emitted})
+				action.DeliverEvents(ctx, f.deliveryDeps, workspaceID, module+"/"+entity, []action.EventEmission{*emitted})
 			}
 		}
 

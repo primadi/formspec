@@ -18,9 +18,9 @@ type EventMessage struct {
 // Hub is the connection-manager contract a websocket transport implements
 // and that delivery code depends on without importing internal/api.
 type Hub interface {
-	// Broadcast pushes msg to every connection registered under tenantID.
-	// Zero connections for tenantID MUST be a cheap no-op, never an error.
-	Broadcast(tenantID string, msg EventMessage)
+	// Broadcast pushes msg to every connection registered under workspaceID.
+	// Zero connections for workspaceID MUST be a cheap no-op, never an error.
+	Broadcast(workspaceID string, msg EventMessage)
 }
 
 // NoopHub is used where no hub is configured (e.g. tests that don't care

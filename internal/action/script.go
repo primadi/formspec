@@ -35,27 +35,27 @@ func NewScriptExecutor(basePath string) *ScriptExecutor {
 }
 
 // SetSaveHandler sets the save callback used by resource.save() in scripts.
-func (e *ScriptExecutor) SetSaveHandler(fn func(tenantID, module, entity, id string, version int, data map[string]any) error) {
+func (e *ScriptExecutor) SetSaveHandler(fn func(workspaceID, module, entity, id string, version int, data map[string]any) error) {
 	e.engine.SaveHandler = fn
 }
 
 // SetCallHandler sets the cross-resource call callback.
-func (e *ScriptExecutor) SetCallHandler(fn func(tenantID, fromModule, targetModule, targetEntity, action string, params map[string]any) (any, error)) {
+func (e *ScriptExecutor) SetCallHandler(fn func(workspaceID, fromModule, targetModule, targetEntity, action string, params map[string]any) (any, error)) {
 	e.engine.CallHandler = fn
 }
 
 // SetLoadHandler sets the entity load callback.
-func (e *ScriptExecutor) SetLoadHandler(fn func(tenantID, module, entity, id string) (map[string]any, int, error)) {
+func (e *ScriptExecutor) SetLoadHandler(fn func(workspaceID, module, entity, id string) (map[string]any, int, error)) {
 	e.engine.LoadHandler = fn
 }
 
 // SetCreateHandler sets the entity create callback used by resource.create() in scripts.
-func (e *ScriptExecutor) SetCreateHandler(fn func(tenantID, module, entity string, data map[string]any) (string, error)) {
+func (e *ScriptExecutor) SetCreateHandler(fn func(workspaceID, module, entity string, data map[string]any) (string, error)) {
 	e.engine.CreateHandler = fn
 }
 
 // SetNextKeyHandler sets the natural key generation callback.
-func (e *ScriptExecutor) SetNextKeyHandler(fn func(tenantID, module, entity, fieldName string) (string, error)) {
+func (e *ScriptExecutor) SetNextKeyHandler(fn func(workspaceID, module, entity, fieldName string) (string, error)) {
 	e.engine.NextKeyHandler = fn
 }
 
@@ -79,7 +79,7 @@ func (e *ScriptExecutor) Execute(ctx context.Context, action spec.Action, params
 		params.ResourceID,
 		params.Resource,
 		params.Params,
-		params.TenantID,
+		params.WorkspaceID,
 		params.UserID,
 		params.ResourceVersion,
 	)

@@ -205,7 +205,6 @@ export interface DocumentSpec {
   events?: EventDecl[]
   deliver?: DeliveryDecl[]
   indexes?: IndexDecl[]
-  tenant?: TenantDecl
   extend_storage?: ExtendStorage
   expose?: ExposeConfig[]
   backdate_policy?: BackdatePolicy
@@ -343,7 +342,7 @@ export interface UsesConfigDecl {
 }
 
 export interface KvstoreUseDecl {
-  scope?: "tenant" | "module" | "global"
+  scope?: "workspace" | "module" | "global"
   access?: "read" | "read_write"
   module?: string
 }
@@ -440,15 +439,11 @@ export interface DeliveryDecl {
   channel?: string
 }
 
-// ── Indexes, Tenant, Extend ──
+// ── Indexes, Extend ──
 
 export interface IndexDecl {
   fields: string[]
   unique?: boolean
-}
-
-export interface TenantDecl {
-  isolated: boolean
 }
 
 export interface ExtendStorage {

@@ -45,8 +45,8 @@ func TestOutboxStore_Enqueue(t *testing.T) {
 	if rec.Status != "pending" {
 		t.Errorf("expected status=pending, got %s", rec.Status)
 	}
-	if rec.TenantID != "t1" {
-		t.Errorf("expected tenant_id=t1, got %s", rec.TenantID)
+	if rec.WorkspaceID != "t1" {
+		t.Errorf("expected tenant_id=t1, got %s", rec.WorkspaceID)
 	}
 }
 

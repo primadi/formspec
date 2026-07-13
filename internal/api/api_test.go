@@ -387,13 +387,13 @@ func TestHTTPRouter_WithExposedEntity(t *testing.T) {
 	// Create item
 	createBody := strings.NewReader(`{"name":"Widget","sku":"WDG-001"}`)
 	createReq := httptest.NewRequest("POST", "/warehouse/items", createBody)
-	createReq = createReq.WithContext(WithTenant(ctx, "test-tenant"))
+	createReq = createReq.WithContext(WithWorkspace(ctx, "test-workspace"))
 	createReq = createReq.WithContext(WithUser(ctx, "tester"))
 
 	// We can't test the full handler without a working registry,
 	// but we can test the store directly
 	id, err := store.Insert(ctx, db.InsertParams{
-		TenantID:  "test-tenant",
+		WorkspaceID:  "test-workspace",
 		CreatedBy: "tester",
 		Data:      map[string]any{"name": "Widget", "sku": "WDG-001"},
 	})
@@ -405,7 +405,7 @@ func TestHTTPRouter_WithExposedEntity(t *testing.T) {
 	}
 
 	// Find
-	rec, err := store.GetByID(ctx, db.GetByIDParams{TenantID: "test-tenant", ID: id})
+	rec, err := store.GetByID(ctx, db.GetByIDParams{WorkspaceID: "test-workspace", ID: id})
 	if err != nil {
 		t.Fatalf("GetByID failed: %v", err)
 	}
@@ -414,7 +414,7 @@ func TestHTTPRouter_WithExposedEntity(t *testing.T) {
 	}
 
 	// List
-	result, err := store.List(ctx, db.ListParams{TenantID: "test-tenant", PerPage: 20})
+	result, err := store.List(ctx, db.ListParams{WorkspaceID: "test-workspace", PerPage: 20})
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}
@@ -424,7 +424,7 @@ func TestHTTPRouter_WithExposedEntity(t *testing.T) {
 
 	// Update
 	newVersion, err := store.Update(ctx, db.UpdateParams{
-		TenantID:  "test-tenant",
+		WorkspaceID:  "test-workspace",
 		ID:        id,
 		Version:   rec.Version,
 		UpdatedBy: "tester",
@@ -438,13 +438,13 @@ func TestHTTPRouter_WithExposedEntity(t *testing.T) {
 	}
 
 	// SoftDelete
-	err = store.SoftDelete(ctx, "test-tenant", id)
+	err = store.SoftDelete(ctx, "test-workspace", id)
 	if err != nil {
 		t.Fatalf("SoftDelete failed: %v", err)
 	}
 
 	// Verify deleted
-	_, err = store.GetByID(ctx, db.GetByIDParams{TenantID: "test-tenant", ID: id})
+	_, err = store.GetByID(ctx, db.GetByIDParams{WorkspaceID: "test-workspace", ID: id})
 	if err == nil {
 		t.Error("expected not found after delete")
 	}
@@ -647,8 +647,8 @@ func TestIdentityFromContext_Nil(t *testing.T) {
 	}
 }
 
-// TestTenantFromContext_PrefersIdentity verifies tenant resolution from identity.
-func TestTenantFromContext_PrefersIdentity(t *testing.T) {
+// TestWorkspaceFromContext_PrefersIdentity verifies tenant resolution from identity.
+func TestWorkspaceFromContext_PrefersIdentity(t *testing.T) {
 	id := &auth.Identity{
 		UserID:      "bob",
 		WorkspaceID: "workspace-from-identity",
@@ -656,11 +656,11 @@ func TestTenantFromContext_PrefersIdentity(t *testing.T) {
 
 	ctx := WithIdentity(context.Background(), id)
 	// Also set an older tenant ID — identity should take precedence
-	ctx = WithTenant(ctx, "old-tenant")
+	ctx = WithWorkspace(ctx, "old-workspace")
 
-	got := tenantFromContext(ctx)
+	got := workspaceFromContext(ctx)
 	if got != "workspace-from-identity" {
-		t.Errorf("tenantFromContext = %q, want %q (identity should take precedence)", got, "workspace-from-identity")
+		t.Errorf("workspaceFromContext = %q, want %q (identity should take precedence)", got, "workspace-from-identity")
 	}
 }
 
@@ -738,11 +738,11 @@ func TestAuthMiddleware_DevMode(t *testing.T) {
 	}
 }
 
-// TestTenantMiddleware_Isolation verifies tenant extraction from URL path.
-func TestTenantMiddleware_Isolation(t *testing.T) {
+// TestWorkspaceMiddleware_Isolation verifies tenant extraction from URL path.
+func TestWorkspaceMiddleware_Isolation(t *testing.T) {
 	var capturedTenant string
-	handler := TenantMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		capturedTenant = tenantFromContext(r.Context())
+	handler := WorkspaceMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedTenant = workspaceFromContext(r.Context())
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -763,7 +763,7 @@ func TestTenantMiddleware_Isolation(t *testing.T) {
 			handler.ServeHTTP(rec, req)
 
 			if capturedTenant != tt.want {
-				t.Errorf("tenant = %q, want %q", capturedTenant, tt.want)
+				t.Errorf("workspace = %q, want %q", capturedTenant, tt.want)
 			}
 		})
 	}
@@ -771,13 +771,13 @@ func TestTenantMiddleware_Isolation(t *testing.T) {
 
 // TestDevMode_AnyWorkspace_NotBlockedByCrossTenantCheck is a regression test:
 // DevValidator must not hard-code a workspace, or every URL workspace slug
-// except that one hard-coded value would 404 under the cross-tenant check
+// except that one hard-coded value would 404 under the cross-workspace check
 // in AuthMiddleware (identity.WorkspaceID vs URL workspace).
 func TestDevMode_AnyWorkspace_NotBlockedByCrossTenantCheck(t *testing.T) {
 	SetAuthValidator(auth.NewDevValidator())
 	defer SetAuthValidator(nil)
 
-	chain := TenantMiddleware(AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	chain := WorkspaceMiddleware(AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})))
 
@@ -805,7 +805,7 @@ func TestAuthMiddleware_CrossTenant404(t *testing.T) {
 	// Use a validator returning a fixed non-empty workspace to simulate prod JWT behavior.
 	SetAuthValidator(fixedWorkspaceValidator{workspaceID: "acme"})
 
-	chain := TenantMiddleware(AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	chain := WorkspaceMiddleware(AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})))
 
@@ -815,7 +815,7 @@ func TestAuthMiddleware_CrossTenant404(t *testing.T) {
 	chain.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusNotFound {
-		t.Errorf("cross-tenant access: expected 404, got %d", rec.Code)
+		t.Errorf("cross-workspace access: expected 404, got %d", rec.Code)
 	}
 
 	// Same-workspace request must pass through.

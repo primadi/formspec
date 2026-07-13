@@ -68,7 +68,7 @@ Pod start
   → forma-sidecar: pull artifact dari Cluster Control (sama seperti forma-resource)
   → Extract: YAML specs + source code app (app.php) + runtime info (php:8.3)
   → Load entity spec ke engine (sama seperti forma-resource.OnDeploy)
-  → Start listener socket (unix:///var/run/forma/sidecar.sock)
+  → Start listener socket (unix:///tmp/forma/sidecar.sock)
   → Tunggu proses app terhubung (app container start terpisah, connect ke socket via shared volume)
       ATAU forma-sidecar sendiri yang exec proses app, tergantung mode (lihat §5)
   → Serve REST API (sama seperti forma-resource yang sudah lengkap)
@@ -90,7 +90,7 @@ Pod start
 
 ### 4.1 Transport
 
-Unix domain socket (default, direkomendasikan — latency lebih rendah, tidak ada konflik port): `unix:///var/run/forma/sidecar.sock`, dipasang lewat `emptyDir` volume yang di-share antar container dalam pod yang sama. Alternatif: HTTP lokal di `localhost:PORT` (dua container dalam satu pod berbagi network namespace, jadi `localhost` valid) — dipakai kalau runtime bahasa tidak punya library unix-socket yang matang.
+Unix domain socket (default, direkomendasikan — latency lebih rendah, tidak ada konflik port): `unix:///tmp/forma/sidecar.sock`, dipasang lewat `emptyDir` volume yang di-share antar container dalam pod yang sama. Alternatif: HTTP lokal di `localhost:PORT` (dua container dalam satu pod berbagi network namespace, jadi `localhost` valid) — dipakai kalau runtime bahasa tidak punya library unix-socket yang matang.
 
 Format pesan: **HTTP/1.1 di atas socket tersebut** (bukan protokol biner custom) — memudahkan `lib-forma-*` dibangun di atas HTTP client standar tiap bahasa, dan mudah di-debug dengan tooling umum (`curl --unix-socket`).
 
@@ -173,8 +173,8 @@ Nilai `--runtime` boleh membawa suffix versi (`php:8.3`) — bagian setelah `:` 
 ```bash
 # Mode container terpisah (default) — app dijalankan sendiri (container sibling)
 forma-sidecar \
-  --listen unix:///var/run/forma/sidecar.sock \
-  --app-endpoint unix:///var/run/forma/app.sock \
+  --listen unix:///tmp/forma/sidecar.sock \
+  --app-endpoint unix:///tmp/forma/app.sock \
   --control-cluster-url https://control-cluster.jkt-premium-01.svc \
   --workspace-id bank-mandiri-prod \
   --invoke-timeout 30s
@@ -184,8 +184,8 @@ forma-sidecar \
   --runtime php:8.3 \
   --app-dir /srv/app \
   --app-entrypoint app.php \
-  --listen unix:///var/run/forma/sidecar.sock \
-  --app-endpoint unix:///var/run/forma/app.sock \
+  --listen unix:///tmp/forma/sidecar.sock \
+  --app-endpoint unix:///tmp/forma/app.sock \
   --spec ./spec
 ```
 

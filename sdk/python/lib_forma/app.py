@@ -29,7 +29,6 @@ class Invocation:
     resource_id: str
     resource: dict
     params: dict
-    tenant_id: str
     user_id: str
 
 
@@ -101,7 +100,7 @@ class App:
 
     def __init__(self, listen: Optional[str] = None, sidecar_endpoint: Optional[str] = None) -> None:
         self._listen = listen or "unix://" + os.environ.get(
-            "FORMA_APP_SOCKET", "/var/run/forma/app.sock"
+            "FORMA_APP_SOCKET", "/tmp/forma/app.sock"
         )
         self._handlers: Dict[str, Handler] = {}
         self.ctx = Ctx(SidecarClient(sidecar_endpoint))
@@ -174,7 +173,6 @@ class App:
                     resource_id=str(body.get("resource_id", "")),
                     resource=body.get("resource") or {},
                     params=body.get("params") or {},
-                    tenant_id=str(body.get("tenant_id", "")),
                     user_id=str(body.get("user_id", "")),
                 )
 

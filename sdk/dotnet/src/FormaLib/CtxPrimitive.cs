@@ -60,6 +60,33 @@ public sealed class CtxPrimitive
     /// <summary>Release a distributed lock.</summary>
     public void Release(string key) => Call("release", new() { ["key"] = key });
 
+    // ---- entity atomic operations ----
+
+    /// <summary>Atomically merge fields into an entity record (entity/update).
+    /// Uses jsonb_merge / json_patch — single SQL statement, no race condition.</summary>
+    public void Update(string id, Dictionary<string, object?> fields)
+    {
+        var body = new Dictionary<string, object?> { ["key"] = id, ["fields"] = fields };
+        Call("update", body);
+    }
+
+    /// <summary>Atomically increment a numeric field on an entity record.
+    /// Single SQL statement — no read-modify-write race condition.</summary>
+    public void Increment(string id, string field, double amount)
+    {
+        var body = new Dictionary<string, object?> { ["key"] = id, ["field"] = field, ["amount"] = amount };
+        Call("increment", body);
+    }
+
+    /// <summary>Atomically decrement a numeric field on an entity record.
+    /// Includes a guard against negative values. Returns the new field value.</summary>
+    public double? Decrement(string id, string field, double amount)
+    {
+        var body = new Dictionary<string, object?> { ["key"] = id, ["field"] = field, ["amount"] = amount };
+        var resp = Call("decrement", body);
+        return resp.GetValueOrDefault("data") as double?;
+    }
+
     // ---- internal ----
 
     private Dictionary<string, object?> Call(string op, Dictionary<string, object?> body)

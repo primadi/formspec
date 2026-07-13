@@ -42,8 +42,8 @@ type ExecuteParams struct {
 	ResourceVersion int
 	// Params are the action parameters from the request body.
 	Params map[string]any
-	// TenantID is the current workspace tenant.
-	TenantID string
+	// WorkspaceID is the current workspace identifier.
+	WorkspaceID string
 	// UserID is the authenticated user.
 	UserID string
 	// Identity carries the full auth identity (user, workspace, permissions, roles).
@@ -164,12 +164,12 @@ func (d *Dispatcher) Dispatch(ctx context.Context, action spec.Action, params Ex
 // RuntimeContext provides access to ctx.* primitives for script execution.
 // This is the concrete implementation of what scripts see as `ctx`.
 type RuntimeContext struct {
-	Tenant  *TenantInfo
-	User    *UserInfo
-	Auth    *AuthInfo
-	Now     func() time.Time
-	Logger  RuntimeLogger
-	NextKey func(fieldName string) (string, error)
+	Workspace *WorkspaceInfo
+	User      *UserInfo
+	Auth      *AuthInfo
+	Now       func() time.Time
+	Logger    RuntimeLogger
+	NextKey   func(fieldName string) (string, error)
 	// DB, Cache, Lock, Queue, PubSub, Storage are injected by the dispatcher.
 	DB interface {
 		Load(entity, id string) (map[string]any, error)
@@ -181,8 +181,8 @@ type RuntimeContext struct {
 	}
 }
 
-// TenantInfo is exposed as ctx.tenant in scripts.
-type TenantInfo struct {
+// WorkspaceInfo is exposed as ctx.workspace in scripts.
+type WorkspaceInfo struct {
 	ID   string
 	Name string
 }

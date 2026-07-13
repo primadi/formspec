@@ -23,7 +23,7 @@ import (
 // All fields are immutable after construction.
 type Identity struct {
 	UserID      string   // authenticated user ID (sub claim in JWT)
-	WorkspaceID string   // workspace/tenant scope
+	WorkspaceID string   // workspace scope
 	Permissions []string // granted permissions, e.g. ["billing.invoices.*", "billing.customers.list"]
 	Roles       []string // assigned roles, e.g. ["billing-admin"]
 }

@@ -20,7 +20,7 @@ const (
 // AuditRecord represents a single audit log entry.
 type AuditRecord struct {
 	ID        string `json:"id"`
-	TenantID  string `json:"tenant_id"`
+	WorkspaceID  string `json:"tenant_id"`
 	Entity    string `json:"entity"`    // resource name (e.g. "billing/invoice")
 	EntityID  string `json:"entity_id"` // PK of the entity record
 	Action    string `json:"action"`    // create | update | delete | action
@@ -42,7 +42,7 @@ func NewAuditStore(db DB, driver DriverType) *AuditStore {
 }
 
 // ListByEntity returns audit records for a specific entity record.
-func (s *AuditStore) ListByEntity(ctx context.Context, tenantID, entity, entityID string, limit, offset int) ([]AuditRecord, error) {
+func (s *AuditStore) ListByEntity(ctx context.Context, workspaceID, entity, entityID string, limit, offset int) ([]AuditRecord, error) {
 	if limit < 1 || limit > 100 {
 		limit = 50
 	}
@@ -53,7 +53,7 @@ func (s *AuditStore) ListByEntity(ctx context.Context, tenantID, entity, entityI
 		WHERE tenant_id = ? AND entity = ? AND entity_id = ?
 		ORDER BY created_at DESC
 		LIMIT ? OFFSET ?
-	`, tenantID, entity, entityID, limit, offset)
+	`, workspaceID, entity, entityID, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("audit list: %w", err)
 	}
@@ -62,7 +62,7 @@ func (s *AuditStore) ListByEntity(ctx context.Context, tenantID, entity, entityI
 	var records []AuditRecord
 	for rows.Next() {
 		var rec AuditRecord
-		if err := rows.Scan(&rec.ID, &rec.TenantID, &rec.Entity, &rec.EntityID,
+		if err := rows.Scan(&rec.ID, &rec.WorkspaceID, &rec.Entity, &rec.EntityID,
 			&rec.Action, &rec.Actor, &rec.Changes, &rec.CreatedAt); err != nil {
 			return nil, fmt.Errorf("audit scan: %w", err)
 		}
@@ -74,8 +74,8 @@ func (s *AuditStore) ListByEntity(ctx context.Context, tenantID, entity, entityI
 	return records, nil
 }
 
-// ListByTenant returns audit records for a tenant, optionally filtered by entity type.
-func (s *AuditStore) ListByTenant(ctx context.Context, tenantID, entity string, limit, offset int) ([]AuditRecord, error) {
+// ListByWorkspace returns audit records for a workspace, optionally filtered by entity type.
+func (s *AuditStore) ListByWorkspace(ctx context.Context, workspaceID, entity string, limit, offset int) ([]AuditRecord, error) {
 	if limit < 1 || limit > 100 {
 		limit = 50
 	}
@@ -90,7 +90,7 @@ func (s *AuditStore) ListByTenant(ctx context.Context, tenantID, entity string, 
 			WHERE tenant_id = ? AND entity = ?
 			ORDER BY created_at DESC
 			LIMIT ? OFFSET ?
-		`, tenantID, entity, limit, offset)
+		`, workspaceID, entity, limit, offset)
 	} else {
 		rows, err = s.db.QueryContext(ctx, `
 			SELECT id, tenant_id, entity, entity_id, action, actor, changes, created_at
@@ -98,17 +98,17 @@ func (s *AuditStore) ListByTenant(ctx context.Context, tenantID, entity string, 
 			WHERE tenant_id = ?
 			ORDER BY created_at DESC
 			LIMIT ? OFFSET ?
-		`, tenantID, limit, offset)
+		`, workspaceID, limit, offset)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("audit list tenant: %w", err)
+		return nil, fmt.Errorf("audit list workspace: %w", err)
 	}
 	defer rows.Close()
 
 	var records []AuditRecord
 	for rows.Next() {
 		var rec AuditRecord
-		if err := rows.Scan(&rec.ID, &rec.TenantID, &rec.Entity, &rec.EntityID,
+		if err := rows.Scan(&rec.ID, &rec.WorkspaceID, &rec.Entity, &rec.EntityID,
 			&rec.Action, &rec.Actor, &rec.Changes, &rec.CreatedAt); err != nil {
 			return nil, fmt.Errorf("audit scan: %w", err)
 		}
@@ -121,7 +121,7 @@ func (s *AuditStore) ListByTenant(ctx context.Context, tenantID, entity string, 
 }
 
 // writeAuditLog inserts an audit record. This is called internally by the CRUD layer.
-func writeAuditLog(ctx context.Context, db DB, driver DriverType, tenantID, entity, entityID, action, actor, changes string) error {
+func writeAuditLog(ctx context.Context, db DB, driver DriverType, workspaceID, entity, entityID, action, actor, changes string) error {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
 	var err error
@@ -129,12 +129,12 @@ func writeAuditLog(ctx context.Context, db DB, driver DriverType, tenantID, enti
 		_, err = db.ExecContext(ctx, `
 			INSERT INTO forma_audit_log (tenant_id, entity, entity_id, action, actor, changes, created_at)
 			VALUES ($1, $2, $3, $4, $5, $6, $7)
-		`, tenantID, entity, entityID, action, actor, changes, now)
+		`, workspaceID, entity, entityID, action, actor, changes, now)
 	} else {
 		_, err = db.ExecContext(ctx, `
 			INSERT INTO forma_audit_log (tenant_id, entity, entity_id, action, actor, changes, created_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?)
-		`, tenantID, entity, entityID, action, actor, changes, now)
+		`, workspaceID, entity, entityID, action, actor, changes, now)
 	}
 
 	if err != nil {

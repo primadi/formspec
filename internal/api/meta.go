@@ -92,7 +92,7 @@ func (b *RouterBuilder) HandleMetaMe() http.HandlerFunc {
 			}
 		}
 		if me.Workspace == "" {
-			me.Workspace = tenantFromContext(r.Context())
+			me.Workspace = workspaceFromContext(r.Context())
 		}
 		if me.Roles == nil {
 			me.Roles = []string{}

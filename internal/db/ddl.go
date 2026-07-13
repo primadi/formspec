@@ -131,7 +131,7 @@ func GenerateEntityDDL(meta spec.Metadata, entity *spec.EntitySpec, driver Drive
 
 	// 1b. Document Model reserved columns (v0.3.0)
 	columns = append(columns,
-		fmt.Sprintf("doc_status  VARCHAR(20) DEFAULT NULL"),                    // NULL = lifecycle-free
+		"doc_status  VARCHAR(20) DEFAULT NULL",                                 // NULL = lifecycle-free
 		fmt.Sprintf("amends      %s REFERENCES %s(id)", dl.uuid, ti.TableName), // FK to original document
 		fmt.Sprintf("amended_by  %s REFERENCES %s(id)", dl.uuid, ti.TableName), // FK to new version
 	)

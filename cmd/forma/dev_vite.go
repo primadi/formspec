@@ -55,19 +55,91 @@ func (p *appProcess) Shutdown(timeout time.Duration) {
 
 // ─── Runtime Commands ───
 
+// runtimeCommand describes how to build, prepare, and run a sidecar app
+// for a specific language/framework.
 type runtimeCommand struct {
-	command           string
-	defaultEntrypoint string
+	command           string   // base command to run the app
+	defaultEntrypoint string   // default entrypoint filename (relative to appDir)
+	depDir            string   // subdirectory created by dependency install (relative to appDir)
+	depInstallCmd     []string // command + args for installing dependencies
+	buildCmd          []string // command + args for build step (empty = no build needed)
+	buildCheck        string   // file to check after build (relative to appDir; empty = no build)
+	devCmd            []string // command + args for dev mode with file watching (empty = use base command)
+	useRunDir         bool     // if true, app process runs in the appDir (needed for go/cargo/dotnet)
 }
 
-var knownRuntimes = map[string]runtimeCommand{
-	"php":    {command: "php", defaultEntrypoint: "app.php"},
-	"python": {command: "python3", defaultEntrypoint: "app.py"},
-	"node":   {command: "node", defaultEntrypoint: "app.js"},
+var knownRuntimes = map[string]*runtimeCommand{
+	"php": {
+		command:           "php",
+		defaultEntrypoint: "app.php",
+		depDir:            "vendor",
+		depInstallCmd:     []string{"composer", "install"},
+		devCmd:            []string{"npx", "nodemon", "--watch", ".", "-e", "php", "--exec", "php app.php"},
+	},
+	"python": {
+		command:           "python3",
+		defaultEntrypoint: "app.py",
+		depDir:            ".venv",
+		depInstallCmd:     []string{"pip", "install", "-e", "."},
+		devCmd:            []string{"python3", "-m", "watchfiles", "python app.py", "."},
+	},
+	"ruby": {
+		command:           "ruby",
+		defaultEntrypoint: "app.rb",
+		depDir:            "vendor/bundle",
+		depInstallCmd:     []string{"bundle", "install"},
+		devCmd:            []string{"rerun", "--", "ruby", "app.rb"},
+	},
+	"java": {
+		command:           "java",
+		defaultEntrypoint: "App.java",
+		depDir:            "target",
+		depInstallCmd:     []string{"mvn", "compile", "-q"},
+		buildCmd:          []string{"mvn", "compile", "-q"},
+		buildCheck:        "target/classes",
+		devCmd:            []string{"mvn", "compile", "exec:java", "-Dexec.mainClass=App", "-q"},
+		useRunDir:         true,
+	},
+	"dotnet": {
+		command:           "dotnet",
+		defaultEntrypoint: "Program.cs",
+		depDir:            "obj",
+		depInstallCmd:     []string{"dotnet", "restore"},
+		buildCmd:          []string{"dotnet", "build", "-q"},
+		buildCheck:        "bin",
+		devCmd:            []string{"dotnet", "watch", "run"},
+		useRunDir:         true,
+	},
+	"go": {
+		command:           "go",
+		defaultEntrypoint: ".",
+		depDir:            "vendor",
+		depInstallCmd:     []string{"go", "mod", "tidy"},
+		devCmd:            []string{"go", "run", "."},
+		useRunDir:         true,
+	},
+	"rust": {
+		command:           "cargo",
+		defaultEntrypoint: ".",
+		depDir:            "target",
+		depInstallCmd:     []string{"cargo", "fetch"},
+		buildCmd:          []string{"cargo", "build", "-q"},
+		buildCheck:        "target/debug",
+		devCmd:            []string{"cargo", "watch", "-x", "run"},
+		useRunDir:         true,
+	},
+	"node": {
+		command:           "node",
+		defaultEntrypoint: "app.js",
+		depDir:            "node_modules",
+		depInstallCmd:     []string{"npm", "install"},
+	},
 }
 
 // startAppProcess execs the app for the given --runtime.
-func startAppProcess(ctx context.Context, runtime, appDir, entrypoint, appEndpoint, listenEndpoint string) (*appProcess, error) {
+// It handles dependency installation, optional build step, and dev-mode
+// watch/reload based on per-runtime metadata in knownRuntimes.
+func startAppProcess(ctx context.Context, runtime, appDir, entrypoint, appEndpoint, listenEndpoint string, devMode bool) (*appProcess, error) {
 	runtimeName := strings.SplitN(runtime, ":", 2)[0]
 	rt, ok := knownRuntimes[runtimeName]
 	if !ok {
@@ -90,12 +162,92 @@ func startAppProcess(ctx context.Context, runtime, appDir, entrypoint, appEndpoi
 	if entrypoint == "" {
 		entrypoint = rt.defaultEntrypoint
 	}
-	entrypointPath := filepath.Join(appDir, entrypoint)
-	if _, err := os.Stat(entrypointPath); err != nil {
-		return nil, fmt.Errorf("app entrypoint %s: %w", entrypointPath, err)
+
+	// ── Dependency install ──
+	if rt.depInstallCmd != nil {
+		depDir := filepath.Join(appDir, rt.depDir)
+		if _, err := os.Stat(depDir); os.IsNotExist(err) {
+			log.Printf("[forma] running %s in %s...", rt.depInstallCmd[0], appDir)
+			install := exec.CommandContext(ctx, rt.depInstallCmd[0], rt.depInstallCmd[1:]...)
+			install.Dir = appDir
+			install.Stdout = os.Stdout
+			install.Stderr = os.Stderr
+			if err := install.Run(); err != nil {
+				return nil, fmt.Errorf("%s in %s: %w", rt.depInstallCmd[0], appDir, err)
+			}
+		}
 	}
 
-	cmd := exec.CommandContext(ctx, rt.command, entrypointPath)
+	// ── Build step (if needed and output missing) ──
+	if rt.buildCmd != nil && rt.buildCheck != "" {
+		buildCheckPath := filepath.Join(appDir, rt.buildCheck)
+		if _, err := os.Stat(buildCheckPath); os.IsNotExist(err) {
+			log.Printf("[forma] running %s...", rt.buildCmd[0])
+			build := exec.CommandContext(ctx, rt.buildCmd[0], rt.buildCmd[1:]...)
+			build.Dir = appDir
+			build.Stdout = os.Stdout
+			build.Stderr = os.Stderr
+			if err := build.Run(); err != nil {
+				return nil, fmt.Errorf("%s in %s: %w", rt.buildCmd[0], appDir, err)
+			}
+			log.Printf("[forma] app build complete")
+		}
+	}
+
+	// ── Node.js special handling: TypeScript entrypoint via tsx ──
+	isTS := strings.HasSuffix(entrypoint, ".ts") && runtimeName == "node"
+
+	// ── Determine command: dev mode vs normal ──
+	var command string
+	var args []string
+
+	if devMode && rt.devCmd != nil {
+		command = rt.devCmd[0]
+		args = append(args, rt.devCmd[1:]...)
+		log.Printf("[forma] app: %s (dev mode)", strings.Join(rt.devCmd, " "))
+	} else if isTS {
+		// Node.js TypeScript (non-dev): tsx without --watch
+		absDir, err := filepath.Abs(appDir)
+		if err != nil {
+			return nil, fmt.Errorf("resolve app dir: %w", err)
+		}
+		tsxCli := filepath.Join(absDir, "node_modules", "tsx", "dist", "cli.mjs")
+		if _, err := os.Stat(tsxCli); err == nil {
+			command = "node"
+			args = append(args, tsxCli)
+		} else {
+			command = "npx"
+			args = append(args, "tsx")
+		}
+		args = append(args, entrypoint)
+		log.Printf("[forma] app: tsx %s", entrypoint)
+	} else if rt.useRunDir {
+		// Project-mode runtimes: go/cargo/dotnet run from their project dir
+		command = rt.command
+		switch runtimeName {
+		case "go":
+			args = []string{"run", "."}
+		case "rust":
+			args = []string{"run"}
+		case "dotnet":
+			args = []string{"run"}
+		case "java":
+			class := strings.TrimSuffix(entrypoint, ".java")
+			args = []string{"-cp", "target/classes", class}
+		default:
+			args = []string{"run", "."}
+		}
+	} else {
+		// Simple runtimes: php/python/ruby/node — run the entrypoint file
+		entrypointPath := filepath.Join(appDir, entrypoint)
+		if _, err := os.Stat(entrypointPath); err != nil {
+			return nil, fmt.Errorf("app entrypoint %s: %w", entrypointPath, err)
+		}
+		command = rt.command
+		args = append(args, entrypoint)
+	}
+
+	cmd := exec.CommandContext(ctx, command, args...)
 	cmd.Dir = appDir
 	cmd.Env = append(os.Environ(),
 		"FORMA_APP_SOCKET="+appSocket,
@@ -105,10 +257,14 @@ func startAppProcess(ctx context.Context, runtime, appDir, entrypoint, appEndpoi
 	cmd.Stderr = os.Stderr
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
-	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("exec %s %s: %w", rt.command, entrypointPath, err)
+	label := command
+	if len(args) > 0 {
+		label = command + " " + args[0]
 	}
-	log.Printf("[forma] app process started: %s %s (pid %d)", rt.command, entrypointPath, cmd.Process.Pid)
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("exec %s: %w", label, err)
+	}
+	log.Printf("[forma] app process started: %s (pid %d)", label, cmd.Process.Pid)
 
 	proc := &appProcess{cmd: cmd, done: make(chan struct{})}
 	go proc.wait()

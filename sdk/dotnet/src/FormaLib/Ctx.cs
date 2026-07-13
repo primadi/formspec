@@ -17,4 +17,7 @@ public sealed class Ctx
     public CtxPrimitive PubSub() => new(_client, "pubsub");
     public CtxPrimitive Storage() => new(_client, "storage");
     public CtxPrimitive KvStore() => new(_client, "kvstore");
+
+    /// <summary>Entity primitive — access entity records via named("module/entity").</summary>
+    public CtxPrimitive Entity() => new(_client, "entity");
 }

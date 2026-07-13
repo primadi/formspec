@@ -19,7 +19,6 @@ final class Invocation
         public readonly array $resource,
         /** @var array<string, mixed> action parameters from the request body */
         public readonly array $params,
-        public readonly string $tenantId,
         public readonly string $userId,
     ) {
     }
@@ -34,7 +33,6 @@ final class Invocation
             resourceId: (string) ($body['resource_id'] ?? ''),
             resource: (array) ($body['resource'] ?? []),
             params: (array) ($body['params'] ?? []),
-            tenantId: (string) ($body['tenant_id'] ?? ''),
             userId: (string) ($body['user_id'] ?? ''),
         );
     }

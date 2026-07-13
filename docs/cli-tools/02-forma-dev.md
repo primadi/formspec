@@ -113,10 +113,10 @@ forma dev --runtime local  # paksa single-process
 |---|---|---|
 | `none` | **Default.** Tidak ada ctx listener atau app endpoint | Single process, tanpa app process |
 | `local_http` | TCP localhost (`:9090` / `:9091`) | Dev dengan app process (PHP/Python/Node) |
-| `unix_socket` | Unix socket (`/var/run/forma/...`) | Production di K8s pod |
+| `unix_socket` | Unix socket (`/tmp/forma/...`) | Production di K8s pod |
 
 Backward compatibility: `--listen "http://127.0.0.1:9090"` auto-detect sebagai
-`local_http`. `--listen "unix:///var/run/forma/sidecar.sock"` auto-detect
+`local_http`. `--listen "unix:///tmp/forma/sidecar.sock"` auto-detect
 sebagai `unix_socket`.
 
 ### Example dengan app process

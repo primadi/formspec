@@ -3,7 +3,7 @@
 // This file provides the ctx.* object exposed to Starlark scripts.
 // Scripts access runtime primitives via:
 //
-//	ctx.tenant.id
+//	ctx.workspace.id
 //	ctx.user.id
 //	ctx.now()
 //	ctx.log.info("event", {"key": "val"})
@@ -20,15 +20,15 @@ import (
 )
 
 // CtxAPI is the Starlark-callable ctx object.
-// It provides access to tenant info, user info, logging, and primitives.
+// It provides access to workspace info, user info, logging, and primitives.
 type CtxAPI struct {
-	Tenant  *tenantInfo
-	User    *userInfo
-	Auth    *authInfo
-	Now     func() time.Time
-	Log     *logAPI
-	NextKey func(fieldName string) (string, error)
-	Config  *configAPI
+	Workspace *workspaceInfo
+	User      *userInfo
+	Auth      *authInfo
+	Now       func() time.Time
+	Log       *logAPI
+	NextKey   func(fieldName string) (string, error)
+	Config    *configAPI
 
 	// Primitive handles — callable starlark values with .named() support.
 	// Each is lazily initialized via the getter methods.
@@ -43,14 +43,14 @@ type CtxAPI struct {
 
 var _ starlark.Value = (*CtxAPI)(nil)
 
-// NewCtxAPI creates a ctx object with the given tenant and user info.
-func NewCtxAPI(tenantID, tenantName, userID, userRole string, userPerms []string) *CtxAPI {
+// NewCtxAPI creates a ctx object with the given workspace and user info.
+func NewCtxAPI(workspaceID, workspaceName, userID, userRole string, userPerms []string) *CtxAPI {
 	return &CtxAPI{
-		Tenant: &tenantInfo{ID: tenantID, Name: tenantName},
-		User:   &userInfo{ID: userID, Role: userRole, Permissions: userPerms},
-		Auth:   &authInfo{},
-		Now:    now,
-		Log:    newLogAPI(),
+		Workspace: &workspaceInfo{ID: workspaceID, Name: workspaceName},
+		User:      &userInfo{ID: userID, Role: userRole, Permissions: userPerms},
+		Auth:      &authInfo{},
+		Now:       now,
+		Log:       newLogAPI(),
 	}
 }
 
@@ -75,12 +75,12 @@ func (c *CtxAPI) Freeze()               {}
 func (c *CtxAPI) Truth() starlark.Bool  { return starlark.True }
 func (c *CtxAPI) Hash() (uint32, error) { return 0, fmt.Errorf("ctx is not hashable") }
 
-// Attr returns ctx attributes: .tenant, .user, .auth, .now, .log, .next_key, .config,
+// Attr returns ctx attributes: .workspace, .user, .auth, .now, .log, .next_key, .config,
 // plus primitives: .db, .cache, .lock, .queue, .pubsub, .storage, .kvstore
 func (c *CtxAPI) Attr(name string) (starlark.Value, error) {
 	switch name {
-	case "tenant":
-		return c.Tenant, nil
+	case "workspace":
+		return c.Workspace, nil
 	case "user":
 		return c.User, nil
 	case "auth":
@@ -136,7 +136,7 @@ func (c *CtxAPI) Attr(name string) (starlark.Value, error) {
 }
 
 func (c *CtxAPI) AttrNames() []string {
-	return []string{"tenant", "user", "auth", "now", "today", "log", "next_key", "config",
+	return []string{"workspace", "user", "auth", "now", "today", "log", "next_key", "config",
 		"db", "cache", "lock", "queue", "pubsub", "storage", "kvstore"}
 }
 
@@ -196,31 +196,31 @@ func (c *CtxAPI) builtinNextKey() *starlark.Builtin {
 
 // ─── Sub-types ───
 
-type tenantInfo struct {
+type workspaceInfo struct {
 	ID   string
 	Name string
 }
 
-var _ starlark.Value = (*tenantInfo)(nil)
+var _ starlark.Value = (*workspaceInfo)(nil)
 
-func (t *tenantInfo) String() string        { return fmt.Sprintf("<tenant %s>", t.ID) }
-func (t *tenantInfo) Type() string          { return "tenant" }
-func (t *tenantInfo) Freeze()               {}
-func (t *tenantInfo) Truth() starlark.Bool  { return starlark.True }
-func (t *tenantInfo) Hash() (uint32, error) { return 0, fmt.Errorf("tenant is not hashable") }
+func (t *workspaceInfo) String() string        { return fmt.Sprintf("<workspace %s>", t.ID) }
+func (t *workspaceInfo) Type() string          { return "workspace" }
+func (t *workspaceInfo) Freeze()               {}
+func (t *workspaceInfo) Truth() starlark.Bool  { return starlark.True }
+func (t *workspaceInfo) Hash() (uint32, error) { return 0, fmt.Errorf("workspace is not hashable") }
 
-func (t *tenantInfo) Attr(name string) (starlark.Value, error) {
+func (t *workspaceInfo) Attr(name string) (starlark.Value, error) {
 	switch name {
 	case "id":
 		return starlark.String(t.ID), nil
 	case "name":
 		return starlark.String(t.Name), nil
 	default:
-		return nil, starlark.NoSuchAttrError(fmt.Sprintf("tenant has no .%s", name))
+		return nil, starlark.NoSuchAttrError(fmt.Sprintf("workspace has no .%s", name))
 	}
 }
 
-func (t *tenantInfo) AttrNames() []string { return []string{"id", "name"} }
+func (t *workspaceInfo) AttrNames() []string { return []string{"id", "name"} }
 
 type userInfo struct {
 	ID          string

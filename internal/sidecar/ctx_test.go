@@ -52,7 +52,7 @@ func TestCtxHandler_QueryAndLock(t *testing.T) {
 			return nil, fmt.Errorf("datastore %q not found", name)
 		}
 		return conn, nil
-	})
+	}, "demo")
 
 	rec, resp := postCtx(t, h, "/ctx/db/query", `{"sql":"SELECT 1"}`)
 	if rec.Code != http.StatusOK {
@@ -82,7 +82,7 @@ func TestCtxHandler_QueryAndLock(t *testing.T) {
 func TestCtxHandler_UnsupportedOpIs501(t *testing.T) {
 	h := NewCtxHandler(func(prim, name string) (any, error) {
 		return &fakeConn{locked: map[string]bool{}}, nil // no KV interfaces
-	})
+	}, "demo")
 	rec, resp := postCtx(t, h, "/ctx/cache/get", `{"key":"k"}`)
 	if rec.Code != http.StatusNotImplemented {
 		t.Fatalf("status = %d, want 501", rec.Code)
@@ -93,7 +93,7 @@ func TestCtxHandler_UnsupportedOpIs501(t *testing.T) {
 }
 
 func TestCtxHandler_NoResolver(t *testing.T) {
-	h := NewCtxHandler(nil)
+	h := NewCtxHandler(nil, "demo")
 	rec, resp := postCtx(t, h, "/ctx/db/query", `{"sql":"SELECT 1"}`)
 	if rec.Code != http.StatusNotImplemented {
 		t.Fatalf("status = %d, want 501", rec.Code)
@@ -104,7 +104,7 @@ func TestCtxHandler_NoResolver(t *testing.T) {
 }
 
 func TestCtxHandler_UnknownPrimitive(t *testing.T) {
-	h := NewCtxHandler(nil)
+	h := NewCtxHandler(nil, "demo")
 	rec, _ := postCtx(t, h, "/ctx/gpu/query", `{}`)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
@@ -116,7 +116,7 @@ func TestCtxHandler_NamedResolution(t *testing.T) {
 	h := NewCtxHandler(func(prim, name string) (any, error) {
 		gotName = name
 		return &fakeConn{locked: map[string]bool{}}, nil
-	})
+	}, "demo")
 	postCtx(t, h, "/ctx/db/query", `{"named":"analytics-db","sql":"SELECT 1"}`)
 	if gotName != "analytics-db" {
 		t.Errorf("resolved name = %q, want analytics-db", gotName)

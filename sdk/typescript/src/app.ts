@@ -20,7 +20,6 @@ export interface Invocation {
   resourceId: string;
   resource: Record<string, unknown>;
   params: Record<string, unknown>;
-  tenantId: string;
   userId: string;
 }
 
@@ -89,7 +88,7 @@ export class App {
   constructor(options: AppOptions = {}) {
     this.listen =
       options.listen ??
-      `unix://${process.env.FORMA_APP_SOCKET ?? "/var/run/forma/app.sock"}`;
+      `unix://${process.env.FORMA_APP_SOCKET ?? "/tmp/forma/app.sock"}`;
     this.ctx = new Ctx(new SidecarClient(options.sidecarEndpoint));
   }
 
@@ -173,7 +172,6 @@ export class App {
         resourceId: String(body.resource_id ?? ""),
         resource: (body.resource as Record<string, unknown>) ?? {},
         params: (body.params as Record<string, unknown>) ?? {},
-        tenantId: String(body.tenant_id ?? ""),
         userId: String(body.user_id ?? ""),
       };
 

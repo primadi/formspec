@@ -94,7 +94,7 @@ spec:
       deliver:
         - channel: audit_log
         - channel: websocket
-          target: { scope: tenant }
+          target: { scope: workspace }
 
   # SHOWCASE: hooks before/create — batalkan create bila stok tidak
   # mencukupi, sebelum baris otc-sale pernah dibuat (fail() = abort).

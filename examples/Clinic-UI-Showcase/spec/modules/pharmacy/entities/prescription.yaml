@@ -121,7 +121,7 @@ spec:
       deliver:
         - channel: audit_log
         - channel: websocket
-          target: { scope: tenant }
+          target: { scope: workspace }
 
   # SHOWCASE: hooks (Core Extended §8) — before/create runs synchronously
   # ahead of the insert. If patient_id is set, cross-module resource.fetch

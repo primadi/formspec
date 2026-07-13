@@ -16,8 +16,8 @@ type fakeHub struct {
 	tenants    []string
 }
 
-func (f *fakeHub) Broadcast(tenantID string, msg events.EventMessage) {
-	f.tenants = append(f.tenants, tenantID)
+func (f *fakeHub) Broadcast(workspaceID string, msg events.EventMessage) {
+	f.tenants = append(f.tenants, workspaceID)
 	f.broadcasts = append(f.broadcasts, msg)
 }
 
@@ -59,15 +59,15 @@ func TestDeliveryEventHandler_FansOutToWebsocketAndAuditLog(t *testing.T) {
 		t.Fatalf("hub.Broadcast called %d times, want 1", len(hub.broadcasts))
 	}
 	if hub.tenants[0] != "demo" {
-		t.Errorf("tenant = %q, want \"demo\"", hub.tenants[0])
+		t.Errorf("workspace = %q, want \"demo\"", hub.tenants[0])
 	}
 	if hub.broadcasts[0].Event != "completed" {
 		t.Errorf("Event = %q, want \"completed\"", hub.broadcasts[0].Event)
 	}
 
-	records, err := eventLog.ListByTenant(context.Background(), "demo", "clinic/visit", 10, 0)
+	records, err := eventLog.ListByWorkspace(context.Background(), "demo", "clinic/visit", 10, 0)
 	if err != nil {
-		t.Fatalf("ListByTenant: %v", err)
+		t.Fatalf("ListByWorkspace: %v", err)
 	}
 	if len(records) != 1 {
 		t.Fatalf("event log has %d records, want 1", len(records))

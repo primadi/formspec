@@ -79,18 +79,18 @@ func TestAuditStore_ListByTenant(t *testing.T) {
 	store := NewAuditStore(d, DriverSQLite)
 
 	// List all for tenant-a
-	records, err := store.ListByTenant(ctx, "tenant-a", "", 10, 0)
+	records, err := store.ListByWorkspace(ctx, "tenant-a", "", 10, 0)
 	if err != nil {
-		t.Fatalf("ListByTenant failed: %v", err)
+		t.Fatalf("ListByWorkspace failed: %v", err)
 	}
 	if len(records) != 2 {
 		t.Errorf("expected 2 records for tenant-a, got %d", len(records))
 	}
 
 	// Filter by entity type
-	records, err = store.ListByTenant(ctx, "tenant-a", "billing/invoice", 10, 0)
+	records, err = store.ListByWorkspace(ctx, "tenant-a", "billing/invoice", 10, 0)
 	if err != nil {
-		t.Fatalf("ListByTenant with filter failed: %v", err)
+		t.Fatalf("ListByWorkspace with filter failed: %v", err)
 	}
 	if len(records) != 1 {
 		t.Errorf("expected 1 invoice record for tenant-a, got %d", len(records))
@@ -117,15 +117,15 @@ func TestAuditStore_TenantIsolation(t *testing.T) {
 	store := NewAuditStore(d, DriverSQLite)
 
 	// Tenant-b should only see their own records
-	records, err := store.ListByTenant(ctx, "tenant-b", "", 10, 0)
+	records, err := store.ListByWorkspace(ctx, "tenant-b", "", 10, 0)
 	if err != nil {
-		t.Fatalf("ListByTenant failed: %v", err)
+		t.Fatalf("ListByWorkspace failed: %v", err)
 	}
 	if len(records) != 1 {
 		t.Errorf("expected 1 record for tenant-b, got %d", len(records))
 	}
-	if records[0].TenantID != "tenant-b" {
-		t.Errorf("expected tenant-b record, got tenant %q", records[0].TenantID)
+	if records[0].WorkspaceID != "tenant-b" {
+		t.Errorf("expected tenant-b record, got tenant %q", records[0].WorkspaceID)
 	}
 }
 

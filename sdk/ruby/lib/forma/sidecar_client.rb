@@ -5,10 +5,10 @@ module Forma
   # HTTP client to the forma-sidecar local listener — unix domain socket
   # (default) or localhost TCP.
   class SidecarClient
-    # @param endpoint [String] "unix:///var/run/forma/sidecar.sock" or "http://localhost:PORT"
+    # @param endpoint [String] "unix:///tmp/forma/sidecar.sock" or "http://localhost:PORT"
     # @param timeout  [Integer] request timeout in seconds
     def initialize(endpoint = nil, timeout: 30)
-      endpoint ||= ENV["FORMA_SIDECAR_SOCKET"] || "unix:///var/run/forma/sidecar.sock"
+      endpoint ||= ENV["FORMA_SIDECAR_SOCKET"] || "unix:///tmp/forma/sidecar.sock"
       @timeout = timeout
 
       if endpoint.start_with?("unix://")

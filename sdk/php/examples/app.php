@@ -3,8 +3,8 @@
 // Example lib-forma-php app: the business-logic side of an
 // impl: {type: sidecar} action. Run inside a pod next to forma-sidecar:
 //
-//   FORMA_APP_SOCKET=/var/run/forma/app.sock \
-//   FORMA_SIDECAR_SOCKET=/var/run/forma/sidecar.sock \
+//   FORMA_APP_SOCKET=/tmp/forma/app.sock \
+//   FORMA_SIDECAR_SOCKET=/tmp/forma/sidecar.sock \
 //   php examples/app.php
 
 declare(strict_types=1);

@@ -72,8 +72,8 @@ func TestHandleWS_BroadcastEndToEnd(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// No auth validator is configured in this test, so AuthMiddleware's
-	// dev fallback applies and every connection is registered under tenant
-	// "demo" regardless of the URL workspace segment (see tenantFromContext).
+	// dev fallback applies and every connection is registered under workspace
+	// "demo" regardless of the URL workspace segment (see workspaceFromContext).
 	rb.Hub().Broadcast("demo", events.EventMessage{Event: "completed", Resource: "clinic/visit"})
 
 	msg, ok := readOneMessage(t, conn, 2*time.Second)
@@ -85,11 +85,11 @@ func TestHandleWS_BroadcastEndToEnd(t *testing.T) {
 	}
 }
 
-func TestWSHub_Broadcast_TenantIsolation(t *testing.T) {
+func TestWSHub_Broadcast_WorkspaceIsolation(t *testing.T) {
 	hub := NewWSHub()
 
-	connA := &wsConn{id: "a", tenant: "tenant-a", send: make(chan events.EventMessage, 4)}
-	connB := &wsConn{id: "b", tenant: "tenant-b", send: make(chan events.EventMessage, 4)}
+	connA := &wsConn{id: "a", workspace: "tenant-a", send: make(chan events.EventMessage, 4)}
+	connB := &wsConn{id: "b", workspace: "tenant-b", send: make(chan events.EventMessage, 4)}
 	hub.register(connA)
 	hub.register(connB)
 
@@ -105,25 +105,25 @@ func TestWSHub_Broadcast_TenantIsolation(t *testing.T) {
 	case msg := <-connB.send:
 		t.Fatalf("tenant-b connection unexpectedly received tenant-a's broadcast: %+v", msg)
 	case <-time.After(100 * time.Millisecond):
-		// expected: no message for the other tenant
+		// expected: no message for the other workspace
 	}
 }
 
 func TestWSHub_Broadcast_ZeroConnectionsIsNoop(t *testing.T) {
 	hub := NewWSHub()
-	// Must not panic or block when no connection is registered for the tenant.
-	hub.Broadcast("no-such-tenant", events.EventMessage{Event: "completed"})
+	// Must not panic or block when no connection is registered for the workspace.
+	hub.Broadcast("no-such-workspace", events.EventMessage{Event: "completed"})
 }
 
 func TestWSHub_RegisterUnregister(t *testing.T) {
 	hub := NewWSHub()
-	c := &wsConn{id: "x", tenant: "t1", send: make(chan events.EventMessage, 1)}
+	c := &wsConn{id: "x", workspace: "t1", send: make(chan events.EventMessage, 1)}
 	hub.register(c)
-	if len(hub.byTenant["t1"]) != 1 {
-		t.Fatalf("expected 1 registered connection, got %d", len(hub.byTenant["t1"]))
+	if len(hub.byWorkspace["t1"]) != 1 {
+		t.Fatalf("expected 1 registered connection, got %d", len(hub.byWorkspace["t1"]))
 	}
 	hub.unregister(c)
-	if _, ok := hub.byTenant["t1"]; ok {
-		t.Errorf("expected tenant map to be cleaned up after last connection unregisters")
+	if _, ok := hub.byWorkspace["t1"]; ok {
+		t.Errorf("expected workspace map to be cleaned up after last connection unregisters")
 	}
 }

@@ -8,7 +8,6 @@ module Forma
     :resource_id,
     :resource,
     :params,
-    :tenant_id,
     :user_id
   ) do
     # @param body [Hash] decoded /invoke request body
@@ -20,7 +19,6 @@ module Forma
         resource_id: body["resource_id"].to_s,
         resource:    body["resource"] || {},
         params:      body["params"] || {},
-        tenant_id:   body["tenant_id"].to_s,
         user_id:     body["user_id"].to_s
       )
     end

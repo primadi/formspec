@@ -7,7 +7,7 @@
 //
 // Logika di file ini adalah hasil migrasi dari cmd/forma-sidecar/main.go
 // dengan perubahan:
-//   - Default --listen dan --app-endpoint = "none" (single process)
+//   - Default --listen = unix socket (sidecar selalu jalan)
 //   - --dev / --dev-ui implied --force
 //   - Config file auto-discover (forma-sidecar.yaml)
 //   - Runtime auto-detect dari project files
@@ -67,7 +67,7 @@ const (
 	defaultSpecPath    = "./spec"
 	defaultDSN         = "sqlite:.forma/data.db"
 	defaultAddr        = ":8080"
-	defaultListen      = "none"
+	defaultListen      = "unix:///tmp/forma/sidecar.sock"
 	defaultAppEndpoint = "none"
 	defaultWorkspaceID = "default"
 	defaultStateDir    = ".forma"
@@ -93,13 +93,14 @@ func runDev(args []string) {
 	// ── 2. Try config file (forma-sidecar.yaml / forma-sidecar.yml) ──
 	cfg = mergeConfigFile(cfg)
 
-	// ── 3. Re-parse flags to override config file (CLI wins) ──
-	// We already have final values from flag.Parse; config file only fills
-	// in values that were NOT set via CLI. This is handled in mergeConfigFile.
+	// ── 3. Apply defaults for values not set by CLI or config file ──
+	if cfg.AppDir == "" {
+		cfg.AppDir = filepath.Join(cfg.StateDir, "app")
+	}
 
-	// ── 4. Auto-detect runtime ──
+	// ── 4. Auto-detect runtime (scoped to app directory) ──
 	if cfg.Runtime == "auto" {
-		cfg.Runtime = detectRuntime()
+		cfg.Runtime = detectRuntime(cfg.AppDir)
 	}
 
 	// ── 5. Implied --force for dev/dev-ui ──
@@ -109,11 +110,11 @@ func runDev(args []string) {
 
 	// ── 6. Resolve listen URL ──
 	listenURL := resolveEndpoint(cfg.Listen, cfg.ListenURL,
-		"unix:///var/run/forma/sidecar.sock",
+		"unix:///tmp/forma/sidecar.sock",
 		"http://127.0.0.1:9090")
 
 	appEndpointURL := resolveEndpoint(cfg.AppEndpoint, cfg.AppEndpointURL,
-		"unix:///var/run/forma/app.sock",
+		"unix:///tmp/forma/app.sock",
 		"http://127.0.0.1:9091")
 
 	// ── 7. Auto-create state directory ──
@@ -165,7 +166,7 @@ func runDev(args []string) {
 		ProdMode:             !cfg.DevMode && cfg.ControlURL != "",
 		SidecarEndpoint:      appEndpointURL,
 		SidecarInvokeTimeout: cfg.InvokeTimeout,
-		TenantID:             cfg.WorkspaceID,
+		WorkspaceID:          cfg.WorkspaceID,
 	}
 
 	// SPA serving priority: --web-dir > auto-detect web/dist/ > embedded FS
@@ -209,6 +210,15 @@ func runDev(args []string) {
 			}
 		}
 		resolver := func(primitiveType, name string) (any, error) {
+			if primitiveType == "entity" {
+				// name format: "module/entity" — split and resolve via entity store
+				parts := strings.SplitN(name, "/", 2)
+				if len(parts) != 2 {
+					return nil, fmt.Errorf("invalid entity reference %q (want module/entity)", name)
+				}
+				module, entityName := parts[0], parts[1]
+				return app.GetEntityStore(module, entityName)
+			}
 			return dsRegistry.Resolve(spec.PrimitiveType(primitiveType), name)
 		}
 
@@ -219,7 +229,7 @@ func runDev(args []string) {
 		}
 		go monitor.Run(ctx)
 
-		socketSrv = sidecar.NewServer(listenURL, sidecar.NewCtxHandler(resolver), monitor, nil)
+		socketSrv = sidecar.NewServer(listenURL, sidecar.NewCtxHandler(resolver, "demo"), monitor, nil)
 		if err := socketSrv.Listen(); err != nil {
 			log.Fatalf("[forma] ctx listener: %v", err)
 		}
@@ -230,7 +240,7 @@ func runDev(args []string) {
 	var appProc *appProcess
 	if !isLocalRuntime(cfg.Runtime) {
 		var err error
-		appProc, err = startAppProcess(ctx, cfg.Runtime, cfg.AppDir, cfg.AppEntrypoint, appEndpointURL, listenURL)
+		appProc, err = startAppProcess(ctx, cfg.Runtime, cfg.AppDir, cfg.AppEntrypoint, appEndpointURL, listenURL, cfg.DevMode)
 		if err != nil {
 			log.Fatalf("[forma] app process: %v", err)
 		}
@@ -251,11 +261,9 @@ func runDev(args []string) {
 	}
 
 	// ── 14. SPA info ──
-	if cfg.WebDir != "" {
-		log.Printf("[forma] SPA dari folder: %s", cfg.WebDir)
-	} else if cfg.DevUI {
+	if cfg.DevUI {
 		log.Printf("[forma] Frontend: http://localhost:5173/default/_admin")
-	} else {
+	} else if cfg.WebDir == "" {
 		log.Printf("[forma] SPA embedded — buka http://localhost%s/default/_admin", cfg.Addr)
 	}
 
@@ -417,7 +425,7 @@ func parseDevFlags(args []string) DevConfig {
 	listenURL := fs.String("listen-url", "", "Custom listen URL (override mode auto-resolve)")
 	appEndpointURL := fs.String("app-endpoint-url", "", "Custom app endpoint URL (override mode auto-resolve)")
 	workspaceID := fs.String("workspace-id", "", "Workspace ID (default: default)")
-	runtime := fs.String("runtime", "", `App runtime: "auto" (default), "local", "php", "python", "node"`)
+	runtime := fs.String("runtime", "", `App runtime: "auto" (default), "local", "php", "python", "ruby", "java", "dotnet", "go", "rust", "node"`)
 	stateDir := fs.String("state-dir", "", "State directory (default: .forma)")
 	devMode := fs.Bool("dev", false, "Development mode (implied by --dev-ui)")
 	devUI := fs.Bool("dev-ui", false, "Development UI: start Vite HMR (implies --dev)")
@@ -452,10 +460,8 @@ func parseDevFlags(args []string) DevConfig {
 		ControlURL:     *controlURL,
 	}
 
-	if cfg.AppDir == "" {
-		cfg.AppDir = filepath.Join(cfg.StateDir, "app")
-	}
-
+	// AppDir default is applied AFTER config file merge (in runDev),
+	// so the config file can override it. See mergeConfigFile's empty-string check.
 	return cfg
 }
 

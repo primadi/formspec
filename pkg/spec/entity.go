@@ -85,7 +85,6 @@ type DocumentSpec struct {
 	Events            []EventDecl        `yaml:"events,omitempty" json:"events,omitempty"`
 	Deliver           []DeliveryDecl     `yaml:"deliver,omitempty" json:"deliver,omitempty"`
 	Indexes           []IndexDecl        `yaml:"indexes,omitempty" json:"indexes,omitempty"`
-	Tenant            *TenantDecl        `yaml:"tenant,omitempty" json:"tenant,omitempty"`
 	ExtendStorage     *ExtendStorage     `yaml:"extend_storage,omitempty" json:"extend_storage,omitempty"`
 	Expose            []ExposeConfig     `yaml:"expose,omitempty" json:"expose,omitempty"`
 	BackdatePolicy    *BackdatePolicy    `yaml:"backdate_policy,omitempty" json:"backdate_policy,omitempty"`
@@ -432,7 +431,7 @@ type UsesConfigDecl struct {
 
 // KvstoreUseDecl specifies durable key-value store access (§11.2).
 type KvstoreUseDecl struct {
-	Scope  string `yaml:"scope,omitempty" json:"scope,omitempty"`   // tenant | module | global
+	Scope  string `yaml:"scope,omitempty" json:"scope,omitempty"`   // workspace | module | global
 	Access string `yaml:"access,omitempty" json:"access,omitempty"` // read | read_write
 	Module string `yaml:"module,omitempty" json:"module,omitempty"`
 }
@@ -725,7 +724,7 @@ type EventDeliveryDecl struct {
 
 // DeliveryTarget addresses the receiver of an event delivery.
 type DeliveryTarget struct {
-	Scope    string `yaml:"scope,omitempty" json:"scope,omitempty"`       // websocket: tenant | user | ...
+	Scope    string `yaml:"scope,omitempty" json:"scope,omitempty"`       // websocket: workspace | user | ...
 	Resource string `yaml:"resource,omitempty" json:"resource,omitempty"` // reliable_event: "module.entity"
 	Action   string `yaml:"action,omitempty" json:"action,omitempty"`
 }
@@ -754,11 +753,6 @@ type IndexDecl struct {
 	Unique bool     `yaml:"unique,omitempty" json:"unique,omitempty"`
 }
 
-// TenantDecl configures tenant isolation for an Entity.
-type TenantDecl struct {
-	Isolated bool `yaml:"isolated" json:"isolated"`
-}
-
 // RelationDecl defines a relation to another entity.
 type RelationDecl struct {
 	Type       string   `yaml:"type" json:"type"` // belongs_to | has_many | has_one
@@ -778,7 +772,7 @@ type NaturalKeyRuleDecl struct {
 	// isolates the counter — the counter table is already keyed by
 	// (tenant_id, resource, field, scope, period); ScopeField supplies that
 	// scope. Empty (the default) reproduces prior behavior: one counter shared
-	// across the whole tenant.
+	// across the whole workspace.
 }
 
 // NaturalKeyPrefix defines the prefix for a natural key.

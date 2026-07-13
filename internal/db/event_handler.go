@@ -26,7 +26,7 @@ type DeliveryEventHandler struct {
 
 // HandleEvent implements EventHandler. payload is the JSON-marshaled
 // events.EventMessage that was enqueued at emission time.
-func (h *DeliveryEventHandler) HandleEvent(ctx context.Context, tenantID, eventName, resource, payload string) error {
+func (h *DeliveryEventHandler) HandleEvent(ctx context.Context, workspaceID, eventName, resource, payload string) error {
 	channels, ok := h.Lookup(resource, eventName)
 	if !ok {
 		return fmt.Errorf("outbox delivery: no channels resolved for %s event %q — resource may have been removed from the current spec", resource, eventName)
@@ -40,9 +40,9 @@ func (h *DeliveryEventHandler) HandleEvent(ctx context.Context, tenantID, eventN
 	for _, ch := range channels {
 		switch ch.Channel {
 		case "websocket":
-			h.Hub.Broadcast(tenantID, msg)
+			h.Hub.Broadcast(workspaceID, msg)
 		case "audit_log":
-			if err := h.EventLog.Write(ctx, tenantID, eventName, resource, []byte(payload)); err != nil {
+			if err := h.EventLog.Write(ctx, workspaceID, eventName, resource, []byte(payload)); err != nil {
 				return err
 			}
 		default:

@@ -245,6 +245,6 @@ public sealed class App : IAsyncDisposable
     private static string DetectSidecarEndpoint()
     {
         return Environment.GetEnvironmentVariable("FORMA_SIDECAR_SOCKET")
-            ?? "unix:///var/run/forma/sidecar.sock";
+            ?? "unix:///tmp/forma/sidecar.sock";
     }
 }

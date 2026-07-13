@@ -98,6 +98,47 @@ public final class CtxPrimitive {
         call("release", Map.of("key", key));
     }
 
+    // ---- entity atomic operations ----
+
+    /**
+     * Atomically merge fields into an entity record (entity/update).
+     * Uses jsonb_merge / json_patch — single SQL statement, no race condition.
+     * Workspace isolation is enforced by the sidecar — not a parameter.
+     */
+    public void update(String id, Map<String, Object> fields) {
+        var body = new LinkedHashMap<String, Object>();
+        body.put("key", id);
+        body.put("fields", fields);
+        call("update", body);
+    }
+
+    /**
+     * Atomically increment a numeric field on an entity record.
+     * Single SQL statement — no read-modify-write race condition.
+     * Workspace isolation is enforced by the sidecar — not a parameter.
+     */
+    public void increment(String id, String field, double amount) {
+        var body = new LinkedHashMap<String, Object>();
+        body.put("key", id);
+        body.put("field", field);
+        body.put("amount", amount);
+        call("increment", body);
+    }
+
+    /**
+     * Atomically decrement a numeric field on an entity record.
+     * Includes a guard against negative values. Returns the new field value.
+     * Workspace isolation is enforced by the sidecar — not a parameter.
+     */
+    public Object decrement(String id, String field, double amount) {
+        var body = new LinkedHashMap<String, Object>();
+        body.put("key", id);
+        body.put("field", field);
+        body.put("amount", amount);
+        var resp = call("decrement", body);
+        return resp.get("data");
+    }
+
     // ---- internal ----
 
     private Map<String, Object> call(String op, Map<String, Object> body) {

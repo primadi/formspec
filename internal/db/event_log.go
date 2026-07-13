@@ -13,7 +13,7 @@ import (
 // diffs, not arbitrary named business events.
 type EventLogRecord struct {
 	ID          string `json:"id"`
-	TenantID    string `json:"tenant_id"`
+	WorkspaceID    string `json:"tenant_id"`
 	EventName   string `json:"event_name"`
 	Resource    string `json:"resource"` // "module/entity", e.g. "clinic/visit"
 	Payload     string `json:"payload"`  // JSON
@@ -34,7 +34,7 @@ func NewEventLogStore(db DB, driver DriverType) *EventLogStore {
 // Write records one delivered event. Best-effort — this channel carries no
 // retry semantics of its own; a durable event instead flows through the
 // outbox (see internal/action.DeliverEvents).
-func (s *EventLogStore) Write(ctx context.Context, tenantID, eventName, resource string, payload []byte) error {
+func (s *EventLogStore) Write(ctx context.Context, workspaceID, eventName, resource string, payload []byte) error {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
 	var err error
@@ -42,12 +42,12 @@ func (s *EventLogStore) Write(ctx context.Context, tenantID, eventName, resource
 		_, err = s.db.ExecContext(ctx, `
 			INSERT INTO forma_event_log (tenant_id, event_name, resource, payload, delivered_at)
 			VALUES ($1, $2, $3, $4, $5)
-		`, tenantID, eventName, resource, string(payload), now)
+		`, workspaceID, eventName, resource, string(payload), now)
 	} else {
 		_, err = s.db.ExecContext(ctx, `
 			INSERT INTO forma_event_log (tenant_id, event_name, resource, payload, delivered_at)
 			VALUES (?, ?, ?, ?, ?)
-		`, tenantID, eventName, resource, string(payload), now)
+		`, workspaceID, eventName, resource, string(payload), now)
 	}
 	if err != nil {
 		return fmt.Errorf("write event log: %w", err)
@@ -55,9 +55,9 @@ func (s *EventLogStore) Write(ctx context.Context, tenantID, eventName, resource
 	return nil
 }
 
-// ListByTenant returns event log records for a tenant, optionally filtered
+// ListByWorkspace returns event log records for a workspace, optionally filtered
 // by resource ("module/entity").
-func (s *EventLogStore) ListByTenant(ctx context.Context, tenantID, resource string, limit, offset int) ([]EventLogRecord, error) {
+func (s *EventLogStore) ListByWorkspace(ctx context.Context, workspaceID, resource string, limit, offset int) ([]EventLogRecord, error) {
 	if limit < 1 || limit > 100 {
 		limit = 50
 	}
@@ -72,7 +72,7 @@ func (s *EventLogStore) ListByTenant(ctx context.Context, tenantID, resource str
 			WHERE tenant_id = ? AND resource = ?
 			ORDER BY delivered_at DESC
 			LIMIT ? OFFSET ?
-		`, tenantID, resource, limit, offset)
+		`, workspaceID, resource, limit, offset)
 	} else {
 		rows, err = s.db.QueryContext(ctx, `
 			SELECT id, tenant_id, event_name, resource, payload, delivered_at
@@ -80,7 +80,7 @@ func (s *EventLogStore) ListByTenant(ctx context.Context, tenantID, resource str
 			WHERE tenant_id = ?
 			ORDER BY delivered_at DESC
 			LIMIT ? OFFSET ?
-		`, tenantID, limit, offset)
+		`, workspaceID, limit, offset)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("event log list: %w", err)
@@ -90,7 +90,7 @@ func (s *EventLogStore) ListByTenant(ctx context.Context, tenantID, resource str
 	var records []EventLogRecord
 	for rows.Next() {
 		var rec EventLogRecord
-		if err := rows.Scan(&rec.ID, &rec.TenantID, &rec.EventName, &rec.Resource,
+		if err := rows.Scan(&rec.ID, &rec.WorkspaceID, &rec.EventName, &rec.Resource,
 			&rec.Payload, &rec.DeliveredAt); err != nil {
 			return nil, fmt.Errorf("event log scan: %w", err)
 		}

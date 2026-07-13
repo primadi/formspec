@@ -46,4 +46,9 @@ public final class Ctx {
     public CtxPrimitive kvstore() {
         return new CtxPrimitive(client, "kvstore");
     }
+
+    /** Entity primitive — access entity records via named("module/entity"). */
+    public CtxPrimitive entity() {
+        return new CtxPrimitive(client, "entity");
+    }
 }

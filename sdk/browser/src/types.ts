@@ -6,7 +6,7 @@
  */
 export interface RecordMeta {
   id: string;
-  tenant_id: string;
+  // tenant_id removed - workspace enforced by sidecar
   version: number;
   created_at: string;
   updated_at: string;

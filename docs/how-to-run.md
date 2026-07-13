@@ -72,8 +72,8 @@ Satu port `:8080` untuk API + SPA. Buka **http://localhost:8080/default/_admin**
 | `--spec` | Path ke direktori YAML manifests | `./spec` |
 | `--dsn` | Database DSN (sqlite atau postgres) | `sqlite:.forma/data.db` |
 | `--addr` | REST API listen address | `:8080` |
-| `--listen` | Sidecar ctx listener (internal) | `unix:///var/run/forma/sidecar.sock` |
-| `--app-endpoint` | App endpoint (internal) | `unix:///var/run/forma/app.sock` |
+| `--listen` | Sidecar ctx listener (internal) | `unix:///tmp/forma/sidecar.sock` |
+| `--app-endpoint` | App endpoint (internal) | `unix:///tmp/forma/app.sock` |
 | `--dev` | Dev mode (auth bypass, unsigned artifacts) | `false` |
 | `--state-dir` | Local state directory | `.forma` |
 | `--force` | Kill previous `forma-sidecar` on same ports | `false` |
@@ -137,13 +137,13 @@ go run ./cmd/forma-sidecar/ \
 | `--spec` | Path ke direktori YAML manifests | `./spec` |
 | `--dsn` | Database DSN (sqlite atau postgres) | `sqlite:.forma/data.db` |
 | `--addr` | REST API listen address | `:8080` |
-| `--listen` | Sidecar ctx listener (internal) | `unix:///var/run/forma/sidecar.sock` |
-| `--app-endpoint` | App endpoint (internal) | `unix:///var/run/forma/app.sock` |
+| `--listen` | Sidecar ctx listener (internal) | `unix:///tmp/forma/sidecar.sock` |
+| `--app-endpoint` | App endpoint (internal) | `unix:///tmp/forma/app.sock` |
 | `--dev` | Dev mode (auth bypass, unsigned artifacts) | `false` |
 | `--state-dir` | Local state directory | `.forma` |
 | **`--force`** | Kill previous `forma-sidecar` on same ports; error jika port dipakai program **lain** | `false` |
 
-> **Catatan:** `--listen` dan `--app-endpoint` perlu HTTP URL (bukan Unix socket) jika tidak punya akses root, karena Unix socket default di `/var/run/forma/` butuh permission root.
+> **Catatan:** `--listen` dan `--app-endpoint` perlu HTTP URL (bukan Unix socket) jika tidak punya akses root, karena Unix socket default di `/tmp/forma/` butuh permission root.
 
 ### --force Flag
 

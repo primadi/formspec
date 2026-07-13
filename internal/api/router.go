@@ -104,7 +104,7 @@ func (b *RouterBuilder) BuildHTTP() http.Handler {
 	r.Use(LoggingMiddleware)
 	r.Use(CORSMiddleware)
 	r.Use(RequestIDMiddleware)
-	r.Use(TenantMiddleware)
+	r.Use(WorkspaceMiddleware)
 	r.Use(AuthMiddleware)
 
 	// Workspace-prefixed API routes

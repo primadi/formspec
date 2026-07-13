@@ -24,10 +24,40 @@ func main() {
 	case "apply":
 		runApply(os.Args[2:])
 	case "generate":
-		runGenerate(os.Args[2:])
+		if len(os.Args) > 2 {
+			switch os.Args[2] {
+			case "node-app":
+				runGenerateNodeApp(os.Args[3:])
+			case "go-app":
+				runGenerateGoApp(os.Args[3:])
+			case "rust-app":
+				runGenerateRustApp(os.Args[3:])
+			case "php-app":
+				runGeneratePHPApp(os.Args[3:])
+			case "python-app":
+				runGeneratePythonApp(os.Args[3:])
+			case "ruby-app":
+				runGenerateRubyApp(os.Args[3:])
+			case "java-app":
+				runGenerateJavaApp(os.Args[3:])
+			case "dotnet-app":
+				runGenerateDotNetApp(os.Args[3:])
+			default:
+				runGenerate(os.Args[2:])
+			}
+		} else {
+			runGenerate(os.Args[2:])
+		}
+	case "new":
+		if len(os.Args) > 2 && os.Args[2] == "app" {
+			runGenerateNodeApp(os.Args[3:])
+		} else {
+			fmt.Fprintf(os.Stderr, "Usage: forma new app [flags]\n  Scaffold a new TypeScript sidecar app\n")
+			os.Exit(1)
+		}
 	case "dev":
 		runDev(os.Args[2:])
-	case "diff", "delete", "get", "describe", "validate", "new", "repl",
+	case "diff", "delete", "get", "describe", "validate", "repl",
 		"migrate", "seed", "backup", "restore", "archive", "saga", "module", "sign", "script",
 		"freeze", "rollback", "lock", "workspace":
 		fmt.Fprintf(os.Stderr, "forma %s: not implemented yet — see docs/cli-tools/01-forma-cli.md\n", os.Args[1])
@@ -41,11 +71,20 @@ func main() {
 func usage() {
 	fmt.Fprintf(os.Stderr, "Usage: forma <command> [flags]\n\n")
 	fmt.Fprintf(os.Stderr, "Commands:\n")
-	fmt.Fprintf(os.Stderr, "  apply       Register YAML manifests to the Control Plane\n")
-	fmt.Fprintf(os.Stderr, "  generate    Derive a typed TypeScript client from entity manifests\n")
-	fmt.Fprintf(os.Stderr, "  dev         Development server (API + SPA built-in)\n")
+	fmt.Fprintf(os.Stderr, "  apply               Register YAML manifests to the Control Plane\n")
+	fmt.Fprintf(os.Stderr, "  generate            Derive a typed TypeScript client from entity manifests\n")
+	fmt.Fprintf(os.Stderr, "  generate node-app   Scaffold a TypeScript sidecar app\n")
+	fmt.Fprintf(os.Stderr, "  generate go-app     Scaffold a Go sidecar app\n")
+	fmt.Fprintf(os.Stderr, "  generate rust-app   Scaffold a Rust sidecar app\n")
+	fmt.Fprintf(os.Stderr, "  generate php-app    Scaffold a PHP sidecar app\n")
+	fmt.Fprintf(os.Stderr, "  generate python-app Scaffold a Python sidecar app\n")
+	fmt.Fprintf(os.Stderr, "  generate ruby-app   Scaffold a Ruby sidecar app\n")
+	fmt.Fprintf(os.Stderr, "  generate java-app   Scaffold a Java sidecar app\n")
+	fmt.Fprintf(os.Stderr, "  generate dotnet-app Scaffold a .NET sidecar app\n")
+	fmt.Fprintf(os.Stderr, "  new app             Alias for `generate node-app`\n")
+	fmt.Fprintf(os.Stderr, "  dev                 Development server (API + SPA built-in)\n")
 	fmt.Fprintf(os.Stderr, "\nNot yet implemented (see docs/cli-tools/01-forma-cli.md):\n")
-	fmt.Fprintf(os.Stderr, "  diff, delete, get, describe, validate, new, repl,\n")
+	fmt.Fprintf(os.Stderr, "  diff, delete, get, describe, validate, repl,\n")
 	fmt.Fprintf(os.Stderr, "  migrate, seed, backup, restore, archive, saga, module, sign, script,\n")
 	fmt.Fprintf(os.Stderr, "  freeze, rollback, lock, workspace\n")
 }

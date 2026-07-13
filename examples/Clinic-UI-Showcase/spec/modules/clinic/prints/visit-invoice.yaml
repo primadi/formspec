@@ -20,4 +20,4 @@ spec:
     - child_table: { field: treatments, columns: [treatment_name, quantity, price] }
     - totals: { field: total, format: currency }
   footer:
-    text: "Terima kasih — {tenant.name}"
+    text: "Terima kasih — {workspace.name}"

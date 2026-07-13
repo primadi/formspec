@@ -17,7 +17,7 @@ module Forma
     # @param listen          [String, nil] "unix:///path.sock"; default from FORMA_APP_SOCKET
     # @param sidecar_endpoint [String, nil] "unix:///..." or "http://..."; default from FORMA_SIDECAR_SOCKET
     def initialize(listen: nil, sidecar_endpoint: nil)
-      @listen = listen || "unix://#{ENV.fetch("FORMA_APP_SOCKET", "/var/run/forma/app.sock")}"
+      @listen = listen || "unix://#{ENV.fetch("FORMA_APP_SOCKET", "/tmp/forma/app.sock")}"
       @handlers = {}
       @ctx = Ctx.new(SidecarClient.new(sidecar_endpoint))
     end

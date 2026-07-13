@@ -37,7 +37,7 @@ class SidecarClient:
     def __init__(self, endpoint: Optional[str] = None, timeout: float = 30.0) -> None:
         if endpoint is None:
             endpoint = "unix://" + os.environ.get(
-                "FORMA_SIDECAR_SOCKET", "/var/run/forma/sidecar.sock"
+                "FORMA_SIDECAR_SOCKET", "/tmp/forma/sidecar.sock"
             )
         self._timeout = timeout
         if endpoint.startswith("unix://"):
@@ -113,6 +113,24 @@ class CtxPrimitive:
     def delete(self, key: str) -> None:
         self._call("delete", {"key": key})
 
+    # ---- entity atomic operations ----
+
+    def update(self, id: str, fields: dict) -> None:
+        """Atomically merge fields into an entity record (entity/update)."""
+        body: dict = {"key": id, "fields": fields}
+        self._call("update", body)
+
+    def increment(self, id: str, field: str, amount: float) -> None:
+        """Atomically increment a numeric field on an entity record."""
+        body: dict = {"key": id, "field": field, "amount": amount}
+        self._call("increment", body)
+
+    def decrement(self, id: str, field: str, amount: float) -> Any:
+        """Atomically decrement a numeric field on an entity record.
+        Includes a guard against negative values. Returns the new field value."""
+        body: dict = {"key": id, "field": field, "amount": amount}
+        return self._call("decrement", body).get("data")
+
     def acquire(self, key: str, ttl_seconds: int = 30) -> bool:
         return bool(
             self._call("acquire", {"key": key, "ttl_seconds": ttl_seconds}).get("ok")
@@ -160,3 +178,7 @@ class Ctx:
 
     def kvstore(self) -> CtxPrimitive:
         return CtxPrimitive(self._client, "kvstore")
+
+    def entity(self) -> CtxPrimitive:
+        """Entity primitive — access entity records via named('module/entity')."""
+        return CtxPrimitive(self._client, "entity")
