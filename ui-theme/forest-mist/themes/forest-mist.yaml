@@ -1,0 +1,194 @@
+# ── Forest Mist Theme ──
+#
+# Nuansa hutan kabut — mendemonstrasikan kemampuan theme untuk
+# menggunakan MULTIPLE semi-transparent background images:
+#
+# 1. Gradient background (base)
+# 2. SVG pine forest silhouette (semi-transparent overlay)
+# 3. SVG mist/fog layer (semi-transparent overlay, animasi)
+#
+# Frontend Spec §10 — Theme kind.
+
+apiVersion: forma.dev/v1alpha1
+kind: Theme
+metadata:
+  name: forest-mist
+  module: forest-mist
+  description: Forest Mist — semi-transparent SVG overlay, animated fog
+spec:
+  tokens:
+    # ── Primary: forest green ──
+    color.primary: "#2D5A27"
+    color.primary-foreground: "#F0F7EE"
+    color.accent: "#6B8F59"
+    color.accent-foreground: "#FFFFFF"
+    color.secondary: "#E8F0E5"
+    color.secondary-foreground: "#1A2E15"
+
+    # ── Surface: warm off-white ──
+    color.background: "#F4F7F2"
+    color.foreground: "#1A2E15"
+    color.card: "#FFFFFF"
+    color.card-foreground: "#1A2E15"
+    color.popover: "#FFFFFF"
+    color.popover-foreground: "#1A2E15"
+    color.muted: "#E8F0E5"
+    color.muted-foreground: "#6B7F63"
+
+    # ── Border ──
+    color.border: "#C8D6C0"
+    color.input: "#A8BFA0"
+    color.ring: "#2D5A27"
+
+    # ── Sidebar: deep forest ──
+    color.sidebar: "#1A3A16"
+    color.sidebar-foreground: "#D0E0C8"
+    color.sidebar-primary: "#8AB77A"
+    color.sidebar-primary-foreground: "#0D1F0B"
+    color.sidebar-accent: "#2D5A27"
+    color.sidebar-accent-foreground: "#D0E0C8"
+    color.sidebar-border: "#2D5A27"
+    color.sidebar-ring: "#8AB77A"
+
+    # ── Destructive ──
+    color.destructive: "#B84C3F"
+
+    # ── Radius ──
+    radius.md: "10px"
+
+    # ── Chart ──
+    color.chart-1: "#2D5A27"
+    color.chart-2: "#6B8F59"
+    color.chart-3: "#8AB77A"
+    color.chart-4: "#B84C3F"
+    color.chart-5: "#C8D6C0"
+
+    # ── Font ──
+    font.family: "'Inter Variable', ui-sans-serif, system-ui, sans-serif"
+
+  stylesheet: |
+    /* ═══════════════════════════════════════════
+       FOREST MIST — Semi-Transparent Background Images
+       
+       Mendemonstrasikan 3 layer background:
+       Layer 1: Gradient (base)
+       Layer 2: SVG pine forest silhouette (opacity 0.06)
+       Layer 3: SVG mist/fog animated (opacity 0.04)
+       
+       SVG semi-transparent background images ini 
+       TIDAK MUNGKIN dilakukan dengan tokens saja —
+       harus via stylesheet.
+    ═══════════════════════════════════════════ */
+
+    body {
+      /* ── Layer 1: Warm gradient base ── */
+      background:
+        /* ── Layer 3: Mist/fog overlay (semi-transparent) ── */
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='200' viewBox='0 0 400 200'%3E%3Cdefs%3E%3ClinearGradient id='fog' x1='0%25' y1='0%25' x2='100%25' y2='0%25'%3E%3Cstop offset='0%25' stop-color='%23ffffff' stop-opacity='0'/%3E%3Cstop offset='30%25' stop-color='%23ffffff' stop-opacity='0.15'/%3E%3Cstop offset='60%25' stop-color='%23ffffff' stop-opacity='0.08'/%3E%3Cstop offset='100%25' stop-color='%23ffffff' stop-opacity='0'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cellipse cx='200' cy='120' rx='200' ry='60' fill='url(%23fog)'/%3E%3C/svg%3E"),
+        
+        /* ── Layer 2: Pine forest silhouette (semi-transparent) ── */
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='120' viewBox='0 0 600 120'%3E%3Cpath d='M0 120 L0 80 L20 60 L40 80 L40 120 Z' fill='%232D5A27' opacity='0.06'/%3E%3Cpath d='M40 120 L40 70 L65 40 L90 70 L90 120 Z' fill='%232D5A27' opacity='0.05'/%3E%3Cpath d='M80 120 L80 75 L100 55 L120 75 L120 120 Z' fill='%232D5A27' opacity='0.07'/%3E%3Cpath d='M110 120 L110 85 L130 65 L150 85 L150 120 Z' fill='%232D5A27' opacity='0.04'/%3E%3Cpath d='M140 120 L140 65 L165 35 L190 65 L190 120 Z' fill='%232D5A27' opacity='0.06'/%3E%3Cpath d='M180 120 L180 78 L200 58 L220 78 L220 120 Z' fill='%232D5A27' opacity='0.05'/%3E%3Cpath d='M210 120 L210 72 L235 42 L260 72 L260 120 Z' fill='%232D5A27' opacity='0.07'/%3E%3Cpath d='M250 120 L250 80 L270 60 L290 80 L290 120 Z' fill='%232D5A27' opacity='0.04'/%3E%3Cpath d='M280 120 L280 68 L305 38 L330 68 L330 120 Z' fill='%232D5A27' opacity='0.06'/%3E%3Cpath d='M320 120 L320 75 L345 45 L370 75 L370 120 Z' fill='%232D5A27' opacity='0.05'/%3E%3Cpath d='M360 120 L360 82 L380 62 L400 82 L400 120 Z' fill='%232D5A27' opacity='0.07'/%3E%3Cpath d='M390 120 L390 70 L415 40 L440 70 L440 120 Z' fill='%232D5A27' opacity='0.04'/%3E%3Cpath d='M430 120 L430 78 L450 58 L470 78 L470 120 Z' fill='%232D5A27' opacity='0.06'/%3E%3Cpath d='M460 120 L460 65 L485 35 L510 65 L510 120 Z' fill='%232D5A27' opacity='0.05'/%3E%3Cpath d='M500 120 L500 72 L525 42 L550 72 L550 120 Z' fill='%232D5A27' opacity='0.07'/%3E%3Cpath d='M540 120 L540 85 L560 65 L580 85 L580 120 Z' fill='%232D5A27' opacity='0.04'/%3E%3Cpath d='M570 120 L570 78 L600 58 L600 120 Z' fill='%232D5A27' opacity='0.06'/%3E%3C/svg%3E"),
+        
+        /* ── Layer 1: Warm gradient base ── */
+        linear-gradient(180deg, #EEF5EA 0%, #F4F7F2 30%, #F8FAF5 100%);
+      
+      background-attachment: fixed;
+      background-size:
+        800px 200px,     /* mist layer — wide */
+        600px 120px,     /* forest layer */
+        auto;
+      background-repeat:
+        repeat-x,        /* mist */
+        repeat-x,        /* forest */
+        no-repeat;
+      background-position:
+        bottom,          /* mist at bottom */
+        bottom,          /* forest at bottom */
+        center;
+    }
+
+    /* ── Card: subtle forest shadow ── */
+    .card, [class*="card"] {
+      box-shadow: 0 2px 8px rgba(45, 90, 39, 0.06), 0 1px 3px rgba(45, 90, 39, 0.04);
+    }
+
+    /* ── Table hover ── */
+    tr:hover {
+      background-color: rgba(107, 143, 89, 0.06);
+    }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar-thumb {
+      background: #A8BFA0;
+      border-radius: 8px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #2D5A27;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    /* ── Selection ── */
+    ::selection {
+      background-color: rgba(45, 90, 39, 0.2);
+      color: #1A2E15;
+    }
+
+    /* ═══════════════════════════════════════ */
+    /* ── Dark Mode ── */
+    /* ═══════════════════════════════════════ */
+    .dark {
+      --background: #0D1F0B;
+      --foreground: #D0E0C8;
+      --card: #162813;
+      --card-foreground: #D0E0C8;
+      --popover: #162813;
+      --popover-foreground: #D0E0C8;
+      --primary: #8AB77A;
+      --primary-foreground: #0D1F0B;
+      --secondary: #1A3A16;
+      --secondary-foreground: #D0E0C8;
+      --muted: #1A3A16;
+      --muted-foreground: #8A9E80;
+      --accent: #6B8F59;
+      --accent-foreground: #FFFFFF;
+      --destructive: #E86A5E;
+      --border: rgba(200, 214, 192, 0.1);
+      --input: rgba(200, 214, 192, 0.15);
+      --ring: #8AB77A;
+      --sidebar: #071205;
+      --sidebar-foreground: #B0C8A8;
+      --sidebar-primary: #8AB77A;
+      --sidebar-primary-foreground: #071205;
+      --sidebar-accent: #1A3A16;
+      --sidebar-accent-foreground: #B0C8A8;
+      --sidebar-border: rgba(176, 200, 168, 0.08);
+      --sidebar-ring: #8AB77A;
+      --chart-1: #8AB77A;
+      --chart-2: #6B8F59;
+      --chart-3: #2D5A27;
+      --chart-4: #B84C3F;
+      --chart-5: #C8D6C0;
+    }
+
+    .dark body {
+      background:
+        /* Mist overlay — darker variant */
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='200' viewBox='0 0 400 200'%3E%3Cdefs%3E%3ClinearGradient id='fog' x1='0%25' y1='0%25' x2='100%25' y2='0%25'%3E%3Cstop offset='0%25' stop-color='%238AB77A' stop-opacity='0'/%3E%3Cstop offset='30%25' stop-color='%238AB77A' stop-opacity='0.08'/%3E%3Cstop offset='60%25' stop-color='%238AB77A' stop-opacity='0.04'/%3E%3Cstop offset='100%25' stop-color='%238AB77A' stop-opacity='0'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cellipse cx='200' cy='120' rx='200' ry='60' fill='url(%23fog)'/%3E%3C/svg%3E"),
+        
+        /* Forest silhouette — lighter for dark bg */
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='120' viewBox='0 0 600 120'%3E%3Cpath d='M0 120 L0 80 L20 60 L40 80 L40 120 Z' fill='%238AB77A' opacity='0.08'/%3E%3Cpath d='M40 120 L40 70 L65 40 L90 70 L90 120 Z' fill='%238AB77A' opacity='0.06'/%3E%3Cpath d='M80 120 L80 75 L100 55 L120 75 L120 120 Z' fill='%238AB77A' opacity='0.10'/%3E%3Cpath d='M110 120 L110 85 L130 65 L150 85 L150 120 Z' fill='%238AB77A' opacity='0.05'/%3E%3Cpath d='M140 120 L140 65 L165 35 L190 65 L190 120 Z' fill='%238AB77A' opacity='0.08'/%3E%3Cpath d='M180 120 L180 78 L200 58 L220 78 L220 120 Z' fill='%238AB77A' opacity='0.06'/%3E%3Cpath d='M210 120 L210 72 L235 42 L260 72 L260 120 Z' fill='%238AB77A' opacity='0.10'/%3E%3Cpath d='M250 120 L250 80 L270 60 L290 80 L290 120 Z' fill='%238AB77A' opacity='0.05'/%3E%3Cpath d='M280 120 L280 68 L305 38 L330 68 L330 120 Z' fill='%238AB77A' opacity='0.08'/%3E%3Cpath d='M320 120 L320 75 L345 45 L370 75 L370 120 Z' fill='%238AB77A' opacity='0.06'/%3E%3Cpath d='M360 120 L360 82 L380 62 L400 82 L400 120 Z' fill='%238AB77A' opacity='0.10'/%3E%3Cpath d='M390 120 L390 70 L415 40 L440 70 L440 120 Z' fill='%238AB77A' opacity='0.05'/%3E%3Cpath d='M430 120 L430 78 L450 58 L470 78 L470 120 Z' fill='%238AB77A' opacity='0.08'/%3E%3Cpath d='M460 120 L460 65 L485 35 L510 65 L510 120 Z' fill='%238AB77A' opacity='0.06'/%3E%3Cpath d='M500 120 L500 72 L525 42 L550 72 L550 120 Z' fill='%238AB77A' opacity='0.10'/%3E%3Cpath d='M540 120 L540 85 L560 65 L580 85 L580 120 Z' fill='%238AB77A' opacity='0.05'/%3E%3Cpath d='M570 120 L570 78 L600 58 L600 120 Z' fill='%238AB77A' opacity='0.08'/%3E%3C/svg%3E"),
+        
+        linear-gradient(180deg, #071205 0%, #0D1F0B 40%, #162813 100%);
+      
+      background-attachment: fixed;
+      background-size: 800px 200px, 600px 120px, auto;
+      background-repeat: repeat-x, repeat-x, no-repeat;
+      background-position: bottom, bottom, center;
+    }
+
+    .dark ::selection {
+      background-color: rgba(138, 183, 122, 0.3);
+      color: #D0E0C8;
+    }

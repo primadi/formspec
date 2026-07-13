@@ -268,6 +268,7 @@ export default function WizardRenderer({ entry }: WizardRendererProps) {
               <div key={field.name} className="space-y-1">
                 <label className="text-sm font-medium">{field.label ?? field.name}</label>
                 <input
+                  autoComplete="nope"
                   className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
                   placeholder={field.placeholder}
                   value={(stepData[field.name] as string) ?? ""}

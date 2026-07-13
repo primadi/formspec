@@ -30,6 +30,7 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -76,6 +77,13 @@ type Config struct {
 	// at the root. When set, serves SPA at /{ws}/_admin and /{ws}/app
 	// with index.html fallback. Takes precedence over WebDir.
 	WebFS fs.FS
+
+	// ThemeDirs lists additional directories containing Theme manifests
+	// (Frontend Spec §10). These are loaded alongside the main SpecPath
+	// so theme modules can live outside the app's spec/modules/ tree.
+	// Useful for shared/global theme registries. Paths can be absolute
+	// or relative to the working directory.
+	ThemeDirs []string
 }
 
 func (c *Config) applyDefaults() {
@@ -210,6 +218,19 @@ func New(cfg Config) (*App, error) {
 	uiReg := ui.NewRegistry()
 	for _, loadErr := range uiReg.LoadDir(cfg.SpecPath) {
 		fmt.Fprintf(os.Stderr, "forma: ui load warning: %v\n", loadErr)
+	}
+	// Load additional theme directories (Frontend Spec §10).
+	// These share the same registry, so theme names must be unique
+	// across all loaded paths.
+	for _, themeDir := range cfg.ThemeDirs {
+		resolved := themeDir
+		if !filepath.IsAbs(themeDir) {
+			wd, _ := os.Getwd()
+			resolved = filepath.Join(wd, themeDir)
+		}
+		for _, loadErr := range uiReg.LoadDir(resolved) {
+			fmt.Fprintf(os.Stderr, "forma: ui load warning (theme %s): %v\n", themeDir, loadErr)
+		}
 	}
 	resolveEntity := func(module, name string) (*spec.EntitySpec, bool) {
 		info, ok := reg.GetEntity(module, name)

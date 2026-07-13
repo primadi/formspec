@@ -1,0 +1,10 @@
+apiVersion: forma.dev/v1alpha1
+kind: Module
+metadata:
+  name: forest-mist
+  description: >
+    Forest Mist — nuansa hutan kabut dengan lapisan background image
+    semi-transparan (SVG overlay). Menunjukkan kemampuan theme untuk
+    menggunakan background image, gradient, dan multiple layers.
+spec:
+  version: 1.0.0

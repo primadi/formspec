@@ -48,7 +48,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             <label
               htmlFor="workspace"
               className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
@@ -65,7 +65,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
             />
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             <label
               htmlFor="token"
               className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"

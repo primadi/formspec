@@ -142,12 +142,13 @@ export default function WizardFormStep({
       }
 
       return (
-        <div key={field.name} className="space-y-1">
+        <div key={field.name} className="space-y-2.5">
           <label className="text-sm font-medium">{label}</label>
           {field.help && (
             <p className="text-xs text-muted-foreground">{field.help}</p>
           )}
           <select
+            autoComplete="nope"
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
             value={value}
             onChange={(e) => {
@@ -179,9 +180,10 @@ export default function WizardFormStep({
     // Handle enum fields → dropdown
     if (entityField.type === "enum" && entityField.enum_values?.length) {
       return (
-        <div key={field.name} className="space-y-1">
+        <div key={field.name} className="space-y-2.5">
           <label className="text-sm font-medium">{label}</label>
           <select
+            autoComplete="nope"
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
             value={value}
             onChange={(e) => onFieldChange(field.name, e.target.value)}
@@ -218,7 +220,7 @@ export default function WizardFormStep({
     // Handle date fields
     if (entityField.type === "date" || entityField.type === "datetime") {
       return (
-        <div key={field.name} className="space-y-1">
+        <div key={field.name} className="space-y-2.5">
           <label className="text-sm font-medium">{label}</label>
           <Input
             type={entityField.type === "datetime" ? "datetime-local" : "date"}
@@ -232,7 +234,7 @@ export default function WizardFormStep({
     // Handle number types
     if (entityField.type === "integer" || entityField.type === "decimal" || entityField.type === "number") {
       return (
-        <div key={field.name} className="space-y-1">
+        <div key={field.name} className="space-y-2.5">
           <label className="text-sm font-medium">{label}</label>
           <Input
             type="number"
@@ -247,7 +249,7 @@ export default function WizardFormStep({
 
     // Default: string text input
     return (
-      <div key={field.name} className="space-y-1">
+      <div key={field.name} className="space-y-2.5">
         <label className="text-sm font-medium">{label}</label>
         <Input
           placeholder={field.placeholder}

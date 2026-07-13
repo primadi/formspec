@@ -1,0 +1,224 @@
+# ── Tropical Theme ──
+#
+# Vibrant & playful: coral, lime, gold, animated gradient background,
+# rounded corners besar, bubble elements.
+#
+# Frontend Spec §10 — Theme kind.
+apiVersion: forma.dev/v1alpha1
+kind: Theme
+metadata:
+  name: tropical
+  module: tropical
+  description: Tropical — coral vibes, animated gradient, playful
+spec:
+  tokens:
+    # ── Primary: coral ──
+    color.primary: "#E85D4A"
+    color.primary-foreground: "#FFFFFF"
+    color.accent: "#F4A460"
+    color.accent-foreground: "#1A120B"
+    color.secondary: "#FFF0E6"
+    color.secondary-foreground: "#2D1810"
+
+    # ── Surface: warm cream ──
+    color.background: "#FFF9F5"
+    color.foreground: "#2D1810"
+    color.card: "#FFFFFF"
+    color.card-foreground: "#2D1810"
+    color.popover: "#FFFFFF"
+    color.popover-foreground: "#2D1810"
+    color.muted: "#FFF0E6"
+    color.muted-foreground: "#8B7355"
+
+    # ── Border ──
+    color.border: "#F5D6C4"
+    color.input: "#E8C8B4"
+    color.ring: "#E85D4A"
+
+    # ── Sidebar: deep teal ──
+    color.sidebar: "#1A4A4A"
+    color.sidebar-foreground: "#E8F5E9"
+    color.sidebar-primary: "#F4A460"
+    color.sidebar-primary-foreground: "#1A120B"
+    color.sidebar-accent: "#2D6B6B"
+    color.sidebar-accent-foreground: "#E8F5E9"
+    color.sidebar-border: "#2D6B6B"
+    color.sidebar-ring: "#F4A460"
+
+    # ── Destructive ──
+    color.destructive: "#D32F2F"
+
+    # ── Radius: playful ──
+    radius.md: "16px"
+
+    # ── Chart ──
+    color.chart-1: "#E85D4A"
+    color.chart-2: "#F4A460"
+    color.chart-3: "#4CAF50"
+    color.chart-4: "#FFD700"
+    color.chart-5: "#2D6B6B"
+
+    # ── Font ──
+    font.family: "'Inter Variable', ui-sans-serif, system-ui, sans-serif"
+    font.heading: "'Inter Variable', ui-sans-serif, system-ui, sans-serif"
+
+  stylesheet: |
+    /* ── Tropical — Animated Gradient Background ── */
+    body {
+      background: linear-gradient(
+        135deg,
+        #FFF9F5 0%,
+        #FFF0E6 25%,
+        #FFE8D6 50%,
+        #FFF0E6 75%,
+        #FFF9F5 100%
+      );
+      background-size: 400% 400%;
+      animation: tropical-shift 20s ease infinite;
+      background-attachment: fixed;
+    }
+
+    @keyframes tropical-shift {
+      0%   { background-position: 0% 50%; }
+      50%  { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+
+    /* ── Palm leaves + Bubble pattern overlay ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: -1;
+      background:
+        /* Layer 3: Palm leaf silhouettes */
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='120' viewBox='0 0 200 120'%3E%3Cpath d='M0 120 Q 40 100 80 90 Q 100 85 120 80 Q 110 90 90 100 Q 70 110 60 120 Z' fill='%234CAF50' opacity='0.08'/%3E%3Cpath d='M200 120 Q 160 95 140 85 Q 120 78 100 75 Q 115 85 135 95 Q 155 105 170 120 Z' fill='%234CAF50' opacity='0.06'/%3E%3Cpath d='M50 120 Q 70 90 90 75 Q 100 68 110 65 Q 100 78 85 90 Q 70 105 65 120 Z' fill='%234CAF50' opacity='0.07'/%3E%3C/svg%3E"),
+        /* Layer 2: Tropical flowers */
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Ccircle cx='40' cy='40' r='8' fill='%23E85D4A' opacity='0.06'/%3E%3Ccircle cx='40' cy='32' r='5' fill='%23E85D4A' opacity='0.05'/%3E%3Ccircle cx='48' cy='40' r='5' fill='%23E85D4A' opacity='0.05'/%3E%3Ccircle cx='40' cy='48' r='5' fill='%23E85D4A' opacity='0.05'/%3E%3Ccircle cx='32' cy='40' r='5' fill='%23E85D4A' opacity='0.05'/%3E%3Ccircle cx='40' cy='40' r='3' fill='%23F4A460' opacity='0.08'/%3E%3C/svg%3E"),
+        /* Layer 1: Bubble dots */
+        radial-gradient(circle at 20% 30%, #E85D4A 2px, transparent 2px),
+        radial-gradient(circle at 80% 70%, #F4A460 3px, transparent 3px);
+      background-repeat: repeat-x, repeat, repeat, repeat;
+      background-size:
+        200px 120px,
+        80px 80px,
+        80px 80px,
+        120px 120px;
+      background-position:
+        bottom,
+        0 0,
+        0 0,
+        0 0;
+    }
+
+    /* ── Card: playful rounded + shadow ── */
+    .card, [class*="card"] {
+      box-shadow: 0 4px 16px rgba(232, 93, 74, 0.08), 0 1px 4px rgba(0, 0, 0, 0.04);
+      border: 1px solid rgba(245, 214, 196, 0.5);
+    }
+
+    /* ── Button hover ── */
+    button:not([class*="ghost"]):hover {
+      transform: translateY(-1px);
+      transition: transform 0.15s ease;
+    }
+
+    /* ── Active sidebar item ── */
+    [data-active="true"], [data-state="active"] {
+      border-radius: 12px;
+    }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: linear-gradient(180deg, #E85D4A, #F4A460);
+      border-radius: 10px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: linear-gradient(180deg, #D14A3A, #E89550);
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    /* ── Selection ── */
+    ::selection {
+      background-color: rgba(232, 93, 74, 0.2);
+      color: #2D1810;
+    }
+
+    /* ── Input focus ── */
+    input:focus, textarea:focus, select:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(232, 93, 74, 0.15);
+    }
+
+    /* ═══════════════════════════════════════ */
+    /* ── Dark Mode ── */
+    /* ═══════════════════════════════════════ */
+    .dark {
+      --background: #1A1210;
+      --foreground: #F5EDE0;
+      --card: #2C1F1A;
+      --card-foreground: #F5EDE0;
+      --popover: #2C1F1A;
+      --popover-foreground: #F5EDE0;
+      --primary: #F4A460;
+      --primary-foreground: #1A120B;
+      --secondary: #3D2B24;
+      --secondary-foreground: #F5EDE0;
+      --muted: #3D2B24;
+      --muted-foreground: #A89880;
+      --accent: #E85D4A;
+      --accent-foreground: #FFFFFF;
+      --destructive: #EF5350;
+      --border: rgba(245, 222, 196, 0.1);
+      --input: rgba(245, 222, 196, 0.15);
+      --ring: #F4A460;
+      --sidebar: #0F2A2A;
+      --sidebar-foreground: #C8E6C9;
+      --sidebar-primary: #F4A460;
+      --sidebar-primary-foreground: #0F2A2A;
+      --sidebar-accent: #1A4A4A;
+      --sidebar-accent-foreground: #C8E6C9;
+      --sidebar-border: rgba(200, 230, 201, 0.1);
+      --sidebar-ring: #F4A460;
+      --chart-1: #F4A460;
+      --chart-2: #E85D4A;
+      --chart-3: #4CAF50;
+      --chart-4: #FFD700;
+      --chart-5: #2D6B6B;
+    }
+
+    .dark body {
+      background: linear-gradient(135deg, #1A1210 0%, #2C1F1A 50%, #1A1210 100%);
+      animation: none;
+    }
+
+    .dark body::before {
+      opacity: 0.06;
+      background-image: radial-gradient(circle at 20% 30%, #F4A460 2px, transparent 2px),
+                        radial-gradient(circle at 80% 70%, #E85D4A 3px, transparent 3px),
+                        radial-gradient(circle at 50% 50%, #4CAF50 1px, transparent 1px);
+    }
+
+    .dark .card, .dark [class*="card"] {
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+      border-color: rgba(245, 222, 196, 0.1);
+    }
+
+    .dark ::-webkit-scrollbar-thumb {
+      background: linear-gradient(180deg, #4CAF50, #2D6B6B);
+    }
+
+    .dark ::-webkit-scrollbar-thumb:hover {
+      background: linear-gradient(180deg, #66BB6A, #3D8B8B);
+    }
+
+    .dark ::selection {
+      background-color: rgba(244, 164, 96, 0.3);
+      color: #F5EDE0;
+    }

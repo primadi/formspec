@@ -108,7 +108,7 @@ forma dev --spec ./my-app/spec
 # Dengan Vite HMR (edit frontend)
 forma dev --spec ./my-app/spec --dev-ui
 
-# Auto-detect config file (forma-sidecar.yaml)
+# Auto-detect config file (forma-app.yaml)
 forma dev
 ```
 

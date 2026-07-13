@@ -1,0 +1,141 @@
+# ── Batik Nusantara Theme ──
+#
+# Terinspirasi dari motif batik tradisional Indonesia:
+# - Parang: warna cokelat/gold — keberanian, kewibawaan
+# - Kawung: krem/putih — kesucian, ketertiban
+# - Mega Mendung: biru gelap/cerah — awan pembawa hujan berkah
+#
+# Token override semua CSS variables shadcn/ui sehingga seluruh
+# komponen base library berubah warna sesuai palet batik.
+#
+# Frontend Spec §10 — Theme kind.
+apiVersion: forma.dev/v1alpha1
+kind: Theme
+metadata:
+  name: batik-nusantara
+  module: batik-theme
+  description: >
+    Batik Nusantara — palet warna motif batik tradisional Indonesia
+    (Parang, Kawung, Mega Mendung). Cocok untuk aplikasi budaya,
+    kreatif, atau yang menginginkan nuansa hangit & earthy.
+spec:
+  tokens:
+    # ── Palet Utama (Parang — cokelat emas) ──
+    color.primary: "#8B5E3C"
+    color.primary-foreground: "#FAF6F0"
+    color.accent: "#D4A76A"
+    color.accent-foreground: "#1A120B"
+    color.secondary: "#E8DCCC"
+    color.secondary-foreground: "#3D2B1F"
+
+    # ── Background & Surface (Kawung — krem alami) ──
+    color.background: "#FDF8F0"
+    color.foreground: "#2C1810"
+    color.card: "#FFFDF7"
+    color.card-foreground: "#2C1810"
+    color.popover: "#FFFDF7"
+    color.popover-foreground: "#2C1810"
+    color.muted: "#F5EDE0"
+    color.muted-foreground: "#8B7355"
+
+    # ── Border & Ring — batik garis tepi (cokelat gelap) ──
+    color.border: "#C4A882"
+    color.input: "#D4BFA5"
+    color.ring: "#8B5E3C"
+
+    # ── Sidebar (Mega Mendung — biru gelap) ──
+    color.sidebar: "#1A2F4C"
+    color.sidebar-foreground: "#E8ECF1"
+    color.sidebar-primary: "#D4A76A"
+    color.sidebar-primary-foreground: "#1A2F4C"
+    color.sidebar-accent: "#2A4A6E"
+    color.sidebar-accent-foreground: "#E8ECF1"
+    color.sidebar-border: "#2A4A6E"
+    color.sidebar-ring: "#D4A76A"
+
+    # ── Destructive — merah batik ──
+    color.destructive: "#B84C3F"
+
+    # ── Radius — lebih lembut ──
+    radius.md: "12px"
+
+    # ── Chart — palet batik untuk visualisasi ──
+    color.chart-1: "#8B5E3C"
+    color.chart-2: "#D4A76A"
+    color.chart-3: "#1A2F4C"
+    color.chart-4: "#B84C3F"
+    color.chart-5: "#C4A882"
+
+    # ── Font ──
+    font.family: "'Inter Variable', ui-sans-serif, system-ui, sans-serif"
+    font.heading: "'Inter Variable', ui-sans-serif, system-ui, sans-serif"
+
+  # Dark mode override — tetap dalam nuansa batik
+  # Stylesheet di-inject sebagai <style> oleh ThemeRenderer
+  stylesheet: |
+    /* ── Batik Nusantara — Dark Mode ── */
+    .dark {
+      --background: #1A120B;
+      --foreground: #EDE0D4;
+      --card: #2C1F14;
+      --card-foreground: #EDE0D4;
+      --popover: #2C1F14;
+      --popover-foreground: #EDE0D4;
+      --primary: #D4A76A;
+      --primary-foreground: #1A120B;
+      --secondary: #3D2B1F;
+      --secondary-foreground: #EDE0D4;
+      --muted: #3D2B1F;
+      --muted-foreground: #A89880;
+      --accent: #D4A76A;
+      --accent-foreground: #1A120B;
+      --destructive: #E86A5E;
+      --border: rgba(237, 224, 212, 0.12);
+      --input: rgba(237, 224, 212, 0.16);
+      --ring: #D4A76A;
+      --sidebar: #0F1A2E;
+      --sidebar-foreground: #CED4DA;
+      --sidebar-primary: #D4A76A;
+      --sidebar-primary-foreground: #0F1A2E;
+      --sidebar-accent: #1A2F4C;
+      --sidebar-accent-foreground: #CED4DA;
+      --sidebar-border: rgba(206, 212, 218, 0.12);
+      --sidebar-ring: #D4A76A;
+      --chart-1: #D4A76A;
+      --chart-2: #8B5E3C;
+      --chart-3: #6B8E9E;
+      --chart-4: #E86A5E;
+      --chart-5: #C4A882;
+    }
+
+    /* ═══════════════════════════════════════════
+       BATIK NUSANTARA — Semi-Transparent Pattern
+       
+       Tiga motif batik tradisional sebagai SVG overlay:
+       1. Parang (diagonal lines) — keberanian
+       2. Kawung (overlapping circles) — ketertiban
+       3. Mega Mendung (cloud arches) — berkah
+       
+       Semua SVG adalah original geometric interpretation,
+       terinspirasi dari warisan budaya Indonesia (public domain).
+    ═══════════════════════════════════════════ */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      /* Mega Mendung — cloud arches pattern */
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='60' viewBox='0 0 120 60'%3E%3Cpath d='M0 25 Q 15 10 30 25 Q 45 40 60 25 Q 75 10 90 25 Q 105 40 120 25' fill='none' stroke='%238B5E3C' stroke-width='2' opacity='0.15'/%3E%3Cpath d='M0 35 Q 15 22 30 35 Q 45 48 60 35 Q 75 22 90 35 Q 105 48 120 35' fill='none' stroke='%23D4A76A' stroke-width='1.5' opacity='0.10'/%3E%3C/svg%3E");
+      background-repeat: repeat;
+      background-size: 120px 60px;
+    }
+
+    /* ── Dark mode ── */
+    .dark body::before {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='60' viewBox='0 0 120 60'%3E%3Cpath d='M0 25 Q 15 10 30 25 Q 45 40 60 25 Q 75 10 90 25 Q 105 40 120 25' fill='none' stroke='%23D4A76A' stroke-width='2' opacity='0.12'/%3E%3Cpath d='M0 35 Q 15 22 30 35 Q 45 48 60 35 Q 75 22 90 35 Q 105 48 120 35' fill='none' stroke='%23D4A76A' stroke-width='1.5' opacity='0.08'/%3E%3C/svg%3E");
+    }
+
+  # Widget skin overrides (future): bisa diganti dengan custom JS component
+  # widgets:
+  #   badge: assets/widgets/badge.js

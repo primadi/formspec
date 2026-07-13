@@ -1,0 +1,11 @@
+apiVersion: forma.dev/v1alpha1
+kind: Module
+metadata:
+  name: batik-theme
+  description: >
+    Batik Nusantara — theme tradisional Indonesia dengan pattern batik
+    sebagai inspirasi warna dan nuansa. Tema ini bisa dipasang di
+    workspace mana pun tanpa perlu mengubah manifest aplikasi.
+spec:
+  version: 1.0.0
+  # pure UI module — tidak punya entity, service, atau action

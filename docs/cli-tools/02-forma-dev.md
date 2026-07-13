@@ -49,7 +49,7 @@ forma dev --spec ./my-app/spec --dev-ui
 
 ### Dengan config file
 
-Buat `forma-sidecar.yaml` di folder project:
+Buat `forma-app.yaml` di folder project:
 
 ```yaml
 spec: ./my-app/spec
@@ -138,10 +138,10 @@ forma dev --listen local_http --app-endpoint local_http --runtime php
 
 ---
 
-## 7. Config File (`forma-sidecar.yaml`)
+## 7. Config File (`forma-app.yaml`)
 
-Jika `forma dev` dijalankan tanpa flag, ia mencari `./forma-sidecar.yaml`
-atau `./forma-sidecar.yml` untuk konfigurasi.
+Jika `forma dev` dijalankan tanpa flag, ia mencari `./forma-app.yaml`
+(atau `./forma-sidecar.yaml` untuk backward compatibility).
 
 Format:
 

@@ -1,0 +1,64 @@
+/* ── Batik Nusantara — Additional CSS ──
+ *
+ * Stylesheet tambahan untuk theme Batik Nusantara.
+ * Di-inject otomatis oleh ThemeRenderer dari manifest tokens/stylesheet.
+ * Berisi pattern background halus & utility classes khas batik.
+ */
+
+/* ── Pattern latar halus (subtile) ── */
+.batik-pattern-parang {
+  background-color: var(--background);
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 20px,
+    rgba(139, 94, 60, 0.06) 20px,
+    rgba(139, 94, 60, 0.06) 21px
+  );
+}
+
+.batik-pattern-kawung {
+  background-color: var(--background);
+  background-image: radial-gradient(
+    circle at 25% 25%,
+    rgba(212, 167, 106, 0.08) 0%,
+    transparent 50%
+  );
+  background-size: 60px 60px;
+}
+
+/* ── Ornamen khas untuk border/divider ── */
+.batik-divider {
+  border: none;
+  height: 2px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--primary) 20%,
+    var(--primary) 80%,
+    transparent
+  );
+  position: relative;
+}
+
+.batik-divider::after {
+  content: "✦";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--background);
+  padding: 0 8px;
+  color: var(--primary);
+  font-size: 10px;
+}
+
+/* ── Animasi subtle ── */
+@keyframes batik-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.batik-enter {
+  animation: batik-fade-in 0.3s ease-out;
+}

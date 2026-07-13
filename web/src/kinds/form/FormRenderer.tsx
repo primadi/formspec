@@ -181,7 +181,7 @@ export default function FormRenderer({ entity, mode }: FormRendererProps) {
       </div>
 
       {/* Form */}
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
+      <form onSubmit={handleSubmit(onSubmit)} autoComplete="off" className="space-y-8">
         {formSpec.sections.map((section, sIdx) => (
           <div key={sIdx} className="space-y-4">
             {section.title && (
@@ -208,7 +208,7 @@ export default function FormRenderer({ entity, mode }: FormRendererProps) {
                 const isRequired = entityField.required ?? false
 
                 return (
-                  <div key={field.name} className="space-y-1.5">
+                  <div key={field.name} className="space-y-2.5">
                     <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
                       {field.label ?? field.name}
                       {isRequired && <span className="text-destructive ml-0.5">*</span>}
@@ -311,6 +311,7 @@ function FormFieldWidget({
         />
       )
 
+    case "enum":
     case "select":
       return (
         <Select
@@ -339,6 +340,7 @@ function FormFieldWidget({
         </div>
       )
 
+    case "relation-picker":
     case "relation":
       return (
         <RelationPicker

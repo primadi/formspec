@@ -15,6 +15,7 @@ import { useMetaStore } from "@/stores/meta"
 import { apiList, apiPost } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Select as ThemedSelect } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { toast } from "sonner"
 
@@ -158,7 +159,7 @@ export default function SearchSelect({ step, module, stepData, onSelect, getClie
     switch (fieldType) {
       case "date":
         return (
-          <div key={field.name} className="space-y-1">
+          <div key={field.name} className="space-y-2.5">
             <label className="text-sm font-medium">{label}</label>
             <Input
               type="date"
@@ -170,18 +171,14 @@ export default function SearchSelect({ step, module, stepData, onSelect, getClie
       case "enum": {
         const options = entityField?.enum_values ?? []
         return (
-          <div key={field.name} className="space-y-1">
+          <div key={field.name} className="space-y-2.5">
             <label className="text-sm font-medium">{label}</label>
-            <select
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+            <ThemedSelect
               value={value}
-              onChange={(e) => setFormData((d) => ({ ...d, [field.name]: e.target.value }))}
-            >
-              <option value="">Pilih {label}</option>
-              {options.map((opt) => (
-                <option key={opt} value={opt}>{opt}</option>
-              ))}
-            </select>
+              onChange={(v) => setFormData((d) => ({ ...d, [field.name]: v }))}
+              options={options}
+              placeholder={`Pilih ${label}`}
+            />
           </div>
         )
       }
@@ -206,7 +203,7 @@ export default function SearchSelect({ step, module, stepData, onSelect, getClie
       case "decimal":
       case "number":
         return (
-          <div key={field.name} className="space-y-1">
+          <div key={field.name} className="space-y-2.5">
             <label className="text-sm font-medium">{label}</label>
             <Input
               type="number"
@@ -218,7 +215,7 @@ export default function SearchSelect({ step, module, stepData, onSelect, getClie
         )
       default:
         return (
-          <div key={field.name} className="space-y-1">
+          <div key={field.name} className="space-y-2.5">
             <label className="text-sm font-medium">{label}</label>
             <Input
               placeholder={field.placeholder}
@@ -321,6 +318,7 @@ export default function SearchSelect({ step, module, stepData, onSelect, getClie
 
                   {createForm ? (
                     <form
+                      autoComplete="off"
                       onSubmit={(e) => {
                         e.preventDefault()
                         handleCreate()

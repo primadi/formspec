@@ -1,27 +1,25 @@
 # How to Run Forma
 
-Forma berjalan dengan backend (Go API server) dan frontend (SPA React).
+Forma berjalan dalam satu proses engine (`forma dev`) + frontend (SPA React). App business logic dalam bahasa apapun (Go, PHP, Python, Ruby, Java, .NET, TypeScript, Rust) berjalan sebagai child process.
 
 | Opsi | Cara | Terminal | HMR | Cocok untuk |
 |---|---|---|---|---|
-| **A — `--dev-ui`** | Sidecar spawn Vite otomatis | **1** | ✅ | Development paling praktis |
-| **B — Manual** | Sidecar + `npm run dev` | 2 | ✅ | Development |
-| **C — Static** | Sidecar + `--web-dir` | 1 | ❌ | Demo / produksi |
+| **A — `--dev-ui`** | `forma dev` spawn Vite otomatis | **1** | ✅ | Development paling praktis |
+| **B — Manual** | `forma dev` + `npm run dev` | 2 | ✅ | Development |
+| **C — Static** | `forma dev` + `--web-dir` | 1 | ❌ | Demo / produksi |
 
 ## Opsi A: Satu Terminal — `--dev-ui`
 
 ```bash
-go run ./cmd/forma-sidecar/ \
+go run ./cmd/forma/ dev \
   --spec examples/Clinic-UI-Showcase/spec \
   --dsn "sqlite:.forma/clinic.db" \
   --addr :8080 \
-  --listen "http://127.0.0.1:9090" \
-  --app-endpoint "http://127.0.0.1:9091" \
   --force --dev-ui
 ```
 
-Sidecar akan:
-1. Kill sidecar sebelumnya (kalau ada) berkat `--force`
+`forma dev` akan:
+1. Kill engine sebelumnya (kalau ada) berkat `--force`
 2. Load engine + REST API di `:8080`
 3. Spawn `npm run dev` sebagai child process — Vite HMR siap di `:5173`
 4. Saat `Ctrl+C`, Vite ikut dimatikan
@@ -30,14 +28,12 @@ Buka **http://localhost:5173/default/_admin**.
 
 ## Opsi B: Dua Terminal
 
-**Terminal 1 — Backend:**
+**Terminal 1 — Engine:**
 ```bash
-go run ./cmd/forma-sidecar/ \
+go run ./cmd/forma/ dev \
   --spec examples/Clinic-UI-Showcase/spec \
   --dsn "sqlite:.forma/clinic.db" \
   --addr :8080 \
-  --listen "http://127.0.0.1:9090" \
-  --app-endpoint "http://127.0.0.1:9091" \
   --dev --force
 ```
 
@@ -51,12 +47,10 @@ cd web && npm run dev
 ```bash
 cd web && npm run build
 
-go run ./cmd/forma-sidecar/ \
+go run ./cmd/forma/ dev \
   --spec examples/Clinic-UI-Showcase/spec \
   --dsn "sqlite:.forma/clinic.db" \
   --addr :8080 \
-  --listen "http://127.0.0.1:9090" \
-  --app-endpoint "http://127.0.0.1:9091" \
   --dev --force \
   --web-dir web/dist
 ```
@@ -72,15 +66,16 @@ Satu port `:8080` untuk API + SPA. Buka **http://localhost:8080/default/_admin**
 | `--spec` | Path ke direktori YAML manifests | `./spec` |
 | `--dsn` | Database DSN (sqlite atau postgres) | `sqlite:.forma/data.db` |
 | `--addr` | REST API listen address | `:8080` |
-| `--listen` | Sidecar ctx listener (internal) | `unix:///tmp/forma/sidecar.sock` |
-| `--app-endpoint` | App endpoint (internal) | `unix:///tmp/forma/app.sock` |
 | `--dev` | Dev mode (auth bypass, unsigned artifacts) | `false` |
 | `--state-dir` | Local state directory | `.forma` |
-| `--force` | Kill previous `forma-sidecar` on same ports | `false` |
+| `--force` | Kill previous `forma` engine on same ports | `false` |
 | `--web-dir` | Built SPA directory (e.g. `web/dist`) | `""` |
 | `--dev-ui` | Spawn `npm run dev` otomatis (implikasikan `--dev`) | `false` |
+| `--runtime` | App runtime: `auto`, `go`, `php`, `python`, `ruby`, `java`, `dotnet`, `rust`, `node` | `auto` |
+| `--app-dir` | App source directory (child-process runtime) | `.forma/app` |
+| `--app-entrypoint` | Entrypoint file (default tergantung runtime) | auto |
 
-> `--listen` dan `--app-endpoint` perlu HTTP URL (bukan Unix socket) jika tidak punya akses root.
+> `--listen` dan `--app-endpoint` sudah otomatis diatur oleh `forma dev` — tidak perlu di-set manual.
 
 ## Reset Database
 
@@ -88,7 +83,7 @@ Satu port `:8080` untuk API + SPA. Buka **http://localhost:8080/default/_admin**
 rm -rf .forma
 ```
 
-Database auto-generate saat sidecar restart.
+Database auto-generate saat engine restart.
 
 ## Troubleshooting
 
@@ -96,8 +91,8 @@ Database auto-generate saat sidecar restart.
 |---|---|
 | Port already in use | Tambah `--force` |
 | Blank page | Hard refresh (Ctrl+F5) |
-| Permission denied | Pake HTTP URL: `--listen "http://127.0.0.1:9090"` |
-| Hyphen di tabel SQL | Sidecar otomatis `-` → `_` (fix di `internal/db/crud.go`) |
+| Permission denied | `forma dev` pilih socket/HTTP otomatis berdasarkan environment |
+| Hyphen di tabel SQL | Engine otomatis `-` → `_` (fix di `internal/db/crud.go`) |
 
 ## Prasyarat
 
@@ -107,13 +102,15 @@ Database auto-generate saat sidecar restart.
 | Node.js | 22+ | `node --version` |
 | npm | 10+ | `npm --version` |
 
-## 1. Backend — `forma-sidecar`
+## 1. Engine — `forma dev`
 
-Backend adalah server Go yang:
+`forma dev` adalah engine yang:
 - Load YAML manifest dari direktori `--spec`
 - Generate tabel SQLite/Postgres sesuai entity spec
 - Serve REST API di `/{workspace}/api/v1/...`
 - Serve Meta API di `/{workspace}/api/v1/_meta/...`
+- Auto-detect runtime dari `--app-dir` dan spawn app child process
+- Enforce permission, tenant isolation, ctx.* primitives
 
 ### Command
 
@@ -121,14 +118,50 @@ Backend adalah server Go yang:
 # Dari root repository
 cd /workspaces/forma
 
-go run ./cmd/forma-sidecar/ \
+go run ./cmd/forma/ dev \
   --spec examples/Clinic-UI-Showcase/spec \
   --dsn "sqlite:.forma/clinic.db" \
   --addr :8080 \
-  --listen "http://127.0.0.1:9090" \
-  --app-endpoint "http://127.0.0.1:9091" \
   --dev
 ```
+
+### App Child Process
+
+App business logic dalam bahasa apapun berjalan sebagai **child process** dari `forma dev`. Engine dan app berkomunikasi via Unix socket:
+
+```
+┌───────────────────────────────────────────┐
+│ forma dev (engine)                         │
+│  • Entity engine, state machine           │
+│  • Permission enforcement                 │
+│  • Tenant isolation                       │
+│  • REST API + Admin panel                 │
+│  • ctx.* primitives                       │
+│              │                            │
+│              ▼ Unix socket                │
+│  app child process (via lib-forma-*)      │
+│  • Business logic only                    │
+│  • Go / PHP / Python / Ruby / Java        │
+│    .NET / TypeScript / Rust               │
+└───────────────────────────────────────────┘
+```
+
+### Auto-detect Runtime
+
+`forma dev` mendeteksi runtime dari file di `--app-dir`:
+
+| File | Runtime |
+|---|---|
+| `go.mod` | Go |
+| `Cargo.toml` | Rust |
+| `package.json` | Node.js / TypeScript |
+| `composer.json` | PHP |
+| `pyproject.toml` / `requirements.txt` | Python |
+| `Gemfile` | Ruby |
+| `pom.xml` / `build.gradle` | Java |
+| `*.csproj` / `*.sln` | .NET |
+
+Override manual dengan `--runtime <name>` atau `runtime:` di `forma-app.yaml`.
 
 ### Flags
 
@@ -137,43 +170,44 @@ go run ./cmd/forma-sidecar/ \
 | `--spec` | Path ke direktori YAML manifests | `./spec` |
 | `--dsn` | Database DSN (sqlite atau postgres) | `sqlite:.forma/data.db` |
 | `--addr` | REST API listen address | `:8080` |
-| `--listen` | Sidecar ctx listener (internal) | `unix:///tmp/forma/sidecar.sock` |
-| `--app-endpoint` | App endpoint (internal) | `unix:///tmp/forma/app.sock` |
 | `--dev` | Dev mode (auth bypass, unsigned artifacts) | `false` |
 | `--state-dir` | Local state directory | `.forma` |
-| **`--force`** | Kill previous `forma-sidecar` on same ports; error jika port dipakai program **lain** | `false` |
+| **`--force`** | Kill previous `forma` engine on same ports | `false` |
+| `--web-dir` | Built SPA directory | `""` |
+| `--dev-ui` | Auto-spawn Vite dev server | `false` |
+| `--runtime` | Override runtime auto-detect | `auto` |
+| `--app-dir` | App source directory | `.forma/app` |
+| `--app-entrypoint` | Entrypoint file | auto |
 
-> **Catatan:** `--listen` dan `--app-endpoint` perlu HTTP URL (bukan Unix socket) jika tidak punya akses root, karena Unix socket default di `/tmp/forma/` butuh permission root.
+> `--listen` dan `--app-endpoint` sudah diatur internal — tidak perlu di-set manual. `--app-endpoint-url` untuk override jika perlu endpoint spesifik.
 
 ### --force Flag
 
-`--force` otomatis membunuh proses `forma-sidecar` sebelumnya yang masih menempel di port yang sama, lalu restart yang baru. Jika port dipakai program **lain**, akan muncul error:
+`--force` otomatis membunuh proses `forma` sebelumnya yang masih menempel di port yang sama, lalu restart yang baru. Jika port dipakai program **lain**, akan muncul error:
 
 ```bash
 port 8080 is already in use by "nginx" (PID 12345).
-Use --force to kill a previous forma-sidecar, or stop the other program manually
+Use --force to kill a previous forma instance, or stop the other program manually
 ```
 
 ### Contoh: Clinic UI Showcase
 
 ```bash
 mkdir -p .forma
-go run ./cmd/forma-sidecar/ \
+go run ./cmd/forma/ dev \
   --spec examples/Clinic-UI-Showcase/spec \
   --dsn "sqlite:.forma/clinic.db" \
   --addr :8080 \
-  --listen "http://127.0.0.1:9090" \
-  --app-endpoint "http://127.0.0.1:9091" \
   --dev \
   --force
 ```
 
 Output:
 ```
-port 8080 is held by a previous forma-sidecar (PID 12345) — killing it...
-[forma-sidecar] engine loaded: 45 routes
-[forma-sidecar] ctx listener on http://127.0.0.1:9090
-[forma-sidecar] REST API on :8080
+port 8080 is held by a previous forma instance (PID 12345) — killing it...
+[forma] engine loaded: 45 routes
+[forma] ctx listener on unix:///tmp/forma/sidecar.sock
+[forma] REST API on :8080
 ```
 
 Verifikasi:
@@ -228,22 +262,31 @@ Jika backend di port berbeda, sesuaikan `target`.
 
 ## 3. Production Build
 
-Build SPA statis, lalu backend serve semuanya:
+Untuk production, gunakan `forma serve` (tanpa `--dev`):
 
 ```bash
+# Build SPA
 cd web && npm run build
 cd ..
 
-go run ./cmd/forma-sidecar/ \
+# Jalankan engine dalam mode production
+go run ./cmd/forma/ serve \
   --spec examples/Clinic-UI-Showcase/spec \
   --dsn "sqlite:.forma/clinic.db" \
   --addr :8080 \
-  --listen "http://127.0.0.1:9090" \
-  --app-endpoint "http://127.0.0.1:9091" \
-  --dev
+  --web-dir web/dist
 ```
 
-> **Note:** `--web-dir` flag belum diimplementasikan di `forma-sidecar`. Untuk production, gunakan HTTP server (nginx, caddy) untuk serve `web/dist/` dan proxy `/{workspace}/api/` ke `localhost:8080`.
+`forma serve` mengaktifkan:
+- **JWT auth** — semua request API perlu token valid
+- **Strict `uses` enforcement** — action hanya bisa akses resource yang di-declare
+- **Production logging** — structured, tanpa debug output
+- **No auto-reload** — app child process dijalankan sekali, tidak di-watch
+
+Untuk deployment skala besar, gunakan nginx/caddy sebagai reverse proxy:
+- Serve `web/dist/` untuk static assets
+- Proxy `/{workspace}/api/` ke `localhost:8080`
+- Rate limiting, SSL termination, CDN
 
 ## 4. Reset Database
 
@@ -255,7 +298,7 @@ rm .forma/clinic.db
 rm -rf .forma
 ```
 
-Database akan auto-generate saat sidecar restart.
+Database akan auto-generate saat engine restart.
 
 ## 5. Troublehshooting
 
@@ -263,14 +306,13 @@ Database akan auto-generate saat sidecar restart.
 
 Gunakan `--force`:
 ```bash
-go run ./cmd/forma-sidecar/ ... --force
+go run ./cmd/forma/ dev ... --force
 ```
 
 Atau manual:
 ```bash
 # Cek proses yang pakai port
 lsof -i :8080
-lsof -i :9090
 lsof -i :5173
 
 # Kill
@@ -279,37 +321,26 @@ kill <PID>
 kill -9 <PID>
 ```
 
-### Permission denied (Unix socket)
-
-Gunakan HTTP URL untuk `--listen` dan `--app-endpoint`:
-```bash
-go run ./cmd/forma-sidecar/ ... \
-  --listen "http://127.0.0.1:9090" \
-  --app-endpoint "http://127.0.0.1:9091"
-```
-
 ### Blank page di browser
 
 1. Buka Chrome DevTools (F12) → Console, cek error
 2. Hard refresh (Ctrl+F5) — browser cache mungkin stale
-3. Pastikan Vite dan backend sama-sama running
+3. Pastikan Vite dan engine sama-sama running
 4. Cek proxy: akses langsung `http://localhost:8080/default/api/v1/_meta/me`
 
 ### Table name with hyphens
 
-Backend otomatis mengganti `-` dengan `_` di nama tabel SQL. Jika masih error, pastikan backend versi terbaru (fix di `internal/db/crud.go`).
+Engine otomatis mengganti `-` dengan `_` di nama tabel SQL. Jika masih error, pastikan engine versi terbaru (fix di `internal/db/crud.go`).
 
 ## 6. Contoh Lain
 
 ### Billing (formerly Order-to-Cash)
 
 ```bash
-go run ./cmd/forma-sidecar/ \
+go run ./cmd/forma/ dev \
   --spec verticals/billing/spec \
   --dsn "sqlite:.forma/billing.db" \
   --addr :8080 \
-  --listen "http://127.0.0.1:9090" \
-  --app-endpoint "http://127.0.0.1:9091" \
   --dev \
   --force
 ```
@@ -317,12 +348,10 @@ go run ./cmd/forma-sidecar/ \
 ### Reference App
 
 ```bash
-go run ./cmd/forma-sidecar/ \
+go run ./cmd/forma/ dev \
   --spec examples/reference-app/spec \
   --dsn "sqlite:.forma/reference.db" \
   --addr :8080 \
-  --listen "http://127.0.0.1:9090" \
-  --app-endpoint "http://127.0.0.1:9091" \
   --dev \
   --force
 ```
@@ -330,16 +359,19 @@ go run ./cmd/forma-sidecar/ \
 ## 7. Arsitektur Singkat
 
 ```
-Browser ─── Vite (:5173) ─── proxy /default/api/v1/ → forma-sidecar (:8080)
+Browser ─── Vite (:5173) ─── proxy /default/api/v1/ → forma dev (:8080)
                                                               │
                                                     ┌─────────┴──────────┐
                                                     │  Entity Engine     │
                                                     │  REST API          │
                                                     │  Meta API          │
+                                                    │  ctx.* primitives  │
+                                                    │  App child process │
                                                     │  SQLite/Postgres   │
                                                     └────────────────────┘
 ```
 
-- **Vite** dev server: HMR, hot reload, proxy API ke backend
-- **forma-sidecar**: Go binary — entity engine, CRUD, permissions, Starlark
+- **Vite** dev server: HMR, hot reload, proxy API ke engine
+- **`forma dev`**: Engine — entity engine, CRUD, permissions, Starlark, ctx.* primitives, spawn app child process
+- **App child process**: Business logic dalam bahasa apapun (Go/PHP/Python/Ruby/Java/.NET/TypeScript/Rust) via `lib-forma-*` SDK
 - **SPA**: React 19 + shadcn/ui — runtime reader Meta API, manifest-driven renderer

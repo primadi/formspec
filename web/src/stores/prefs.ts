@@ -62,11 +62,14 @@ export interface PrefsState {
   sidebarCollapsed: boolean
   theme: ThemeMode
   colorPreset: string
+  /** Name of the active manifest theme, or null for no theme (use index.css defaults) */
+  activeTheme: string | null
   // ── Actions ──
   toggleSidebar: () => void
   setSidebarCollapsed: (collapsed: boolean) => void
   setTheme: (theme: ThemeMode) => void
   setColorPreset: (name: string) => void
+  setActiveTheme: (name: string | null) => void
 }
 
 export const usePrefsStore = create<PrefsState>()(
@@ -75,11 +78,13 @@ export const usePrefsStore = create<PrefsState>()(
       sidebarCollapsed: false,
       theme: "system",
       colorPreset: "neutral",
+      activeTheme: null,
 
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
       setTheme: (theme) => set({ theme }),
       setColorPreset: (name) => set({ colorPreset: name }),
+      setActiveTheme: (name) => set({ activeTheme: name }),
     }),
     {
       name: "forma-prefs",

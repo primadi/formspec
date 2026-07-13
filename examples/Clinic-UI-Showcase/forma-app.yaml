@@ -1,0 +1,36 @@
+# ── Forma Dev Config — TypeScript Sidecar Demo ──
+#
+# Usage:
+#   cd examples/Clinic-UI-Showcase
+#   go run ../../cmd/forma/ dev
+#
+# This enables:
+#   - Runtime: Node.js (detected from app/package.json)
+#   - Ctx listener: unix socket (for entity primitive proxy)
+#   - App endpoint: unix socket (for sidecar invoke)
+#   - The sell action on otc-sale is handled by app/src/handlers/otc_sell.ts
+#     (compiled to app/dist/app.js)
+#
+# Without this file, `forma dev` runs in single-process mode (Starlark only).
+
+spec: spec
+dsn: sqlite:.forma/clinic.db
+runtime: node
+app-dir: app
+# .ts entrypoint + dev: true → forma uses `npx tsx --watch` auto-reload
+app-entrypoint: src/app.ts
+listen: unix_socket
+app-endpoint: unix_socket
+listen-url: unix:///tmp/forma-sidecar.sock
+app-endpoint-url: unix:///tmp/forma-app.sock
+dev: true
+
+# Theme manifests — loaded from the shared ui-theme/ directory.
+# Tidak perlu copy theme ke spec/modules/.
+# Path relatif terhadap working directory (examples/Clinic-UI-Showcase).
+themes:
+  - ../../ui-theme/batik-theme
+  - ../../ui-theme/ocean-blue
+  - ../../ui-theme/midnight-pro
+  - ../../ui-theme/tropical
+  - ../../ui-theme/forest-mist

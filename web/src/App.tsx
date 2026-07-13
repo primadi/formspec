@@ -20,6 +20,7 @@ import { Toaster } from "sonner"
 
 import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
+import { usePrefsStore } from "@/stores/prefs"
 import { AppShell, LoginScreen, buildRoutes } from "@/shell"
 import ThemeRenderer from "@/kinds/theme/ThemeRenderer"
 import { useTheme } from "@/hooks/useTheme"
@@ -68,6 +69,7 @@ function SurfaceShell({ surface }: { surface: "admin" | "app" }) {
   // wizard's own setSearchParams() step change). Keying on bundle/surfacePath
   // keeps the same Component references across those re-renders.
   // Must run before any early return below — Hooks can't be conditional.
+  const activeTheme = usePrefsStore((s) => s.activeTheme)
   const surfacePath = `/${workspace}/${surface === "admin" ? "_admin" : "app"}`
   const surfaceRoutes = useMemo(
     () => (bundle ? buildRoutes({ bundle, basePath: surfacePath }) : []),
@@ -126,17 +128,15 @@ function SurfaceShell({ surface }: { surface: "admin" | "app" }) {
     )
   }
 
-  // Apply themes
-  const themeBundle = bundle.themes?.[0]
-  const themeEntry = themeBundle ? {
-    name: themeBundle.name,
-    module: themeBundle.module,
-    spec: themeBundle.spec,
-  } : null
+  // Apply selected theme from user preference.
+  // When activeTheme is null, no manifest theme is applied (use index.css defaults).
+  const themeEntry = activeTheme
+    ? bundle.themes.find((t) => t.name === activeTheme) ?? null
+    : null
 
   return (
     <>
-      {themeEntry && <ThemeRenderer entry={themeEntry} />}
+      <ThemeRenderer entry={themeEntry} />
       <Routes>
         <Route element={<AppShell />}>
         {surfaceRoutes.map((route, idx) => (

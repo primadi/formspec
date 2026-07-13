@@ -1,0 +1,10 @@
+apiVersion: forma.dev/v1alpha1
+kind: Module
+metadata:
+  name: midnight-pro
+  description: >
+    Midnight Pro — dark-first premium theme dengan frosted glass effect,
+    glow accent, dan tipografi elegan. Cocok untuk dashboard analitik,
+    SaaS platform, atau aplikasi yang ingin tampil modern & mewah.
+spec:
+  version: 1.0.0

@@ -1,0 +1,11 @@
+apiVersion: forma.dev/v1alpha1
+kind: Module
+metadata:
+  name: tropical
+  description: >
+    Tropical — vibrant & playful dengan palet coral, lime, dan gold.
+    Dilengkapi animated gradient background dan rounded corners besar.
+    Cocok untuk aplikasi wellness, fitness, e-commerce fashion,
+    atau startup yang ingin tampil energik & friendly.
+spec:
+  version: 1.0.0

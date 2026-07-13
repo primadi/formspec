@@ -1,4 +1,0 @@
-# Konfigurasi default untuk `forma dev`
-# Dibaca otomatis dari folder kerja — lihat mergeConfigFile() di dev_config.go
-spec: examples/Clinic-UI-Showcase/spec
-dsn: sqlite:.forma/clinic.db

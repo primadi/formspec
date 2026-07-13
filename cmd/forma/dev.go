@@ -9,7 +9,7 @@
 // dengan perubahan:
 //   - Default --listen = unix socket (sidecar selalu jalan)
 //   - --dev / --dev-ui implied --force
-//   - Config file auto-discover (forma-sidecar.yaml)
+//   - Config file auto-discover (forma-app.yaml / forma-sidecar.yaml)
 //   - Runtime auto-detect dari project files
 //   - Auto-create .forma/ directory
 package main
@@ -59,6 +59,7 @@ type DevConfig struct {
 	AppDir         string
 	AppEntrypoint  string
 	ControlURL     string
+	ThemeDirs      []string // additional directories containing theme manifests
 }
 
 // ─── Flag defaults ───
@@ -90,7 +91,7 @@ func runDev(args []string) {
 	// ── 1. Parse flags with defaults ──
 	cfg := parseDevFlags(args)
 
-	// ── 2. Try config file (forma-sidecar.yaml / forma-sidecar.yml) ──
+	// ── 2. Try config file (forma-app.yaml / forma-sidecar.yaml) ──
 	cfg = mergeConfigFile(cfg)
 
 	// ── 3. Apply defaults for values not set by CLI or config file ──
@@ -167,6 +168,7 @@ func runDev(args []string) {
 		SidecarEndpoint:      appEndpointURL,
 		SidecarInvokeTimeout: cfg.InvokeTimeout,
 		WorkspaceID:          cfg.WorkspaceID,
+		ThemeDirs:            cfg.ThemeDirs,
 	}
 
 	// SPA serving priority: --web-dir > auto-detect web/dist/ > embedded FS
@@ -248,21 +250,22 @@ func runDev(args []string) {
 
 	// ── 13. Dev UI: Vite dev server ──
 	var viteProc *appProcess
+	var vitePort string
 	if cfg.DevUI {
 		webDir, err := findWebDir()
 		if err != nil {
 			log.Fatalf("[forma] %v", err)
 		}
-		viteProc, err = startVite(ctx, webDir)
+		viteProc, vitePort, err = startVite(ctx, webDir)
 		if err != nil {
 			log.Fatalf("[forma] vite: %v", err)
 		}
-		log.Printf("[forma] Vite dev server started (http://localhost:5173)")
+		log.Printf("[forma] Vite dev server started (http://localhost:%s)", vitePort)
 	}
 
 	// ── 14. SPA info ──
 	if cfg.DevUI {
-		log.Printf("[forma] Frontend: http://localhost:5173/default/_admin")
+		log.Printf("[forma] Frontend: http://localhost:%s/default/_admin", vitePort)
 	} else if cfg.WebDir == "" {
 		log.Printf("[forma] SPA embedded — buka http://localhost%s/default/_admin", cfg.Addr)
 	}
@@ -347,13 +350,34 @@ func autoKillPrevious() {
 	}
 
 	log.Printf("[forma] killing previous instance (PID %d)...", oldPID)
-	time.Sleep(500 * time.Millisecond)
 
-	// SIGKILL if still alive
-	proc.Signal(syscall.SIGKILL)
-	time.Sleep(200 * time.Millisecond)
+	// Give it a real chance to run its own graceful shutdown (which stops
+	// its app/Vite children cleanly) instead of racing it with a fixed
+	// short sleep — that previously SIGKILLed it before it got around to
+	// signaling its children, leaving them orphaned in their own process
+	// group (see ensurePort for the same fix).
+	deadline := time.Now().Add(8 * time.Second)
+	for time.Now().Before(deadline) && processAlive(oldPID) {
+		time.Sleep(150 * time.Millisecond)
+	}
+
+	if processAlive(oldPID) {
+		log.Printf("[forma] previous instance (PID %d) did not exit gracefully — forcing", oldPID)
+		killDescendants(oldPID)
+		proc.Signal(syscall.SIGKILL)
+		time.Sleep(200 * time.Millisecond)
+	}
 
 	os.Remove(pidPath)
+}
+
+// processAlive reports whether pid still exists, via a zero-signal probe.
+func processAlive(pid int) bool {
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	return proc.Signal(syscall.Signal(0)) == nil
 }
 
 // writePIDFile writes the current PID to the PID file.
@@ -435,6 +459,7 @@ func parseDevFlags(args []string) DevConfig {
 	appDir := fs.String("app-dir", "", "App source directory (child-process runtime)")
 	appEntrypoint := fs.String("app-entrypoint", "", "Entrypoint filename (default: app.php / app.py / app.js)")
 	controlURL := fs.String("control-cluster-url", "", "Control Plane URL (artifact pull mode)")
+	themeDirs := fs.String("theme-dir", "", "Additional theme directory (repeatable, comma-separated)")
 
 	fs.Parse(args)
 
@@ -458,6 +483,7 @@ func parseDevFlags(args []string) DevConfig {
 		AppDir:         *appDir,
 		AppEntrypoint:  *appEntrypoint,
 		ControlURL:     *controlURL,
+		ThemeDirs:      splitAndClean(*themeDirs),
 	}
 
 	// AppDir default is applied AFTER config file merge (in runDev),
@@ -472,6 +498,26 @@ func orDefault(val, def string) string {
 		return def
 	}
 	return val
+}
+
+// splitAndClean splits a comma-separated string and trims whitespace.
+// Returns nil for empty input.
+func splitAndClean(s string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			result = append(result, p)
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
 }
 
 // resolveEndpoint converts a mode string + custom URL into a listenable URL.
@@ -532,16 +578,58 @@ func ensurePort(addr, ownProcessName string) error {
 	if procName == ownProcessName || procName == "exe" || strings.Contains(procName, ownProcessName) {
 		fmt.Fprintf(os.Stderr, "port %d is held by a previous %s (PID %d) — killing it...\n", port, ownProcessName, pid)
 		proc, err := os.FindProcess(pid)
-		if err == nil {
-			proc.Signal(syscall.SIGTERM)
-			time.Sleep(500 * time.Millisecond)
-			proc.Signal(syscall.SIGKILL)
-			time.Sleep(200 * time.Millisecond)
+		if err != nil {
+			return nil
 		}
+		proc.Signal(syscall.SIGTERM)
+
+		// Give the old instance a real chance to run its own graceful
+		// shutdown (which stops its app/Vite children cleanly) instead of
+		// racing it with a fixed short sleep — that previously SIGKILLed it
+		// before it got around to signaling its children, leaving them
+		// orphaned in their own process group.
+		deadline := time.Now().Add(8 * time.Second)
+		for time.Now().Before(deadline) {
+			if ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port)); err == nil {
+				ln.Close()
+				return nil
+			}
+			time.Sleep(150 * time.Millisecond)
+		}
+
+		// It's still holding the port after a generous wait — force it,
+		// and sweep any children it leaked (e.g. an app/Vite process
+		// detached in its own process group) so they don't accumulate
+		// across restarts.
+		fmt.Fprintf(os.Stderr, "port %d: previous instance (PID %d) did not exit gracefully — forcing\n", port, pid)
+		killDescendants(pid)
+		proc.Signal(syscall.SIGKILL)
+		time.Sleep(200 * time.Millisecond)
 		return nil
 	}
 
 	return fmt.Errorf("port %d is already in use by %q (PID %d). Stop it manually first", port, procName, pid)
+}
+
+// killDescendants force-kills every descendant of pid (depth-first) so that
+// children left behind in their own process group — e.g. an app/Vite
+// process started with Setpgid, which doesn't die just because its parent
+// does — don't survive a forced kill of that parent.
+func killDescendants(pid int) {
+	out, err := exec.Command("pgrep", "-P", strconv.Itoa(pid)).Output()
+	if err != nil {
+		return
+	}
+	for _, field := range strings.Fields(string(out)) {
+		childPid, err := strconv.Atoi(field)
+		if err != nil {
+			continue
+		}
+		killDescendants(childPid)
+		if proc, err := os.FindProcess(childPid); err == nil {
+			proc.Signal(syscall.SIGKILL)
+		}
+	}
 }
 
 // extractPort extracts the TCP port from an address string.

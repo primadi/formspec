@@ -1,8 +1,8 @@
 // ─── Select Widget ───
 //
-// For enum fields. Renders a dropdown with the allowed enum values.
+// For enum fields. Renders a themed dropdown with the allowed enum values.
 
-import { SelectNative } from "@/components/ui/select-native"
+import { Select as ThemedSelect } from "@/components/ui/select"
 
 interface SelectProps {
   value?: string
@@ -30,18 +30,13 @@ export function Select({
   }
 
   return (
-    <SelectNative
+    <ThemedSelect
       value={value ?? ""}
-      onChange={(e) => onChange?.(e.target.value)}
+      onChange={(v) => onChange?.(v)}
+      options={options}
+      placeholder={placeholder}
       disabled={readonly}
-      className={error ? "border-destructive" : ""}
-    >
-      {placeholder && <option value="">{placeholder}</option>}
-      {options.map((opt) => (
-        <option key={opt} value={opt}>
-          {opt.charAt(0).toUpperCase() + opt.slice(1).replace(/_/g, " ")}
-        </option>
-      ))}
-    </SelectNative>
+      error={!!error}
+    />
   )
 }

@@ -1,0 +1,10 @@
+apiVersion: forma.dev/v1alpha1
+kind: Module
+metadata:
+  name: ocean-blue
+  description: >
+    Ocean Blue — nuansa laut dalam dengan gradient background dan wave pattern.
+    Cocok untuk aplikasi finansial, logistik, atau enterprise yang ingin
+    tampil profesional dengan sentuhan elegan.
+spec:
+  version: 1.0.0

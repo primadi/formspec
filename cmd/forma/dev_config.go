@@ -1,6 +1,6 @@
-// ─── Config file loader for `forma dev` ───
+// ─── Config file loader for `forma dev` / `forma serve` ───
 //
-// Loads configuration from forma-sidecar.yaml or forma-sidecar.yml,
+// Loads configuration from forma-app.yaml (or legacy forma-sidecar.yaml),
 // then merges with CLI flags (CLI wins).
 package main
 
@@ -12,31 +12,32 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// configFile represents the YAML structure of forma-sidecar.yaml.
+// configFile represents the YAML structure of forma-app.yaml.
 // Fields are pointers so we can detect which ones were explicitly set.
 type configFile struct {
-	Spec             *string `yaml:"spec"`
-	DSN              *string `yaml:"dsn"`
-	Addr             *string `yaml:"addr"`
-	Listen           *string `yaml:"listen"`
-	AppEndpoint      *string `yaml:"app-endpoint"`
-	ListenURL        *string `yaml:"listen-url"`
-	AppEndpointURL   *string `yaml:"app-endpoint-url"`
-	WorkspaceID      *string `yaml:"workspace-id"`
-	Runtime          *string `yaml:"runtime"`
-	StateDir         *string `yaml:"state-dir"`
-	Dev              *bool   `yaml:"dev"`
-	DevUI            *bool   `yaml:"dev-ui"`
-	Force            *bool   `yaml:"force"`
-	WebDir           *string `yaml:"web-dir"`
-	InvokeTimeoutStr *string `yaml:"invoke-timeout"`
-	AppDir           *string `yaml:"app-dir"`
-	AppEntrypoint    *string `yaml:"app-entrypoint"`
-	ControlURL       *string `yaml:"control-cluster-url"`
-	WorkspaceIDAlt   *string `yaml:"workspace-id-alt"` // unused reserved
+	Spec             *string  `yaml:"spec"`
+	DSN              *string  `yaml:"dsn"`
+	Addr             *string  `yaml:"addr"`
+	Listen           *string  `yaml:"listen"`
+	AppEndpoint      *string  `yaml:"app-endpoint"`
+	ListenURL        *string  `yaml:"listen-url"`
+	AppEndpointURL   *string  `yaml:"app-endpoint-url"`
+	WorkspaceID      *string  `yaml:"workspace-id"`
+	Runtime          *string  `yaml:"runtime"`
+	StateDir         *string  `yaml:"state-dir"`
+	Dev              *bool    `yaml:"dev"`
+	DevUI            *bool    `yaml:"dev-ui"`
+	Force            *bool    `yaml:"force"`
+	WebDir           *string  `yaml:"web-dir"`
+	InvokeTimeoutStr *string  `yaml:"invoke-timeout"`
+	AppDir           *string  `yaml:"app-dir"`
+	AppEntrypoint    *string  `yaml:"app-entrypoint"`
+	ControlURL       *string  `yaml:"control-cluster-url"`
+	WorkspaceIDAlt   *string  `yaml:"workspace-id-alt"` // unused reserved
+	Themes           []string `yaml:"themes"`           // additional theme manifest directories
 }
 
-// mergeConfigFile tries to read forma-sidecar.yaml and merge values into cfg.
+// mergeConfigFile tries to read forma-app.yaml and merge values into cfg.
 // Config file values only apply when the CLI flag was left at its default.
 // Returns the potentially-modified config.
 func mergeConfigFile(cfg DevConfig) DevConfig {
@@ -119,15 +120,21 @@ func mergeConfigFile(cfg DevConfig) DevConfig {
 	if cf.ControlURL != nil && cfg.ControlURL == "" {
 		cfg.ControlURL = *cf.ControlURL
 	}
+	// Merge theme dirs from config file (append if CLI didn't set any)
+	if len(cf.Themes) > 0 && len(cfg.ThemeDirs) == 0 {
+		cfg.ThemeDirs = cf.Themes
+	}
 
 	return cfg
 }
 
-// findConfigFile looks for forma-sidecar.yaml or forma-sidecar.yml in CWD.
+// findConfigFile looks for forma-app.yaml in CWD, then falls back to
+// the legacy name forma-sidecar.yaml for backward compatibility.
 func findConfigFile() string {
 	candidates := []string{
-		"forma-sidecar.yaml",
-		"forma-sidecar.yml",
+		"forma-app.yaml",
+		"forma-app.yml",
+		"forma-sidecar.yaml", // legacy, backward compat
 	}
 	for _, c := range candidates {
 		if _, err := os.Stat(c); err == nil {

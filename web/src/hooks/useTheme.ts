@@ -2,6 +2,11 @@
 //
 // Applies theme mode (light/dark/system) and color preset to <html>.
 // Reads from usePrefsStore and syncs to DOM reactively.
+//
+// When a manifest theme is active (activeTheme !== null), color presets
+// are skipped — the theme's YAML tokens already set all CSS variables via
+// ThemeRenderer's <style> block. The user can still toggle light/dark/system
+// independently (Frontend Spec §10, Opsi A).
 
 import { useEffect } from "react"
 import { usePrefsStore, COLOR_PRESETS } from "@/stores/prefs"
@@ -9,6 +14,7 @@ import { usePrefsStore, COLOR_PRESETS } from "@/stores/prefs"
 export function useTheme() {
   const theme = usePrefsStore((s) => s.theme)
   const colorPreset = usePrefsStore((s) => s.colorPreset)
+  const activeTheme = usePrefsStore((s) => s.activeTheme)
 
   useEffect(() => {
     const root = document.documentElement
@@ -20,25 +26,28 @@ export function useTheme() {
     root.classList.toggle("dark", isDark)
     root.style.colorScheme = isDark ? "dark" : "light"
 
-    // 2. Apply color preset
-    const preset = COLOR_PRESETS[colorPreset]
-    if (preset) {
-      root.style.setProperty("--primary", preset.primary)
-      root.style.setProperty("--primary-foreground", preset["primary-foreground"])
-      if (preset.accent) root.style.setProperty("--accent", preset.accent)
-      if (preset.radius) root.style.setProperty("--radius", preset.radius)
+    // 2. Apply color preset (only when no manifest theme is active)
+    //    When a theme is active, its <style> block handles all colors.
+    if (!activeTheme) {
+      const preset = COLOR_PRESETS[colorPreset]
+      if (preset) {
+        root.style.setProperty("--primary", preset.primary)
+        root.style.setProperty("--primary-foreground", preset["primary-foreground"])
+        if (preset.accent) root.style.setProperty("--accent", preset.accent)
+        if (preset.radius) root.style.setProperty("--radius", preset.radius)
+      }
     }
 
-    // Cleanup: remove preset overrides when switching back to default
+    // Cleanup: remove preset overrides
     return () => {
-      if (colorPreset !== "neutral") {
+      if (!activeTheme && colorPreset !== "neutral") {
         root.style.removeProperty("--primary")
         root.style.removeProperty("--primary-foreground")
         root.style.removeProperty("--accent")
         root.style.removeProperty("--radius")
       }
     }
-  }, [theme, colorPreset])
+  }, [theme, colorPreset, activeTheme])
 
   // Listen for system color scheme changes when in "system" mode
   useEffect(() => {
