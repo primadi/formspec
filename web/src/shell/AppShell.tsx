@@ -13,9 +13,11 @@ import {
   Home,
 } from "lucide-react"
 import { usePrefsStore } from "@/stores/prefs"
+import { useMediaQuery } from "@/hooks/useMediaQuery"
 import { ErrorBoundary } from "@/components/ErrorBoundary"
 import { ThemeSwitcher } from "@/components/ThemeSwitcher"
 import { Sidebar } from "./Sidebar"
+import { useState, useCallback, useEffect } from "react"
 import { OverlayHost } from "./OverlayHost"
 import { Button } from "@/components/ui/button"
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb"
@@ -27,6 +29,22 @@ export function AppShell() {
   const location = useLocation()
   const sidebarCollapsed = usePrefsStore((s) => s.sidebarCollapsed)
   const toggleSidebar = usePrefsStore((s) => s.toggleSidebar)
+
+  const isMobile = useMediaQuery("(max-width: 767px)")
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
+
+  // Close mobile sidebar on route change
+  useEffect(() => {
+    setMobileSidebarOpen(false)
+  }, [location.pathname])
+
+  const handleMobileToggle = useCallback(() => {
+    setMobileSidebarOpen((prev) => !prev)
+  }, [])
+
+  const handleMobileClose = useCallback(() => {
+    setMobileSidebarOpen(false)
+  }, [])
 
   // Build breadcrumbs from current path
   const pathParts = location.pathname
@@ -46,10 +64,19 @@ export function AppShell() {
   return (
     <TooltipProvider>
       <div className="flex h-screen overflow-hidden">
-        {/* Sidebar */}
+        {/* Sidebar — overlay on mobile, static on desktop */}
+        {isMobile && mobileSidebarOpen && (
+          <div
+            className="fixed inset-0 z-40 bg-black/50"
+            onClick={handleMobileClose}
+          />
+        )}
         <Sidebar
-          collapsed={sidebarCollapsed}
-          onToggle={toggleSidebar}
+          collapsed={isMobile ? false : sidebarCollapsed}
+          onToggle={isMobile ? handleMobileToggle : toggleSidebar}
+          mobile={isMobile}
+          mobileOpen={mobileSidebarOpen}
+          onMobileClose={handleMobileClose}
         />
 
         {/* Main content */}
@@ -61,7 +88,7 @@ export function AppShell() {
               variant="ghost"
               size="icon"
               className="md:hidden"
-              onClick={toggleSidebar}
+              onClick={handleMobileToggle}
             >
               <Menu className="size-4" />
             </Button>

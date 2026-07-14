@@ -54,9 +54,12 @@ interface MenuItem {
 interface SidebarProps {
   collapsed: boolean
   onToggle?: () => void
+  mobile?: boolean
+  mobileOpen?: boolean
+  onMobileClose?: () => void
 }
 
-export function Sidebar({ collapsed, onToggle: _onToggle }: SidebarProps) {
+export function Sidebar({ collapsed, onToggle: _onToggle, mobile, mobileOpen, onMobileClose }: SidebarProps) {
   const { workspace } = useParams<{ workspace: string }>()
   const bundle = useMetaStore((s) => s.bundle)
   const me = useSessionStore((s) => s.me)
@@ -153,35 +156,92 @@ export function Sidebar({ collapsed, onToggle: _onToggle }: SidebarProps) {
   if (!bundle || !me) return null
 
   return (
-    <aside
-      className={cn(
-        "flex flex-col border-r bg-sidebar transition-all duration-200",
-        collapsed ? "w-14" : "w-60",
-      )}
-    >
-      {/* Logo */}
-      <div className="flex h-14 items-center border-b px-4">
-        {collapsed ? (
-          <span className="text-lg font-bold mx-auto">F</span>
-        ) : (
-          <span className="text-lg font-bold">Forma</span>
-        )}
-      </div>
+    <>
+      {/* Mobile overlay sidebar */}
+      {mobile && (
+        <aside
+          className={cn(
+            "fixed inset-y-0 left-0 z-50 flex flex-col border-r bg-sidebar shadow-2xl transition-transform duration-300",
+            "w-60",
+            mobileOpen ? "translate-x-0" : "-translate-x-full",
+          )}
+        >
+          {/* Logo + close button */}
+          <div className="flex h-14 items-center justify-between border-b px-4">
+            <span className="text-lg font-bold">Forma</span>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onMobileClose}
+              aria-label="Close sidebar"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="size-4"
+              >
+                <path d="M18 6 6 18" />
+                <path d="m6 6 12 12" />
+              </svg>
+            </Button>
+          </div>
 
-      {/* Navigation */}
-      <ScrollArea className="flex-1 py-2">
-        <nav className="space-y-1 px-2">
-          {menuItems.map((item, idx) => (
-            <SidebarGroup
-              key={`${item.label}-${idx}`}
-              item={item}
-              collapsed={collapsed}
-              basePath={surfacePrefix}
-            />
-          ))}
-        </nav>
-      </ScrollArea>
-    </aside>
+          {/* Navigation */}
+          <ScrollArea className="flex-1 py-2">
+            <nav className="space-y-1 px-2">
+              {menuItems.map((item, idx) => (
+                <SidebarGroup
+                  key={`${item.label}-${idx}`}
+                  item={item}
+                  collapsed={false}
+                  basePath={surfacePrefix}
+                />
+              ))}
+            </nav>
+          </ScrollArea>
+        </aside>
+      )}
+
+      {/* Desktop static sidebar */}
+      {!mobile && (
+        <aside
+          className={cn(
+            "flex flex-col border-r bg-sidebar transition-all duration-200",
+            collapsed ? "w-14" : "w-60",
+          )}
+        >
+          {/* Logo */}
+          <div className="flex h-14 items-center border-b px-4">
+            {collapsed ? (
+              <span className="text-lg font-bold mx-auto">F</span>
+            ) : (
+              <span className="text-lg font-bold">Forma</span>
+            )}
+          </div>
+
+          {/* Navigation */}
+          <ScrollArea className="flex-1 py-2">
+            <nav className="space-y-1 px-2">
+              {menuItems.map((item, idx) => (
+                <SidebarGroup
+                  key={`${item.label}-${idx}`}
+                  item={item}
+                  collapsed={collapsed}
+                  basePath={surfacePrefix}
+                />
+              ))}
+            </nav>
+          </ScrollArea>
+        </aside>
+      )}
+    </>
   )
 }
 
@@ -213,7 +273,22 @@ function SidebarSubGroup({
   basePath: string
 }) {
   if (collapsed) {
-    return <SidebarLink item={item} collapsed basePath={basePath} />
+    return (
+      <div className="space-y-1">
+        {item.children?.length ? (
+          item.children.map((child, idx) => (
+            <SidebarLink
+              key={`${child.label}-${idx}`}
+              item={child}
+              collapsed={true}
+              basePath={basePath}
+            />
+          ))
+        ) : (
+          <SidebarLink item={item} collapsed basePath={basePath} />
+        )}
+      </div>
+    )
   }
 
   return (
@@ -272,24 +347,25 @@ function SidebarGroup({
     return (
       <div>
         {collapsed ? (
-          <Tooltip>
-            <TooltipTrigger>
-              {hasRoute ? (
-                <NavLink to={linkHref(item, basePath)}>
-                  <Button variant="ghost" size="icon" className="w-full justify-center">
-                    {item.icon ? renderIcon(item.icon) : <FolderIcon />}
-                  </Button>
-                </NavLink>
+          <div className="space-y-1">
+            {item.children.map((child, idx) =>
+              child.children?.length ? (
+                <SidebarSubGroup
+                  key={`${child.label}-${idx}`}
+                  item={child}
+                  collapsed={true}
+                  basePath={basePath}
+                />
               ) : (
-                <Button variant="ghost" size="icon" className="w-full justify-center">
-                  {item.icon ? renderIcon(item.icon) : <FolderIcon />}
-                </Button>
-              )}
-            </TooltipTrigger>
-            <TooltipContent side="right">
-              <p>{item.label}</p>
-            </TooltipContent>
-          </Tooltip>
+                <SidebarLink
+                  key={`${child.label}-${idx}`}
+                  item={child}
+                  collapsed={true}
+                  basePath={basePath}
+                />
+              ),
+            )}
+          </div>
         ) : (
           <div className="mb-1">
             {groupLabel}
@@ -406,11 +482,6 @@ function filterMenuItem(
     }
   }
   return true
-}
-
-function FolderIcon() {
-  const Icon = resolveIcon("Folder")
-  return Icon ? <Icon className="size-4" /> : <div className="size-4" />
 }
 
 function FileIcon() {
