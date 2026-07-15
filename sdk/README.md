@@ -84,10 +84,10 @@ surface that as a per-call error; the invoke path is fully functional.
 ## `@forma/client` — REST API Protocol
 
 `browser/` is a completely different client: it calls `forma-resource`'s
-generated REST API directly (`docs/spec/02-core-basic.md` §16) — no unix
+generated REST API directly (`docs_old/spec/02-core-basic.md` §16) — no unix
 socket, no sidecar involved. Paired with `forma generate --lang typescript`
 (`cmd/forma/generate.go`), it's the typed client for hand-building frontend
-pages (`docs/spec/05-frontend.md` §7's `forma.api`, before any manifest-driven
+pages (`docs_old/spec/05-frontend.md` §7's `forma.api`, before any manifest-driven
 renderer exists). See [`browser/README.md`](browser/README.md) for the
 runtime API and `docs/cli-tools/03-forma-generate.md` for the full guide —
 including a step-by-step React + shadcn walkthrough.

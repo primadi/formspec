@@ -3,7 +3,7 @@
 // Wizard, Kanban, Timeline, Menu, Print, Theme) and serves them to the
 // manifest-driven renderer through the Meta API (implemented in internal/api).
 //
-// Design doc: docs/implementation/frontend-renderer.md §4.1–§4.2.
+// Design doc: docs_old/implementation/frontend-renderer.md §4.1–§4.2.
 package ui
 
 import (

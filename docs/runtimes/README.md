@@ -19,6 +19,7 @@
 | 2 | **Forma Resource** | Go library (`import "github.com/primadi/forma/resource"`) | FSL (open source) | [`02-forma-resource.md`](./02-forma-resource.md) |
 | 3 | **Forma Operator** | Binary (K8s CRD controller) | **Closed source** | [`03-forma-operator.md`](./03-forma-operator.md) |
 | 4 | **Forma Sidecar** | Binary (embed Forma Resource + socket listener) | FSL (open source) | [`04-forma-sidecar.md`](./04-forma-sidecar.md) |
+| 5 | **Engine API Layer** | Lapisan HTTP runtime engine (`internal/api`) | FSL (open source) | [`05-engine-api-layer.md`](./05-engine-api-layer.md) |
 
 ```
                     ┌─────────────────┐

@@ -974,7 +974,7 @@ type EntityRecord struct {
 }
 
 // MarshalJSON flattens Data alongside the record's own fields into one
-// object, keyed the way the wire contract (docs/spec/02-core-basic.md §16)
+// object, keyed the way the wire contract (docs_old/spec/02-core-basic.md §16)
 // and every client SDK expect — not a Go-field-cased, Data-nested struct.
 // Reserved names (id, version, ...) always win on collision, matching the
 // framework-owned-column convention elsewhere in the spec.

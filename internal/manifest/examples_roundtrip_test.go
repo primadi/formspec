@@ -10,7 +10,7 @@ import (
 // examplesDir points at the conformance/demo projects shipped with the repo
 // (Clinic-UI-Showcase, Midtrans-Payment-Gateway, reference-app). They are
 // written in the spec's canonical manifest vocabulary, so loading them
-// end-to-end guards against drift between docs/spec and pkg/spec.
+// end-to-end guards against drift between docs_old/spec and pkg/spec.
 const examplesDir = "../../examples"
 
 // verticalsDir points at the real, independently-installable vertical Apps

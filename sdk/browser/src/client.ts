@@ -18,7 +18,7 @@ export interface FormaClientOptions {
 
 /**
  * Generic, untyped runtime for the Forma REST API
- * (docs/spec/02-core-basic.md §16). `forma generate` emits a typed layer on
+ * (docs_old/spec/02-core-basic.md §16). `forma generate` emits a typed layer on
  * top of this — one interface and one set of typed methods per exposed
  * entity — so application code almost never calls this class directly.
  *

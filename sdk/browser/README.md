@@ -1,8 +1,8 @@
 # @forma/client
 
 Typed browser/Node runtime for Forma's generated REST API
-(docs/spec/02-core-basic.md §16). This is the hand-written half of
-`forma.api` (docs/spec/05-frontend.md §7) — `forma generate --lang
+(docs_old/spec/02-core-basic.md §16). This is the hand-written half of
+`forma.api` (docs_old/spec/05-frontend.md §7) — `forma generate --lang
 typescript` (`cmd/forma/generate.go`) emits the typed half on top of it.
 Zero runtime dependencies (native `fetch`), Node ≥ 18 or any modern browser.
 

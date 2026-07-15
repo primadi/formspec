@@ -2,7 +2,7 @@ import type { ErrorDetailItem, ErrorResponse } from "./types.js";
 
 /**
  * Thrown for any non-2xx response. Mirrors the error envelope exactly
- * (docs/spec/02-core-basic.md §16) so callers can branch on `code` instead
+ * (docs_old/spec/02-core-basic.md §16) so callers can branch on `code` instead
  * of parsing messages: VALIDATION_ERROR (422), UNAUTHORIZED (401),
  * FORBIDDEN (403), NOT_FOUND (404), CONFLICT / version conflict (409),
  * INTERNAL_ERROR (500), CONDITION_FAILED (422, action guard), ACTION_ERROR (500).
