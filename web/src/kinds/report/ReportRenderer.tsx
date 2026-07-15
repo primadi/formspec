@@ -11,6 +11,8 @@ import { toast } from "sonner"
 
 import type { Entry, ReportSpec, ListResponseMeta } from "@/types/manifest"
 import { useSessionStore } from "@/stores/session"
+import { useMetaStore } from "@/stores/meta"
+import { resolveEntityRef } from "@/engine/entityRef"
 import { apiList, buildListParams } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -22,6 +24,7 @@ interface ReportRendererProps {
 
 export default function ReportRenderer({ entry }: ReportRendererProps) {
   const getClient = useSessionStore((s) => s.getClient)
+  const getEntity = useMetaStore((s) => s.getEntity)
 
   const [data, setData] = useState<Record<string, unknown>[]>([])
   const [loading, setLoading] = useState(false)
@@ -42,9 +45,15 @@ export default function ReportRenderer({ entry }: ReportRendererProps) {
         if (value) listParams[key] = value
       }
 
+      const [module, name] = resolveEntityRef(entry.spec.entity, entry.module)
+      const schema = getEntity(module, name)
+      if (!schema) {
+        throw new Error(`entity ${module}.${name} not found`)
+      }
+
       const result = await apiList<Record<string, unknown>>(
         client,
-        `${entry.spec.entity.includes(".") ? entry.spec.entity.replace(".", "/") : entry.spec.entity}`,
+        `${schema.module}/${schema.plural}`,
         buildListParams({
           per_page: 1000,
           ...listParams,
@@ -59,7 +68,7 @@ export default function ReportRenderer({ entry }: ReportRendererProps) {
       setLoading(false)
       setExecuted(true)
     }
-  }, [entry.spec.entity, params, getClient])
+  }, [entry.spec.entity, entry.module, params, getClient, getEntity])
 
   // Group data
   const groups = useMemo(() => {

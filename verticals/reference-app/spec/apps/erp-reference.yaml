@@ -9,6 +9,7 @@ metadata:
 spec:
   version: 1.0.0
   vendor: forma-dev
+  root_url: /app/erp-reference
   modules:
     [
       company,
@@ -19,3 +20,14 @@ spec:
       sales-inventory-integrator,
       sales-gl-integrator,
     ]
+  # Adopt each composed vertical's own default menu suggestion (Core Basic
+  # §4.4/§4.5) — company/notifications/sales-*-integrator have none, so
+  # there's nothing to adopt for them (matches the pre-migration experience:
+  # they never shipped a kind: Menu either).
+  menu:
+    - type: module
+      module: billing
+    - type: module
+      module: gl
+    - type: module
+      module: inventory

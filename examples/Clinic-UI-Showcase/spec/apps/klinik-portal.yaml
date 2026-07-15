@@ -1,0 +1,25 @@
+apiVersion: forma.dev/v1alpha1
+kind: App
+metadata:
+  name: klinik-portal
+  description: >
+    SHOWCASE — App kedua yang mount module `clinic` yang SAMA dengan
+    klinik-internal, dengan root_url berbeda. Bukti konkret bahwa 1 Module
+    bisa di-mount lebih dari 1 App dalam 1 workspace (many-to-many
+    App<->Module — reff_docs/forma-technical-notes-kind-system.md §2).
+    Populasi user berbeda (calon pasien publik, bukan staf), jadi menu-nya
+    sengaja jauh lebih ramping daripada klinik-internal: cuma pendaftaran
+    pasien, tanpa akses ke kunjungan/kasir/laporan/pengaturan staf.
+spec:
+  version: 1.0.0
+  vendor: forma-examples
+  root_url: /app/klinik-portal
+  modules: [clinic]
+  menu:
+    - label: "Layanan Publik"
+      icon: "user-plus"
+      children:
+        - label: "Pendaftaran Pasien"
+          module: clinic
+          view: patient-registration
+          order: 1

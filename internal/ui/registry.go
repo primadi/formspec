@@ -40,7 +40,6 @@ type Registry struct {
 	Wizards    map[string]*Entry[spec.WizardSpec]
 	Kanbans    map[string]*Entry[spec.KanbanSpec]
 	Timelines  map[string]*Entry[spec.TimelineSpec]
-	Menus      map[string]*Entry[spec.MenuSpec]
 	Prints     map[string]*Entry[spec.PrintSpec]
 	Themes     map[string]*Entry[spec.ThemeSpec]
 }
@@ -57,7 +56,6 @@ func NewRegistry() *Registry {
 		Wizards:    map[string]*Entry[spec.WizardSpec]{},
 		Kanbans:    map[string]*Entry[spec.KanbanSpec]{},
 		Timelines:  map[string]*Entry[spec.TimelineSpec]{},
-		Menus:      map[string]*Entry[spec.MenuSpec]{},
 		Prints:     map[string]*Entry[spec.PrintSpec]{},
 		Themes:     map[string]*Entry[spec.ThemeSpec]{},
 	}
@@ -115,8 +113,6 @@ func (r *Registry) register(raw manifest.RawManifest) error {
 		return registerInto(r.Kanbans, raw)
 	case spec.KindTimeline:
 		return registerInto(r.Timelines, raw)
-	case spec.KindMenu:
-		return registerInto(r.Menus, raw)
 	case spec.KindPrint:
 		return registerInto(r.Prints, raw)
 	case spec.KindTheme:
@@ -152,7 +148,49 @@ func (r *Registry) Count() int {
 	defer r.mu.RUnlock()
 	return len(r.Pages) + len(r.Forms) + len(r.Tables) + len(r.Dashboards) +
 		len(r.Widgets) + len(r.Reports) + len(r.Wizards) + len(r.Kanbans) +
-		len(r.Timelines) + len(r.Menus) + len(r.Prints) + len(r.Themes)
+		len(r.Timelines) + len(r.Prints) + len(r.Themes)
+}
+
+// ResolveViewRoute resolves a menu item's `view` reference (module + name,
+// Core §4.4) to a concrete route. Page uses its own explicit Route; every
+// other independently-routable View kind uses the `/<kind-lowercase>/<name>`
+// convention (matching web/src/shell/router.tsx's buildRoutes), so the route
+// is never duplicated/hand-kept-in-sync in the menu item itself.
+//
+// Form and Table are deliberately NOT resolvable here — router.tsx never
+// mounts a standalone route for them; they only appear embedded in a Page's
+// blocks, or as the framework's derived per-entity CRUD routes. A menu item
+// wanting to link to one should reference the Page that embeds it (or use
+// the `route` escape hatch for a derived entity list route).
+func (r *Registry) ResolveViewRoute(module, name string) (string, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if e, ok := r.Pages[name]; ok && e.Module == module {
+		return e.Spec.Route, nil
+	}
+	if e, ok := r.Dashboards[name]; ok && e.Module == module {
+		return "/dashboard/" + name, nil
+	}
+	if e, ok := r.Widgets[name]; ok && e.Module == module {
+		return "/widget/" + name, nil
+	}
+	if e, ok := r.Reports[name]; ok && e.Module == module {
+		return "/report/" + name, nil
+	}
+	if e, ok := r.Wizards[name]; ok && e.Module == module {
+		return "/wizard/" + name, nil
+	}
+	if e, ok := r.Kanbans[name]; ok && e.Module == module {
+		return "/kanban/" + name, nil
+	}
+	if e, ok := r.Timelines[name]; ok && e.Module == module {
+		return "/timeline/" + name, nil
+	}
+	if e, ok := r.Prints[name]; ok && e.Module == module {
+		return "/print/" + name, nil
+	}
+	return "", fmt.Errorf("view %q not found in module %q", name, module)
 }
 
 // EntityResolver resolves an entity reference to its spec. Implemented by

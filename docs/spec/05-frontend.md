@@ -36,7 +36,7 @@ The renderer MUST also be consumable **as a library**: an existing React/Vue app
 
 ### 1.3 Derived by Default (D17)
 
-Every Document automatically yields, with no UI manifest at all: a list **Table**, **create/edit Forms**, a detail **Page**, and **Menu** entries per module. UI kinds exist to *override* these defaults. A team can ship a complete internal tool with zero frontend manifests.
+Every Document automatically yields, with no UI manifest at all: a list **Table**, **create/edit Forms**, a detail **Page**, and a derived navigation entry in the App's menu (grouped by the Document's module, for any module not already covered by an authored `App.spec.menu`/`Module.spec.menu` entry — Core Basic §4.4). UI kinds exist to *override* these defaults. A team can ship a complete internal tool with zero frontend manifests.
 
 ### 1.4 Permission-Driven UI
 
@@ -114,11 +114,12 @@ Twelve kinds, one concern each:
 | `Wizard` | Multi-step business process with stepper navigation | — |
 | `Kanban` | Drag-and-drop status board per document | — |
 | `Timeline` | Chronological, append-only event journal | — |
-| `Menu` | Navigation tree | Derived module menus |
 | `Print` | Printable document for one document — multi-target output | — |
 | `Theme` | Look & feel — distributable, marketplace artifact | Default theme |
 
 All share the manifest format (Core §3). `metadata.module` scopes them like any resource. The vocabulary is **closed** (D33): new UI needs never add YAML syntax — they become components (§7). The kinds added in v0.5.0 (Wizard, Kanban, Timeline) are generic UI patterns, not business-case-specific syntax; they pass the D33 litmus test.
+
+> Navigation is **not** in this table. There is no standalone `kind: Menu` — the navigation tree is `App.spec.menu` (authoritative) and, optionally, `Module.spec.menu` (a default suggestion an App can adopt). See Core Basic §4.4/§4.5.
 
 ---
 
@@ -377,23 +378,11 @@ Declarative subscription to entity changes:
 
 ---
 
-## 9. `kind: Menu` and `kind: Print`
+## 9. `kind: Print`
 
-### Menu
-```yaml
-apiVersion: forma.dev/v1alpha1
-kind: Menu
-metadata: { name: main, module: core }
-spec:
-  items:
-    - { label: Orders, page: order-detail-list, icon: receipt }
-    - label: Finance
-      items:
-        - { label: Journal, page: journal-list }
-    - { label: Settings, page: settings, when: "user.has('core.settings.view')" }
-```
+### Menu — see Core Basic §4.4/§4.5
 
-Items pointing to pages whose backing permissions the user lacks are hidden automatically (§1.4); `when` adds business conditions.
+Navigation is not a standalone kind here — it's `App.spec.menu` (authoritative) and `Module.spec.menu` (default suggestion), documented in full (the `MenuItem` shape, the 3-level nesting cap, the `view`/`route` leaf resolution rules) in Core Basic §4.4. Items pointing to a `view` whose backing permission the caller lacks are hidden automatically (§1.4 below); `when` adds business conditions on top.
 
 ### Print
 ```yaml

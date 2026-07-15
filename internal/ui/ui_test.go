@@ -58,15 +58,6 @@ spec:
     - { label: General, form: { ref: order-edit, entity: order, id: "1" } }
 ---
 apiVersion: forma.dev/v1alpha1
-kind: Menu
-metadata: { name: main, module: billing }
-spec:
-  label: Billing
-  order: 1
-  children:
-    - { label: Orders, route: /app/orders }
----
-apiVersion: forma.dev/v1alpha1
 kind: Widget
 metadata: { name: rev-today, module: billing }
 spec:
@@ -195,8 +186,8 @@ func testResolver() EntityResolver {
 
 func TestLoadAllKinds(t *testing.T) {
 	r := loadFixture(t)
-	if r.Count() != 13 {
-		t.Fatalf("expected 13 manifests, got %d", r.Count())
+	if r.Count() != 12 {
+		t.Fatalf("expected 12 manifests, got %d", r.Count())
 	}
 	if r.Pages["settings"].Spec.Tabs[0].Label != "General" {
 		t.Errorf("tabs not parsed")
@@ -219,14 +210,14 @@ func TestDuplicateNameRejected(t *testing.T) {
 	loader := manifest.NewLoader("")
 	dup := `
 apiVersion: forma.dev/v1alpha1
-kind: Menu
+kind: Theme
 metadata: { name: main, module: a }
-spec: { label: A }
+spec: { tokens: { color.primary: "#111" } }
 ---
 apiVersion: forma.dev/v1alpha1
-kind: Menu
+kind: Theme
 metadata: { name: main, module: b }
-spec: { label: B }
+spec: { tokens: { color.primary: "#222" } }
 `
 	raws, _ := loader.ParseBytes([]byte(dup), "dup.yaml")
 	r := NewRegistry()
@@ -369,7 +360,7 @@ func TestBuildBundlePermissionFiltering(t *testing.T) {
 	}
 
 	t.Run("admin sees everything", func(t *testing.T) {
-		b := r.BuildBundle(entities, func(string) bool { return true })
+		b := r.BuildBundle(entities, func(string) bool { return true }, AppContext{})
 		if len(b.Entities) != 2 {
 			t.Errorf("entities: want 2, got %d", len(b.Entities))
 		}
@@ -380,7 +371,7 @@ func TestBuildBundlePermissionFiltering(t *testing.T) {
 	})
 
 	t.Run("no permissions sees nothing entity-backed", func(t *testing.T) {
-		b := r.BuildBundle(entities, func(string) bool { return false })
+		b := r.BuildBundle(entities, func(string) bool { return false }, AppContext{})
 		if len(b.Entities) != 0 || len(b.Tables) != 0 || len(b.Forms) != 0 || len(b.Kanbans) != 0 {
 			t.Errorf("expected empty entity-backed sections: %+v", b)
 		}
@@ -388,15 +379,15 @@ func TestBuildBundlePermissionFiltering(t *testing.T) {
 		if len(b.Pages) != 1 || b.Pages[0].Name != "settings" {
 			t.Errorf("expected only settings page, got %+v", b.Pages)
 		}
-		// menus/themes always ship
-		if len(b.Menus) != 1 || len(b.Themes) != 1 {
-			t.Errorf("menus/themes should always ship")
+		// themes always ship
+		if len(b.Themes) != 1 {
+			t.Errorf("themes should always ship")
 		}
 	})
 
 	t.Run("scoped permission", func(t *testing.T) {
 		can := func(p string) bool { return p == "billing.orders.list" }
-		b := r.BuildBundle(entities, can)
+		b := r.BuildBundle(entities, can, AppContext{})
 		if len(b.Entities) != 1 || b.Entities[0].Name != "order" {
 			t.Errorf("expected only order entity, got %+v", b.Entities)
 		}
@@ -409,6 +400,36 @@ func TestBuildBundlePermissionFiltering(t *testing.T) {
 		}
 		if !foundOrderList {
 			t.Errorf("order-list page should be visible via module-relative permission")
+		}
+	})
+}
+
+// TestBuildBundle_AppContextModuleScoping verifies the module-filtering
+// behavior AppContext.allows() gives (Core §4.4): a zero-value AppContext
+// (used by the `_admin` surface, which isn't scoped to any App) sees entities
+// from every module, while a scoped AppContext only sees its own modules'
+// entities — even for a module no App declares at all.
+func TestBuildBundle_AppContextModuleScoping(t *testing.T) {
+	r := loadFixture(t)
+	entities := func() []EntityDescriptor {
+		return []EntityDescriptor{
+			{Module: "billing", Name: "order", Spec: orderEntity()},
+			{Module: "hr", Name: "employee", Spec: customerEntity()},
+		}
+	}
+	can := func(string) bool { return true }
+
+	t.Run("unscoped (_admin) sees every module", func(t *testing.T) {
+		b := r.BuildBundle(entities, can, AppContext{})
+		if len(b.Entities) != 2 {
+			t.Fatalf("expected entities from both modules, got %+v", b.Entities)
+		}
+	})
+
+	t.Run("scoped to one module (App) excludes the other", func(t *testing.T) {
+		b := r.BuildBundle(entities, can, AppContext{Modules: map[string]bool{"billing": true}})
+		if len(b.Entities) != 1 || b.Entities[0].Module != "billing" {
+			t.Fatalf("expected only billing entity, got %+v", b.Entities)
 		}
 	})
 }

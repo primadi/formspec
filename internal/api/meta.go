@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -38,8 +39,81 @@ func callerChecker(r *http.Request) ui.PermissionChecker {
 	return id.HasPermission
 }
 
+// appMetaSummary is one entry of the /_meta/apps payload.
+type appMetaSummary struct {
+	Name    string `json:"name"`
+	RootURL string `json:"root_url"`
+}
+
+// HandleMetaApps lists every resolved App in this workspace (name + root_url)
+// — Core §4.4. The renderer fetches this once, matches the current
+// window.location.pathname against each root_url, and uses the winning
+// App's name as the `app` query param on subsequent /_meta/ui calls.
+func (b *RouterBuilder) HandleMetaApps() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		names := make([]string, 0, len(b.apps))
+		for name := range b.apps {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+
+		out := make([]appMetaSummary, 0, len(names))
+		for _, name := range names {
+			a := b.apps[name]
+			out = append(out, appMetaSummary{Name: a.Name, RootURL: a.Spec.RootURL})
+		}
+
+		writeJSON(w, http.StatusOK, SingleResponse{
+			Data: out,
+			Meta: MetaSingle{RequestID: requestIDFromContext(r.Context()), Timestamp: time.Now().UTC().Format(time.RFC3339)},
+		})
+	}
+}
+
+// resolveAppContext picks which App a /_meta/ui request is scoped to: the
+// `app` query param if given, or the workspace's only App if there's exactly
+// one. Returns an error message when the request is ambiguous.
+func (b *RouterBuilder) resolveAppContext(r *http.Request) (ui.AppContext, string) {
+	if len(b.apps) == 0 {
+		return ui.AppContext{}, ""
+	}
+	name := r.URL.Query().Get("app")
+	if name == "" {
+		if len(b.apps) == 1 {
+			for n := range b.apps {
+				name = n
+			}
+		} else {
+			return ui.AppContext{}, "workspace has more than one App — pass ?app=<name> (see /_meta/apps)"
+		}
+	}
+	resolved, ok := b.apps[name]
+	if !ok {
+		return ui.AppContext{}, "unknown app " + name
+	}
+	return ui.AppContext{
+		Name:    resolved.Name,
+		RootURL: resolved.Spec.RootURL,
+		Modules: resolved.Modules,
+		Menu:    resolved.Menu,
+	}, ""
+}
+
+// adminAccessPermission gates the `_admin` surface (Core §4.4 discussion):
+// a single, binary "may see the unscoped, all-modules bundle" check — not a
+// per-entity RBAC mechanism. Per-entity/per-view RBAC stays exclusive to
+// authored Apps (menu.permissions).
+const adminAccessPermission = "_admin.access"
+
 // HandleMetaUI serves the full UI bundle with ETag/304 support. The bundle
-// is permission-filtered per caller, so the ETag is computed per response.
+// is permission-filtered per caller and scoped to one resolved App (see
+// resolveAppContext), so the ETag is computed per response.
+//
+// `?admin=true` requests the `_admin` surface's bundle instead: unscoped by
+// any App (every module's entities, Core §4.4 — _admin isn't App-scoped)
+// and unfiltered by per-entity list/view permission (the binary
+// adminAccessPermission gate is the only check). Gated separately since
+// _admin has no AppContext to resolve in the first place.
 func (b *RouterBuilder) HandleMetaUI() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if b.uiRegistry == nil {
@@ -47,7 +121,22 @@ func (b *RouterBuilder) HandleMetaUI() http.HandlerFunc {
 			return
 		}
 
-		bundle := b.uiRegistry.BuildBundle(b.listEntityDescriptors, callerChecker(r))
+		var bundle *ui.Bundle
+		if r.URL.Query().Get("admin") == "true" {
+			if !callerChecker(r)(adminAccessPermission) {
+				writeError(w, http.StatusForbidden, "FORBIDDEN", "missing permission: "+adminAccessPermission)
+				return
+			}
+			alwaysVisible := func(string) bool { return true }
+			bundle = b.uiRegistry.BuildBundle(b.listEntityDescriptors, alwaysVisible, ui.AppContext{})
+		} else {
+			appCtx, errMsg := b.resolveAppContext(r)
+			if errMsg != "" {
+				writeError(w, http.StatusBadRequest, "BAD_REQUEST", errMsg)
+				return
+			}
+			bundle = b.uiRegistry.BuildBundle(b.listEntityDescriptors, callerChecker(r), appCtx)
+		}
 
 		payload, err := json.Marshal(SingleResponse{
 			Data: bundle,

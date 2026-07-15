@@ -1,9 +1,0 @@
-apiVersion: forma.dev/v1alpha1
-kind: App
-metadata:
-  name: inventory
-  description: Inventory management — multi-warehouse stock tracking
-spec:
-  version: 1.0.0
-  vendor: forma-dev
-  modules: [inventory]

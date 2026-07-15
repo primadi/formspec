@@ -14,6 +14,7 @@ import type { Entry, PageSpec, PageBlock, PageTab } from "@/types/manifest"
 import { useMetaStore } from "@/stores/meta"
 import { useSessionStore } from "@/stores/session"
 import { can as checkPermission } from "@/engine/permissions"
+import { resolveEntityRef } from "@/engine/entityRef"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 
@@ -77,23 +78,20 @@ function PageBlocks({ entry }: { entry: Entry<PageSpec> }) {
         style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}
       >
         {blocks.map((block, idx) => (
-          <PageBlockRenderer key={idx} block={block} />
+          <PageBlockRenderer key={idx} block={block} module={entry.module} />
         ))}
       </div>
     </div>
   )
 }
 
-function PageBlockRenderer({ block }: { block: PageBlock }) {
+function PageBlockRenderer({ block, module }: { block: PageBlock; module: string }) {
   const getEntity = useMetaStore((s) => s.getEntity)
 
   // Form block
   if (block.form) {
     const entity = block.form.entity
-      ? getEntity(
-          block.form.entity.includes(".") ? block.form.entity.split(".")[0] : "",
-          block.form.entity.includes(".") ? block.form.entity.split(".")[1] : block.form.entity,
-        )
+      ? getEntity(...resolveEntityRef(block.form.entity, module))
       : undefined
 
     if (entity) {
@@ -103,6 +101,8 @@ function PageBlockRenderer({ block }: { block: PageBlock }) {
             <FormRenderer
               entity={entity}
               mode={(block.form?.mode as "create" | "edit" | "view") ?? "view"}
+              id={block.form?.id}
+              formRef={block.form?.ref}
             />
           </Suspense>
         </div>
@@ -114,10 +114,7 @@ function PageBlockRenderer({ block }: { block: PageBlock }) {
   // Table block
   if (block.table) {
     const entity = block.table.entity
-      ? getEntity(
-          block.table.entity.includes(".") ? block.table.entity.split(".")[0] : "",
-          block.table.entity.includes(".") ? block.table.entity.split(".")[1] : block.table.entity,
-        )
+      ? getEntity(...resolveEntityRef(block.table.entity, module))
       : undefined
 
     if (entity) {
@@ -214,11 +211,15 @@ function PageTabs({ entry }: { entry: Entry<PageSpec> }) {
         ))}
       </div>
 
-      {/* Active tab content */}
+      {/* Active tab content. `key={activeTab}` forces a full remount on tab
+          switch — tabs can point at different records of the same entity
+          (Configuration Page pattern), and without it React would reuse the
+          previous tab's FormRenderer instance, briefly showing its
+          already-loaded record instead of a loading state. */}
       {activeIndex >= 0 && (
         <div className="pt-2">
           <Suspense fallback={<Skeleton className="h-48" />}>
-            <TabContent tab={tabs[activeIndex]} />
+            <TabContent key={activeTab} tab={tabs[activeIndex]} module={entry.module} />
           </Suspense>
         </div>
       )}
@@ -226,15 +227,12 @@ function PageTabs({ entry }: { entry: Entry<PageSpec> }) {
   )
 }
 
-function TabContent({ tab }: { tab: PageTab }) {
+function TabContent({ tab, module }: { tab: PageTab; module: string }) {
   const getEntity = useMetaStore((s) => s.getEntity)
 
   if (tab.form) {
     const entity = tab.form.entity
-      ? getEntity(
-          tab.form.entity.includes(".") ? tab.form.entity.split(".")[0] : "",
-          tab.form.entity.includes(".") ? tab.form.entity.split(".")[1] : tab.form.entity,
-        )
+      ? getEntity(...resolveEntityRef(tab.form.entity, module))
       : undefined
 
     if (entity) {
@@ -243,6 +241,8 @@ function TabContent({ tab }: { tab: PageTab }) {
           <FormRenderer
             entity={entity}
             mode={(tab.form?.mode as "create" | "edit" | "view") ?? "view"}
+            id={tab.form?.id}
+            formRef={tab.form?.ref}
           />
         </Suspense>
       )
@@ -251,10 +251,7 @@ function TabContent({ tab }: { tab: PageTab }) {
 
   if (tab.table) {
     const entity = tab.table.entity
-      ? getEntity(
-          tab.table.entity.includes(".") ? tab.table.entity.split(".")[0] : "",
-          tab.table.entity.includes(".") ? tab.table.entity.split(".")[1] : tab.table.entity,
-        )
+      ? getEntity(...resolveEntityRef(tab.table.entity, module))
       : undefined
 
     if (entity) {

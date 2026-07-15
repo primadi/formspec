@@ -13,6 +13,7 @@ import { toast } from "sonner"
 import type { Entry, PrintSpec } from "@/types/manifest"
 import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
+import { resolveEntityRef } from "@/engine/entityRef"
 import { apiGet } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/widgets/Badge"
@@ -26,13 +27,19 @@ export default function PrintRenderer({ entry }: PrintRendererProps) {
   const getClient = useSessionStore((s) => s.getClient)
   const getEntity = useMetaStore((s) => s.getEntity)
 
-  const entity = getEntity(entry.module, entry.spec.entity)
+  const [entityModule, entityName] = resolveEntityRef(entry.spec.entity, entry.module)
+  const entity = getEntity(entityModule, entityName)
   const [record, setRecord] = useState<Record<string, unknown> | null>(null)
   const [loading, setLoading] = useState(!!id)
   const [printMode, setPrintMode] = useState(false)
 
   useEffect(() => {
-    if (!id || !entity) return
+    if (!id) return
+    if (!entity) {
+      toast.error(`entity "${entry.spec.entity}" not found`)
+      setLoading(false)
+      return
+    }
     const load = async () => {
       try {
         const client = getClient()
@@ -48,7 +55,7 @@ export default function PrintRenderer({ entry }: PrintRendererProps) {
       }
     }
     load()
-  }, [id, entity, getClient])
+  }, [id, entity, entry.spec.entity, getClient])
 
   const handlePrint = useCallback(() => {
     setPrintMode(true)

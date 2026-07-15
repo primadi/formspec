@@ -12,6 +12,7 @@ import { Clock, Loader2 } from "lucide-react"
 import type { Entry, TimelineSpec } from "@/types/manifest"
 import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
+import { resolveEntityRef } from "@/engine/entityRef"
 import { apiList } from "@/lib/api"
 import { Badge } from "@/widgets/Badge"
 
@@ -23,7 +24,8 @@ export default function TimelineRenderer({ entry }: TimelineRendererProps) {
   const getClient = useSessionStore((s) => s.getClient)
   const getEntity = useMetaStore((s) => s.getEntity)
 
-  const entity = getEntity(entry.module, entry.spec.entity)
+  const [entityModule, entityName] = resolveEntityRef(entry.spec.entity, entry.module)
+  const entity = getEntity(entityModule, entityName)
   const dateField = entry.spec.date_field ?? "created_at"
   const groupBy = entry.spec.group_by ?? "date"
   const sort = entry.spec.sort ?? "desc"
@@ -36,12 +38,18 @@ export default function TimelineRenderer({ entry }: TimelineRendererProps) {
 
   const fetchItems = useCallback(async () => {
     if (!hasMore) return
+    if (!entity) {
+      toast.error(`entity "${entry.spec.entity}" not found`)
+      setLoading(false)
+      setHasMore(false)
+      return
+    }
     setLoading(true)
     try {
       const client = getClient()
       const result = await apiList<Record<string, unknown>>(
         client,
-        `${entity?.module ?? entry.module}/${entity?.plural ?? entry.spec.entity}`,
+        `${entity.module}/${entity.plural}`,
         {
           sort: `${sort === "desc" ? "-" : ""}${dateField}`,
           ...(cursorRef.current ? { page: cursorRef.current } : {}),
@@ -55,7 +63,7 @@ export default function TimelineRenderer({ entry }: TimelineRendererProps) {
     } finally {
       setLoading(false)
     }
-  }, [entry, entity, dateField, sort, hasMore, getClient])
+  }, [entry.spec.entity, entity, dateField, sort, hasMore, getClient])
 
   useEffect(() => {
     fetchItems()

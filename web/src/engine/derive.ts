@@ -17,7 +17,7 @@ import {
   type FormSpec,
   type FormSection,
   type FormField,
-  type MenuSpec,
+  type MenuItem,
 } from "@/types/manifest"
 
 // ── Main derive functions ──
@@ -45,15 +45,24 @@ export function deriveTable(entity: EntitySchema): TableSpec {
   }
 
   // Row actions: view, edit, delete + custom actions
-  // Summary entities are read-only projections — no edit/delete
-  if (entity.characteristic !== "summary") {
+  // Summary entities are read-only projections — view only.
+  // Reference entities are locked-structure config records (Configuration
+  // pattern) — view + edit, no delete (matches engine/lifecycle.ts's
+  // hasDelete/hasCreate rule for `characteristic: reference`; the backend
+  // also never generates a delete route for them, internal/api/generator.go).
+  if (entity.characteristic === "summary") {
+    rowActions.push({ action: "view", label: "View", icon: "Eye" })
+  } else if (entity.characteristic === "reference") {
+    rowActions.push(
+      { action: "view", label: "View", icon: "Eye" },
+      { action: "edit", label: "Edit", icon: "Pencil" },
+    )
+  } else {
     rowActions.push(
       { action: "view", label: "View", icon: "Eye" },
       { action: "edit", label: "Edit", icon: "Pencil" },
       { action: "delete", label: "Delete", icon: "Trash2", confirm_msg: "Are you sure you want to delete this item?" },
     )
-  } else {
-    rowActions.push({ action: "view", label: "View", icon: "Eye" })
   }
 
   // Add custom actions that have UI hints
@@ -135,7 +144,7 @@ function deriveFormRenderMode(fields: Field[]): "modal" | "drawer" | "separate_p
  */
 export function deriveMenuItems(
   entities: EntitySchema[],
-): MenuSpec[] {
+): MenuItem[] {
   const byModule = new Map<string, EntitySchema[]>()
   for (const e of entities) {
     const list = byModule.get(e.module) ?? []
@@ -143,9 +152,9 @@ export function deriveMenuItems(
     byModule.set(e.module, list)
   }
 
-  const menus: MenuSpec[] = []
+  const menus: MenuItem[] = []
   for (const [module, ents] of byModule) {
-    const children: MenuSpec[] = ents
+    const children: MenuItem[] = ents
       .filter((e) => e.characteristic !== "summary")
       .map((e) => ({
         label: entityDisplayName(e),
@@ -214,7 +223,17 @@ export function resolveForm(
   entity: EntitySchema,
   mode: "create" | "edit" | "view",
   authoredForms: ReadonlyMap<string, import("@/types/manifest").Entry<FormSpec>>,
+  // Explicit override — a Page/Tab block's `form.ref` names a specific
+  // authored Form by name, bypassing the naming-convention guess below.
+  // Needed whenever more than one Form targets the same entity (e.g. a
+  // Configuration Page split across tabs, each with its own curated Form).
+  explicitRef?: string,
 ): FormSpec {
+  if (explicitRef) {
+    const named = authoredForms.get(explicitRef)
+    if (named) return named.spec
+  }
+
   const modeSuffix = mode === "create" ? "create" : mode === "edit" ? "edit" : "view"
 
   // 1. Mode-specific: entity-create, entity-edit, entity-view

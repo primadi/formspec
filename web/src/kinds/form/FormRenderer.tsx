@@ -18,7 +18,7 @@ import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
 import { resolveForm } from "@/engine/derive"
 import { evalReadonlyWhen } from "@/lib/formaexpr"
-import { apiGet, apiPost, apiPut } from "@/lib/api"
+import { apiGet, apiPost, apiPatch } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { TextInput } from "@/widgets/TextInput"
 import { NumberInput } from "@/widgets/NumberInput"
@@ -29,11 +29,21 @@ import { RelationPicker } from "@/widgets/RelationPicker"
 interface FormRendererProps {
   entity: EntitySchema
   mode: "create" | "edit" | "view"
+  // Fixed record id (Page/Tab block's `form.id`, e.g. a Configuration Page's
+  // singleton row) — takes precedence over the :id route param, which is
+  // only ever present for the framework's derived per-entity CRUD routes.
+  id?: string
+  // Explicit Form name (Page/Tab block's `form.ref`) — required whenever
+  // more than one authored Form targets the same entity (e.g. a
+  // Configuration Page split across tabs), since the naming-convention
+  // lookup in resolveForm() can only ever pick one.
+  formRef?: string
 }
 
-export default function FormRenderer({ entity, mode }: FormRendererProps) {
+export default function FormRenderer({ entity, mode, id: fixedId, formRef }: FormRendererProps) {
   const navigate = useNavigate()
-  const { workspace = "default", id } = useParams<{ workspace: string; id?: string }>()
+  const { workspace = "default", id: routeId } = useParams<{ workspace: string; id?: string }>()
+  const id = fixedId ?? routeId
   const getClient = useSessionStore((s) => s.getClient)
   const bundleForms = useMetaStore((s) => s.bundle?.forms ?? [])
 
@@ -46,8 +56,8 @@ export default function FormRenderer({ entity, mode }: FormRendererProps) {
   }, [bundleForms])
 
   const formSpec = useMemo(
-    () => resolveForm(entity, mode, authoredForms),
-    [entity, mode, authoredForms],
+    () => resolveForm(entity, mode, authoredForms, formRef),
+    [entity, mode, authoredForms, formRef],
   )
 
   const isView = mode === "view"
@@ -73,43 +83,60 @@ export default function FormRenderer({ entity, mode }: FormRendererProps) {
     defaultValues: {},
   })
 
-  const { handleSubmit, formState: { errors, isSubmitting }, reset, watch } = form
+  const { handleSubmit, formState: { errors, isSubmitting, isDirty }, reset, watch } = form
   const formValues = watch()
 
   // Load existing record in edit/view mode
   const [loading, setLoading] = useState(isEdit || isView)
   const [recordVersion, setRecordVersion] = useState<number | undefined>()
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  // Guards against a stale fetch (superseded by a newer load, e.g. a manual
+  // reload while the initial one is still in flight) overwriting fresher data.
+  const loadTokenRef = useRef(0)
+
+  const loadRecord = useCallback(async () => {
+    if (!id || (!isEdit && !isView)) return
+    const token = ++loadTokenRef.current
+    // Any autosave still pending from before this (re)load is now stale —
+    // it would otherwise fire afterwards and silently overwrite the record
+    // we're about to load with edits the caller (e.g. Cancel) meant to drop.
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
+    setLoading(true)
+    try {
+      const client = getClient()
+      const record = await apiGet<Record<string, unknown>>(
+        client,
+        `${entity.module}/${entity.plural}/${id}`,
+      )
+      if (loadTokenRef.current !== token) return
+      reset(record as FormData)
+      if (typeof record.version === "number") {
+        setRecordVersion(record.version)
+      }
+    } catch (err) {
+      if (loadTokenRef.current !== token) return
+      toast.error("Failed to load record")
+      // A fixed-id embed has no derived list to bounce back to — stay in
+      // place (route-driven forms still redirect, since the :id there
+      // came from a now-presumably-invalid URL).
+      if (!fixedId) {
+        navigate(`/${workspace}/_admin/${entity.module}/${entity.plural}`)
+      }
+    } finally {
+      if (loadTokenRef.current === token) setLoading(false)
+    }
+  }, [id, entity, isEdit, isView, getClient, reset, navigate, workspace, fixedId])
 
   useEffect(() => {
-    if (!id || (!isEdit && !isView)) return
-    const loadRecord = async () => {
-      try {
-        const client = getClient()
-        const record = await apiGet<Record<string, unknown>>(
-          client,
-          `${entity.module}/${entity.plural}/${id}`,
-        )
-        reset(record as FormData)
-        if (typeof record.version === "number") {
-          setRecordVersion(record.version)
-        }
-      } catch (err) {
-        toast.error("Failed to load record")
-        navigate(`/${workspace}/_admin/${entity.module}/${entity.plural}`)
-      } finally {
-        setLoading(false)
-      }
-    }
     loadRecord()
-  }, [id, entity, isEdit, isView, getClient, reset, navigate, workspace])
+  }, [loadRecord])
 
   // Auto-save (debounced) for two_step_autosave lifecycle
   const autoSave = useCallback(async (data: FormData) => {
     if (!isEdit || !id) return
     try {
       const client = getClient()
-      await apiPut(
+      await apiPatch(
         client,
         `${entity.module}/${entity.plural}/${id}`,
         data,
@@ -129,17 +156,26 @@ export default function FormRenderer({ entity, mode }: FormRendererProps) {
   )
 
   useEffect(() => {
-    if (isEdit && entity.lifecycle === "two_step_autosave") {
+    // `reset(record)` after load also changes formValues but clears isDirty —
+    // gating on isDirty keeps a freshly-loaded record from immediately
+    // triggering an autosave of the data it was just loaded with. When isDirty
+    // drops back to false (that reset, or a Cancel-triggered reload), any
+    // save already scheduled from edits made before the reset is now stale
+    // and must be cancelled — otherwise it fires later and overwrites the
+    // just-(re)loaded record with the abandoned edits.
+    if (isEdit && isDirty && entity.lifecycle === "two_step_autosave") {
       debouncedAutoSave(formValues as FormData)
+    } else if (autoSaveTimer.current) {
+      clearTimeout(autoSaveTimer.current)
     }
-  }, [formValues, isEdit, entity.lifecycle, debouncedAutoSave])
+  }, [formValues, isEdit, isDirty, entity.lifecycle, debouncedAutoSave])
 
   // Submit handler
   const onSubmit = async (data: FormData) => {
     try {
       const client = getClient()
       if (isEdit && id) {
-        await apiPut(
+        await apiPatch(
           client,
           `${entity.module}/${entity.plural}/${id}`,
           data,
@@ -150,7 +186,11 @@ export default function FormRenderer({ entity, mode }: FormRendererProps) {
         await apiPost(client, `${entity.module}/${entity.plural}`, data)
         toast.success("Created successfully")
       }
-      navigate(`/${workspace}/_admin/${entity.module}/${entity.plural}`)
+      // A fixed-id embed (Page/Tab block's `form.id`, e.g. a Configuration
+      // Page singleton) has no derived list to return to — stay in place.
+      if (!fixedId) {
+        navigate(`/${workspace}/_admin/${entity.module}/${entity.plural}`)
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Save failed")
     }
@@ -168,17 +208,21 @@ export default function FormRenderer({ entity, mode }: FormRendererProps) {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-          <ArrowLeft className="size-4" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            {title} {entity.name.charAt(0).toUpperCase() + entity.name.slice(1)}
-          </h1>
+      {/* Header: a fixed-id embed (Page/Tab block's `form.id`) sits inside a
+          tab/section that already has its own caption, and has no list to
+          navigate back to — so it skips this standalone-page header. */}
+      {!fixedId && (
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+            <ArrowLeft className="size-4" />
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">
+              {title} {entity.name.charAt(0).toUpperCase() + entity.name.slice(1)}
+            </h1>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Form */}
       <form onSubmit={handleSubmit(onSubmit)} autoComplete="off" className="space-y-8">
@@ -220,7 +264,9 @@ export default function FormRenderer({ entity, mode }: FormRendererProps) {
                       error={errors[field.name]?.message as string | undefined}
                       readonly={isReadonly || isView}
                       currentModule={entity.module}
-                      onChange={(value) => form.setValue(field.name as any, value, { shouldValidate: true })}
+                      onChange={(value) =>
+                        form.setValue(field.name as any, value, { shouldValidate: true, shouldDirty: true })
+                      }
                     />
                     {field.help && !isView && (
                       <p className="text-xs text-muted-foreground">{field.help}</p>
@@ -249,7 +295,17 @@ export default function FormRenderer({ entity, mode }: FormRendererProps) {
             <Button
               type="button"
               variant="outline"
-              onClick={() => navigate(-1)}
+              onClick={() => {
+                // A fixed-id embed has no list to go back to and no
+                // navigation history of its own (see the header/loadRecord
+                // comments above) — just discard edits by reloading the
+                // current record instead of navigating away.
+                if (fixedId) {
+                  loadRecord()
+                } else {
+                  navigate(-1)
+                }
+              }}
             >
               Cancel
             </Button>

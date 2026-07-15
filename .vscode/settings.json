@@ -1,7 +1,7 @@
 {
   "json.schemaDownload.enable": true,
-  "chat.mcp.autoStart": true,
   "dbcode.ai.mcp.autoStart": false,
+  "css.lint.unknownAtRules": "ignore",
   "json.schemas": [
     {
       "fileMatch": ["components.json"],

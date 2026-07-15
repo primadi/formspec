@@ -12,6 +12,7 @@ import type { KyInstance } from "ky"
 
 import type { WizardStep, FormSpec, Entry, FormField } from "@/types/manifest"
 import { useMetaStore } from "@/stores/meta"
+import { resolveEntityRef } from "@/engine/entityRef"
 import { apiList, apiPost } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -50,13 +51,17 @@ export default function SearchSelect({ step, module, stepData, onSelect, getClie
   const getForm = useMetaStore((s) => s.getForm)
   const createForm: Entry<FormSpec> | undefined = step.form ? getForm(step.form) : undefined
 
-  // Look up the entity schema from the meta store
+  // Look up the entity schema from the meta store. step.entity is inline on
+  // the wizard step, so it resolves relative to the wizard's own module.
   const getEntity = useMetaStore((s) => s.getEntity)
-  const entity = step.entity ? getEntity(module, step.entity) : undefined
+  const [stepEntityModule, stepEntityName] = step.entity
+    ? resolveEntityRef(step.entity, module)
+    : ["", ""]
+  const entity = stepEntityName ? getEntity(stepEntityModule, stepEntityName) : undefined
 
   // Derived: module & plural for API path
-  const moduleName = entity?.module ?? module
-  const pluralName = entity?.plural ?? `${step.entity}s`
+  const moduleName = entity?.module ?? stepEntityModule
+  const pluralName = entity?.plural ?? `${stepEntityName}s`
 
   // ── Search ──
 

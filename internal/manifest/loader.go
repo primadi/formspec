@@ -212,10 +212,10 @@ var KnownKinds = map[string]bool{
 	"Config": true, "Migration": true, "Subscription": true,
 	// Core Extended
 	"Workflow": true, "Api": true, "Webhook": true, "Mockup": true, "KindDefinition": true, "Integrator": true,
-	// Frontend
+	// Frontend — no "Menu": navigation lives in App.spec.menu / Module.spec.menu.
 	"Page": true, "Form": true, "Table": true, "Dashboard": true, "Widget": true,
 	"Report": true, "Wizard": true, "Kanban": true, "Timeline": true,
-	"Menu": true, "Print": true, "Theme": true,
+	"Print": true, "Theme": true,
 	// Control Plane
 	"Environment": true, "Policy": true, "Datastore": true,
 }
@@ -290,6 +290,32 @@ func RawSpecTo[T any](specMap map[string]any) (*T, error) {
 		return nil, fmt.Errorf("unmarshal spec: %w", err)
 	}
 	return &out, nil
+}
+
+// RawSpecToAppSpec converts a raw spec map to a typed AppSpec.
+func RawSpecToAppSpec(specMap map[string]any) (*spec.AppSpec, error) {
+	b, err := yaml.Marshal(specMap)
+	if err != nil {
+		return nil, fmt.Errorf("re-marshal spec: %w", err)
+	}
+	var appSpec spec.AppSpec
+	if err := yaml.Unmarshal(b, &appSpec); err != nil {
+		return nil, fmt.Errorf("unmarshal app spec: %w", err)
+	}
+	return &appSpec, nil
+}
+
+// RawSpecToModuleSpec converts a raw spec map to a typed ModuleSpec.
+func RawSpecToModuleSpec(specMap map[string]any) (*spec.ModuleSpec, error) {
+	b, err := yaml.Marshal(specMap)
+	if err != nil {
+		return nil, fmt.Errorf("re-marshal spec: %w", err)
+	}
+	var modSpec spec.ModuleSpec
+	if err := yaml.Unmarshal(b, &modSpec); err != nil {
+		return nil, fmt.Errorf("unmarshal module spec: %w", err)
+	}
+	return &modSpec, nil
 }
 
 // RawSpecToServiceSpec converts a raw spec map to a typed ServiceSpec.

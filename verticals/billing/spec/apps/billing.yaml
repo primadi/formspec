@@ -6,7 +6,11 @@ metadata:
 spec:
   version: 1.0.0
   vendor: forma-dev
+  root_url: /app/billing
   modules: [billing]
+  menu:
+    - type: module
+      module: billing
   publishes:
     - service: order-events
       actions: [read]

@@ -6,4 +6,5 @@ metadata:
 spec:
   version: 1.0.0
   vendor: acme-corp
+  root_url: /app/tokoku
   modules: [billing, notifications, gl]

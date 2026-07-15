@@ -1,0 +1,21 @@
+apiVersion: forma.dev/v1alpha1
+kind: App
+metadata:
+  name: klinik-internal
+  description: >
+    UI Showcase — contoh yang meng-exercise SEMUA fitur frontend renderer
+    (docs/implementation/frontend-renderer.md). Setiap UI kind, setiap pola
+    lifecycle, dan derived-by-default (D17) punya perwakilan di sini.
+    Ini App internal — staf klinik, akses penuh ke kedua module.
+spec:
+  version: 1.0.0
+  vendor: forma-examples
+  root_url: /app/klinik-internal
+  modules: [clinic, pharmacy]
+  # Adopsi utuh default menu suggestion masing-masing module (Core Basic
+  # §4.4/§4.5) — setara tampilan menu lama sebelum migrasi dari kind: Menu.
+  menu:
+    - type: module
+      module: clinic
+    - type: module
+      module: pharmacy

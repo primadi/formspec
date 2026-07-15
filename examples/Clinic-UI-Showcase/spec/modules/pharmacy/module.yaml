@@ -8,3 +8,20 @@ spec:
   depends:
     - module: forma/core
     - module: clinic
+  # Default menu suggestion (Core Basic §4.5) — see clinic/module.yaml for
+  # the full explanation. Migrated from the old
+  # spec/modules/pharmacy/menus/pharmacy-main.yaml.
+  menu:
+    - label: "Farmasi"
+      icon: "pill"
+      order: 20
+      children:
+        - { label: "Antrian Resep", icon: "columns-3", view: pharmacy-queue, order: 1 }
+        - label: "Semua Resep"
+          icon: "list"
+          route: "/pharmacy/prescriptions" # derived entity-list route (no authored View)
+          order: 2
+        - label: "Jual Bebas (OTC)"
+          icon: "shopping-cart"
+          route: "/pharmacy/otc-sales" # derived entity-list route (no authored View)
+          order: 3

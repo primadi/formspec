@@ -8,3 +8,21 @@ spec:
   vendor: forma-dev
   depends:
     - module: forma/core
+  # Default menu suggestion (Core Basic §4.5) — migrated from the old
+  # standalone kind: Menu (spec/menus/inventory-menu.yaml). Most items have
+  # no authored View backing them yet in this vertical, so they stay on the
+  # `route` escape hatch unchanged; only "Kartu Stok" maps to a real Report.
+  menu:
+    - label: "Inventory"
+      icon: "package"
+      order: 20
+      children:
+        - { label: "Dashboard", icon: "dashboard", route: "/app/inventory/dashboard", order: 1 }
+        - { label: "Stok", icon: "boxes", route: "/app/inventory/stock", order: 2 }
+        - { label: "Mutasi Stok", icon: "arrows-left-right", route: "/app/inventory/movements", order: 3 }
+        - label: "Laporan"
+          icon: "file-text"
+          order: 4
+          children:
+            - { label: "Kartu Stok", view: stock-card }
+            - { label: "Laporan Mutasi", route: "/app/inventory/reports/movement" }

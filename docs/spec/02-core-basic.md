@@ -275,17 +275,21 @@ NOT kinds. Accessed only via `ctx`: `ctx.db`, `ctx.cache`, `ctx.lock`, `ctx.queu
 
 #### 4.4 `kind: App`
 
-Root project manifest. Unit of deployment, trust boundary, and interface publication.
+Root project manifest. Unit of deployment, trust boundary, and interface publication. A **Workspace MAY contain more than one App** — all Apps in a workspace run simultaneously in the same process, distinguished by `root_url`. The same Module MAY be mounted by more than one App in the same workspace (e.g. an internal App and a public-facing App both mounting the same business module, exposing a different subset of its views).
 
 ```yaml
 apiVersion: forma.dev/v1alpha1
 kind: App
 metadata:
-  name: klinik-sehat
+  name: klinik-sehat-internal
 spec:
   version: 2.1.0
   vendor: acme-corp
+  root_url: /app/klinik-internal   # routing prefix, MUST be unique across all Apps in the workspace and start with "/app/" (the renderer SPA is only mounted there)
   modules: [billing, acme-corp/general-ledger]
+  menu:                            # navigation tree for this App — see "Menu" below
+    - type: module
+      module: billing
   publishes:                      # cross-app interfaces offered
     - service: icd-lookup
       actions: [search, find]
@@ -296,6 +300,37 @@ spec:
 ```
 
 Default private. Cross-app access only via publish → request → **grant approved by Data Owner**, recorded, revocable, metered.
+
+**Menu ownership.** Menu belongs to the App, not the Module — "Module is the catalog, `App.spec.menu` is the shopping list from that catalog." Because different Apps mounting the same Module may expose different subsets of its views (internal vs. public), the menu enumeration has to live at the same level as that visibility decision, i.e. the App. To avoid burdening every App with wiring every item from scratch, a Module MAY ship a `spec.menu` default suggestion (§4.5) that an App can adopt wholesale via a `type: module` entry, and still override/restrict/rearrange freely.
+
+**`MenuItem`** (used identically in `App.spec.menu` and `Module.spec.menu`):
+
+```go
+type MenuItem struct {
+    Type     string      // "module" = adopt-shorthand node; empty = plain group or leaf
+    Label    string
+    Icon     string
+    Module   string      // required on `type: module` nodes and on leaf nodes; forbidden on group nodes
+    View     string      // name of a registered View (Page/Table/Wizard/Kanban/Dashboard/Report/Timeline)
+    Route    string      // escape hatch: raw URL for a leaf with no registered View (external link, custom path)
+    When     string       // FormaExpr business condition
+    Order    int
+    Children []MenuItem
+}
+```
+
+Menu nesting is capped at **3 levels**, and every node MUST be exactly one of three shapes (validated at load time, not silently coerced):
+
+1. **Adopt node** (`type: module`) — level 1 only. Requires `module`; optionally `order` (to reposition the adopted block within the App's list). Forbids `label`, `icon`, `view`, `route`, `children` — those all come from the target Module's own `spec.menu`. Effect: splices that Module's entire suggested menu tree in at this position.
+2. **Group node** (has `children`) — level 1 (category) or level 2 (parent-menu). Requires `label` and a non-empty `children`. Forbids `module`, `view`, `route` **on the group itself** — a category may contain children belonging to different modules, so `module` is only meaningful on the leaves underneath, never on the group.
+3. **Leaf/action node** (no `children`, not `type: module`) — level 2 or level 3. Requires `label`, `module`, and **exactly one** of `view`/`route`. A level-3 leaf MUST NOT have `children` — this is what enforces the 3-level cap.
+
+Resolution rules:
+- A leaf with `view` resolves its route from that View's own registration (a `Page` uses its own `route:`; `Dashboard`/`Widget`/`Wizard`/`Kanban`/`Timeline`/`Report`/`Print` use the `/<kind-lowercase>/<name>` convention, e.g. `/wizard/patient-registration`, `/kanban/consultation-board`) — the route is never duplicated into the menu item, so it can't drift out of sync. `Form` and `Table` are **not** valid `view` targets — the renderer never mounts a standalone route for them (they only appear embedded in a Page's blocks, or as the framework's derived per-entity CRUD routes); reference the `Page` that embeds them instead, or fall back to `route` for a derived entity-list link.
+- A leaf with `route` uses it verbatim (unresolved) — for links with no backing View (external URLs, custom paths).
+- Every `module` referenced anywhere in `App.spec.menu` (leaf or adopt node) MUST be a member of that App's own `spec.modules` — an App can never silently navigate into a Module it doesn't mount.
+
+There is no standalone `kind: Menu` — it has been folded entirely into `App.spec.menu` (authoritative) and `Module.spec.menu` (default suggestion).
 
 #### 4.5 `kind: Module`
 
@@ -315,7 +350,15 @@ spec:
       version: ">=1.0 <2.0"
   config:
     default_currency: IDR
+  menu:                            # default menu suggestion, module-relative — see §4.4 "MenuItem"
+    - label: "Akuntansi"
+      icon: calculator
+      children:
+        - { label: "Jurnal Umum", view: journal-list }
+        - { label: "Buku Besar", view: ledger }
 ```
+
+`Module.spec.menu` uses the same `MenuItem` shape as `App.spec.menu`, except `module` is implicit (the module's own name) and therefore omitted on every item — an App adopts it wholesale via a `type: module` entry (§4.4).
 
 Module permission footprint is **derived** — the aggregate of `required_permission` + `uses` across all its manifests. `forma module install` MUST present this footprint for consent.
 
@@ -346,7 +389,9 @@ actions:
 
 ```
 myapp/
-  forma.yaml                      # kind: App (root)
+  apps/
+    internal.yaml                 # kind: App
+    public.yaml                   # kind: App (second App, same workspace)
   modules/
     billing/
       module.yaml                 # kind: Module
@@ -361,7 +406,7 @@ myapp/
       invoice_handler.go
 ```
 
-Folder names are convention. Loaders MUST discover by scanning `*.yaml`, not by path. The only hard rule: three file types (`.yaml`, `.star`, `assets/*`). `impl/` is build-time only, committed, excluded from deployment artifacts.
+Folder names are convention. Loaders MUST discover by scanning `*.yaml`, not by path — nothing stops a workspace from keeping a single `forma.yaml` at the root instead of `apps/<name>.yaml`; `apps/` is the recommended layout once a workspace has more than one App. The only hard rule: three file types (`.yaml`, `.star`, `assets/*`). `impl/` is build-time only, committed, excluded from deployment artifacts.
 
 ### 6. Compilation & Process Model
 

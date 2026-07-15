@@ -10,6 +10,7 @@ import type { Entry, DashboardSpec, WidgetLayout } from "@/types/manifest"
 import { useMetaStore } from "@/stores/meta"
 import { useSessionStore } from "@/stores/session"
 import { can as checkPermission } from "@/engine/permissions"
+import { resolveEntityRef } from "@/engine/entityRef"
 import { Badge } from "@/widgets/Badge"
 
 interface DashboardRendererProps {
@@ -31,7 +32,8 @@ export default function DashboardRenderer({ entry }: DashboardRendererProps) {
         .filter((w) => {
           if (!w.meta?.spec.entity) return true
           if (!me) return false
-          const perm = `${w.meta.module}.${(getEntity(w.meta.module, w.meta.spec.entity ?? "")?.plural) ?? "list"}`
+          const [module, name] = resolveEntityRef(w.meta.spec.entity, w.meta.module)
+          const perm = `${module}.${getEntity(module, name)?.plural ?? "list"}`
           return checkPermission(perm, me.permissions)
         }),
     [entry.spec.widgets, getWidget, me, getEntity],

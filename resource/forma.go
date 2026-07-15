@@ -36,9 +36,11 @@ import (
 
 	"github.com/primadi/forma/internal/action"
 	"github.com/primadi/forma/internal/api"
+	forma_app "github.com/primadi/forma/internal/app"
 	"github.com/primadi/forma/internal/auth"
 	"github.com/primadi/forma/internal/db"
 	"github.com/primadi/forma/internal/entity"
+	"github.com/primadi/forma/internal/manifest"
 	"github.com/primadi/forma/internal/permission"
 	"github.com/primadi/forma/internal/ui"
 	"github.com/primadi/forma/internal/validation"
@@ -243,12 +245,28 @@ func New(cfg Config) (*App, error) {
 		fmt.Fprintf(os.Stderr, "forma: ui validate warning: %v\n", valErr)
 	}
 
+	// Resolve kind: App / kind: Module manifests (Core §4.4/§4.5). A
+	// workspace MAY declare more than one App; all of them run
+	// simultaneously in this one process, distinguished by root_url.
+	specManifests, err := manifest.NewLoader(cfg.SpecPath).LoadAll()
+	if err != nil {
+		return nil, fmt.Errorf("load manifests for app resolution: %w", err)
+	}
+	resolvedApps, err := forma_app.Resolve(specManifests.Manifests, uiReg)
+	if err != nil {
+		return nil, fmt.Errorf("resolve apps: %w", err)
+	}
+	if len(resolvedApps) == 0 {
+		fmt.Fprintf(os.Stderr, "forma: warning: no kind: App manifest found under %s — /_meta/ui will 400 until one is added\n", cfg.SpecPath)
+	}
+
 	rb := api.NewRouterBuilder(reg)
 	rb.BuildRoutes()
 	disp := newDispatcher(reg, cfg)
 	nativeEx := disp.NativeExecutor() // get the native executor from dispatcher
 	rb.SetDispatcher(disp)
 	rb.SetUIRegistry(uiReg)
+	rb.SetApps(resolvedApps)
 	if cfg.WebDir != "" {
 		rb.SetWebDir(cfg.WebDir)
 	}

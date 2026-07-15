@@ -13,6 +13,7 @@ import { toast } from "sonner"
 import type { Entry, WizardSpec } from "@/types/manifest"
 import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
+import { resolveEntityRef } from "@/engine/entityRef"
 import { apiPost } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -144,17 +145,24 @@ export default function WizardRenderer({ entry }: WizardRendererProps) {
         // already resolved during the wizard's steps (e.g. patient_id from
         // an eager patient.create in step 1), so the final commit is just a
         // normal entity create — no custom script/action required.
-        const entitySchema = getEntity(entry.module, entry.spec.entity)
-        const plural = entitySchema?.plural ?? `${entry.spec.entity}s`
+        const [entityModule, entityName] = resolveEntityRef(entry.spec.entity, entry.module)
+        const entitySchema = getEntity(entityModule, entityName)
+        if (!entitySchema) {
+          throw new Error(`entity ${entityModule}.${entityName} not found`)
+        }
         const payload: Record<string, unknown> = {
           transaction_date: new Date().toISOString().slice(0, 10),
         }
         for (const [key, value] of Object.entries(stepData)) {
-          if (entitySchema?.fields.some((f) => f.name === key)) {
+          if (entitySchema.fields.some((f) => f.name === key)) {
             payload[key] = value
           }
         }
-        response = await apiPost<Record<string, unknown>>(client, `${entry.module}/${plural}`, payload)
+        response = await apiPost<Record<string, unknown>>(
+          client,
+          `${entitySchema.module}/${entitySchema.plural}`,
+          payload,
+        )
       }
       toast.success("Wizard completed successfully")
 

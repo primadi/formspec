@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/primadi/forma/internal/action"
+	forma_app "github.com/primadi/forma/internal/app"
 	"github.com/primadi/forma/internal/entity"
 	"github.com/primadi/forma/internal/ui"
 	"github.com/primadi/forma/pkg/spec"
@@ -26,6 +27,7 @@ type RouterBuilder struct {
 	webDir     string // static SPA root (web/dist); empty = no static serving
 	webFS      fs.FS  // embedded SPA (embed.FS); empty = no static serving
 	hub        *WSHub
+	apps       map[string]*forma_app.ResolvedApp // resolved kind: App manifests, keyed by name (Core §4.4)
 }
 
 // NewRouterBuilder creates a new router builder backed by the entity registry.
@@ -64,6 +66,14 @@ func (b *RouterBuilder) SetDeliveryDeps(deps action.DeliveryDeps) {
 // (/{ws}/api/v1/_meta/...). Call before BuildHTTP.
 func (b *RouterBuilder) SetUIRegistry(r *ui.Registry) {
 	b.uiRegistry = r
+}
+
+// SetApps wires the resolved kind: App manifests (internal/app.Resolve) —
+// enables /_meta/apps and app-scoped /_meta/ui bundles. A workspace MAY
+// resolve to more than one App; they all serve simultaneously, distinguished
+// by the `app` query param / their own root_url (Core §4.4).
+func (b *RouterBuilder) SetApps(apps map[string]*forma_app.ResolvedApp) {
+	b.apps = apps
 }
 
 // SetWebDir enables static SPA serving from dir (typically web/dist) at
@@ -114,6 +124,7 @@ func (b *RouterBuilder) BuildHTTP() http.Handler {
 			// No RequirePermission wrapper: the bundle itself is filtered per
 			// caller, and /_meta/me is by definition caller-scoped.
 			r.Route("/_meta", func(r chi.Router) {
+				r.Get("/apps", b.HandleMetaApps())
 				r.Get("/ui", b.HandleMetaUI())
 				r.Get("/me", b.HandleMetaMe())
 				r.Get("/entities/{module}/{name}", b.HandleMetaEntity())

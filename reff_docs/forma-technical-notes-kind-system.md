@@ -1,7 +1,7 @@
 # Forma Technical Note: Kind System — App, Module, Menu, Navigation, Theme, dan Akses Lintas-Module
 
 **Catatan internal — hasil diskusi tim, bukan bagian resmi Forma Core Spec.**
-**Status: bahan eksplorasi desain, belum committed ke Forma Core Basic/Extended Spec. Beberapa poin di sini memperluas Unified Permission Declaration (Core Basic §11.4) dan mendahului Technical Note "Form Layout & List View Declaration" yang masih open item.**
+**Status: §2/§3/§3.4 (multi-App per Workspace, Menu milik App, Module boleh sediakan default menu suggestion) sudah diadopsi ke Forma Core Basic Spec §4.4/§4.5 — lihat `docs/spec/02-core-basic.md`. Sisanya (Navigation/Auth/Theme sebagai konten App, §5–§6 lintas-Module) masih bahan eksplorasi desain, belum committed. Beberapa poin di sini memperluas Unified Permission Declaration (Core Basic §11.4) dan mendahului Technical Note "Form Layout & List View Declaration" yang masih open item.**
 
 ---
 

@@ -285,16 +285,6 @@ type KanbanCard struct {
 	Component string   `yaml:"component,omitempty" json:"component,omitempty"`
 }
 
-// MenuSpec defines a navigation entry (Frontend §9).
-type MenuSpec struct {
-	Label    string     `yaml:"label" json:"label"`
-	Icon     string     `yaml:"icon,omitempty" json:"icon,omitempty"`
-	Route    string     `yaml:"route,omitempty" json:"route,omitempty"`
-	When     string     `yaml:"when,omitempty" json:"when,omitempty"` // FormaExpr business condition
-	Children []MenuSpec `yaml:"children,omitempty" json:"children,omitempty"`
-	Order    int        `yaml:"order,omitempty" json:"order,omitempty"`
-}
-
 // PrintSpec defines a printable document template (Frontend §9).
 type PrintSpec struct {
 	Entity   string          `yaml:"entity" json:"entity"`

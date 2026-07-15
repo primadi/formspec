@@ -1,7 +1,9 @@
 // ─── Sidebar Navigation ───
 //
-// Renders the navigation tree: derived module menus for entities without
-// authored menus, merged with authored `kind: Menu` manifests.
+// Renders the navigation tree: bundle.menu is already fully resolved
+// server-side (Core §4.4 — App.spec.menu, adopt nodes spliced, `view`
+// leaves turned into concrete `route`), merged with derived module menus
+// for entities not covered by any authored menu item.
 //
 // Features:
 //   - Permission-filtered items (hides when user lacks backing permission)
@@ -17,8 +19,9 @@ import { cn } from "@/lib/utils"
 import { useMetaStore } from "@/stores/meta"
 import { useSessionStore } from "@/stores/session"
 import { can as checkPermission } from "@/engine/permissions"
+import type { MenuItem } from "@/types/manifest"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import {
   Tooltip,
   TooltipContent,
@@ -39,16 +42,6 @@ function resolveIcon(name: string | undefined) {
   return Icon ?? null
 }
 
-// ── Menu Item Types ──
-
-interface MenuItem {
-  label: string
-  icon?: string
-  route?: string
-  order?: number
-  children?: MenuItem[]
-}
-
 // ── Sidebar Props ──
 
 interface SidebarProps {
@@ -65,93 +58,67 @@ export function Sidebar({ collapsed, onToggle: _onToggle, mobile, mobileOpen, on
   const me = useSessionStore((s) => s.me)
   const location = useLocation()
 
-  // Determine correct surface prefix from current URL
-  const isAdmin = location.pathname.includes("/_admin/")
-  const surfacePrefix = isAdmin ? `/${workspace}/_admin` : `/${workspace}/app`
+  // Determine correct surface prefix from current URL. The App surface uses
+  // this App's own root_url (Core §4.4) — not a hardcoded "/app" — since a
+  // workspace can resolve to more than one App, each mounted at its own
+  // root_url under the shared /{ws}/app/* renderer SPA.
+  // Matches the route table in App.tsx ("/:workspace/_admin/*") exactly —
+  // a plain `.includes("/_admin/")` misses the bare root path
+  // (`/{workspace}/_admin`, no trailing segment), which is exactly what's
+  // hit on first load before any redirect appends a subpath.
+  const adminPrefix = `/${workspace}/_admin`
+  const isAdmin = location.pathname === adminPrefix || location.pathname.startsWith(`${adminPrefix}/`)
+  const surfacePrefix = isAdmin ? `/${workspace}/_admin` : `/${workspace}${bundle?.app.root_url ?? "/app"}`
 
   const menuItems = useMemo(() => {
     if (!bundle || !me) return []
 
-    const items: MenuItem[] = []
+    const sortByOrder = (items: MenuItem[]) =>
+      [...items].sort((a, b) => (a.order ?? 99) - (b.order ?? 99))
 
-    // Recursively convert MenuSpec → MenuItem (handles nested children, sorts by order)
-  const sortByOrder = (items: MenuItem[]) =>
-    items.sort((a, b) => (a.order ?? 99) - (b.order ?? 99))
-
-  const toMenuItem = (spec: import("@/types/manifest").MenuSpec): MenuItem => ({
-    label: spec.label,
-    icon: spec.icon,
-    route: spec.route,
-    order: spec.order,
-    children: spec.children?.length
-      ? sortByOrder(
-          spec.children
-            .filter((c) => filterMenuItem(c, me.permissions))
-            .map(toMenuItem),
-        )
-      : undefined,
-  })
-
-  // 1. Authored menus (kind: Menu) — sorted by order, children recursively sorted
-    const authoredMenus = sortByOrder(
-      bundle.menus
-        .filter((m) => filterMenuItem(m.spec, me.permissions))
-        .map((m) => toMenuItem(m.spec)),
-    )
-
-    items.push(...authoredMenus)
-
-    // 2. Derived module menus (for entities not covered by authored menus)
-    const coveredRoutes = new Set<string>()
-    for (const m of authoredMenus) {
-      if (m.route) coveredRoutes.add(m.route)
-      for (const c of m.children ?? []) {
-        if (c.route) coveredRoutes.add(c.route)
-      }
-    }
-
-    const entitiesByModule = useMetaStore.getState().getEntitiesByModule()
-    for (const [module, entities] of entitiesByModule) {
-      // Check if any authored menu belongs to this module (by module name,
-      // not by label — labels may be localized like "Klinik" vs "Clinic")
-      const moduleAuthored = bundle.menus.some(
-        (m) => m.module === module,
-      )
-      if (moduleAuthored) continue
-
-      // Create derived menu for this module
-      const visibleEntities = entities.filter((e) => {
-        const listPerm = `${module}.${e.plural}.list`
-        return checkPermission(listPerm, me.permissions)
-      })
-
-      if (visibleEntities.length === 0) continue
-
-      const children = visibleEntities
-        .filter(
-          (e) =>
-            !coveredRoutes.has(`/${module}/${e.plural}`),
-        )
-        .map((e) => ({
+    // `_admin` isn't scoped to any App and can't be curated (Core §4.4) — it
+    // always shows every module's entities, mechanically generated, with no
+    // authored menu and no per-entity permission filtering (the binary
+    // `_admin.access` gate already covers "may see this at all").
+    if (isAdmin) {
+      const entitiesByModule = useMetaStore.getState().getEntitiesByModule()
+      const items: MenuItem[] = []
+      for (const [module, entities] of entitiesByModule) {
+        if (entities.length === 0) continue
+        const children = entities.map((e) => ({
           label: e.label_field
             ? e.name.charAt(0).toUpperCase() + e.name.slice(1)
             : e.name,
           icon: "FileText" as string | undefined,
           route: `/${module}/${e.plural}`,
         }))
-
-      if (children.length > 0) {
         items.push({
           label: module.charAt(0).toUpperCase() + module.slice(1),
           icon: "Folder",
-          order: 99, // derived menus after authored ones
           children: sortByOrder(children),
         })
       }
+      return sortByOrder(items)
     }
 
-    return items
-  }, [bundle, me])
+    // App surface: ONLY the authored, curated menu (Core §4.4 — App is a
+    // curated cart of entities/views from its modules). Entities not wired
+    // into the menu do not appear here at all — no derived fallback.
+    // bundle.menu is already fully resolved server-side (adopt nodes
+    // spliced, `view` leaves turned into `route`); only permission/when
+    // filtering and ordering happen here.
+    const filterTree = (list: MenuItem[]): MenuItem[] =>
+      sortByOrder(
+        list
+          .filter((item) => filterMenuItem(item, me.permissions))
+          .map((item) => ({
+            ...item,
+            children: item.children?.length ? filterTree(item.children) : undefined,
+          })),
+      )
+
+    return filterTree(bundle.menu ?? [])
+  }, [bundle, me, isAdmin])
 
   if (!bundle || !me) return null
 
@@ -417,25 +384,29 @@ function SidebarLink({
   const to = item.route ? linkHref(item, basePath) : "#"
 
   if (collapsed) {
+    // Single real anchor element doing triple duty (nav link, tooltip
+    // trigger, button styling) via base-ui's `render` composition — nesting
+    // separate <a>/<button> elements here (as before) produces invalid HTML
+    // (`<button><a><button>`) that browsers resolve with an extra
+    // hover/activate step, requiring two clicks to actually navigate.
     return (
       <Tooltip>
-        <TooltipTrigger>
-          <NavLink to={to}>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="w-full justify-center"
-            >
-              {item.icon ? (
-                (() => {
-                  const Icon = resolveIcon(item.icon)
-                  return Icon ? <Icon className="size-4" /> : null
-                })()
-              ) : (
-                <FileIcon />
-              )}
-            </Button>
-          </NavLink>
+        <TooltipTrigger
+          render={
+            <NavLink
+              to={to}
+              className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "w-full justify-center")}
+            />
+          }
+        >
+          {item.icon ? (
+            (() => {
+              const Icon = resolveIcon(item.icon)
+              return Icon ? <Icon className="size-4" /> : null
+            })()
+          ) : (
+            <FileIcon />
+          )}
         </TooltipTrigger>
         <TooltipContent side="right">
           <p>{item.label}</p>

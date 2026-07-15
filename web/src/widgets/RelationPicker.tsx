@@ -255,6 +255,15 @@ export function RelationPicker({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onFocus={() => setIsOpen(true)}
+              onBlur={(e) => {
+                // Tab/Shift+Tab away doesn't fire the click-outside listener
+                // below, so without this the dropdown is left open, covering
+                // whatever field comes next. Skip closing when focus is
+                // landing on the dropdown itself (e.g. a result button).
+                const next = e.relatedTarget as Node | null
+                if (next && dropdownRef.current?.contains(next)) return
+                setIsOpen(false)
+              }}
               placeholder={selectedLabel || placeholder || "Cari..."}
               className={cn("pl-8", error && "border-destructive")}
             />

@@ -12,6 +12,7 @@ import type { KyInstance } from "ky"
 
 import type { WizardStep, Entry, FormSpec, FormField } from "@/types/manifest"
 import { useMetaStore } from "@/stores/meta"
+import { resolveEntityRef } from "@/engine/entityRef"
 import { apiList } from "@/lib/api"
 import { Input } from "@/components/ui/input"
 
@@ -44,11 +45,15 @@ export default function WizardFormStep({
     () => (step.form ? getForm(step.form) : undefined),
     [step.form, getForm],
   )
+  // form.spec.entity is resolved relative to the FORM manifest's own module
+  // (form.module) — not the wizard's module, which may differ for a
+  // cross-module Form referenced by step.form.
   const entityName = form?.spec.entity
-  const entity = useMemo(
-    () => (entityName ? getEntity(module, entityName) : undefined),
-    [entityName, module, getEntity],
-  )
+  const entity = useMemo(() => {
+    if (!entityName || !form) return undefined
+    const [entityModule, entityLocalName] = resolveEntityRef(entityName, form.module)
+    return getEntity(entityModule, entityLocalName)
+  }, [entityName, form, getEntity])
 
   // Gather all fields from all sections — stable reference
   const allFields: FormField[] = useMemo(
@@ -75,10 +80,17 @@ export default function WizardFormStep({
     setLoadingOptions((prev) => ({ ...prev, [resource]: true }))
     try {
       const client = getClient()
-      // Look up the entity to get its plural name
-      const resEntity = getEntity(module, resource)
-      const plural = resEntity?.plural ?? `${resource}s`
-      const path = `${module}/${plural}`
+      // relation.resource is resolved relative to the entity that declares
+      // the relation field (entity.module) — falling back to the wizard's
+      // own module only if the entity itself hasn't resolved yet.
+      const [resModule, resName] = resolveEntityRef(resource, entity?.module ?? module)
+      const resEntity = getEntity(resModule, resName)
+      if (!resEntity) {
+        optionsRef.current = { ...optionsRef.current, [resource]: [] }
+        setRefreshTick((t) => t + 1)
+        return
+      }
+      const path = `${resEntity.module}/${resEntity.plural}`
       const { items } = await apiList<OptionItem>(client, path, { per_page: "100" })
       optionsRef.current = { ...optionsRef.current, [resource]: items ?? [] }
       setRefreshTick((t) => t + 1)
@@ -88,7 +100,7 @@ export default function WizardFormStep({
     } finally {
       setLoadingOptions((prev) => ({ ...prev, [resource]: false }))
     }
-  }, [module, getClient, getEntity])
+  }, [module, entity, getClient, getEntity])
 
   // Load options for relation fields on mount
   useEffect(() => {

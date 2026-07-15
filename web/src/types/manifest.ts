@@ -42,16 +42,18 @@ export const KIND_REPORT = "Report"
 export const KIND_WIZARD = "Wizard"
 export const KIND_KANBAN = "Kanban"
 export const KIND_TIMELINE = "Timeline"
-export const KIND_MENU = "Menu"
 export const KIND_PRINT = "Print"
 export const KIND_THEME = "Theme"
 
+// No KIND_MENU — navigation isn't a standalone kind. It lives as
+// App.spec.menu (authoritative) / Module.spec.menu (default suggestion),
+// both typed as MenuItem[] below (Core Basic §4.4/§4.5).
 export type ResourceKind =
   | "App" | "Module" | "Document" | "Entity" | "Service" | "Config"
   | "Migration" | "Subscription" | "Workflow" | "Api" | "Webhook"
   | "Environment" | "Policy" | "Datastore"
   | "Page" | "Form" | "Table" | "Dashboard" | "Widget" | "Report"
-  | "Wizard" | "Kanban" | "Timeline" | "Menu" | "Print" | "Theme"
+  | "Wizard" | "Kanban" | "Timeline" | "Print" | "Theme"
 
 // ── Field Types ──
 
@@ -739,15 +741,23 @@ export interface KanbanCard {
   component?: string
 }
 
-// ── Menu (Frontend §9) ──
-
-export interface MenuSpec {
-  label: string
+// ── Menu (Core Basic §4.4/§4.5) ──
+//
+// Not a standalone kind — embedded in App.spec.menu (authoritative) and
+// Module.spec.menu (default suggestion). The bundle's `menu` field
+// (MetaBundle below) is already fully resolved server-side: adopt nodes
+// (type: "module") spliced in, `view` leaves turned into concrete `route`.
+// The renderer only ever needs to walk `route`/`children`.
+export interface MenuItem {
+  type?: "module"
+  label?: string
   icon?: string
+  module?: string
+  view?: string
   route?: string
   when?: string
-  children?: MenuSpec[]
   order?: number
+  children?: MenuItem[]
 }
 
 // ── Print (Frontend §9) ──
@@ -875,7 +885,13 @@ export interface ActionSummary {
   ui?: ActionUIHint
 }
 
+export interface AppSummary {
+  name: string
+  root_url: string
+}
+
 export interface MetaBundle {
+  app: AppSummary
   entities: EntitySchema[]
   pages: Entry<PageSpec>[]
   forms: Entry<FormSpec>[]
@@ -886,7 +902,7 @@ export interface MetaBundle {
   wizards: Entry<WizardSpec>[]
   kanbans: Entry<KanbanSpec>[]
   timelines: Entry<TimelineSpec>[]
-  menus: Entry<MenuSpec>[]
+  menu: MenuItem[]
   prints: Entry<PrintSpec>[]
   themes: Entry<ThemeSpec>[]
 }

@@ -58,6 +58,7 @@ function SurfaceShell({ surface }: { surface: "admin" | "app" }) {
   const bundle = useMetaStore((s) => s.bundle)
   const metaLoading = useMetaStore((s) => s.loading)
   const metaError = useMetaStore((s) => s.error)
+  const metaForbidden = useMetaStore((s) => s.forbidden)
   const loadMeta = useMetaStore((s) => s.load)
 
   // Build routes from meta bundle.
@@ -70,7 +71,20 @@ function SurfaceShell({ surface }: { surface: "admin" | "app" }) {
   // keeps the same Component references across those re-renders.
   // Must run before any early return below — Hooks can't be conditional.
   const activeTheme = usePrefsStore((s) => s.activeTheme)
-  const surfacePath = `/${workspace}/${surface === "admin" ? "_admin" : "app"}`
+  // The app surface uses this resolved App's own root_url (Core §4.4) —
+  // a workspace can resolve to more than one App, each mounted at its own
+  // root_url under the shared /{ws}/app/* renderer SPA. Falls back to a
+  // bare "/app" before the bundle (and thus root_url) is known. This is the
+  // full absolute prefix used to build/link every route (basePath below,
+  // Sidebar hrefs, DefaultRedirect targets).
+  const surfacePath =
+    surface === "admin" ? `/${workspace}/_admin` : `/${workspace}${bundle?.app.root_url ?? "/app"}`
+  // mountPrefix is the FIXED prefix actually consumed by the outer splat
+  // route ("/:workspace/app/*" or "/:workspace/_admin/*"). The nested
+  // <Routes> below only ever sees the remainder after that fixed prefix —
+  // root_url is NOT part of it, even though it IS part of surfacePath — so
+  // relative route paths must strip mountPrefix, never surfacePath.
+  const mountPrefix = `/${workspace}/${surface === "admin" ? "_admin" : "app"}`
   const surfaceRoutes = useMemo(
     () => (bundle ? buildRoutes({ bundle, basePath: surfacePath }) : []),
     [bundle, surfacePath],
@@ -81,10 +95,10 @@ function SurfaceShell({ surface }: { surface: "admin" | "app" }) {
     if (!sessionLoaded) {
       boot(workspace).then(() => {
         const client = useSessionStore.getState().getClient()
-        loadMeta(client)
+        loadMeta(client, surface)
       })
     }
-  }, [workspace, sessionLoaded, boot, loadMeta])
+  }, [workspace, sessionLoaded, boot, loadMeta, surface])
 
   // While loading
   if (!sessionLoaded || metaLoading) {
@@ -98,6 +112,18 @@ function SurfaceShell({ surface }: { surface: "admin" | "app" }) {
           <Skeleton className="h-4 w-3/4" />
           <Skeleton className="h-8 w-full" />
         </div>
+      </div>
+    )
+  }
+
+  // Forbidden: authenticated, but lacks _admin.access (or equivalent gate)
+  if (metaForbidden) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4">
+        <h1 className="text-2xl font-bold">Access Denied</h1>
+        <p className="text-sm text-muted-foreground">
+          You don&apos;t have permission to access this area.
+        </p>
       </div>
     )
   }
@@ -142,7 +168,7 @@ function SurfaceShell({ surface }: { surface: "admin" | "app" }) {
         {surfaceRoutes.map((route, idx) => (
           <Route
             key={`${surface}-${idx}`}
-            path={route.path?.replace(`${surfacePath}/`, "") ?? ""}
+            path={route.path?.replace(`${mountPrefix}/`, "") ?? ""}
             Component={route.Component}
           />
         ))}
@@ -168,6 +194,19 @@ function SurfaceShell({ surface }: { surface: "admin" | "app" }) {
 
 // ── Default Redirect ──
 
+// Depth-first search for the first navigable leaf in a resolved menu tree
+// (bundle.menu — Core §4.4, routes already resolved server-side).
+function firstMenuRoute(items: import("@/types/manifest").MenuItem[]): string | undefined {
+  for (const item of items) {
+    if (item.route) return item.route
+    if (item.children?.length) {
+      const found = firstMenuRoute(item.children)
+      if (found) return found
+    }
+  }
+  return undefined
+}
+
 function DefaultRedirect({
   bundle,
   workspace,
@@ -177,10 +216,21 @@ function DefaultRedirect({
   workspace: string
   surface?: string
 }) {
-  // Skip summary/read-only entities for the default landing page
+  const prefix = surface === "admin" ? "_admin" : bundle.app.root_url.replace(/^\//, "")
+
+  // App surface: land on the App's own first authored menu item (e.g. its
+  // Dashboard) rather than an arbitrary derived entity list.
+  if (surface === "app") {
+    const menuRoute = firstMenuRoute(bundle.menu)
+    if (menuRoute) {
+      return <Navigate to={`/${workspace}/${prefix}${menuRoute}`} replace />
+    }
+  }
+
+  // Fallback (admin surface, or an app with no menu at all): first
+  // non-summary/read-only entity's derived list.
   const entity = bundle.entities.find((e) => e.characteristic !== "summary") ?? bundle.entities[0]
   if (entity) {
-    const prefix = surface === "admin" ? "_admin" : "app"
     return (
       <Navigate
         to={`/${workspace}/${prefix}/${entity.module}/${entity.plural}`}

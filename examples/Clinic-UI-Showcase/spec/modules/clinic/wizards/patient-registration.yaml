@@ -14,7 +14,7 @@ metadata:
   module: clinic
   description: Pendaftaran pasien — cari/buat pasien, pilih poli & dokter, konfirmasi
 spec:
-  title: "Pendaftaran Pasien"
+  title: "Pendaftaran Pasienx"
   entity: visit
   on_complete:
     restart: true               # langsung siap daftarkan pasien berikutnya (loket)

@@ -7,3 +7,37 @@ spec:
   version: 1.0.0
   depends:
     - module: forma/core
+  # Default menu suggestion (Core Basic §4.5) — module-relative, no `module`
+  # field on any item (implied: this module). An App adopts it wholesale via
+  # a `type: module` entry in its own spec.menu (see spec/apps/*.yaml), and
+  # can still override/restrict/rearrange freely (e.g. spec/apps/klinik-portal.yaml
+  # mounts this same module with a much narrower, hand-picked menu instead).
+  #
+  # Migrated from the old standalone kind: Menu (spec/modules/clinic/menus/clinic-main.yaml).
+  # `view:` leaves resolve their route from the referenced resource's own
+  # registration — no more hand-kept-in-sync `route:` strings that can drift
+  # (the old Menu's "/clinic/visits" and "/clinic/settings" had in fact
+  # already drifted from the real Page routes "/app/visits"/"/app/settings").
+  menu:
+    - label: "Klinik"
+      icon: "stethoscope"
+      order: 10
+      children:
+        - { label: "Dashboard", icon: "layout-dashboard", view: clinic-dashboard, order: 1 }
+        - { label: "Pendaftaran Pasien", icon: "user-plus", view: patient-registration, order: 2 }
+        - label: "Kunjungan"
+          icon: "clipboard-list"
+          order: 3
+          children:
+            - { label: "Daftar Kunjungan", icon: "list", view: visits-page }
+            - { label: "Board Konsultasi", icon: "columns-3", view: consultation-board }
+        - label: "Kasir"
+          icon: "wallet"
+          route: "/clinic/payments" # derived entity-list route (no authored View) — route escape hatch
+          order: 4
+        - { label: "Laporan Pendapatan", icon: "bar-chart-3", view: revenue-by-polyclinic, order: 5 }
+        - label: "Pengaturan"
+          icon: "settings"
+          view: system-settings
+          order: 9
+          when: "user.has('clinic.settings.update')" # kondisi bisnis FormaExpr (§9)

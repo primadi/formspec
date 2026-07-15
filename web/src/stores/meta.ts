@@ -20,19 +20,44 @@ import {
   type WizardSpec,
   type KanbanSpec,
   type TimelineSpec,
-  type MenuSpec,
   type PrintSpec,
   type ThemeSpec,
+  type AppSummary,
 } from "@/types/manifest"
-import { fetchMetaBundle } from "@/lib/api"
+import { fetchMetaBundle, fetchMetaApps } from "@/lib/api"
+import { FormaApiError } from "@/types/manifest"
+
+// Picks which resolved App (Core §4.4) the current URL belongs to: the
+// longest root_url prefix match, after stripping the leading {workspace}
+// path segment. Falls back to the first App when nothing matches (e.g. the
+// _admin surface, which isn't scoped to any App's root_url).
+function detectAppName(pathname: string, apps: AppSummary[]): string | undefined {
+  if (apps.length === 0) return undefined
+  if (apps.length === 1) return apps[0].name
+
+  const segments = pathname.split("/").filter(Boolean)
+  const rest = "/" + segments.slice(1).join("/") // drop {workspace}
+
+  let best: AppSummary | undefined
+  for (const a of apps) {
+    if (rest === a.root_url || rest.startsWith(a.root_url + "/")) {
+      if (!best || a.root_url.length > best.root_url.length) best = a
+    }
+  }
+  return (best ?? apps[0]).name
+}
 
 export interface MetaState {
   bundle: MetaBundle | null
   loading: boolean
   error: string | null
+  // Set when the server rejected the request with 403 (e.g. `_admin` without
+  // the `_admin.access` permission) — distinct from `error` so the UI can
+  // show "Access Denied" instead of a generic connection-error screen.
+  forbidden: boolean
 
   // ── Actions ──
-  load: (client: KyInstance) => Promise<void>
+  load: (client: KyInstance, surface: "admin" | "app") => Promise<void>
   reset: () => void
 
   // ── Entity Lookups ──
@@ -49,7 +74,6 @@ export interface MetaState {
   getWizard: (name: string) => Entry<WizardSpec> | undefined
   getKanban: (name: string) => Entry<KanbanSpec> | undefined
   getTimeline: (name: string) => Entry<TimelineSpec> | undefined
-  getMenu: (name: string) => Entry<MenuSpec> | undefined
   getPrint: (name: string) => Entry<PrintSpec> | undefined
   getTheme: (name: string) => Entry<ThemeSpec> | undefined
 
@@ -85,7 +109,6 @@ function createLookups(bundle: MetaBundle) {
   const wizards = byName(bundle.wizards)
   const kanbans = byName(bundle.kanbans)
   const timelines = byName(bundle.timelines)
-  const menus = byName(bundle.menus)
   const prints = byName(bundle.prints)
   const themes = byName(bundle.themes)
 
@@ -101,7 +124,6 @@ function createLookups(bundle: MetaBundle) {
     wizards,
     kanbans,
     timelines,
-    menus,
     prints,
     themes,
   }
@@ -121,20 +143,34 @@ export const useMetaStore = create<MetaState>((set, get) => ({
   bundle: null,
   loading: false,
   error: null,
+  forbidden: false,
 
-  load: async (client: KyInstance) => {
-    set({ loading: true, error: null })
+  load: async (client: KyInstance, surface: "admin" | "app") => {
+    set({ loading: true, error: null, forbidden: false })
     try {
-      const bundle = await fetchMetaBundle(client)
-      set({ bundle, loading: false, error: null })
+      // `_admin` isn't scoped to any App (Core §4.4) — skip App detection
+      // entirely and fetch the unscoped, binary-gated bundle.
+      let bundle: MetaBundle
+      if (surface === "admin") {
+        bundle = await fetchMetaBundle(client, { admin: true })
+      } else {
+        const apps = await fetchMetaApps(client)
+        const appName = detectAppName(window.location.pathname, apps)
+        bundle = await fetchMetaBundle(client, { appName })
+      }
+      set({ bundle, loading: false, error: null, forbidden: false })
     } catch (err) {
+      if (err instanceof FormaApiError && err.status === 403) {
+        set({ loading: false, error: null, forbidden: true })
+        return
+      }
       const message = err instanceof Error ? err.message : "Failed to load meta bundle"
       set({ loading: false, error: message })
     }
   },
 
   reset: () => {
-    set({ bundle: null, loading: false, error: null })
+    set({ bundle: null, loading: false, error: null, forbidden: false })
   },
 
   getEntity: (module: string, name: string) => {
@@ -156,7 +192,6 @@ export const useMetaStore = create<MetaState>((set, get) => ({
   getWizard: (name: string) => getOrBuildLookups(get().bundle)?.wizards.get(name),
   getKanban: (name: string) => getOrBuildLookups(get().bundle)?.kanbans.get(name),
   getTimeline: (name: string) => getOrBuildLookups(get().bundle)?.timelines.get(name),
-  getMenu: (name: string) => getOrBuildLookups(get().bundle)?.menus.get(name),
   getPrint: (name: string) => getOrBuildLookups(get().bundle)?.prints.get(name),
   getTheme: (name: string) => getOrBuildLookups(get().bundle)?.themes.get(name),
 

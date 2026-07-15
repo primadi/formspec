@@ -61,6 +61,10 @@ const (
 )
 
 // Frontend kinds (Frontend §2).
+//
+// There is no KindMenu — navigation is not a standalone kind. It lives as
+// App.spec.menu (authoritative) and Module.spec.menu (default suggestion),
+// both typed as []MenuItem (Core §4.4/§4.5).
 const (
 	KindPage      Kind = "Page"
 	KindForm      Kind = "Form"
@@ -71,7 +75,6 @@ const (
 	KindWizard    Kind = "Wizard"
 	KindKanban    Kind = "Kanban"
 	KindTimeline  Kind = "Timeline"
-	KindMenu      Kind = "Menu"
 	KindPrint     Kind = "Print"
 	KindTheme     Kind = "Theme"
 )
@@ -112,7 +115,7 @@ func IsValidKind(k Kind) bool {
 		KindWorkflow, KindApi, KindKindDefinition, KindWebhook, KindMockup, KindIntegrator,
 		KindEnvironment, KindPolicy, KindDatastore,
 		KindPage, KindForm, KindTable, KindDashboard, KindWidget, KindReport,
-		KindWizard, KindKanban, KindTimeline, KindMenu, KindPrint, KindTheme:
+		KindWizard, KindKanban, KindTimeline, KindPrint, KindTheme:
 		return true
 	default:
 		return false

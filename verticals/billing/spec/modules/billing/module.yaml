@@ -7,3 +7,26 @@ spec:
   version: 1.0.0
   depends:
     - module: forma/core
+  # Default menu suggestion (Core Basic §4.5) — migrated from the old
+  # standalone kind: Menu (spec/modules/billing/menus/billing-menu.yaml).
+  # `view:` leaves resolve their route from the referenced Page's own
+  # registration — fixes latent drift in the old menu ("Pelanggan" pointed
+  # at "/app/customers", but customer-list's real route is "/customers").
+  menu:
+    - label: "Billing"
+      icon: "shopping-cart"
+      order: 10
+      children:
+        - { label: "Dashboard", icon: "dashboard", view: billing-dashboard, order: 1 }
+        - label: "Order"
+          icon: "clipboard-list"
+          order: 2
+          children:
+            - { label: "Semua Order", icon: "list", view: order-list }
+            - { label: "Board Order", icon: "columns", view: order-kanban }
+            - { label: "Buat Order Baru", icon: "plus-circle", view: checkout-wizard-page }
+        - label: "Invoice"
+          icon: "file-invoice"
+          route: "/app/invoices" # no authored View for invoices in this vertical yet
+          order: 3
+        - { label: "Pelanggan", icon: "users", view: customer-list, order: 4 }

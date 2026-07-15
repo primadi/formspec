@@ -37,8 +37,39 @@ type ActionSummary struct {
 	UI          *spec.ActionUIHint `json:"ui,omitempty"`
 }
 
+// AppSummary identifies which resolved App a Bundle was built for (Core §4.4).
+type AppSummary struct {
+	Name    string `json:"name"`
+	RootURL string `json:"root_url"`
+}
+
+// AppContext scopes BuildBundle to one resolved App: which modules it mounts
+// (Pages/Forms/Tables/... outside this set are excluded from the bundle) and
+// its already-resolved menu tree (adopt nodes spliced, view leaves resolved
+// to routes — see internal/app.Resolve). A zero-value AppContext (Modules
+// nil) disables module filtering, for callers with no App concept yet.
+type AppContext struct {
+	Name    string
+	RootURL string
+	Modules map[string]bool
+	Menu    []spec.MenuItem
+}
+
+// allows reports whether a manifest belonging to module may ship in this
+// App's bundle. "core" is a repo-wide convention for App-level/cross-module
+// content that isn't owned by any one declared Module (e.g. a cross-module
+// Dashboard, or an app-level Config) — it always ships, since it was never
+// meant to be gated by spec.modules in the first place.
+func (c AppContext) allows(module string) bool {
+	if c.Modules == nil || module == "core" {
+		return true
+	}
+	return c.Modules[module]
+}
+
 // Bundle is the full /_meta/ui payload.
 type Bundle struct {
+	App        AppSummary                   `json:"app"`
 	Entities   []EntitySchema               `json:"entities"`
 	Pages      []*Entry[spec.PageSpec]      `json:"pages"`
 	Forms      []*Entry[spec.FormSpec]      `json:"forms"`
@@ -49,7 +80,7 @@ type Bundle struct {
 	Wizards    []*Entry[spec.WizardSpec]    `json:"wizards"`
 	Kanbans    []*Entry[spec.KanbanSpec]    `json:"kanbans"`
 	Timelines  []*Entry[spec.TimelineSpec]  `json:"timelines"`
-	Menus      []*Entry[spec.MenuSpec]      `json:"menus"`
+	Menu       []spec.MenuItem              `json:"menu"`
 	Prints     []*Entry[spec.PrintSpec]     `json:"prints"`
 	Themes     []*Entry[spec.ThemeSpec]     `json:"themes"`
 }
@@ -70,22 +101,29 @@ type EntityDescriptor struct {
 	Spec        *spec.EntitySpec
 }
 
-// BuildBundle assembles the /_meta/ui payload for one caller.
+// BuildBundle assembles the /_meta/ui payload for one caller, scoped to one
+// resolved App (appCtx — Core §4.4). Manifests belonging to a module outside
+// appCtx.Modules are excluded entirely, on top of permission filtering.
 //
 // Permission filtering (Frontend §1.4, defense in depth — the renderer
 // re-filters per element): an entity schema ships when the caller can list
 // or view it; entity-backed manifests follow their entity; pages with
 // explicit permissions require at least one; navigation-only kinds
-// (Menu, Dashboard, Theme, Wizard) always ship — their leaf elements are
-// permission-gated client-side against /_meta/me.
-func (r *Registry) BuildBundle(entities EntityLister, can PermissionChecker) *Bundle {
+// (Dashboard, Theme, Wizard) always ship — their leaf elements are
+// permission-gated client-side against /_meta/me. The menu itself comes
+// straight from appCtx.Menu — already resolved (adopt nodes spliced, view
+// leaves turned into routes) by internal/app.Resolve.
+func (r *Registry) BuildBundle(entities EntityLister, can PermissionChecker, appCtx AppContext) *Bundle {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	b := &Bundle{}
+	b := &Bundle{App: AppSummary{Name: appCtx.Name, RootURL: appCtx.RootURL}, Menu: appCtx.Menu}
 
 	visible := map[string]bool{} // "module/name" → caller can see entity
 	for _, d := range entities() {
+		if !appCtx.allows(d.Module) {
+			continue
+		}
 		schema := buildEntitySchema(d)
 		listPerm := d.Module + "." + schema.Plural + ".list"
 		viewPerm := d.Module + "." + schema.Plural + ".view"
@@ -106,28 +144,34 @@ func (r *Registry) BuildBundle(entities EntityLister, can PermissionChecker) *Bu
 
 	for _, k := range sortedKeys(r.Pages) {
 		e := r.Pages[k]
-		if allowedPage(e, can) {
+		if appCtx.allows(e.Module) && allowedPage(e, can) {
 			b.Pages = append(b.Pages, e)
 		}
 	}
 	for _, k := range sortedKeys(r.Forms) {
-		if e := r.Forms[k]; entityVisible(e.Module, e.Spec.Entity) {
+		if e := r.Forms[k]; appCtx.allows(e.Module) && entityVisible(e.Module, e.Spec.Entity) {
 			b.Forms = append(b.Forms, e)
 		}
 	}
 	for _, k := range sortedKeys(r.Tables) {
-		if e := r.Tables[k]; entityVisible(e.Module, e.Spec.Entity) {
+		if e := r.Tables[k]; appCtx.allows(e.Module) && entityVisible(e.Module, e.Spec.Entity) {
 			b.Tables = append(b.Tables, e)
 		}
 	}
 	for _, k := range sortedKeys(r.Widgets) {
 		e := r.Widgets[k]
+		if !appCtx.allows(e.Module) {
+			continue
+		}
 		if e.Spec.Entity == "" || entityVisible(e.Module, e.Spec.Entity) {
 			b.Widgets = append(b.Widgets, e)
 		}
 	}
 	for _, k := range sortedKeys(r.Reports) {
 		e := r.Reports[k]
+		if !appCtx.allows(e.Module) {
+			continue
+		}
 		if e.Spec.RequiredPermission != "" && !can(qualifyPerm(e.Module, e.Spec.RequiredPermission)) {
 			continue
 		}
@@ -136,28 +180,29 @@ func (r *Registry) BuildBundle(entities EntityLister, can PermissionChecker) *Bu
 		}
 	}
 	for _, k := range sortedKeys(r.Kanbans) {
-		if e := r.Kanbans[k]; entityVisible(e.Module, e.Spec.Entity) {
+		if e := r.Kanbans[k]; appCtx.allows(e.Module) && entityVisible(e.Module, e.Spec.Entity) {
 			b.Kanbans = append(b.Kanbans, e)
 		}
 	}
 	for _, k := range sortedKeys(r.Timelines) {
-		if e := r.Timelines[k]; entityVisible(e.Module, e.Spec.Entity) {
+		if e := r.Timelines[k]; appCtx.allows(e.Module) && entityVisible(e.Module, e.Spec.Entity) {
 			b.Timelines = append(b.Timelines, e)
 		}
 	}
 	for _, k := range sortedKeys(r.Prints) {
-		if e := r.Prints[k]; entityVisible(e.Module, e.Spec.Entity) {
+		if e := r.Prints[k]; appCtx.allows(e.Module) && entityVisible(e.Module, e.Spec.Entity) {
 			b.Prints = append(b.Prints, e)
 		}
 	}
 	for _, k := range sortedKeys(r.Dashboards) {
-		b.Dashboards = append(b.Dashboards, r.Dashboards[k])
+		if e := r.Dashboards[k]; appCtx.allows(e.Module) {
+			b.Dashboards = append(b.Dashboards, e)
+		}
 	}
 	for _, k := range sortedKeys(r.Wizards) {
-		b.Wizards = append(b.Wizards, r.Wizards[k])
-	}
-	for _, k := range sortedKeys(r.Menus) {
-		b.Menus = append(b.Menus, r.Menus[k])
+		if e := r.Wizards[k]; appCtx.allows(e.Module) {
+			b.Wizards = append(b.Wizards, e)
+		}
 	}
 	for _, k := range sortedKeys(r.Themes) {
 		b.Themes = append(b.Themes, r.Themes[k])

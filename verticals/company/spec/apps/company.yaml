@@ -6,6 +6,7 @@ metadata:
 spec:
   version: 1.0.0
   vendor: forma-dev
+  root_url: /app/company
   modules: [company]
   publishes:
     - service: branch-directory

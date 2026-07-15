@@ -12,6 +12,7 @@ import { toast } from "sonner"
 import type { Entry, KanbanSpec, KanbanColumn } from "@/types/manifest"
 import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
+import { resolveEntityRef } from "@/engine/entityRef"
 import { apiList } from "@/lib/api"
 import { Badge } from "@/widgets/Badge"
 import { Input } from "@/components/ui/input"
@@ -25,7 +26,8 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
   const getClient = useSessionStore((s) => s.getClient)
   const getEntity = useMetaStore((s) => s.getEntity)
 
-  const entity = getEntity(entry.module, entry.spec.entity)
+  const [entityModule, entityName] = resolveEntityRef(entry.spec.entity, entry.module)
+  const entity = getEntity(entityModule, entityName)
   const columns = entry.spec.columns
   const statusField = entry.spec.status_field
 
@@ -34,12 +36,17 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
   const [search, setSearch] = useState("")
 
   const fetchRecords = useCallback(async () => {
+    if (!entity) {
+      toast.error(`entity "${entry.spec.entity}" not found`)
+      setLoading(false)
+      return
+    }
     setLoading(true)
     try {
       const client = getClient()
       const result = await apiList<Record<string, unknown>>(
         client,
-        `${entity?.module ?? entry.module}/${entity?.plural ?? entry.spec.entity}`,
+        `${entity.module}/${entity.plural}`,
       )
       setRecords(result.items)
     } catch {
@@ -47,7 +54,7 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
     } finally {
       setLoading(false)
     }
-  }, [entity, entry.module, entry.spec.entity, getClient])
+  }, [entity, entry.spec.entity, getClient])
 
   useEffect(() => {
     fetchRecords()

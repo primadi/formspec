@@ -6,6 +6,7 @@ metadata:
 spec:
   version: 1.0.0
   vendor: forma-dev
+  root_url: /app/notifications
   modules: [notifications]
   consumes:
     - app: billing
