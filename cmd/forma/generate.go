@@ -21,7 +21,7 @@ import (
 	"strings"
 
 	"github.com/primadi/forma/internal/api"
-	"github.com/primadi/forma/internal/db"
+	"github.com/primadi/forma/renderers/jsonbpersist"
 	"github.com/primadi/forma/internal/entity"
 	"github.com/primadi/forma/pkg/spec"
 )
@@ -231,7 +231,7 @@ func writeActionParamsType(b *strings.Builder, entityTypeName string, action spe
 }
 
 // writeField emits one interface property. The key is the field's literal
-// name, quoted — it MUST match the wire JSON key exactly (internal/db
+// name, quoted — it MUST match the wire JSON key exactly (renderers/jsonbpersist
 // EntityRecord.MarshalJSON spreads Data verbatim, no case transform), so
 // this deliberately does NOT go through tsIdent's camelCasing the way
 // generator-invented identifiers (module/plural/action keys) do below.
@@ -275,7 +275,7 @@ func optionalMark(optional bool) string {
 // tsFieldType maps a Forma field type to its TypeScript representation.
 // decimal maps to string, not number: money fields MUST be arbitrary
 // precision (pkg/spec/entity.go FieldDecimal doc comment) and JS `number`
-// cannot represent that safely. NOTE: internal/db does not yet coerce
+// cannot represent that safely. NOTE: renderers/jsonbpersist does not yet coerce
 // decimal values to a string on the wire (no dedicated marshaling exists),
 // so until that lands server-side this type is aspirational, not a
 // guarantee — see docs/cli-tools/03-forma-generate.md client-generation notes.

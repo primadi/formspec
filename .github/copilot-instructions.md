@@ -44,12 +44,12 @@ Tiga tipe file: `yaml` (deskripsi), `script` (Starlark logic), `asset` (static/c
 
 ```
 cmd/
-  forma-control/       # Control Plane binary
-  forma-resource/      # Resource Plane binary
+  forma/               # Developer CLI
+  forma-ctl/           # Control Plane binary
+  forma-operator/      # Kubernetes Operator
 internal/
   api/                 # API handlers
   auth/                # Authentication
-  ctx/                 # Context primitives
   entity/              # Entity engine
   events/              # Event system
   manifest/            # YAML manifest loader & validator
@@ -57,9 +57,10 @@ internal/
   starlark/            # Starlark runtime
   tenant/              # Tenant isolation
 pkg/spec/              # Go spec types (entity.go, frontend.go, resources.go, spec.go)
-docs/spec/             # Specification documents (01-overview through 11-reference)
-web/                   # Frontend: React + TypeScript + Vite
-  src/
+renderers/
+  jsonbpersist/        # PersistBackend renderer (JSONB strategy, Postgres+SQLite)
+  web/                 # Frontend: React + TypeScript + Vite (shadcn-shell)
+  web/src/
     App.tsx            # Root dengan BrowserRouter
     main.tsx           # Entry point
     index.css          # Tailwind + shadcn CSS variables

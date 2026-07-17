@@ -5,13 +5,13 @@
 > Draft: isi di bawah kontrak yang berlaku.
 
 ## 1. Model Extension
-Module lain menambah field/perilaku ke Document yang dimiliki module lain
+Module lain menambah field/perilaku ke Entity yang dimiliki module lain
 (mis. `billing/invoice` dari marketplace) — tanpa fork module itu, tanpa
 merusak jalur upgrade-nya, tanpa mengorbankan performa query:
 
 ```yaml
 apiVersion: forma.dev/v1alpha1
-kind: Document
+kind: Entity
 metadata:
   name: invoice-ext
   module: my-customization
@@ -54,10 +54,10 @@ masalah: (1) coupling permanen ke identitas extension dasar — sulit di-rename
 atau dilepas dengan aman kalau extension dasarnya diganti/dihapus; (2)
 membuat dependency urutan migrasi yang sebelumnya tidak ada; (3) membocorkan
 abstraksi — module penyusun jadi tahu bahwa target-nya adalah sebuah
-extension, bukan Document biasa.
+extension, bukan Entity biasa.
 
 **Alternatif yang direkomendasikan:** seluruh extension tetap **flat
-siblings** terhadap Document dasar, berapa pun jumlahnya. Kalau satu module
+siblings** terhadap Entity dasar, berapa pun jumlahnya. Kalau satu module
 butuh field dari extension module lain, deklarasikan dependency-nya lewat
 `spec.depends` di manifest Module ([`01-core-basic.md`](01-core-basic.md) §5
 qualifier `module/resource`), akses field lintas-extension lewat kode

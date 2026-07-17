@@ -6,14 +6,14 @@
 > storage-agnostic; contoh SQL konkret hidup di dokumentasi renderer
 > jsonb-persist.
 
-## 1. Document (Entity)
+## 1. Entity (Entity)
 
 ### 1.1 Taksonomi Resource
 Dua tipe resource: `type: document` (persisted, sumber kebenaran data bisnis)
 dan `type: service` (stateless, komputasi murni — tidak punya `characteristic`,
 `doc_status`, atau lifecycle guard).
 
-Document punya `characteristic`, tepat satu nilai (mutually exclusive; `forma
+Entity punya `characteristic`, tepat satu nilai (mutually exclusive; `forma
 apply` menolak lebih dari satu):
 
 | Characteristic | Arti | Wajib |
@@ -33,7 +33,7 @@ custom, otomatis ada di semua `type: document`, framework-managed: `owner`,
 `transaction_date` **wajib** dideklarasikan eksplisit untuk `characteristic:
 transaction` — `forma apply` menolak kalau tidak ada.
 
-Setiap Document punya lifecycle bawaan lewat `doc_status` (`draft |
+Setiap Entity punya lifecycle bawaan lewat `doc_status` (`draft |
 submitted | cancelled`, closed set — kebutuhan proses bisnis granular pakai
 field terpisah, lihat [`02-core-extended.md`](02-core-extended.md) §1),
 ditegakkan lewat delapan reserved action:
@@ -45,7 +45,7 @@ ditegakkan lewat delapan reserved action:
 | `submit` | `doc_status == draft` | `doc_status = submitted` |
 | `cancel` | `doc_status == submitted AND no_pending_references` | `doc_status = cancelled` |
 | `delete` | `doc_status == draft AND no_referencing_documents` | row dihapus (guard absolut, **tanpa** `override_permission`) |
-| `amend` | `doc_status == submitted OR cancelled` | atomik: cancel original + set `amended_by` + buat Document baru linked (`amends`) sebagai `draft` |
+| `amend` | `doc_status == submitted OR cancelled` | atomik: cancel original + set `amended_by` + buat Entity baru linked (`amends`) sebagai `draft` |
 | `create-submit` | gabungan `create`+`submit` | derivasi otomatis kalau keduanya aktif |
 | `amend-submit` | gabungan `amend`+`submit` | derivasi otomatis kalau keduanya aktif |
 
@@ -56,9 +56,9 @@ deklarasi eksplisit `create-submit` kalau `submit` di-`disabled: true`.
 
 **Gating transitif:** `submit` nonaktif → `cancel` dan `amend` implisit
 nonaktif; `cancel` nonaktif → `amend` implisit nonaktif. Kalau ketiganya
-nonaktif (eksplisit atau transitif), Document itu **lifecycle-free**:
+nonaktif (eksplisit atau transitif), Entity itu **lifecycle-free**:
 `doc_status` selalu `null`, guard lifecycle di `update`/`delete` di-bypass,
-berperilaku plain CRUD — ini bukan kategori resource keempat, cuma Document
+berperilaku plain CRUD — ini bukan kategori resource keempat, cuma Entity
 dengan lifecycle nonaktif, zero-cost.
 
 **`delete` vs `cancel`:** `delete` menghapus row — guard-nya absolut (setara
@@ -66,11 +66,11 @@ dengan lifecycle nonaktif, zero-cost.
 sini, terlepas dari `doc_status`. `cancel` tidak menghapus row, cuma mengubah
 status — guard-nya bisa dibuka lewat handler yang membongkar dependency dulu.
 **`update` setelah `submit` selalu ditolak, tanpa pengecualian** — inilah yang
-membuat Document "immutable" setelah submit; perubahan field spesifik pasca-
+membuat Entity "immutable" setelah submit; perubahan field spesifik pasca-
 submit tetap mungkin lewat custom action bernama (tercatat di audit log
 sebagai nama action, bukan "document updated").
 
-**Referenceability:** hanya Document `doc_status = null` (lifecycle-free) atau
+**Referenceability:** hanya Entity `doc_status = null` (lifecycle-free) atau
 `'submitted'` yang boleh jadi target field `relation` — `draft`/`cancelled`
 ditolak sebagai target relation saat runtime.
 
@@ -120,7 +120,7 @@ order. Katalog field-nya sendiri ada di
 `required`).
 
 ## 2. Primary Key & Natural Key
-Primary key: **UUID v7** (time-ordered) untuk semua Document — ini kontrak,
+Primary key: **UUID v7** (time-ordered) untuk semua Entity — ini kontrak,
 bukan pilihan per backend. Natural key adalah **unique constraint per
 tenant**, bukan pernah jadi PK:
 
@@ -171,7 +171,7 @@ sekalipun dengan `uses` consent
 §7). Ini beda datastore = beda deployment boundary = wajib async, bukan
 sekadar butuh izin lebih tinggi.
 
-`spec.persist` mendeklarasikan apa yang dijanjikan framework ke Document itu
+`spec.persist` mendeklarasikan apa yang dijanjikan framework ke Entity itu
 — bukan bagaimana backend memenuhinya:
 
 ```yaml
@@ -196,7 +196,7 @@ menerima diff dan menerjemahkannya ke storage-nya sendiri. Tidak ada asumsi
 §2 untuk kontrak lengkapnya (aturan `renamed_from`, dua tahap untuk field
 removal, dll).
 
-Tiga jenis migrasi: **structural** (otomatis penuh dari diff Document, tidak
+Tiga jenis migrasi: **structural** (otomatis penuh dari diff Entity, tidak
 pernah ditulis tangan), **custom DDL** (`kind: Migration` — index, function,
 trigger, extension, materialized view; DML ditolak saat runtime), **data
 migration** (script ber-versi, run/rollback manual — backfill masuk sini,
@@ -250,7 +250,7 @@ setelah completed → replay response asli; duplikat saat masih pending →
 tunggu/409. Entry kedaluwarsa lewat retention (default 24 jam, dibaca dari
 `core.idempotency_retention`), tidak pernah dihapus saat commit.
 
-**Optimistic concurrency lewat `version`** — default aktif di semua Document:
+**Optimistic concurrency lewat `version`** — default aktif di semua Entity:
 update wajib membawa `version` yang dibaca client; mismatch → `409 CONFLICT`
 dengan version terkini. `modified` (timestamp) murni metadata audit, bukan
 mekanisme konkurensi.
@@ -288,7 +288,7 @@ renumbering. Tier: Critical (1–9, gate yang harus dicek pertama), Normal
 non-kritis tapi tetap sync).
 
 **Kontrak durabilitas.** `publish.durable: true` → event ditulis ke outbox
-sebelum action return; untuk Document, transaksi yang sama dengan perubahan
+sebelum action return; untuk Entity, transaksi yang sama dengan perubahan
 data (atomik). Reliabilitas mensyaratkan **kedua sisi**: publisher durable +
 subscriber durable = reliable. Publisher non-durable + subscriber durable =
 error validasi.
@@ -304,43 +304,123 @@ tanpa mengubah publisher (lihat [`02-core-extended.md`](02-core-extended.md)
 §3 untuk mode streaming/durable-nya). Kontrak durabilitas dua-sisi berlaku
 sama; Subscription masuk consent footprint module konsumen.
 
-## 8. API Runtime yang Digenerate
+## 8. Dua Permukaan API: UI vs External
 
-**Model exposure — deny-by-default.** Tidak ada endpoint eksternal yang dibuat
-untuk sebuah Document kecuali ia opt-in lewat `spec.expose: [{type: rest} |
-{type: grpc} | {type: ws}]`. Pemanggil internal (service same-process, script
-Starlark, event) tidak terpengaruh aturan ini — mereka selalu punya akses.
-Konsekuensinya: tooling yang menghasilkan client (`forma generate`) wajib
-menolak berjalan kalau *tidak ada* entity yang exposed sama sekali — tidak ada
-yang bisa digenerate.
+Forma menyediakan **dua permukaan (surface) API** untuk operasi data, dengan
+auth, gating, dan visibility yang berbeda — mengikuti pola route Laravel
+(`web.php` untuk UI, `api.php` untuk external service).
 
-**Workspace prefix.** Setiap route eksternal diprefiks identitas workspace:
-`/{workspace_slug}/api/{version}/{module}/{plural}/:id/:action`. `workspace_slug`
-adalah alias yang bisa dibaca manusia (dikonfigurasi per Workspace); router
-wajib jatuh ke UUID workspace kalau slug tidak diset.
+### 8.1 Permukaan UI — `_ui/entity`
 
-**Router.** Router multi-protokol **wajib** memakai radix-tree (atau setara)
-dengan lookup O(jumlah segmen path) — jumlah route yang bertambah tidak boleh
-mendegradasi performa secara linear. Pemanggil internal (same-process,
-registry-local) **melewati jaringan sepenuhnya** → dispatch fungsi langsung
-tanpa overhead serialisasi; pemanggil lintas-proses memakai adapter protokol
-terkonfigurasi (REST/gRPC/WS). Deskriptor route bersifat protocol-agnostic —
-satu deskriptor melayani semua protokol yang di-expose entity itu, router
-men-dispatch ke adapter yang tepat.
+Permukaan ini **selalu tersedia** untuk setiap Entity, tanpa memerlukan
+`spec.expose`. Digunakan oleh seluruh UI kind (Form, Table, Kanban, Timeline,
+Calendar) untuk operasi CRUD dan custom action.
 
-**Response envelope.** List: `{ data, meta: {page, per_page, total,
-total_pages}, links }`. Single: `{ data, meta: {request_id, timestamp} }`.
-Error: `{ error: {code, message, details}, meta }`.
+```
+GET    /{ws}/_ui/entity/{module}/{entity}             → list
+GET    /{ws}/_ui/entity/{module}/{entity}/{id}         → find
+POST   /{ws}/_ui/entity/{module}/{entity}              → create
+PATCH  /{ws}/_ui/entity/{module}/{entity}/{id}         → update
+DELETE /{ws}/_ui/entity/{module}/{entity}/{id}         → delete
+POST   /{ws}/_ui/entity/{module}/{entity}/{id}/{action} → custom action
+```
 
-**Kode error standar:** `VALIDATION_ERROR` (422), `UNAUTHORIZED` (401),
-`FORBIDDEN` (403), `NOT_FOUND` (404, termasuk cross-workspace dan cross-app
-yang tidak di-grant), `CONFLICT` (409), `STATE_TRANSITION_ERROR` (422),
-`INTERNAL_ERROR` (500, hanya reference ID yang dikembalikan ke klien). Daftar
-lengkap kanonik: [`error-glossary.yaml`](error-glossary.yaml).
+| Aspek | Ketentuan |
+|---|---|
+| Auth | Session cookie / OAuth (user agent). **Tidak menerima** API key. |
+| Gating | Permission `list`/`view`/`create`/`update`/`delete` + `required_permission` action-level ([§5](#5-action)) — **tidak** digerbangi `spec.expose` |
+| Field visibility | Semua field kecuali yang di-strip oleh `required_permission` field-level ([`05-field-types.md`](05-field-types.md) §5.3) |
+| Rate limit | Per user session |
+| Audit attribution | `user_id`, `session_id` |
+| Ketersediaan | Selalu ada untuk setiap Entity yang user punya permission-nya |
 
-Kontrak ini yang dikonsumsi `forma generate` untuk menghasilkan typed client —
-lihat `docs/cli-tools/03-forma-generate.md` untuk panduan pemakaiannya di
-frontend.
+### 8.2 Permukaan External — `api/v1`
+
+Permukaan ini **hanya tersedia kalau Entity opt-in** lewat `spec.expose:
+[{type: rest} | {type: grpc} | {type: ws}]`. Digunakan oleh third-party
+service, SDK (`forma generate`), dan integrasi eksternal.
+
+```
+GET    /{ws}/api/v1/{module}/{plural}             → list
+GET    /{ws}/api/v1/{module}/{plural}/{id}         → find
+POST   /{ws}/api/v1/{module}/{plural}              → create
+PATCH  /{ws}/api/v1/{module}/{plural}/{id}         → update
+DELETE /{ws}/api/v1/{module}/{plural}/{id}         → delete
+POST   /{ws}/api/v1/{module}/{plural}/{id}/{action} → custom action
+```
+
+| Aspek | Ketentuan |
+|---|---|
+| Auth | API key header (`X-Forma-Key`). **Tidak menerima** session cookie. |
+| Gating | `spec.expose` (deny-by-default) + `required_permission` action-level ([§5](#5-action)) |
+| Field visibility | Field dengan `exclude: [public_api]` disembunyikan dari respons ([`05-field-types.md`](05-field-types.md) §5.3) |
+| Rate limit | Per API key + plan tier |
+| Audit attribution | `api_key_id`, `service_label` |
+| Ketersediaan | Hanya untuk Entity dengan `spec.expose` — tanpa expose, endpoint 404 |
+
+`forma generate` hanya menghasilkan typed client untuk permukaan external ini.
+Kalau tidak ada entity yang exposed, `forma generate` menolak berjalan — tidak
+ada yang bisa digenerate.
+
+### 8.3 Router & Middleware
+
+Router **wajib** memakai radix-tree (atau setara) dengan lookup O(jumlah segmen
+path) — jumlah route tidak boleh mendegradasi performa secara linear. Dua
+permukaan didaftarkan sebagai **dua route group** dengan middleware auth yang
+berbeda di level router:
+
+| Route group | Middleware auth |
+|---|---|
+| `/_ui/` | Session cookie / OAuth |
+| `/api/v1/` | API key header (`X-Forma-Key`) |
+
+**Satu logic path internal.** Engine (validasi, permission enforcement, guard
+lifecycle, state machine, natural key generation, event publishing) adalah **satu
+code path** yang dipanggil dari dua entry point di atas — tidak ada duplikasi
+logika bisnis. Yang berbeda hanya: auth method, rate limiting, field visibility
+per surface, dan audit attribution.
+
+Pemanggil internal (same-process service, script Starlark, event) **melewati
+jaringan sepenuhnya** — dispatch fungsi langsung tanpa overhead serialisasi, dan
+tidak terikat aturan `spec.expose` atau auth method manapun. Permukaan gRPC dan
+WebSocket mengikuti kontrak yang sama dengan REST external ([§8.2](#82-permukaan-external--apiv1)).
+
+### 8.4 `spec.expose` — Definisi Ulang
+
+`spec.expose` **hanya** mengontrol ketersediaan di permukaan external
+([§8.2](#82-permukaan-external--apiv1)). Ia **tidak** memengaruhi:
+
+- Permukaan UI (`/_ui/entity/`) — selalu tersedia, gated permission
+- Pemanggil internal (same-process, Starlark script, event) — selalu tersedia
+- `/_meta/` endpoint — selalu tersedia, gated permission
+
+```yaml
+# Entity tanpa expose: UI tetap bisa CRUD, tapi third-party tidak bisa akses API
+spec:
+  expose: []   # atau tidak dideklarasikan sama sekali → UI jalan, external 404
+
+# Entity dengan expose: UI + external service keduanya bisa
+spec:
+  expose:
+    - type: rest
+      actions: [list, find]          # read-only external API (UI tetap full CRUD)
+```
+
+`kind: Api` ([`02-core-extended.md`](02-core-extended.md) §12) hanya
+meng-override bagaimana permukaan external dipublikasikan — `base_path`,
+`version`, `disable` — dan tidak berlaku untuk permukaan UI.
+
+### 8.5 Shared Contract
+
+Kedua permukaan **wajib** mematuhi kontrak yang sama untuk:
+
+| Kontrak | Referensi |
+|---|---|
+| Workspace prefix (`/{workspace_slug}`) | §8.2 — router wajib jatuh ke UUID kalau slug tidak diset |
+| Response envelope (`data`, `meta`, `error`) | `list: { data, meta: {page, per_page, total, total_pages}, links }`, `single: { data, meta: {request_id, timestamp} }`, `error: { error: {code, message, details}, meta }` |
+| Kode error standar | `VALIDATION_ERROR` (422), `UNAUTHORIZED` (401), `FORBIDDEN` (403), `NOT_FOUND` (404), `CONFLICT` (409), `STATE_TRANSITION_ERROR` (422), `INTERNAL_ERROR` (500) — daftar lengkap: [`error-glossary.yaml`](error-glossary.yaml) |
+| Query & filter ([§6](#6-query--filter-operator)) | `?page&per_page&sort&direction&fields&filter[...]&search&include` |
+| Optimistic concurrency (`version`) | Update wajib membawa `version`; mismatch → `409 CONFLICT` |
 
 ## 9. Error Model
 Kode kanonik berformat `FORMA.{DOMAIN}.{REASON}` (mis.

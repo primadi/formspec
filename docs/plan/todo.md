@@ -1,0 +1,587 @@
+# Master Plan: Forma Implementation
+
+**Last Updated**: 2026-07-17 18:00  
+**Status**: ✅ Fase 0 complete · 🔄 Fase 1 next  
+
+> `⬜` not started · `✅` complete · `⏸️` deferred  
+
+**Scope**: `forma dev` + `forma serve --mode=production` single-server.  
+**Deferred**: Control Plane (`forma-ctl`), K8s Operator, Marketplace — untuk cloud phase berikutnya.  
+**Sumber**: `docs/spec/backend/` (01–06), `docs/spec/frontend/` (01–08), `docs/spec/platform/` (01–10), `docs/cli-tools/` (01–04), `docs/renderers/jsonb-persist/` (01–04), `docs/renderers/shadcn-shell/` (01–04).
+
+---
+
+## Fase 0: Documentation & Repo Foundation ✅ COMPLETE
+
+| Item | Status |
+|---|---|
+| 0.1 Fix CLI doc numbering (01-dev, 02-cli, 03-generate, 04-ctl) | ✅ |
+| 0.2 Fix Document → Entity in docs/spec/ | ✅ |
+| 0.3 Repo restructure: `web/` → `renderers/web/` | ✅ |
+| 0.4 Repo restructure: `internal/db/`+`datastore/` → `renderers/jsonbpersist/` | ✅ |
+| 0.5 AI instructions + 3 skills (backend, frontend, cli) | ✅ |
+| 0.6 Verify no `docs_old/` refs in `docs/` | ✅ |
+
+---
+
+## Fase 1: `pkg/spec/` — Complete All Go Contract Types
+
+**Goal**: Every kind, field type, and validation rule from `docs/spec/` has a Go struct.
+
+### 1.1 Missing backend kind structs
+- [ ] 1.1.1 `MigrationSpec` — DDL-only migration (`kind` + `spec.ddl` + `spec.module`), reject DML  
+- [ ] 1.1.2 `WorkflowSpec` — approval workflow (`entity`, `on.transition`, `steps[]`, `on_reject`, `escalation`)  
+- [ ] 1.1.3 `ApiSpec` — external surface override (`rest.base_path`, `rest.version`, `rest.disable`, `grpc.*`)  
+- [ ] 1.1.4 `WebhookSpec` — verified inbound endpoint (`for`, `method`, `path`, `auth.strategy`, `auth.signature`, `idempotent`)  
+- [ ] 1.1.5 `IntegratorSpec` — cross-module bridge (`listen.resource`+`event`, `call.resource`+`action`, `compensate`)  
+- [ ] 1.1.6 `MockupSpec` — simulated connector (`for`, `config_ref`)  
+- [ ] 1.1.7 `KindDefinitionSpec` — CRD-like kind extension (`group`, `version`, `schema`, `handler`, `scope`)  
+- [ ] 1.1.8 Update `SubscriptionSpec` — add Tier 2 fields (`store`, `retention`, `position`, `max_retry`, `dead_letter`, `filter`, `transform`, `delivery` channel)  
+- [ ] 1.1.9 Update `ConfigSpec` — replace `map[string]any` with structured `ConfigKey` type (`type`, `default`, `secret`, `required`)  
+
+### 1.2 Missing meta-kind structs
+- [ ] 1.2.1 `VisualSpecKindSpec` — declare new view type (`tier`, `schema`, `renderer_contract`, `accepts_slots`/`implements_slot`)  
+- [ ] 1.2.2 `RendererSpec` — concrete VisualSpecKind implementation (`implements`, `stack_family`, `trust_tier`)  
+- [ ] 1.2.3 `PersistBackendSpec` — storage seam declaration (`implements`, `trust_tier`)  
+
+### 1.3 Missing frontend kind structs
+- [ ] 1.3.1 `CalendarSpec` — calendar view (`entity`, `date_field`, `end_field`, `title_field`, `resource_field`, `color_field`, `views[]`, recurrence via RRULE)  
+- [ ] 1.3.2 `ApprovalInboxSpec` — pending approvals (`realtime`, `filters`, `search`)  
+- [ ] 1.3.3 `NotificationCenterSpec` — in-app notifications (`realtime`)  
+- [ ] 1.3.4 `ListingSpec` — public catalog (`entity`, `columns`, `filters`, `search`)  
+
+### 1.4 Extended field type structs
+- [ ] 1.4.1 `RateLimitSpec` — per-resource rate limit (`max`, `per`, `scope`, `strategy`: sliding_window/token_bucket)  
+- [ ] 1.4.2 `SecretRef` — `ctx.secrets` access declaration (`uses.secrets: [key, ...]`)  
+- [ ] 1.4.3 `FieldClassification` — governance label (`pii`|`financial`|`internal`)  
+- [ ] 1.4.4 `FieldPermission` — field-level `required_permission`  
+- [ ] 1.4.5 `FieldExclude` — per-surface field exclusion (`api`|`ui`|`export`)  
+- [ ] 1.4.6 `EncryptedField` — at-rest encryption marker (`encrypted: true`)  
+- [ ] 1.4.7 `MaskedField` — auto-mask in response/log (`masked: true`)  
+- [ ] 1.4.8 `BackdatePolicy` / `ForwardDatePolicy` — max days, override_permission  
+- [ ] 1.4.9 `TreeDecl` — self-referential hierarchy marker (`tree: true` on relation)  
+- [ ] 1.4.10 `SoftDeactivateDecl` — `is_active` + `deactivate`/`reactivate` action pattern  
+- [ ] 1.4.11 `StorageSpec` (file field) — `allowed_types`, `max_size_mb`, `max_count`, `visibility`, `signed_url_ttl`, `cdn`, `transform`  
+
+### 1.5 Error glossary Go types
+- [ ] 1.5.1 Go const/type mapping dari `error-glossary.yaml` (22 error codes → `FORMA.DOC.*`, `FORMA.TXN.*`, `FORMA.PERIOD.*`, `FORMA.EVENT.*`, `FORMA.SAGA.*`, `FORMA.REF.*`, `FORMA.PERSIST.*`, `FORMA.ARCHIVE.*`, `FORMA.VALIDATE.*`)  
+
+---
+
+## Fase 2: Engine Core — `forma dev` Reliability
+
+**Goal**: Atomic operations, correct PK, complete filters, lifecycle enforcement — agar `forma dev` bisa diandalkan untuk testing.
+
+### 2.1 Database integrity
+- [ ] 2.1.1 Atomic mutation + outbox — wrap Entity INSERT/UPDATE/DELETE + outbox write dalam `BeginTx`/`Commit` (rollback on error)  
+- [ ] 2.1.2 Natural key counter in same transaction as Entity insert — UPSERT counter + INSERT dalam satu `Tx`  
+- [ ] 2.1.3 UUID v7 PK — replace SQLite `INTEGER PRIMARY KEY AUTOINCREMENT` with UUID v7 generated at app layer  
+- [ ] 2.1.4 Idempotency retention configurable — read from config (`core.idempotency_retention`), default 24h, not hardcoded  
+
+### 2.2 Query correctness
+- [ ] 2.2.1 Filter operators 12/12 — implement `between`, `ilike`, `null`, `notnull`  
+- [ ] 2.2.2 JSONB path fallback for non-indexed fields — `data->>'field'` when no generated column exists  
+- [ ] 2.2.3 Generated column dialect-aware — Postgres `data->>'field'` (not `json_extract`), SQLite `json_extract`  
+- [ ] 2.2.4 `exists:<resource>` real lookup — query registry, not stub (always-true)  
+- [ ] 2.2.5 Cross-module relation resolution — registry lookup by `{module}.{entity}`, not naive pluralization (add `s`)  
+
+### 2.3 Lifecycle engine
+- [ ] 2.3.1 8 reserved actions with guard enforcement — `create`, `update`, `submit`, `cancel`, `delete`, `amend`, `create-submit`, `amend-submit`  
+- [ ] 2.3.2 Transitive gating — submit nonaktif → cancel/amend implisit nonaktif; cancel nonaktif → amend implisit nonaktif  
+- [ ] 2.3.3 `update` after `submit` always rejected (immutability)  
+- [ ] 2.3.4 Referenceability — only `doc_status = null` (lifecycle-free) or `submitted` as relation target; `draft`/`cancelled` rejected  
+- [ ] 2.3.5 `delete` guard absolut — `relation.on_delete: restrict` equivalent; `cancel` guard dapat dibuka via handler  
+- [ ] 2.3.6 `create-submit`/`amend-submit` auto-derived when both constituent actions active  
+- [ ] 2.3.7 `FORMA.DOC.*` + `FORMA.REF.*` error codes — `UPDATE_NOT_DRAFT`, `DELETE_REFERENCED`, `CANCEL_REFERENCED`, `SUBMIT_NOT_DRAFT`, `ALREADY_SUBMITTED`, `ALREADY_CANCELLED`, `RESERVED_FIELD`, `CREATE_SUBMIT_NOT_AVAILABLE`, `REF.DELETE_BLOCKED`, `REF.CANCEL_BLOCKED`  
+- [ ] 2.3.8 `child.sequence_field` enforcement — validate monotonically ordered line numbers on insert/reorder; reject duplicates/non-monotonic → `VALIDATION_ERROR` (422); no auto-renumber on insert (explicit reorder only)  
+- [ ] 2.3.9 `child` lifecycle — child follows parent submit/cancel; child `storage: table` with own UUID still bound to parent lifecycle  
+
+### 2.4 Event system core
+- [ ] 2.4.1 Event naming convention enforcement — `before_*` always sync, `on_*` always async; custom events must declare `type`; `forma apply` rejects contradiction  
+- [ ] 2.4.2 Event priority ordering — Critical 1–9, Normal 10–89 (default 10), Low 90–99; kelipatan 10 convention  
+- [ ] 2.4.3 Durability contract validation — publisher non-durable + subscriber durable = validation error at apply  
+- [ ] 2.4.4 Outbox worker — poll pending → idempotency check → sync call → delivered / backoff retry → dead-letter; `retry.initial_delay_ms` + `backoff` strategy  
+- [ ] 2.4.5 `FORMA.EVENT.TYPE_MISMATCH` + `FORMA.EVENT.TYPE_MISSING` error codes  
+
+### 2.5 API infrastructure
+- [ ] 2.5.1 Two API surfaces — `/_ui/entity/` (session auth, always available) + `/api/v1/` (API key, `spec.expose` gated, deny-by-default)  
+- [ ] 2.5.2 Radix-tree router — O(segments) lookup, two route groups with different auth middleware  
+- [ ] 2.5.3 Single internal logic path — dispatch fungsi langsung untuk same-process caller (Starlark, event), bypass network + serialization  
+- [ ] 2.5.4 ListResponse `links` field — `first`, `prev`, `next`, `last` pagination links  
+- [ ] 2.5.5 ErrorResponse `details` array — structured per-field/per-level error details  
+- [ ] 2.5.6 `per_page` clamping — max 100 di-clamp (not rejected), non-numeric/negative → `VALIDATION_ERROR` (422)  
+- [ ] 2.5.7 Response envelope contract — `{data, meta}` / `{error: {code, message, details}, meta}` for both surfaces  
+- [ ] 2.5.8 Meta API backend-agnostic audit — no `ext_` prefix, no `data->>` path, no SQL-specific type leaking in `/_meta` responses  
+
+### 2.6 Security basics
+- [ ] 2.6.1 Cross-tenant isolation — middleware check: resource tenant == caller tenant; cross-tenant → 404 (not 403)  
+- [ ] 2.6.2 Tenant ID auto-injection — DDL adds `tenant_id`, query auto-scopes WHERE tenant_id  
+- [ ] 2.6.3 Permission auto-registration — `{module}.{entity}.{list|view|create|update|delete|submit|cancel|amend}` registered on entity load  
+- [ ] 2.6.4 UsesEnforcement wiring — `uses` declaration checked at runtime; undeclared `uses` → blocked + alert + module auto-suspend + incident audit  
+- [ ] 2.6.5 Optimistic concurrency — `version` field on all Entities; update without version → `409 CONFLICT`; `modified` is audit metadata, NOT concurrency mechanism  
+- [ ] 2.6.6 WebSocket per-message permission filter — hub checks permission before broadcasting to each connection  
+
+### 2.7 Idempotency
+- [ ] 2.7.1 Two-step prepare flow — `POST /{resource}/{action}/prepare` → receive key → retry action with key  
+- [ ] 2.7.2 Idempotency store — `(tenant, action, key) → pending|completed|failed + response`; duplicate after completed → replay; duplicate during pending → wait/409  
+
+### 2.8 `spec.expose` enforcement
+- [ ] 2.8.1 `spec.expose: []` → external API returns 404 for all endpoints; UI surface unaffected  
+- [ ] 2.8.2 `spec.expose: [{type: rest, actions: [list, find]}]` → only those actions on `/api/v1/`  
+
+---
+
+## Fase 3: CLI — `forma` Command Completion
+
+**Goal**: `validate` → `check` → `new` → `dev` → `generate` → `diff/get/describe/delete` → `migrate/repl/seed` → `backup/restore/logs`.  
+**Priority**: per `docs/cli-tools/02-forma-cli.md` §13.1.
+
+### 3.1 High-priority (no backend dependency)
+- [ ] 3.1.1 `forma validate -f <path>` — dry-run validation + honesty scan (Starlark: undeclared usage → error, declared-but-unused → warning, `ctx.environment` branching → warning). CI gate.  
+- [ ] 3.1.2 `forma check [--fix] -f <path>` — cross-file analysis: unresolved varnames (error), FormaExpr ref to nonexistent field (error), undeclared cross-module access (error), unused cross-module declarations (warning). `--fix`: auto-add `depends_on`/`uses`, auto-remove unused.  
+- [ ] 3.1.3 `forma new <kind>` — scaffold: `new app <name>`, `new entity <name>`, `new module <name>`. Generate boilerplate YAML + directory.  
+
+### 3.2 `forma dev` — verify against spec
+- [ ] 3.2.1 Verify 12 flags work: `--spec`, `--dsn`, `--addr`, `--listen` (none/local_http/unix_socket), `--app-endpoint` (none/local_http/unix_socket), `--runtime` (auto-detect + explicit override), `--dev`, `--dev-ui` (implies `--dev`+`--force`), `--force`, `--web-dir`, `--state-dir`, `--workspace-id`  
+- [ ] 3.2.2 Runtime auto-detect — `go.mod` → go, `package.json` → node, `composer.json` → php, `requirements.txt` → python, `Gemfile` → ruby, `*.csproj` → dotnet, `pom.xml` → java  
+- [ ] 3.2.3 SPA serving priority — explicit `--web-dir` > auto-detect `renderers/web/dist/` > embedded `//go:embed` FS  
+- [ ] 3.2.4 Config file `forma-app.yaml` support  
+- [ ] 3.2.5 Two personas: Persona A (embedded SPA, 80%) + Persona B (`--dev-ui` Vite HMR, 20%)  
+- [ ] 3.2.6 Add `check`, `promote`, `logs` to CLI dispatcher switch (currently fall to `usage()`)  
+
+### 3.3 `forma generate`
+- [ ] 3.3.1 `forma generate --lang typescript --spec <path> --out <dir>` — generate typed TS client from manifests  
+- [ ] 3.3.2 Generate: typed interfaces, create/update input types, custom action params, `createApi()` function  
+- [ ] 3.3.3 Field type mapping: string→string, integer→number, decimal→number, money→{amount:number,currency:string}, date→string, datetime→string, boolean→boolean, enum→union, relation→string, child→array, file→{id,url,filename}  
+
+### 3.4 Read-only CLI ops
+- [ ] 3.4.1 `forma diff -f <path>` — compare local vs deployed (dry-run)  
+- [ ] 3.4.2 `forma get <kind> <name>` — fetch resource, table/JSON output  
+- [ ] 3.4.3 `forma describe <kind> <name>` — detailed view with combined output (Workflow+Subscription+Integrator ter-compile)  
+
+### 3.5 Mutation CLI ops
+- [ ] 3.5.1 `forma delete <kind> <name> --confirm` — remove resource  
+
+### 3.6 Engine-dependent CLI ops
+- [ ] 3.6.1 `forma migrate plan|apply` — structural diff from Entity changes, applied via migration runner  
+- [ ] 3.6.2 `forma repl [--environment]` — interactive Starlark console, full `ctx.*`, sandbox limits enforced  
+- [ ] 3.6.3 `forma seed [--module]` — run seeders from YAML seed files  
+
+### 3.7 Data lifecycle CLI ops
+- [ ] 3.7.1 `forma backup create [--full|--incremental|--filter]` — backup DB + artifacts, open format  
+- [ ] 3.7.2 `forma backup inspect <file>` — inspect backup contents  
+- [ ] 3.7.3 `forma restore --from <file> [--map-resource] [--conflict skip|overwrite|remap] [--dry-run]` — restore with conflict resolution  
+- [ ] 3.7.4 `forma logs [--workspace] [--module] [--entity] [--level] [--since] [--request-id] [--follow]` — tail structured logs  
+
+### 3.8 Deferred CLI ops
+- [ ] ⏸️ `promote`, `archive`, `saga`, `module`, `sign`, `script`, `freeze`, `rollback`, `lock`, `workspace create`, `suspend scripts` — depend on Control Plane or backend maturity  
+
+---
+
+## Fase 4: JSONB Persist — Clean Renderer
+
+**Goal**: Clean PersistBackend interface, extension, categories, migration engine, backup/restore, archiving, audit trail, query builder.
+
+### 4.1 Clean PersistBackend interface
+- [ ] 4.1.1 Define `PersistBackend` Go interface — technology-agnostic (no SQL types: `*sql.DB`, `ExecContext`, `QueryContext`, `Driver()`)  
+- [ ] 4.1.2 Required capabilities: structural diff apply, query resolution (identical results across backends), `ctx.next_key` (gap-free, atomic), index generation, clean extension uninstall  
+- [ ] 4.1.3 Refactor `renderers/jsonbpersist/` to implement `PersistBackend` interface  
+
+### 4.2 Migration engine
+- [ ] 4.2.1 Structural diff from Entity spec changes — field add/remove/type-change → storage-agnostic diff (not SQL text)  
+- [ ] 4.2.2 `renamed_from` field — two-phase removal (deprecate then drop)  
+- [ ] 4.2.3 Per-Entity migration in one transaction — fail = full rollback; data in `data` JSONB never rewritten by structural migration  
+- [ ] 4.2.4 `kind: Migration` — custom DDL (index, function, trigger, extension, materialized view); DML rejected at runtime  
+
+### 4.3 Entity extension
+- [ ] 4.3.1 Extension read — `entity.ext("namespace").field` via JSONB column access  
+- [ ] 4.3.2 Extension write — populate `ext_{namespace}` column  
+- [ ] 4.3.3 Extension uninstall — `DROP COLUMN ext_{namespace}` + remove registry entry + namespace lock (never reused)  
+- [ ] 4.3.4 Extension namespace collision prevention — `forma apply` rejects duplicate namespace for same target  
+
+### 4.4 Category schemas
+- [ ] 4.4.1 6 category schemas: operational, financial, compliance, analytics, master, archive  
+- [ ] 4.4.2 Cross-category JOIN block — `FORMA.PERSIST.CROSS_CATEGORY` error  
+- [ ] 4.4.3 `spec.persist.category` enforcement at query time  
+
+### 4.5 Query Builder
+- [ ] 4.5.1 Aggregate functions — `sum`, `count`, `avg`, `min`, `max`  
+- [ ] 4.5.2 `group_by` — single + multi-field grouping  
+- [ ] 4.5.3 `having` — post-aggregation filter  
+- [ ] 4.5.4 `date_trunc` — time bucketing (day/week/month/quarter/year)  
+- [ ] 4.5.5 Window functions — running total, ranking  
+- [ ] 4.5.6 `include()` batched — eager-load relations in one query per level (N+1 prevention)  
+
+### 4.6 Tree/hierarchy
+- [ ] 4.6.1 Materialized path column — `_tpath_{field_name}` for `tree: true` self-referential relations; path format: `""` (root) or `parent.child.grandchild`  
+- [ ] 4.6.2 Tree operators — `descendant_of` → `LIKE 'prefix.%'`, `ancestor_of` → PK lookup, `child_of` → FK query, `root` → `parent_id IS NULL`  
+- [ ] 4.6.3 Cycle detection — server-side on create/update/move/reparent → `VALIDATION_ERROR` (422)  
+
+### 4.7 Business audit trail
+- [ ] 4.7.1 `audit: true` on action → append-only audit entries  
+- [ ] 4.7.2 Per-entry: actor, action name (not "document updated"), timestamp (`created_at`), before/after diff, request_id  
+- [ ] 4.7.3 Immutability — no API update/delete; framework writes only  
+- [ ] 4.7.4 Queryable per record — source for Timeline kind; filterable with standard query operators  
+
+### 4.8 Backup & restore
+- [ ] 4.8.1 Full + incremental backup — DB dump + file storage (ctx.storage), open format  
+- [ ] 4.8.2 Filterable backup — by workspace, module, entity  
+- [ ] 4.8.3 Restore with conflict resolution — `skip|overwrite|remap`, `--dry-run` compatibility report  
+- [ ] 4.8.4 Credible exit — read/export operations never license-gated  
+
+### 4.9 Data archiving
+- [ ] 4.9.1 Archive transactions (`characteristic: transaction`) to Parquet when age ≥ `retention.archive_after`  
+- [ ] 4.9.2 Master snapshot "as-of" — referenced masters snapshotted alongside archived transactions  
+- [ ] 4.9.3 `locked_for_deletion` flag — master referenced by archived transaction cannot be deleted  
+- [ ] 4.9.4 `FORMA.ARCHIVE.LOCKED_FOR_DELETION` error code  
+- [ ] 4.9.5 `forma archive run [--dry-run]` / `view --batch-id` / `restore-batch`  
+
+### 4.10 Soft-delete & soft-deactivation
+- [ ] 4.10.1 `persist.soft_delete: true` → `deleted_at` column + query auto-filters to `deleted_at IS NULL`  
+- [ ] 4.10.2 `is_active` + `deactivate`/`reactivate` pattern — dropdown filters `is_active: true` for new transactions; list shows all  
+
+---
+
+## Fase 5: Frontend — shadcn-shell Completeness
+
+**Goal**: Semua UI kind, widget, contract, dan FormaExpr sesuai spec. Bisa dites end-to-end.
+
+### 5.1 App Shell
+- [ ] 5.1.1 `sidebar-nav` — full chrome, side navigation, breadcrumb (existing, verify)  
+- [ ] 5.1.2 `topnav` — full chrome, top navigation  
+- [ ] 5.1.3 `landing-page` — minimal, public pages, no auth wrap  
+
+### 5.2 `kind: Page`
+- [ ] 5.2.1 Blocks composition — form, table, component, widget, html blocks; permission-gated per block  
+- [ ] 5.2.2 Tabs variant — mutually exclusive with blocks; permission-checked per tab  
+- [ ] 5.2.3 Master-detail split — `layout.mode: split`, `binds: {source, param}`; detail refetch on selection change  
+- [ ] 5.2.4 Full-custom — single `component:` block  
+- [ ] 5.2.5 Custom Page (`mode: custom`) — full-code page with `binds` footprint (entities, actions, subscribe); top rung of frontend control  
+- [ ] 5.2.6 Configuration Page pattern — `characteristic: reference` entities → no New/Delete buttons, only Update surfaced  
+
+### 5.3 `kind: Form`
+- [ ] 5.3.1 `render` mode enforcement — `modal` (dialog overlay), `drawer` (slide-in panel), `separate_page` (own route); design-time, no runtime switch  
+- [ ] 5.3.2 Wire `OverlayHost` — currently dead code; connect to Form.render modal/drawer  
+- [ ] 5.3.3 409 conflict handling — CAS version mismatch → "Data telah diubah oleh pengguna lain", offer reload + re-apply changes  
+- [ ] 5.3.4 Lifecycle UI patterns — plain_crud (no submit), 2-step+auto-save (default), 2-step manual (Save Draft + Submit buttons), 1-step create-submit (single button, no draft)  
+- [ ] 5.3.5 FormaExpr — `visible_when`, `readonly_when`, `required_when`, `compute` per field  
+
+### 5.4 `kind: Table`
+- [ ] 5.4.1 Fix hardcoded `/_admin` prefix — surface-aware navigation (`/app` vs `/_admin`)  
+- [ ] 5.4.2 Inline editing — `inline_edit: true`, cell editable for non-readonly/computed/immutable fields; CAS per baris; submitted rows reject inline-edit  
+- [ ] 5.4.3 Batch editing — `batch_edit: [field, ...]`, update per baris, partial failure reported (not all-or-nothing)  
+- [ ] 5.4.4 Column derivation fix — N priority columns (natural key → label_field → status → transaction_date → rest), overflow accessible via row expand/detail; NEVER silently dropped  
+- [ ] 5.4.5 `realtime: true` — auto-subscribe + patch rows in-place (depends on 5.8)  
+
+### 5.5 `kind: Kanban`
+- [ ] 5.5.1 Drag-and-drop — wire `@dnd-kit/core` + `@dnd-kit/sortable`; drag card antar kolom → call `update` action with new state field  
+- [ ] 5.5.2 Optimistic update with server-enforced rollback  
+- [ ] 5.5.3 `drag_guard` FormaExpr — pre-check UX, prevent drop that server will reject  
+- [ ] 5.5.4 WIP limits — `wip_limit` per column, soft UX enforcement  
+- [ ] 5.5.5 Zero-config — derive columns from state machine or `group_by` enum  
+
+### 5.6 `kind: Calendar`
+- [ ] 5.6.1 Month/week/day/resource views — `views: [month, week, day, resource]`  
+- [ ] 5.6.2 Event rendering — from `date_field` + optional `end_field`; title from `label_field` or `title_field`  
+- [ ] 5.6.3 Click event → detail Page/Form; click empty slot → Form create with date pre-filled  
+- [ ] 5.6.4 Drag reschedule — call `update` action on date_field (server-enforced); submitted immutable rows disable drag  
+- [ ] 5.6.5 RRULE recurrence — parse RFC 5545, expand to instances for visible date range (render-time, not materialized)  
+- [ ] 5.6.6 Resource view — one lane per `resource_field` value; color by `color_field`  
+
+### 5.7 `kind: Dashboard` + `kind: Widget`
+- [ ] 5.7.1 MetricWidget — fetch from summary entity, display number with label  
+- [ ] 5.7.2 ChartWidget — bar/line/pie from summary entity; add chart library dependency  
+- [ ] 5.7.3 ListWidget — mini-table from entity list  
+- [ ] 5.7.4 SummaryWidget — multi-metric card  
+- [ ] 5.7.5 Dashboard customizable — `customizable: true`, user add/remove/reorder widgets from catalog; preference stored as runtime preference (not YAML)  
+- [ ] 5.7.6 Widget catalog visibility — derived from user's `list`/`view` permission on underlying entity (not manual flag)  
+
+### 5.8 Realtime WebSocket
+- [ ] 5.8.1 `useRealtime(entityRef)` hook — subscribe to `entity:{module}.{name}` channels  
+- [ ] 5.8.2 Optimistic update — patch rendered data in-place on event  
+- [ ] 5.8.3 Reconnect → refetch via `/_meta/ui`, no replay  
+
+### 5.9 Asset Component Contract
+- [ ] 5.9.1 Dynamic ES module loader — load `asset` component at runtime  
+- [ ] 5.9.2 `forma` client injection — `forma.api` (typed, logged-in user), `forma.subscribe(entity, cb)`, `forma.navigate(page, params)`, `forma.theme` (tokens)  
+- [ ] 5.9.3 `forma.ui` centralized service — `toast()`, `dialog()`, `confirm()`, `drawer()` (replace direct `sonner` imports + `window.confirm()`)  
+- [ ] 5.9.4 `forma.files` — upload/download tray  
+- [ ] 5.9.5 `forma.form(entity, {mode, id?})` — headless form engine: field state, dirty tracking, client validation from field rules, FormaExpr eval, `submit()` with CAS version  
+- [ ] 5.9.6 `needs:` declaration — frontend `uses` equivalent; `forma.api` calls outside `needs` fail client-side  
+- [ ] 5.9.7 CSP sandbox — `connect-src` restricted to App origin only; no `window`/`document` global access outside container  
+- [ ] 5.9.8 CSS scoped — component CSS never leaks to chrome or other components  
+
+### 5.10 Missing input widgets
+- [ ] 5.10.1 DatePicker — `react-day-picker` integration for `date`/`datetime` field types  
+- [ ] 5.10.2 JsonEditor — textarea + JSON validation  
+- [ ] 5.10.3 ChildGrid — inline table for `child` entities with `storage: table`  
+- [ ] 5.10.4 RichText — basic toolbar (bold/italic, list, link, heading) + server-sanitized HTML; NOT page builder  
+- [ ] 5.10.5 FileInput — upload to `ctx.storage`, preview (image/PDF), size/type enforcement from field rules, `forma.files` tray  
+- [ ] 5.10.6 DecimalInput — arbitrary-precision decimal with banker's rounding display  
+- [ ] 5.10.7 DateTimeInput — combined date + time picker  
+- [ ] 5.10.8 Base UI components — empty-state, breadcrumb, skeleton/loading, pagination, badge, card  
+
+### 5.11 FormaExpr
+- [ ] 5.11.1 Audit grammar vs spec — verify lexer→parser→evaluator supports all operators from `08-formaexpr.md` §2  
+- [ ] 5.11.2 Deploy-time static validation — `forma apply`/`forma check` rejects unresolvable field references + invalid grammar (ERROR, not warning)  
+- [ ] 5.11.3 Runtime error state — nonexistent field reference → visible error state (never silent fail-safe/evaluate to `false`)  
+- [ ] 5.11.4 `title` interpolation — `"Order {order.number}"` pattern in Page/Wizard/Print titles  
+- [ ] 5.11.5 Cross-shell conformance test suite — identical interpretation across shells  
+
+### 5.12 Spec Resolution API
+- [ ] 5.12.1 ETag caching — conditional GET with 304 for `/_meta/ui` bundle  
+- [ ] 5.12.2 `label_field` fallback — `name` → `title` → `number` → first string field  
+- [ ] 5.12.3 Entity schema shape — `label_field`, `lifecycle`, `actions` with embedded `permission`  
+- [ ] 5.12.4 Permission filtering — entity (404 if no list/view), page (hidden if missing permission), action (permission string sent, not filtered)  
+- [ ] 5.12.5 Task-based admin granting → materialized permission strings  
+
+### 5.13 Other UI kinds
+- [ ] 5.13.1 `kind: Report` — fix totals row bug (values computed but `<tr>` empty); add grouping + subtotal  
+- [ ] 5.13.2 `kind: Print` — PDF server-side generation; `format: html` via `window.print()` (existing)  
+- [ ] 5.13.3 `kind: ApprovalInbox` — pending approvals list, `approve`/`reject` inline actions, badge count, `realtime: true`  
+- [ ] 5.13.4 `kind: NotificationCenter` — notification list, badge unread, `mark-read` action, `realtime: true`, deep-link on click  
+- [ ] 5.13.5 `kind: Listing` — public catalog, no auth wrap, no row/bulk actions  
+
+### 5.14 Derivation engine
+- [ ] 5.14.1 Derivation fix — Table: N priority columns, overflow accessible via expand (never silently dropped)  
+- [ ] 5.14.2 Wire `deriveMenuItems()` — currently dead code; `_admin` menu built inline in Sidebar  
+- [ ] 5.14.3 Derivation: Form mode heuristic — >12 fields OR has child with `storage: table` → `separate_page`; >5 fields → `drawer`; else → `modal`  
+- [ ] 5.14.4 Missing lifecycle derivation — add `two_step_manual` and `one_step_create_submit` patterns  
+
+### 5.15 Dead code cleanup
+- [ ] 5.15.1 Remove `engine/registry.tsx` — replaced by hardcoded `lazy()` map in router  
+- [ ] 5.15.2 Wire `OverlayHost` — connect to Form.render modal/drawer and other overlay needs  
+
+---
+
+## Fase 6: Auth & Authorization
+
+**Goal**: Login, JWT, permission model, roles, API keys, sessions, field security. Prod requirement.
+
+### 6.1 Login & token
+- [ ] 6.1.1 Login endpoint — `POST /api/v1/auth/login`, credential verification (password hash), JWT issuance (access + refresh)  
+- [ ] 6.1.2 Token claims — `sub`, `workspace`, `roles`, `permissions`, `exp`, `iat`  
+- [ ] 6.1.3 Token refresh — rotate (invalidate old, issue new)  
+
+### 6.2 Permission model
+- [ ] 6.2.1 Resource + action permission — format `{module}.{entity}.{action}`  
+- [ ] 6.2.2 Wildcard support — `{module}.{entity}.*`, `*` (super-wildcard), `public`  
+- [ ] 6.2.3 Wire permission check to every API handler — both surfaces  
+- [ ] 6.2.4 Permission resolution — role → permissions list; cache per session  
+- [ ] 6.2.5 Consent footprint — aggregate `required_permission` + `uses` presented to workspace owner at install; cross-module write = high-risk consent  
+
+### 6.3 Roles & membership
+- [ ] 6.3.1 `role` Entity — collection of permissions  
+- [ ] 6.3.2 `app_membership` Entity — user + role + scope (workspace/app/module)  
+- [ ] 6.3.3 Admin delegation chain — workspace owner → app admin → module staff  
+- [ ] 6.3.4 4 symmetric owner roles — Workspace Owner, App Owner, Module Owner, Cloud Owner  
+
+### 6.4 API keys
+- [ ] 6.4.1 `api_key` Entity — create (return key once), list (masked), revoke, expiry  
+- [ ] 6.4.2 Scope — per workspace or per app  
+- [ ] 6.4.3 API key auth middleware — `Authorization: Bearer fk_...`  
+
+### 6.5 Session management
+- [ ] 6.5.1 `session` Entity — session_id, user, workspace, IP, user-agent, created/expires/last_active  
+- [ ] 6.5.2 Refresh token rotation — invalidate old, issue new  
+- [ ] 6.5.3 Concurrent session limit — configurable per user  
+- [ ] 6.5.4 Global revoke — logout all devices  
+- [ ] 6.5.5 Session expiry + cleanup job  
+
+### 6.6 Auth middleware pipeline
+- [ ] 6.6.1 Auth method detection — Bearer JWT vs Bearer API key (`fk_` prefix) vs session cookie  
+- [ ] 6.6.2 Token validation → identity extraction → permission loading → workspace context  
+- [ ] 6.6.3 Rate limiting per auth method  
+- [ ] 6.6.4 Audit log every auth attempt (success + failure)  
+
+### 6.7 Field-level security
+- [ ] 6.7.1 `classification` label — tag field `pii|financial|internal`; log/export auto-tag  
+- [ ] 6.7.2 `required_permission` (field-level) — user without permission → field excluded from response  
+- [ ] 6.7.3 `exclude` — per-surface field exclusion (`api`, `ui`, `export`)  
+- [ ] 6.7.4 `encrypted: true` — AES-256-GCM at-rest encryption for field  
+- [ ] 6.7.5 `masked: true` — auto-mask in JSON response and structured log (`***`)  
+- [ ] 6.7.6 `computed` — server-derived, never client-writable; recompute on every create/update  
+
+### 6.8 `ctx.secrets`
+- [ ] 6.8.1 `ctx.secrets.get("key")` — only path for `secret: true` Config keys  
+- [ ] 6.8.2 `uses: { secrets: [key, ...] }` — must declare access; undeclared → blocked  
+- [ ] 6.8.3 Secret never appears in logs at any level  
+- [ ] 6.8.4 Every secret read audited — who read what secret, when  
+
+### 6.9 RichText sanitization
+- [ ] 6.9.1 Server-side HTML sanitize — strip script/markup before persist; client HTML never trusted raw  
+
+---
+
+## Fase 7: Engine Extended — Missing Kind Runtimes
+
+**Goal**: Service, Config, Subscription, Workflow, Webhook, Integrator, Hook engine, Validation L4–L6, State machine, Denormalisasi, Period closing, Rate limiter, Async job.
+
+### 7.1 `kind: Service` runtime
+- [ ] 7.1.1 Service registry — register by `{module}.{name}`  
+- [ ] 7.1.2 Resolve `impl.native` — scan `impl/**/*.go`, `ref: "{Type}.{Method}"`, must be unique in module  
+- [ ] 7.1.3 Resolve `impl.script` / `impl.script_ref` / `impl.sidecar`  
+- [ ] 7.1.4 `call: async` — fire-and-forget (no job_id, no progress, no result)  
+
+### 7.2 `kind: Config` runtime
+- [ ] 7.2.1 Config registry — load Config manifests, resolve per environment  
+- [ ] 7.2.2 `ctx.config.get("key")` — Starlark access; non-secret keys only  
+- [ ] 7.2.3 `settings.*` namespace — global settings: currency, locale, timezone, date_format, fiscal_year_start  
+- [ ] 7.2.4 Global settings defaults — spec MUST provide acceptable defaults for every setting; components MUST NOT guess  
+
+### 7.3 `kind: Subscription` engine
+- [ ] 7.3.1 Tier 1 (outbox) — event → match Subscription → call handler; transactional  
+- [ ] 7.3.2 Tier 2 (streaming) — Redis/Kafka; at-least-once, positioned replay, filter/transform Starlark  
+- [ ] 7.3.3 `emits:` custom event emission — action declares `emits: <event-name>` → event emitted on action success  
+- [ ] 7.3.4 Dynamic subscriptions — runtime-created subscriptions as data (not manifest); live in `forma.core`  
+- [ ] 7.3.5 Delivery channels — `webhook` (outbound, HMAC signed, retry), `notification` (bridge to `forma/notify`), `pubsub` (non-durable, at-most-once)  
+
+### 7.4 `kind: Workflow` engine
+- [ ] 7.4.1 Approval state machine — attach to Entity transition without modifying Entity  
+- [ ] 7.4.2 Multi-approver modes — `all` (all eligible must approve), `any` (quorum from pool), `sequential` (chain order)  
+- [ ] 7.4.3 `when` condition — FormaExpr on `resource`; step skipped if false  
+- [ ] 7.4.4 `escalation` — timeout (`after`), notify_roles, reassign_roles  
+- [ ] 7.4.5 Requester can never approve own request  
+- [ ] 7.4.6 Approval = signed statement recorded in audit trail  
+
+### 7.5 State machine engine (basic)
+- [ ] 7.5.1 Transition validation — declared transitions only; undeclared → `STATE_TRANSITION_ERROR`  
+- [ ] 7.5.2 Starlark inline guards — guard on transition  
+- [ ] 7.5.3 Builtin aggregates — `sum_line(field)`, `len(resource.items)` for guard expressions  
+
+### 7.6 `kind: Webhook` engine
+- [ ] 7.6.1 Inbound endpoint — route registration, method validation  
+- [ ] 7.6.2 Signature verification — HMAC (strategy: `signature`, algorithm, header, payload) before handler  
+- [ ] 7.6.3 Token auth — strategy: `token`  
+- [ ] 7.6.4 Verification failure → rejected BEFORE handler runs  
+
+### 7.7 `kind: Integrator` engine
+- [ ] 7.7.1 Listen → call bridge — `listen.resource`+`event` triggers `call.resource`+`action`  
+- [ ] 7.7.2 Mandatory symmetric cancel handler — every Integrator MUST provide cancel handler  
+- [ ] 7.7.3 Target action must be `idempotent: true` for cross-boundary calls  
+- [ ] 7.7.4 Saga compensate — cross-boundary call registers `compensate` to Saga log; `FORMA.SAGA.*` errors  
+
+### 7.8 Hook engine
+- [ ] 7.8.1 5 hook points — `before`, `after`, `on_error`, `before_deliver`, `after_deliver`  
+- [ ] 7.8.2 `before` — may modify action params or call `fail()` to abort  
+- [ ] 7.8.3 `after` — post-action side effects  
+- [ ] 7.8.4 `on_error` — compensation/cleanup  
+- [ ] 7.8.5 `before_deliver` — may suppress delivery or enrich payload  
+- [ ] 7.8.6 Priority ordering — consistent with event priority (smaller first, kelipatan 10)  
+- [ ] 7.8.7 Cross-module hooks — must declare `uses`; appear in consent footprint  
+
+### 7.9 Validation levels L4–L6
+- [ ] 7.9.1 L4 `business_rules` — single-record business constraints via script  
+- [ ] 7.9.2 L5 `cross_validate` — multi-field/child-record validation within same record  
+- [ ] 7.9.3 L6 `consistency` — cross-entity consistency (e.g., aggregate balance vs GL); requires `uses: db`  
+- [ ] 7.9.4 Sequential evaluation — L1–L3 → L4 → L5 → L6; stop at first failure  
+- [ ] 7.9.5 Error response with `details: [{level, field?, message}]`  
+
+### 7.10 Denormalisasi finansial
+- [ ] 7.10.1 Master financial fields snapshot to transaction on `create`/`submit` — not live-join  
+- [ ] 7.10.2 Old transactions unaffected by master value changes  
+
+### 7.11 Period closing
+- [ ] 7.11.1 `period-closing` as Entity — gets lifecycle, reference guard, audit trail for free  
+- [ ] 7.11.2 `submit` → finalize summary period; `cancel` (reopen) → unfinalize  
+- [ ] 7.11.3 Reopen requires elevated permission + recorded reason → `FORMA.PERIOD.REOPEN_DENIED`  
+- [ ] 7.11.4 Business calendar day resolution — `today`/`current` from EOD, not system clock  
+- [ ] 7.11.5 `FORMA.PERIOD.CLOSED` enforcement for create/update/submit/amend in closed period  
+
+### 7.12 Rate limiter
+- [ ] 7.12.1 Per-resource rate limit — `max`, `per`, `scope` (tenant|user|ip|global), `strategy` (sliding_window|token_bucket)  
+- [ ] 7.12.2 Per-action override — overrides resource default  
+- [ ] 7.12.3 `429` response before handler runs  
+
+### 7.13 Async job tracker
+- [ ] 7.13.1 `call: async` (tracked) → `202` with `job_id`  
+- [ ] 7.13.2 Progress via WebSocket `jobs` channel — `progress`/`completed`/`failed` events  
+- [ ] 7.13.3 `ctx.job.progress(pct, message)` from handler  
+- [ ] 7.13.4 Callback webhook delivery — HMAC-signed, durable retry  
+
+### 7.14 Starlark sandbox
+- [ ] 7.14.1 Hard limits enforcement — wall-clock 5000ms, memory 64MB, iterations 100K, max 50 DB queries, max 1000 records read  
+- [ ] 7.14.2 No network/filesystem/subprocess access  
+- [ ] 7.14.3 Exceeding any limit → abort with error, no partial results  
+
+### 7.15 Sidecar multi-runtime
+- [ ] 7.15.1 Read `spec.runtime` per Module manifest — go, node, php, python, ruby, java, dotnet, rust  
+- [ ] 7.15.2 Spawn one sidecar process per unique runtime  
+- [ ] 7.15.3 Sidecar protocol — entity CRUD via `POST /ctx/entity/{op}` (get, set, update, increment, decrement)  
+
+### 7.16 Money type
+- [ ] 7.16.1 Money as first-class type — pair of exact amount (decimal) + currency code (ISO-4217)  
+- [ ] 7.16.2 Currency resolution order — explicit field → `settings.currency` → error (never guess)  
+- [ ] 7.16.3 Banker's rounding default  
+- [ ] 7.16.4 Non-default currency MUST declare `decimal_places`  
+
+### 7.17 File storage
+- [ ] 7.17.1 File upload route — `POST /:resource/:id/{field}` convention  
+- [ ] 7.17.2 `storage` spec enforcement — `allowed_types`, `max_size_mb`, `max_count`, `visibility` (public|private|signed)  
+- [ ] 7.17.3 Transform — server-side resize/thumbnail per `transform` spec  
+
+---
+
+## Fase 8: Production Self-Hosting Single Server
+
+**Goal**: `forma serve --mode=production` — production-grade, single-server, no Control Plane.
+
+### 8.1 Production mode
+- [ ] 8.1.1 `forma serve --mode=production` — disable dev shortcuts: no auto-approve, no self-signed, no dev auth  
+- [ ] 8.1.2 Production JWT — RS256/ES256 (test + wire to config)  
+- [ ] 8.1.3 HTTPS — TLS configuration  
+- [ ] 8.1.4 Production datastore — Postgres (not SQLite)  
+
+### 8.2 Observability
+- [ ] 8.2.1 Structured JSON-lines logging — 12 mandatory fields: timestamp, level, request_id, workspace, module, entity, action, actor, duration_ms, error_code, trace_id, environment  
+- [ ] 8.2.2 PII discipline — info/warn/error MUST NOT contain business data; debug gated by operator control  
+- [ ] 8.2.3 Request ID — issue at boundary, propagate to Starlark (`ctx.request_id`), sidecar (header), ctx.* calls  
+- [ ] 8.2.4 Prometheus `/metrics` endpoint (separate admin listener) — 10 mandatory metrics: http_requests_total, http_request_duration_seconds, action_duration_seconds, outbox_pending, db_pool_open/idle/wait_total, snapshot_age_seconds  
+- [ ] 8.2.5 Cardinality discipline — labels limited to bounded dimensions; no entity_id, request_id, actor, raw URL as labels  
+- [ ] 8.2.6 Health endpoint `GET /health` — `{status, reasons, checked_at}` with controlled vocabulary: healthy/degraded/unhealthy, snapshot_stale, datastore_unreachable, db_pool_exhausted, outbox_backlog  
+- [ ] 8.2.7 OpenTelemetry tracing — W3C Trace Context propagation to sidecar (wire contract)  
+
+### 8.3 Backup automation
+- [ ] 8.3.1 Scheduled backup — periodic full + incremental  
+- [ ] 8.3.2 Restore procedure — documented, tested  
+
+---
+
+## Fase 9: Final Audit & Cleanup
+
+### 9.1 Full audit — code vs `docs/spec/`
+- [ ] 9.1.1 Systematic comparison of every spec file against implementation; catalog all deviations  
+
+### 9.2 Integration test
+- [ ] 9.2.1 Order-to-Cash end-to-end — order → invoice → payment → general ledger; all flows automated  
+
+### 9.3 Code generation
+- [ ] 9.3.1 `make generate` — generate TypeScript types from `pkg/spec/` → `renderers/web/src/generated/types.ts`  
+- [ ] 9.3.2 Validate generated types against manual `types/manifest.ts`  
+
+### 9.4 Developer guide
+- [ ] 9.4.1 "Buat App Pertama Anda dengan Forma" — getting started guide  
+
+### 9.5 Retirement
+- [ ] 9.5.1 Final audit `docs_old/` — verify all content migrated; archive or delete  
+
+---
+
+## Deferred (Cloud Phase)
+
+| Area | Reason |
+|---|---|
+| `forma-ctl` (all modes: region, cluster, standalone) | Control Plane — cloud deployment phase |
+| K8s Operator (`forma-operator`) | Production infrastructure |
+| Marketplace (pricing, metering, licensing) | Business features |
+| Control Plane (Environment, Policy/OPA, transparency log, key model, contracts) | Governance |
+| Two-stage deployment pipeline (register→deploy, snapshot, evidence) | Requires Control Plane |
+| `forma promote/archive/saga/module/sign/script/freeze/rollback/lock/workspace/suspend` | CLI — depend on Control Plane |
+| Print: thermal/dotmatrix | Niche — PDF sufficient |
+| gRPC + mTLS transport | Cloud deployment |
+| Platform signing (HSM/KMS) | Cloud deployment |
+| Generic Docker image (`formahub/forma-resource`) | Cloud deployment |
+| Scale-to-zero | Cloud deployment |
+| Unmanaged client codegen (Dart, Flutter) | Future SDK |
+
+

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/primadi/forma/internal/db"
+	"github.com/primadi/forma/renderers/jsonbpersist"
 	"github.com/primadi/forma/internal/events"
 )
 

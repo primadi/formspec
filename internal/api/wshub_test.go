@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	"github.com/primadi/forma/internal/db"
+	"github.com/primadi/forma/renderers/jsonbpersist"
 	"github.com/primadi/forma/internal/entity"
 	"github.com/primadi/forma/internal/events"
 )

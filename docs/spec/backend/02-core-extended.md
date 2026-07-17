@@ -42,22 +42,22 @@ bagian state machine dasar.
 ### 1.1 Denormalisasi Field Finansial (Normatif)
 
 Field `characteristic: master` yang nilainya memengaruhi perhitungan
-finansial pada Document transaksi (harga, diskon, tier, tarif pajak)
-**wajib** disalin (snapshot) ke Document transaksi saat `create`/`submit` —
+finansial pada Entity transaksi (harga, diskon, tier, tarif pajak)
+**wajib** disalin (snapshot) ke Entity transaksi saat `create`/`submit` —
 **tidak boleh** dibaca ulang lewat live-join ke Master saat transaksi
 ditampilkan atau dihitung ulang. Kalau nilai Master berubah kemudian (mis.
 customer naik tier bulan depan), transaksi lama yang sudah dibuat **tidak
 boleh** ikut berubah retroaktif. Field non-finansial pada relasi yang sama
 (nama, alamat) boleh tetap live-join. Aturan praktis: setiap field Master
 yang dipakai dalam `conditions`/kalkulasi total pada action transaksi
-disalin sebagai field milik Document transaksi sendiri (konvensi penamaan
+disalin sebagai field milik Entity transaksi sendiri (konvensi penamaan
 bebas, mis. suffix `_at_transaction`). Ini berbeda dari master snapshot
 saat archiving (§10) — snapshot finansial ini terjadi *setiap transaksi*,
 bukan cuma saat archive run.
 
 ## 2. Workflow
-Lifecycle sederhana cukup inline di Document (§1). Approval berbasis role
-hidup di `kind: Workflow` dan **menempel tanpa mengubah Document** — pola yang
+Lifecycle sederhana cukup inline di Entity (§1). Approval berbasis role
+hidup di `kind: Workflow` dan **menempel tanpa mengubah Entity** — pola yang
 sama dengan Subscription (§3), diterapkan ke transisi state machine:
 
 ```yaml
@@ -202,7 +202,7 @@ sebelum handler manapun berjalan, terhitung, bisa dialert. Strategi `token`
 untuk webhook internal sederhana; `signature` untuk provider kriptografi.
 
 ## 5. Integrator
-`kind: Integrator` menjembatani dua Document/Module yang **tidak saling kenal
+`kind: Integrator` menjembatani dua Entity/Module yang **tidak saling kenal
 langsung** — konsisten dengan prinsip "module tidak saling `import` definisi
 satu sama lain":
 
@@ -365,7 +365,7 @@ menentukan batas periode. Transaksi dengan `transaction_date` yang jatuh di
 periode tertutup **ditolak** dengan `FORMA.PERIOD.CLOSED` — berlaku untuk
 `create`, `update`, `submit`, maupun `amend` yang menyentuh periode itu.
 
-Period closing itu sendiri dimodelkan sebagai **Document** (`period-closing`),
+Period closing itu sendiri dimodelkan sebagai **Entity** (`period-closing`),
 bukan sekadar perintah CLI — sehingga otomatis mendapat `doc_status`, reference
 guard, audit trail, dan model permission gratis. `submit` di dokumen ini
 memicu finalisasi summary periode; `cancel` (reopen) memicu unfinalize.
@@ -388,7 +388,7 @@ tanggal 4 sampai EOD-nya selesai).
 
 Governing prose untuk kode `FORMA.ARCHIVE.*`
 ([`error-glossary.yaml`](error-glossary.yaml)). Verb CLI-nya di
-[`../../cli-tools/01-forma-cli.md`](../../cli-tools/01-forma-cli.md)
+[`../../cli-tools/02-forma-cli.md`](../../cli-tools/02-forma-cli.md)
 (`archive run|view|restore-batch`).
 
 **Hanya transaksi yang diarsipkan; master di-snapshot** demi konsistensi
@@ -471,12 +471,15 @@ rotasi key, emergency, sesi REPL production) — ia **tidak pernah** memuat data
 bisnis. Keduanya append-only tapi domainnya terpisah dan tidak saling
 menggantikan.
 
-## 12. kind: Api — Override Permukaan
+## 12. kind: Api — Override Permukaan External
 
-`kind: Api` meng-override **permukaan API yang sudah exposed** sebuah entity
+`kind: Api` meng-override **permukaan external** (`/api/v1/`) sebuah entity
 ([`../platform/03-kind-system.md`](../platform/03-kind-system.md)) — ia tidak
 membuat exposure baru (itu `spec.expose`, [`01-core-basic.md`](01-core-basic.md)
-§8), melainkan menyetel bagaimana permukaan yang sudah opt-in itu dipublikasikan:
+§8.4), melainkan menyetel bagaimana permukaan external yang sudah opt-in itu
+dipublikasikan. Permukaan UI (`/_ui/entity/`) **tidak** terpengaruh oleh
+`kind: Api` — path UI mengikuti konvensi `{module}/{entity}` tetap, tidak bisa
+di-override.
 
 ```yaml
 apiVersion: forma.dev/v1alpha1
@@ -492,14 +495,14 @@ spec:
     package: billing.public.v2
 ```
 
-Body override:
+Body override (hanya berlaku untuk permukaan external `/api/v1/`):
 
 | Field | Arti |
 |---|---|
-| `rest.base_path` | Segmen path yang menggantikan `{module}` di route eksternal ([`01-core-basic.md`](01-core-basic.md) §8) |
-| `rest.version` | Menyetel `{version}` route untuk permukaan ini |
-| `rest.disable` | Daftar entity yang **opt-out** dari permukaan REST ini walau exposed |
-| `grpc.enabled` | Mengaktifkan permukaan gRPC |
+| `rest.base_path` | Segmen path yang menggantikan `{module}` di route external ([`01-core-basic.md`](01-core-basic.md) §8.2). Tidak memengaruhi `/_ui/entity/`. |
+| `rest.version` | Menyetel `{version}` route untuk permukaan external ini |
+| `rest.disable` | Daftar entity yang **opt-out** dari permukaan external REST ini. Entity tetap bisa diakses via UI (`/_ui/entity/`) selama permission terpenuhi. |
+| `grpc.enabled` | Mengaktifkan permukaan gRPC (external) |
 | `grpc.package` | Nama package proto untuk permukaan gRPC |
 
 **Beberapa permukaan Api bernama per module.** Satu module boleh punya lebih dari
@@ -507,8 +510,8 @@ satu `kind: Api` (dibedakan `metadata.name`, mis. `public` vs `partner`), masing
 dengan `base_path`/`version`/exposure sendiri — sehingga satu entity yang sama
 bisa tampil beda di permukaan `partner` (path/version berbeda, sebagian entity
 di-`disable`) dibanding permukaan `public`. Deskriptor route tetap
-protocol-agnostic ([`01-core-basic.md`](01-core-basic.md) §8); `kind: Api` hanya
-mengatur bagaimana deskriptor itu dipublikasikan per permukaan.
+protocol-agnostic ([`01-core-basic.md`](01-core-basic.md) §8.3); `kind: Api` hanya
+mengatur bagaimana deskriptor itu dipublikasikan per permukaan external.
 
 ## 13. Async Action & Job Tracking
 
@@ -587,7 +590,7 @@ entity lain, karena itu **wajib** mendeklarasikan akses baca yang dipakainya di
 `uses` — sama seperti akses lintas-resource lain; akses yang tidak dideklarasikan
 diblokir saat runtime ([`01-core-basic.md`](01-core-basic.md) §5). Kegagalan di
 level mana pun mengembalikan envelope error normatif dengan `details: [{level,
-field?, message}]` ([`01-core-basic.md`](01-core-basic.md) §8), `level` menandai
+field?, message}]` ([`01-core-basic.md`](01-core-basic.md) §8.5), `level` menandai
 di level berapa validasi gagal.
 
 ## 15. Hook Spec

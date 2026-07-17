@@ -54,9 +54,9 @@ terorganisir. Ini keputusan pengelompokan design-time.
 
 **Pola Configuration Page:** untuk setting sistem (parameter key-value yang
 strukturnya dikunci developer, nilainya diubah admin) — `kind: Page`
-ber-`tabs`, tiap tab mereferensikan `kind: Form` `mode: edit` atas Document
+ber-`tabs`, tiap tab mereferensikan `kind: Form` `mode: edit` atas Entity
 `characteristic: reference`. Renderer **tidak boleh** merender tombol
-"New Item"/"Delete" untuk Document reference — hanya action Update yang
+"New Item"/"Delete" untuk Entity reference — hanya action Update yang
 disurfacekan.
 
 ### 1.1 Master-detail (split view)
@@ -93,7 +93,7 @@ entries, master data + panel detail. Enforcement permission tetap **per-blok**
 menautkan seleksi, tidak melonggarkan gating.
 
 ## 2. `data-entry` (`kind: Form`)
-Layout + perilaku input satu Document, menggantikan form hasil derivasi:
+Layout + perilaku input satu Entity, menggantikan form hasil derivasi:
 
 ```yaml
 apiVersion: forma.dev/v1alpha1
@@ -129,24 +129,24 @@ spec:
 | `drawer` | Panel slide-in dari kanan, sama sifatnya dengan modal tapi lebih lebar | Form medium (5–12 field), khususnya `columns: 2` |
 | `separate_page` | Route sendiri, breadcrumb + URL sendiri | Entity padat (12+ field, child table, validasi kompleks), butuh deep-link |
 
-Document yang sama boleh punya banyak Form dengan `render` berbeda (mis. modal
+Entity yang sama boleh punya banyak Form dengan `render` berbeda (mis. modal
 quick-create + separate_page full-edit) — keputusan per-Form, ditegakkan
 renderer (tidak ada switch runtime; butuh mode lain → deklarasikan Form
 kedua).
 
-**Aturan:** tiap `field` wajib ada di Document; tiap `action` wajib ada dan
+**Aturan:** tiap `field` wajib ada di Entity; tiap `action` wajib ada dan
 permission-gated otomatis
 ([`04-spec-resolution-api.md`](04-spec-resolution-api.md) §4). Vocabulary
 perilaku client tertutup: `visible_when`, `readonly_when`, `required_when`,
 `compute` (FormaExpr, [`08-formaexpr.md`](08-formaexpr.md)) — begitu butuh
 efek imperatif, field itu jadi custom widget
 ([`07-component-kinds.md`](07-component-kinds.md) §4). `rules` field dari
-Document manifest ditegakkan client-side untuk UX; **validasi server-side
+Entity manifest ditegakkan client-side untuk UX; **validasi server-side
 tetap otoritas — cek client bukan pernah keamanan.**
 
 ### 2.1 Pola UI: Lifecycle vs Plain CRUD
 Renderer memilih pola UI berdasar apakah reserved action `submit` aktif di
-Document ([`../backend/01-core-basic.md`](../backend/01-core-basic.md) §1.2)
+Entity ([`../backend/01-core-basic.md`](../backend/01-core-basic.md) §1.2)
 — **bukan** berdasar `characteristic: transaction` (dua flag itu independen:
 `characteristic` murni soal periode akuntansi, pola UI murni soal apakah
 lifecycle draft→submit bermakna secara bisnis).
@@ -163,7 +163,7 @@ submit AKTIF (default)
 
 | Pola | Kapan dipakai | UI |
 |---|---|---|
-| **2-step + auto-save** (default) | Document kompleks, butuh review (Invoice, Order, Contract) | Auto-save senyap saat draft (debounced `update`), satu tombol "Submit" eksplisit |
+| **2-step + auto-save** (default) | Entity kompleks, butuh review (Invoice, Order, Contract) | Auto-save senyap saat draft (debounced `update`), satu tombol "Submit" eksplisit |
 | **2-step manual** | Draft sengaja dipisah untuk direview orang lain dulu | Tombol "Save Draft" + "Submit" terpisah |
 | **1-step (`create-submit`)** | Entry cepat volume tinggi (POS, antrean klinik) | Satu tombol, pakai reserved action `create-submit` ([`../backend/01-core-basic.md`](../backend/01-core-basic.md) §1.2) — tanpa konsep draft di UI, atomik |
 
@@ -387,7 +387,7 @@ dipindah ke jam 15:00, sisanya tetap") butuh model data exception
 tersendiri (row terpisah yang mereferensikan tanggal asli + override) —
 belum dispesifikasikan, ditunda ke iterasi berikutnya. Calendar v1
 menampilkan seluruh occurrence hasil expansion RRULE tanpa exception; drag
-reschedule (di atas) berlaku ke **field tanggal Document itu sendiri**,
+reschedule (di atas) berlaku ke **field tanggal Entity itu sendiri**,
 bukan ke satu occurrence dari pattern berulang.
 
 **Bukan pengganti recurring job.** Recurrence di sini murni untuk
@@ -695,9 +695,9 @@ Form terkelola → custom widget → component → custom Page → headless form
 → raw `forma.api` ([`07-component-kinds.md`](07-component-kinds.md) §4).
 
 ## 14. Derivasi Otomatis (Layer 0)
-Tiap Document otomatis menghasilkan, tanpa manifest UI sama sekali: **Table**
+Tiap Entity otomatis menghasilkan, tanpa manifest UI sama sekali: **Table**
 list, **Form** create/edit, **Page** detail, dan entry navigasi turunan di
-menu App (dikelompokkan per module Document, untuk module yang belum
+menu App (dikelompokkan per module Entity, untuk module yang belum
 tercakup entry `App.spec.menu`/`Module.spec.menu` yang ditulis eksplisit).
 Kind di tier ini ada untuk *override* default itu — tim bisa mengirim tool
 internal lengkap dengan nol manifest frontend.

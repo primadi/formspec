@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/primadi/forma/internal/auth"
-	"github.com/primadi/forma/internal/db"
+	"github.com/primadi/forma/renderers/jsonbpersist"
 	"github.com/primadi/forma/internal/entity"
 	"github.com/primadi/forma/pkg/spec"
 )

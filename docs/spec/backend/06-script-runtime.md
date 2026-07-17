@@ -25,13 +25,13 @@ def execute(resource, params, ctx):
 
 | Argumen | Isi |
 |---|---|
-| `resource` | Record yang menjadi sasaran action — objek Document dengan API di §2. Untuk action `type: service` yang tidak terikat record, `resource` bisa `None`. |
+| `resource` | Record yang menjadi sasaran action — objek Entity dengan API di §2. Untuk action `type: service` yang tidak terikat record, `resource` bisa `None`. |
 | `params` | Payload masukan action (body request/argumen pemanggil), sudah lolos validasi field-level (L1–L3, [`05-field-types.md`](05-field-types.md) §3) sebelum entrypoint dipanggil. |
 | `ctx` | Context runtime — primitive `ctx.*` (§5), identitas (`ctx.user`, `ctx.tenant`), utility (`ctx.now()`, `ctx.next_key()`), config & secret. |
 
 ## 2. Objek `resource`
 
-`resource` adalah handle ke satu record Document, bukan dict mentah:
+`resource` adalah handle ke satu record Entity, bukan dict mentah:
 
 | API | Arti |
 |---|---|
@@ -107,7 +107,7 @@ penulisan handler:
 ## 6. Kontrak Return
 
 Handler mengembalikan salah satu dari dua konstruktor hasil, yang memetakan
-langsung ke envelope respons HTTP ([`01-core-basic.md`](01-core-basic.md) §8):
+langsung ke envelope respons HTTP ([`01-core-basic.md`](01-core-basic.md) §8.5):
 
 | Return | Hasil |
 |---|---|

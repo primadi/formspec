@@ -27,7 +27,7 @@ Go tertentu — tiap PersistBackend bebas menerjemahkannya ke mekanisme
 internalnya):
 
 - **Structural diff apply.** Framework menghasilkan diff skema dari
-  perbandingan Document manifest versi lama vs baru (field ditambah/dihapus/
+  perbandingan Entity manifest versi lama vs baru (field ditambah/dihapus/
   di-`renamed_from`, index berubah); PersistBackend menerima diff itu dan
   menerjemahkannya ke storage-nya sendiri. Field rename **wajib** dideklarasi
   lewat `renamed_from` — tanpa itu, diff membacanya sebagai drop+add. Field

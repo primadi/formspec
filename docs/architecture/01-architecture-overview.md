@@ -157,7 +157,7 @@ forma serve --db=postgres://... --app-dir=./app
 # Development — Engine + app (auto-detect runtime dari app/)
 forma dev --app-dir=./app
 
-# Emergency (Cloud Owner, same forma-ctl binary — see docs/cli-tools/02-forma-ctl.md)
+# Emergency (Cloud Owner, same forma-ctl binary — see docs/cli-tools/04-forma-ctl.md)
 forma-ctl freeze --reason "..."
 ```
 

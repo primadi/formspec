@@ -10,7 +10,7 @@ transaksional (POS multi-cabang, inventory, billing, klinik, HRM, order
 management). Ia adalah **standar terbuka (CC0) dengan implementasi
 referensi**, bukan sekadar framework — siapa pun boleh membangun implementasi
 lain yang konform terhadap `docs/spec/`. Nilai jual inti: **tulis kontrak
-sekali (`kind: Document`, `kind: Kanban`, dst.), dapat implementasi banyak
+sekali (`kind: Entity`, `kind: Kanban`, dst.), dapat implementasi banyak
 platform** — web dan mobile dari spec yang sama
 ([`../frontend/01-visual-hierarchy.md`](../frontend/01-visual-hierarchy.md)
 §5), backend Postgres atau SQLite dari spec penyimpanan yang sama
@@ -37,7 +37,7 @@ di-deploy sekali, membaca spec untuk App/Page apa pun.
 
 ## 3. Anatomi Sistem
 ```
-Spec YAML (Document/Service/Page/…)
+Spec YAML (Entity/Service/Page/…)
         │  forma apply — dua-tahap: Control Plane registrasi → Resource Plane pull
         ▼
 ┌─────────────────────── Resource Plane ───────────────────────┐
@@ -57,7 +57,7 @@ Lihat [`04-control-plane.md`](04-control-plane.md) dan
 
 ## 4. Persona dan Tier Developer
 - **App developer** (Layer 0/1) — nol atau minim manifest frontend, tanpa dev
-  environment lokal; CRUD derived otomatis dari Document
+  environment lokal; CRUD derived otomatis dari Entity
   ([`../frontend/06-page-kinds.md`](../frontend/06-page-kinds.md) §14).
 - **Tier 2/3 developer** — menulis handler native/script, frontend custom
   (`asset`, [`../frontend/07-component-kinds.md`](../frontend/07-component-kinds.md)
@@ -86,7 +86,7 @@ dipenuhinya.
 | Bagian | Isi |
 |---|---|
 | [`spec/platform/`](README.md) | Kontrak lintas sisi — overview (ini), workspace/App/Module, kind system, control plane, plane protocol, datastore, marketplace |
-| [`spec/backend/`](../backend/README.md) | Kontrak data & perilaku — Document, Action, Event, PersistBackend |
+| [`spec/backend/`](../backend/README.md) | Kontrak data & perilaku — Entity, Action, Event, PersistBackend |
 | [`spec/frontend/`](../frontend/README.md) | Kontrak visual — Shell/App/Page/Component, VisualSpecKind, Renderer, Spec Resolution API |
 
 Urutan baca disarankan per persona ada di [`../../README.md`](../../README.md)

@@ -1,7 +1,7 @@
 // Command forma is the developer CLI — one binary, subcommand per verb.
 // See docs/cli-tools/01-forma-cli.md for the full verb reference.
 //
-// SPA frontend (web/dist/) is embedded into the binary so `forma dev` serves
+// SPA frontend (renderers/web/dist/) is embedded into the binary so `forma dev` serves
 // both API and UI from a single process — no separate frontend server needed.
 package main
 

@@ -136,7 +136,7 @@ Kontrak normatif:
   transparency log ([`04-control-plane.md`](04-control-plane.md) §7).
 
 `forma promote` **wajib** ada sebagai verb CLI dan ditambahkan ke tabel verb
-[`../../cli-tools/01-forma-cli.md`](../../cli-tools/01-forma-cli.md) §1.
+[`../../cli-tools/02-forma-cli.md`](../../cli-tools/02-forma-cli.md) §1.
 
 ## 6. DR & HA — Requirement Minimal
 Forma tidak membangun mekanisme HA sendiri di level pod/node — itu K8s

@@ -49,7 +49,7 @@ dari mekanisme permission.
 ## 4. Determinisme & Batasan
 Dievaluasi di browser — **UX saja, tidak pernah otorisasi dan tidak pernah
 validasi final**; keduanya tetap wajib server-side (rules field dari
-Document manifest ditegakkan client-side untuk UX, server-side tetap otoritas
+Entity manifest ditegakkan client-side untuk UX, server-side tetap otoritas
 — [`06-page-kinds.md`](06-page-kinds.md) §Form). Tanpa side effect (murni
 fungsi dari data yang tersedia di §3 ke nilai) — tidak ada mutasi state,
 tidak ada pemanggilan action, tidak ada I/O. Kompleksitas dibatasi oleh
@@ -61,7 +61,7 @@ membahas ini eksplisit — evaluasi FormaExpr cukup ringan by construction).
 adalah **error, bukan fail-safe**. Penegakannya dua lapis:
 
 1. **Deploy-time (wajib).** `forma apply`/`forma check` melakukan validasi
-   statis seluruh FormaExpr terhadap skema Document/Page yang dirujuknya —
+   statis seluruh FormaExpr terhadap skema Entity/Page yang dirujuknya —
    referensi field yang tidak ada, member access yang tidak valid, atau
    identifier di luar konteks §3 adalah **validation error yang menggagalkan
    apply**. Ekspresi yang lolos apply dijamin seluruh referensinya resolvable,

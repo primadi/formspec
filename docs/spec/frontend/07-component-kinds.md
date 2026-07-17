@@ -11,7 +11,7 @@ Shell resmi wajib menyediakan pustaka component dasar yang **closed, themeable**
 Registry widget dasar adalah **himpunan tertutup yang dienumerasi eksplisit** —
 bukan daftar terbuka yang boleh tumbuh informal. Widget input form yang wajib
 disediakan (kontrak value/validation/permission per field mengikuti field spec
-Document, [`../backend/01-core-basic.md`](../backend/01-core-basic.md) §1):
+Entity, [`../backend/01-core-basic.md`](../backend/01-core-basic.md) §1):
 
 `textinput`, `numberinput`, `decimalinput`, `dateinput`, `datetimeinput`,
 `select`, `relation-picker`, `child-grid`, `fileinput` (§1.1), `toggle`,
@@ -32,7 +32,7 @@ layout atau melewati visibilitas berbasis permission (§ Spec Resolution API —
 
 ### 1.1 `fileinput` — Upload / Attachment
 Widget untuk field bertipe `file`/`attachment` (single atau multi — ditentukan
-field spec Document, [`../backend/01-core-basic.md`](../backend/01-core-basic.md)
+field spec Entity, [`../backend/01-core-basic.md`](../backend/01-core-basic.md)
 §1). Upload mengalir ke primitive **`storage`** (`ctx.storage`, dilayani
 Datastore ber-`serves: [storage]` — s3/minio/fs,
 [`../platform/06-datastore.md`](../platform/06-datastore.md) §2); file

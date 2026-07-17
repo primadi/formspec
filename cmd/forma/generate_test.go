@@ -109,7 +109,7 @@ spec:
 	}
 
 	// Field keys must never be camelCased — they must match the literal
-	// wire JSON key exactly (internal/db EntityRecord.MarshalJSON spreads
+	// wire JSON key exactly (renderers/jsonbpersist EntityRecord.MarshalJSON spreads
 	// Data verbatim, no case transform).
 	if strings.Contains(ts, "customerId") {
 		t.Error("field name was camelCased — must stay literal to match the wire format")

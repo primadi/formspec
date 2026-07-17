@@ -11,9 +11,10 @@
 
 | # | CLI | Audiens | Wujud | Dokumen |
 |---|---|---|---|---|
-| 1 | `forma` | App/Module Owner, Developer | Binary sendiri (`cmd/forma`) — `apply`, `generate --lang typescript` implemented, verb lain roadmap | [`01-forma-cli.md`](./01-forma-cli.md) |
-| 2 | `forma-ctl` | Cloud Owner / Platform Operator | Subcommand di binary `forma-ctl` yang sama dengan server (D43 "bedrock exception") | [`02-forma-ctl.md`](./02-forma-ctl.md) |
-| 3 | `forma generate` (browser client) | Frontend Developer | `@forma/client` (npm, `sdk/browser`) + codegen — panduan build halaman manual | [`03-forma-generate.md`](./03-forma-generate.md) |
+| 1 | `forma dev` | App/Module Owner, Developer | Binary `cmd/forma` — single-process dev server | [`01-forma-dev.md`](./01-forma-dev.md) |
+| 2 | `forma` (CLI reference) | App/Module Owner, Developer | Binary `cmd/forma` — `apply`, `generate`, dll | [`02-forma-cli.md`](./02-forma-cli.md) |
+| 3 | `forma generate` (browser client) | Frontend Developer | `@forma/client` (npm, `sdk/browser`) + codegen | [`03-forma-generate.md`](./03-forma-generate.md) |
+| 4 | `forma-ctl` | Cloud Owner / Platform Operator | Subcommand di binary `forma-ctl` (D43) | [`04-forma-ctl.md`](./04-forma-ctl.md) |
 
 ---
 

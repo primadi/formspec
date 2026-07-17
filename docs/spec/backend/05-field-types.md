@@ -3,11 +3,11 @@
 **Version:** 0.1.0 · **Status:** Draft
 
 > Draft: isi di bawah kontrak yang berlaku. Katalog tipe di sini normatif untuk
-> semua `kind: Document`; storage-agnostic — layout fisik tiap tipe adalah
+> semua `kind: Entity`; storage-agnostic — layout fisik tiap tipe adalah
 > urusan PersistBackend
 > ([`../../renderers/jsonb-persist/02-schema-strategies.md`](../../renderers/jsonb-persist/02-schema-strategies.md)).
 
-Field hanya valid di `kind: Document` (§9 anatomi dokumen). Nama field reserved
+Field hanya valid di `kind: Entity` (§9 anatomi dokumen). Nama field reserved
 ([`01-core-basic.md`](01-core-basic.md) §1.2) tidak boleh dipakai ulang. Tiap
 field mendeklarasikan `type` dari katalog tertutup di §1.
 
@@ -66,7 +66,7 @@ Aturan normatif:
 ### 1.3 `file` / `attachment`
 
 Field `file` menyimpan **pointer** ke objek di `ctx.storage`, bukan byte-nya di
-baris Document. Metadata kanonik yang disajikan: `key`, `filename`,
+baris Entity. Metadata kanonik yang disajikan: `key`, `filename`,
 `content_type`, `size`, `checksum`. Upload/download lewat jalur `ctx.storage`
 yang tunduk `uses` dan isolasi tenant; file ikut ter-backup
 ([`04-persist-backend.md`](04-persist-backend.md) §3). Byte mentah tidak pernah
@@ -110,7 +110,7 @@ Aturan normatif:
 
 **Konvensi route upload.** Upload ke field file spesifik pada record yang sudah
 ada memakai `POST /:resource/:id/{field}` (di bawah workspace prefix,
-[`01-core-basic.md`](01-core-basic.md) §8). Route ini menerima byte, menerapkan
+[`01-core-basic.md`](01-core-basic.md) §8.5). Route ini menerima byte, menerapkan
 `allowed_types`/`max_size_mb`/`max_count`, menyimpan ke `ctx.storage`, lalu
 menautkan pointer ke field. Widget frontend yang mengonsumsi konvensi ini adalah
 `fileinput` ([`../frontend/07-component-kinds.md`](../frontend/07-component-kinds.md) §1.1).
@@ -151,8 +151,8 @@ tidak mungkin.
 **Skala tetap per mata uang — dideklarasikan, bukan diturunkan dari katalog.**
 Core **tidak** menyertakan tabel metadata mata uang (bukan ISO-4217 built-in) —
 katalog mata uang (kode, nama, simbol, kalau app butuh daftar/dropdown) adalah
-**Document bisnis biasa** yang dimodelkan app developer sendiri kalau perlu,
-tidak berbeda dari Document lain, dan tidak diistimewakan framework. Yang wajib
+**Entity bisnis biasa** yang dimodelkan app developer sendiri kalau perlu,
+tidak berbeda dari Entity lain, dan tidak diistimewakan framework. Yang wajib
 dideklarasikan eksplisit (bukan ditebak, bukan di-lookup) adalah skala minor-unit
 tiap mata uang yang benar-benar dipakai:
 
@@ -182,8 +182,8 @@ skala mata uang dibulatkan dengan mode ini.
 
 **Format tampilan** (simbol, posisi, pemisah ribuan) mengikuti `settings.locale`
 + `symbol` yang dideklarasikan di `settings.currency`/field itu sendiri — bukan
-hard-code per komponen, dan bukan hasil query ke Document katalog (kalau app
-punya Document katalog mata uang, itu murni data tampilan/pilihan-user, di luar
+hard-code per komponen, dan bukan hasil query ke Entity katalog (kalau app
+punya Entity katalog mata uang, itu murni data tampilan/pilihan-user, di luar
 jalur baca tipe `money`).
 
 **Open — FX & multi-currency.** Konversi antar mata uang (rate table, tanggal
@@ -224,7 +224,7 @@ frontend tetap tertahan di backend.
 | Escape hatch | `script` + `message` | Starlark inline untuk aturan di luar kosakata; pesan pakai format `code`+`params` bernamespace App ([`01-core-basic.md`](01-core-basic.md) §9) |
 
 Kegagalan validasi mengembalikan envelope error normatif
-([`01-core-basic.md`](01-core-basic.md) §8) dengan `details: [{level, field?,
+([`01-core-basic.md`](01-core-basic.md) §8.5) dengan `details: [{level, field?,
 message}]`.
 
 ## 4. Tree / Hierarki
@@ -348,7 +348,9 @@ guard **lebih halus** di atasnya:
   permission: field di-strip dari respons (read) dan penyetelannya di payload
   ditolak (write).
 - `exclude` — daftar surface keluaran tempat field ini **dihilangkan** meski ada
-  secara internal. Nilai: `public_api` (respons API eksternal), `audit_log`
+  secara internal. Nilai: `public_api` (respons permukaan external `/api/v1/` —
+  lihat [`01-core-basic.md`](01-core-basic.md) §8.2; permukaan UI
+  `/_ui/entity/` (§8.1) **tidak** terpengaruh), `audit_log`
   (entri audit bisnis, [`02-core-extended.md`](02-core-extended.md) §11),
   `webhook` (payload webhook keluar, [`02-core-extended.md`](02-core-extended.md)
   §4). Field tetap ada dan dapat dipakai logika internal/script; ia hanya tidak

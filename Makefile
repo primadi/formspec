@@ -21,9 +21,9 @@ build-operator:
 
 # Build the frontend SPA. Requires npm dependencies installed (make web-deps).
 build-spa: web-deps
-	cd web && npm run build
+	cd renderers/web && npm run build
 	@mkdir -p cmd/forma/dist
-	cp -r web/dist/* cmd/forma/dist/
+	cp -r renderers/web/dist/* cmd/forma/dist/
 
 # forma-resource is a Go library (import "github.com/forma/forma"), not a
 # binary — see docs/runtimes/02-forma-resource.md. examples/reference-app
@@ -83,13 +83,13 @@ deps:
 
 # Frontend
 web-deps:
-	cd web && npm install
+	cd renderers/web && npm install
 
 web-dev:
-	cd web && npm run dev
+	cd renderers/web && npm run dev
 
 web-build:
-	cd web && npm run build
+	cd renderers/web && npm run build
 
 # Format code
 fmt:

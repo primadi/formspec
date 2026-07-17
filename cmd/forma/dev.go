@@ -31,9 +31,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/primadi/forma/internal/datastore"
 	"github.com/primadi/forma/internal/sidecar"
 	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/forma/renderers/jsonbpersist/datastore"
 	forma "github.com/primadi/forma/resource"
 )
 
@@ -171,11 +171,11 @@ func runDev(args []string) {
 		ThemeDirs:            cfg.ThemeDirs,
 	}
 
-	// SPA serving priority: --web-dir > auto-detect web/dist/ > embedded FS
+	// SPA serving priority: --web-dir > auto-detect renderers/web/dist/ > embedded FS
 	if cfg.WebDir != "" {
 		formaCfg.WebDir = cfg.WebDir
 	} else if found := findWebDist(); found != "" {
-		// Auto-detect web/dist/ — picks up npm run rebuilds immediately
+		// Auto-detect renderers/web/dist/ — picks up npm run rebuilds immediately
 		cfg.WebDir = found
 		formaCfg.WebDir = cfg.WebDir
 		log.Printf("[forma] SPA from folder: %s", cfg.WebDir)
@@ -417,7 +417,7 @@ func chdirIfPositionalArg(args []string) []string {
 	return args[1:]
 }
 
-// findWebDist walks up from CWD looking for web/dist/ directory.
+// findWebDist walks up from CWD looking for renderers/web/dist/ directory.
 // Returns the absolute path if found, empty string otherwise.
 func findWebDist() string {
 	dir, err := os.Getwd()
@@ -425,7 +425,7 @@ func findWebDist() string {
 		return ""
 	}
 	for {
-		candidate := filepath.Join(dir, "web", "dist")
+		candidate := filepath.Join(dir, "renderers", "web", "dist")
 		if st, err := os.Stat(candidate); err == nil && st.IsDir() {
 			return candidate
 		}

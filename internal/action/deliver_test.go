@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/primadi/forma/internal/db"
+	"github.com/primadi/forma/renderers/jsonbpersist"
 	"github.com/primadi/forma/internal/events"
 	"github.com/primadi/forma/pkg/spec"
 )

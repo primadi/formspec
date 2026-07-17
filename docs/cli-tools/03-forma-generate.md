@@ -267,7 +267,7 @@ Explicitly out of scope for `@forma/client` + `forma generate` (all part of the 
 - Fixed as a prerequisite: `internal/db.EntityRecord` had no JSON tags at all, so the real wire format was PascalCase keys with entity fields nested under a `"Data"` key — not what §16 specifies and not what any client (generated or hand-written) could reasonably expect. `EntityRecord.MarshalJSON` (`internal/db/crud.go`) now flattens fields and uses snake_case, matching the spec. No test previously exercised the full HTTP response path, so this had gone uncaught.
 
 **Not implemented:**
-- `--lang go` and `--lang openapi` (`docs/cli-tools/01-forma-cli.md` §5 mentions both; only TypeScript exists).
+- `--lang go` and `--lang openapi` (`docs/cli-tools/02-forma-cli.md` §5 mentions both; only TypeScript exists).
 - The manifest-driven renderer itself — `kind: Page`/`Form`/`Table`/`Dashboard`/etc. interpretation, derived admin panel, permission-driven visibility (contracts for this are being written incrementally at `docs/spec/frontend/`).
 - `sort`/`filter[field][op]` query parameters (declared in §16, not parsed by `internal/api/handler.go`).
 - Decimal-as-string is the generated *type*, not yet an enforced *wire* guarantee — `internal/db` doesn't coerce decimal values before JSON-encoding them.
@@ -279,7 +279,7 @@ Explicitly out of scope for `@forma/client` + `forma generate` (all part of the 
 
 | Document | Content |
 |---|---|
-| [`01-forma-cli.md`](01-forma-cli.md) §5 | `forma generate` in the context of the full CLI verb set |
+| [`02-forma-cli.md`](02-forma-cli.md) §5 | `forma generate` in the context of the full CLI verb set |
 | [`docs/runtimes/05-engine-api-layer.md`](../runtimes/05-engine-api-layer.md) | `internal/api` package internals, response envelope |
 | [`docs/spec/frontend/`](../spec/frontend/README.md) | Normative contracts for the manifest-driven renderer this document's escape hatch stands apart from |
 | `sdk/README.md` | The other client family — `lib-forma-*` for `forma-sidecar` (a different protocol; don't confuse the two) |

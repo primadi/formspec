@@ -312,18 +312,18 @@ func socketPathOf(flagName, endpoint string) (string, error) {
 
 // ─── Vite Dev Server ───
 
-// findWebDir locates the web/ directory (for Vite HMR via --dev-ui).
-// Walks up from CWD looking for web/package.json, then falls back to
+// findWebDir locates the renderers/web/ directory (for Vite HMR via --dev-ui).
+// Walks up from CWD looking for renderers/web/package.json, then falls back to
 // the executable path. This mirrors findWebDist() behaviour so it works
 // regardless of where `forma dev` is invoked from.
 func findWebDir() (string, error) {
-	// 1. Walk up from CWD looking for web/package.json
+	// 1. Walk up from CWD looking for renderers/web/package.json
 	dir, err := os.Getwd()
 	if err == nil {
 		for {
-			candidate := filepath.Join(dir, "web", "package.json")
+			candidate := filepath.Join(dir, "renderers", "web", "package.json")
 			if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
-				return filepath.Join(dir, "web"), nil
+				return filepath.Join(dir, "renderers", "web"), nil
 			}
 			parent := filepath.Dir(dir)
 			if parent == dir {
@@ -338,7 +338,7 @@ func findWebDir() (string, error) {
 	if err == nil {
 		dir := filepath.Dir(execPath)
 		for i := 0; i < 5; i++ {
-			candidate := filepath.Join(dir, "web")
+			candidate := filepath.Join(dir, "renderers", "web")
 			if info, err := os.Stat(filepath.Join(candidate, "package.json")); err == nil && !info.IsDir() {
 				return candidate, nil
 			}
@@ -346,7 +346,7 @@ func findWebDir() (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("cannot find web/ directory with package.json (walked up from CWD and tried executable path)")
+	return "", fmt.Errorf("cannot find renderers/web/ directory with package.json (walked up from CWD and tried executable path)")
 }
 
 // viteLocalURLRe matches Vite's ready banner, e.g. "  ➜  Local:   http://localhost:5174/".

@@ -45,6 +45,13 @@ GET /{ws}/api/v1/_meta/entities/{module}/{name}
     ikut bundle awal. Tunduk aturan visibilitas yang sama dengan §4 (404
     kalau caller tidak punya permission list/view entity itu — bukan 403,
     supaya keberadaan entity tidak bocor ke caller yang tidak berhak).
+
+**Catatan — endpoint data UI.** `/_meta/` menyediakan type information
+(schema, field, action, permission). Untuk operasi data (CRUD dan custom
+action), Shell menggunakan endpoint permukaan UI `/_ui/entity/{module}/{entity}`
+([`../backend/01-core-basic.md`](../backend/01-core-basic.md) §8.1) — tersedia
+untuk semua Entity tanpa memerlukan `spec.expose`, digerbangi permission.
+Kedua grup (`/_meta/` dan `/_ui/`) memakai auth session yang sama.
 ```
 
 Bentuk `EntitySchema` yang dikirim tiap endpoint: field (tipe, validasi,

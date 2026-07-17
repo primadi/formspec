@@ -43,7 +43,7 @@ kosong ditulis `null`, bukan dihilangkan):
 | `request_id` | ID korelasi request (§2.3); `null` untuk log di luar konteks request (boot, scheduler) |
 | `workspace` | Workspace ID; identitas dari infrastruktur, bukan dari kode aplikasi |
 | `module` | Module yang mengeksekusi |
-| `entity` | Nama entity/Document yang disentuh; `null` kalau tidak relevan |
+| `entity` | Nama entity/Entity yang disentuh; `null` kalau tidak relevan |
 | `action` | Action yang dieksekusi; `null` di luar konteks action |
 | `actor` | Identitas pemanggil (user ID atau service identity); **tidak pernah** PII mentah (nama/email) — hanya ID |
 | `duration_ms` | Durasi operasi, integer milidetik; hanya pada record penutup operasi |
@@ -188,7 +188,7 @@ forma logs --request-id req-abc123                   # satu request, lintas komp
 `forma logs` **tidak pernah** menembus disiplin PII (§2.2): kalau `debug`
 tidak diaktifkan operator, nilai bisnis tetap tidak ada di stream, dan
 `forma logs` tidak bisa memunculkannya. Verb ini **wajib** ditambahkan ke
-referensi CLI ([`../../cli-tools/01-forma-cli.md`](../../cli-tools/01-forma-cli.md)).
+referensi CLI ([`../../cli-tools/02-forma-cli.md`](../../cli-tools/02-forma-cli.md)).
 
 ## 8. Kode Error
 | Kode | Kondisi |

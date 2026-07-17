@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/primadi/forma/internal/artifact"
-	"github.com/primadi/forma/internal/db"
+	"github.com/primadi/forma/renderers/jsonbpersist"
 	"github.com/primadi/forma/internal/entity"
 	"github.com/primadi/forma/internal/manifest"
 	"github.com/primadi/forma/internal/resource"

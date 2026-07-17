@@ -5,7 +5,7 @@
 **License:** Creative Commons CC0 (dokumen) — binary-nya sendiri FSL (open source)
 **Governed by:** `docs/architecture/01-architecture-overview.md` §4–5, `docs/spec/platform/04-control-plane.md`, `docs/spec/platform/05-plane-protocol.md`
 
-> `forma-ctl` adalah **satu-satunya binary Control Plane** di Forma. Subcommand `serve` menjalankannya dalam tiga mode (`region`, `cluster`, `standalone`) dari **satu codebase yang sama** — bukan tiga binary berbeda; subcommand lain (`freeze`, `revoke`, `key`, `policy`, `log`) adalah emergency CLI Cloud Owner (D43 "bedrock exception" — lihat `docs/cli-tools/02-forma-ctl.md`), dalam binary yang sama. Dokumen ini menjelaskan fitur, desain internal, dan API HTTP-nya secara rinci, sebagai pelengkap gambaran topologi besar di `docs/architecture/`.
+> `forma-ctl` adalah **satu-satunya binary Control Plane** di Forma. Subcommand `serve` menjalankannya dalam tiga mode (`region`, `cluster`, `standalone`) dari **satu codebase yang sama** — bukan tiga binary berbeda; subcommand lain (`freeze`, `revoke`, `key`, `policy`, `log`) adalah emergency CLI Cloud Owner (D43 "bedrock exception" — lihat `docs/cli-tools/04-forma-ctl.md`), dalam binary yang sama. Dokumen ini menjelaskan fitur, desain internal, dan API HTTP-nya secara rinci, sebagai pelengkap gambaran topologi besar di `docs/architecture/`.
 
 ---
 
@@ -189,7 +189,7 @@ Response 202 Accepted
 
 ## 6. Konfigurasi & Flags
 
-`forma-ctl` adalah binary bersubcommand: `serve` menjalankan server (region/cluster/standalone); verb emergency (`freeze`, `revoke`, `key`, `policy`, `log`) adalah subcommand terpisah di binary yang sama (lihat `docs/cli-tools/02-forma-ctl.md`).
+`forma-ctl` adalah binary bersubcommand: `serve` menjalankan server (region/cluster/standalone); verb emergency (`freeze`, `revoke`, `key`, `policy`, `log`) adalah subcommand terpisah di binary yang sama (lihat `docs/cli-tools/04-forma-ctl.md`).
 
 Flag CLI aktual hari ini (`cmd/forma-ctl serve`):
 
@@ -200,7 +200,7 @@ forma-ctl serve \
   --control-db PATH  # path DB (belum di-wire — lihat §7)
 ```
 
-Subcommand emergency hari ini hanya stub — memanggilnya mencetak pesan "not implemented" dan exit 1 (lihat `docs/cli-tools/02-forma-ctl.md` §5):
+Subcommand emergency hari ini hanya stub — memanggilnya mencetak pesan "not implemented" dan exit 1 (lihat `docs/cli-tools/04-forma-ctl.md` §5):
 
 ```bash
 forma-ctl freeze --reason "..."   # → "forma-ctl freeze: not implemented yet"

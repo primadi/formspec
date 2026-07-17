@@ -13,7 +13,7 @@ import (
 
 	"github.com/primadi/forma/internal/action"
 	"github.com/primadi/forma/internal/auth"
-	"github.com/primadi/forma/internal/db"
+	"github.com/primadi/forma/renderers/jsonbpersist"
 	"github.com/primadi/forma/internal/validation"
 	"github.com/primadi/forma/pkg/spec"
 )

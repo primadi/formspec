@@ -10,7 +10,7 @@
 Workspace → App → Module → Resource
 ```
 Satu workspace berisi banyak App dan banyak Module. **Module memiliki
-objek** (Document, Service, dan seluruh instance VisualSpecKind — Page,
+objek** (Entity, Service, dan seluruh instance VisualSpecKind — Page,
 Form, Table, dst.) — satu Module = satu bounded context bisnis utuh,
 tidak dipecah jadi "module backend" vs "module frontend" (field/schema,
 layout form, list view, permission berubah bersamaan; memisahkannya
@@ -24,7 +24,7 @@ internal vs App publik yang mengakses data sama).
 
 **Workspace adalah satu-satunya model multi-tenancy Forma.** Aplikasi
 ditulis sepenuhnya *tenancy-blind* — tidak ada kode aplikasi yang memilih
-strategi tenancy, dan **setiap Document tenant-isolated secara default,
+strategi tenancy, dan **setiap Entity tenant-isolated secara default,
 tanpa pengecualian**; satu workspace = satu tenant terisolasi. **Tidak ada
 akses lintas-workspace dalam bentuk apa pun** di dalam framework — kalau
 integrasi lintas-workspace suatu saat dibutuhkan, itu hidup di level
@@ -288,7 +288,7 @@ bukan tambah primitive).
 **Akses lintas-module dalam satu workspace didukung penuh & terverifikasi
 tooling.** Selama masih dalam satu workspace, module boleh saling mengakses
 sesuai deklarasi `depends_on` + permission. Kejujuran deklarasi ditegakkan
-statis oleh **`forma check`** ([`../../cli-tools/01-forma-cli.md`](../../cli-tools/01-forma-cli.md)),
+statis oleh **`forma check`** ([`../../cli-tools/02-forma-cli.md`](../../cli-tools/02-forma-cli.md)),
 yang wajib melaporkan minimal: (a) seluruh *unresolved varname* di script,
 (b) akses lintas-module yang **belum di-approve** (dipakai di kode tapi tak
 dideklarasikan/di-consent), dan (c) deklarasi lintas-module yang **tidak

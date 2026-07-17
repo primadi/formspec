@@ -39,7 +39,7 @@ deskriptif) — ditambah section pendukung.
 `spec/backend/04-persist-backend` → `guides/authoring-a-persist-backend`).
 
 **Platform operator** (menjalankan Forma untuk banyak workspace):
-`architecture/01-architecture-overview` → `runtimes/` → `cli-tools/02-forma-ctl`.
+`architecture/01-architecture-overview` → `runtimes/` → `cli-tools/04-forma-ctl`.
 
 **Framework contributor** (mengubah kode Forma sendiri — `cmd/`, `internal/`,
 `pkg/`, `web/`, `sdk/`): `architecture/08-repo-structure` → dokumen `spec/`

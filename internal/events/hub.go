@@ -1,8 +1,8 @@
 // Package events holds the low-level, dependency-free types shared between
-// event delivery (internal/action), the outbox worker (internal/db), and
+// event delivery (internal/action), the outbox worker (renderers/jsonbpersist), and
 // the websocket transport (internal/api) — without creating an import cycle
 // between them. internal/events depends on nothing else in this repo except
-// pkg/spec (a leaf package already imported everywhere); internal/db,
+// pkg/spec (a leaf package already imported everywhere); renderers/jsonbpersist,
 // internal/action, and internal/api all depend on internal/events.
 package events
 

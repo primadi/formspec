@@ -19,7 +19,7 @@ myapp/
   modules/
     billing/
       module.yaml                # kind: Module — termasuk deklarasi runtime (§3)
-      documents/invoice.yaml      # kind: Document
+      documents/invoice.yaml      # kind: Entity
       services/tax-calculator.yaml
       scripts/invoice_send.star  # script Starlark
       assets/                    # custom UI component (asset escape hatch)

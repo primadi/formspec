@@ -14,7 +14,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/primadi/forma/internal/db"
+	"github.com/primadi/forma/renderers/jsonbpersist"
 	"github.com/primadi/forma/internal/manifest"
 	"github.com/primadi/forma/internal/permission"
 	"github.com/primadi/forma/pkg/spec"

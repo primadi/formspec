@@ -12,7 +12,7 @@ terbagi per concern:
 
 | Concern | Kind | Didefinisikan di |
 |---|---|---|
-| Model domain | `Document`, `Service` | `spec/backend/01-core-basic.md` |
+| Model domain | `Entity`, `Service` | `spec/backend/01-core-basic.md` |
 | Kurasi | `App`, `Module` | `spec/platform/02-workspace-app-module.md` |
 | Konfigurasi | `Config` | `spec/backend/01-core-basic.md` §10 (Config & Global Settings) |
 | DDL custom | `Migration` | `spec/backend/01-core-basic.md` §4 |
@@ -25,14 +25,14 @@ terbagi per concern:
 | Infrastruktur | `Datastore` | `spec/platform/06-datastore.md` |
 
 **Derived by default:** endpoint CRUD, admin panel, dan dokumentasi API
-digenerate otomatis dari manifest `Document` — tanpa manifest tambahan
+digenerate otomatis dari manifest `Entity` — tanpa manifest tambahan
 apa pun. Kind visual (Page/Form/Table/dst.) ada hanya untuk *override*
 default itu ([`../frontend/06-page-kinds.md`](../frontend/06-page-kinds.md)
 §9).
 
 **Guardrail:** app developer hampir tidak pernah perlu mendefinisikan kind
 baru — butuh kind baru berarti memperluas framework. 95% kasus jawabannya
-`Document`.
+`Entity`.
 
 ## 2. Meta-Kinds
 Kind yang mendeklarasikan kind lain — extensible dalam tiga layer:
@@ -70,10 +70,10 @@ Tiga meta-kind lain, masing-masing dijelaskan penuh di spec-nya sendiri:
 ## 3. Katalog Concern → Kind
 | Kebutuhan aplikasi bisnis | Kind yang menjawab |
 |---|---|
-| Simpan & kelola data bertransaksi | `Document` (`characteristic: transaction`) |
-| Data referensi stabil | `Document` (`characteristic: master`) |
-| Data seed read-only | `Document` (`characteristic: reference`) |
-| Projeksi/agregat sistem | `Document` (`characteristic: summary`) |
+| Simpan & kelola data bertransaksi | `Entity` (`characteristic: transaction`) |
+| Data referensi stabil | `Entity` (`characteristic: master`) |
+| Data seed read-only | `Entity` (`characteristic: reference`) |
+| Projeksi/agregat sistem | `Entity` (`characteristic: summary`) |
 | Komputasi tanpa state | `Service` |
 | Approval berbasis role atas transisi | `Workflow` |
 | Endpoint masuk terverifikasi (webhook provider) | `Webhook` |
@@ -83,7 +83,7 @@ Tiga meta-kind lain, masing-masing dijelaskan penuh di spec-nya sendiri:
 | Override permukaan API yang sudah exposed | `Api` |
 | DDL custom (index, trigger) | `Migration` |
 | Layar/route | `Page` |
-| Input/edit satu Document | `Form` |
+| Input/edit satu Entity | `Form` |
 | List/browse | `Table` |
 | Proses multi-step | `Wizard` |
 | Board status drag-drop | `Kanban` |
@@ -109,7 +109,7 @@ Resource Plane.
 
 | Kind | Plane |
 |---|---|
-| `App`, `Module`, `Document`, `Service`, `Config`, `Migration`, `Subscription` | Resource |
+| `App`, `Module`, `Entity`, `Service`, `Config`, `Migration`, `Subscription` | Resource |
 | `Workflow`, `Api`, `Webhook`, `Mockup`, `Integrator`, `KindDefinition` | Resource |
 | `Page`, `Form`, `Table`, `Dashboard`, `Widget`, `Report`, `Wizard`, `Kanban`, `Timeline`, `Print`, `Theme` | Resource |
 | `VisualSpecKind`, `Renderer` | Resource (dideklarasikan bersama artifact visual; distribusi lewat marketplace §7) |
