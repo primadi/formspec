@@ -45,6 +45,30 @@ spec:
         - { scope: "billing.invoice", access: write }
 ```
 
+### 1.1 Binding Datastore per Module (Multi-Datastore Normatif)
+
+Satu workspace **boleh** punya lebih dari satu Datastore ber-`serves: [db]`
+— tapi pemilihannya di level **Module**, bukan pilihan bebas per kode.
+`kind: Module` boleh mendeklarasikan `spec.datastore: <name>`
+([`02-workspace-app-module.md`](02-workspace-app-module.md) §2); tanpa
+deklarasi, resolve ke Datastore `'default'` (§5). Di dalam kode Module itu,
+`ctx.db()` tanpa argumen **selalu** resolve ke Datastore yang di-bind ini —
+tidak ada nama Datastore lain yang bisa dijangkau lewat panggilan polos,
+sehingga tidak mungkin ada script yang "lupa menyebut" datastore yang benar
+dan diam-diam menulis ke tempat yang salah.
+
+**Konsekuensi lintas-Module.** Dua Module dengan `spec.datastore` berbeda
+tidak pernah berbagi transaksi — mutasi yang menyentuh keduanya **tidak
+mungkin** atomik dalam satu commit. Interaksi antar keduanya **wajib**
+lewat event-subscribe/outbox
+([`../backend/01-core-basic.md`](../backend/01-core-basic.md) §3, §7;
+[`02-workspace-app-module.md`](02-workspace-app-module.md) §7) — **tidak
+ada** escape hatch `ctx.db` langsung ke Datastore Module lain, sekalipun
+dengan `uses` consent. Ini beda dengan akses lintas-module dalam Datastore
+yang **sama** (tetap boleh, dengan `uses` consent seperti biasa,
+[`../backend/01-core-basic.md`](../backend/01-core-basic.md) §5) — bedanya
+murni pada apakah kedua Module berbagi instance fisik yang sama atau tidak.
+
 ## 2. Field Reference
 `spec.serves` — daftar tipe primitive yang dilayani: `db` (`ctx.db`),
 `cache` (`ctx.cache`), `lock` (`ctx.lock`), `queue` (`ctx.queue`), `pubsub`

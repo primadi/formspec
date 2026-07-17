@@ -155,12 +155,21 @@ constraint referensial dievaluasi server-side pada setiap jalur masuk
 pernah menjadi satu-satunya penjaga — payload yang melewati frontend (atau
 dikirim langsung oleh klien yang tidak jujur) tetap tertahan di backend.
 
-**Open — multi-datastore per workspace.** Apakah satu workspace boleh punya
-lebih dari satu datastore transactional belum diputuskan. Kalau nanti
-diizinkan, konsistensi lintas-datastore **wajib** ditangani framework lewat
-transactional outbox implicit (bukan diserahkan ke app developer) — dua
-mutasi di dua datastore tidak pernah boleh saling menggantung tanpa
-mekanisme rekonsiliasi bawaan.
+**Multi-datastore per workspace (normatif).** Satu workspace **boleh**
+punya lebih dari satu Datastore transactional — binding-nya di level
+**Module**, bukan pilihan bebas per kode
+([`../platform/06-datastore.md`](../platform/06-datastore.md) §1.1). Setiap
+Module resolve `ctx.db()` tanpa argumen ke **satu** Datastore yang di-bind
+ke Module itu (default `'default'`); tidak ada jalan bagi kode untuk
+"lupa menyebut" datastore lain, karena tidak ada datastore lain yang bisa
+dijangkau dari `ctx.db()` polos. Konsekuensinya: mutasi yang melibatkan dua
+Module dengan Datastore berbeda **tidak pernah** atomik dalam satu transaksi
+— interaksi lintas-Module-lintas-Datastore **wajib** lewat event-subscribe/
+outbox (§7 di bawah), **tidak ada** escape hatch `ctx.db` lintas-Datastore
+sekalipun dengan `uses` consent
+([`../platform/02-workspace-app-module.md`](../platform/02-workspace-app-module.md)
+§7). Ini beda datastore = beda deployment boundary = wajib async, bukan
+sekadar butuh izin lebih tinggi.
 
 `spec.persist` mendeklarasikan apa yang dijanjikan framework ke Document itu
 — bukan bagaimana backend memenuhinya:
@@ -214,13 +223,20 @@ pernah memberi grant sendiri. Footprint modul (agregat seluruh
 `required_permission` + `uses` miliknya) adalah dasar consent yang wajib
 ditampilkan ke pemilik workspace saat instalasi.
 
-**Scope `ctx.db` default = module sendiri.** Akses `ctx.db` lintas-module
-**wajib** dideklarasikan eksplisit di `uses` dan muncul di consent footprint;
-**tulis lintas-module** disajikan sebagai consent risiko-tinggi, presentasinya
-berbeda dari akses biasa. Akses `ctx.db` yang tidak dideklarasikan — bahkan
-sekadar mengecek keberadaan data — diblokir saat runtime, memicu alert, dan
-**men-suspend module secara otomatis** disertai insiden audit
+**Scope `ctx.db` default = module sendiri.** `ctx.db()` tanpa argumen
+resolve ke Datastore yang di-bind ke Module pemanggil (§3, biasanya sama
+untuk seluruh workspace, tapi boleh berbeda per Module —
+[`../platform/06-datastore.md`](../platform/06-datastore.md) §1.1). Akses
+`ctx.db` lintas-module **wajib** dideklarasikan eksplisit di `uses` dan
+muncul di consent footprint; **tulis lintas-module** disajikan sebagai
+consent risiko-tinggi, presentasinya berbeda dari akses biasa. Akses
+`ctx.db` yang tidak dideklarasikan — bahkan sekadar mengecek keberadaan
+data — diblokir saat runtime, memicu alert, dan **men-suspend module
+secara otomatis** disertai insiden audit
 (`USES_VIOLATION`, [`../platform/05-plane-protocol.md`](../platform/05-plane-protocol.md) §4.4).
+**Kalau Module pemanggil dan Module target di-bind ke Datastore yang
+berbeda, tidak ada bentuk consent yang membuka akses `ctx.db` langsung** —
+satu-satunya jalur adalah event-subscribe/outbox (§3, §7).
 
 **Idempotensi.** `idempotent: true` mensyaratkan sumber `idempotency_key`
 (`header` | `param` | `server`). Untuk sumber `server`, framework menyediakan
@@ -374,3 +390,24 @@ ditebak per komponen:
   eksplisit di manifest. Setting yang dibutuhkan tapi tidak tersedia dan
   tidak punya default standar adalah **error**, bukan tebakan diam-diam —
   menebak membuat default tiap komponen berbeda dan perilaku tidak konsisten.
+
+Contoh konkret namespace `settings.*` di workspace Config:
+
+```yaml
+apiVersion: forma.dev/v1alpha1
+kind: Config
+metadata:
+  name: workspace
+  module: forma.core
+spec:
+  keys:
+    settings.default_currency:  { type: string, default: "USD" }
+    settings.locale:            { type: string, default: "en-US" }
+    settings.timezone:          { type: string, default: "UTC" }
+    settings.date_format:       { type: string, default: "YYYY-MM-DD" }
+    settings.fiscal_year_start: { type: string, default: "01-01" }
+```
+
+Module membaca lewat `ctx.config.get("settings.default_currency")` —
+namespace `settings.*` memastikan tidak bentrok dengan key config milik
+Module sendiri.

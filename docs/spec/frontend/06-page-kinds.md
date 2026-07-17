@@ -364,14 +364,39 @@ resource scheduling.
 - `realtime: true` = event muncul/pindah in-place
   ([`04-spec-resolution-api.md`](04-spec-resolution-api.md) §5).
 
-**Recurrence (display-only pass-through):** kalau entity punya field recurrence
-(mis. string RRULE), Calendar meng-expand dan menampilkan instance-instance
-pengulangannya — murni baca, tak mengubah data.
+**Recurrence (normatif).** Field recurrence pada entity **wajib** berformat
+**RRULE (RFC 5545)** — standar yang sama dipakai iCalendar/Google
+Calendar/Outlook — bukan grammar bikinan sendiri, supaya interop
+(export/import `.ics`) gratis dan tooling expansion yang sudah matang bisa
+langsung dipakai:
 
-> **Open — recurrence authoring.** Mengarang/menyunting aturan recurrence
-> (editor RRULE, exception per-instance, "edit this vs all events") belum
-> dispesifikasikan. Calendar v1 hanya membaca field recurrence yang sudah ada;
-> UI penyuntingnya menyusul.
+```yaml
+- { name: recurrence, type: string }   # nilai: "FREQ=WEEKLY;BYDAY=MO;INTERVAL=2"
+```
+
+**Expansion terjadi saat baca/render**, bukan materialized rows di
+PersistBackend — Calendar meng-expand RRULE jadi instance konkret untuk
+rentang tanggal yang sedang di-view (bulan/minggu/hari), lewat pustaka
+expansion RRULE standar di sisi renderer. Ini murni komputasi tampilan;
+tidak butuh dukungan Query Builder backend ([`../backend/02-core-extended.md`](../backend/02-core-extended.md)
+§16) untuk kasus umum tanpa exception.
+
+**Di luar cakupan v1 (Open — exception per-instance).** Mengubah/membatalkan
+**satu** occurrence tanpa mengubah pattern-nya (mis. "pertemuan tanggal 5
+dipindah ke jam 15:00, sisanya tetap") butuh model data exception
+tersendiri (row terpisah yang mereferensikan tanggal asli + override) —
+belum dispesifikasikan, ditunda ke iterasi berikutnya. Calendar v1
+menampilkan seluruh occurrence hasil expansion RRULE tanpa exception; drag
+reschedule (di atas) berlaku ke **field tanggal Document itu sendiri**,
+bukan ke satu occurrence dari pattern berulang.
+
+**Bukan pengganti recurring job.** Recurrence di sini murni untuk
+menampilkan/mengedit pola tanggal yang dilihat manusia di Calendar —
+**bukan** mekanisme untuk menjalankan action terjadwal berkala (mis. tutup
+buku bulanan, generate invoice periodik). Kebutuhan itu domain modul resmi
+`forma/scheduler` di atas primitive yang ada
+([`../platform/06-datastore.md`](../platform/06-datastore.md) §2 "Set
+primitive tertutup"), bukan Calendar.
 
 ## 6. `wizard`
 Proses bisnis sekuensial multi-step lintas entity; framework mengurus

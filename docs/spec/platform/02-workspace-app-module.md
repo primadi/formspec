@@ -59,8 +59,14 @@ spec:
     - module: forma/core
     - module: billing
       version: ">=1.0 <2.0"
+  datastore: default    # opsional — nama kind: Datastore untuk ctx.db()
+                        # module ini; default kalau tidak diisi. Lihat
+                        # ../backend/01-core-basic.md §3 dan 06-datastore.md §1.1
   config:
-    default_currency: IDR
+    fiscal_year_start: "04-01"   # module-specific: GL mulai tahun fiskal April
+    coa_structure: "4-2-2-2"     # module-specific: struktur kode akun 4 segmen
+    # Currency, locale, timezone → settings.* (global), bukan di sini
+    # Lihat ../backend/01-core-basic.md §10
   menu: []    # default menu suggestion, module-relative — lihat §4
 ```
 
@@ -126,11 +132,22 @@ di-resolve di level App, bukan enum tertutup:
   memeriksa atribut** App, user, membership, atau konteks lain
   (attribute-based) di samping pengecekan permission berbasis role.
 
-**Open — Forma-ID.** Bentuk final identity provider bawaan (`Forma-ID`)
-belum diputuskan: kalau fungsinya setara OAuth/OIDC server standar, tidak
-perlu reinvent — pasang OAuth server yang sudah matang di Forma Cloud dan
-jadikan Forma-ID deployment terkelola darinya. Keputusan ini menentukan
-apakah `sso`/`social-sso` cukup jadi konfigurasi ke server itu.
+**"Forma-ID" bukan primitive tersendiri (normatif).** Konsep identitas
+lintas-workspace dengan consent ledger portable (identitas manusia yang
+dikenali lintas banyak workspace, membawa riwayat consent) **di luar
+scope Forma Framework** — bertentangan langsung dengan prinsip tenancy §1:
+workspace adalah satu-satunya batas isolasi, tanpa akses lintas-workspace
+dalam bentuk apa pun. Kalau kebutuhan semacam itu muncul, tempatnya di
+level external service ([`../backend/01-core-basic.md`](../backend/01-core-basic.md)
+§3), bukan diselesaikan sebagai fitur Forma Framework.
+
+Yang tetap relevan dan **tidak butuh konsep baru**: Forma Cloud **boleh**
+menawarkan server OIDC/OAuth terkelola sebagai kenyamanan infra — supaya
+App Owner tidak perlu memasang identity provider sendiri — persis seperti
+menawarkan Postgres terkelola. Ini cukup jadi **satu pilihan** di bawah
+strategy `sso` yang sudah ada di atas, dikonfigurasi lewat `auth_config_ref`
+seperti provider OIDC lain mana pun — tanpa nama/branding atau kontrak
+tersendiri.
 
 **Multi-cabang (branch) — pola yang direkomendasikan.** Cabang **bukan**
 alasan membuat App terpisah per cabang (App per cabang menduplikasi kurasi
@@ -237,6 +254,15 @@ service call** (A cukup tahu kontrak Action, tidak tahu skema internal B),
 sederhana, mis. cek data referensi). Framework tidak melarang entity read
 lintas-module, tapi konvensi mengarahkan ke pola lebih longgar untuk apa pun
 yang menyangkut *behavior*, bukan sekadar baca.
+
+**Kalau kedua Module beda `spec.datastore` (§2), preferensi di atas jadi
+keharusan (normatif):** *entity read langsung* dan *action/service call*
+lewat `ctx.db` sama-sama **tidak tersedia** lintas-Datastore — satu-satunya
+jalur yang tersisa adalah **event subscribe**
+([`../backend/01-core-basic.md`](../backend/01-core-basic.md) §3,
+[`06-datastore.md`](06-datastore.md) §1.1). Beda Datastore = beda
+deployment boundary; tidak ada tingkat consent yang membuka akses langsung
+ke sana.
 
 Deklarasi dependency di level Module (`spec.depends`, §2) memberi
 visibilitas dependency graph untuk tooling registry/marketplace — bukan

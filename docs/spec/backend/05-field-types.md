@@ -136,8 +136,8 @@ tidak mungkin.
 # Warisi mata uang default dari global settings
 - { name: total, type: money }
 
-# Kunci mata uang eksplisit di field ini
-- { name: fee, type: money, currency: USD }
+# Kunci mata uang eksplisit di field ini — non-default WAJIB sertakan decimal_places (§2 di bawah)
+- { name: fee, type: money, currency: USD, decimal_places: 2 }
 ```
 
 **Sumber mata uang — jangan pernah menebak** ([`01-core-basic.md`](01-core-basic.md)
@@ -148,11 +148,31 @@ tidak mungkin.
    bukan tebakan. Komponen/renderer/backend dilarang menyimpulkan mata uang
    dari heuristik (mis. "field bernama `price` pasti currency default").
 
-**Skala tetap per mata uang.** Jumlah selalu disimpan pada skala minor-unit mata
-uangnya (mis. `USD`/`IDR` skala 2, `JPY` skala 0). Skala diturunkan dari metadata
-mata uang, bukan ditebak. Core menyertakan **tabel metadata mata uang minimal**
-(kode → skala minor-unit, simbol) yang cukup untuk penyimpanan, pembulatan, dan
-format single-currency yang benar.
+**Skala tetap per mata uang — dideklarasikan, bukan diturunkan dari katalog.**
+Core **tidak** menyertakan tabel metadata mata uang (bukan ISO-4217 built-in) —
+katalog mata uang (kode, nama, simbol, kalau app butuh daftar/dropdown) adalah
+**Document bisnis biasa** yang dimodelkan app developer sendiri kalau perlu,
+tidak berbeda dari Document lain, dan tidak diistimewakan framework. Yang wajib
+dideklarasikan eksplisit (bukan ditebak, bukan di-lookup) adalah skala minor-unit
+tiap mata uang yang benar-benar dipakai:
+
+```yaml
+# Global — mata uang default workspace beserta skalanya
+settings:
+  currency:
+    code: IDR
+    decimal_places: 0
+    symbol: "Rp"          # opsional, hanya untuk format tampilan
+
+# Field yang override ke mata uang lain WAJIB ikut menyertakan skalanya
+- { name: fee, type: money, currency: USD, decimal_places: 2, symbol: "$" }
+```
+
+Field `money` yang meng-override `currency` ke kode selain
+`settings.currency.code` **wajib** menyertakan `decimal_places` sendiri di
+deklarasi field — tidak ada katalog untuk di-lookup, jadi tidak mendeklarasikan
+skala pada mata uang non-default adalah `VALIDATION_ERROR` saat `forma apply`,
+bukan tebakan diam-diam (mis. asumsi "2 digit untuk semua mata uang").
 
 **Rounding normatif.** Default **banker's rounding** (round-half-to-even) — dipilih
 karena netral secara statistik pada agregasi finansial. Bisa di-override di satu
@@ -161,7 +181,10 @@ memilih mode pembulatan sendiri. Setiap operasi yang menghasilkan digit di luar
 skala mata uang dibulatkan dengan mode ini.
 
 **Format tampilan** (simbol, posisi, pemisah ribuan) mengikuti `settings.locale`
-+ metadata mata uang — bukan hard-code per komponen.
++ `symbol` yang dideklarasikan di `settings.currency`/field itu sendiri — bukan
+hard-code per komponen, dan bukan hasil query ke Document katalog (kalau app
+punya Document katalog mata uang, itu murni data tampilan/pilihan-user, di luar
+jalur baca tipe `money`).
 
 **Open — FX & multi-currency.** Konversi antar mata uang (rate table, tanggal
 rate, revaluasi, gain/loss selisih kurs) **di luar scope core**. Ia menjadi

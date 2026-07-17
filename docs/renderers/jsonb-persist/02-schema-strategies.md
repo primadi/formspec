@@ -88,3 +88,85 @@ dikenal Postgres. Ini bug nyata, belum ketahuan karena test DDL Postgres
 yang ada cuma menguji nama schema, bukan sintaks generated column-nya.
 Jangan anggap jalur Postgres untuk field ber-`index: true` sudah teruji
 benar sampai ini diperbaiki.
+
+## 4. Materialized Path — Optimasi Query Tree
+
+Field `relation` self-referential dengan marker `tree: true`
+([`../../spec/backend/05-field-types.md`](../../spec/backend/05-field-types.md)
+§4) memicu strategi **materialized path** di backend ini — bukan recursive
+CTE.
+
+### 4.1 Motivasi
+
+Recursive CTE membebani query planner untuk setiap query hierarki — bebannya
+linier terhadap kedalaman tree dan tidak bisa di-index secara konvensional.
+Materialized path menggantinya dengan **prefix-match string sederhana** yang
+memanfaatkan B-tree index standar: `descendant_of` menjadi `LIKE 'prefix.%'`,
+bukan recursive CTE. Trade-off: path harus di-maintain pada setiap mutasi
+struktur tree (move, reparent) — tapi operasi tersebut jauh lebih jarang
+daripada query baca hierarki di hampir semua domain bisnis (COA, org chart,
+kategori produk).
+
+### 4.2 Kolom `_tpath_`
+
+Setiap field `relation` ber-`tree: true` mendapat satu generated column
+tersembunyi:
+
+```sql
+-- Field "parent_id" bertipe relation self-referential dengan tree: true
+ALTER TABLE financial.gl_accounts
+  ADD COLUMN _tpath_parent_id TEXT NOT NULL DEFAULT '';
+CREATE INDEX ON financial.gl_accounts (tenant_id, _tpath_parent_id)
+  WHERE deleted_at IS NULL;
+```
+
+Prefiks `_tpath_` membedakan kolom path dari generated column biasa (`_`
+untuk index generation, §3). Nilai path disimpan di key tersembunyi
+`__tpath.<field_name>` di dalam `data` JSONB; generated column
+mengekstraknya untuk indexing.
+
+### 4.3 Format Path
+
+Path adalah string yang merepresentasikan rantai ancestor dari root ke node
+itu sendiri, dipisahkan separator `.` (titik):
+
+```
+<root_id>.<child_id>.<grandchild_id>
+```
+
+- **Root node** (parent null): path = `""` (string kosong)
+- **Node biasa**: path = path parent + `.` + id sendiri
+- **Separator `.`** dipilih karena tidak muncul di UUID v7 maupun integer
+  (PK SQLite) — bebas dari false-positive match
+
+Path **tidak** menggunakan kode bisnis (mis. `001.01.001`) — ia murni
+berdasarkan PK (`id`) agar independen dari konvensi penamaan yang bisa
+berubah. Kode bisnis tetap jadi field `string` biasa milik app; ia tidak
+terlibat dalam query hierarki.
+
+### 4.4 Maintenance
+
+Path dikelola framework **server-side, selalu** — klien tidak bisa menulis
+`__tpath.*`:
+
+| Operasi | Perilaku |
+|---|---|
+| **Create root** (parent null) | path = `""` |
+| **Create child** (parent = X) | path = path(X) + `.` + id_baru |
+| **Move / reparent** | path node + seluruh subtree dihitung ulang dalam satu transaksi; lock di parent lama & baru mencegah concurrent reparent |
+| **Delete** | `relation.on_delete` berlaku — `cascade` menghapus subtree (path ikut terhapus), `restrict` menolak jika masih ada anak |
+
+### 4.5 Translasi Operator Tree
+
+Lihat [`04-query-and-keys.md`](04-query-and-keys.md) §6 untuk translasi
+lengkap operator `descendant_of` / `ancestor_of` / `child_of` / `root` ke
+prefix-match B-tree. Ringkasan:
+
+| Operator kontrak | Strategi jsonb-persist |
+|---|---|
+| `descendant_of=<X>` | `_tpath_… LIKE '<path(X)>.<X>.%'` — prefix-match, indexed |
+| `ancestor_of=<X>` | Parse path(X), `WHERE id IN (…)` — lookup PK langsung |
+| `child_of=<X>` | `parent_id = <X>` — field relation biasa, bukan path |
+| `root` | `parent_id IS NULL` — indeks standar pada kolom FK |
+
+**Tidak ada recursive CTE di backend ini.**

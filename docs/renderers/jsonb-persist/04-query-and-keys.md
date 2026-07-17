@@ -71,3 +71,83 @@ kedua driver **tidak** dijamin identik (mis. sintaks upsert, fungsi tanggal)
 — resource yang memakai `ctx.db` bertanggung jawab sendiri menulis SQL yang
 kompatibel driver yang ia targetkan, atau menerima keterkuncian ke satu
 driver tertentu.
+
+## 6. Translasi Operator Tree
+
+Kontrak operator hierarki untuk field `relation` ber-`tree: true`
+([`../../spec/backend/05-field-types.md`](../../spec/backend/05-field-types.md)
+§4) — `descendant_of`, `ancestor_of`, `child_of`, `root` — dipenuhi backend ini
+**tanpa recursive CTE**, memakai prefix-match terhadap kolom materialized path
+(`_tpath_<field>`, lihat [`02-schema-strategies.md`](02-schema-strategies.md)
+§4).
+
+### 6.1 `descendant_of`
+
+Mencari semua turunan rekursif dari node X:
+
+```sql
+-- X bukan root
+SELECT * FROM gl_accounts
+WHERE tenant_id = $1
+  AND _tpath_parent_id LIKE '<path(X)>.<X>.%'
+  AND deleted_at IS NULL;
+
+-- X adalah root (path kosong)
+SELECT * FROM gl_accounts
+WHERE tenant_id = $1
+  AND _tpath_parent_id LIKE '<X>.%'
+  AND deleted_at IS NULL;
+```
+
+Karena pola `LIKE` dimulai dengan prefix tetap (bukan wildcard di awal),
+B-tree index pada `(tenant_id, _tpath_parent_id)` digunakan penuh — **tidak
+ada sequential scan** dan **tidak ada recursive CTE**.
+
+### 6.2 `ancestor_of`
+
+Mencari semua leluhur rekursif dari node X:
+
+1. Ambil path node X dari `data->>'__tpath.parent_id'` (atau dari kolom
+   `_tpath_parent_id`)
+2. Split path dengan separator `.` → dapatkan daftar ID ancestor
+3. Query: `WHERE id IN (<daftar_id>) AND tenant_id = $1`
+
+Karena lookup berdasarkan PK (`id`), ini adalah **O(depth)** query — depth
+tree bisnis praktis jarang melebihi 10 level.
+
+### 6.3 `child_of`
+
+Anak langsung (satu tingkat) dari node X:
+
+```sql
+SELECT * FROM gl_accounts
+WHERE tenant_id = $1
+  AND data->>'parent_id' = '<X>'
+  AND deleted_at IS NULL;
+```
+
+Ini adalah query field `relation` biasa — bukan operator path. Indeks pada
+FK `parent_id` (jika ada generated column untuk field tersebut) mencukupi.
+
+### 6.4 `root`
+
+Node akar (tanpa parent):
+
+```sql
+SELECT * FROM gl_accounts
+WHERE tenant_id = $1
+  AND data->>'parent_id' IS NULL
+  AND deleted_at IS NULL;
+```
+
+Atau ekuivalen: `_tpath_parent_id = ''`.
+
+### 6.5 Siklus
+
+Integritas tree (§4 kontrak) dicegah **sebelum** path ditulis: pada
+`create`/`update`/reparent, framework memeriksa apakah kandidat parent
+adalah turunan dari node yang sedang dimutasi — pemeriksaan pakai path
+node kandidat parent (query `ancestor_of`). Siklus yang terdeteksi
+menghasilkan `VALIDATION_ERROR` (422) sebelum transaksi commit. Backend ini
+tidak mengandalkan recursive CTE untuk deteksi siklus — hanya prefix-match
+string.

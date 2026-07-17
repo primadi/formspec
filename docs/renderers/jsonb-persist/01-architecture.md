@@ -52,6 +52,7 @@ Pemetaan tiap kemampuan wajib
 |---|---|
 | Structural diff apply | `internal/db/migrate.go` — `PlanMigrations`/`ApplyMigrations` menerjemahkan diff Document ke DDL Postgres/SQLite |
 | Query resolution | Operator filter kontrak diterjemahkan ke SQL/JSONB path — lihat [`04-query-and-keys.md`](04-query-and-keys.md) §1 |
+| Tree query resolution | Operator `descendant_of`/`ancestor_of`/`child_of`/`root` diterjemahkan ke prefix-match materialized path, **tanpa recursive CTE** — [`02-schema-strategies.md`](02-schema-strategies.md) §4, [`04-query-and-keys.md`](04-query-and-keys.md) §6 |
 | `ctx.next_key` | Tabel counter `forma_natural_key_counters`, alokasi di bawah lock — [`04-query-and-keys.md`](04-query-and-keys.md) §2 |
 | Index generation | Generated column dari `data`, indexed — [`02-schema-strategies.md`](02-schema-strategies.md) §3 (**catatan dialek**, lihat §4 di sana) |
 | Uninstall extension bersih | **Belum diimplementasikan** — DDL `ADD COLUMN ext_*` dibuat saat extension dipasang, tapi tidak ada `DROP COLUMN`/rute uninstall di kode manapun. Lihat [`02-schema-strategies.md`](02-schema-strategies.md) §2. |
