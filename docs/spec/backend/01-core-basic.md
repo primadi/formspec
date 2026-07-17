@@ -1,42 +1,376 @@
 # Core Basic
 
-**Version:** 0.1.0 · **Status:** Outline
+**Version:** 0.1.0 · **Status:** Draft
 
-> Dokumen berstatus Outline: heading di bawah menetapkan cakupan final; isi
-> ditulis bertahap. Seluruh kontrak di dokumen ini storage-agnostic; contoh SQL
-> konkret hidup di dokumentasi renderer persist-postgres.
+> Draft: isi di bawah kontrak yang berlaku. Seluruh kontrak di dokumen ini
+> storage-agnostic; contoh SQL konkret hidup di dokumentasi renderer
+> jsonb-persist.
 
 ## 1. Document (Entity)
-Skema field, tipe, validasi, title, expose (default unexposed), relasi dan
-target relasi.
+
+### 1.1 Taksonomi Resource
+Dua tipe resource: `type: document` (persisted, sumber kebenaran data bisnis)
+dan `type: service` (stateless, komputasi murni — tidak punya `characteristic`,
+`doc_status`, atau lifecycle guard).
+
+Document punya `characteristic`, tepat satu nilai (mutually exclusive; `forma
+apply` menolak lebih dari satu):
+
+| Characteristic | Arti | Wajib |
+|---|---|---|
+| `master` | Data referensi stabil (Customer, Product) | Boleh punya lifecycle (kalau `submit` aktif) atau tidak |
+| `transaction` | Append-heavy, time-partitioned (Invoice, Journal Entry) | Wajib field `transaction_date` |
+| `reference` | Seed data read-only, dimiliki App Owner (Provinsi, Tarif Pajak) | — |
+| `summary` | Projeksi terkelola sistem (GL Balance) | `create`/`update`/`delete` permanen nonaktif via API |
+
+`summary` bukan tipe resource keempat — ia nilai `characteristic` yang sama
+kelasnya dengan `master`/`transaction`/`reference`.
+
+### 1.2 Field Reserved & Lifecycle (`doc_status`)
+Field berikut **reserved** — tidak boleh dipakai ulang sebagai nama field
+custom, otomatis ada di semua `type: document`, framework-managed: `owner`,
+`created_at`, `modified`, `doc_status`, `amends`, `amended_by`, `version`.
+`transaction_date` **wajib** dideklarasikan eksplisit untuk `characteristic:
+transaction` — `forma apply` menolak kalau tidak ada.
+
+Setiap Document punya lifecycle bawaan lewat `doc_status` (`draft |
+submitted | cancelled`, closed set — kebutuhan proses bisnis granular pakai
+field terpisah, lihat [`02-core-extended.md`](02-core-extended.md) §1),
+ditegakkan lewat delapan reserved action:
+
+| Action | Guard dasar | Post-condition |
+|---|---|---|
+| `create` | — | `doc_status = draft` |
+| `update` | `doc_status == draft` | — |
+| `submit` | `doc_status == draft` | `doc_status = submitted` |
+| `cancel` | `doc_status == submitted AND no_pending_references` | `doc_status = cancelled` |
+| `delete` | `doc_status == draft AND no_referencing_documents` | row dihapus (guard absolut, **tanpa** `override_permission`) |
+| `amend` | `doc_status == submitted OR cancelled` | atomik: cancel original + set `amended_by` + buat Document baru linked (`amends`) sebagai `draft` |
+| `create-submit` | gabungan `create`+`submit` | derivasi otomatis kalau keduanya aktif |
+| `amend-submit` | gabungan `amend`+`submit` | derivasi otomatis kalau keduanya aktif |
+
+Developer boleh menambah `conditions` di atas guard dasar, **tidak boleh**
+melemahkannya. `create-submit`/`amend-submit` otomatis tersedia (tidak perlu
+dideklarasikan) begitu kedua action penyusunnya aktif; `forma apply` menolak
+deklarasi eksplisit `create-submit` kalau `submit` di-`disabled: true`.
+
+**Gating transitif:** `submit` nonaktif → `cancel` dan `amend` implisit
+nonaktif; `cancel` nonaktif → `amend` implisit nonaktif. Kalau ketiganya
+nonaktif (eksplisit atau transitif), Document itu **lifecycle-free**:
+`doc_status` selalu `null`, guard lifecycle di `update`/`delete` di-bypass,
+berperilaku plain CRUD — ini bukan kategori resource keempat, cuma Document
+dengan lifecycle nonaktif, zero-cost.
+
+**`delete` vs `cancel`:** `delete` menghapus row — guard-nya absolut (setara
+`ON DELETE RESTRICT`), berlaku dari tipe field `relation` yang menunjuk ke
+sini, terlepas dari `doc_status`. `cancel` tidak menghapus row, cuma mengubah
+status — guard-nya bisa dibuka lewat handler yang membongkar dependency dulu.
+**`update` setelah `submit` selalu ditolak, tanpa pengecualian** — inilah yang
+membuat Document "immutable" setelah submit; perubahan field spesifik pasca-
+submit tetap mungkin lewat custom action bernama (tercatat di audit log
+sebagai nama action, bukan "document updated").
+
+**Referenceability:** hanya Document `doc_status = null` (lifecycle-free) atau
+`'submitted'` yang boleh jadi target field `relation` — `draft`/`cancelled`
+ditolak sebagai target relation saat runtime.
+
+### 1.3 `child` vs `relation`
+Garis pembeda adalah **kepemilikan lifecycle**, bukan bentuk penyimpanan:
+
+| Aspek | `child` | `relation` |
+|---|---|---|
+| Lifecycle | Ikut parent — submit/cancel parent otomatis diteruskan | Independen — `doc_status` sendiri |
+| Identitas | `storage: jsonb` → tanpa UUID, embedded; `storage: table` → UUID v7 sendiri | UUID v7 sendiri, independen |
+| Eksistensi | Tidak bisa ada tanpa parent | Bisa berdiri sendiri |
+
+Uji keputusan: "apakah punya makna di luar parent?" — line item invoice tanpa
+Invoice tidak bermakna (`child`); Order mereferensi Customer tapi keduanya
+berdiri sendiri (`relation`). Bahkan child ber-`storage: table` dengan UUID
+sendiri tetap ikut ter-submit/cancel bersama parent — lifecycle-nya tidak
+pernah independen. Detail layout storage (kolom generated, tabel child) adalah
+implementasi backend — lihat
+[`../../renderers/jsonb-persist/02-schema-strategies.md`](../../renderers/jsonb-persist/02-schema-strategies.md).
+
+**`sequence_field` — line-ordering eksplisit.** Sebuah `child` array boleh
+menetapkan `sequence_field: <field-name>` yang menunjuk field child mana yang
+membawa nomor urut baris eksplisit (mis. `line_number`):
+
+```yaml
+- name: items
+  type: child
+  child:
+    resource: invoice_item
+    storage: table
+    sequence_field: line_number
+```
+
+Framework **memelihara dan memvalidasi urutan monotonik** field ini pada
+insert/reorder — nilai duplikat atau non-monotonik di antara sibling ditolak
+`VALIDATION_ERROR` (422). Framework **tidak** merenumber ulang sibling yang sudah
+ada secara otomatis kecuali diminta eksplisit (mis. operasi reorder yang memang
+menugaskan ulang seluruh nomor) — menyisip di tengah tidak diam-diam menggeser
+nomor baris lain. Ini berbeda dari urutan penyimpanan implisit: `sequence_field`
+membuat urutan menjadi **data yang bermakna dan stabil**, bukan artefak insertion
+order. Katalog field-nya sendiri ada di
+[`05-field-types.md`](05-field-types.md) §1.4.
+
+`relation.on_delete`: `restrict` (default, absolut — sama dengan guard
+`delete` §1.2) | `cascade` (ikut terhapus, hanya kalau referencing document
+`draft`/lifecycle-free) | `set_null` (hanya valid kalau field tidak
+`required`).
 
 ## 2. Primary Key & Natural Key
-Strategi PK (UUID v7 / integer / natural key), `natural_key_rule`, jaminan
-gap-free sequence sebagai kontrak (bukan mekanisme spesifik backend).
+Primary key: **UUID v7** (time-ordered) untuk semua Document — ini kontrak,
+bukan pilihan per backend. Natural key adalah **unique constraint per
+tenant**, bukan pernah jadi PK:
+
+```yaml
+- name: number
+  type: string
+  natural_key: true
+  immutable: true
+  unique: true
+  natural_key_rule:
+    strategy: sequence            # sequence | custom
+    format: "{prefix}-{year}-{seq:06d}"
+    prefix: { config: billing.invoice_prefix, default: "INV" }
+    reset: yearly                 # never | yearly | monthly | daily
+    scope_field: branch_id        # opsional — sequence terpisah per nilai field ini
+```
+
+Jaminan generasi (gap-free, atomik, duplicate-free) adalah kontrak yang wajib
+dipenuhi tiap PersistBackend lewat `ctx.next_key` — lihat
+[`04-persist-backend.md`](04-persist-backend.md) §2 untuk mekanismenya.
 
 ## 3. Persistence Sebagai Kontrak
-`persist.indexes` dan deklarasi persist lain: apa yang dijanjikan framework,
-apa yang jadi urusan PersistBackend.
+
+**Transaksi adalah kewajiban, bukan opsi.** Forma adalah framework aplikasi
+bisnis: setiap mutasi yang secara logis satu unit (mutasi entity + guard
+lifecycle + counter natural key + penulisan outbox) **wajib** atomik dalam
+satu transaksi PersistBackend — commit semua atau tidak sama sekali
+([`04-persist-backend.md`](04-persist-backend.md) §2, §3). **Integritas data
+ditegakkan di backend, selalu** — validasi, rules, guard lifecycle, dan
+constraint referensial dievaluasi server-side pada setiap jalur masuk
+(HTTP, script, event); frontend menegakkan hal yang sama untuk UX tapi tidak
+pernah menjadi satu-satunya penjaga — payload yang melewati frontend (atau
+dikirim langsung oleh klien yang tidak jujur) tetap tertahan di backend.
+
+**Open — multi-datastore per workspace.** Apakah satu workspace boleh punya
+lebih dari satu datastore transactional belum diputuskan. Kalau nanti
+diizinkan, konsistensi lintas-datastore **wajib** ditangani framework lewat
+transactional outbox implicit (bukan diserahkan ke app developer) — dua
+mutasi di dua datastore tidak pernah boleh saling menggantung tanpa
+mekanisme rekonsiliasi bawaan.
+
+`spec.persist` mendeklarasikan apa yang dijanjikan framework ke Document itu
+— bukan bagaimana backend memenuhinya:
+
+```yaml
+persist:
+  soft_delete: true
+  category: operational   # operational | financial | compliance | analytics | master | archive
+  indexes:
+    - { field: status, type: btree }
+```
+
+`category` adalah pengelompokan data yang framework jamin **tidak boleh
+di-join lintas kategori** (isolasi, bukan sekadar performa) — cara sebuah
+PersistBackend mewujudkan batas ini (schema Postgres terpisah, database
+terpisah, dll.) adalah detail implementasinya, lihat
+[`../../renderers/jsonb-persist/02-schema-strategies.md`](../../renderers/jsonb-persist/02-schema-strategies.md).
+`indexes` memenuhi kontrak `04-persist-backend.md` §2 "Index generation".
 
 ## 4. Migration = Structural Diff
 Framework menghasilkan structural diff dari perubahan spec; PersistBackend
 menerima diff dan menerjemahkannya ke storage-nya sendiri. Tidak ada asumsi
-"framework generate SQL".
+"framework generate SQL" — lihat [`04-persist-backend.md`](04-persist-backend.md)
+§2 untuk kontrak lengkapnya (aturan `renamed_from`, dua tahap untuk field
+removal, dll).
+
+Tiga jenis migrasi: **structural** (otomatis penuh dari diff Document, tidak
+pernah ditulis tangan), **custom DDL** (`kind: Migration` — index, function,
+trigger, extension, materialized view; DML ditolak saat runtime), **data
+migration** (script ber-versi, run/rollback manual — backfill masuk sini,
+bukan structural diff).
 
 ## 5. Action
-`impl.native` / `impl.script` / `impl.script_ref` / `impl.sidecar`; context yang
-tersedia; hooks (before/after/on_error).
+
+`impl.native` / `impl.script` / `impl.script_ref` / `impl.compiled` /
+`impl.sidecar`; context yang tersedia; hooks (before/after/on_error).
+
+**Model permission (normatif untuk kelima jenis impl).** Setiap action
+mendeklarasikan dua hal secara eksplisit:
+- `required_permission` — guard bagi si pemanggil: siapa yang boleh memanggil.
+- `uses` — akses kode action itu sendiri: tier database, resource lain,
+  primitives (`ctx.db`, `ctx.cache`, `ctx.lock`, `ctx.queue`, dst.).
+
+**Grant tidak pernah diturunkan dari pemakaian aktual di kode** — deklarasi
+adalah satu-satunya sumber kebenaran; implementasi wajib menegakkan permission
+lewat identity proxy untuk kelima jenis impl secara seragam, bukan hanya untuk
+`native`. `uses` yang undeclared harus ditolak saat resolusi, bukan silently
+diizinkan. Auto-scan kode (mis. `forma validate`) hanya berperan sebagai
+verifikator kejujuran deklarasi terhadap kode — bukan sumber grant, dan tidak
+pernah memberi grant sendiri. Footprint modul (agregat seluruh
+`required_permission` + `uses` miliknya) adalah dasar consent yang wajib
+ditampilkan ke pemilik workspace saat instalasi.
+
+**Scope `ctx.db` default = module sendiri.** Akses `ctx.db` lintas-module
+**wajib** dideklarasikan eksplisit di `uses` dan muncul di consent footprint;
+**tulis lintas-module** disajikan sebagai consent risiko-tinggi, presentasinya
+berbeda dari akses biasa. Akses `ctx.db` yang tidak dideklarasikan — bahkan
+sekadar mengecek keberadaan data — diblokir saat runtime, memicu alert, dan
+**men-suspend module secara otomatis** disertai insiden audit
+(`USES_VIOLATION`, [`../platform/05-plane-protocol.md`](../platform/05-plane-protocol.md) §4.4).
+
+**Idempotensi.** `idempotent: true` mensyaratkan sumber `idempotency_key`
+(`header` | `param` | `server`). Untuk sumber `server`, framework menyediakan
+alur **prepare dua-langkah**: klien meminta kunci lebih dulu lewat
+`POST /{resource}/{action}/prepare`, menerima sebuah key, lalu mengirim ulang
+panggilan action sebenarnya dengan key itu terlampir. Ini melindungi dari
+double-submit browser pada action `create` yang tidak punya kunci idempotency
+alami dari sisi klien. Framework menjaga idempotency store
+`(tenant, action, key) → pending|completed + response tersimpan`. Duplikat
+setelah completed → replay response asli; duplikat saat masih pending →
+tunggu/409. Entry kedaluwarsa lewat retention (default 24 jam, dibaca dari
+`core.idempotency_retention`), tidak pernah dihapus saat commit.
+
+**Optimistic concurrency lewat `version`** — default aktif di semua Document:
+update wajib membawa `version` yang dibaca client; mismatch → `409 CONFLICT`
+dengan version terkini. `modified` (timestamp) murni metadata audit, bukan
+mekanisme konkurensi.
 
 ## 6. Query & Filter Operator
-Konvensi HTTP query (`eq`, `gt`, `between`, …) sebagai kontrak yang wajib
-diimplementasikan setiap PersistBackend secara identik.
+
+Konvensi HTTP query yang wajib diimplementasikan setiap PersistBackend secara
+identik (bukan sekadar direkomendasikan):
+
+```
+?page&per_page&sort&direction&fields&filter[field][op]=value&search&include
+```
+
+Filter operator yang wajib didukung: `eq neq gt gte lt lte between in nin like
+ilike null notnull`. `per_page` default **20**, maksimum **100** — nilai di
+atas maksimum di-clamp (bukan ditolak); nilai non-numerik atau negatif adalah
+`VALIDATION_ERROR` (422). Implementasi BOLEH menurunkan batas maksimum per
+dokumen tapi TIDAK BOLEH menaikkannya di atas 100.
 
 ## 7. Event & Outbox
-Event model, delivery guarantee.
+
+**Konvensi penamaan** mengunci tipe event lewat prefix: `before_*` (mis.
+`before_cancel`) **selalu sync** — gate yang harus selesai sebelum state
+berubah. `on_*` (mis. `on_submit`) **selalu async** — notifikasi setelah
+commit. Event custom di luar pola ini **wajib** mendeklarasikan `type`
+eksplisit. `forma apply` menolak event yang `type`-nya kontradiktif dengan
+prefix-nya. Aturan ini otomatis berlaku untuk kedelapan reserved action (§1.2)
+— tiap reserved action punya `before_{action}` (sync) dan `on_{action}`
+(async) berpasangan tanpa perlu dideklarasikan manual.
+
+**Prioritas handler** (event sync): urutan `priority` (kecil dijalankan
+duluan) — kelipatan 10 supaya handler baru bisa disisipkan tanpa
+renumbering. Tier: Critical (1–9, gate yang harus dicek pertama), Normal
+(10–89, default **10**, mayoritas business logic), Low (90–99, side-effect
+non-kritis tapi tetap sync).
+
+**Kontrak durabilitas.** `publish.durable: true` → event ditulis ke outbox
+sebelum action return; untuk Document, transaksi yang sama dengan perubahan
+data (atomik). Reliabilitas mensyaratkan **kedua sisi**: publisher durable +
+subscriber durable = reliable. Publisher non-durable + subscriber durable =
+error validasi.
+
+**Outbox (normatif).** PersistBackend wajib menyediakan tabel outbox dan
+worker: poll pending → cek idempotency → **sync call** ke target action →
+delivered, atau backoff retry → dead-letter. `retry.initial_delay_ms` menyetel
+jeda sebelum percobaan retry **pertama**; retry berikutnya mengikuti strategi
+`backoff` yang dideklarasikan mulai dari jeda itu.
+
+**`kind: Subscription`** — module lain bereaksi terhadap event resource lain
+tanpa mengubah publisher (lihat [`02-core-extended.md`](02-core-extended.md)
+§3 untuk mode streaming/durable-nya). Kontrak durabilitas dua-sisi berlaku
+sama; Subscription masuk consent footprint module konsumen.
 
 ## 8. API Runtime yang Digenerate
-Bentuk REST API per entity yang dijanjikan ke konsumen (workspace-scoped).
+
+**Model exposure — deny-by-default.** Tidak ada endpoint eksternal yang dibuat
+untuk sebuah Document kecuali ia opt-in lewat `spec.expose: [{type: rest} |
+{type: grpc} | {type: ws}]`. Pemanggil internal (service same-process, script
+Starlark, event) tidak terpengaruh aturan ini — mereka selalu punya akses.
+Konsekuensinya: tooling yang menghasilkan client (`forma generate`) wajib
+menolak berjalan kalau *tidak ada* entity yang exposed sama sekali — tidak ada
+yang bisa digenerate.
+
+**Workspace prefix.** Setiap route eksternal diprefiks identitas workspace:
+`/{workspace_slug}/api/{version}/{module}/{plural}/:id/:action`. `workspace_slug`
+adalah alias yang bisa dibaca manusia (dikonfigurasi per Workspace); router
+wajib jatuh ke UUID workspace kalau slug tidak diset.
+
+**Router.** Router multi-protokol **wajib** memakai radix-tree (atau setara)
+dengan lookup O(jumlah segmen path) — jumlah route yang bertambah tidak boleh
+mendegradasi performa secara linear. Pemanggil internal (same-process,
+registry-local) **melewati jaringan sepenuhnya** → dispatch fungsi langsung
+tanpa overhead serialisasi; pemanggil lintas-proses memakai adapter protokol
+terkonfigurasi (REST/gRPC/WS). Deskriptor route bersifat protocol-agnostic —
+satu deskriptor melayani semua protokol yang di-expose entity itu, router
+men-dispatch ke adapter yang tepat.
+
+**Response envelope.** List: `{ data, meta: {page, per_page, total,
+total_pages}, links }`. Single: `{ data, meta: {request_id, timestamp} }`.
+Error: `{ error: {code, message, details}, meta }`.
+
+**Kode error standar:** `VALIDATION_ERROR` (422), `UNAUTHORIZED` (401),
+`FORBIDDEN` (403), `NOT_FOUND` (404, termasuk cross-workspace dan cross-app
+yang tidak di-grant), `CONFLICT` (409), `STATE_TRANSITION_ERROR` (422),
+`INTERNAL_ERROR` (500, hanya reference ID yang dikembalikan ke klien). Daftar
+lengkap kanonik: [`error-glossary.yaml`](error-glossary.yaml).
+
+Kontrak ini yang dikonsumsi `forma generate` untuk menghasilkan typed client —
+lihat `docs/cli-tools/03-forma-generate.md` untuk panduan pemakaiannya di
+frontend.
 
 ## 9. Error Model
-Kode `FORMA.*` (lihat error-glossary.yaml); kontrak error yang bisa
-di-branch programatik.
+Kode kanonik berformat `FORMA.{DOMAIN}.{REASON}` (mis.
+`FORMA.DOC.UPDATE_NOT_DRAFT`, `FORMA.PERIOD.CLOSED`) — satu file
+`error-glossary.yaml`, versioned bersama Core Basic, dipakai ganda sebagai
+matcher programatik **dan** kunci lookup i18n (tidak ada field `key` terpisah).
+`code` **tidak pernah** diubah atau dipakai ulang setelah rilis — integrasi
+pihak ketiga yang `switch(error.code)` tidak boleh diam-diam rusak; situasi
+baru menambah entri baru. Error dari mekanisme framework (guard reserved
+action, dll.) wajib pakai kode kanonik ini, bukan pesan inline hard-coded.
+`conditions:` custom milik developer bebas pakai pesan sendiri, SEBAIKNYA
+tetap format `code` + `params` dengan namespace App sendiri (bukan `FORMA.*`).
+
+## 10. Config & Global Settings
+
+Config adalah manifest, bukan dotenv:
+
+```yaml
+apiVersion: forma.dev/v1alpha1
+kind: Config
+metadata:
+  name: app
+  module: core
+spec:
+  keys:
+    invoice_due_days: { type: int, default: 30 }
+    smtp_host:        { type: string, secret: true }
+```
+
+Nilai di-resolve per environment. Secret dan definisi environment digovern
+Control Plane ([`../platform/04-control-plane.md`](../platform/04-control-plane.md)
+§2). Script membaca lewat `ctx.config.get("key")` — tidak pernah env var
+mentah.
+
+**Global settings — jangan pernah menebak.** Setting yang memengaruhi
+interpretasi data atau tampilan lintas-komponen (currency, locale, timezone,
+format tanggal/angka, awal tahun fiskal, dst.) hidup di **satu tempat: level
+global** (workspace/App Config di bawah namespace `settings.*`) — bukan
+ditebak per komponen:
+
+- Spec **wajib** menetapkan nilai default standar yang bisa diterima umum
+  untuk setiap setting global (mis. format tanggal ISO-8601), sehingga
+  perilaku konsisten di seluruh komponen walau tidak diset — dan bisa diubah
+  di satu tempat kalau tidak sesuai.
+- Komponen/renderer **dilarang menebak** (mis. menyimpulkan "ini currency"
+  dari heuristik rule numerik) — ia membaca setting global atau deklarasi
+  eksplisit di manifest. Setting yang dibutuhkan tapi tidak tersedia dan
+  tidak punya default standar adalah **error**, bukan tebakan diam-diam —
+  menebak membuat default tiap komponen berbeda dan perilaku tidak konsisten.

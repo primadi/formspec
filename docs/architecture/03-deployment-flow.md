@@ -5,7 +5,7 @@
 **License:** Creative Commons CC0
 **Governed by:** Forma Architecture Overview · Forma Plane Protocol Spec
 
-> Dokumen ini menjelaskan **bagaimana** YAML manifest berpindah dari laptop developer menjadi aplikasi yang berjalan di production — melalui pipeline dua-stage: registration (developer → Control Plane) dan deployment (Control Plane → Resource Plane). Detail wire protocol ada di `docs/spec/06-plane-protocol.md`.
+> Dokumen ini menjelaskan **bagaimana** YAML manifest berpindah dari laptop developer menjadi aplikasi yang berjalan di production — melalui pipeline dua-stage: registration (developer → Control Plane) dan deployment (Control Plane → Resource Plane). Detail wire protocol ada di `docs/spec/platform/05-plane-protocol.md`.
 
 ---
 
@@ -150,7 +150,7 @@ Saat Resource Plane memuat artifact baru:
 | **`forma apply`** | `--watch` untuk hot-reload | Run-once per deployment |
 | **Evidence** | Optional (logged locally) | Mandatory + transparency log |
 | **Local poll trigger** | `POST /v1/poll` (dev-only) | Tidak ada — menunggu pull cycle berikutnya |
-| **Revocation propagation** | Pull berikutnya (10 detik) | **Push-hint** — snapshot yang membawa revocation memicu pull segera + pull interval diperpendek sampai revocation terkonfirmasi (wajib per `docs/spec/06-plane-protocol.md` §Revocations) |
+| **Revocation propagation** | Pull berikutnya (10 detik) | **Push-hint** — snapshot yang membawa revocation memicu pull segera + pull interval diperpendek sampai revocation terkonfirmasi (wajib per `docs/spec/platform/05-plane-protocol.md` §5 (Semantik Outage)) |
 | **Database** | SQLite | Postgres |
 | **Forma Operator** | Tidak digunakan | CRD controller |
 
@@ -213,6 +213,6 @@ Cluster Control melakukan **batch relay** — mengumpulkan evidence dari semua p
 
 | Dokumen | Isi |
 |---|---|
-| `docs/spec/06-plane-protocol.md` | Wire protocol detail (endpoint, format, header) |
+| `docs/spec/platform/05-plane-protocol.md` | Wire protocol detail (endpoint, format, header) |
 | `docs/architecture/01-architecture-overview.md` | Multi-region topology, control levels |
 | `docs/architecture/06-k8s-operator.md` | Forma Operator, CRD reconciliation |

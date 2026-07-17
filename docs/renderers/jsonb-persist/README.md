@@ -1,9 +1,11 @@
-# persist-postgres — Backend Renderer Resmi
+# jsonb-persist — Backend Renderer Resmi
 
 **Updated:** 2026-07-15 · Status: Outline
 
-PersistBackend resmi Forma: Postgres dengan strategi hybrid JSONB. Memenuhi
-kontrak [`spec/backend/04-persist-backend.md`](../../spec/backend/04-persist-backend.md).
+PersistBackend resmi Forma: strategi hybrid JSONB, jalan di atas Postgres
+maupun SQLite (nama renderer ini soal *strategi skema*, bukan engine SQL —
+lihat [02-schema-strategies.md](02-schema-strategies.md)). Memenuhi kontrak
+[`spec/backend/04-persist-backend.md`](../../spec/backend/04-persist-backend.md).
 Kode: `internal/db/`, `internal/datastore/`.
 
 | Dokumen | Cakupan |

@@ -18,8 +18,8 @@ deskriptif) — ditambah section pendukung.
 | [`spec/backend/`](spec/backend/) | Kontrak data & perilaku: core basic/extended, entity extension, **PersistBackend** | Normatif, semver |
 | [`spec/frontend/`](spec/frontend/) | Kontrak visual: hirarki Shell→App→Page→Component, **VisualSpecKind**, **Renderer**, **Spec Resolution API**, katalog kind per tier, FormaExpr | Normatif, semver |
 | [`renderers/shadcn-shell/`](renderers/shadcn-shell/) | Frontend renderer resmi (React + shadcn/ui) | Deskriptif, dated |
-| [`renderers/persist-postgres/`](renderers/persist-postgres/) | Backend renderer resmi (PersistBackend Postgres hybrid JSONB) | Deskriptif, dated |
-| [`architecture/`](architecture/) | Topologi deployment, HA/failover, K8s operator, admin surfaces | Deskriptif |
+| [`renderers/jsonb-persist/`](renderers/jsonb-persist/) | Backend renderer resmi (PersistBackend hybrid JSONB, Postgres/SQLite) | Deskriptif, dated |
+| [`architecture/`](architecture/) | Topologi deployment, HA/failover, K8s operator, admin surfaces, struktur repo | Deskriptif |
 | [`runtimes/`](runtimes/) | Internals per komponen runtime: forma-ctl, forma-resource, forma-operator, forma-sidecar, engine API layer | Deskriptif |
 | [`cli-tools/`](cli-tools/) | Referensi CLI: forma, forma-ctl, forma dev, forma generate | Deskriptif |
 | [`guides/`](guides/) | Cara menjalankan, tutorial Order-to-Cash, panduan menulis renderer/shell/persist-backend | Tutorial |
@@ -40,6 +40,10 @@ deskriptif) — ditambah section pendukung.
 
 **Platform operator** (menjalankan Forma untuk banyak workspace):
 `architecture/01-architecture-overview` → `runtimes/` → `cli-tools/02-forma-ctl`.
+
+**Framework contributor** (mengubah kode Forma sendiri — `cmd/`, `internal/`,
+`pkg/`, `web/`, `sdk/`): `architecture/08-repo-structure` → dokumen `spec/`
+atau `renderers/` yang relevan dengan area yang disentuh.
 
 ## Konvensi
 

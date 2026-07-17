@@ -20,7 +20,7 @@ product catalog. Those four have moved to [`verticals/`](../../verticals/README.
 `examples/` (`Clinic-UI-Showcase`, `Midtrans-Payment-Gateway`, `reference-app`) are genuine
 conformance fixtures, not verticals.
 
-The name `verticals/` matches vocabulary already used in `docs/spec/01-overview.md`: "Vertical
+The name `verticals/` matches vocabulary already used in `docs/spec/platform/01-overview.md`: "Vertical
 modules (accounting, HRM, inventory) as first-class ecosystem citizens." Not `erp/` (Forma is a
 general business-app platform — non-ERP verticals like Clinic could graduate here too, someday) and
 not `products/` (doesn't carry the established term).
@@ -28,9 +28,9 @@ not `products/` (doesn't carry the established term).
 ## 2. Workspace → App → Module → Resource
 
 Forma's tenancy model is singular and explicit: `Workspace → App → Module → Resource`
-(`docs/spec/02-core-basic.md:430-433`). Installing multiple Apps into one Workspace is the *normal*
-case, not an edge case — it "unifies tenant identity — basis for cross-app grants"
-(`02-core-basic.md:439`; D25, D37 in `docs/spec/11-reference.md`).
+(`docs/spec/platform/02-workspace-app-module.md` §1). Installing multiple Apps into one Workspace is the *normal*
+case, not an edge case — it unifies tenant identity, the basis for cross-app grants
+(same document, §1 and §3).
 
 - **App** (§4.4): "Root project manifest. Unit of deployment, trust boundary, and interface
   publication." Declares `modules`, `publishes` (interfaces offered), `consumes` (interfaces
@@ -149,7 +149,7 @@ both call sites hardcoded `""`. Fixed as a small, additive, backward-compatible 
   `internal/starlark/executor.go`, and `resource/forma.go`'s `NextKeyHandler` chain — out of scope
   for this pass. `ctx.next_key()` always uses the tenant-wide scope regardless of `scope_field`
   today; the automatic on-create path (what document numbering actually needs) is what's fixed.
-- Documented in `docs/spec/02-core-basic.md` §10.4, alongside `strategy`/`format`/`prefix`/`reset`.
+- Documented in `docs/spec/backend/01-core-basic.md` §2, alongside `strategy`/`format`/`prefix`/`reset`.
 
 ## 7. UI ownership: vertical vs. `reference-app`
 
@@ -172,10 +172,10 @@ Mirroring `examples/SPEC-COMPATIBILITY-NOTES.md`'s format — gap, evidence, sta
 | Gap | Evidence | Status |
 |---|---|---|
 | No branch/multi-location construct | No `branch_id` in `ddl.go`; no tree field type in `pkg/spec/entity.go` | Modeled as a plain master entity + convention (§5); only viable path given the spec today |
-| `App.consumes`/`publishes` only demonstrated for `kind: Service` | `02-core-basic.md:289-295`'s only example is `service: icd-lookup` | This reorg approximates it for plain entity events (`billing.order.paid`) with an invented `service:` name in each `consumes`/`publishes` block — clearly a best-effort mapping, not spec-blessed syntax |
+| `App.consumes`/`publishes` only demonstrated for `kind: Service` | `spec/platform/02-workspace-app-module.md` §3's only example is `service: icd-lookup` | This reorg approximates it for plain entity events (`billing.order.paid`) with an invented `service:` name in each `consumes`/`publishes` block — clearly a best-effort mapping, not spec-blessed syntax |
 | Cross-app grant enforcement unimplemented | No App-scoped grant-checking anywhere in `internal/permission`/`internal/action` | Spec'd (D25, §15.3), zero runtime implementation — not attempted here |
 | SyncAgent registry sync not wired to the live HTTP router | `docs/runtimes/02-forma-resource.md:138` | A real multi-App workspace can *accept* manifests via `forma apply` per App but can't yet *serve* them together end-to-end; `reference-app` uses a dev-mode filesystem-aggregation workaround instead (§9), same shortcut every pre-existing example already used |
-| `impl: compiled` (WASM/Go plugin) unimplemented | `pkg/spec/spec.go:96` is a bare string constant; no executor registered in `internal/action` | Spec'd (`02-core-basic.md` §6.1), not built — noted for future closed-source vendor modules (see §10) |
+| `impl: compiled` (WASM/Go plugin) unimplemented | `pkg/spec/spec.go:96` is a bare string constant; no executor registered in `internal/action` | Spec'd (`spec/backend/01-core-basic.md` §5), not built — noted for future closed-source vendor modules (see §10) |
 | `EntitySpec.Tenant *TenantDecl` unwired | Zero consumers in `internal/db`/`internal/entity` | Same class of "spec got ahead of the engine" gap as the natural-key `scope` parameter was, before §6's fix |
 | `natural_key_rule.scope_field` doesn't reach `ctx.next_key()` | See §6 | Automatic on-create path fixed; explicit script path is a known follow-up |
 | Dashboard `widget.ref` is matched by bare `metadata.name`, not module-qualified | `internal/ui/registry.go`'s `Widgets` map is keyed by name only (`registerInto`, `raw.Metadata.Name`) | Confirmed while building `reference-app/spec/dashboards/erp-overview.yaml` — a cross-module dashboard must use each widget's bare name (`today-revenue`, not `billing.today-revenue`); harmless here since names are unique across the composed set, but two modules reusing the same widget name would silently collide |
@@ -186,8 +186,8 @@ See [`verticals/reference-app/README.md`](../../verticals/reference-app/README.m
 Summary: `compose.sh` copies each vertical's `spec/modules/<name>/` (plus, for `inventory`/`gl`,
 their App-level UI folders, namespaced per-app to avoid collisions like both shipping their own
 `config/app.yaml`) into one aggregated tree, loaded via the ordinary single-`SpecPath` dev loader.
-This is explicitly the same shortcut `02-core-basic.md` §6.0 calls "non-conformant" for direct
-filesystem loading — tolerated here because the *conformant* path (per-App `forma apply` into one
+This is explicitly the same shortcut `spec/platform/02-workspace-app-module.md` §6 calls
+"non-conformant" for direct filesystem loading — tolerated here because the *conformant* path (per-App `forma apply` into one
 workspace) can't yet serve a converged result end-to-end (§8's SyncAgent gap). When that's fixed,
 `reference-app` should be replaced by real per-App `forma apply` calls against one workspace.
 
@@ -207,6 +207,6 @@ Not built in this pass:
 - Closed-source 3rd-party vertical modules: the mechanism already exists (`impl: native`, compiled
   into a vendor's own binary with source never distributed; or `impl: sidecar`, a separate
   container/process over Unix socket — SDKs exist for PHP/Python/TypeScript in `sdk/`) — YAML/
-  Starlark manifests stay open regardless ("readability is a feature", D24,
-  `docs/spec/07-marketplace.md:46`). Not relevant to this repo's own reference verticals, which
+  Starlark manifests stay open regardless ("readability is a feature",
+  `docs/spec/platform/07-marketplace.md` §2). Not relevant to this repo's own reference verticals, which
   should stay `script_ref` throughout, but worth knowing for whoever builds the next one commercially.

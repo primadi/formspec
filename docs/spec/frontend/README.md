@@ -20,8 +20,8 @@ Tiga tingkat di dalamnya dideklarasikan lewat meta-kind **VisualSpecKind**
 | [03-renderer-kind.md](03-renderer-kind.md) | Kind Renderer: implements, stack_family, trust_tier, registry, konformansi |
 | [04-spec-resolution-api.md](04-spec-resolution-api.md) | Seam runtime shell ↔ engine; wajib backend-agnostic |
 | [05-app-kinds.md](05-app-kinds.md) | Katalog tier app: sidebar-nav, topnav, landing-page |
-| [06-page-kinds.md](06-page-kinds.md) | Katalog tier page: data-entry, table, wizard, kanban, dashboard, report, … |
-| [07-component-kinds.md](07-component-kinds.md) | Katalog tier component: input, widget, slot filling, asset |
+| [06-page-kinds.md](06-page-kinds.md) | Katalog tier page: data-entry, table (inline/batch edit), master-detail, kanban, calendar, wizard, dashboard, report, timeline, approval-inbox, notification-center, custom page, … |
+| [07-component-kinds.md](07-component-kinds.md) | Katalog tier component: input (termasuk fileinput, richtext), widget, slot filling, asset |
 | [08-formaexpr.md](08-formaexpr.md) | Grammar ekspresi client-side, berlaku untuk semua shell |
 
 Renderer/shell author: baca 01 → 02 → 03 → 04, lalu katalog tier yang relevan.

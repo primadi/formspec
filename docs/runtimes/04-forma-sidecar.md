@@ -144,6 +144,32 @@ POST /ctx/cache/get
 
 Panggilan ini terjadi **selama** request `/invoke/...` dari §4.2 sedang berlangsung (app memanggil balik ke sidecar dalam rentang satu invoke) — bukan panggilan independen di luar konteks action.
 
+### 4.3a Entity Primitive — `POST /ctx/entity/{op}`
+
+Primitive infrastruktur (§4.3) tidak menyediakan operasi level-entity; handler sidecar butuh padanan `resource.fetch()`/`resource.save()` milik Starlark. Entity primitive mengisinya dengan lima operasi:
+
+| Operasi | Semantik | Atomik? |
+|---|---|---|
+| `get` | Fetch record penuh by ID | — |
+| `set` | Ganti seluruh data | ✅ satu statement |
+| `update` | Merge field tertentu saja | ✅ satu statement |
+| `increment` | `field = field + amount` | ✅ satu statement |
+| `decrement` | `field = field - amount`, dengan guard `>= amount` | ✅ satu statement |
+
+```http
+POST /ctx/entity/update
+{ "named": "pharmacy/medicine", "key": "0189abcd-...", "fields": { "stock": 96 } }
+
+POST /ctx/entity/decrement
+{ "named": "pharmacy/medicine", "key": "0189abcd-...", "field": "stock", "amount": 4 }
+```
+
+`named` berformat `"{module}/{entity}"`. `update`/`increment`/`decrement` dieksekusi sebagai satu statement di PersistBackend — tidak ada read-modify-write race; `version` tetap di-increment otomatis. `decrement` mengembalikan nilai baru dan **gagal kalau guard tidak terpenuhi** (saldo/stok tidak cukup) — pola yang tepat untuk counter stok. Kolom generated ber-index dihitung ulang otomatis oleh backend ([`../renderers/jsonb-persist/02-schema-strategies.md`](../renderers/jsonb-persist/02-schema-strategies.md)).
+
+Semua SDK `lib-forma-*` mengekspos operasi ini lewat `ctx.entity().named("module/entity").get/set/update/increment/decrement(...)`.
+
+Praktik: pilih `decrement`/`increment` alih-alih `get`+modify+`set` untuk field numerik (menghindari TOCTOU); pilih `update` alih-alih `set` untuk perubahan parsial. Catatan: operasi field-level tidak mengecek `version` (bukan full-record CAS) — kalau butuh optimistic concurrency level record, pakai `get` → compare → `set`. Multi-operasi dalam satu handler **belum** dibungkus satu transaksi — gap yang sama dengan kontrak transaksi [`../spec/backend/01-core-basic.md`](../spec/backend/01-core-basic.md) §3, lihat §8.
+
 ### 4.4 Peran `lib-forma-*` (SDK Client Tipis)
 
 `lib-forma-php`, `lib-forma-python`, dst **hanya**:
@@ -212,7 +238,7 @@ Referensi lengkap ada di `--help` (`cmd/forma-sidecar/main.go`); ringkasan flag 
 
 **SDK client (`lib-forma-*`) sudah ada di `sdk/`** — PHP (`sdk/php`, Composer `forma/lib-forma`), Python (`sdk/python`, `lib-forma`, stdlib-only), dan TypeScript (`sdk/typescript`, `@forma/lib-forma`, tanpa dependency runtime). Ketiganya mengimplementasikan persis tiga peran §4.4: listener `/invoke` + `/health`, objek `ctx` yang memanggil balik §4.3, dan serialisasi wire types. Kontrak wire didokumentasikan di `sdk/README.md`; counterpart Go-nya `internal/action/sidecar.go` dan `internal/sidecar/ctx.go`. Ketiganya sudah diverifikasi end-to-end (invoke + `ctx.lock` round-trip lewat unix socket, termasuk PHP lewat `php-cli`/`composer` yang ditambahkan ke `.devcontainer/Dockerfile`).
 
-**Yang masih terbuka:** backend primitive `ctx.*` masih stub di seluruh codebase (operasi `query`/`get`/... balas 501 sampai `datastore.ConnectionPool` punya implementasi op nyata — gap yang sama dengan Starlark); mode child-process belum punya auto-restart kalau child crash di tengah jalan (hanya di-log, sidecar tetap hidup dan health `/health` melapor degraded via app monitor).
+**Yang masih terbuka:** backend primitive `ctx.*` masih stub di seluruh codebase (operasi `query`/`get`/... balas 501 sampai `datastore.ConnectionPool` punya implementasi op nyata — gap yang sama dengan Starlark); mode child-process belum punya auto-restart kalau child crash di tengah jalan (hanya di-log, sidecar tetap hidup dan health `/health` melapor degraded via app monitor). **Model `--runtime` di §5–§6 juga baru mendukung satu runtime untuk seluruh project** — belum ada satu-proses-per-Module untuk workspace yang Module-nya dimiliki bahasa berbeda-beda (mis. Module A TypeScript, Module B PHP); kontrak target untuk itu ada di [`docs/spec/platform/08-project-layout.md`](../spec/platform/08-project-layout.md) §3–§5, dicatat sebagai desain belum-diimplementasikan.
 
 ### 8.1 Urutan Pembangunan yang Disarankan
 
@@ -229,4 +255,4 @@ Referensi lengkap ada di `--help` (`cmd/forma-sidecar/main.go`); ringkasan flag 
 |---|---|
 | `docs/runtimes/02-forma-resource.md` | Engine yang di-embed sidecar; `ctx.*` primitive contract |
 | `docs/architecture/01-architecture-overview.md` §2 | Deployment model Go vs non-Go app |
-| `docs/spec/02-core-basic.md` | Skema `impl.type: sidecar` di level Document/Action |
+| `docs/spec/backend/01-core-basic.md` | Skema `impl.type: sidecar` di level Document/Action |

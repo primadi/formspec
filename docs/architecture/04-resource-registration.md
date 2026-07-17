@@ -215,7 +215,70 @@ Operator menolak klaim yang:
 
 ---
 
-## 6. Metering Model
+## 6. Registry Resolution & Routing
+
+Ketika sebuah caller me-resolve target (resource/service lain) lewat registry,
+registry — bukan caller — yang memilih rute ke instance sehat terdekat.
+**Location transparency dipertahankan sepenuhnya:** caller tidak pernah perlu
+tahu atau menyebut di mana target sebenarnya berjalan; ia cukup menyebut
+identitas target, dan registry menentukan rutenya.
+
+### 6.1 Locality-Aware Routing Order
+
+Resolusi mengikuti urutan preferensi **wajib** dari yang termurah ke yang
+termahal secara latency, jatuh ke tingkat berikutnya hanya bila tidak ada
+instance sehat di tingkat saat ini:
+
+| Urutan | Tingkat | Mekanisme | Biaya |
+|---|---|---|---|
+| 1 | **Same process** | Direct function dispatch | Zero network hop |
+| 2 | **Same host** | Loopback | Tanpa keluar host |
+| 3 | **Same zone/region** | Jaringan intra-zone/region | Latency rendah |
+| 4 | **Any healthy instance** | Jaringan lintas-zone/region | Fallback terakhir |
+
+Urutan ini adalah preferensi, bukan pembatasan: bila tingkat terdekat tidak
+punya instance sehat, registry otomatis turun ke tingkat berikutnya tanpa
+melibatkan caller.
+
+### 6.2 Load-Balancing Strategies & Circuit Breaker
+
+Ketika lebih dari satu instance target tersedia di tingkat resolusi yang
+dipilih, registry mendistribusikan panggilan memakai strategi load-balancing
+yang dapat dipilih:
+
+| Strategi | Perilaku |
+|---|---|
+| `round_robin` | Rotasi merata antar instance |
+| `least_connections` | Ke instance dengan koneksi aktif paling sedikit |
+| `latency_aware` | Ke instance dengan latency teramati terendah |
+| `tenant_affinity` | Panggilan satu tenant konsisten diarahkan ke instance yang sama |
+
+**`tenant_affinity` di sini adalah *request-routing affinity*, bukan
+otorisasi.** Ia menstabilkan instance mana yang melayani tenant tertentu (demi
+cache locality/konsistensi), dan **berbeda tegas** dari filter `allowedTenants`
+pada `kind: Datastore` ([`../spec/platform/06-datastore.md`](../spec/platform/06-datastore.md)
+§4) yang merupakan *authorization filter* — menentukan tenant mana yang boleh
+sama sekali memakai resource. Perhatikan juga §5.1 "Tenant Affinity" di dokumen
+ini yang membahas scoping `allowedTenants` untuk permission, bukan routing.
+
+**Per-instance circuit breaker.** Tiap instance target dilindungi circuit
+breaker independen:
+
+| Transisi | Pemicu |
+|---|---|
+| `closed` → `open` | 5 kegagalan berturut-turut **atau** failure rate > 50% dalam jendela 60 detik |
+| `open` (fail-fast) | Selama terbuka, request ke instance itu gagal cepat tanpa menyentuh instance |
+| `open` → `half-open` | Setelah 30 detik, sebagian request diuji untuk mendeteksi pemulihan |
+| `half-open` → `closed` | Uji berhasil → instance kembali menerima traffic normal |
+| `half-open` → `open` | Uji gagal → kembali fail-fast, ulangi timer 30 detik |
+
+Instance dengan breaker `open` dikeluarkan sementara dari pool load-balancing;
+resolusi (§6.1) memperlakukannya seperti instance tidak sehat dan jatuh ke
+kandidat berikutnya.
+
+---
+
+## 7. Metering Model
 
 | Metrik | Sumber | Agregasi |
 |---|---|---|
@@ -231,7 +294,7 @@ Semua metrik diagregasi per workspace untuk billing. Workspace owner bisa lihat 
 
 ---
 
-## 7. Standalone Mode
+## 8. Standalone Mode
 
 Dalam standalone mode (non-K8s), registrasi resource dilakukan manual via CLI:
 
@@ -251,11 +314,11 @@ Tanpa approval workflow — semua auto-approved di standalone mode.
 
 ---
 
-## 8. References
+## 9. References
 
 | Dokumen | Isi |
 |---|---|
-| `docs/spec/12-datastore.md` | Datastore kind spec |
-| `docs/spec/04-control-plane.md` | Control Plane API, Environment, Policy |
+| `docs/spec/platform/06-datastore.md` | Datastore kind spec |
+| `docs/spec/platform/04-control-plane.md` | Control Plane API, Environment, Policy |
 | `docs/architecture/01-architecture-overview.md` | Multi-region topology, ClusterClass |
 | `docs/architecture/06-k8s-operator.md` | CRD definitions, Operator reconciliation |

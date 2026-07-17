@@ -56,4 +56,4 @@ Each document is self-contained and assumes no prior knowledge of Forma. They ar
 - **Is Forma mature enough for my use case?**
 - **Which architectural patterns are built-in vs DIY?**
 
-For a complete understanding of Forma itself, start with the [Forma Overview](../spec/01-overview.md).
+For a complete understanding of Forma itself, start with the [Forma Overview](../spec/platform/01-overview.md).

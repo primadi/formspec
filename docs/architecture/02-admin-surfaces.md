@@ -5,7 +5,7 @@
 **License:** Creative Commons CC0
 **Governed by:** Forma Architecture Overview (D-ARCH-1, D-ARCH-2, D-ARCH-3, D-ARCH-17)
 
-> Forma memiliki **tiga admin UI** dengan pemilik, lisensi, dan fungsi yang berbeda. Dokumen ini menjelaskan masing-masing secara detail. **Penting:** spec `05-frontend.md` adalah untuk UI aplikasi bisnis, **bukan** untuk admin UI yang dijelaskan di sini.
+> Forma memiliki **tiga admin UI** dengan pemilik, lisensi, dan fungsi yang berbeda. Dokumen ini menjelaskan masing-masing secara detail. **Penting:** spec `spec/frontend/01-visual-hierarchy.md` adalah untuk UI aplikasi bisnis, **bukan** untuk admin UI yang dijelaskan di sini.
 
 ---
 
@@ -130,12 +130,14 @@ Sama seperti `forma/ops`, `forma/console` adalah aplikasi Forma yang dibangun de
 
 ### 4.2 Override dengan Frontend Kinds
 
-Default bisa di-override dengan UI kinds dari `docs/spec/05-frontend.md`:
+Default bisa di-override dengan UI kinds dari `docs/spec/frontend/06-page-kinds.md`
+dan `docs/spec/frontend/07-component-kinds.md`:
 - `kind: Form` — custom form layout
 - `kind: Table` — custom column, filter, sort
 - `kind: Page` — custom page composition
 - `kind: Dashboard` — widget canvas
-- `kind: Menu` — custom navigation
+- Navigasi custom lewat `App.spec.menu`/`Module.spec.menu` — tidak ada
+  `kind: Menu` standalone, lihat `docs/spec/platform/02-workspace-app-module.md` §4
 
 ### 4.3 Escape Hatch: Asset Components
 
@@ -168,7 +170,7 @@ Admin panel bisnis **bukan** aplikasi Forma. Forma hanya menyediakan mesin gener
 - Preview visual sebelum `forma apply`
 - Template vertikal siap pakai
 
-Status: roadmap, bukan bagian dari spec saat ini. Detail di `Forma-Technical-Note-Katalog-Aplikasi.md` §3.4.
+Status: roadmap, bukan bagian dari spec saat ini.
 
 ---
 
@@ -176,7 +178,7 @@ Status: roadmap, bukan bagian dari spec saat ini. Detail di `Forma-Technical-Not
 
 | Dokumen | Isi |
 |---|---|
-| `docs/spec/01-overview.md` §6 | Empat persona + tools |
-| `docs/spec/05-frontend.md` | Spec UI kinds untuk aplikasi bisnis |
-| `reff_docs/Forma-Technical-Note-Katalog-Aplikasi.md` | Katalog first-party apps |
+| `docs/spec/platform/01-overview.md` §4 | Persona + tier developer |
+| `docs/spec/platform/04-control-plane.md` §4 | Empat peran owner + tools |
+| `docs/spec/frontend/06-page-kinds.md`, `07-component-kinds.md` | Spec UI kinds untuk aplikasi bisnis |
 | `docs/architecture/01-architecture-overview.md` | Multi-region topology |

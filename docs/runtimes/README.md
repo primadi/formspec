@@ -58,8 +58,8 @@
 |---|---|
 | Forma Control | Ada (`cmd/forma-ctl`), tapi single-mode (belum region/cluster/standalone split), storage in-memory, dan **pipeline register→deployment belum tersambung** — lihat `01-forma-ctl.md` §7 |
 | Forma Resource | Facade publik nyata di `resource/` (`resource/forma.go` App, `resource/syncagent.go` SyncAgent — lihat `examples/reference-app`), tapi kedua jalur masih terpisah: `App` (serve) tidak menyambung ke `SyncAgent` (pull artifact) — lihat `02-forma-resource.md` §7 |
-| Forma Operator | **Belum ada kode sama sekali** — dokumen adalah spesifikasi desain awal — lihat `03-forma-operator.md` §7 |
-| Forma Sidecar | **Belum ada kode sama sekali**, stub-nya di `internal/action/sidecar.go` — lihat `04-forma-sidecar.md` §8 |
+| Forma Operator | Implementasi awal ada (`cmd/forma-operator` + `internal/operator`: tiga reconciler, verifikasi ed25519, reporter) — endpoint reporting sisi `forma-ctl` belum ada — lihat `03-forma-operator.md` §7 |
+| Forma Sidecar | Implementasi awal ada (`cmd/forma-sidecar` + `internal/sidecar`: `SidecarExecutor`, socket server `POST /ctx/*`, dua mode runtime, pull artifact) — hot-rebuild & transaksi multi-operasi belum — lihat `04-forma-sidecar.md` §8 |
 
 Tiap dokumen punya bagian **"Status Implementasi Hari Ini"** yang mencatat gap konkret antara desain dan kode, plus urutan pembangunan yang disarankan — supaya dokumen ini berguna sebagai peta kerja teknis, bukan cuma spesifikasi aspirasional.
 

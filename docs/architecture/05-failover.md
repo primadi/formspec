@@ -248,7 +248,7 @@ Catatan: status di tabel ini adalah **observability di control plane** (apa yang
 
 | Dokumen | Isi |
 |---|---|
-| `docs/spec/01-overview.md` §2 | Idempotency key convention |
-| `docs/spec/06-plane-protocol.md` §1 | Direction of authority, outage semantics |
+| `docs/spec/backend/01-core-basic.md` §5 | Idempotency key convention |
+| `docs/spec/platform/05-plane-protocol.md` §1, §5 | Direction of authority, outage semantics |
 | `docs/architecture/01-architecture-overview.md` | Control levels, responsibility boundary, D-ARCH-31 |
 | `docs/architecture/04-resource-registration.md` | Resource lifecycle, heartbeat |

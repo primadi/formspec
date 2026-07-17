@@ -3,9 +3,8 @@
 **Version:** 1.0
 **Status:** Draft
 **License:** Creative Commons CC0 (dokumen) — kode-nya sendiri FSL (open source, bagian dari `forma-ctl`)
-**Governed by:** `docs/spec/01-overview.md` §11.C, `docs/spec/04-control-plane.md` §11–12, `docs/spec/11-reference.md` (D43)
 
-> `forma-ctl` **bukan binary terpisah**. Ini adalah entrypoint darurat Cloud Owner/Platform Operator, berupa **kode konvensional di dalam binary `forma-ctl`** (D43, "bedrock exception") — sengaja dibangun sesederhana mungkin dan **tidak bergantung pada platform yang sedang ia perbaiki**. Kalau OPA policy engine, database artifact, atau komponen lain sedang rusak, `forma-ctl` tetap harus bisa dipakai.
+> `forma-ctl` **bukan binary terpisah**. Ini adalah entrypoint darurat Cloud Owner/Platform Operator, berupa **kode konvensional di dalam binary `forma-ctl`** — sengaja dibangun sesederhana mungkin dan **tidak bergantung pada platform yang sedang ia perbaiki**. Kalau OPA policy engine, database artifact, atau komponen lain sedang rusak, `forma-ctl` tetap harus bisa dipakai. Dokumen ini normatif — implementasi kode mengikuti dokumen ini.
 
 ---
 
@@ -19,6 +18,8 @@ Karena itu:
 - Tetap **wajib** menyertakan alasan (`--reason`), ditandatangani aktor, dan tercatat di transparency log — darurat bukan alasan untuk melewati audit
 
 Dipanggil sebagai `forma-ctl <verb>` di samping `forma-ctl serve` — keduanya subcommand dari binary yang persis sama (`cmd/forma-ctl/main.go`), analog dengan bagaimana `busybox` atau `git` punya banyak "personality" dari satu binary.
+
+Prinsip desain lengkap ("bedrock exception" — kenapa ini pengecualian arsitektural dibanding konsol resmi lain seperti `forma/console`/`forma/studio`/`forma/ops`): [`docs/spec/platform/04-control-plane.md`](../spec/platform/04-control-plane.md) §8.
 
 ---
 
@@ -38,7 +39,7 @@ forma-ctl key rotate --environment production
 | `revoke sessions --all --environment <env>` | Cabut semua sesi aktif di environment tertentu — dipakai saat dugaan kompromi kredensial |
 | `key rotate --environment <env>` | Rotasi platform signing key untuk environment tertentu |
 
-Setiap aksi **wajib** `--reason`, ditandatangani aktor yang menjalankan, dicatat ke transparency log (`docs/spec/04-control-plane.md` §11).
+Setiap aksi **wajib** `--reason`, ditandatangani aktor yang menjalankan, dicatat ke transparency log — kontrak lengkap: [`docs/spec/platform/04-control-plane.md`](../spec/platform/04-control-plane.md) §6, §8.
 
 ### 2.2 Policy Testing
 
@@ -46,7 +47,7 @@ Setiap aksi **wajib** `--reason`, ditandatangani aktor yang menjalankan, dicatat
 forma-ctl policy test
 ```
 
-Menjalankan table-driven test terhadap policy yang sudah dikompilasi ke Rego — dipakai memverifikasi perubahan `kind: Policy` sebelum diterapkan (`docs/spec/04-control-plane.md` §2, embedded OPA evaluation dari structured key + `rego:` escape hatch).
+Menjalankan table-driven test terhadap `kind: Policy` yang sudah dikompilasi ke Rego — dipakai memverifikasi perubahan policy sebelum diterapkan. Kontrak lengkap `kind: Policy` (vocabulary terstruktur + escape hatch Rego, policy floor yang tidak bisa dikonfigurasi lepas): [`docs/spec/platform/04-control-plane.md`](../spec/platform/04-control-plane.md) §5.
 
 ### 2.3 Transparency Log Verification
 
@@ -54,7 +55,7 @@ Menjalankan table-driven test terhadap policy yang sudah dikompilasi ke Rego —
 forma-ctl log verify --checkpoint <file>
 ```
 
-Membuktikan tidak ada perubahan sejarah (history rewrite) sejak checkpoint tertentu — verifikasi Merkle tree independen dari proses region control yang normal berjalan.
+Membuktikan tidak ada perubahan sejarah (history rewrite) sejak checkpoint tertentu — verifikasi Merkle tree independen dari proses region control yang normal berjalan. Kontrak lengkap transparency log (struktur Merkle tree, inclusion proof, publikasi checkpoint): [`docs/spec/platform/04-control-plane.md`](../spec/platform/04-control-plane.md) §6.
 
 ---
 
@@ -69,7 +70,7 @@ Dua CLI yang berbeda untuk dua sisi yang berbeda — **jangan disatukan**:
 | **Scope** | Satu workspace/app | Seluruh environment |
 | **Binary** | `forma` (CLI developer/app owner) | `forma-ctl` (mode CLI, bukan binary lain) |
 
-Lihat `01-forma-cli.md` §11 untuk sisi Resource Plane.
+Lihat [`01-forma-cli.md`](01-forma-cli.md) §11 untuk sisi Resource Plane.
 
 ---
 
@@ -85,7 +86,7 @@ Lihat `01-forma-cli.md` §11 untuk sisi Resource Plane.
 
 ## 5. Status Implementasi Hari Ini
 
-**Kerangka dispatcher ada, verb emergency-nya belum.** `cmd/forma-ctl/main.go` sudah membedakan `serve` (fungsional — lihat `docs/runtimes/01-forma-ctl.md`) dari verb emergency (`freeze`, `revoke`, `key`, `policy`, `log`), tapi kelima verb itu langsung mencetak:
+**Kerangka dispatcher ada, verb emergency-nya belum.** `cmd/forma-ctl/main.go` sudah membedakan `serve` (fungsional — lihat [`docs/runtimes/01-forma-ctl.md`](../runtimes/01-forma-ctl.md)) dari verb emergency (`freeze`, `revoke`, `key`, `policy`, `log`), tapi kelima verb itu langsung mencetak:
 
 ```
 forma-ctl freeze: not implemented yet — see docs/cli-tools/02-forma-ctl.md §5
@@ -93,27 +94,21 @@ forma-ctl freeze: not implemented yet — see docs/cli-tools/02-forma-ctl.md §5
 
 dan exit dengan status 1 — **bukan** silent no-op, dan bukan pura-pura sukses. Ini konsisten dengan pola stub yang sudah dipakai di tempat lain di codebase (mis. `internal/action/sidecar.go`'s `SidecarExecutor`).
 
-`docs/plan/todo.md` menandai implementasi sungguhan verb ini sebagai item terpisah:
-
-- Fase 5.7: `forma-ctl` emergency CLI — freeze, revoke sessions, key rotate — ⏳
-- Fase 5.2: `kind: Policy` — OPA/Rego integration, `forma-ctl policy test` — ⏳
-
-Keduanya bergantung pada fitur yang sendiri belum ada (`docs/runtimes/01-forma-ctl.md` §7: tidak ada OPA/policy engine, tidak ada persistent store, tidak ada transparency log implementasi nyata) — jadi implementasi sungguhan verb ini **tidak bisa dibangun sebelum** ketiga fondasi itu ada.
+Implementasi sungguhan kelima verb ini bergantung pada fondasi yang sendiri belum ada (lihat [`docs/runtimes/01-forma-ctl.md`](../runtimes/01-forma-ctl.md) §7): tidak ada OPA/policy engine, tidak ada persistent artifact store, tidak ada transparency log implementasi nyata — sehingga **tidak bisa dibangun sebelum** ketiga fondasi itu ada.
 
 ### 5.1 Urutan Pembangunan yang Disarankan
 
-1. Bangun dulu fondasi yang jadi prasyarat: persistent artifact store, transparency log dasar (lihat `docs/runtimes/01-forma-ctl.md` §7.1) — `forma-ctl log verify` tidak ada gunanya tanpa log yang nyata.
+1. Bangun dulu fondasi yang jadi prasyarat: persistent artifact store, transparency log dasar (lihat [`docs/runtimes/01-forma-ctl.md`](../runtimes/01-forma-ctl.md) §7.1) — `forma-ctl log verify` tidak ada gunanya tanpa log yang nyata.
 2. `forma-ctl freeze`/`revoke sessions` bisa dibangun lebih awal dari `key rotate` — perilakunya lebih sederhana (set flag status di environment record, tidak butuh HSM/KMS integration). Ganti stub `case "freeze", "revoke", ...` di `main.go` dengan implementasi nyata satu per satu, bukan sekaligus.
-3. `policy test` menunggu `kind: Policy` + OPA integration (belum ada sama sekali di kode).
+3. `policy test` menunggu `kind: Policy` + integrasi OPA (belum ada sama sekali di kode).
 4. Sepanjang jalan, jaga prinsip §1 — jangan sampai implementasi verb emergency diam-diam butuh service lain hidup untuk berfungsi (mis. jangan taruh di belakang HTTP API internal yang bisa down bareng komponen yang diperbaiki). Implementasikan sebagai kode langsung dalam proses `forma-ctl`, bukan sebagai HTTP client ke `serve` yang sedang berjalan.
 
 ---
 
-## 6. References
+## 6. Referensi
 
 | Dokumen | Isi |
 |---|---|
-| `docs/spec/04-control-plane.md` §11–12 | Emergency controls, conformance |
-| `docs/spec/11-reference.md` D43 | Bedrock exception, dogfooding consoles |
-| `docs/runtimes/01-forma-ctl.md` | Binary yang meng-host `forma-ctl` |
-| `docs/cli-tools/01-forma-cli.md` §11 | Emergency command sisi Resource Plane (`forma freeze`, dst) |
+| [`docs/runtimes/01-forma-ctl.md`](../runtimes/01-forma-ctl.md) | Binary yang meng-host `forma-ctl`, termasuk gap fondasi §7 |
+| [`01-forma-cli.md`](01-forma-cli.md) §11 | Emergency command sisi Resource Plane (`forma freeze`, dst) |
+| [`docs/spec/platform/04-control-plane.md`](../spec/platform/04-control-plane.md) | Kontrak: Policy, transparency log, REPL governance, emergency controls, bedrock exception |

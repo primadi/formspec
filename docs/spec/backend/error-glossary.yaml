@@ -90,6 +90,11 @@ glossary:
     params: [resource_name, blocking_resource, blocking_id]
     default_message: "{resource_name} cannot be cancelled: referenced by {blocking_resource} #{blocking_id}"
 
+  # --- Persistence & Category Isolation (§3) ---
+  - code: FORMA.PERSIST.CROSS_CATEGORY
+    params: [source_category, target_category]
+    default_message: "Query cannot join across categories: '{source_category}' to '{target_category}' is disallowed"
+
   # --- Archiving (§14b) ---
   - code: FORMA.ARCHIVE.LOCKED_FOR_DELETION
     params: [resource_name, archived_reference_count]

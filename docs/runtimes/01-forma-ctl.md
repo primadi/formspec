@@ -3,7 +3,7 @@
 **Version:** 1.0
 **Status:** Draft
 **License:** Creative Commons CC0 (dokumen) — binary-nya sendiri FSL (open source)
-**Governed by:** `docs/architecture/01-architecture-overview.md` §4–5, `docs/spec/04-control-plane.md`, `docs/spec/06-plane-protocol.md`
+**Governed by:** `docs/architecture/01-architecture-overview.md` §4–5, `docs/spec/platform/04-control-plane.md`, `docs/spec/platform/05-plane-protocol.md`
 
 > `forma-ctl` adalah **satu-satunya binary Control Plane** di Forma. Subcommand `serve` menjalankannya dalam tiga mode (`region`, `cluster`, `standalone`) dari **satu codebase yang sama** — bukan tiga binary berbeda; subcommand lain (`freeze`, `revoke`, `key`, `policy`, `log`) adalah emergency CLI Cloud Owner (D43 "bedrock exception" — lihat `docs/cli-tools/02-forma-ctl.md`), dalam binary yang sama. Dokumen ini menjelaskan fitur, desain internal, dan API HTTP-nya secara rinci, sebagai pelengkap gambaran topologi besar di `docs/architecture/`.
 
@@ -183,7 +183,7 @@ Response 202 Accepted
 
 ### 5.3 Endpoint yang Direncanakan Tapi Belum Ada
 
-`docs/spec/06-plane-protocol.md` menyebut `POST /v1/register` sebagai endpoint registrasi resource (node/datastore/cache — lihat `docs/architecture/04-resource-registration.md`). Endpoint ini **belum ada** di kode; hanya `POST /v1/artifacts` (registrasi *artifact* aplikasi) yang terimplementasi. Perbedaan ini perlu direkonsiliasi: apakah `/v1/register` akan jadi endpoint terpisah, atau digabung ke bawah `/v1/artifacts` dengan `resource_type` field.
+`docs/spec/platform/05-plane-protocol.md` menyebut `POST /v1/register` sebagai endpoint registrasi resource (node/datastore/cache — lihat `docs/architecture/04-resource-registration.md`). Endpoint ini **belum ada** di kode; hanya `POST /v1/artifacts` (registrasi *artifact* aplikasi) yang terimplementasi. Perbedaan ini perlu direkonsiliasi: apakah `/v1/register` akan jadi endpoint terpisah, atau digabung ke bawah `/v1/artifacts` dengan `resource_type` field.
 
 ---
 
@@ -245,5 +245,5 @@ Bagian ini secara sengaja jujur tentang jarak antara desain di atas dan kode saa
 | `docs/architecture/01-architecture-overview.md` §1, §4 | Topologi multi-region, tiga level kontrol |
 | `docs/architecture/03-deployment-flow.md` | Pipeline dua-stage lengkap (register → deploy) |
 | `docs/architecture/04-resource-registration.md` | Registrasi node/datastore/cache |
-| `docs/spec/06-plane-protocol.md` | Wire protocol normatif |
+| `docs/spec/platform/05-plane-protocol.md` | Wire protocol normatif |
 | `docs/runtimes/02-forma-resource.md` | Sisi klien dari plane protocol (resource pod) |

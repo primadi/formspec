@@ -3,7 +3,9 @@
 // all Forma resource kinds.
 //
 // The types in this package correspond 1:1 with the YAML manifest format
-// defined in docs_old/spec/02-core-basic.md, 04-control-plane.md, and 05-frontend.md.
+// defined in docs/spec/backend/{01-core-basic,02-core-extended,03-entity-extension}.md,
+// docs/spec/frontend/{01-04} (docs_old/spec/05-frontend.md §3-13 pending migration),
+// and docs_old/spec/04-control-plane.md (pending migration).
 package spec
 
 // APIVersion is the current Forma API version string.

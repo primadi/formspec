@@ -6,7 +6,7 @@ import (
 )
 
 // TestEntityRecord_MarshalJSON_FlattensAndUsesSnakeCase locks the wire
-// contract clients depend on (docs_old/spec/02-core-basic.md §16: single
+// contract clients depend on (docs/spec/backend/01-core-basic.md §8: single
 // response `{ data, meta }` where `data` is the record's own fields plus
 // id/version/timestamps at the same level, snake_case) — not a Go-field
 // PascalCase struct with a nested "Data" key.

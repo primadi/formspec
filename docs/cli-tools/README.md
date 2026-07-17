@@ -36,7 +36,7 @@ Menyatukan keduanya ke satu CLI akan merusak properti paling penting `forma-ctl`
 
 | CLI | Status kode hari ini |
 |---|---|
-| `forma` | `apply` dan `generate --lang typescript` implemented sebagai subcommand nyata di `cmd/forma` (lihat `03-forma-generate.md`). ~19 verb lain dikenali dispatcher tapi cuma print "not implemented yet" (konsisten dengan `docs/plan/todo.md` Fase 6, semua ⏳) |
+| `forma` | `apply` dan `generate --lang typescript` implemented sebagai subcommand nyata di `cmd/forma` (lihat `03-forma-generate.md`). ~19 verb lain dikenali dispatcher tapi cuma print "not implemented yet" |
 | `forma-ctl` | Subcommand `serve` implemented (lihat `docs/runtimes/01-forma-ctl.md`). Verb emergency (`freeze`, `revoke`, `key`, `policy`, `log`) dikenali dispatcher tapi cuma print "not implemented yet" — bergantung fondasi yang sendiri belum dibangun (persistent store, OPA, transparency log — lihat `docs/runtimes/01-forma-ctl.md` §7) |
 
 ---

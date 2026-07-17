@@ -2,7 +2,7 @@
 
 **Status:** Draft
 **Audience:** App Developers — first-time Forma users
-**Prerequisites:** Read [Forma Overview](./01-overview.md) and [Core Basic Spec](./02-core-basic.md)
+**Prerequisites:** Read [Forma Overview](../spec/platform/01-overview.md) and [Core Basic Spec](../spec/backend/01-core-basic.md)
 
 > This tutorial walks you through building a mini Order-to-Cash application with Forma, step by step. By the end, you will have: a working order management system with sequential order numbers, payment gateway integration, a transactional journal entry on payment, and email/WA notifications — all from declarative manifests with minimal code.
 
@@ -229,7 +229,7 @@ spec:
 **What's happening here:**
 - FR1 (sequential numbers): `natural_key_rule` with `strategy: sequence` and `ctx.next_key()` — the framework handles locking, reset periods, and formatting. No `MAX()+1` ever.
 - FR3 (idempotency): `idempotent: true` on the `mark-paid` action. The framework maintains an idempotency store and replays the original response on duplicates.
-- FR4 (reliable events): `publish.durable: true` + `deliver.reliable_event`. The order `paid` event and the journal entry creation are atomic (same DB transaction for entities). The outbox worker delivers idempotently.
+- FR4 (reliable events): `publish.durable: true` + `deliver.reliable_event`. The contract requires the order `paid` event (outbox write) and the entity mutation to be atomic — same DB transaction ([Core Basic §3, §7](../spec/backend/01-core-basic.md)). The outbox worker delivers idempotently. **Implementation status:** the reference jsonb-persist implementation does not yet wrap the outbox write in the mutation's transaction — see [jsonb-persist gap notes](../renderers/jsonb-persist/01-architecture.md) §3; until that lands, a crash between commit and enqueue can drop the event.
 - The state machine allows `draft → awaiting_payment` via `checkout`, `awaiting_payment → paid` via `mark-paid`. All other transitions are blocked.
 - `update` is restricted to `draft` status only. `delete` is disabled for audit integrity.
 
@@ -270,8 +270,10 @@ def execute(resource, params, ctx):
     resource.set("gateway_reference", params.gateway_reference)
     resource.set("paid_at", ctx.now())
     resource.save()   # Transitions awaiting_payment→paid AND writes the "paid"
-                      # event to the outbox — ONE DB transaction (answers the
-                      # second Scenario A bug: non-atomic status+journal).
+                      # event to the outbox — ONE DB transaction per the contract
+                      # (answers the second Scenario A bug: non-atomic
+                      # status+journal). NOTE: the reference implementation does
+                      # not yet honor this atomicity — see jsonb-persist gap notes.
     return ok()
 ```
 
@@ -402,6 +404,6 @@ This starts the complete local environment: Postgres, Valkey, Mailpit, MinIO, `f
 
 ## Next Steps
 
-- Read the [Order-to-Cash Companion](./09-order-to-cash-companion.md) for the deep technical analysis, including the "without Forma vs with Forma" comparison
-- Explore [Core Extended](./03-core-extended.md) for Workflow (approval chains), Webhook signature verification, and Mockup environment binding
-- See [Entity Extension](./10-entity-extension.md) to learn how to add custom fields to marketplace modules without forking
+- Read the [Order-to-Cash Companion](./order-to-cash-companion.md) for the deep technical analysis, including the "without Forma vs with Forma" comparison
+- Explore [Core Extended](../spec/backend/02-core-extended.md) for Workflow (approval chains), Webhook signature verification, and Mockup environment binding
+- See [Entity Extension](../spec/backend/03-entity-extension.md) to learn how to add custom fields to marketplace modules without forking

@@ -320,4 +320,4 @@ forma-ctl serve --mode=standalone --port=8443 --db=sqlite:.forma/control.db
 | `docs/architecture/03-deployment-flow.md` | Deployment pipeline, Stage 1 & 2 |
 | `docs/architecture/04-resource-registration.md` | Resource lifecycle, token structure |
 | `docs/architecture/05-failover.md` | Pod-level and workspace-level HA |
-| `docs/spec/00-kind-plane-mapping.md` | Authoritative kind → plane mapping |
+| `docs/spec/platform/03-kind-system.md` §4 | Authoritative kind → plane mapping |

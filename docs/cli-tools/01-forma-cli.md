@@ -3,9 +3,8 @@
 **Version:** 1.0
 **Status:** Draft
 **License:** Creative Commons CC0 (dokumen) — binary-nya sendiri FSL (open source)
-**Governed by:** `docs/spec/02-core-basic.md` §23–25/27, `docs/spec/01-overview.md` §11–12, `docs/spec/04-control-plane.md` §11, `docs/spec/11-reference.md` (D13, D34)
 
-> `forma` adalah CLI utama untuk App/Module Owner dan Developer — satu binary (`cmd/forma`), banyak subcommand. Semua verb di dokumen ini adalah subcommand dari **satu proses `forma`**, bukan binary terpisah. Untuk CLI darurat Platform Operator, lihat `02-forma-ctl.md`.
+> `forma` adalah CLI utama untuk App/Module Owner dan Developer — satu binary (`cmd/forma`), banyak subcommand. Semua verb di dokumen ini adalah subcommand dari **satu proses `forma`**, bukan binary terpisah. Untuk CLI darurat Platform Operator, lihat [`02-forma-ctl.md`](02-forma-ctl.md). Dokumen ini normatif — perilaku setiap verb didefinisikan di sini secara lengkap; implementasi kode mengikuti dokumen ini, bukan sebaliknya.
 
 ---
 
@@ -13,7 +12,7 @@
 
 | Kategori | Verb |
 |---|---|
-| **Deployment** | `apply`, `diff`, `delete`, `get`, `describe`, `validate` |
+| **Deployment** | `apply`, `diff`, `delete`, `get`, `describe`, `validate`, `check [--fix]`, `promote` |
 | **Scaffolding** | `new <kind>` |
 | **Dev loop** | `dev`, `repl` |
 | **Codegen** | `generate` |
@@ -23,7 +22,7 @@
 | **Marketplace & signing** | `module list\|install\|uninstall`, `sign` |
 | **Scripting** | `script validate\|test` |
 | **Emergency (Resource Plane)** | `freeze`, `rollback`, `lock workspace` |
-| **Ops** | `workspace create` |
+| **Ops** | `workspace create`, `logs` |
 
 ---
 
@@ -31,7 +30,7 @@
 
 ### `forma apply`
 
-Satu-satunya cara mendaftarkan YAML manifest ke Control Plane (lihat `docs/architecture/03-deployment-flow.md`, `docs/runtimes/01-forma-ctl.md` §5).
+Satu-satunya cara mendaftarkan YAML manifest ke Control Plane (lihat [`docs/architecture/03-deployment-flow.md`](../architecture/03-deployment-flow.md), [`docs/runtimes/01-forma-ctl.md`](../runtimes/01-forma-ctl.md) §5).
 
 ```bash
 forma apply -f myapp/
@@ -68,16 +67,54 @@ forma delete document old-report --confirm
 
 ### `forma validate`
 
-Validasi tanpa mendaftarkan — dry-run. Termasuk **honesty scan** untuk script: `uses` yang dideklarasikan vs yang benar-benar dipakai script (D20).
+Validasi tanpa mendaftarkan — dry-run. Termasuk **honesty scan** untuk script Starlark.
 
 ```bash
 forma validate -f myapp/
 # undeclared usage  → error
 # declared-but-unused → warning
-# ctx.environment branching di business script → warning (§spec/03-core-extended.md:103)
+# ctx.environment branching di business script → warning
 ```
 
-`forma validate` **tidak pernah memberi grant** — ia cuma verifikasi kejujuran deklarasi terhadap kode. Dijalankan tiap PR sebagai gate CI.
+`forma validate` **tidak pernah memberi grant** — ia cuma verifikator kejujuran otomatis atas deklarasi `required_permission`/`uses` setiap action terhadap kode sungguhan, bukan sumber kebenaran permission itu sendiri. Model permission lengkap (kelima jenis impl, kenapa grant tidak pernah diturunkan dari pemakaian): [`docs/spec/backend/01-core-basic.md`](../spec/backend/01-core-basic.md) §5. Aturan environment binding pada business logic (kenapa `ctx.environment` hanya untuk logging, bukan percabangan bisnis): [`docs/spec/backend/02-core-extended.md`](../spec/backend/02-core-extended.md) §8. Dijalankan tiap PR sebagai gate CI.
+
+### `forma check [--fix]`
+
+Analisis statis menyeluruh atas satu project — melampaui `validate` (yang
+per-manifest): resolusi lintas-file dan lintas-module dalam satu workspace.
+Wajib melaporkan minimal:
+
+```bash
+forma check -f myapp/
+# unresolved varname di script (referensi field/identifier yang tidak ada) → error
+# FormaExpr mereferensi field yang tidak ada di skema                       → error
+# akses lintas-module yang dipakai tapi belum dideklarasikan/di-approve      → error
+# deklarasi lintas-module yang tidak pernah dipakai                          → warning
+```
+
+`forma check --fix` memperbaiki apa yang bisa diperbaiki otomatis: menambah
+deklarasi `depends_on`/`uses` yang kurang (setelah konfirmasi interaktif —
+penambahan deklarasi adalah perluasan footprint consent, tidak pernah
+diam-diam), dan menghapus deklarasi yang tidak terpakai. Error kelas
+unresolved-reference **menggagalkan `forma apply`** — inilah yang menjamin
+error referensi FormaExpr/script tidak mungkin muncul di runtime
+([`../spec/frontend/08-formaexpr.md`](../spec/frontend/08-formaexpr.md),
+[`../spec/platform/02-workspace-app-module.md`](../spec/platform/02-workspace-app-module.md) §7).
+
+### `forma promote`
+
+Promosikan artifact yang **sama** (checksum diverifikasi identik) dari satu
+environment ke environment lain — tanpa build/sign ulang. Mengikuti siklus
+Sign → Apply → Approve → Promote; approval memakai Policy environment tujuan.
+
+```bash
+forma promote myapp --from staging --to production
+```
+
+Kontrak lengkap (verifikasi checksum, gate re-consent, chain transparency
+log): [`docs/spec/platform/10-deployment-operations.md`](../spec/platform/10-deployment-operations.md)
+§5 dan [`docs/spec/platform/04-control-plane.md`](../spec/platform/04-control-plane.md)
+§2–3.
 
 ---
 
@@ -85,7 +122,12 @@ forma validate -f myapp/
 
 ### `forma new <kind>`
 
-Scaffold boilerplate untuk kind tertentu — bagian dari "spec tooling ladder" (D34): JSON Schema+LSP → `forma new` → visual editor di admin panel → Agent Skill.
+Scaffold boilerplate untuk kind tertentu — anak tangga kedua dari empat anak tangga yang mengurangi verbositas YAML:
+
+1. JSON Schema per kind (dipublikasikan di `forma.dev/schemas`) + LSP — autocomplete, hover docs, validasi realtime; nyaris gratis berkat format seragam `apiVersion/kind`.
+2. **`forma new <kind>`** — scaffold CLI (dokumen ini).
+3. Editor visual di admin panel (mirip DocType editor Frappe) — **menulis YAML ke file/PR, bukan ke database tersembunyi**; git tetap jadi source of truth.
+4. Agent Skill — spec editor untuk AI.
 
 ```bash
 forma new app tokoku                # scaffold App baru
@@ -130,11 +172,11 @@ forma dev
 | `--addr` | `:8080` | REST API listen address |
 | `--listen` | `none` | Ctx listener mode: `none`, `local_http`, `unix_socket` |
 | `--app-endpoint` | `none` | App endpoint mode: `none`, `local_http`, `unix_socket` |
-| `--runtime` | auto | Runtime auto-detect (php/python/node) |
+| `--runtime` | auto-detect | Runtime auto-detect (php/python/node) |
 | `--dev-ui` | `false` | Start Vite HMR (implies `--dev`) |
 | `--dev` | `false` | Dev mode (auth bypass) |
 | `--force` | `false` | Kill previous instance. Implied oleh `--dev` / `--dev-ui` |
-| `--web-dir` | auto | Override SPA directory |
+| `--web-dir` | auto-detect | Override SPA directory |
 | `--state-dir` | `.forma` | State directory (auto-create) |
 
 **Runtime auto-detect:**
@@ -147,9 +189,11 @@ forma dev
 | `go.mod` | local (Go) |
 | (none) | local (API-only) |
 
+Referensi lengkap flag, mode `--listen`/`--app-endpoint`, dan arsitektur proses: [`02-forma-dev.md`](02-forma-dev.md).
+
 ### `forma repl`
 
-Console Starlark interaktif dengan akses `ctx.*` penuh — fitur first-class (D13), termasuk sebagai permukaan untuk AI Agent Skills debugging.
+Console Starlark interaktif dengan akses `ctx.*` penuh — fitur first-class (bukan alat debug darurat sekali pakai), termasuk sebagai permukaan untuk AI Agent Skill debugging.
 
 ```bash
 forma repl --environment staging
@@ -157,14 +201,7 @@ forma repl --environment staging
 >>> ctx.db.query("...")
 ```
 
-**Scope environment policy** (`docs/spec/04-control-plane.md` §11):
-
-| Environment | Akses REPL |
-|---|---|
-| Dev/staging profile | Read-write, sesi direkam di audit log |
-| Production profile | **Read-only** — write butuh policy approval eksplisit time-boxed, tercatat di transparency log |
-
-REPL selalu berjalan di bawah identitas user nyata dengan permission user tersebut — **bukan** superuser shell.
+Scope environment policy (tabel akses per profil environment, jaminan "bukan superuser shell"): [`docs/spec/platform/04-control-plane.md`](../spec/platform/04-control-plane.md) §7.
 
 ---
 
@@ -180,7 +217,7 @@ forma generate --lang go,typescript                                  # go: not i
 forma generate --openapi > api-spec.json                             # not implemented yet
 ```
 
-**Status:** `--lang typescript` implemented (`cmd/forma/generate.go`) — lihat `docs/cli-tools/03-forma-generate.md` untuk referensi lengkap dan panduan pemakaian di frontend (termasuk `@forma/client`, runtime SDK-nya). `--lang go` dan `--openapi` belum dibangun.
+**Status:** `--lang typescript` implemented (`cmd/forma/generate.go`) — lihat [`03-forma-generate.md`](03-forma-generate.md) untuk referensi lengkap dan panduan pemakaian di frontend (termasuk `@forma/client`, runtime SDK-nya). `--lang go` dan `--openapi` belum dibangun.
 
 ---
 
@@ -195,6 +232,8 @@ forma migrate plan     # tampilkan DDL yang akan dijalankan, tanpa eksekusi
 forma migrate apply    # eksekusi (biasanya otomatis lewat forma apply)
 ```
 
+Rename field wajib dideklarasikan lewat `renamed_from` pada field — kalau tidak, diff menafsirkannya sebagai drop+add; penghapusan field butuh dua langkah (deprecate, lalu remove) lintas dua versi apply. Backfill data adalah urusan migrasi tipe data (scripted, run/rollback per versi), bukan migrasi structural.
+
 ### `forma seed`
 
 Jalankan seeder & factory (`forma/seed` official module) untuk data dev/testing.
@@ -205,7 +244,7 @@ forma seed --module billing
 
 ### `forma backup create|inspect` / `forma restore`
 
-Normatif untuk **Credible Exit Guarantee** (D31) — format backup adalah bagian dari spec terbuka, **tidak boleh license-gated** (D27).
+Jaminan format backup/restore (credible exit guarantee, kenapa operasi baca/ekspor tidak boleh license-gated): [`docs/spec/backend/04-persist-backend.md`](../spec/backend/04-persist-backend.md) §3.
 
 ```bash
 forma backup create --full                       # atau --incremental, --filter <query>
@@ -217,7 +256,7 @@ forma restore --from backup-2026-07-10.tar \
   --dry-run                                       # laporan kompatibilitas dulu
 ```
 
-File storage ikut ter-backup; summary/agregat tidak (bisa dihitung ulang). Transform per-record via script Starlark saat restore.
+File storage ikut ter-backup; summary/agregat tidak (bisa dihitung ulang). Transform per-record via script Starlark saat restore. `restore` yang meng-overwrite data yang sudah ada wajib tanda tangan pemilik workspace atau delegasi eksplisit ber-scope `backup.restore`, selalu tercatat di transparency log.
 
 ---
 
@@ -302,12 +341,13 @@ forma script test invoice.star --fixture fixtures/invoice_submit.json
 
 ## 11. Emergency (Resource Plane Side)
 
-Perintah darurat yang dijalankan **App Admin yang diotorisasi**, di sisi Resource Plane (bukan Platform Operator — itu `forma-ctl`, lihat `02-forma-ctl.md`):
+Perintah darurat yang dijalankan **App Admin yang diotorisasi**, di sisi Resource Plane (bukan Platform Operator — itu `forma-ctl`, lihat [`02-forma-ctl.md`](02-forma-ctl.md)):
 
 ```bash
 forma freeze --reason "..."
 forma rollback --since 1h --all
 forma lock workspace <name> --reason "..."
+forma suspend scripts --all --reason "..."   # stop semua handler Starlark, engine tetap layani read/CRUD
 ```
 
 Setiap aksi darurat **wajib** menyertakan alasan, ditandatangani aktor, dan tercatat di transparency log.
@@ -322,6 +362,24 @@ Setiap aksi darurat **wajib** menyertakan alasan, ditandatangani aktor, dan terc
 forma workspace create --region jakarta --cluster-class premium
 ```
 
+### `forma logs`
+
+Baca stream log terstruktur (JSON lines) dari engine Resource Plane — tail
+dan filter tanpa menyaring JSON manual.
+
+```bash
+forma logs --workspace corp-456 --follow          # tail live
+forma logs --module billing --entity invoice        # filter per module/entity
+forma logs --level error --since 1h                  # hanya error, jendela waktu
+forma logs --request-id req-abc123                    # satu request, lintas komponen
+```
+
+`forma logs` **tidak pernah** menembus disiplin PII: nilai bisnis hanya
+muncul kalau operator mengaktifkan level `debug`, yang off secara default di
+`prod`. Kontrak lengkap (field wajib log, disiplin PII, filter):
+[`docs/spec/platform/09-observability.md`](../spec/platform/09-observability.md)
+§2, §7.
+
 ---
 
 ## 13. Status Implementasi Hari Ini
@@ -330,28 +388,31 @@ forma workspace create --region jakarta --cluster-class premium
 
 | Verb | Status | Catatan |
 |---|---|---|
-| `apply` | ⚠️ Sebagian | Subcommand nyata di `cmd/forma`, tapi pipeline register→deploy putus di sisi server — lihat `docs/runtimes/01-forma-ctl.md` §7 |
+| `apply` | ⚠️ Sebagian | Subcommand nyata di `cmd/forma`, tapi pipeline register→deploy putus di sisi server — lihat [`docs/runtimes/01-forma-ctl.md`](../runtimes/01-forma-ctl.md) §7 |
 | `apply --watch` | ✅ | `fsnotify`, debounce 500ms |
+| `validate`, `new`, `dev`, `generate`, `migrate` | ⏳ | Belum dikerjakan |
 | Semua verb lain (§2–§12) | ❌ Belum ada logic | Dikenali dispatcher, tapi cuma print "not implemented yet" — lihat `cmd/forma/main.go` |
-
-`docs/plan/todo.md` Fase 6 (CLI & DX) menandai `validate`, `new`, `dev`, `generate`, `migrate` sebagai ⏳ (belum dikerjakan) — konsisten dengan temuan ini.
 
 ### 13.1 Urutan Pembangunan yang Disarankan
 
 1. **`forma validate`** berikutnya — nilainya tinggi (CI gate) dan tidak butuh pipeline deploy penuh untuk berfungsi, cukup manifest loader + honesty scanner (`internal/manifest`, `internal/permission` sudah ada). Ganti `case "validate":` di dispatcher dengan implementasi nyata.
 2. **`forma new <kind>`** — scaffold sederhana, tidak bergantung komponen lain, cepat memberi nilai ke DX.
-3. **`forma dev`** — baru bermakna penuh setelah gap pipeline di `docs/runtimes/01-forma-ctl.md` §7 (register→deployment) diperbaiki, karena `forma dev` mengandalkan hot-reload lewat jalur yang sama.
+3. **`forma dev`** — baru bermakna penuh setelah gap pipeline di [`docs/runtimes/01-forma-ctl.md`](../runtimes/01-forma-ctl.md) §7 (register→deployment) diperbaiki, karena `forma dev` mengandalkan hot-reload lewat jalur yang sama.
 4. **`forma generate`** — bergantung stabilitas skema `pkg/spec` (sudah cukup stabil untuk kind `Document`), realistis dikerjakan setelah `validate`.
 5. Sisanya (`backup`/`restore`/`archive`/`saga`/`module`/`sign`/emergency) bergantung fitur yang sendiri belum ada di `internal/*` (outbox lengkap, marketplace registry, dsb) — realistis fase lanjutan.
 
 ---
 
-## 14. References
+## 14. Referensi
 
 | Dokumen | Isi |
 |---|---|
-| `docs/spec/02-core-basic.md` §23–25, 27 | Verb normatif, dev environment, backup/restore, codegen |
-| `docs/spec/01-overview.md` §11–12 | Tools per persona, ekosistem CLI |
-| `docs/spec/11-reference.md` D13, D34 | REPL first-class, spec tooling ladder |
-| `docs/runtimes/01-forma-ctl.md` | API server yang jadi target `apply`/`diff`/`get` |
-| `docs/cli-tools/02-forma-ctl.md` | CLI darurat Platform Operator (binary berbeda peran, sama proses) |
+| [`docs/runtimes/01-forma-ctl.md`](../runtimes/01-forma-ctl.md) | API server yang jadi target `apply`/`diff`/`get` |
+| [`docs/architecture/03-deployment-flow.md`](../architecture/03-deployment-flow.md) | Bagaimana `forma apply` masuk ke pipeline deployment production |
+| [`02-forma-ctl.md`](02-forma-ctl.md) | CLI darurat Platform Operator (binary berbeda peran, sama proses) |
+| [`02-forma-dev.md`](02-forma-dev.md) | Referensi lengkap `forma dev` |
+| [`03-forma-generate.md`](03-forma-generate.md) | Referensi lengkap `forma generate` + browser client SDK |
+| [`docs/spec/backend/01-core-basic.md`](../spec/backend/01-core-basic.md) | Kontrak: model permission, query/filter, API delivery |
+| [`docs/spec/backend/02-core-extended.md`](../spec/backend/02-core-extended.md) | Kontrak: Mockup & environment binding |
+| [`docs/spec/backend/04-persist-backend.md`](../spec/backend/04-persist-backend.md) | Kontrak: jaminan backup/restore |
+| [`docs/spec/platform/04-control-plane.md`](../spec/platform/04-control-plane.md) | Kontrak: Policy, transparency log, REPL governance, emergency controls |

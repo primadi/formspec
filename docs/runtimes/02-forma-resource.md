@@ -3,7 +3,7 @@
 **Version:** 1.0
 **Status:** Draft
 **License:** Creative Commons CC0 (dokumen) — kode-nya sendiri FSL (open source)
-**Governed by:** `docs/architecture/01-architecture-overview.md` §2, §4.3, `docs/spec/02-core-basic.md`, `docs/spec/03-core-extended.md`
+**Governed by:** `docs/architecture/01-architecture-overview.md` §2, §4.3, `docs/spec/backend/01-core-basic.md`, `docs/spec/backend/02-core-extended.md`
 
 > `forma-resource` **bukan binary** — ia adalah **Go library** (`import "github.com/primadi/forma/resource"`) yang di-compile menjadi satu proses dengan aplikasi Go. Untuk app non-Go, engine yang sama di-embed ke dalam proses `forma-sidecar` (lihat `04-forma-sidecar.md`). Dokumen ini menjelaskan fitur, desain internal, dan permukaan API (`ctx.*` serta REST API yang dihasilkan) dari library ini.
 
@@ -16,7 +16,7 @@ Forma Resource adalah **mesin bisnis** yang dikompilasi ke dalam app: entity eng
 - **Tidak membaca YAML dari filesystem di production** — memuat manifest yang sudah diverifikasi dari artifact yang di-pull lewat plane protocol (lihat `01-forma-ctl.md` §5)
 - Menyediakan `ctx.*` primitives untuk script Starlark (`ctx.db`, `ctx.lock`, `ctx.pubsub`, dst)
 - Meng-generate route REST CRUD + custom action dari spec `Document`/`Entity`
-- Menegakkan permission model deny-by-default (D20/D49 — lihat `docs/spec/04-control-plane.md`)
+- Menegakkan permission model deny-by-default (lihat `docs/spec/backend/01-core-basic.md` §1.1, §5, §8)
 
 Dua binary embed engine yang sama: **app Go native** (`import` langsung) dan **`forma-sidecar`** (untuk app non-Go — lihat `04-forma-sidecar.md`).
 
@@ -107,7 +107,7 @@ Permukaan primitive yang dipanggil dari `.star` script (`internal/starlark/primi
 | `ctx.tenant` / `ctx.user` / `ctx.auth` | `.has()` | Identitas & permission check |
 | `ctx.now()`, `ctx.next_key()`, `ctx.log.{info,warn,error}`, `ctx.config.get()` | | Utility |
 
-Semua primitive mendukung `.named("name")` untuk binding ke datastore spesifik (multi-datastore per `kind: Datastore` — lihat `docs/spec/12-datastore.md`).
+Semua primitive mendukung `.named("name")` untuk binding ke datastore spesifik (multi-datastore per `kind: Datastore` — lihat `docs/spec/platform/06-datastore.md`).
 
 **Status implementasi:** permukaan API-nya lengkap dan stabil, tapi setiap operasi (`query`/`get`/`set`/`delete`/`acquire`/`release`) **selalu mengembalikan error "not yet implemented"** — `CtxAPI.SetDatastoreResolver` (yang seharusnya menyambungkan ke koneksi nyata) tidak pernah dipanggil dari binary manapun. Lihat §7.
 
@@ -145,7 +145,7 @@ Model *single-process embed* (lihat `04-forma-sidecar.md`): `forma-sidecar` meng
 
 ## 6. Referensi Skema Manifest
 
-Skema `Document`/`Entity` (yang di-load engine ini) didefinisikan normatif di `docs/spec/02-core-basic.md` dan `docs/spec/10-entity-extension.md` — dokumen ini tidak mengulang skemanya, hanya perilaku runtime-nya. Struct Go yang relevan ada di `pkg/spec/entity.go`: `DocumentSpec`, `Field`, `Action`, `StateMachine`, `EventDecl`, `UsesDecl`, `ExposeConfig`.
+Skema `Document`/`Entity` (yang di-load engine ini) didefinisikan normatif di `docs/spec/backend/01-core-basic.md` dan `docs/spec/backend/03-entity-extension.md` — dokumen ini tidak mengulang skemanya, hanya perilaku runtime-nya. Struct Go yang relevan ada di `pkg/spec/entity.go`: `DocumentSpec`, `Field`, `Action`, `StateMachine`, `EventDecl`, `UsesDecl`, `ExposeConfig`.
 
 Kind lain yang parse valid tapi **belum dikonsumsi runtime apapun** (lihat §7): `Page`, `Form`, `Table`, `Dashboard`, `Workflow`, `Api`, `Webhook`, `Environment`, `Policy`, `Datastore`, dan kind frontend lain di `pkg/spec/frontend.go`.
 
@@ -177,8 +177,8 @@ Kind lain yang parse valid tapi **belum dikonsumsi runtime apapun** (lihat §7):
 
 | Dokumen | Isi |
 |---|---|
-| `docs/spec/02-core-basic.md`, `03-core-extended.md` | Skema normatif Document/Entity/Action/StateMachine |
-| `docs/spec/12-datastore.md` | Skema `kind: Datastore` dan resolusi `ctx.*` |
+| `docs/spec/backend/01-core-basic.md`, `docs/spec/backend/02-core-extended.md` | Skema normatif Document/Entity/Action/StateMachine |
+| `docs/spec/platform/06-datastore.md` | Skema `kind: Datastore` dan resolusi `ctx.*` |
 | `docs/architecture/01-architecture-overview.md` §2, §4.3 | Model compile-in Go, resource pod |
 | `docs/runtimes/01-forma-ctl.md` | Sisi server dari plane protocol |
 | `docs/runtimes/04-forma-sidecar.md` | Model embedding untuk app non-Go |

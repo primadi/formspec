@@ -69,7 +69,7 @@ Forma terdiri dari **1 engine binary** (`forma`) + **1 control binary** (`forma-
 | `forma-ctl` | **Binary** — `--mode=region` | Region Control Plane — source of truth: artifact store, policy, signing, deployment routing | FSL |
 | | `--mode=cluster` | Cluster cache proxy — artifact cache, snapshot proxy, evidence relay | FSL |
 | | `--mode=standalone` | All-in-one region+cluster untuk dev/small deployment | FSL |
-| `lib-forma-*` | **Thin SDK per bahasa** ([go/](../sdk/go/), [php/](../sdk/php/), [python/](../sdk/python/), [typescript/](../sdk/typescript/), [java/](../sdk/java/), [dotnet/](../sdk/dotnet/), [ruby/](../sdk/ruby/), [rust/](../sdk/rust/)) | HTTP listener di Unix socket, registrasi handler business logic, proxy ctx.* calls ke engine. **Tidak ada engine logic di sini** — hanya serialisasi/deserialisasi wire protocol. | FSL |
+| `lib-forma-*` | **Thin SDK per bahasa** ([go/](../../sdk/go/), [php/](../../sdk/php/), [python/](../../sdk/python/), [typescript/](../../sdk/typescript/), [java/](../../sdk/java/), [dotnet/](../../sdk/dotnet/), [ruby/](../../sdk/ruby/), [rust/](../../sdk/rust/)) | HTTP listener di Unix socket, registrasi handler business logic, proxy ctx.* calls ke engine. **Tidak ada engine logic di sini** — hanya serialisasi/deserialisasi wire protocol. | FSL |
 | `forma-operator` | **Binary** (K8s pod) | CRD controller — Workspace, Datastore, ResourceClaim reconciliation | **Closed source** |
 | `forma-sidecar` | **Binary** (legacy) | ⚠️ **Deprecated.** Digantikan oleh `forma dev` / `forma serve`. | FSL |
 
@@ -341,7 +341,7 @@ Tiga admin UI dengan pemilik berbeda. Detail lengkap di [`02-admin-surfaces.md`]
 | **forma/console** | Workspace Owner | Closed source | `console.{region}.forma.dev` |
 | **Business Admin** (`/_admin`) | App Owner (end-user) | Open source (auto-generated) | `{workspace}.forma.dev/_admin` |
 
-> **Batas tegas:** `docs/spec/05-frontend.md` adalah spec untuk UI aplikasi bisnis (Page, Form, Table, dll) — **bukan** spec untuk forma/ops atau forma/console. Admin UI plane memiliki spec terpisah di `02-admin-surfaces.md`.
+> **Batas tegas:** `docs/spec/frontend/` (khususnya `06-page-kinds.md`, `07-component-kinds.md`) adalah spec untuk UI aplikasi bisnis (Page, Form, Table, dll) — **bukan** spec untuk forma/ops atau forma/console. Admin UI plane memiliki spec terpisah di `02-admin-surfaces.md`.
 
 ---
 
@@ -527,9 +527,9 @@ Untuk development dan small deployment, Forma berjalan dalam **standalone mode**
 |---|---|---|
 | D-ARCH-1 | Control Plane nature | API-only, tidak punya UI sendiri kecuali `forma/ops` (first-party) |
 | D-ARCH-2 | Resource Plane nature | API + serves admin panel (`/_admin`) + business app UI (`/app`) + `forma/console` |
-| D-ARCH-3 | Frontend spec scope | `05-frontend.md` = spec UI aplikasi bisnis (Page, Form, Table...), BUKAN admin UI plane |
+| D-ARCH-3 | Frontend spec scope | `spec/frontend/01-visual-hierarchy.md` = spec UI aplikasi bisnis (Page, Form, Table...), BUKAN admin UI plane |
 | D-ARCH-4 | Component model | **1 unified engine binary + 1 Control Plane binary + 1 K8s operator + thin SDKs.** Engine: `forma` (`dev`/`serve` modes — satu binary untuk semua bahasa, permission enforcement, tenant isolation). Control Plane: `forma-ctl` (3 mode + emergency CLI). K8s: `forma-operator` (closed source). SDK: `lib-forma-*` per bahasa (thin client, no engine logic). `forma-sidecar` deprecated. `forma-resource` adalah Go library yang di-embedded ke `forma` binary, bukan untuk di-import app developer |
-| D-ARCH-5 | Deployment model | **Satu pipeline: `forma apply`.** Tidak ada Docker image untuk app. Semua pod pakai generic image `formahub/forma-resource` (version/digest-pinned di prod). Spec, script, source code handler, asset semua dalam satu artifact. Tidak ada `native` impl type — hanya `script` (Starlark) dan `sidecar` (semua bahasa via `lib-forma-*`) |
+| D-ARCH-5 | Deployment model | **Satu pipeline: `forma apply`.** Tidak ada Docker image untuk app. Semua pod pakai generic image `formahub/forma-resource` (version/digest-pinned di prod). Spec, script, source code handler, asset semua dalam satu artifact. Lima jenis `impl` didukung (`native`, `compiled`, `script`, `script_ref`, `sidecar` — [`docs/spec/backend/01-core-basic.md`](../spec/backend/01-core-basic.md) §5), digerbangi trust tier saat instalasi ([`docs/spec/platform/07-marketplace.md`](../spec/platform/07-marketplace.md) §2) |
 | D-ARCH-6 | Resource ownership | Tidak perlu persona baru. Pemilik = Cloud Owner (shared infra) atau Workspace Owner (dedicated infra) |
 | D-ARCH-7 | K8s node join mechanism | Token signed dari Cloud Owner → register → pending → approval via forma/ops → active. Node K8s dengan label `forma.dev/*` |
 | D-ARCH-8 | Resource registration | Sama seperti K8s node: token signed + approval. DB, Valkey, Redis semua resource yang diregistrasi |
@@ -563,10 +563,10 @@ Untuk development dan small deployment, Forma berjalan dalam **standalone mode**
 
 | Dokumen | Isi |
 |---|---|
-| `docs/spec/01-overview.md` §5–§6 | Arsitektur dua plane, empat persona |
-| `docs/spec/04-control-plane.md` | Spec Environment, Policy, Datastore |
-| `docs/spec/05-frontend.md` | Spec UI kinds (Page, Form, Table...) |
-| `docs/spec/06-plane-protocol.md` | YAML registration pipeline |
-| `docs/spec/00-kind-plane-mapping.md` | Kind → Plane mapping |
-| `docs/spec/12-datastore.md` | Datastore kind spec |
-| `reff_docs/Forma-Technical-Note-Katalog-Aplikasi.md` | First-party apps catalog |
+| `docs/spec/platform/01-overview.md` §3–§4 | Arsitektur dua plane, persona |
+| `docs/spec/platform/04-control-plane.md` | Spec Environment, Policy, Datastore |
+| `docs/spec/frontend/06-page-kinds.md` | Spec UI kinds (Page, Form, Table...) |
+| `docs/spec/platform/05-plane-protocol.md` | YAML registration pipeline |
+| `docs/spec/platform/03-kind-system.md` §4 | Kind → Plane mapping |
+| `docs/spec/platform/06-datastore.md` | Datastore kind spec |
+| `docs/architecture/02-admin-surfaces.md` | First-party apps (forma/console, forma/ops, forma/studio) |

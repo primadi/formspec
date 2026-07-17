@@ -2,7 +2,7 @@
 
 **Status:** Draft
 **Audience:** Developers evaluating Forma — technical deep-dive
-**Prerequisites:** [Forma Overview](./01-overview.md) · [Core Basic Spec](./02-core-basic.md) · [O2C Tutorial](./08-order-to-cash-tutorial.md)
+**Prerequisites:** [Forma Overview](../spec/platform/01-overview.md) · [Core Basic Spec](../spec/backend/01-core-basic.md) · [O2C Tutorial](./order-to-cash-tutorial.md)
 
 > This document is the technical companion to the Order-to-Cash tutorial. It compares building the same application with and without Forma, catalogs the test-drive findings from writing the spec against real requirements, and maps every requirement to the exact Forma construct that handles it.
 
@@ -31,7 +31,7 @@ What happens when an AI coding assistant builds this in plain Go, with a reviewe
 
 ## 2. Scenario B — With Forma Core Basic
 
-The same requirements, built with Forma (see the [tutorial](./08-order-to-cash-tutorial.md) for the full walkthrough). Every requirement maps to a **declared, framework-enforced construct**:
+The same requirements, built with Forma (see the [tutorial](./order-to-cash-tutorial.md) for the full walkthrough). Every requirement maps to a **declared, framework-enforced construct**:
 
 | Requirement | Construct | Why it's different |
 |---|---|---|
@@ -52,7 +52,7 @@ The same requirements, built with Forma (see the [tutorial](./08-order-to-cash-t
 - Order numbers are auto-per-tenant (counter keyed by tenant — lock is never global across tenants)
 - Item/total validation = state machine guard + field rules
 - Audit = `audit: true`
-- Event loss = impossible because `mark-paid` changes status AND writes the outbox in one DB transaction
+- Event loss = impossible *by contract* because `mark-paid` changes status AND writes the outbox in one DB transaction. **Implementation status:** the reference jsonb-persist backend does not yet wrap the outbox write in the mutation's transaction — see [jsonb-persist gap notes](../renderers/jsonb-persist/01-architecture.md) §3; until that lands, a crash between commit and enqueue can drop the event (consistent with the tutorial's FR4 note).
 
 ---
 

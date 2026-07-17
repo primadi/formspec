@@ -2,15 +2,15 @@
 
 **Status:** Partially implemented — see §7
 **License:** Creative Commons CC0
-**Governed by:** `docs/spec/02-core-basic.md` §16 (API Delivery), §23 (`forma generate`), `docs/spec/05-frontend.md` §7 (`forma.api` contract)
+> `forma generate` derives a typed TypeScript client from your entity manifests. This document is both its CLI reference and the practical guide for **programmers building a page by hand** — the escape hatch that exists independently of the manifest-driven renderer (not built yet; its contracts are being written incrementally at `docs/spec/frontend/`). If you're hand-writing a React (or any) frontend against Forma's generated REST API today, this is the document to read.
 
-> `forma generate` derives a typed TypeScript client from your entity manifests. This document is both its CLI reference and the practical guide for **programmers building a page by hand** — the escape hatch that exists independently of the manifest-driven renderer described in `docs/spec/05-frontend.md` (which is not built yet — see that spec's own status notes). If you're hand-writing a React (or any) frontend against Forma's generated REST API today, this is the document to read.
+The normative API delivery contract this client generates against (exposure model, query conventions, response envelope, error codes) lives at [`docs/spec/backend/01-core-basic.md`](../spec/backend/01-core-basic.md) §6, §8 — read that first if you're implementing against the REST API directly rather than through this generated client. `forma.api` — the generated, typed client this document covers — is one of two ways to consume that contract; the other is the (not yet built) manifest-driven renderer that interprets `kind: Page`/`Form`/`Table` at runtime. Both speak the same REST contract; `forma.api` just hands you typed methods instead of you writing `fetch` calls by hand.
 
 ---
 
 ## 1. Two Layers
 
-Forma's browser client is split in two, matching the split in `docs/spec/05-frontend.md` §7 (`forma.api` = "generated, typed"):
+Forma's browser client is split in two:
 
 | Layer | What it is | Where it lives | Hand-edited? |
 |---|---|---|---|
@@ -98,7 +98,7 @@ client.delete(module, plural, id): Promise<void>
 client.action<T>(module, plural, id, actionName, params?): Promise<T>
 ```
 
-`ListOptions` only has `page`/`perPage`/`search` — `sort` and `filter[field][op]` are declared in `docs/spec/02-core-basic.md` §16 but **not wired server-side yet** (`internal/api/handler.go` never parses them), so they are intentionally absent rather than silently ignored.
+`ListOptions` only has `page`/`perPage`/`search` — `sort` and `filter[field][op]` are part of the normative query convention above but **not wired server-side yet** (`internal/api/handler.go` never parses them), so they are intentionally absent from the runtime rather than silently ignored.
 
 Every record you get back is typed `FormaRecord<T>` — your entity's own fields (`T`) plus the reserved columns:
 
@@ -128,7 +128,7 @@ try {
 
 ## 5. Building a Page by Hand — Walkthrough (React + shadcn)
 
-This is the pattern for `web/` (React + Vite + shadcn/Tailwind, see `web/package.json`) today — there is no renderer yet, so *every* page is "manual" in the sense `docs/spec/05-frontend.md` §7 means for `asset` components. This will keep working once/if a renderer exists, since it's the same underlying client.
+This is the pattern for `web/` (React + Vite + shadcn/Tailwind, see `web/package.json`) today — there is no renderer yet, so *every* page is "manual" in the sense the eventual renderer's `asset` escape-hatch component contract means: an ES module with a `mount(el, props, forma)` entry point, framework-agnostic. This will keep working once/if a renderer exists, since it's the same underlying client.
 
 **1. Generate, once per manifest change:**
 
@@ -237,20 +237,20 @@ async function handleApprove(id: string) {
   } catch (e) {
     if (e instanceof FormaApiError && e.isForbidden) {
       // hide/disable the button instead of showing this error next time —
-      // permission-driven UI is still the caller's responsibility (§ D38,
-      // docs/spec/05-frontend.md §1.4) until a renderer derives it for you
+      // permission-driven UI is still the caller's responsibility until a
+      // renderer exists (see contract below)
     }
   }
 }
 ```
 
-**Permissions today:** unlike the eventual renderer (`docs/spec/05-frontend.md` §1.4, D38), nothing here hides a button for a caller who lacks permission — the server enforces it (a `403 FORBIDDEN` `FormaApiError`), but the *UI* decision to hide/disable is on you until that piece exists. Don't rely on hiding controls as a security boundary — it never was one (D38 confused-deputy rationale applies here too).
+**Permissions today:** nothing here hides a button for a caller who lacks permission. The server enforces it (a `403 FORBIDDEN` `FormaApiError`), but the *UI* decision to hide/disable is on you until a renderer exists. Don't rely on hiding controls as a security boundary — it never was one; enforcement always lives at the resource (`required_permission`), never at the UI layer. The eventual renderer's permission-filtering contract — why it derives visibility from the permission catalog rather than a UI-declared role list, and why page-based authorization is rejected as an enforcement mechanism — is specified at [`docs/spec/frontend/04-spec-resolution-api.md`](../spec/frontend/04-spec-resolution-api.md) §4.
 
 ---
 
 ## 6. What This Does *Not* Give You
 
-Explicitly out of scope for `@forma/client` + `forma generate` (all part of the not-yet-built renderer, `docs/spec/05-frontend.md`):
+Explicitly out of scope for `@forma/client` + `forma generate` (all part of the not-yet-built manifest-driven renderer):
 
 - No `kind: Page`/`Form`/`Table` interpretation — you lay out the page yourself.
 - No `forma.ui` (toast/dialog/confirm/drawer), `forma.subscribe` (realtime), `forma.navigate`, `forma.form()` headless engine, or `forma.files` transfer manager.
@@ -268,10 +268,10 @@ Explicitly out of scope for `@forma/client` + `forma generate` (all part of the 
 
 **Not implemented:**
 - `--lang go` and `--lang openapi` (`docs/cli-tools/01-forma-cli.md` §5 mentions both; only TypeScript exists).
-- Everything in `docs/spec/05-frontend.md` beyond §7's client contract (the manifest-driven renderer itself, kinds, admin panel derivation).
+- The manifest-driven renderer itself — `kind: Page`/`Form`/`Table`/`Dashboard`/etc. interpretation, derived admin panel, permission-driven visibility (contracts for this are being written incrementally at `docs/spec/frontend/`).
 - `sort`/`filter[field][op]` query parameters (declared in §16, not parsed by `internal/api/handler.go`).
 - Decimal-as-string is the generated *type*, not yet an enforced *wire* guarantee — `internal/db` doesn't coerce decimal values before JSON-encoding them.
-- Dart codegen (mentioned alongside TypeScript in `docs/spec/05-frontend.md` §7.5 for mobile/unmanaged clients).
+- Dart codegen for unmanaged clients (Flutter, native). Unmanaged clients are first-class API consumers today via this same REST contract — HTTP, realtime WebSocket, server-enforced permissions — Dart is simply not an official codegen target yet (TypeScript is the only one built).
 
 ---
 
@@ -279,7 +279,7 @@ Explicitly out of scope for `@forma/client` + `forma generate` (all part of the 
 
 | Document | Content |
 |---|---|
-| `docs/spec/02-core-basic.md` §16, §23 | Normative REST contract; `forma generate` verb |
-| `docs/spec/05-frontend.md` §7 | `forma.api`/`forma.ui`/`forma.form()` full contract (aspirational renderer context) |
-| `docs/implementation/api-layer.md` | `internal/api` package internals, response envelope |
+| [`01-forma-cli.md`](01-forma-cli.md) §5 | `forma generate` in the context of the full CLI verb set |
+| [`docs/runtimes/05-engine-api-layer.md`](../runtimes/05-engine-api-layer.md) | `internal/api` package internals, response envelope |
+| [`docs/spec/frontend/`](../spec/frontend/README.md) | Normative contracts for the manifest-driven renderer this document's escape hatch stands apart from |
 | `sdk/README.md` | The other client family — `lib-forma-*` for `forma-sidecar` (a different protocol; don't confuse the two) |

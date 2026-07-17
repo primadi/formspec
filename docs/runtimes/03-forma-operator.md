@@ -100,7 +100,7 @@ Operator adalah **klien** dari `forma-ctl --mode=cluster` (lihat `01-forma-ctl.m
 | Operator → Cluster Control | `POST /v1/workspace-status` | On-change | Status Deployment per workspace (Ready/Progressing/Degraded/restart_required consumed) |
 | Cluster Control → Operator | (pull, bukan push) `GET /v1/snapshot` per workspace, via pod itu sendiri | — | Operator tidak pull snapshot — itu tanggung jawab pod (`forma-resource`/`forma-sidecar`), bukan operator |
 
-> **Catatan desain:** endpoint di atas belum dispesifikasikan secara normatif di `docs/spec/06-plane-protocol.md` (yang baru mendefinisikan kontrak Region↔Cluster↔Resource, bukan Operator↔Cluster). Ini perlu ditambahkan sebagai ekstensi wire protocol saat operator mulai dibangun.
+> **Catatan desain:** endpoint di atas belum dispesifikasikan secara normatif di `docs/spec/platform/05-plane-protocol.md` (yang baru mendefinisikan kontrak Region↔Cluster↔Resource, bukan Operator↔Cluster). Ini perlu ditambahkan sebagai ekstensi wire protocol saat operator mulai dibangun.
 
 ### 3.3 CRD yang Diwatch (Ringkas)
 
@@ -196,14 +196,14 @@ spec:
 - `ResourceClaimReconciler` (§2.4): verifikasi ed25519 (`spec.ownerPublicKey` hex di Datastore, pesan kanonik `datastore|workspace|permission|grantedBy|grantedAt`) + cek `allowedTenants` → Ready/Denied. `--insecure-skip-signature-verify` untuk dev.
 - Reporter §3.2: `POST /v1/node-health` (15s) & `/v1/workspace-status` (on-change) — sisi server di `forma-ctl` **belum ada**, kegagalan di-log rate-limited dan tidak memblokir reconcile.
 
-**Yang masih terbuka:** konsumsi `deploy_status: restart_required` dari Cluster Control (annotation `forma.dev/artifact-binary-hash` sudah disalin ke pod template kalau di-stamp di Workspace, tapi belum ada poller yang men-stamp-nya); endpoint §3.2 belum dinormatifkan di `docs/spec/06-plane-protocol.md`; ClusterClass reconciler terpisah tidak dibuat (cache-only — perubahan class di-fan-out ke Workspace via watch).
+**Yang masih terbuka:** konsumsi `deploy_status: restart_required` dari Cluster Control (annotation `forma.dev/artifact-binary-hash` sudah disalin ke pod template kalau di-stamp di Workspace, tapi belum ada poller yang men-stamp-nya); endpoint §3.2 belum dinormatifkan di `docs/spec/platform/05-plane-protocol.md`; ClusterClass reconciler terpisah tidak dibuat (cache-only — perubahan class di-fan-out ke Workspace via watch).
 
 ### 7.1 Urutan Pembangunan yang Disarankan
 
 1. Definisikan CRD Go types (`+kubebuilder:object` markers) untuk `Workspace`, `Datastore`, `ResourceClaim`, `ClusterClass` — mulai dari skema di `docs/architecture/06-k8s-operator.md` §3.
 2. Scaffold operator dengan `kubebuilder`/`operator-sdk` (memberi struktur controller-runtime standar, leader election, metrics gratis).
 3. Implementasikan `WorkspaceReconciler` dulu (paling kritikal — tanpa ini tidak ada pod yang pernah dibuat).
-4. Selesaikan kontrak komunikasi dengan Cluster Control (§3.2) sebagai bagian dari `docs/spec/06-plane-protocol.md` — jangan biarkan jadi keputusan implisit di kode.
+4. Selesaikan kontrak komunikasi dengan Cluster Control (§3.2) sebagai bagian dari `docs/spec/platform/05-plane-protocol.md` — jangan biarkan jadi keputusan implisit di kode.
 5. `DatastoreReconciler` dan `ResourceClaimReconciler` menyusul, karena bergantung pada `docs/architecture/04-resource-registration.md` yang juga belum ada implementasinya.
 
 ---

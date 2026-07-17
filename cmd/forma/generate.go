@@ -1,6 +1,6 @@
 // Command `forma generate` derives a typed TypeScript client from loaded
-// entity manifests — the codegen half of `forma.api` (docs_old/spec/05-frontend.md
-// §7; docs_old/spec/02-core-basic.md §16, §23). The hand-written runtime half
+// entity manifests — the codegen half of `forma.api` (docs/cli-tools/03-forma-generate.md;
+// docs/spec/backend/01-core-basic.md §8). The hand-written runtime half
 // (auth, HTTP, error mapping) lives in the published package @forma/client
 // (sdk/browser) — this command only emits per-entity types and a thin typed
 // wrapper on top of it.
@@ -101,7 +101,7 @@ type entityGroup struct {
 func generateTypeScript(reg *entity.Registry) (string, error) {
 	routes := append(api.GenerateRoutes(reg), api.GenerateCustomActionRoutes(reg)...)
 	if len(routes) == 0 {
-		return "", fmt.Errorf("no exposed entities found — nothing to generate (every Document defaults to unexposed; see spec.expose, docs_old/spec/02-core-basic.md §16 D49)")
+		return "", fmt.Errorf("no exposed entities found — nothing to generate (every Document defaults to unexposed; see spec.expose, docs/spec/backend/01-core-basic.md §8)")
 	}
 
 	groups := map[string]*entityGroup{}
@@ -141,7 +141,7 @@ func generateTypeScript(reg *entity.Registry) (string, error) {
 	b.WriteString("//\n")
 	b.WriteString("// Regenerate with: forma generate --spec <dir> --out <this file>\n")
 	b.WriteString("// Runtime (auth, HTTP, error mapping) lives in @forma/client — this file only\n")
-	b.WriteString("// adds types and a thin typed wrapper per entity (docs_old/spec/05-frontend.md §7).\n\n")
+	b.WriteString("// adds types and a thin typed wrapper per entity (docs/cli-tools/03-forma-generate.md).\n\n")
 	b.WriteString("import { FormaClient, FormaRecord, ListOptions, ListResult } from \"@forma/client\";\n\n")
 
 	for _, key := range order {
@@ -278,7 +278,7 @@ func optionalMark(optional bool) string {
 // cannot represent that safely. NOTE: internal/db does not yet coerce
 // decimal values to a string on the wire (no dedicated marshaling exists),
 // so until that lands server-side this type is aspirational, not a
-// guarantee — see docs_old/spec/05-frontend.md client-generation notes.
+// guarantee — see docs/cli-tools/03-forma-generate.md client-generation notes.
 func tsFieldType(f spec.Field) string {
 	switch f.Type {
 	case spec.FieldString, spec.FieldUUID, spec.FieldDate, spec.FieldDateTime:
