@@ -13,6 +13,6 @@ sebelum masuk ke kontraknya masing-masing.
 | [05-plane-protocol.md](05-plane-protocol.md) | Protokol antar plane |
 | [06-datastore.md](06-datastore.md) | Kind Datastore dan lifecycle koneksinya |
 | [07-marketplace.md](07-marketplace.md) | Distribusi module & renderer, trust tier |
-| [08-project-layout.md](08-project-layout.md) | Struktur folder project aplikasi; runtime per Module untuk handler multi-bahasa |
+| [08-project-layout.md](08-project-layout.md) | Struktur folder project aplikasi; runtime per Module untuk handler multi-bahasa; module lokal vs vendor, aktivasi, shadow copy |
 | [09-observability.md](09-observability.md) | Kontrak observability engine Resource Plane: logging terstruktur, metrics, tracing, kosakata health, `forma logs` |
 | [10-deployment-operations.md](10-deployment-operations.md) | Kontrak operasional: pipeline deployment & konvergensi, rollback, canary, promotion, DR/HA minimal |

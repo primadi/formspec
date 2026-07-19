@@ -314,7 +314,32 @@ Tidak ada retry otomatis tanpa batas — kalau butuh manusia, sistem tidak berpu
 ```bash
 forma module install billing-pro --from registry.forma.dev
 # Menampilkan ModuleFootprint (aggregate required_permission + uses) untuk consent SEBELUM install
+# Default: fetch ke vendors/, catat forma.lock, tulis entri ter-comment (nonaktif) di App manifest.
+
+forma module install billing-pro --from registry.forma.dev --use
+# Langsung menulis entri ter-uncomment (aktif) — lewati langkah aktivasi manual.
 ```
+
+Model folder (`vendors/` read-only), alias otomatis saat konflik nama, dan
+format marker aktivasi ada di
+[`../spec/platform/08-project-layout.md`](../spec/platform/08-project-layout.md)
+§6 — **target desain, belum diimplementasikan** (§6.5).
+
+### `forma override adopt|diff`
+
+```bash
+forma override adopt stripe-connector Form checkout-form
+# Copy spec asli ke overrides/, catat checksum sumber ke forma.lock (shadow copy)
+
+forma override diff stripe-connector Form checkout-form
+# Bandingkan shadow copy lokal vs versi vendor upstream saat ini
+```
+
+Shadow copy hanya berlaku untuk kind presentation (`Form`, `Menu`/
+`Navigation`, dan instance `VisualSpecKind` lain seperti `Table`/`Kanban`) —
+bukan `Entity`/`Service`/`Workflow`. Detail whitelist dan deteksi drift ada di
+[`../spec/platform/08-project-layout.md`](../spec/platform/08-project-layout.md)
+§6.4 — **target desain, belum diimplementasikan**.
 
 ### `forma sign`
 

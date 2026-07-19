@@ -41,7 +41,7 @@ aplikasi.
 ## 2. Module
 Package manifest — identitas, versi, dependency. Isi ditemukan lewat
 scanning file, bukan didaftar manual (`metadata.name` = permission
-namespace, tanpa alias). Struktur di dalamnya adalah *closed set*: Document,
+namespace). Struktur di dalamnya adalah *closed set*: Document,
 Service, instance VisualSpecKind (Page/Form/Table/dst.), dan deklarasi
 permission yang mengikat semuanya — bukan tipe bebas. Module tidak wajib
 mengisi semua jenis itu; Module murni integrasi (mis. `forma/tax-calculator`)
@@ -68,7 +68,60 @@ spec:
     # Currency, locale, timezone → settings.* (global), bukan di sini
     # Lihat ../backend/01-core-basic.md §10
   menu: []    # default menu suggestion, module-relative — lihat §4
+  ai_index:   # opsional — metadata discovery untuk Forma AI, lihat
+              # ../../ai/04-forma-remote-mcp.md §3
+    category: payment
+    features: [charge, refund, webhook_callback]
+    integration_pattern: |
+      depends: [{module: payment-gateway-xendit}]
+    skills_for_ai: |
+      Pakai module ini kalau bisnis butuh terima pembayaran online.
 ```
+
+### 2.1 Identitas Unik & Alias saat Konflik Nama (Module Vendor)
+`metadata.name` yang ditulis pembuat module (mis. `billing`) **tidak
+dijamin unik secara global** — dua vendor berbeda boleh memilih nama yang
+sama. Identitas unik sesungguhnya ada di **source** module (mis.
+`github.com/acme/billing-module`), dicatat di `forma.lock`
+([`08-project-layout.md`](08-project-layout.md) §6.2). Ini hanya berlaku
+untuk module yang diinstal lewat `forma module install`
+([`07-marketplace.md`](07-marketplace.md) §3) — Module lokal hand-authored
+tetap satu-satunya pemilik `metadata.name`-nya sendiri, tanpa alias.
+
+Saat instalasi bentrok dengan nama efektif module lain yang **sudah pernah
+diinstal** (aktif maupun masih nonaktif), installer otomatis memberi alias,
+dicatat sebagai blok marker di manifest App
+([`08-project-layout.md`](08-project-layout.md) §6.3):
+
+```yaml
+spec:
+  modules:
+    - billing   # module lokal
+
+    # >>> forma:vendor github.com/acme/billing-module @1.0.0
+    # - acme-billing
+    # <<< forma:vendor
+```
+
+Uncomment `- acme-billing` mengaktifkannya — bentuknya tetap string biasa,
+konsisten dengan elemen `App.spec.modules` lain (§3). Source dan versi asal
+tercatat di baris marker `>>>` dan di `forma.lock`
+([`08-project-layout.md`](08-project-layout.md) §6.2), bukan di bentuk
+entri itu sendiri.
+
+**Alias dihitung saat install, bukan saat aktivasi** — nama efektif module
+tidak boleh berubah tergantung urutan aktivasi developer: kalau dua vendor
+dengan nama sama sama-sama diaktifkan kapan pun kemudian, tidak boleh ada
+surprise rename. Konsisten dengan prinsip gap-free yang sama dipegang di
+tempat lain di spec (mis. `ctx.next_key`, [`../backend/01-core-basic.md`](../backend/01-core-basic.md)) —
+nomor/nama tidak boleh berubah makna tergantung state runtime.
+
+**Enforcement saat boot:** `forma-server` mengecek nama efektif (alias
+kalau ada, `metadata.name` kalau tidak) **hanya** untuk set module yang
+aktif. Bentrok di set aktif → refuse to boot dengan pesan jelas, minta
+alias manual. Module yang belum diaktifkan tidak pernah dicek — dua vendor
+module bernama sama boleh nangkring bersamaan di `vendors/` selama tidak
+dua-duanya aktif tanpa alias.
 
 ## 3. App
 Root project manifest — unit deployment, trust boundary, dan publikasi

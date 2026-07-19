@@ -72,3 +72,60 @@ mendeklarasikan akses tulis ke kategori persist target lewat `uses: { db:
 { write: [<category>] } }` ([`01-core-basic.md`](01-core-basic.md) §5) —
 tampil di consent footprint-nya saat instalasi, konsisten dengan seluruh
 akses lintas-module lain.
+
+## 5. Validasi Tambahan (`validate:`)
+Selain field, Entity Extension boleh menambah pemeriksaan `business_rules`
+miliknya sendiri lewat `spec.validate` — **aditif, bukan pengganti**:
+
+```yaml
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: invoice-ext
+  module: my-customization
+spec:
+  extend_storage:
+    target: billing/invoice
+    namespace: shipping_info
+  fields:
+    - name: shipping_method
+      type: enum
+      enum_values: [regular, express]
+      rules: [required]
+
+  validate:
+    - script: |
+        def validate(resource, params, ctx):
+          if resource.ext("shipping_info").shipping_method == "express" \
+             and resource.total < 100000:
+            return fail("Express shipping butuh minimum order")
+          return ok()
+      on: [create, update]
+```
+
+- **Urutan eksekusi** — validasi bawaan Entity dasar (L1–L6,
+  [`02-core-extended.md`](02-core-extended.md) §14) selalu jalan lebih dulu;
+  kontrak module asal tetap utuh. Validasi Extension jalan sesudahnya, pola
+  yang sama dengan priority handler yang sudah ada di hook/event
+  ([`02-core-extended.md`](02-core-extended.md) §15 Hook Spec) — bukan
+  mekanisme baru.
+- **Tidak boleh override** — script `validate:` Extension hanya boleh
+  *menambah* pemeriksaan baru. Ia tidak bisa melemahkan, mengganti, atau
+  melewati validasi bawaan Entity dasar.
+- **Akses field** — boleh membaca field Entity dasar (`resource.<field>`,
+  read-only) untuk keperluan pemeriksaan silang, tapi hanya berhak
+  menuntut/mewajibkan field miliknya sendiri di namespace-nya
+  (`resource.ext("<namespace>").<field>`).
+
+## 6. Visibilitas Default di Layer 0
+Field Extension otomatis ikut Layer 0 (spec-only, auto-generated CRUD) —
+begitu Extension aktif, field-nya otomatis muncul di form/list yang
+di-generate, dikelompokkan default di section bernama sesuai
+`metadata.name` Extension. Dua kasus turunan:
+
+- **Mau tampil tapi beda posisi/caption dari default** — shadow copy Form
+  ([`../platform/08-project-layout.md`](../platform/08-project-layout.md)
+  §6.4), opsional.
+- **Memang tidak boleh pernah terlihat** (internal/computed/API-only) —
+  bukan urusan Form sama sekali, cukup `exclude: [ui]` di level field
+  Extension itu sendiri ([`05-field-types.md`](05-field-types.md) §5.3).

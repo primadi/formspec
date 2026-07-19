@@ -349,12 +349,16 @@ guard **lebih halus** di atasnya:
   ditolak (write).
 - `exclude` — daftar surface keluaran tempat field ini **dihilangkan** meski ada
   secara internal. Nilai: `public_api` (respons permukaan external `/api/v1/` —
-  lihat [`01-core-basic.md`](01-core-basic.md) §8.2; permukaan UI
-  `/_ui/entity/` (§8.1) **tidak** terpengaruh), `audit_log`
+  lihat [`01-core-basic.md`](01-core-basic.md) §8.2), `audit_log`
   (entri audit bisnis, [`02-core-extended.md`](02-core-extended.md) §11),
   `webhook` (payload webhook keluar, [`02-core-extended.md`](02-core-extended.md)
-  §4). Field tetap ada dan dapat dipakai logika internal/script; ia hanya tidak
-  bocor ke surface yang disebut.
+  §4), `ui` (form/list hasil derivasi Layer 0 dan Menu App — field tetap ada di
+  permukaan `public_api`/`/_ui/entity/` mentah, hanya tidak ditampilkan render
+  visual; dipakai untuk field internal/computed/API-only, mis. field tambahan
+  dari Entity Extension yang memang tidak boleh pernah terlihat — lihat
+  [`03-entity-extension.md`](03-entity-extension.md) §5). Field tetap ada dan
+  dapat dipakai logika internal/script; ia hanya tidak bocor ke surface yang
+  disebut.
 
 ### 5.4 Classification
 

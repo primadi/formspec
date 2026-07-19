@@ -21,7 +21,8 @@ deskriptif) — ditambah section pendukung.
 | [`renderers/jsonb-persist/`](renderers/jsonb-persist/) | Backend renderer resmi (PersistBackend hybrid JSONB, Postgres/SQLite) | Deskriptif, dated |
 | [`architecture/`](architecture/) | Topologi deployment, HA/failover, K8s operator, admin surfaces, struktur repo | Deskriptif |
 | [`runtimes/`](runtimes/) | Internals per komponen runtime: forma-ctl, forma-resource, forma-operator, forma-sidecar, engine API layer | Deskriptif |
-| [`cli-tools/`](cli-tools/) | Referensi CLI: forma, forma-ctl, forma dev, forma generate | Deskriptif |
+| [`cli-tools/`](cli-tools/) | Referensi CLI: forma, forma-ctl, forma dev, forma generate, forma consult | Deskriptif |
+| [`ai/`](ai/README.md) | Forma AI: `forma-consult`, `forma-local-mcp`/`forma-remote-mcp`, LLM provider layer (Vercel AI SDK, BYOK), Forma Skill | Deskriptif — design, belum diimplementasikan |
 | [`guides/`](guides/) | Cara menjalankan, tutorial Order-to-Cash, panduan menulis renderer/shell/persist-backend | Tutorial |
 | [`reference/`](reference/) | Glossary istilah kanonik | Referensi |
 | [`comparison/`](comparison/) | Forma dibandingkan platform lain | Referensi |
