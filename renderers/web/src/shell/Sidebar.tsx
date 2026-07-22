@@ -73,9 +73,6 @@ export function Sidebar({ collapsed, onToggle: _onToggle, mobile, mobileOpen, on
   const menuItems = useMemo(() => {
     if (!bundle || !me) return []
 
-    const sortByOrder = (items: MenuItem[]) =>
-      [...items].sort((a, b) => (a.order ?? 99) - (b.order ?? 99))
-
     // `_admin` isn't scoped to any App and can't be curated (Core §4.4) — it
     // always shows every module's entities, mechanically generated, with no
     // authored menu and no per-entity permission filtering (the binary
@@ -95,10 +92,10 @@ export function Sidebar({ collapsed, onToggle: _onToggle, mobile, mobileOpen, on
         items.push({
           label: module.charAt(0).toUpperCase() + module.slice(1),
           icon: "Folder",
-          children: sortByOrder(children),
+          children,
         })
       }
-      return sortByOrder(items)
+      return items
     }
 
     // App surface: ONLY the authored, curated menu (Core §4.4 — App is a
@@ -108,14 +105,12 @@ export function Sidebar({ collapsed, onToggle: _onToggle, mobile, mobileOpen, on
     // spliced, `view` leaves turned into `route`); only permission/when
     // filtering and ordering happen here.
     const filterTree = (list: MenuItem[]): MenuItem[] =>
-      sortByOrder(
-        list
-          .filter((item) => filterMenuItem(item, me.permissions))
-          .map((item) => ({
-            ...item,
-            children: item.children?.length ? filterTree(item.children) : undefined,
-          })),
-      )
+      list
+        .filter((item) => filterMenuItem(item, me.permissions))
+        .map((item) => ({
+          ...item,
+          children: item.children?.length ? filterTree(item.children) : undefined,
+        }))
 
     return filterTree(bundle.menu ?? [])
   }, [bundle, me, isAdmin])

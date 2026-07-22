@@ -1,7 +1,7 @@
 # Master Plan: Forma Implementation
 
-**Last Updated**: 2026-07-19  
-**Status**: ✅ Fase 0 complete · 🔄 Fase 1 next  
+**Last Updated**: 2026-07-20  
+**Status**: ✅ Fase 0 complete · ✅ Fase 1 (1.1–1.5) · ✅ Fase 2.1 · ✅ Fase 5 (5.1–5.4)  
 
 > `⬜` not started · `✅` complete · `⏸️` deferred  
 
@@ -29,45 +29,45 @@
 
 **Goal**: Every kind, field type, and validation rule from `docs/spec/` has a Go struct.
 
-### 1.1 Missing backend kind structs
-- [ ] 1.1.1 `MigrationSpec` — DDL-only migration (`kind` + `spec.ddl` + `spec.module`), reject DML  
-- [ ] 1.1.2 `WorkflowSpec` — approval workflow (`entity`, `on.transition`, `steps[]`, `on_reject`, `escalation`)  
-- [ ] 1.1.3 `ApiSpec` — external surface override (`rest.base_path`, `rest.version`, `rest.disable`, `grpc.*`)  
-- [ ] 1.1.4 `WebhookSpec` — verified inbound endpoint (`for`, `method`, `path`, `auth.strategy`, `auth.signature`, `idempotent`)  
-- [ ] 1.1.5 `IntegratorSpec` — cross-module bridge (`listen.resource`+`event`, `call.resource`+`action`, `compensate`)  
-- [ ] 1.1.6 `MockupSpec` — simulated connector (`for`, `config_ref`)  
-- [ ] 1.1.7 `KindDefinitionSpec` — CRD-like kind extension (`group`, `version`, `schema`, `handler`, `scope`)  
-- [ ] 1.1.8 Update `SubscriptionSpec` — add Tier 2 fields (`store`, `retention`, `position`, `max_retry`, `dead_letter`, `filter`, `transform`, `delivery` channel)  
-- [ ] 1.1.9 Update `ConfigSpec` — replace `map[string]any` with structured `ConfigKey` type (`type`, `default`, `secret` — per `01-core-basic.md` §10; `required` tidak ada di spec)  
-- [ ] 1.1.10 `MenuSpec`/`MenuItem` — kontrak menu App/Module (`platform/02-workspace-app-module.md` §4: mode `module`/`custom`, nesting max 3 level, node adopt/group/leaf, `when` FormaExpr) + validasi apply §6 (`menu.items[].entity` harus di `depends_on`, module di menu anggota `App.spec.modules`, `root_url` unik prefix `/app/`, `Form`/`Table` bukan target `view`)  
+### 1.1 Missing backend kind structs ✅
+- [x] 1.1.1 `MigrationSpec` — DDL-only migration (`kind` + `spec.ddl` + `spec.module`), reject DML  
+- [x] 1.1.2 `WorkflowSpec` — approval workflow (`entity`, `on.transition`, `steps[]`, `on_reject`, `escalation`)  
+- [x] 1.1.3 `ApiSpec` — external surface override (`rest.base_path`, `rest.version`, `rest.disable`, `grpc.*`)  
+- [x] 1.1.4 `WebhookSpec` — verified inbound endpoint (`for`, `method`, `path`, `auth.strategy`, `auth.signature`, `idempotent`)  
+- [x] 1.1.5 `IntegratorSpec` — cross-module bridge (`listen.resource`+`event`, `call.resource`+`action`, `compensate`)  
+- [x] 1.1.6 `MockupSpec` — simulated connector (`for`, `config_ref`)  
+- [x] 1.1.7 `KindDefinitionSpec` — CRD-like kind extension (`group`, `version`, `schema`, `handler`, `scope`)  
+- [x] 1.1.8 Update `SubscriptionSpec` — add Tier 2 fields (`store`, `retention`, `position`, `max_retry`, `dead_letter`, `filter`, `transform`, `delivery` channel)  
+- [x] 1.1.9 Update `ConfigSpec` — replace `map[string]any` with structured `ConfigKey` type (`type`, `default`, `secret` — per `01-core-basic.md` §10; `required` tidak ada di spec)  
+- [x] 1.1.10 `MenuItem` — kontrak menu App/Module (`platform/02-workspace-app-module.md` §4: `[]MenuItem` langsung tanpa wrapper, array-index order, nesting max 3 level, node adopt/group/leaf, `when` FormaExpr) + validasi apply §6 (`module` di menu anggota `App.spec.modules`, `root_url` unik prefix `/app/`, `Form`/`Table` bukan target `view`)  
 
-### 1.2 Missing meta-kind structs
-- [ ] 1.2.1 `VisualSpecKindSpec` — declare new view type (`tier`, `schema`, `renderer_contract`, `accepts_slots`/`implements_slot`)  
-- [ ] 1.2.2 `RendererSpec` — concrete VisualSpecKind implementation (`implements`, `stack_family`, `trust_tier`)  
-- [ ] 1.2.3 `PersistBackendSpec` — storage seam declaration (`implements`, `trust_tier`)  
+### 1.2 Missing meta-kind structs ✅
+- [x] 1.2.1 `VisualSpecKindSpec` — declare new view type (`tier`, `schema`, `renderer_contract`, `accepts_slots`/`implements_slot`)  
+- [x] 1.2.2 `RendererSpec` — concrete VisualSpecKind implementation (`implements`, `stack_family`, `trust_tier`)  
+- [x] 1.2.3 `PersistBackendSpec` — storage seam declaration (`implements`, `trust_tier`)  
 
-### 1.3 Missing frontend kind structs
-- [ ] 1.3.1 `CalendarSpec` — calendar view (`entity`, `date_field`, `end_field`, `title_field`, `resource_field`, `color_field`, `views[]`, recurrence via RRULE)  
-- [ ] 1.3.2 `ApprovalInboxSpec` — pending approvals (`realtime`, `filters`, `search`)  
-- [ ] 1.3.3 `NotificationCenterSpec` — in-app notifications (`realtime`)  
-- [ ] 1.3.4 `ListingSpec` — public catalog (`entity`, `columns`, `filters`, `search`)  
+### 1.3 Missing frontend kind structs ✅
+- [x] 1.3.1 `CalendarSpec` — calendar view (`entity`, `date_field`, `end_field`, `title_field`, `resource_field`, `color_field`, `views[]`, recurrence via RRULE)  
+- [x] 1.3.2 `ApprovalInboxSpec` — pending approvals (`realtime`, `filters`, `search`)  
+- [x] 1.3.3 `NotificationCenterSpec` — in-app notifications (`realtime`)  
+- [x] 1.3.4 `ListingSpec` — public catalog (`entity`, `columns`, `filters`, `search`)  
 
-### 1.4 Extended field type structs
-- [ ] 1.4.1 `RateLimitSpec` — per-resource rate limit (`max`, `per`, `scope`, `strategy`: sliding_window/token_bucket)  
-- [ ] 1.4.2 `SecretRef` — `ctx.secrets` access declaration (`uses.secrets: [key, ...]`)  
-- [ ] 1.4.3 `FieldClassification` — governance label (`pii`|`financial`|`internal`)  
-- [ ] 1.4.4 `FieldPermission` — field-level `required_permission`  
-- [ ] 1.4.5 `FieldExclude` — per-surface field exclusion (`public_api`|`audit_log`|`webhook`|`ui` — per `05-field-types.md` §5.3)  
-- [ ] 1.4.6 `EncryptedField` — at-rest encryption marker (`encrypted: true`)  
-- [ ] 1.4.7 `MaskedField` — auto-mask in response/log (`masked: true`)  
-- [ ] 1.4.8 `BackdatePolicy` / `ForwardDatePolicy` — max days, override_permission  
-- [ ] 1.4.9 `TreeDecl` — self-referential hierarchy marker (`tree: true` on relation)  
-- [ ] 1.4.10 `SoftDeactivateDecl` — `is_active` + `deactivate`/`reactivate` action pattern  
-- [ ] 1.4.11 `StorageSpec` (file field) — `allowed_types`, `max_size_mb`, `max_count`, `visibility`, `signed_url_ttl`, `cdn`, `transform`  
+### 1.4 Extended field type structs ✅
+- [x] 1.4.1 `RateLimitSpec` — per-resource rate limit (`max`, `per`, `scope`, `strategy`: sliding_window/token_bucket)  
+- [x] 1.4.2 `SecretRef` — `ctx.secrets` access declaration (`uses.secrets: [key, ...]`) via `UsesDecl.Secrets`  
+- [x] 1.4.3 `FieldClassification` — governance label (`pii`|`financial`|`internal`)  
+- [x] 1.4.4 `FieldPermission` — field-level `required_permission`  
+- [x] 1.4.5 `FieldExclude` — per-surface field exclusion (`public_api`|`audit_log`|`webhook`|`ui` — per `05-field-types.md` §5.3)  
+- [x] 1.4.6 `EncryptedField` — at-rest encryption marker (`encrypted: true`)  
+- [x] 1.4.7 `MaskedField` — auto-mask in response/log (`masked: true`)  
+- [x] 1.4.8 `BackdatePolicy` / `ForwardDatePolicy` — max days, override_permission (already existed in entity.go)  
+- [x] 1.4.9 `TreeDecl` — self-referential hierarchy marker (`tree: true` on relation)  
+- [x] 1.4.10 `SoftDeactivateDecl` — `is_active` + `deactivate`/`reactivate` action pattern  
+- [x] 1.4.11 `StorageSpec` (file field) — `allowed_types`, `max_size_mb`, `max_count`, `visibility`, `signed_url_ttl`, `cdn`, `transform`  
 
-### 1.5 Error glossary Go types
-- [ ] 1.5.1 Go const/type mapping dari `error-glossary.yaml` (22 error codes → `FORMA.DOC.*`, `FORMA.TXN.*`, `FORMA.PERIOD.*`, `FORMA.EVENT.*`, `FORMA.SAGA.*`, `FORMA.REF.*`, `FORMA.PERSIST.*`, `FORMA.ARCHIVE.*`, `FORMA.VALIDATE.*`)  
-- [ ] 1.5.2 Observability error codes — `OBSERVABILITY_METRICS_DISABLED`, `OBSERVABILITY_DEBUG_FORBIDDEN`, `LOGS_FILTER_INVALID` (`09-observability.md` §8)  
+### 1.5 Error glossary Go types ✅
+- [x] 1.5.1 Go const/type mapping dari `error-glossary.yaml` (22 error codes → `FORMA.DOC.*`, `FORMA.TXN.*`, `FORMA.PERIOD.*`, `FORMA.EVENT.*`, `FORMA.SAGA.*`, `FORMA.REF.*`, `FORMA.PERSIST.*`, `FORMA.ARCHIVE.*`, `FORMA.VALIDATE.*`)  
+- [x] 1.5.2 Observability error codes — `OBSERVABILITY_METRICS_DISABLED`, `OBSERVABILITY_DEBUG_FORBIDDEN`, `LOGS_FILTER_INVALID` (`09-observability.md` §8)  
 
 ---
 
@@ -75,12 +75,12 @@
 
 **Goal**: Atomic operations, correct PK, complete filters, lifecycle enforcement — agar `forma dev` bisa diandalkan untuk testing.
 
-### 2.1 Database integrity
-- [ ] 2.1.1 Atomic mutation + outbox — wrap Entity INSERT/UPDATE/DELETE + outbox write dalam `BeginTx`/`Commit` (rollback on error)  
-- [ ] 2.1.2 Natural key counter in same transaction as Entity insert — UPSERT counter + INSERT dalam satu `Tx`  
-- [ ] 2.1.3 UUID v7 PK — replace SQLite `INTEGER PRIMARY KEY AUTOINCREMENT` with UUID v7 generated at app layer  
-- [ ] 2.1.4 Idempotency retention configurable — read from config (`core.idempotency_retention`), default 24h, not hardcoded  
-- [ ] 2.1.5 `natural_key_rule` lengkap — `strategy: sequence|custom`, `format`, `prefix`, `reset: never|yearly|monthly|daily`, `scope_field` (`01-core-basic.md` §2); counter komposit `(tenant, resource, field, scope, period, seq)` (`jsonb-persist/04` §2)  
+### 2.1 Database integrity ✅
+- [x] 2.1.1 Atomic mutation + outbox — wrap Entity INSERT/UPDATE/DELETE + outbox write dalam `BeginTx`/`Commit` (rollback on error). Terpenuhi untuk create/update HTTP (`InTx`) **dan** custom action (`HandleCustomAction` + `TxScope`, `renderers/jsonbpersist/txscope.go`) — satu transaksi request-scoped mencakup semua panggilan `resource.save()`/`.create()` (Starlark/native/sidecar via `X-Forma-Scope-Id`) dalam satu eksekusi action, join berdasar identitas store (bukan Module — multi-Module dalam satu Datastore fisik yang sama tetap atomik; lintas-Datastore genuinely berbeda → `ErrCrossStoreTx`). **Gap tersisa**: `RunAfterPhase` masih fire-and-forget (tidak rollback); SDK sidecar (`sdk/php`/`sdk/python`/`sdk/typescript`) belum mengirim `X-Forma-Scope-Id` (`01-architecture.md` §3, `runtimes/04-forma-sidecar.md` §4.3a).  
+- [x] 2.1.2 Natural key counter in same transaction as Entity insert — UPSERT counter + INSERT dalam satu `Tx` (`generateNaturalKeys` menerima DB terikat-transaksi; `04-query-and-keys.md` §2)  
+- [x] 2.1.3 UUID v7 PK — replace SQLite `INTEGER PRIMARY KEY AUTOINCREMENT` with UUID v7 generated at app layer (`NewUUIDv7`, kedua driver; child table PK juga ikut)  
+- [x] 2.1.4 Idempotency retention configurable — `IdempotencyStore` sekarang dikonstruksi di `resource.App` dengan TTL dari `Config.IdempotencyTTL` (default 24h via `db.DefaultIdempotencyTTL`), diekspos lewat `App.Idempotency()`. Resolusi dari manifest `kind: Config` (`core.idempotency_retention`) menunggu runtime Config-kind (Fase 7.2, belum ada) — `Config.IdempotencyTTL` adalah seam yang setara untuk saat ini.  
+- [x] 2.1.5 `natural_key_rule` lengkap — `strategy: sequence|custom` (custom = framework tidak auto-generate, diisi hook/script/import), `format`, `prefix`, `reset: never|yearly|monthly|daily` (divalidasi di `ValidateDocumentSpec`), `scope_field` (`01-core-basic.md` §2); counter komposit `(tenant, resource, field, scope, period, seq)` sudah ada (`jsonb-persist/04` §2)  
 
 ### 2.2 Query correctness
 - [ ] 2.2.1 Filter operators 13/13 (`eq neq gt gte lt lte between in nin like ilike null notnull` — `01-core-basic.md` §6) — implement yang kurang: `between`, `ilike`, `null`, `notnull`  
@@ -156,12 +156,12 @@
 - [ ] 3.1.3 `forma new <kind>` — scaffold: `new app <name>`, `new entity <name>`, `new module <name>`. Generate boilerplate YAML + directory.  
 
 ### 3.2 `forma dev` — verify against spec
-- [ ] 3.2.1 Verify 12 flags work: `--spec`, `--dsn`, `--addr`, `--listen` (none/local_http/unix_socket), `--app-endpoint` (none/local_http/unix_socket), `--runtime` (auto-detect + explicit override), `--dev`, `--dev-ui` (implies `--dev`+`--force`), `--force`, `--web-dir`, `--state-dir`, `--workspace-id`  
-- [ ] 3.2.2 Runtime auto-detect — `go.mod` → go (local), `package.json` → node, `composer.json` → php, `requirements.txt`/`pyproject.toml` → python, `*.csproj` → dotnet (SDK belum tersedia) — per `01-forma-dev.md` §4; ruby/java TIDAK termasuk auto-detect `forma dev` (hanya konteks sidecar `spec.runtime`, lihat 7.15.1)  
-- [ ] 3.2.3 SPA serving priority — explicit `--web-dir` > embedded `//go:embed` FS > auto-detect `renderers/web/dist/` (urutan per `01-forma-dev.md` §6; path auto-detect di docs masih `web/dist/` — stale pasca-restructure 0.3, perbaiki docs)  
-- [ ] 3.2.4 Config file `forma-app.yaml` support  
-- [ ] 3.2.5 Two personas: Persona A (embedded SPA, 80%) + Persona B (`--dev-ui` Vite HMR, 20%)  
-- [ ] 3.2.6 Add `check`, `promote`, `logs` to CLI dispatcher switch (currently fall to `usage()`)  
+- [x] 3.2.1 Verify 12 flags work: `--spec`, `--dsn`, `--addr`, `--listen` (none/local_http/unix_socket), `--app-endpoint` (none/local_http/unix_socket), `--runtime` (auto-detect + explicit override), `--dev`, `--dev-ui` (implies `--dev`+`--force`), `--force`, `--web-dir`, `--state-dir`, `--workspace-id`  
+- [x] 3.2.2 Runtime auto-detect — `go.mod` → go (local), `package.json` → node, `composer.json` → php, `requirements.txt`/`pyproject.toml` → python, `*.csproj` → dotnet (SDK belum tersedia) — per `01-forma-dev.md` §4; ruby/java TIDAK termasuk auto-detect `forma dev` (hanya konteks sidecar `spec.runtime`, lihat 7.15.1)  
+- [x] 3.2.3 SPA serving priority — explicit `--web-dir` > embedded `//go:embed` FS > auto-detect `renderers/web/dist/` (urutan per `01-forma-dev.md` §6; path auto-detect di docs masih `web/dist/` — stale pasca-restructure 0.3, perbaiki docs)  
+- [x] 3.2.4 Config file `forma-app.yaml` support  
+- [x] 3.2.5 Two personas: Persona A (embedded SPA, 80%) + Persona B (`--dev-ui` Vite HMR, 20%)  
+- [x] 3.2.6 Add `check`, `promote`, `logs` to CLI dispatcher switch (currently fall to `usage()`)  
 
 ### 3.3 `forma generate`
 - [ ] 3.3.1 `forma generate --lang typescript --spec <path> --out <dir>` — generate typed TS client from manifests  
@@ -265,27 +265,27 @@
 **Goal**: Semua UI kind, widget, contract, dan FormaExpr sesuai spec. Bisa dites end-to-end.
 
 ### 5.1 App Shell
-- [ ] 5.1.1 `sidebar-nav` — full chrome, side navigation, breadcrumb (existing, verify)  
+- [x] 5.1.1 `sidebar-nav` — full chrome, side navigation, breadcrumb (verified, working)  
 - [ ] 5.1.2 `topnav` — full chrome, top navigation  
 - [ ] 5.1.3 `landing-page` — minimal, public pages, no auth wrap  
 
 ### 5.2 `kind: Page`
-- [ ] 5.2.1 Blocks composition — form, table, component blocks (himpunan tertutup `06-page-kinds.md` §1; `widget` milik Dashboard §7, `html` block tidak ada di spec); permission-gated per block  
-- [ ] 5.2.2 Tabs variant — mutually exclusive with blocks; permission-checked per tab  
+- [x] 5.2.1 Blocks composition — form, table, component blocks (himpunan tertutup `06-page-kinds.md` §1; `widget` milik Dashboard §7, `html` block tidak ada di spec); permission-gated per block  
+- [x] 5.2.2 Tabs variant — mutually exclusive with blocks; permission-checked per tab  
 - [ ] 5.2.3 Master-detail split — `layout.mode: split`, `binds: {source, param}`; detail refetch on selection change  
 - [ ] 5.2.4 Full-custom — single `component:` block  
 - [ ] 5.2.5 Custom Page (`mode: custom`) — full-code page with `binds` footprint (entities, actions, subscribe); top rung of frontend control  
-- [ ] 5.2.6 Configuration Page pattern — `characteristic: reference` entities → no New/Delete buttons, only Update surfaced  
+- [x] 5.2.6 Configuration Page pattern — `characteristic: reference` entities → no New/Delete buttons, only Update surfaced  
 
 ### 5.3 `kind: Form`
-- [ ] 5.3.1 `render` mode enforcement — `modal` (dialog overlay), `drawer` (slide-in panel), `separate_page` (own route); design-time, no runtime switch  
-- [ ] 5.3.2 Wire `OverlayHost` — currently dead code; connect to Form.render modal/drawer  
+- [x] 5.3.1 `render` mode enforcement — `modal` (dialog overlay), `drawer` (slide-in panel), `separate_page` (own route); design-time, no runtime switch  
+- [x] 5.3.2 Wire `OverlayHost` — connected to Form.render modal/drawer  
 - [ ] 5.3.3 409 conflict handling — CAS version mismatch → "Data telah diubah oleh pengguna lain", offer reload + re-apply changes  
-- [ ] 5.3.4 Lifecycle UI patterns — plain_crud (no submit), 2-step+auto-save (default), 2-step manual (Save Draft + Submit buttons), 1-step create-submit (single button, no draft)  
-- [ ] 5.3.5 FormaExpr — `visible_when`, `readonly_when`, `required_when`, `compute` per field  
+- [x] 5.3.4 Lifecycle UI patterns — plain_crud (no submit), 2-step+auto-save (default), 2-step manual (Save Draft + Submit buttons), 1-step create-submit (single button, no draft)  
+- [x] 5.3.5 FormaExpr — `visible_when`, `readonly_when`, `required_when`, `compute` per field  
 
 ### 5.4 `kind: Table`
-- [ ] 5.4.1 Fix hardcoded `/_admin` prefix — surface-aware navigation (`/app` vs `/_admin`)  
+- [x] 5.4.1 Fix hardcoded `/_admin` prefix — surface-aware navigation (`/app` vs `/_admin`)  
 - [ ] 5.4.2 Inline editing — `inline_edit: true`, cell editable for non-readonly/computed/immutable fields; CAS per baris; submitted rows reject inline-edit  
 - [ ] 5.4.3 Batch editing — `batch_edit: [field, ...]`, update per baris, partial failure reported (not all-or-nothing)  
 - [ ] 5.4.4 Column derivation fix — N priority columns (natural key → label_field → status → transaction_date → rest), overflow accessible via row expand/detail; NEVER silently dropped  

@@ -48,7 +48,7 @@ func TestDeliverEvents_NonDurable_BroadcastsButDoesNotEnqueue(t *testing.T) {
 		DeliverTo: []spec.EventDeliveryDecl{{Channel: "websocket"}},
 	}}
 
-	DeliverEvents(context.Background(), deps, "demo", "clinic/visit", emissions)
+	DeliverEvents(context.Background(), deps, "demo", "clinic/visit", emissions, false)
 
 	if len(hub.broadcasts) != 1 {
 		t.Fatalf("hub.Broadcast called %d times, want 1", len(hub.broadcasts))
@@ -74,7 +74,7 @@ func TestDeliverEvents_Durable_BroadcastsAndEnqueues(t *testing.T) {
 		DeliverTo: []spec.EventDeliveryDecl{{Channel: "websocket"}},
 	}}
 
-	DeliverEvents(context.Background(), deps, "demo", "clinic/visit", emissions)
+	DeliverEvents(context.Background(), deps, "demo", "clinic/visit", emissions, false)
 
 	if len(hub.broadcasts) != 1 {
 		t.Fatalf("hub.Broadcast called %d times, want 1 (durable events still get an immediate best-effort push)", len(hub.broadcasts))
@@ -100,7 +100,7 @@ func TestDeliverEvents_AuditLog_NonDurable_WritesEventLogDirectly(t *testing.T) 
 		DeliverTo: []spec.EventDeliveryDecl{{Channel: "audit_log"}},
 	}}
 
-	DeliverEvents(context.Background(), deps, "demo", "clinic/visit", emissions)
+	DeliverEvents(context.Background(), deps, "demo", "clinic/visit", emissions, false)
 
 	records, err := deps.EventLog.ListByWorkspace(context.Background(), "demo", "clinic/visit", 10, 0)
 	if err != nil {
@@ -127,7 +127,7 @@ func TestDeliverEvents_AuditLog_Durable_GoesThroughOutboxNotDirectWrite(t *testi
 		DeliverTo: []spec.EventDeliveryDecl{{Channel: "audit_log"}},
 	}}
 
-	DeliverEvents(context.Background(), deps, "demo", "clinic/visit", emissions)
+	DeliverEvents(context.Background(), deps, "demo", "clinic/visit", emissions, false)
 
 	records, err := deps.EventLog.ListByWorkspace(context.Background(), "demo", "clinic/visit", 10, 0)
 	if err != nil {
@@ -153,7 +153,7 @@ func TestDeliverEvents_UnimplementedChannel_DoesNotPanic(t *testing.T) {
 		DeliverTo: []spec.EventDeliveryDecl{{Channel: "webhook"}},
 	}}
 
-	DeliverEvents(context.Background(), deps, "demo", "clinic/visit", emissions)
+	DeliverEvents(context.Background(), deps, "demo", "clinic/visit", emissions, false)
 
 	if len(hub.broadcasts) != 0 {
 		t.Errorf("expected no broadcast for an unimplemented channel")

@@ -39,7 +39,7 @@ func runGenerateGoApp(args []string) {
 
 	files := map[string]string{
 		"go.mod":         scaffoldGoMod(mod),
-		"main.go":        scaffoldGoMain(mod, ent, act),
+		"main.go":        scaffoldGoMain(mod, ent),
 		"handler.go":     scaffoldGoHandler(mod, ent, act),
 		"forma-app.yaml": scaffoldGoAppYAML(),
 		".gitignore":     scaffoldGoGitignore(),
@@ -74,7 +74,7 @@ replace github.com/primadi/forma/sdk/go => ../../sdk/go
 `, module)
 }
 
-func scaffoldGoMain(module, entity, action string) string {
+func scaffoldGoMain(module, entity string) string {
 	return fmt.Sprintf(`package main
 
 import (

@@ -38,7 +38,7 @@ func Resolve(manifests []manifest.RawManifest, uiReg *ui.Registry) (map[string]*
 	for _, raw := range manifests {
 		switch spec.Kind(raw.Kind) {
 		case spec.KindApp:
-			as, err := manifest.RawSpecToAppSpec(raw.Spec)
+			as, err := manifest.RawSpecToAppSpec(raw.Spec.(map[string]any))
 			if err != nil {
 				return nil, fmt.Errorf("%s: parse App spec: %w", raw.Source, err)
 			}
@@ -49,7 +49,7 @@ func Resolve(manifests []manifest.RawManifest, uiReg *ui.Registry) (map[string]*
 			apps[name] = as
 			appSources[name] = raw.Source
 		case spec.KindModule:
-			ms, err := manifest.RawSpecToModuleSpec(raw.Spec)
+			ms, err := manifest.RawSpecToModuleSpec(raw.Spec.(map[string]any))
 			if err != nil {
 				return nil, fmt.Errorf("%s: parse Module spec: %w", raw.Source, err)
 			}
@@ -167,11 +167,6 @@ func resolveMenuItem(item spec.MenuItem, moduleSet map[string]bool, modules map[
 		resolved, err := resolveMenuList(stamped, moduleSet, modules, uiReg, 1)
 		if err != nil {
 			return nil, fmt.Errorf("adopted menu from module %q: %w", item.Module, err)
-		}
-		if item.Order != 0 {
-			for i := range resolved {
-				resolved[i].Order = item.Order
-			}
 		}
 		return resolved, nil
 

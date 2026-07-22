@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/primadi/forma/renderers/jsonbpersist"
 	"github.com/primadi/forma/pkg/spec"
 )
 
@@ -151,6 +152,15 @@ func (e *SidecarExecutor) Execute(ctx context.Context, action spec.Action, param
 		return nil, fmt.Errorf("sidecar invoke %s.%s: %w", params.Module, params.ActionName, err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	// If a request-scoped TxScope is active (HandleCustomAction opened one
+	// for this action execution), forward its registry id so the app
+	// process can echo it back on its /ctx/entity/{op} callbacks — the Go
+	// host reconstructs the same scope server-side (internal/sidecar/ctx.go)
+	// even though it's a separate HTTP round-trip. See
+	// renderers/jsonbpersist/txscope.go's scopeRegistry doc comment.
+	if scopeID := db.ScopeIDFromContext(ctx); scopeID != "" {
+		req.Header.Set("X-Forma-Scope-Id", scopeID)
+	}
 
 	resp, err := e.client.Do(req)
 	if err != nil {

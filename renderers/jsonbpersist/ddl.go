@@ -63,8 +63,11 @@ func dialectFor(driver DriverType) dialect {
 			timestamptz: "text",
 			jsonb:       "text",
 			nowFn:       "(datetime('now'))",
-			uuidPK:      "integer PRIMARY KEY AUTOINCREMENT",
-			bigint:      "integer",
+			// PK is a UUID v7 string generated at the app layer (see
+			// NewUUIDv7 in tx.go), never SQLite AUTOINCREMENT — Core Basic
+			// §2 mandates UUID v7 PKs with no per-backend exception.
+			uuidPK: "text PRIMARY KEY",
+			bigint: "integer",
 		}
 	}
 	return dialect{
@@ -72,8 +75,11 @@ func dialectFor(driver DriverType) dialect {
 		timestamptz: "timestamptz",
 		jsonb:       "jsonb",
 		nowFn:       "now()",
-		uuidPK:      "uuid PRIMARY KEY DEFAULT gen_uuid_v7()",
-		bigint:      "bigint",
+		// Postgres also gets its default from the app layer (gen_uuid_v7()
+		// may not exist without the pgcrypto/uuid-ossp extension enabled) —
+		// the app always supplies id explicitly on INSERT.
+		uuidPK: "uuid PRIMARY KEY",
+		bigint: "bigint",
 	}
 }
 
@@ -81,9 +87,12 @@ func dialectFor(driver DriverType) dialect {
 func GenerateEntityDDL(meta spec.Metadata, entity *spec.EntitySpec, driver DriverType) (*TableInfo, error) {
 	dl := dialectFor(driver)
 	ti := &TableInfo{
-		Module:    meta.Module,
-		Entity:    meta.Name,
-		HasUUIDPK: driver != DriverSQLite,
+		Module: meta.Module,
+		Entity: meta.Name,
+		// Both drivers now use an app-generated UUID v7 string PK (see
+		// dialectFor) — HasUUIDPK is kept for callers that branched on
+		// per-driver PK type, but the answer is always true today.
+		HasUUIDPK: true,
 	}
 
 	// Determine schema (PostgreSQL only)
@@ -178,14 +187,16 @@ func GenerateEntityDDL(meta spec.Metadata, entity *spec.EntitySpec, driver Drive
 			idxName := fmt.Sprintf("idx_uq_%s_%s", ti.TableName, f.Name)
 
 			if driver == DriverSQLite {
-				// SQLite: partial unique constraints must be CREATE UNIQUE INDEX
+				// SQLite: partial unique constraints must be CREATE UNIQUE INDEX.
+				// Natural key uniqueness is scoped per tenant (tenant_id, _field)
+				// per 01-core-basic.md §2: "unique constraint per tenant".
 				if softDelete {
 					indexes = append(indexes,
-						fmt.Sprintf("CREATE UNIQUE INDEX %s ON %s (%s) WHERE deleted_at IS NULL;",
+						fmt.Sprintf("CREATE UNIQUE INDEX %s ON %s (tenant_id, %s) WHERE deleted_at IS NULL;",
 							idxName, ti.TableName, colName))
 				} else {
 					indexes = append(indexes,
-						fmt.Sprintf("CREATE UNIQUE INDEX %s ON %s (%s);",
+						fmt.Sprintf("CREATE UNIQUE INDEX %s ON %s (tenant_id, %s);",
 							idxName, ti.TableName, colName))
 				}
 			} else {
@@ -328,14 +339,10 @@ func generateChildTableDDL(parentTable string, field spec.Field, driver DriverTy
 	// Primary key
 	columns = append(columns, fmt.Sprintf("  id          %s", dl.uuidPK))
 
-	// Foreign key to parent — match parent's PK type
-	parentIDType := dl.uuid
-	if driver == DriverSQLite {
-		parentIDType = "integer"
-	}
-	// SQLite doesn't enforce FK by default, so we still declare it
+	// Foreign key to parent — parent PK is a UUID v7 string on both drivers.
+	// SQLite doesn't enforce FK by default, so we still declare it.
 	columns = append(columns, fmt.Sprintf("  parent_id   %s   NOT NULL REFERENCES %s(id) ON DELETE CASCADE",
-		parentIDType, parentTable))
+		dl.uuid, parentTable))
 
 	// Sequence field (auto-increment per parent)
 	if field.Child != nil && field.Child.SequenceField != "" {

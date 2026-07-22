@@ -168,7 +168,30 @@ POST /ctx/entity/decrement
 
 Semua SDK `lib-forma-*` mengekspos operasi ini lewat `ctx.entity().named("module/entity").get/set/update/increment/decrement(...)`.
 
-Praktik: pilih `decrement`/`increment` alih-alih `get`+modify+`set` untuk field numerik (menghindari TOCTOU); pilih `update` alih-alih `set` untuk perubahan parsial. Catatan: operasi field-level tidak mengecek `version` (bukan full-record CAS) — kalau butuh optimistic concurrency level record, pakai `get` → compare → `set`. Multi-operasi dalam satu handler **belum** dibungkus satu transaksi — gap yang sama dengan kontrak transaksi [`../spec/backend/01-core-basic.md`](../spec/backend/01-core-basic.md) §3, lihat §8.
+Praktik: pilih `decrement`/`increment` alih-alih `get`+modify+`set` untuk field numerik (menghindari TOCTOU); pilih `update` alih-alih `set` untuk perubahan parsial. Catatan: operasi field-level tidak mengecek `version` (bukan full-record CAS) — kalau butuh optimistic concurrency level record, pakai `get` → compare → `set`.
+
+**Multi-operasi dalam satu handler kini BISA satu transaksi** — lewat header
+`X-Forma-Scope-Id` (baru). Saat `HandleCustomAction` men-dispatch action
+bertipe `sidecar`, ia sudah membuka `TxScope` request-scoped untuk seluruh
+eksekusi action itu (`renderers/jsonbpersist/txscope.go`); `SidecarExecutor`
+(`internal/action/sidecar.go`) menyertakan id scope itu sebagai header
+`X-Forma-Scope-Id` pada request `POST /invoke/...` (§4.2). **App process
+wajib menyimpan header ini selama menangani satu `/invoke/...` dan
+mengirimkannya balik sebagai header yang sama di setiap panggilan
+`/ctx/...` (termasuk `/ctx/entity/{op}`) yang dilakukan dalam rentang
+invoke tersebut** — `CtxHandler` (`internal/sidecar/ctx.go`) me-resolve
+header itu balik ke `*TxScope` yang sama (keduanya berjalan di proses OS
+yang sama, lihat `cmd/forma/dev.go`) sehingga operasi entity itu ikut
+transaksi yang sama, bukan commit sendiri-sendiri. Tanpa header ini,
+perilakunya persis seperti sebelumnya: tiap operasi commit independen.
+
+**Status implementasi SDK (per 2026-07-20): belum ada `lib-forma-*` yang
+mengirim header ini.** Ini kontrak wire baru di sisi Go; menyesuaikan
+`sdk/php`, `sdk/python`, `sdk/typescript` (yang sudah punya implementasi
+nyata) dan SDK lain untuk menyimpan+mengirim `X-Forma-Scope-Id` sepanjang
+satu invoke adalah follow-up terpisah, bukan bagian dari perubahan Go ini.
+Sebelum SDK diperbarui, panggilan `ctx.entity.*` dari app process tetap
+commit independen — SAMA seperti perilaku hari ini, tidak ada regresi.
 
 ### 4.4 Peran `lib-forma-*` (SDK Client Tipis)
 

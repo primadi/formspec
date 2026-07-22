@@ -48,6 +48,17 @@ export function getLifecycle(entity: EntitySchema): LifecycleActions {
         quickSubmit: false,
       }
 
+    case "two_step_manual":
+      return {
+        pattern: "two_step_manual",
+        hasSave: true,
+        hasSubmit: true,
+        hasDelete: !isReference && !isSummary,
+        hasCreate: !isReference && !isSummary,
+        autoSave: false,
+        quickSubmit: false,
+      }
+
     case "two_step_autosave":
     default:
       return {

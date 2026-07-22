@@ -25,12 +25,26 @@ type EntityStore struct {
 	schema            string
 	softDelete        bool
 	fields            []spec.Field
+	naturalKeyField   string                 // empty if no natural key; field name if exactly one (from spec.EntitySpec.NaturalKeyField)
 	children          map[string]*ChildStore // child field name → store
 	stateMachine      *spec.StateMachine     // optional state machine
 	computedFields    []spec.Field           // fields with Computed != nil
 	submitEnabled     bool                   // whether submit action is enabled (v0.3.0 — doc_status init)
 	backdatePolicy    *spec.BackdatePolicy
 	forwardDatePolicy *spec.ForwardDatePolicy
+}
+
+// PendingEvent is a durable event to enqueue to the outbox in the same
+// transaction as the entity mutation that produced it — the caller (the
+// create/update HTTP handlers) resolves the entity's declared Emits event
+// against the pre-insert/pre-update data and passes it in, closing the gap
+// described in docs/renderers/jsonb-persist/01-architecture.md §3 where a
+// crash between mutation commit and outbox enqueue silently drops the
+// event. Non-durable events are never passed here — they are delivered
+// best-effort by action.DeliverEvents after the fact, as before.
+type PendingEvent struct {
+	Name    string
+	Payload string // JSON-encoded event message (see action.BuildEventMessage)
 }
 
 // NewEntityStore creates a new EntityStore for the given entity manifest.
@@ -84,6 +98,7 @@ func NewEntityStore(db DB, driver DriverType, meta spec.Metadata, entity *spec.E
 		schema:            schema,
 		softDelete:        softDelete,
 		fields:            entity.Fields,
+		naturalKeyField:   entity.NaturalKeyField,
 		children:          collectChildFields(db, driver, tableName, entity.Fields),
 		stateMachine:      sm,
 		computedFields:    computedFields,
@@ -92,6 +107,11 @@ func NewEntityStore(db DB, driver DriverType, meta spec.Metadata, entity *spec.E
 		forwardDatePolicy: entity.ForwardDatePolicy,
 	}
 }
+
+// BaseDB returns the store's underlying (non-transaction-bound) DB — used
+// by callers outside this package (internal/api's HandleCustomAction) to
+// check TxScope.Peek against this entity's actual store identity.
+func (s *EntityStore) BaseDB() DB { return s.db }
 
 // qualifiedTable returns the table name with schema prefix for PostgreSQL.
 func (s *EntityStore) qualifiedTable() string {
@@ -131,8 +151,11 @@ func (s *EntityStore) applyDefaults(data map[string]any) {
 // NaturalKeyRule whose value is not already present in data (a caller may
 // still supply an explicit value, e.g. migrations/imports — those are left
 // untouched). Uses NaturalKeyCounter for atomic, per-workspace/resource/field
-// sequence generation.
-func (s *EntityStore) generateNaturalKeys(ctx context.Context, workspaceID string, data map[string]any) error {
+// sequence generation. database is the counter's UPSERT target — Insert
+// passes the transaction-bound DB so the counter increment and the row
+// insert it numbers commit together or not at all (Core Basic §2,
+// jsonb-persist 04-query-and-keys.md §2).
+func (s *EntityStore) generateNaturalKeys(ctx context.Context, database DB, workspaceID string, data map[string]any) error {
 	for _, f := range s.fields {
 		if !f.NaturalKey || f.NaturalKeyRule == nil {
 			continue
@@ -142,6 +165,17 @@ func (s *EntityStore) generateNaturalKeys(ctx context.Context, workspaceID strin
 		}
 
 		rule := f.NaturalKeyRule
+
+		// strategy: custom means the framework does NOT auto-generate this
+		// key — the caller (a hook, script, or import) is responsible for
+		// supplying it. Leaving it absent here means validateRequired (run
+		// right after this, in Insert) is the backstop that catches a
+		// custom-strategy key nobody supplied (01-core-basic.md §2:
+		// "sequence | custom").
+		if rule.Strategy == "custom" {
+			continue
+		}
+
 		prefix := ""
 		if rule.Prefix != nil {
 			if rule.Prefix.Value != "" {
@@ -160,7 +194,7 @@ func (s *EntityStore) generateNaturalKeys(ctx context.Context, workspaceID strin
 			}
 		}
 
-		counter := NewNaturalKeyCounter(s.db, s.driver)
+		counter := NewNaturalKeyCounter(database, s.driver)
 		key, err := counter.GenerateNaturalKey(ctx, workspaceID, s.entity, f.Name, scope, rule.Reset, rule.Format, prefix)
 		if err != nil {
 			return fmt.Errorf("generate natural key %q: %w", f.Name, err)
@@ -186,93 +220,127 @@ func (s *EntityStore) validateRequired(data map[string]any) error {
 
 // InsertParams holds the data for creating a new entity record.
 type InsertParams struct {
-	WorkspaceID  string
-	CreatedBy string
-	Data      map[string]any
+	WorkspaceID   string
+	CreatedBy     string
+	Data          map[string]any
+	PendingEvents []PendingEvent // durable events to enqueue atomically with this insert (see PendingEvent)
 }
 
-// Insert creates a new entity record and returns its ID.
+// Insert creates a new entity record and returns its ID. The natural-key
+// counter UPSERT, the row insert, child-table inserts, and any
+// PendingEvents outbox enqueue all run inside one transaction — Core Basic
+// §2/§7 (jsonb-persist 04-query-and-keys.md §2, 01-architecture.md §3):
+// commit all of it or none of it, closing the gap where a crash between a
+// committed mutation and a later best-effort outbox write silently drops
+// the event, and the gap where a natural-key counter increment survives a
+// failed insert as an unrecoverable numbering hole.
 // Children with storage:table are extracted from Data and stored in child tables.
 func (s *EntityStore) Insert(ctx context.Context, params InsertParams) (string, error) {
 	// Apply default values for fields not present in data
 	s.applyDefaults(params.Data)
 
-	// Generate natural keys (e.g. queue_number, invoice number) for fields
-	// that declare natural_key: true + natural_key_rule, before required-field
-	// validation — a generated key must count as present.
-	if err := s.generateNaturalKeys(ctx, params.WorkspaceID, params.Data); err != nil {
-		return "", fmt.Errorf("%s insert: %w", s.entity, err)
-	}
-
-	// Validate required fields
-	if err := s.validateRequired(params.Data); err != nil {
-		return "", fmt.Errorf("%s insert: %w", s.entity, err)
-	}
-
-	// Validate field rules
-	if err := s.validateFieldRules(params.Data); err != nil {
-		return "", fmt.Errorf("%s insert: %w", s.entity, err)
-	}
-
-	// Validate relation targets (referenceability guard)
-	if err := s.ValidateRelationTargets(ctx, params.WorkspaceID, params.Data); err != nil {
-		return "", fmt.Errorf("%s insert: %w", s.entity, err)
-	}
-
-	// Validate transaction_date policy (backdate/forward-date)
-	if err := s.validateTransactionDatePolicy(params.Data); err != nil {
-		return "", fmt.Errorf("%s insert: %w", s.entity, err)
-	}
-
-	// Extract children from data (table storage only)
-	parentData := params.Data
-	childrenData := make(map[string][]map[string]any)
-	for name, cs := range s.children {
-		if cs.Storage() == "table" {
-			ch, pd := cs.ChildrenExtract(parentData)
-			childrenData[name] = ch
-			parentData = pd
-		}
-	}
-
 	tbl := s.qualifiedTable()
+	id := NewUUIDv7()
 
-	// Set initial doc_status: draft if lifecycle active, NULL if lifecycle-free
-	initialDocStatus := "NULL"
-	if s.submitEnabled {
-		initialDocStatus = "'draft'"
-	}
+	err := runTx(ctx, s.db, func(txdb DB) error {
+		// Generate natural keys (e.g. queue_number, invoice number) for
+		// fields that declare natural_key: true + natural_key_rule, before
+		// required-field validation — a generated key must count as
+		// present. The counter UPSERT runs on txdb: if the insert below
+		// fails, the counter increment rolls back with it instead of
+		// leaving a permanent numbering gap.
+		if err := s.generateNaturalKeys(ctx, txdb, params.WorkspaceID, params.Data); err != nil {
+			return err
+		}
 
-	query := fmt.Sprintf(
-		`INSERT INTO %s (tenant_id, created_by, updated_by, doc_status, data) VALUES (?, ?, ?, %s, ?) RETURNING id`,
-		tbl, initialDocStatus)
+		// Validate required fields
+		if err := s.validateRequired(params.Data); err != nil {
+			return err
+		}
 
-	var id string
-	err := s.db.QueryRowContext(ctx, query,
-		params.WorkspaceID,
-		params.CreatedBy,
-		params.CreatedBy,
-		toJSONString(parentData),
-	).Scan(&id)
+		// Validate field rules
+		if err := s.validateFieldRules(params.Data); err != nil {
+			return err
+		}
+
+		// Validate relation targets (referenceability guard) — reads through
+		// this Insert's own transaction (txdb), never s.db: a second,
+		// independent query against s.db while this transaction already
+		// holds the sole SQLite connection would deadlock instead of erroring.
+		if err := s.ValidateRelationTargets(ctx, txdb, params.WorkspaceID, params.Data); err != nil {
+			return err
+		}
+
+		// Validate transaction_date policy (backdate/forward-date)
+		if err := s.validateTransactionDatePolicy(params.Data); err != nil {
+			return err
+		}
+
+		// Extract children from data (table storage only)
+		parentData := params.Data
+		childrenData := make(map[string][]map[string]any)
+		for name, cs := range s.children {
+			if cs.Storage() == "table" {
+				ch, pd := cs.ChildrenExtract(parentData)
+				childrenData[name] = ch
+				parentData = pd
+			}
+		}
+
+		// Set initial doc_status: draft if lifecycle active, NULL if lifecycle-free
+		initialDocStatus := "NULL"
+		if s.submitEnabled {
+			initialDocStatus = "'draft'"
+		}
+
+		query := fmt.Sprintf(
+			`INSERT INTO %s (id, tenant_id, created_by, updated_by, doc_status, data) VALUES (?, ?, ?, ?, %s, ?)`,
+			tbl, initialDocStatus)
+
+		if _, err := txdb.ExecContext(ctx, query,
+			id,
+			params.WorkspaceID,
+			params.CreatedBy,
+			params.CreatedBy,
+			toJSONString(parentData),
+		); err != nil {
+			return fmt.Errorf("insert row: %w", err)
+		}
+
+		// Insert children into child tables
+		for name, ch := range childrenData {
+			cs := s.children[name]
+			if err := cs.withDB(txdb).InsertChildren(ctx, id, ch); err != nil {
+				return fmt.Errorf("insert children %s: %w", name, err)
+			}
+		}
+
+		resource := s.module + "/" + s.entity
+
+		// Write audit log — best-effort, same as before: a failure here is
+		// logged but does not roll back the mutation (audit isn't part of
+		// the mandated atomic set: entity mutation + natural-key counter +
+		// durable outbox).
+		changesJSON := toJSONString(params.Data)
+		if err := writeAuditLog(ctx, txdb, s.driver, params.WorkspaceID, resource, id,
+			string(AuditActionCreate), params.CreatedBy, changesJSON); err != nil {
+			log.Printf("[WARN] audit write failed (create %s/%s): %v", resource, id, err)
+		}
+
+		// Enqueue any durable events atomically with the row that produced
+		// them — a failure here DOES roll back the whole insert, since a
+		// durable publisher's contract requires the mutation and its
+		// outbox entry to commit together or not at all.
+		for _, ev := range params.PendingEvents {
+			if _, err := enqueueOutbox(ctx, txdb, params.WorkspaceID, ev.Name, resource, ev.Payload); err != nil {
+				return fmt.Errorf("enqueue pending event %q: %w", ev.Name, err)
+			}
+		}
+
+		return nil
+	})
 	if err != nil {
 		return "", fmt.Errorf("%s insert: %w", s.entity, err)
-	}
-
-	// Insert children into child tables
-	for name, ch := range childrenData {
-		cs := s.children[name]
-		if err := cs.InsertChildren(ctx, id, ch); err != nil {
-			return "", fmt.Errorf("%s insert children %s: %w", s.entity, name, err)
-		}
-	}
-
-	// Write audit log
-	resource := s.module + "/" + s.entity
-	changesJSON := toJSONString(params.Data)
-	if err := writeAuditLog(ctx, s.db, s.driver, params.WorkspaceID, resource, id,
-		string(AuditActionCreate), params.CreatedBy, changesJSON); err != nil {
-		// Audit failure is non-fatal — log warning but don't fail the insert
-		log.Printf("[WARN] audit write failed (create %s/%s): %v", resource, id, err)
 	}
 
 	return id, nil
@@ -281,13 +349,28 @@ func (s *EntityStore) Insert(ctx context.Context, params InsertParams) (string, 
 // GetByIDParams holds the data for fetching an entity record.
 type GetByIDParams struct {
 	WorkspaceID string
-	ID       string
+	ID          string
 }
 
 // GetByID fetches a single entity record by ID.
+//
+// Lookup order:
+//  1. UUID v7 primary key (WHERE id = ?)
+//  2. Natural key fallback (WHERE _<NaturalKeyField> = ?) — only when
+//     the entity declares a natural_key field. This makes the REST API
+//     transparently accept both /{uuid} and /{natural_key_value}.
+//
 // Children with storage:table are hydrated into the Data map.
 func (s *EntityStore) GetByID(ctx context.Context, params GetByIDParams) (*EntityRecord, error) {
 	rec, err := s.getByIDRaw(ctx, params)
+	if err != nil && s.naturalKeyField != "" {
+		// Natural key fallback: the requested ID didn't match a UUID —
+		// try the natural key field. FindByField already hydrates
+		// children and evaluates computed fields, so return directly.
+		if nkRec, nkErr := s.FindByField(ctx, params.WorkspaceID, s.naturalKeyField, params.ID); nkErr == nil {
+			return nkRec, nil
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -308,6 +391,9 @@ func (s *EntityStore) GetByID(ctx context.Context, params GetByIDParams) (*Entit
 }
 
 // getByIDRaw fetches the raw parent record without hydrating children.
+// Reads through txReadDB — if a request-scoped transaction is active on
+// this store, this sees that transaction's own uncommitted writes so far
+// (read-your-own-writes within one action execution).
 func (s *EntityStore) getByIDRaw(ctx context.Context, params GetByIDParams) (*EntityRecord, error) {
 	tbl := s.qualifiedTable()
 	query := fmt.Sprintf(
@@ -317,20 +403,23 @@ func (s *EntityStore) getByIDRaw(ctx context.Context, params GetByIDParams) (*En
 		query += " AND deleted_at IS NULL"
 	}
 
-	return s.scanRecord(ctx, query, params.ID, params.WorkspaceID)
+	return s.scanRecord(ctx, txReadDB(ctx, s.db), query, params.ID, params.WorkspaceID)
 }
 
 // UpdateParams holds the data for updating an entity record.
 type UpdateParams struct {
-	WorkspaceID  string
-	ID        string
-	Version   int // optimistic concurrency: update only if version matches
-	UpdatedBy string
-	Data      map[string]any
+	WorkspaceID   string
+	ID            string
+	Version       int // optimistic concurrency: update only if version matches
+	UpdatedBy     string
+	Data          map[string]any
+	PendingEvents []PendingEvent // durable events to enqueue atomically with this update (see PendingEvent)
 }
 
 // Update updates an entity record with optimistic concurrency control.
-// Returns the new version if successful.
+// Returns the new version if successful. The row update, child-table sync,
+// and any PendingEvents outbox enqueue all run inside one transaction — see
+// Insert's doc comment for the atomicity contract this satisfies.
 // Children with storage:table are extracted from Data, stored in child tables
 // (replace-all strategy), and removed from parent JSONB.
 func (s *EntityStore) Update(ctx context.Context, params UpdateParams) (int, error) {
@@ -344,8 +433,11 @@ func (s *EntityStore) Update(ctx context.Context, params UpdateParams) (int, err
 		return 0, fmt.Errorf("%s update: %w", s.entity, err)
 	}
 
-	// Validate relation targets (referenceability guard)
-	if err := s.ValidateRelationTargets(ctx, params.WorkspaceID, params.Data); err != nil {
+	// Validate relation targets (referenceability guard) — no transaction is
+	// open yet at this point in Update, so txReadDB's usual fallback to
+	// s.db is safe; it only prefers the scope's txdb when one is already
+	// active (e.g. a custom action that read/wrote this same store earlier).
+	if err := s.ValidateRelationTargets(ctx, txReadDB(ctx, s.db), params.WorkspaceID, params.Data); err != nil {
 		return 0, fmt.Errorf("%s update: %w", s.entity, err)
 	}
 
@@ -367,14 +459,19 @@ func (s *EntityStore) Update(ctx context.Context, params UpdateParams) (int, err
 
 	tbl := s.qualifiedTable()
 
-	// Check immutable fields: fetch existing record and compare values
+	// Check immutable fields: fetch existing record and compare values.
+	// Use GetByID (not getByIDRaw) so natural-key lookups are resolved
+	// to the actual UUID — entities with natural_key: true use the natural
+	// key value as the API-facing ID (e.g. "clinic" for settings).
 	var existingData map[string]any
+	var resolvedID string
 	{
-		rec, err := s.getByIDRaw(ctx, GetByIDParams{WorkspaceID: params.WorkspaceID, ID: params.ID})
+		rec, err := s.GetByID(ctx, GetByIDParams{WorkspaceID: params.WorkspaceID, ID: params.ID})
 		if err != nil {
 			return 0, fmt.Errorf("%s update: fetch existing: %w", s.entity, err)
 		}
 		existingData = rec.Data
+		resolvedID = rec.ID // actual UUID (natural key was resolved)
 	}
 	for _, f := range s.fields {
 		if !f.Immutable {
@@ -396,95 +493,123 @@ func (s *EntityStore) Update(ctx context.Context, params UpdateParams) (int, err
 		}
 	}
 
-	query := fmt.Sprintf(
-		`UPDATE %s SET data = ?, version = version + 1, updated_by = ?, updated_at = %s WHERE id = ? AND tenant_id = ? AND version = ?`,
-		tbl, currentTimestampExpr(s.driver))
-
-	if s.softDelete {
-		query += " AND deleted_at IS NULL"
-	}
-
-	query += " RETURNING version"
-
 	var newVersion int
-	err := s.db.QueryRowContext(ctx, query,
-		toJSONString(parentData),
-		params.UpdatedBy,
-		params.ID,
-		params.WorkspaceID,
-		params.Version,
-	).Scan(&newVersion)
+	err := runTx(ctx, s.db, func(txdb DB) error {
+		query := fmt.Sprintf(
+			`UPDATE %s SET data = ?, version = version + 1, updated_by = ?, updated_at = %s WHERE id = ? AND tenant_id = ? AND version = ?`,
+			tbl, currentTimestampExpr(s.driver))
+
+		if s.softDelete {
+			query += " AND deleted_at IS NULL"
+		}
+
+		query += " RETURNING version"
+
+		if err := txdb.QueryRowContext(ctx, query,
+			toJSONString(parentData),
+			params.UpdatedBy,
+			resolvedID,
+			params.WorkspaceID,
+			params.Version,
+		).Scan(&newVersion); err != nil {
+			if strings.Contains(err.Error(), "no rows") {
+				return fmt.Errorf("%w (version conflict or not found)", ErrNotFound)
+			}
+			return err
+		}
+
+		// Sync children in child tables (replace-all)
+		for name, ch := range childrenData {
+			cs := s.children[name]
+			if err := cs.withDB(txdb).UpdateChildren(ctx, resolvedID, ch); err != nil {
+				return fmt.Errorf("update children %s: %w", name, err)
+			}
+		}
+
+		resource := s.module + "/" + s.entity
+
+		// Write audit log with changes diff — best-effort, same as Insert.
+		changes := computeChanges(existingData, parentData)
+		if len(changes) > 0 {
+			changesJSON := serializeChangeMap(changes)
+			if err := writeAuditLog(ctx, txdb, s.driver, params.WorkspaceID, resource, resolvedID,
+				string(AuditActionUpdate), params.UpdatedBy, changesJSON); err != nil {
+				log.Printf("[WARN] audit write failed (update %s/%s): %v", resource, resolvedID, err)
+			}
+		}
+
+		// Enqueue any durable events atomically with the row update that
+		// produced them — see Insert's doc comment.
+		for _, ev := range params.PendingEvents {
+			if _, err := enqueueOutbox(ctx, txdb, params.WorkspaceID, ev.Name, resource, ev.Payload); err != nil {
+				return fmt.Errorf("enqueue pending event %q: %w", ev.Name, err)
+			}
+		}
+
+		return nil
+	})
 	if err != nil {
-		if strings.Contains(err.Error(), "no rows") {
-			return 0, fmt.Errorf("%s update: %w (version conflict or not found)", s.entity, ErrNotFound)
-		}
 		return 0, fmt.Errorf("%s update: %w", s.entity, err)
-	}
-
-	// Sync children in child tables (replace-all)
-	for name, ch := range childrenData {
-		cs := s.children[name]
-		if err := cs.UpdateChildren(ctx, params.ID, ch); err != nil {
-			return 0, fmt.Errorf("%s update children %s: %w", s.entity, name, err)
-		}
-	}
-
-	// Write audit log with changes diff
-	resource := s.module + "/" + s.entity
-	changes := computeChanges(existingData, parentData)
-	if len(changes) > 0 {
-		changesJSON := serializeChangeMap(changes)
-		if err := writeAuditLog(ctx, s.db, s.driver, params.WorkspaceID, resource, params.ID,
-			string(AuditActionUpdate), params.UpdatedBy, changesJSON); err != nil {
-			// Audit failure is non-fatal — log warning but don't fail the update
-			log.Printf("[WARN] audit write failed (update %s/%s): %v", resource, params.ID, err)
-		}
 	}
 
 	return newVersion, nil
 }
 
-// SoftDelete marks an entity record as deleted.
+// SoftDelete marks an entity record as deleted. Child-row removal, the
+// delete/deactivate write, and the audit log entry all run inside one
+// transaction (see Insert's doc comment for the atomicity contract).
 // Children in child tables are cascade-deleted (ON DELETE CASCADE from DDL handles this
 // for hard deletes; for soft deletes we explicitly remove child rows).
 func (s *EntityStore) SoftDelete(ctx context.Context, workspaceID, id string) error {
 	if !s.softDelete {
-		// Delete children first (child tables have ON DELETE CASCADE,
-		// but we do it explicitly for clarity).
-		for name, cs := range s.children {
-			if err := cs.DeleteChildren(ctx, id); err != nil {
-				return fmt.Errorf("%s delete children %s: %w", s.entity, name, err)
+		err := runTx(ctx, s.db, func(txdb DB) error {
+			// Delete children first (child tables have ON DELETE CASCADE,
+			// but we do it explicitly for clarity).
+			for name, cs := range s.children {
+				if err := cs.withDB(txdb).DeleteChildren(ctx, id); err != nil {
+					return fmt.Errorf("delete children %s: %w", name, err)
+				}
 			}
+
+			// Hard delete
+			tbl := s.qualifiedTable()
+			_, err := txdb.ExecContext(ctx,
+				fmt.Sprintf("DELETE FROM %s WHERE id = ? AND tenant_id = ?", tbl),
+				id, workspaceID)
+			return err
+		})
+		if err != nil {
+			return fmt.Errorf("%s delete: %w", s.entity, err)
+		}
+		return nil
+	}
+
+	err := runTx(ctx, s.db, func(txdb DB) error {
+		tbl := s.qualifiedTable()
+		query := fmt.Sprintf(
+			`UPDATE %s SET deleted_at = %s WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL`,
+			tbl, currentTimestampExpr(s.driver))
+
+		result, err := txdb.ExecContext(ctx, query, id, workspaceID)
+		if err != nil {
+			return err
+		}
+		rows, _ := result.RowsAffected()
+		if rows == 0 {
+			return ErrNotFound
 		}
 
-		// Hard delete
-		tbl := s.qualifiedTable()
-		_, err := s.db.ExecContext(ctx,
-			fmt.Sprintf("DELETE FROM %s WHERE id = ? AND tenant_id = ?", tbl),
-			id, workspaceID)
-		return err
-	}
-
-	tbl := s.qualifiedTable()
-	query := fmt.Sprintf(
-		`UPDATE %s SET deleted_at = %s WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL`,
-		tbl, currentTimestampExpr(s.driver))
-
-	result, err := s.db.ExecContext(ctx, query, id, workspaceID)
+		// Write audit log
+		resource := s.module + "/" + s.entity
+		if err := writeAuditLog(ctx, txdb, s.driver, workspaceID, resource, id,
+			string(AuditActionDelete), "system", "{}"); err != nil {
+			// Audit failure is non-fatal — log warning but don't fail the delete
+			log.Printf("[WARN] audit write failed (delete %s/%s): %v", resource, id, err)
+		}
+		return nil
+	})
 	if err != nil {
 		return fmt.Errorf("%s soft delete: %w", s.entity, err)
-	}
-	rows, _ := result.RowsAffected()
-	if rows == 0 {
-		return fmt.Errorf("%s soft delete: %w", s.entity, ErrNotFound)
-	}
-
-	// Write audit log
-	resource := s.module + "/" + s.entity
-	if err := writeAuditLog(ctx, s.db, s.driver, workspaceID, resource, id,
-		string(AuditActionDelete), "system", "{}"); err != nil {
-		// Audit failure is non-fatal — log warning but don't fail the delete
-		log.Printf("[WARN] audit write failed (delete %s/%s): %v", resource, id, err)
 	}
 	return nil
 }
@@ -517,7 +642,11 @@ func (s *EntityStore) UpdateFields(ctx context.Context, workspaceID, id string, 
 			tbl, currentTimestampExpr(s.driver), softDeleteClause)
 	}
 
-	result, err := s.db.ExecContext(ctx, query, dataJSON, id, workspaceID)
+	database, err := writeDB(ctx, s.db)
+	if err != nil {
+		return fmt.Errorf("%s update fields: %w", s.entity, err)
+	}
+	result, err := database.ExecContext(ctx, query, dataJSON, id, workspaceID)
 	if err != nil {
 		return fmt.Errorf("%s update fields: %w", s.entity, err)
 	}
@@ -551,7 +680,11 @@ func (s *EntityStore) IncrementField(ctx context.Context, workspaceID, id, field
 		query += " AND deleted_at IS NULL"
 	}
 
-	result, err := s.db.ExecContext(ctx, query, amount, id, workspaceID)
+	database, err := writeDB(ctx, s.db)
+	if err != nil {
+		return fmt.Errorf("%s increment field %s: %w", s.entity, field, err)
+	}
+	result, err := database.ExecContext(ctx, query, amount, id, workspaceID)
 	if err != nil {
 		return fmt.Errorf("%s increment field %s: %w", s.entity, field, err)
 	}
@@ -590,8 +723,12 @@ func (s *EntityStore) DecrementField(ctx context.Context, workspaceID, id, field
 			tbl, field, field, currentTimestampExpr(s.driver), softDeleteClause, field, field)
 	}
 
+	database, err := writeDB(ctx, s.db)
+	if err != nil {
+		return 0, fmt.Errorf("%s decrement field %s: %w", s.entity, field, err)
+	}
 	var newVal float64
-	err := s.db.QueryRowContext(ctx, query, amount, id, workspaceID, amount).Scan(&newVal)
+	err = database.QueryRowContext(ctx, query, amount, id, workspaceID, amount).Scan(&newVal)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return 0, fmt.Errorf("%s decrement field %s: %w (not found or insufficient %s)", s.entity, field, ErrNotFound, field)
@@ -603,8 +740,12 @@ func (s *EntityStore) DecrementField(ctx context.Context, workspaceID, id, field
 
 // ValidateRelationTargets checks that all relation fields in data point to
 // valid targets (doc_status = NULL or 'submitted'). Draft/cancelled targets
-// are rejected per Core §4.1b referenceability rule.
-func (s *EntityStore) ValidateRelationTargets(ctx context.Context, workspaceID string, data map[string]any) error {
+// are rejected per Core §4.1b referenceability rule. database is the DB to
+// read through — callers already inside an open transaction (Insert) MUST
+// pass that transaction's txdb, not s.db: issuing a second, independent
+// query against s.db while a transaction already holds the sole SQLite
+// connection deadlocks instead of erroring.
+func (s *EntityStore) ValidateRelationTargets(ctx context.Context, database DB, workspaceID string, data map[string]any) error {
 	for _, f := range s.fields {
 		if f.Relation == nil || f.Relation.Resource == "" {
 			continue
@@ -635,7 +776,7 @@ func (s *EntityStore) ValidateRelationTargets(ctx context.Context, workspaceID s
 			tbl)
 
 		var docStatus *string
-		err := s.db.QueryRowContext(ctx, query, targetIDStr, workspaceID).Scan(&docStatus)
+		err := database.QueryRowContext(ctx, query, targetIDStr, workspaceID).Scan(&docStatus)
 		if err != nil {
 			// Target not found or table doesn't exist — skip guard
 			continue
@@ -711,9 +852,9 @@ func (s *EntityStore) Amend(ctx context.Context, workspaceID, originalID, userID
 
 	// 2. Create new document as draft
 	newID, err := s.Insert(ctx, InsertParams{
-		WorkspaceID:  workspaceID,
-		CreatedBy: userID,
-		Data:      newData,
+		WorkspaceID: workspaceID,
+		CreatedBy:   userID,
+		Data:        newData,
 	})
 	if err != nil {
 		return "", fmt.Errorf("%s amend: create new: %w", s.entity, err)
@@ -781,11 +922,11 @@ func toAnySlice(v any) []any {
 // ListParams holds pagination, sorting, and filtering for List queries.
 type ListParams struct {
 	WorkspaceID string
-	Page     int    // 1-based
-	PerPage  int    // default 20
-	Sort     string // field name, prefixed with - for DESC
-	Filters  map[string]FilterOp
-	Search   string // full-text search across data
+	Page        int    // 1-based
+	PerPage     int    // default 20
+	Sort        string // field name, prefixed with - for DESC
+	Filters     map[string]FilterOp
+	Search      string // full-text search across data
 }
 
 // FilterOp represents a filter operation.
@@ -950,7 +1091,7 @@ func (s *EntityStore) FindByField(ctx context.Context, workspaceID, field, value
 	}
 	query += " LIMIT 1"
 
-	rec, err := s.scanRecord(ctx, query, value, workspaceID)
+	rec, err := s.scanRecord(ctx, txReadDB(ctx, s.db), query, value, workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -963,14 +1104,14 @@ func (s *EntityStore) FindByField(ctx context.Context, workspaceID, field, value
 
 // EntityRecord represents a single row from an entity table.
 type EntityRecord struct {
-	ID        string
-	WorkspaceID  string
-	Version   int
-	CreatedAt string
-	UpdatedAt string
-	CreatedBy string
-	UpdatedBy string
-	Data      map[string]any
+	ID          string
+	WorkspaceID string
+	Version     int
+	CreatedAt   string
+	UpdatedAt   string
+	CreatedBy   string
+	UpdatedBy   string
+	Data        map[string]any
 }
 
 // MarshalJSON flattens Data alongside the record's own fields into one
@@ -994,8 +1135,8 @@ func (r EntityRecord) MarshalJSON() ([]byte, error) {
 }
 
 // scanRecord scans a single entity record from a query.
-func (s *EntityStore) scanRecord(ctx context.Context, query string, args ...any) (*EntityRecord, error) {
-	row := s.db.QueryRowContext(ctx, query, args...)
+func (s *EntityStore) scanRecord(ctx context.Context, database DB, query string, args ...any) (*EntityRecord, error) {
+	row := database.QueryRowContext(ctx, query, args...)
 	return scanEntityRecord(row)
 }
 
@@ -1022,14 +1163,14 @@ func scanEntityRecord(row interface {
 	}
 
 	return &EntityRecord{
-		ID:        id,
-		WorkspaceID:  workspaceID,
-		Version:   version,
-		CreatedAt: createdAt,
-		UpdatedAt: updatedAt,
-		CreatedBy: createdBy,
-		UpdatedBy: updatedBy,
-		Data:      data,
+		ID:          id,
+		WorkspaceID: workspaceID,
+		Version:     version,
+		CreatedAt:   createdAt,
+		UpdatedAt:   updatedAt,
+		CreatedBy:   createdBy,
+		UpdatedBy:   updatedBy,
+		Data:        data,
 	}, nil
 }
 

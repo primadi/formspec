@@ -7,6 +7,7 @@
 
 import { useEffect, useState, useMemo } from "react"
 import { useNavigate, useParams } from "react-router-dom"
+import { useSurface } from "@/hooks/useSurface"
 import { toast } from "sonner"
 import { ArrowLeft, Edit, Loader2 } from "lucide-react"
 
@@ -26,6 +27,7 @@ interface DetailPageProps {
 export default function DetailPage({ entity }: DetailPageProps) {
   const navigate = useNavigate()
   const { workspace = "default", id } = useParams<{ workspace: string; id: string }>()
+  const { surfacePath } = useSurface()
   const me = useSessionStore((s) => s.me)
   const getClient = useSessionStore((s) => s.getClient)
 
@@ -47,7 +49,7 @@ export default function DetailPage({ entity }: DetailPageProps) {
         setRecord(data)
       } catch (err) {
         toast.error("Failed to load record")
-        navigate(`/${workspace}/_admin/${entity.module}/${entity.plural}`)
+        navigate(surfacePath(entity.module, entity.plural))
       } finally {
         setLoading(false)
       }
@@ -113,12 +115,12 @@ export default function DetailPage({ entity }: DetailPageProps) {
           )}
         </div>
 
-        {lifecycle.hasSave && (
+        {lifecycle.hasSave && id && (
           <Button
             variant="outline"
             onClick={() =>
               navigate(
-                `/${workspace}/_admin/${entity.module}/${entity.plural}/${id}/edit`,
+                surfacePath(entity.module, entity.plural, id, "edit"),
               )
             }
           >

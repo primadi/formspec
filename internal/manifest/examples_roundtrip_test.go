@@ -73,7 +73,7 @@ func TestOrderEntityRoundTrip(t *testing.T) {
 	var order *spec.EntitySpec
 	for _, m := range result.Manifests {
 		if m.Kind == "Entity" && m.Metadata.Name == "order" {
-			es, err := RawSpecToEntitySpec(m.Spec)
+			es, err := RawSpecToEntitySpec(m.Spec.(map[string]any))
 			if err != nil {
 				t.Fatalf("RawSpecToEntitySpec(order): %v", err)
 			}

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/primadi/forma/renderers/jsonbpersist"
 	"github.com/primadi/forma/pkg/spec"
 )
 
@@ -113,5 +114,69 @@ func TestSidecarExecutor_Timeout(t *testing.T) {
 func TestNewSidecarExecutorWithEndpoint_BadScheme(t *testing.T) {
 	if _, err := NewSidecarExecutorWithEndpoint("grpc://localhost:1234", 0); err == nil {
 		t.Fatal("expected error for unsupported scheme")
+	}
+}
+
+// TestSidecarExecutor_ForwardsScopeIdHeader verifies the sending half of
+// the cross-process TxScope correlation described in
+// renderers/jsonbpersist/txscope.go: when ctx carries an active scope,
+// Execute must forward its registry id as X-Forma-Scope-Id on the
+// outbound /invoke/... request — internal/sidecar/ctx.go's receiving half
+// (TestCtxHandler_ScopeIdJoinsSameTransaction) already proves the id gets
+// resolved back to the live scope; this proves it actually gets sent.
+func TestSidecarExecutor_ForwardsScopeIdHeader(t *testing.T) {
+	var gotHeader string
+	endpoint := startAppListener(t, func(w http.ResponseWriter, r *http.Request) {
+		gotHeader = r.Header.Get("X-Forma-Scope-Id")
+		json.NewEncoder(w).Encode(sidecarInvokeResponse{Data: map[string]any{}})
+	})
+
+	ex, err := NewSidecarExecutorWithEndpoint(endpoint, 5*time.Second)
+	if err != nil {
+		t.Fatalf("executor: %v", err)
+	}
+
+	scope := db.NewTxScope()
+	scopeID := db.RegisterScope(scope)
+	defer db.UnregisterScope(scopeID)
+	ctx := db.WithTxScope(context.Background(), scope, scopeID)
+
+	if _, err := ex.Execute(ctx, spec.Action{
+		Name: "sell",
+		Impl: &spec.ImplDecl{Type: spec.ImplSidecar, Ref: "sell-handler"},
+	}, ExecuteParams{Module: "pharmacy", Entity: "otc-sale", ActionName: "sell"}); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+
+	if gotHeader != scopeID {
+		t.Fatalf("X-Forma-Scope-Id header = %q, want %q", gotHeader, scopeID)
+	}
+}
+
+// TestSidecarExecutor_NoScopeMeansNoHeader confirms the fallback: without
+// an active TxScope in ctx, Execute sends no scope header at all — the app
+// process then has nothing to echo back, and /ctx/... callbacks commit
+// independently, exactly as before this feature existed.
+func TestSidecarExecutor_NoScopeMeansNoHeader(t *testing.T) {
+	var sawHeader bool
+	endpoint := startAppListener(t, func(w http.ResponseWriter, r *http.Request) {
+		_, sawHeader = r.Header["X-Forma-Scope-Id"]
+		json.NewEncoder(w).Encode(sidecarInvokeResponse{Data: map[string]any{}})
+	})
+
+	ex, err := NewSidecarExecutorWithEndpoint(endpoint, 5*time.Second)
+	if err != nil {
+		t.Fatalf("executor: %v", err)
+	}
+
+	if _, err := ex.Execute(context.Background(), spec.Action{
+		Name: "sell",
+		Impl: &spec.ImplDecl{Type: spec.ImplSidecar, Ref: "sell-handler"},
+	}, ExecuteParams{Module: "pharmacy", Entity: "otc-sale", ActionName: "sell"}); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+
+	if sawHeader {
+		t.Fatal("expected no X-Forma-Scope-Id header when ctx carries no TxScope")
 	}
 }

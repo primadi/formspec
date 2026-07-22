@@ -42,6 +42,26 @@ func NewOutboxStore(db DB, driver DriverType) *OutboxStore {
 
 // Enqueue inserts a new event into the outbox for processing.
 func (s *OutboxStore) Enqueue(ctx context.Context, workspaceID, eventName, resource, payload string) (string, error) {
+	return enqueueOutbox(ctx, s.db, workspaceID, eventName, resource, payload)
+}
+
+// EnqueueOutboxTx enqueues a durable event directly onto an already-open
+// transaction's DB (e.g. a TxScope's txdb) — used by HandleCustomAction to
+// enqueue atomically alongside whatever mutation the action performed,
+// instead of going through a fresh OutboxStore bound to the base
+// connection. Delegates to the same enqueueOutbox helper OutboxStore uses.
+func EnqueueOutboxTx(ctx context.Context, txdb DB, workspaceID, eventName, resource, payload string) (string, error) {
+	return enqueueOutbox(ctx, txdb, workspaceID, eventName, resource, payload)
+}
+
+// enqueueOutbox performs the outbox insert against the given DB — a plain
+// connection, or a transaction-bound DB (see InTx in tx.go). EntityStore
+// uses the latter form to enqueue a durable event atomically alongside the
+// entity mutation that produced it (InsertParams/UpdateParams.PendingEvents),
+// closing the gap described in
+// docs/renderers/jsonb-persist/01-architecture.md §3 where a crash between
+// mutation commit and outbox enqueue silently drops the event.
+func enqueueOutbox(ctx context.Context, database DB, workspaceID, eventName, resource, payload string) (string, error) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	query := `
 		INSERT INTO forma_outbox (tenant_id, event_name, resource, payload, status, created_at, next_retry_at)
@@ -50,18 +70,18 @@ func (s *OutboxStore) Enqueue(ctx context.Context, workspaceID, eventName, resou
 	`
 
 	var id string
-	err := s.db.QueryRowContext(ctx, query,
+	err := database.QueryRowContext(ctx, query,
 		workspaceID, eventName, resource, payload, now, now,
 	).Scan(&id)
 	if err != nil {
 		// SQLite may not support RETURNING
-		return s.enqueueFallback(ctx, workspaceID, eventName, resource, payload, now)
+		return enqueueOutboxFallback(ctx, database, workspaceID, eventName, resource, payload, now)
 	}
 	return id, nil
 }
 
-func (s *OutboxStore) enqueueFallback(ctx context.Context, workspaceID, eventName, resource, payload, now string) (string, error) {
-	_, err := s.db.ExecContext(ctx, `
+func enqueueOutboxFallback(ctx context.Context, database DB, workspaceID, eventName, resource, payload, now string) (string, error) {
+	_, err := database.ExecContext(ctx, `
 		INSERT INTO forma_outbox (tenant_id, event_name, resource, payload, status, created_at, next_retry_at)
 		VALUES (?, ?, ?, ?, 'pending', ?, ?)
 	`, workspaceID, eventName, resource, payload, now, now)
@@ -71,7 +91,7 @@ func (s *OutboxStore) enqueueFallback(ctx context.Context, workspaceID, eventNam
 
 	// Retrieve the last inserted ID
 	var id string
-	err = s.db.QueryRowContext(ctx, `SELECT last_insert_rowid()`).Scan(&id)
+	err = database.QueryRowContext(ctx, `SELECT last_insert_rowid()`).Scan(&id)
 	if err != nil {
 		return "", fmt.Errorf("outbox get last id: %w", err)
 	}

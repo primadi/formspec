@@ -17,6 +17,14 @@ spec:
     - { type: rest, enabled: true }
 
   fields:
+    - name: key
+      type: string
+      required: true
+      natural_key: true
+      natural_key_rule:
+        strategy: custom
+      description: "Natural key per grup setting — misal 'clinic', 'billing'"
+      exclude: [ui]
     - name: clinic_name
       type: string
       rules: [max_length: 120]
@@ -39,3 +47,9 @@ spec:
       description: Wajib bila enable_whatsapp — required_when di form
     - name: receipt_footer
       type: string
+
+  actions:
+    # Reference/config data tanpa lifecycle → plain CRUD (§1.7 spec frontend):
+    # tombol "Simpan Pengaturan" saja, tanpa Submit/draft.
+    - name: submit
+      disabled: true

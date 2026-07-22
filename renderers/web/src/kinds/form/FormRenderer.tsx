@@ -9,6 +9,7 @@ import { useMemo, useState, useEffect, useCallback, useRef } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useNavigate, useParams } from "react-router-dom"
+import { useSurface } from "@/hooks/useSurface"
 import { z } from "zod"
 import { toast } from "sonner"
 import { ArrowLeft, Save, Loader2 } from "lucide-react"
@@ -17,7 +18,8 @@ import type { EntitySchema, FormSpec } from "@/types/manifest"
 import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
 import { resolveForm } from "@/engine/derive"
-import { evalReadonlyWhen } from "@/lib/formaexpr"
+import { getLifecycle } from "@/engine/lifecycle"
+import { evalReadonlyWhen, evalVisibleWhen, evalRequiredWhen, evalCompute } from "@/lib/formaexpr"
 import { apiGet, apiPost, apiPatch } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { TextInput } from "@/widgets/TextInput"
@@ -38,13 +40,21 @@ interface FormRendererProps {
   // Configuration Page split across tabs), since the naming-convention
   // lookup in resolveForm() can only ever pick one.
   formRef?: string
+  // When true, renders inside an overlay (Dialog/Sheet) instead of a
+  // standalone page — suppresses its own header/back-button and calls
+  // onClose after save instead of navigating away.
+  inOverlay?: boolean
+  // Called after successful save when inOverlay is true.
+  onClose?: () => void
 }
 
-export default function FormRenderer({ entity, mode, id: fixedId, formRef }: FormRendererProps) {
+export default function FormRenderer({ entity, mode, id: fixedId, formRef, inOverlay, onClose }: FormRendererProps) {
   const navigate = useNavigate()
   const { workspace = "default", id: routeId } = useParams<{ workspace: string; id?: string }>()
+  const { surfacePath } = useSurface()
   const id = fixedId ?? routeId
   const getClient = useSessionStore((s) => s.getClient)
+  const me = useSessionStore((s) => s.me)
   const bundleForms = useMetaStore((s) => s.bundle?.forms ?? [])
 
   const authoredForms = useMemo(() => {
@@ -62,6 +72,7 @@ export default function FormRenderer({ entity, mode, id: fixedId, formRef }: For
 
   const isView = mode === "view"
   const isEdit = mode === "edit"
+  const lifecycle = useMemo(() => getLifecycle(entity), [entity])
 
   // Build zod schema from fields
   const zodSchema = useMemo(() => {
@@ -119,8 +130,10 @@ export default function FormRenderer({ entity, mode, id: fixedId, formRef }: For
       // A fixed-id embed has no derived list to bounce back to — stay in
       // place (route-driven forms still redirect, since the :id there
       // came from a now-presumably-invalid URL).
-      if (!fixedId) {
-        navigate(`/${workspace}/_admin/${entity.module}/${entity.plural}`)
+      if (inOverlay) {
+        onClose?.()
+      } else if (!fixedId) {
+        navigate(surfacePath(entity.module, entity.plural))
       }
     } finally {
       if (loadTokenRef.current === token) setLoading(false)
@@ -170,6 +183,23 @@ export default function FormRenderer({ entity, mode, id: fixedId, formRef }: For
     }
   }, [formValues, isEdit, isDirty, entity.lifecycle, debouncedAutoSave])
 
+  // Evaluate compute expressions whenever form values change.
+  // Computed fields are auto-set by the framework — never user-editable.
+  useEffect(() => {
+    const needsCompute = formSpec.sections.flatMap((s) =>
+      s.fields.filter((f) => f.compute),
+    )
+    if (needsCompute.length === 0) return
+
+    const ctx = { fields: formValues as Record<string, unknown>, user: me }
+    for (const field of needsCompute) {
+      const result = evalCompute(field.compute!, ctx as any)
+      if (result !== null && result !== undefined) {
+        form.setValue(field.name as any, result, { shouldDirty: false })
+      }
+    }
+  }, [formValues, formSpec.sections, form, me])
+
   // Submit handler
   const onSubmit = async (data: FormData) => {
     try {
@@ -182,14 +212,20 @@ export default function FormRenderer({ entity, mode, id: fixedId, formRef }: For
           recordVersion,
         )
         toast.success("Updated successfully")
+      } else if (lifecycle.quickSubmit) {
+        // one-step create-submit: POST to create-submit endpoint
+        await client.post(`${entity.module}/${entity.plural}/create-submit`, { json: data })
+        toast.success("Created and submitted successfully")
       } else {
         await apiPost(client, `${entity.module}/${entity.plural}`, data)
         toast.success("Created successfully")
       }
       // A fixed-id embed (Page/Tab block's `form.id`, e.g. a Configuration
       // Page singleton) has no derived list to return to — stay in place.
-      if (!fixedId) {
-        navigate(`/${workspace}/_admin/${entity.module}/${entity.plural}`)
+      if (inOverlay) {
+        onClose?.()
+      } else if (!fixedId) {
+        navigate(surfacePath(entity.module, entity.plural))
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Save failed")
@@ -208,10 +244,9 @@ export default function FormRenderer({ entity, mode, id: fixedId, formRef }: For
 
   return (
     <div className="space-y-6">
-      {/* Header: a fixed-id embed (Page/Tab block's `form.id`) sits inside a
-          tab/section that already has its own caption, and has no list to
-          navigate back to — so it skips this standalone-page header. */}
-      {!fixedId && (
+      {/* Header: suppressed in overlay mode (the Dialog/Sheet has its own
+          header) and for fixed-id embeds (Page/Tab block's `form.id`). */}
+      {!fixedId && !inOverlay && (
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
             <ArrowLeft className="size-4" />
@@ -226,7 +261,13 @@ export default function FormRenderer({ entity, mode, id: fixedId, formRef }: For
 
       {/* Form */}
       <form onSubmit={handleSubmit(onSubmit)} autoComplete="off" className="space-y-8">
-        {formSpec.sections.map((section, sIdx) => (
+        {formSpec.sections
+          .filter((section) => {
+            // Section-level visible_when: skip invisible sections
+            const ctx = { fields: formValues as Record<string, unknown>, user: me }
+            return !section.visible_when || evalVisibleWhen(section.visible_when, ctx as any)
+          })
+          .map((section, sIdx) => (
           <div key={sIdx} className="space-y-4">
             {section.title && (
               <div>
@@ -247,9 +288,12 @@ export default function FormRenderer({ entity, mode, id: fixedId, formRef }: For
                 const entityField = entity.fields.find((f) => f.name === field.name)
                 if (!entityField) return null
 
-                const fieldContext = { fields: formValues as Record<string, unknown> }
+                const fieldContext = { fields: formValues as Record<string, unknown>, user: me }
                 const isReadonly = field.read_only ?? evalReadonlyWhen(field.readonly_when, fieldContext as any)
-                const isRequired = entityField.required ?? false
+                const isRequired = entityField.required || evalRequiredWhen(field.required_when, fieldContext as any)
+                const isVisible = field.visible_when ? evalVisibleWhen(field.visible_when, fieldContext as any) : true
+
+                if (!isVisible) return null
 
                 return (
                   <div key={field.name} className="space-y-2.5">
@@ -281,26 +325,68 @@ export default function FormRenderer({ entity, mode, id: fixedId, formRef }: For
           </div>
         ))}
 
-        {/* Submit buttons */}
+        {/* Submit buttons — lifecycle-aware */}
         {!isView && (
           <div className="flex items-center gap-2">
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? (
-                <Loader2 className="size-4 mr-1 animate-spin" />
-              ) : (
-                <Save className="size-4 mr-1" />
-              )}
-              {isEdit ? "Save Changes" : "Create"}
-            </Button>
+            {/* one_step / quickSubmit: single Create-Submit button */}
+            {lifecycle.quickSubmit && mode === "create" ? (
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <Loader2 className="size-4 mr-1 animate-spin" />
+                ) : (
+                  <Save className="size-4 mr-1" />
+                )}
+                {entity.actions.find((a) => a.name === "create-submit")?.ui?.button_label ?? "Create & Submit"}
+              </Button>
+            ) : lifecycle.hasSave ? (
+              /* Save / Save Draft button */
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <Loader2 className="size-4 mr-1 animate-spin" />
+                ) : (
+                  <Save className="size-4 mr-1" />
+                )}
+                {lifecycle.pattern === "two_step_manual"
+                  ? "Save Draft"
+                  : isEdit
+                    ? "Save Changes"
+                    : "Create"}
+              </Button>
+            ) : null}
+
+            {/* Submit button for two_step_manual (always explicit, never auto-save) */}
+            {lifecycle.hasSubmit && lifecycle.pattern === "two_step_manual" && (
+              <Button
+                type="button"
+                variant="default"
+                disabled={isSubmitting}
+                onClick={async () => {
+                  if (!id) return
+                  try {
+                    const client = getClient()
+                    await client.post(`${entity.module}/${entity.plural}/${id}/submit`)
+                    toast.success("Submitted successfully")
+                    if (inOverlay) {
+                      onClose?.()
+                    } else if (!fixedId) {
+                      navigate(surfacePath(entity.module, entity.plural))
+                    }
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : "Submit failed")
+                  }
+                }}
+              >
+                {entity.actions.find((a) => a.name === "submit")?.ui?.button_label ?? "Submit"}
+              </Button>
+            )}
+
             <Button
               type="button"
               variant="outline"
               onClick={() => {
-                // A fixed-id embed has no list to go back to and no
-                // navigation history of its own (see the header/loadRecord
-                // comments above) — just discard edits by reloading the
-                // current record instead of navigating away.
-                if (fixedId) {
+                if (inOverlay) {
+                  onClose?.()
+                } else if (fixedId) {
                   loadRecord()
                 } else {
                   navigate(-1)
@@ -380,6 +466,7 @@ function FormFieldWidget({
         />
       )
 
+    case "boolean":
     case "switch":
       return (
         <Switch

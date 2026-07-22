@@ -1,14 +1,12 @@
 # SHOWCASE kind: Page varian TABS + Configuration Page pattern (§3 spec frontend).
 # Tiap tab = Form mode edit atas entity `setting` (characteristic: reference)
-# dengan id row tetap. Renderer: tanpa tombol New/Delete, hanya Update.
+# dengan id berisi natural key value — misal "clinic", "billing".
+# Renderer: tanpa tombol New/Delete, hanya Update.
 #
-# CATATAN: `id` di bawah adalah primary key asli (integer, auto-increment,
-# GLOBAL lintas tenant/workspace — bukan per-tenant) — BUKAN string bebas
-# seperti "clinic"/"billing" (kolom `id` di tabel clinic_settings adalah
-# `integer PRIMARY KEY AUTOINCREMENT`, bukan string). Baris untuk workspace
-# "default" sudah di-seed lewat POST /clinic/settings sekali saat setup —
-# belum ada mekanisme seeding otomatis di engine (kind: Migration cuma boleh
-# DDL, bukan DML), jadi ini harus dibuat manual sekali per workspace/tenant.
+# CATATAN: Entity `setting` punya natural_key field `key` (strategy: custom).
+# Backend GetByID otomatis resolve dari UUID → _key fallback. Saat pertama
+# kali diakses tanpa record yang cocok, HandleFind auto-create record dengan
+# natural key value + field defaults.
 apiVersion: forma.dev/v1alpha1
 kind: Page
 metadata:
@@ -22,6 +20,6 @@ spec:
   permissions: [settings.update]
   tabs:
     - label: "Klinik"
-      form: { ref: settings-clinic, entity: setting, id: "3", mode: edit }
+      form: { ref: settings-clinic, entity: setting, id: "clinic", mode: edit }
     - label: "Billing & Struk"
-      form: { ref: settings-billing, entity: setting, id: "4", mode: edit }
+      form: { ref: settings-billing, entity: setting, id: "billing", mode: edit }

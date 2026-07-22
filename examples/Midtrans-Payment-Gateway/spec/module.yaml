@@ -13,11 +13,9 @@ spec:
   menu:
     - label: "Pembayaran"
       icon: "credit-card"
-      order: 20
       children:
-        - { label: "Konfigurasi Midtrans", icon: "settings", view: midtrans-config, order: 1 }
-        - { label: "Log Webhook", icon: "webhook", view: midtrans-webhook-log, order: 2 }
+        - { label: "Konfigurasi Midtrans", icon: "settings", view: midtrans-config }
+        - { label: "Log Webhook", icon: "webhook", view: midtrans-webhook-log }
         - label: "Simulasi"
           icon: "flask"
           route: "/settings/payment/midtrans/simulation" # no authored View for this yet
-          order: 3

@@ -55,9 +55,16 @@ terorganisir. Ini keputusan pengelompokan design-time.
 **Pola Configuration Page:** untuk setting sistem (parameter key-value yang
 strukturnya dikunci developer, nilainya diubah admin) — `kind: Page`
 ber-`tabs`, tiap tab mereferensikan `kind: Form` `mode: edit` atas Entity
-`characteristic: reference`. Renderer **tidak boleh** merender tombol
-"New Item"/"Delete" untuk Entity reference — hanya action Update yang
-disurfacekan.
+`characteristic: reference` dengan `id` sentinel (misal `"0"`). Renderer
+**tidak boleh** merender tombol "New Item"/"Delete" untuk Entity reference —
+hanya action Update yang disurfacekan.
+
+Backend otomatis mendukung **find-or-create** untuk pola ini: ketika
+`GET /{entity}/{id}` gagal karena record belum ada, framework mencari record
+yang sudah ada untuk workspace tersebut. Jika tidak ada, framework auto-create
+record baru dengan nilai default dari entity spec. Lihat
+[`backend/01-core-basic.md`](../backend/01-core-basic.md) §1.1 untuk detail
+implementasi.
 
 ### 1.1 Master-detail (split view)
 Pola dua blok bersisian di mana seleksi baris pada blok list menggerakkan blok

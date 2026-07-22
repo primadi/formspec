@@ -20,11 +20,19 @@ apply` menolak lebih dari satu):
 |---|---|---|
 | `master` | Data referensi stabil (Customer, Product) | Boleh punya lifecycle (kalau `submit` aktif) atau tidak |
 | `transaction` | Append-heavy, time-partitioned (Invoice, Journal Entry) | Wajib field `transaction_date` |
-| `reference` | Seed data read-only, dimiliki App Owner (Provinsi, Tarif Pajak) | — |
+| `reference` | Seed data read-only, dimiliki App Owner (Provinsi, Tarif Pajak). Backend mendukung **find-or-create**: jika record belum ada saat diakses via GET, framework auto-create dengan field defaults. | — |
 | `summary` | Projeksi terkelola sistem (GL Balance) | `create`/`update`/`delete` permanen nonaktif via API |
 
 `summary` bukan tipe resource keempat — ia nilai `characteristic` yang sama
 kelasnya dengan `master`/`transaction`/`reference`.
+
+> **Find-or-create untuk reference.** Ketika `GET /{id}`找不到 record pada entity
+> `characteristic: reference`, framework tidak langsung mengembalikan 404 —
+> melainkan mencari record yang sudah ada untuk workspace tersebut. Jika tidak
+> ada, framework auto-create record baru dengan nilai default dari field
+> definition (`spec.fields[].default`). Ini memungkinkan pola Configuration
+> Page (Page tabs dengan sentinel `id: "0"`) bekerja tanpa seeding manual.
+> Lihat implementasi `findOrCreateReference()` di renderer persist.
 
 ### 1.2 Field Reserved & Lifecycle (`doc_status`)
 Field berikut **reserved** — tidak boleh dipakai ulang sebagai nama field

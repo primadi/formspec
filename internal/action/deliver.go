@@ -26,6 +26,23 @@ func (d DeliveryDeps) logger() RuntimeLogger {
 	return DefaultLogger
 }
 
+// BuildEventMessage marshals the wire payload for an emission exactly as
+// DeliverEvents would — exposed so a caller (e.g. the create/update HTTP
+// handlers) can enqueue a durable event to the outbox atomically, in the
+// same transaction as the entity mutation that produced it, before
+// DeliverEvents ever runs (see EntityStore.Insert/Update's PendingEvents
+// param in renderers/jsonbpersist). Core Basic §7 requires the entity
+// mutation and its durable outbox entry to commit together or not at all.
+func BuildEventMessage(resource string, ev EventEmission) ([]byte, error) {
+	msg := events.EventMessage{
+		Event:    ev.Name,
+		Resource: resource,
+		Payload:  ev.Payload,
+		Emitted:  time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	return json.Marshal(msg)
+}
+
 // DeliverEvents fans each emission out to its declared channels
 // (EventEmission.DeliverTo, already resolved by ResolveEmission from the
 // entity's events: block). Durability is gated purely by ev.Durable (from
@@ -37,19 +54,21 @@ func (d DeliveryDeps) logger() RuntimeLogger {
 // an immediate best-effort push always happens regardless of durability —
 // the outbox enqueue on top is insurance for a client that was
 // disconnected at the moment of the immediate push.
-func DeliverEvents(ctx context.Context, deps DeliveryDeps, workspaceID, resource string, emissions []EventEmission) {
+//
+// outboxAlreadyEnqueued is set by callers (create/update) that already
+// enqueued this emission's durable outbox entry atomically alongside the
+// entity mutation itself, via EntityStore's PendingEvents — DeliverEvents
+// must not enqueue it a second time. Custom actions (which don't yet have
+// an atomic path) pass false, preserving the pre-existing best-effort
+// behavior for that path (a documented gap — see 01-architecture.md §3).
+func DeliverEvents(ctx context.Context, deps DeliveryDeps, workspaceID, resource string, emissions []EventEmission, outboxAlreadyEnqueued bool) {
 	for _, ev := range emissions {
-		msg := events.EventMessage{
-			Event:    ev.Name,
-			Resource: resource,
-			Payload:  ev.Payload,
-			Emitted:  time.Now().UTC().Format(time.RFC3339Nano),
-		}
-		payloadJSON, err := json.Marshal(msg)
+		payloadJSON, err := BuildEventMessage(resource, ev)
 		if err != nil {
 			deps.logger().Error("event.marshal_failed", map[string]any{"event": ev.Name, "resource": resource, "error": err.Error()})
 			continue
 		}
+		msg := events.EventMessage{Event: ev.Name, Resource: resource, Payload: ev.Payload}
 
 		for _, ch := range ev.DeliverTo {
 			switch ch.Channel {
@@ -57,15 +76,17 @@ func DeliverEvents(ctx context.Context, deps DeliveryDeps, workspaceID, resource
 				if deps.Hub != nil {
 					deps.Hub.Broadcast(workspaceID, msg)
 				}
-				if ev.Durable && deps.Outbox != nil {
+				if ev.Durable && deps.Outbox != nil && !outboxAlreadyEnqueued {
 					if _, err := deps.Outbox.Enqueue(ctx, workspaceID, ev.Name, resource, string(payloadJSON)); err != nil {
 						deps.logger().Error("event.outbox_enqueue_failed", map[string]any{"event": ev.Name, "channel": ch.Channel, "error": err.Error()})
 					}
 				}
 			case "audit_log":
-				if ev.Durable && deps.Outbox != nil {
-					if _, err := deps.Outbox.Enqueue(ctx, workspaceID, ev.Name, resource, string(payloadJSON)); err != nil {
-						deps.logger().Error("event.outbox_enqueue_failed", map[string]any{"event": ev.Name, "channel": ch.Channel, "error": err.Error()})
+				if ev.Durable {
+					if deps.Outbox != nil && !outboxAlreadyEnqueued {
+						if _, err := deps.Outbox.Enqueue(ctx, workspaceID, ev.Name, resource, string(payloadJSON)); err != nil {
+							deps.logger().Error("event.outbox_enqueue_failed", map[string]any{"event": ev.Name, "channel": ch.Channel, "error": err.Error()})
+						}
 					}
 					continue
 				}

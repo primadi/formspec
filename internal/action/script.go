@@ -35,31 +35,34 @@ func NewScriptExecutor(basePath string) *ScriptExecutor {
 }
 
 // SetSaveHandler sets the save callback used by resource.save() in scripts.
-func (e *ScriptExecutor) SetSaveHandler(fn func(workspaceID, module, entity, id string, version int, data map[string]any) error) {
+func (e *ScriptExecutor) SetSaveHandler(fn func(ctx context.Context, workspaceID, module, entity, id string, version int, data map[string]any) error) {
 	e.engine.SaveHandler = fn
 }
 
 // SetCallHandler sets the cross-resource call callback.
-func (e *ScriptExecutor) SetCallHandler(fn func(workspaceID, fromModule, targetModule, targetEntity, action string, params map[string]any) (any, error)) {
+func (e *ScriptExecutor) SetCallHandler(fn func(ctx context.Context, workspaceID, fromModule, targetModule, targetEntity, action string, params map[string]any) (any, error)) {
 	e.engine.CallHandler = fn
 }
 
 // SetLoadHandler sets the entity load callback.
-func (e *ScriptExecutor) SetLoadHandler(fn func(workspaceID, module, entity, id string) (map[string]any, int, error)) {
+func (e *ScriptExecutor) SetLoadHandler(fn func(ctx context.Context, workspaceID, module, entity, id string) (map[string]any, int, error)) {
 	e.engine.LoadHandler = fn
 }
 
 // SetCreateHandler sets the entity create callback used by resource.create() in scripts.
-func (e *ScriptExecutor) SetCreateHandler(fn func(workspaceID, module, entity string, data map[string]any) (string, error)) {
+func (e *ScriptExecutor) SetCreateHandler(fn func(ctx context.Context, workspaceID, module, entity string, data map[string]any) (string, error)) {
 	e.engine.CreateHandler = fn
 }
 
 // SetNextKeyHandler sets the natural key generation callback.
-func (e *ScriptExecutor) SetNextKeyHandler(fn func(workspaceID, module, entity, fieldName string) (string, error)) {
+func (e *ScriptExecutor) SetNextKeyHandler(fn func(ctx context.Context, workspaceID, module, entity, fieldName string) (string, error)) {
 	e.engine.NextKeyHandler = fn
 }
 
-// Execute runs the script for the given action.
+// Execute runs the script for the given action. ctx is threaded through to
+// the engine (and from there to every resource.*/ctx.* handler) so a
+// request-scoped TxScope, if one is active, is honored by every mutation
+// the script performs — see internal/starlark's Execute doc comment.
 func (e *ScriptExecutor) Execute(ctx context.Context, action spec.Action, params ExecuteParams) (*ExecuteResult, error) {
 	if action.Impl == nil || action.Impl.Ref == "" {
 		return nil, fmt.Errorf("script action %s has no impl.ref", action.Name)
@@ -73,6 +76,7 @@ func (e *ScriptExecutor) Execute(ctx context.Context, action spec.Action, params
 
 	// Execute the script
 	result, err := e.engine.Execute(
+		ctx,
 		scriptPath,
 		params.Module,
 		params.Entity,

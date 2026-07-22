@@ -21,23 +21,19 @@ spec:
   menu:
     - label: "Klinik"
       icon: "stethoscope"
-      order: 10
       children:
-        - { label: "Dashboard", icon: "layout-dashboard", view: clinic-dashboard, order: 1 }
-        - { label: "Pendaftaran Pasien", icon: "user-plus", view: patient-registration, order: 2 }
+        - { label: "Dashboard", icon: "layout-dashboard", view: clinic-dashboard }
+        - { label: "Pendaftaran Pasien", icon: "user-plus", view: patient-registration }
         - label: "Kunjungan"
           icon: "clipboard-list"
-          order: 3
           children:
             - { label: "Daftar Kunjungan", icon: "list", view: visits-page }
             - { label: "Board Konsultasi", icon: "columns-3", view: consultation-board }
         - label: "Kasir"
           icon: "wallet"
           route: "/clinic/payments" # derived entity-list route (no authored View) — route escape hatch
-          order: 4
-        - { label: "Laporan Pendapatan", icon: "bar-chart-3", view: revenue-by-polyclinic, order: 5 }
+        - { label: "Laporan Pendapatan", icon: "bar-chart-3", view: revenue-by-polyclinic }
         - label: "Pengaturan"
           icon: "settings"
           view: system-settings
-          order: 9
           when: "user.has('clinic.settings.update')" # kondisi bisnis FormaExpr (§9)

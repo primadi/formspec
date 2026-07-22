@@ -377,3 +377,44 @@ type ThemeSpec struct {
 	Stylesheet string            `yaml:"stylesheet,omitempty" json:"stylesheet,omitempty"`
 	Widgets    map[string]string `yaml:"widgets,omitempty" json:"widgets,omitempty"` // base widget → asset skin
 }
+
+// ─── 1.3 Missing Frontend Kind Structs ───
+
+// CalendarSpec defines a calendar view for date/datetime entity data
+// (06-page-kinds.md §5). Instance of VisualSpecKind tier: page.
+type CalendarSpec struct {
+	Entity        string   `yaml:"entity" json:"entity"`
+	DateField     string   `yaml:"date_field" json:"date_field"`
+	EndField      string   `yaml:"end_field,omitempty" json:"end_field,omitempty"`
+	TitleField    string   `yaml:"title_field,omitempty" json:"title_field,omitempty"`
+	ResourceField string   `yaml:"resource_field,omitempty" json:"resource_field,omitempty"`
+	ColorField    string   `yaml:"color_field,omitempty" json:"color_field,omitempty"`
+	Views         []string `yaml:"views,omitempty" json:"views,omitempty"` // month, week, day, resource (default month)
+	Realtime      bool     `yaml:"realtime,omitempty" json:"realtime,omitempty"`
+}
+
+// ApprovalInboxSpec defines the pending-approval task queue page
+// (06-page-kinds.md §11). Instance of VisualSpecKind tier: page.
+// Zero-config: sources are pending Workflow steps eligible for the caller.
+type ApprovalInboxSpec struct {
+	Realtime bool          `yaml:"realtime,omitempty" json:"realtime,omitempty"`
+	Filters  []TableFilter `yaml:"filters,omitempty" json:"filters,omitempty"`
+	Search   bool          `yaml:"search,omitempty" json:"search,omitempty"`
+}
+
+// NotificationCenterSpec defines the in-app notification page
+// (06-page-kinds.md §12). Instance of VisualSpecKind tier: page.
+// Zero-config: lists caller's notifications from forma/notify.
+type NotificationCenterSpec struct {
+	Realtime bool `yaml:"realtime,omitempty" json:"realtime,omitempty"`
+}
+
+// ListingSpec defines a public catalog page (06-page-kinds.md §10).
+// Instance of VisualSpecKind tier: page. Similar to table-list but without
+// Auth-wrap assumptions and without row_actions/bulk_actions.
+type ListingSpec struct {
+	Entity  string        `yaml:"entity" json:"entity"`
+	Columns []TableColumn `yaml:"columns" json:"columns"`
+	Filters []TableFilter `yaml:"filters,omitempty" json:"filters,omitempty"`
+	Search  bool          `yaml:"search,omitempty" json:"search,omitempty"`
+}

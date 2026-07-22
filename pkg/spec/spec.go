@@ -65,8 +65,8 @@ const (
 // Frontend kinds (Frontend §2).
 //
 // There is no KindMenu — navigation is not a standalone kind. It lives as
-// App.spec.menu (authoritative) and Module.spec.menu (default suggestion),
-// both typed as []MenuItem (Core §4.4/§4.5).
+// App.spec.menu and Module.spec.menu, both typed as []MenuItem
+// (Core §4.4/§4.5).
 const (
 	KindPage      Kind = "Page"
 	KindForm      Kind = "Form"

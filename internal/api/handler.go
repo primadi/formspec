@@ -13,9 +13,9 @@ import (
 
 	"github.com/primadi/forma/internal/action"
 	"github.com/primadi/forma/internal/auth"
-	"github.com/primadi/forma/renderers/jsonbpersist"
 	"github.com/primadi/forma/internal/validation"
 	"github.com/primadi/forma/pkg/spec"
+	db "github.com/primadi/forma/renderers/jsonbpersist"
 )
 
 // HandlerFactory creates HTTP handlers backed by an EntityStore.
@@ -239,6 +239,15 @@ func (f *HandlerFactory) parseListQuery(r *http.Request, module, entity string) 
 }
 
 // HandleFind returns a GET /{id} handler for the given entity.
+//
+// GetByID transparently handles both UUID v7 primary keys and natural key
+// values — see db.EntityStore.GetByID for the lookup order.
+//
+// For characteristic: reference entities: if no record matches (neither
+// UUID nor natural key), the handler auto-creates a record with the
+// natural key value (if a natural_key field is declared) plus field
+// defaults from the entity spec. This enables Configuration Page patterns
+// (e.g. Page tabs with id: "clinic") to work on first access.
 func (f *HandlerFactory) HandleFind(module, entity string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
@@ -253,8 +262,29 @@ func (f *HandlerFactory) HandleFind(module, entity string) http.HandlerFunc {
 
 		rec, err := store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: id})
 		if err != nil {
-			writeError(w, http.StatusNotFound, "NOT_FOUND", err.Error())
-			return
+			// Auto-create for reference entities with natural key: if
+			// neither UUID nor natural key matched, create a new record
+			// seeded with the natural key value + field defaults.
+			if f.specLookup != nil {
+				if es, ok := f.specLookup(module, entity); ok &&
+					es.Characteristic == spec.CharReference && es.NaturalKeyField != "" {
+					defaultData := map[string]any{es.NaturalKeyField: id}
+					newID, insertErr := store.Insert(ctx, db.InsertParams{
+						WorkspaceID: workspaceID,
+						CreatedBy:   userFromContext(ctx),
+						Data:        defaultData,
+					})
+					if insertErr == nil {
+						rec, err = store.GetByID(ctx, db.GetByIDParams{
+							WorkspaceID: workspaceID, ID: newID,
+						})
+					}
+				}
+			}
+			if err != nil {
+				writeError(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+				return
+			}
 		}
 
 		writeJSON(w, http.StatusOK, SingleResponse{
@@ -311,10 +341,24 @@ func (f *HandlerFactory) HandleCreate(module, entity string) http.HandlerFunc {
 			return
 		}
 
+		// Resolve the create action's declared Emits event (if any) against
+		// the pre-insert data, and hand a durable one to Insert so it's
+		// enqueued to the outbox atomically, in the same transaction as the
+		// row — see db.PendingEvent's doc comment.
+		var pendingEvents []db.PendingEvent
+		if entitySpec != nil {
+			if emitted := action.ResolveEmission(entitySpec.Events, emitsOf(actionSpec), execParams.Resource); emitted != nil && emitted.Durable {
+				if payloadJSON, err := action.BuildEventMessage(module+"/"+entity, *emitted); err == nil {
+					pendingEvents = append(pendingEvents, db.PendingEvent{Name: emitted.Name, Payload: string(payloadJSON)})
+				}
+			}
+		}
+
 		id, err := store.Insert(ctx, db.InsertParams{
-			WorkspaceID: workspaceID,
-			CreatedBy:   createdBy,
-			Data:        execParams.Resource,
+			WorkspaceID:   workspaceID,
+			CreatedBy:     createdBy,
+			Data:          execParams.Resource,
+			PendingEvents: pendingEvents,
 		})
 		if err != nil {
 			writeStoreError(w, err)
@@ -335,7 +379,11 @@ func (f *HandlerFactory) HandleCreate(module, entity string) http.HandlerFunc {
 			})
 			if entitySpec != nil {
 				if emitted := action.ResolveEmission(entitySpec.Events, emitsOf(actionSpec), rec.Data); emitted != nil {
-					action.DeliverEvents(ctx, f.deliveryDeps, workspaceID, module+"/"+entity, []action.EventEmission{*emitted})
+					// outboxAlreadyEnqueued=true: a durable emission was
+					// already enqueued atomically above; this call only
+					// handles the immediate best-effort parts (websocket
+					// push, non-durable audit log write).
+					action.DeliverEvents(ctx, f.deliveryDeps, workspaceID, module+"/"+entity, []action.EventEmission{*emitted}, true)
 				}
 			}
 		}
@@ -375,6 +423,7 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 		// replacing it outright (Update()'s SQL overwrites the whole JSON
 		// blob, and required-field validation runs against the merged
 		// result, not just the fields the caller happened to resend).
+		// GetByID transparently resolves both UUID and natural key lookups.
 		current, err := store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: id})
 		if err != nil {
 			writeError(w, http.StatusNotFound, "NOT_FOUND", err.Error())
@@ -409,12 +458,26 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 			return
 		}
 
+		// Resolve the update action's declared Emits event (if any) against
+		// the pre-update merged data, and hand a durable one to Update so
+		// it's enqueued to the outbox atomically, in the same transaction
+		// as the row — see db.PendingEvent's doc comment.
+		var pendingEvents []db.PendingEvent
+		if entitySpec != nil {
+			if emitted := action.ResolveEmission(entitySpec.Events, emitsOf(actionSpec), execParams.Resource); emitted != nil && emitted.Durable {
+				if payloadJSON, err := action.BuildEventMessage(module+"/"+entity, *emitted); err == nil {
+					pendingEvents = append(pendingEvents, db.PendingEvent{Name: emitted.Name, Payload: string(payloadJSON)})
+				}
+			}
+		}
+
 		newVersion, err := store.Update(ctx, db.UpdateParams{
-			WorkspaceID: workspaceID,
-			ID:          id,
-			Version:     current.Version,
-			UpdatedBy:   updatedBy,
-			Data:        execParams.Resource,
+			WorkspaceID:   workspaceID,
+			ID:            id,
+			Version:       current.Version,
+			UpdatedBy:     updatedBy,
+			Data:          execParams.Resource,
+			PendingEvents: pendingEvents,
 		})
 		if err != nil {
 			writeStoreError(w, err)
@@ -432,7 +495,8 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 			})
 			if entitySpec != nil {
 				if emitted := action.ResolveEmission(entitySpec.Events, emitsOf(actionSpec), rec.Data); emitted != nil {
-					action.DeliverEvents(ctx, f.deliveryDeps, workspaceID, module+"/"+entity, []action.EventEmission{*emitted})
+					// outboxAlreadyEnqueued=true — see HandleCreate.
+					action.DeliverEvents(ctx, f.deliveryDeps, workspaceID, module+"/"+entity, []action.EventEmission{*emitted}, true)
 				}
 			}
 		}
@@ -716,6 +780,8 @@ func writeStoreError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", err.Error())
 	case isConflictError(err):
 		writeError(w, http.StatusConflict, "CONFLICT", err.Error())
+	case errors.Is(err, db.ErrCrossStoreTx):
+		writeError(w, http.StatusInternalServerError, "CROSS_STORE_TX", err.Error())
 	default:
 		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 	}
@@ -839,26 +905,78 @@ func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, a
 			Identity:        identityInfo,
 		}
 
+		// Open a request-scoped transaction for this action's entire
+		// execution — every resource.save()/create()/load()/call() the
+		// dispatched script (or native/sidecar impl) performs joins this
+		// SAME transaction instead of each committing on its own. See
+		// renderers/jsonbpersist/txscope.go.
+		scope := db.NewTxScope()
+		scopeID := db.RegisterScope(scope)
+		defer db.UnregisterScope(scopeID)
+		ctx = db.WithTxScope(ctx, scope, scopeID)
+
 		// hooks: entries scoped to this action name run as a before-phase
 		// around the dispatch below. actionSpec itself is NOT passed as the
 		// "own impl" (unlike create/update) — Dispatch already executes it;
 		// passing it here too would run it twice.
 		if err := action.RunBeforePhase(ctx, f.dispatcher, hooks, nil, actionName, &execParams); err != nil {
+			scope.Rollback()
 			writeError(w, http.StatusUnprocessableEntity, "HOOK_ABORTED", err.Error())
 			return
 		}
 
 		result, err := f.dispatcher.Dispatch(ctx, actionSpec, execParams)
 		if err != nil {
+			scope.Rollback()
+			if errors.Is(err, db.ErrCrossStoreTx) {
+				writeError(w, http.StatusInternalServerError, "CROSS_STORE_TX", err.Error())
+				return
+			}
 			writeError(w, http.StatusInternalServerError, "ACTION_ERROR", err.Error())
 			return
 		}
 
 		action.RunAfterPhase(ctx, f.dispatcher, hooks, nil, actionName, execParams)
+
+		// Resolve the emitted event and, if durable, enqueue it atomically
+		// onto the scope's own transaction — BEFORE committing. Everything
+		// else (websocket push, non-durable audit log write) happens AFTER
+		// scope.Commit() below: those paths go through the plain base
+		// connection (EventLogStore, the websocket hub), not the scope, so
+		// running them while the scope's transaction is still open would
+		// contend for a second connection against a pool that (on SQLite)
+		// has none free — a deadlock, not just a delay.
+		var emitted *action.EventEmission
+		enqueuedAtomically := false
 		if entitySpec != nil {
-			if emitted := action.ResolveEmission(entitySpec.Events, actionSpec.Emits, execParams.Resource); emitted != nil {
-				action.DeliverEvents(ctx, f.deliveryDeps, workspaceID, module+"/"+entity, []action.EventEmission{*emitted})
+			emitted = action.ResolveEmission(entitySpec.Events, actionSpec.Emits, execParams.Resource)
+			if emitted != nil && emitted.Durable && store != nil {
+				if txdb, ok := scope.Peek(store.BaseDB()); ok {
+					if payloadJSON, err := action.BuildEventMessage(module+"/"+entity, *emitted); err == nil {
+						if _, err := db.EnqueueOutboxTx(ctx, txdb, workspaceID, emitted.Name, module+"/"+entity, string(payloadJSON)); err != nil {
+							scope.Rollback()
+							writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "enqueue outbox: "+err.Error())
+							return
+						}
+						enqueuedAtomically = true
+					}
+				}
 			}
+		}
+
+		if err := scope.Commit(); err != nil {
+			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "commit failed: "+err.Error())
+			return
+		}
+
+		if emitted != nil {
+			// outboxAlreadyEnqueued=true whenever the durable branch above
+			// already handled it (or the event isn't durable, in which case
+			// the flag is moot) — this call only handles the remaining
+			// best-effort delivery. When the action made no local mutation,
+			// outboxAlreadyEnqueued is false so DeliverEvents falls back to
+			// its own best-effort enqueue, same as before this change.
+			action.DeliverEvents(ctx, f.deliveryDeps, workspaceID, module+"/"+entity, []action.EventEmission{*emitted}, enqueuedAtomically || !emitted.Durable)
 		}
 
 		writeJSON(w, http.StatusOK, SingleResponse{

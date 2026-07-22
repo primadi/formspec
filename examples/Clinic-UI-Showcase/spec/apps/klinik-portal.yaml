@@ -22,4 +22,3 @@ spec:
         - label: "Pendaftaran Pasien"
           module: clinic
           view: patient-registration
-          order: 1

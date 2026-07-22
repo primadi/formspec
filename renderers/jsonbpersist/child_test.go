@@ -446,18 +446,19 @@ func TestChildStorage_ChildStore_Standalone(t *testing.T) {
 	// Create parent + child table manually
 	ctx := context.Background()
 	_, err = d.ExecContext(ctx,
-		`CREATE TABLE test_orders (id integer PRIMARY KEY AUTOINCREMENT, data text NOT NULL DEFAULT '{}')`)
+		`CREATE TABLE test_orders (id text PRIMARY KEY, data text NOT NULL DEFAULT '{}')`)
 	if err != nil {
 		t.Fatalf("create parent table: %v", err)
 	}
 	_, err = d.ExecContext(ctx,
-		`CREATE TABLE test_orders__items (id integer PRIMARY KEY AUTOINCREMENT, parent_id integer NOT NULL REFERENCES test_orders(id) ON DELETE CASCADE, created_at text NOT NULL DEFAULT (datetime('now')), data text NOT NULL DEFAULT '{}')`)
+		`CREATE TABLE test_orders__items (id text PRIMARY KEY, parent_id text NOT NULL REFERENCES test_orders(id) ON DELETE CASCADE, created_at text NOT NULL DEFAULT (datetime('now')), data text NOT NULL DEFAULT '{}')`)
 	if err != nil {
 		t.Fatalf("create child table: %v", err)
 	}
 
-	// Insert parent
-	_, err = d.ExecContext(ctx, `INSERT INTO test_orders (id, data) VALUES (1, '{"order":"test"}')`)
+	// Insert parent — id is a UUID v7 string, matching production PKs
+	// (Core Basic §2: PK is always UUID v7, no per-backend exception).
+	_, err = d.ExecContext(ctx, `INSERT INTO test_orders (id, data) VALUES ('1', '{"order":"test"}')`)
 	if err != nil {
 		t.Fatalf("insert parent: %v", err)
 	}

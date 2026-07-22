@@ -1,6 +1,6 @@
 # Query & Keys
 
-**Updated:** 2026-07-16 · Status: Outline
+**Updated:** 2026-07-19 · Status: Outline
 
 > Outline: heading menetapkan cakupan; isi ditulis bertahap.
 
@@ -33,27 +33,45 @@ forma_natural_key_counters (tenant_id, resource, field, scope, period, seq)
 
 `NaturalKeyCounter.NextSequence` meng-UPSERT baris counter secara atomik
 (satu statement, gap-free dan duplicate-free untuk nilai counter itu
-sendiri) — bukan lewat scan `MAX()`. **Tapi** UPSERT counter ini **tidak**
-dibungkus transaksi bersama insert/update Document-nya (`BeginTx` tidak
-pernah dipanggil di jalur ini, sama seperti gap outbox di
-[`01-architecture.md`](01-architecture.md) §3) — kalau insert gagal setelah
-counter terlanjur increment, angkanya tetap "terpakai": gap selalu mungkin
-terjadi hari ini, bukan cuma "kecuali mode gap-free dideklarasikan" seperti
-niat kontrak (mode gap-free itu sendiri butuh lock ditahan sampai commit
-transaksi bersama — belum ada mekanismenya). `scope_field` opsional
-memetakan nilai field lain (mis. `branch_id`) jadi komponen `scope`, sehingga
-satu sequence independen per nilai itu alih-alih satu sequence tenant-wide.
-Pemanggilan eksplisit `ctx.next_key(field)` dari script saat ini selalu pakai
-scope tenant-wide (jalur itu tidak punya data resource untuk resolve nilai
-`scope_field`) — menyamakan perilakunya dengan jalur auto-generate saat
-`create` adalah follow-up yang belum dikerjakan.
+sendiri) — bukan lewat scan `MAX()`. Pada jalur auto-generate saat `create`
+(`EntityStore.Insert`), UPSERT ini sekarang jalan **di transaksi yang sama**
+dengan `INSERT` baris Document (`InTx`, `renderers/jsonbpersist/tx.go`) —
+kalau insert gagal setelah counter terlanjur increment, rollback membatalkan
+keduanya, menutup gap yang sebelumnya dicatat di sini (lihat
+[`01-architecture.md`](01-architecture.md) §3 untuk cakupan penuh mutasi
+atomik ini, termasuk apa yang masih belum tercakup). Mode gap-free penuh
+("angka tidak pernah bolong sama sekali") tetap belum berarti *lock ditahan
+lintas request bersamaan* — ini "counter dan insert commit/rollback
+bersama", bukan serialisasi antar request konkuren, yang cukup untuk
+kontrak ini (gap-free per unit transaksi, bukan zero-contention). `scope_field`
+opsional memetakan nilai field lain (mis. `branch_id`) jadi komponen `scope`,
+sehingga satu sequence independen per nilai itu alih-alih satu sequence
+tenant-wide. Pemanggilan eksplisit `ctx.next_key(field)` dari script saat ini
+selalu pakai scope tenant-wide (jalur itu tidak punya data resource untuk
+resolve nilai `scope_field`) — menyamakan perilakunya dengan jalur
+auto-generate saat `create` adalah follow-up yang belum dikerjakan.
+
+`natural_key_rule.strategy: custom` (kontrak §2: `sequence | custom`) berarti
+framework **tidak** auto-generate nilai ini — pemanggil (hook/script/import)
+wajib mengisinya sendiri; `generateNaturalKeys` melewati field semacam itu
+tanpa menyentuh counter, dan validasi required-field jadi pengaman kalau
+field itu ternyata tidak diisi siapa pun.
 
 ## 3. Idempotency Store
 `(tenant, action, key) → pending | completed | failed + response tersimpan`
 ([`../../spec/backend/01-core-basic.md`](../../spec/backend/01-core-basic.md)
 §5) — entry tidak pernah dihapus saat commit, kedaluwarsa via `CleanupExpired`
-lewat retention (`core.idempotency_retention`, default 24 jam). Ini bagian
-yang implementasinya sudah sesuai kontrak, tidak seperti §1/§2 di atas.
+lewat retention (`core.idempotency_retention`, default 24 jam,
+`IdempotencyStore.WithTTL`). `resource.App` (`resource/forma.go`) sekarang
+membuat satu `IdempotencyStore` per App dengan TTL dari `Config.IdempotencyTTL`
+dan mengeksposnya lewat `App.Idempotency()` — TTL-nya nyata dipakai, bukan
+field yang dihitung lalu dibuang. Resolusi TTL dari manifest `kind: Config`
+(`core.idempotency_retention` sebagai key config, bukan field Go) menunggu
+runtime Config-kind (belum ada registry-nya — lihat Fase 7.2 di
+`docs/plan/todo.md`); sampai saat itu, `Config.IdempotencyTTL` adalah seam
+konfigurasi yang setara, sama seperti `JWTSecret` dkk. Jalur HTTP
+prepare-flow (`POST /{resource}/{action}/prepare`) yang benar-benar memakai
+store ini saat request masuk belum ada (Fase 2.7) — bagian itu tetap gap.
 
 ## 4. Summary Multi-Source
 Kontrak "gabungkan sources by join_key"

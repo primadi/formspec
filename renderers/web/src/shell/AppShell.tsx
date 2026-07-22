@@ -6,6 +6,7 @@
 // Wraps children with TooltipProvider for sidebar tooltips.
 
 import { Outlet, useParams, useLocation, Link } from "react-router-dom"
+import { useSurface } from "@/hooks/useSurface"
 import {
   ChevronLeft,
   ChevronRight,
@@ -27,6 +28,7 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 export function AppShell() {
   const { workspace } = useParams<{ workspace: string }>()
   const location = useLocation()
+  const { surfacePrefix } = useSurface()
   const sidebarCollapsed = usePrefsStore((s) => s.sidebarCollapsed)
   const toggleSidebar = usePrefsStore((s) => s.toggleSidebar)
 
@@ -111,7 +113,7 @@ export function AppShell() {
             <Breadcrumb>
               <BreadcrumbList>
                 <BreadcrumbItem>
-                  <BreadcrumbLink render={<Link to={`/${workspace}/_admin`} />}>
+                  <BreadcrumbLink render={<Link to={surfacePrefix} />}>
                     <Home className="size-3.5" />
                   </BreadcrumbLink>
                 </BreadcrumbItem>

@@ -1,4 +1,4 @@
-.PHONY: all build clean test lint run-example dev web-deps web-dev web-build apply build-spa
+.PHONY: all build clean test lint run-example dev web-deps web-dev web-build apply build-spa install
 
 # Build all binaries
 all: build
@@ -9,8 +9,10 @@ build-ctl:
 	go build -o bin/forma-ctl ./cmd/forma-ctl
 
 # Build the forma CLI with embedded SPA.
-# build-spa ensures web/dist/ is built and copied to cmd/forma/dist/.
+# build-spa builds web/dist/, then we copy it to cmd/forma/dist/ for go:embed.
 build-forma: build-spa
+	@mkdir -p cmd/forma/dist
+	cp -r renderers/web/dist/* cmd/forma/dist/
 	go build -o bin/forma ./cmd/forma
 
 build-sidecar:
@@ -22,8 +24,6 @@ build-operator:
 # Build the frontend SPA. Requires npm dependencies installed (make web-deps).
 build-spa: web-deps
 	cd renderers/web && npm run build
-	@mkdir -p cmd/forma/dist
-	cp -r renderers/web/dist/* cmd/forma/dist/
 
 # forma-resource is a Go library (import "github.com/forma/forma"), not a
 # binary — see docs/runtimes/02-forma-resource.md. examples/reference-app

@@ -261,6 +261,7 @@ function LoginPage() {
     navigate(`/${workspace}/_admin`)
   }
 
+
   return <LoginScreen onLogin={handleLogin} />
 }
 

@@ -6,7 +6,8 @@
 // Design doc §5.5 Wizard kind (F4)
 
 import { useState, useEffect } from "react"
-import { useSearchParams, useNavigate, useParams } from "react-router-dom"
+import { useSearchParams, useNavigate } from "react-router-dom"
+import { useSurface } from "@/hooks/useSurface"
 import { ArrowLeft, ArrowRight, Check, X } from "lucide-react"
 import { toast } from "sonner"
 
@@ -26,7 +27,7 @@ interface WizardRendererProps {
 
 export default function WizardRenderer({ entry }: WizardRendererProps) {
   const navigate = useNavigate()
-  const { workspace = "default" } = useParams()
+  const { adminPath } = useSurface()
   const [searchParams, setSearchParams] = useSearchParams()
   const getClient = useSessionStore((s) => s.getClient)
   const getEntity = useMetaStore((s) => s.getEntity)
@@ -174,7 +175,7 @@ export default function WizardRenderer({ entry }: WizardRendererProps) {
       } else if (onComplete?.redirect) {
         navigate(onComplete.redirect)
       } else {
-        navigate(`/${workspace}/_admin`)
+        navigate(adminPath())
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Wizard submission failed")

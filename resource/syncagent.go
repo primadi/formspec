@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/primadi/forma/internal/artifact"
-	"github.com/primadi/forma/renderers/jsonbpersist"
 	"github.com/primadi/forma/internal/entity"
 	"github.com/primadi/forma/internal/manifest"
 	"github.com/primadi/forma/internal/resource"
+	db "github.com/primadi/forma/renderers/jsonbpersist"
 )
 
 // SyncAgentConfig configures a SyncAgent — the client side of the Forma
@@ -179,7 +179,7 @@ func loadYAMLIntoRegistry(ctx context.Context, reg *entity.Registry, yamlFiles [
 			if raw.Kind != "Document" && raw.Kind != "Entity" {
 				continue
 			}
-			entitySpec, err := manifest.RawSpecToEntitySpec(raw.Spec)
+			entitySpec, err := manifest.RawSpecToEntitySpec(raw.Spec.(map[string]any))
 			if err != nil {
 				log.Printf("forma: sync agent skip %s: parse spec: %v", raw.Source, err)
 				continue

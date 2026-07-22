@@ -41,6 +41,15 @@ func NewChildStore(db DB, driver DriverType, parentTable string, field spec.Fiel
 // Storage returns the storage mode.
 func (c *ChildStore) Storage() string { return c.storage }
 
+// withDB returns a shallow copy of c bound to a different DB — used to run
+// child writes on the same transaction as the parent row mutation (see
+// EntityStore.Insert/Update in crud.go, InTx in tx.go).
+func (c *ChildStore) withDB(txdb DB) *ChildStore {
+	cp := *c
+	cp.db = txdb
+	return &cp
+}
+
 // ChildTable returns the child table name (only meaningful for table storage).
 func (c *ChildStore) ChildTable() string { return c.childTable }
 
@@ -90,22 +99,23 @@ func (c *ChildStore) InsertChildren(ctx context.Context, parentID string, childr
 
 	for i, child := range children {
 		dataStr := toJSONString(child)
+		id := NewUUIDv7()
 		query := fmt.Sprintf(
-			"INSERT INTO %s (parent_id, data) VALUES (?, ?)",
+			"INSERT INTO %s (id, parent_id, data) VALUES (?, ?, ?)",
 			c.childTable)
 
 		// Add sequence number if SequenceField is set
 		if c.field.Child != nil && c.field.Child.SequenceField != "" {
 			seqField := c.field.Child.SequenceField
 			query = fmt.Sprintf(
-				"INSERT INTO %s (parent_id, %s, data) VALUES (?, ?, ?)",
+				"INSERT INTO %s (id, parent_id, %s, data) VALUES (?, ?, ?, ?)",
 				c.childTable, seqField)
-			_, err := c.db.ExecContext(ctx, query, parentID, i+1, dataStr)
+			_, err := c.db.ExecContext(ctx, query, id, parentID, i+1, dataStr)
 			if err != nil {
 				return fmt.Errorf("insert child[%d] into %s: %w", i, c.childTable, err)
 			}
 		} else {
-			_, err := c.db.ExecContext(ctx, query, parentID, dataStr)
+			_, err := c.db.ExecContext(ctx, query, id, parentID, dataStr)
 			if err != nil {
 				return fmt.Errorf("insert child[%d] into %s: %w", i, c.childTable, err)
 			}

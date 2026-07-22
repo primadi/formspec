@@ -85,11 +85,11 @@ type LoadResult struct {
 
 // RawManifest is a parsed but not-yet-validated manifest.
 type RawManifest struct {
-	APIVersion string         `yaml:"apiVersion"`
-	Kind       string         `yaml:"kind"`
-	Metadata   RawMetadata    `yaml:"metadata"`
-	Spec       map[string]any `yaml:"spec"`
-	Source     string         `yaml:"-"` // file path + document index
+	APIVersion string      `yaml:"apiVersion"`
+	Kind       string      `yaml:"kind"`
+	Metadata   RawMetadata `yaml:"metadata"`
+	Spec       any         `yaml:"spec"` // map[string]any for real manifests; string/nil for config files
+	Source     string      `yaml:"-"`    // file path + document index
 }
 
 // RawMetadata is the metadata section of a raw manifest.
@@ -237,7 +237,7 @@ func (l *Loader) Validate(raw RawManifest) error {
 
 	// Type-specific validation
 	if (raw.Kind == "Entity" || raw.Kind == "Document") && raw.Spec != nil {
-		entitySpec, err := RawSpecToEntitySpec(raw.Spec)
+		entitySpec, err := RawSpecToEntitySpec(raw.Spec.(map[string]any))
 		if err != nil {
 			return fmt.Errorf("%s: invalid spec: %w", raw.Source, err)
 		}

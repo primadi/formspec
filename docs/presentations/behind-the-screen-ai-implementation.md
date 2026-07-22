@@ -7,6 +7,20 @@
 > Format: presentasi + live demo. Audiens: developer yang sudah pakai AI tool tapi ingin
 > lebih sistematis (bukan sekadar "tanya lalu tempel").
 
+## Alokasi Waktu (total ~110 menit — sesuaikan dengan durasi sesi aktual)
+
+| Bagian | Estimasi | Catatan pacing |
+|---|---|---|
+| 1 — AI Mindset & Anatomi Tools | 15 menit | Interaktif, boleh molor kalau diskusi hidup — ini pembuka, jangan buru-buru |
+| 2 — Memilih & Mengendalikan Otak AI | 10 menit | Padat tabel, cepat kalau audiens sudah familiar |
+| 3 — Memperluas Indra AI (MCP, Skills) | 25 menit | Anatomi MCP (primitif, local vs remote) + Agent Skills sebagai standar terbuka (format, lokasi folder, koleksi referensi) |
+| 4 — Showcase Praktek Nyata | 20 menit | Termasuk live demo `@plan → @agent` — sisakan buffer 5 menit kalau demo meleset |
+| 5 — Repository-Driven Context & SOP | 10 menit | Bisa dipercepat, isinya ringkas |
+| 6 — Masa Depan Software Dev + Demo Forma | 30 menit | Bagian terberat — 10 menit paparan celah + objection-handling, 20 menit demo |
+
+Kalau waktu sesi lebih pendek, pangkas dari Bagian 2 dan 5 dulu (paling mudah dipercepat tanpa
+kehilangan inti pesan) — jangan potong dari Bagian 4 dan 6 (demo adalah inti nilai sesi ini).
+
 ---
 
 ## Bagian 1 — AI Mindset & Anatomi Tools (The Philosophy)
@@ -123,6 +137,114 @@ biaya membongkar hasil eksekusi yang salah arah.
 Benang merah ketiganya: **AI yang punya akses ke kenyataan (data, browser, environment) jauh
 lebih dipercaya daripada AI yang hanya menebak dari teks.**
 
+### 3.3 Anatomi MCP: Standar, Primitif, & Ekosistem CLI
+
+**MCP (Model Context Protocol)** awalnya dirilis Anthropic (November 2024) sebagai spesifikasi
+terbuka untuk menyambungkan AI model ke tools dan data eksternal — sejak itu diadopsi vendor lain
+(OpenAI, Google DeepMind, dkk) dan berkembang jadi standar lintas-vendor, bukan fitur eksklusif
+satu produk. Analogi yang sering dipakai: **MCP itu "USB-C untuk AI tools"** — satu protokol
+yang sama dipakai model manapun untuk bicara ke tool/data manapun, tanpa integrasi custom per
+pasangan model-tool.
+
+**Dua mode deployment server MCP:**
+
+| | **MCP Local (stdio)** | **MCP Server (remote/hosted)** |
+|---|---|---|
+| Transport | stdin/stdout — server jalan sebagai child process di mesin sendiri | HTTP/SSE (Streamable HTTP) — server jalan sebagai service terpisah |
+| Cocok untuk | Akses resource lokal (filesystem, DB lokal), workflow personal/dev | Tool dipakai bersama tim/organisasi, servicenya sudah disediakan vendor SaaS |
+| Auth | Biasanya tidak perlu — proses lokal, dipercaya penuh | Perlu token/OAuth eksplisit (server tidak tahu siapa yang connect kalau tidak diverifikasi) |
+| Contoh | `npx -y @modelcontextprotocol/server-filesystem`, server DB lokal | GitHub MCP (`api.githubcopilot.com/mcp/`), Notion MCP, Linear MCP, Slack MCP |
+
+Rule of thumb: **local untuk eksperimen/dev pribadi, remote untuk kapabilitas yang perlu
+governance dan dipakai bersama** (kredensial terpusat, audit, bisa dicabut aksesnya tanpa
+mengubah kode di laptop siapapun).
+
+**Tiga primitif inti MCP** (didefinisikan dari sisi server, konsisten di semua implementasi):
+
+| Primitif | Siapa yang kontrol | Fungsi |
+|---|---|---|
+| **Tools** | Model — AI yang memutuskan kapan dan dengan parameter apa memanggilnya | Aksi/fungsi nyata: `create_issue`, `search_repository`, `send_message` |
+| **Resources** | Aplikasi/klien — biasanya klien yang memilih resource mana yang dilampirkan ke context | Data terekspos untuk dibaca: isi file, baris database, dokumen — bukan aksi |
+| **Prompts** | User — dipicu eksplisit oleh pengguna, bukan otomatis oleh model | Template instruksi siap pakai yang disediakan server, semacam slash-command bawaan |
+
+Tiga primitif ini yang membuat MCP lebih dari sekadar "function calling" — ada pembagian jelas
+kapan sesuatu adalah aksi yang diputuskan AI (tools), data yang dilampirkan aplikasi (resources),
+dan starting point yang dipilih manusia (prompts).
+
+**Posisi Skills dan Context relatif terhadap MCP** — ketiganya sering tertukar, padahal beda lapis:
+
+- **MCP** = jalur **akses** ke kapabilitas/data eksternal yang sebelumnya AI tidak punya sama
+  sekali (tools nyata, sistem nyata di luar teks).
+- **Skills** = paket **pengetahuan/prosedur** yang di-load on-demand — bukan akses baru, tapi cara
+  kerja/instruksi yang reusable. Satu skill = satu folder dengan `SKILL.md`; deskripsi singkatnya
+  selalu ada di context, badan lengkapnya baru dibaca AI kalau tugasnya relevan.
+- **Context (window)** = "meja kerja" tempat semuanya — riwayat chat, skema tools dari MCP yang
+  aktif, isi skill yang ter-load — hidup sementara (lihat [[1.3]]). Makin banyak MCP tools/skills
+  yang dimuat sekaligus, makin besar tekanan ke context; makanya ada teknik seperti *tool search*
+  (baru memuat skema tool detail kalau relevan, bukan semua di awal) supaya context tidak
+  kebanjiran definisi yang jarang dipakai.
+
+Analogi ringkas untuk audiens: **MCP kasih tangan & mata baru (akses ke dunia nyata), Skills kasih
+buku panduan yang dibuka pas dibutuhkan (keahlian), context ya meja kerjanya sendiri** — terbatas,
+harus dikelola aktif (reset/kompresi, sudah dibahas di Bagian 1.3), bukan ditumpuk terus.
+
+### 3.4 Agent Skills: Format & Standar Terbuka
+
+**Skill juga sudah jadi standar terbuka resmi, bukan sekadar konvensi satu vendor.** Kronologi
+singkatnya: format `SKILL.md` lahir di Claude Code, lalu **18 Desember 2025 Anthropic merilis
+Agent Skills sebagai open standard** — spec + SDK dipublikasikan di `agentskills.io` untuk
+diadopsi platform manapun. Standar ini sekarang di-*steward* oleh **Agentic AI Foundation** —
+badan yang sama yang mengoordinasikan MCP dan AGENTS.md, di bawah payung Linux Foundation, dengan
+platinum member **AWS, Anthropic, Block, Google, Microsoft, OpenAI**. Per hari ini tercatat 40+
+tool sudah adopsi resmi: Claude Code, Cursor, Windsurf, VS Code/Copilot, Gemini CLI, OpenAI Codex,
+Goose, Roo Code, Amp, Letta, Laravel Boost, dan lainnya.
+
+**Format minimum** (`SKILL.md` per spec resmi):
+
+| Field | Wajib? | Aturan |
+|---|---|---|
+| `name` | Ya | Maks 64 karakter, lowercase + angka + hyphen saja, harus sama dengan nama folder induk |
+| `description` | Ya | Maks 1024 karakter — jelaskan apa DAN kapan dipakai, ini yang jadi index di context |
+| `license`, `compatibility`, `metadata`, `allowed-tools` | Tidak | Opsional — kebanyakan skill tidak perlu ini |
+
+Badan file di bawah frontmatter bebas formatnya (markdown biasa), plus folder pendukung opsional
+`scripts/`, `references/`, `assets/` yang di-load belakangan sesuai kebutuhan (progressive disclosure).
+
+**Lokasi folder tetap beda per tool** (masing-masing punya folder native sendiri, bukan semua
+pindah ke satu folder bersama):
+
+| Tool | Folder native | Catatan |
+|---|---|---|
+| Claude Code | `.claude/skills/` | Folder pertama/asal — paling banyak berisi skill publik existing |
+| Cursor | `.cursor/skills/` | |
+| Windsurf | `.windsurf/skills/` | |
+| OpenCode | `.opencode/skills/` | Juga baca `.claude/skills/` & `.agents/skills/` sebagai fallback |
+| GitHub Copilot | `.github/skills/` | Juga baca `.claude/skills/` & `.agents/skills/` sebagai fallback |
+| — netral, tanpa vendor | `.agents/skills/` | Lokasi bersama yang mulai muncul untuk interop lintas-tool |
+
+**Koleksi skill siap pakai untuk programming** (untuk demo/referensi, bukan sekadar dibuat sendiri):
+
+| Sumber | Isi |
+|---|---|
+| [firecrawl.dev/blog/best-claude-code-skills](https://www.firecrawl.dev/blog/best-claude-code-skills) | Kurasi blog, fokus Claude Code |
+| [github.com/VoltAgent/awesome-agent-skills](https://github.com/VoltAgent/awesome-agent-skills) | 1000+ skill, termasuk yang resmi dari tim dev asli: Anthropic, Google Labs, Vercel, Stripe, Cloudflare, Netlify, Sentry, dll |
+| [github.com/addyosmani/agent-skills](https://github.com/addyosmani/agent-skills) | "Production-grade engineering skills" — standar kualitas tinggi, fokus programming |
+| [agentskills.io](https://agentskills.io) | Rumah spec resmi + Client Showcase (daftar lengkap tool yang adopsi) |
+
+**Ekosistem CLI tools — siap pakai vs multi-model:**
+
+| Tool | Vendor lock-in | Karakter |
+|---|---|---|
+| **Claude Code** | Anthropic | Coding agent interaktif di terminal, siap pakai, MCP-native |
+| **`ant` CLI** | Anthropic | CLI umum untuk API Anthropic — kelola agents/sessions/vaults langsung dari terminal, cocok untuk automation & CI, bukan cuma coding |
+| **OpenCode** | Vendor-neutral (open source) | Coding agent terminal yang mendukung banyak provider/model (Claude, OpenAI, dll) — pola interaksi mirip Claude Code tapi tidak terkunci satu vendor |
+| **Vercel AI SDK** (`ai` package) | Vendor-neutral (library, bukan CLI) | Abstraksi unified untuk memanggil banyak provider LLM dari kode TypeScript/Next.js — satu API untuk streaming, tool-calling, dan text generation lintas provider |
+
+Pesan untuk audiens: pilihan CLI/library bukan soal "mana yang terbaik", tapi soal **berapa besar
+kamu mau terkunci ke satu vendor** — Claude Code dan `ant` optimal kalau tim sudah all-in Claude;
+OpenCode/Vercel AI SDK relevan kalau tim perlu fleksibilitas ganti model/provider tanpa menulis
+ulang integrasi.
+
 ---
 
 ## Bagian 4 — Showcase Praktek Nyata (The Blueprint Workflow)
@@ -191,7 +313,31 @@ sedang dikembangkan — secara konkret menjawab celah tersebut.
    ready-to-use untuk kebutuhan industri riil (QRIS, payment gateway, akuntansi, inventory,
    dll), sehingga AI selalu reinventing the wheel dari nol setiap proyek baru.
 
-### B. Live Demo: Forma Menjawab Keempat Celah Ini
+### B. Antisipasi Keberatan: "Ini kan Low-Code/No-Code Lagi?"
+
+Begitu audiens melihat "spec YAML → CRUD otomatis", reaksi wajar developer berpengalaman adalah
+skeptis — sudah banyak yang kapok dengan low-code generation di masa lalu. Jawab ini **sebelum**
+masuk demo, bukan sesudah:
+
+- **Bedanya bukan "declarative vs kode"** — Frappe/ERPNext (`DocType`) sudah lebih dulu melakukan
+  ini dan terbukti production-proven 15+ tahun. Perbedaan Forma ada di **di mana kontrak itu
+  hidup**: DocType Frappe tersimpan sebagai row di database (`tabDocType`), Entity Forma tersimpan
+  sebagai **file YAML di disk**.
+- Konsekuensinya konkret: file YAML **git-diffable, reviewable di PR, dan dibaca/ditulis AI
+  secara natural** — sama seperti AI sudah terbiasa dengan manifest K8s/Docker Compose/CI config.
+  DocType di database butuh tooling ekspor/impor khusus (`bench export-doc`) sebelum bisa masuk
+  alur git/PR, dan AI perlu API call atau akses DB langsung untuk membacanya.
+- Forma juga tidak mengunci ke satu bahasa/ORM — logic bisa Go native, Starlark script, atau
+  sidecar bahasa apapun; akses data pakai raw SQL (`ctx.db`), bukan ORM abstraction yang
+  membatasi query kompleks.
+- Kejujuran perlu disampaikan juga: Forma **masih MVP**, belum punya modul bisnis siap pakai
+  sebanyak ERPNext (30+ modul). Argumennya bukan "Forma sudah lebih lengkap", tapi "Forma
+  dirancang supaya AI-assisted development bekerja lebih presisi di atasnya sejak awal."
+
+- Rujukan: `docs/comparison/forma-vs-frappe.md` §4 (YAML di disk vs DocType di DB) dan §6
+  (kapan pilih yang mana) — kutip langsung dari situ kalau ada pertanyaan lanjutan di sesi.
+
+### C. Live Demo: Forma Menjawab Keempat Celah Ini
 
 **Forma** adalah platform *spec-driven* untuk aplikasi bisnis: aplikasi dideklarasikan sebagai
 kumpulan spec YAML (`workspace → app → module → kind`), diinterpretasikan saat runtime oleh satu
@@ -251,8 +397,18 @@ terbaca" (`docs/spec/platform/07-marketplace.md`).
 
 #### Alur Demo yang Disarankan
 
+**Pilihan spec untuk live demo** — dua opsi, pilih sesuai risiko yang bisa ditoleransi:
+
+| Opsi | Command | Kapan pakai |
+|---|---|---|
+| **Aman (default)** | `go run ./cmd/forma/ dev --spec examples/Clinic-UI-Showcase/spec --dsn "sqlite:.forma/clinic.db" --addr :8080 --force --dev-ui` | Sudah jadi contoh resmi yang terdokumentasi di `docs/guides/how-to-run.md` — paling kecil kemungkinan gagal di depan audiens |
+| **Naratif bisnis lebih kuat** | `go run ./cmd/forma/ dev --spec verticals/billing/spec --dsn "sqlite:.forma/billing.db" --addr :8080 --dev --force --dev-ui` | Kalau ingin cerita "modul vertikal siap pakai" terasa lebih konkret — **wajib gladi bersih dulu** sebelum sesi, karena vertical module masih berkembang dan belum sekokoh example app |
+
+Kalau tidak sempat gladi bersih penuh sebelum sesi, pakai opsi Aman. Siapkan juga screenshot/rekaman
+singkat sebagai fallback kalau demo tetap macet di tempat — jangan mengandalkan live demo 100% tanpa cadangan.
+
 1. Tunjukkan `docs/architecture/08-repo-structure.md` — peta repo, kontrak vs renderer.
-2. Jalankan satu command: `go run ./cmd/forma/ dev --spec verticals/billing/spec --dsn "sqlite:.forma/billing.db" --addr :8080 --dev --force --dev-ui` — satu proses, tanpa setup infra manual.
+2. Jalankan command sesuai pilihan di atas — satu proses, tanpa setup infra manual.
 3. Buka admin panel (`http://localhost:5173/default/_admin`) — tunjukkan CRUD, form, dan tabel yang **otomatis diturunkan dari spec**, belum ada satu baris React/SQL ditulis manual.
 4. Minta AI (Claude Code) menambah satu field baru ke `kind: Entity` di spec YAML — tunjukkan
    efeknya otomatis merambat ke form, tabel, dan REST API tanpa AI perlu menyentuh migration

@@ -29,7 +29,9 @@ tanpa pengecualian**; satu workspace = satu tenant terisolasi. **Tidak ada
 akses lintas-workspace dalam bentuk apa pun** di dalam framework — kalau
 integrasi lintas-workspace suatu saat dibutuhkan, itu hidup di level
 external service, di luar Forma Framework. Data `characteristic: reference`
-dimiliki App Owner (di-seed lewat rilis, read-only bagi Data Owner);
+dimiliki App Owner (di-seed lewat rilis, read-only bagi Data Owner;
+backend juga mendukung **find-or-create** otomatis saat pertama kali
+diakses — lihat [`backend/01-core-basic.md`](../backend/01-core-basic.md) §1.1);
 seluruh data tenant-isolated lainnya dimiliki Data Owner. Strategi dan
 topologi isolasi (single vs multi, pooled vs isolated, tiering) **bukan
 urusan spec aplikasi** — diputuskan saat deployment oleh Platform Operator
@@ -221,27 +223,14 @@ internal expose `list`+`approve` dari Module yang sama). Menu — enumerasi
 dengan keputusan visibility itu, yaitu App. Analogi: **Module = katalog,
 App.menu = daftar belanja dari katalog itu.**
 
-Dua mode: `module` (otomatis semua entity yang di-`depends_on` App) dan
-`custom` (kurasi eksplisit):
+`App.spec.menu` dan `Module.spec.menu` sama-sama `[]MenuItem` — array
+= `App.spec.menu` (otoritatif), atau saran default `Module.spec.menu` yang
+diadopsi App lewat `type: module` Adopt node.
 
-```yaml
-# app.yaml
-spec:
-  menu:
-    mode: custom
-    items:
-      - entity: billing/invoice
-      - entity: billing/customer
-      # billing/expense-report tidak disebut = otomatis tidak muncul
-```
-
-Urutan item di list = urutan tampil (tidak ada field `priority` terpisah).
-Trade-off mode `custom`: lepas dari auto-sync — kalau Module menambah entity
-baru, App itu tidak otomatis dapat menu barunya, harus ditambahkan manual.
+Urutan item di list = urutan tampil (tidak ada field `order` terpisah).
 Supaya App Owner tidak dibebani wiring manual dari nol, **Module boleh
 menyediakan default menu suggestion** (`Module.spec.menu`) yang bisa langsung
-diadopsi App tanpa konfigurasi tambahan — App tetap bebas override/restrict/
-rearrange kapan pun.
+diadopsi App lewat Adopt node — App tetap bebas override/restrict/rearrange.
 
 `MenuItem` (dipakai identik di `App.spec.menu` dan `Module.spec.menu`):
 
@@ -254,7 +243,6 @@ type MenuItem struct {
     View     string      // nama View terdaftar (Page/Table/Wizard/Kanban/Dashboard/Report/Timeline)
     Route    string      // escape hatch: URL mentah untuk leaf tanpa View terdaftar
     When     string      // kondisi bisnis FormaExpr
-    Order    int
     Children []MenuItem
 }
 ```
@@ -289,9 +277,6 @@ module) — analog package-qualified reference di Go (`Invoice` dalam package
 sendiri vs `billing.Invoice` dari luar).
 
 ## 6. Validasi `forma apply`
-- `menu.items[].entity` wajib tercakup dalam `depends_on`/`modules` App —
-  App tidak boleh menaruh entity di menu dari Module yang tidak ia
-  deklarasikan sebagai dependency.
 - Setiap `module` yang direferensikan di manapun dalam `App.spec.menu`
   (leaf atau adopt node) wajib anggota `App.spec.modules`.
 - `root_url` wajib unik lintas seluruh App dalam satu workspace dan diawali

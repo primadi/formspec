@@ -2,7 +2,9 @@
 //
 // Satu binary untuk semua persona:
 //   - Persona A: `forma dev` → API + SPA embedded, tanpa npm
-//   - Persona B: `forma dev --dev-ui` → + Vite HMR untuk edit frontend
+//   - Persona B: `forma dev --dev-ui` → + Vite HMR; SPA di :8080
+//     di-proxy otomatis ke Vite dev server (:5173). User cukup akses
+//     satu port (:8080) untuk semuanya.
 //   - Non-Go: auto-detect runtime (PHP/Python/Node) dan spawn app process
 //
 // Logika di file ini adalah hasil migrasi dari cmd/forma-sidecar/main.go
@@ -22,6 +24,8 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -172,7 +176,11 @@ func runDev(args []string) {
 	}
 
 	// SPA serving priority: --web-dir > auto-detect renderers/web/dist/ > embedded FS
-	if cfg.WebDir != "" {
+	// When --dev-ui is active the backend does NOT serve the SPA directly;
+	// instead SPA requests are reverse-proxied to the Vite dev server (see §13b).
+	if cfg.DevUI {
+		log.Printf("[forma] dev UI mode — SPA will be proxied to Vite dev server")
+	} else if cfg.WebDir != "" {
 		formaCfg.WebDir = cfg.WebDir
 	} else if found := findWebDist(); found != "" {
 		// Auto-detect renderers/web/dist/ — picks up npm run rebuilds immediately
@@ -251,6 +259,7 @@ func runDev(args []string) {
 	// ── 13. Dev UI: Vite dev server ──
 	var viteProc *appProcess
 	var vitePort string
+	var viteProxyURL string
 	if cfg.DevUI {
 		webDir, err := findWebDir()
 		if err != nil {
@@ -260,18 +269,29 @@ func runDev(args []string) {
 		if err != nil {
 			log.Fatalf("[forma] vite: %v", err)
 		}
-		log.Printf("[forma] Vite dev server started (http://localhost:%s)", vitePort)
+		viteProxyURL = "http://localhost:" + vitePort
+		log.Printf("[forma] Vite dev server started (%s)", viteProxyURL)
+	}
+
+	// ── 13b. Wrap handler dengan Vite proxy ──
+	// SPA routes di :8080 di-proxy ke Vite dev server, sehingga user
+	// cukup akses satu port (:8080) untuk API + frontend dengan HMR.
+	handler := app.Handler()
+	if viteProxyURL != "" {
+		log.Printf("[forma] SPA routes at %s proxied to Vite (%s)", cfg.Addr, viteProxyURL)
+		handler = viteSPAProxy(handler, viteProxyURL, cfg.WorkspaceID)
 	}
 
 	// ── 14. SPA info ──
 	if cfg.DevUI {
-		log.Printf("[forma] Frontend: http://localhost:%s/default/_admin", vitePort)
+		log.Printf("[forma] Frontend: http://localhost%s/default/_admin (proxied to Vite HMR)", cfg.Addr)
+		log.Printf("[forma]   Vite langsung: http://localhost:%s/default/_admin", vitePort)
 	} else if cfg.WebDir == "" {
 		log.Printf("[forma] SPA embedded — buka http://localhost%s/default/_admin", cfg.Addr)
 	}
 
 	// ── 15. Serve ──
-	restSrv := &http.Server{Addr: cfg.Addr, Handler: app.Handler()}
+	restSrv := &http.Server{Addr: cfg.Addr, Handler: handler}
 	errCh := make(chan error, 2)
 	if socketSrv != nil {
 		go func() { errCh <- socketSrv.Serve() }()
@@ -387,7 +407,7 @@ func writePIDFile() {
 		log.Printf("[forma] warning: cannot create state dir for PID file: %v", err)
 		return
 	}
-	if err := os.WriteFile(pidPath, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0644); err != nil {
+	if err := os.WriteFile(pidPath, fmt.Appendf(nil, "%d\n", os.Getpid()), 0644); err != nil {
 		log.Printf("[forma] warning: cannot write PID file: %v", err)
 	}
 }
@@ -691,4 +711,39 @@ func findProcessOnPort(port int) (int, string, error) {
 	}
 
 	return 0, "", fmt.Errorf("cannot determine owner of port %d", port)
+}
+
+// ─── Vite SPA Proxy ───
+
+// viteSPAProxy wraps an http.Handler so that SPA-frontend requests are
+// reverse-proxied to a Vite dev server instead of being served from the
+// backend's built SPA (which may be stale or absent in --dev-ui mode).
+//
+// Strategy: proxy ALL request paths to Vite EXCEPT known API routes.
+// This ensures Vite source files (/src/*, /@vite/*, /node_modules/.vite/*,
+// etc.) are always served correctly without maintaining an allowlist.
+//
+// Non-proxied (backend-handled) paths:
+//   - /{workspaceID}/api/* — REST API + meta + WebSocket
+//   - /health              — health check
+func viteSPAProxy(next http.Handler, viteTarget, workspaceID string) http.Handler {
+	target, err := url.Parse(viteTarget)
+	if err != nil {
+		log.Fatalf("[forma] invalid Vite target URL %q: %v", viteTarget, err)
+	}
+	proxy := httputil.NewSingleHostReverseProxy(target)
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+
+		// API routes → passthrough ke backend
+		if strings.HasPrefix(path, "/"+workspaceID+"/api/") ||
+			path == "/health" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Semua yang lain → Vite dev server
+		proxy.ServeHTTP(w, r)
+	})
 }

@@ -74,22 +74,25 @@ type EntitySpec = DocumentSpec
 // DocumentSpec defines a stateful, persisted business data resource (Core §4.1).
 // Renamed from EntitySpec in v0.3.0.
 type DocumentSpec struct {
-	Version           string             `yaml:"version" json:"version"`
-	Plural            string             `yaml:"plural,omitempty" json:"plural,omitempty"`
-	Characteristic    Characteristic     `yaml:"characteristic,omitempty" json:"characteristic,omitempty"`
-	Auth              *EntityAuth        `yaml:"auth,omitempty" json:"auth,omitempty"`
-	Persist           *PersistSpec       `yaml:"persist,omitempty" json:"persist,omitempty"`
-	Fields            []Field            `yaml:"fields" json:"fields"`
-	Actions           []Action           `yaml:"actions" json:"actions"`
-	StateMachine      *StateMachine      `yaml:"state_machine,omitempty" json:"state_machine,omitempty"`
-	Events            []EventDecl        `yaml:"events,omitempty" json:"events,omitempty"`
-	Deliver           []DeliveryDecl     `yaml:"deliver,omitempty" json:"deliver,omitempty"`
-	Indexes           []IndexDecl        `yaml:"indexes,omitempty" json:"indexes,omitempty"`
-	ExtendStorage     *ExtendStorage     `yaml:"extend_storage,omitempty" json:"extend_storage,omitempty"`
-	Expose            []ExposeConfig     `yaml:"expose,omitempty" json:"expose,omitempty"`
-	BackdatePolicy    *BackdatePolicy    `yaml:"backdate_policy,omitempty" json:"backdate_policy,omitempty"`
-	ForwardDatePolicy *ForwardDatePolicy `yaml:"forward_date_policy,omitempty" json:"forward_date_policy,omitempty"`
-	Hooks             []HookDecl         `yaml:"hooks,omitempty" json:"hooks,omitempty"`
+	Version           string              `yaml:"version" json:"version"`
+	Plural            string              `yaml:"plural,omitempty" json:"plural,omitempty"`
+	Characteristic    Characteristic      `yaml:"characteristic,omitempty" json:"characteristic,omitempty"`
+	Auth              *EntityAuth         `yaml:"auth,omitempty" json:"auth,omitempty"`
+	Persist           *PersistSpec        `yaml:"persist,omitempty" json:"persist,omitempty"`
+	Fields            []Field             `yaml:"fields" json:"fields"`
+	Actions           []Action            `yaml:"actions" json:"actions"`
+	StateMachine      *StateMachine       `yaml:"state_machine,omitempty" json:"state_machine,omitempty"`
+	Events            []EventDecl         `yaml:"events,omitempty" json:"events,omitempty"`
+	Deliver           []DeliveryDecl      `yaml:"deliver,omitempty" json:"deliver,omitempty"`
+	Indexes           []IndexDecl         `yaml:"indexes,omitempty" json:"indexes,omitempty"`
+	ExtendStorage     *ExtendStorage      `yaml:"extend_storage,omitempty" json:"extend_storage,omitempty"`
+	Expose            []ExposeConfig      `yaml:"expose,omitempty" json:"expose,omitempty"`
+	BackdatePolicy    *BackdatePolicy     `yaml:"backdate_policy,omitempty" json:"backdate_policy,omitempty"`
+	ForwardDatePolicy *ForwardDatePolicy  `yaml:"forward_date_policy,omitempty" json:"forward_date_policy,omitempty"`
+	Hooks             []HookDecl          `yaml:"hooks,omitempty" json:"hooks,omitempty"`
+	RateLimit         *RateLimitSpec      `yaml:"rate_limit,omitempty" json:"rate_limit,omitempty"`           // 1.4.1 resource-level rate limit (02-core-extended.md §17)
+	SoftDeactivate    *SoftDeactivateDecl `yaml:"soft_deactivate,omitempty" json:"soft_deactivate,omitempty"` // 1.4.10
+	NaturalKeyField   string              `yaml:"-" json:"-"`                                                 // resolved in ValidateDocumentSpec: empty if none, field name if exactly one natural_key
 }
 
 // ExposeConfig declares one external protocol surface for an Entity (D49).
@@ -135,21 +138,50 @@ type Field struct {
 	Relation       *RelationDecl       `yaml:"relation,omitempty" json:"relation,omitempty"`
 	Child          *ChildDecl          `yaml:"child,omitempty" json:"child,omitempty"`
 	Computed       *ComputedDecl       `yaml:"computed,omitempty" json:"computed,omitempty"`
+
+	// Extended field type structs (05-field-types.md §4–§5)
+
+	// 1.4.9 TreeDecl — self-referential hierarchy marker (05-field-types.md §4).
+	Tree bool `yaml:"tree,omitempty" json:"tree,omitempty"`
+
+	// 1.4.3 FieldClassification — governance label (05-field-types.md §5.4).
+	Classification FieldClassification `yaml:"classification,omitempty" json:"classification,omitempty"`
+
+	// 1.4.4 FieldPermission — field-level required_permission (05-field-types.md §5.3).
+	RequiredPermission string `yaml:"required_permission,omitempty" json:"required_permission,omitempty"`
+
+	// 1.4.5 FieldExclude — per-surface field exclusion (05-field-types.md §5.3).
+	Exclude []string `yaml:"exclude,omitempty" json:"exclude,omitempty"`
+
+	// 1.4.6 EncryptedField — at-rest encryption marker (05-field-types.md §5.2).
+	Encrypted bool `yaml:"encrypted,omitempty" json:"encrypted,omitempty"`
+
+	// 1.4.7 MaskedField — auto-mask in response/log (05-field-types.md §5.2).
+	Masked bool `yaml:"masked,omitempty" json:"masked,omitempty"`
+
+	// 1.4.11 StorageSpec — file field configuration (05-field-types.md §1.3).
+	// Only valid when Type == FieldFile.
+	Storage *StorageSpec `yaml:"storage,omitempty" json:"storage,omitempty"`
 }
 
-// FieldType is the data type of a field (Core §10.1).
+// FieldType is the data type of a field (Core §10.1, 05-field-types.md §1.1).
 type FieldType string
 
 const (
 	FieldString   FieldType = "string"
-	FieldInteger  FieldType = "integer" // 64-bit integer
-	FieldDecimal  FieldType = "decimal" // arbitrary-precision — MUST be used for money, never float
+	FieldText     FieldType = "text"     // multi-line text (05-field-types.md §1.1)
+	FieldRichText FieldType = "richtext" // rich markup (sanitized server-side)
+	FieldInteger  FieldType = "integer"  // 64-bit integer
+	FieldDecimal  FieldType = "decimal"  // arbitrary-precision — MUST be used for money, never float
+	FieldMoney    FieldType = "money"    // {amount, currency} pair (05-field-types.md §2)
 	FieldBoolean  FieldType = "boolean"
 	FieldEnum     FieldType = "enum"
 	FieldDate     FieldType = "date"
 	FieldDateTime FieldType = "datetime"
-	FieldJSON     FieldType = "json"
+	FieldTime     FieldType = "time" // time-of-day (HH:MM:SS)
 	FieldUUID     FieldType = "uuid"
+	FieldJSON     FieldType = "json"
+	FieldFile     FieldType = "file" // reference to ctx.storage object (05-field-types.md §1.3)
 	FieldRelation FieldType = "relation"
 	FieldChild    FieldType = "child"
 
@@ -255,6 +287,41 @@ func ValidateDocumentSpec(d *DocumentSpec) error {
 		if IsReservedField(f.Name) {
 			return fmt.Errorf("field %q is a reserved field name and cannot be used as a custom field", f.Name)
 		}
+	}
+
+	// natural_key_rule: strategy/reset enums (01-core-basic.md §2)
+	for _, f := range d.Fields {
+		if f.NaturalKeyRule == nil {
+			continue
+		}
+		if !f.NaturalKey {
+			return fmt.Errorf("field %q declares natural_key_rule without natural_key: true", f.Name)
+		}
+		switch f.NaturalKeyRule.Strategy {
+		case "", "sequence", "custom":
+		default:
+			return fmt.Errorf("field %q: natural_key_rule.strategy must be \"sequence\" or \"custom\", got %q", f.Name, f.NaturalKeyRule.Strategy)
+		}
+		switch f.NaturalKeyRule.Reset {
+		case "", "never", "yearly", "monthly", "daily":
+		default:
+			return fmt.Errorf("field %q: natural_key_rule.reset must be one of never|yearly|monthly|daily, got %q", f.Name, f.NaturalKeyRule.Reset)
+		}
+	}
+
+	// Natural key cardinality (§2): at most one natural_key field per entity.
+	// Resolve NaturalKeyField for fast O(1) lookup at the store layer.
+	{
+		var nkField string
+		for _, f := range d.Fields {
+			if f.NaturalKey {
+				if nkField != "" {
+					return fmt.Errorf("only one natural_key field allowed per entity (found %q and %q)", nkField, f.Name)
+				}
+				nkField = f.Name
+			}
+		}
+		d.NaturalKeyField = nkField
 	}
 
 	// transaction_date required for characteristic: transaction
@@ -382,7 +449,8 @@ type Action struct {
 	Uses               *UsesDecl        `yaml:"uses,omitempty" json:"uses,omitempty"`
 	Params             *ParamsDecl      `yaml:"params,omitempty" json:"params,omitempty"`
 	Conditions         []ConditionDecl  `yaml:"conditions,omitempty" json:"conditions,omitempty"`
-	UI                 *ActionUIHint    `yaml:"ui,omitempty" json:"ui,omitempty"` // Frontend §1.7 — button rendering hints
+	UI                 *ActionUIHint    `yaml:"ui,omitempty" json:"ui,omitempty"`                 // Frontend §1.7 — button rendering hints
+	RateLimit          *RateLimitSpec   `yaml:"rate_limit,omitempty" json:"rate_limit,omitempty"` // 1.4.1 per-action override (02-core-extended.md §17)
 }
 
 // ActionUIHint carries frontend rendering hints for an action button (Frontend §1.7).
@@ -412,6 +480,7 @@ type UsesDecl struct {
 	Db         *UsesDbDecl       `yaml:"db,omitempty" json:"db,omitempty"`
 	Config     *UsesConfigDecl   `yaml:"config,omitempty" json:"config,omitempty"`
 	Kvstore    []KvstoreUseDecl  `yaml:"kvstore,omitempty" json:"kvstore,omitempty"`
+	Secrets    []string          `yaml:"secrets,omitempty" json:"secrets,omitempty"` // 1.4.2 ctx.secrets access keys (02-core-extended.md §18)
 	Primitives []string          `yaml:"primitives,omitempty" json:"primitives,omitempty"`
 	Datastores map[string]string `yaml:"datastores,omitempty" json:"datastores,omitempty"` // primitive → datastore name binding
 }
@@ -817,4 +886,58 @@ type PersistSpec struct {
 	SoftDelete *bool       `yaml:"soft_delete,omitempty" json:"soft_delete,omitempty"`
 	Category   string      `yaml:"category,omitempty" json:"category,omitempty"` // operational | financial | compliance | analytics | master | archive
 	Indexes    []IndexDecl `yaml:"indexes,omitempty" json:"indexes,omitempty"`
+}
+
+// ─── 1.4 Extended Field Type Structs ───
+
+// 1.4.1 RateLimitSpec — per-resource or per-action rate limit (02-core-extended.md §17).
+type RateLimitSpec struct {
+	Max      int    `yaml:"max" json:"max"`
+	Per      string `yaml:"per" json:"per"`                               // e.g. "1s", "1m", "1h"
+	Scope    string `yaml:"scope,omitempty" json:"scope,omitempty"`       // tenant | user | ip | global
+	Strategy string `yaml:"strategy,omitempty" json:"strategy,omitempty"` // sliding_window | token_bucket
+}
+
+// 1.4.3 FieldClassification — governance label for field-level data sensitivity
+// (05-field-types.md §5.4).
+type FieldClassification string
+
+const (
+	ClassificationPII       FieldClassification = "pii"
+	ClassificationFinancial FieldClassification = "financial"
+	ClassificationInternal  FieldClassification = "internal"
+)
+
+// 1.4.9 TreeDecl — self-referential hierarchy marker (05-field-types.md §4).
+// Applied via Field.Tree = true on a relation field.
+// No separate struct needed — the `tree: true` boolean on Field is sufficient.
+// This type exists for documentation and potential future expansion.
+type TreeDecl struct {
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+}
+
+// 1.4.10 SoftDeactivateDecl — soft-deactivation pattern for master entities
+// (02-core-extended.md §19). Adds is_active field + deactivate/reactivate actions.
+type SoftDeactivateDecl struct {
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+}
+
+// 1.4.11 StorageSpec — file field configuration (05-field-types.md §1.3).
+// Only valid on Field.Type == FieldFile.
+type StorageSpec struct {
+	AllowedTypes []string           `yaml:"allowed_types,omitempty" json:"allowed_types,omitempty"`
+	MaxSizeMB    int                `yaml:"max_size_mb,omitempty" json:"max_size_mb,omitempty"`
+	MaxCount     int                `yaml:"max_count,omitempty" json:"max_count,omitempty"`
+	Visibility   string             `yaml:"visibility,omitempty" json:"visibility,omitempty"`         // public | private | signed
+	SignedURLTTL string             `yaml:"signed_url_ttl,omitempty" json:"signed_url_ttl,omitempty"` // e.g. "15m"
+	CDN          bool               `yaml:"cdn,omitempty" json:"cdn,omitempty"`
+	Transform    []StorageTransform `yaml:"transform,omitempty" json:"transform,omitempty"`
+}
+
+// StorageTransform declares an image transformation preset for a file field.
+type StorageTransform struct {
+	Name   string `yaml:"name" json:"name"`
+	Width  int    `yaml:"width,omitempty" json:"width,omitempty"`
+	Height int    `yaml:"height,omitempty" json:"height,omitempty"`
+	Fit    string `yaml:"fit,omitempty" json:"fit,omitempty"` // cover | contain | fill
 }

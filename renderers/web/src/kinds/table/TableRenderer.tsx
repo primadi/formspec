@@ -14,7 +14,8 @@ import {
   type SortingState,
   type ColumnDef,
 } from "@tanstack/react-table"
-import { useNavigate, useParams } from "react-router-dom"
+import { useNavigate, useSearchParams } from "react-router-dom"
+import { useSurface } from "@/hooks/useSurface"
 import {
   ChevronUp,
   ChevronDown,
@@ -31,6 +32,7 @@ import { toast } from "sonner"
 
 import type { EntitySchema, ListParams, TableAction } from "@/types/manifest"
 import { useSessionStore } from "@/stores/session"
+import { useMetaStore } from "@/stores/meta"
 import { can as checkPermission } from "@/engine/permissions"
 import { deriveTable } from "@/engine/derive"
 import { getLifecycle } from "@/engine/lifecycle"
@@ -51,9 +53,18 @@ interface RowData {
 
 export default function TableRenderer({ entity }: TableRendererProps) {
   const navigate = useNavigate()
-  const { workspace = "default" } = useParams<{ workspace: string }>()
+  const { surfacePath } = useSurface()
+  const [, setSearchParams] = useSearchParams()
   const me = useSessionStore((s) => s.me)
   const getClient = useSessionStore((s) => s.getClient)
+  const metaBundle = useMetaStore((s) => s.bundle)
+
+  // Find an authored form for this entity + mode to check render mode.
+  const authoredForm = useMemo(() => {
+    if (!metaBundle) return undefined
+    const entityRef = `${entity.module}.${entity.name}`
+    return metaBundle.forms.find((f) => f.spec.entity === entityRef)
+  }, [metaBundle, entity])
 
   // Resolve table spec: authored > derived
   const tableSpec = useMemo(
@@ -161,12 +172,20 @@ export default function TableRenderer({ entity }: TableRendererProps) {
 
     switch (action.action) {
       case "view":
-        navigate(`/${workspace}/_admin/${entity.module}/${entity.plural}/${row.id}`)
+        navigate(surfacePath(entity.module, entity.plural, row.id))
         break
       case "edit":
-        navigate(
-          `/${workspace}/_admin/${entity.module}/${entity.plural}/${row.id}/edit`,
-        )
+        // If there's an authored form with overlay mode, trigger overlay
+        if (authoredForm?.spec.render?.mode && authoredForm.spec.render.mode !== "separate_page") {
+          setSearchParams({
+            action: "edit",
+            form: authoredForm.name,
+            id: row.id,
+            mode: authoredForm.spec.render.mode,
+          })
+        } else {
+          navigate(surfacePath(entity.module, entity.plural, row.id, "edit"))
+        }
         break
       case "delete":
         try {
@@ -209,11 +228,18 @@ export default function TableRenderer({ entity }: TableRendererProps) {
 
         {lifecycle.hasCreate && (
           <Button
-            onClick={() =>
-              navigate(
-                `/${workspace}/_admin/${entity.module}/${entity.plural}/new`,
-              )
-            }
+            onClick={() => {
+              // If there's an authored form with overlay mode, trigger overlay
+              if (authoredForm?.spec.render?.mode && authoredForm.spec.render.mode !== "separate_page") {
+                setSearchParams({
+                  action: "create",
+                  form: authoredForm.name,
+                  mode: authoredForm.spec.render.mode,
+                })
+              } else {
+                navigate(surfacePath(entity.module, entity.plural, "new"))
+              }
+            }}
           >
             <Plus className="size-4 mr-1" />
             New

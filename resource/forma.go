@@ -143,8 +143,25 @@ type App struct {
 	disp         *action.Dispatcher
 	nativeEx     *action.NativeExecutor
 	outboxWorker *db.OutboxWorker
+	idempotency  *db.IdempotencyStore
 	httpServer   *http.Server
 }
+
+// Idempotency returns the app's idempotency-key store, configured with
+// cfg.IdempotencyTTL (default db.DefaultIdempotencyTTL — Core Basic §5:
+// "the TTL MUST be configurable via WithTTL; hard-coding is a spec
+// violation"). Exposed for the two-step prepare flow
+// (POST /{resource}/{action}/prepare, Fase 2.7) to wire against once it
+// lands — construction is done here, once, so the TTL is resolved from
+// Config consistently regardless of which caller ends up using the store.
+//
+// core.idempotency_retention (a manifest-level Config key) is the intended
+// long-term source for this value once the Config-kind runtime exists
+// (Fase 7.2 — no such registry is loaded today, see internal/entity.Registry
+// .LoadEntities, which only registers Document/Entity kinds). Until then,
+// cfg.IdempotencyTTL is the equivalent Go-level configuration seam, same
+// pattern as JWTSecret and the other Config fields above.
+func (a *App) Idempotency() *db.IdempotencyStore { return a.idempotency }
 
 // GetEntityStore returns the EntityStore for a given module/entity pair.
 // This is used by the sidecar ctx handler for entity primitive operations
@@ -319,9 +336,12 @@ func New(cfg Config) (*App, error) {
 		Lookup:   eventChannelLookup,
 	})
 
+	idempotencyStore := db.NewIdempotencyStore(database, driver).WithTTL(cfg.IdempotencyTTL)
+
 	return &App{
 		cfg: cfg, reg: reg, rb: rb, handler: rb.BuildHTTP(), disp: disp, nativeEx: nativeEx,
 		outboxWorker: outboxWorker,
+		idempotency:  idempotencyStore,
 	}, nil
 }
 
@@ -393,7 +413,7 @@ func newDispatcher(reg *entity.Registry, cfg Config) *action.Dispatcher {
 	disp := action.NewDispatcher()
 
 	scriptEx := action.NewScriptExecutor(cfg.SpecPath)
-	scriptEx.SetSaveHandler(func(workspaceID, module, entityName, id string, version int, data map[string]any) error {
+	scriptEx.SetSaveHandler(func(ctx context.Context, workspaceID, module, entityName, id string, version int, data map[string]any) error {
 		if id == "" {
 			return fmt.Errorf("resource.save: cannot save before the record exists — use resource.set() during a before-create hook/impl; the framework persists automatically")
 		}
@@ -401,7 +421,7 @@ func newDispatcher(reg *entity.Registry, cfg Config) *action.Dispatcher {
 		if err != nil {
 			return fmt.Errorf("get store: %w", err)
 		}
-		_, err = store.Update(context.Background(), db.UpdateParams{
+		_, err = store.Update(ctx, db.UpdateParams{
 			WorkspaceID: workspaceID,
 			ID:          id,
 			Version:     version,
@@ -410,18 +430,18 @@ func newDispatcher(reg *entity.Registry, cfg Config) *action.Dispatcher {
 		})
 		return err
 	})
-	scriptEx.SetCallHandler(func(workspaceID, fromModule, targetModule, targetEntity, actionName string, params map[string]any) (any, error) {
+	scriptEx.SetCallHandler(func(ctx context.Context, workspaceID, fromModule, targetModule, targetEntity, actionName string, params map[string]any) (any, error) {
 		if targetModule == "" {
 			targetModule = fromModule
 		}
-		return invokeAction(context.Background(), reg, disp, workspaceID, targetModule, targetEntity, actionName, "", params)
+		return invokeAction(ctx, reg, disp, workspaceID, targetModule, targetEntity, actionName, "", params)
 	})
-	scriptEx.SetLoadHandler(func(workspaceID, module, entityName, id string) (map[string]any, int, error) {
+	scriptEx.SetLoadHandler(func(ctx context.Context, workspaceID, module, entityName, id string) (map[string]any, int, error) {
 		store, err := reg.GetEntityStore(module, entityName)
 		if err != nil {
 			return nil, 0, fmt.Errorf("get store: %w", err)
 		}
-		rec, err := store.GetByID(context.Background(), db.GetByIDParams{WorkspaceID: workspaceID, ID: id})
+		rec, err := store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: id})
 		if err != nil {
 			return nil, 0, err
 		}
@@ -430,19 +450,19 @@ func newDispatcher(reg *entity.Registry, cfg Config) *action.Dispatcher {
 		}
 		return rec.Data, rec.Version, nil
 	})
-	scriptEx.SetCreateHandler(func(workspaceID, module, entityName string, data map[string]any) (string, error) {
+	scriptEx.SetCreateHandler(func(ctx context.Context, workspaceID, module, entityName string, data map[string]any) (string, error) {
 		store, err := reg.GetEntityStore(module, entityName)
 		if err != nil {
 			return "", fmt.Errorf("get store: %w", err)
 		}
-		return store.Insert(context.Background(), db.InsertParams{
+		return store.Insert(ctx, db.InsertParams{
 			WorkspaceID: workspaceID,
 			CreatedBy:   "script",
 			Data:        data,
 		})
 	})
-	scriptEx.SetNextKeyHandler(func(workspaceID, module, entityName, fieldName string) (string, error) {
-		return generateNextKey(context.Background(), reg, workspaceID, module, entityName, fieldName)
+	scriptEx.SetNextKeyHandler(func(ctx context.Context, workspaceID, module, entityName, fieldName string) (string, error) {
+		return generateNextKey(ctx, reg, workspaceID, module, entityName, fieldName)
 	})
 	disp.RegisterExecutor(spec.ImplScript, scriptEx)
 	disp.RegisterExecutor(spec.ImplScriptRef, scriptEx)

@@ -14,10 +14,10 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/primadi/forma/renderers/jsonbpersist"
 	"github.com/primadi/forma/internal/manifest"
 	"github.com/primadi/forma/internal/permission"
 	"github.com/primadi/forma/pkg/spec"
+	db "github.com/primadi/forma/renderers/jsonbpersist"
 )
 
 // Registry is the central entity registry for the Forma runtime.
@@ -96,7 +96,7 @@ func (r *Registry) LoadEntities() []error {
 		key := entityKey(raw.Metadata.Module, raw.Metadata.Name)
 
 		// Parse spec
-		entitySpec, err := manifest.RawSpecToEntitySpec(raw.Spec)
+		entitySpec, err := manifest.RawSpecToEntitySpec(raw.Spec.(map[string]any))
 		if err != nil {
 			allErrors = append(allErrors, fmt.Errorf("%s: parse spec: %w", raw.Source, err))
 			continue

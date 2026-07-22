@@ -88,7 +88,7 @@ export type Characteristic = "master" | "transaction" | "reference" | "summary"
 export const LIFECYCLE_PLAIN_CRUD = "plain_crud"
 export const LIFECYCLE_TWO_STEP_AUTOSAVE = "two_step_autosave"
 
-export type Lifecycle = "plain_crud" | "two_step_autosave"
+export type Lifecycle = "plain_crud" | "two_step_autosave" | "two_step_manual"
 
 // ── Form Render Modes ──
 
@@ -756,7 +756,6 @@ export interface MenuItem {
   view?: string
   route?: string
   when?: string
-  order?: number
   children?: MenuItem[]
 }
 
@@ -1000,7 +999,7 @@ export class FormaApiError extends Error {
  * The three lifecycle patterns derived server-side (Frontend §1.7).
  * Sent as the `lifecycle` field on EntitySchema.
  */
-export type LifecyclePattern = "plain_crud" | "two_step_autosave"
+export type LifecyclePattern = "plain_crud" | "two_step_autosave" | "two_step_manual"
 
 /**
  * Heuristic form render mode derived by the derivation engine.

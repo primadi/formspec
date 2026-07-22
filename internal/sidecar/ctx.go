@@ -17,6 +17,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/primadi/forma/renderers/jsonbpersist"
 )
 
 // PrimitiveResolver resolves a primitive type ("db", "cache", "lock", ...)
@@ -164,7 +166,22 @@ func (h *CtxHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.dispatch(w, r.Context(), prim, op, conn, req)
+	ctx := r.Context()
+	// If this callback carries a scope id (set by SidecarExecutor on the
+	// outbound /invoke/... call this callback belongs to — see
+	// internal/action/sidecar.go), resolve it back to the live *TxScope so
+	// this entity operation joins the SAME transaction as the rest of that
+	// action's execution, instead of committing on its own. Both HTTP hops
+	// run in this one process (see cmd/forma/dev.go), so a lookup by id is
+	// all that's needed to reconstruct the effect of a plain ctx value
+	// having crossed the process boundary.
+	if scopeID := r.Header.Get("X-Forma-Scope-Id"); scopeID != "" {
+		if scope, ok := db.LookupScope(scopeID); ok {
+			ctx = db.WithTxScope(ctx, scope, scopeID)
+		}
+	}
+
+	h.dispatch(w, ctx, prim, op, conn, req)
 }
 
 func (h *CtxHandler) dispatch(w http.ResponseWriter, ctx context.Context, prim, op string, conn any, req ctxRequest) {

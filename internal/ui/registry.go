@@ -123,7 +123,7 @@ func (r *Registry) register(raw manifest.RawManifest) error {
 }
 
 func registerInto[T any](m map[string]*Entry[T], raw manifest.RawManifest) error {
-	parsed, err := manifest.RawSpecTo[T](raw.Spec)
+	parsed, err := manifest.RawSpecTo[T](raw.Spec.(map[string]any))
 	if err != nil {
 		return fmt.Errorf("%s: parse %s spec: %w", raw.Source, raw.Kind, err)
 	}
