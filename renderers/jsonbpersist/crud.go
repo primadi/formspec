@@ -352,30 +352,9 @@ type GetByIDParams struct {
 	ID          string
 }
 
-// GetByID fetches a single entity record by ID.
-//
-// Lookup order:
-//  1. UUID v7 primary key (WHERE id = ?)
-//  2. Natural key fallback (WHERE _<NaturalKeyField> = ?) — only when
-//     the entity declares a natural_key field. This makes the REST API
-//     transparently accept both /{uuid} and /{natural_key_value}.
-//
-// Children with storage:table are hydrated into the Data map.
-func (s *EntityStore) GetByID(ctx context.Context, params GetByIDParams) (*EntityRecord, error) {
-	rec, err := s.getByIDRaw(ctx, params)
-	if err != nil && s.naturalKeyField != "" {
-		// Natural key fallback: the requested ID didn't match a UUID —
-		// try the natural key field. FindByField already hydrates
-		// children and evaluates computed fields, so return directly.
-		if nkRec, nkErr := s.FindByField(ctx, params.WorkspaceID, s.naturalKeyField, params.ID); nkErr == nil {
-			return nkRec, nil
-		}
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	// Hydrate children from child tables
+// hydrateAndCompute hydrates child-table data into the record and evaluates
+// computed fields. Shared by all lookup paths in GetByID to avoid duplication.
+func (s *EntityStore) hydrateAndCompute(ctx context.Context, rec *EntityRecord) (*EntityRecord, error) {
 	for name, cs := range s.children {
 		hydrated, err := cs.Hydrate(ctx, rec.ID, rec.Data)
 		if err != nil {
@@ -383,11 +362,47 @@ func (s *EntityStore) GetByID(ctx context.Context, params GetByIDParams) (*Entit
 		}
 		rec.Data = hydrated
 	}
-
-	// Evaluate computed fields
 	s.evaluateComputed(rec.Data)
-
 	return rec, nil
+}
+
+// GetByID fetches a single entity record by ID.
+//
+// Lookup order:
+//  1. Natural key (fast path) — when the entity declares a natural_key field
+//     AND the requested ID doesn't look like a UUID, skip the UUID primary-key
+//     lookup entirely. This saves one unnecessary database round-trip per
+//     natural-key-based fetch (e.g. REST API calls like GET /settings/clinic).
+//  2. UUID v7 primary key (WHERE id = ?) — standard path for UUID-based lookups.
+//  3. Natural key fallback (WHERE _<NaturalKeyField> = ?) — only when
+//     the entity declares a natural_key field and the UUID lookup returned
+//     no rows. This makes the REST API transparently accept both /{uuid}
+//     and /{natural_key_value}.
+//
+// Children with storage:table are hydrated into the Data map.
+func (s *EntityStore) GetByID(ctx context.Context, params GetByIDParams) (*EntityRecord, error) {
+	// Fast path: the requested ID is clearly a natural key value, not a UUID.
+	if s.naturalKeyField != "" && !looksLikeUUID(params.ID) {
+		rec, err := s.FindByField(ctx, params.WorkspaceID, s.naturalKeyField, params.ID)
+		if err != nil {
+			return nil, err
+		}
+		return s.hydrateAndCompute(ctx, rec)
+	}
+
+	rec, err := s.getByIDRaw(ctx, params)
+	if err != nil && s.naturalKeyField != "" {
+		// Natural key fallback: the requested ID didn't match a UUID —
+		// try the natural key field.
+		if nkRec, nkErr := s.FindByField(ctx, params.WorkspaceID, s.naturalKeyField, params.ID); nkErr == nil {
+			return s.hydrateAndCompute(ctx, nkRec)
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return s.hydrateAndCompute(ctx, rec)
 }
 
 // getByIDRaw fetches the raw parent record without hydrating children.
@@ -1531,6 +1546,18 @@ var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-
 
 // urlRegex validates basic URL format.
 var urlRegex = regexp.MustCompile(`^https?://[^\s/$.?#].[^\s]*$`)
+
+// uuidRegex matches standard UUID format (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx).
+// Used by looksLikeUUID to distinguish UUID primary keys from natural key values.
+var uuidRegex = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
+// looksLikeUUID reports whether s matches the standard UUID format. When an
+// entity declares a natural key, GetByID uses this to skip the UUID primary-key
+// lookup and go straight to the natural key lookup — saving one unnecessary
+// database round-trip per natural-key-based fetch.
+func looksLikeUUID(s string) bool {
+	return uuidRegex.MatchString(s)
+}
 
 // timeNow returns the current UTC time. Extracted for testability.
 var timeNow = func() time.Time {

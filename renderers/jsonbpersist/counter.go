@@ -180,10 +180,11 @@ func renderFormat(format string, counter int64, period, resource, field, prefix 
 		}
 	}
 
+	tm := time.Now().UTC()
 	result = strings.ReplaceAll(result, "{period}", period)
-	result = strings.ReplaceAll(result, "{year}", fmt.Sprintf("%d", time.Now().UTC().Year()))
-	result = strings.ReplaceAll(result, "{month}", fmt.Sprintf("%02d", time.Now().UTC().Month()))
-	result = strings.ReplaceAll(result, "{day}", fmt.Sprintf("%02d", time.Now().UTC().Day()))
+	result = strings.ReplaceAll(result, "{year}", fmt.Sprintf("%d", tm.Year()))
+	result = strings.ReplaceAll(result, "{month}", fmt.Sprintf("%02d", tm.Month()))
+	result = strings.ReplaceAll(result, "{day}", fmt.Sprintf("%02d", tm.Day()))
 	result = strings.ReplaceAll(result, "{resource}", resource)
 	result = strings.ReplaceAll(result, "{field}", field)
 	result = strings.ReplaceAll(result, "{prefix}", prefix)

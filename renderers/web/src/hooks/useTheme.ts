@@ -31,8 +31,23 @@ export function useTheme() {
     if (!activeTheme) {
       const preset = COLOR_PRESETS[colorPreset]
       if (preset) {
-        root.style.setProperty("--primary", preset.primary)
-        root.style.setProperty("--primary-foreground", preset["primary-foreground"])
+        // For the neutral (black) preset in dark mode, skip overriding
+        // --primary and --primary-foreground because the .dark class
+        // in index.css already sets contrast-appropriate values:
+        //   --primary:             oklch(0.922 0 0)  (light gray)
+        //   --primary-foreground:  oklch(0.205 0 0)  (near-black)
+        // Without this guard, the inline style overrides .dark and
+        // text-primary resolves to near-black on near-black background
+        // — invisible text. Saturated presets (blue, green, etc.) are
+        // unaffected because their hues maintain contrast on dark
+        // backgrounds; they still get overridden as before.
+        if (isDark && colorPreset === "neutral") {
+          root.style.removeProperty("--primary")
+          root.style.removeProperty("--primary-foreground")
+        } else {
+          root.style.setProperty("--primary", preset.primary)
+          root.style.setProperty("--primary-foreground", preset["primary-foreground"])
+        }
         if (preset.accent) root.style.setProperty("--accent", preset.accent)
         if (preset.radius) root.style.setProperty("--radius", preset.radius)
       }
