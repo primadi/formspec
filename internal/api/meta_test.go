@@ -9,10 +9,10 @@ import (
 
 	forma_app "github.com/primadi/forma/internal/app"
 	"github.com/primadi/forma/internal/auth"
-	"github.com/primadi/forma/renderers/jsonbpersist"
 	"github.com/primadi/forma/internal/entity"
 	"github.com/primadi/forma/internal/ui"
 	"github.com/primadi/forma/pkg/spec"
+	db "github.com/primadi/forma/renderers/jsonbpersist"
 )
 
 // setupMetaTestRouter builds a RouterBuilder with an empty entity registry,
@@ -47,7 +47,7 @@ func TestHandleMetaUI_AdminMode_RequiresPermission(t *testing.T) {
 	handler := b.HandleMetaUI()
 
 	identity := &auth.Identity{UserID: "user-1", WorkspaceID: "demo", Permissions: []string{}}
-	req := httptest.NewRequest("GET", "/demo/api/v1/_meta/ui?admin=true", nil)
+	req := httptest.NewRequest("GET", "/demo/_ui/_meta/ui?admin=true", nil)
 	req = req.WithContext(WithIdentity(context.Background(), identity))
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -68,7 +68,7 @@ func TestHandleMetaUI_AdminMode_AllowedWithPermission(t *testing.T) {
 	handler := b.HandleMetaUI()
 
 	identity := &auth.Identity{UserID: "user-1", WorkspaceID: "demo", Permissions: []string{adminAccessPermission}}
-	req := httptest.NewRequest("GET", "/demo/api/v1/_meta/ui?admin=true", nil)
+	req := httptest.NewRequest("GET", "/demo/_ui/_meta/ui?admin=true", nil)
 	req = req.WithContext(WithIdentity(context.Background(), identity))
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -97,7 +97,7 @@ func TestHandleMetaUI_AppScoped_UnaffectedByAdminChange(t *testing.T) {
 	handler := b.HandleMetaUI()
 
 	identity := &auth.Identity{UserID: "user-1", WorkspaceID: "demo", Permissions: []string{}}
-	req := httptest.NewRequest("GET", "/demo/api/v1/_meta/ui?app=storefront", nil)
+	req := httptest.NewRequest("GET", "/demo/_ui/_meta/ui?app=storefront", nil)
 	req = req.WithContext(WithIdentity(context.Background(), identity))
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)

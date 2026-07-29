@@ -104,6 +104,10 @@ export default function FormRenderer({ entity, mode, id: fixedId, formRef, inOve
   // Guards against a stale fetch (superseded by a newer load, e.g. a manual
   // reload while the initial one is still in flight) overwriting fresher data.
   const loadTokenRef = useRef(0)
+  // After a failed auto-save, block further auto-saves until the user
+  // manually clicks Save or the form is reset — prevents an infinite loop
+  // of failed auto-save attempts (e.g. backdate policy violation).
+  const autoSaveBlockedRef = useRef(false)
 
   const loadRecord = useCallback(async () => {
     if (!id || (!isEdit && !isView)) return
@@ -117,7 +121,7 @@ export default function FormRenderer({ entity, mode, id: fixedId, formRef, inOve
       const client = getClient()
       const record = await apiGet<Record<string, unknown>>(
         client,
-        `${entity.module}/${entity.plural}/${id}`,
+        `${entity.module}/${entity.name}/${id}`,
       )
       if (loadTokenRef.current !== token) return
       reset(record as FormData)
@@ -151,12 +155,15 @@ export default function FormRenderer({ entity, mode, id: fixedId, formRef, inOve
       const client = getClient()
       await apiPatch(
         client,
-        `${entity.module}/${entity.plural}/${id}`,
+        `${entity.module}/${entity.name}/${id}`,
         data,
         recordVersion,
       )
-    } catch {
-      // Silent fail for auto-save
+    } catch (err: unknown) {
+      autoSaveBlockedRef.current = true
+      const msg =
+        err instanceof Error ? err.message : "Auto-save gagal"
+      toast.error(`Auto-save gagal: ${msg}`, { duration: 5000 })
     }
   }, [isEdit, id, entity, getClient, recordVersion])
 
@@ -177,9 +184,16 @@ export default function FormRenderer({ entity, mode, id: fixedId, formRef, inOve
     // and must be cancelled — otherwise it fires later and overwrites the
     // just-(re)loaded record with the abandoned edits.
     if (isEdit && isDirty && entity.lifecycle === "two_step_autosave") {
-      debouncedAutoSave(formValues as FormData)
+      // After a failed auto-save, block further auto-saves to prevent an
+      // infinite loop (e.g. backdate policy violation). Unblock on reset
+      // (isDirty → false) or manual Save.
+      if (!autoSaveBlockedRef.current) {
+        debouncedAutoSave(formValues as FormData)
+      }
     } else if (autoSaveTimer.current) {
       clearTimeout(autoSaveTimer.current)
+      // isDirty just became false (reset/undo) — unblock auto-save
+      autoSaveBlockedRef.current = false
     }
   }, [formValues, isEdit, isDirty, entity.lifecycle, debouncedAutoSave])
 
@@ -202,22 +216,23 @@ export default function FormRenderer({ entity, mode, id: fixedId, formRef, inOve
 
   // Submit handler
   const onSubmit = async (data: FormData) => {
+    autoSaveBlockedRef.current = false // unblock auto-save on manual save
     try {
       const client = getClient()
       if (isEdit && id) {
         await apiPatch(
           client,
-          `${entity.module}/${entity.plural}/${id}`,
+          `${entity.module}/${entity.name}/${id}`,
           data,
           recordVersion,
         )
         toast.success("Updated successfully")
       } else if (lifecycle.quickSubmit) {
         // one-step create-submit: POST to create-submit endpoint
-        await client.post(`${entity.module}/${entity.plural}/create-submit`, { json: data })
+        await client.post(`${entity.module}/${entity.name}/create-submit`, { json: data })
         toast.success("Created and submitted successfully")
       } else {
-        await apiPost(client, `${entity.module}/${entity.plural}`, data)
+        await apiPost(client, `${entity.module}/${entity.name}`, data)
         toast.success("Created successfully")
       }
       // A fixed-id embed (Page/Tab block's `form.id`, e.g. a Configuration
@@ -354,8 +369,8 @@ export default function FormRenderer({ entity, mode, id: fixedId, formRef, inOve
               </Button>
             ) : null}
 
-            {/* Submit button for two_step_manual (always explicit, never auto-save) */}
-            {lifecycle.hasSubmit && lifecycle.pattern === "two_step_manual" && (
+            {/* Submit button for two_step_manual / two_step_autosave */}
+            {lifecycle.hasSubmit && (lifecycle.pattern === "two_step_manual" || lifecycle.pattern === "two_step_autosave") && (
               <Button
                 type="button"
                 variant="default"
@@ -364,7 +379,7 @@ export default function FormRenderer({ entity, mode, id: fixedId, formRef, inOve
                   if (!id) return
                   try {
                     const client = getClient()
-                    await client.post(`${entity.module}/${entity.plural}/${id}/submit`)
+                    await client.post(`${entity.module}/${entity.name}/${id}/submit`)
                     toast.success("Submitted successfully")
                     if (inOverlay) {
                       onClose?.()
@@ -552,7 +567,7 @@ function buildZodField(
       else schema = (schema as z.ZodString).optional().or(z.literal(""))
       break
     default:
-      schema = z.any()
+      schema = z.any().optional()
   }
 
   // Apply rules

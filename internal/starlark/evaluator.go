@@ -12,6 +12,7 @@ import (
 	"math"
 
 	"go.starlark.net/starlark"
+	"go.starlark.net/syntax"
 )
 
 // EvalExpr evaluates a Starlark expression with the given environment variables.
@@ -39,9 +40,32 @@ func EvalExpr(expr string, env map[string]any) (any, error) {
 		predeclared[k] = sv
 	}
 
-	// Add built-in constants
+	// Add built-in constants and helpers
 	predeclared["math_pi"] = starlark.Float(math.Pi)
 	predeclared["math_e"] = starlark.Float(math.E)
+	predeclared["empty"] = starlark.NewBuiltin("empty", func(
+		thread *starlark.Thread,
+		fn *starlark.Builtin,
+		args starlark.Tuple,
+		kwargs []starlark.Tuple,
+	) (starlark.Value, error) {
+		var v starlark.Value
+		if err := starlark.UnpackArgs("empty", args, kwargs, "value", &v); err != nil {
+			return nil, err
+		}
+		if v == nil || v == starlark.None {
+			return starlark.True, nil
+		}
+		switch x := v.(type) {
+		case starlark.String:
+			return starlark.Bool(string(x) == ""), nil
+		case *starlark.List:
+			return starlark.Bool(x.Len() == 0), nil
+		case *starlark.Dict:
+			return starlark.Bool(x.Len() == 0), nil
+		}
+		return starlark.False, nil
+	})
 
 	// Create a sandboxed thread
 	thread := &starlark.Thread{
@@ -52,7 +76,7 @@ func EvalExpr(expr string, env map[string]any) (any, error) {
 	}
 
 	// Evaluate
-	val, err := starlark.Eval(thread, "computed", expr, predeclared)
+	val, err := starlark.EvalOptions(syntax.LegacyFileOptions(), thread, "computed", expr, predeclared)
 	if err != nil {
 		return nil, fmt.Errorf("starlark eval: %w", err)
 	}

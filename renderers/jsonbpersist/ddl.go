@@ -164,7 +164,7 @@ func GenerateEntityDDL(meta spec.Metadata, entity *spec.EntitySpec, driver Drive
 			// Relation fields: store foreign key in data JSONB
 			// unless belongs_to with explicit foreign_key
 			if f.Relation != nil && f.Relation.ForeignKey != "" {
-				gc := generateGeneratedColumn(f.Name, "uuid")
+				gc := generateGeneratedColumn(f.Name, "uuid", driver)
 				columns = append(columns, gc)
 				if f.Index || f.Unique {
 					idx := generateIndexConstraint(ti.TableName, f.Name, f.Unique)
@@ -177,7 +177,7 @@ func GenerateEntityDDL(meta spec.Metadata, entity *spec.EntitySpec, driver Drive
 		// Indexed fields get generated columns
 		if f.Index || f.Unique || f.NaturalKey {
 			sqlType := fieldTypeToSQL(f.Type, f.EnumValues)
-			gc := generateGeneratedColumn(f.Name, sqlType)
+			gc := generateGeneratedColumn(f.Name, sqlType, driver)
 			columns = append(columns, gc)
 		}
 
@@ -279,10 +279,16 @@ func GenerateEntityDDL(meta spec.Metadata, entity *spec.EntitySpec, driver Drive
 
 // generateGeneratedColumn creates a generated column for indexed/unique fields.
 // PostgreSQL: data->>'field'  —  SQLite: json_extract(data, '$.field')
-func generateGeneratedColumn(fieldName string, sqlType string) string {
+func generateGeneratedColumn(fieldName string, sqlType string, driver DriverType) string {
 	colName := generatedColumnName(fieldName)
-	return fmt.Sprintf("%s %s GENERATED ALWAYS AS (json_extract(data, '$.%s')) STORED",
-		colName, sqlType, fieldName)
+	var expr string
+	if driver == DriverPostgres {
+		expr = fmt.Sprintf("data->>'%s'", fieldName)
+	} else {
+		expr = fmt.Sprintf("json_extract(data, '$.%s')", fieldName)
+	}
+	return fmt.Sprintf("%s %s GENERATED ALWAYS AS (%s) STORED",
+		colName, sqlType, expr)
 }
 
 // generatedColumnName returns the generated column name for a field.
@@ -344,11 +350,14 @@ func generateChildTableDDL(parentTable string, field spec.Field, driver DriverTy
 	columns = append(columns, fmt.Sprintf("  parent_id   %s   NOT NULL REFERENCES %s(id) ON DELETE CASCADE",
 		dl.uuid, parentTable))
 
-	// Sequence field (auto-increment per parent)
+	// Sequence field (monotonically ordered per parent)
 	if field.Child != nil && field.Child.SequenceField != "" {
 		seqField := field.Child.SequenceField
 		columns = append(columns, fmt.Sprintf("  %s        %s NOT NULL", seqField, dl.bigint))
 	}
+
+	// doc_status — child follows parent lifecycle (2.3.9)
+	columns = append(columns, "  doc_status  VARCHAR(20) DEFAULT NULL")
 
 	// Timestamp — useful for ordering
 	columns = append(columns, fmt.Sprintf("  created_at  %s   NOT NULL DEFAULT %s", dl.timestamptz, dl.nowFn))

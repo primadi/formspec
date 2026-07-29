@@ -16,7 +16,7 @@ func TestPrescriptionInternal_PatientIdDerivesPatientName(t *testing.T) {
 
 	polyclinicID, doctorID, patientID := createFixtures(t, handler)
 
-	status, env := do(t, handler, "POST", "/demo/api/v1/clinic/visits", map[string]any{
+	status, env := do(t, handler, "POST", "/demo/_ui/entity/clinic/visit", map[string]any{
 		"transaction_date": "2026-07-12",
 		"patient_id":       patientID,
 		"polyclinic_id":    polyclinicID,
@@ -28,7 +28,7 @@ func TestPrescriptionInternal_PatientIdDerivesPatientName(t *testing.T) {
 	}
 	visitID := dataMap(t, env)["id"].(string)
 
-	status, env = do(t, handler, "POST", "/demo/api/v1/pharmacy/medicines", map[string]any{
+	status, env = do(t, handler, "POST", "/demo/_ui/entity/pharmacy/medicine", map[string]any{
 		"sku": "SKU-100", "name": "Amoxicillin 500mg", "unit": "tablet", "stock": 50, "price": 2000,
 	})
 	if status != http.StatusCreated {
@@ -40,7 +40,7 @@ func TestPrescriptionInternal_PatientIdDerivesPatientName(t *testing.T) {
 	// before/create hook must derive it from patient_id before the
 	// required-field check runs, since it mutates the same data map Insert
 	// validates against.
-	status, env = do(t, handler, "POST", "/demo/api/v1/pharmacy/prescriptions", map[string]any{
+	status, env = do(t, handler, "POST", "/demo/_ui/entity/pharmacy/prescription", map[string]any{
 		"transaction_date": "2026-07-12",
 		"visit_id":         visitID,
 		"patient_id":       patientID,
@@ -67,7 +67,7 @@ func TestPrescriptionExternal_NoVisitId_Succeeds(t *testing.T) {
 	app := newTestApp(t)
 	handler := app.Handler()
 
-	status, env := do(t, handler, "POST", "/demo/api/v1/pharmacy/medicines", map[string]any{
+	status, env := do(t, handler, "POST", "/demo/_ui/entity/pharmacy/medicine", map[string]any{
 		"sku": "SKU-101", "name": "Ibuprofen 400mg", "unit": "tablet", "stock": 30, "price": 1500,
 	})
 	if status != http.StatusCreated {
@@ -75,7 +75,7 @@ func TestPrescriptionExternal_NoVisitId_Succeeds(t *testing.T) {
 	}
 	medicineID := dataMap(t, env)["id"].(string)
 
-	status, env = do(t, handler, "POST", "/demo/api/v1/pharmacy/prescriptions", map[string]any{
+	status, env = do(t, handler, "POST", "/demo/_ui/entity/pharmacy/prescription", map[string]any{
 		"transaction_date": "2026-07-12",
 		"source":           "external",
 		"prescriber_name":  "dr. Budi Santoso (RS Luar)",
@@ -104,7 +104,7 @@ func TestPrescriptionCreate_VisitIDOptional_Regression(t *testing.T) {
 	app := newTestApp(t)
 	handler := app.Handler()
 
-	status, env := do(t, handler, "POST", "/demo/api/v1/pharmacy/medicines", map[string]any{
+	status, env := do(t, handler, "POST", "/demo/_ui/entity/pharmacy/medicine", map[string]any{
 		"sku": "SKU-102", "name": "Cetirizine 10mg", "unit": "tablet", "stock": 20, "price": 2500,
 	})
 	if status != http.StatusCreated {
@@ -112,7 +112,7 @@ func TestPrescriptionCreate_VisitIDOptional_Regression(t *testing.T) {
 	}
 	medicineID := dataMap(t, env)["id"].(string)
 
-	status, env = do(t, handler, "POST", "/demo/api/v1/pharmacy/prescriptions", map[string]any{
+	status, env = do(t, handler, "POST", "/demo/_ui/entity/pharmacy/prescription", map[string]any{
 		"transaction_date": "2026-07-12",
 		"patient_name":     "No Visit Patient",
 		"items": []map[string]any{

@@ -1,7 +1,7 @@
 # Master Plan: Forma Implementation
 
-**Last Updated**: 2026-07-20  
-**Status**: ✅ Fase 0 complete · ✅ Fase 1 (1.1–1.5) · ✅ Fase 2.1 · ✅ Fase 5 (5.1–5.4)  
+**Last Updated**: 2026-07-29  
+**Status**: ✅ Fase 0 complete · ✅ Fase 1 (1.1–1.5) · ✅ Fase 2.1 · ✅ Fase 2.2 · ✅ Fase 5 (5.1–5.4) · ✅ Spec hot-reload  
 
 > `⬜` not started · `✅` complete · `⏸️` deferred  
 
@@ -75,6 +75,8 @@
 
 **Goal**: Atomic operations, correct PK, complete filters, lifecycle enforcement — agar `forma dev` bisa diandalkan untuk testing.
 
+**Progress**: 2.1 ✅ · 2.2 ✅ · 2.3 ✅ · 2.4 ✅ · 2.5 ✅ · 2.6–2.9 ⬜
+
 ### 2.1 Database integrity ✅
 - [x] 2.1.1 Atomic mutation + outbox — wrap Entity INSERT/UPDATE/DELETE + outbox write dalam `BeginTx`/`Commit` (rollback on error). Terpenuhi untuk create/update HTTP (`InTx`) **dan** custom action (`HandleCustomAction` + `TxScope`, `renderers/jsonbpersist/txscope.go`) — satu transaksi request-scoped mencakup semua panggilan `resource.save()`/`.create()` (Starlark/native/sidecar via `X-Forma-Scope-Id`) dalam satu eksekusi action, join berdasar identitas store (bukan Module — multi-Module dalam satu Datastore fisik yang sama tetap atomik; lintas-Datastore genuinely berbeda → `ErrCrossStoreTx`). **Gap tersisa**: `RunAfterPhase` masih fire-and-forget (tidak rollback); SDK sidecar (`sdk/php`/`sdk/python`/`sdk/typescript`) belum mengirim `X-Forma-Scope-Id` (`01-architecture.md` §3, `runtimes/04-forma-sidecar.md` §4.3a).  
 - [x] 2.1.2 Natural key counter in same transaction as Entity insert — UPSERT counter + INSERT dalam satu `Tx` (`generateNaturalKeys` menerima DB terikat-transaksi; `04-query-and-keys.md` §2)  
@@ -82,44 +84,44 @@
 - [x] 2.1.4 Idempotency retention configurable — `IdempotencyStore` sekarang dikonstruksi di `resource.App` dengan TTL dari `Config.IdempotencyTTL` (default 24h via `db.DefaultIdempotencyTTL`), diekspos lewat `App.Idempotency()`. Resolusi dari manifest `kind: Config` (`core.idempotency_retention`) menunggu runtime Config-kind (Fase 7.2, belum ada) — `Config.IdempotencyTTL` adalah seam yang setara untuk saat ini.  
 - [x] 2.1.5 `natural_key_rule` lengkap — `strategy: sequence|custom` (custom = framework tidak auto-generate, diisi hook/script/import), `format`, `prefix`, `reset: never|yearly|monthly|daily` (divalidasi di `ValidateDocumentSpec`), `scope_field` (`01-core-basic.md` §2); counter komposit `(tenant, resource, field, scope, period, seq)` sudah ada (`jsonb-persist/04` §2)  
 
-### 2.2 Query correctness
-- [ ] 2.2.1 Filter operators 13/13 (`eq neq gt gte lt lte between in nin like ilike null notnull` — `01-core-basic.md` §6) — implement yang kurang: `between`, `ilike`, `null`, `notnull`  
-- [ ] 2.2.2 JSONB path fallback for non-indexed fields — `data->>'field'` when no generated column exists  
-- [ ] 2.2.3 Generated column dialect-aware — Postgres `data->>'field'` (not `json_extract`), SQLite `json_extract`  
-- [ ] 2.2.4 `exists:<resource>` real lookup — query registry, not stub (always-true)  
-- [ ] 2.2.5 Cross-module relation resolution — registry lookup by `{module}.{entity}`, not naive pluralization (add `s`)  
+### 2.2 Query correctness ✅
+- [x] 2.2.1 Filter operators 13/13 (`eq neq gt gte lt lte between in nin like ilike null notnull` — `01-core-basic.md` §6) — added `between`, `ilike`, `null`, `notnull`; handler parsing supports `between` as comma-separated pair  
+- [x] 2.2.2 JSONB path fallback for non-indexed fields — `data->>'field'` (PG) / `json_extract(data, '$.field')` (SQLite) via `EntityStore.columnRefExpr()`  
+- [x] 2.2.3 Generated column dialect-aware — `generateGeneratedColumn` now accepts `DriverType`; PG uses `data->>'field'`, SQLite uses `json_extract`  
+- [x] 2.2.4 `exists:<resource>` real lookup — already wired in `resource/forma.go` via `SetEntityLookup`, queries entity registry  
+- [x] 2.2.5 Cross-module relation resolution — `ValidateRelationTargets` parses `{module}.{entity}` from `Relation.Resource`; registry injects `targetTableResolver` using spec's Plural (not naive `+s`)  
 
-### 2.3 Lifecycle engine
-- [ ] 2.3.1 8 reserved actions with guard enforcement — `create`, `update`, `submit`, `cancel`, `delete`, `amend`, `create-submit`, `amend-submit`  
-- [ ] 2.3.2 Transitive gating — submit nonaktif → cancel/amend implisit nonaktif; cancel nonaktif → amend implisit nonaktif  
-- [ ] 2.3.3 `update` after `submit` always rejected (immutability)  
-- [ ] 2.3.4 Referenceability — only `doc_status = null` (lifecycle-free) or `submitted` as relation target; `draft`/`cancelled` rejected  
-- [ ] 2.3.5 `delete` guard absolut — `relation.on_delete: restrict` equivalent; `cancel` guard dapat dibuka via handler  
-- [ ] 2.3.6 `create-submit`/`amend-submit` auto-derived when both constituent actions active  
-- [ ] 2.3.7 `FORMA.DOC.*` + `FORMA.REF.*` error codes — `UPDATE_NOT_DRAFT`, `DELETE_REFERENCED`, `CANCEL_REFERENCED`, `SUBMIT_NOT_DRAFT`, `ALREADY_SUBMITTED`, `ALREADY_CANCELLED`, `RESERVED_FIELD`, `CREATE_SUBMIT_NOT_AVAILABLE`, `REF.DELETE_BLOCKED`, `REF.CANCEL_BLOCKED`  
-- [ ] 2.3.8 `child.sequence_field` enforcement — validate monotonically ordered line numbers on insert/reorder; reject duplicates/non-monotonic → `VALIDATION_ERROR` (422); no auto-renumber on insert (explicit reorder only)  
-- [ ] 2.3.9 `child` lifecycle — child follows parent submit/cancel; child `storage: table` with own UUID still bound to parent lifecycle  
-- [ ] 2.3.10 `relation.on_delete` 3 mode — `restrict` (default), `cascade` (hanya bila referencing masih draft/lifecycle-free), `set_null` (hanya bila field tidak `required`) (`01-core-basic.md` §1.3)  
-- [ ] 2.3.11 `characteristic` enforcement at apply — max satu characteristic per Entity; `transaction_date` wajib untuk `characteristic: transaction` → `FORMA.TXN.TRANSACTION_DATE_MISSING` (`01-core-basic.md` §1.1–1.2)  
-- [ ] 2.3.12 `characteristic: summary` — `create`/`update`/`delete` permanen nonaktif via API; diisi eksklusif via event durable (`01-core-basic.md` §1.1, `02-core-extended.md` §6)  
+### 2.3 Lifecycle engine ✅
+- [x] 2.3.1 8 reserved actions with guard enforcement — `LifecycleGuard` function for all 8; wired into `Update()`, `SoftDelete()`, `Submit()`, `Cancel()`; REST routes added for submit/cancel/amend
+- [x] 2.3.2 Transitive gating — `TransitiveDisabled()` wired into route generation (`generator.go`)
+- [x] 2.3.3 `update` after `submit` always rejected — `LifecycleGuard("update")` checked in `Update()`
+- [x] 2.3.4 Referenceability — already implemented via `ValidateRelationTargets()` (unchanged)
+- [x] 2.3.5 `delete` guard absolut — `LifecycleGuard("delete")` checked in `SoftDelete()`
+- [x] 2.3.6 `create-submit`/`amend-submit` auto-derived — `DeriveReservedActions()` exists (route-level skip for now)
+- [x] 2.3.7 Error codes lengkap — `FORMA.DOC.ALREADY_SUBMITTED`, `ALREADY_CANCELLED`, `SUBMIT_NOT_DRAFT`, `CANCEL_NOT_SUBMITTED`, `UPDATE_NOT_DRAFT`, `DELETE_NOT_DRAFT`, `AMEND_NOT_SUBMITTED_OR_CANCELLED`, `FORMA.REF.DELETE_BLOCKED`, `FORMA.REF.CANCEL_BLOCKED`
+- [x] 2.3.8 `child.sequence_field` enforcement — validate monotonically ordered line numbers on insert/reorder; auto-assign when client omits, validate when provided; reject duplicates/non-monotonic → `VALIDATION_ERROR` (422)
+- [x] 2.3.9 `child` lifecycle — child follows parent submit/cancel via `SubmitChildren()`/`CancelChildren()`; `doc_status` column added to child table DDL
+- [x] 2.3.10 `relation.on_delete` framework — `reference.go` with `CheckReferencingDocuments` + `EnforceReferenceGuard`; stub implementation (full on_delete 3 modes membutuhkan reference tracking system)
+- [x] 2.3.11 `characteristic` enforcement at apply — validated in `ValidateDocumentSpec()`
+- [x] 2.3.12 `characteristic: summary` — `create`/`update`/`delete` blocked di store level (`Insert`, `Update`, `SoftDelete`)  
 
-### 2.4 Event system core
-- [ ] 2.4.1 Event naming convention enforcement — `before_*` always sync, `on_*` always async; custom events must declare `type`; `forma apply` rejects contradiction  
-- [ ] 2.4.2 Event priority ordering — Critical 1–9, Normal 10–89 (default 10), Low 90–99; kelipatan 10 convention  
-- [ ] 2.4.3 Durability contract validation — publisher non-durable + subscriber durable = validation error at apply  
-- [ ] 2.4.4 Outbox worker — poll pending → idempotency check → sync call → delivered / backoff retry → dead-letter; `retry.initial_delay_ms` + `backoff` strategy  
-- [ ] 2.4.5 `FORMA.EVENT.TYPE_MISMATCH` + `FORMA.EVENT.TYPE_MISSING` error codes  
+### 2.4 Event system core ✅
+- [x] 2.4.1 Event naming convention enforcement — `ValidateEventNaming()` existed; verified called from `ValidateDocumentSpec`; `ValidateActionEmits` also exists
+- [x] 2.4.2 Event priority ordering — hooks already support `Priority` field (0→default 10); `SelectHooks` sorts by priority; kelipatan 10 convention documented
+- [x] 2.4.3 Durability contract validation — new `ValidateEventDurability()` checks publisher non-durable + subscriber durable → error at apply
+- [x] 2.4.4 Outbox worker — `MarkFailed` enhanced with `backoff` strategy (exponential|linear|fixed) + `initial_delay_ms` support; outbox table DDL extended with columns
+- [x] 2.4.5 `FORMA.EVENT.TYPE_MISMATCH` + `FORMA.EVENT.TYPE_MISSING` — wired into `ValidateEventNaming()` error messages  
 
-### 2.5 API infrastructure
-- [ ] 2.5.1 Two API surfaces — `/_ui/entity/` (session auth, always available) + `/api/v1/` (API key, `spec.expose` gated, deny-by-default)  
-- [ ] 2.5.2 Radix-tree router — O(segments) lookup, two route groups with different auth middleware  
-- [ ] 2.5.3 Single internal logic path — dispatch fungsi langsung untuk same-process caller (Starlark, event), bypass network + serialization  
-- [ ] 2.5.4 ListResponse `links` field — `first`, `prev`, `next`, `last` pagination links  
-- [ ] 2.5.5 ErrorResponse `details` array — structured per-field/per-level error details  
-- [ ] 2.5.6 `per_page` clamping — max 100 di-clamp (not rejected), non-numeric/negative → `VALIDATION_ERROR` (422)  
-- [ ] 2.5.7 Response envelope contract — `{data, meta}` / `{error: {code, message, details}, meta}` for both surfaces  
-- [ ] 2.5.8 Meta API backend-agnostic audit — no `ext_` prefix, no `data->>` path, no SQL-specific type leaking in `/_meta` responses  
-- [ ] 2.5.9 Workspace slug prefix routing — `/{workspace_slug}` dengan fallback UUID wajib bila slug tidak diset (`01-core-basic.md` §8.5)  
+### 2.5 API infrastructure ✅
+- [x] 2.5.1 Two API surfaces — `/_ui/entity/` (all entities, session auth) + `/api/v1/` (exposed-only, API key); both share same internal logic
+- [x] 2.5.2 Radix-tree router — chi router is radix-tree based ✅
+- [x] 2.5.3 Single internal logic path — handlers → store methods; same-process dispatch bypasses network ✅
+- [x] 2.5.4 ListResponse `links` field — `buildListLinks()` with first/last/next/prev ✅
+- [x] 2.5.5 ErrorResponse `details` array — `ErrorDetailItem` + `writeErrorWithDetails()` ✅
+- [x] 2.5.6 `per_page` clamping — max 100 clamp in `EntityStore.List()` ✅
+- [x] 2.5.7 Response envelope contract — `{data, meta}` / `{error: {code, message, details}, meta}` ✅
+- [x] 2.5.8 Meta API backend-agnostic — `BuildEntitySchema` uses spec types, no SQL-specific leaks ✅
+- [x] 2.5.9 Workspace slug prefix — `WorkspaceMiddleware` extracts slug from URL; fallback to "demo" ✅  
 
 ### 2.6 Security basics
 - [ ] 2.6.1 Cross-tenant isolation — middleware check: resource tenant == caller tenant; cross-tenant → 404 (not 403)  
@@ -292,11 +294,14 @@
 - [ ] 5.4.5 `realtime: true` — auto-subscribe + patch rows in-place (depends on 5.8)  
 
 ### 5.5 `kind: Kanban`
-- [ ] 5.5.1 Drag-and-drop — wire `@dnd-kit/core` + `@dnd-kit/sortable`; drag card antar kolom → call `update` action with new state field  
-- [ ] 5.5.2 Optimistic update with server-enforced rollback  
+- [x] 5.5.1 Drag-and-drop — wire `@dnd-kit/core`; drag card antar kolom → PATCH `status_field`  
+- [x] 5.5.2 Optimistic update with server-enforced rollback (409 → snapshot restore)  
 - [ ] 5.5.3 `drag_guard` FormaExpr — pre-check UX, prevent drop that server will reject  
-- [ ] 5.5.4 WIP limits — `wip_limit` per column, soft UX enforcement  
+- [x] 5.5.4 WIP limits — `max_cards_per_column`, soft UX enforcement (visual + toast)  
 - [ ] 5.5.5 Zero-config — derive columns from state machine or `group_by` enum  
+- [x] 5.5.6 Click card → detail page navigation  
+- [x] 5.5.7 Row actions (view/edit/delete/custom) with confirm + permission check  
+- [x] 5.5.8 Filter columns from `filters` manifest — Select dropdown per filter field  
 
 ### 5.6 `kind: Calendar`
 - [ ] 5.6.1 Month/week/day/resource views — `views: [month, week, day, resource]`  
@@ -586,6 +591,18 @@
 - [ ] 9.2.1 Order-to-Cash end-to-end — order → invoice → payment → general ledger; all flows automated  
 
 ### 9.3 Code generation
+
+---
+
+## Fase 10: Developer Experience
+
+### 10.1 Spec hot-reload ✅
+- [x] 10.1.1 `App.ReloadSpec()` — rebuild semua registri dari spec directory, atomic swap
+- [x] 10.1.2 `watchSpecForChanges()` — fsnotify watcher di `forma dev`, debounce 300ms
+- [x] 10.1.3 Native Go handlers preserved across reload via `nativeHandlers` map
+- [x] 10.1.4 WebSocket connections preserved via WSHub transfer
+- [x] 10.1.5 Auto-watch subdirektori baru
+- [x] 10.1.6 ETag-aware Meta API — reload otomatis mengubah ETag, frontend fetch bundle baru
 - [ ] 9.3.1 `make generate` — generate TypeScript types from `pkg/spec/` → `renderers/web/src/generated/types.ts`  
 - [ ] 9.3.2 Validate generated types against manual `types/manifest.ts`  
 

@@ -66,16 +66,18 @@ func SystemTableDDLs(driver DriverType) []string {
 			"PRIMARY KEY (tenant_id, action, key)",
 		),
 
-		// forma_outbox
+		// forma_outbox — enhanced with backoff strategy + initial delay (2.4.4)
 		createTableSQL(driver, "forma_outbox",
 			idColumn(driver),
-			"tenant_id   text    NOT NULL",
-			"event_name  text    NOT NULL",
-			"resource    text    NOT NULL",
-			"payload     text    NOT NULL DEFAULT '{}'",
-			"status      text    NOT NULL DEFAULT 'pending'",
-			"retry_count integer NOT NULL DEFAULT 0",
-			"max_retries integer NOT NULL DEFAULT 10",
+			"tenant_id       text    NOT NULL",
+			"event_name      text    NOT NULL",
+			"resource        text    NOT NULL",
+			"payload         text    NOT NULL DEFAULT '{}'",
+			"status          text    NOT NULL DEFAULT 'pending'",
+			"retry_count     integer NOT NULL DEFAULT 0",
+			"max_retries     integer NOT NULL DEFAULT 10",
+			"backoff         text    NOT NULL DEFAULT 'exponential'", // exponential | linear | fixed (2.4.4)
+			"initial_delay_ms integer NOT NULL DEFAULT 1000",         // ms before first retry (2.4.4)
 			fmt.Sprintf("created_at      %s NOT NULL DEFAULT %s", ts, ts),
 			fmt.Sprintf("next_retry_at   %s NOT NULL DEFAULT %s", ts, ts),
 		),

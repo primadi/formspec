@@ -8,7 +8,8 @@ import (
 
 // LifecycleGuard validates that a reserved action can be executed given the
 // current doc_status of a document. Returns nil if the action is allowed,
-// or an error if blocked by the lifecycle.
+// or an error if blocked by the lifecycle. Returns specific error codes
+// per error-glossary.yaml.
 //
 // Guards per spec §4.1b:
 //
@@ -27,41 +28,79 @@ func LifecycleGuard(actionName string, docStatus spec.DocStatus) error {
 		return nil
 
 	case "update":
-		if docStatus != spec.DocStatusDraft && docStatus != "" {
+		if docStatus == spec.DocStatusSubmitted {
 			return &LifecycleError{
 				Action:    "update",
 				DocStatus: string(docStatus),
-				Required:  "draft or lifecycle-free (null)",
+				Code:      "FORMA.DOC.UPDATE_NOT_DRAFT",
+			}
+		}
+		if docStatus == spec.DocStatusCancelled {
+			return &LifecycleError{
+				Action:    "update",
+				DocStatus: string(docStatus),
 				Code:      "FORMA.DOC.UPDATE_NOT_DRAFT",
 			}
 		}
 
 	case "submit":
-		if docStatus != spec.DocStatusDraft {
+		if docStatus == spec.DocStatusSubmitted {
 			return &LifecycleError{
 				Action:    "submit",
 				DocStatus: string(docStatus),
-				Required:  "draft",
+				Code:      "FORMA.DOC.ALREADY_SUBMITTED",
+			}
+		}
+		if docStatus == spec.DocStatusCancelled {
+			return &LifecycleError{
+				Action:    "submit",
+				DocStatus: string(docStatus),
+				Code:      "FORMA.DOC.SUBMIT_NOT_DRAFT",
+			}
+		}
+		if docStatus == "" {
+			return &LifecycleError{
+				Action:    "submit",
+				DocStatus: "null",
 				Code:      "FORMA.DOC.SUBMIT_NOT_DRAFT",
 			}
 		}
 
 	case "cancel":
-		if docStatus != spec.DocStatusSubmitted {
+		if docStatus == spec.DocStatusCancelled {
 			return &LifecycleError{
 				Action:    "cancel",
 				DocStatus: string(docStatus),
-				Required:  "submitted",
+				Code:      "FORMA.DOC.ALREADY_CANCELLED",
+			}
+		}
+		if docStatus == spec.DocStatusDraft {
+			return &LifecycleError{
+				Action:    "cancel",
+				DocStatus: string(docStatus),
+				Code:      "FORMA.DOC.CANCEL_NOT_SUBMITTED",
+			}
+		}
+		if docStatus == "" {
+			return &LifecycleError{
+				Action:    "cancel",
+				DocStatus: "null",
 				Code:      "FORMA.DOC.CANCEL_NOT_SUBMITTED",
 			}
 		}
 
 	case "delete":
-		if docStatus != spec.DocStatusDraft && docStatus != "" {
+		if docStatus == spec.DocStatusSubmitted {
 			return &LifecycleError{
 				Action:    "delete",
 				DocStatus: string(docStatus),
-				Required:  "draft or lifecycle-free (null)",
+				Code:      "FORMA.DOC.DELETE_NOT_DRAFT",
+			}
+		}
+		if docStatus == spec.DocStatusCancelled {
+			return &LifecycleError{
+				Action:    "delete",
+				DocStatus: string(docStatus),
 				Code:      "FORMA.DOC.DELETE_NOT_DRAFT",
 			}
 		}
@@ -71,7 +110,6 @@ func LifecycleGuard(actionName string, docStatus spec.DocStatus) error {
 			return &LifecycleError{
 				Action:    "amend",
 				DocStatus: string(docStatus),
-				Required:  "submitted or cancelled",
 				Code:      "FORMA.DOC.AMEND_NOT_SUBMITTED_OR_CANCELLED",
 			}
 		}
@@ -138,14 +176,12 @@ func TransitiveDisabled(disabledActions map[string]bool) map[string]bool {
 type LifecycleError struct {
 	Action    string
 	DocStatus string
-	Required  string
 	Code      string
 }
 
 func (e *LifecycleError) Error() string {
-	status := e.DocStatus
-	if status == "" {
-		status = "(null — lifecycle-free)"
+	if e.DocStatus == "" {
+		return fmt.Sprintf("[%s] action %q blocked: referential integrity violation", e.Code, e.Action)
 	}
-	return fmt.Sprintf("[%s] action %q requires doc_status=%s, got %s", e.Code, e.Action, e.Required, status)
+	return fmt.Sprintf("[%s] action %q blocked by doc_status=%s", e.Code, e.Action, e.DocStatus)
 }

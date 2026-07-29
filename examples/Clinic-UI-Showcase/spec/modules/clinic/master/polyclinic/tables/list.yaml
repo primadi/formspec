@@ -1,0 +1,13 @@
+# SHOWCASE: authored Table minimal untuk master Poliklinik.
+# Columns sepenuhnya derived dari entity spec — tidak perlu deklarasi kolom
+# eksplisit. Digunakan oleh kind: Page tabs Data Master.
+apiVersion: forma.dev/v1alpha1
+kind: Table
+metadata:
+  name: polyclinic-table
+  module: clinic
+  description: Tabel poliklinik — derived columns
+spec:
+  entity: polyclinic
+  page_size: 15
+  default_sort: "name"

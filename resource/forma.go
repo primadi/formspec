@@ -32,19 +32,21 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/primadi/forma/internal/action"
 	"github.com/primadi/forma/internal/api"
 	forma_app "github.com/primadi/forma/internal/app"
 	"github.com/primadi/forma/internal/auth"
-	"github.com/primadi/forma/renderers/jsonbpersist"
 	"github.com/primadi/forma/internal/entity"
 	"github.com/primadi/forma/internal/manifest"
 	"github.com/primadi/forma/internal/permission"
 	"github.com/primadi/forma/internal/ui"
 	"github.com/primadi/forma/internal/validation"
 	"github.com/primadi/forma/pkg/spec"
+	db "github.com/primadi/forma/renderers/jsonbpersist"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -135,8 +137,14 @@ type NativeParams struct {
 
 // App is a running Forma entity engine: loaded manifests, a synced schema,
 // and a generated REST API handler.
+//
+// mu protects reg, rb, handler, disp for atomic reload. Read lock is
+// taken on every HTTP request (Handler()), write lock during ReloadSpec().
 type App struct {
+	mu           sync.RWMutex
 	cfg          Config
+	database     db.DB
+	driver       db.DriverType
 	reg          *entity.Registry
 	rb           *api.RouterBuilder
 	handler      http.Handler
@@ -145,6 +153,15 @@ type App struct {
 	outboxWorker *db.OutboxWorker
 	idempotency  *db.IdempotencyStore
 	httpServer   *http.Server
+
+	// nativeHandlers preserves user-registered native Go handlers across
+	// ReloadSpec() calls so they are re-registered on the new dispatcher.
+	// Stored as action.NativeHandler (which wraps the user's NativeHandler)
+	// so they can be directly passed to the new dispatcher's NativeExecutor.
+	nativeHandlers map[string]action.NativeHandler
+	// specVersion is incremented on every ReloadSpec() call. Exposed via
+	// the Meta API so the frontend can detect when the bundle changed.
+	specVersion atomic.Int64
 }
 
 // Idempotency returns the app's idempotency-key store, configured with
@@ -175,7 +192,8 @@ func (a *App) GetEntityStore(module, name string) (*db.EntityStore, error) {
 //
 // Panics if a handler is already registered for the same ref.
 func (a *App) RegisterNative(ref string, handler NativeHandler) {
-	a.nativeEx.Register(ref, func(ctx context.Context, params action.ExecuteParams) (any, error) {
+	// Preserve in nativeHandlers map for re-registration on ReloadSpec().
+	wrapped := action.NativeHandler(func(ctx context.Context, params action.ExecuteParams) (any, error) {
 		return handler(ctx, NativeParams{
 			Module:      params.Module,
 			Entity:      params.Entity,
@@ -187,6 +205,13 @@ func (a *App) RegisterNative(ref string, handler NativeHandler) {
 			UserID:      params.UserID,
 		})
 	})
+	a.mu.Lock()
+	if a.nativeHandlers == nil {
+		a.nativeHandlers = make(map[string]action.NativeHandler)
+	}
+	a.nativeHandlers[ref] = wrapped
+	a.mu.Unlock()
+	a.nativeEx.Register(ref, wrapped)
 }
 
 // RegisterNatives registers multiple native handlers at once (convenience).
@@ -338,26 +363,60 @@ func New(cfg Config) (*App, error) {
 
 	idempotencyStore := db.NewIdempotencyStore(database, driver).WithTTL(cfg.IdempotencyTTL)
 
-	return &App{
-		cfg: cfg, reg: reg, rb: rb, handler: rb.BuildHTTP(), disp: disp, nativeEx: nativeEx,
-		outboxWorker: outboxWorker,
-		idempotency:  idempotencyStore,
-	}, nil
+	app := &App{
+		cfg: cfg, database: database, driver: driver,
+		reg: reg, rb: rb, disp: disp, nativeEx: nativeEx,
+		outboxWorker:   outboxWorker,
+		idempotency:    idempotencyStore,
+		nativeHandlers: make(map[string]action.NativeHandler),
+	}
+	// specVersionFn must be set before BuildHTTP() so HandleMetaVersion
+	// captures it. The closure reads from the live App's specVersion.
+	rb.SetSpecVersionFn(func() int64 { return app.specVersion.Load() })
+	app.handler = rb.BuildHTTP()
+	return app, nil
 }
 
-// Handler returns the generated REST API handler, for mounting into your
-// own http.Server or alongside other routes.
-func (a *App) Handler() http.Handler { return a.handler }
+// Handler returns a reload-safe REST API handler. The returned handler
+// always delegates to the current internal handler — after a ReloadSpec()
+// call, subsequent requests automatically use the freshly-built routes.
+// The read lock is held only for the pointer read, not for the full
+// request lifecycle, so ReloadSpec() never blocks in-flight requests long.
+func (a *App) Handler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		a.mu.RLock()
+		h := a.handler
+		a.mu.RUnlock()
+		h.ServeHTTP(w, r)
+	})
+}
 
 // Routes returns the routes generated from the loaded manifests.
-func (a *App) Routes() []api.RouteDescriptor { return a.rb.Routes() }
+func (a *App) Routes() []api.RouteDescriptor {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.rb.Routes()
+}
 
 // RouteCount returns the number of generated routes.
-func (a *App) RouteCount() int { return a.rb.RouteCount() }
+func (a *App) RouteCount() int {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.rb.RouteCount()
+}
 
 // Registry returns the underlying entity registry, for advanced use
 // (inspecting loaded entities, fetching an EntityStore directly).
-func (a *App) Registry() *entity.Registry { return a.reg }
+func (a *App) Registry() *entity.Registry {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.reg
+}
+
+// SpecVersion returns the spec version counter. Incremented on every
+// successful ReloadSpec() call. The frontend polls this via the Meta API
+// to detect when the meta bundle needs re-fetching.
+func (a *App) SpecVersion() int64 { return a.specVersion.Load() }
 
 // ListenAndServe starts the HTTP server on cfg.Addr. It also starts the
 // outbox worker (background delivery of durable events) — started here
@@ -378,6 +437,143 @@ func (a *App) Close(ctx context.Context) error {
 	if a.httpServer != nil {
 		return a.httpServer.Shutdown(ctx)
 	}
+	return nil
+}
+
+// ReloadSpec re-reads all YAML manifests from cfg.SpecPath, rebuilds the
+// entity registry, UI registry, App resolution, and HTTP router, then
+// atomically swaps them into the live App. In-flight requests finish
+// against the old registries; new requests use the fresh ones.
+//
+// Safe to call concurrently with request serving. The heavy loading work
+// (manifest parsing, schema sync, route building) happens without holding
+// the write lock — only the pointer swap is locked. Native Go handlers
+// registered via RegisterNative / RegisterNatives are preserved across
+// the reload.
+//
+// Not safe to call concurrently with itself — callers must serialise.
+func (a *App) ReloadSpec() error {
+	// ── 1. Build fresh entity registry ──
+	newReg := entity.NewRegistry(a.database, a.driver, a.cfg.SpecPath)
+	for _, loadErr := range newReg.LoadEntities() {
+		fmt.Fprintf(os.Stderr, "forma: reload: %v\n", loadErr)
+	}
+
+	permReg := newReg.GetPermissionRegistry()
+	auth.SetPermissionChecker(permission.NewAuthChecker(permReg))
+
+	if _, err := newReg.SyncSchema(context.Background()); err != nil {
+		return fmt.Errorf("reload sync schema: %w", err)
+	}
+
+	// ── 2. Build fresh UI registry ──
+	newUIReg := ui.NewRegistry()
+	for _, loadErr := range newUIReg.LoadDir(a.cfg.SpecPath) {
+		fmt.Fprintf(os.Stderr, "forma: reload ui: %v\n", loadErr)
+	}
+	for _, themeDir := range a.cfg.ThemeDirs {
+		resolved := themeDir
+		if !filepath.IsAbs(themeDir) {
+			wd, _ := os.Getwd()
+			resolved = filepath.Join(wd, themeDir)
+		}
+		for _, loadErr := range newUIReg.LoadDir(resolved) {
+			fmt.Fprintf(os.Stderr, "forma: reload ui (theme %s): %v\n", themeDir, loadErr)
+		}
+	}
+	resolveEntity := func(module, name string) (*spec.EntitySpec, bool) {
+		info, ok := newReg.GetEntity(module, name)
+		if !ok || info.EntitySpec == nil {
+			return nil, false
+		}
+		return info.EntitySpec, true
+	}
+	for _, valErr := range newUIReg.Validate(resolveEntity) {
+		fmt.Fprintf(os.Stderr, "forma: reload ui validate: %v\n", valErr)
+	}
+
+	// ── 3. Re-resolve App/Module manifests ──
+	specManifests, err := manifest.NewLoader(a.cfg.SpecPath).LoadAll()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "forma: reload app resolution: %v\n", err)
+	}
+	resolvedApps, err := forma_app.Resolve(specManifests.Manifests, newUIReg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "forma: reload resolve apps: %v\n", err)
+	}
+	if len(resolvedApps) == 0 {
+		fmt.Fprintf(os.Stderr, "forma: reload warning: no kind: App manifest found\n")
+	}
+
+	// ── 4. Build fresh router, dispatcher, and handler ──
+	// Preserve the existing WSHub so in-flight WebSocket connections
+	// continue receiving events after the reload.
+	a.mu.RLock()
+	oldHub := a.rb.Hub()
+	a.mu.RUnlock()
+
+	newRB := api.NewRouterBuilder(newReg)
+	// Transfer existing hub (and its live WebSocket connections) to the
+	// new router — SetHub must precede BuildRoutes so the WS handler
+	// registered by BuildHTTP uses the correct hub reference.
+	newRB.SetHub(oldHub)
+	// Wire spec version function BEFORE BuildHTTP() so HandleMetaVersion
+	// captures it. Reads from the live App's atomic counter.
+	newRB.SetSpecVersionFn(func() int64 { return a.specVersion.Load() })
+	newRB.BuildRoutes()
+	newDisp := newDispatcher(newReg, a.cfg)
+
+	// Re-register native Go handlers on the new dispatcher.
+	a.mu.RLock()
+	for ref, h := range a.nativeHandlers {
+		newDisp.NativeExecutor().Register(ref, h)
+	}
+	a.mu.RUnlock()
+
+	newRB.SetDispatcher(newDisp)
+	newRB.SetUIRegistry(newUIReg)
+	newRB.SetApps(resolvedApps)
+	if a.cfg.WebDir != "" {
+		newRB.SetWebDir(a.cfg.WebDir)
+	}
+	if a.cfg.WebFS != nil {
+		newRB.SetWebFS(a.cfg.WebFS)
+	}
+
+	// Wire event delivery. The outboxStore and eventLogStore share the
+	// same database tables as before, so the existing outboxWorker
+	// continues to drain pending events without interruption.
+	outboxStore := db.NewOutboxStore(a.database, a.driver)
+	eventLogStore := db.NewEventLogStore(a.database, a.driver)
+	newRB.SetDeliveryDeps(action.DeliveryDeps{Hub: oldHub, Outbox: outboxStore, EventLog: eventLogStore})
+
+	newHandler := newRB.BuildHTTP()
+
+	// ── 5. Re-wire process-global validation entity lookup ──
+	validation.SetEntityLookup(func(module, entityName, id string) (bool, error) {
+		store, err := newReg.GetEntityStore(module, entityName)
+		if err != nil {
+			return false, err
+		}
+		if _, err := store.GetByID(context.Background(), db.GetByIDParams{WorkspaceID: a.cfg.WorkspaceID, ID: id}); err != nil {
+			return false, nil
+		}
+		return true, nil
+	})
+
+	// ── 6. Atomic swap — only the pointer assignment is locked ──
+	a.mu.Lock()
+	a.reg = newReg
+	a.rb = newRB
+	a.handler = newHandler
+	a.disp = newDisp
+	a.nativeEx = newDisp.NativeExecutor()
+	a.mu.Unlock()
+
+	a.specVersion.Add(1)
+
+	fmt.Fprintf(os.Stderr, "forma: reload complete — %d routes, %d entities (v%d)\n",
+		len(newRB.Routes()), newReg.Count(), a.specVersion.Load())
 	return nil
 }
 

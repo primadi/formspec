@@ -29,18 +29,9 @@ import {
 } from "@/components/ui/tooltip"
 
 // ── Icon resolution ──
-// Lazy map from icon name → lucide component.
-// We use dynamic import to avoid bundling all icons.
+// Shared resolveIcon from lib/icon-resolver (same as ActionIcon).
 
-import * as LucideIcons from "lucide-react"
-
-function resolveIcon(name: string | undefined) {
-  if (!name) return null
-  // Try PascalCase
-  const key = name.charAt(0).toUpperCase() + name.slice(1).replace(/-./g, (c) => c[1].toUpperCase())
-  const Icon = (LucideIcons as unknown as Record<string, React.ComponentType<{ className?: string }>>)[key]
-  return Icon ?? null
-}
+import { resolveIcon } from "@/lib/icon-resolver"
 
 // ── Sidebar Props ──
 

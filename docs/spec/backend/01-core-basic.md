@@ -215,6 +215,34 @@ bukan structural diff).
 `impl.native` / `impl.script` / `impl.script_ref` / `impl.compiled` /
 `impl.sidecar`; context yang tersedia; hooks (before/after/on_error).
 
+### 5.1 UI Hints
+
+Setiap action bisa mendeklarasikan `ui` — petunjuk rendering untuk frontend,
+baik di tabel/kanban (row action) maupun di detail page (transition button).
+Field ini opsional dan tidak memengaruhi perilaku backend.
+
+```yaml
+actions:
+  - name: start-consultation
+    ui:
+      button_label: "Mulai Konsultasi"   # label tombol (default: action name)
+      icon: play                         # ikon lucide-react
+      style: primary                     # primary | secondary | danger
+      confirm: "Panggil pasien ini ke ruang konsultasi?"  # pesan konfirmasi
+```
+
+| Field | Tipe | Default | Keterangan |
+|---|---|---|---|
+| `button_label` | string | action name | Label tombol di UI |
+| `icon` | string | — | Nama ikon lucide-react (kebab-case, mis. `play`, `x`, `check`) |
+| `style` | string | `secondary` | `primary` (tombol solid), `secondary` (outline), `danger` (merah) |
+| `confirm` | string | — | Jika diisi, munculkan ConfirmDialog sebelum eksekusi; nilai = pesan |
+| `show_when` | string | — | FormaExpr; tombol hanya ditampilkan jika expression `true` |
+
+`confirm` adalah satu-satunya mekanisme konfirmasi untuk action — definisikan
+di entity, bukan di table/kanban. Table/kanban tetap bisa override via
+`confirm_msg` di row action-nya, tapi sumber kebenaran ada di entity.
+
 **Model permission (normatif untuk kelima jenis impl).** Setiap action
 mendeklarasikan dua hal secara eksplisit:
 - `required_permission` — guard bagi si pemanggil: siapa yang boleh memanggil.

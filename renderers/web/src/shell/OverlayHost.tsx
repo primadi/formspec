@@ -14,7 +14,7 @@
 //
 // Back button closes overlay. URL is shareable.
 
-import { useCallback } from "react"
+import { lazy, Suspense, useCallback } from "react"
 import { useSearchParams, useNavigate } from "react-router-dom"
 import {
   Dialog,
@@ -31,7 +31,9 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet"
 import { useMetaStore } from "@/stores/meta"
-import FormRenderer from "@/kinds/form/FormRenderer"
+import { Skeleton } from "@/components/ui/skeleton"
+
+const FormRenderer = lazy(() => import("@/kinds/form/FormRenderer"))
 
 // ── OverlayHost ──
 
@@ -75,14 +77,16 @@ export function OverlayHost() {
   const formMode = action === "edit" ? "edit" : "create"
 
   const overlayContent = (
-    <FormRenderer
-      entity={entity}
-      mode={formMode}
-      id={id}
-      formRef={formName}
-      inOverlay
-      onClose={close}
-    />
+    <Suspense fallback={<div className="flex justify-center py-8"><Skeleton className="h-32 w-full max-w-md" /></div>}>
+      <FormRenderer
+        entity={entity}
+        mode={formMode}
+        id={id}
+        formRef={formName}
+        inOverlay
+        onClose={close}
+      />
+    </Suspense>
   )
 
   if (overlayMode === "drawer") {

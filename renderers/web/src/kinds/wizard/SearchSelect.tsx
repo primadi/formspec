@@ -59,9 +59,8 @@ export default function SearchSelect({ step, module, stepData, onSelect, getClie
     : ["", ""]
   const entity = stepEntityName ? getEntity(stepEntityModule, stepEntityName) : undefined
 
-  // Derived: module & plural for API path
+  // Derived: module for API path
   const moduleName = entity?.module ?? stepEntityModule
-  const pluralName = entity?.plural ?? `${stepEntityName}s`
 
   // ── Search ──
 
@@ -74,7 +73,7 @@ export default function SearchSelect({ step, module, stepData, onSelect, getClie
     setLoading(true)
     try {
       const client = getClient()
-      const path = `${moduleName}/${pluralName}`
+      const path = `${moduleName}/${stepEntityName}`
       const { items } = await apiList<SearchResult>(client, path, {
         search: q.trim(),
         per_page: "10",
@@ -85,7 +84,7 @@ export default function SearchSelect({ step, module, stepData, onSelect, getClie
     } finally {
       setLoading(false)
     }
-  }, [moduleName, pluralName, step.search_fields, getClient])
+  }, [moduleName, stepEntityName, step.search_fields, getClient])
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
@@ -120,7 +119,7 @@ export default function SearchSelect({ step, module, stepData, onSelect, getClie
     setCreating(true)
     try {
       const client = getClient()
-      const path = `${moduleName}/${pluralName}`
+      const path = `${moduleName}/${stepEntityName}`
       const record = await apiPost<SearchResult>(client, path, formData)
 
       // Select the newly created record — created eagerly, on dialog save,
@@ -137,7 +136,7 @@ export default function SearchSelect({ step, module, stepData, onSelect, getClie
     } finally {
       setCreating(false)
     }
-  }, [moduleName, pluralName, formData, getClient, step.entity, onSelect])
+  }, [moduleName, stepEntityName, formData, getClient, step.entity, onSelect])
 
   // Reset form when dialog opens
   useEffect(() => {

@@ -17,9 +17,9 @@ import (
 //
 // Read-only, same-origin endpoints the manifest-driven renderer boots from:
 //
-//	GET /{ws}/api/v1/_meta/ui                      → UI bundle (permission-filtered, ETag)
-//	GET /{ws}/api/v1/_meta/me                      → caller identity + effective permissions
-//	GET /{ws}/api/v1/_meta/entities/{module}/{name} → one full entity schema
+//	GET /{ws}/_ui/_meta/ui                      → UI bundle (permission-filtered, ETag)
+//	GET /{ws}/_ui/_meta/me                      → caller identity + effective permissions
+//	GET /{ws}/_ui/_meta/entities/{module}/{name} → one full entity schema
 
 // metaIdentity is the /_meta/me payload.
 type metaIdentity struct {
@@ -193,6 +193,19 @@ func (b *RouterBuilder) HandleMetaMe() http.HandlerFunc {
 			Data: me,
 			Meta: MetaSingle{RequestID: requestIDFromContext(r.Context()), Timestamp: time.Now().UTC().Format(time.RFC3339)},
 		})
+	}
+}
+
+// HandleMetaVersion serves the current spec version — a lightweight polling
+// endpoint the frontend uses to detect when the meta bundle has changed
+// (e.g. after a spec hot-reload). Returns { spec_version: N }.
+func (b *RouterBuilder) HandleMetaVersion() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		version := int64(0)
+		if b.specVersionFn != nil {
+			version = b.specVersionFn()
+		}
+		writeJSON(w, http.StatusOK, map[string]int64{"spec_version": version})
 	}
 }
 

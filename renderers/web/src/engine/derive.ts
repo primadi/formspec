@@ -35,8 +35,18 @@ export function deriveTable(entity: EntitySchema): TableSpec {
     .slice(0, 8)
 
   for (const field of visibleFields) {
+    // For belongs_to relation fields, use dot-path notation to resolve the
+    // related entity's display name instead of showing the raw foreign key.
+    // Example: polyclinic_id → polyclinic.name
+    let colField = field.name
+    if (field.type === "relation" && field.relation?.type === "belongs_to") {
+      const alias = field.name.endsWith("_id")
+        ? field.name.slice(0, -3)
+        : field.relation.resource
+      colField = `${alias}.name`
+    }
     columns.push({
-      field: field.name,
+      field: colField,
       label: fieldLabel(field),
       sortable: isSortable(field),
       widget: tableWidget(field),

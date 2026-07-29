@@ -50,6 +50,12 @@ type ExecuteParams struct {
 	Identity *IdentityInfo
 	// Ctx carries runtime context primitives available to scripts.
 	RuntimeCtx *RuntimeContext
+
+	// SpecDir is the directory of the entity's YAML spec file.
+	// Used by ScriptExecutor to resolve script refs relative to the
+	// entity's own directory rather than the spec root — no fixed
+	// folder structure is assumed.
+	SpecDir string
 }
 
 // IdentityInfo mirrors auth.Identity for the action package (no import cycle).

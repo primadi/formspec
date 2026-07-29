@@ -443,8 +443,8 @@ func TestEntitySchemaDerivation(t *testing.T) {
 	if schema.LabelField != "number" {
 		t.Errorf("label_field should prefer natural key, got %s", schema.LabelField)
 	}
-	if schema.Lifecycle != "two_step_autosave" {
-		t.Errorf("default lifecycle: %s", schema.Lifecycle)
+	if schema.Lifecycle != "plain_crud" {
+		t.Errorf("default lifecycle should be plain_crud (no submit action), got %s", schema.Lifecycle)
 	}
 	if !schema.Exposed {
 		t.Errorf("expected exposed")

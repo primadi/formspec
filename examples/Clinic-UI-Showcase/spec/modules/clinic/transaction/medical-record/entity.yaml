@@ -1,0 +1,46 @@
+# SHOWCASE: entity append-only untuk kind: Timeline (§13 spec frontend).
+# update & delete di-disable → renderer tidak boleh render tombol edit/hapus;
+# Timeline = "read-only story".
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: medical-record
+  module: clinic
+  description: Rekam medis — append-only, dirender sebagai Timeline
+spec:
+  version: v1
+  characteristic: transaction
+
+  auth: { required: true, strategies: [token] }
+
+  fields:
+    - name: patient_id
+      type: relation
+      relation: { type: belongs_to, resource: patient }
+      required: true
+    - name: visit_id
+      type: relation
+      relation: { type: belongs_to, resource: visit }
+    - name: transaction_date
+      type: datetime
+      required: true
+      index: true
+    - name: visit_type
+      type: enum
+      enum_values: [consultation, emergency, followup, lab]
+      default: consultation
+    - name: doctor_id
+      type: relation
+      relation: { type: belongs_to, resource: doctor }
+      required: true
+    - name: diagnosis_and_notes
+      type: string
+      rules: [required, max_length: 5000]
+
+  actions:
+    - name: update
+      disabled: true
+    - name: delete
+      disabled: true
+    - name: submit
+      disabled: true

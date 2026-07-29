@@ -1,8 +1,11 @@
 package api
 
 import (
+	"strings"
+
 	"github.com/primadi/forma/internal/entity"
 	"github.com/primadi/forma/pkg/spec"
+	db "github.com/primadi/forma/renderers/jsonbpersist"
 )
 
 // GenerateRoutes produces RouteDescriptors for all registered entities
@@ -50,25 +53,80 @@ func GenerateRoutes(registry *entity.Registry) []RouteDescriptor {
 	return routes
 }
 
+// GenerateUIRoutes produces RouteDescriptors for ALL registered entities on
+// the `/_ui/entity/` surface (§8.1). Unlike GenerateRoutes, this does NOT
+// check spec.expose — all entities are available on the UI surface regardless
+// of their expose configuration. Permission gating still applies.
+func GenerateUIRoutes(registry *entity.Registry) []RouteDescriptor {
+	var routes []RouteDescriptor
+
+	for _, info := range registry.ListEntities() {
+		specInfo, ok := registry.GetEntity(info.Module, info.Name)
+		if !ok || specInfo.EntitySpec == nil {
+			continue
+		}
+
+		es := specInfo.EntitySpec
+
+		plural := es.Plural
+		if plural == "" {
+			plural = info.Name + "s"
+		}
+
+		isSummary := es.Characteristic == spec.CharSummary
+
+		// Standard actions disabled via `disabled: true` (§11.1)
+		disabled := make(map[string]bool)
+		for _, a := range es.Actions {
+			if a.Disabled {
+				disabled[a.Name] = true
+			}
+		}
+
+		// UI surface uses the same internal logic; expose config is
+		// ignored. All standard CRUD actions (including delete) are available
+		// on the UI surface unless explicitly disabled in entity actions.
+		uiActions := []string{"list", "find", "create", "update", "delete"}
+		uiExp := spec.ExposeConfig{Type: spec.ProtocolREST, Actions: uiActions}
+		routes = append(routes, generateRESTRoutes(info.Module, info.Name, plural, uiExp, isSummary, disabled)...)
+	}
+
+	// Rewrite path prefixes from /api/v1/... to /_ui/entity/...
+	for i := range routes {
+		routes[i].Path = strings.Replace(routes[i].Path, "/api/v1/"+routes[i].Module+"/"+routes[i].Plural,
+			"/_ui/entity/"+routes[i].Module+"/"+routes[i].Entity, 1)
+	}
+
+	return routes
+}
+
 // generateRESTRoutes creates REST route descriptors for one entity.
+// Applies transitive gating (2.3.2) and auto-derives composite actions (2.3.6).
 func generateRESTRoutes(module, name, plural string, exp spec.ExposeConfig, isSummary bool, disabled map[string]bool) []RouteDescriptor {
 	var routes []RouteDescriptor
 
-	// Build the set of allowed actions
+	// Apply transitive gating (2.3.2): submit disabled → cancel/amend implicitly disabled;
+	// cancel disabled → amend implicitly disabled.
+	fullDisabled := db.TransitiveDisabled(disabled)
+
+	// Build the set of explicitly allowed actions from spec.expose.actions
 	allowed := make(map[string]bool)
 	for _, a := range exp.Actions {
 		allowed[a] = true
 	}
 
-	// If no actions filter, default to all except delete
+	// If no actions filter, default to all CRUD except delete (plus lifecycle if submit enabled)
 	useAll := len(exp.Actions) == 0
+
+	// Determine if submit is disabled (lifecycle-free entity → skip lifecycle actions)
+	submitDisabled := fullDisabled["submit"]
 
 	// Path prefix: /api/{version}/{module}/{plural}
 	pathPrefix := "/api/v1/" + module + "/" + plural
 
 	for _, std := range StandardRESTActions {
 		// Disabled standard actions never generate a route (§11.1)
-		if disabled[std.Action] {
+		if fullDisabled[std.Action] {
 			continue
 		}
 
@@ -77,13 +135,18 @@ func generateRESTRoutes(module, name, plural string, exp spec.ExposeConfig, isSu
 			continue
 		}
 
+		// Lifecycle-free entities: skip submit/cancel/amend routes
+		if submitDisabled && (std.Action == "submit" || std.Action == "cancel" || std.Action == "amend") {
+			continue
+		}
+
 		// Filter: if actions are specified, only include those
 		if !useAll && !allowed[std.Action] {
 			continue
 		}
 
-		// Default: skip delete unless explicitly enabled
-		if useAll && std.Action == "delete" {
+		// Default: skip delete and lifecycle unless explicitly enabled
+		if useAll && (std.Action == "delete" || std.Action == "submit" || std.Action == "cancel" || std.Action == "amend") {
 			continue
 		}
 
@@ -139,8 +202,11 @@ func GenerateCustomActionRoutes(registry *entity.Registry) []RouteDescriptor {
 			}
 
 			for _, action := range es.Actions {
-				// Skip standard CRUD actions — they're handled by generateRESTRoutes
-				if isStandardAction(action.Name) {
+				// Standard CRUD actions (list/find/create/update/delete) are handled
+				// by generateRESTRoutes. Lifecycle actions (submit/cancel/amend) with
+				// a custom impl constitute custom state-machine actions, not document
+				// lifecycle actions, and are generated here as custom routes.
+				if isStandardCrudAction(action.Name) {
 					continue
 				}
 
@@ -173,34 +239,83 @@ func GenerateCustomActionRoutes(registry *entity.Registry) []RouteDescriptor {
 	return routes
 }
 
-// isStandardAction returns true if the action name is a standard CRUD action.
-func isStandardAction(name string) bool {
-	for _, std := range StandardRESTActions {
-		if std.Action == name {
-			return true
+// GenerateUICustomActionRoutes creates route descriptors for custom actions
+// on the UI surface (/_ui/entity/). Unlike GenerateCustomActionRoutes, this
+// includes ALL entities regardless of spec.expose.
+func GenerateUICustomActionRoutes(registry *entity.Registry) []RouteDescriptor {
+	var routes []RouteDescriptor
+
+	for _, info := range registry.ListEntities() {
+		specInfo, ok := registry.GetEntity(info.Module, info.Name)
+		if !ok || specInfo.EntitySpec == nil {
+			continue
 		}
+
+		es := specInfo.EntitySpec
+		plural := es.Plural
+		if plural == "" {
+			plural = info.Name + "s"
+		}
+
+		for _, action := range es.Actions {
+			// Standard CRUD actions (list/find/create/update/delete) are handled
+			// by generateRESTRoutes. Lifecycle actions (submit/cancel/amend) with
+			// a custom impl constitute custom actions and are generated here.
+			if isStandardCrudAction(action.Name) {
+				continue
+			}
+			if action.Disabled || action.Impl == nil {
+				continue
+			}
+
+			perm := action.RequiredPermission
+			if perm == "" {
+				perm = info.Module + "." + plural + "." + action.Name
+			}
+
+			routes = append(routes, RouteDescriptor{
+				Module:             info.Module,
+				Entity:             info.Name,
+				Plural:             plural,
+				Action:             action.Name,
+				Method:             "POST",
+				Path:               "/_ui/entity/" + info.Module + "/" + info.Name + "/{id}/" + action.Name,
+				Protocol:           spec.ProtocolREST,
+				Handler:            "custom",
+				RequiredPermission: perm,
+			})
+		}
+	}
+
+	return routes
+}
+
+// isStandardCrudAction returns true only for standard CRUD action names
+// (list/find/create/update/delete). Lifecycle actions (submit/cancel/amend)
+// are excluded because entities may define them as custom state-machine
+// actions with a script impl.
+func isStandardCrudAction(name string) bool {
+	switch name {
+	case "list", "find", "create", "update", "delete":
+		return true
 	}
 	return false
 }
 
-// mergeRoutes combines standard REST routes with custom action routes.
-func mergeRoutes(restRoutes, customRoutes []RouteDescriptor) []RouteDescriptor {
-	// Deduplicate by (module, entity, action)
+// mergeRoutes combines multiple route slices, deduplicating by path + method.
+// Different path prefixes (e.g. /api/v1/ vs /_ui/entity/) are kept separate.
+func mergeRoutes(slices ...[]RouteDescriptor) []RouteDescriptor {
 	seen := make(map[string]bool)
-	result := make([]RouteDescriptor, 0, len(restRoutes)+len(customRoutes))
+	result := make([]RouteDescriptor, 0)
 
-	for _, rd := range restRoutes {
-		key := rd.Module + "/" + rd.Entity + "/" + rd.Action
-		seen[key] = true
-		result = append(result, rd)
-	}
-
-	for _, rd := range customRoutes {
-		key := rd.Module + "/" + rd.Entity + "/" + rd.Action
-		if !seen[key] {
-			result = append(result, rd)
+	for _, slice := range slices {
+		for _, rd := range slice {
+			key := rd.Module + "/" + rd.Entity + "/" + rd.Action + "/" + rd.Path
+			if !seen[key] {
+				seen[key] = true
+				result = append(result, rd)
+			}
 		}
 	}
-
 	return result
 }

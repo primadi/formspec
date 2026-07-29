@@ -87,11 +87,15 @@ function PageBlocks({ entry }: { entry: Entry<PageSpec> }) {
 
 function PageBlockRenderer({ block, module }: { block: PageBlock; module: string }) {
   const getEntity = useMetaStore((s) => s.getEntity)
+  const getForm = useMetaStore((s) => s.getForm)
+  const getTable = useMetaStore((s) => s.getTable)
 
-  // Form block
+  // Form block — entity resolved from the referenced Form manifest's spec.entity
   if (block.form) {
-    const entity = block.form.entity
-      ? getEntity(...resolveEntityRef(block.form.entity, module))
+    const formEntry = block.form.ref ? getForm(block.form.ref) : undefined
+    const entityRef = formEntry?.spec.entity
+    const entity = entityRef
+      ? getEntity(...resolveEntityRef(entityRef, formEntry?.module ?? module))
       : undefined
 
     if (entity) {
@@ -111,10 +115,12 @@ function PageBlockRenderer({ block, module }: { block: PageBlock; module: string
     return <div className="rounded-md border p-4 text-sm text-muted-foreground">Form: {block.form.ref}</div>
   }
 
-  // Table block
+  // Table block — entity resolved from the referenced Table manifest's spec.entity
   if (block.table) {
-    const entity = block.table.entity
-      ? getEntity(...resolveEntityRef(block.table.entity, module))
+    const tableEntry = block.table.ref ? getTable(block.table.ref) : undefined
+    const entityRef = tableEntry?.spec.entity
+    const entity = entityRef
+      ? getEntity(...resolveEntityRef(entityRef, tableEntry?.module ?? module))
       : undefined
 
     if (entity) {
@@ -229,10 +235,15 @@ function PageTabs({ entry }: { entry: Entry<PageSpec> }) {
 
 function TabContent({ tab, module }: { tab: PageTab; module: string }) {
   const getEntity = useMetaStore((s) => s.getEntity)
+  const getForm = useMetaStore((s) => s.getForm)
+  const getTable = useMetaStore((s) => s.getTable)
 
   if (tab.form) {
-    const entity = tab.form.entity
-      ? getEntity(...resolveEntityRef(tab.form.entity, module))
+    // Resolve entity from the referenced Form manifest's spec.entity
+    const formEntry = tab.form.ref ? getForm(tab.form.ref) : undefined
+    const entityRef = formEntry?.spec.entity
+    const entity = entityRef
+      ? getEntity(...resolveEntityRef(entityRef, formEntry?.module ?? module))
       : undefined
 
     if (entity) {
@@ -247,11 +258,15 @@ function TabContent({ tab, module }: { tab: PageTab; module: string }) {
         </Suspense>
       )
     }
+    return <div className="rounded-md border p-4 text-sm text-muted-foreground">Form: {tab.form.ref}</div>
   }
 
   if (tab.table) {
-    const entity = tab.table.entity
-      ? getEntity(...resolveEntityRef(tab.table.entity, module))
+    // Resolve entity from the referenced Table manifest's spec.entity
+    const tableEntry = tab.table.ref ? getTable(tab.table.ref) : undefined
+    const entityRef = tableEntry?.spec.entity
+    const entity = entityRef
+      ? getEntity(...resolveEntityRef(entityRef, tableEntry?.module ?? module))
       : undefined
 
     if (entity) {
@@ -261,6 +276,7 @@ function TabContent({ tab, module }: { tab: PageTab; module: string }) {
         </Suspense>
       )
     }
+    return <div className="rounded-md border p-4 text-sm text-muted-foreground">Table: {tab.table.ref}</div>
   }
 
   if (tab.component) {

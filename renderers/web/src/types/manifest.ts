@@ -508,7 +508,6 @@ export interface PageTab {
 export interface BlockRef {
   ref?: string
   asset?: string
-  entity?: string
   id?: string
   mode?: "view" | "edit"
   param?: Record<string, unknown>

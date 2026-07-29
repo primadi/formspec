@@ -102,12 +102,42 @@ export function RelationPicker({
   )
 
   const moduleName = relatedEntity?.module ?? currentModule
-  const pluralName = relatedEntity?.plural ?? `${entityField.relation?.resource ?? "unknown"}s`
+  // API endpoints use the singular entity name (entity.Name), not plural.
+  const entityName = relatedEntity?.name ?? entityField.relation?.resource ?? ""
   const labelField = relatedEntity?.label_field ?? "id"
+  // Secondary identifier shown alongside label_field in search results to
+  // distinguish records with identical display names (e.g. same-name patients).
+  // Uses the first unique non-label_field, or common identifier field names.
+  const secondaryField = useMemo(() => {
+    if (!relatedEntity) return undefined
+    const candidates = ["nik", "code", "phone", "email", "number", "license_number"]
+    // Prefer the first unique field that isn't the label_field
+    const uniqueField = relatedEntity.fields.find(
+      (f) => f.unique && f.name !== labelField && f.name !== "id",
+    )
+    if (uniqueField) return uniqueField.name
+    // Fallback to common identifier names
+    return candidates.find((c) =>
+      relatedEntity.fields.some((f) => f.name === c && f.name !== labelField),
+    )
+  }, [relatedEntity, labelField])
+
+  /** Build a display label for a search result item, optionally including secondary info. */
+  const formatLabel = useCallback(
+    (item: SearchResult): string => {
+      const primary = String(item[labelField] ?? item.id)
+      const secondary =
+        secondaryField && item[secondaryField]
+          ? String(item[secondaryField])
+          : undefined
+      return secondary ? `${primary} (${secondary})` : primary
+    },
+    [labelField, secondaryField],
+  )
 
   // ── Load label for current value (on mount / value change) ──
   useEffect(() => {
-    if (!value || !relatedEntity) {
+    if (!value || !relatedEntity || !entityName) {
       setSelectedLabel("")
       return
     }
@@ -115,7 +145,7 @@ export function RelationPicker({
     // If we already have a matching result cached, use it
     const cached = results.find((r) => r.id === value)
     if (cached) {
-      setSelectedLabel(String(cached[labelField] ?? cached.id))
+      setSelectedLabel(formatLabel(cached))
       return
     }
 
@@ -126,10 +156,10 @@ export function RelationPicker({
         const client = getClient()
         const record = await apiGet<SearchResult>(
           client,
-          `${moduleName}/${pluralName}/${value}`,
+          `${moduleName}/${entityName}/${value}`,
         )
         if (!cancelled) {
-          setSelectedLabel(String(record?.[labelField] ?? record?.id ?? value))
+          setSelectedLabel(formatLabel(record as SearchResult))
         }
       } catch {
         if (!cancelled) setSelectedLabel(value)
@@ -137,7 +167,7 @@ export function RelationPicker({
     }
     fetchLabel()
     return () => { cancelled = true }
-  }, [value, relatedEntity, moduleName, pluralName, labelField, getClient, results])
+  }, [value, relatedEntity, moduleName, entityName, labelField, secondaryField, getClient, results, formatLabel])
 
   // ── Search ──
   const doSearch = useCallback(
@@ -150,7 +180,7 @@ export function RelationPicker({
       setLoading(true)
       try {
         const client = getClient()
-        const { items } = await apiList<SearchResult>(client, `${moduleName}/${pluralName}`, {
+        const { items } = await apiList<SearchResult>(client, `${moduleName}/${entityName}`, {
           search: q.trim(),
           per_page: "10",
         })
@@ -161,7 +191,7 @@ export function RelationPicker({
         setLoading(false)
       }
     },
-    [moduleName, pluralName, getClient],
+    [moduleName, entityName, getClient],
   )
 
   useEffect(() => {
@@ -172,6 +202,16 @@ export function RelationPicker({
       if (debounceRef.current) clearTimeout(debounceRef.current)
     }
   }, [query, isOpen, readonly, doSearch])
+
+  // ── Auto-focus input when opening ──
+  // Without this, the shadcn Input's blockAutofill mechanism leaves the
+  // field readOnly until focused, preventing the user from typing directly
+  // after clicking the label display.
+  useEffect(() => {
+    if (isOpen) {
+      requestAnimationFrame(() => inputRef.current?.focus())
+    }
+  }, [isOpen])
 
   // ── Click outside to close ──
   useEffect(() => {
@@ -192,7 +232,7 @@ export function RelationPicker({
 
   // ── Select ──
   const handleSelect = (item: SearchResult) => {
-    setSelectedLabel(String(item[labelField] ?? item.id))
+    setSelectedLabel(formatLabel(item))
     setQuery("")
     setResults([])
     setIsOpen(false)
@@ -223,14 +263,26 @@ export function RelationPicker({
       <div className="relative">
         {selectedLabel && !isOpen ? (
           <div
+            role="combobox"
+            aria-haspopup="listbox"
+            aria-expanded={false}
+            tabIndex={0}
             className={cn(
               "flex h-8 w-full items-center rounded-lg border border-input bg-transparent px-2.5 text-sm",
               "cursor-pointer transition-colors hover:border-ring",
+              "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
               error && "border-destructive",
             )}
             onClick={() => {
               setIsOpen(true)
               setQuery("")
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault()
+                setIsOpen(true)
+                setQuery("")
+              }
             }}
           >
             <Search className="mr-2 size-3.5 shrink-0 text-muted-foreground" />
@@ -275,7 +327,7 @@ export function RelationPicker({
       </div>
 
       {/* Dropdown */}
-      {isOpen && !selectedLabel && (
+      {isOpen && (
         <div
           ref={dropdownRef}
           className={cn(
@@ -302,25 +354,38 @@ export function RelationPicker({
             </div>
           )}
 
-          {results.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={cn(
-                "flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors",
-                "hover:bg-accent hover:text-accent-foreground",
-                item.id === value && "bg-accent/50 font-medium",
-              )}
-              onClick={() => handleSelect(item)}
-            >
-              <span className="flex-1 truncate">
-                {String(item[labelField] ?? item.id)}
-              </span>
-              {item.id === value && (
-                <Check className="size-3.5 shrink-0 text-primary" />
-              )}
-            </button>
-          ))}
+          {results.map((item) => {
+            const primaryLabel = String(item[labelField] ?? item.id)
+            const secondaryLabel =
+              secondaryField && item[secondaryField]
+                ? String(item[secondaryField])
+                : undefined
+
+            return (
+              <button
+                key={item.id}
+                type="button"
+                className={cn(
+                  "flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors",
+                  "hover:bg-accent hover:text-accent-foreground",
+                  item.id === value && "bg-accent/50 font-medium",
+                )}
+                onClick={() => handleSelect(item)}
+              >
+                <span className="flex-1 truncate">
+                  <span>{primaryLabel}</span>
+                  {secondaryLabel && (
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      {secondaryLabel}
+                    </span>
+                  )}
+                </span>
+                {item.id === value && (
+                  <Check className="size-3.5 shrink-0 text-primary" />
+                )}
+              </button>
+            )
+          })}
         </div>
       )}
     </div>

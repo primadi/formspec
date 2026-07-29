@@ -185,10 +185,9 @@ func TestLifecycleError(t *testing.T) {
 	err := &LifecycleError{
 		Action:    "submit",
 		DocStatus: "cancelled",
-		Required:  "draft",
 		Code:      "FORMA.DOC.SUBMIT_NOT_DRAFT",
 	}
-	expected := "[FORMA.DOC.SUBMIT_NOT_DRAFT] action \"submit\" requires doc_status=draft, got cancelled"
+	expected := "[FORMA.DOC.SUBMIT_NOT_DRAFT] action \"submit\" blocked by doc_status=cancelled"
 	if err.Error() != expected {
 		t.Errorf("error message mismatch:\n  got:      %s\n  expected: %s", err.Error(), expected)
 	}

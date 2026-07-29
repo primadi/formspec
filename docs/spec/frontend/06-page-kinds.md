@@ -21,7 +21,7 @@ spec:
   route: /orders/:id
   title: "Order {order.number}"
   blocks:
-    - form:  { ref: order-edit, entity: order, id: ":id", mode: view }
+    - form:  { ref: order-edit, id: ":id", mode: view }
     - table: { ref: order-payments, param: { order_id: ":id" } }
     - component:
         asset: billing/assets/payment-timeline.js
@@ -79,10 +79,9 @@ spec:
   route: /orders/workbench
   layout: { mode: split }               # master kiri (sempit), detail kanan (lebar)
   blocks:
-    - table: { ref: order-list, entity: order }          # master — sumber seleksi
+    - table: { ref: order-list }          # master — sumber seleksi
     - form:
         ref: order-detail
-        entity: order
         binds: { source: order-list, param: id }         # detail mengikuti seleksi
 ```
 

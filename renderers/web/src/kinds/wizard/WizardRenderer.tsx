@@ -161,7 +161,7 @@ export default function WizardRenderer({ entry }: WizardRendererProps) {
         }
         response = await apiPost<Record<string, unknown>>(
           client,
-          `${entitySchema.module}/${entitySchema.plural}`,
+          `${entitySchema.module}/${entitySchema.name}`,
           payload,
         )
       }

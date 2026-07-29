@@ -9,8 +9,8 @@ import (
 
 	"github.com/primadi/forma/internal/action"
 	"github.com/primadi/forma/internal/entity"
-	"github.com/primadi/forma/renderers/jsonbpersist"
 	"github.com/primadi/forma/pkg/spec"
+	db "github.com/primadi/forma/renderers/jsonbpersist"
 )
 
 // TestHandleCustomAction_StarlarkScript_RollsBackAcrossSaveAndCreate is the
@@ -100,7 +100,7 @@ def execute(resource, params, ctx):
 		Name: "checkout",
 		Impl: &spec.ImplDecl{Type: spec.ImplScript, Ref: "billing/checkout_fail"},
 	}
-	handlerFunc := factory.HandleCustomAction("billing", "order", "checkout", actionSpec)
+	handlerFunc := factory.HandleCustomAction("billing", "order", "checkout", actionSpec, "")
 
 	req := httptest.NewRequest("POST", "/billing/orders/"+id+"/checkout", nil)
 	req.SetPathValue("id", id)

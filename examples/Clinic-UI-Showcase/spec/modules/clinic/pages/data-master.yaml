@@ -1,0 +1,21 @@
+# SHOWCASE: kind: Page varian TABS — Tabbed Resources pattern (Frontend spec §1).
+# Mengelompokkan tiga master-data kecil (Dokter, Pasien, Poliklinik) dalam
+# satu route dengan tabbed interface, menghindari clutter di sidebar menu.
+# Tiap tab menampilkan Table (list view) dari entity masing-masing.
+apiVersion: forma.dev/v1alpha1
+kind: Page
+metadata:
+  name: data-master
+  module: clinic
+  description: Data Master — tabbed table untuk dokter, pasien, poliklinik
+spec:
+  route: /app/master
+  title: "Data Master"
+  icon: "database"
+  tabs:
+    - label: "Dokter"
+      table: { ref: doctor-table }
+    - label: "Pasien"
+      table: { ref: patient-table }
+    - label: "Poliklinik"
+      table: { ref: polyclinic-table }

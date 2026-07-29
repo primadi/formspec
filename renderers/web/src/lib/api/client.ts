@@ -2,7 +2,7 @@
 //
 // ky-based HTTP client with typed envelope unwrapping, auth, CAS,
 // and list parameter building. Designed for the renderer's Meta API
-// and CRUD endpoints under /{ws}/api/v1/...
+// and CRUD endpoints.
 
 import ky, { type KyInstance } from "ky"
 
@@ -23,15 +23,15 @@ export interface ApiClientConfig {
 }
 
 /**
- * Creates a ky-based API client for the given workspace.
+ * Creates a ky-based API client for entity CRUD operations on the UI surface.
  *
- * - Prefixes all URLs with `/{workspace}/api/v1`
+ * - Prefixes all URLs with `/{workspace}/_ui/entity`
  * - Injects `Authorization: Bearer` from stored token
  * - Unwraps envelope responses (data from SingleResponse/ListResponse)
  * - Maps ErrorResponse into a typed FormaApiError
  */
 export function createApiClient(config: ApiClientConfig): KyInstance {
-  const prefix = `/${config.workspace}/api/v1`
+  const prefix = `/${config.workspace}/_ui/entity`
 
   const api = ky.create({
     prefix,

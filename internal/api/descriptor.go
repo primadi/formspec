@@ -31,6 +31,9 @@ type RouteDescriptor struct {
 }
 
 // StandardRESTActions is the set of auto-generated REST actions for entities.
+// Includes both CRUD and lifecycle actions (§4.1b). Lifecycle actions (submit,
+// cancel, amend) are POST-only and require the entity to participate in the
+// document lifecycle (submit action not disabled).
 var StandardRESTActions = []struct {
 	Action, Method, PathSuffix string
 	PermissionAction           string
@@ -40,4 +43,8 @@ var StandardRESTActions = []struct {
 	{Action: "create", Method: "POST", PathSuffix: "", PermissionAction: "create"},
 	{Action: "update", Method: "PATCH", PathSuffix: "/{id}", PermissionAction: "update"},
 	{Action: "delete", Method: "DELETE", PathSuffix: "/{id}", PermissionAction: "delete"},
+	// Lifecycle actions (Core §4.1b):
+	{Action: "submit", Method: "POST", PathSuffix: "/{id}/submit", PermissionAction: "submit"},
+	{Action: "cancel", Method: "POST", PathSuffix: "/{id}/cancel", PermissionAction: "cancel"},
+	{Action: "amend", Method: "POST", PathSuffix: "/{id}/amend", PermissionAction: "amend"},
 }

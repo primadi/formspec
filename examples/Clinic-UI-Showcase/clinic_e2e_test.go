@@ -96,7 +96,7 @@ func dataMap(t *testing.T, env envelope) map[string]any {
 func createFixtures(t *testing.T, handler http.Handler) (polyclinicID, doctorID, patientID string) {
 	t.Helper()
 
-	status, env := do(t, handler, "POST", "/demo/api/v1/clinic/polyclinics", map[string]any{
+	status, env := do(t, handler, "POST", "/demo/_ui/entity/clinic/polyclinic", map[string]any{
 		"name": "Poli Umum",
 		"code": "UMUM",
 	})
@@ -105,18 +105,18 @@ func createFixtures(t *testing.T, handler http.Handler) (polyclinicID, doctorID,
 	}
 	polyclinicID = dataMap(t, env)["id"].(string)
 
-	status, env = do(t, handler, "POST", "/demo/api/v1/clinic/doctors", map[string]any{
-		"name":              "Dr. Andi",
-		"polyclinic_id":     polyclinicID,
-		"license_number":    "LIC-0001",
-		"consultation_fee":  50000,
+	status, env = do(t, handler, "POST", "/demo/_ui/entity/clinic/doctor", map[string]any{
+		"name":             "Dr. Andi",
+		"polyclinic_id":    polyclinicID,
+		"license_number":   "LIC-0001",
+		"consultation_fee": 50000,
 	})
 	if status != http.StatusCreated {
 		t.Fatalf("create doctor: status %d, body %+v", status, env)
 	}
 	doctorID = dataMap(t, env)["id"].(string)
 
-	status, env = do(t, handler, "POST", "/demo/api/v1/clinic/patients", map[string]any{
+	status, env = do(t, handler, "POST", "/demo/_ui/entity/clinic/patient", map[string]any{
 		"nik":        "1234567890123456",
 		"name":       "Jane Doe",
 		"birth_date": "1990-01-01",
@@ -143,7 +143,7 @@ func TestVisitLifecycle_EndToEnd(t *testing.T) {
 	// complaint, transaction_date) is already known; no separate commit
 	// action is needed. queue_number is generated automatically here
 	// (natural_key_rule).
-	status, env := do(t, handler, "POST", "/demo/api/v1/clinic/visits", map[string]any{
+	status, env := do(t, handler, "POST", "/demo/_ui/entity/clinic/visit", map[string]any{
 		"transaction_date": "2026-07-12",
 		"patient_id":       patientID,
 		"polyclinic_id":    polyclinicID,
@@ -157,20 +157,20 @@ func TestVisitLifecycle_EndToEnd(t *testing.T) {
 	visitID := visit["id"].(string)
 
 	queueNumber, _ := visit["queue_number"].(string)
-	if matched, _ := regexp.MatchString(`^Q-\d{3}$`, queueNumber); !matched {
-		t.Errorf("queue_number %q does not match Q-NNN format", queueNumber)
+	if matched, _ := regexp.MatchString(`^Q\d{8}-\d{3}$`, queueNumber); !matched {
+		t.Errorf("queue_number %q does not match QYYYYMMDD-NNN format", queueNumber)
 	}
 	versionAfterCreate := int(visit["version"].(float64))
 
 	// start-consultation: first status transition + first save on an
 	// already-existing record — this is where the CAS bug (hardcoded
 	// Version: 0) used to fail outright.
-	status, env = do(t, handler, "POST", "/demo/api/v1/clinic/visits/"+visitID+"/start-consultation", nil)
+	status, env = do(t, handler, "POST", "/demo/_ui/entity/clinic/visit/"+visitID+"/start-consultation", nil)
 	if status != http.StatusOK {
 		t.Fatalf("start-consultation: status %d, body %+v", status, env)
 	}
 
-	status, env = do(t, handler, "GET", "/demo/api/v1/clinic/visits/"+visitID, nil)
+	status, env = do(t, handler, "GET", "/demo/_ui/entity/clinic/visit/"+visitID, nil)
 	if status != http.StatusOK {
 		t.Fatalf("get visit after start-consultation: status %d, body %+v", status, env)
 	}
@@ -185,7 +185,7 @@ func TestVisitLifecycle_EndToEnd(t *testing.T) {
 
 	// Add diagnosis + treatments via the standard update action (allowed:
 	// visit.update's condition permits status in [waiting, in_consultation]).
-	status, env = do(t, handler, "PATCH", "/demo/api/v1/clinic/visits/"+visitID, map[string]any{
+	status, env = do(t, handler, "PATCH", "/demo/_ui/entity/clinic/visit/"+visitID, map[string]any{
 		"diagnosis": "ISPA ringan",
 		"treatments": []map[string]any{
 			{"line_number": 1, "treatment_name": "Paracetamol", "quantity": 2, "price": 5000},
@@ -199,12 +199,12 @@ func TestVisitLifecycle_EndToEnd(t *testing.T) {
 	// complete: second sequential script-driven save on the same record —
 	// the actual CAS regression check — and it must compute total from the
 	// child rows using t["quantity"]/t["price"] (Dict indexing, not dot access).
-	status, env = do(t, handler, "POST", "/demo/api/v1/clinic/visits/"+visitID+"/complete", nil)
+	status, env = do(t, handler, "POST", "/demo/_ui/entity/clinic/visit/"+visitID+"/complete", nil)
 	if status != http.StatusOK {
 		t.Fatalf("complete: status %d, body %+v", status, env)
 	}
 
-	status, env = do(t, handler, "GET", "/demo/api/v1/clinic/visits/"+visitID, nil)
+	status, env = do(t, handler, "GET", "/demo/_ui/entity/clinic/visit/"+visitID, nil)
 	if status != http.StatusOK {
 		t.Fatalf("get visit after complete: status %d, body %+v", status, env)
 	}
@@ -232,7 +232,7 @@ func TestVisitComplete_RejectsMissingDiagnosis(t *testing.T) {
 
 	polyclinicID, doctorID, patientID := createFixtures(t, handler)
 
-	status, env := do(t, handler, "POST", "/demo/api/v1/clinic/visits", map[string]any{
+	status, env := do(t, handler, "POST", "/demo/_ui/entity/clinic/visit", map[string]any{
 		"transaction_date": "2026-07-12",
 		"patient_id":       patientID,
 		"polyclinic_id":    polyclinicID,
@@ -244,12 +244,12 @@ func TestVisitComplete_RejectsMissingDiagnosis(t *testing.T) {
 	}
 	visitID := dataMap(t, env)["id"].(string)
 
-	status, env = do(t, handler, "POST", "/demo/api/v1/clinic/visits/"+visitID+"/start-consultation", nil)
+	status, env = do(t, handler, "POST", "/demo/_ui/entity/clinic/visit/"+visitID+"/start-consultation", nil)
 	if status != http.StatusOK {
 		t.Fatalf("start-consultation: status %d, body %+v", status, env)
 	}
 
-	status, _ = do(t, handler, "POST", "/demo/api/v1/clinic/visits/"+visitID+"/complete", nil)
+	status, _ = do(t, handler, "POST", "/demo/_ui/entity/clinic/visit/"+visitID+"/complete", nil)
 	if status == http.StatusOK {
 		t.Fatal("expected complete to fail without diagnosis, but it succeeded")
 	}
@@ -261,7 +261,7 @@ func TestPrescriptionLifecycle_EndToEnd(t *testing.T) {
 
 	polyclinicID, doctorID, patientID := createFixtures(t, handler)
 
-	status, env := do(t, handler, "POST", "/demo/api/v1/clinic/visits", map[string]any{
+	status, env := do(t, handler, "POST", "/demo/_ui/entity/clinic/visit", map[string]any{
 		"transaction_date": "2026-07-12",
 		"patient_id":       patientID,
 		"polyclinic_id":    polyclinicID,
@@ -273,7 +273,7 @@ func TestPrescriptionLifecycle_EndToEnd(t *testing.T) {
 	}
 	visitID := dataMap(t, env)["id"].(string)
 
-	status, env = do(t, handler, "POST", "/demo/api/v1/pharmacy/medicines", map[string]any{
+	status, env = do(t, handler, "POST", "/demo/_ui/entity/pharmacy/medicine", map[string]any{
 		"sku":   "SKU-001",
 		"name":  "Paracetamol 500mg",
 		"unit":  "tablet",
@@ -285,7 +285,7 @@ func TestPrescriptionLifecycle_EndToEnd(t *testing.T) {
 	}
 	medicineID := dataMap(t, env)["id"].(string)
 
-	status, env = do(t, handler, "POST", "/demo/api/v1/pharmacy/prescriptions", map[string]any{
+	status, env = do(t, handler, "POST", "/demo/_ui/entity/pharmacy/prescription", map[string]any{
 		"transaction_date": "2026-07-12",
 		"visit_id":         visitID,
 		"patient_name":     "Jane Doe",
@@ -305,13 +305,13 @@ func TestPrescriptionLifecycle_EndToEnd(t *testing.T) {
 	}
 
 	for _, action := range []string{"start-compounding", "mark-ready", "dispense"} {
-		status, env = do(t, handler, "POST", fmt.Sprintf("/demo/api/v1/pharmacy/prescriptions/%s/%s", prescriptionID, action), nil)
+		status, env = do(t, handler, "POST", fmt.Sprintf("/demo/_ui/entity/pharmacy/prescription/%s/%s", prescriptionID, action), nil)
 		if status != http.StatusOK {
 			t.Fatalf("%s: status %d, body %+v", action, status, env)
 		}
 	}
 
-	status, env = do(t, handler, "GET", "/demo/api/v1/pharmacy/prescriptions/"+prescriptionID, nil)
+	status, env = do(t, handler, "GET", "/demo/_ui/entity/pharmacy/prescription/"+prescriptionID, nil)
 	if status != http.StatusOK {
 		t.Fatalf("get prescription: status %d, body %+v", status, env)
 	}
@@ -323,7 +323,7 @@ func TestPrescriptionLifecycle_EndToEnd(t *testing.T) {
 	// actually decremented stock — this is the loaded-resource CAS/save
 	// propagation fix (a resource.load() result must be independently
 	// saveable, not just readable).
-	status, env = do(t, handler, "GET", "/demo/api/v1/pharmacy/medicines/"+medicineID, nil)
+	status, env = do(t, handler, "GET", "/demo/_ui/entity/pharmacy/medicine/"+medicineID, nil)
 	if status != http.StatusOK {
 		t.Fatalf("get medicine: status %d, body %+v", status, env)
 	}

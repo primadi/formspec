@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/primadi/forma/internal/manifest"
@@ -319,6 +320,76 @@ func (r *Registry) GetEntityStore(module, name string) (*db.EntityStore, error) 
 
 	// Lazy-create store
 	newStore := db.NewEntityStore(r.db, r.driver, info.Metadata, info.EntitySpec)
+
+	// Wire the cross-module table resolver (2.2.5) — resolves
+	// "{module}.{entity}" references to the actual registered table name
+	// using the entity spec's Plural, not naive "add s" pluralization.
+	newStore.SetTargetTableResolver(func(targetModule, targetEntityName string) (string, error) {
+		targetKey := entityKey(targetModule, targetEntityName)
+		r.mu.RLock()
+		targetInfo, ok := r.specs[targetKey]
+		r.mu.RUnlock()
+		if !ok {
+			return "", fmt.Errorf("target entity %q not registered", targetKey)
+		}
+		// Use the cached TableInfo if available, otherwise compute it.
+		if targetInfo.TableInfo != nil {
+			return targetInfo.TableInfo.TableName, nil
+		}
+		ti, err := db.GenerateEntityDDL(targetInfo.Metadata, targetInfo.EntitySpec, r.driver)
+		if err != nil {
+			return "", err
+		}
+		return ti.TableName, nil
+	})
+
+	// Wire the referencing-entity resolver for referential integrity
+	// enforcement on delete/cancel. Scans all registered entity specs for
+	// belongs_to relation fields targeting this entity.
+	newStore.SetReferencingEntityResolver(func(currentModule, currentEntity string) ([]db.ReferencingEntity, error) {
+		r.mu.RLock()
+		defer r.mu.RUnlock()
+
+		var refs []db.ReferencingEntity
+		for key, si := range r.specs {
+			refModule, refEntity, _ := strings.Cut(key, "/")
+
+			for _, f := range si.EntitySpec.Fields {
+				if f.Relation == nil || f.Relation.Type != "belongs_to" {
+					continue
+				}
+
+				// Resolve the target: "entity" (same module) or "module.entity"
+				targetModule := refModule
+				targetEntity := f.Relation.Resource
+				if dotIdx := strings.Index(f.Relation.Resource, "."); dotIdx >= 0 {
+					targetModule = f.Relation.Resource[:dotIdx]
+					targetEntity = f.Relation.Resource[dotIdx+1:]
+				}
+
+				if targetModule == currentModule && targetEntity == currentEntity {
+					// Found a referencing entity — resolve its table name
+					var tbl string
+					if si.TableInfo != nil {
+						tbl = si.TableInfo.TableName
+					} else {
+						ti, err := db.GenerateEntityDDL(si.Metadata, si.EntitySpec, r.driver)
+						if err != nil {
+							return nil, fmt.Errorf("compute table for %s: %w", key, err)
+						}
+						tbl = ti.TableName
+					}
+					refs = append(refs, db.ReferencingEntity{
+						Module:    refModule,
+						Entity:    refEntity,
+						FieldName: f.Name,
+						TableName: tbl,
+					})
+				}
+			}
+		}
+		return refs, nil
+	})
 
 	r.mu.Lock()
 	r.stores[key] = newStore

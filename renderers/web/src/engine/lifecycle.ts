@@ -38,6 +38,7 @@ export function getLifecycle(entity: EntitySchema): LifecycleActions {
 
   switch (entity.lifecycle) {
     case "plain_crud":
+    default:
       return {
         pattern: "plain_crud",
         hasSave: true,
@@ -60,7 +61,6 @@ export function getLifecycle(entity: EntitySchema): LifecycleActions {
       }
 
     case "two_step_autosave":
-    default:
       return {
         pattern: "two_step_autosave",
         hasSave: true,

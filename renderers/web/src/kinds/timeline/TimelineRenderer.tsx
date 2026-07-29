@@ -49,7 +49,7 @@ export default function TimelineRenderer({ entry }: TimelineRendererProps) {
       const client = getClient()
       const result = await apiList<Record<string, unknown>>(
         client,
-        `${entity.module}/${entity.plural}`,
+        `${entity.module}/${entity.name}`,
         {
           sort: `${sort === "desc" ? "-" : ""}${dateField}`,
           ...(cursorRef.current ? { page: cursorRef.current } : {}),

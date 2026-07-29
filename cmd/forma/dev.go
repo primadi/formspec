@@ -35,6 +35,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
+
 	"github.com/primadi/forma/internal/sidecar"
 	"github.com/primadi/forma/pkg/spec"
 	"github.com/primadi/forma/renderers/jsonbpersist/datastore"
@@ -282,12 +284,22 @@ func runDev(args []string) {
 		handler = viteSPAProxy(handler, viteProxyURL, cfg.WorkspaceID)
 	}
 
+	// ── 13c. Spec hot-reload watcher (dev mode only) ──
+	// Watches the spec directory for YAML/STAR file changes and triggers
+	// a full reload of all registries without restarting the process.
+	// In --dev-ui mode, also notifies Vite HMR so browsers refresh instantly.
+	viteHMRURL := ""
+	if viteProxyURL != "" {
+		viteHMRURL = viteProxyURL + "/_dev/hmr-reload"
+	}
+	go watchSpecForChanges(ctx, app, cfg.SpecPath, viteHMRURL)
+
 	// ── 14. SPA info ──
 	if cfg.DevUI {
 		log.Printf("[forma] Frontend: http://localhost%s/default/_admin (proxied to Vite HMR)", cfg.Addr)
-		log.Printf("[forma]   Vite langsung: http://localhost:%s/default/_admin", vitePort)
+		log.Printf("[forma]   Vite direct: http://localhost:%s/default/_admin", vitePort)
 	} else if cfg.WebDir == "" {
-		log.Printf("[forma] SPA embedded — buka http://localhost%s/default/_admin", cfg.Addr)
+		log.Printf("[forma] SPA embedded — open http://localhost%s/default/_admin", cfg.Addr)
 	}
 
 	// ── 15. Serve ──
@@ -736,14 +748,121 @@ func viteSPAProxy(next http.Handler, viteTarget, workspaceID string) http.Handle
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 
-		// API routes → passthrough ke backend
-		if strings.HasPrefix(path, "/"+workspaceID+"/api/") ||
+		// API & Meta routes → passthrough ke backend.
+		//   /{ws}/_ui/...    UI surface (meta API, entity CRUD, WebSocket)
+		//   /{ws}/api/...    External API
+		//   /health          Health check
+		if strings.HasPrefix(path, "/"+workspaceID+"/_ui/") ||
+			strings.HasPrefix(path, "/"+workspaceID+"/api/") ||
 			path == "/health" {
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		// Semua yang lain → Vite dev server
+		// Semua yang lain (/{ws}/_admin/..., /{ws}/app/...) → Vite dev server
 		proxy.ServeHTTP(w, r)
 	})
+}
+
+// watchSpecForChanges watches the spec directory for YAML/STAR file changes
+// and triggers a full reload of all registries via App.ReloadSpec().
+//
+// viteHMRURL is the Vite dev server's /_dev/hmr-reload endpoint (empty when
+// --dev-ui is not active). When set, the watcher calls it after each reload
+// so Vite broadcasts a custom HMR event to connected browsers — no polling.
+//
+// Runs in a background goroutine. Stops when ctx is cancelled (SIGINT/SIGTERM).
+func watchSpecForChanges(ctx context.Context, app *forma.App, specPath string, viteHMRURL string) {
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		log.Printf("[forma] spec watcher: %v (hot-reload disabled)", err)
+		return
+	}
+	defer watcher.Close()
+
+	// Add the spec directory and all subdirectories recursively.
+	filepath.Walk(specPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			base := filepath.Base(path)
+			if strings.HasPrefix(base, ".") || base == "node_modules" || base == "impl" {
+				return filepath.SkipDir
+			}
+			if watchErr := watcher.Add(path); watchErr != nil {
+				log.Printf("[forma] spec watcher: cannot watch %s: %v", path, watchErr)
+			}
+		}
+		return nil
+	})
+
+	log.Printf("[forma] watching %s for spec changes (hot-reload)", specPath)
+
+	// Debounce mechanism: coalesce rapid file events (e.g. editor save
+	// sequences) into a single reload call after 300ms of inactivity.
+	const debounceInterval = 300 * time.Millisecond
+	var timer *time.Timer
+
+	for {
+		select {
+		case <-ctx.Done():
+			if timer != nil {
+				timer.Stop()
+			}
+			return
+
+		case event, ok := <-watcher.Events:
+			if !ok {
+				return
+			}
+
+			// Automatically watch newly created subdirectories.
+			if event.Op&fsnotify.Create != 0 {
+				if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
+					base := filepath.Base(event.Name)
+					if !strings.HasPrefix(base, ".") && base != "node_modules" && base != "impl" {
+						watcher.Add(event.Name)
+					}
+				}
+			}
+
+			if event.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Remove|fsnotify.Rename) == 0 {
+				continue
+			}
+			ext := strings.ToLower(filepath.Ext(event.Name))
+			if ext != ".yaml" && ext != ".yml" && ext != ".star" {
+				continue
+			}
+
+			// Reset debounce timer on each event.
+			if timer != nil {
+				timer.Stop()
+			}
+			timer = time.NewTimer(debounceInterval)
+			go func(name string) {
+				<-timer.C
+				log.Printf("[forma] spec change detected: %s — reloading...", filepath.Base(name))
+				if err := app.ReloadSpec(); err != nil {
+					log.Printf("[forma] spec reload error: %v", err)
+				} else {
+					log.Printf("[forma] spec reload complete")
+					// Notify Vite HMR (only in --dev-ui mode).
+					if viteHMRURL != "" {
+						if resp, err := http.Get(viteHMRURL); err != nil {
+							log.Printf("[forma] vite hmr notify: %v", err)
+						} else {
+							resp.Body.Close()
+						}
+					}
+				}
+			}(event.Name)
+
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				return
+			}
+			log.Printf("[forma] spec watcher error: %v", err)
+		}
+	}
 }

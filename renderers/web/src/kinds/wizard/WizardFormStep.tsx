@@ -90,7 +90,7 @@ export default function WizardFormStep({
         setRefreshTick((t) => t + 1)
         return
       }
-      const path = `${resEntity.module}/${resEntity.plural}`
+      const path = `${resEntity.module}/${resEntity.name}`
       const { items } = await apiList<OptionItem>(client, path, { per_page: "100" })
       optionsRef.current = { ...optionsRef.current, [resource]: items ?? [] }
       setRefreshTick((t) => t + 1)

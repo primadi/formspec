@@ -30,8 +30,30 @@ type EntityStore struct {
 	stateMachine      *spec.StateMachine     // optional state machine
 	computedFields    []spec.Field           // fields with Computed != nil
 	submitEnabled     bool                   // whether submit action is enabled (v0.3.0 — doc_status init)
+	characteristic    spec.Characteristic    // master|transaction|reference|summary (2.3.12)
 	backdatePolicy    *spec.BackdatePolicy
 	forwardDatePolicy *spec.ForwardDatePolicy
+
+	// targetTableResolver resolves a relation Resource reference
+	// ("module.entity" or "entity") to a qualified table name. Used by
+	// ValidateRelationTargets for cross-module relation resolution (2.2.5).
+	// Defaults to naive {module}_{inflectPlural(entity)}, overridden by the
+	// entity registry with the actual registered table name.
+	targetTableResolver func(module, entity string) (string, error)
+
+	// referencingEntityResolver resolves a (module, entity) pair to a list of
+	// all entities that reference it via belongs_to relations. Used by
+	// CheckReferencingDocuments for referential integrity enforcement on
+	// delete/cancel. Set by the entity registry; when nil the check is skipped.
+	referencingEntityResolver ReferencingEntityResolver
+}
+
+// SetTargetTableResolver installs a table-name resolver for cross-module
+// relation lookups. The resolver receives a (module, entity) pair and
+// returns the qualified table name. When nil (the default), the naive
+// {module}_{plural} convention is used.
+func (s *EntityStore) SetTargetTableResolver(fn func(module, entity string) (string, error)) {
+	s.targetTableResolver = fn
 }
 
 // PendingEvent is a durable event to enqueue to the outbox in the same
@@ -103,6 +125,7 @@ func NewEntityStore(db DB, driver DriverType, meta spec.Metadata, entity *spec.E
 		stateMachine:      sm,
 		computedFields:    computedFields,
 		submitEnabled:     submitEnabled,
+		characteristic:    entity.Characteristic,
 		backdatePolicy:    entity.BackdatePolicy,
 		forwardDatePolicy: entity.ForwardDatePolicy,
 	}
@@ -236,6 +259,12 @@ type InsertParams struct {
 // failed insert as an unrecoverable numbering hole.
 // Children with storage:table are extracted from Data and stored in child tables.
 func (s *EntityStore) Insert(ctx context.Context, params InsertParams) (string, error) {
+	// Summary entities are permanently read-only via API (§4.1.1)
+	if s.characteristic == spec.CharSummary {
+		return "", fmt.Errorf("%w: summary entity %s/%s is read-only (create/update/delete disabled)",
+			ErrValidationRule, s.module, s.entity)
+	}
+
 	// Apply default values for fields not present in data
 	s.applyDefaults(params.Data)
 
@@ -352,9 +381,10 @@ type GetByIDParams struct {
 	ID          string
 }
 
-// hydrateAndCompute hydrates child-table data into the record and evaluates
-// computed fields. Shared by all lookup paths in GetByID to avoid duplication.
-func (s *EntityStore) hydrateAndCompute(ctx context.Context, rec *EntityRecord) (*EntityRecord, error) {
+// hydrateAndCompute hydrates child-table data into the record, evaluates
+// computed fields, and resolves belongs_to relations.
+// Shared by all lookup paths in GetByID to avoid duplication.
+func (s *EntityStore) hydrateAndCompute(ctx context.Context, rec *EntityRecord, workspaceID string) (*EntityRecord, error) {
 	for name, cs := range s.children {
 		hydrated, err := cs.Hydrate(ctx, rec.ID, rec.Data)
 		if err != nil {
@@ -363,6 +393,10 @@ func (s *EntityStore) hydrateAndCompute(ctx context.Context, rec *EntityRecord) 
 		rec.Data = hydrated
 	}
 	s.evaluateComputed(rec.Data)
+
+	// Resolve belongs_to relations for this single record
+	s.resolveRelations(ctx, []EntityRecord{*rec}, workspaceID)
+
 	return rec, nil
 }
 
@@ -387,7 +421,7 @@ func (s *EntityStore) GetByID(ctx context.Context, params GetByIDParams) (*Entit
 		if err != nil {
 			return nil, err
 		}
-		return s.hydrateAndCompute(ctx, rec)
+		return s.hydrateAndCompute(ctx, rec, params.WorkspaceID)
 	}
 
 	rec, err := s.getByIDRaw(ctx, params)
@@ -395,14 +429,14 @@ func (s *EntityStore) GetByID(ctx context.Context, params GetByIDParams) (*Entit
 		// Natural key fallback: the requested ID didn't match a UUID —
 		// try the natural key field.
 		if nkRec, nkErr := s.FindByField(ctx, params.WorkspaceID, s.naturalKeyField, params.ID); nkErr == nil {
-			return s.hydrateAndCompute(ctx, nkRec)
+			return s.hydrateAndCompute(ctx, nkRec, params.WorkspaceID)
 		}
 	}
 	if err != nil {
 		return nil, err
 	}
 
-	return s.hydrateAndCompute(ctx, rec)
+	return s.hydrateAndCompute(ctx, rec, params.WorkspaceID)
 }
 
 // getByIDRaw fetches the raw parent record without hydrating children.
@@ -412,7 +446,7 @@ func (s *EntityStore) GetByID(ctx context.Context, params GetByIDParams) (*Entit
 func (s *EntityStore) getByIDRaw(ctx context.Context, params GetByIDParams) (*EntityRecord, error) {
 	tbl := s.qualifiedTable()
 	query := fmt.Sprintf(
-		`SELECT id, tenant_id, version, created_at, updated_at, created_by, updated_by, data FROM %s WHERE id = ? AND tenant_id = ?`,
+		`SELECT id, tenant_id, version, created_at, updated_at, created_by, updated_by, doc_status, data FROM %s WHERE id = ? AND tenant_id = ?`,
 		tbl)
 	if s.softDelete {
 		query += " AND deleted_at IS NULL"
@@ -438,6 +472,12 @@ type UpdateParams struct {
 // Children with storage:table are extracted from Data, stored in child tables
 // (replace-all strategy), and removed from parent JSONB.
 func (s *EntityStore) Update(ctx context.Context, params UpdateParams) (int, error) {
+	// Summary entities are permanently read-only via API (§4.1.1)
+	if s.characteristic == spec.CharSummary {
+		return 0, fmt.Errorf("%w: summary entity %s/%s is read-only (create/update/delete disabled)",
+			ErrValidationRule, s.module, s.entity)
+	}
+
 	// Validate required fields that are present in the update data
 	if err := s.validateRequired(params.Data); err != nil {
 		return 0, fmt.Errorf("%s update: %w", s.entity, err)
@@ -480,6 +520,7 @@ func (s *EntityStore) Update(ctx context.Context, params UpdateParams) (int, err
 	// key value as the API-facing ID (e.g. "clinic" for settings).
 	var existingData map[string]any
 	var resolvedID string
+	var existingDocStatus spec.DocStatus
 	{
 		rec, err := s.GetByID(ctx, GetByIDParams{WorkspaceID: params.WorkspaceID, ID: params.ID})
 		if err != nil {
@@ -487,6 +528,14 @@ func (s *EntityStore) Update(ctx context.Context, params UpdateParams) (int, err
 		}
 		existingData = rec.Data
 		resolvedID = rec.ID // actual UUID (natural key was resolved)
+		existingDocStatus = rec.EffectiveDocStatus()
+
+		// Validate lifecycle guard: update requires draft or lifecycle-free
+		if s.submitEnabled {
+			if err := LifecycleGuard("update", existingDocStatus); err != nil {
+				return 0, fmt.Errorf("%s update: %w", s.entity, err)
+			}
+		}
 	}
 	for _, f := range s.fields {
 		if !f.Immutable {
@@ -576,8 +625,30 @@ func (s *EntityStore) Update(ctx context.Context, params UpdateParams) (int, err
 // Children in child tables are cascade-deleted (ON DELETE CASCADE from DDL handles this
 // for hard deletes; for soft deletes we explicitly remove child rows).
 func (s *EntityStore) SoftDelete(ctx context.Context, workspaceID, id string) error {
+	// Summary entities are permanently read-only via API (§4.1.1)
+	if s.characteristic == spec.CharSummary {
+		return fmt.Errorf("%w: summary entity %s/%s is read-only (create/update/delete disabled)",
+			ErrValidationRule, s.module, s.entity)
+	}
+
+	// Fetch existing record to check lifecycle guard
+	rec, err := s.GetByID(ctx, GetByIDParams{WorkspaceID: workspaceID, ID: id})
+	if err != nil {
+		return fmt.Errorf("%s delete: fetch existing: %w", s.entity, err)
+	}
+	if s.submitEnabled {
+		if guardErr := LifecycleGuard("delete", rec.EffectiveDocStatus()); guardErr != nil {
+			return fmt.Errorf("%s delete: %w", s.entity, guardErr)
+		}
+	}
+
+	// Enforce reference guard: check if any document references this one
+	if guardErr := s.EnforceReferenceGuard(ctx, txReadDB(ctx, s.db), workspaceID, rec.ID, "delete"); guardErr != nil {
+		return fmt.Errorf("%s delete: %w", s.entity, guardErr)
+	}
+
 	if !s.softDelete {
-		err := runTx(ctx, s.db, func(txdb DB) error {
+		delErr := runTx(ctx, s.db, func(txdb DB) error {
 			// Delete children first (child tables have ON DELETE CASCADE,
 			// but we do it explicitly for clarity).
 			for name, cs := range s.children {
@@ -588,18 +659,18 @@ func (s *EntityStore) SoftDelete(ctx context.Context, workspaceID, id string) er
 
 			// Hard delete
 			tbl := s.qualifiedTable()
-			_, err := txdb.ExecContext(ctx,
+			_, txErr := txdb.ExecContext(ctx,
 				fmt.Sprintf("DELETE FROM %s WHERE id = ? AND tenant_id = ?", tbl),
 				id, workspaceID)
-			return err
+			return txErr
 		})
-		if err != nil {
-			return fmt.Errorf("%s delete: %w", s.entity, err)
+		if delErr != nil {
+			return fmt.Errorf("%s delete: %w", s.entity, delErr)
 		}
 		return nil
 	}
 
-	err := runTx(ctx, s.db, func(txdb DB) error {
+	err = runTx(ctx, s.db, func(txdb DB) error {
 		tbl := s.qualifiedTable()
 		query := fmt.Sprintf(
 			`UPDATE %s SET deleted_at = %s WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL`,
@@ -776,16 +847,29 @@ func (s *EntityStore) ValidateRelationTargets(ctx context.Context, database DB, 
 			continue
 		}
 
-		// Query the target document's doc_status
-		// We use a simple query: the target table is {target_module}_{target_plural}
-		// Since we don't have full entity resolution here, we query via a generic check.
-		// For now, this is a best-effort guard that works when the target entity
-		// is in the same module and follows standard naming conventions.
+		// Resolve the target resource reference: "module.entity" or "entity" (same module).
+		targetResource := f.Relation.Resource
 		targetModule := s.module
-		targetEntity := f.Relation.Resource
+		targetEntity := targetResource
+		if dotIdx := strings.Index(targetResource, "."); dotIdx >= 0 {
+			targetModule = targetResource[:dotIdx]
+			targetEntity = targetResource[dotIdx+1:]
+		}
 
-		// Try to check doc_status via a direct query
-		tbl := targetModule + "_" + targetEntity + "s" // simplified pluralization
+		// Resolve the table name — use the resolver if set, otherwise fall
+		// back to the naive {module}_{plural} convention (2.2.5).
+		var tbl string
+		if s.targetTableResolver != nil {
+			resolved, err := s.targetTableResolver(targetModule, targetEntity)
+			if err != nil {
+				// Resolver failed — skip guard (best-effort)
+				continue
+			}
+			tbl = resolved
+		} else {
+			tbl = targetModule + "_" + inflectPlural(targetEntity)
+		}
+
 		query := fmt.Sprintf(
 			`SELECT doc_status FROM %s WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL`,
 			tbl)
@@ -815,6 +899,17 @@ func (s *EntityStore) ValidateRelationTargets(ctx context.Context, database DB, 
 
 // Submit transitions a document from draft → submitted.
 func (s *EntityStore) Submit(ctx context.Context, workspaceID, id, userID string) error {
+	// Fetch existing record to check lifecycle guard
+	rec, err := s.GetByID(ctx, GetByIDParams{WorkspaceID: workspaceID, ID: id})
+	if err != nil {
+		return fmt.Errorf("%s submit: fetch existing: %w", s.entity, err)
+	}
+	if s.submitEnabled {
+		if guardErr := LifecycleGuard("submit", rec.EffectiveDocStatus()); guardErr != nil {
+			return fmt.Errorf("%s submit: %w", s.entity, guardErr)
+		}
+	}
+
 	tbl := s.qualifiedTable()
 	query := fmt.Sprintf(
 		`UPDATE %s SET doc_status = 'submitted', version = version + 1, updated_at = %s, updated_by = ? WHERE id = ? AND tenant_id = ? AND doc_status = 'draft'`,
@@ -832,11 +927,30 @@ func (s *EntityStore) Submit(ctx context.Context, workspaceID, id, userID string
 	if rows == 0 {
 		return fmt.Errorf("%s submit: %w (not in draft status or not found)", s.entity, ErrNotFound)
 	}
+
+	// Propagate lifecycle to children (2.3.9)
+	for name, cs := range s.children {
+		if err := cs.withDB(s.db).SubmitChildren(ctx, id); err != nil {
+			log.Printf("[WARN] submit children %s: %v", name, err)
+		}
+	}
+
 	return nil
 }
 
 // Cancel transitions a document from submitted → cancelled.
 func (s *EntityStore) Cancel(ctx context.Context, workspaceID, id, userID string) error {
+	// Fetch existing record to check lifecycle guard
+	rec, err := s.GetByID(ctx, GetByIDParams{WorkspaceID: workspaceID, ID: id})
+	if err != nil {
+		return fmt.Errorf("%s cancel: fetch existing: %w", s.entity, err)
+	}
+	if s.submitEnabled {
+		if guardErr := LifecycleGuard("cancel", rec.EffectiveDocStatus()); guardErr != nil {
+			return fmt.Errorf("%s cancel: %w", s.entity, guardErr)
+		}
+	}
+
 	tbl := s.qualifiedTable()
 	query := fmt.Sprintf(
 		`UPDATE %s SET doc_status = 'cancelled', version = version + 1, updated_at = %s, updated_by = ? WHERE id = ? AND tenant_id = ? AND doc_status = 'submitted'`,
@@ -854,6 +968,14 @@ func (s *EntityStore) Cancel(ctx context.Context, workspaceID, id, userID string
 	if rows == 0 {
 		return fmt.Errorf("%s cancel: %w (not in submitted status or not found)", s.entity, ErrNotFound)
 	}
+
+	// Propagate lifecycle to children (2.3.9)
+	for name, cs := range s.children {
+		if err := cs.withDB(s.db).CancelChildren(ctx, id); err != nil {
+			log.Printf("[WARN] cancel children %s: %v", name, err)
+		}
+	}
+
 	return nil
 }
 
@@ -906,14 +1028,95 @@ var normativeListColumns = map[string]bool{
 // (Core §19) addressable directly in filters and sort.
 func IsNormativeColumn(name string) bool { return normativeListColumns[name] }
 
-// columnRef maps a field name to its SQL column: normative columns as-is,
-// data fields through their generated column (only indexed/unique/natural-key
-// fields have one — the HTTP layer validates before passing a field here).
-func columnRef(field string) string {
+// columnRefExpr returns the SQL column expression for a field, falling back
+// to a JSONB path expression when the field has no generated column. This
+// enables filtering on non-indexed fields via data->>'field' (Postgres) or
+// json_extract(data, '$.field') (SQLite) — see 2.2.2.
+//
+// When the field type is known (numeric, boolean, date, timestamp) the JSONB
+// text value is cast to the native SQL type so that sorting and comparison
+// operators work correctly (numeric order, not lexicographic). Fields without
+// a type match (unknown field name) are returned as plain text for backward
+// compatibility with programmatic queries outside the entity schema.
+func (s *EntityStore) columnRefExpr(field string) string {
 	if normativeListColumns[field] {
 		return field
 	}
-	return generatedColumnName(field)
+	// Check if the field has a generated column (index/unique/naturalKey)
+	for _, f := range s.fields {
+		if f.Name == field && (f.Index || f.Unique || f.NaturalKey) {
+			return generatedColumnName(field)
+		}
+	}
+
+	// Lookup field type for type-aware casting
+	var fieldType spec.FieldType
+	for _, f := range s.fields {
+		if f.Name == field {
+			fieldType = f.Type
+			break
+		}
+	}
+
+	// Fallback: use JSONB path expression
+	var expr string
+	if s.driver == DriverPostgres {
+		expr = fmt.Sprintf("data->>'%s'", field)
+	} else {
+		expr = fmt.Sprintf("json_extract(data, '$.%s')", field)
+	}
+
+	// Cast based on type — ensures numeric/date sort is correct, not lexicographic
+	castType := castTypeForField(fieldType, s.driver)
+	if castType == "" {
+		return expr
+	}
+	if s.driver == DriverPostgres {
+		return fmt.Sprintf("(%s)::%s", expr, castType)
+	}
+	return fmt.Sprintf("CAST(%s AS %s)", expr, castType)
+}
+
+// castTypeForField returns the SQL type keyword to cast a FieldType to its
+// native database type. Returns empty string when no cast is needed (text
+// comparison is semantically correct).
+//
+// For SQLite, date/time types are stored as ISO-8601 text and sort correctly
+// lexicographically without explicit cast.
+func castTypeForField(ft spec.FieldType, driver DriverType) string {
+	switch ft {
+	case spec.FieldInteger:
+		return "integer"
+	case spec.FieldDecimal, spec.FieldNumber:
+		if driver == DriverSQLite {
+			return "REAL"
+		}
+		return "numeric"
+	case spec.FieldBoolean:
+		if driver == DriverSQLite {
+			return "INTEGER"
+		}
+		return "boolean"
+	case spec.FieldDate:
+		if driver == DriverPostgres {
+			return "date"
+		}
+		return "" // SQLite: ISO text sorts correctly
+	case spec.FieldDateTime:
+		if driver == DriverPostgres {
+			return "timestamp"
+		}
+		return "" // SQLite: ISO text sorts correctly
+	case spec.FieldTime:
+		if driver == DriverPostgres {
+			return "time"
+		}
+		return "" // SQLite: ISO text sorts correctly
+	default:
+		// string, text, richtext, enum, uuid, json, file, relation, money,
+		// child — either already text or composite types that can't be cast
+		return ""
+	}
 }
 
 // toAnySlice normalizes a filter value into a flat []any for IN/NOT IN.
@@ -946,7 +1149,7 @@ type ListParams struct {
 
 // FilterOp represents a filter operation.
 type FilterOp struct {
-	Op    string // eq, neq, gt, gte, lt, lte, like, in, nin
+	Op    string // eq, neq, gt, gte, lt, lte, between, in, nin, like, ilike, null, notnull
 	Value any
 }
 
@@ -986,7 +1189,7 @@ func (s *EntityStore) List(ctx context.Context, params ListParams) (*ListResult,
 
 	// Custom filters
 	for field, filter := range params.Filters {
-		col := columnRef(field)
+		col := s.columnRefExpr(field)
 		switch filter.Op {
 		case "eq":
 			whereClauses = append(whereClauses, fmt.Sprintf("%s = ?", col))
@@ -1009,6 +1212,24 @@ func (s *EntityStore) List(ctx context.Context, params ListParams) (*ListResult,
 		case "like":
 			whereClauses = append(whereClauses, fmt.Sprintf("%s LIKE ?", col))
 			args = append(args, filter.Value)
+		case "ilike":
+			if s.driver == DriverPostgres {
+				whereClauses = append(whereClauses, fmt.Sprintf("%s ILIKE ?", col))
+			} else {
+				whereClauses = append(whereClauses, fmt.Sprintf("LOWER(%s) LIKE LOWER(?)", col))
+			}
+			args = append(args, filter.Value)
+		case "null":
+			whereClauses = append(whereClauses, fmt.Sprintf("%s IS NULL", col))
+		case "notnull":
+			whereClauses = append(whereClauses, fmt.Sprintf("%s IS NOT NULL", col))
+		case "between":
+			values := toAnySlice(filter.Value)
+			if len(values) != 2 {
+				continue
+			}
+			whereClauses = append(whereClauses, fmt.Sprintf("%s BETWEEN ? AND ?", col))
+			args = append(args, values[0], values[1])
 		case "in", "nin":
 			values := toAnySlice(filter.Value)
 			if len(values) == 0 {
@@ -1055,7 +1276,7 @@ func (s *EntityStore) List(ctx context.Context, params ListParams) (*ListResult,
 			direction = "DESC"
 			field = field[1:]
 		}
-		orderClause = fmt.Sprintf("ORDER BY %s %s", columnRef(field), direction)
+		orderClause = fmt.Sprintf("ORDER BY %s %s", s.columnRefExpr(field), direction)
 	}
 
 	// Pagination
@@ -1065,7 +1286,7 @@ func (s *EntityStore) List(ctx context.Context, params ListParams) (*ListResult,
 
 	// Query
 	query := fmt.Sprintf(
-		`SELECT id, tenant_id, version, created_at, updated_at, created_by, updated_by, data FROM %s WHERE %s %s %s`,
+		`SELECT id, tenant_id, version, created_at, updated_at, created_by, updated_by, doc_status, data FROM %s WHERE %s %s %s`,
 		tbl, whereStr, orderClause, paginationClause)
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
@@ -1084,6 +1305,10 @@ func (s *EntityStore) List(ctx context.Context, params ListParams) (*ListResult,
 		records = append(records, *rec)
 	}
 
+	// Resolve belongs_to relations: fetch related records and nest them
+	// so dot-path column accessors (e.g. patient.name) work in the frontend.
+	s.resolveRelations(ctx, records, params.WorkspaceID)
+
 	return &ListResult{
 		Data:       records,
 		Total:      total,
@@ -1093,13 +1318,132 @@ func (s *EntityStore) List(ctx context.Context, params ListParams) (*ListResult,
 	}, nil
 }
 
+// resolveRelations populates nested relation data for a list of records.
+// For each belongs_to relation field, it batch-fetches the referenced
+// records and adds them as nested objects keyed by relation alias.
+// Example: field "patient_id" with relation resource "patient" →
+//
+//	records[i].Data["patient"] = {"id": "...", "name": "...", ...}
+func (s *EntityStore) resolveRelations(ctx context.Context, records []EntityRecord, workspaceID string) {
+	if len(records) == 0 {
+		return
+	}
+
+	for _, f := range s.fields {
+		if f.Relation == nil || f.Relation.Type != "belongs_to" {
+			continue
+		}
+
+		// Determine relation alias: "patient_id" → "patient"
+		alias := strings.TrimSuffix(f.Name, "_id")
+		if alias == f.Name {
+			alias = f.Relation.Resource // fallback to resource name
+		}
+
+		// Collect foreign key values and track which records reference them
+		var ids []string
+		idSeen := make(map[string]bool) // deduplicate
+		type recordRef struct {
+			idx      int
+			sourceID string
+		}
+		var refs []recordRef
+
+		for i, rec := range records {
+			idVal, ok := rec.Data[f.Name]
+			if !ok || idVal == nil {
+				continue
+			}
+			idStr, ok := idVal.(string)
+			if !ok || idStr == "" {
+				continue
+			}
+			refs = append(refs, recordRef{idx: i, sourceID: rec.ID})
+			if !idSeen[idStr] {
+				idSeen[idStr] = true
+				ids = append(ids, idStr)
+			}
+		}
+
+		if len(ids) == 0 {
+			continue
+		}
+
+		// Resolve target entity and table name
+		targetModule := s.module
+		targetEntity := f.Relation.Resource
+		if dotIdx := strings.Index(targetEntity, "."); dotIdx >= 0 {
+			targetModule = targetEntity[:dotIdx]
+			targetEntity = targetEntity[dotIdx+1:]
+		}
+
+		targetTable := TableName(targetModule, targetEntity, "")
+		if s.driver == DriverPostgres && s.schema != "" {
+			targetTable = s.schema + "." + targetTable
+		}
+
+		// Batch query: SELECT id, data FROM target WHERE id IN (?,?,...)
+		// Include tenant_id filter for workspace isolation (deleted_at guard
+		// omitted because not every target table has soft delete enabled).
+		placeholders := strings.Repeat("?,", len(ids))
+		placeholders = placeholders[:len(placeholders)-1]
+		q := fmt.Sprintf("SELECT id, data FROM %s WHERE id IN (%s) AND tenant_id = ?",
+			targetTable, placeholders)
+		idArgs := make([]any, 0, len(ids)+1)
+		for _, id := range ids {
+			idArgs = append(idArgs, id)
+		}
+		idArgs = append(idArgs, workspaceID)
+
+		rows, err := s.db.QueryContext(ctx, q, idArgs...)
+		if err != nil {
+			log.Printf("[WARN] resolve relation %s: query %s: %v", f.Name, targetTable, err)
+			continue
+		}
+
+		// Build lookup: relatedID → full record data (including id)
+		relatedData := make(map[string]map[string]any, len(ids))
+		for rows.Next() {
+			var relID, dataStr string
+			if err := rows.Scan(&relID, &dataStr); err != nil {
+				log.Printf("[WARN] resolve relation %s: scan row: %v", f.Name, err)
+				continue
+			}
+			var data map[string]any
+			if err := json.Unmarshal([]byte(dataStr), &data); err != nil {
+				log.Printf("[WARN] resolve relation %s: unmarshal data: %v", f.Name, err)
+				continue
+			}
+			if data == nil {
+				data = make(map[string]any)
+			}
+			data["id"] = relID // include id so frontend can reference it
+			relatedData[relID] = data
+		}
+		rows.Close()
+
+		if err := rows.Err(); err != nil {
+			log.Printf("[WARN] resolve relation %s: rows iteration: %v", f.Name, err)
+			continue
+		}
+
+		// Add nested data to source records
+		for _, ref := range refs {
+			fkVal, _ := records[ref.idx].Data[f.Name].(string)
+			if data, ok := relatedData[fkVal]; ok {
+				records[ref.idx].Data[alias] = data
+			}
+		}
+	}
+}
+
 // FindByField finds a single entity record by a specific field value.
 func (s *EntityStore) FindByField(ctx context.Context, workspaceID, field, value string) (*EntityRecord, error) {
 	tbl := s.qualifiedTable()
 	col := generatedColumnName(field)
 
 	query := fmt.Sprintf(
-		`SELECT id, tenant_id, version, created_at, updated_at, created_by, updated_by, data FROM %s WHERE %s = ? AND tenant_id = ?`,
+		`SELECT id, tenant_id, version, created_at, updated_at, created_by, updated_by, doc_status, data FROM %s WHERE %s = ? AND tenant_id = ?`,
 		tbl, col)
 	if s.softDelete {
 		query += " AND deleted_at IS NULL"
@@ -1126,7 +1470,13 @@ type EntityRecord struct {
 	UpdatedAt   string
 	CreatedBy   string
 	UpdatedBy   string
+	DocStatus   string // "" = lifecycle-free, "draft", "submitted", "cancelled"
 	Data        map[string]any
+}
+
+// EffectiveDocStatus returns the document status. Empty string means lifecycle-free.
+func (r *EntityRecord) EffectiveDocStatus() spec.DocStatus {
+	return spec.DocStatus(r.DocStatus)
 }
 
 // MarshalJSON flattens Data alongside the record's own fields into one
@@ -1135,7 +1485,7 @@ type EntityRecord struct {
 // Reserved names (id, version, ...) always win on collision, matching the
 // framework-owned-column convention elsewhere in the spec.
 func (r EntityRecord) MarshalJSON() ([]byte, error) {
-	out := make(map[string]any, len(r.Data)+7)
+	out := make(map[string]any, len(r.Data)+8)
 	for k, v := range r.Data {
 		out[k] = v
 	}
@@ -1146,6 +1496,9 @@ func (r EntityRecord) MarshalJSON() ([]byte, error) {
 	out["updated_at"] = r.UpdatedAt
 	out["created_by"] = r.CreatedBy
 	out["updated_by"] = r.UpdatedBy
+	if r.DocStatus != "" {
+		out["doc_status"] = r.DocStatus
+	}
 	return json.Marshal(out)
 }
 
@@ -1162,9 +1515,10 @@ func scanEntityRecord(row interface {
 	var id, workspaceID, createdBy, updatedBy string
 	var version int
 	var createdAt, updatedAt string
+	var docStatus sql.NullString // NULL = lifecycle-free
 	var dataStr string
 
-	err := row.Scan(&id, &workspaceID, &version, &createdAt, &updatedAt, &createdBy, &updatedBy, &dataStr)
+	err := row.Scan(&id, &workspaceID, &version, &createdAt, &updatedAt, &createdBy, &updatedBy, &docStatus, &dataStr)
 	if err != nil {
 		if strings.Contains(err.Error(), "no rows") {
 			return nil, fmt.Errorf("%w", ErrNotFound)
@@ -1185,6 +1539,7 @@ func scanEntityRecord(row interface {
 		UpdatedAt:   updatedAt,
 		CreatedBy:   createdBy,
 		UpdatedBy:   updatedBy,
+		DocStatus:   docStatus.String, // empty string when NULL
 		Data:        data,
 	}, nil
 }
@@ -1335,14 +1690,24 @@ func (s *EntityStore) validateStateTransition(oldData, newData map[string]any) e
 		if t.From.Matches(oldState) && t.To == newState {
 			// Evaluate guard if present
 			if t.Guard != nil && t.Guard.Expression != "" {
-				// Build env from combined old+new data (new values take precedence)
-				env := make(map[string]any, len(oldData)+len(newData))
+				// Build combined data from old+new (new values take precedence)
+				combined := make(map[string]any, len(oldData)+len(newData))
 				for k, v := range oldData {
-					env[k] = v
+					combined[k] = v
 				}
 				for k, v := range newData {
+					combined[k] = v
+				}
+				// Build env from combined data, then inject resource/data
+				// aliases pointing TO combined, NOT to env itself — otherwise
+				// toStarlark hits infinite recursion on the circular map.
+				// Matches evaluateGuard in internal/entity/state_machine.go.
+				env := make(map[string]any, len(combined)+2)
+				for k, v := range combined {
 					env[k] = v
 				}
+				env["resource"] = combined
+				env["data"] = combined
 
 				result, err := starlark.EvalExpr(t.Guard.Expression, env)
 				if err != nil {
@@ -1363,7 +1728,7 @@ func (s *EntityStore) validateStateTransition(oldData, newData map[string]any) e
 					if msg == "" {
 						msg = fmt.Sprintf("guard %q rejected transition", t.Guard.Expression)
 					}
-					return fmt.Errorf("%w: %s (from %s -> %s)", ErrValidationRule, msg, oldState, newState)
+					return fmt.Errorf("%w: %s", ErrValidationRule, msg)
 				}
 			}
 			return nil // Valid transition

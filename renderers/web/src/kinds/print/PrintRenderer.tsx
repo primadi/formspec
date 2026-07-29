@@ -45,7 +45,7 @@ export default function PrintRenderer({ entry }: PrintRendererProps) {
         const client = getClient()
         const data = await apiGet<Record<string, unknown>>(
           client,
-          `${entity.module}/${entity.plural}/${id}`,
+          `${entity.module}/${entity.name}/${id}`,
         )
         setRecord(data)
       } catch {

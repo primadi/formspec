@@ -1,0 +1,32 @@
+# SHOWCASE: characteristic summary — sumber data Widget/Dashboard (§5 spec frontend:
+# "Dashboard widgets read summary entities or list actions only").
+# Router hanya generate list + find untuk summary. Tidak dapat menu derived.
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: daily-visit-summary
+  module: clinic
+  description: Agregat harian kunjungan & pendapatan per poliklinik
+spec:
+  version: v1
+  characteristic: summary
+
+  auth: { required: true, strategies: [token] }
+
+  fields:
+    - name: date
+      type: date
+      required: true
+      index: true
+    - name: polyclinic_id
+      type: relation
+      relation: { type: belongs_to, resource: polyclinic }
+    - name: visit_count
+      type: integer
+      default: 0
+    - name: completed_count
+      type: integer
+      default: 0
+    - name: revenue
+      type: decimal
+      default: 0

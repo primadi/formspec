@@ -90,15 +90,34 @@ function SurfaceShell({ surface }: { surface: "admin" | "app" }) {
     [bundle, surfacePath],
   )
 
-  // Boot: fetch session + meta
+  // Boot: fetch session + meta, then start spec version polling
   useEffect(() => {
     if (!sessionLoaded) {
       boot(workspace).then(() => {
-        const client = useSessionStore.getState().getClient()
-        loadMeta(client, surface)
+        const { token } = useSessionStore.getState()
+        loadMeta(workspace, surface, token)
       })
     }
   }, [workspace, sessionLoaded, boot, loadMeta, surface])
+
+  // Dev-mode only: listen for Vite HMR 'forma:spec-reloaded' events.
+  // When the backend reloads YAML specs, the Vite dev server broadcasts
+  // this event and we re-fetch the meta bundle — no polling needed.
+  useEffect(() => {
+    if (!import.meta.hot) return
+
+    const handler = () => {
+      const state = useMetaStore.getState()
+      if (state.bundle) {
+        const { token } = useSessionStore.getState()
+        state.refresh(workspace, surface, token)
+      }
+    }
+    import.meta.hot.on("forma:spec-reloaded", handler)
+    return () => {
+      import.meta.hot.off("forma:spec-reloaded", handler)
+    }
+  }, [workspace, surface])
 
   // While loading
   if (!sessionLoaded || metaLoading) {

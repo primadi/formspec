@@ -92,29 +92,55 @@ func (c *ChildStore) ChildrenExtract(data map[string]any) (children []map[string
 
 // InsertChildren inserts child rows into the child table.
 // For jsonb storage, this is a no-op (children are already in parent JSONB).
+// When SequenceField is set, validates monotonic ordering (2.3.8).
 func (c *ChildStore) InsertChildren(ctx context.Context, parentID string, children []map[string]any) error {
 	if c.storage == "jsonb" || len(children) == 0 {
 		return nil
 	}
 
+	// Validate or auto-assign sequence_field if configured (2.3.8)
+	seqField := ""
+	if c.field.Child != nil && c.field.Child.SequenceField != "" {
+		seqField = c.field.Child.SequenceField
+		// Check if client provided sequence values
+		clientProvided := false
+		for _, ch := range children {
+			if v, ok := ch[seqField]; ok && v != nil {
+				clientProvided = true
+				break
+			}
+		}
+		if clientProvided {
+			// Validate monotonic ordering
+			if err := validateSequenceField(children, seqField); err != nil {
+				return err
+			}
+		} else {
+			// Auto-assign sequence values starting from 1
+			for i, ch := range children {
+				ch[seqField] = int64(i + 1)
+			}
+		}
+	}
+
 	for i, child := range children {
 		dataStr := toJSONString(child)
 		id := NewUUIDv7()
-		query := fmt.Sprintf(
-			"INSERT INTO %s (id, parent_id, data) VALUES (?, ?, ?)",
-			c.childTable)
 
-		// Add sequence number if SequenceField is set
-		if c.field.Child != nil && c.field.Child.SequenceField != "" {
-			seqField := c.field.Child.SequenceField
-			query = fmt.Sprintf(
+		if seqField != "" {
+			// Use client-supplied sequence value, not auto-increment
+			seqVal := extractSeqValue(child, seqField, i+1)
+			query := fmt.Sprintf(
 				"INSERT INTO %s (id, parent_id, %s, data) VALUES (?, ?, ?, ?)",
 				c.childTable, seqField)
-			_, err := c.db.ExecContext(ctx, query, id, parentID, i+1, dataStr)
+			_, err := c.db.ExecContext(ctx, query, id, parentID, seqVal, dataStr)
 			if err != nil {
 				return fmt.Errorf("insert child[%d] into %s: %w", i, c.childTable, err)
 			}
 		} else {
+			query := fmt.Sprintf(
+				"INSERT INTO %s (id, parent_id, data) VALUES (?, ?, ?)",
+				c.childTable)
 			_, err := c.db.ExecContext(ctx, query, id, parentID, dataStr)
 			if err != nil {
 				return fmt.Errorf("insert child[%d] into %s: %w", i, c.childTable, err)
@@ -124,6 +150,72 @@ func (c *ChildStore) InsertChildren(ctx context.Context, parentID string, childr
 
 	return nil
 }
+
+// extractSeqValue extracts the sequence value from child data, falling back to
+// index+1 if not present (for backward compatibility with clients that omit it).
+func extractSeqValue(child map[string]any, seqField string, defaultVal int) int64 {
+	if v, ok := child[seqField]; ok {
+		switch tv := v.(type) {
+		case float64:
+			return int64(tv)
+		case int64:
+			return tv
+		case int:
+			return int64(tv)
+		}
+	}
+	return int64(defaultVal)
+}
+
+// validateSequenceField checks that the sequence_field values are monotonically
+// increasing (strictly). Duplicates or non-increasing values → VALIDATION_ERROR.
+func validateSequenceField(children []map[string]any, seqField string) error {
+	var prev *int64
+	for i, child := range children {
+		raw, ok := child[seqField]
+		if !ok || raw == nil {
+			return &validationErr{
+				field: seqField,
+				msg:   fmt.Sprintf("child[%d]: sequence field %q is required", i, seqField),
+			}
+		}
+		var curr int64
+		switch v := raw.(type) {
+		case float64:
+			curr = int64(v)
+		case int64:
+			curr = v
+		case int:
+			curr = int64(v)
+		default:
+			return &validationErr{
+				field: seqField,
+				msg:   fmt.Sprintf("child[%d]: %q must be a number", i, seqField),
+			}
+		}
+
+		if prev != nil && curr <= *prev {
+			return &validationErr{
+				field: seqField,
+				msg:   fmt.Sprintf("child[%d]: %q value %d is not monotonically increasing (previous: %d)", i, seqField, curr, *prev),
+			}
+		}
+		prev = &curr
+	}
+	return nil
+}
+
+// validationErr is a simple validation error that wraps ErrValidationRule.
+type validationErr struct {
+	field string
+	msg   string
+}
+
+func (e *validationErr) Error() string {
+	return fmt.Sprintf("%s: %s", ErrValidationRule.Error(), e.msg)
+}
+
+func (e *validationErr) Unwrap() error { return ErrValidationRule }
 
 // GetChildren fetches all children for a parent from the child table.
 // For jsonb storage, this is a no-op (children come from parent data JSONB).
@@ -203,6 +295,31 @@ func (c *ChildStore) DeleteChildren(ctx context.Context, parentID string) error 
 		return fmt.Errorf("delete children from %s: %w", c.childTable, err)
 	}
 	return nil
+}
+
+// SubmitChildren propagates submit lifecycle to all child rows (2.3.9).
+// Children follow parent lifecycle — when parent is submitted, all children
+// transition to submitted as well. For jsonb storage this is a no-op.
+func (c *ChildStore) SubmitChildren(ctx context.Context, parentID string) error {
+	if c.storage == "jsonb" {
+		return nil
+	}
+	_, err := c.db.ExecContext(ctx,
+		fmt.Sprintf("UPDATE %s SET doc_status = 'submitted' WHERE parent_id = ? AND (doc_status IS NULL OR doc_status = 'draft')", c.childTable),
+		parentID)
+	return err
+}
+
+// CancelChildren propagates cancel lifecycle to all child rows (2.3.9).
+// When parent is cancelled, all children transition to cancelled as well.
+func (c *ChildStore) CancelChildren(ctx context.Context, parentID string) error {
+	if c.storage == "jsonb" {
+		return nil
+	}
+	_, err := c.db.ExecContext(ctx,
+		fmt.Sprintf("UPDATE %s SET doc_status = 'cancelled' WHERE parent_id = ? AND doc_status = 'submitted'", c.childTable),
+		parentID)
+	return err
 }
 
 // Hydrate merges table-stored children back into a parent data map.

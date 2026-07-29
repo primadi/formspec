@@ -5,7 +5,6 @@
 // lookup by entity name, form name, table name, etc.
 
 import { create } from "zustand"
-import type { KyInstance } from "ky"
 
 import {
   type MetaBundle,
@@ -57,8 +56,9 @@ export interface MetaState {
   forbidden: boolean
 
   // ── Actions ──
-  load: (client: KyInstance, surface: "admin" | "app") => Promise<void>
+  load: (workspace: string, surface: "admin" | "app", token?: string) => Promise<void>
   reset: () => void
+  refresh: (workspace: string, surface: "admin" | "app", token?: string) => Promise<void>
 
   // ── Entity Lookups ──
   getEntity: (module: string, name: string) => EntitySchema | undefined
@@ -145,18 +145,18 @@ export const useMetaStore = create<MetaState>((set, get) => ({
   error: null,
   forbidden: false,
 
-  load: async (client: KyInstance, surface: "admin" | "app") => {
+  load: async (workspace: string, surface: "admin" | "app", token?: string) => {
     set({ loading: true, error: null, forbidden: false })
     try {
       // `_admin` isn't scoped to any App (Core §4.4) — skip App detection
       // entirely and fetch the unscoped, binary-gated bundle.
       let bundle: MetaBundle
       if (surface === "admin") {
-        bundle = await fetchMetaBundle(client, { admin: true })
+        bundle = await fetchMetaBundle(workspace, { admin: true, token })
       } else {
-        const apps = await fetchMetaApps(client)
+        const apps = await fetchMetaApps(workspace, token)
         const appName = detectAppName(window.location.pathname, apps)
-        bundle = await fetchMetaBundle(client, { appName })
+        bundle = await fetchMetaBundle(workspace, { appName, token })
       }
       set({ bundle, loading: false, error: null, forbidden: false })
     } catch (err) {
@@ -166,6 +166,22 @@ export const useMetaStore = create<MetaState>((set, get) => ({
       }
       const message = err instanceof Error ? err.message : "Failed to load meta bundle"
       set({ loading: false, error: message })
+    }
+  },
+
+  refresh: async (workspace: string, surface: "admin" | "app", token?: string) => {
+    try {
+      let bundle: MetaBundle
+      if (surface === "admin") {
+        bundle = await fetchMetaBundle(workspace, { admin: true, token })
+      } else {
+        const apps = await fetchMetaApps(workspace, token)
+        const appName = detectAppName(window.location.pathname, apps)
+        bundle = await fetchMetaBundle(workspace, { appName, token })
+      }
+      set({ bundle, error: null })
+    } catch {
+      // Silently ignore refresh errors — keep the old bundle.
     }
   },
 

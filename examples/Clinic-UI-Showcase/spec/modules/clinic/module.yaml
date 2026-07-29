@@ -36,4 +36,5 @@ spec:
         - label: "Pengaturan"
           icon: "settings"
           view: system-settings
-          when: "user.has('clinic.settings.update')" # kondisi bisnis FormaExpr (§9)
+          when: "user.has('clinic.settings.update')"
+        - { label: "Data Master", icon: "database", route: "/app/master?tab=Dokter" }

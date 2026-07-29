@@ -13,6 +13,7 @@ import (
 
 	"github.com/primadi/forma/internal/action"
 	"github.com/primadi/forma/internal/auth"
+	entityengine "github.com/primadi/forma/internal/entity"
 	"github.com/primadi/forma/internal/validation"
 	"github.com/primadi/forma/pkg/spec"
 	db "github.com/primadi/forma/renderers/jsonbpersist"
@@ -137,9 +138,11 @@ var reservedListParams = map[string]bool{
 }
 
 // filterOps are the supported bracket operators: field[op]=value.
+// 13 operators total per 01-core-basic.md §6 (2.2.1).
 var filterOps = map[string]bool{
 	"eq": true, "neq": true, "gt": true, "gte": true, "lt": true, "lte": true,
-	"like": true, "in": true, "nin": true,
+	"between": true, "in": true, "nin": true, "like": true, "ilike": true,
+	"null": true, "notnull": true,
 }
 
 // parseListQuery extracts sort + field filters from the query string
@@ -176,20 +179,15 @@ func (f *HandlerFactory) parseListQuery(r *http.Request, module, entity string) 
 		return "", nil, fmt.Errorf("entity spec not found: %s/%s", module, entity)
 	}
 
-	filterable := map[string]bool{}
+	// Collect all entity field names — filtering is now supported on any
+	// field via JSONB path fallback (2.2.2), not only indexed ones.
+	allFields := map[string]bool{}
 	for _, fld := range es.Fields {
-		if fld.Index || fld.Unique || fld.NaturalKey {
-			filterable[fld.Name] = true
-		}
+		allFields[fld.Name] = true
 	}
 	checkField := func(name string) error {
-		if db.IsNormativeColumn(name) || filterable[name] {
+		if db.IsNormativeColumn(name) || allFields[name] {
 			return nil
-		}
-		for _, fld := range es.Fields {
-			if fld.Name == name {
-				return fmt.Errorf("field %q is not filterable/sortable — declare index: true on it", name)
-			}
 		}
 		return fmt.Errorf("unknown field %q", name)
 	}
@@ -220,13 +218,19 @@ func (f *HandlerFactory) parseListQuery(r *http.Request, module, entity string) 
 		}
 
 		var value any = values[0]
-		if op == "in" || op == "nin" {
+		switch op {
+		case "in", "nin":
 			parts := strings.Split(values[0], ",")
 			anyParts := make([]any, len(parts))
 			for i, p := range parts {
 				anyParts[i] = strings.TrimSpace(p)
 			}
 			value = anyParts
+		case "between":
+			parts := strings.Split(values[0], ",")
+			if len(parts) == 2 {
+				value = []any{strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])}
+			}
 		}
 
 		if filters == nil {
@@ -448,6 +452,14 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 			hooks = entitySpec.Hooks
 		}
 
+		// Evaluate action conditions (e.g. prevent editing cancelled records)
+		if actionSpec != nil && len(actionSpec.Conditions) > 0 {
+			if err := action.EvaluateConditions(actionSpec.Conditions, merged, body); err != nil {
+				writeError(w, http.StatusUnprocessableEntity, "CONDITION_FAILED", err.Error())
+				return
+			}
+		}
+
 		execParams := &action.ExecuteParams{
 			Module: module, Entity: entity, ActionName: "update", ResourceID: id,
 			Resource: merged, ResourceVersion: current.Version, Params: body,
@@ -522,11 +534,258 @@ func (f *HandlerFactory) HandleDelete(module, entity string) http.HandlerFunc {
 		id := r.PathValue("id")
 
 		if err := store.SoftDelete(ctx, workspaceID, id); err != nil {
+			// Detect lifecycle/referential integrity errors → 409 Conflict
+			var lcErr *db.LifecycleError
+			if errors.As(err, &lcErr) {
+				writeError(w, http.StatusConflict, lcErr.Code, lcErr.Error())
+				return
+			}
 			writeError(w, http.StatusNotFound, "NOT_FOUND", err.Error())
 			return
 		}
 
 		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// HandleSubmit returns a POST /{id}/submit handler that transitions a draft
+// document to submitted. Calls the action dispatcher for hooks and events,
+// then performs the actual lifecycle transition via store.Submit().
+func (f *HandlerFactory) HandleSubmit(module, entity string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		store, err := f.registry.GetEntityStore(module, entity)
+		if err != nil {
+			writeError(w, http.StatusNotFound, "NOT_FOUND", "entity not found: "+err.Error())
+			return
+		}
+
+		workspaceID := workspaceFromContext(ctx)
+		userID := userFromContext(ctx)
+		id := r.PathValue("id")
+
+		// Fetch current state first
+		rec, err := store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: id})
+		if err != nil {
+			writeError(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+			return
+		}
+
+		// Run before-phase hooks
+		var entitySpec *spec.EntitySpec
+		if f.specLookup != nil {
+			entitySpec, _ = f.specLookup(module, entity)
+		}
+		actionSpec := resolveAction(entitySpec, "submit")
+		var hooks []spec.HookDecl
+		if entitySpec != nil {
+			hooks = entitySpec.Hooks
+		}
+
+		execParams := &action.ExecuteParams{
+			Module: module, Entity: entity, ActionName: "submit",
+			ResourceID: id, Resource: rec.Data,
+			WorkspaceID: workspaceID, UserID: userID,
+		}
+		if err := action.RunBeforePhase(ctx, f.dispatcher, hooks, actionSpec, "submit", execParams); err != nil {
+			writeError(w, http.StatusUnprocessableEntity, "HOOK_ABORTED", err.Error())
+			return
+		}
+
+		// Perform the submit
+		if err := store.Submit(ctx, workspaceID, id, userID); err != nil {
+			writeStoreError(w, err)
+			return
+		}
+
+		// Re-fetch to get updated state
+		rec, err = store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: id})
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "submitted but fetch failed: "+err.Error())
+			return
+		}
+
+		if rec != nil {
+			action.RunAfterPhase(ctx, f.dispatcher, hooks, actionSpec, "submit", action.ExecuteParams{
+				Module: module, Entity: entity, ActionName: "submit", ResourceID: id,
+				Resource: rec.Data, WorkspaceID: workspaceID, UserID: userID,
+			})
+
+			// Emit on_submit event
+			if entitySpec != nil {
+				emitted := action.ResolveEmission(entitySpec.Events, emitsOf(actionSpec), rec.Data)
+				if emitted != nil {
+					action.DeliverEvents(ctx, f.deliveryDeps, workspaceID, module+"/"+entity, []action.EventEmission{*emitted}, false)
+				}
+			}
+		}
+
+		writeJSON(w, http.StatusOK, SingleResponse{
+			Data: rec,
+			Meta: MetaSingle{RequestID: requestIDFromContext(ctx), Timestamp: time.Now().UTC().Format(time.RFC3339)},
+		})
+	}
+}
+
+// HandleCancel returns a POST /{id}/cancel handler that transitions a submitted
+// document to cancelled. Mirrors HandleSubmit's structure.
+func (f *HandlerFactory) HandleCancel(module, entity string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		store, err := f.registry.GetEntityStore(module, entity)
+		if err != nil {
+			writeError(w, http.StatusNotFound, "NOT_FOUND", "entity not found: "+err.Error())
+			return
+		}
+
+		workspaceID := workspaceFromContext(ctx)
+		userID := userFromContext(ctx)
+		id := r.PathValue("id")
+
+		rec, err := store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: id})
+		if err != nil {
+			writeError(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+			return
+		}
+
+		var entitySpec *spec.EntitySpec
+		if f.specLookup != nil {
+			entitySpec, _ = f.specLookup(module, entity)
+		}
+		actionSpec := resolveAction(entitySpec, "cancel")
+		var hooks []spec.HookDecl
+		if entitySpec != nil {
+			hooks = entitySpec.Hooks
+		}
+
+		execParams := &action.ExecuteParams{
+			Module: module, Entity: entity, ActionName: "cancel",
+			ResourceID: id, Resource: rec.Data,
+			WorkspaceID: workspaceID, UserID: userID,
+		}
+		if err := action.RunBeforePhase(ctx, f.dispatcher, hooks, actionSpec, "cancel", execParams); err != nil {
+			writeError(w, http.StatusUnprocessableEntity, "HOOK_ABORTED", err.Error())
+			return
+		}
+
+		if err := store.Cancel(ctx, workspaceID, id, userID); err != nil {
+			writeStoreError(w, err)
+			return
+		}
+
+		rec, err = store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: id})
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "cancelled but fetch failed: "+err.Error())
+			return
+		}
+
+		if rec != nil {
+			action.RunAfterPhase(ctx, f.dispatcher, hooks, actionSpec, "cancel", action.ExecuteParams{
+				Module: module, Entity: entity, ActionName: "cancel", ResourceID: id,
+				Resource: rec.Data, WorkspaceID: workspaceID, UserID: userID,
+			})
+
+			if entitySpec != nil {
+				emitted := action.ResolveEmission(entitySpec.Events, emitsOf(actionSpec), rec.Data)
+				if emitted != nil {
+					action.DeliverEvents(ctx, f.deliveryDeps, workspaceID, module+"/"+entity, []action.EventEmission{*emitted}, false)
+				}
+			}
+		}
+
+		writeJSON(w, http.StatusOK, SingleResponse{
+			Data: rec,
+			Meta: MetaSingle{RequestID: requestIDFromContext(ctx), Timestamp: time.Now().UTC().Format(time.RFC3339)},
+		})
+	}
+}
+
+// HandleAmend returns a POST /{id}/amend handler that creates a new draft
+// version of a submitted/cancelled document. The request body contains the new
+// data for the amended version.
+func (f *HandlerFactory) HandleAmend(module, entity string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		store, err := f.registry.GetEntityStore(module, entity)
+		if err != nil {
+			writeError(w, http.StatusNotFound, "NOT_FOUND", "entity not found: "+err.Error())
+			return
+		}
+
+		var body map[string]any
+		if r.Body != nil && r.ContentLength > 0 {
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				writeError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "invalid JSON: "+err.Error())
+				return
+			}
+		}
+		if body == nil {
+			body = make(map[string]any)
+		}
+
+		workspaceID := workspaceFromContext(ctx)
+		userID := userFromContext(ctx)
+		id := r.PathValue("id")
+
+		var entitySpec *spec.EntitySpec
+		if f.specLookup != nil {
+			entitySpec, _ = f.specLookup(module, entity)
+		}
+		actionSpec := resolveAction(entitySpec, "amend")
+		var hooks []spec.HookDecl
+		if entitySpec != nil {
+			hooks = entitySpec.Hooks
+		}
+
+		// Fetch current resource data
+		rec, err := store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: id})
+		if err != nil {
+			writeError(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+			return
+		}
+
+		execParams := &action.ExecuteParams{
+			Module: module, Entity: entity, ActionName: "amend",
+			ResourceID: id, Resource: rec.Data, Params: body,
+			WorkspaceID: workspaceID, UserID: userID,
+		}
+		if err := action.RunBeforePhase(ctx, f.dispatcher, hooks, actionSpec, "amend", execParams); err != nil {
+			writeError(w, http.StatusUnprocessableEntity, "HOOK_ABORTED", err.Error())
+			return
+		}
+
+		// Perform the amend: cancels original + creates new draft
+		newID, err := store.Amend(ctx, workspaceID, id, userID, body)
+		if err != nil {
+			writeStoreError(w, err)
+			return
+		}
+
+		// Fetch the new amended record
+		newRec, err := store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: newID})
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "amended but fetch failed: "+err.Error())
+			return
+		}
+
+		if newRec != nil {
+			action.RunAfterPhase(ctx, f.dispatcher, hooks, actionSpec, "amend", action.ExecuteParams{
+				Module: module, Entity: entity, ActionName: "amend", ResourceID: newID,
+				Resource: newRec.Data, WorkspaceID: workspaceID, UserID: userID,
+			})
+
+			if entitySpec != nil {
+				emitted := action.ResolveEmission(entitySpec.Events, emitsOf(actionSpec), newRec.Data)
+				if emitted != nil {
+					action.DeliverEvents(ctx, f.deliveryDeps, workspaceID, module+"/"+entity, []action.EventEmission{*emitted}, false)
+				}
+			}
+		}
+
+		writeJSON(w, http.StatusCreated, SingleResponse{
+			Data: newRec,
+			Meta: MetaSingle{RequestID: requestIDFromContext(ctx), Timestamp: time.Now().UTC().Format(time.RFC3339)},
+		})
 	}
 }
 
@@ -775,6 +1034,16 @@ func isValidationError(err error) bool {
 // validation → 422 VALIDATION_ERROR, version conflict → 409 CONFLICT,
 // anything else → 500 INTERNAL_ERROR.
 func writeStoreError(w http.ResponseWriter, err error) {
+	// Unwrap to find LifecycleError (errors.Is with pointer type)
+	if _, ok := errors.AsType[*db.LifecycleError](err); ok {
+		writeError(w, http.StatusUnprocessableEntity, "LIFECYCLE_ERROR", err.Error())
+		return
+	}
+	// TransactionDatePolicyError is a validation error — map to 422
+	if _, ok := errors.AsType[*db.TransactionDatePolicyError](err); ok {
+		writeError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", err.Error())
+		return
+	}
 	switch {
 	case isValidationError(err):
 		writeError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", err.Error())
@@ -799,26 +1068,26 @@ func contains(s, substr string) bool {
 // writeValidationErrors writes one or more validation errors as 422 VALIDATION_ERROR.
 // Spec §16: errors include structured details array with level, optional field, and message.
 func writeValidationErrors(w http.ResponseWriter, errs []error) {
-	msg := ""
+	var msg strings.Builder
 	details := make([]ErrorDetailItem, 0, len(errs))
 	for i, e := range errs {
 		if i > 0 {
-			msg += "; "
+			msg.WriteString("; ")
 		}
 		errStr := e.Error()
-		msg += errStr
+		msg.WriteString(errStr)
 		details = append(details, ErrorDetailItem{
 			Level:   "error",
 			Message: errStr,
 		})
 	}
-	writeErrorWithDetails(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", msg, details)
+	writeErrorWithDetails(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", msg.String(), details)
 }
 
 // HandleCustomAction returns a handler for a named custom action on an entity.
 // It validates action params, evaluates conditions, dispatches to the impl executor,
 // and handles the result (including state machine transitions).
-func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, actionSpec spec.Action) http.HandlerFunc {
+func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, actionSpec spec.Action, specDir string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		workspaceID := workspaceFromContext(ctx)
@@ -871,6 +1140,32 @@ func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, a
 			}
 		}
 
+		// Resolve entity spec for state machine and hooks
+		var entitySpec *spec.EntitySpec
+		if f.specLookup != nil {
+			entitySpec, _ = f.specLookup(module, entity)
+		}
+
+		// Validate state machine transition + evaluate guard before dispatching.
+		// Catches invalid transitions (e.g. cancelling an already-cancelled record)
+		// and evaluates guard expressions (e.g. diagnosis required before complete).
+		if entitySpec != nil && entitySpec.StateMachine != nil && resourceID != "" {
+			sm := entitySpec.StateMachine
+			currentState := ""
+			if cs, ok := resourceData[sm.Field]; ok && cs != nil {
+				currentState = fmt.Sprintf("%v", cs)
+			}
+			smEngine := entityengine.NewStateMachineEngine()
+			if err := smEngine.CanTransition(entitySpec, currentState, actionName, resourceData); err != nil {
+				if ste, ok := err.(*entityengine.StateTransitionError); ok {
+					writeError(w, http.StatusUnprocessableEntity, "INVALID_TRANSITION", ste.Reason)
+				} else {
+					writeError(w, http.StatusInternalServerError, "GUARD_ERROR", err.Error())
+				}
+				return
+			}
+		}
+
 		// Dispatch to the appropriate executor via the action dispatcher
 		identity := IdentityFromContext(ctx)
 		var identityInfo *action.IdentityInfo
@@ -883,10 +1178,6 @@ func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, a
 			}
 		}
 
-		var entitySpec *spec.EntitySpec
-		if f.specLookup != nil {
-			entitySpec, _ = f.specLookup(module, entity)
-		}
 		var hooks []spec.HookDecl
 		if entitySpec != nil {
 			hooks = entitySpec.Hooks
@@ -903,6 +1194,7 @@ func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, a
 			WorkspaceID:     workspaceID,
 			UserID:          userID,
 			Identity:        identityInfo,
+			SpecDir:         specDir,
 		}
 
 		// Open a request-scoped transaction for this action's entire

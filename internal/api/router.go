@@ -19,15 +19,16 @@ import (
 // RouterBuilder constructs a Forma API router.
 // It wires middleware, route generation, and handler dispatch together.
 type RouterBuilder struct {
-	registry   *entity.Registry
-	routes     []RouteDescriptor
-	factory    *HandlerFactory
-	dispatcher *action.Dispatcher
-	uiRegistry *ui.Registry
-	webDir     string // static SPA root (web/dist); empty = no static serving
-	webFS      fs.FS  // embedded SPA (embed.FS); empty = no static serving
-	hub        *WSHub
-	apps       map[string]*forma_app.ResolvedApp // resolved kind: App manifests, keyed by name (Core §4.4)
+	registry      *entity.Registry
+	routes        []RouteDescriptor
+	factory       *HandlerFactory
+	dispatcher    *action.Dispatcher
+	uiRegistry    *ui.Registry
+	webDir        string // static SPA root (web/dist); empty = no static serving
+	webFS         fs.FS  // embedded SPA (embed.FS); empty = no static serving
+	hub           *WSHub
+	apps          map[string]*forma_app.ResolvedApp // resolved kind: App manifests, keyed by name (Core §4.4)
+	specVersionFn func() int64                      // returns the current spec version (for Meta API polling)
 }
 
 // NewRouterBuilder creates a new router builder backed by the entity registry.
@@ -63,7 +64,7 @@ func (b *RouterBuilder) SetDeliveryDeps(deps action.DeliveryDeps) {
 }
 
 // SetUIRegistry wires the frontend UI registry; enables the Meta API
-// (/{ws}/api/v1/_meta/...). Call before BuildHTTP.
+// (/{ws}/_ui/_meta/...). Call before BuildHTTP.
 func (b *RouterBuilder) SetUIRegistry(r *ui.Registry) {
 	b.uiRegistry = r
 }
@@ -96,12 +97,27 @@ func (b *RouterBuilder) Hub() *WSHub {
 	return b.hub
 }
 
+// SetHub replaces the websocket hub. Used during spec reload (ReloadSpec)
+// to preserve existing WebSocket connections across a router rebuild.
+func (b *RouterBuilder) SetHub(h *WSHub) {
+	b.hub = h
+}
+
+// SetSpecVersionFn wires the spec version function. Called by the Meta API
+// version handler so the frontend can detect when the meta bundle changed.
+func (b *RouterBuilder) SetSpecVersionFn(fn func() int64) {
+	b.specVersionFn = fn
+}
+
 // BuildRoutes generates route descriptors and stores them in the builder.
-// Includes both standard CRUD routes and custom action routes.
+// Includes both external API (/api/v1/) and UI (/ _ui/entity/) routes,
+// plus custom action routes for both surfaces.
 func (b *RouterBuilder) BuildRoutes() {
 	restRoutes := GenerateRoutes(b.registry)
+	uiRoutes := GenerateUIRoutes(b.registry)
 	customRoutes := GenerateCustomActionRoutes(b.registry)
-	b.routes = mergeRoutes(restRoutes, customRoutes)
+	uiCustomRoutes := GenerateUICustomActionRoutes(b.registry)
+	b.routes = mergeRoutes(restRoutes, uiRoutes, customRoutes, uiCustomRoutes)
 }
 
 // BuildHTTP constructs the chi router with all middleware and route registration.
@@ -117,24 +133,53 @@ func (b *RouterBuilder) BuildHTTP() http.Handler {
 	r.Use(WorkspaceMiddleware)
 	r.Use(AuthMiddleware)
 
-	// Workspace-prefixed API routes
+	// Workspace-prefixed API routes — two surfaces (§8):
+	//   /{ws}/_ui/...        → UI (always available, session auth)
+	//   /{ws}/api/v1/...     → external (deny-by-default, spec.expose)
 	r.Route("/{workspace}", func(r chi.Router) {
-		r.Route("/api/v1", func(r chi.Router) {
+		// JSON 404 for unmatched API routes within this workspace
+		r.NotFound(func(w http.ResponseWriter, r *http.Request) {
+			writeError(w, http.StatusNotFound, "NOT_FOUND", "endpoint not found")
+		})
+		// ─── UI surface (§8.1): /_ui/ ───
+		r.Route("/_ui", func(r chi.Router) {
 			// Meta API — read-only UI manifests + identity (Frontend §1.1).
-			// No RequirePermission wrapper: the bundle itself is filtered per
-			// caller, and /_meta/me is by definition caller-scoped.
 			r.Route("/_meta", func(r chi.Router) {
 				r.Get("/apps", b.HandleMetaApps())
 				r.Get("/ui", b.HandleMetaUI())
 				r.Get("/me", b.HandleMetaMe())
+				r.Get("/version", b.HandleMetaVersion())
 				r.Get("/entities/{module}/{name}", b.HandleMetaEntity())
 			})
 
 			// Realtime event push (Frontend kanban/board realtime: true).
 			r.Get("/_ws", b.HandleWS())
 
+			// Entity CRUD — all entities, regardless of spec.expose.
+			// No SPA fallback here: /_ui/entity/* is a REST API surface that
+			// must return JSON errors, not HTML. Client-side routing for the
+			// SPA lives under /_admin and /app, not under /_ui/entity.
+			r.Route("/entity", func(r chi.Router) {
+				for _, rd := range b.routes {
+					if rd.Protocol != ProtocolREST {
+						continue
+					}
+					if !strings.HasPrefix(rd.Path, "/_ui/entity") {
+						continue
+					}
+					pattern := strings.TrimPrefix(rd.Path, "/_ui/entity")
+					b.registerRouteWithPattern(r, rd, pattern)
+				}
+			})
+		})
+
+		// ─── External API surface (§8.2): /api/v1/ ───
+		r.Route("/api/v1", func(r chi.Router) {
 			for _, rd := range b.routes {
 				if rd.Protocol != ProtocolREST {
+					continue
+				}
+				if !strings.HasPrefix(rd.Path, "/api/v1") {
 					continue
 				}
 				b.registerRoute(r, rd)
@@ -207,6 +252,12 @@ func (b *RouterBuilder) registerRoute(r chi.Router, rd RouteDescriptor) {
 			handler = b.factory.HandleUpdate(rd.Module, rd.Entity)
 		case "delete":
 			handler = b.factory.HandleDelete(rd.Module, rd.Entity)
+		case "submit":
+			handler = b.factory.HandleSubmit(rd.Module, rd.Entity)
+		case "cancel":
+			handler = b.factory.HandleCancel(rd.Module, rd.Entity)
+		case "amend":
+			handler = b.factory.HandleAmend(rd.Module, rd.Entity)
 		default:
 			return // unknown auto action, skip
 		}
@@ -238,7 +289,13 @@ func (b *RouterBuilder) registerRoute(r chi.Router, rd RouteDescriptor) {
 			break
 		}
 
-		handler = b.factory.HandleCustomAction(rd.Module, rd.Entity, rd.Action, *actionSpec)
+		// Extract entity spec directory from source path
+		specDir := ""
+		if src := specInfo.Source; src != "" {
+			specDir = filepath.Dir(strings.SplitN(src, "#", 2)[0])
+		}
+
+		handler = b.factory.HandleCustomAction(rd.Module, rd.Entity, rd.Action, *actionSpec, specDir)
 	default:
 		return // unknown handler type, skip
 	}
@@ -250,6 +307,75 @@ func (b *RouterBuilder) registerRoute(r chi.Router, rd RouteDescriptor) {
 	}
 
 	// Register on the sub-router
+	switch rd.Method {
+	case "GET":
+		sub.Get(pattern, handler)
+	case "POST":
+		sub.Post(pattern, handler)
+	case "PATCH":
+		sub.Patch(pattern, handler)
+	case "DELETE":
+		sub.Delete(pattern, handler)
+	default:
+		sub.Get(pattern, handler)
+	}
+}
+
+// registerRouteWithPattern is like registerRoute but with an explicit path
+// pattern (used by UI surface routes which have a different path prefix).
+func (b *RouterBuilder) registerRouteWithPattern(r chi.Router, rd RouteDescriptor, pattern string) {
+	var handler http.HandlerFunc
+	switch rd.Handler {
+	case "auto":
+		switch rd.Action {
+		case "list":
+			handler = b.factory.HandleList(rd.Module, rd.Entity)
+		case "find":
+			handler = b.factory.HandleFind(rd.Module, rd.Entity)
+		case "create":
+			handler = b.factory.HandleCreate(rd.Module, rd.Entity)
+		case "update":
+			handler = b.factory.HandleUpdate(rd.Module, rd.Entity)
+		case "delete":
+			handler = b.factory.HandleDelete(rd.Module, rd.Entity)
+		case "submit":
+			handler = b.factory.HandleSubmit(rd.Module, rd.Entity)
+		case "cancel":
+			handler = b.factory.HandleCancel(rd.Module, rd.Entity)
+		case "amend":
+			handler = b.factory.HandleAmend(rd.Module, rd.Entity)
+		default:
+			return
+		}
+	case "custom":
+		specInfo, ok := b.registry.GetEntity(rd.Module, rd.Entity)
+		if !ok || specInfo.EntitySpec == nil {
+			return
+		}
+		var actionSpec *spec.Action
+		for i, a := range specInfo.EntitySpec.Actions {
+			if a.Name == rd.Action {
+				actionSpec = &specInfo.EntitySpec.Actions[i]
+				break
+			}
+		}
+		if actionSpec == nil {
+			return
+		}
+		specDir := ""
+		if src := specInfo.Source; src != "" {
+			specDir = filepath.Dir(strings.SplitN(src, "#", 2)[0])
+		}
+		handler = b.factory.HandleCustomAction(rd.Module, rd.Entity, rd.Action, *actionSpec, specDir)
+	default:
+		return
+	}
+
+	sub := r
+	if rd.RequiredPermission != "" {
+		sub = r.With(RequirePermission(rd.RequiredPermission))
+	}
+
 	switch rd.Method {
 	case "GET":
 		sub.Get(pattern, handler)

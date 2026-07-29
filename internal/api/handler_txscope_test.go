@@ -10,8 +10,8 @@ import (
 	"github.com/primadi/forma/internal/action"
 	"github.com/primadi/forma/internal/entity"
 	"github.com/primadi/forma/internal/manifest"
-	"github.com/primadi/forma/renderers/jsonbpersist"
 	"github.com/primadi/forma/pkg/spec"
+	db "github.com/primadi/forma/renderers/jsonbpersist"
 )
 
 // registerTestEntity applies migrations for entitySpec and registers it into
@@ -119,7 +119,7 @@ func TestHandleCustomAction_RollsBackBothWritesOnFailure(t *testing.T) {
 		Name: "checkout",
 		Impl: &spec.ImplDecl{Type: spec.ImplNative, Ref: "Test.CheckoutFail"},
 	}
-	handlerFunc := factory.HandleCustomAction("billing", "order", "checkout", actionSpec)
+	handlerFunc := factory.HandleCustomAction("billing", "order", "checkout", actionSpec, "")
 
 	req := httptest.NewRequest("POST", "/billing/orders/"+id+"/checkout", nil)
 	req.SetPathValue("id", id)
@@ -223,7 +223,7 @@ func TestHandleCustomAction_CrossStoreErrors(t *testing.T) {
 		Name: "cross",
 		Impl: &spec.ImplDecl{Type: spec.ImplNative, Ref: "Test.CrossStore"},
 	}
-	handlerFunc := factory.HandleCustomAction("billing", "order", "cross", actionSpec)
+	handlerFunc := factory.HandleCustomAction("billing", "order", "cross", actionSpec, "")
 
 	req := httptest.NewRequest("POST", "/billing/orders/"+id+"/cross", nil)
 	req.SetPathValue("id", id)
@@ -336,7 +336,7 @@ func TestHandleCustomAction_CrossModuleSameStore_CommitsAtomically(t *testing.T)
 	factory.SetDispatcher(disp)
 
 	actionSpec := spec.Action{Name: "confirm", Impl: &spec.ImplDecl{Type: spec.ImplNative, Ref: "Test.CrossModuleOK"}}
-	handlerFunc := factory.HandleCustomAction("billing", "order", "confirm", actionSpec)
+	handlerFunc := factory.HandleCustomAction("billing", "order", "confirm", actionSpec, "")
 
 	req := httptest.NewRequest("POST", "/billing/orders/"+orderID+"/confirm", nil)
 	req.SetPathValue("id", orderID)
@@ -407,7 +407,7 @@ func TestHandleCustomAction_CrossModuleSameStore_RollsBackAtomically(t *testing.
 	factory.SetDispatcher(disp)
 
 	actionSpec := spec.Action{Name: "confirm", Impl: &spec.ImplDecl{Type: spec.ImplNative, Ref: "Test.CrossModuleFail"}}
-	handlerFunc := factory.HandleCustomAction("billing", "order", "confirm", actionSpec)
+	handlerFunc := factory.HandleCustomAction("billing", "order", "confirm", actionSpec, "")
 
 	req := httptest.NewRequest("POST", "/billing/orders/"+orderID+"/confirm", nil)
 	req.SetPathValue("id", orderID)

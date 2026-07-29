@@ -1,0 +1,13 @@
+# SHOWCASE: authored Table minimal untuk master Pasien.
+# Columns sepenuhnya derived dari entity spec — tidak perlu deklarasi kolom
+# eksplisit. Digunakan oleh kind: Page tabs Data Master.
+apiVersion: forma.dev/v1alpha1
+kind: Table
+metadata:
+  name: patient-table
+  module: clinic
+  description: Tabel pasien — derived columns
+spec:
+  entity: patient
+  page_size: 15
+  default_sort: "name"

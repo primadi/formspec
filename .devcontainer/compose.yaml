@@ -16,7 +16,7 @@ services:
       - ../..:/workspaces:cached
     command: sleep infinity
     ports:
-      - "18080:8080"   # forma-resource API
+      - "18080:8080"
     networks:
       - forma-net
     depends_on:

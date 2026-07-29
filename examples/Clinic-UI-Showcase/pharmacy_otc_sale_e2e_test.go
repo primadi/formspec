@@ -13,7 +13,7 @@ func TestOTCSale_EndToEnd(t *testing.T) {
 	app := newTestApp(t)
 	handler := app.Handler()
 
-	status, env := do(t, handler, "POST", "/demo/api/v1/pharmacy/medicines", map[string]any{
+	status, env := do(t, handler, "POST", "/demo/_ui/entity/pharmacy/medicine", map[string]any{
 		"sku": "SKU-200", "name": "Vitamin C 500mg", "unit": "tablet", "stock": 100, "price": 1000,
 	})
 	if status != http.StatusCreated {
@@ -21,7 +21,7 @@ func TestOTCSale_EndToEnd(t *testing.T) {
 	}
 	medicineID := dataMap(t, env)["id"].(string)
 
-	status, env = do(t, handler, "POST", "/demo/api/v1/pharmacy/otc-sales", map[string]any{
+	status, env = do(t, handler, "POST", "/demo/_ui/entity/pharmacy/otc-sale", map[string]any{
 		"transaction_date": "2026-07-12",
 		"buyer_name":       "Pembeli Umum",
 		"items": []map[string]any{
@@ -37,12 +37,12 @@ func TestOTCSale_EndToEnd(t *testing.T) {
 		t.Fatalf("expected status pending after create, got %v", got)
 	}
 
-	status, env = do(t, handler, "POST", "/demo/api/v1/pharmacy/otc-sales/"+saleID+"/sell", nil)
+	status, env = do(t, handler, "POST", "/demo/_ui/entity/pharmacy/otc-sale/"+saleID+"/sell", nil)
 	if status != http.StatusOK {
 		t.Fatalf("sell: status %d, body %+v", status, env)
 	}
 
-	status, env = do(t, handler, "GET", "/demo/api/v1/pharmacy/otc-sales/"+saleID, nil)
+	status, env = do(t, handler, "GET", "/demo/_ui/entity/pharmacy/otc-sale/"+saleID, nil)
 	if status != http.StatusOK {
 		t.Fatalf("get otc-sale: status %d, body %+v", status, env)
 	}
@@ -54,7 +54,7 @@ func TestOTCSale_EndToEnd(t *testing.T) {
 		t.Errorf("expected total %v, got %v", float64(4*1000), got)
 	}
 
-	status, env = do(t, handler, "GET", "/demo/api/v1/pharmacy/medicines/"+medicineID, nil)
+	status, env = do(t, handler, "GET", "/demo/_ui/entity/pharmacy/medicine/"+medicineID, nil)
 	if status != http.StatusOK {
 		t.Fatalf("get medicine: status %d, body %+v", status, env)
 	}
@@ -69,7 +69,7 @@ func TestOTCSale_Cancel(t *testing.T) {
 	app := newTestApp(t)
 	handler := app.Handler()
 
-	status, env := do(t, handler, "POST", "/demo/api/v1/pharmacy/medicines", map[string]any{
+	status, env := do(t, handler, "POST", "/demo/_ui/entity/pharmacy/medicine", map[string]any{
 		"sku": "SKU-201", "name": "Antacid", "unit": "tablet", "stock": 10, "price": 500,
 	})
 	if status != http.StatusCreated {
@@ -77,7 +77,7 @@ func TestOTCSale_Cancel(t *testing.T) {
 	}
 	medicineID := dataMap(t, env)["id"].(string)
 
-	status, env = do(t, handler, "POST", "/demo/api/v1/pharmacy/otc-sales", map[string]any{
+	status, env = do(t, handler, "POST", "/demo/_ui/entity/pharmacy/otc-sale", map[string]any{
 		"transaction_date": "2026-07-12",
 		"items": []map[string]any{
 			{"line_number": 1, "medicine_id": medicineID, "quantity": 2, "unit_price": 500},
@@ -88,12 +88,12 @@ func TestOTCSale_Cancel(t *testing.T) {
 	}
 	saleID := dataMap(t, env)["id"].(string)
 
-	status, env = do(t, handler, "POST", "/demo/api/v1/pharmacy/otc-sales/"+saleID+"/cancel", nil)
+	status, env = do(t, handler, "POST", "/demo/_ui/entity/pharmacy/otc-sale/"+saleID+"/cancel", nil)
 	if status != http.StatusOK {
 		t.Fatalf("cancel: status %d, body %+v", status, env)
 	}
 
-	status, env = do(t, handler, "GET", "/demo/api/v1/pharmacy/otc-sales/"+saleID, nil)
+	status, env = do(t, handler, "GET", "/demo/_ui/entity/pharmacy/otc-sale/"+saleID, nil)
 	if status != http.StatusOK {
 		t.Fatalf("get otc-sale: status %d, body %+v", status, env)
 	}
@@ -101,7 +101,7 @@ func TestOTCSale_Cancel(t *testing.T) {
 		t.Fatalf("expected status cancelled, got %v", got)
 	}
 
-	status, env = do(t, handler, "GET", "/demo/api/v1/pharmacy/medicines/"+medicineID, nil)
+	status, env = do(t, handler, "GET", "/demo/_ui/entity/pharmacy/medicine/"+medicineID, nil)
 	if status != http.StatusOK {
 		t.Fatalf("get medicine: status %d, body %+v", status, env)
 	}
@@ -118,7 +118,7 @@ func TestOTCSale_StockGuardRejectsInsufficientStock(t *testing.T) {
 	app := newTestApp(t)
 	handler := app.Handler()
 
-	status, env := do(t, handler, "POST", "/demo/api/v1/pharmacy/medicines", map[string]any{
+	status, env := do(t, handler, "POST", "/demo/_ui/entity/pharmacy/medicine", map[string]any{
 		"sku": "SKU-202", "name": "Low Stock Item", "unit": "tablet", "stock": 2, "price": 1000,
 	})
 	if status != http.StatusCreated {
@@ -126,7 +126,7 @@ func TestOTCSale_StockGuardRejectsInsufficientStock(t *testing.T) {
 	}
 	medicineID := dataMap(t, env)["id"].(string)
 
-	status, env = do(t, handler, "POST", "/demo/api/v1/pharmacy/otc-sales", map[string]any{
+	status, env = do(t, handler, "POST", "/demo/_ui/entity/pharmacy/otc-sale", map[string]any{
 		"transaction_date": "2026-07-12",
 		"items": []map[string]any{
 			{"line_number": 1, "medicine_id": medicineID, "quantity": 5, "unit_price": 1000},
@@ -149,7 +149,7 @@ func TestOTCSale_SellRejectsEmptyItems(t *testing.T) {
 	app := newTestApp(t)
 	handler := app.Handler()
 
-	status, env := do(t, handler, "POST", "/demo/api/v1/pharmacy/otc-sales", map[string]any{
+	status, env := do(t, handler, "POST", "/demo/_ui/entity/pharmacy/otc-sale", map[string]any{
 		"transaction_date": "2026-07-12",
 		"buyer_name":       "No Items Buyer",
 	})
@@ -158,7 +158,7 @@ func TestOTCSale_SellRejectsEmptyItems(t *testing.T) {
 	}
 	saleID := dataMap(t, env)["id"].(string)
 
-	status, _ = do(t, handler, "POST", "/demo/api/v1/pharmacy/otc-sales/"+saleID+"/sell", nil)
+	status, _ = do(t, handler, "POST", "/demo/_ui/entity/pharmacy/otc-sale/"+saleID+"/sell", nil)
 	if status == http.StatusOK {
 		t.Fatal("expected sell to fail with no items, but it succeeded")
 	}

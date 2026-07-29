@@ -285,25 +285,39 @@ func buildEntitySchema(d EntityDescriptor) EntitySchema {
 }
 
 // lifecycle derives the UI pattern from the reserved `submit` action
-// (Frontend §1.7): explicitly disabled → plain CRUD; otherwise the default
-// draft→submit lifecycle with silent auto-save.
+// (Frontend §1.7):
+//   - explicit lifecycle in YAML → use that value directly
+//   - submit exists and not disabled → two_step_manual (Save Draft + Submit)
+//   - submit disabled or absent    → plain_crud
 func lifecycle(es *spec.EntitySpec) string {
+	if es.Lifecycle != "" {
+		return es.Lifecycle
+	}
 	for _, a := range es.Actions {
-		if a.Name == "submit" && a.Disabled {
-			return "plain_crud"
+		if a.Name == "submit" {
+			if a.Disabled {
+				return "plain_crud"
+			}
+			return "two_step_manual"
 		}
 	}
-	return "two_step_autosave"
+	return "plain_crud"
 }
 
 // labelField picks the field used to represent a record in pickers, links,
 // and kanban cards: natural key → "name" → "title" → "number" → id.
 func labelField(es *spec.EntitySpec) string {
+	// 1. Explicit display_field in manifest
+	if es.DisplayField != "" {
+		return es.DisplayField
+	}
+	// 2. Natural key field
 	for _, f := range es.Fields {
 		if f.NaturalKey {
 			return f.Name
 		}
 	}
+	// 3. Convention: name / title / number
 	for _, candidate := range []string{"name", "title", "number"} {
 		for _, f := range es.Fields {
 			if f.Name == candidate {
@@ -311,5 +325,6 @@ func labelField(es *spec.EntitySpec) string {
 			}
 		}
 	}
+	// 4. Fallback to id
 	return "id"
 }

@@ -38,14 +38,16 @@ type PageTab struct {
 }
 
 // BlockRef references another resource within a page block.
+// Entity is resolved from the referenced Form/Table manifest's `spec.entity` —
+// not declared inline here (removed as redundant, since every Form/Table has
+// a 1:1 mapping to an entity).
 type BlockRef struct {
-	Ref    string         `yaml:"ref,omitempty" json:"ref,omitempty"`
-	Asset  string         `yaml:"asset,omitempty" json:"asset,omitempty"` // component blocks (§7)
-	Entity string         `yaml:"entity,omitempty" json:"entity,omitempty"`
-	ID     string         `yaml:"id,omitempty" json:"id,omitempty"`
-	Mode   string         `yaml:"mode,omitempty" json:"mode,omitempty"` // view | edit
-	Param  map[string]any `yaml:"param,omitempty" json:"param,omitempty"`
-	Props  map[string]any `yaml:"props,omitempty" json:"props,omitempty"` // component blocks
+	Ref   string         `yaml:"ref,omitempty" json:"ref,omitempty"`
+	Asset string         `yaml:"asset,omitempty" json:"asset,omitempty"` // component blocks (§7)
+	ID    string         `yaml:"id,omitempty" json:"id,omitempty"`
+	Mode  string         `yaml:"mode,omitempty" json:"mode,omitempty"` // view | edit
+	Param map[string]any `yaml:"param,omitempty" json:"param,omitempty"`
+	Props map[string]any `yaml:"props,omitempty" json:"props,omitempty"` // component blocks
 }
 
 // FormSpec defines an input/edit layout (Frontend §4).

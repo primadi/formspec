@@ -139,3 +139,120 @@ func TestValidateEntitySpec_NilExtendStorage(t *testing.T) {
 		t.Errorf("expected no error for nil extend_storage, got %v", err)
 	}
 }
+
+func TestValidateDocumentSpec_NaturalKeyRuleFormat(t *testing.T) {
+	tests := []struct {
+		name    string
+		spec    *EntitySpec
+		wantErr bool
+	}{
+		{
+			name: "daily with day placeholder",
+			spec: &EntitySpec{Fields: []Field{
+				{Name: "q", NaturalKey: true, NaturalKeyRule: &NaturalKeyRuleDecl{
+					Strategy: "sequence", Format: "{prefix}{year}{month}{day}-{seq:03d}", Reset: "daily",
+				}},
+			}},
+			wantErr: false,
+		},
+		{
+			name: "daily with period placeholder",
+			spec: &EntitySpec{Fields: []Field{
+				{Name: "q", NaturalKey: true, NaturalKeyRule: &NaturalKeyRuleDecl{
+					Strategy: "sequence", Format: "{prefix}-{period}-{seq:03d}", Reset: "daily",
+				}},
+			}},
+			wantErr: false,
+		},
+		{
+			name: "daily without date placeholder (should fail)",
+			spec: &EntitySpec{Fields: []Field{
+				{Name: "q", NaturalKey: true, NaturalKeyRule: &NaturalKeyRuleDecl{
+					Strategy: "sequence", Format: "{prefix}-{seq:03d}", Reset: "daily",
+				}},
+			}},
+			wantErr: true,
+		},
+		{
+			name: "monthly with month placeholder",
+			spec: &EntitySpec{Fields: []Field{
+				{Name: "n", NaturalKey: true, NaturalKeyRule: &NaturalKeyRuleDecl{
+					Strategy: "sequence", Format: "PAY-{year}{month}-{seq:05d}", Reset: "monthly",
+				}},
+			}},
+			wantErr: false,
+		},
+		{
+			name: "monthly with period placeholder",
+			spec: &EntitySpec{Fields: []Field{
+				{Name: "n", NaturalKey: true, NaturalKeyRule: &NaturalKeyRuleDecl{
+					Strategy: "sequence", Format: "ORD-{period}-{seq:03d}", Reset: "monthly",
+				}},
+			}},
+			wantErr: false,
+		},
+		{
+			name: "monthly without date placeholder (should fail)",
+			spec: &EntitySpec{Fields: []Field{
+				{Name: "n", NaturalKey: true, NaturalKeyRule: &NaturalKeyRuleDecl{
+					Strategy: "sequence", Format: "PAY-{seq:05d}", Reset: "monthly",
+				}},
+			}},
+			wantErr: true,
+		},
+		{
+			name: "yearly with year placeholder",
+			spec: &EntitySpec{Fields: []Field{
+				{Name: "n", NaturalKey: true, NaturalKeyRule: &NaturalKeyRuleDecl{
+					Strategy: "sequence", Format: "INV-{year}-{seq:05d}", Reset: "yearly",
+				}},
+			}},
+			wantErr: false,
+		},
+		{
+			name: "yearly without year placeholder (should fail)",
+			spec: &EntitySpec{Fields: []Field{
+				{Name: "n", NaturalKey: true, NaturalKeyRule: &NaturalKeyRuleDecl{
+					Strategy: "sequence", Format: "INV-{seq:05d}", Reset: "yearly",
+				}},
+			}},
+			wantErr: true,
+		},
+		{
+			name: "never reset without date (ok)",
+			spec: &EntitySpec{Fields: []Field{
+				{Name: "n", NaturalKey: true, NaturalKeyRule: &NaturalKeyRuleDecl{
+					Strategy: "sequence", Format: "INV-{seq:05d}", Reset: "never",
+				}},
+			}},
+			wantErr: false,
+		},
+		{
+			name: "empty reset without date (ok)",
+			spec: &EntitySpec{Fields: []Field{
+				{Name: "n", NaturalKey: true, NaturalKeyRule: &NaturalKeyRuleDecl{
+					Strategy: "sequence", Format: "INV-{seq:05d}",
+				}},
+			}},
+			wantErr: false,
+		},
+		{
+			name: "daily with default format (empty, uses default which has period)",
+			spec: &EntitySpec{Fields: []Field{
+				{Name: "q", NaturalKey: true, NaturalKeyRule: &NaturalKeyRuleDecl{
+					Strategy: "sequence", Reset: "daily",
+				}},
+			}},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateDocumentSpec(tt.spec)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateDocumentSpec() error = %v, wantErr = %v", err, tt.wantErr)
+			}
+		})
+	}
+}

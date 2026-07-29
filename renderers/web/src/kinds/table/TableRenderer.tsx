@@ -5,7 +5,7 @@
 //
 // Design doc §5.5 Table kind (F3)
 
-import { useState, useEffect, useMemo } from "react"
+import React, { useState, useEffect, useMemo } from "react"
 import {
   useReactTable,
   getCoreRowModel,
@@ -22,15 +22,22 @@ import {
   ChevronsUpDown,
   Search,
   Plus,
-  Eye,
-  Pencil,
-  Trash2,
   ArrowLeft,
   ArrowRight,
+  X,
+  ListFilter,
+  RotateCcw,
 } from "lucide-react"
+import { ActionIcon } from "@/components/ui/action-icon"
 import { toast } from "sonner"
 
-import type { EntitySchema, ListParams, TableAction } from "@/types/manifest"
+import type {
+  EntitySchema,
+  ListParams,
+  TableAction,
+  TableFilter,
+  MetaBundle,
+} from "@/types/manifest"
 import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
 import { can as checkPermission } from "@/engine/permissions"
@@ -39,8 +46,11 @@ import { getLifecycle } from "@/engine/lifecycle"
 import { buildListParams, apiList, apiDelete } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Select } from "@/components/ui/select"
 import { Badge } from "@/widgets/Badge"
 import { cn } from "@/lib/utils"
+import { resolveIcon } from "@/lib/icon-resolver"
+import ConfirmDialog from "@/components/ui/confirm-dialog"
 
 interface TableRendererProps {
   entity: EntitySchema
@@ -66,11 +76,25 @@ export default function TableRenderer({ entity }: TableRendererProps) {
     return metaBundle.forms.find((f) => f.spec.entity === entityRef)
   }, [metaBundle, entity])
 
-  // Resolve table spec: authored > derived
-  const tableSpec = useMemo(
-    () => deriveTable(entity),
-    [entity],
-  )
+  // Resolve table spec: authored > derived, with fallback for missing fields
+  const tableSpec = useMemo(() => {
+    if (!metaBundle) return deriveTable(entity)
+    // Look for an authored table whose spec.entity matches this entity
+    const entityRef = `${entity.module}.${entity.name}`
+    const authored = metaBundle.tables.find(
+      (t) => t.spec.entity === entityRef || t.spec.entity === entity.name,
+    )
+    if (!authored) return deriveTable(entity)
+    // Merge: use authored where present, fill gaps from deriveTable
+    const derived = deriveTable(entity)
+    return {
+      ...derived,
+      ...authored.spec,
+      // columns, row_actions: authored if non-empty, else derived
+      columns: authored.spec.columns?.length ? authored.spec.columns : derived.columns,
+      row_actions: authored.spec.row_actions?.length ? authored.spec.row_actions : derived.row_actions,
+    }
+  }, [entity, metaBundle])
 
   const lifecycle = useMemo(() => getLifecycle(entity), [entity])
 
@@ -84,6 +108,21 @@ export default function TableRenderer({ entity }: TableRendererProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
+
+  // Filter state
+  const [filterValues, setFilterValues] = useState<Record<string, string>>({})
+  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set())
+
+  // Pending confirm action
+  const [pendingAction, setPendingAction] = useState<{
+    action: TableAction
+    row: RowData
+  } | null>(null)
+
+  // Reset page when filters change
+  useEffect(() => {
+    setPage(1)
+  }, [filterValues])
 
   // Fetch data when params change
   useEffect(() => {
@@ -101,9 +140,19 @@ export default function TableRenderer({ entity }: TableRendererProps) {
         if (sorting.length > 0) {
           params.sort = sorting.map((s) => `${s.desc ? "-" : ""}${s.id}`).join(",")
         }
+        // Add filter values to params
+        const activeFilters: Record<string, string> = {}
+        for (const [field, value] of Object.entries(filterValues)) {
+          if (value) {
+            activeFilters[field] = value
+          }
+        }
+        if (Object.keys(activeFilters).length > 0) {
+          params.filters = activeFilters
+        }
         const result = await apiList<RowData>(
           client,
-          `${entity.module}/${entity.plural}`,
+          `${entity.module}/${entity.name}`,
           buildListParams(params),
         )
         if (!cancelled) {
@@ -122,39 +171,94 @@ export default function TableRenderer({ entity }: TableRendererProps) {
     }
     load()
     return () => { cancelled = true }
-  }, [entity, page, search, sorting, tableSpec.page_size, getClient, reloadKey])
+  }, [entity, page, search, sorting, filterValues, tableSpec.page_size, getClient, reloadKey])
+
+  // Row selection state for bulk actions
+  const [rowSelection, setRowSelection] = useState({})
+
+  // Sync rowSelection to our Set state
+  useEffect(() => {
+    const newSet = new Set<string>()
+    for (const [id, selected] of Object.entries(rowSelection)) {
+      if (selected) newSet.add(id)
+    }
+    setSelectedRows(newSet)
+  }, [rowSelection])
 
   // Columns
+  const hasBulkActions =
+    tableSpec.bulk_actions && tableSpec.bulk_actions.length > 0
   const columns = useMemo<ColumnDef<RowData>[]>(
-    () =>
-      tableSpec.columns.map((col) => ({
-        id: col.field,
-        accessorKey: col.field,
-        header: col.label ?? col.field,
-        enableSorting: col.sortable ?? true,
-        cell: ({ getValue }) => {
-          const value = getValue()
-          return renderCellValue(value, col.widget, col.format)
-        },
-      })),
-    [tableSpec.columns],
+    () => {
+      const cols: ColumnDef<RowData>[] = []
+
+      // Selection checkbox column for bulk actions
+      if (hasBulkActions) {
+        cols.push({
+          id: "__select",
+          header: ({ table }) => (
+            <input
+              type="checkbox"
+              className="size-4 cursor-pointer"
+              checked={table.getIsAllRowsSelected()}
+              onChange={table.getToggleAllRowsSelectedHandler()}
+            />
+          ),
+          cell: ({ row }) => (
+            <input
+              type="checkbox"
+              className="size-4 cursor-pointer"
+              checked={row.getIsSelected()}
+              onChange={row.getToggleSelectedHandler()}
+            />
+          ),
+          enableSorting: false,
+          size: 40,
+        })
+      }
+
+      for (const col of tableSpec.columns) {
+        cols.push({
+          id: col.field,
+          accessorKey: col.field,
+          header: col.label ?? col.field,
+          enableSorting: col.sortable ?? true,
+          cell: ({ getValue }) => {
+            const value = getValue()
+            return renderCellValue(value, col.widget, col.format)
+          },
+        })
+      }
+
+      return cols
+    },
+    [tableSpec.columns, hasBulkActions],
   )
 
   // TanStack table
   const table = useReactTable({
     data,
     columns,
-    state: { sorting },
+    state: {
+      sorting,
+      rowSelection: hasBulkActions ? rowSelection : undefined,
+    },
     onSortingChange: setSorting,
+    onRowSelectionChange: hasBulkActions ? setRowSelection : undefined,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     manualSorting: true,
     manualPagination: true,
     pageCount: totalPages,
+    enableRowSelection: hasBulkActions,
   })
 
   // Row action handler
-  const handleRowAction = async (action: TableAction, row: RowData) => {
+  const handleRowAction = async (
+    action: TableAction,
+    row: RowData,
+    skipConfirm = false,
+  ) => {
     if (!me) return
 
     // Check permission
@@ -164,10 +268,14 @@ export default function TableRenderer({ entity }: TableRendererProps) {
       return
     }
 
-    // Confirm
-    if (action.confirm_msg) {
-      const confirmed = window.confirm(action.confirm_msg)
-      if (!confirmed) return
+    // Resolve confirm message: table action first, then entity action's ui.confirm
+    const entityAction = entity.actions?.find((a) => a.name === action.action)
+    const confirmMsg = action.confirm_msg ?? entityAction?.ui?.confirm
+
+    // Confirm — intercept if confirm_msg exists and not skipped
+    if (confirmMsg && !skipConfirm) {
+      setPendingAction({ action, row })
+      return
     }
 
     switch (action.action) {
@@ -190,7 +298,7 @@ export default function TableRenderer({ entity }: TableRendererProps) {
       case "delete":
         try {
           const client = getClient()
-          await apiDelete(client, `${entity.module}/${entity.plural}/${row.id}`)
+          await apiDelete(client, `${entity.module}/${entity.name}/${row.id}`)
           toast.success("Deleted successfully")
           setReloadKey((k) => k + 1)
         } catch (err) {
@@ -202,7 +310,7 @@ export default function TableRenderer({ entity }: TableRendererProps) {
         try {
           const client = getClient()
           await client.post(
-            `${entity.module}/${entity.plural}/${row.id}/${action.action}`,
+            `${entity.module}/${entity.name}/${row.id}/${action.action}`,
           )
           toast.success("Action completed")
           setReloadKey((k) => k + 1)
@@ -211,6 +319,14 @@ export default function TableRenderer({ entity }: TableRendererProps) {
         }
         break
     }
+  }
+
+  // Handle confirm from ConfirmDialog
+  const handleConfirm = () => {
+    if (!pendingAction) return
+    const { action, row } = pendingAction
+    setPendingAction(null)
+    handleRowAction(action, row, true)
   }
 
   return (
@@ -261,6 +377,30 @@ export default function TableRenderer({ entity }: TableRendererProps) {
             className="pl-9 max-w-sm"
           />
         </div>
+      )}
+
+      {/* Filters */}
+      {tableSpec.filters && tableSpec.filters.length > 0 && (
+        <FilterBar
+          filters={tableSpec.filters}
+          entity={entity}
+          metaBundle={metaBundle}
+          getClient={getClient}
+          filterValues={filterValues}
+          onFilterChange={(field, value) =>
+            setFilterValues((prev) => ({ ...prev, [field]: value }))
+          }
+          onClear={() => setFilterValues({})}
+        />
+      )}
+
+      {/* Bulk Actions */}
+      {tableSpec.bulk_actions && tableSpec.bulk_actions.length > 0 && selectedRows.size > 0 && (
+        <BulkActionsBar
+          bulkActions={tableSpec.bulk_actions}
+          selectedCount={selectedRows.size}
+          onClear={() => setSelectedRows(new Set())}
+        />
       )}
 
       {/* Error */}
@@ -351,6 +491,9 @@ export default function TableRenderer({ entity }: TableRendererProps) {
                               const perm = `${entity.module}.${entity.plural}.${a.action}`
                               return checkPermission(perm, me.permissions)
                             })
+                            .filter((action) =>
+                              isActionAllowedForRow(action, row.original, entity),
+                            )
                             .map((action) => (
                               <Button
                                 key={action.action}
@@ -360,7 +503,7 @@ export default function TableRenderer({ entity }: TableRendererProps) {
                                 onClick={() => handleRowAction(action, row.original)}
                                 title={action.label}
                               >
-                                <ActionIcon action={action.action} />
+                                <ActionIcon iconName={action.icon ?? action.action} />
                               </Button>
                             ))}
                         </div>
@@ -400,6 +543,47 @@ export default function TableRenderer({ entity }: TableRendererProps) {
           </Button>
         </div>
       </div>
+
+      {/* Confirm Dialog */}
+      {(() => {
+        const actionName = pendingAction?.action.action
+        const actionIconName = pendingAction?.action.icon
+        const ActionIconComponent = actionIconName
+          ? resolveIcon(actionIconName)
+          : null
+        const customIcon = ActionIconComponent
+          ? React.createElement(ActionIconComponent, { className: "size-5" })
+          : undefined
+
+        // Resolve confirm message: table action first, then entity action
+        const entityActionForConfirm = actionName
+          ? entity.actions?.find((a) => a.name === actionName)
+          : undefined
+        const confirmMsg =
+          pendingAction?.action.confirm_msg ??
+          entityActionForConfirm?.ui?.confirm ??
+          ""
+
+        return (
+          <ConfirmDialog
+            open={!!pendingAction}
+            onOpenChange={(open) => {
+              if (!open) setPendingAction(null)
+            }}
+            title={pendingAction?.action.label ?? "Konfirmasi"}
+            message={confirmMsg}
+            icon={customIcon}
+            variant={
+              actionName === "delete" || actionName === "cancel"
+                ? "destructive"
+                : "default"
+            }
+            confirmLabel={actionName === "delete" ? "Hapus" : "Konfirmasi"}
+            onConfirm={handleConfirm}
+            onCancel={() => setPendingAction(null)}
+          />
+        )
+      })()}
     </div>
   )
 }
@@ -447,15 +631,204 @@ function renderCellValue(value: unknown, widget?: string, format?: string) {
   return String(value)
 }
 
-function ActionIcon({ action }: { action: string }) {
-  switch (action) {
-    case "view":
-      return <Eye className="size-4" />
-    case "edit":
-      return <Pencil className="size-4" />
-    case "delete":
-      return <Trash2 className="size-4" />
-    default:
-      return <span className="text-xs">{action.charAt(0).toUpperCase()}</span>
+/**
+ * Check if a table action can be performed on a given row based on the
+ * entity's state machine. Actions not declared in any transition (e.g.
+ * "view", "edit", "delete") are always allowed. Actions whose current
+ * state doesn't match any transition's `from` list are hidden.
+ *
+ * Guard expressions are evaluated server-side and cannot be checked here;
+ * this only checks the `from`-state gate for basic UX filtering.
+ */
+function isActionAllowedForRow(
+  action: TableAction,
+  row: RowData,
+  entity: EntitySchema,
+): boolean {
+  const sm = entity.state_machine
+  if (!sm) return true
+
+  // Find transitions keyed by this action name (via `via`)
+  const matchingTransitions = sm.transitions.filter(
+    (t) => t.via === action.action,
+  )
+  if (matchingTransitions.length === 0) {
+    // Not a state-machine action — always show (view, edit, delete, export, …)
+    return true
   }
+
+  const currentState = String(row[sm.field] ?? sm.initial)
+  return matchingTransitions.some((t) => t.from.includes(currentState))
+}
+
+// ── FilterBar ──
+
+function FilterBar({
+  filters,
+  entity,
+  metaBundle,
+  getClient,
+  filterValues,
+  onFilterChange,
+  onClear,
+}: {
+  filters: TableFilter[]
+  entity: EntitySchema
+  metaBundle: MetaBundle | null
+  getClient: () => import("ky").KyInstance
+  filterValues: Record<string, string>
+  onFilterChange: (field: string, value: string) => void
+  onClear: () => void
+}) {
+  const hasActiveFilters = Object.values(filterValues).some(Boolean)
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <ListFilter className="size-4 text-muted-foreground shrink-0" />
+      {filters.map((f) => (
+        <FilterControl
+          key={f.field}
+          filter={f}
+          entity={entity}
+          metaBundle={metaBundle}
+          getClient={getClient}
+          value={filterValues[f.field] ?? ""}
+          onChange={(v) => onFilterChange(f.field, v)}
+        />
+      ))}
+      {hasActiveFilters && (
+        <Button variant="ghost" size="sm" onClick={onClear} className="h-8 px-2">
+          <RotateCcw className="size-3 mr-1" />
+          Reset
+        </Button>
+      )}
+    </div>
+  )
+}
+
+function FilterControl({
+  filter,
+  entity,
+  metaBundle,
+  getClient,
+  value,
+  onChange,
+}: {
+  filter: TableFilter
+  entity: EntitySchema
+  metaBundle: MetaBundle | null
+  getClient: () => import("ky").KyInstance
+  value: string
+  onChange: (value: string) => void
+}) {
+  switch (filter.type) {
+    case "select": {
+      // Derive options from entity field enum_values or relation entity
+      const fieldDef = entity.fields.find((f) => f.name === filter.field)
+      const isRelation = fieldDef?.type === "relation" && fieldDef?.relation
+      const [relationOptions, setRelationOptions] = useState<
+        { value: string; label: string }[]
+      >([])
+
+      // Fetch relation options if this is a relation field
+      useEffect(() => {
+        if (!isRelation || !metaBundle || !fieldDef?.relation) return
+        const resource = fieldDef.relation.resource
+        // Find the related entity in metaBundle
+        const relatedEntity = metaBundle.entities.find(
+          (e) => e.name === resource,
+        )
+        if (!relatedEntity) return
+
+        const client = getClient()
+        const labelField = relatedEntity.label_field || "name"
+        client
+          .get(`${relatedEntity.module}/${resource}`, {
+            searchParams: { per_page: "500" },
+          })
+          .json<{ data: Record<string, unknown>[] }>()
+          .then((body) => {
+            const items = body.data ?? []
+            setRelationOptions(
+              items.map((item) => ({
+                value: String(item.id ?? ""),
+                label: String(item[labelField] ?? item.id ?? ""),
+              })),
+            )
+          })
+          .catch(() => {
+            // Silently fail — filter just shows "All" only
+          })
+      }, [isRelation, metaBundle, fieldDef, getClient])
+
+      const options = isRelation
+        ? relationOptions
+        : (fieldDef?.enum_values ?? []).map((o) => ({ value: o, label: o }))
+
+      return (
+        <Select
+          value={value}
+          onChange={(v) => onChange(v === "__all__" ? "" : v)}
+          options={[
+            { value: "__all__", label: "All" },
+            ...options,
+          ]}
+          placeholder={filter.label}
+          className="h-8 w-35 text-xs"
+        />
+      )
+    }
+    case "date_range": {
+      return (
+        <Input
+          type="date"
+          placeholder={filter.label}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="h-8 w-40 text-xs"
+        />
+      )
+    }
+    case "text":
+    default: {
+      return (
+        <Input
+          placeholder={filter.label}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="h-8 w-40 text-xs"
+        />
+      )
+    }
+  }
+}
+
+// ── BulkActionsBar ──
+
+function BulkActionsBar({
+  bulkActions,
+  selectedCount,
+  onClear,
+}: {
+  bulkActions: TableAction[]
+  selectedCount: number
+  onClear: () => void
+}) {
+  return (
+    <div className="flex items-center gap-2 px-3 py-2 rounded-md border bg-muted/30">
+      <span className="text-sm text-muted-foreground mr-2">
+        {selectedCount} selected
+      </span>
+      {bulkActions.map((action) => (
+        <Button key={action.action} variant="secondary" size="sm">
+          <ActionIcon iconName={action.icon ?? action.action} />
+          <span className="ml-1">{action.label}</span>
+        </Button>
+      ))}
+      <Button variant="ghost" size="sm" onClick={onClear} className="ml-auto">
+        <X className="size-3 mr-1" />
+        Clear
+      </Button>
+    </div>
+  )
 }

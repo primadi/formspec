@@ -34,6 +34,16 @@ func NewScriptExecutor(basePath string) *ScriptExecutor {
 	}
 }
 
+// getSpecDir extracts the entity spec directory from ExecuteParams.
+// It prefers SpecDir (set by the handler from the entity YAML path),
+// falling back to basePath when SpecDir is empty (legacy callers).
+func (e *ScriptExecutor) getSpecDir(params ExecuteParams) string {
+	if params.SpecDir != "" {
+		return params.SpecDir
+	}
+	return e.basePath
+}
+
 // SetSaveHandler sets the save callback used by resource.save() in scripts.
 func (e *ScriptExecutor) SetSaveHandler(fn func(ctx context.Context, workspaceID, module, entity, id string, version int, data map[string]any) error) {
 	e.engine.SaveHandler = fn
@@ -68,8 +78,8 @@ func (e *ScriptExecutor) Execute(ctx context.Context, action spec.Action, params
 		return nil, fmt.Errorf("script action %s has no impl.ref", action.Name)
 	}
 
-	// Resolve the script ref to a file path
-	scriptPath, err := resolveScriptPath(e.basePath)(action.Impl.Ref)
+	// Resolve the script ref — prefer entity's spec directory, fall back to basePath
+	scriptPath, err := resolveScript(e.basePath, e.getSpecDir(params), action.Impl.Ref)
 	if err != nil {
 		return nil, fmt.Errorf("resolve script ref %q: %w", action.Impl.Ref, err)
 	}
@@ -98,20 +108,89 @@ func (e *ScriptExecutor) Execute(ctx context.Context, action spec.Action, params
 	return &ExecuteResult{Data: result.Data}, nil
 }
 
-// resolveScriptPath returns a function that resolves script refs to file paths.
+// resolveScript resolves a script ref to an absolute file path.
 //
-// Resolution rules (first match wins):
-//   - "module/script_name" → "{basePath}/modules/{module}/scripts/{script_name}.star"
-//     (the layout used by every module-scoped example: Clinic, Inventory,
-//     General-Ledger, Order-to-Cash — a per-module "scripts/" subdirectory)
-//   - "module/script_name" → "{basePath}/modules/{ref}.star"
-//     (flat ref-as-path, kept for backward compatibility)
-//   - "{basePath}/scripts/{script_name}.star" (top-level scripts, used by
-//     examples with a flat spec layout, e.g. Customer, Midtrans-Payment-Gateway)
+// Resolution order (first match wins):
+//
+//  1. From entity's spec directory (specDir) — used when the entity YAML
+//     file's directory is known. No folder structure is assumed; ref is just
+//     a filename (e.g. "cancel") resolved relative to the entity's location:
+//     a. {specDir}/scripts/{ref}.star
+//     b. {specDir}/{ref}.star (direct, allows refs with relative paths)
+//
+//  2. Fallback from spec root (basePath) — used when specDir is empty
+//     (hook scripts, legacy callers). Tries module-scoped patterns:
+//     a. {basePath}/modules/{module}/scripts/{name}.star  (module-scoped)
+//     b. {basePath}/modules/{ref}.star                     (flat ref-as-path)
+//     c. {basePath}/{ref}.star                              (direct path)
+//     d. {basePath}/scripts/{name}.star                     (top-level scripts)
+func resolveScript(basePath, specDir, ref string) (string, error) {
+	parts := parseRef(ref)
+	tried := make([]string, 0, 6)
+
+	// ── 1. Resolve relative to entity's spec directory ──
+	if specDir != "" {
+		candidate := filepath.Join(specDir, "scripts", ref+".star")
+		tried = append(tried, candidate)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		}
+
+		candidate = filepath.Join(specDir, ref+".star")
+		tried = append(tried, candidate)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		}
+	}
+
+	// ── 2. Fallback: module-scoped (for backward compatibility) ──
+	if len(parts) >= 2 {
+		module := parts[0]
+		scriptName := strings.Join(parts[1:], "/")
+		candidate := filepath.Join(basePath, "modules", module, "scripts", scriptName+".star")
+		tried = append(tried, candidate)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		}
+
+		candidate = filepath.Join(basePath, "modules", ref+".star")
+		tried = append(tried, candidate)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		}
+	}
+
+	// ── 3. Fallback: direct path from spec root ──
+	candidate := filepath.Join(basePath, ref+".star")
+	tried = append(tried, candidate)
+	if _, err := os.Stat(candidate); err == nil {
+		return candidate, nil
+	}
+
+	// ── 4. Fallback: flat scripts/ directory ──
+	if len(parts) >= 1 {
+		name := parts[len(parts)-1]
+		candidate = filepath.Join(basePath, "scripts", name+".star")
+		tried = append(tried, candidate)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		}
+	}
+
+	return "", fmt.Errorf("script not found for ref %q (tried: %s)", ref, strings.Join(tried, ", "))
+}
+
+// resolveScriptPath returns a function that resolves script refs to file paths.
+// Kept for backward compatibility with starlark.ScriptPathResolver and
+// non-entity script resolution (e.g. hook scripts without specDir context).
+// Uses the same module-scoped patterns as the original resolver:
+//   - "{basePath}/modules/{module}/scripts/{name}.star"  (module-scoped)
+//   - "{basePath}/modules/{ref}.star"                     (flat ref-as-path)
+//   - "{basePath}/scripts/{name}.star"                    (top-level scripts)
 func resolveScriptPath(basePath string) func(ref string) (string, error) {
 	return func(ref string) (string, error) {
 		parts := parseRef(ref)
-		tried := make([]string, 0, 3)
+		tried := make([]string, 0, 4)
 
 		if len(parts) >= 2 {
 			module := parts[0]
@@ -130,6 +209,17 @@ func resolveScriptPath(basePath string) func(ref string) (string, error) {
 		}
 
 		if len(parts) >= 2 {
+			// Nested module layout fallback (multi-segment ref)
+			if len(parts) >= 3 {
+				dir := strings.Join(parts[:len(parts)-1], "/")
+				name := parts[len(parts)-1]
+				candidate = filepath.Join(basePath, "modules", dir, "scripts", name+".star")
+				tried = append(tried, candidate)
+				if _, err := os.Stat(candidate); err == nil {
+					return candidate, nil
+				}
+			}
+
 			scriptName := parts[len(parts)-1]
 			candidate = filepath.Join(basePath, "scripts", scriptName+".star")
 			tried = append(tried, candidate)

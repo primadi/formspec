@@ -92,6 +92,8 @@ type DocumentSpec struct {
 	Hooks             []HookDecl          `yaml:"hooks,omitempty" json:"hooks,omitempty"`
 	RateLimit         *RateLimitSpec      `yaml:"rate_limit,omitempty" json:"rate_limit,omitempty"`           // 1.4.1 resource-level rate limit (02-core-extended.md §17)
 	SoftDeactivate    *SoftDeactivateDecl `yaml:"soft_deactivate,omitempty" json:"soft_deactivate,omitempty"` // 1.4.10
+	Lifecycle         string              `yaml:"lifecycle,omitempty" json:"lifecycle,omitempty"`             // explicit frontend lifecycle: two_step_autosave | two_step_manual | plain_crud (default derived from actions)
+	DisplayField      string              `yaml:"display_field,omitempty" json:"display_field,omitempty"`     // field name used as display label for this entity in relation pickers & detail pages
 	NaturalKeyField   string              `yaml:"-" json:"-"`                                                 // resolved in ValidateDocumentSpec: empty if none, field name if exactly one natural_key
 }
 
@@ -307,6 +309,36 @@ func ValidateDocumentSpec(d *DocumentSpec) error {
 		default:
 			return fmt.Errorf("field %q: natural_key_rule.reset must be one of never|yearly|monthly|daily, got %q", f.Name, f.NaturalKeyRule.Reset)
 		}
+
+		// Reset requires a date placeholder in the format string —
+		// otherwise the counter resets but still produces the same value
+		// across periods, causing a UNIQUE constraint violation at insert
+		// time (01-core-basic.md §2: natural key uniqueness per tenant).
+		if f.NaturalKeyRule.Reset != "" && f.NaturalKeyRule.Reset != "never" {
+			fmt_ := f.NaturalKeyRule.Format
+			if fmt_ == "" {
+				fmt_ = "{prefix}-{period}-{seq:05d}" // default format
+			}
+			hasPeriod := strings.Contains(fmt_, "{period}")
+			hasYear := strings.Contains(fmt_, "{year}")
+			hasMonth := strings.Contains(fmt_, "{month}")
+			hasDay := strings.Contains(fmt_, "{day}")
+
+			switch f.NaturalKeyRule.Reset {
+			case "daily":
+				if !hasPeriod && !hasDay {
+					return fmt.Errorf("field %q: natural_key_rule.reset=daily requires {day} or {period} in format, got %q", f.Name, fmt_)
+				}
+			case "monthly":
+				if !hasPeriod && !hasMonth {
+					return fmt.Errorf("field %q: natural_key_rule.reset=monthly requires {month} or {period} in format, got %q", f.Name, fmt_)
+				}
+			case "yearly":
+				if !hasPeriod && !hasYear {
+					return fmt.Errorf("field %q: natural_key_rule.reset=yearly requires {year} or {period} in format, got %q", f.Name, fmt_)
+				}
+			}
+		}
 	}
 
 	// Natural key cardinality (§2): at most one natural_key field per entity.
@@ -374,6 +406,11 @@ func ValidateDocumentSpec(d *DocumentSpec) error {
 
 	// Event naming validation (Core §12)
 	if err := ValidateEvents(d.Events); err != nil {
+		return err
+	}
+
+	// Event durability contract (2.4.3): publisher non-durable + subscriber durable = error
+	if err := ValidateEventDurability(d.Events); err != nil {
 		return err
 	}
 
@@ -449,11 +486,11 @@ type Action struct {
 	Uses               *UsesDecl        `yaml:"uses,omitempty" json:"uses,omitempty"`
 	Params             *ParamsDecl      `yaml:"params,omitempty" json:"params,omitempty"`
 	Conditions         []ConditionDecl  `yaml:"conditions,omitempty" json:"conditions,omitempty"`
-	UI                 *ActionUIHint    `yaml:"ui,omitempty" json:"ui,omitempty"`                 // Frontend §1.7 — button rendering hints
+	UI                 *ActionUIHint    `yaml:"ui,omitempty" json:"ui,omitempty"`                 // Backend §5.1 — button rendering hints (confirm, icon, style, etc.)
 	RateLimit          *RateLimitSpec   `yaml:"rate_limit,omitempty" json:"rate_limit,omitempty"` // 1.4.1 per-action override (02-core-extended.md §17)
 }
 
-// ActionUIHint carries frontend rendering hints for an action button (Frontend §1.7).
+// ActionUIHint carries frontend rendering hints for an action button (Backend §5.1).
 type ActionUIHint struct {
 	ButtonLabel string `yaml:"button_label,omitempty" json:"button_label,omitempty"`
 	Style       string `yaml:"style,omitempty" json:"style,omitempty"` // primary | secondary | danger
@@ -722,6 +759,24 @@ func ValidateActionEmits(actions []Action, events []EventDecl) error {
 	return nil
 }
 
+// ValidateEventDurability checks durability contract (2.4.3):
+// publisher non-durable + subscriber durable = validation error.
+// A subscriber is durable if any of its deliver channels use durable delivery
+// (reliable_event, queue, or websocket when the event is durable).
+func ValidateEventDurability(events []EventDecl) error {
+	for _, e := range events {
+		isDurable := e.Publish != nil && e.Publish.Durable
+		for _, d := range e.Deliver {
+			if d.Channel == "reliable_event" || d.Channel == "queue" {
+				if !isDurable {
+					return fmt.Errorf("event %q: channel %q requires publish.durable: true", e.Name, d.Channel)
+				}
+			}
+		}
+	}
+	return nil
+}
+
 // EventDecl declares an event an entity can publish (Core §12).
 type EventDecl struct {
 	Name        string              `yaml:"name" json:"name"`
@@ -743,28 +798,30 @@ const (
 //   - before_* → sync
 //   - on_* → async
 //   - custom names → type MUST be explicit
+//
+// Returns error with FORMA.EVENT.* codes (2.4.5).
 func ValidateEventNaming(event EventDecl) error {
 	isBefore := strings.HasPrefix(event.Name, "before_")
 	isOn := strings.HasPrefix(event.Name, "on_")
 
 	if !isBefore && !isOn {
 		if event.Type == "" {
-			return fmt.Errorf("event %q: type is required for custom events (not prefixed before_/on_)", event.Name)
+			return fmt.Errorf("[FORMA.EVENT.TYPE_MISSING] event %q: type is required for custom events (not prefixed before_/on_)", event.Name)
 		}
 		if event.Type != EventTypeSync && event.Type != EventTypeAsync {
-			return fmt.Errorf("event %q: type must be 'sync' or 'async', got %q", event.Name, event.Type)
+			return fmt.Errorf("[FORMA.EVENT.TYPE_MISMATCH] event %q: type must be 'sync' or 'async', got %q", event.Name, event.Type)
 		}
 		return nil
 	}
 
 	if isBefore {
 		if event.Type != "" && event.Type != EventTypeSync {
-			return fmt.Errorf("event %q: before_* events must be 'sync', got %q", event.Name, event.Type)
+			return fmt.Errorf("[FORMA.EVENT.TYPE_MISMATCH] event %q: before_* events must be 'sync', got %q", event.Name, event.Type)
 		}
 	}
 	if isOn {
 		if event.Type != "" && event.Type != EventTypeAsync {
-			return fmt.Errorf("event %q: on_* events must be 'async', got %q", event.Name, event.Type)
+			return fmt.Errorf("[FORMA.EVENT.TYPE_MISMATCH] event %q: on_* events must be 'async', got %q", event.Name, event.Type)
 		}
 	}
 

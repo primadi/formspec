@@ -243,7 +243,7 @@ func TestNaturalKeyCounter_GenerateNaturalKey(t *testing.T) {
 		},
 		{
 			// {seq...} is the placeholder name every manifest in this repo
-			// actually uses (e.g. Clinic's visit.queue_number: "{prefix}-{seq:03d}") —
+			// actually uses (e.g. Clinic's visit.queue_number: "{prefix}{year}{month}{day}-{seq:03d}") —
 			// must be supported as an alias of {counter...}, not just {counter...}.
 			name:     "seq placeholder with prefix (visit.queue_number shape)",
 			resource: "visit",

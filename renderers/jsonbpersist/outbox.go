@@ -23,16 +23,18 @@ type OutboxStore struct {
 
 // OutboxRecord represents a row in forma_outbox.
 type OutboxRecord struct {
-	ID          string
+	ID             string
 	WorkspaceID    string
-	EventName   string
-	Resource    string
-	Payload     string
-	Status      string // pending | delivering | completed | failed
-	RetryCount  int
-	MaxRetries  int
-	CreatedAt   string
-	NextRetryAt string
+	EventName      string
+	Resource       string
+	Payload        string
+	Status         string // pending | delivering | completed | failed
+	RetryCount     int
+	MaxRetries     int
+	Backoff        string // exponential | linear | fixed (2.4.4)
+	InitialDelayMs int    // ms before first retry (2.4.4)
+	CreatedAt      string
+	NextRetryAt    string
 }
 
 // NewOutboxStore creates a new outbox store.
@@ -54,6 +56,12 @@ func EnqueueOutboxTx(ctx context.Context, txdb DB, workspaceID, eventName, resou
 	return enqueueOutbox(ctx, txdb, workspaceID, eventName, resource, payload)
 }
 
+// enqueueOutboxParams holds optional parameters for enqueueing an outbox event.
+type enqueueOutboxParams struct {
+	Backoff        string // exponential | linear | fixed (default: exponential)
+	InitialDelayMs int    // ms before first retry (default: 1000)
+}
+
 // enqueueOutbox performs the outbox insert against the given DB — a plain
 // connection, or a transaction-bound DB (see InTx in tx.go). EntityStore
 // uses the latter form to enqueue a durable event atomically alongside the
@@ -62,29 +70,44 @@ func EnqueueOutboxTx(ctx context.Context, txdb DB, workspaceID, eventName, resou
 // docs/renderers/jsonb-persist/01-architecture.md §3 where a crash between
 // mutation commit and outbox enqueue silently drops the event.
 func enqueueOutbox(ctx context.Context, database DB, workspaceID, eventName, resource, payload string) (string, error) {
+	return enqueueOutboxWithParams(ctx, database, workspaceID, eventName, resource, payload, enqueueOutboxParams{})
+}
+
+// enqueueOutboxParams is the same as enqueueOutbox but with optional retry params.
+func enqueueOutboxWithParams(ctx context.Context, database DB, workspaceID, eventName, resource, payload string, params enqueueOutboxParams) (string, error) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
+
+	backoff := params.Backoff
+	if backoff == "" {
+		backoff = "exponential"
+	}
+	initialDelayMs := params.InitialDelayMs
+	if initialDelayMs <= 0 {
+		initialDelayMs = 1000
+	}
+
 	query := `
-		INSERT INTO forma_outbox (tenant_id, event_name, resource, payload, status, created_at, next_retry_at)
-		VALUES (?, ?, ?, ?, 'pending', ?, ?)
+		INSERT INTO forma_outbox (tenant_id, event_name, resource, payload, status, backoff, initial_delay_ms, created_at, next_retry_at)
+		VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?)
 		RETURNING id
 	`
 
 	var id string
 	err := database.QueryRowContext(ctx, query,
-		workspaceID, eventName, resource, payload, now, now,
+		workspaceID, eventName, resource, payload, backoff, initialDelayMs, now, now,
 	).Scan(&id)
 	if err != nil {
 		// SQLite may not support RETURNING
-		return enqueueOutboxFallback(ctx, database, workspaceID, eventName, resource, payload, now)
+		return enqueueOutboxFallback(ctx, database, workspaceID, eventName, resource, payload, now, backoff, initialDelayMs)
 	}
 	return id, nil
 }
 
-func enqueueOutboxFallback(ctx context.Context, database DB, workspaceID, eventName, resource, payload, now string) (string, error) {
+func enqueueOutboxFallback(ctx context.Context, database DB, workspaceID, eventName, resource, payload, now, backoff string, initialDelayMs int) (string, error) {
 	_, err := database.ExecContext(ctx, `
-		INSERT INTO forma_outbox (tenant_id, event_name, resource, payload, status, created_at, next_retry_at)
-		VALUES (?, ?, ?, ?, 'pending', ?, ?)
-	`, workspaceID, eventName, resource, payload, now, now)
+		INSERT INTO forma_outbox (tenant_id, event_name, resource, payload, status, backoff, initial_delay_ms, created_at, next_retry_at)
+		VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?)
+	`, workspaceID, eventName, resource, payload, backoff, initialDelayMs, now, now)
 	if err != nil {
 		return "", fmt.Errorf("outbox enqueue: %w", err)
 	}
@@ -108,7 +131,7 @@ func (s *OutboxStore) Dequeue(ctx context.Context, batchSize int) ([]OutboxRecor
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, tenant_id, event_name, resource, payload, status, retry_count, max_retries, created_at, next_retry_at
+		SELECT id, tenant_id, event_name, resource, payload, status, retry_count, max_retries, backoff, initial_delay_ms, created_at, next_retry_at
 		FROM forma_outbox
 		WHERE status = 'pending' AND next_retry_at <= ?
 		ORDER BY created_at ASC
@@ -124,6 +147,7 @@ func (s *OutboxStore) Dequeue(ctx context.Context, batchSize int) ([]OutboxRecor
 		var rec OutboxRecord
 		if err := rows.Scan(&rec.ID, &rec.WorkspaceID, &rec.EventName, &rec.Resource,
 			&rec.Payload, &rec.Status, &rec.RetryCount, &rec.MaxRetries,
+			&rec.Backoff, &rec.InitialDelayMs,
 			&rec.CreatedAt, &rec.NextRetryAt); err != nil {
 			return nil, fmt.Errorf("outbox scan: %w", err)
 		}
@@ -154,14 +178,16 @@ func (s *OutboxStore) MarkCompleted(ctx context.Context, id string) error {
 }
 
 // MarkFailed marks an outbox record as failed and schedules a retry.
-// Uses exponential backoff: 2^retry_count seconds, capped at max_retries.
+// Uses the record's backoff strategy (exponential|linear|fixed) and
+// initial_delay_ms for scheduling the next attempt (2.4.4).
 func (s *OutboxStore) MarkFailed(ctx context.Context, id string, maxRetries int) error {
-	// Get current retry count
+	// Get current retry count, backoff strategy, and initial delay
 	var retryCount int
-	var currentStatus string
+	var currentStatus, backoff string
+	var initialDelayMs int
 	err := s.db.QueryRowContext(ctx, `
-		SELECT retry_count, status FROM forma_outbox WHERE id = ?
-	`, id).Scan(&retryCount, &currentStatus)
+		SELECT retry_count, status, backoff, initial_delay_ms FROM forma_outbox WHERE id = ?
+	`, id).Scan(&retryCount, &currentStatus, &backoff, &initialDelayMs)
 	if err != nil {
 		return fmt.Errorf("outbox mark failed get: %w", err)
 	}
@@ -176,10 +202,21 @@ func (s *OutboxStore) MarkFailed(ctx context.Context, id string, maxRetries int)
 		return err
 	}
 
-	// Exponential backoff: 2^retry_count seconds (cap at 3600s = 1h)
-	backoffSeconds := 1 << uint(newRetryCount)
-	backoff := math.Min(float64(backoffSeconds), 3600)
-	nextRetry := time.Now().UTC().Add(time.Duration(backoff) * time.Second).Format(time.RFC3339Nano)
+	// Calculate backoff delay: initial_delay_ms is the base for the first retry
+	var delayMs float64
+	switch backoff {
+	case "linear":
+		delayMs = float64(initialDelayMs) * float64(newRetryCount)
+	case "fixed":
+		delayMs = float64(initialDelayMs)
+	default: // exponential
+		delayMs = float64(initialDelayMs) * math.Pow(2, float64(newRetryCount-1))
+	}
+
+	// Cap at 1 hour
+	delayMs = math.Min(delayMs, 3600000)
+
+	nextRetry := time.Now().UTC().Add(time.Duration(delayMs) * time.Millisecond).Format(time.RFC3339Nano)
 
 	_, err = s.db.ExecContext(ctx, `
 		UPDATE forma_outbox SET status = 'pending', retry_count = ?, next_retry_at = ? WHERE id = ?

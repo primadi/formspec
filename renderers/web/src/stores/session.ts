@@ -59,8 +59,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set({ workspace, token: token ?? "", loaded: false, error: null })
 
     try {
-      const client = createApiClient({ workspace, token })
-      const me = await fetchMe(client)
+      const me = await fetchMe(workspace, token)
 
       // Dev mode: if _meta/me returns null, create a synthetic identity
       const identity: MeResponse = me ?? {

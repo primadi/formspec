@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	"github.com/primadi/forma/renderers/jsonbpersist"
 	"github.com/primadi/forma/internal/entity"
 	"github.com/primadi/forma/internal/events"
+	db "github.com/primadi/forma/renderers/jsonbpersist"
 )
 
 func newTestRouterServer(t *testing.T) (*httptest.Server, *RouterBuilder) {
@@ -34,7 +34,7 @@ func newTestRouterServer(t *testing.T) (*httptest.Server, *RouterBuilder) {
 
 func dialWS(t *testing.T, srv *httptest.Server, workspace string) *websocket.Conn {
 	t.Helper()
-	url := "ws" + strings.TrimPrefix(srv.URL, "http") + "/" + workspace + "/api/v1/_ws"
+	url := "ws" + strings.TrimPrefix(srv.URL, "http") + "/" + workspace + "/_ui/_ws"
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	conn, _, err := websocket.Dial(ctx, url, nil)
