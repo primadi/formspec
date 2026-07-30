@@ -192,7 +192,7 @@ func TestLoadAllKinds(t *testing.T) {
 	if r.Pages["settings"].Spec.Tabs[0].Label != "General" {
 		t.Errorf("tabs not parsed")
 	}
-	if r.Forms["order-edit"].Spec.Render.Mode != "separate_page" {
+	if r.Forms["order-edit"].Spec.Render != "separate_page" {
 		t.Errorf("render mode not parsed")
 	}
 	if r.Prints["receipt"].Spec.Output.Paper.Size != "thermal_58mm" {

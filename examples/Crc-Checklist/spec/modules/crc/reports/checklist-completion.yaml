@@ -1,0 +1,17 @@
+apiVersion: forma.dev/v1alpha1
+kind: Report
+metadata:
+  name: checklist-completion
+  module: crc
+  description: Laporan kelengkapan checklist — per template & periode
+spec:
+  entity: checklist-result
+  title: "Kelengkapan Checklist"
+  parameters:
+    - { field: template_id, label: "Template", type: select, required: false }
+    - { field: inspection_date, label: "Periode", type: date_range, required: true }
+  groups:
+    - { field: overall_result, label: "Berdasarkan Hasil" }
+  totals:
+    - { field: id, label: "Total Checklist", aggregate: count }
+  export: [csv, xlsx]

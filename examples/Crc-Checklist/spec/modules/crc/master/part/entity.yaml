@@ -1,0 +1,57 @@
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: part
+  module: crc
+  description: Sparepart — inventori komponen alat berat
+spec:
+  version: v1
+  characteristic: master
+
+  auth: { required: true, strategies: [token] }
+
+  display_field: name
+
+  fields:
+    - name: code
+      type: string
+      natural_key: true
+      immutable: true
+      unique: true
+      index: true
+      rules: [required, min_length: 2, max_length: 50]
+      description: Kode sparepart (part number)
+    - name: name
+      type: string
+      index: true
+      rules: [required, max_length: 200]
+    - name: description
+      type: string
+      rules: [max_length: 1000]
+    - name: unit
+      type: enum
+      enum_values: [pcs, set, liter, kg, meter]
+      required: true
+      default: pcs
+    - name: stock_quantity
+      type: integer
+      default: 0
+      rules: [positive]
+    - name: min_stock
+      type: integer
+      default: 0
+      rules: [positive]
+      description: Minimum stok — alert jika stock ≤ min_stock
+    - name: price
+      type: decimal
+      rules: [positive, precision: 2]
+    - name: is_active
+      type: boolean
+      default: true
+      index: true
+    - name: notes
+      type: string
+
+  actions:
+    - name: submit
+      disabled: true

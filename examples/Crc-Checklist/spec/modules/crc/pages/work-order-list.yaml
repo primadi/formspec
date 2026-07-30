@@ -1,0 +1,14 @@
+apiVersion: forma.dev/v1alpha1
+kind: Page
+metadata:
+  name: work-order-list
+  module: crc
+  description: Halaman daftar Work Order
+spec:
+  route: /work-orders
+  title: "Work Order"
+  icon: "wrench"
+  permissions: [work-order.view]
+  blocks:
+    - table:
+        ref: work-order-list

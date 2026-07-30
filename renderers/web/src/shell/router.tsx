@@ -54,7 +54,7 @@ export function buildRoutes(options: RouteBuilderOptions): RouteObject[] {
   const routes: RouteObject[] = []
 
   // 1. Page routes
-  for (const page of bundle.pages) {
+  for (const page of bundle.pages ?? []) {
     const route = page.spec.route.startsWith("/")
       ? page.spec.route
       : `/${page.spec.route}`
@@ -70,7 +70,7 @@ export function buildRoutes(options: RouteBuilderOptions): RouteObject[] {
   }
 
   // 2. Derived CRUD routes per entity
-  for (const entity of bundle.entities) {
+  for (const entity of bundle.entities ?? []) {
     const base = `${basePath}/${entity.module}/${entity.plural}`
 
     // List route
@@ -115,7 +115,7 @@ export function buildRoutes(options: RouteBuilderOptions): RouteObject[] {
   }
 
   // 3. Dashboard routes
-  for (const dashboard of bundle.dashboards) {
+  for (const dashboard of bundle.dashboards ?? []) {
     routes.push({
       path: `${basePath}/dashboard/${dashboard.name}`,
       Component: () => (
@@ -127,7 +127,7 @@ export function buildRoutes(options: RouteBuilderOptions): RouteObject[] {
   }
 
   // 4. Widget routes
-  for (const widget of bundle.widgets) {
+  for (const widget of bundle.widgets ?? []) {
     routes.push({
       path: `${basePath}/widget/${widget.name}`,
       Component: () => (
@@ -139,7 +139,7 @@ export function buildRoutes(options: RouteBuilderOptions): RouteObject[] {
   }
 
   // 5. Wizard routes (kind: Wizard)
-  for (const wizard of bundle.wizards) {
+  for (const wizard of bundle.wizards ?? []) {
     routes.push({
       path: `${basePath}/wizard/${wizard.name}`,
       Component: () => (
@@ -151,7 +151,7 @@ export function buildRoutes(options: RouteBuilderOptions): RouteObject[] {
   }
 
   // 6. Kanban routes
-  for (const kanban of bundle.kanbans) {
+  for (const kanban of bundle.kanbans ?? []) {
     routes.push({
       path: `${basePath}/kanban/${kanban.name}`,
       Component: () => (
@@ -163,7 +163,7 @@ export function buildRoutes(options: RouteBuilderOptions): RouteObject[] {
   }
 
   // 7. Timeline routes
-  for (const timeline of bundle.timelines) {
+  for (const timeline of bundle.timelines ?? []) {
     routes.push({
       path: `${basePath}/timeline/${timeline.name}`,
       Component: () => (
@@ -175,7 +175,7 @@ export function buildRoutes(options: RouteBuilderOptions): RouteObject[] {
   }
 
   // 8. Report routes
-  for (const report of bundle.reports) {
+  for (const report of bundle.reports ?? []) {
     routes.push({
       path: `${basePath}/report/${report.name}`,
       Component: () => (
@@ -187,7 +187,7 @@ export function buildRoutes(options: RouteBuilderOptions): RouteObject[] {
   }
 
   // 9. Print routes
-  for (const print of bundle.prints) {
+  for (const print of bundle.prints ?? []) {
     routes.push({
       path: `${basePath}/print/${print.name}`,
       Component: () => (

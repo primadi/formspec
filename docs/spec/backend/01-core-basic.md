@@ -306,6 +306,15 @@ atas maksimum di-clamp (bukan ditolak); nilai non-numerik atau negatif adalah
 `VALIDATION_ERROR` (422). Implementasi BOLEH menurunkan batas maksimum per
 dokumen tapi TIDAK BOLEH menaikkannya di atas 100.
 
+**Type-aware sort & filter.** Saat `sort` atau `filter` mengenai field yang
+disimpan di JSONB (`data`), PersistBackend mengekstrak nilainya sebagai text
+lalu meng-cast ke tipe native field yang dideklarasikan di Entity spec. Ini
+memastikan `?sort=queue_position` mengurutkan secara numerik (1, 2, 10) bukan
+lexicographic (1, 10, 2). Field tanpa tipe yang perlu cast (`string`,
+`richtext`, `enum`, `uuid`, `json`, `file`, `relation`, `money`, `child`)
+dibiarkan sebagai text. Developer tidak perlu `index: true` semata-mata untuk
+sort/filter yang benar — index tetap berguna untuk performa pada data besar.
+
 ## 7. Event & Outbox
 
 **Konvensi penamaan** mengunci tipe event lewat prefix: `before_*` (mis.

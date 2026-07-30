@@ -1,0 +1,16 @@
+apiVersion: forma.dev/v1alpha1
+kind: Widget
+metadata:
+  name: wo-completed-today
+  module: crc
+  description: Work Order selesai hari ini
+spec:
+  title: "Selesai Hari Ini"
+  type: metric
+  metric:
+    entity: work-order
+    aggregate: count
+    filter:
+      - { field: completed_date, op: eq, value: "{today}" }
+  icon: "check-circle"
+  color: "#009F53"

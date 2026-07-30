@@ -1,0 +1,17 @@
+apiVersion: forma.dev/v1alpha1
+kind: Report
+metadata:
+  name: wo-summary
+  module: crc
+  description: Laporan ringkasan Work Order — filter status & periode
+spec:
+  entity: work-order
+  title: "Ringkasan Work Order"
+  parameters:
+    - { field: status, label: "Status", type: select, required: false }
+    - { field: transaction_date, label: "Periode", type: date_range, required: true }
+  groups:
+    - { field: status, label: "Berdasarkan Status" }
+  totals:
+    - { field: id, label: "Total WO", aggregate: count }
+  export: [csv, xlsx]

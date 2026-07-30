@@ -127,7 +127,7 @@ function PageBlockRenderer({ block, module }: { block: PageBlock; module: string
       return (
         <div className="rounded-md border p-4">
           <Suspense fallback={<Skeleton className="h-48" />}>
-            <TableRenderer entity={entity} />
+            <TableRenderer entity={entity} hideTitle />
           </Suspense>
         </div>
       )
@@ -272,7 +272,7 @@ function TabContent({ tab, module }: { tab: PageTab; module: string }) {
     if (entity) {
       return (
         <Suspense fallback={<Skeleton className="h-48" />}>
-          <TableRenderer entity={entity} />
+          <TableRenderer entity={entity} hideTitle />
         </Suspense>
       )
     }

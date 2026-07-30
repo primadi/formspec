@@ -1,0 +1,23 @@
+apiVersion: forma.dev/v1alpha1
+kind: Config
+metadata:
+  name: app
+  description: Konfigurasi aplikasi CRC
+spec:
+  keys:
+    - name: crc.wo_prefix
+      type: string
+      default: "WO"
+      description: Prefix nomor Work Order
+    - name: crc.cl_prefix
+      type: string
+      default: "CL"
+      description: Prefix nomor Checklist
+    - name: crc.sr_prefix
+      type: string
+      default: "SR"
+      description: Prefix nomor Service Report
+    - name: crc.pr_prefix
+      type: string
+      default: "PR"
+      description: Prefix nomor Part Request

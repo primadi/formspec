@@ -1,0 +1,32 @@
+apiVersion: forma.dev/v1alpha1
+kind: Module
+metadata:
+  name: crc
+  description: CRC Checklist Management System — service management untuk alat berat Trakindo
+spec:
+  version: 1.0.0
+  depends:
+    - module: forma/core
+  menu:
+    - label: "CRC"
+      icon: "clipboard-check"
+      order: 1
+      children:
+        - { label: "Dashboard", icon: "layout-dashboard", view: crc-dashboard, order: 1 }
+        - label: "Data Master"
+          icon: "database"
+          order: 10
+          children:
+            - { label: "Pelanggan", icon: "building-2", view: customer-list, order: 1 }
+            - { label: "Equipment", icon: "tractor", view: equipment-list, order: 2 }
+            - { label: "Karyawan", icon: "users", view: employee-list, order: 3 }
+            - { label: "Sparepart", icon: "package", view: part-list, order: 4 }
+            - { label: "Template Checklist", icon: "file-text", view: checklist-template-list, order: 5 }
+        - label: "Transaksi"
+          icon: "activity"
+          order: 20
+          children:
+            - { label: "Work Order", icon: "wrench", view: work-order-list, order: 1 }
+            - { label: "Hasil Checklist", icon: "check-square", view: checklist-result-list, order: 2 }
+            - { label: "Service Report", icon: "file-bar-chart", view: service-report-list, order: 3 }
+            - { label: "Request Part", icon: "shopping-cart", view: part-request-list, order: 4 }

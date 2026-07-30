@@ -22,3 +22,5 @@ spec:
   filters: [polyclinic_id]
   search: true
   max_cards_per_column: 50
+  sortable: true
+  position_field: queue_position

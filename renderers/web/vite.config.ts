@@ -37,6 +37,11 @@ export default defineConfig({
         target: 'http://localhost:8080',
         changeOrigin: true,
       },
+      // Proxy _ui/* (meta API, entity CRUD) — matches what Go's viteSPAProxy intercepts
+      '/default/_ui/': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      },
     },
   },
   build: {

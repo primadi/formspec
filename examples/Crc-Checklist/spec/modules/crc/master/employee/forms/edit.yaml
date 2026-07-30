@@ -1,0 +1,20 @@
+apiVersion: forma.dev/v1alpha1
+kind: Form
+metadata:
+  name: employee-edit
+  module: crc
+  description: Form edit karyawan
+spec:
+  entity: employee
+  mode: edit
+  render: drawer
+  sections:
+    - title: "Data Karyawan"
+      fields:
+        - { field: name, rules: [required] }
+        - { field: role, rules: [required] }
+        - { field: phone }
+        - { field: email }
+        - { field: joined_at }
+        - { field: is_active }
+        - { field: notes }

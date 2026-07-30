@@ -1,0 +1,24 @@
+apiVersion: forma.dev/v1alpha1
+kind: Form
+metadata:
+  name: customer-create
+  module: crc
+  description: Form buat pelanggan baru
+spec:
+  entity: customer
+  mode: create
+  render: drawer
+  sections:
+    - title: "Informasi Perusahaan"
+      fields:
+        - { field: code, rules: [required] }
+        - { field: name, rules: [required] }
+        - { field: address }
+        - { field: phone }
+        - { field: email }
+    - title: "Informasi Tambahan"
+      fields:
+        - { field: npwp }
+        - { field: contact_person }
+        - { field: is_active }
+        - { field: notes }

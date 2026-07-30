@@ -1,0 +1,23 @@
+apiVersion: forma.dev/v1alpha1
+kind: Page
+metadata:
+  name: work-order-detail
+  module: crc
+  description: Halaman detail Work Order — form + checklist + part request
+spec:
+  route: /work-orders/:id
+  title: "Work Order {number}"
+  icon: "wrench"
+  permissions: [work-order.view]
+  blocks:
+    - form:
+        ref: work-order-edit
+        mode: view
+    - table:
+        ref: checklist-result-list
+        param: { work_order_id: id }
+        title: "Hasil Checklist"
+    - table:
+        ref: part-request-list
+        param: { work_order_id: id }
+        title: "Request Part"

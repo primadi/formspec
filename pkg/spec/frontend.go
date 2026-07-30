@@ -57,7 +57,7 @@ type FormSpec struct {
 	Sections []FormSection `yaml:"sections" json:"sections"`
 	Actions  []FormAction  `yaml:"actions,omitempty" json:"actions,omitempty"`
 	Submit   *FormSubmit   `yaml:"submit,omitempty" json:"submit,omitempty"`
-	Render   *FormRender   `yaml:"render,omitempty" json:"render,omitempty"`
+	Render   FormRender    `yaml:"render,omitempty" json:"render,omitempty"`
 }
 
 // FormSection groups form fields.
@@ -70,8 +70,10 @@ type FormSection struct {
 }
 
 // FormField configures a single field in a form.
+// YAML uses `field:` to reference the Entity field name; JSON serializes as
+// `name:` to match the TypeScript FormField interface.
 type FormField struct {
-	Name         string `yaml:"name" json:"name"`
+	Field        string `yaml:"field" json:"name"`
 	Label        string `yaml:"label,omitempty" json:"label,omitempty"`
 	Placeholder  string `yaml:"placeholder,omitempty" json:"placeholder,omitempty"`
 	Help         string `yaml:"help,omitempty" json:"help,omitempty"`
@@ -99,9 +101,7 @@ type FormSubmit struct {
 }
 
 // FormRender controls how a form is displayed (Frontend §1.6 — design-time locking).
-type FormRender struct {
-	Mode string `yaml:"mode" json:"mode"` // modal | drawer | separate_page
-}
+type FormRender string // modal | drawer | separate_page
 
 // TableSpec defines a list/browse view (Frontend §5).
 type TableSpec struct {
@@ -187,18 +187,24 @@ type ReportSpec struct {
 	RequiredPermission string         `yaml:"required_permission,omitempty" json:"required_permission,omitempty"`
 	Parameters         []ReportParam  `yaml:"parameters,omitempty" json:"parameters,omitempty"`
 	Columns            []ReportColumn `yaml:"columns" json:"columns"`
-	Groups             []string       `yaml:"groups,omitempty" json:"groups,omitempty"`
+	Groups             []ReportGroup  `yaml:"groups,omitempty" json:"groups,omitempty"`
 	Totals             []ReportTotal  `yaml:"totals,omitempty" json:"totals,omitempty"`
 	Export             []string       `yaml:"export,omitempty" json:"export,omitempty"` // pdf | csv | xlsx
 }
 
 // ReportParam is a filterable input for a report.
 type ReportParam struct {
-	Name     string `yaml:"name" json:"name"`
+	Field    string `yaml:"field" json:"field"`
 	Label    string `yaml:"label" json:"label"`
 	Type     string `yaml:"type" json:"type"`
 	Required bool   `yaml:"required,omitempty" json:"required,omitempty"`
 	Default  any    `yaml:"default,omitempty" json:"default,omitempty"`
+}
+
+// ReportGroup defines a grouping level in a report.
+type ReportGroup struct {
+	Field string `yaml:"field" json:"field"`
+	Label string `yaml:"label,omitempty" json:"label,omitempty"`
 }
 
 // ReportColumn is a column in a report output.
@@ -268,6 +274,8 @@ type KanbanSpec struct {
 	Search            bool           `yaml:"search,omitempty" json:"search,omitempty"`
 	RowActions        []TableAction  `yaml:"row_actions,omitempty" json:"row_actions,omitempty"`
 	MaxCardsPerColumn int            `yaml:"max_cards_per_column,omitempty" json:"max_cards_per_column,omitempty"`
+	Sortable          bool           `yaml:"sortable,omitempty" json:"sortable,omitempty"`             // enable within-column drag-to-reorder
+	PositionField     string         `yaml:"position_field,omitempty" json:"position_field,omitempty"` // field storing user-adjustable position (e.g. "queue_position")
 }
 
 // KanbanColumn is a status lane in a kanban board.

@@ -1,0 +1,29 @@
+# CRC Theme — Trakindo Utama brand colors
+# Kuning #FFC107 (primary), hitam #212529 (sidebar), hijau #009F53 (success)
+apiVersion: forma.dev/v1alpha1
+kind: Theme
+metadata:
+  name: crc-theme
+  description: Tema Trakindo — kuning CRC, sidebar gelap
+spec:
+  tokens:
+    color.primary: "#FFC107"
+    color.accent: "#009F53"
+    color.sky: "#00A7E2"
+    color.blue: "#29388F"
+    color.warning: "#FD7E14"
+    color.danger: "#DC3545"
+    color.sidebar.bg: "#212529"
+    color.sidebar.text: "#C2C7D0"
+    color.sidebar.active: "#FFC107"
+    color.header.bg: "#FFC107"
+    color.header.text: "#212529"
+    color.content.bg: "#F4F6F9"
+    color.card.bg: "#FFFFFF"
+    color.card.border: "#DEE2E6"
+    color.table.header.bg: "#FFCC00"
+    color.table.header.text: "#000000"
+    color.text: "#212529"
+    color.text.secondary: "#6C757D"
+    radius.md: "10px"
+    font.family: "Roboto"

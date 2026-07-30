@@ -1,0 +1,14 @@
+apiVersion: forma.dev/v1alpha1
+kind: Page
+metadata:
+  name: checklist-template-list
+  module: crc
+  description: Halaman daftar template checklist
+spec:
+  route: /checklist-templates
+  title: "Template Checklist"
+  icon: "file-text"
+  permissions: [checklist-template.view]
+  blocks:
+    - table:
+        ref: checklist-template-list

@@ -1,0 +1,22 @@
+# ── CRC Checklist Management System — Forma App ──
+#
+# App standalone yang mereplikasi CRC (Checklist Management System)
+# untuk Trakindo Utama — heavy equipment/Caterpillar dealer.
+#
+# Usage:
+#   cd examples/Crc-Checklist
+#   go run ../../cmd/forma/ dev
+#
+# Atau sebagai standalone:
+#   go run ../reference-app --spec ./spec --dsn "sqlite://.forma/crc.db" --addr :8080
+
+spec: spec
+dsn: sqlite:.forma/crc.db
+
+# Theme manifests — loaded from the shared ui-theme/ directory and local spec/themes/
+themes:
+  - ../../ui-theme/batik-theme
+  - ../../ui-theme/ocean-blue
+  - ../../ui-theme/midnight-pro
+  - ../../ui-theme/tropical
+  - ../../ui-theme/forest-mist

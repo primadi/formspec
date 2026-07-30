@@ -1,0 +1,25 @@
+apiVersion: forma.dev/v1alpha1
+kind: Form
+metadata:
+  name: equipment-create
+  module: crc
+  description: Form tambah equipment baru
+spec:
+  entity: equipment
+  mode: create
+  render: drawer
+  sections:
+    - title: "Identitas Unit"
+      fields:
+        - { field: serial_number, rules: [required] }
+        - { field: name, rules: [required] }
+        - { field: customer_id, rules: [required] }
+        - { field: brand, rules: [required] }
+        - { field: model, rules: [required] }
+    - title: "Detail Unit"
+      fields:
+        - { field: year, rules: [required] }
+        - { field: engine_hours }
+        - { field: last_service_date }
+        - { field: is_active }
+        - { field: notes }

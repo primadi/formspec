@@ -1,0 +1,21 @@
+apiVersion: forma.dev/v1alpha1
+kind: Table
+metadata:
+  name: service-report-list
+  module: crc
+  description: Tabel daftar Service Report
+spec:
+  entity: service-report
+  default_sort: "-report_date"
+  page_size: 20
+  columns:
+    - { field: number, label: "No. SR", sortable: true, width: "130px" }
+    - { field: work_order.number, label: "WO", sortable: true }
+    - { field: report_date, label: "Tanggal Laporan", sortable: true, width: "140px" }
+    - { field: status, label: "Status", width: "100px", align: "center" }
+  filters:
+    - { field: status, label: "Status", type: select }
+    - { field: report_date, label: "Tanggal", type: date_range }
+  row_actions:
+    - { action: "view", label: "Detail", icon: "eye" }
+  search: true

@@ -1,0 +1,15 @@
+apiVersion: forma.dev/v1alpha1
+kind: Widget
+metadata:
+  name: wo-by-priority
+  module: crc
+  description: Chart Work Order berdasarkan prioritas
+spec:
+  title: "WO per Prioritas"
+  type: chart
+  chart:
+    type: bar
+    entity: work-order
+    group_by: priority
+    aggregate: count
+  refresh: 120

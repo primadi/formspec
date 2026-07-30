@@ -1,0 +1,14 @@
+apiVersion: forma.dev/v1alpha1
+kind: Page
+metadata:
+  name: part-request-list
+  module: crc
+  description: Halaman daftar Part Request
+spec:
+  route: /part-requests
+  title: "Request Part"
+  icon: "shopping-cart"
+  permissions: [part-request.view]
+  blocks:
+    - table:
+        ref: part-request-list

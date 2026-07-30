@@ -1,0 +1,20 @@
+apiVersion: forma.dev/v1alpha1
+kind: Form
+metadata:
+  name: service-report-edit
+  module: crc
+  description: Form edit Service Report
+spec:
+  entity: service-report
+  mode: edit
+  render: separate_page
+  sections:
+    - title: "Informasi Laporan"
+      fields:
+        - { field: report_date, rules: [required] }
+    - title: "Temuan & Tindakan"
+      fields:
+        - { field: findings, rules: [required] }
+        - { field: actions_taken, rules: [required] }
+        - { field: parts_used }
+        - { field: recommendations }

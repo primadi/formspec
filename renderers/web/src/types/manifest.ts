@@ -723,6 +723,8 @@ export interface KanbanSpec {
   search?: boolean
   row_actions?: TableAction[]
   max_cards_per_column?: number
+  sortable?: boolean
+  position_field?: string
 }
 
 export interface KanbanColumn {

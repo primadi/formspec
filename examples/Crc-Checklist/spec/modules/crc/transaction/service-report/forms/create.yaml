@@ -1,0 +1,21 @@
+apiVersion: forma.dev/v1alpha1
+kind: Form
+metadata:
+  name: service-report-create
+  module: crc
+  description: Form buat Service Report
+spec:
+  entity: service-report
+  mode: create
+  render: separate_page
+  sections:
+    - title: "Informasi Laporan"
+      fields:
+        - { field: report_date, rules: [required] }
+        - { field: work_order_id, rules: [required] }
+    - title: "Temuan & Tindakan"
+      fields:
+        - { field: findings, rules: [required] }
+        - { field: actions_taken, rules: [required] }
+        - { field: parts_used }
+        - { field: recommendations }

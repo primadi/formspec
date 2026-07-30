@@ -1,0 +1,23 @@
+apiVersion: forma.dev/v1alpha1
+kind: Form
+metadata:
+  name: checklist-result-edit
+  module: crc
+  description: Form edit hasil checklist
+spec:
+  entity: checklist-result
+  mode: edit
+  render: separate_page
+  sections:
+    - title: "Informasi Inspeksi"
+      fields:
+        - { field: inspection_date, rules: [required] }
+        - { field: template_id, rules: [required] }
+        - { field: inspected_by, rules: [required] }
+    - title: "Item Checklist"
+      fields:
+        - { field: items }
+    - title: "Kesimpulan"
+      fields:
+        - { field: overall_result, rules: [required] }
+        - { field: notes }

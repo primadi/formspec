@@ -1,0 +1,21 @@
+apiVersion: forma.dev/v1alpha1
+kind: Form
+metadata:
+  name: part-edit
+  module: crc
+  description: Form edit sparepart
+spec:
+  entity: part
+  mode: edit
+  render: drawer
+  sections:
+    - title: "Data Sparepart"
+      fields:
+        - { field: name, rules: [required] }
+        - { field: description }
+        - { field: unit, rules: [required] }
+        - { field: stock_quantity }
+        - { field: min_stock }
+        - { field: price }
+        - { field: is_active }
+        - { field: notes }

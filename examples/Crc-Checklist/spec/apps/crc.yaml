@@ -1,0 +1,14 @@
+apiVersion: forma.dev/v1alpha1
+kind: App
+metadata:
+  name: crc
+  description: CRC Checklist Management System — Trakindo Utama
+spec:
+  version: 1.0.0
+  vendor: forma-examples
+  root_url: /app/crc
+  modules: [crc]
+  theme: crc-theme
+  menu:
+    - type: module
+      module: crc

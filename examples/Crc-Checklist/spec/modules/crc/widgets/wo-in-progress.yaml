@@ -1,0 +1,16 @@
+apiVersion: forma.dev/v1alpha1
+kind: Widget
+metadata:
+  name: wo-in-progress
+  module: crc
+  description: Work Order sedang dikerjakan
+spec:
+  title: "Sedang Dikerjakan"
+  type: metric
+  metric:
+    entity: work-order
+    aggregate: count
+    filter:
+      - { field: status, op: eq, value: in_progress }
+  icon: "activity"
+  color: "#00A7E2"

@@ -1,0 +1,21 @@
+apiVersion: forma.dev/v1alpha1
+kind: Dashboard
+metadata:
+  name: crc-dashboard
+  module: crc
+  description: Dashboard utama CRC — ringkasan operasional
+spec:
+  title: "Dashboard CRC"
+  description: "Ringkasan operasional hari ini"
+  widgets:
+    - ref: total-wo-today
+      layout: { x: 0, y: 0, w: 1, h: 1 }
+    - ref: wo-in-progress
+      layout: { x: 1, y: 0, w: 1, h: 1 }
+    - ref: wo-completed-today
+      layout: { x: 2, y: 0, w: 1, h: 1 }
+    - ref: wo-by-priority
+      layout: { x: 3, y: 0, w: 1, h: 1 }
+  customizable: true
+  defaults: [total-wo-today, wo-in-progress, wo-completed-today]
+  refresh: 60

@@ -234,12 +234,14 @@ func runDev(args []string) {
 			return dsRegistry.Resolve(spec.PrimitiveType(primitiveType), name)
 		}
 
-		var err error
-		monitor, err = sidecar.NewAppMonitor(appEndpointURL, 10*time.Second, 3)
-		if err != nil {
-			log.Fatalf("[forma] app monitor: %v", err)
+		if appEndpointURL != "" {
+			var err error
+			monitor, err = sidecar.NewAppMonitor(appEndpointURL, 10*time.Second, 3)
+			if err != nil {
+				log.Fatalf("[forma] app monitor: %v", err)
+			}
+			go monitor.Run(ctx)
 		}
-		go monitor.Run(ctx)
 
 		socketSrv = sidecar.NewServer(listenURL, sidecar.NewCtxHandler(resolver, "demo"), monitor, nil)
 		if err := socketSrv.Listen(); err != nil {

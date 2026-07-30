@@ -1,0 +1,22 @@
+apiVersion: forma.dev/v1alpha1
+kind: Table
+metadata:
+  name: customer-list
+  module: crc
+  description: Tabel daftar pelanggan
+spec:
+  entity: customer
+  default_sort: "name"
+  page_size: 20
+  columns:
+    - { field: code, label: "Kode", sortable: true, width: "120px" }
+    - { field: name, label: "Nama Perusahaan", sortable: true }
+    - { field: phone, label: "Telepon", width: "150px" }
+    - { field: email, label: "Email" }
+    - { field: is_active, label: "Aktif", width: "80px", align: "center" }
+  filters:
+    - { field: is_active, label: "Status", type: select }
+    - { field: name, label: "Cari Nama", type: text }
+  row_actions:
+    - { action: "view", label: "Detail", icon: "eye" }
+  search: true

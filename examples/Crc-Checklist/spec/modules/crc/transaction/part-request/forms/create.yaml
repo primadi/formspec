@@ -1,0 +1,21 @@
+apiVersion: forma.dev/v1alpha1
+kind: Form
+metadata:
+  name: part-request-create
+  module: crc
+  description: Form buat Part Request baru
+spec:
+  entity: part-request
+  mode: create
+  render: drawer
+  sections:
+    - title: "Informasi Permintaan"
+      fields:
+        - { field: work_order_id, rules: [required] }
+        - { field: requested_by, rules: [required] }
+    - title: "Item Part"
+      fields:
+        - { field: items }
+    - title: "Catatan"
+      fields:
+        - { field: notes }

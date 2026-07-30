@@ -54,6 +54,10 @@ import ConfirmDialog from "@/components/ui/confirm-dialog"
 
 interface TableRendererProps {
   entity: EntitySchema
+  /** When true, the entity-name <h1> title is suppressed — used when
+   *  TableRenderer is embedded inside a Page that already provides its
+   *  own title. Standalone (derived CRUD route) keeps the default title. */
+  hideTitle?: boolean
 }
 
 interface RowData {
@@ -61,7 +65,7 @@ interface RowData {
   [key: string]: unknown
 }
 
-export default function TableRenderer({ entity }: TableRendererProps) {
+export default function TableRenderer({ entity, hideTitle }: TableRendererProps) {
   const navigate = useNavigate()
   const { surfacePath } = useSurface()
   const [, setSearchParams] = useSearchParams()
@@ -334,9 +338,11 @@ export default function TableRenderer({ entity }: TableRendererProps) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            {entity.name.charAt(0).toUpperCase() + entity.name.slice(1)}
-          </h1>
+          {!hideTitle && (
+            <h1 className="text-2xl font-bold tracking-tight">
+              {entity.name.charAt(0).toUpperCase() + entity.name.slice(1)}
+            </h1>
+          )}
           <p className="text-sm text-muted-foreground">
             {total} record{total !== 1 ? "s" : ""}
           </p>

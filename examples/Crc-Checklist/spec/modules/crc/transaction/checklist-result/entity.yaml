@@ -1,0 +1,83 @@
+# CRC: Checklist Result — hasil inspeksi checklist untuk Work Order.
+# Items pass/fail disimpan di child jsonb.
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: checklist-result
+  module: crc
+  description: Hasil checklist inspeksi — diisi serviceman berdasarkan template
+spec:
+  version: v1
+  characteristic: transaction
+
+  auth: { required: true, strategies: [token] }
+
+  fields:
+    - name: transaction_date
+      type: date
+      required: true
+      index: true
+    - name: number
+      type: string
+      natural_key: true
+      immutable: true
+      unique: true
+      index: true
+      natural_key_rule:
+        strategy: sequence
+        format: "{prefix}-{year}-{seq:06d}"
+        prefix: { config: crc.cl_prefix, default: "CL" }
+        reset: yearly
+      description: Nomor Checklist
+    - name: work_order_id
+      type: relation
+      relation: { type: belongs_to, resource: work-order }
+      required: true
+      index: true
+    - name: template_id
+      type: relation
+      relation: { type: belongs_to, resource: checklist-template }
+      required: true
+    - name: inspected_by
+      type: relation
+      relation: { type: belongs_to, resource: employee }
+      required: true
+      description: Serviceman yang melakukan inspeksi
+    - name: inspection_date
+      type: date
+      required: true
+    - name: items
+      type: child
+      child:
+        storage: jsonb
+        sequence_field: order_index
+        fields:
+          - { name: order_index, type: integer, immutable: true }
+          - { name: item_name, type: string, rules: [required] }
+          - { name: result, type: enum, enum_values: [pass, fail, na], default: na }
+          - { name: notes, type: string, rules: [max_length: 500] }
+          - { name: image_url, type: string, description: "URL foto pendukung (opsional)" }
+    - name: overall_result
+      type: enum
+      enum_values: [pass, fail, conditional]
+      description: Hasil keseluruhan — pass jika semua item pass
+    - name: notes
+      type: string
+      rules: [max_length: 2000]
+
+  actions:
+    - name: update
+      conditions:
+        - script: "resource.status in ['draft']"
+          message: "Checklist yang sudah disubmit tidak bisa diedit"
+
+    - name: delete
+      conditions:
+        - script: "resource.status == 'draft'"
+          message: "Hanya checklist draft yang bisa dihapus"
+
+    - name: find
+
+  events:
+    - name: created
+      type: sync

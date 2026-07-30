@@ -1,0 +1,16 @@
+apiVersion: forma.dev/v1alpha1
+kind: Widget
+metadata:
+  name: total-wo-today
+  module: crc
+  description: Total Work Order hari ini
+spec:
+  title: "Total WO Hari Ini"
+  type: metric
+  metric:
+    entity: work-order
+    aggregate: count
+    filter:
+      - { field: transaction_date, op: eq, value: "{today}" }
+  icon: "clipboard-list"
+  color: "#29388F"

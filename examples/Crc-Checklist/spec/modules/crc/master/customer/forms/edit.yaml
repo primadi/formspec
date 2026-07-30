@@ -1,0 +1,23 @@
+apiVersion: forma.dev/v1alpha1
+kind: Form
+metadata:
+  name: customer-edit
+  module: crc
+  description: Form edit pelanggan
+spec:
+  entity: customer
+  mode: edit
+  render: drawer
+  sections:
+    - title: "Informasi Perusahaan"
+      fields:
+        - { field: name, rules: [required] }
+        - { field: address }
+        - { field: phone }
+        - { field: email }
+    - title: "Informasi Tambahan"
+      fields:
+        - { field: npwp }
+        - { field: contact_person }
+        - { field: is_active }
+        - { field: notes }

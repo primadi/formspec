@@ -1,0 +1,22 @@
+apiVersion: forma.dev/v1alpha1
+kind: Form
+metadata:
+  name: part-create
+  module: crc
+  description: Form tambah sparepart
+spec:
+  entity: part
+  mode: create
+  render: drawer
+  sections:
+    - title: "Data Sparepart"
+      fields:
+        - { field: code, rules: [required] }
+        - { field: name, rules: [required] }
+        - { field: description }
+        - { field: unit, rules: [required] }
+        - { field: stock_quantity }
+        - { field: min_stock }
+        - { field: price }
+        - { field: is_active }
+        - { field: notes }

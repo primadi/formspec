@@ -1,0 +1,14 @@
+apiVersion: forma.dev/v1alpha1
+kind: Page
+metadata:
+  name: employee-list
+  module: crc
+  description: Halaman daftar karyawan
+spec:
+  route: /employees
+  title: "Data Karyawan"
+  icon: "users"
+  permissions: [employee.view]
+  blocks:
+    - table:
+        ref: employee-list

@@ -31,6 +31,9 @@ spec:
         format: "{prefix}{year}{month}{day}-{seq:03d}"
         prefix: { config: clinic.queue_prefix, default: "Q" }
         reset: daily
+    - name: queue_position
+      type: integer
+      description: Posisi urutan dalam kolom Kanban — nullable, diisi via drag-to-reorder
     - name: patient_id
       type: relation
       relation: { type: belongs_to, resource: patient }

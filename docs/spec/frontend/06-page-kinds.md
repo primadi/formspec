@@ -322,6 +322,22 @@ spec:
   realtime: true
 ```
 
+**Within-column ordering.** Renderer dapat mengurutkan kartu dalam satu kolom
+dan mengizinkan operator mengubah urutan via drag-to-reorder dalam kolom:
+
+- `sortable: true` — mengaktifkan drag-to-reorder dalam kolom. Renderer
+  otomatis mengirim `?sort=<position_field>` ke API, sehingga kartu tampil
+  sesuai urutan posisi.
+- `position_field: "nama_field"` — field entity yang menyimpan nilai posisi
+  (biasanya integer). Renderer mengupdate field ini via PATCH saat kartu
+  di-drag ke posisi baru.
+- `sortable: true` tanpa `position_field` adalah konfigurasi tidak valid
+  — manifest validation wajib menolaknya.
+
+Saat kartu dipindah antar kolom, renderer juga mengisi `position_field`
+dengan `max(posisi_kolom_tujuan) + 1` sehingga kartu baru muncul di urutan
+terakhir kolom tujuan.
+
 **Kapan pakai Kanban vs Table:** Kanban kalau status adalah dimensi kerja utama
 dan pemindahan status adalah aksi utama (support queue, order fulfillment,
 triage board). Table kalau operasi utama adalah sort/filter/edit banyak kolom.

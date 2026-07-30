@@ -1,0 +1,14 @@
+apiVersion: forma.dev/v1alpha1
+kind: Page
+metadata:
+  name: part-list
+  module: crc
+  description: Halaman daftar sparepart
+spec:
+  route: /parts
+  title: "Data Sparepart"
+  icon: "package"
+  permissions: [part.view]
+  blocks:
+    - table:
+        ref: part-list

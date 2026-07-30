@@ -1,0 +1,14 @@
+apiVersion: forma.dev/v1alpha1
+kind: Page
+metadata:
+  name: equipment-list
+  module: crc
+  description: Halaman daftar equipment
+spec:
+  route: /equipment
+  title: "Data Equipment"
+  icon: "tractor"
+  permissions: [equipment.view]
+  blocks:
+    - table:
+        ref: equipment-list

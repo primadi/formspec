@@ -1,0 +1,22 @@
+apiVersion: forma.dev/v1alpha1
+kind: Table
+metadata:
+  name: checklist-template-list
+  module: crc
+  description: Tabel daftar template checklist
+spec:
+  entity: checklist-template
+  default_sort: "name"
+  page_size: 20
+  columns:
+    - { field: code, label: "Kode", sortable: true, width: "120px" }
+    - { field: name, label: "Nama Template", sortable: true }
+    - { field: category, label: "Kategori", sortable: true, width: "140px", align: "center" }
+    - { field: is_active, label: "Aktif", width: "80px", align: "center" }
+  filters:
+    - { field: category, label: "Kategori", type: select }
+    - { field: is_active, label: "Status", type: select }
+    - { field: name, label: "Cari", type: text }
+  row_actions:
+    - { action: "view", label: "Detail", icon: "eye" }
+  search: true

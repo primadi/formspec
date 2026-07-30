@@ -12,7 +12,6 @@ import { toast } from "sonner"
 import {
   DndContext,
   DragOverlay,
-  useDraggable,
   useDroppable,
   PointerSensor,
   useSensor,
@@ -22,6 +21,11 @@ import {
   type DragEndEvent,
   type UniqueIdentifier,
 } from "@dnd-kit/core"
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable"
 import { Eye, Edit2, Trash2, GripVertical, MoreHorizontal } from "lucide-react"
 
 import type {
@@ -46,6 +50,9 @@ import ConfirmDialog from "@/components/ui/confirm-dialog"
 // ── Constants ──
 
 const DRAGGING_CLASS = "opacity-40"
+
+// Sentinel for null position_field — sorts new records (null) to the END (FIFO).
+const POS_NULL_SENTINEL = Number.MAX_SAFE_INTEGER
 
 // ── Interfaces ──
 
@@ -114,9 +121,14 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
     setLoading(true)
     try {
       const client = getClient()
+      // Auto-default sort to position_field when sortable is enabled
+      const sortField = entry.spec.sortable && entry.spec.position_field
+        ? entry.spec.position_field
+        : undefined
       const result = await apiList<Record<string, unknown>>(
         client,
         `${entity.module}/${entity.name}`,
+        sortField ? { sort: sortField } : undefined,
       )
       setRecords(result.items)
     } catch {
@@ -124,7 +136,7 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
     } finally {
       setLoading(false)
     }
-  }, [entity, entry.spec.entity, getClient])
+  }, [entity, entry.spec.entity, entry.spec.sortable, entry.spec.position_field, getClient])
 
   useEffect(() => {
     fetchRecords()
@@ -213,23 +225,138 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
 
       if (!over || active.id === over.id) return
 
-      const targetColumnStatus = over.id as string
-      const targetColumn = columns.find((c) => c.status === targetColumnStatus)
-      if (!targetColumn) return
-
       const activeRecord = records.find(
         (r) => r.id === active.id,
       ) as Record<string, unknown> | undefined
       if (!activeRecord) return
 
-      const currentStatus = activeRecord[statusField] as string
-      if (currentStatus === targetColumnStatus) return
+      const positionField = entry.spec.position_field || null
 
-      // ── WIP limit check ──
-      const currentCount = getColumnRecords(targetColumnStatus).length
-      if (entry.spec.max_cards_per_column && currentCount >= entry.spec.max_cards_per_column) {
-        toast.error(`Column "${targetColumn.label}" is full (max ${entry.spec.max_cards_per_column})`)
-        return
+      // Determine drop target: column status or card ID
+      const targetColumn = columns.find((c) => c.status === over.id)
+      const overRecord = !targetColumn
+        ? (records.find((r) => r.id === over.id) as Record<string, unknown> | undefined)
+        : undefined
+
+      let targetStatus: string
+      let targetPosition: number | null = null
+
+      if (targetColumn) {
+        // ── Drop onto column (append to end) ──
+        targetStatus = targetColumn.status
+        const currentStatus = activeRecord[statusField] as string
+        const isSameColumn = currentStatus === targetStatus
+
+        // WIP limit check — only for cross-column drops
+        if (!isSameColumn) {
+          const currentCount = getColumnRecords(targetStatus).length
+          if (entry.spec.max_cards_per_column && currentCount >= entry.spec.max_cards_per_column) {
+            toast.error(`Column "${targetColumn.label}" is full (max ${entry.spec.max_cards_per_column})`)
+            return
+          }
+        }
+
+        // Calculate position = max+1 of target column
+        if (positionField) {
+          const targetRecords = getColumnRecords(targetStatus)
+          const maxPos = targetRecords.reduce(
+            (max, r) => Math.max(max, (r[positionField] as number) ?? 0),
+            0,
+          )
+          targetPosition = maxPos + 1000 // gap of 1000 for future insertions
+        }
+
+        // For same-column drop on column area → this is "move to end"
+        // Don't return early — proceed to PATCH with new position
+        if (isSameColumn && !positionField) return
+      } else if (overRecord) {
+        // ── Drop onto a card ──
+        targetStatus = overRecord[statusField] as string
+        const activeStatus = activeRecord[statusField] as string
+        const activePosition = positionField ? (activeRecord[positionField] as number | null) ?? null : null
+
+        if (activeStatus === targetStatus && positionField) {
+          // ── Within-column reorder ──
+          // Sort by position to match visual order
+          const columnRecords = [...getColumnRecords(targetStatus)].sort((a, b) => {
+            const pa = (a[positionField] as number) ?? POS_NULL_SENTINEL
+            const pb = (b[positionField] as number) ?? POS_NULL_SENTINEL
+            if (pa !== pb) return pa - pb
+            // FIFO fallback: null positions sort by created_at ascending
+            const ca = a.created_at ? new Date(String(a.created_at)).getTime() : 0
+            const cb = b.created_at ? new Date(String(b.created_at)).getTime() : 0
+            return ca - cb
+          })
+          const activeIdx = columnRecords.findIndex((r) => r.id === active.id)
+          const overIdx = columnRecords.findIndex((r) => r.id === over.id)
+          if (activeIdx === -1 || overIdx === -1) return
+
+          const overPos = (overRecord[positionField] as number) ?? (overIdx + 1) * 1000
+          const isDraggingDown = activeIdx < overIdx
+          const MIN_GAP = 10 // minimum gap before triggering renumber
+
+          if (isDraggingDown) {
+            // Moving DOWN → card goes AFTER overRecord (between over and next)
+            const nextRecord = columnRecords[overIdx + 1]
+            const nextPos = nextRecord
+              ? (nextRecord[positionField] as number) ?? (overIdx + 2) * 1000
+              : overPos + 1000
+
+            const rawGap = (nextPos as number) - overPos
+            if (rawGap <= MIN_GAP) {
+              // Gap too small — renumber column with fresh gaps
+              return renumberColumn(columnRecords, activeIdx, overIdx, isDraggingDown, activeRecord, getClient, entity, entityModule, entityName, positionField, statusField, setRecords, toast)
+            }
+            targetPosition = overPos === nextPos ? overPos + 1000 : Math.floor((overPos + nextPos) / 2)
+            if (targetPosition <= overPos) targetPosition = overPos + 1
+          } else {
+            // Moving UP → card goes BEFORE overRecord (between prev and over)
+            const prevRecord = columnRecords[overIdx - 1]
+            const prevPos = prevRecord
+              ? (prevRecord[positionField] as number) ?? overIdx * 1000
+              : overPos - 1000
+
+            const rawGap = overPos - (prevPos as number)
+            if (rawGap <= MIN_GAP) {
+              // Gap too small — renumber column with fresh gaps
+              return renumberColumn(columnRecords, activeIdx, overIdx, isDraggingDown, activeRecord, getClient, entity, entityModule, entityName, positionField, statusField, setRecords, toast)
+            }
+            targetPosition = overPos === prevPos ? overPos + 1 : Math.floor((prevPos + overPos) / 2)
+            if (targetPosition <= (prevPos ?? 0)) targetPosition = overPos + 1
+          }
+
+          // Only exit early when active has a non-null position that matches
+          if (activePosition != null && activePosition === targetPosition) return
+        } else {
+          // ── Cross-column drop onto specific card ──
+          const currentStatus = activeRecord[statusField] as string
+          if (currentStatus === targetStatus) return
+
+          // Insert before overRecord
+          if (positionField) {
+            const targetRecords = [...getColumnRecords(targetStatus)].sort((a, b) => {
+              const pa = (a[positionField] as number) ?? POS_NULL_SENTINEL
+              const pb = (b[positionField] as number) ?? POS_NULL_SENTINEL
+              if (pa !== pb) return pa - pb
+              const ca = a.created_at ? new Date(String(a.created_at)).getTime() : 0
+              const cb = b.created_at ? new Date(String(b.created_at)).getTime() : 0
+              return ca - cb
+            })
+            const overIdx = targetRecords.findIndex((r) => r.id === over.id)
+            if (overIdx === -1) return
+
+            const overPos = (overRecord[positionField] as number) ?? (overIdx + 1) * 1000
+            const prevRecord = targetRecords[overIdx - 1]
+            const prevPos = prevRecord
+              ? (prevRecord[positionField] as number) ?? overIdx * 1000
+              : overPos - 1000
+            targetPosition = overPos === prevPos ? overPos + 1 : Math.floor((prevPos + overPos) / 2)
+            // Collision safety
+            if (targetPosition <= (prevPos ?? 0)) targetPosition = overPos + 1
+          }
+        }
+      } else {
+        return // drop target not found
       }
 
       // ── Permission check ──
@@ -239,13 +366,19 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
         return
       }
 
+      // ── Build PATCH body ──
+      const patchBody: Record<string, unknown> = { [statusField]: targetStatus }
+      if (positionField && targetPosition != null) {
+        patchBody[positionField] = targetPosition
+      }
+
       // ── Save snapshot for rollback ──
       const snapshot = [...records]
 
       // ── Optimistic update ──
       setRecords((prev) =>
         prev.map((r) =>
-          r.id === active.id ? { ...r, [statusField]: targetColumnStatus } : r,
+          r.id === active.id ? { ...r, ...patchBody } : r,
         ),
       )
 
@@ -255,10 +388,14 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
         await apiPatch(
           client,
           `${entity?.module ?? entityModule}/${entity?.name ?? entityName}/${active.id}`,
-          { [statusField]: targetColumnStatus },
+          patchBody,
           (activeRecord as Record<string, unknown>).version as number | undefined,
         )
-        toast.success(`Moved to ${targetColumn.label}`)
+        if (targetColumn) {
+          toast.success(`Moved to ${targetColumn.label}`)
+        } else {
+          toast.success("Card reordered")
+        }
       } catch (err) {
         // Rollback on error
         setRecords(snapshot)
@@ -278,6 +415,7 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
       me,
       getColumnRecords,
       entry.spec.max_cards_per_column,
+      entry.spec.position_field,
     ],
   )
 
@@ -412,6 +550,7 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
               onRowAction={handleRowAction}
               entityModule={entity?.module ?? entityModule}
               entityPlural={entity?.plural ?? entityName}
+              positionField={entry.spec.position_field}
             />
           ))}
         </div>
@@ -449,6 +588,83 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
   )
 }
 
+// ── Renumber helper ──
+
+/**
+ * Renumbers all cards in a column with fresh 1000-gap positions.
+ * Called when the gap between cards becomes too small (< MIN_GAP).
+ *
+ * 1. Sorts records with active card moved to its target position
+ * 2. Assigns positions 1000, 2000, 3000, ...
+ * 3. PATCHes each card; partial failure shows toast but keeps local state
+ */
+async function renumberColumn(
+  columnRecords: Record<string, unknown>[],
+  activeIdx: number,
+  overIdx: number,
+  isDraggingDown: boolean,
+  _activeRecord: Record<string, unknown>,
+  getClient: () => import("ky").KyInstance,
+  entity: { module: string; name: string } | null | undefined,
+  entityModule: string,
+  entityName: string,
+  positionField: string,
+  statusField: string,
+  setRecords: React.Dispatch<React.SetStateAction<Record<string, unknown>[]>>,
+  toast: { error: (msg: string) => void; success: (msg: string) => void },
+): Promise<void> {
+  const client = getClient()
+  const path = `${entity?.module ?? entityModule}/${entity?.name ?? entityName}`
+
+  // Build new order: remove active from its position, insert at overIdx
+  const newOrder = [...columnRecords]
+  const [moved] = newOrder.splice(activeIdx, 1)
+  const insertAt = isDraggingDown ? overIdx + 1 : overIdx
+  newOrder.splice(insertAt, 0, moved)
+
+  // Assign fresh positions with 1000 gap
+  const repositions: { id: string; newPos: number; record: Record<string, unknown> }[] = []
+  let versionMap = new Map<string, number>()
+  for (const rec of columnRecords) {
+    if (rec.id != null) {
+      versionMap.set(String(rec.id), (rec as any).version as number)
+    }
+  }
+
+  for (let i = 0; i < newOrder.length; i++) {
+    const rec = newOrder[i]
+    const id = String(rec.id ?? "")
+    const newPos = (i + 1) * 1000
+    repositions.push({ id, newPos, record: rec })
+  }
+
+  // Optimistic update: apply all new positions locally
+  setRecords((prev) =>
+    prev.map((r) => {
+      const update = repositions.find((p) => p.id === r.id)
+      return update ? { ...r, [positionField]: update.newPos } : r
+    }),
+  )
+
+  // PATCH all affected cards (Promise.allSettled — best effort)
+  const results = await Promise.allSettled(
+    repositions.map((p) => {
+      const version = (p.record as any).version as number | undefined
+      const patchBody: Record<string, unknown> = { [positionField]: p.newPos }
+      // Include status field so the PATCH doesn't try to clear it
+      patchBody[statusField] = p.record[statusField] as string
+      return apiPatch(client, `${path}/${p.id}`, patchBody, version)
+    }),
+  )
+
+  const failures = results.filter((r) => r.status === "rejected")
+  if (failures.length > 0) {
+    toast.error(`${failures.length} card(s) failed to renumber — refresh to sync`)
+  } else {
+    toast.success("Column reordered")
+  }
+}
+
 // ── Column Component ──
 
 function KanbanColumn({
@@ -462,6 +678,7 @@ function KanbanColumn({
   onRowAction,
   entityModule,
   entityPlural,
+  positionField,
 }: {
   column: KanbanColumn
   cards: Record<string, unknown>[]
@@ -473,6 +690,7 @@ function KanbanColumn({
   onRowAction: (action: TableAction, record: Record<string, unknown>) => void
   entityModule: string
   entityPlural: string
+  positionField?: string
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: column.status,
@@ -480,6 +698,22 @@ function KanbanColumn({
 
   const isFull = maxCards != null && cards.length >= maxCards
   const isEmpty = cards.length === 0 && !loading
+
+  // Sort cards by position_field when available
+  const sortedCards = useMemo(() => {
+    if (!positionField) return cards
+    return [...cards].sort((a, b) => {
+      const pa = (a[positionField] as number) ?? POS_NULL_SENTINEL
+      const pb = (b[positionField] as number) ?? POS_NULL_SENTINEL
+      if (pa !== pb) return pa - pb
+      const ca = a.created_at ? new Date(String(a.created_at)).getTime() : 0
+      const cb = b.created_at ? new Date(String(b.created_at)).getTime() : 0
+      return ca - cb
+    })
+  }, [cards, positionField])
+
+  const visibleCards = sortedCards.slice(0, maxCards)
+  const cardIds = useMemo(() => visibleCards.map((c) => (c.id as string) ?? ""), [visibleCards])
 
   return (
     <div
@@ -500,7 +734,7 @@ function KanbanColumn({
             <span className="text-[10px] text-red-500 font-medium">FULL</span>
           )}
         </div>
-        <Badge value={String(cards.length)} />
+        <Badge value={String(sortedCards.length)} />
       </div>
 
       {/* Cards */}
@@ -514,27 +748,29 @@ function KanbanColumn({
             No items
           </div>
         ) : (
-          cards.slice(0, maxCards).map((card) => {
-            const id = (card.id as string) ?? ""
-            return (
-              <DraggableCard
-                key={id}
-                id={id}
-                record={card}
-                template={cardTemplate}
-                isDragging={activeId === id}
-                rowActions={rowActions}
-                onRowAction={onRowAction}
-                entityModule={entityModule}
-                entityPlural={entityPlural}
-              />
-            )
-          })
+          <SortableContext items={cardIds} strategy={verticalListSortingStrategy}>
+            {visibleCards.map((card) => {
+              const id = (card.id as string) ?? ""
+              return (
+                <SortableCard
+                  key={id}
+                  id={id}
+                  record={card}
+                  template={cardTemplate}
+                  isDragging={activeId === id}
+                  rowActions={rowActions}
+                  onRowAction={onRowAction}
+                  entityModule={entityModule}
+                  entityPlural={entityPlural}
+                />
+              )
+            })}
+          </SortableContext>
         )}
 
-        {maxCards && cards.length > maxCards && (
+        {maxCards && sortedCards.length > maxCards && (
           <p className="text-center text-xs text-muted-foreground">
-            +{cards.length - maxCards} more
+            +{sortedCards.length - maxCards} more
           </p>
         )}
       </div>
@@ -542,9 +778,9 @@ function KanbanColumn({
   )
 }
 
-// ── Draggable Card Wrapper ──
+// ── Sortable Card Wrapper ──
 
-function DraggableCard({
+function SortableCard({
   id,
   record,
   template,
@@ -565,12 +801,18 @@ function DraggableCard({
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
 
-  const { attributes, listeners, setNodeRef, transform } =
-    useDraggable({ id })
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+  } = useSortable({ id })
 
   const style = transform
     ? {
         transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+        transition,
       }
     : undefined
 

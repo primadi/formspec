@@ -1,0 +1,24 @@
+apiVersion: forma.dev/v1alpha1
+kind: Form
+metadata:
+  name: equipment-edit
+  module: crc
+  description: Form edit equipment
+spec:
+  entity: equipment
+  mode: edit
+  render: drawer
+  sections:
+    - title: "Identitas Unit"
+      fields:
+        - { field: name, rules: [required] }
+        - { field: customer_id, rules: [required] }
+        - { field: brand, rules: [required] }
+        - { field: model, rules: [required] }
+    - title: "Detail Unit"
+      fields:
+        - { field: year, rules: [required] }
+        - { field: engine_hours }
+        - { field: last_service_date }
+        - { field: is_active }
+        - { field: notes }

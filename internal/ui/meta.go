@@ -117,7 +117,21 @@ func (r *Registry) BuildBundle(entities EntityLister, can PermissionChecker, app
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	b := &Bundle{App: AppSummary{Name: appCtx.Name, RootURL: appCtx.RootURL}, Menu: appCtx.Menu}
+	b := &Bundle{
+		App:        AppSummary{Name: appCtx.Name, RootURL: appCtx.RootURL},
+		Menu:       appCtx.Menu,
+		Pages:      []*Entry[spec.PageSpec]{},
+		Forms:      []*Entry[spec.FormSpec]{},
+		Tables:     []*Entry[spec.TableSpec]{},
+		Dashboards: []*Entry[spec.DashboardSpec]{},
+		Widgets:    []*Entry[spec.WidgetSpec]{},
+		Reports:    []*Entry[spec.ReportSpec]{},
+		Wizards:    []*Entry[spec.WizardSpec]{},
+		Kanbans:    []*Entry[spec.KanbanSpec]{},
+		Timelines:  []*Entry[spec.TimelineSpec]{},
+		Prints:     []*Entry[spec.PrintSpec]{},
+		Themes:     []*Entry[spec.ThemeSpec]{},
+	}
 
 	visible := map[string]bool{} // "module/name" → caller can see entity
 	for _, d := range entities() {
