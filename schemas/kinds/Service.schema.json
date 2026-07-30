@@ -1,0 +1,24 @@
+{
+  "title": "Service Spec",
+  "description": "ServiceSpec defines a stateless, pure computation resource (Core §4.2).\n",
+  "type": "object",
+  "properties": {
+    "actions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Action"
+      }
+    },
+    "auth": {
+      "$ref": "#/$defs/EntityAuth",
+      "nullable": true
+    },
+    "version": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "version"
+  ],
+  "additionalProperties": false
+}

@@ -13,4 +13,3 @@ spec:
   blocks:
     - table:
         ref: midtrans-webhook-table
-        entity: webhook_log

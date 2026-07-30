@@ -8,7 +8,6 @@ spec:
   vendor: forma-examples
   root_url: /app/crc
   modules: [crc]
-  theme: crc-theme
   menu:
     - type: module
       module: crc

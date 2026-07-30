@@ -11,8 +11,8 @@ spec:
   sections:
     - title: "Informasi Permintaan"
       fields:
-        - { field: work_order_id, rules: [required] }
-        - { field: requested_by, rules: [required] }
+        - { field: work_order_id }
+        - { field: requested_by }
     - title: "Item Part"
       fields:
         - { field: items }

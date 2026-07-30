@@ -15,26 +15,26 @@ spec:
     - title: "Data Kunjungan"
       columns: 2
       fields:
-        - name: transaction_date
+        - field: transaction_date
           label: "Tanggal Kunjungan"
-        - name: patient_id
+        - field: patient_id
           label: "Pasien"
-        - name: polyclinic_id
+        - field: polyclinic_id
           label: "Poliklinik"
-        - name: doctor_id
+        - field: doctor_id
           label: "Dokter"
     - title: "Keluhan"
       columns: 1
       fields:
-        - name: complaint
+        - field: complaint
           label: "Keluhan Awal"
           placeholder: "Keluhan utama pasien…"
     - title: "Biaya & Status"
       columns: 2
       fields:
-        - name: total
+        - field: total
           label: "Total Biaya"
-        - name: status
+        - field: status
           label: "Status"
   submit:
     label: "Simpan Kunjungan Baru"

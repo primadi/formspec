@@ -12,5 +12,4 @@ spec:
     aggregate: count
     filter:
       - { field: completed_date, op: eq, value: "{today}" }
-  icon: "check-circle"
   color: "#009F53"

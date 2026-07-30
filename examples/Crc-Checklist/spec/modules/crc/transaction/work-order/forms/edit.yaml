@@ -11,14 +11,14 @@ spec:
   sections:
     - title: "Informasi Work Order"
       fields:
-        - { field: transaction_date, rules: [required] }
-        - { field: equipment_id, rules: [required] }
-        - { field: customer_id, rules: [required] }
+        - { field: transaction_date }
+        - { field: equipment_id }
+        - { field: customer_id }
         - { field: assigned_to }
-        - { field: description, rules: [required] }
+        - { field: description }
     - title: "Detail Pekerjaan"
       fields:
-        - { field: priority, rules: [required] }
+        - { field: priority }
         - { field: scheduled_date }
         - { field: engine_hours_at_service }
         - { field: notes }

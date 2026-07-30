@@ -9,6 +9,7 @@ import (
 
 // DocStatus is the built-in document lifecycle state (Core §4.1).
 // NULL means lifecycle-free — the document does not participate in the lifecycle.
+// @schema {description: "Document lifecycle state (empty = lifecycle-free)", enum: ["draft", "submitted", "cancelled"]}
 type DocStatus string
 
 const (
@@ -59,6 +60,7 @@ func IsDerivedReservedAction(name string) bool {
 }
 
 // OnDelete specifies behavior when a referenced document is deleted (Core §10.5).
+// @schema {description: "Referential action on target delete", enum: ["restrict", "cascade", "set_null"]}
 type OnDelete string
 
 const (
@@ -107,6 +109,7 @@ type ExposeConfig struct {
 }
 
 // ProtocolType identifies the external protocol for API delivery (§16).
+// @schema {description: "External protocol type", enum: ["rest", "grpc", "ws"]}
 type ProtocolType string
 
 const (
@@ -122,8 +125,11 @@ type EntityAuth struct {
 }
 
 // Field defines a data field on an Entity.
+// @schema {title: "Field Definition"}
 type Field struct {
-	Name           string              `yaml:"name" json:"name"`
+	// @schema {minLength: 1, maxLength: 128, pattern: "^[a-z][a-z0-9_]*$", description: "Field name — lowercase snake_case, unique within entity"}
+	Name string `yaml:"name" json:"name"`
+	// @schema {description: "Data type — determines storage class, renderer widget, and validation"}
 	Type           FieldType           `yaml:"type" json:"type"`
 	Title          string              `yaml:"title,omitempty" json:"title,omitempty"`
 	Description    string              `yaml:"description,omitempty" json:"description,omitempty"`
@@ -167,6 +173,7 @@ type Field struct {
 }
 
 // FieldType is the data type of a field (Core §10.1, 05-field-types.md §1.1).
+// @schema {title: "Field Type", description: "Data type for a field — determines storage class, renderer widget, and validation rules"}
 type FieldType string
 
 const (
@@ -193,6 +200,7 @@ const (
 )
 
 // ValidationRule is a validation constraint on a field.
+// @schema {description: "Validation constraint. Supports 4 YAML formats: string (\"required\"), colon (\"after:end_date\"), map-shorthand ({min_length: 1}), or full ({name: \"min_length\", value: 1})"}
 type ValidationRule struct {
 	Name  string `yaml:"name" json:"name"`
 	Value any    `yaml:"value,omitempty" json:"value,omitempty"`
@@ -493,10 +501,12 @@ type Action struct {
 // ActionUIHint carries frontend rendering hints for an action button (Backend §5.1).
 type ActionUIHint struct {
 	ButtonLabel string `yaml:"button_label,omitempty" json:"button_label,omitempty"`
-	Style       string `yaml:"style,omitempty" json:"style,omitempty"` // primary | secondary | danger
-	Icon        string `yaml:"icon,omitempty" json:"icon,omitempty"`
-	Confirm     string `yaml:"confirm,omitempty" json:"confirm,omitempty"`
-	ShowWhen    string `yaml:"show_when,omitempty" json:"show_when,omitempty"` // FormaExpr
+	// @schema {description: "Button style variant", enum: ["primary", "secondary", "danger"]}
+	Style   string `yaml:"style,omitempty" json:"style,omitempty"`
+	Icon    string `yaml:"icon,omitempty" json:"icon,omitempty"`
+	Confirm string `yaml:"confirm,omitempty" json:"confirm,omitempty"`
+	// @schema {description: "FormaExpr — condition to show this action button"}
+	ShowWhen string `yaml:"show_when,omitempty" json:"show_when,omitempty"`
 }
 
 // ImplDecl specifies how an action is implemented.
@@ -668,6 +678,7 @@ func (g *GuardDecl) UnmarshalYAML(value *yaml.Node) error {
 }
 
 // HookTiming is when a hook runs relative to its action or event (Core Extended §8).
+// @schema {description: "When the hook executes relative to the action/event", enum: ["before", "after", "on_error", "before_deliver", "after_deliver"]}
 type HookTiming string
 
 const (
@@ -880,8 +891,11 @@ type IndexDecl struct {
 }
 
 // RelationDecl defines a relation to another entity.
+// @schema {title: "Relation Declaration"}
 type RelationDecl struct {
-	Type       string   `yaml:"type" json:"type"` // belongs_to | has_many | has_one
+	// @schema {description: "Relation type: belongs_to (FK on this entity), has_many (FK on target), has_one (FK on target, unique)", enum: ["belongs_to", "has_many", "has_one"]}
+	Type string `yaml:"type" json:"type"`
+	// @schema {description: "Target entity \"module/entity\" or just \"entity\" within same module"}
 	Resource   string   `yaml:"resource" json:"resource"`
 	ForeignKey string   `yaml:"foreign_key,omitempty" json:"foreign_key,omitempty"`
 	OnDelete   OnDelete `yaml:"on_delete,omitempty" json:"on_delete,omitempty"` // restrict | cascade | set_null (v0.3.0)
@@ -957,6 +971,7 @@ type RateLimitSpec struct {
 
 // 1.4.3 FieldClassification — governance label for field-level data sensitivity
 // (05-field-types.md §5.4).
+// @schema {description: "Data sensitivity classification for governance", enum: ["pii", "financial", "internal"]}
 type FieldClassification string
 
 const (

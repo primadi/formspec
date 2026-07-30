@@ -101,7 +101,8 @@ type FormSubmit struct {
 }
 
 // FormRender controls how a form is displayed (Frontend §1.6 — design-time locking).
-type FormRender string // modal | drawer | separate_page
+// @schema {description: "Render mode: modal (popup dialog), drawer (side panel), separate_page (full page)", enum: ["modal", "drawer", "separate_page"]}
+type FormRender string
 
 // TableSpec defines a list/browse view (Frontend §5).
 type TableSpec struct {
@@ -140,7 +141,8 @@ type TableAction struct {
 type TableFilter struct {
 	Field string `yaml:"field" json:"field"`
 	Label string `yaml:"label" json:"label"`
-	Type  string `yaml:"type" json:"type"` // text | select | date_range
+	// @schema {description: "Filter widget type", enum: ["text", "select", "date_range"]}
+	Type string `yaml:"type" json:"type"`
 }
 
 // DashboardSpec defines a widget canvas (Frontend §5).

@@ -8,11 +8,10 @@ metadata:
   description: Pilih poliklinik & dokter — step 2 wizard pendaftaran
 spec:
   entity: visit
-  render:
-    mode: modal
+  render: modal
   sections:
     - title: "Tujuan Kunjungan"
       fields:
-        - { name: polyclinic_id, label: "Poliklinik" }
-        - { name: doctor_id, label: "Dokter", help: "Ter-filter sesuai poliklinik" }
-        - { name: complaint, label: "Keluhan Awal", placeholder: "Keluhan utama…" }
+        - { field: polyclinic_id, label: "Poliklinik" }
+        - { field: doctor_id, label: "Dokter", help: "Ter-filter sesuai poliklinik" }
+        - { field: complaint, label: "Keluhan Awal", placeholder: "Keluhan utama…" }

@@ -10,13 +10,12 @@ metadata:
   description: Penjualan obat bebas — quick create
 spec:
   entity: otc-sale
-  render:
-    mode: modal
+  render: modal
   sections:
     - title: "Penjualan"
       fields:
-        - { name: transaction_date, label: "Tanggal" }
-        - { name: patient_id, label: "Pasien Terdaftar", help: "Opsional" }
-        - { name: buyer_name, label: "Nama Pembeli", placeholder: "Opsional — boleh kosong untuk pembeli anonim" }
-        - { name: items, label: "Item", widget: child-grid }
-        - { name: notes, label: "Catatan" }
+        - { field: transaction_date, label: "Tanggal" }
+        - { field: patient_id, label: "Pasien Terdaftar", help: "Opsional" }
+        - { field: buyer_name, label: "Nama Pembeli", placeholder: "Opsional — boleh kosong untuk pembeli anonim" }
+        - { field: items, label: "Item", widget: child-grid }
+        - { field: notes, label: "Catatan" }

@@ -31,6 +31,7 @@ type Metadata struct {
 }
 
 // Kind represents the resource kind as a PascalCase string.
+// @schema {title: "Resource Kind"}
 type Kind string
 
 // Core Basic built-in kinds (Core §4).
@@ -82,6 +83,7 @@ const (
 )
 
 // Characteristic classifies the data nature of an Entity (Core §4.1).
+// @schema {title: "Characteristic", description: "Data nature classification — determines storage strategy, partitioning, and API behavior"}
 type Characteristic string
 
 const (
@@ -92,6 +94,7 @@ const (
 )
 
 // ImplType is the implementation strategy for an action (Core §4.1).
+// @schema {title: "Implementation Type", description: "How an action is implemented: script_ref (Starlark file), script (inline Starlark), native (Go), compiled (WASM), sidecar (external process)"}
 type ImplType string
 
 const (
@@ -103,6 +106,7 @@ const (
 )
 
 // Environment mode (Control §2).
+// @schema {description: "Deployment environment mode", enum: ["dev", "prod"]}
 type EnvironmentMode string
 
 const (

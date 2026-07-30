@@ -11,9 +11,9 @@ spec:
   sections:
     - title: "Data Karyawan"
       fields:
-        - { field: employee_number, rules: [required] }
-        - { field: name, rules: [required] }
-        - { field: role, rules: [required] }
+        - { field: employee_number }
+        - { field: name }
+        - { field: role }
         - { field: phone }
         - { field: email }
         - { field: joined_at }

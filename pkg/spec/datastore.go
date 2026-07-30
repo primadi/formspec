@@ -9,6 +9,7 @@
 package spec
 
 // DatastoreDriver identifies the backend technology.
+// @schema {description: "Backend database/driver technology", enum: ["sqlite", "postgres", "valkey", "redis", "s3", "minio", "nats", "memory", "fs"]}
 type DatastoreDriver string
 
 const (
@@ -24,6 +25,7 @@ const (
 )
 
 // PrimitiveType identifies which ctx.* primitive a datastore backs.
+// @schema {description: "ctx.* primitive type this datastore backs", enum: ["db", "cache", "lock", "queue", "pubsub", "storage", "config", "kvstore", "log"]}
 type PrimitiveType string
 
 const (
@@ -39,6 +41,7 @@ const (
 )
 
 // AccessPermission is the permission level for a datastore.
+// @schema {description: "Access permission level", enum: ["read", "write", "read_write"]}
 type AccessPermission string
 
 const (

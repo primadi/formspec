@@ -12,14 +12,14 @@ spec:
   sections:
     - title: "Profil"
       fields:
-        - { name: nik, label: "NIK" }
-        - { name: name, label: "Nama" }
-        - { name: birth_date, label: "Tgl. Lahir" }
-        - { name: gender, label: "Jenis Kelamin" }
-        - { name: blood_type, label: "Gol. Darah" }
+        - { field: nik, label: "NIK" }
+        - { field: name, label: "Nama" }
+        - { field: birth_date, label: "Tgl. Lahir" }
+        - { field: gender, label: "Jenis Kelamin" }
+        - { field: blood_type, label: "Gol. Darah" }
     - title: "Kontak & Lainnya"
       fields:
-        - { name: phone, label: "No. HP" }
-        - { name: address, label: "Alamat" }
-        - { name: allergies, label: "Alergi" }
-        - { name: is_bpjs, label: "Peserta BPJS" }
+        - { field: phone, label: "No. HP" }
+        - { field: address, label: "Alamat" }
+        - { field: allergies, label: "Alergi" }
+        - { field: is_bpjs, label: "Peserta BPJS" }

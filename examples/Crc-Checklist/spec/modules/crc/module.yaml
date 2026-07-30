@@ -10,12 +10,10 @@ spec:
   menu:
     - label: "CRC"
       icon: "clipboard-check"
-      order: 1
       children:
         - { label: "Dashboard", icon: "layout-dashboard", view: crc-dashboard, order: 1 }
         - label: "Data Master"
           icon: "database"
-          order: 10
           children:
             - { label: "Pelanggan", icon: "building-2", view: customer-list, order: 1 }
             - { label: "Equipment", icon: "tractor", view: equipment-list, order: 2 }
@@ -24,7 +22,6 @@ spec:
             - { label: "Template Checklist", icon: "file-text", view: checklist-template-list, order: 5 }
         - label: "Transaksi"
           icon: "activity"
-          order: 20
           children:
             - { label: "Work Order", icon: "wrench", view: work-order-list, order: 1 }
             - { label: "Hasil Checklist", icon: "check-square", view: checklist-result-list, order: 2 }

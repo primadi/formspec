@@ -1,0 +1,36 @@
+{
+  "title": "Widget Spec",
+  "description": "WidgetSpec defines a reusable dashboard widget (Frontend §5).\n",
+  "type": "object",
+  "properties": {
+    "config": {
+      "type": "object",
+      "additionalProperties": {}
+    },
+    "entity": {
+      "type": "string"
+    },
+    "query": {
+      "type": "string"
+    },
+    "refresh_secs": {
+      "type": "integer"
+    },
+    "size": {
+      "$ref": "#/$defs/WidgetLayout",
+      "nullable": true
+    },
+    "title": {
+      "type": "string"
+    },
+    "type": {
+      "description": "metric | chart | table | list",
+      "type": "string"
+    }
+  },
+  "required": [
+    "title",
+    "type"
+  ],
+  "additionalProperties": false
+}

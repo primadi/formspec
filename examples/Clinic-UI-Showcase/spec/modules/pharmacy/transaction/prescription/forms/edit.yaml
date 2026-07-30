@@ -11,42 +11,41 @@ metadata:
   description: Form resep — internal (dari kunjungan) atau eksternal (dibawa pasien)
 spec:
   entity: prescription
-  render:
-    mode: separate_page
+  render: separate_page
   sections:
     - title: "Resep"
       fields:
-        - name: transaction_date
+        - field: transaction_date
           label: "Tanggal"
-        - name: number
+        - field: number
           label: "No. Resep"
           read_only: true
           help: "Digenerate otomatis saat simpan (natural key, reset harian)"
-        - name: source
+        - field: source
           label: "Sumber Resep"
-        - name: visit_id
+        - field: visit_id
           label: "Kunjungan"
           visible_when: "fields.source == 'internal'"
-        - name: prescriber_name
+        - field: prescriber_name
           label: "Nama Dokter (Luar)"
           placeholder: "Nama dokter penulis resep…"
           visible_when: "fields.source == 'external'"
           required_when: "fields.source == 'external'"
-        - name: patient_id
+        - field: patient_id
           label: "Pasien Terdaftar"
           help: "Pilih untuk auto-isi nama pasien"
-        - name: patient_name
+        - field: patient_name
           label: "Nama Pasien"
-        - name: priority
+        - field: priority
           label: "Prioritas"
     - title: "Item Obat"
       fields:
-        - name: items
+        - field: items
           label: "Item"
           widget: child-grid
     - title: "Catatan"
       fields:
-        - name: notes
+        - field: notes
           label: "Catatan"
   submit:
     label: "Simpan Resep"

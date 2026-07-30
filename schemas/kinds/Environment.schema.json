@@ -1,0 +1,5 @@
+{
+  "title": "Environment Spec",
+  "description": "Spec for kind: Environment (type definition not found in pkg/spec)",
+  "type": "object"
+}

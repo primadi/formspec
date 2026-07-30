@@ -11,10 +11,10 @@ spec:
   sections:
     - title: "Informasi Laporan"
       fields:
-        - { field: report_date, rules: [required] }
+        - { field: report_date }
     - title: "Temuan & Tindakan"
       fields:
-        - { field: findings, rules: [required] }
-        - { field: actions_taken, rules: [required] }
+        - { field: findings }
+        - { field: actions_taken }
         - { field: parts_used }
         - { field: recommendations }

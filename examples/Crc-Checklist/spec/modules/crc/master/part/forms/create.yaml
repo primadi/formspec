@@ -11,10 +11,10 @@ spec:
   sections:
     - title: "Data Sparepart"
       fields:
-        - { field: code, rules: [required] }
-        - { field: name, rules: [required] }
+        - { field: code }
+        - { field: name }
         - { field: description }
-        - { field: unit, rules: [required] }
+        - { field: unit }
         - { field: stock_quantity }
         - { field: min_stock }
         - { field: price }

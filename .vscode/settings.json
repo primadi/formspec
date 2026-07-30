@@ -7,5 +7,13 @@
       "fileMatch": ["components.json"],
       "url": "https://ui.shadcn.com/schema.json"
     }
-  ]
+  ],
+  "yaml.schemas": {
+    "schemas/forma.schema.json": [
+      "examples/**/spec/**/*.yaml",
+      "examples/**/spec/**/*.yml",
+      "verticals/**/spec/**/*.yaml",
+      "verticals/**/spec/**/*.yml"
+    ]
+  }
 }

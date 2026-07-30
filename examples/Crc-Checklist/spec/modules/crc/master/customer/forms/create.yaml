@@ -11,8 +11,8 @@ spec:
   sections:
     - title: "Informasi Perusahaan"
       fields:
-        - { field: code, rules: [required] }
-        - { field: name, rules: [required] }
+        - { field: code }
+        - { field: name }
         - { field: address }
         - { field: phone }
         - { field: email }

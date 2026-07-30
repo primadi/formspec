@@ -10,30 +10,29 @@ metadata:
   description: Form edit kunjungan — separate page, section + child grid
 spec:
   entity: visit
-  render:
-    mode: separate_page
+  render: separate_page
   sections:
     - title: "Kunjungan"
       fields:
-        - name: transaction_date
+        - field: transaction_date
           label: "Tanggal Kunjungan"
-        - name: queue_number
+        - field: queue_number
           label: "No. Antrian"
           read_only: true
           help: "Digenerate otomatis saat simpan (natural key, reset harian)"
-        - name: patient_id
+        - field: patient_id
           label: "Pasien"
-        - name: polyclinic_id
+        - field: polyclinic_id
           label: "Poliklinik"
-        - name: doctor_id
+        - field: doctor_id
           label: "Dokter"
     - title: "Konsultasi"
       description: "Diisi dokter saat konsultasi berlangsung"
       fields:
-        - name: complaint
+        - field: complaint
           label: "Keluhan"
           placeholder: "Keluhan utama pasien…"
-        - name: diagnosis
+        - field: diagnosis
           label: "Diagnosis"
           # Diagnosis hanya relevan & wajib begitu konsultasi dimulai —
           # FormaExpr dievaluasi client-side, UX only (§6 spec).
@@ -41,10 +40,10 @@ spec:
           required_when: "fields.status == 'in_consultation'"
     - title: "Tindakan & Biaya"
       fields:
-        - name: treatments
+        - field: treatments
           label: "Tindakan"
           widget: child-grid
-        - name: total
+        - field: total
           label: "Total"
           read_only: true
           compute: "sum([t.quantity * t.price for t in fields.treatments])"

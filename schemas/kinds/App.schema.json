@@ -1,0 +1,46 @@
+{
+  "title": "App Spec",
+  "description": "AppSpec is the root project manifest (Core §4.4). A Workspace MAY contain\nmore than one App; all Apps in a workspace run simultaneously, mounted at\ntheir own RootURL.\n",
+  "type": "object",
+  "properties": {
+    "consumes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "menu": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/MenuItem"
+      }
+    },
+    "modules": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "publishes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "root_url": {
+      "type": "string"
+    },
+    "vendor": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "version",
+    "vendor",
+    "root_url"
+  ],
+  "additionalProperties": false
+}

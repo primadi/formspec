@@ -7,14 +7,13 @@ metadata:
   description: Pengaturan pajak & struk
 spec:
   entity: setting
-  render:
-    mode: separate_page
+  render: separate_page
   sections:
     - title: "Pajak"
       fields:
-        - { name: tax_percent, label: "PPN (%)" }
+        - { field: tax_percent, label: "PPN (%)" }
     - title: "Struk"
       fields:
-        - { name: receipt_footer, label: "Footer Struk" }
+        - { field: receipt_footer, label: "Footer Struk" }
   submit:
     label: "Simpan Pengaturan"

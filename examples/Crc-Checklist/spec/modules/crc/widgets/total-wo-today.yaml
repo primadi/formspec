@@ -12,5 +12,3 @@ spec:
     aggregate: count
     filter:
       - { field: transaction_date, op: eq, value: "{today}" }
-  icon: "clipboard-list"
-  color: "#29388F"

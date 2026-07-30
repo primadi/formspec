@@ -11,8 +11,8 @@ spec:
   sections:
     - title: "Informasi Template"
       fields:
-        - { field: name, rules: [required] }
-        - { field: category, rules: [required] }
+        - { field: name }
+        - { field: category }
         - { field: is_active }
         - { field: notes }
     - title: "Item Checklist"

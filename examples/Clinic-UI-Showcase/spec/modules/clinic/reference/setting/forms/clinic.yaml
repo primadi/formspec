@@ -8,19 +8,18 @@ metadata:
   description: Pengaturan identitas klinik
 spec:
   entity: setting
-  render:
-    mode: separate_page
+  render: separate_page
   sections:
     - title: "Identitas Klinik"
       fields:
-        - { name: clinic_name, label: "Nama Klinik" }
-        - { name: address, label: "Alamat" }
-        - { name: phone, label: "Telepon" }
-        - { name: queue_prefix, label: "Prefix No. Antrian", help: "Maks 4 karakter" }
+        - { field: clinic_name, label: "Nama Klinik" }
+        - { field: address, label: "Alamat" }
+        - { field: phone, label: "Telepon" }
+        - { field: queue_prefix, label: "Prefix No. Antrian", help: "Maks 4 karakter" }
     - title: "Notifikasi"
       fields:
-        - { name: enable_whatsapp, label: "Aktifkan WhatsApp" }
-        - name: whatsapp_number
+        - { field: enable_whatsapp, label: "Aktifkan WhatsApp" }
+        - field: whatsapp_number
           label: "Nomor WhatsApp"
           visible_when: "fields.enable_whatsapp"
           required_when: "fields.enable_whatsapp"

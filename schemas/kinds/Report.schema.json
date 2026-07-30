@@ -1,0 +1,52 @@
+{
+  "title": "Report Spec",
+  "description": "ReportSpec defines a parameterized tabular report (Frontend §5).\n",
+  "type": "object",
+  "properties": {
+    "columns": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ReportColumn"
+      }
+    },
+    "entity": {
+      "type": "string"
+    },
+    "export": {
+      "description": "pdf | csv | xlsx",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "groups": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ReportGroup"
+      }
+    },
+    "parameters": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ReportParam"
+      }
+    },
+    "required_permission": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "totals": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ReportTotal"
+      }
+    }
+  },
+  "required": [
+    "title",
+    "entity"
+  ],
+  "additionalProperties": false
+}

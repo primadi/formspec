@@ -8,18 +8,17 @@ metadata:
   description: Terima pembayaran — quick entry kasir
 spec:
   entity: payment
-  render:
-    mode: modal
+  render: modal
   sections:
     - title: "Pembayaran"
       fields:
-        - name: visit_id
+        - field: visit_id
           label: "Kunjungan"
-        - name: amount
+        - field: amount
           label: "Jumlah"
-        - name: method
+        - field: method
           label: "Metode"
-        - name: reference
+        - field: reference
           label: "No. Referensi"
           help: "Wajib untuk pembayaran non-tunai"
           visible_when: "fields.method != 'cash'"

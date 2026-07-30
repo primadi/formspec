@@ -11,21 +11,20 @@ metadata:
   description: Quick-create pasien — modal, dipakai wizard step 1
 spec:
   entity: patient
-  render:
-    mode: modal
+  render: modal
   sections:
     - title: "Pasien Baru"
       fields:
-        - name: nik
+        - field: nik
           label: "NIK"
           placeholder: "16 digit"
-        - name: name
+        - field: name
           label: "Nama Lengkap"
-        - name: birth_date
+        - field: birth_date
           label: "Tanggal Lahir"
-        - name: gender
+        - field: gender
           label: "Jenis Kelamin"
-        - name: phone
+        - field: phone
           label: "No. HP"
   submit:
     label: "Simpan Pasien"

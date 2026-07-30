@@ -11,13 +11,13 @@ spec:
   sections:
     - title: "Informasi Inspeksi"
       fields:
-        - { field: inspection_date, rules: [required] }
-        - { field: template_id, rules: [required] }
-        - { field: inspected_by, rules: [required] }
+        - { field: inspection_date }
+        - { field: template_id }
+        - { field: inspected_by }
     - title: "Item Checklist"
       fields:
         - { field: items }
     - title: "Kesimpulan"
       fields:
-        - { field: overall_result, rules: [required] }
+        - { field: overall_result }
         - { field: notes }

@@ -46,7 +46,8 @@
 				"esbenp.prettier-vscode",
 				"bradlc.vscode-tailwindcss",
 				"dbcode.dbcode",
-				"Anthropic.claude-code"
+				"Anthropic.claude-code",
+				"redhat.vscode-yaml"
 			]
 		}
 	},

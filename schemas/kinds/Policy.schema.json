@@ -1,0 +1,5 @@
+{
+  "title": "Policy Spec",
+  "description": "Spec for kind: Policy (type definition not found in pkg/spec)",
+  "type": "object"
+}

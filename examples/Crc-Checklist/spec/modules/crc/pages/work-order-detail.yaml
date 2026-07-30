@@ -16,8 +16,6 @@ spec:
     - table:
         ref: checklist-result-list
         param: { work_order_id: id }
-        title: "Hasil Checklist"
     - table:
         ref: part-request-list
         param: { work_order_id: id }
-        title: "Request Part"

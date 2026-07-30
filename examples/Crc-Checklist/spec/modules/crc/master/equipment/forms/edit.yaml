@@ -11,13 +11,13 @@ spec:
   sections:
     - title: "Identitas Unit"
       fields:
-        - { field: name, rules: [required] }
-        - { field: customer_id, rules: [required] }
-        - { field: brand, rules: [required] }
-        - { field: model, rules: [required] }
+        - { field: name }
+        - { field: customer_id }
+        - { field: brand }
+        - { field: model }
     - title: "Detail Unit"
       fields:
-        - { field: year, rules: [required] }
+        - { field: year }
         - { field: engine_hours }
         - { field: last_service_date }
         - { field: is_active }

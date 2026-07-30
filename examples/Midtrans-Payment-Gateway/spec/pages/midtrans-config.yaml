@@ -14,5 +14,4 @@ spec:
   blocks:
     - form:
         ref: midtrans-config-form
-        entity: config/billing.midtrans
         mode: edit

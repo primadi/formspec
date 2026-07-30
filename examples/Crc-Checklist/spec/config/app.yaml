@@ -5,19 +5,15 @@ metadata:
   description: Konfigurasi aplikasi CRC
 spec:
   keys:
-    - name: crc.wo_prefix
+    crc.wo_prefix:
       type: string
       default: "WO"
-      description: Prefix nomor Work Order
-    - name: crc.cl_prefix
+    crc.cl_prefix:
       type: string
       default: "CL"
-      description: Prefix nomor Checklist
-    - name: crc.sr_prefix
+    crc.sr_prefix:
       type: string
       default: "SR"
-      description: Prefix nomor Service Report
-    - name: crc.pr_prefix
+    crc.pr_prefix:
       type: string
       default: "PR"
-      description: Prefix nomor Part Request

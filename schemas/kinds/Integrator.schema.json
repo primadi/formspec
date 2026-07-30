@@ -1,0 +1,23 @@
+{
+  "title": "Integrator Spec",
+  "description": "IntegratorSpec bridges two entities/modules that do not know each other\ndirectly (02-core-extended.md §5).\n",
+  "type": "object",
+  "properties": {
+    "call": {
+      "$ref": "#/$defs/IntegratorCall",
+      "nullable": true
+    },
+    "compensate": {
+      "type": "string"
+    },
+    "listen": {
+      "$ref": "#/$defs/IntegratorListen",
+      "nullable": true
+    }
+  },
+  "required": [
+    "listen",
+    "call"
+  ],
+  "additionalProperties": false
+}

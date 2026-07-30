@@ -12,5 +12,4 @@ spec:
     aggregate: count
     filter:
       - { field: status, op: eq, value: in_progress }
-  icon: "activity"
   color: "#00A7E2"

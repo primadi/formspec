@@ -1,0 +1,27 @@
+{
+  "title": "Module Spec",
+  "description": "ModuleSpec defines a package of manifests (Core §4.3, Ref D19).\n",
+  "type": "object",
+  "properties": {
+    "depends": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Dependency"
+      }
+    },
+    "menu": {
+      "description": "Menu is a default navigation suggestion, module-relative (no `Module`",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/MenuItem"
+      }
+    },
+    "version": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "version"
+  ],
+  "additionalProperties": false
+}

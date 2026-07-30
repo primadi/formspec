@@ -1,0 +1,42 @@
+{
+  "title": "Print Spec",
+  "description": "PrintSpec defines a printable document template (Frontend §9).\n",
+  "type": "object",
+  "properties": {
+    "body": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PrintBodyItem"
+      }
+    },
+    "entity": {
+      "type": "string"
+    },
+    "footer": {
+      "$ref": "#/$defs/PrintFooter",
+      "nullable": true
+    },
+    "formats": {
+      "description": "pdf | thermal | dotmatrix | html",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "header": {
+      "$ref": "#/$defs/PrintHeader",
+      "nullable": true
+    },
+    "output": {
+      "$ref": "#/$defs/PrintOutput",
+      "nullable": true
+    },
+    "template": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "entity"
+  ],
+  "additionalProperties": false
+}

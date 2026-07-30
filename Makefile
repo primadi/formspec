@@ -76,6 +76,13 @@ clean:
 generate:
 	@echo "⏳ 'forma generate' is not implemented yet — see docs/cli-tools/01-forma-cli.md §5"
 
+# Generate JSON Schema files from Go struct types in pkg/spec/
+# Output goes to schemas/ — register in VS Code via yaml.schemas
+generate-schema:
+	@echo "📐 Generating JSON Schema from Go types..."
+	@go run ./cmd/forma-gen-schema/ --out schemas
+	@echo "✅ JSON Schema files generated in schemas/"
+
 # Download dependencies
 deps:
 	go mod tidy
