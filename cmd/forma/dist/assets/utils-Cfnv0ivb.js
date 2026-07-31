@@ -1,0 +1,1 @@
+import{Ft as e,It as t}from"./vendor-CJ-dVoMo.js";function n(...n){return e(t(n))}export{n as t};

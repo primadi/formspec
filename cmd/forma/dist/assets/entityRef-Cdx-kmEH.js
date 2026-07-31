@@ -1,0 +1,1 @@
+function e(e,t){let n=e.indexOf(`.`);return n>0?[e.slice(0,n),e.slice(n+1)]:[t,e]}export{e as t};

@@ -104,7 +104,8 @@ function SurfaceShell({ surface }: { surface: "admin" | "app" }) {
   // When the backend reloads YAML specs, the Vite dev server broadcasts
   // this event and we re-fetch the meta bundle — no polling needed.
   useEffect(() => {
-    if (!import.meta.hot) return
+    const hot = import.meta.hot
+    if (!hot) return
 
     const handler = () => {
       const state = useMetaStore.getState()
@@ -113,9 +114,9 @@ function SurfaceShell({ surface }: { surface: "admin" | "app" }) {
         state.refresh(workspace, surface, token)
       }
     }
-    import.meta.hot.on("forma:spec-reloaded", handler)
+    hot.on("forma:spec-reloaded", handler)
     return () => {
-      import.meta.hot.off("forma:spec-reloaded", handler)
+      hot.off("forma:spec-reloaded", handler)
     }
   }, [workspace, surface])
 
