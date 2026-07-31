@@ -6,8 +6,7 @@ func KindMapping() []KindEntry {
 		// — Core Basic —
 		{Kind: "App", SpecStruct: "AppSpec"},
 		{Kind: "Module", SpecStruct: "ModuleSpec"},
-		{Kind: "Document", SpecStruct: "DocumentSpec"},
-		{Kind: "Entity", SpecStruct: "DocumentSpec", Deprecated: true, Aliases: []string{"Document"}},
+		{Kind: "Entity", SpecStruct: "EntitySpec"},
 		{Kind: "Service", SpecStruct: "ServiceSpec"},
 		{Kind: "Config", SpecStruct: "ConfigSpec"},
 		{Kind: "Migration", SpecStruct: "MigrationSpec"},

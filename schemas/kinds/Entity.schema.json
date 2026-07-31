@@ -1,6 +1,6 @@
 {
   "title": "Entity Spec",
-  "description": "DocumentSpec defines a stateful, persisted business data resource (Core §4.1).\nRenamed from EntitySpec in v0.3.0.\n",
+  "description": "EntitySpec defines a stateful, persisted business data resource (Core §4.1).\n",
   "type": "object",
   "properties": {
     "actions": {

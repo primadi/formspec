@@ -13,5 +13,5 @@ spec:
   groups:
     - { field: status, label: "Berdasarkan Status" }
   totals:
-    - { field: id, label: "Total WO", aggregate: count }
+    - { field: id, label: "Total WO", fn: count }
   export: [csv, xlsx]

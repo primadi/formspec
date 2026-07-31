@@ -29,7 +29,7 @@ func (c *Converter) Generate(collect *CollectResult) *GenerateResult {
 		"ChildDecl", "ComputedDecl", "IndexDecl", "UsesDecl",
 		"ParamsDecl", "ConditionDecl", "HookDecl", "IdempotencyDecl",
 		"EntityAuth", "ExposeConfig", "RateLimitSpec",
-		"ActionUIHint", "TableFilter", "FormSection", "FormField", "FormAction", "FormSubmit",
+		"ActionUIHint", "TableFilter", "FormSection", "FormField", "FormAction", "FormSubmit", "FormRenderDecl",
 		"TableColumn", "TableAction", "BackdatePolicy", "ForwardDatePolicy",
 		"SoftDeactivateDecl", "PersistSpec", "ExtendStorage",
 		"NaturalKeyRuleDecl", "NaturalKeyPrefix", "StorageSpec", "FieldRef",
@@ -43,7 +43,10 @@ func (c *Converter) Generate(collect *CollectResult) *GenerateResult {
 		// Kind-specific sub-types referenced via $ref from kind specs
 		"ApiGRPCConfig", "ApiRESTConfig",
 		"DatastoreAccess", "DatastoreConnection", "DatastoreAccessFilter", "DatastorePermission", "DatastorePool", "DatastorePermissionRule",
+		"ConfigKey", // map value type for ConfigSpec.Keys
 		"Dependency",
+		"AiIndexDecl", "AppInterface", "AppConsume",
+		"EnvironmentPlane", "PolicyApproval",
 		"IntegratorCall", "IntegratorListen",
 		"KvstoreUseDecl",
 		"PageLayout",
@@ -324,6 +327,17 @@ func fieldToSchema(fd FieldDef, collect *CollectResult, sharedDefs map[string]*S
 
 	case "map":
 		s.Type = "object"
+		// When the map's value is a known struct (e.g. ConfigSpec.Keys →
+		// ConfigKey), emit a $ref so YAML autocomplete/validation works for
+		// the map entries. Otherwise fall back to unconstrained values.
+		if fd.MapValueType != nil {
+			if _, ok := collect.Structs[*fd.MapValueType]; ok {
+				s.AdditionalProperties = map[string]any{
+					"$ref": "#/$defs/" + *fd.MapValueType,
+				}
+				break
+			}
+		}
 		s.AdditionalProperties = map[string]any{}
 
 	case "interface":

@@ -12,29 +12,66 @@ type ServiceSpec struct {
 // ModuleSpec defines a package of manifests (Core §4.3, Ref D19).
 type ModuleSpec struct {
 	Version string       `yaml:"version" json:"version"`
+	Vendor  string       `yaml:"vendor,omitempty" json:"vendor,omitempty"`     // publishing vendor (platform/02-workspace-app-module.md §2)
 	Depends []Dependency `yaml:"depends,omitempty" json:"depends,omitempty"`
+	// Datastore binds the module to a named kind: Datastore for ctx.db()
+	// (platform/06-datastore.md §1.1). Empty = resolve to Datastore 'default'.
+	Datastore string         `yaml:"datastore,omitempty" json:"datastore,omitempty"`
+	Config    map[string]any `yaml:"config,omitempty" json:"config,omitempty"`     // module-specific configuration (02-workspace-app-module.md §2)
+	AiIndex   *AiIndexDecl    `yaml:"ai_index,omitempty" json:"ai_index,omitempty"` // AI discovery metadata (ai/04-forma-remote-mcp.md §3)
 	// Menu is a default navigation suggestion, module-relative (no `Module`
 	// field on its items — it's implicitly this module). An App adopts it
 	// wholesale via a `type: module` MenuItem (platform/02-workspace-app-module.md §4).
 	Menu []MenuItem `yaml:"menu,omitempty" json:"menu,omitempty"`
 }
 
+// AiIndexDecl is the optional AI discovery index on a Module
+// (ai/04-forma-remote-mcp.md §3). skills_for_ai is untrusted third-party input.
+type AiIndexDecl struct {
+	Category           string   `yaml:"category,omitempty" json:"category,omitempty"`
+	Features           []string `yaml:"features,omitempty" json:"features,omitempty"`
+	Aliases            []string `yaml:"aliases,omitempty" json:"aliases,omitempty"`
+	IntegrationPattern string   `yaml:"integration_pattern,omitempty" json:"integration_pattern,omitempty"`
+	SkillsForAI        string   `yaml:"skills_for_ai,omitempty" json:"skills_for_ai,omitempty"`
+}
+
 // Dependency declares a module dependency.
 type Dependency struct {
 	Module string `yaml:"module" json:"module"`
+	// Version is an optional semver constraint (e.g. ">=1.0 <2.0")
+	// (02-workspace-app-module.md §2).
+	Version string `yaml:"version,omitempty" json:"version,omitempty"`
 }
 
 // AppSpec is the root project manifest (Core §4.4). A Workspace MAY contain
 // more than one App; all Apps in a workspace run simultaneously, mounted at
 // their own RootURL.
 type AppSpec struct {
-	Version   string     `yaml:"version" json:"version"`
-	Vendor    string     `yaml:"vendor" json:"vendor"`
-	RootURL   string     `yaml:"root_url" json:"root_url"`
-	Modules   []string   `yaml:"modules" json:"modules"`
-	Menu      []MenuItem `yaml:"menu,omitempty" json:"menu,omitempty"`
-	Publishes []string   `yaml:"publishes,omitempty" json:"publishes,omitempty"`
-	Consumes  []string   `yaml:"consumes,omitempty" json:"consumes,omitempty"`
+	Version        string         `yaml:"version" json:"version"`
+	Vendor         string         `yaml:"vendor" json:"vendor"`
+	RootURL        string         `yaml:"root_url" json:"root_url"`
+	Modules        []string       `yaml:"modules" json:"modules"`
+	AppRenderer    string         `yaml:"app_renderer,omitempty" json:"app_renderer,omitempty"` // named Renderer tier app (frontend/05-app-kinds.md)
+	ThemeRef       string         `yaml:"theme_ref,omitempty" json:"theme_ref,omitempty"`       // per-App Theme resolution (platform/02 §3)
+	AuthConfigRef  string         `yaml:"auth_config_ref,omitempty" json:"auth_config_ref,omitempty"` // per-App auth strategy config
+	Menu           []MenuItem     `yaml:"menu,omitempty" json:"menu,omitempty"`
+	Publishes      []AppInterface `yaml:"publishes,omitempty" json:"publishes,omitempty"`       // cross-app interfaces offered
+	Consumes       []AppConsume   `yaml:"consumes,omitempty" json:"consumes,omitempty"`         // cross-app interfaces needed → grant request
+}
+
+// AppInterface is one cross-app service interface offered by an App
+// (02-workspace-app-module.md §3).
+type AppInterface struct {
+	Service string   `yaml:"service" json:"service"`
+	Actions []string `yaml:"actions,omitempty" json:"actions,omitempty"`
+}
+
+// AppConsume is one cross-app interface an App depends on; it triggers a
+// grant request to the owning App (02-workspace-app-module.md §3).
+type AppConsume struct {
+	App     string   `yaml:"app" json:"app"`
+	Service string   `yaml:"service" json:"service"`
+	Actions []string `yaml:"actions,omitempty" json:"actions,omitempty"`
 }
 
 // ─── 1.2 Meta-Kind Structs (platform/03-kind-system.md §2) ───

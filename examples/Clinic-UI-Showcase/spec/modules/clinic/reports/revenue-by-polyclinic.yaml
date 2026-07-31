@@ -10,16 +10,17 @@ spec:
   title: "Laporan Pendapatan per Poliklinik"
   entity: daily-visit-summary
   parameters:
-    - { name: date_from, label: "Dari Tanggal", type: date }
-    - { name: date_to, label: "Sampai Tanggal", type: date }
-    - { name: polyclinic_id, label: "Poliklinik (opsional)", type: select }
+    - { field: date_from, label: "Dari Tanggal", type: date }
+    - { field: date_to, label: "Sampai Tanggal", type: date }
+    - { field: polyclinic_id, label: "Poliklinik (opsional)", type: select }
   columns:
     - { field: date, label: "Tanggal" }
     - { field: polyclinic.name, label: "Poliklinik" }
     - { field: visit_count, label: "Kunjungan", aggregate: sum }
     - { field: completed_count, label: "Selesai", aggregate: sum }
     - { field: revenue, label: "Pendapatan", aggregate: sum, format: currency }
-  groups: [polyclinic_id]
+  groups:
+    - { field: polyclinic_id, label: "Poliklinik" }
   totals:
     - { label: "Total Kunjungan", field: visit_count, fn: sum }
     - { label: "Total Pendapatan", field: revenue, fn: sum }

@@ -142,6 +142,12 @@ apa yang ia sentuh di tempat ia dipasang:
       subscribe: [billing.order]
 ```
 
+> **Open — `needs:` belum didukung skema `BlockRef`.** Deklarasi `needs`
+> belum ada di `pkg/spec` (field `BlockRef` saat ini: `ref`/`asset`/`id`/`mode`/
+> `param`/`props`) — ditracking di `docs/plan/todo.md`. Enforcement footprint
+> `uses` di sisi backend sudah berjalan; deklarasi `needs` di manifest adalah
+> target kontrak berikutnya.
+
 Panggilan `forma.api` di luar `needs` gagal client-side (dan memang tidak
 pernah diotorisasi server-side juga). `forma validate` memperingatkan
 deklarasi yang tidak dipakai.

@@ -13,5 +13,5 @@ spec:
   groups:
     - { field: overall_result, label: "Berdasarkan Hasil" }
   totals:
-    - { field: id, label: "Total Checklist", aggregate: count }
+    - { field: id, label: "Total Checklist", fn: count }
   export: [csv, xlsx]

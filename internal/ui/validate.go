@@ -60,10 +60,14 @@ func (r *Registry) Validate(resolve EntityResolver) []error {
 				addf("%s: Form %q: action %q not on entity %q", e.Source, name, a.Action, e.Spec.Entity)
 			}
 		}
-		switch e.Spec.Render {
+		var renderMode spec.FormRender
+		if e.Spec.Render != nil {
+			renderMode = e.Spec.Render.Mode
+		}
+		switch renderMode {
 		case "", "modal", "drawer", "separate_page":
 		default:
-			addf("%s: Form %q: invalid render %q (modal|drawer|separate_page)", e.Source, name, string(e.Spec.Render))
+			addf("%s: Form %q: invalid render %q (modal|drawer|separate_page)", e.Source, name, string(renderMode))
 		}
 	}
 

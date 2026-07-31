@@ -1,6 +1,6 @@
 {
   "title": "Print Spec",
-  "description": "PrintSpec defines a printable document template (Frontend §9).\n",
+  "description": "PrintSpec defines a printable document template (Frontend §9).\nOne format per manifest — declared via `output.format` (Frontend §9).\n",
   "type": "object",
   "properties": {
     "body": {
@@ -15,13 +15,6 @@
     "footer": {
       "$ref": "#/$defs/PrintFooter",
       "nullable": true
-    },
-    "formats": {
-      "description": "pdf | thermal | dotmatrix | html",
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
     },
     "header": {
       "$ref": "#/$defs/PrintHeader",

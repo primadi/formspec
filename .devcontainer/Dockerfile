@@ -12,6 +12,22 @@ FROM mcr.microsoft.com/devcontainers/go:2-1.26-trixie
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     && apt-get -y install --no-install-recommends sqlite3 php-cli php-curl composer
 
+# Install rtk (Rust Token Killer) — CLI proxy that compresses shell output
+# before it reaches LLM agents (Claude Code / Copilot hook).
+#   - Installed as the `vscode` user so the binary lands in ~/.local/bin,
+#     which is auto-added to PATH by ~/.profile in the base image.
+#   - Without RTK_VERSION the installer fetches the latest release (see rtk-ai/rtk releases).
+#   - `rtk init -g` registers the global Claude Code hook + RTK.md. That state
+#     lives under $HOME, so it must be baked here to survive a container rebuild.
+#     RTK_TELEMETRY_DISABLED=1 keeps the step non-interactive.
+USER vscode
+RUN curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh -o /tmp/rtk-install.sh \
+    && sh /tmp/rtk-install.sh \
+    && rm -f /tmp/rtk-install.sh \
+    && mkdir -p /home/vscode/.claude \
+    && RTK_TELEMETRY_DISABLED=1 /home/vscode/.local/bin/rtk init -g
+USER root
+
 # [Optional] Uncomment the next lines to use go get to install anything else you need
 # USER vscode
 # RUN go get -x <your-dependency-or-tool>

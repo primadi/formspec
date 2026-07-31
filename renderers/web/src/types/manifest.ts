@@ -192,10 +192,10 @@ export interface RawManifest {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Entity / Document Spec (from pkg/spec/entity.go)
+// Entity Spec (from pkg/spec/entity.go)
 // ══════════════════════════════════════════════════════════════════════════════
 
-export interface DocumentSpec {
+export interface EntitySpec {
   version?: string
   plural?: string
   characteristic?: Characteristic
@@ -213,8 +213,8 @@ export interface DocumentSpec {
   forward_date_policy?: ForwardDatePolicy
 }
 
-/** @deprecated Use DocumentSpec */
-export type EntitySpec = DocumentSpec
+/** @deprecated Use EntitySpec */
+export type DocumentSpec = EntitySpec
 
 export interface EntityAuth {
   required: boolean
@@ -646,17 +646,22 @@ export interface ReportSpec {
   required_permission?: string
   parameters?: ReportParam[]
   columns: ReportColumn[]
-  groups?: string[]
+  groups?: ReportGroup[]
   totals?: ReportTotal[]
   export?: ExportFormat[]
 }
 
 export interface ReportParam {
-  name: string
+  field: string
   label: string
   type: string
   required?: boolean
   default?: unknown
+}
+
+export interface ReportGroup {
+  field: string
+  label?: string
 }
 
 export interface ReportColumn {
@@ -761,11 +766,11 @@ export interface MenuItem {
 }
 
 // ── Print (Frontend §9) ──
+// One format per manifest — declared via `output.format`.
 
 export interface PrintSpec {
   entity: string
   template?: string
-  formats?: PrintFormat[]
   output?: PrintOutput
   header?: PrintHeader
   body?: PrintBodyItem[]

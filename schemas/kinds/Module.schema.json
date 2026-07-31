@@ -3,6 +3,20 @@
   "description": "ModuleSpec defines a package of manifests (Core §4.3, Ref D19).\n",
   "type": "object",
   "properties": {
+    "ai_index": {
+      "$ref": "#/$defs/AiIndexDecl",
+      "description": "AI discovery metadata (ai/04-forma-remote-mcp.md §3)",
+      "nullable": true
+    },
+    "config": {
+      "description": "module-specific configuration (02-workspace-app-module.md §2)",
+      "type": "object",
+      "additionalProperties": {}
+    },
+    "datastore": {
+      "description": "Datastore binds the module to a named kind: Datastore for ctx.db()",
+      "type": "string"
+    },
     "depends": {
       "type": "array",
       "items": {
@@ -15,6 +29,10 @@
       "items": {
         "$ref": "#/$defs/MenuItem"
       }
+    },
+    "vendor": {
+      "description": "publishing vendor (platform/02-workspace-app-module.md §2)",
+      "type": "string"
     },
     "version": {
       "type": "string"

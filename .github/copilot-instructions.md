@@ -131,7 +131,10 @@ spec:
 | `Wizard` | Multi-step business process |
 | `Kanban` | Drag-and-drop status board |
 | `Timeline` | Chronological event journal |
-| `Menu` | Navigation tree |
+| `Calendar` | Calendar view for date-based entity data |
+| `Listing` | Public catalog (paired with landing-page App kind) |
+| `ApprovalInbox` | Pending approval task queue |
+| `NotificationCenter` | In-app notification feed |
 | `Print` | Printable document |
 | `Theme` | Look & feel (CSS variables) |
 

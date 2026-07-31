@@ -1,60 +1,230 @@
 # Project Layout
 
-**Version:** 0.1.0 · **Status:** Draft (§3–§6 adalah target desain, belum diimplementasikan — lihat §5, §6.5)
+**Version:** 0.2.0 · **Status:** Draft (§1–§2 menggambarkan layout yang
+terimplementasi — lihat contoh `examples/Clinic-UI-Showcase/`; §3–§6 adalah
+target desain, belum diimplementasikan — lihat §5, §6.5)
 
 > Dokumen ini mengontrakkan struktur folder project aplikasi Forma di disk, dan
-> bagaimana satu workspace dengan banyak Module bisa memiliki handler
-> implementasi dalam bahasa yang berbeda-beda per Module.
+> bagaimana satu workspace dengan banyak App/Module menata manifest serta kode
+> handler-nya. Contoh kanonik layout ini hidup di
+> [`examples/Clinic-UI-Showcase/`](../../../examples/Clinic-UI-Showcase/) —
+> `spec/`, `app/`, dan `forma-app.yaml` di sana adalah referensi utama untuk
+> section §1–§2.
 
 ---
 
 ## 1. Direktori Standar
 
+Layout berikut adalah struktur yang dipakai contoh resmi
+[`examples/Clinic-UI-Showcase/spec/`](../../../examples/Clinic-UI-Showcase/spec/)
+— satu workspace, dua App (`klinik-internal`, `klinik-portal`), dua Module
+(`clinic`, `pharmacy`), satu runtime sidecar (`app/`):
+
 ```
-myapp/
-  forma-app.yaml                 # kind: Config — konfigurasi root (dsn, addr, dst.)
-  apps/
-    internal.yaml                # kind: App
-    public.yaml                  # kind: App (App kedua, workspace yang sama)
-  modules/
-    billing/
-      module.yaml                # kind: Module — termasuk deklarasi runtime (§3)
-      documents/invoice.yaml      # kind: Entity
-      services/tax-calculator.yaml
-      scripts/invoice_send.star  # script Starlark
-      assets/                    # custom UI component (asset escape hatch)
-      impl/                      # kode handler Module ini — bahasa BEBAS per Module (§3)
-        src/invoice-handler.ts   # mis. TypeScript, kalau module.yaml runtime: typescript
-    pharmacy/
-      module.yaml                # runtime: php
-      documents/prescription.yaml
-      impl/
-        composer.json
-        src/PrescriptionHandler.php
+klinik-sehat/
+  forma-app.yaml               # config dev/serve — BUKAN manifest (lihat §1.1)
+  spec/                        # container semua manifest — lokasi bisa diubah (§1.2)
+    apps/
+      klinik-internal.yaml     # kind: App — staf klinik, akses penuh ke dua module
+      klinik-portal.yaml       # kind: App — portal publik, mount module yang SAMA
+    modules/
+      clinic/
+        module.yaml            # kind: Module — termasuk spec.menu (menu default, §2.2)
+        master/                #  → folder entity ber-characteristic: master
+          patient/
+            entity.yaml        #    kind: Entity
+            forms/             #    UI yang melekat ke entity ini (§2.2)
+            pages/
+            tables/
+          doctor/
+            entity.yaml
+            tables/
+          polyclinic/
+            entity.yaml
+        transaction/           #  → folder entity ber-characteristic: transaction
+          visit/
+            entity.yaml
+            forms/
+            kanbans/
+            pages/
+            prints/
+            scripts/           #    *.star colocated dengan entity
+            tables/
+            widgets/
+            wizards/
+        reference/             #  → folder entity ber-characteristic: reference
+          setting/
+            entity.yaml
+            forms/
+            pages/
+        summary/               #  → folder entity ber-characteristic: summary
+          daily-visit-summary/
+            entity.yaml
+            widgets/
+        config/                # kind: Config — konfigurasi module (bukan per-entity)
+          clinic.yaml
+        dashboards/            # kind: Dashboard — level module, bukan per-entity
+          clinic-dashboard.yaml
+        pages/                 # kind: Page komposit lintas-entity (data-master)
+          data-master.yaml
+        reports/               # kind: Report — level module
+          revenue-by-polyclinic.yaml
+        themes/                # kind: Theme — level module
+          showcase-theme.yaml
+      pharmacy/
+        module.yaml
+        master/
+          medicine/
+        transaction/
+          otc-sale/
+          prescription/
+  app/                         # kode handler sidecar (satu proses per runtime) — §2.3
+    package.json
+    src/
+      app.ts                   # entrypoint (app-entrypoint di forma-app.yaml)
+      handlers/otc_sell.ts
+  .forma/                      # runtime state (sqlite, pid) — gitignored, bukan source of truth
 ```
 
-Nama folder adalah konvensi, bukan kontrak keras. Loader **wajib** menemukan
-manifest dengan men-scan `*.yaml`, bukan berdasarkan path tetap — tidak ada
-yang melarang workspace kecil menyimpan satu `forma.yaml` di root alih-alih
-`apps/<name>.yaml`; struktur `apps/` direkomendasikan begitu workspace punya
-lebih dari satu App.
+Pola di atas adalah **konvensi, bukan kontrak keras** — loader wajib menemukan
+manifest dengan men-scan `*.yaml` secara rekursif (§1.2), bukan berdasarkan
+path tetap. Organisasi di sini adalah yang disarankan supaya project mudah
+dibaca dan supaya konvensi penamaan (§2.2) bisa dipakai renderer untuk derive
+UI.
 
-## 2. Tiga Jenis File, Plus `impl/` Per Module
+### 1.1 `forma-app.yaml` adalah Config Dev/Serve, Bukan `kind: Config`
 
-Satu-satunya aturan keras: tiga jenis file dalam manifest —`.yaml` (deskripsi),
-`.star` (logika, Starlark), `assets/*` (statis/custom UI). `impl/` adalah kode
-sumber build-time (Go native, atau bahasa lain untuk `impl.type: sidecar`) —
-di-commit, tidak masuk artifact deployment. **`impl/` bersifat per-Module**,
-bukan satu folder global di root — setiap Module membawa kode handlernya
-sendiri, dalam bahasa yang ia deklarasikan sendiri (§3).
+File `forma-app.yaml` di root (legacy: `forma-sidecar.yaml`) adalah **config
+untuk tooling** (`forma dev`/`forma serve`), diparse oleh CLI — bukan manifest
+resource `kind: Config`. Isinya mengarahkan engine ke mana spec, datastore,
+runtime, dan kode app berada:
+
+```yaml
+# forma-app.yaml — contoh Clinic-UI-Showcase
+spec: spec                       # lokasi container spec (§1.2)
+dsn: sqlite:.forma/clinic.db     # datastore engine
+runtime: node                    # runtime sidecar untuk impl.type: sidecar
+app-dir: app                     # lokasi kode app sidecar (§2.3)
+app-entrypoint: src/app.ts       # entrypoint app sidecar
+listen: unix_socket              # socket server engine
+app-endpoint: unix_socket        # socket invoke sidecar
+dev: true                        # mode dev (hot-reload spec, dst.)
+themes:                          # direktori theme tambahan (bisa di luar spec/)
+  - ../../ui-theme/batik-theme
+```
+
+`runtime` di sini masih **satu untuk seluruh project** (lihat §5) — model
+multi-runtime per Module di §3–§4 tetap target desain.
+
+### 1.2 Kontrak Loader: Zero Folder Assumption
+
+`forma` menemukan manifest dengan `filepath.Walk` rekursif dari root spec,
+mengumpulkan semua `.yaml`/`.yml`. Direktori yang **di-skip**: folder hidden
+(berawalan `.`), `node_modules`, dan `impl/` (kode build-time, bukan manifest).
+Semua folder lain — termasuk `apps/`, `modules/`, dan subfolder entity — bebas
+ditata; resolver action/script menyelesaikan referensi **relatif ke direktori
+entity** (§2.2), bukan dari path tetap.
+
+Konsekuensinya: workspace kecil boleh menyimpan satu App manifest di root spec
+tanpa folder `apps/`, dan module tunggal boleh tanpa subfolder characteristic —
+struktur `apps/` + `modules/` + characteristic direkomendasikan begitu
+workspace tumbuh melewati satu App/satu entity.
+
+## 2. Tiga Jenis File, Plus Kode Handler
+
+Satu-satunya aturan keras: tiga jenis file dalam manifest — `.yaml`
+(deskripsi), `.star` (logika, Starlark), dan `assets/*` (statis/custom UI).
+Kode handler non-Starlark adalah tipe keempat, di luar manifest — lokasinya
+di §2.3.
+
+### 2.1 Tiga Jenis File dan Tempatnya
+
+| Jenis | Ekstensi | Isi | Lokasi umum |
+|---|---|---|---|
+| Deskripsi | `.yaml`/`.yml` | Seluruh manifest (App, Module, Entity, UI kinds, dst.) | `spec/apps/`, `spec/modules/<module>/**` |
+| Logika | `.star` | Script Starlark untuk action/guard | `scripts/` di dalam folder entity (§2.2), atau level module |
+| Statis/Custom UI | `assets/*` | Aset biner + komponen UI custom (asset escape hatch) | dalam module, di luar `spec/` |
 
 **Git adalah sumber kebenaran.** Manifest selalu berupa file teks di
 repositori — tidak pernah format biner proprietary maupun state tersembunyi
-di database. Tooling authoring (scaffold `forma new <kind>`, editor visual
-di admin panel) **menulis kembali YAML ke file/PR**, bukan ke DB
-tersembunyi; git tetap satu-satunya sumber kebenaran. Skema JSON per kind
-memberi validasi/autocomplete editor (LSP), tapi tidak menggantikan file
-sebagai artifact otoritatif.
+di database. Tooling authoring (scaffold `forma new <kind>`, editor visual di
+admin panel) **menulis kembali YAML ke file/PR**, bukan ke DB tersembunyi; git
+tetap satu-satunya sumber kebenaran. Skema JSON per kind memberi
+validasi/autocomplete editor (LSP), tapi tidak menggantikan file sebagai
+artifact otoritatif.
+
+### 2.2 Konvensi Folder Entity (entity-centric)
+
+Di dalam `spec/modules/<module>/`, entity dikelompokkan per **characteristic**
+(master/transaction/reference/summary), dan setiap entity adalah **satu
+folder** bernama sama dengan entity-nya:
+
+```
+spec/modules/clinic/transaction/visit/
+  entity.yaml         # kind: Entity — manifest entity (wajib bernama entity.yaml)
+  forms/create.yaml   # kind: Form  — metadata.name: visit-create  (resolveForm mode create)
+  forms/edit.yaml     # kind: Form  — metadata.name: visit-edit
+  forms/quick.yaml    # kind: Form  — metadata.name: visit-quick (wizard step / quick-create)
+  tables/list.yaml    # kind: Table — metadata.name: visit-table
+  pages/list.yaml     # kind: Page  — metadata.name: visit-list
+  kanbans/board.yaml  # kind: Kanban — metadata.name: consultation-board
+  prints/queue-ticket.yaml   # kind: Print
+  widgets/today.yaml  # kind: Widget
+  wizards/registration.yaml  # kind: Wizard
+  scripts/cancel.star # script colocated — ref cukup "cancel", resolve relatif ke folder entity
+```
+
+Konvensi penamaan (dikodifikasi sebagai rekomendasi; dipakai renderer untuk
+derive UI dan resolve referensi):
+
+1. **Manifest entity bernama `entity.yaml`** di dalam folder entity.
+2. **Nama file UI = peran (role)**, bukan `{entity}-{kind}`: `create.yaml`,
+   `edit.yaml`, `quick.yaml`, `list.yaml`, `board.yaml`, `detail.yaml`,
+   `registration.yaml`, `card.yaml`, dst. — boleh diberi kata sifat
+   (`quick-create.yaml`, `by-polyclinic.yaml`).
+3. **`metadata.name` membawa nama resolve** = `{entity}-{role}` (mis.
+   `visit-create`, `visit-table`, `patient-detail`, `patient-card`). Pola
+   `{entity}-create`/`{entity}-edit` inilah yang dipakai `resolveForm()` untuk
+   memilih form per mode — authoring memakai nama file pendek, resolver memakai
+   `metadata.name` penuh.
+4. **Script direferensikan dengan nama file saja** (mis. `ref: cancel`) dan
+   di-resolve **relatif ke direktori entity** (folder `scripts/` di dalam
+   entity didahulukan) — bukan path penuh dari spec root.
+
+Entity yang **tidak punya manifest UI apa pun** sengaja sah: renderer
+men-derive Table, Form, detail Page, dan menu entry-nya (derived by default —
+[`03-kind-system.md`](03-kind-system.md)). Contoh `clinic/polyclinic` dan
+`clinic/daily-visit-summary` menguji jalur derived ini.
+
+Kind **level module** (tidak melekat ke satu entity) diletakkan langsung di
+bawah folder module, bukan di dalam folder entity: `config/`, `dashboards/`,
+`pages/` (page komposit seperti data-master), `reports/`, `themes/`.
+
+> Menu default sebuah Module kini dideklarasikan di `module.yaml → spec.menu`
+> — **tidak ada `kind: Menu` standalone**; sudah dilebur ke `App.spec.menu`
+> (otoritatif) dan `Module.spec.menu` (saran default), lihat
+> [`02-workspace-app-module.md`](02-workspace-app-module.md) §4. App mengadopsi
+> menu default module lewat entri `menu: [{type: module, module: ...}]`
+> (`spec/apps/*.yaml`).
+
+### 2.3 Lokasi Kode Handler: `app/` Root vs `impl/` per Module
+
+Handler non-Starlark (`impl.type: native` atau `impl.type: sidecar`) hidup di
+kode sumber build-time — di-commit, tidak masuk artifact deployment. Dua pola
+lokasi:
+
+- **`app/` di root project (model yang dipakai contoh sekarang).** Satu folder
+  app sidecar per workspace, ditunjuk lewat `app-dir`/`app-entrypoint` di
+  `forma-app.yaml` (§1.1). Cocok untuk model saat ini yang masih **satu runtime
+  per project** (§5) — seluruh handler sidecar satu bahasa di satu proses.
+- **`impl/` per Module (native Go, dan target multi-runtime).** Setiap Module
+  membawa kodenya sendiri dalam bahasa yang ia deklarasikan (§3). Loader
+  **men-skip `impl/`** saat scan manifest (§1.2) — folder ini murni untuk
+  kompiler/build, bukan dibaca sebagai spec. Contoh yang memakai pola ini:
+  `examples/Midtrans-Payment-Gateway/impl/billing/`.
+
+Kedua pola sah hari ini; `impl/` per Module adalah arah yang dikontrakkan di
+§3–§4 ketika multi-runtime diimplementasikan.
 
 ## 3. Runtime Per Module
 
@@ -120,11 +290,15 @@ kebijakan implementasi engine.
 
 Model saat ini di `forma dev`/`forma-sidecar`
 ([`docs/runtimes/04-forma-sidecar.md`](../../runtimes/04-forma-sidecar.md)
-§5–§6) hanya mendukung **satu runtime untuk seluruh project**, lewat flag
-global `--runtime` (auto-detect dari file marker di root: `composer.json` →
-php, `package.json` → node, dst.) dan satu proses app di satu socket. Model
-multi-runtime-per-Module di §3–§4 dokumen ini adalah **target desain, belum
-diimplementasikan**. Perubahan yang dibutuhkan sebelum ini berjalan:
+§5–§6) hanya mendukung **satu runtime untuk seluruh project** — ditetapkan
+lewat `runtime:` di `forma-app.yaml` (§1.1) atau flag global `--runtime`
+(auto-detect dari file marker di root: `composer.json` → php, `package.json` →
+node, dst.), dengan satu proses app di satu socket. Contoh
+[`examples/Clinic-UI-Showcase/`](../../../examples/Clinic-UI-Showcase/) persis
+menjalankan model ini: satu `runtime: node`, satu `app/` sidecar, socket
+`unix_socket`. Model multi-runtime-per-Module di §3–§4 dokumen ini adalah
+**target desain, belum diimplementasikan**. Perubahan yang dibutuhkan sebelum
+ini berjalan:
 
 1. Schema `kind: Module` bertambah field `spec.runtime`.
 2. Engine (`forma dev` dan pod Resource Plane produksi) spawn N child process
@@ -305,8 +479,18 @@ kerja untuk detail):
 
 | Dokumen | Isi |
 |---|---|
-| [`02-workspace-app-module.md`](02-workspace-app-module.md) | Model workspace/App/Module yang jadi dasar §3; alias saat konflik nama (§2.1) |
+| [`examples/Clinic-UI-Showcase/`](../../../examples/Clinic-UI-Showcase/) | Contoh kanonik layout §1–§2: dua App, dua Module, spec entity-centric, app sidecar `app/` |
+| [`03-kind-system.md`](03-kind-system.md) | Taksonomi kind, derived-by-default, pemetaan kind → plane |
+| [`02-workspace-app-module.md`](02-workspace-app-module.md) | Model workspace/App/Module yang jadi dasar §3; menu (§4); alias saat konflik nama (§2.1) |
 | [`07-marketplace.md`](07-marketplace.md) | Instalasi, trust tier, dan model aktivasi module vendor (§6 di atas) |
 | [`../backend/03-entity-extension.md`](../backend/03-entity-extension.md) | Entity Extension — jalur aditif untuk field/validasi tambahan pada Entity vendor |
+| [`../backend/06-script-runtime.md`](../backend/06-script-runtime.md) | Resolusi `ref` handler native di `impl/` (§7) — memakai §2 dokumen ini |
 | [`docs/runtimes/04-forma-sidecar.md`](../../runtimes/04-forma-sidecar.md) | Protokol sidecar per proses (§4), mode eksekusi (§5), gap implementasi (§8) |
 | [`docs/architecture/08-repo-structure.md`](../../architecture/08-repo-structure.md) | Bagaimana `sdk/*` dan `internal/sidecar` merealisasikan kontrak ini di kode |
+
+> **Dua konvensi folder di repo:** contoh `examples/Clinic-UI-Showcase/`
+> memakai folder entity-centric + characteristic grouping (kanonik, §2.2).
+> Contoh lama (`examples/Midtrans-Payment-Gateway/`, `verticals/billing/spec/`)
+> masih memakai grouping kind-based (`entities/`, `forms/`, `tables/`,
+> `services/`) — keduanya sah di loader (§1.2), dan migrasi ke konvensi kanonik
+> adalah pekerjaan lanjutan, bukan bagian kontrak.

@@ -46,7 +46,7 @@ type SpecInfo struct {
 type EntityInfo struct {
 	Name           string `json:"name"`
 	Module         string `json:"module"`
-	Kind           string `json:"kind"` // "Document" (v0.3.0)
+	Kind           string `json:"kind"` // "Entity"
 	Characteristic string `json:"characteristic,omitempty"`
 	TableName      string `json:"table_name,omitempty"`
 	FieldCount     int    `json:"field_count"`
@@ -88,9 +88,9 @@ func (r *Registry) LoadEntities() []error {
 		allErrors = append(allErrors, &pe)
 	}
 
-	// Filter and register only Document (or Entity) manifests
+	// Filter and register only Entity (or deprecated Document) manifests
 	for _, raw := range result.Manifests {
-		if !spec.IsDocumentKind(spec.Kind(raw.Kind)) {
+		if !spec.IsEntityKind(spec.Kind(raw.Kind)) {
 			continue
 		}
 
@@ -104,7 +104,7 @@ func (r *Registry) LoadEntities() []error {
 		}
 
 		// Validate
-		if err := spec.ValidateDocumentSpec(entitySpec); err != nil {
+		if err := spec.ValidateEntitySpec(entitySpec); err != nil {
 			allErrors = append(allErrors, fmt.Errorf("%s: validate: %w", raw.Source, err))
 			continue
 		}
@@ -184,14 +184,14 @@ func (r *Registry) RegisterArtifactManifest(raw manifest.RawManifest, entitySpec
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if !spec.IsDocumentKind(spec.Kind(raw.Kind)) {
-		return nil // silently skip non-Document kinds
+	if !spec.IsEntityKind(spec.Kind(raw.Kind)) {
+		return nil // silently skip non-Entity kinds
 	}
 
 	key := entityKey(raw.Metadata.Module, raw.Metadata.Name)
 
 	// Validate
-	if err := spec.ValidateDocumentSpec(entitySpec); err != nil {
+	if err := spec.ValidateEntitySpec(entitySpec); err != nil {
 		return fmt.Errorf("%s: validate: %w", raw.Source, err)
 	}
 
@@ -480,7 +480,7 @@ func (r *Registry) ListEntities() []EntityInfo {
 		result = append(result, EntityInfo{
 			Name:           info.Metadata.Name,
 			Module:         info.Metadata.Module,
-			Kind:           "Document",
+			Kind:           "Entity",
 			Characteristic: char,
 			TableName:      tableName,
 			FieldCount:     len(info.EntitySpec.Fields),

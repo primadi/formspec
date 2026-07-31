@@ -5,7 +5,9 @@
   "properties": {
     "keys": {
       "type": "object",
-      "additionalProperties": {}
+      "additionalProperties": {
+        "$ref": "#/$defs/ConfigKey"
+      }
     }
   },
   "required": [

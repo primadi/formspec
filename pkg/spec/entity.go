@@ -70,12 +70,7 @@ const (
 )
 
 // EntitySpec defines a stateful, persisted business data resource (Core §4.1).
-// Deprecated: Use DocumentSpec for new code. EntitySpec is kept for backward compatibility.
-type EntitySpec = DocumentSpec
-
-// DocumentSpec defines a stateful, persisted business data resource (Core §4.1).
-// Renamed from EntitySpec in v0.3.0.
-type DocumentSpec struct {
+type EntitySpec struct {
 	Version           string              `yaml:"version" json:"version"`
 	Plural            string              `yaml:"plural,omitempty" json:"plural,omitempty"`
 	Characteristic    Characteristic      `yaml:"characteristic,omitempty" json:"characteristic,omitempty"`
@@ -96,8 +91,12 @@ type DocumentSpec struct {
 	SoftDeactivate    *SoftDeactivateDecl `yaml:"soft_deactivate,omitempty" json:"soft_deactivate,omitempty"` // 1.4.10
 	Lifecycle         string              `yaml:"lifecycle,omitempty" json:"lifecycle,omitempty"`             // explicit frontend lifecycle: two_step_autosave | two_step_manual | plain_crud (default derived from actions)
 	DisplayField      string              `yaml:"display_field,omitempty" json:"display_field,omitempty"`     // field name used as display label for this entity in relation pickers & detail pages
-	NaturalKeyField   string              `yaml:"-" json:"-"`                                                 // resolved in ValidateDocumentSpec: empty if none, field name if exactly one natural_key
+	NaturalKeyField   string              `yaml:"-" json:"-"`                                                 // resolved in ValidateEntitySpec: empty if none, field name if exactly one natural_key
 }
+
+// DocumentSpec defines a stateful, persisted business data resource (Core §4.1).
+// Deprecated: Renamed to EntitySpec in v0.3.0; kept for backward compatibility.
+type DocumentSpec = EntitySpec
 
 // ExposeConfig declares one external protocol surface for an Entity (D49).
 // Each entry opts the entity into one protocol type. Without any expose entries,
@@ -177,22 +176,23 @@ type Field struct {
 type FieldType string
 
 const (
-	FieldString   FieldType = "string"
-	FieldText     FieldType = "text"     // multi-line text (05-field-types.md §1.1)
-	FieldRichText FieldType = "richtext" // rich markup (sanitized server-side)
-	FieldInteger  FieldType = "integer"  // 64-bit integer
-	FieldDecimal  FieldType = "decimal"  // arbitrary-precision — MUST be used for money, never float
-	FieldMoney    FieldType = "money"    // {amount, currency} pair (05-field-types.md §2)
-	FieldBoolean  FieldType = "boolean"
-	FieldEnum     FieldType = "enum"
-	FieldDate     FieldType = "date"
-	FieldDateTime FieldType = "datetime"
-	FieldTime     FieldType = "time" // time-of-day (HH:MM:SS)
-	FieldUUID     FieldType = "uuid"
-	FieldJSON     FieldType = "json"
-	FieldFile     FieldType = "file" // reference to ctx.storage object (05-field-types.md §1.3)
-	FieldRelation FieldType = "relation"
-	FieldChild    FieldType = "child"
+	FieldString     FieldType = "string"
+	FieldText       FieldType = "text"     // multi-line text (05-field-types.md §1.1)
+	FieldRichText   FieldType = "richtext" // rich markup (sanitized server-side)
+	FieldInteger    FieldType = "integer"  // 64-bit integer
+	FieldDecimal    FieldType = "decimal"  // arbitrary-precision — MUST be used for money, never float
+	FieldMoney      FieldType = "money"    // {amount, currency} pair (05-field-types.md §2)
+	FieldBoolean    FieldType = "boolean"
+	FieldEnum       FieldType = "enum"
+	FieldDate       FieldType = "date"
+	FieldDateTime   FieldType = "datetime"
+	FieldTime       FieldType = "time" // time-of-day (HH:MM:SS)
+	FieldUUID       FieldType = "uuid"
+	FieldJSON       FieldType = "json"
+	FieldFile       FieldType = "file"       // reference to ctx.storage object (05-field-types.md §1.3)
+	FieldAttachment FieldType = "attachment" // alias for FieldFile (05-field-types.md §1.3) — normalized to FieldFile at validate time
+	FieldRelation   FieldType = "relation"
+	FieldChild      FieldType = "child"
 
 	// Deprecated: FieldNumber predates the spec's integer/decimal split (Core §10.1).
 	// It is kept for backward compatibility and maps to the same storage as decimal.
@@ -286,12 +286,21 @@ func ValidateEvents(events []EventDecl) error {
 	return nil
 }
 
-// ValidateDocumentSpec validates a DocumentSpec, returning an error if any constraint is violated.
+// ValidateEntitySpec validates an EntitySpec, returning an error if any constraint is violated.
 // In addition to extension validation, it enforces:
 //   - Reserved field names MUST NOT be reused.
 //   - transaction_date field MUST be declared when characteristic: transaction.
 //   - Event naming convention: before_* = sync, on_* = async (Core §12).
-func ValidateDocumentSpec(d *DocumentSpec) error {
+func ValidateEntitySpec(d *EntitySpec) error {
+	// Normalize alias field types: `attachment` is an alias for `file`
+	// (05-field-types.md §1.3). Do this before any storage/widget mapping so
+	// every downstream path treats them identically.
+	for i := range d.Fields {
+		if d.Fields[i].Type == FieldAttachment {
+			d.Fields[i].Type = FieldFile
+		}
+	}
+
 	// Reserved field name check
 	for _, f := range d.Fields {
 		if IsReservedField(f.Name) {
@@ -435,47 +444,10 @@ func ValidateDocumentSpec(d *DocumentSpec) error {
 	return nil
 }
 
-// Currently checks:
-//   - Extension (ExtendStorage) fields cannot be Required.
-//   - Extension target must be in "module/entity" format.
-//   - Extension namespace must be valid (non-empty, lowercase, alphanumeric+underscore).
-func ValidateEntitySpec(e *EntitySpec) error {
-	if e.ExtendStorage != nil {
-		// Extension fields must not be Required
-		for _, f := range e.Fields {
-			if f.Required {
-				return fmt.Errorf("extension field %q cannot be required", f.Name)
-			}
-		}
-
-		// Validate target format: "module/entity"
-		target := e.ExtendStorage.Target
-		if target == "" {
-			return fmt.Errorf("extend_storage.target is required")
-		}
-		parts := strings.Split(target, "/")
-		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-			return fmt.Errorf("extend_storage.target must be in format \"module/entity\", got %q", target)
-		}
-
-		// Validate namespace format
-		ns := e.ExtendStorage.Namespace
-		if ns == "" {
-			return fmt.Errorf("extend_storage.namespace is required")
-		}
-		if len(ns) < 3 || len(ns) > 32 {
-			return fmt.Errorf("extend_storage.namespace must be 3-32 characters, got %d", len(ns))
-		}
-		for i, r := range ns {
-			if i == 0 && !(r >= 'a' && r <= 'z') {
-				return fmt.Errorf("extend_storage.namespace must start with a lowercase letter")
-			}
-			if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_') {
-				return fmt.Errorf("extend_storage.namespace must contain only lowercase letters, digits, and underscores")
-			}
-		}
-	}
-	return nil
+// ValidateDocumentSpec validates a DocumentSpec.
+// Deprecated: renamed to ValidateEntitySpec; kept for backward compatibility.
+func ValidateDocumentSpec(d *DocumentSpec) error {
+	return ValidateEntitySpec(d)
 }
 
 // Action defines an operation on an Entity or Service.

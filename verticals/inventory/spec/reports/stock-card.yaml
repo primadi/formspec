@@ -9,16 +9,16 @@ spec:
   title: "Kartu Stok"
   entity: stock_movement
   parameters:
-    - name: product_id
+    - field: product_id
       label: "Produk"
       type: "select"
-    - name: warehouse_id
+    - field: warehouse_id
       label: "Gudang"
       type: "select"
-    - name: date_from
+    - field: date_from
       label: "Dari Tanggal"
       type: "date"
-    - name: date_to
+    - field: date_to
       label: "Sampai Tanggal"
       type: "date"
   columns:

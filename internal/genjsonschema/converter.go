@@ -96,12 +96,17 @@ type FieldDef struct {
 	Annotation *schemaAnnotation
 	GoType     types.Type
 	NamedType  *string // for named types, the name
+
+	// MapValueType holds the named value type of a map field (when the value is
+	// a struct). Used to emit an additionalProperties $ref for maps of structs
+	// (e.g. ConfigSpec.Keys → ConfigKey) instead of collapsing to {}.
+	MapValueType *string
 }
 
 // KindMap maps Kind constants to their spec struct names.
 type KindEntry struct {
 	Kind       string // YAML kind value
-	SpecStruct string // Go struct name (e.g. "DocumentSpec")
+	SpecStruct string // Go struct name (e.g. "EntitySpec")
 	Deprecated bool   // true if deprecated (e.g. Entity → Document)
 	Aliases    []string
 }
@@ -417,6 +422,12 @@ func resolveFieldType(fd *FieldDef, _ map[string]*TypeDef) {
 	case *types.Map:
 		fd.TypeKind = "map"
 		fd.TypeName = "map"
+		// Capture the map's value type so fieldToSchema can emit a $ref when
+		// the value is a known struct (e.g. ConfigSpec.Keys → ConfigKey).
+		if elem, ok := typ.Elem().(*types.Named); ok {
+			name := elem.Obj().Name()
+			fd.MapValueType = &name
+		}
 	case *types.Interface:
 		fd.TypeKind = "interface"
 		fd.TypeName = "any"

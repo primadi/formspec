@@ -98,6 +98,10 @@ entries, master data + panel detail. Enforcement permission tetap **per-blok**
 ([`04-spec-resolution-api.md`](04-spec-resolution-api.md) §4) — split cuma
 menautkan seleksi, tidak melonggarkan gating.
 
+> **Open — `binds`/`layout.mode: split`.** Master-detail belum didukung skema
+> `PageSpec`/`BlockRef` maupun renderer — ditracking di `docs/plan/todo.md`.
+> Saat ini master-detail dilakukan via `param` + route (`:id`) biasa.
+
 ## 2. `data-entry` (`kind: Form`)
 Layout + perilaku input satu Entity, menggantikan form hasil derivasi:
 
@@ -110,19 +114,18 @@ metadata:
 spec:
   entity: order
   mode: edit                    # create | edit | view
-  render: separate_page         # modal | drawer | separate_page (default: modal)
-  layout:
-    sections:
-      - title: Customer
-        columns: 2
-        fields:
-          - { field: customer_id, widget: relation-picker }
-          - { field: member_tier, readonly: true }
-      - title: Totals
-        visible_when: "fields.items != null and len(fields.items) > 0"
-        fields:
-          - { field: total, readonly: true,
-              compute: "sum([i.quantity * i.price for i in fields.items])" }
+  render: { mode: separate_page }   # modal | drawer | separate_page (default: modal)
+  sections:
+    - title: Customer
+      columns: 2
+      fields:
+        - { field: customer_id, widget: relation-picker }
+        - { field: member_tier, read_only: true }
+    - title: Totals
+      visible_when: "fields.items != null and len(fields.items) > 0"
+      fields:
+        - { field: total, read_only: true,
+            compute: "sum([i.quantity * i.price for i in fields.items])" }
   actions:
     - { action: checkout, label: "Checkout", style: primary }
 ```
@@ -149,6 +152,10 @@ efek imperatif, field itu jadi custom widget
 ([`07-component-kinds.md`](07-component-kinds.md) §4). `rules` field dari
 Entity manifest ditegakkan client-side untuk UX; **validasi server-side
 tetap otoritas — cek client bukan pernah keamanan.**
+
+`render` menerima bentuk objek `{ mode: separate_page }` (bentuk kanonik,
+sesuai skema dan renderer) maupun shorthand skalar `render: separate_page` —
+keduanya disetarakan saat parse.
 
 ### 2.1 Pola UI: Lifecycle vs Plain CRUD
 Renderer memilih pola UI berdasar apakah reserved action `submit` aktif di
@@ -191,8 +198,10 @@ spec:
     - { field: customer.name }
     - { field: total, format: currency }
     - { field: status, widget: badge }
-  filters: [status, created_at]
-  default_sort: { field: created_at, direction: desc }
+  filters:
+    - { field: status, label: Status, type: select }
+    - { field: created_at, label: "Created", type: date_range }
+  default_sort: -created_at       # "field" = asc, "-field" = desc
   search: true
   realtime: true
   row_actions: [mark-paid, void]
@@ -263,25 +272,31 @@ kind: Kanban
 metadata: { name: support-board, module: helpdesk }
 spec:
   entity: ticket
+  status_field: status      # wajib — field state machine/enum yang jadi kolom
   realtime: true
 ```
 
-**Zero-config:** dengan hanya `entity`, renderer menderivasi kolom dari state
-machine bisnis entity ([`../backend/02-core-extended.md`](../backend/02-core-extended.md)
-§1) — satu kolom per nilai `state_machine.field`, urut sesuai urutan transisi;
-kartu menampilkan field prioritas sama seperti derivasi kolom Table (§3.1).
-Board langsung jalan tanpa manifest tambahan.
+**Kontrak saat ini:** `status_field` **wajib** — menunjuk field yang nilainya
+jadi kolom (field state machine bisnis entity
+[`../backend/02-core-extended.md`](../backend/02-core-extended.md) §1, atau
+field enum biasa). `columns` eksplisit berisi nilai status yang ditampilkan
+sebagai kolom.
+
+> **Open — zero-config derivasi kolom.** Derivas kolom otomatis dari state
+> machine/`group_by` (menghilangkan kewajiban `status_field`) belum
+> diimplementasikan — ditracking di `docs/plan/kanban-full-implementation.md`.
 
 **Derivasi kolom:**
-- Default: kolom = nilai field state machine (§ core-extended §1). Kalau entity
-  tak punya state machine tapi punya field enum, `group_by: <field>` memakai
-  nilai enum sebagai kolom.
-- `columns:` eksplisit **menang penuh** (nilai, urutan, dan `wip_limit`
-  per-kolom).
+- `columns:` eksplisit **menang penuh** — setiap entry `{ status, label, color }`
+  (nilai, urutan).
+- Tanpa `columns:` eksplisit, renderer menderivasi kolom dari nilai unik
+  `status_field` — urut sesuai urutan transisi (state machine) atau urutan
+  deklarasi `enum_values`.
 
 **Derivasi kartu:** field kartu diderivasi seperti prioritas kolom Table (§3.1)
 — natural key/title-ish, `transaction_date`; field status implisit (sudah jadi
-kolom, tak diulang di kartu). Override lewat `card_fields:`.
+kolom, tak diulang di kartu). Override lewat `card_template`
+(`{ title, subtitle, badge, assignee, fields, component }`).
 
 **Drag-drop = state transition:**
 - Menjatuhkan kartu ke kolom lain memanggil action `via` transisi yang cocok
@@ -291,13 +306,16 @@ kolom, tak diulang di kartu). Override lewat `card_fields:`.
   permission itu tak bisa men-drag kartu ke kolom tersebut.
 - Transisi yang tak dideklarasikan → tak ada drop target; kalaupun dipaksa,
   server menolaknya (`STATE_TRANSITION_ERROR`, § core-extended §1).
-- `drag_guard` (FormaExpr opsional, [`08-formaexpr.md`](08-formaexpr.md)) —
-  pre-check UX sebelum drop, mencegah drop yang pasti ditolak. Konteks evaluasi
-  = field record kartu (§ [`08-formaexpr.md`](08-formaexpr.md) §3). UX-only;
-  validasi server tetap otoritas (§ [`08-formaexpr.md`](08-formaexpr.md) §4).
 
-**WIP limit:** `wip_limit` per kolom (opsional) — batas jumlah kartu; kolom
-penuh menolak drop di UI (soft, pre-check UX), server tak menegakkan batas ini.
+> **Open — `drag_guard`.** Pre-check UX sebelum drop (FormaExpr,
+> [`08-formaexpr.md`](08-formaexpr.md)) belum diimplementasikan — ditracking di
+> `docs/plan/kanban-full-implementation.md`. Validasi server (guard state
+> machine) tetap otoritas dan sudah berjalan.
+
+> **Open — WIP limit.** `wip_limit` per kolom (batas jumlah kartu, soft
+> pre-check UX) belum ada di skema `columns` — ditracking di
+> `docs/plan/kanban-full-implementation.md`. Pengganti saat ini:
+> `max_cards_per_column` (integer, level board) di `KanbanSpec`.
 
 **Realtime:** `realtime: true` = subscribe event `updated`/`created`, kartu
 pindah kolom di tempat saat status berubah dari klien lain
@@ -308,17 +326,19 @@ dengan banyak kartu paginasi cursor-based — renderer **tak boleh** diam-diam
 memotong kartu tanpa indikator "muat lebih" (prinsip no-silent-drop yang sama
 dengan Table §3.1).
 
-Override penuh + WIP + guard:
+Override penuh:
 ```yaml
 spec:
   entity: ticket
-  group_by: priority                 # atau derivasi state machine (default)
+  status_field: status
   columns:
-    - { value: low }
-    - { value: normal, wip_limit: 20 }
-    - { value: urgent, wip_limit: 5 }
-  card_fields: [number, subject, assignee.name, created_at]
-  drag_guard: "fields.assignee_id != null"
+    - { status: low,    label: Low }
+    - { status: normal, label: Normal, color: blue }
+    - { status: urgent, label: Urgent, color: red }
+  card_template:
+    title: number
+    subtitle: subject
+    fields: [assignee.name, created_at]
   realtime: true
 ```
 
@@ -487,13 +507,14 @@ spec:
 
 **Relasi ke kind lain:** Wizard adalah komposisi stateful dari step
 mirip-Form dengan shell stepper. Kalau prosesnya cuma section form linear
-tanpa penegakan sekuensial, pakai `kind: Form` dengan `layout.sections`
-biasa (§2) — bukan Wizard.
+tanpa penegakan sekuensial, pakai `kind: Form` dengan `sections` biasa (§2)
+— bukan Wizard.
 
 ## 7. `dashboard`
 Grid slot `widget` ([`02-visual-spec-kind.md`](02-visual-spec-kind.md) §4,
 [`07-component-kinds.md`](07-component-kinds.md) §2–§3 untuk kontrak Widget
-dan slot filling-nya):
+dan slot filling-nya). Dashboard **mereferensikan** widget by name — widget
+didefinisikan terpisah sebagai `kind: Widget`:
 
 ```yaml
 apiVersion: forma.dev/v1alpha1
@@ -504,13 +525,32 @@ spec:
   defaults: [sales-today-stat, gl-cashflow-chart]
   refresh: 60                          # atau realtime: true
   widgets:
-    - stat:  { title: "Today's Revenue", entity: sales-daily-summary, field: total }
-    - chart: { type: line, entity: sales-daily-summary, x: date, y: total, range: 30d }
+    - ref: sales-today-stat
+      layout: { x: 0, y: 0, w: 4, h: 2 }
+    - ref: gl-cashflow-chart
+      layout: { x: 4, y: 0, w: 8, h: 4 }
+      config: { range: 30d }
 ```
 
-Detail kontrak Widget (`kind: Widget` tier component, visibilitas katalog
-derived dari permission, mekanisme customizable) — lihat
+```yaml
+apiVersion: forma.dev/v1alpha1
+kind: Widget
+metadata: { name: sales-today-stat, module: billing }
+spec:
+  title: "Today's Revenue"
+  type: metric                       # metric | chart | table | list
+  entity: sales-daily-summary
+  config: { field: total }           # specifik per type
+```
+
+`DashboardWidget` = `{ ref, layout: {x,y,w,h}, config }`; `WidgetSpec` =
+`{ title, type, entity?, query?, refresh_secs?, size?, config? }`. Visibilitas
+katalog widget derived dari permission, mekanisme customizable — lihat
 [`07-component-kinds.md`](07-component-kinds.md) §2–§3.
+
+> **Open — rendering widget.** Renderer widget (`stat`/`chart`/`table`/`list`)
+> dan kanvas dashboard belum sepenuhnya diimplementasikan — skema kontrak di
+> atas sudah final; eksekusi ditracking di `docs/plan/todo.md` §5.7.
 
 ## 8. `report` dan `print`
 
@@ -522,24 +562,35 @@ apiVersion: forma.dev/v1alpha1
 kind: Report
 metadata: { name: sales-by-category, module: billing }
 spec:
+  title: "Sales by Category"
+  entity: order
   required_permission: reports.sales-by-category
-  params:
-    - { field: date_from, type: date, required: true }
-    - { field: date_to,   type: date, required: true }
-  source: { entity: order, filter: { status: paid,
-            paid_at: { between: [":date_from", ":date_to"] } } }
-  columns: [number, customer.name, category, total]
-  group_by: [category]
-  totals: [total]
-  exports: [xlsx, csv, { print: receipt-style }]
+  parameters:
+    - { field: date_from, label: "Dari", type: date, required: true }
+    - { field: date_to,   label: "Sampai", type: date, required: true }
+  columns:
+    - { field: number, label: "No." }
+    - { field: customer.name, label: "Customer" }
+    - { field: category, label: "Kategori" }
+    - { field: total, label: "Total", aggregate: sum, format: currency }
+  groups:
+    - { field: category, label: "Kategori" }
+  totals:
+    - { label: "Total", field: total, fn: sum }
+  export: [xlsx, csv]
 ```
 
-`source` selalu query entity, permission-checked — Report tidak pernah
+`entity` selalu query entity, permission-checked — Report tidak pernah
 meng-embed SQL (kontrak "gabungkan sources by join_key" adalah urusan
 PersistBackend, [`../backend/02-core-extended.md`](../backend/02-core-extended.md)
 §6). Export berjalan sebagai **async job**
 ([`../backend/01-core-basic.md`](../backend/01-core-basic.md) §5 `call:
 async`); file mendarat di download tray.
+
+> **Open — `source.filter`.** Filter parameterized deklaratif (`source:
+> { entity, filter }` dengan `":param"` placeholder) belum didukung skema —
+> parameter saat ini dikirim sebagai filter query `?<field>=<value>` per
+> `parameters[]` saat eksekusi report.
 
 ### `kind: Print`
 Dokumen cetak untuk satu entity, multi-target output:
@@ -679,6 +730,10 @@ permukaan in-app-nya.
 Untuk layar yang tak berpola sama sekali: `kind: Page` dengan `mode: custom`
 menyerahkan **seluruh** rendering ke kode programmer, sambil tetap men-declare
 footprint backend yang ia konsumsi.
+
+> **Open — `mode: custom`/`binds`.** Custom Page belum didukung skema
+> `PageSpec` maupun renderer (Page saat ini hanya `blocks`/`tabs`) — ditracking
+> di `docs/plan/todo.md`. Kontrak di bawah adalah target desain.
 
 ```yaml
 apiVersion: forma.dev/v1alpha1

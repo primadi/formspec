@@ -17,7 +17,8 @@
       "type": "string"
     },
     "render": {
-      "$ref": "#/$defs/FormRender"
+      "$ref": "#/$defs/FormRenderDecl",
+      "nullable": true
     },
     "sections": {
       "type": "array",

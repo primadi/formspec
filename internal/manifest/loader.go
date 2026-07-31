@@ -241,7 +241,7 @@ func (l *Loader) Validate(raw RawManifest) error {
 		if err != nil {
 			return fmt.Errorf("%s: invalid spec: %w", raw.Source, err)
 		}
-		if err := spec.ValidateDocumentSpec(entitySpec); err != nil {
+		if err := spec.ValidateEntitySpec(entitySpec); err != nil {
 			return fmt.Errorf("%s: %w", raw.Source, err)
 		}
 	}
@@ -249,7 +249,7 @@ func (l *Loader) Validate(raw RawManifest) error {
 	return nil
 }
 
-// RawSpecToEntitySpec converts a raw spec map to a typed EntitySpec (DocumentSpec).
+// RawSpecToEntitySpec converts a raw spec map to a typed EntitySpec.
 // Handles backward compatibility:
 //   - `characteristics: [X]` (deprecated array) → `characteristic: X`
 func RawSpecToEntitySpec(specMap map[string]any) (*spec.EntitySpec, error) {

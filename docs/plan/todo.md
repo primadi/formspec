@@ -1,7 +1,7 @@
 # Master Plan: Forma Implementation
 
-**Last Updated**: 2026-07-29  
-**Status**: ✅ Fase 0 complete · ✅ Fase 1 (1.1–1.5) · ✅ Fase 2.1 · ✅ Fase 2.2 · ✅ Fase 5 (5.1–5.4) · ✅ Spec hot-reload  
+**Last Updated**: 2026-07-31  
+**Status**: ✅ Fase 0 complete · ✅ Fase 1 (1.1–1.5) · ✅ Fase 2.1 · ✅ Fase 2.2 · ✅ Fase 5 (5.1–5.4) · ✅ Spec hot-reload · ✅ Fase 11 (review schema↔docs) · ✅ Audit spec↔schema + tambah TODO item  
 
 > `⬜` not started · `✅` complete · `⏸️` deferred  
 
@@ -9,6 +9,15 @@
 **Deferred**: Control Plane (`forma-ctl`), K8s Operator, Marketplace — untuk cloud phase berikutnya.  
 **Sumber**: `docs/spec/backend/` (01–06), `docs/spec/frontend/` (01–08), `docs/spec/platform/` (01–10), `docs/cli-tools/` (01–05), `docs/renderers/jsonb-persist/` (01–04), `docs/renderers/shadcn-shell/` (01–04), `docs/ai/` (01–06).  
 **Catatan status sumber**: seluruh spec masih **Draft** (jsonb-persist masih **Outline**; `platform/08` §3–§6 "target desain") — mismatch todo↔docs bisa berarti docs-nya yang perlu diperbaiki. Audit penuh todo vs docs terakhir: 2026-07-19.
+
+**Catatan 2026-07-31**: `platform/08-project-layout.md` §1–§2 ditulis ulang agar match
+layout contoh `examples/Clinic-UI-Showcase/spec/` (entity-centric + `spec/` container +
+`forma-app.yaml` sebagai config dev) — lihat `docs/changelog/2026-07-31-002-update-project-layout-sesuai-clinic-ui-showcase.md`. §3–§6 tetap target desain.
+
+**Catatan 2026-07-31**: `rtk` (CLI proxy token LLM) di-bake ke
+`.devcontainer/Dockerfile` (binary pinned v0.44.1 + `rtk init -g`) karena
+`~/.local/bin`/`~/.claude` tidak di-persist volume — lihat
+`docs/changelog/2026-07-31-003-bake-rtk-ke-devcontainer-dockerfile.md`.
 
 ---
 
@@ -64,6 +73,7 @@
 - [x] 1.4.9 `TreeDecl` — self-referential hierarchy marker (`tree: true` on relation)  
 - [x] 1.4.10 `SoftDeactivateDecl` — `is_active` + `deactivate`/`reactivate` action pattern  
 - [x] 1.4.11 `StorageSpec` (file field) — `allowed_types`, `max_size_mb`, `max_count`, `visibility`, `signed_url_ttl`, `cdn`, `transform`  
+- [ ] 1.4.12 `MoneyType` FX & multi-currency — konversi antar mata uang (rate table, tanggal efektif, spread) untuk field `money`; belum dispesifikasikan di `05-field-types.md` § "Open — FX & multi-currency"  
 
 ### 1.5 Error glossary Go types ✅
 - [x] 1.5.1 Go const/type mapping dari `error-glossary.yaml` (22 error codes → `FORMA.DOC.*`, `FORMA.TXN.*`, `FORMA.PERIOD.*`, `FORMA.EVENT.*`, `FORMA.SAGA.*`, `FORMA.REF.*`, `FORMA.PERSIST.*`, `FORMA.ARCHIVE.*`, `FORMA.VALIDATE.*`)  
@@ -310,6 +320,7 @@
 - [ ] 5.6.4 Drag reschedule — call `update` action on date_field (server-enforced); submitted immutable rows disable drag  
 - [ ] 5.6.5 RRULE recurrence — parse RFC 5545, expand to instances for visible date range (render-time, not materialized)  
 - [ ] 5.6.6 Resource view — one lane per `resource_field` value; color by `color_field`  
+- [ ] 5.6.7 RRULE exception per-instance — ubah/batalkan satu occurrence tanpa ubah pattern; butuh model data exception tersendiri (row terpisah + override tanggal asli); ditunda ke iterasi berikutnya (`06-page-kinds.md` §5 "Di luar cakupan v1")  
 
 ### 5.7 `kind: Dashboard` + `kind: Widget`
 - [ ] 5.7.1 Widget `stat` — fetch from summary entity, display number with label  
@@ -359,6 +370,7 @@
 
 ### 5.13 Other UI kinds
 - [ ] 5.13.1 `kind: Report` — fix totals row bug (values computed but `<tr>` empty); add grouping + subtotal; export berjalan sebagai async job → file mendarat di download tray (`06-page-kinds.md` §8), bukan CSV Blob client-side  
+- [ ] 5.13.1a Report `source.filter` — filter parameterized deklaratif (`source: { entity, filter }` dengan `":param"` placeholder); saat ini parameter dikirim sebagai filter query `?<field>=<value>` (`06-page-kinds.md` §8 "Open — source.filter")  
 - [ ] 5.13.2 `kind: Print` — PDF server-side generation; `format: html` via `window.print()` (existing)  
 - [ ] 5.13.3 `kind: ApprovalInbox` — pending approvals list, `approve`/`reject` inline actions, badge count, `realtime: true`  
 - [ ] 5.13.4 `kind: NotificationCenter` — notification list, badge unread, `mark-read` action, `realtime: true`, deep-link on click  
@@ -553,6 +565,15 @@
 - [ ] 7.17.2 `storage` spec enforcement — `allowed_types`, `max_size_mb`, `max_count`, `visibility` (public|private|signed)  
 - [ ] 7.17.3 Transform — server-side resize/thumbnail per `transform` spec  
 
+### 7.18 `kind: KindDefinition` runtime
+- [ ] 7.18.1 Kind registry — daftarkan kind baru dari `KindDefinition` manifest; validasi `group` + `version` + `schema`  
+- [ ] 7.18.2 Handler resolution — `impl.native`/`impl.script`/`impl.compiled`/`impl.sidecar`; eksekusi di bawah `uses` module yang mendeklarasikan  
+- [ ] 7.18.3 Group-scoped naming — instance pakai `apiVersion: {group}/v1`; tabrakan namespace mustahil secara struktural  
+
+### 7.19 `kind: Mockup` runtime
+- [ ] 7.19.1 Mock connector — simulated third-party API response; `for` menunjuk Service/Webhook yang di-mock; `config_ref` ke Config  
+- [ ] 7.19.2 Dev-only gate — Mockup hanya aktif di `forma dev`; production → `forma apply` menolak atau warning  
+
 ---
 
 ## Fase 8: Production Self-Hosting Single Server
@@ -668,6 +689,25 @@ di tabel Deferred di bawah, jadi Fase ini realistis baru mulai setelah salah sat
 - [ ] 10.7.2 Guard read-only `vendors/` ditegakkan di semua tool tulis, bukan konvensi dokumentasi (03 §4)
 
 ---
+
+## Fase 11: Resolusi Review Schema ↔ Docs ✅ COMPLETE (2026-07-31)
+
+Menutup kontradiksi `pkg/spec`/JSON Schema/`renderers/web` vs `docs/spec/`.
+Referensi: `docs/changelog/2026-07-31-001-resolusi-review-schema-docs.md`.
+
+| Item | Status | Catatan |
+|---|---|---|
+| A1: `Config.spec.keys` → `$ref ConfigKey` (generator map-of-struct) | ✅ | `internal/genjsonschema` + regen schema |
+| A2: `Entity` canonical (revert `Document`), konsolidasi validator | ✅ | `spec.go`/`entity.go`/`registry.go`/`kinds.go`/`manifest.ts`; `Document` = deprecated alias |
+| B1: `ModuleSpec` +`vendor/datastore/config/ai_index`; `AppSpec` structured `publishes`/`consumes` +`app_renderer/theme_ref/auth_config_ref` | ✅ | binding `datastore` runtime tetap defer (2.9.4) |
+| B2: `EnvironmentSpec`/`PolicySpec` (`pkg/spec/control.go`) — schema tak lagi bare | ✅ | eksekusi control-plane tetap defer |
+| B3: `attachment` alias `file` + docs `spec.auth` §1.4 | ✅ | normalisasi di `ValidateEntitySpec` |
+| C1: Form `sections`/`read_only`/`render:{mode}` + Table `filters`/`default_sort` — docs→kode | ✅ | perbaiki fixture `internal/ui` (test sebelumnya merah) |
+| C2: Kanban docs → schema (`status_field` wajib, `columns{status,label}`, `card_template`) + Open zero-config/`group_by`/`drag_guard`/`wip_limit`/`card_fields` | ✅ | defer → `docs/plan/kanban-full-implementation.md` |
+| C3: Dashboard/Widget docs → ref-based + Open rendering widget | ✅ | defer → Fase 5.7 |
+| C4: Report docs → kode (`parameters`/`groups`/`export`, objek) + Open `source.filter`; TS/ renderer fix | ✅ | contoh manifest Report diperbarui |
+| C5: Print hapus `formats` redundan | ✅ | satu format per manifest = `output.format` |
+| C6: Page `binds`/`mode:custom` + BlockRef `needs:` ditandai Open | ✅ | defer → Fase 5 |
 
 ## Deferred (Cloud Phase)
 

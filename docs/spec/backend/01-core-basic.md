@@ -127,6 +127,31 @@ order. Katalog field-nya sendiri ada di
 `draft`/lifecycle-free) | `set_null` (hanya valid kalau field tidak
 `required`).
 
+### 1.4 `spec.auth` — Persyaratan Autentikasi
+Entity (dan Service, `pkg/spec/resources.go`) boleh mendeklarasikan
+persyaratan autentikasi lewat `spec.auth`:
+
+```yaml
+spec:
+  auth:
+    required: true              # operasi Entity wajib terautentikasi
+    strategies: [sso, passkey]  # strategy autentikasi yang diterima
+```
+
+- `required` — `bool`. Menandai operasi Entity ini wajib dijalankan oleh
+  caller terautentikasi.
+- `strategies` — daftar nama strategy autentikasi yang diterima. Set strategy
+  **terbuka untuk ditambah** (bukan closed enum): `basic-auth`, `sso`
+  (OIDC/SAML), `social-sso` (Google, Facebook, GitHub, dst), `passwordless`
+  (magic link/OTP), `passkey` (WebAuthn), dst — strategy baru didaftarkan
+  sebagai artifact, mengikuti trust tier yang sama dengan artifact lain
+  ([`../../spec/platform/02-workspace-app-module.md`](../../spec/platform/02-workspace-app-module.md) §3).
+
+Field ini **deklaratif** — kontrak konsumsi untuk tooling, App renderer, dan
+audit. Enforcement nyata tetap di lapisan autentikasi (§8): otorisasi
+berbasis permission `{module}.{entity}.{action}` dijalankan server-side
+selalu, tanpa pengecualian.
+
 ## 2. Primary Key & Natural Key
 Primary key: **UUID v7** (time-ordered) untuk semua Entity — ini kontrak,
 bukan pilihan per backend. Natural key adalah **unique constraint per

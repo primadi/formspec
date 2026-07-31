@@ -38,8 +38,8 @@ type Kind string
 const (
 	KindApp          Kind = "App"
 	KindModule       Kind = "Module"
-	KindDocument     Kind = "Document" // v0.3.0 — Entity renamed to Document
-	KindEntity       Kind = "Entity"   // deprecated alias for KindDocument
+	KindEntity       Kind = "Entity"   // stateful persisted resource (Core §4.1)
+	KindDocument     Kind = "Document" // deprecated alias for KindEntity (kept for backward compatibility)
 	KindService      Kind = "Service"
 	KindConfig       Kind = "Config"
 	KindMigration    Kind = "Migration"
@@ -128,7 +128,13 @@ func IsValidKind(k Kind) bool {
 	}
 }
 
+// IsEntityKind returns true if k is Entity (or the deprecated Document alias).
+func IsEntityKind(k Kind) bool {
+	return k == KindEntity || k == KindDocument
+}
+
 // IsDocumentKind returns true if k is Document (or deprecated Entity alias).
+// Deprecated: renamed to IsEntityKind; kept for backward compatibility.
 func IsDocumentKind(k Kind) bool {
-	return k == KindDocument || k == KindEntity
+	return IsEntityKind(k)
 }

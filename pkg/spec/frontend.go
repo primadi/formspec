@@ -1,5 +1,7 @@
 package spec
 
+import "gopkg.in/yaml.v3"
+
 // ─── Frontend Kinds (Frontend Spec §2–§13) ───
 
 // PageSpec defines a routed screen composing blocks (Frontend §3).
@@ -52,12 +54,12 @@ type BlockRef struct {
 
 // FormSpec defines an input/edit layout (Frontend §4).
 type FormSpec struct {
-	Entity   string        `yaml:"entity" json:"entity"`
-	Mode     string        `yaml:"mode,omitempty" json:"mode,omitempty"` // create | edit | view
-	Sections []FormSection `yaml:"sections" json:"sections"`
-	Actions  []FormAction  `yaml:"actions,omitempty" json:"actions,omitempty"`
-	Submit   *FormSubmit   `yaml:"submit,omitempty" json:"submit,omitempty"`
-	Render   FormRender    `yaml:"render,omitempty" json:"render,omitempty"`
+	Entity   string         `yaml:"entity" json:"entity"`
+	Mode     string         `yaml:"mode,omitempty" json:"mode,omitempty"` // create | edit | view
+	Sections []FormSection  `yaml:"sections" json:"sections"`
+	Actions  []FormAction   `yaml:"actions,omitempty" json:"actions,omitempty"`
+	Submit   *FormSubmit    `yaml:"submit,omitempty" json:"submit,omitempty"`
+	Render   *FormRenderDecl `yaml:"render,omitempty" json:"render,omitempty"`
 }
 
 // FormSection groups form fields.
@@ -103,6 +105,27 @@ type FormSubmit struct {
 // FormRender controls how a form is displayed (Frontend §1.6 — design-time locking).
 // @schema {description: "Render mode: modal (popup dialog), drawer (side panel), separate_page (full page)", enum: ["modal", "drawer", "separate_page"]}
 type FormRender string
+
+// FormRenderDecl is the design-time container declaration of a Form
+// (Frontend §1.6). YAML accepts both `render: separate_page` (shorthand) and
+// `render: { mode: separate_page }`; JSON always serializes the object form to
+// match the renderer contract (`spec.render.mode`).
+type FormRenderDecl struct {
+	// @schema {description: "Render mode: modal (popup dialog), drawer (side panel), separate_page (full page)", enum: ["modal", "drawer", "separate_page"]}
+	Mode FormRender `yaml:"mode" json:"mode"`
+}
+
+// UnmarshalYAML accepts either the scalar shorthand ("separate_page") or the
+// object form ({mode: "separate_page"}).
+func (d *FormRenderDecl) UnmarshalYAML(value *yaml.Node) error {
+	var s string
+	if err := value.Decode(&s); err == nil {
+		d.Mode = FormRender(s)
+		return nil
+	}
+	type plain FormRenderDecl
+	return value.Decode((*plain)(d))
+}
 
 // TableSpec defines a list/browse view (Frontend §5).
 type TableSpec struct {
@@ -298,10 +321,10 @@ type KanbanCard struct {
 }
 
 // PrintSpec defines a printable document template (Frontend §9).
+// One format per manifest — declared via `output.format` (Frontend §9).
 type PrintSpec struct {
 	Entity   string          `yaml:"entity" json:"entity"`
 	Template string          `yaml:"template,omitempty" json:"template,omitempty"`
-	Formats  []string        `yaml:"formats,omitempty" json:"formats,omitempty"` // pdf | thermal | dotmatrix | html
 	Output   *PrintOutput    `yaml:"output,omitempty" json:"output,omitempty"`
 	Header   *PrintHeader    `yaml:"header,omitempty" json:"header,omitempty"`
 	Body     []PrintBodyItem `yaml:"body,omitempty" json:"body,omitempty"`

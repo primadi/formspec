@@ -115,6 +115,34 @@
       },
       "additionalProperties": false
     },
+    "AiIndexDecl": {
+      "description": "AiIndexDecl is the optional AI discovery index on a Module\n(ai/04-forma-remote-mcp.md §3). skills_for_ai is untrusted third-party input.\n",
+      "type": "object",
+      "properties": {
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "category": {
+          "type": "string"
+        },
+        "features": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "integration_pattern": {
+          "type": "string"
+        },
+        "skills_for_ai": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
     "ApiGRPCConfig": {
       "description": "ApiGRPCConfig configures the gRPC external surface.\n",
       "type": "object",
@@ -151,6 +179,48 @@
           "type": "string"
         }
       },
+      "additionalProperties": false
+    },
+    "AppConsume": {
+      "description": "AppConsume is one cross-app interface an App depends on; it triggers a\ngrant request to the owning App (02-workspace-app-module.md §3).\n",
+      "type": "object",
+      "properties": {
+        "actions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "app": {
+          "type": "string"
+        },
+        "service": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "app",
+        "service"
+      ],
+      "additionalProperties": false
+    },
+    "AppInterface": {
+      "description": "AppInterface is one cross-app service interface offered by an App\n(02-workspace-app-module.md §3).\n",
+      "type": "object",
+      "properties": {
+        "actions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "service": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "service"
+      ],
       "additionalProperties": false
     },
     "BackdatePolicy": {
@@ -263,6 +333,24 @@
           "type": "string"
         }
       },
+      "additionalProperties": false
+    },
+    "ConfigKey": {
+      "description": "ConfigKey declares one configuration entry (01-core-basic.md §10).\n",
+      "type": "object",
+      "properties": {
+        "default": {},
+        "secret": {
+          "type": "boolean"
+        },
+        "type": {
+          "description": "int | string | bool | decimal | json",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
       "additionalProperties": false
     },
     "DashboardWidget": {
@@ -469,6 +557,10 @@
       "properties": {
         "module": {
           "type": "string"
+        },
+        "version": {
+          "description": "Version is an optional semver constraint (e.g. \"\u003e=1.0 \u003c2.0\")",
+          "type": "string"
         }
       },
       "required": [
@@ -511,6 +603,19 @@
         "dev",
         "prod"
       ]
+    },
+    "EnvironmentPlane": {
+      "description": "EnvironmentPlane is one resource plane endpoint of an Environment.\n",
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "additionalProperties": false
     },
     "ErrorCode": {
       "description": "ErrorCode is a canonical Forma error code string.\n",
@@ -803,6 +908,7 @@
         "uuid",
         "json",
         "file",
+        "attachment",
         "relation",
         "child",
         "number"
@@ -879,6 +985,20 @@
         "drawer",
         "separate_page"
       ]
+    },
+    "FormRenderDecl": {
+      "description": "FormRenderDecl is the design-time container declaration of a Form\n(Frontend §1.6). YAML accepts both `render: separate_page` (shorthand) and\n`render: { mode: separate_page }`; JSON always serializes the object form to\nmatch the renderer contract (`spec.render.mode`).\n",
+      "type": "object",
+      "properties": {
+        "mode": {
+          "$ref": "#/$defs/FormRender",
+          "description": "@schema {description: \"Render mode: modal (popup dialog), drawer (side panel), separate_page (full page)\", enum: [\"modal\", \"drawer\", \"separate_page\"]}"
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "additionalProperties": false
     },
     "FormSection": {
       "description": "FormSection groups form fields.\n",
@@ -1146,8 +1266,8 @@
       "enum": [
         "App",
         "Module",
-        "Document",
         "Entity",
+        "Document",
         "Service",
         "Config",
         "Migration",
@@ -1439,6 +1559,31 @@
           "type": "string"
         }
       },
+      "additionalProperties": false
+    },
+    "PolicyApproval": {
+      "description": "PolicyApproval declares an approval rule for a class of implementation types.\n",
+      "type": "object",
+      "properties": {
+        "approver_roles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "approvers": {
+          "type": "integer"
+        },
+        "impl": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ImplType"
+          }
+        }
+      },
+      "required": [
+        "approvers"
+      ],
       "additionalProperties": false
     },
     "PrimitiveType": {
@@ -2645,6 +2790,34 @@
       },
       "additionalProperties": false
     },
+    "AiIndexDecl": {
+      "description": "AiIndexDecl is the optional AI discovery index on a Module\n(ai/04-forma-remote-mcp.md §3). skills_for_ai is untrusted third-party input.\n",
+      "type": "object",
+      "properties": {
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "category": {
+          "type": "string"
+        },
+        "features": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "integration_pattern": {
+          "type": "string"
+        },
+        "skills_for_ai": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
     "ApiGRPCConfig": {
       "description": "ApiGRPCConfig configures the gRPC external surface.\n",
       "type": "object",
@@ -2681,6 +2854,48 @@
           "type": "string"
         }
       },
+      "additionalProperties": false
+    },
+    "AppConsume": {
+      "description": "AppConsume is one cross-app interface an App depends on; it triggers a\ngrant request to the owning App (02-workspace-app-module.md §3).\n",
+      "type": "object",
+      "properties": {
+        "actions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "app": {
+          "type": "string"
+        },
+        "service": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "app",
+        "service"
+      ],
+      "additionalProperties": false
+    },
+    "AppInterface": {
+      "description": "AppInterface is one cross-app service interface offered by an App\n(02-workspace-app-module.md §3).\n",
+      "type": "object",
+      "properties": {
+        "actions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "service": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "service"
+      ],
       "additionalProperties": false
     },
     "BackdatePolicy": {
@@ -2793,6 +3008,24 @@
           "type": "string"
         }
       },
+      "additionalProperties": false
+    },
+    "ConfigKey": {
+      "description": "ConfigKey declares one configuration entry (01-core-basic.md §10).\n",
+      "type": "object",
+      "properties": {
+        "default": {},
+        "secret": {
+          "type": "boolean"
+        },
+        "type": {
+          "description": "int | string | bool | decimal | json",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
       "additionalProperties": false
     },
     "DashboardWidget": {
@@ -2999,6 +3232,10 @@
       "properties": {
         "module": {
           "type": "string"
+        },
+        "version": {
+          "description": "Version is an optional semver constraint (e.g. \"\u003e=1.0 \u003c2.0\")",
+          "type": "string"
         }
       },
       "required": [
@@ -3041,6 +3278,19 @@
         "dev",
         "prod"
       ]
+    },
+    "EnvironmentPlane": {
+      "description": "EnvironmentPlane is one resource plane endpoint of an Environment.\n",
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "additionalProperties": false
     },
     "ErrorCode": {
       "description": "ErrorCode is a canonical Forma error code string.\n",
@@ -3333,6 +3583,7 @@
         "uuid",
         "json",
         "file",
+        "attachment",
         "relation",
         "child",
         "number"
@@ -3409,6 +3660,20 @@
         "drawer",
         "separate_page"
       ]
+    },
+    "FormRenderDecl": {
+      "description": "FormRenderDecl is the design-time container declaration of a Form\n(Frontend §1.6). YAML accepts both `render: separate_page` (shorthand) and\n`render: { mode: separate_page }`; JSON always serializes the object form to\nmatch the renderer contract (`spec.render.mode`).\n",
+      "type": "object",
+      "properties": {
+        "mode": {
+          "$ref": "#/$defs/FormRender",
+          "description": "@schema {description: \"Render mode: modal (popup dialog), drawer (side panel), separate_page (full page)\", enum: [\"modal\", \"drawer\", \"separate_page\"]}"
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "additionalProperties": false
     },
     "FormSection": {
       "description": "FormSection groups form fields.\n",
@@ -3676,8 +3941,8 @@
       "enum": [
         "App",
         "Module",
-        "Document",
         "Entity",
+        "Document",
         "Service",
         "Config",
         "Migration",
@@ -3969,6 +4234,31 @@
           "type": "string"
         }
       },
+      "additionalProperties": false
+    },
+    "PolicyApproval": {
+      "description": "PolicyApproval declares an approval rule for a class of implementation types.\n",
+      "type": "object",
+      "properties": {
+        "approver_roles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "approvers": {
+          "type": "integer"
+        },
+        "impl": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ImplType"
+          }
+        }
+      },
+      "required": [
+        "approvers"
+      ],
       "additionalProperties": false
     },
     "PrimitiveType": {
@@ -5080,7 +5370,7 @@
         "Config",
         "Dashboard",
         "Datastore",
-        "Document",
+        "Entity",
         "Environment",
         "Form",
         "Integrator",
@@ -5106,8 +5396,7 @@
         "Webhook",
         "Widget",
         "Wizard",
-        "Workflow",
-        "Entity"
+        "Workflow"
       ]
     },
     "metadata": {
@@ -5166,10 +5455,19 @@
           "description": "AppSpec is the root project manifest (Core §4.4). A Workspace MAY contain\nmore than one App; all Apps in a workspace run simultaneously, mounted at\ntheir own RootURL.\n",
           "type": "object",
           "properties": {
+            "app_renderer": {
+              "description": "named Renderer tier app (frontend/05-app-kinds.md)",
+              "type": "string"
+            },
+            "auth_config_ref": {
+              "description": "per-App auth strategy config",
+              "type": "string"
+            },
             "consumes": {
+              "description": "cross-app interfaces needed → grant request",
               "type": "array",
               "items": {
-                "type": "string"
+                "$ref": "#/$defs/AppConsume"
               }
             },
             "menu": {
@@ -5185,12 +5483,17 @@
               }
             },
             "publishes": {
+              "description": "cross-app interfaces offered",
               "type": "array",
               "items": {
-                "type": "string"
+                "$ref": "#/$defs/AppInterface"
               }
             },
             "root_url": {
+              "type": "string"
+            },
+            "theme_ref": {
+              "description": "per-App Theme resolution (platform/02 §3)",
               "type": "string"
             },
             "vendor": {
@@ -5257,6 +5560,20 @@
           "description": "ModuleSpec defines a package of manifests (Core §4.3, Ref D19).\n",
           "type": "object",
           "properties": {
+            "ai_index": {
+              "$ref": "#/$defs/AiIndexDecl",
+              "description": "AI discovery metadata (ai/04-forma-remote-mcp.md §3)",
+              "nullable": true
+            },
+            "config": {
+              "description": "module-specific configuration (02-workspace-app-module.md §2)",
+              "type": "object",
+              "additionalProperties": {}
+            },
+            "datastore": {
+              "description": "Datastore binds the module to a named kind: Datastore for ctx.db()",
+              "type": "string"
+            },
             "depends": {
               "type": "array",
               "items": {
@@ -5269,6 +5586,10 @@
               "items": {
                 "$ref": "#/$defs/MenuItem"
               }
+            },
+            "vendor": {
+              "description": "publishing vendor (platform/02-workspace-app-module.md §2)",
+              "type": "string"
             },
             "version": {
               "type": "string"
@@ -5295,10 +5616,7 @@
         },
         "kind": {
           "type": "string",
-          "enum": [
-            "Document",
-            "Entity"
-          ]
+          "const": "Entity"
         },
         "metadata": {
           "description": "Metadata is common to all Forma resources.\n",
@@ -5328,8 +5646,8 @@
           "additionalProperties": false
         },
         "spec": {
-          "title": "Document Spec",
-          "description": "DocumentSpec defines a stateful, persisted business data resource (Core §4.1).\nRenamed from EntitySpec in v0.3.0.\n",
+          "title": "Entity Spec",
+          "description": "EntitySpec defines a stateful, persisted business data resource (Core §4.1).\n",
           "type": "object",
           "properties": {
             "actions": {
@@ -5552,7 +5870,9 @@
           "properties": {
             "keys": {
               "type": "object",
-              "additionalProperties": {}
+              "additionalProperties": {
+                "$ref": "#/$defs/ConfigKey"
+              }
             }
           },
           "required": [
@@ -6199,8 +6519,54 @@
         },
         "spec": {
           "title": "Environment Spec",
-          "description": "Spec for kind: Environment (type definition not found in pkg/spec)",
-          "type": "object"
+          "description": "EnvironmentSpec defines one deployment target (platform/04-control-plane.md §2).\n",
+          "type": "object",
+          "properties": {
+            "key_ref": {
+              "description": "KeyRef is the location of the platform signing key (e.g. kms://prod-signing).",
+              "type": "string"
+            },
+            "mode": {
+              "$ref": "#/$defs/EnvironmentMode",
+              "description": "Mode is the deployment environment mode — dev | prod."
+            },
+            "policy": {
+              "description": "Policy names the kind: Policy that applies to this environment.",
+              "type": "string"
+            },
+            "resource_planes": {
+              "description": "ResourcePlanes lists the resource plane endpoints for this environment.",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/EnvironmentPlane"
+              }
+            },
+            "resource_pool": {
+              "description": "Resource pool strategy",
+              "type": "string",
+              "enum": [
+                "shared",
+                "exclusive"
+              ]
+            },
+            "tier": {
+              "description": "Deployment tier",
+              "type": "string",
+              "enum": [
+                "standalone",
+                "cloud",
+                "enterprise"
+              ]
+            }
+          },
+          "required": [
+            "mode",
+            "tier",
+            "resource_pool",
+            "key_ref",
+            "policy"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
@@ -6249,8 +6615,38 @@
         },
         "spec": {
           "title": "Policy Spec",
-          "description": "Spec for kind: Policy (type definition not found in pkg/spec)",
-          "type": "object"
+          "description": "PolicySpec defines governance rules evaluated on control-plane decisions\n(platform/04-control-plane.md §5). The escape hatch `rego` is compiled into\nthe same OPA evaluation engine as the structured vocabulary.\n",
+          "type": "object",
+          "properties": {
+            "blocked": {
+              "description": "Blocked is the policy floor — rules that cannot be configured away.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "rego": {
+              "description": "Rego is the escape hatch — full OPA policy body.",
+              "type": "string"
+            },
+            "require_approval": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/PolicyApproval"
+              }
+            },
+            "require_signing": {
+              "type": "boolean"
+            },
+            "require_staging_first": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "require_signing",
+            "require_staging_first"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
@@ -6622,7 +7018,8 @@
               "type": "string"
             },
             "render": {
-              "$ref": "#/$defs/FormRender"
+              "$ref": "#/$defs/FormRenderDecl",
+              "nullable": true
             },
             "sections": {
               "type": "array",
@@ -7312,7 +7709,7 @@
         },
         "spec": {
           "title": "Print Spec",
-          "description": "PrintSpec defines a printable document template (Frontend §9).\n",
+          "description": "PrintSpec defines a printable document template (Frontend §9).\nOne format per manifest — declared via `output.format` (Frontend §9).\n",
           "type": "object",
           "properties": {
             "body": {
@@ -7327,13 +7724,6 @@
             "footer": {
               "$ref": "#/$defs/PrintFooter",
               "nullable": true
-            },
-            "formats": {
-              "description": "pdf | thermal | dotmatrix | html",
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
             },
             "header": {
               "$ref": "#/$defs/PrintHeader",

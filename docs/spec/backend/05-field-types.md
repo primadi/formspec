@@ -287,24 +287,26 @@ tidak pernah menjadi penjaganya.
 ```yaml
 - name: line_total
   type: money
-  computed: { script: <starlark-ref> }
+  computed: { formula: "quantity * unit_price" }
 ```
 
 `computed` menandai field yang nilainya **diturunkan server-side**, bukan ditulis
 klien. Marker ini menegakkan:
 - **Never client-writable** — nilai `computed` di payload klien diabaikan (bukan
   error diam-diam yang menimpa hasil hitung); satu-satunya sumber nilai adalah
-  script.
-- **Recomputed on save** — script dievaluasi ulang pada tiap `create`/`update`
+  evaluasi formula.
+- **Recomputed on save** — formula dievaluasi ulang pada tiap `create`/`update`
   sebelum persist, sehingga nilai tersimpan selalu konsisten dengan input
   terkini. Ia bukan default sekali-tulis.
 
-`script` menunjuk Starlark — mengikuti mekanisme named script / `script_ref`
-yang sama dengan escape hatch validasi ([`01-core-basic.md`](01-core-basic.md)
-§9) dan cross-module Starlark ([`02-core-extended.md`](02-core-extended.md) §7);
-kontrak runtime script (context yang tersedia, determinisme, sandbox) dijabarkan
-di spec Script Runtime. Field `computed` boleh membaca field lain di dokumen yang
-sama; ia tidak boleh menghasilkan efek samping di luar nilai yang dikembalikan.
+`formula` adalah **ekspresi Starlark inline** yang dievaluasi server-side
+terhadap data dokumen yang sama (context = field record, dibaca via nama field
+atau `data["field"]`) — bukan named `script_ref`. Ia boleh membaca field lain di
+dokumen yang sama; ia tidak boleh menghasilkan efek samping di luar nilai yang
+dikembalikan. Untuk logika multi-pernyataan yang lebih besar, gunakan custom
+action `impl: script_ref` (escape hatch validasi
+[`01-core-basic.md`](01-core-basic.md) §9) yang menulis hasilnya ke field, atau
+kerjakan via hook.
 
 ### 5.2 Enkripsi & Masking at Rest
 

@@ -145,7 +145,7 @@ Model *single-process embed* (lihat `04-forma-sidecar.md`): `forma-sidecar` meng
 
 ## 6. Referensi Skema Manifest
 
-Skema `Document`/`Entity` (yang di-load engine ini) didefinisikan normatif di `docs/spec/backend/01-core-basic.md` dan `docs/spec/backend/03-entity-extension.md` — dokumen ini tidak mengulang skemanya, hanya perilaku runtime-nya. Struct Go yang relevan ada di `pkg/spec/entity.go`: `DocumentSpec`, `Field`, `Action`, `StateMachine`, `EventDecl`, `UsesDecl`, `ExposeConfig`.
+Skema `Document`/`Entity` (yang di-load engine ini) didefinisikan normatif di `docs/spec/backend/01-core-basic.md` dan `docs/spec/backend/03-entity-extension.md` — dokumen ini tidak mengulang skemanya, hanya perilaku runtime-nya. Struct Go yang relevan ada di `pkg/spec/entity.go`: `EntitySpec`, `Field`, `Action`, `StateMachine`, `EventDecl`, `UsesDecl`, `ExposeConfig`.
 
 Kind lain yang parse valid tapi **belum dikonsumsi runtime apapun** (lihat §7): `Page`, `Form`, `Table`, `Dashboard`, `Workflow`, `Api`, `Webhook`, `Environment`, `Policy`, `Datastore`, dan kind frontend lain di `pkg/spec/frontend.go`.
 

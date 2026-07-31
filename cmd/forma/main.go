@@ -57,6 +57,8 @@ func main() {
 		}
 	case "dev":
 		runDev(os.Args[2:])
+	case "init":
+		runInit(os.Args[2:])
 	case "diff", "delete", "get", "describe", "validate", "repl",
 		"migrate", "seed", "backup", "restore", "archive", "saga", "module", "sign", "script",
 		"freeze", "rollback", "lock", "workspace":
@@ -83,6 +85,7 @@ func usage() {
 	fmt.Fprintf(os.Stderr, "  generate dotnet-app Scaffold a .NET sidecar app\n")
 	fmt.Fprintf(os.Stderr, "  new app             Alias for `generate node-app`\n")
 	fmt.Fprintf(os.Stderr, "  dev                 Development server (API + SPA built-in)\n")
+	fmt.Fprintf(os.Stderr, "  init                Scaffold a new Forma project with standard layout\n")
 	fmt.Fprintf(os.Stderr, "\nNot yet implemented (see docs/cli-tools/01-forma-cli.md):\n")
 	fmt.Fprintf(os.Stderr, "  diff, delete, get, describe, validate, repl,\n")
 	fmt.Fprintf(os.Stderr, "  migrate, seed, backup, restore, archive, saga, module, sign, script,\n")

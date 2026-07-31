@@ -75,7 +75,7 @@ export default function ReportRenderer({ entry }: ReportRendererProps) {
     if (!entry.spec.groups?.length) return null
     const grouped = new Map<string, Record<string, unknown>[]>()
     for (const item of data) {
-      const key = entry.spec.groups!.map((g) => String(item[g] ?? "")).join(" · ")
+      const key = entry.spec.groups!.map((g) => String(item[g.field] ?? "")).join(" · ")
       const list = grouped.get(key) ?? []
       list.push(item)
       grouped.set(key, list)
@@ -170,15 +170,15 @@ export default function ReportRenderer({ entry }: ReportRendererProps) {
           <h3 className="text-sm font-medium">Parameters</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {(entry.spec.parameters ?? []).map((param) => (
-              <div key={param.name} className="space-y-1">
+              <div key={param.field} className="space-y-1">
                 <label className="text-xs font-medium">{param.label}</label>
                 <Input
-                  placeholder={param.name}
-                  value={params[param.name] ?? ""}
+                  placeholder={param.field}
+                  value={params[param.field] ?? ""}
                   onChange={(e) =>
                     setParams((p) => ({
                       ...p,
-                      [param.name]: e.target.value,
+                      [param.field]: e.target.value,
                     }))
                   }
                 />

@@ -9,7 +9,7 @@ spec:
   title: "Neraca Saldo"
   entity: ledger
   parameters:
-    - name: as_of_date
+    - field: as_of_date
       label: "Per Tanggal"
       type: "date"
       default: "today"
@@ -32,7 +32,8 @@ spec:
     - field: ending_balance
       label: "Saldo Akhir"
       format: "currency"
-  groups: [account_type]
+  groups:
+    - { field: account_type, label: "Tipe Akun" }
   totals:
     - label: "TOTAL"
       field: ending_balance
