@@ -6,6 +6,10 @@ obj/
 *.so
 *.dylib
 
+# Compiled CLI binaries at repo root (output of `go build ./cmd/...`)
+/forma
+/forma-gen-schema
+
 # Test binary, built with `go test -c`
 *.test
 

@@ -278,7 +278,7 @@ func startAppProcess(ctx context.Context, runtime, appDir, entrypoint, appEndpoi
 	)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	setProcessGroup(cmd)
 
 	label := command
 	if len(args) > 0 {
