@@ -1,0 +1,52 @@
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: approval
+  module: crc-approval
+  description: "Persetujuan akhir — CAP (Centralized Approval Platform) internal dan/atau Customer eksternal via URL/QR Code"
+spec:
+  version: v1
+  characteristic: transaction
+  fields:
+    - name: transaction_date
+      type: date
+      required: true
+    - name: approval_number
+      type: string
+      required: true
+    - name: submission
+      type: relation
+      relation: { type: belongs_to, resource: crc-checklist.checklist-submission }
+      required: true
+    - name: approval_type
+      type: string
+      required: true
+      description: "CAP (internal) atau Customer (eksternal)"
+    - name: approver_id
+      type: string
+      description: "User ID Approver (untuk CAP internal)"
+    - name: approver_name
+      type: string
+      description: "Nama approver"
+    - name: customer_email
+      type: string
+      description: "Email kustomer (untuk approval eksternal)"
+    - name: approval_decision
+      type: string
+      description: "Approve atau Revise"
+    - name: notes
+      type: text
+    - name: secure_url
+      type: string
+      description: "Secure URL / QR code link untuk akses kustomer"
+    - name: url_expires_at
+      type: datetime
+      description: "Waktu kadaluarsa secure URL"
+    - name: approved_at
+      type: datetime
+    - name: cap_reference
+      type: string
+      description: "Referensi ID dari Centralized Approval Platform"
+    - name: cap_status
+      type: string
+      description: "Status dari CAP: Pending, Approved, Rejected"

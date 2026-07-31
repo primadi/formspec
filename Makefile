@@ -83,6 +83,12 @@ generate-schema:
 	@go run ./cmd/forma-gen-schema/ --out schemas
 	@echo "✅ JSON Schema files generated in schemas/"
 
+# Validate a spec tree against the engine loader AND the JSON Schema contract.
+# Usage: make validate-spec SPEC=examples/crc-management/spec
+validate-spec:
+	@test -n "$(SPEC)" || (echo "Usage: make validate-spec SPEC=<path to spec dir>" && exit 1)
+	@go run ./cmd/forma validate --spec $(SPEC)
+
 # Download dependencies
 deps:
 	go mod tidy

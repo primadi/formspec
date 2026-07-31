@@ -1,0 +1,35 @@
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: job-identity
+  module: crc-master
+  description: "Identitas pekerjaan — Trakindo WO, Customer, PEX/Non-PEX, TU ID Actual, Component Hours. Disinkronisasi dari SAP via EDW."
+spec:
+  version: v1
+  characteristic: master
+  fields:
+    - name: trakindo_wo
+      type: string
+      required: true
+      description: "Trakindo Work Order number"
+    - name: customer_name
+      type: string
+      required: true
+    - name: pex_type
+      type: string
+      description: "PEX atau Non-PEX"
+    - name: tu_id_actual
+      type: string
+      description: "TU ID Actual"
+    - name: component_hours
+      type: integer
+      description: "Jam operasi komponen saat inspeksi"
+    - name: model
+      type: relation
+      relation: { type: belongs_to, resource: crc-master.model }
+    - name: sap_reference
+      type: string
+      description: "Referensi data dari SAP"
+    - name: last_sync_at
+      type: datetime
+      description: "Timestamp terakhir sinkronisasi dari SAP/EDW"

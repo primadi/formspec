@@ -1,0 +1,26 @@
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: special-tool
+  module: crc-master
+  description: "Special tools yang digunakan dalam pekerjaan inspeksi — nama tool, part number, quantity"
+spec:
+  version: v1
+  characteristic: master
+  fields:
+    - name: tool_name
+      type: string
+      required: true
+    - name: part_number
+      type: string
+    - name: quantity
+      type: integer
+      default: 1
+    - name: unit
+      type: string
+      default: "pcs"
+    - name: description
+      type: text
+    - name: is_active
+      type: boolean
+      default: true

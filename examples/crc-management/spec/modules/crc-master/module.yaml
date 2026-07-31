@@ -1,0 +1,9 @@
+apiVersion: forma.dev/v1alpha1
+kind: Module
+metadata:
+  name: crc-master
+  description: "Master data & reference data for CRC Checklist Management System — ComponentType, WorkType, SpecialTool, Chemical, ProcessType, Model, JobIdentity"
+spec:
+  version: 1.0.0
+  vendor: trakindo
+  depends: []

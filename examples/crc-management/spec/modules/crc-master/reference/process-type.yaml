@@ -1,0 +1,21 @@
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: process-type
+  module: crc-master
+  description: "Tipe proses pekerjaan yang tersedia dalam sistem"
+spec:
+  version: v1
+  characteristic: reference
+  fields:
+    - name: code
+      type: string
+      required: true
+    - name: name
+      type: string
+      required: true
+    - name: description
+      type: text
+    - name: is_active
+      type: boolean
+      default: true

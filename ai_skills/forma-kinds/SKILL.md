@@ -79,6 +79,7 @@ metadata:
   module: billing
   description: "Sales invoice with line items"
 spec:
+  version: v1
   characteristic: transaction
   fields:
     - name: invoice_number
@@ -89,9 +90,94 @@ spec:
       required: true
     - name: total_amount
       type: money
-      currency: IDR
-  expose: all           # all | read | none
+      required: true
+  # expose is an ARRAY of {type, actions} — the `all`/`read`/`none` shorthand
+  # does NOT exist. Omit expose entirely for UI-only (external API → 404).
+  expose:
+    - type: rest
+      actions: [list, find, create, update, delete]
 ```
+
+**`spec.version` is required** on every Entity (`version: v1`).
+
+**Relations** are declared with `type: relation` **plus** a sibling `relation:`
+object — never a `target:` key (`target` is silently ignored by the YAML
+loader, leaving a dangling relation):
+
+```yaml
+fields:
+  - name: customer_id
+    type: relation
+    relation: { type: belongs_to, resource: billing.customer }
+    required: true
+```
+
+**`child`** declares an *embedded* collection (inline fields, storage
+jsonb|table) — it is NOT a reference to another entity:
+
+```yaml
+fields:
+  - name: items
+    type: child
+    child:
+      storage: jsonb
+      sequence_field: line_no
+      fields:
+        - { name: description, type: string }
+        - { name: quantity, type: integer }
+```
+
+If the child must be a separately CRUD-able entity, use `relation`
+(`belongs_to`) instead.
+
+**`expose`** canonical list form (`docs/spec/backend/01-core-basic.md` §8.4):
+
+| Value | Meaning |
+|---|---|
+| `expose: []` / omitted | UI + internal callers only; external API → 404 |
+| `expose: [{ type: rest, actions: [list, find] }]` | read-only external API |
+| `expose: [{ type: rest, actions: [list, find, create, update, delete] }]` | full CRUD external API |
+
+`expose` only controls the external surface; UI is always available and gated
+by permissions. `kind: Api` overrides how the external surface is published.
+
+**`lifecycle`** (if used) is a STRING enum
+(`two_step_autosave | two_step_manual | plain_crud`), NOT a map. The built-in
+`doc_status` lifecycle is default-on — do NOT write `lifecycle: {doc_status: true}`.
+
+**State machine** for business states beyond doc_status (`docs/spec/backend/02-core-extended.md` §1):
+
+```yaml
+spec:
+  version: v1
+  characteristic: transaction
+  fields:
+    - name: status
+      type: enum
+      enum_values: [draft, in_progress, completed, cancelled]
+      default: draft
+      index: true
+  state_machine:
+    field: status
+    initial: draft
+    states:
+      - { name: draft, label: "Draft" }
+      - { name: in_progress, label: "In Progress" }
+      - { name: completed, label: "Completed" }
+      - { name: cancelled, label: "Cancelled" }
+    transitions:
+      - { from: draft, to: in_progress, via: start-work }
+      - { from: in_progress, to: completed, via: complete }
+      - { from: "*", to: cancelled, via: cancel }
+  actions:
+    - name: start-work
+      description: "Mulai pengerjaan"
+      required_permission: billing.invoice.start-work
+      audit: true
+```
+
+Transitions use `via` (the triggering action name) — `action` is only a
+legacy alias. `guard` is `{ expression, message }`, not a list of roles.
 
 ### Service — Stateless Computation
 
@@ -121,19 +207,30 @@ spec:
 
 ### App — Curated Collection of Modules
 
-An App is a **curation** — a basket of objects from modules declared via
-`depends_on`. An App does NOT own objects; Modules do. The same Module can
-be mounted by multiple Apps in the same workspace.
+An App is a **curation** — a basket of modules declared via `spec.modules`.
+An App does NOT own objects; Modules do. The same Module can be mounted by
+multiple Apps in the same workspace.
+
+`spec.version`, `spec.vendor`, and `spec.root_url` are **required**.
 
 ```yaml
 apiVersion: forma.dev/v1alpha1
 kind: App
 metadata:
   name: klinik-internal
+  description: "Klinik internal"
 spec:
+  version: 1.0.0
+  vendor: acme-corp
+  root_url: /app/klinik
   modules:
     - clinic
     - pharmacy
+  menu:
+    - type: module
+      module: clinic
+    - type: module
+      module: pharmacy
 ```
 
 ### Module — Bounded Context
@@ -142,16 +239,20 @@ A Module **owns** objects (Entity, Service, VisualSpecKind instances).
 One Module = one complete business bounded context. Module structure is a
 closed set: Entity, Service, and VisualSpecKind instances.
 
+`spec.version` is **required**. Dependencies use `depends` (array of
+`{module, version?}`), NOT `depends_on`.
+
 ```yaml
 apiVersion: forma.dev/v1alpha1
 kind: Module
 metadata:
   name: billing
+  description: "Billing module"
 spec:
   version: 1.0.0
   vendor: acme-corp
-  depends_on:
-    - general-ledger
+  depends:
+    - module: general-ledger
 ```
 
 ---
@@ -217,7 +318,31 @@ spec:
 
 ### Workflow — Multi-Approver Approval
 
-Attaches to an Entity's state machine for approval-based transitions.
+Approval-based role gating attached to ONE Entity state-machine transition.
+The states/transitions live on the Entity (`state_machine` above); the
+Workflow only intercepts a single `from → to` transition and adds approval
+steps. Never declare `states:`/`transitions:` inside a Workflow manifest.
+
+```yaml
+apiVersion: forma.dev/v1alpha1
+kind: Workflow
+metadata:
+  name: journal-posting-approval
+  module: gl
+spec:
+  entity: gl.journal-entry
+  on: { transition: { from: draft, to: posted } }
+  steps:
+    - { roles: [gl.supervisor], approvers: 1 }
+    - { roles: [gl.controller], approvers: 1,
+        when: "resource.amount > 100000000" }
+  on_reject: { to: rejected }
+  escalation: { after: 48h, notify_roles: [gl.manager] }
+```
+
+Step fields: `roles` (eligibility), `approvers` (quorum, default 1),
+`mode` (`all` | `any` | `sequential`), `when` (FormaExpr to skip a step),
+`escalation` (`after`, `notify_roles`, `reassign_roles`).
 
 ### Api — External API Surface Override
 
@@ -421,3 +546,13 @@ spec:
 - **95% of cases: the answer is `Entity`.** Needing a new kind means extending the framework, not building an app.
 - **Permission = resource + action.** Never hardcode role names in YAML.
 - **`forma-app.yaml` is CLI config, NOT a `kind: Config` manifest.**
+- **`expose` is an ARRAY of `{type, actions}`** — the `all`/`read`/`none`
+  shorthand does not exist and fails to unmarshal.
+- **`target:` on a field is silently ignored** by the YAML loader, producing a
+  dangling relation. Use `relation: { type: belongs_to, resource: <mod.entity> }`.
+- **Module dependency key is `depends`** (array of `{module, version?}`), not `depends_on`.
+- **Validate before you trust:** run `forma validate --spec <dir>` (engine loader +
+  JSON Schema) and rely on the editor `yaml.schemas` → `schemas/forma.schema.json`
+  for autocomplete/validation. `spec.version: v1` is required on every Entity.
+- **`on:` is a normal YAML key** for Workflow (`on: { transition: ... }`) — do
+  not quote it; only YAML 1.1 parsers (e.g. PyYAML) misread it as boolean `true`.

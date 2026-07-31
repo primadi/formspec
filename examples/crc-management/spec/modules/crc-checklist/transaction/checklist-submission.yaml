@@ -1,0 +1,129 @@
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: checklist-submission
+  module: crc-checklist
+  description: "Hasil pengisian form checklist oleh User — satu submission per task. Mencakup seluruh section dan field yang telah diisi."
+spec:
+  version: v1
+  characteristic: transaction
+  fields:
+    - name: transaction_date
+      type: date
+      required: true
+    - name: doc_number
+      type: string
+      required: true
+      description: "Nomor dokumen final (auto-generated: prefix + sequence)"
+    - name: task
+      type: relation
+      relation: { type: belongs_to, resource: crc-checklist.checklist-task }
+      required: true
+    - name: template
+      type: relation
+      relation: { type: belongs_to, resource: crc-checklist.checklist-template }
+      required: true
+    - name: submitted_by
+      type: string
+      required: true
+      description: "User ID teknisi yang submit"
+    - name: job_identity
+      type: relation
+      relation: { type: belongs_to, resource: crc-master.job-identity }
+      required: true
+    - name: status
+      type: enum
+      enum_values: [draft, in_progress, waiting_review, revised, waiting_customer, waiting_cap, completed, cancelled]
+      default: draft
+      index: true
+      description: "Status state machine — Draft → In Progress → Stop and Go Review → CAP/Customer Approval → Completed"
+    - name: overall_judgement
+      type: string
+      description: "Reuse, Reject, Repair — dari Specific Section"
+    - name: pdf_url
+      type: string
+      description: "URL file PDF yang di-generate"
+    - name: sharepoint_url
+      type: string
+      description: "URL file di SharePoint setelah archiving"
+    - name: submitted_at
+      type: datetime
+    - name: customer_approval_required
+      type: boolean
+      default: false
+    - name: customer_approval_url
+      type: string
+      description: "Secure URL/QR link untuk kustomer"
+    - name: customer_approval_deadline
+      type: datetime
+  state_machine:
+    field: status
+    initial: draft
+    states:
+      - { name: draft, label: "Draft" }
+      - { name: in_progress, label: "In Progress" }
+      - { name: waiting_review, label: "Waiting Foreman Review" }
+      - { name: revised, label: "Revised" }
+      - { name: waiting_customer, label: "Waiting Customer Approval" }
+      - { name: waiting_cap, label: "Waiting CAP Approval" }
+      - { name: completed, label: "Completed" }
+      - { name: cancelled, label: "Cancelled" }
+    transitions:
+      - { from: draft, to: in_progress, via: start-work }
+      - { from: in_progress, to: waiting_review, via: request-review }
+      - { from: waiting_review, to: in_progress, via: approve-review }
+      - { from: waiting_review, to: revised, via: revise }
+      - { from: revised, to: in_progress, via: resubmit }
+      - { from: in_progress, to: waiting_customer, via: request-customer-approval,
+          guard: { expression: "resource.customer_approval_required == true" } }
+      - { from: waiting_customer, to: in_progress, via: customer-approve }
+      - { from: waiting_customer, to: revised, via: customer-revise }
+      - { from: in_progress, to: waiting_cap, via: submit-final }
+      - { from: waiting_cap, to: completed, via: cap-approve }
+      - { from: "*", to: cancelled, via: cancel }
+
+  actions:
+    - name: start-work
+      description: "Teknisi mulai mengisi form checklist"
+      required_permission: crc-checklist.checklist-submission.start-work
+      audit: true
+    - name: request-review
+      description: "Teknisi mencapai Stop and Go gate — kirim ke Foreman"
+      required_permission: crc-checklist.checklist-submission.request-review
+      audit: true
+    - name: approve-review
+      description: "Foreman approve — teknisi lanjut ke section berikutnya"
+      required_permission: crc-checklist.checklist-submission.approve-review
+      audit: true
+    - name: revise
+      description: "Foreman/kustomer minta revisi — teknisi perbaiki"
+      required_permission: crc-checklist.checklist-submission.revise
+      audit: true
+    - name: resubmit
+      description: "Teknisi submit ulang setelah revisi"
+      required_permission: crc-checklist.checklist-submission.resubmit
+      audit: true
+    - name: request-customer-approval
+      description: "Opsional — kirim secure URL/QR ke kustomer"
+      required_permission: crc-checklist.checklist-submission.request-customer-approval
+      audit: true
+    - name: customer-approve
+      description: "Kustomer approve via secure URL"
+      required_permission: crc-checklist.checklist-submission.customer-approve
+      audit: true
+    - name: customer-revise
+      description: "Kustomer minta revisi via secure URL"
+      required_permission: crc-checklist.checklist-submission.customer-revise
+      audit: true
+    - name: submit-final
+      description: "Kirim ke CAP untuk final approval"
+      required_permission: crc-checklist.checklist-submission.submit-final
+      audit: true
+    - name: cap-approve
+      description: "CAP approve — di-intercept oleh Workflow checklist-approval-workflow"
+      required_permission: crc-checklist.checklist-submission.cap-approve
+      audit: true
+    - name: cancel
+      description: "Batalkan submission — semua state bisa dibatalkan"
+      required_permission: crc-checklist.checklist-submission.cancel
+      audit: true

@@ -1,0 +1,22 @@
+apiVersion: forma.dev/v1alpha1
+kind: Workflow
+metadata:
+  name: checklist-approval-workflow
+  module: crc-approval
+  description: "CAP Final Approval untuk checklist-submission — menempel pada transisi waiting_cap → completed. State machine lengkap hidup di Entity crc-checklist.checklist-submission."
+spec:
+  entity: crc-checklist.checklist-submission
+  on:
+    transition:
+      from: waiting_cap
+      to: completed
+  steps:
+    - roles: [crc-approval.cap-approver]
+      approvers: 1
+      mode: any
+      escalation:
+        after: 48h
+        notify_roles: [crc-approval.cap-manager]
+  on_reject:
+    to: revised
+

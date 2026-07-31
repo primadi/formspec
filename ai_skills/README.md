@@ -13,6 +13,7 @@ VS Code Copilot (and other compatible agents) can discover and use them.
 |-------|--------|---------|
 | Spec Structure | `forma-spec-structure/` | Navigate `docs/spec/` — which file covers what, doc status lifecycle, contract-vs-renderer principle |
 | Kinds Catalog | `forma-kinds/` | Complete catalog of all ~34 Forma resource kinds — when to use each, manifest format, gotchas |
+| Schema Validation | `schema-validation/` | Run `forma validate`, interpret engine vs schema errors, and repair all manifests to canonical form (generate → validate → fix → re-validate) |
 
 ## Maintenance
 

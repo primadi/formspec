@@ -2,7 +2,9 @@
 // layout defined in docs/spec/platform/08-project-layout.md.
 //
 // It also extracts embedded AI skills (ai_skills/*) into .agents/skills/
-// so that VS Code Copilot can assist with Forma app development.
+// so that VS Code Copilot can assist with Forma app development, and writes
+// the JSON Schema files (schemas/) + .vscode/settings.json (yaml.schemas)
+// so the YAML editor gets autocomplete and validation for Forma manifests.
 //
 // Usage:
 //
@@ -43,6 +45,8 @@ func runInit(args []string) {
 		fmt.Fprintf(os.Stderr, "The project includes:\n")
 		fmt.Fprintf(os.Stderr, "  - Standard directory structure (spec/)\n")
 		fmt.Fprintf(os.Stderr, "  - forma-app.yaml configuration\n")
+		fmt.Fprintf(os.Stderr, "  - schemas/ with JSON Schema for YAML editor validation\n")
+		fmt.Fprintf(os.Stderr, "  - .vscode/settings.json registering yaml.schemas\n")
 		fmt.Fprintf(os.Stderr, "  - .agents/skills/ with AI skills for VS Code Copilot\n")
 		fmt.Fprintf(os.Stderr, "  - .github/copilot-instructions.md\n\n")
 		fmt.Fprintf(os.Stderr, "Flags:\n")
@@ -94,6 +98,7 @@ func runInit(args []string) {
 		filepath.Join(targetDir, "spec", "apps"),
 		filepath.Join(targetDir, "spec", "modules"),
 		filepath.Join(targetDir, ".agents", "skills"),
+		filepath.Join(targetDir, ".vscode"),
 		filepath.Join(targetDir, ".github"),
 	}
 
@@ -172,6 +177,29 @@ Thumbs.db
 		os.Exit(1)
 	}
 
+	// Write embedded JSON Schema files to schemas/
+	fmt.Fprintf(os.Stderr, "Extracting JSON Schema...\n")
+	if err := extractSchemas(targetDir); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: cannot extract schemas: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Register schemas for the YAML editor (.vscode/settings.json).
+	// Only write if missing — never clobber existing editor settings.
+	settingsPath := filepath.Join(targetDir, ".vscode", "settings.json")
+	if _, err := os.Stat(settingsPath); os.IsNotExist(err) {
+		writeFile(".vscode/settings.json", `{
+  "yaml.schemas": {
+    "schemas/forma.schema.json": ["spec/**/*.yaml", "spec/**/*.yml"]
+  }
+}
+`)
+		fmt.Fprintf(os.Stderr, "  ✓ .vscode/settings.json (yaml.schemas)\n")
+	} else {
+		fmt.Fprintf(os.Stderr, "  ⚠️  .vscode/settings.json already exists — add yaml.schemas manually:\n")
+		fmt.Fprintf(os.Stderr, "     \"yaml.schemas\": {\"schemas/forma.schema.json\": [\"spec/**/*.yaml\", \"spec/**/*.yml\"]}\n")
+	}
+
 	// Optional sidecar files
 	if *withSidecar {
 		writeFile("app/package.json", fmt.Sprintf(`{
@@ -247,6 +275,10 @@ console.log("Forma sidecar ready: " + forma.moduleName);
 	fmt.Println()
 	fmt.Println("Then ask Copilot (Agent mode) to create your app:")
 	fmt.Println("  > buat forma app untuk inventory management")
+	fmt.Println()
+	fmt.Println("YAML editor:")
+	fmt.Println("  schemas/ + .vscode/settings.json (yaml.schemas) are ready —")
+	fmt.Println("  spec/**/*.yaml gets autocomplete + validation in VS Code.")
 }
 
 func makeCopilotInstructions(projectName string) string {
@@ -356,6 +388,43 @@ func extractSkills(targetDir string) error {
 		}
 
 		fmt.Fprintf(os.Stderr, "  ✓ .agents/skills/%s\n", relPath)
+		return nil
+	})
+}
+
+// extractSchemas reads the JSON Schema files embedded in the binary and
+// writes them to schemas/ in the target project, so the YAML editor can
+// validate Forma manifests (see .vscode/settings.json -> yaml.schemas).
+func extractSchemas(targetDir string) error {
+	return fs.WalkDir(forma.SchemasFS, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+
+		// path is like "schemas/forma.schema.json" or "schemas/kinds/Entity.schema.json"
+		relPath := strings.TrimPrefix(path, "schemas/")
+		if relPath == path {
+			return nil // not a schema file
+		}
+
+		destPath := filepath.Join(targetDir, "schemas", relPath)
+		if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+			return fmt.Errorf("mkdir %s: %w", filepath.Dir(destPath), err)
+		}
+
+		data, err := fs.ReadFile(forma.SchemasFS, path)
+		if err != nil {
+			return fmt.Errorf("read embedded %s: %w", path, err)
+		}
+
+		if err := os.WriteFile(destPath, data, 0644); err != nil {
+			return fmt.Errorf("write %s: %w", destPath, err)
+		}
+
+		fmt.Fprintf(os.Stderr, "  ✓ schemas/%s\n", relPath)
 		return nil
 	})
 }

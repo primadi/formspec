@@ -67,14 +67,44 @@ forma delete document old-report --confirm
 
 ### `forma validate`
 
-Validasi tanpa mendaftarkan — dry-run. Termasuk **honesty scan** untuk script Starlark.
+Validasi tanpa mendaftarkan — dry-run.
+
+**Status: ✅ sebagian** — dua lapis sudah jalan (lihat di bawah); honesty
+scan Starlark masih roadmap.
 
 ```bash
-forma validate -f myapp/
-# undeclared usage  → error
-# declared-but-unused → warning
-# ctx.environment branching di business script → warning
+forma validate --spec myapp/spec             # default: ./spec
+forma validate --spec myapp/spec --no-schema # engine loader saja
+forma validate --spec myapp/spec --schema schemas/  # paksa pakai schema dir ini
 ```
+
+**Auto-deteksi schema:** tanpa `--schema`, `forma validate` memakai schema
+lokal bila ada — urutan: `<spec>/../schemas` (folder `schemas/` di sebelah
+`spec/`, layout project `forma init`), lalu `./schemas` (cwd), lalu schema
+yang di-embed di binary. Sumber yang dipakai dicetak di baris pertama output
+(`schema: <dir> (local)` atau `schema: embedded`).
+
+Dua lapis, keduanya dilaporkan per manifest:
+
+1. **Engine loader** (`internal/manifest`) — ground truth apa yang `forma dev` /
+   `forma apply` terima: error parse YAML dan validasi dalam Entity (expose,
+   lifecycle, relation, state machine, `transaction_date`, reserved fields, …).
+   Ini adalah hard gate.
+2. **JSON Schema** (`schemas/kinds/*.schema.json`) — kontrak untuk SEMUA kind
+   (App, Module, Form, Workflow, Table, …) yang belum di-deep-validate loader.
+   Menangkap sintaks usang seperti `expose: all` atau Workflow dengan
+   `states`/`transitions`.
+
+Catatan: lapis schema lebih ketat dari engine untuk konstruk shorthand yang
+belum bisa diekspresikan generator schema — mis. `guard: "..."` (string) vs
+`guard: { expression: ... }`, atau `render: drawer` vs `render: { mode: drawer }`
+(`GuardDecl`/`FormRenderDecl` punya `UnmarshalYAML` scalar+map, schema cuma
+mengekspresikan bentuk objek). Gunakan bentuk objek untuk lolos schema.
+
+Exit code 1 jika ada manifest gagal di salah satu lapis.
+
+Roadmap (todo 3.1.1): honesty scan untuk script Starlark — undeclared usage →
+error, declared-but-unused → warning, `ctx.environment` branching → warning.
 
 `forma validate` **tidak pernah memberi grant** — ia cuma verifikator kejujuran otomatis atas deklarasi `required_permission`/`uses` setiap action terhadap kode sungguhan, bukan sumber kebenaran permission itu sendiri. Model permission lengkap (kelima jenis impl, kenapa grant tidak pernah diturunkan dari pemakaian): [`docs/spec/backend/01-core-basic.md`](../spec/backend/01-core-basic.md) §5. Aturan environment binding pada business logic (kenapa `ctx.environment` hanya untuk logging, bukan percabangan bisnis): [`docs/spec/backend/02-core-extended.md`](../spec/backend/02-core-extended.md) §8. Dijalankan tiap PR sebagai gate CI.
 
@@ -415,12 +445,13 @@ muncul kalau operator mengaktifkan level `debug`, yang off secara default di
 |---|---|---|
 | `apply` | ⚠️ Sebagian | Subcommand nyata di `cmd/forma`, tapi pipeline register→deploy putus di sisi server — lihat [`docs/runtimes/01-forma-ctl.md`](../runtimes/01-forma-ctl.md) §7 |
 | `apply --watch` | ✅ | `fsnotify`, debounce 500ms |
-| `validate`, `new`, `dev`, `generate`, `migrate` | ⏳ | Belum dikerjakan |
+| `validate` | ✅ Sebagian | Engine loader + JSON Schema per kind; honesty scan Starlark masih roadmap (§2) |
+| `new`, `dev`, `generate`, `migrate` | ⏳ | Belum dikerjakan |
 | Semua verb lain (§2–§12) | ❌ Belum ada logic | Dikenali dispatcher, tapi cuma print "not implemented yet" — lihat `cmd/forma/main.go` |
 
 ### 13.1 Urutan Pembangunan yang Disarankan
 
-1. **`forma validate`** berikutnya — nilainya tinggi (CI gate) dan tidak butuh pipeline deploy penuh untuk berfungsi, cukup manifest loader + honesty scanner (`internal/manifest`, `internal/permission` sudah ada). Ganti `case "validate":` di dispatcher dengan implementasi nyata.
+1. **`forma validate`** — ✅ sudah jalan (engine loader + JSON Schema per kind) di `cmd/forma/validate.go`; masih ada sisa: honesty scan Starlark, `--fix`.
 2. **`forma new <kind>`** — scaffold sederhana, tidak bergantung komponen lain, cepat memberi nilai ke DX.
 3. **`forma dev`** — baru bermakna penuh setelah gap pipeline di [`docs/runtimes/01-forma-ctl.md`](../runtimes/01-forma-ctl.md) §7 (register→deployment) diperbaiki, karena `forma dev` mengandalkan hot-reload lewat jalur yang sama.
 4. **`forma generate`** — bergantung stabilitas skema `pkg/spec` (sudah cukup stabil untuk kind `Document`), realistis dikerjakan setelah `validate`.

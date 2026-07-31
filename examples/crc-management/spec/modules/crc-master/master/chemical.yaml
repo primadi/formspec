@@ -1,0 +1,23 @@
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: chemical
+  module: crc-master
+  description: "Bahan kimia yang digunakan dalam proses inspeksi — nama, serial number, MSDS"
+spec:
+  version: v1
+  characteristic: master
+  fields:
+    - name: chemical_name
+      type: string
+      required: true
+    - name: serial_number
+      type: string
+    - name: msds_number
+      type: string
+      description: "Material Safety Data Sheet number"
+    - name: description
+      type: text
+    - name: is_active
+      type: boolean
+      default: true

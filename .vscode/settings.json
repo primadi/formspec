@@ -15,5 +15,6 @@
       "verticals/**/spec/**/*.yaml",
       "verticals/**/spec/**/*.yml"
     ]
-  }
+  },
+  "python-envs.defaultEnvManager": "ms-python.python:system"
 }

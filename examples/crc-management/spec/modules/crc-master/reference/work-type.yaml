@@ -1,0 +1,24 @@
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: work-type
+  module: crc-master
+  description: "Jenis pekerjaan inspeksi: Disassemble, Cleaning, Inspection, Assemble, Testing, Installation, General, DCI"
+spec:
+  version: v1
+  characteristic: reference
+  fields:
+    - name: code
+      type: string
+      required: true
+    - name: name
+      type: string
+      required: true
+    - name: sequence_order
+      type: integer
+      description: "Urutan tampilan work type dalam dropdown"
+    - name: description
+      type: text
+    - name: is_active
+      type: boolean
+      default: true

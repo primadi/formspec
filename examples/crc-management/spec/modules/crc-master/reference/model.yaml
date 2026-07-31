@@ -1,0 +1,27 @@
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: model
+  module: crc-master
+  description: "Model unit / equipment — SN Prefix, Model Number, Part Number reference"
+spec:
+  version: v1
+  characteristic: reference
+  fields:
+    - name: sn_prefix
+      type: string
+      required: true
+      description: "Serial Number Prefix"
+    - name: model_number
+      type: string
+      required: true
+    - name: part_number
+      type: string
+    - name: component_type
+      type: relation
+      relation: { type: belongs_to, resource: crc-master.component-type }
+    - name: description
+      type: text
+    - name: is_active
+      type: boolean
+      default: true

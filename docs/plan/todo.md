@@ -1,7 +1,7 @@
 # Master Plan: Forma Implementation
 
 **Last Updated**: 2026-07-31  
-**Status**: ✅ Fase 0 complete · ✅ Fase 1 (1.1–1.5) · ✅ Fase 2.1 · ✅ Fase 2.2 · ✅ Fase 5 (5.1–5.4) · ✅ Spec hot-reload · ✅ Fase 11 (review schema↔docs) · ✅ Audit spec↔schema + tambah TODO item  
+**Status**: ✅ Fase 0 complete · ✅ Fase 1 (1.1–1.5) · ✅ Fase 2.1 · ✅ Fase 2.2 · ✅ Fase 5 (5.1–5.4) · ✅ Spec hot-reload · ✅ Fase 11 (review schema↔docs) · ✅ Audit spec↔schema + tambah TODO item · ✅ `forma validate` (3.1.1, engine+schema)  
 
 > `⬜` not started · `✅` complete · `⏸️` deferred  
 
@@ -163,9 +163,11 @@ layout contoh `examples/Clinic-UI-Showcase/spec/` (entity-centric + `spec/` cont
 **Priority**: per `docs/cli-tools/02-forma-cli.md` §13.1.
 
 ### 3.1 High-priority (no backend dependency)
-- [ ] 3.1.1 `forma validate -f <path>` — dry-run validation + honesty scan (Starlark: undeclared usage → error, declared-but-unused → warning, `ctx.environment` branching → warning). CI gate.  
+- [x] 3.1.1 `forma validate --spec <path>` — dry-run validation dua lapis: engine loader (`internal/manifest`; parse + Entity deep-validation) + JSON Schema per kind (`schemas/kinds/*` via `santhosh-tekuri/jsonschema`, lihat `cmd/forma/validate.go`). Exit 1 bila ada gagal. 2026-07-31. Catatan: lapis schema lebih ketat dari engine untuk shorthand `guard`/`render` (Go `UnmarshalYAML` scalar+map tak bisa diekspresikan generator schema) — gunakan bentuk objek. Sisa: honesty scan Starlark → 3.1.1a.
+- [ ] 3.1.1a `forma validate` honesty scan Starlark (undeclared usage → error, declared-but-unused → warning, `ctx.environment` branching → warning) + flag `--fix`. ⏸️ Ditunda dari 3.1.1 karena butuh `internal/starlark` analyzer penuh.  
 - [ ] 3.1.2 `forma check [--fix] -f <path>` — cross-file analysis: unresolved varnames (error), FormaExpr ref to nonexistent field (error), undeclared cross-module access (error), unused cross-module declarations (warning). `--fix`: auto-add `depends_on`/`uses`, auto-remove unused.  
 - [ ] 3.1.3 `forma new <kind>` — scaffold: `new app <name>`, `new entity <name>`, `new module <name>`. Generate boilerplate YAML + directory.  
+- [x] 3.1.4 `forma init` bundel JSON Schema (`schemas/` dari `//go:embed`) + tulis `.vscode/settings.json` (`yaml.schemas` → `schemas/forma.schema.json` untuk `spec/**/*.yaml|yml`), agar YAML editor punya autocomplete/validasi langsung setelah scaffold — lihat `docs/plan/init-schema-scaffold.md`
 
 ### 3.2 `forma dev` — verify against spec
 - [x] 3.2.1 Verify 12 flags work: `--spec`, `--dsn`, `--addr`, `--listen` (none/local_http/unix_socket), `--app-endpoint` (none/local_http/unix_socket), `--runtime` (auto-detect + explicit override), `--dev`, `--dev-ui` (implies `--dev`+`--force`), `--force`, `--web-dir`, `--state-dir`, `--workspace-id`  
