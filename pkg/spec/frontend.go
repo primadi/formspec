@@ -4,9 +4,15 @@ import "gopkg.in/yaml.v3"
 
 // ─── Frontend Kinds (Frontend Spec §2–§13) ───
 
+// IsPublic returns the effective public flag — nil or true means the view
+// has a route (derived Page wrapper); explicit false means embed-only.
+func IsPublic(p *bool) bool { return p == nil || *p }
+
 // PageSpec defines a routed screen composing blocks (Frontend §3).
 // `blocks` and `tabs` are mutually exclusive.
 type PageSpec struct {
+	// @schema {description: "If true (default), a route is generated for this page. Set false to restrict to embedding only."}
+	Public      *bool       `yaml:"public,omitempty" json:"public,omitempty"`
 	Route       string      `yaml:"route" json:"route"`
 	Title       string      `yaml:"title" json:"title"`
 	Icon        string      `yaml:"icon,omitempty" json:"icon,omitempty"`
@@ -54,11 +60,13 @@ type BlockRef struct {
 
 // FormSpec defines an input/edit layout (Frontend §4).
 type FormSpec struct {
-	Entity   string         `yaml:"entity" json:"entity"`
-	Mode     string         `yaml:"mode,omitempty" json:"mode,omitempty"` // create | edit | view
-	Sections []FormSection  `yaml:"sections" json:"sections"`
-	Actions  []FormAction   `yaml:"actions,omitempty" json:"actions,omitempty"`
-	Submit   *FormSubmit    `yaml:"submit,omitempty" json:"submit,omitempty"`
+	// @schema {description: "If true (default), a route /module/form/<name> is auto-generated. Set false for embed-only forms."}
+	Public   *bool           `yaml:"public,omitempty" json:"public,omitempty"`
+	Entity   string          `yaml:"entity" json:"entity"`
+	Mode     string          `yaml:"mode,omitempty" json:"mode,omitempty"` // create | edit | view
+	Sections []FormSection   `yaml:"sections" json:"sections"`
+	Actions  []FormAction    `yaml:"actions,omitempty" json:"actions,omitempty"`
+	Submit   *FormSubmit     `yaml:"submit,omitempty" json:"submit,omitempty"`
 	Render   *FormRenderDecl `yaml:"render,omitempty" json:"render,omitempty"`
 }
 
@@ -129,6 +137,8 @@ func (d *FormRenderDecl) UnmarshalYAML(value *yaml.Node) error {
 
 // TableSpec defines a list/browse view (Frontend §5).
 type TableSpec struct {
+	// @schema {description: "If true (default), a route /module/table/<name> is auto-generated. Set false for embed-only tables."}
+	Public      *bool         `yaml:"public,omitempty" json:"public,omitempty"`
 	Entity      string        `yaml:"entity" json:"entity"`
 	Columns     []TableColumn `yaml:"columns" json:"columns"`
 	DefaultSort string        `yaml:"default_sort,omitempty" json:"default_sort,omitempty"`
@@ -170,6 +180,8 @@ type TableFilter struct {
 
 // DashboardSpec defines a widget canvas (Frontend §5).
 type DashboardSpec struct {
+	// @schema {description: "If true (default), a route /module/dashboard/<name> is auto-generated."}
+	Public       *bool             `yaml:"public,omitempty" json:"public,omitempty"`
 	Title        string            `yaml:"title" json:"title"`
 	Description  string            `yaml:"description,omitempty" json:"description,omitempty"`
 	Customizable bool              `yaml:"customizable,omitempty" json:"customizable,omitempty"`
@@ -196,6 +208,8 @@ type WidgetLayout struct {
 
 // WidgetSpec defines a reusable dashboard widget (Frontend §5).
 type WidgetSpec struct {
+	// @schema {description: "If true (default), a route /module/widget/<name> is auto-generated."}
+	Public      *bool          `yaml:"public,omitempty" json:"public,omitempty"`
 	Title       string         `yaml:"title" json:"title"`
 	Type        string         `yaml:"type" json:"type"` // metric | chart | table | list
 	Entity      string         `yaml:"entity,omitempty" json:"entity,omitempty"`
@@ -207,6 +221,8 @@ type WidgetSpec struct {
 
 // ReportSpec defines a parameterized tabular report (Frontend §5).
 type ReportSpec struct {
+	// @schema {description: "If true (default), a route /module/report/<name> is auto-generated."}
+	Public             *bool          `yaml:"public,omitempty" json:"public,omitempty"`
 	Title              string         `yaml:"title" json:"title"`
 	Entity             string         `yaml:"entity" json:"entity"`
 	RequiredPermission string         `yaml:"required_permission,omitempty" json:"required_permission,omitempty"`
@@ -249,6 +265,8 @@ type ReportTotal struct {
 
 // WizardSpec defines a multi-step business process (Frontend §11).
 type WizardSpec struct {
+	// @schema {description: "If true (default), a route /module/wizard/<name> is auto-generated."}
+	Public     *bool             `yaml:"public,omitempty" json:"public,omitempty"`
 	Title      string            `yaml:"title" json:"title"`
 	Entity     string            `yaml:"entity,omitempty" json:"entity,omitempty"`
 	Action     string            `yaml:"action,omitempty" json:"action,omitempty"` // server action that commits all steps; if empty, final step plain-creates Entity
@@ -290,6 +308,8 @@ type WizardSummaryItem struct {
 
 // KanbanSpec defines a drag-and-drop status board (Frontend §12).
 type KanbanSpec struct {
+	// @schema {description: "If true (default), a route /module/kanban/<name> is auto-generated."}
+	Public            *bool          `yaml:"public,omitempty" json:"public,omitempty"`
 	Entity            string         `yaml:"entity" json:"entity"`
 	StatusField       string         `yaml:"status_field" json:"status_field"`
 	Columns           []KanbanColumn `yaml:"columns" json:"columns"`
@@ -323,6 +343,8 @@ type KanbanCard struct {
 // PrintSpec defines a printable document template (Frontend §9).
 // One format per manifest — declared via `output.format` (Frontend §9).
 type PrintSpec struct {
+	// @schema {description: "If true (default), a route /module/print/<name> is auto-generated."}
+	Public   *bool           `yaml:"public,omitempty" json:"public,omitempty"`
 	Entity   string          `yaml:"entity" json:"entity"`
 	Template string          `yaml:"template,omitempty" json:"template,omitempty"`
 	Output   *PrintOutput    `yaml:"output,omitempty" json:"output,omitempty"`
@@ -385,6 +407,8 @@ type PrintFooter struct {
 
 // TimelineSpec defines a chronological event journal (Frontend §13).
 type TimelineSpec struct {
+	// @schema {description: "If true (default), a route /module/timeline/<name> is auto-generated."}
+	Public     *bool            `yaml:"public,omitempty" json:"public,omitempty"`
 	Entity     string           `yaml:"entity" json:"entity"`
 	EventField string           `yaml:"event_field,omitempty" json:"event_field,omitempty"`
 	DateField  string           `yaml:"date_field,omitempty" json:"date_field,omitempty"`
@@ -408,6 +432,8 @@ type TimelineDisplay struct {
 
 // ThemeSpec defines look & feel as a distributable artifact (Frontend §10).
 type ThemeSpec struct {
+	// @schema {description: "If true (default), the theme is active and published in the bundle."}
+	Public     *bool             `yaml:"public,omitempty" json:"public,omitempty"`
 	Tokens     map[string]string `yaml:"tokens,omitempty" json:"tokens,omitempty"`
 	Stylesheet string            `yaml:"stylesheet,omitempty" json:"stylesheet,omitempty"`
 	Widgets    map[string]string `yaml:"widgets,omitempty" json:"widgets,omitempty"` // base widget → asset skin
@@ -418,6 +444,8 @@ type ThemeSpec struct {
 // CalendarSpec defines a calendar view for date/datetime entity data
 // (06-page-kinds.md §5). Instance of VisualSpecKind tier: page.
 type CalendarSpec struct {
+	// @schema {description: "If true (default), a route /module/calendar/<name> is auto-generated."}
+	Public        *bool    `yaml:"public,omitempty" json:"public,omitempty"`
 	Entity        string   `yaml:"entity" json:"entity"`
 	DateField     string   `yaml:"date_field" json:"date_field"`
 	EndField      string   `yaml:"end_field,omitempty" json:"end_field,omitempty"`

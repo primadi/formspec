@@ -1,0 +1,10 @@
+apiVersion: forma.dev/v1alpha1
+kind: Page
+metadata:
+  name: customer-portal
+  module: crc-report
+  description: "Landing page kustomer — Approve/Revise via URL/QR tanpa login kompleks"
+spec:
+  route: /customer-portal/:id
+  title: "Customer Approval"
+  description: "Persetujuan dokumen checklist oleh kustomer (Approve / Revise)"

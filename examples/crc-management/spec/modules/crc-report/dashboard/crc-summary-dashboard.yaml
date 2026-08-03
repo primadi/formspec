@@ -1,0 +1,15 @@
+apiVersion: forma.dev/v1alpha1
+kind: Dashboard
+metadata:
+  name: crc-summary-dashboard
+  module: crc-report
+  description: "Summary Report — melacak status seluruh dokumen checklist"
+spec:
+  title: "CRC Summary Report"
+  realtime: true
+  refresh: 60
+  widgets:
+    - { ref: crc-report.doc-in-progress, layout: { x: 0, y: 0, w: 3, h: 1 } }
+    - { ref: crc-report.doc-waiting-review, layout: { x: 3, y: 0, w: 3, h: 1 } }
+    - { ref: crc-report.doc-waiting-approval, layout: { x: 6, y: 0, w: 3, h: 1 } }
+    - { ref: crc-report.doc-completed, layout: { x: 9, y: 0, w: 3, h: 1 } }

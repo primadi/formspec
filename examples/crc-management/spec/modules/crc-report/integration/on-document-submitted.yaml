@@ -1,0 +1,12 @@
+apiVersion: forma.dev/v1alpha1
+kind: Subscription
+metadata:
+  name: on-document-submitted
+  module: crc-report
+  description: "Notifikasi ke Foreman saat dokumen masuk tahap Stop & Go (Waiting Foreman Review)"
+spec:
+  events:
+    - crc-field.checklist-document.submitted_for_review
+  handler:
+    type: native
+    ref: "CrcReport.OnDocumentSubmittedForReview"

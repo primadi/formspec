@@ -134,6 +134,9 @@ func resolveMenuList(items []spec.MenuItem, moduleSet map[string]bool, modules m
 		}
 		out = append(out, resolved...)
 	}
+	if out == nil {
+		out = []spec.MenuItem{}
+	}
 	return out, nil
 }
 

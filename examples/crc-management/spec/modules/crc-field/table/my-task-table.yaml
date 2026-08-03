@@ -1,0 +1,28 @@
+apiVersion: forma.dev/v1alpha1
+kind: Table
+metadata:
+  name: my-task-table
+  module: crc-field
+  description: "Dashboard My Task — daftar tugas checklist dengan filter berjenjang"
+spec:
+  entity: crc-field.checklist-document
+  search: true
+  realtime: true
+  page_size: 25
+  default_sort: "-transaction_date"
+  columns:
+    - { field: doc_number, label: "Doc Number", sortable: true }
+    - { field: work_type, label: "Work Type" }
+    - { field: component_type, label: "Component Type" }
+    - { field: model, label: "Model" }
+    - { field: prefix, label: "Prefix" }
+    - { field: part_number, label: "Part Number" }
+    - { field: status, label: "Status", widget: "badge" }
+    - { field: current_step, label: "Step (Stop & Go)" }
+  filters:
+    - { field: work_type, label: "Work Type", type: "select" }
+    - { field: component_type, label: "Component Type", type: "select" }
+    - { field: prefix, label: "Prefix", type: "text" }
+    - { field: model, label: "Model", type: "text" }
+    - { field: part_number, label: "Part Number", type: "text" }
+    - { field: status, label: "Status", type: "select" }

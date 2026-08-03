@@ -216,7 +216,8 @@ function SurfaceShell({ surface }: { surface: "admin" | "app" }) {
 
 // Depth-first search for the first navigable leaf in a resolved menu tree
 // (bundle.menu — Core §4.4, routes already resolved server-side).
-function firstMenuRoute(items: import("@/types/manifest").MenuItem[]): string | undefined {
+function firstMenuRoute(items: import("@/types/manifest").MenuItem[] | null | undefined): string | undefined {
+  if (!items?.length) return undefined
   for (const item of items) {
     if (item.route) return item.route
     if (item.children?.length) {

@@ -1,0 +1,18 @@
+apiVersion: forma.dev/v1alpha1
+kind: Workflow
+metadata:
+  name: customer-approval
+  module: crc-field
+  description: "Approval kustomer eksternal via link URL/QR (opsional)"
+spec:
+  entity: crc-field.checklist-document
+  on:
+    transition: { from: waiting_customer_approval, to: in_progress }
+  steps:
+    - roles: [crc.customer]
+      approvers: 1
+      mode: any
+  on_reject: { to: revise }
+  escalation:
+    after: 72h
+    notify_roles: [crc.foreman]

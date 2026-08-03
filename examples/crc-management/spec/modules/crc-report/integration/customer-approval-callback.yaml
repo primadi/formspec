@@ -1,0 +1,12 @@
+apiVersion: forma.dev/v1alpha1
+kind: Webhook
+metadata:
+  name: customer-approval-callback
+  module: crc-report
+  description: "Callback dari portal kustomer (Approve/Revise via URL/QR)"
+spec:
+  for: crc-field.checklist-document
+  method: POST
+  path: /webhooks/customer-approval
+  auth:
+    strategy: token

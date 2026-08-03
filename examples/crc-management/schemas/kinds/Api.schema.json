@@ -1,0 +1,16 @@
+{
+  "title": "Api Spec",
+  "description": "ApiSpec overrides the external API surface (/api/v1/) for a module's entities\n(02-core-extended.md §12). It does not affect the UI surface (/_ui/entity/).\n",
+  "type": "object",
+  "properties": {
+    "grpc": {
+      "$ref": "#/$defs/ApiGRPCConfig",
+      "nullable": true
+    },
+    "rest": {
+      "$ref": "#/$defs/ApiRESTConfig",
+      "nullable": true
+    }
+  },
+  "additionalProperties": false
+}

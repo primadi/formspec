@@ -1,0 +1,8 @@
+apiVersion: forma.dev/v1alpha1
+kind: Mockup
+metadata:
+  name: sap-edw-mock
+  module: crc-report
+  description: "Simulasi sinkronisasi master data dari SAP via EDW (Customer, Part, dsb.)"
+spec:
+  for: crc-master.customer

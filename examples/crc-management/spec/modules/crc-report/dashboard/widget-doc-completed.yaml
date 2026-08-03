@@ -1,0 +1,12 @@
+apiVersion: forma.dev/v1alpha1
+kind: Widget
+metadata:
+  name: doc-completed
+  module: crc-report
+  description: "Jumlah dokumen berstatus Completed"
+spec:
+  title: "Completed"
+  type: metric
+  entity: crc-field.checklist-document
+  query: "status == 'completed'"
+  refresh_secs: 60

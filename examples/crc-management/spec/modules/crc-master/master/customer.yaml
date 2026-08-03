@@ -1,0 +1,35 @@
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: customer
+  module: crc-master
+  description: "Data pelanggan / customer eksternal"
+spec:
+  version: v1
+  characteristic: master
+  display_field: name
+  fields:
+    - name: code
+      type: string
+      required: true
+      unique: true
+      title: "Kode Customer"
+    - name: name
+      type: string
+      required: true
+      title: "Nama Customer"
+    - name: contact_email
+      type: string
+      title: "Email Kontak"
+    - name: contact_phone
+      type: string
+      title: "Telepon Kontak"
+    - name: is_external
+      type: boolean
+      default: false
+      title: "Customer Eksternal"
+  soft_deactivate:
+    enabled: true
+  expose:
+    - type: rest
+      actions: [list, find, create, update]

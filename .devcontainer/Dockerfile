@@ -17,15 +17,13 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
 #   - Installed as the `vscode` user so the binary lands in ~/.local/bin,
 #     which is auto-added to PATH by ~/.profile in the base image.
 #   - Without RTK_VERSION the installer fetches the latest release (see rtk-ai/rtk releases).
-#   - `rtk init -g` registers the global Claude Code hook + RTK.md. That state
-#     lives under $HOME, so it must be baked here to survive a container rebuild.
-#     RTK_TELEMETRY_DISABLED=1 keeps the step non-interactive.
+#   - rtk init -g (global hook) is NOT run here because /home/vscode state is
+#     ephemeral across container rebuilds. It runs via postCreateCommand instead
+#     so it re-initializes every time the container starts.
 USER vscode
 RUN curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh -o /tmp/rtk-install.sh \
     && sh /tmp/rtk-install.sh \
-    && rm -f /tmp/rtk-install.sh \
-    && mkdir -p /home/vscode/.claude \
-    && RTK_TELEMETRY_DISABLED=1 /home/vscode/.local/bin/rtk init -g
+    && rm -f /tmp/rtk-install.sh
 USER root
 
 # [Optional] Uncomment the next lines to use go get to install anything else you need

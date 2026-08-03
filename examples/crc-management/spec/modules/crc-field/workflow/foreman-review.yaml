@@ -1,0 +1,18 @@
+apiVersion: forma.dev/v1alpha1
+kind: Workflow
+metadata:
+  name: foreman-review
+  module: crc-field
+  description: "Review Foreman (Stop & Go) — menerima tugas review, memberi performance score, approve/reject tahapan"
+spec:
+  entity: crc-field.checklist-document
+  on:
+    transition: { from: waiting_foreman_review, to: in_progress }
+  steps:
+    - roles: [crc.foreman]
+      approvers: 1
+      mode: any
+  on_reject: { to: revise }
+  escalation:
+    after: 48h
+    notify_roles: [crc.foreman-supervisor]

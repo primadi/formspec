@@ -65,7 +65,9 @@
 	"forwardPorts": [18080, 19000, 19001, 16379, 11025, 18025],
 
 	// Use 'postCreateCommand' to run commands after the container is created.
-	"postCreateCommand": "mkdir -p web && cd web && [ -f package.json ] && npm install || true"
+	// RTK global hooks must re-run here because /home/vscode state is ephemeral
+	// across container rebuilds. --auto-patch skips the settings.json prompt.
+	"postCreateCommand": "mkdir -p web && cd web && [ -f package.json ] && npm install || true; su vscode -c 'RTK_TELEMETRY_DISABLED=1 /home/vscode/.local/bin/rtk init -g --auto-patch && RTK_TELEMETRY_DISABLED=1 /home/vscode/.local/bin/rtk init -g --opencode'"
 
 	// Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
 	// "remoteUser": "root"

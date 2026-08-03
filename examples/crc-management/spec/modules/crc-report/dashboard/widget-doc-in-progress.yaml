@@ -1,0 +1,12 @@
+apiVersion: forma.dev/v1alpha1
+kind: Widget
+metadata:
+  name: doc-in-progress
+  module: crc-report
+  description: "Jumlah dokumen berstatus In Progress"
+spec:
+  title: "In Progress"
+  type: metric
+  entity: crc-field.checklist-document
+  query: "status == 'in_progress'"
+  refresh_secs: 60

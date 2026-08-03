@@ -1,0 +1,23 @@
+apiVersion: forma.dev/v1alpha1
+kind: Print
+metadata:
+  name: checklist-print
+  module: crc-report
+  description: "PDF checklist final — Document Header, General, Specific, Approval List"
+spec:
+  entity: crc-field.checklist-document
+  output:
+    format: pdf
+    paper: { size: A4, margin: "15mm" }
+  header:
+    title: "HLSD CRC Checklist"
+    subtitle: "PT Trakindo Utama — Service Engineering"
+    logo: true
+  body:
+    - { fields: [doc_number, template, work_type, component_type, model, prefix, part_number, wo_number, customer, overall_judgement] }
+    - { separator: "── Hasil Inspeksi ──" }
+    - { child_table: { field: answers, columns: [section, field_label, value] } }
+    - { separator: "── Abnormal Part List ──" }
+    - { child_table: { field: abnormal_parts, columns: [part_name, condition, reason] } }
+  footer:
+    text: "Dokumen ini digenerate otomatis oleh CRC Checklist Management System"

@@ -1,0 +1,18 @@
+apiVersion: forma.dev/v1alpha1
+kind: Workflow
+metadata:
+  name: cap-approval
+  module: crc-field
+  description: "Persetujuan akhir dari Centralized Approval Platform (CAP) internal"
+spec:
+  entity: crc-field.checklist-document
+  on:
+    transition: { from: waiting_cap_approval, to: completed }
+  steps:
+    - roles: [crc.cap-approver]
+      approvers: 1
+      mode: any
+  on_reject: { to: revise }
+  escalation:
+    after: 48h
+    notify_roles: [crc.cap-approver-supervisor]

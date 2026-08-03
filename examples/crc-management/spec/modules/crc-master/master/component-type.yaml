@@ -1,0 +1,35 @@
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: component-type
+  module: crc-master
+  description: "Komponen (Component Type) — Powertrain / Hydraulic"
+spec:
+  version: v1
+  characteristic: master
+  display_field: name
+  plural: component-types
+  fields:
+    - name: code
+      type: string
+      required: true
+      unique: true
+      title: "Kode Komponen"
+    - name: name
+      type: string
+      required: true
+      title: "Nama Komponen"
+    - name: category
+      type: enum
+      enum_values: [powertrain, hydraulic]
+      required: true
+      index: true
+      title: "Kategori"
+    - name: description
+      type: text
+      title: "Deskripsi"
+  soft_deactivate:
+    enabled: true
+  expose:
+    - type: rest
+      actions: [list, find, create, update]

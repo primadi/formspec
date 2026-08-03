@@ -1,0 +1,22 @@
+apiVersion: forma.dev/v1alpha1
+kind: Table
+metadata:
+  name: checklist-template-table
+  module: crc-master
+  description: "Daftar template checklist untuk admin (dengan filter)"
+spec:
+  entity: crc-master.checklist-template
+  search: true
+  page_size: 25
+  default_sort: "-modified"
+  columns:
+    - { field: template_name, label: "Nama Template", sortable: true }
+    - { field: work_type, label: "Work Type" }
+    - { field: component_type, label: "Component Type" }
+    - { field: model, label: "Model" }
+    - { field: revision, label: "Revision" }
+    - { field: status, label: "Status", widget: "badge" }
+  filters:
+    - { field: work_type, label: "Work Type", type: "select" }
+    - { field: component_type, label: "Component Type", type: "select" }
+    - { field: status, label: "Status", type: "select" }

@@ -3,21 +3,24 @@ kind: Entity
 metadata:
   name: chemical
   module: crc-master
-  description: "Bahan kimia yang digunakan dalam proses inspeksi — nama, serial number, MSDS"
+  description: "Master bahan kimia (Chemical)"
 spec:
   version: v1
   characteristic: master
+  display_field: chemical_name
   fields:
     - name: chemical_name
       type: string
       required: true
-    - name: serial_number
+      title: "Nama Kimia"
+    - name: chemical_serial_no
       type: string
-    - name: msds_number
+      title: "Chemical Serial No"
+    - name: msds_no
       type: string
-      description: "Material Safety Data Sheet number"
-    - name: description
-      type: text
-    - name: is_active
-      type: boolean
-      default: true
+      title: "MSDS No"
+  soft_deactivate:
+    enabled: true
+  expose:
+    - type: rest
+      actions: [list, find, create, update]

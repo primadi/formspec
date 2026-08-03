@@ -1,0 +1,13 @@
+apiVersion: forma.dev/v1alpha1
+kind: Service
+metadata:
+  name: sharepoint-upload
+  module: crc-report
+  description: "Unggah PDF final ke SharePoint Service Engineering — auto-folder WorkType/DocType/Year"
+spec:
+  version: v1
+  actions:
+    - name: upload
+      description: "Upload PDF ke folder SharePoint (Level1 WorkType / Level2 DocType / Level3 Year)"
+      required_permission: crc-report.sharepoint-upload.upload
+      audit: true

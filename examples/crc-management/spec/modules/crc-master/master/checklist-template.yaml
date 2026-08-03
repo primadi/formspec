@@ -1,0 +1,117 @@
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: checklist-template
+  module: crc-master
+  description: "Template checklist dinamis (builder) — 4 section: Document Header, General, Specific, Approval List"
+spec:
+  version: v1
+  characteristic: master
+  display_field: template_name
+  plural: checklist-templates
+  fields:
+    - name: template_name
+      type: string
+      required: true
+      title: "Nama Template"
+    # ── Document Header ──
+    - name: doc_number
+      type: string
+      title: "Doc Number"
+    - name: revision
+      type: string
+      title: "Revision"
+    - name: revision_date
+      type: date
+      title: "Revision Date"
+    - name: responsible_by
+      type: string
+      title: "Responsible By"
+    - name: process
+      type: string
+      title: "Process"
+    - name: model
+      type: string
+      title: "Model"
+    - name: prefix
+      type: string
+      title: "Prefix"
+    - name: part_number
+      type: string
+      title: "Part Number"
+    # ── Relasi master ──
+    - name: work_type
+      type: relation
+      relation: { type: belongs_to, resource: crc-master.work-type }
+      required: true
+      title: "Work Type"
+    - name: component_type
+      type: relation
+      relation: { type: belongs_to, resource: crc-master.component-type }
+      required: true
+      title: "Component Type"
+    # ── Lifecycle template ──
+    - name: status
+      type: enum
+      enum_values: [draft, active, inactive]
+      default: draft
+      index: true
+      title: "Status"
+    # ── Builder: daftar field form dinamis ──
+    - name: fields
+      type: child
+      child:
+        storage: jsonb
+        sequence_field: sequence
+        fields:
+          - { name: sequence, type: integer, title: "Urutan" }
+          - { name: section, type: enum, enum_values: [document_header, general, specific, approval_list], required: true, title: "Section" }
+          - { name: group, type: string, title: "Grup (Job Identity / Special Tools / Chemical)" }
+          - { name: label, type: string, required: true, title: "Label" }
+          - { name: field_type, type: enum, enum_values: [text, textarea, number, date, checkbox, multiple_checklist, file, picture, table, signature], required: true, title: "Tipe Input" }
+          - { name: mandatory, type: boolean, default: false, title: "Wajib Isi" }
+          - { name: options, type: text, title: "Opsi (untuk checkbox / multiple / table)" }
+    # ── Builder: alur persetujuan (workflow config) ──
+    - name: approval_steps
+      type: child
+      child:
+        storage: jsonb
+        sequence_field: sequence
+        fields:
+          - { name: sequence, type: integer, title: "Urutan" }
+          - { name: step_name, type: string, required: true, title: "Nama Tahap" }
+          - { name: step_type, type: enum, enum_values: [foreman, customer, cap], required: true, title: "Jenis Tahap" }
+          - { name: approver_role, type: string, title: "Role Approver (permission)" }
+          - { name: mandatory, type: boolean, default: false, title: "Wajib" }
+  state_machine:
+    field: status
+    initial: draft
+    states:
+      - { name: draft, label: "Draft" }
+      - { name: active, label: "Active" }
+      - { name: inactive, label: "Inactive" }
+    transitions:
+      - { from: draft, to: active, via: publish }
+      - { from: active, to: inactive, via: deactivate }
+      - { from: inactive, to: active, via: reactivate }
+      - { from: active, to: draft, via: unpublish }
+  actions:
+    - name: publish
+      description: "Terbitkan template"
+      required_permission: crc-master.checklist-template.publish
+      audit: true
+    - name: unpublish
+      description: "Kembalikan ke draft"
+      required_permission: crc-master.checklist-template.publish
+      audit: true
+    - name: deactivate
+      description: "Nonaktifkan template"
+      required_permission: crc-master.checklist-template.deactivate
+      audit: true
+    - name: reactivate
+      description: "Aktifkan kembali template"
+      required_permission: crc-master.checklist-template.reactivate
+      audit: true
+  expose:
+    - type: rest
+      actions: [list, find, create, update, delete]

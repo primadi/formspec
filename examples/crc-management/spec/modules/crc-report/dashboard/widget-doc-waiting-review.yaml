@@ -1,0 +1,12 @@
+apiVersion: forma.dev/v1alpha1
+kind: Widget
+metadata:
+  name: doc-waiting-review
+  module: crc-report
+  description: "Jumlah dokumen menunggu review Foreman"
+spec:
+  title: "Waiting Foreman Review"
+  type: metric
+  entity: crc-field.checklist-document
+  query: "status == 'waiting_foreman_review'"
+  refresh_secs: 60

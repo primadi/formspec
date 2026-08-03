@@ -1,0 +1,37 @@
+apiVersion: forma.dev/v1alpha1
+kind: Config
+metadata:
+  name: crc-integration-config
+  module: crc-report
+  description: "Konfigurasi integrasi eksternal (SharePoint, CAP, SSO O365) & portal kustomer"
+spec:
+  keys:
+    sharepoint_base_url:
+      type: string
+      default: "https://trakindo.sharepoint.com/sites/ServiceEngineering"
+    sharepoint_level1:
+      type: string
+      default: "WorkType"
+    sharepoint_level2:
+      type: string
+      default: "DocType"
+    sharepoint_level3:
+      type: string
+      default: "Year"
+    cap_api_url:
+      type: string
+      default: "https://cap.internal.trakindo.co.id/api"
+    cap_api_key:
+      type: string
+      secret: true
+    sso_o365_tenant:
+      type: string
+      default: "trakindo.onmicrosoft.com"
+    sso_o365_client_id:
+      type: string
+    sso_o365_client_secret:
+      type: string
+      secret: true
+    customer_portal_base_url:
+      type: string
+      default: "/app/crc/customer-portal"

@@ -3,24 +3,25 @@ kind: Entity
 metadata:
   name: special-tool
   module: crc-master
-  description: "Special tools yang digunakan dalam pekerjaan inspeksi — nama tool, part number, quantity"
+  description: "Master alat khusus (Special Tools)"
 spec:
   version: v1
   characteristic: master
+  display_field: tool_name
   fields:
     - name: tool_name
       type: string
       required: true
-    - name: part_number
+      title: "Nama Tool"
+    - name: part_no
       type: string
+      title: "Part No"
     - name: quantity
       type: integer
       default: 1
-    - name: unit
-      type: string
-      default: "pcs"
-    - name: description
-      type: text
-    - name: is_active
-      type: boolean
-      default: true
+      title: "Qty"
+  soft_deactivate:
+    enabled: true
+  expose:
+    - type: rest
+      actions: [list, find, create, update]

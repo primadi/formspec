@@ -1,0 +1,12 @@
+apiVersion: forma.dev/v1alpha1
+kind: Subscription
+metadata:
+  name: on-document-completed
+  module: crc-report
+  description: "Reaksi saat dokumen selesai — trigger arsip PDF & notifikasi"
+spec:
+  events:
+    - crc-field.checklist-document.completed
+  handler:
+    type: native
+    ref: "CrcReport.OnDocumentCompleted"

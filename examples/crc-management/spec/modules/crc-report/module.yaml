@@ -1,0 +1,15 @@
+apiVersion: forma.dev/v1alpha1
+kind: Module
+metadata:
+  name: crc-report
+  description: "CRC Report & Integrasi Eksternal (CAP, SharePoint, SAP/EDW)"
+spec:
+  version: 1.0.0
+  vendor: trakindo
+  depends:
+    - module: crc-field
+  menu:
+    - { label: "CRC Summary", icon: "layout-dashboard", view: crc-summary-dashboard }
+    - { label: "Laporan Ringkasan", icon: "bar-chart-3", view: checklist-summary-report }
+    - { label: "Cetak Checklist", icon: "printer", view: checklist-print }
+    - { label: "Portal Customer", icon: "globe", view: customer-portal }

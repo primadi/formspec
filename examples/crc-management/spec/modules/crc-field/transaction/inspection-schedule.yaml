@@ -1,0 +1,82 @@
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: inspection-schedule
+  module: crc-field
+  description: "Jadwal inspeksi untuk user (Serviceman / Warehouseman)"
+spec:
+  version: v1
+  characteristic: transaction
+  display_field: job_no
+  plural: inspection-schedules
+  fields:
+    - name: transaction_date
+      type: date
+      required: true
+      index: true
+      title: "Tanggal Jadwal"
+    - name: job_no
+      type: string
+      required: true
+      unique: true
+      title: "Job No"
+    - name: work_type
+      type: relation
+      relation: { type: belongs_to, resource: crc-master.work-type }
+      required: true
+      title: "Work Type"
+    - name: component_type
+      type: relation
+      relation: { type: belongs_to, resource: crc-master.component-type }
+      required: true
+      title: "Component Type"
+    - name: model
+      type: string
+      title: "Model"
+    - name: prefix
+      type: string
+      title: "Prefix"
+    - name: part_number
+      type: string
+      title: "Part Number"
+    - name: customer
+      type: relation
+      relation: { type: belongs_to, resource: crc-master.customer }
+      title: "Customer"
+    - name: assignee
+      type: string
+      title: "Assignee (username)"
+    - name: status
+      type: enum
+      enum_values: [scheduled, in_progress, completed, cancelled]
+      default: scheduled
+      index: true
+      title: "Status"
+  state_machine:
+    field: status
+    initial: scheduled
+    states:
+      - { name: scheduled, label: "Scheduled" }
+      - { name: in_progress, label: "In Progress" }
+      - { name: completed, label: "Completed" }
+      - { name: cancelled, label: "Cancelled" }
+    transitions:
+      - { from: scheduled, to: in_progress, via: start }
+      - { from: in_progress, to: completed, via: complete }
+      - { from: "*", to: cancelled, via: cancel }
+  actions:
+    - name: start
+      description: "Mulai jadwal"
+      required_permission: crc-field.inspection-schedule.start
+      audit: true
+    - name: complete
+      description: "Selesaikan jadwal"
+      required_permission: crc-field.inspection-schedule.complete
+      audit: true
+    - name: cancel
+      description: "Batalkan jadwal"
+      required_permission: crc-field.inspection-schedule.cancel
+      audit: true
+  expose:
+    - type: rest
+      actions: [list, find, create, update, delete]

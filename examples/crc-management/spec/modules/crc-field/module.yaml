@@ -1,0 +1,14 @@
+apiVersion: forma.dev/v1alpha1
+kind: Module
+metadata:
+  name: crc-field
+  description: "CRC Execution — Inspection Schedule & Checklist Document (Stop & Go)"
+spec:
+  version: 1.0.0
+  vendor: trakindo
+  depends:
+    - module: crc-master
+  menu:
+    - { label: "Dokumen Checklist", icon: "clipboard-check", route: /crc-field/checklist-documents }
+    - { label: "Jadwal Inspeksi", icon: "calendar-days", route: /crc-field/inspection-schedules }
+    - { label: "Isi Checklist", icon: "edit", view: checklist-fill-wizard }

@@ -212,25 +212,49 @@ An App does NOT own objects; Modules do. The same Module can be mounted by
 multiple Apps in the same workspace.
 
 `spec.version`, `spec.vendor`, and `spec.root_url` are **required**.
+`root_url` must start with `/app/` and be unique within the workspace.
+
+**Menu is owned by App** (§4 of the platform spec). Menu = "what can be
+reached via navigation" — it must be decided at the same level as
+view/action visibility (different Apps can expose different subsets of the
+same Module). Analogy: **Module = catalog, App.menu = shopping list from
+that catalog.**
+
+The menu is defined in `spec.menu` as a list of `MenuItem` nodes. Three
+node types (validated at load):
+
+| Node | `type` | level | Required | Forbidden |
+|------|--------|-------|----------|-----------|
+| **Adopt** | `module` | 1 only | `module` | `label`, `icon`, `view`, `route`, `children` |
+| **Group** | (empty) | 1–2 | `label`, `children` | `module`, `view`, `route` |
+| **Leaf** | (empty) | 2–3 | `label`, `module`, exactly one of `view`/`route` | `children` |
+
+- **Adopt node** splices the entire `Module.spec.menu` default suggestion at
+  this position. Module must be in `spec.modules`.
+- **Group node** creates a submenu. Children can come from different modules.
+- **Leaf node** links to a view or a raw route. `view` resolves a registered
+  manifest (Page, Dashboard, Widget, Report, Wizard, Kanban, Timeline, or
+  Print — NOT Form/Table). `route` is an escape hatch for derived entity-list
+  routes (`/<module>/<plural>`) or external URLs.
+- Nesting capped at **3 levels**. Order of items = display order.
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
 kind: App
-metadata:
-  name: klinik-internal
-  description: "Klinik internal"
 spec:
-  version: 1.0.0
-  vendor: acme-corp
+  modules: [clinic, pharmacy]
   root_url: /app/klinik
-  modules:
-    - clinic
-    - pharmacy
   menu:
+    # Adopt: splice module's default menu suggestion
     - type: module
       module: clinic
-    - type: module
-      module: pharmacy
+    # Group with mixed children from different modules
+    - label: "Farmasi"
+      icon: "pill"
+      children:
+        - { label: "Antrian Resep", view: pharmacy-queue, module: pharmacy }
+        - { label: "Semua Resep", route: /pharmacy/prescriptions, module: pharmacy }
+    # Leaf: direct view (resolved server-side to /wizard/checklist-fill)
+    - { label: "Isi Checklist", icon: "edit", view: checklist-fill-wizard, module: crc-field }
 ```
 
 ### Module — Bounded Context
@@ -242,18 +266,65 @@ closed set: Entity, Service, and VisualSpecKind instances.
 `spec.version` is **required**. Dependencies use `depends` (array of
 `{module, version?}`), NOT `depends_on`.
 
+**Module may provide a default menu suggestion** (`spec.menu`) — same
+`MenuItem[]` type as App's menu, but **module-relative**: leaf nodes never
+set `module` (it's implied = this module when adopted). `view` is the
+manifest name within this module; `route` is a raw URL (typically
+`/<module>/<plural>` for derived entity-list routes).
+
 ```yaml
-apiVersion: forma.dev/v1alpha1
 kind: Module
 metadata:
-  name: billing
-  description: "Billing module"
+  name: clinic
 spec:
   version: 1.0.0
   vendor: acme-corp
   depends:
-    - module: general-ledger
+    - module: forma/core
+  menu:
+    - label: "Klinik"
+      icon: "stethoscope"
+      children:
+        - { label: "Dashboard", icon: "layout-dashboard", view: clinic-dashboard }
+        - { label: "Daftar Kunjungan", icon: "list", view: visits-page }
+        - label: "Kasir"
+          icon: "wallet"
+          route: /clinic/payments
+    - { label: "Isi Checklist", icon: "edit", view: checklist-fill-wizard }
 ```
+
+**view resolves ALL visual kinds** (via server-side registration):
+Page, Form, Table, Dashboard, Widget, Report, Wizard, Kanban, Timeline, Print.
+
+Every visual kind has a `public` field (default `true`). When `public: true`,
+the framework auto-generates a Page wrapper with route
+`/<module>/<kind-lowercase>/<name>` — the kind can be navigated directly.
+When `public: false`, the kind is embed-only (no standalone route; can only
+appear inside an authored Page's blocks/tabs). Set `public: false` on
+Forms/Tables that are meant to be used exclusively inside a Page.
+
+**`public` field per visual kind:**
+
+```yaml
+kind: Form
+metadata:
+  name: quick-create-invoice
+  module: billing
+spec:
+  public: true   # default — auto-Page route /billing/form/quick-create-invoice
+  entity: billing.invoice
+  mode: create
+```
+
+**Menu resolution flow:**
+1. `App.spec.menu` defines the tree (authoritative).
+2. `type: module` adopt nodes expand to `Module.spec.menu` (default
+   suggestion) — App can freely override/restrict/rearrange.
+3. Server resolves `view` → concrete `route` from the registered manifest.
+4. `route` leaves are sent as-is (no server resolution).
+5. If a module has no `spec.menu`, its adopt node expands to empty.
+   The App then has no navigation entries for that module unless other
+   leaves/groups reference it.
 
 ---
 
@@ -556,3 +627,17 @@ spec:
   for autocomplete/validation. `spec.version: v1` is required on every Entity.
 - **`on:` is a normal YAML key** for Workflow (`on: { transition: ... }`) — do
   not quote it; only YAML 1.1 parsers (e.g. PyYAML) misread it as boolean `true`.
+- **Menu: always provide `spec.menu` in Module if you use `type: module` adopt
+  nodes in App.** An adopt node with an empty/null module menu produces no
+  navigation entries — the module has zero sidebar visibility. If ALL modules
+  in an App lack menus, the UI sidebar and default redirect will be empty.
+- **`view` resolves ALL visual kinds (Page, Form, Table, Dashboard, Widget,
+  Report, Wizard, Kanban, Timeline, Print).** Form and Table are now valid
+  `view` targets — each gets an auto-derived Page wrapper with route
+  `/<module>/form/<name>` or `/<module>/table/<name>` (unless `public: false`).
+  No need to use `route` escape hatch for Forms/Tables anymore.
+- **`public` (default `true`) on every visual kind** controls whether the kind
+  gets a standalone route via auto-derived Page wrapper. Set `public: false`
+  for embed-only Forms/Tables.
+- **Menu nesting is capped at 3 levels.** Adopt nodes only at level 1; groups
+  at levels 1–2; leaves at levels 2–3.

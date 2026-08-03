@@ -1,0 +1,9 @@
+apiVersion: forma.dev/v1alpha1
+kind: Mockup
+metadata:
+  name: cap-mock
+  module: crc-report
+  description: "Simulasi Centralized Approval Platform (CAP) untuk integrasi status/dokumen"
+spec:
+  for: crc-field.checklist-document
+  config_ref: crc-report.crc-integration-config

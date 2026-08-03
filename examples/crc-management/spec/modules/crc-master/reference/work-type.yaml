@@ -3,22 +3,26 @@ kind: Entity
 metadata:
   name: work-type
   module: crc-master
-  description: "Jenis pekerjaan inspeksi: Disassemble, Cleaning, Inspection, Assemble, Testing, Installation, General, DCI"
+  description: "Jenis pekerjaan checklist (Disassemble, Cleaning, Inspection, Assemble, Testing, Installation, General, DCI)"
 spec:
   version: v1
   characteristic: reference
+  display_field: name
+  plural: work-types
   fields:
     - name: code
       type: string
       required: true
+      unique: true
+      title: "Kode"
     - name: name
       type: string
       required: true
-    - name: sequence_order
+      title: "Nama Work Type"
+    - name: sequence
       type: integer
-      description: "Urutan tampilan work type dalam dropdown"
-    - name: description
-      type: text
-    - name: is_active
-      type: boolean
-      default: true
+      default: 0
+      title: "Urutan"
+  expose:
+    - type: rest
+      actions: [list, find]

@@ -1,0 +1,12 @@
+apiVersion: forma.dev/v1alpha1
+kind: Widget
+metadata:
+  name: doc-waiting-approval
+  module: crc-report
+  description: "Jumlah dokumen menunggu approval (Customer / CAP)"
+spec:
+  title: "Waiting Approval"
+  type: metric
+  entity: crc-field.checklist-document
+  query: "status in ('waiting_customer_approval', 'waiting_cap_approval')"
+  refresh_secs: 60

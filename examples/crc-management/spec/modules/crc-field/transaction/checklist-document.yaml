@@ -1,0 +1,219 @@
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: checklist-document
+  module: crc-field
+  description: "Dokumen checklist yang diisi — state machine Stop & Go, Review, Customer, CAP"
+spec:
+  version: v1
+  characteristic: transaction
+  display_field: doc_number
+  plural: checklist-documents
+  fields:
+    - name: transaction_date
+      type: date
+      required: true
+      index: true
+      title: "Tanggal Transaksi"
+    - name: doc_number
+      type: string
+      title: "Doc Number"
+    - name: template
+      type: relation
+      relation: { type: belongs_to, resource: crc-master.checklist-template }
+      required: true
+      title: "Template"
+    - name: schedule
+      type: relation
+      relation: { type: belongs_to, resource: crc-field.inspection-schedule }
+      title: "Jadwal"
+    - name: work_type
+      type: relation
+      relation: { type: belongs_to, resource: crc-master.work-type }
+      title: "Work Type"
+    - name: component_type
+      type: relation
+      relation: { type: belongs_to, resource: crc-master.component-type }
+      title: "Component Type"
+    - name: model
+      type: string
+      title: "Model"
+    - name: prefix
+      type: string
+      title: "Prefix"
+    - name: part_number
+      type: string
+      title: "Part Number"
+    - name: customer
+      type: relation
+      relation: { type: belongs_to, resource: crc-master.customer }
+      title: "Customer"
+    # ── General Section: Job Identity ──
+    - name: wo_number
+      type: string
+      title: "Trakindo WO"
+    - name: pex_non_pex
+      type: enum
+      enum_values: [pex, non_pex]
+      title: "PEX / Non PEX"
+    - name: tu_id_actual
+      type: string
+      title: "TU ID Actual"
+    - name: component_hours
+      type: decimal
+      title: "Component Hours"
+    # ── Specific Section ──
+    - name: overall_judgement
+      type: enum
+      enum_values: [reuse, reject, repair]
+      title: "Overall Judgement"
+    # ── State machine Stop & Go ──
+    - name: status
+      type: enum
+      enum_values: [draft, in_progress, waiting_foreman_review, revise, waiting_customer_approval, waiting_cap_approval, completed, cancelled]
+      default: draft
+      index: true
+      title: "Status"
+    - name: current_step
+      type: integer
+      default: 1
+      title: "Step (Stop & Go)"
+    # ── Jawaban form dinamis ──
+    - name: answers
+      type: child
+      child:
+        storage: jsonb
+        fields:
+          - { name: section, type: string, title: "Section" }
+          - { name: field_label, type: string, title: "Label" }
+          - { name: field_type, type: string, title: "Tipe" }
+          - { name: value, type: text, title: "Nilai" }
+    # ── Abnormal Part List ──
+    - name: abnormal_parts
+      type: child
+      child:
+        storage: jsonb
+        sequence_field: sequence
+        fields:
+          - { name: sequence, type: integer }
+          - { name: part_name, type: string, title: "Nama Part" }
+          - { name: condition, type: string, title: "Kondisi" }
+          - { name: reason, type: text, title: "Alasan" }
+    # ── Foto & Tanda Tangan ──
+    - name: attachments
+      type: child
+      child:
+        storage: jsonb
+        fields:
+          - { name: category, type: enum, enum_values: [picture, file, signature], default: picture, title: "Jenis" }
+          - { name: caption, type: string, title: "Keterangan" }
+          - { name: file_ref, type: file, storage: { visibility: private, max_size_mb: 20, allowed_types: ["image/*", "application/pdf"] }, title: "File" }
+    # ── Special Tools & Chemical (snapshot) ──
+    - name: special_tools
+      type: child
+      child:
+        storage: jsonb
+        fields:
+          - { name: tool_name, type: string, title: "Nama Tool" }
+          - { name: part_no, type: string, title: "Part No" }
+          - { name: qty, type: integer, title: "Qty" }
+    - name: chemicals
+      type: child
+      child:
+        storage: jsonb
+        fields:
+          - { name: chemical_name, type: string, title: "Nama Kimia" }
+          - { name: chemical_serial_no, type: string, title: "Serial No" }
+          - { name: msds_no, type: string, title: "MSDS No" }
+  events:
+    - name: submitted_for_review
+      description: "Dokumen dikirim untuk review foreman (Stop & Go)"
+      type: async
+      publish: { durable: true }
+      deliver:
+        - { channel: reliable_event }
+    - name: completed
+      description: "Dokumen mencapai status Completed"
+      type: async
+      publish: { durable: true }
+      deliver:
+        - { channel: reliable_event }
+  state_machine:
+    field: status
+    initial: draft
+    states:
+      - { name: draft, label: "Draft" }
+      - { name: in_progress, label: "In Progress" }
+      - { name: waiting_foreman_review, label: "Waiting Foreman Review" }
+      - { name: revise, label: "Revise" }
+      - { name: waiting_customer_approval, label: "Waiting Customer Approval" }
+      - { name: waiting_cap_approval, label: "Waiting CAP Approval" }
+      - { name: completed, label: "Completed" }
+      - { name: cancelled, label: "Cancelled" }
+    transitions:
+      - { from: draft, to: in_progress, via: start }
+      - { from: in_progress, to: waiting_foreman_review, via: submit_review }
+      - { from: waiting_foreman_review, to: in_progress, via: foreman_approve }
+      - { from: waiting_foreman_review, to: revise, via: foreman_reject }
+      - { from: revise, to: in_progress, via: resubmit }
+      - { from: in_progress, to: waiting_customer_approval, via: request_customer_approval }
+      - { from: waiting_customer_approval, to: in_progress, via: customer_approve }
+      - { from: waiting_customer_approval, to: revise, via: customer_reject }
+      - { from: in_progress, to: waiting_cap_approval, via: submit_cap }
+      - { from: waiting_cap_approval, to: completed, via: cap_approve }
+      - { from: waiting_cap_approval, to: revise, via: cap_reject }
+      - { from: "*", to: cancelled, via: cancel }
+  actions:
+    - name: start
+      description: "Mulai mengisi form"
+      required_permission: crc-field.checklist-document.start
+      audit: true
+    - name: submit_review
+      description: "Submit ke Foreman untuk review (Stop & Go)"
+      required_permission: crc-field.checklist-document.submit-review
+      audit: true
+      emits: submitted_for_review
+    - name: foreman_approve
+      description: "Foreman menyetujui tahapan"
+      required_permission: crc-field.checklist-document.foreman-approve
+      audit: true
+    - name: foreman_reject
+      description: "Foreman menolak / minta revisi"
+      required_permission: crc-field.checklist-document.foreman-reject
+      audit: true
+    - name: resubmit
+      description: "User memperbaiki dan lanjutkan"
+      required_permission: crc-field.checklist-document.resubmit
+      audit: true
+    - name: request_customer_approval
+      description: "Kirim link approval ke kustomer"
+      required_permission: crc-field.checklist-document.request-customer-approval
+      audit: true
+    - name: customer_approve
+      description: "Kustomer menyetujui"
+      required_permission: crc-field.checklist-document.customer-approve
+      audit: true
+    - name: customer_reject
+      description: "Kustomer minta revisi"
+      required_permission: crc-field.checklist-document.customer-reject
+      audit: true
+    - name: submit_cap
+      description: "Kirim ke Centralized Approval Platform"
+      required_permission: crc-field.checklist-document.submit-cap
+      audit: true
+    - name: cap_approve
+      description: "CAP menyetujui final"
+      required_permission: crc-field.checklist-document.cap-approve
+      audit: true
+      emits: completed
+    - name: cap_reject
+      description: "CAP menolak"
+      required_permission: crc-field.checklist-document.cap-reject
+      audit: true
+    - name: cancel
+      description: "Batalkan dokumen"
+      required_permission: crc-field.checklist-document.cancel
+      audit: true
+  expose:
+    - type: rest
+      actions: [list, find, create, update]

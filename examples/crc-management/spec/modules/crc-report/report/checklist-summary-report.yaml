@@ -1,0 +1,25 @@
+apiVersion: forma.dev/v1alpha1
+kind: Report
+metadata:
+  name: checklist-summary-report
+  module: crc-report
+  description: "Laporan ringkasan dokumen checklist (In progress, Waiting Review, Waiting Approval, Completed)"
+spec:
+  title: "Checklist Summary Report"
+  entity: crc-field.checklist-document
+  required_permission: crc-report.checklist-summary-report.view
+  export: [pdf, csv, xlsx]
+  parameters:
+    - { field: work_type, label: "Work Type", type: "select" }
+    - { field: status, label: "Status", type: "select" }
+    - { field: transaction_date, label: "Periode", type: "date_range" }
+  groups:
+    - { field: status, label: "Status" }
+  columns:
+    - { field: doc_number, label: "Doc Number" }
+    - { field: work_type, label: "Work Type" }
+    - { field: component_type, label: "Component Type" }
+    - { field: model, label: "Model" }
+    - { field: status, label: "Status" }
+  totals:
+    - { label: "Total Dokumen", field: doc_number, fn: count }

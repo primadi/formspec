@@ -2,8 +2,17 @@ apiVersion: forma.dev/v1alpha1
 kind: Module
 metadata:
   name: crc-master
-  description: "Master data & reference data for CRC Checklist Management System — ComponentType, WorkType, SpecialTool, Chemical, ProcessType, Model, JobIdentity"
+  description: "CRC Master Data & Checklist Template Builder (untuk Admin)"
 spec:
   version: 1.0.0
   vendor: trakindo
-  depends: []
+  menu:
+    - label: "Master Data"
+      icon: "database"
+      children:
+        - { label: "Template Checklist", icon: "clipboard-list", route: /crc-master/checklist-templates }
+        - { label: "Chemical", icon: "flask-conical", route: /crc-master/chemicals }
+        - { label: "Tipe Komponen", icon: "puzzle", route: /crc-master/component-types }
+        - { label: "Customer", icon: "users", route: /crc-master/customers }
+        - { label: "Special Tool", icon: "wrench", route: /crc-master/special-tools }
+    - { label: "Tipe Pekerjaan", icon: "briefcase", route: /crc-master/work-types }

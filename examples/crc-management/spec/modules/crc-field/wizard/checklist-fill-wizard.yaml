@@ -1,0 +1,42 @@
+apiVersion: forma.dev/v1alpha1
+kind: Wizard
+metadata:
+  name: checklist-fill-wizard
+  module: crc-field
+  description: "Wizard pengisian checklist — 4 section berurutan (Document Header, General, Specific, Approval List)"
+spec:
+  title: "Isi Checklist"
+  entity: crc-field.checklist-document
+  steps:
+    - title: "1. Document Header"
+      description: "Identitas dokumen & relasi master"
+      fields:
+        - { field: template, label: "Template" }
+        - { field: doc_number, label: "Doc Number" }
+        - { field: work_type, label: "Work Type" }
+        - { field: component_type, label: "Component Type" }
+        - { field: model, label: "Model" }
+        - { field: prefix, label: "Prefix" }
+        - { field: part_number, label: "Part Number" }
+      required: [template, work_type, component_type]
+    - title: "2. General Section"
+      description: "Job Identity, Special Tools, Chemical"
+      fields:
+        - { field: wo_number, label: "Trakindo WO" }
+        - { field: customer, label: "Customer" }
+        - { field: pex_non_pex, label: "PEX / Non PEX" }
+        - { field: tu_id_actual, label: "TU ID Actual" }
+        - { field: component_hours, label: "Component Hours" }
+        - { field: special_tools, label: "Special Tools" }
+        - { field: chemicals, label: "Chemical" }
+    - title: "3. Specific Section"
+      description: "Hasil inspeksi, abnormal part, overall judgement"
+      fields:
+        - { field: answers, label: "Hasil Inspeksi" }
+        - { field: abnormal_parts, label: "Abnormal Part List" }
+        - { field: overall_judgement, label: "Overall Judgement" }
+      required: [overall_judgement]
+    - title: "4. Approval List"
+      description: "Lampiran foto / tanda tangan & submit review"
+      fields:
+        - { field: attachments, label: "Foto & Tanda Tangan" }

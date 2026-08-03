@@ -1,0 +1,13 @@
+apiVersion: forma.dev/v1alpha1
+kind: Integrator
+metadata:
+  name: sharepoint-archiver
+  module: crc-report
+  description: "Arsip otomatis PDF final ke SharePoint saat dokumen Completed"
+spec:
+  listen:
+    resource: crc-field.checklist-document
+    event: completed
+  call:
+    resource: crc-report.sharepoint-upload
+    action: upload

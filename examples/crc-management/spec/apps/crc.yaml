@@ -1,0 +1,22 @@
+apiVersion: forma.dev/v1alpha1
+kind: App
+metadata:
+  name: crc
+  description: "HLSD CRC Checklist Management System — PT Trakindo Utama"
+  labels:
+    client: trakindo
+spec:
+  version: 1.0.0
+  vendor: trakindo
+  root_url: /app/crc
+  modules:
+    - crc-master
+    - crc-field
+    - crc-report
+  menu:
+    - type: module
+      module: crc-master
+    - type: module
+      module: crc-field
+    - type: module
+      module: crc-report
