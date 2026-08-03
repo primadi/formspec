@@ -200,6 +200,16 @@ export default function PrintRenderer({ entry }: PrintRendererProps) {
 
       {/* Print styles */}
       <style>{`
+        /* Force light-theme colors inside the document so print output is
+           never affected by the app's dark mode. */
+        .print-doc {
+          --color-background: oklch(1 0 0);
+          --color-foreground: oklch(0.145 0 0);
+          --color-muted: oklch(0.97 0 0);
+          --color-muted-foreground: oklch(0.556 0 0);
+          color: var(--color-foreground);
+          background: white;
+        }
         @media print {
           .no-print { display: none !important; }
           body { background: white; }

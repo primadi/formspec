@@ -293,6 +293,53 @@ spec:
     - { label: "Isi Checklist", icon: "edit", view: checklist-fill-wizard }
 ```
 
+**Menu structure rule (1–2 levels, always categorized).** Every menu
+(`App.spec.menu` and `Module.spec.menu`) must be authored as a tree of
+**Group nodes** (a `label` + `children`) with **Leaf nodes** underneath —
+never as bare top-level leaves. The renderer nests any orphan leaf (a leaf
+with no enclosing group) under the **last** group it saw, which silently
+corrupts the navigation. Concretely:
+
+- **Level 1 = category** (Group node: `label` + `children`).
+- **Level 2 = item** (Leaf node: `label` + exactly one of `view`/`route`).
+- Use a **third level only** when a category genuinely needs sub-groups
+  (rare); nesting is capped at 3 levels.
+- Every module's default menu suggestion should open with its own category
+  group so adopted modules render as distinct top-level categories instead
+  of collapsing into one.
+
+Canonical 2-level module menu (each module = one or more categories):
+
+```yaml
+kind: Module
+metadata:
+  name: crc-field
+spec:
+  version: 1.0.0
+  vendor: trakindo
+  menu:
+    - label: "Eksekusi"          # level 1 — category (Group node)
+      icon: "clipboard-check"
+      children:
+        - { label: "Dokumen Checklist", icon: "clipboard-check", route: /crc-field/checklist-documents }  # level 2 — leaf
+        - { label: "Isi Checklist", icon: "edit", view: checklist-fill-wizard }
+```
+
+A module with several concerns uses several categories (each a Group node):
+
+```yaml
+  menu:
+    - label: "Laporan"
+      icon: "bar-chart-3"
+      children:
+        - { label: "CRC Summary", icon: "layout-dashboard", view: crc-summary-dashboard }
+        - { label: "Laporan Ringkasan", icon: "bar-chart-3", view: checklist-summary-report }
+    - label: "Portal"
+      icon: "globe"
+      children:
+        - { label: "Portal Customer", icon: "globe", view: customer-portal }
+```
+
 **view resolves ALL visual kinds** (via server-side registration):
 Page, Form, Table, Dashboard, Widget, Report, Wizard, Kanban, Timeline, Print.
 
@@ -641,3 +688,12 @@ spec:
   for embed-only Forms/Tables.
 - **Menu nesting is capped at 3 levels.** Adopt nodes only at level 1; groups
   at levels 1–2; leaves at levels 2–3.
+- **Table `default_sort` must reference an existing field** on the target entity.
+  Check the entity's field list before setting `default_sort`. Framework-managed
+  fields (`id`, `version`, `created_at`, `updated_at`, `created_by`, `updated_by`,
+  `doc_status`) are always valid; custom fields like `modified` do NOT exist
+  unless explicitly declared.
+- **Dashboard widget `ref` uses just the widget name** — NOT `module.name`
+  format. Example: `ref: doc-in-progress`, not `ref: crc-report.doc-in-progress`.
+  The registry indexes widgets by `metadata.name` only. Module-qualified refs
+  will fail validation with "widget ref not found" even when the widget file exists.

@@ -8,7 +8,7 @@ spec:
   entity: crc-master.checklist-template
   search: true
   page_size: 25
-  default_sort: "-modified"
+  default_sort: "template_name"
   columns:
     - { field: template_name, label: "Nama Template", sortable: true }
     - { field: work_type, label: "Work Type" }

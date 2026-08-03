@@ -62,6 +62,8 @@ Most failures map to a small set of canonical fixes. Always check the schema
 | Workflow with `states:`/`transitions:`/`guards:`/`condition:` | States/transitions live on the Entity (`state_machine`: `field`, `initial`, `states`, `transitions` with `via`). A `kind: Workflow` only declares `entity` + `on: {transition: {from, to}}` + `steps` + `on_reject` + `escalation` |
 | Unknown property "X" / additionalProperties | Remove it or check the kind schema for the correct key name |
 | `field.type: money` with `currency:` | `currency` is not a Field property; `money` is a plain field type |
+| Table `default_sort` field not on entity | `default_sort` must reference a field that exists on the target entity. Check the entity's field list. Framework-managed fields (`id`, `version`, `created_at`, `updated_at`, `created_by`, `updated_by`, `doc_status`) are always valid. Change to an existing field like `template_name` or `revision_date`. |
+| Dashboard widget ref not found (module-qualified) | Widget refs in dashboards use the widget `metadata.name` only — NOT `module.name` format. Change `ref: crc-report.doc-in-progress` → `ref: doc-in-progress`. The registry indexes widgets by name alone. |
 
 ## Known Schema-vs-Engine Gaps
 

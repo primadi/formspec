@@ -15,4 +15,4 @@ spec:
         - { label: "Tipe Komponen", icon: "puzzle", route: /crc-master/component-types }
         - { label: "Customer", icon: "users", route: /crc-master/customers }
         - { label: "Special Tool", icon: "wrench", route: /crc-master/special-tools }
-    - { label: "Tipe Pekerjaan", icon: "briefcase", route: /crc-master/work-types }
+        - { label: "Tipe Pekerjaan", icon: "briefcase", route: /crc-master/work-types }

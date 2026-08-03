@@ -9,7 +9,13 @@ spec:
   depends:
     - module: crc-field
   menu:
-    - { label: "CRC Summary", icon: "layout-dashboard", view: crc-summary-dashboard }
-    - { label: "Laporan Ringkasan", icon: "bar-chart-3", view: checklist-summary-report }
-    - { label: "Cetak Checklist", icon: "printer", view: checklist-print }
-    - { label: "Portal Customer", icon: "globe", view: customer-portal }
+    - label: "Laporan"
+      icon: "bar-chart-3"
+      children:
+        - { label: "CRC Summary", icon: "layout-dashboard", view: crc-summary-dashboard }
+        - { label: "Laporan Ringkasan", icon: "bar-chart-3", view: checklist-summary-report }
+        - { label: "Cetak Checklist", icon: "printer", view: checklist-print }
+    - label: "Portal"
+      icon: "globe"
+      children:
+        - { label: "Portal Customer", icon: "globe", view: customer-portal }

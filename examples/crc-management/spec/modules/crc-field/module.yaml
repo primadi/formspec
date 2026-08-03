@@ -9,6 +9,9 @@ spec:
   depends:
     - module: crc-master
   menu:
-    - { label: "Dokumen Checklist", icon: "clipboard-check", route: /crc-field/checklist-documents }
-    - { label: "Jadwal Inspeksi", icon: "calendar-days", route: /crc-field/inspection-schedules }
-    - { label: "Isi Checklist", icon: "edit", view: checklist-fill-wizard }
+    - label: "Eksekusi"
+      icon: "clipboard-check"
+      children:
+        - { label: "Dokumen Checklist", icon: "clipboard-check", route: /crc-field/checklist-documents }
+        - { label: "Jadwal Inspeksi", icon: "calendar-days", route: /crc-field/inspection-schedules }
+        - { label: "Isi Checklist", icon: "edit", view: checklist-fill-wizard }
