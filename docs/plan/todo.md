@@ -1,7 +1,7 @@
 # Master Plan: Forma Implementation
 
-**Last Updated**: 2026-07-31  
-**Status**: ✅ Fase 0 complete · ✅ Fase 1 (1.1–1.5) · ✅ Fase 2.1 · ✅ Fase 2.2 · ✅ Fase 5 (5.1–5.4) · ✅ Spec hot-reload · ✅ Fase 11 (review schema↔docs) · ✅ Audit spec↔schema + tambah TODO item · ✅ `forma validate` (3.1.1, engine+schema)  
+**Last Updated**: 2026-08-04  
+**Status**: ✅ Fase 0 complete · ✅ Fase 1 (1.1–1.5) · ✅ Fase 2.1 · ✅ Fase 2.2 · ✅ Fase 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6) · ✅ Fase 5 (5.1–5.4) · ✅ Spec hot-reload · ✅ Fase 11 (review schema↔docs) · ✅ Audit spec↔schema + tambah TODO item · ✅ `forma validate` (3.1.1, engine+schema)  
 
 > `⬜` not started · `✅` complete · `⏸️` deferred  
 
@@ -85,7 +85,7 @@ layout contoh `examples/Clinic-UI-Showcase/spec/` (entity-centric + `spec/` cont
 
 **Goal**: Atomic operations, correct PK, complete filters, lifecycle enforcement — agar `forma dev` bisa diandalkan untuk testing.
 
-**Progress**: 2.1 ✅ · 2.2 ✅ · 2.3 ✅ · 2.4 ✅ · 2.5 ✅ · 2.6–2.9 ⬜
+**Progress**: 2.1 ✅ · 2.2 ✅ · 2.3 ✅ · 2.4 ✅ · 2.5 ✅ · 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6 ✅; 2.6.4 ⬜ blocked on 2.9.1 + new Starlark caller-context plumbing) · 2.7–2.9 ⬜
 
 ### 2.1 Database integrity ✅
 - [x] 2.1.1 Atomic mutation + outbox — wrap Entity INSERT/UPDATE/DELETE + outbox write dalam `BeginTx`/`Commit` (rollback on error). Terpenuhi untuk create/update HTTP (`InTx`) **dan** custom action (`HandleCustomAction` + `TxScope`, `renderers/jsonbpersist/txscope.go`) — satu transaksi request-scoped mencakup semua panggilan `resource.save()`/`.create()` (Starlark/native/sidecar via `X-Forma-Scope-Id`) dalam satu eksekusi action, join berdasar identitas store (bukan Module — multi-Module dalam satu Datastore fisik yang sama tetap atomik; lintas-Datastore genuinely berbeda → `ErrCrossStoreTx`). **Gap tersisa**: `RunAfterPhase` masih fire-and-forget (tidak rollback); SDK sidecar (`sdk/php`/`sdk/python`/`sdk/typescript`) belum mengirim `X-Forma-Scope-Id` (`01-architecture.md` §3, `runtimes/04-forma-sidecar.md` §4.3a).  
@@ -134,12 +134,12 @@ layout contoh `examples/Clinic-UI-Showcase/spec/` (entity-centric + `spec/` cont
 - [x] 2.5.9 Workspace slug prefix — `WorkspaceMiddleware` extracts slug from URL; fallback to "demo" ✅  
 
 ### 2.6 Security basics
-- [ ] 2.6.1 Cross-tenant isolation — middleware check: resource tenant == caller tenant; cross-tenant → 404 (not 403)  
-- [ ] 2.6.2 Tenant ID auto-injection — DDL adds `tenant_id`, query auto-scopes WHERE tenant_id  
-- [ ] 2.6.3 Permission auto-registration — `{module}.{entity}.{list|view|create|update|delete|submit|cancel|amend}` registered on entity load  
-- [ ] 2.6.4 UsesEnforcement wiring — `uses` declaration checked at runtime; undeclared `uses` → blocked + alert + module auto-suspend + incident audit  
-- [ ] 2.6.5 Optimistic concurrency — `version` field on all Entities; update without version → `409 CONFLICT`; `modified` is audit metadata, NOT concurrency mechanism  
-- [ ] 2.6.6 WebSocket per-message permission filter — hub checks permission before broadcasting to each connection  
+- [x] 2.6.1 Cross-tenant isolation — already in place: `AuthMiddleware` (`internal/api/middleware.go`) returns 404 (not 403) on identity-vs-URL workspace mismatch; every `EntityStore` query in `renderers/jsonbpersist/crud.go` scopes on `tenant_id`. Covered by existing `internal/api/api_test.go`/`renderers/jsonbpersist/crud_test.go`.  
+- [x] 2.6.2 Tenant ID auto-injection — already in place: `GenerateEntityDDL` (`renderers/jsonbpersist/ddl.go`) always emits `tenant_id` + tenant-scoped unique indexes.  
+- [x] 2.6.3 Permission auto-registration — `internal/entity/registry.go`'s `registerStandardPermissions()` (shared by `LoadEntities`/`RegisterArtifactManifest`) now also registers `submit`/`cancel`/`amend`, gated identically to route generation (`db.TransitiveDisabled` + `characteristic: summary`) so registered permissions never drift from actual routes. Format stays `{module}.{plural}.{action}`, matching `internal/api/generator.go`.  
+- [ ] 2.6.4 UsesEnforcement wiring — **not implemented; two concrete blockers found on inspection**: (a) `resource.call()`'s dispatch path (`resource/forma.go`'s `invokeAction`) carries no notion of "which action/module is calling", so there's nothing to check the caller's `uses` declaration against without new plumbing through the Starlark call-handler chain (`internal/action/script.go`'s `SetCallHandler`); (b) `ctx.db`/`ctx.secrets`/etc. enforcement is blocked on 2.9.1 (`CtxAPI.SetDatastoreResolver` — currently everything errors "not configured"). Module auto-suspend + incident audit are also wholly new subsystems (no existing scaffolding to extend). The existing `UsesEnforcement` middleware stub in `internal/api/middleware.go` remains unwired dead code — do not assume it's "ready to activate", its own doc comment overstates that.  
+- [x] 2.6.5 Optimistic concurrency — storage layer was already correct (`crud.go`'s `Update()` does `WHERE version = ?`; conflicts already mapped to 409), but `HandleUpdate` (`internal/api/handler.go`) silently ignored the client and always used the just-fetched version — meaning the `If-Match: version=N` header renderers/web's `apiPatch` (`renderers/web/src/lib/api/client.ts`) already sends on every Form autosave/Kanban drag-update was a no-op. Fixed: `HandleUpdate` now parses `If-Match` and uses the client's version for the CAS check when present; missing `If-Match` falls back to today's behavior in relaxed/dev mode but is `409 CONFLICT` when `SetStrictMode(true)` (production).  
+- [x] 2.6.6 WebSocket per-message permission filter — `wsConn` (`internal/api/wshub.go`) now carries the connection's `*auth.Identity` (captured in `HandleWS`); `Broadcast` resolves `EventMessage.Resource` to `{module}.{plural}.view` via the entity registry and skips connections lacking that permission. Fails open (delivers unfiltered) when identity is nil or the resource/registry can't be resolved, so it only engages once real auth is wired up — see the "identity/registry" branch in `internal/api/wshub_test.go`/`wshub_permission_test.go`.  
 
 ### 2.7 Idempotency
 - [ ] 2.7.1 Two-step prepare flow — `POST /{resource}/{action}/prepare` → receive key → retry action with key  

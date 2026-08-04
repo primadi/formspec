@@ -136,42 +136,68 @@ func (r *Registry) LoadEntities() []error {
 			)
 		}
 
-		// Also register standard CRUD permissions if the entity is exposed
-		// Standard CRUD perms: {module}.{plural}.{list|view|create|update|delete}
+		// Also register standard CRUD + lifecycle permissions if the entity
+		// is exposed.
 		if len(entitySpec.Expose) > 0 {
-			plural := entitySpec.Plural
-			if plural == "" {
-				plural = entityName + "s"
-			}
-
-			// Register each standard CRUD action in the permission registry
-			// so PermissionExists() and ctx.auth.has() work for these.
-			standardActions := []struct {
-				name       string
-				permission string
-			}{
-				{"list", module + "." + plural + ".list"},
-				{"view", module + "." + plural + ".view"},
-				{"create", module + "." + plural + ".create"},
-				{"update", module + "." + plural + ".update"},
-				{"delete", module + "." + plural + ".delete"},
-			}
-			for _, sa := range standardActions {
-				r.permRegistry.RegisterAction(
-					module, entityName, sa.name,
-					sa.permission,
-					&permission.UsesEntry{}, // standard CRUD has no uses
-					raw.Source,
-					false,
-				)
-			}
-
-			// Set module description from entity metadata
+			r.registerStandardPermissions(module, entityName, entitySpec, raw.Source)
 			r.permRegistry.SetModuleDescription(module, raw.Metadata.Description)
 		}
 	}
 
 	return allErrors
+}
+
+// registerStandardPermissions registers the auto-derived standard CRUD +
+// lifecycle permissions for an exposed entity: {module}.{plural}.{action}
+// for list/view/create/update/delete, plus submit/cancel/amend when the
+// entity actually participates in the document lifecycle (2.6.3) — gated
+// identically to route generation (internal/api/generator.go's
+// generateRESTRoutes), via the same db.TransitiveDisabled(disabled) and
+// characteristic:summary rules, so a registered permission always has a
+// matching route and vice versa.
+func (r *Registry) registerStandardPermissions(module, entityName string, entitySpec *spec.EntitySpec, source string) {
+	plural := entitySpec.Plural
+	if plural == "" {
+		plural = entityName + "s"
+	}
+
+	disabled := make(map[string]bool)
+	for _, a := range entitySpec.Actions {
+		if a.Disabled {
+			disabled[a.Name] = true
+		}
+	}
+	fullDisabled := db.TransitiveDisabled(disabled)
+	isSummary := entitySpec.Characteristic == spec.CharSummary
+
+	standardActions := []struct {
+		name       string
+		permission string
+	}{
+		{"list", module + "." + plural + ".list"},
+		{"view", module + "." + plural + ".view"},
+		{"create", module + "." + plural + ".create"},
+		{"update", module + "." + plural + ".update"},
+		{"delete", module + "." + plural + ".delete"},
+		{"submit", module + "." + plural + ".submit"},
+		{"cancel", module + "." + plural + ".cancel"},
+		{"amend", module + "." + plural + ".amend"},
+	}
+	for _, sa := range standardActions {
+		if fullDisabled[sa.name] {
+			continue
+		}
+		if isSummary && (sa.name == "create" || sa.name == "update" || sa.name == "delete") {
+			continue
+		}
+		r.permRegistry.RegisterAction(
+			module, entityName, sa.name,
+			sa.permission,
+			&permission.UsesEntry{}, // standard CRUD/lifecycle actions have no uses
+			source,
+			false,
+		)
+	}
 }
 
 // RegisterArtifactManifest registers a single manifest from an artifact
@@ -222,33 +248,9 @@ func (r *Registry) RegisterArtifactManifest(raw manifest.RawManifest, entitySpec
 		)
 	}
 
-	// Register standard CRUD permissions if exposed
+	// Register standard CRUD + lifecycle permissions if exposed
 	if len(entitySpec.Expose) > 0 {
-		plural := entitySpec.Plural
-		if plural == "" {
-			plural = entityName + "s"
-		}
-
-		standardActions := []struct {
-			name       string
-			permission string
-		}{
-			{"list", module + "." + plural + ".list"},
-			{"view", module + "." + plural + ".view"},
-			{"create", module + "." + plural + ".create"},
-			{"update", module + "." + plural + ".update"},
-			{"delete", module + "." + plural + ".delete"},
-		}
-		for _, sa := range standardActions {
-			r.permRegistry.RegisterAction(
-				module, entityName, sa.name,
-				sa.permission,
-				&permission.UsesEntry{},
-				raw.Source,
-				false,
-			)
-		}
-
+		r.registerStandardPermissions(module, entityName, entitySpec, raw.Source)
 		r.permRegistry.SetModuleDescription(module, raw.Metadata.Description)
 	}
 

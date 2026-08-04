@@ -434,6 +434,25 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 			return
 		}
 
+		// Optimistic concurrency (2.6.5): the client is expected to echo back
+		// the version it last read via `If-Match: version=<N>` (already sent
+		// by renderers/web's apiPatch on every Form autosave and Kanban
+		// drag-update). When present, that client-supplied version — not
+		// whatever GetByID just fetched — is what gets passed to Update(),
+		// so a stale read genuinely conflicts instead of silently winning.
+		expectedVersion := current.Version
+		clientVersion, hasIfMatch, ifMatchValid := parseIfMatchVersion(r)
+		if hasIfMatch && !ifMatchValid {
+			writeError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "invalid If-Match header: expected \"version=<N>\"")
+			return
+		}
+		if hasIfMatch {
+			expectedVersion = clientVersion
+		} else if IsStrictMode() {
+			writeError(w, http.StatusConflict, "CONFLICT", "If-Match header required")
+			return
+		}
+
 		merged := current.Data
 		if merged == nil {
 			merged = make(map[string]any, len(body))
@@ -486,7 +505,7 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 		newVersion, err := store.Update(ctx, db.UpdateParams{
 			WorkspaceID:   workspaceID,
 			ID:            id,
-			Version:       current.Version,
+			Version:       expectedVersion,
 			UpdatedBy:     updatedBy,
 			Data:          execParams.Resource,
 			PendingEvents: pendingEvents,
@@ -1015,6 +1034,26 @@ func buildListLinks(u *url.URL, page, perPage, totalPages int) ListLinks {
 	}
 
 	return links
+}
+
+// parseIfMatchVersion parses the "If-Match: version=<N>" header sent by
+// renderers/web's apiPatch (see lib/api/client.ts). Returns (version,
+// present, valid) — present is false if the header is absent entirely;
+// valid is false if it's present but doesn't match the expected format.
+func parseIfMatchVersion(r *http.Request) (version int, present bool, valid bool) {
+	h := r.Header.Get("If-Match")
+	if h == "" {
+		return 0, false, false
+	}
+	raw, ok := strings.CutPrefix(h, "version=")
+	if !ok {
+		return 0, true, false
+	}
+	v, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, true, false
+	}
+	return v, true, true
 }
 
 func isConflictError(err error) bool {

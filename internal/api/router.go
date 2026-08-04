@@ -36,7 +36,7 @@ func NewRouterBuilder(registry *entity.Registry) *RouterBuilder {
 	b := &RouterBuilder{
 		registry: registry,
 		factory:  NewHandlerFactory(registry),
-		hub:      NewWSHub(),
+		hub:      NewWSHub(registry),
 	}
 	// Entity-spec lookup enables sort/filter validation on list endpoints.
 	b.factory.SetSpecLookup(func(module, name string) (*spec.EntitySpec, bool) {

@@ -86,7 +86,7 @@ func TestHandleWS_BroadcastEndToEnd(t *testing.T) {
 }
 
 func TestWSHub_Broadcast_WorkspaceIsolation(t *testing.T) {
-	hub := NewWSHub()
+	hub := NewWSHub(nil)
 
 	connA := &wsConn{id: "a", workspace: "tenant-a", send: make(chan events.EventMessage, 4)}
 	connB := &wsConn{id: "b", workspace: "tenant-b", send: make(chan events.EventMessage, 4)}
@@ -110,13 +110,13 @@ func TestWSHub_Broadcast_WorkspaceIsolation(t *testing.T) {
 }
 
 func TestWSHub_Broadcast_ZeroConnectionsIsNoop(t *testing.T) {
-	hub := NewWSHub()
+	hub := NewWSHub(nil)
 	// Must not panic or block when no connection is registered for the workspace.
 	hub.Broadcast("no-such-workspace", events.EventMessage{Event: "completed"})
 }
 
 func TestWSHub_RegisterUnregister(t *testing.T) {
-	hub := NewWSHub()
+	hub := NewWSHub(nil)
 	c := &wsConn{id: "x", workspace: "t1", send: make(chan events.EventMessage, 1)}
 	hub.register(c)
 	if len(hub.byWorkspace["t1"]) != 1 {
