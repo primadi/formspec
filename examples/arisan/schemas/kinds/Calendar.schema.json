@@ -1,0 +1,40 @@
+{
+  "title": "Calendar Spec",
+  "description": "CalendarSpec defines a calendar view for date/datetime entity data\n(06-page-kinds.md §5). Instance of VisualSpecKind tier: page.\n",
+  "type": "object",
+  "properties": {
+    "color_field": {
+      "type": "string"
+    },
+    "date_field": {
+      "type": "string"
+    },
+    "end_field": {
+      "type": "string"
+    },
+    "entity": {
+      "type": "string"
+    },
+    "realtime": {
+      "type": "boolean"
+    },
+    "resource_field": {
+      "type": "string"
+    },
+    "title_field": {
+      "type": "string"
+    },
+    "views": {
+      "description": "month, week, day, resource (default month)",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "entity",
+    "date_field"
+  ],
+  "additionalProperties": false
+}

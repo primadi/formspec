@@ -1,0 +1,12 @@
+apiVersion: forma.dev/v1alpha1
+kind: Widget
+metadata:
+  name: active-groups
+  module: arisan-report
+  description: "Jumlah grup arisan yang masih aktif"
+spec:
+  title: "Grup Aktif"
+  type: metric
+  entity: arisan-master.arisan-group
+  query: "status == 'active'"
+  refresh_secs: 60

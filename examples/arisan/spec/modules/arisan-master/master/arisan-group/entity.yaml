@@ -1,0 +1,66 @@
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: arisan-group
+  module: arisan-master
+  description: "Grup arisan — kumpulan anggota dengan iuran bulanan tetap selama satu siklus"
+spec:
+  version: v1
+  characteristic: master
+  lifecycle: plain_crud
+  display_field: name
+  plural: arisan-groups
+  fields:
+    - name: code
+      type: string
+      required: true
+      unique: true
+      title: "Kode Grup"
+      description: "Kode unik grup, contoh AR-001 — dipakai sebagai awalan payment_ref"
+    - name: name
+      type: string
+      required: true
+      title: "Nama Grup"
+    - name: monthly_amount
+      type: money
+      required: true
+      title: "Iuran Bulanan"
+      description: "Nominal iuran per anggota per bulan"
+    - name: term_months
+      type: integer
+      required: true
+      title: "Durasi (bulan)"
+      description: "Panjang siklus dalam bulan (biasanya = jumlah anggota)"
+    - name: start_date
+      type: date
+      title: "Tanggal Mulai"
+    - name: bank_account_name
+      type: string
+      title: "Nama Rekening"
+    - name: bank_account_number
+      type: string
+      title: "No. Rekening"
+    - name: status
+      type: enum
+      enum_values: [active, completed]
+      default: active
+      index: true
+      title: "Status"
+  state_machine:
+    field: status
+    initial: active
+    states:
+      - { name: active, label: "Aktif" }
+      - { name: completed, label: "Selesai" }
+    transitions:
+      - { from: active, to: completed, via: complete }
+  actions:
+    - name: submit
+      disabled: true
+    - name: complete
+      description: "Tandai grup selesai setelah seluruh periode ditutup"
+      required_permission: arisan-master.arisan-group.complete
+      audit: true
+  expose:
+    - type: rest
+      actions: [list, find, create, update, delete]

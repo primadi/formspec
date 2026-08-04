@@ -1,0 +1,12 @@
+apiVersion: forma.dev/v1alpha1
+kind: Widget
+metadata:
+  name: pending-count
+  module: arisan-report
+  description: "Jumlah iuran yang masih menunggu validasi"
+spec:
+  title: "Iuran Menunggu Verifikasi"
+  type: metric
+  entity: arisan-field.contribution
+  query: "status == 'pending'"
+  refresh_secs: 60

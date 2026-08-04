@@ -1,0 +1,20 @@
+{
+  "title": "Theme Spec",
+  "description": "ThemeSpec defines look \u0026 feel as a distributable artifact (Frontend §10).\n",
+  "type": "object",
+  "properties": {
+    "stylesheet": {
+      "type": "string"
+    },
+    "tokens": {
+      "type": "object",
+      "additionalProperties": {}
+    },
+    "widgets": {
+      "description": "base widget → asset skin",
+      "type": "object",
+      "additionalProperties": {}
+    }
+  },
+  "additionalProperties": false
+}

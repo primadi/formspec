@@ -1,0 +1,27 @@
+apiVersion: forma.dev/v1alpha1
+kind: Report
+metadata:
+  name: payment-recap-report
+  module: arisan-report
+  description: "Rekap pembayaran iuran per grup & periode (valid / menunggu / ditolak)"
+spec:
+  title: "Rekap Iuran"
+  entity: arisan-field.contribution
+  required_permission: arisan-report.payment-recap-report.view
+  export: [pdf, csv, xlsx]
+  parameters:
+    - { field: group_id, label: "Grup", type: "select" }
+    - { field: period_id, label: "Periode", type: "select" }
+    - { field: status, label: "Status", type: "select" }
+  groups:
+    - { field: status, label: "Status" }
+  columns:
+    - { field: transaction_date, label: "Tanggal" }
+    - { field: group_id, label: "Grup" }
+    - { field: member_id, label: "Anggota" }
+    - { field: period_id, label: "Periode" }
+    - { field: amount, label: "Nominal" }
+    - { field: payment_ref, label: "Ref Pembayaran" }
+    - { field: status, label: "Status" }
+  totals:
+    - { label: "Total Iuran", field: amount, fn: sum }

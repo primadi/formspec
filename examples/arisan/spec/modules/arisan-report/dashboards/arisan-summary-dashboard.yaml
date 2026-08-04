@@ -1,0 +1,15 @@
+apiVersion: forma.dev/v1alpha1
+kind: Dashboard
+metadata:
+  name: arisan-summary-dashboard
+  module: arisan-report
+  description: "Ringkasan arisan — status iuran, grup aktif, dan periode terbuka"
+spec:
+  title: "Dashboard Arisan"
+  realtime: true
+  refresh: 60
+  widgets:
+    - { ref: active-groups, layout: { x: 0, y: 0, w: 3, h: 1 } }
+    - { ref: open-periods, layout: { x: 3, y: 0, w: 3, h: 1 } }
+    - { ref: paid-count, layout: { x: 6, y: 0, w: 3, h: 1 } }
+    - { ref: pending-count, layout: { x: 9, y: 0, w: 3, h: 1 } }

@@ -1,0 +1,22 @@
+apiVersion: forma.dev/v1alpha1
+kind: App
+metadata:
+  name: arisan
+  description: "Aplikasi Arisan — iuran bulanan & penarikan bergilir (rotating savings)"
+  labels:
+    domain: arisan
+spec:
+  version: 1.0.0
+  vendor: arisan
+  root_url: /app/arisan
+  modules:
+    - arisan-master
+    - arisan-field
+    - arisan-report
+  menu:
+    - type: module
+      module: arisan-master
+    - type: module
+      module: arisan-field
+    - type: module
+      module: arisan-report

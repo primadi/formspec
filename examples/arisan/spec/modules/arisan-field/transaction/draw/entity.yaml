@@ -1,0 +1,64 @@
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: draw
+  module: arisan-field
+  description: "Penarikan — pencatatan pemenang undian arisan per periode"
+spec:
+  version: v1
+  characteristic: transaction
+  lifecycle: plain_crud
+  plural: draws
+  fields:
+    - name: transaction_date
+      type: date
+      required: true
+      index: true
+      title: "Tanggal Penarikan"
+    - name: group_id
+      type: relation
+      relation: { type: belongs_to, resource: arisan-master.arisan-group }
+      required: true
+      title: "Grup"
+    - name: period_id
+      type: relation
+      relation: { type: belongs_to, resource: arisan-field.arisan-period }
+      required: true
+      title: "Periode"
+    - name: member_id
+      type: relation
+      relation: { type: belongs_to, resource: arisan-master.member }
+      required: true
+      title: "Pemenang"
+    - name: amount
+      type: money
+      required: true
+      title: "Nominal Diterima"
+      description: "Total pot yang diterima pemenang"
+    - name: status
+      type: enum
+      enum_values: [drawn, paid_out]
+      default: drawn
+      index: true
+      title: "Status"
+  indexes:
+    - fields: [period_id]
+      unique: true
+  state_machine:
+    field: status
+    initial: drawn
+    states:
+      - { name: drawn, label: "Terundikan" }
+      - { name: paid_out, label: "Dibayarkan" }
+    transitions:
+      - { from: drawn, to: paid_out, via: mark-paid }
+  actions:
+    - name: submit
+      disabled: true
+    - name: mark-paid
+      description: "Tandai penarikan sudah dibayarkan ke pemenang"
+      required_permission: arisan-field.draw.mark-paid
+      audit: true
+  expose:
+    - type: rest
+      actions: [list, find, create, update, delete]

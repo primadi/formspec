@@ -1,0 +1,33 @@
+{
+  "title": "Workflow Spec",
+  "description": "WorkflowSpec defines an approval workflow attached to a state machine\ntransition (02-core-extended.md §2).\n",
+  "type": "object",
+  "properties": {
+    "entity": {
+      "type": "string"
+    },
+    "escalation": {
+      "$ref": "#/$defs/WorkflowEscalation",
+      "nullable": true
+    },
+    "on": {
+      "$ref": "#/$defs/WorkflowTrigger",
+      "nullable": true
+    },
+    "on_reject": {
+      "$ref": "#/$defs/WorkflowReject",
+      "nullable": true
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/WorkflowStep"
+      }
+    }
+  },
+  "required": [
+    "entity",
+    "on"
+  ],
+  "additionalProperties": false
+}

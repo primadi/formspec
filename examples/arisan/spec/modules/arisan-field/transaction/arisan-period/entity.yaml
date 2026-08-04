@@ -1,0 +1,68 @@
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: arisan-period
+  module: arisan-field
+  description: "Periode arisan — satu bulan dalam satu siklus grup; tempat undian penarikan"
+spec:
+  version: v1
+  characteristic: transaction
+  lifecycle: plain_crud
+  plural: arisan-periods
+  fields:
+    - name: transaction_date
+      type: date
+      required: true
+      index: true
+      title: "Tanggal Mulai Periode"
+    - name: group_id
+      type: relation
+      relation: { type: belongs_to, resource: arisan-master.arisan-group }
+      required: true
+      title: "Grup"
+    - name: period_no
+      type: integer
+      required: true
+      title: "Periode ke-"
+      description: "Nomor urut periode dalam siklus (1..term_months)"
+    - name: label
+      type: string
+      title: "Label"
+      description: "Label bulan, contoh 2026-08"
+    - name: status
+      type: enum
+      enum_values: [open, closed]
+      default: open
+      index: true
+      title: "Status"
+  indexes:
+    - fields: [group_id, period_no]
+      unique: true
+  state_machine:
+    field: status
+    initial: open
+    states:
+      - { name: open, label: "Terbuka" }
+      - { name: closed, label: "Ditutup" }
+    transitions:
+      - { from: open, to: closed, via: run-lottery }
+  actions:
+    - name: submit
+      disabled: true
+    - name: run-lottery
+      description: "Undian penarikan — buat record penarikan untuk pemenang dengan iuran valid, lalu tutup periode"
+      required_permission: arisan-field.arisan-period.run-lottery
+      audit: true
+      emits: drawn
+      uses:
+        resources: [contribution.find, draw.create]
+      impl: { type: script_ref, ref: run-lottery }
+  events:
+    - name: drawn
+      type: async
+      description: "Undian periode selesai — satu anggota menang"
+      deliver:
+        - channel: audit_log
+  expose:
+    - type: rest
+      actions: [list, find, create, update, delete]

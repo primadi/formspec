@@ -1,0 +1,104 @@
+{
+  "title": "Entity Spec",
+  "description": "EntitySpec defines a stateful, persisted business data resource (Core §4.1).\n",
+  "type": "object",
+  "properties": {
+    "actions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Action"
+      }
+    },
+    "auth": {
+      "$ref": "#/$defs/EntityAuth",
+      "nullable": true
+    },
+    "backdate_policy": {
+      "$ref": "#/$defs/BackdatePolicy",
+      "nullable": true
+    },
+    "characteristic": {
+      "$ref": "#/$defs/Characteristic"
+    },
+    "deliver": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/DeliveryDecl"
+      }
+    },
+    "display_field": {
+      "description": "field name used as display label for this entity in relation pickers \u0026 detail pages",
+      "type": "string"
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/EventDecl"
+      }
+    },
+    "expose": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ExposeConfig"
+      }
+    },
+    "extend_storage": {
+      "$ref": "#/$defs/ExtendStorage",
+      "nullable": true
+    },
+    "fields": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Field"
+      }
+    },
+    "forward_date_policy": {
+      "$ref": "#/$defs/ForwardDatePolicy",
+      "nullable": true
+    },
+    "hooks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/HookDecl"
+      }
+    },
+    "indexes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/IndexDecl"
+      }
+    },
+    "lifecycle": {
+      "description": "explicit frontend lifecycle: two_step_autosave | two_step_manual | plain_crud (default derived from actions)",
+      "type": "string"
+    },
+    "persist": {
+      "$ref": "#/$defs/PersistSpec",
+      "nullable": true
+    },
+    "plural": {
+      "type": "string"
+    },
+    "rate_limit": {
+      "$ref": "#/$defs/RateLimitSpec",
+      "description": "1.4.1 resource-level rate limit (02-core-extended.md §17)",
+      "nullable": true
+    },
+    "soft_deactivate": {
+      "$ref": "#/$defs/SoftDeactivateDecl",
+      "description": "1.4.10",
+      "nullable": true
+    },
+    "state_machine": {
+      "$ref": "#/$defs/StateMachine",
+      "nullable": true
+    },
+    "version": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "version"
+  ],
+  "additionalProperties": false
+}

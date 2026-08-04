@@ -1,0 +1,15 @@
+apiVersion: forma.dev/v1alpha1
+kind: Module
+metadata:
+  name: arisan-master
+  description: "Arisan Master Data — grup arisan, anggota, dan keanggotaan"
+spec:
+  version: 1.0.0
+  vendor: arisan
+  menu:
+    - label: "Master"
+      icon: "database"
+      children:
+        - { label: "Grup Arisan", icon: "users", route: /arisan-master/arisan-groups }
+        - { label: "Anggota", icon: "user", route: /arisan-master/members }
+        - { label: "Keanggotaan", icon: "user-check", route: /arisan-master/group-members }

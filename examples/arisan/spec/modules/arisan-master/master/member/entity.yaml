@@ -1,0 +1,43 @@
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: member
+  module: arisan-master
+  description: "Data anggota arisan — terdaftar sekali, bisa ikut banyak grup"
+spec:
+  version: v1
+  characteristic: master
+  lifecycle: plain_crud
+  display_field: name
+  plural: members
+  fields:
+    - name: code
+      type: string
+      required: true
+      unique: true
+      title: "Kode Anggota"
+      description: "Kode unik anggota, contoh M-001 — dipakai di payment_ref transfer"
+    - name: name
+      type: string
+      required: true
+      title: "Nama Anggota"
+    - name: phone
+      type: string
+      title: "No. HP"
+    - name: email
+      type: string
+      title: "Email"
+    - name: address
+      type: text
+      title: "Alamat"
+    - name: join_date
+      type: date
+      title: "Tanggal Bergabung"
+  actions:
+    - name: submit
+      disabled: true
+  soft_deactivate:
+    enabled: true
+  expose:
+    - type: rest
+      actions: [list, find, create, update, delete]

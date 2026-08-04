@@ -919,7 +919,11 @@ func (s *EntityStore) Submit(ctx context.Context, workspaceID, id, userID string
 		query += " AND deleted_at IS NULL"
 	}
 
-	result, err := s.db.ExecContext(ctx, query, userID, id, workspaceID)
+	database, err := writeDB(ctx, s.db)
+	if err != nil {
+		return fmt.Errorf("%s submit: %w", s.entity, err)
+	}
+	result, err := database.ExecContext(ctx, query, userID, id, workspaceID)
 	if err != nil {
 		return fmt.Errorf("%s submit: %w", s.entity, err)
 	}
@@ -960,7 +964,11 @@ func (s *EntityStore) Cancel(ctx context.Context, workspaceID, id, userID string
 		query += " AND deleted_at IS NULL"
 	}
 
-	result, err := s.db.ExecContext(ctx, query, userID, id, workspaceID)
+	database, err := writeDB(ctx, s.db)
+	if err != nil {
+		return fmt.Errorf("%s cancel: %w", s.entity, err)
+	}
+	result, err := database.ExecContext(ctx, query, userID, id, workspaceID)
 	if err != nil {
 		return fmt.Errorf("%s cancel: %w", s.entity, err)
 	}
@@ -997,9 +1005,14 @@ func (s *EntityStore) Amend(ctx context.Context, workspaceID, originalID, userID
 		return "", fmt.Errorf("%s amend: create new: %w", s.entity, err)
 	}
 
+	database, err := writeDB(ctx, s.db)
+	if err != nil {
+		return "", fmt.Errorf("%s amend: %w", s.entity, err)
+	}
+
 	// 3. Set amends on new document (points to cancelled original)
 	tbl := s.qualifiedTable()
-	_, err = s.db.ExecContext(ctx,
+	_, err = database.ExecContext(ctx,
 		fmt.Sprintf(`UPDATE %s SET amends = ? WHERE id = ? AND tenant_id = ?`, tbl),
 		originalID, newID, workspaceID)
 	if err != nil {
@@ -1007,7 +1020,7 @@ func (s *EntityStore) Amend(ctx context.Context, workspaceID, originalID, userID
 	}
 
 	// 4. Set amended_by on original (points to new version)
-	_, err = s.db.ExecContext(ctx,
+	_, err = database.ExecContext(ctx,
 		fmt.Sprintf(`UPDATE %s SET amended_by = ? WHERE id = ? AND tenant_id = ?`, tbl),
 		newID, originalID, workspaceID)
 	if err != nil {
@@ -1257,7 +1270,7 @@ func (s *EntityStore) List(ctx context.Context, params ListParams) (*ListResult,
 	// Count total
 	var total int
 	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s", tbl, whereStr)
-	err := s.db.QueryRowContext(ctx, countQuery, args...).Scan(&total)
+	err := txReadDB(ctx, s.db).QueryRowContext(ctx, countQuery, args...).Scan(&total)
 	if err != nil {
 		return nil, fmt.Errorf("%s list count: %w", s.entity, err)
 	}
@@ -1289,7 +1302,7 @@ func (s *EntityStore) List(ctx context.Context, params ListParams) (*ListResult,
 		`SELECT id, tenant_id, version, created_at, updated_at, created_by, updated_by, doc_status, data FROM %s WHERE %s %s %s`,
 		tbl, whereStr, orderClause, paginationClause)
 
-	rows, err := s.db.QueryContext(ctx, query, args...)
+	rows, err := txReadDB(ctx, s.db).QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("%s list: %w", s.entity, err)
 	}
@@ -1395,7 +1408,7 @@ func (s *EntityStore) resolveRelations(ctx context.Context, records []EntityReco
 		}
 		idArgs = append(idArgs, workspaceID)
 
-		rows, err := s.db.QueryContext(ctx, q, idArgs...)
+		rows, err := txReadDB(ctx, s.db).QueryContext(ctx, q, idArgs...)
 		if err != nil {
 			log.Printf("[WARN] resolve relation %s: query %s: %v", f.Name, targetTable, err)
 			continue

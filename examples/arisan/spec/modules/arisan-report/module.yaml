@@ -1,0 +1,16 @@
+apiVersion: forma.dev/v1alpha1
+kind: Module
+metadata:
+  name: arisan-report
+  description: "Arisan Laporan — dashboard ringkasan dan rekap iuran"
+spec:
+  version: 1.0.0
+  vendor: arisan
+  depends:
+    - module: arisan-field
+  menu:
+    - label: "Laporan"
+      icon: "bar-chart-3"
+      children:
+        - { label: "Dashboard Arisan", icon: "layout-dashboard", view: arisan-summary-dashboard }
+        - { label: "Rekap Iuran", icon: "table", view: payment-recap-report }

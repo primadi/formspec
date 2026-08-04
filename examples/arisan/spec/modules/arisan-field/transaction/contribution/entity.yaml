@@ -1,0 +1,93 @@
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: contribution
+  module: arisan-field
+  description: "Iuran — pembayaran bulanan yang disubmit anggota dan divalidasi terhadap mutasi bank"
+spec:
+  version: v1
+  characteristic: transaction
+  lifecycle: plain_crud
+  plural: contributions
+  fields:
+    - name: transaction_date
+      type: date
+      required: true
+      index: true
+      title: "Tanggal Transaksi"
+    - name: group_id
+      type: relation
+      relation: { type: belongs_to, resource: arisan-master.arisan-group }
+      required: true
+      title: "Grup"
+    - name: member_id
+      type: relation
+      relation: { type: belongs_to, resource: arisan-master.member }
+      required: true
+      title: "Anggota"
+    - name: period_id
+      type: relation
+      relation: { type: belongs_to, resource: arisan-field.arisan-period }
+      required: true
+      title: "Periode"
+    - name: amount
+      type: money
+      required: true
+      title: "Nominal Iuran"
+    - name: payment_ref
+      type: string
+      title: "Ref Pembayaran"
+      description: "Kode transfer yang ditulis anggota, contoh AR-001-M-001-202608"
+    - name: payment_date
+      type: date
+      title: "Tanggal Bayar"
+    - name: matched_mutation_id
+      type: relation
+      relation: { type: belongs_to, resource: arisan-field.bank-mutation }
+      title: "Mutasi Tercocok"
+    - name: status
+      type: enum
+      enum_values: [pending, validated, rejected]
+      default: pending
+      index: true
+      title: "Status"
+  state_machine:
+    field: status
+    initial: pending
+    states:
+      - { name: pending, label: "Menunggu" }
+      - { name: validated, label: "Valid" }
+      - { name: rejected, label: "Ditolak" }
+    transitions:
+      - { from: pending, to: validated, via: validate }
+      - { from: pending, to: rejected, via: reject }
+  actions:
+    - name: submit
+      disabled: true
+    - name: validate
+      description: "Validasi iuran terhadap mutasi bank yang cocok (nominal + grup)"
+      required_permission: arisan-field.contribution.validate
+      audit: true
+      emits: validated
+      uses:
+        resources: [bank-mutation.find, bank-mutation.update]
+      impl: { type: script_ref, ref: validate }
+    - name: reject
+      description: "Tolak iuran yang tidak cocok dengan mutasi bank"
+      required_permission: arisan-field.contribution.reject
+      audit: true
+      emits: rejected
+  events:
+    - name: validated
+      type: async
+      description: "Iuran tervalidasi oleh mutasi bank"
+      deliver:
+        - channel: audit_log
+    - name: rejected
+      type: async
+      description: "Iuran ditolak karena tidak cocok"
+      deliver:
+        - channel: audit_log
+  expose:
+    - type: rest
+      actions: [list, find, create]

@@ -1,0 +1,18 @@
+apiVersion: forma.dev/v1alpha1
+kind: Module
+metadata:
+  name: arisan-field
+  description: "Arisan Transaksi — mutasi bank, iuran, periode, dan penarikan"
+spec:
+  version: 1.0.0
+  vendor: arisan
+  depends:
+    - module: arisan-master
+  menu:
+    - label: "Transaksi"
+      icon: "wallet"
+      children:
+        - { label: "Mutasi Bank", icon: "landmark", route: /arisan-field/bank-mutations }
+        - { label: "Iuran", icon: "credit-card", route: /arisan-field/contributions }
+        - { label: "Periode", icon: "calendar-days", route: /arisan-field/arisan-periods }
+        - { label: "Penarikan", icon: "gift", route: /arisan-field/draws }

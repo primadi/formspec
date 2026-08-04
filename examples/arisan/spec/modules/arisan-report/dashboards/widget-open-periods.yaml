@@ -1,0 +1,12 @@
+apiVersion: forma.dev/v1alpha1
+kind: Widget
+metadata:
+  name: open-periods
+  module: arisan-report
+  description: "Jumlah periode yang masih terbuka (belum undian)"
+spec:
+  title: "Periode Terbuka"
+  type: metric
+  entity: arisan-field.arisan-period
+  query: "status == 'open'"
+  refresh_secs: 60

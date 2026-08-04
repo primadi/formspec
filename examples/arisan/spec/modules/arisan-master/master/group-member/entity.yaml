@@ -1,0 +1,40 @@
+apiVersion: forma.dev/v1alpha1
+kind: Entity
+metadata:
+  name: group-member
+  module: arisan-master
+  description: "Keanggotaan — tautan anggota ke grup arisan beserta status aktif"
+spec:
+  version: v1
+  characteristic: master
+  lifecycle: plain_crud
+  plural: group-members
+  fields:
+    - name: group_id
+      type: relation
+      relation: { type: belongs_to, resource: arisan-master.arisan-group }
+      required: true
+      title: "Grup"
+    - name: member_id
+      type: relation
+      relation: { type: belongs_to, resource: arisan-master.member }
+      required: true
+      title: "Anggota"
+    - name: join_date
+      type: date
+      title: "Tanggal Bergabung"
+    - name: status
+      type: enum
+      enum_values: [active, inactive]
+      default: active
+      index: true
+      title: "Status"
+  actions:
+    - name: submit
+      disabled: true
+  indexes:
+    - fields: [group_id, member_id]
+      unique: true
+  expose:
+    - type: rest
+      actions: [list, find, create, update, delete]

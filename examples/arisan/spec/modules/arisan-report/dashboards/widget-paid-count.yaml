@@ -1,0 +1,12 @@
+apiVersion: forma.dev/v1alpha1
+kind: Widget
+metadata:
+  name: paid-count
+  module: arisan-report
+  description: "Jumlah iuran yang sudah valid (lunas)"
+spec:
+  title: "Iuran Valid"
+  type: metric
+  entity: arisan-field.contribution
+  query: "status == 'validated'"
+  refresh_secs: 60
