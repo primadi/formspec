@@ -6,7 +6,7 @@
     "filters": {
       "type": "array",
       "items": {
-        "$ref": "#/$defs/TableFilter"
+        "$ref": "#/$defs/FilterSpec"
       }
     },
     "realtime": {

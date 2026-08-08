@@ -623,6 +623,7 @@ func newDispatcher(reg *entity.Registry, cfg Config) *action.Dispatcher {
 			Version:     version,
 			UpdatedBy:   "script",
 			Data:        data,
+			Permissions: auth.PermissionsFromContext(ctx),
 		})
 		return err
 	})

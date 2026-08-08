@@ -9,13 +9,14 @@ import { useState, useMemo, useCallback } from "react"
 import { Download, Loader2, FileSpreadsheet } from "lucide-react"
 import { toast } from "sonner"
 
-import type { Entry, ReportSpec, ListResponseMeta } from "@/types/manifest"
+import type { Entry, ReportSpec, ReportParam, Field, ListResponseMeta } from "@/types/manifest"
 import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
 import { resolveEntityRef } from "@/engine/entityRef"
 import { apiList, buildListParams } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { RelationPicker } from "@/widgets/RelationPicker"
 
 
 interface ReportRendererProps {
@@ -53,7 +54,7 @@ export default function ReportRenderer({ entry }: ReportRendererProps) {
 
       const result = await apiList<Record<string, unknown>>(
         client,
-        `${schema.module}/${schema.plural}`,
+        `${schema.module}/${schema.name}`,
         buildListParams({
           per_page: 1000,
           ...listParams,
@@ -172,13 +173,14 @@ export default function ReportRenderer({ entry }: ReportRendererProps) {
             {(entry.spec.parameters ?? []).map((param) => (
               <div key={param.field} className="space-y-1">
                 <label className="text-xs font-medium">{param.label}</label>
-                <Input
-                  placeholder={param.field}
+                <ReportParamInput
+                  param={param}
                   value={params[param.field] ?? ""}
-                  onChange={(e) =>
+                  module={entry.module}
+                  onChange={(v) =>
                     setParams((p) => ({
                       ...p,
-                      [param.field]: e.target.value,
+                      [param.field]: v,
                     }))
                   }
                 />
@@ -284,6 +286,61 @@ export default function ReportRenderer({ entry }: ReportRendererProps) {
         </div>
       )}
     </div>
+  )
+}
+
+// ── Report parameter input ──
+//
+// `type: date` gets a native date-picker. `type: select` on a field named
+// `*_id` is treated as a relation to the same-named entity (by convention —
+// ReportParam carries no explicit target, so the `_id` suffix is the only
+// signal available) and gets the same RelationPicker used by form relation
+// fields. Anything else falls back to plain text.
+function ReportParamInput({
+  param,
+  value,
+  module,
+  onChange,
+}: {
+  param: ReportParam
+  value: string
+  module: string
+  onChange: (value: string) => void
+}) {
+  if (param.type === "date" || param.type === "datetime") {
+    return (
+      <Input
+        type={param.type === "datetime" ? "datetime-local" : "date"}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    )
+  }
+
+  if (param.type === "select" && param.field.endsWith("_id")) {
+    const resource = param.field.slice(0, -"_id".length)
+    const syntheticField: Field = {
+      name: param.field,
+      type: "relation",
+      relation: { type: "belongs_to", resource },
+    }
+    return (
+      <RelationPicker
+        value={value}
+        onChange={onChange}
+        entityField={syntheticField}
+        currentModule={module}
+        placeholder={param.label}
+      />
+    )
+  }
+
+  return (
+    <Input
+      placeholder={param.label}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    />
   )
 }
 

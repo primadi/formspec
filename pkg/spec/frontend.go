@@ -138,16 +138,17 @@ func (d *FormRenderDecl) UnmarshalYAML(value *yaml.Node) error {
 // TableSpec defines a list/browse view (Frontend §5).
 type TableSpec struct {
 	// @schema {description: "If true (default), a route /module/table/<name> is auto-generated. Set false for embed-only tables."}
-	Public      *bool         `yaml:"public,omitempty" json:"public,omitempty"`
-	Entity      string        `yaml:"entity" json:"entity"`
-	Columns     []TableColumn `yaml:"columns" json:"columns"`
-	DefaultSort string        `yaml:"default_sort,omitempty" json:"default_sort,omitempty"`
-	PageSize    int           `yaml:"page_size,omitempty" json:"page_size,omitempty"`
-	Search      bool          `yaml:"search,omitempty" json:"search,omitempty"`
-	Realtime    bool          `yaml:"realtime,omitempty" json:"realtime,omitempty"`
-	RowActions  []TableAction `yaml:"row_actions,omitempty" json:"row_actions,omitempty"`
-	BulkActions []TableAction `yaml:"bulk_actions,omitempty" json:"bulk_actions,omitempty"`
-	Filters     []TableFilter `yaml:"filters,omitempty" json:"filters,omitempty"`
+	Public       *bool         `yaml:"public,omitempty" json:"public,omitempty"`
+	Entity       string        `yaml:"entity" json:"entity"`
+	Columns      []TableColumn `yaml:"columns" json:"columns"`
+	DefaultSort  string        `yaml:"default_sort,omitempty" json:"default_sort,omitempty"`
+	PageSize     int           `yaml:"page_size,omitempty" json:"page_size,omitempty"`
+	Search       bool          `yaml:"search,omitempty" json:"search,omitempty"`
+	Realtime     bool          `yaml:"realtime,omitempty" json:"realtime,omitempty"`
+	RowActions   []TableAction `yaml:"row_actions,omitempty" json:"row_actions,omitempty"`
+	BulkActions  []TableAction `yaml:"bulk_actions,omitempty" json:"bulk_actions,omitempty"`
+	Filters      []FilterSpec  `yaml:"filters,omitempty" json:"filters,omitempty"`
+	FixedFilters []FilterSpec  `yaml:"fixed_filters,omitempty" json:"fixed_filters,omitempty"`
 }
 
 // TableColumn configures a table column.
@@ -170,12 +171,30 @@ type TableAction struct {
 	ConfirmMsg string `yaml:"confirm_msg,omitempty" json:"confirm_msg,omitempty"`
 }
 
-// TableFilter is a filterable field in a table.
-type TableFilter struct {
+// FilterSpec is a generic filter declaration shared by every data kind that
+// lists records (Table, Kanban, Listing, ApprovalInbox, …). A filter is used
+// in one of two roles:
+//   - `filters`: a user-adjustable control rendered in the kind's UI. If
+//     `default` is set, the control is pre-seeded with that value (the user
+//     can still change or clear it).
+//   - `fixed_filters`: an immutable, server-side filter — always merged into
+//     the list request, never rendered as a control and not user-clearable.
+//
+// The resolved value is sent to the list API as `field[op]=value`, so `op`
+// defaults to "eq" and follows the backend filter operator set.
+type FilterSpec struct {
 	Field string `yaml:"field" json:"field"`
-	Label string `yaml:"label" json:"label"`
-	// @schema {description: "Filter widget type", enum: ["text", "select", "date_range"]}
-	Type string `yaml:"type" json:"type"`
+	Label string `yaml:"label,omitempty" json:"label,omitempty"`
+	// @schema {description: "Filter widget type", enum: ["text", "select", "date", "date_range"]}
+	Type string `yaml:"type,omitempty" json:"type,omitempty"`
+	// @schema {description: "Filter operator sent to the list API", enum: ["eq", "neq", "gt", "gte", "lt", "lte", "between", "in", "nin", "like", "ilike", "null", "notnull"]}
+	Op string `yaml:"op,omitempty" json:"op,omitempty"` // default "eq"
+	// @schema {description: "Pre-set value for a user-adjustable filter. Supports \"today\" / \"today()\", resolved by the renderer as the server's current date."}
+	Default string `yaml:"default,omitempty" json:"default,omitempty"`
+	// @schema {description: "For select filters: show the \"All\" (clear) option. Default true."}
+	ShowAll *bool `yaml:"show_all,omitempty" json:"show_all,omitempty"`
+	// @schema {description: "For select filters: caption of the \"All\" (clear) option. Default \"(ALL)\"."}
+	AllLabel string `yaml:"all_label,omitempty" json:"all_label,omitempty"`
 }
 
 // DashboardSpec defines a widget canvas (Frontend §5).
@@ -315,7 +334,8 @@ type KanbanSpec struct {
 	Columns           []KanbanColumn `yaml:"columns" json:"columns"`
 	CardTemplate      *KanbanCard    `yaml:"card_template,omitempty" json:"card_template,omitempty"`
 	Realtime          *bool          `yaml:"realtime,omitempty" json:"realtime,omitempty"` // default true (§12)
-	Filters           []string       `yaml:"filters,omitempty" json:"filters,omitempty"`
+	Filters           []FilterSpec   `yaml:"filters,omitempty" json:"filters,omitempty"`
+	FixedFilters      []FilterSpec   `yaml:"fixed_filters,omitempty" json:"fixed_filters,omitempty"`
 	Search            bool           `yaml:"search,omitempty" json:"search,omitempty"`
 	RowActions        []TableAction  `yaml:"row_actions,omitempty" json:"row_actions,omitempty"`
 	MaxCardsPerColumn int            `yaml:"max_cards_per_column,omitempty" json:"max_cards_per_column,omitempty"`
@@ -460,9 +480,9 @@ type CalendarSpec struct {
 // (06-page-kinds.md §11). Instance of VisualSpecKind tier: page.
 // Zero-config: sources are pending Workflow steps eligible for the caller.
 type ApprovalInboxSpec struct {
-	Realtime bool          `yaml:"realtime,omitempty" json:"realtime,omitempty"`
-	Filters  []TableFilter `yaml:"filters,omitempty" json:"filters,omitempty"`
-	Search   bool          `yaml:"search,omitempty" json:"search,omitempty"`
+	Realtime bool         `yaml:"realtime,omitempty" json:"realtime,omitempty"`
+	Filters  []FilterSpec `yaml:"filters,omitempty" json:"filters,omitempty"`
+	Search   bool         `yaml:"search,omitempty" json:"search,omitempty"`
 }
 
 // NotificationCenterSpec defines the in-app notification page
@@ -478,6 +498,6 @@ type NotificationCenterSpec struct {
 type ListingSpec struct {
 	Entity  string        `yaml:"entity" json:"entity"`
 	Columns []TableColumn `yaml:"columns" json:"columns"`
-	Filters []TableFilter `yaml:"filters,omitempty" json:"filters,omitempty"`
+	Filters []FilterSpec  `yaml:"filters,omitempty" json:"filters,omitempty"`
 	Search  bool          `yaml:"search,omitempty" json:"search,omitempty"`
 }

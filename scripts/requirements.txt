@@ -1,0 +1,5 @@
+# Dependencies untuk docs-serve (scripts/docs-serve.py)
+# Install: pip install -r scripts/requirements.txt
+# Atau otomatis via: make docs-serve
+markdown>=3.5
+Pygments>=2.17

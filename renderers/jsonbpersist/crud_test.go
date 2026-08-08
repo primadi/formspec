@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/primadi/forma/pkg/spec"
 )
@@ -37,9 +38,9 @@ func TestEntityStore_InsertAndGetByID(t *testing.T) {
 
 	// Insert
 	id, err := store.Insert(ctx, InsertParams{
-		WorkspaceID:  "tenant-1",
-		CreatedBy: "user-1",
-		Data:      map[string]any{"name": "John Doe", "email": "john@example.com"},
+		WorkspaceID: "tenant-1",
+		CreatedBy:   "user-1",
+		Data:        map[string]any{"name": "John Doe", "email": "john@example.com"},
 	})
 	if err != nil {
 		t.Fatalf("Insert failed: %v", err)
@@ -85,9 +86,9 @@ func TestEntityStore_Update(t *testing.T) {
 
 	// Insert
 	id, err := store.Insert(ctx, InsertParams{
-		WorkspaceID:  "t1",
-		CreatedBy: "u1",
-		Data:      map[string]any{"name": "Widget", "price": 9.99},
+		WorkspaceID: "t1",
+		CreatedBy:   "u1",
+		Data:        map[string]any{"name": "Widget", "price": 9.99},
 	})
 	if err != nil {
 		t.Fatalf("Insert failed: %v", err)
@@ -101,11 +102,11 @@ func TestEntityStore_Update(t *testing.T) {
 
 	// Update
 	newVersion, err := store.Update(ctx, UpdateParams{
-		WorkspaceID:  "t1",
-		ID:        id,
-		Version:   rec.Version,
-		UpdatedBy: "u2",
-		Data:      map[string]any{"name": "Widget Pro", "price": 19.99},
+		WorkspaceID: "t1",
+		ID:          id,
+		Version:     rec.Version,
+		UpdatedBy:   "u2",
+		Data:        map[string]any{"name": "Widget Pro", "price": 19.99},
 	})
 	if err != nil {
 		t.Fatalf("Update failed: %v", err)
@@ -227,8 +228,8 @@ func TestEntityStore_List(t *testing.T) {
 	// List with pagination
 	result, err := store.List(ctx, ListParams{
 		WorkspaceID: "t1",
-		Page:     1,
-		PerPage:  3,
+		Page:        1,
+		PerPage:     3,
 	})
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
@@ -290,7 +291,7 @@ func TestEntityStore_List_FilterByField(t *testing.T) {
 	// Filter by generated column
 	result, err := store.List(ctx, ListParams{
 		WorkspaceID: "t1",
-		Filters:  map[string]FilterOp{"name": {Op: "eq", Value: "Alice"}},
+		Filters:     map[string]FilterOp{"name": {Op: "eq", Value: "Alice"}},
 	})
 	if err != nil {
 		t.Fatalf("List with filter failed: %v", err)
@@ -1557,5 +1558,195 @@ func TestEntityStore_LifecycleFree_NoDocStatus(t *testing.T) {
 		id, "t1").Scan(&docStatus)
 	if docStatus != nil {
 		t.Errorf("expected doc_status=NULL (lifecycle-free), got %v", *docStatus)
+	}
+}
+
+// ============================================================================
+// Backdate policy + override_permission (special path for stale records)
+// ============================================================================
+
+// TestEntityStore_BackdatePolicy_Blocked verifies that a transaction_date
+// beyond max_days_back is rejected when the caller lacks the override.
+func TestEntityStore_BackdatePolicy_Blocked(t *testing.T) {
+	dir := t.TempDir()
+	d, err := OpenSQLite(filepath.Join(dir, "crud_backdate_blocked.db"), nil)
+	if err != nil {
+		t.Fatalf("OpenSQLite failed: %v", err)
+	}
+	defer d.Close()
+
+	meta := spec.Metadata{Name: "visit", Module: "clinic"}
+	oldDate := timeNow().Add(-10 * 24 * time.Hour).Format("2006-01-02")
+	entity := &spec.EntitySpec{
+		Version: "v1",
+		Fields: []spec.Field{
+			{Name: "transaction_date", Type: spec.FieldDate, Required: true},
+		},
+		BackdatePolicy: &spec.BackdatePolicy{
+			MaxDaysBack:        3,
+			OverridePermission: "visits.resolve-stale",
+		},
+	}
+
+	r := NewMigrationRunner(d, DriverSQLite)
+	ctx := context.Background()
+	if _, err := r.ApplyMigrations(ctx, []EntityMigration{{Metadata: meta, EntitySpec: *entity}}); err != nil {
+		t.Fatalf("ApplyMigrations failed: %v", err)
+	}
+
+	store := NewEntityStore(d, DriverSQLite, meta, entity)
+
+	// Without override permission → blocked
+	_, err = store.Insert(ctx, InsertParams{
+		WorkspaceID: "t1", CreatedBy: "u1",
+		Data:        map[string]any{"transaction_date": oldDate},
+		Permissions: []string{"visits.create"},
+	})
+	if err == nil {
+		t.Fatal("expected BACKDATE_EXCEEDED for old date without override")
+	}
+	if !strings.Contains(err.Error(), "FORMA.TXN.BACKDATE_EXCEEDED") {
+		t.Errorf("expected BACKDATE_EXCEEDED error, got: %v", err)
+	}
+}
+
+// TestEntityStore_BackdatePolicy_Override verifies that a caller holding the
+// override_permission can bypass the policy — the special path for stale
+// records, without widening the policy itself.
+func TestEntityStore_BackdatePolicy_Override(t *testing.T) {
+	dir := t.TempDir()
+	d, err := OpenSQLite(filepath.Join(dir, "crud_backdate_override.db"), nil)
+	if err != nil {
+		t.Fatalf("OpenSQLite failed: %v", err)
+	}
+	defer d.Close()
+
+	meta := spec.Metadata{Name: "visit", Module: "clinic"}
+	oldDate := timeNow().Add(-10 * 24 * time.Hour).Format("2006-01-02")
+	entity := &spec.EntitySpec{
+		Version: "v1",
+		Fields: []spec.Field{
+			{Name: "transaction_date", Type: spec.FieldDate, Required: true},
+		},
+		BackdatePolicy: &spec.BackdatePolicy{
+			MaxDaysBack:        3,
+			OverridePermission: "visits.resolve-stale",
+		},
+	}
+
+	r := NewMigrationRunner(d, DriverSQLite)
+	ctx := context.Background()
+	if _, err := r.ApplyMigrations(ctx, []EntityMigration{{Metadata: meta, EntitySpec: *entity}}); err != nil {
+		t.Fatalf("ApplyMigrations failed: %v", err)
+	}
+
+	store := NewEntityStore(d, DriverSQLite, meta, entity)
+
+	// With override permission → allowed (wildcard also works)
+	_, err = store.Insert(ctx, InsertParams{
+		WorkspaceID: "t1", CreatedBy: "u1",
+		Data:        map[string]any{"transaction_date": oldDate},
+		Permissions: []string{"visits.resolve-stale"},
+	})
+	if err != nil {
+		t.Fatalf("Insert with override permission should pass: %v", err)
+	}
+}
+
+// TestEntityStore_IsStale_Computed verifies the derived is_stale flag follows
+// the backdate limit injected into the computed env.
+func TestEntityStore_IsStale_Computed(t *testing.T) {
+	dir := t.TempDir()
+	d, err := OpenSQLite(filepath.Join(dir, "crud_is_stale.db"), nil)
+	if err != nil {
+		t.Fatalf("OpenSQLite failed: %v", err)
+	}
+	defer d.Close()
+
+	meta := spec.Metadata{Name: "visit", Module: "clinic"}
+	entity := &spec.EntitySpec{
+		Version: "v1",
+		Fields: []spec.Field{
+			{Name: "transaction_date", Type: spec.FieldDate, Required: true},
+			{Name: "status", Type: spec.FieldString},
+			{
+				Name: "is_stale",
+				Type: spec.FieldBoolean,
+				Computed: &spec.ComputedDecl{
+					Formula: `status not in ("completed", "cancelled") and transaction_date < days_ago(backdate_limit_days)`,
+				},
+			},
+		},
+		BackdatePolicy: &spec.BackdatePolicy{
+			MaxDaysBack:        3,
+			OverridePermission: "visits.resolve-stale",
+		},
+	}
+
+	r := NewMigrationRunner(d, DriverSQLite)
+	ctx := context.Background()
+	if _, err := r.ApplyMigrations(ctx, []EntityMigration{{Metadata: meta, EntitySpec: *entity}}); err != nil {
+		t.Fatalf("ApplyMigrations failed: %v", err)
+	}
+
+	store := NewEntityStore(d, DriverSQLite, meta, entity)
+
+	// Old waiting visit → is_stale = true
+	id1, err := store.Insert(ctx, InsertParams{
+		WorkspaceID: "t1", CreatedBy: "u1",
+		Data: map[string]any{
+			"transaction_date": timeNow().Add(-5 * 24 * time.Hour).Format("2006-01-02"),
+			"status":           "waiting",
+		},
+		Permissions: []string{"visits.resolve-stale"},
+	})
+	if err != nil {
+		t.Fatalf("Insert stale failed: %v", err)
+	}
+	rec, err := store.GetByID(ctx, GetByIDParams{WorkspaceID: "t1", ID: id1})
+	if err != nil {
+		t.Fatalf("GetByID failed: %v", err)
+	}
+	if stale, _ := rec.Data["is_stale"].(bool); !stale {
+		t.Errorf("expected is_stale=true for old waiting visit, got %v", rec.Data["is_stale"])
+	}
+
+	// Completed visit (even old) → is_stale = false
+	id2, err := store.Insert(ctx, InsertParams{
+		WorkspaceID: "t1", CreatedBy: "u1",
+		Data: map[string]any{
+			"transaction_date": timeNow().Add(-5 * 24 * time.Hour).Format("2006-01-02"),
+			"status":           "completed",
+		},
+		Permissions: []string{"visits.resolve-stale"},
+	})
+	if err != nil {
+		t.Fatalf("Insert completed failed: %v", err)
+	}
+	rec2, err := store.GetByID(ctx, GetByIDParams{WorkspaceID: "t1", ID: id2})
+	if err != nil {
+		t.Fatalf("GetByID failed: %v", err)
+	}
+	if stale, _ := rec2.Data["is_stale"].(bool); stale {
+		t.Errorf("expected is_stale=false for completed visit, got %v", rec2.Data["is_stale"])
+	}
+
+	// Recent waiting visit → is_stale = false
+	id3, err := store.Insert(ctx, InsertParams{
+		WorkspaceID: "t1", CreatedBy: "u1",
+		Data: map[string]any{
+			"transaction_date": timeNow().Format("2006-01-02"),
+			"status":           "waiting",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Insert recent failed: %v", err)
+	}
+	rec3, err := store.GetByID(ctx, GetByIDParams{WorkspaceID: "t1", ID: id3})
+	if err != nil {
+		t.Fatalf("GetByID failed: %v", err)
+	}
+	if stale, _ := rec3.Data["is_stale"].(bool); stale {
+		t.Errorf("expected is_stale=false for recent visit, got %v", rec3.Data["is_stale"])
 	}
 }

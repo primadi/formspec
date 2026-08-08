@@ -5,7 +5,7 @@
 //
 // Design doc §5.5 Table kind (F3)
 
-import React, { useState, useEffect, useMemo } from "react"
+import React, { useState, useEffect, useMemo, useRef } from "react"
 import {
   useReactTable,
   getCoreRowModel,
@@ -35,20 +35,24 @@ import type {
   EntitySchema,
   ListParams,
   TableAction,
-  TableFilter,
+  FilterSpec,
+  FilterOpValue,
   MetaBundle,
 } from "@/types/manifest"
 import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
 import { can as checkPermission } from "@/engine/permissions"
-import { deriveTable } from "@/engine/derive"
+import { deriveTable, deriveForm } from "@/engine/derive"
 import { getLifecycle } from "@/engine/lifecycle"
 import { buildListParams, apiList, apiDelete } from "@/lib/api"
+import { buildFixedFilterParams, resolveFilterValue, shouldShowAll, allLabel } from "@/lib/filters"
+import { useSelectFilterOptions } from "@/hooks/useSelectFilterOptions"
+import { useRealtime } from "@/hooks/useRealtime"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
 import { Badge } from "@/widgets/Badge"
-import { cn } from "@/lib/utils"
+import { cn, titleCase } from "@/lib/utils"
 import { resolveIcon } from "@/lib/icon-resolver"
 import ConfirmDialog from "@/components/ui/confirm-dialog"
 
@@ -58,6 +62,11 @@ interface TableRendererProps {
    *  TableRenderer is embedded inside a Page that already provides its
    *  own title. Standalone (derived CRUD route) keeps the default title. */
   hideTitle?: boolean
+  /** Extra filters merged into every list fetch, in addition to whatever the
+   *  user picks from the table's own filter UI — used by a Page's `table`
+   *  block `param` (e.g. `{ patient_id: ":id" }` scoping the table to the
+   *  page's own record). Always applied; not user-clearable. */
+  fixedFilters?: Record<string, string>
 }
 
 interface RowData {
@@ -65,7 +74,7 @@ interface RowData {
   [key: string]: unknown
 }
 
-export default function TableRenderer({ entity, hideTitle }: TableRendererProps) {
+export default function TableRenderer({ entity, hideTitle, fixedFilters }: TableRendererProps) {
   const navigate = useNavigate()
   const { surfacePath } = useSurface()
   const [, setSearchParams] = useSearchParams()
@@ -79,6 +88,14 @@ export default function TableRenderer({ entity, hideTitle }: TableRendererProps)
     const entityRef = `${entity.module}.${entity.name}`
     return metaBundle.forms.find((f) => f.spec.entity === entityRef)
   }, [metaBundle, entity])
+
+  // Render mode (§1.6 heuristic: ≤5 fields → modal, 6–12 → drawer, else
+  // separate_page) — authored form wins if it sets one explicitly, otherwise
+  // fall back to the same heuristic deriveForm() applies to fully-derived
+  // entities (most entities in this showcase have no authored Form at all).
+  const formRenderMode = authoredForm?.spec.render?.mode
+    ?? deriveForm(entity, "create").render?.mode
+    ?? "separate_page"
 
   // Resolve table spec: authored > derived, with fallback for missing fields
   const tableSpec = useMemo(() => {
@@ -112,9 +129,20 @@ export default function TableRenderer({ entity, hideTitle }: TableRendererProps)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
+  // Set true by the realtime effect so the next list load stays silent
+  // (no full-table "Loading..." flash on every pushed event).
+  const silentRefetch = useRef(false)
 
-  // Filter state
-  const [filterValues, setFilterValues] = useState<Record<string, string>>({})
+  // Filter state — pre-seeded from each filter's `default` (e.g.
+  // `{ field: transaction_date, type: date, default: today }` → the table
+  // opens scoped to the server's current date, still user-adjustable).
+  const [filterValues, setFilterValues] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      (tableSpec.filters ?? [])
+        .map((f) => [f.field, resolveFilterValue(f.default)])
+        .filter(([, v]) => v !== ""),
+    ),
+  )
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set())
 
   // Pending confirm action
@@ -131,8 +159,10 @@ export default function TableRenderer({ entity, hideTitle }: TableRendererProps)
   // Fetch data when params change
   useEffect(() => {
     let cancelled = false
+    const silent = silentRefetch.current
+    silentRefetch.current = false // consume the realtime-silent flag
     const load = async () => {
-      setLoading(true)
+      if (!silent) setLoading(true)
       setError(null)
       try {
         const client = getClient()
@@ -144,12 +174,14 @@ export default function TableRenderer({ entity, hideTitle }: TableRendererProps)
         if (sorting.length > 0) {
           params.sort = sorting.map((s) => `${s.desc ? "-" : ""}${s.id}`).join(",")
         }
-        // Add filter values to params
-        const activeFilters: Record<string, string> = {}
-        for (const [field, value] of Object.entries(filterValues)) {
-          if (value) {
-            activeFilters[field] = value
-          }
+        // Add filter values to params — user picks first, then the page's
+        // runtime fixedFilters, then the manifest's fixed_filters (operator
+        // syntax) so an immutable server-side scope can never be removed by
+        // the UI (e.g. a table pinned to today()).
+        const activeFilters: Record<string, string | FilterOpValue> = {
+          ...filterValues,
+          ...fixedFilters,
+          ...buildFixedFilterParams(tableSpec.fixed_filters),
         }
         if (Object.keys(activeFilters).length > 0) {
           params.filters = activeFilters
@@ -170,12 +202,22 @@ export default function TableRenderer({ entity, hideTitle }: TableRendererProps)
           setData([])
         }
       } finally {
-        if (!cancelled) setLoading(false)
+        if (!cancelled && !silent) setLoading(false)
       }
     }
     load()
     return () => { cancelled = true }
-  }, [entity, page, search, sorting, filterValues, tableSpec.page_size, getClient, reloadKey])
+  }, [entity, page, search, sorting, filterValues, tableSpec.page_size, getClient, reloadKey, fixedFilters])
+
+  // ── Realtime (spec §5): matching entity event → silent refetch ──
+  const realtimeTick = useRealtime(
+    tableSpec.realtime && entity ? `${entity.module}/${entity.name}` : "",
+  )
+  useEffect(() => {
+    if (realtimeTick === 0) return
+    silentRefetch.current = true
+    setReloadKey((k) => k + 1)
+  }, [realtimeTick])
 
   // Row selection state for bulk actions
   const [rowSelection, setRowSelection] = useState({})
@@ -287,13 +329,14 @@ export default function TableRenderer({ entity, hideTitle }: TableRendererProps)
         navigate(surfacePath(entity.module, entity.plural, row.id))
         break
       case "edit":
-        // If there's an authored form with overlay mode, trigger overlay
-        if (authoredForm?.spec.render?.mode && authoredForm.spec.render.mode !== "separate_page") {
+        // Modal/drawer render mode → overlay (authored form name if there is
+        // one, otherwise the entity itself — OverlayHost derives the form).
+        if (formRenderMode !== "separate_page") {
           setSearchParams({
             action: "edit",
-            form: authoredForm.name,
+            ...(authoredForm ? { form: authoredForm.name } : { entity: `${entity.module}.${entity.name}` }),
             id: row.id,
-            mode: authoredForm.spec.render.mode,
+            mode: formRenderMode,
           })
         } else {
           navigate(surfacePath(entity.module, entity.plural, row.id, "edit"))
@@ -340,7 +383,7 @@ export default function TableRenderer({ entity, hideTitle }: TableRendererProps)
         <div>
           {!hideTitle && (
             <h1 className="text-2xl font-bold tracking-tight">
-              {entity.name.charAt(0).toUpperCase() + entity.name.slice(1)}
+              {titleCase(entity.name)}
             </h1>
           )}
           <p className="text-sm text-muted-foreground">
@@ -351,12 +394,14 @@ export default function TableRenderer({ entity, hideTitle }: TableRendererProps)
         {lifecycle.hasCreate && (
           <Button
             onClick={() => {
-              // If there's an authored form with overlay mode, trigger overlay
-              if (authoredForm?.spec.render?.mode && authoredForm.spec.render.mode !== "separate_page") {
+              // Modal/drawer render mode → overlay (authored form name if
+              // there is one, otherwise the entity itself — OverlayHost
+              // derives the form).
+              if (formRenderMode !== "separate_page") {
                 setSearchParams({
                   action: "create",
-                  form: authoredForm.name,
-                  mode: authoredForm.spec.render.mode,
+                  ...(authoredForm ? { form: authoredForm.name } : { entity: `${entity.module}.${entity.name}` }),
+                  mode: formRenderMode,
                 })
               } else {
                 navigate(surfacePath(entity.module, entity.plural, "new"))
@@ -678,7 +723,7 @@ function FilterBar({
   onFilterChange,
   onClear,
 }: {
-  filters: TableFilter[]
+  filters: FilterSpec[]
   entity: EntitySchema
   metaBundle: MetaBundle | null
   getClient: () => import("ky").KyInstance
@@ -720,7 +765,7 @@ function FilterControl({
   value,
   onChange,
 }: {
-  filter: TableFilter
+  filter: FilterSpec
   entity: EntitySchema
   metaBundle: MetaBundle | null
   getClient: () => import("ky").KyInstance
@@ -729,61 +774,26 @@ function FilterControl({
 }) {
   switch (filter.type) {
     case "select": {
-      // Derive options from entity field enum_values or relation entity
-      const fieldDef = entity.fields.find((f) => f.name === filter.field)
-      const isRelation = fieldDef?.type === "relation" && fieldDef?.relation
-      const [relationOptions, setRelationOptions] = useState<
-        { value: string; label: string }[]
-      >([])
-
-      // Fetch relation options if this is a relation field
-      useEffect(() => {
-        if (!isRelation || !metaBundle || !fieldDef?.relation) return
-        const resource = fieldDef.relation.resource
-        // Find the related entity in metaBundle
-        const relatedEntity = metaBundle.entities.find(
-          (e) => e.name === resource,
-        )
-        if (!relatedEntity) return
-
-        const client = getClient()
-        const labelField = relatedEntity.label_field || "name"
-        client
-          .get(`${relatedEntity.module}/${resource}`, {
-            searchParams: { per_page: "500" },
-          })
-          .json<{ data: Record<string, unknown>[] }>()
-          .then((body) => {
-            const items = body.data ?? []
-            setRelationOptions(
-              items.map((item) => ({
-                value: String(item.id ?? ""),
-                label: String(item[labelField] ?? item.id ?? ""),
-              })),
-            )
-          })
-          .catch(() => {
-            // Silently fail — filter just shows "All" only
-          })
-      }, [isRelation, metaBundle, fieldDef, getClient])
-
-      const options = isRelation
-        ? relationOptions
-        : (fieldDef?.enum_values ?? []).map((o) => ({ value: o, label: o }))
-
+      // Options come from the entity field definition (enum_values / related
+      // entity master data), independent of the current rows — so a table or
+      // board scoped to an empty date range still shows valid filter options.
+      const options = useSelectFilterOptions(filter, entity, metaBundle, getClient)
+      const showAll = shouldShowAll(filter)
+      const optionsWithAll = [
+        ...(showAll ? [{ value: "__all__", label: allLabel(filter) }] : []),
+        ...options,
+      ]
       return (
         <Select
           value={value}
           onChange={(v) => onChange(v === "__all__" ? "" : v)}
-          options={[
-            { value: "__all__", label: "All" },
-            ...options,
-          ]}
+          options={optionsWithAll}
           placeholder={filter.label}
           className="h-8 w-35 text-xs"
         />
       )
     }
+    case "date":
     case "date_range": {
       return (
         <Input

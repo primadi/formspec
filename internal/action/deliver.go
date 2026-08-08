@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/primadi/forma/renderers/jsonbpersist"
 	"github.com/primadi/forma/internal/events"
+	db "github.com/primadi/forma/renderers/jsonbpersist"
 )
 
 // DeliveryDeps bundles the dependencies DeliverEvents needs to fan out an
@@ -43,6 +43,27 @@ func BuildEventMessage(resource string, ev EventEmission) ([]byte, error) {
 	return json.Marshal(msg)
 }
 
+// NotifyMutation broadcasts a generic entity-change event over the
+// workspace's websocket — the Spec Resolution API §5 realtime channel
+// `entity:{module}.{name}` with events `created | updated | deleted` (and
+// custom action names for lifecycle/state transitions). The CRUD handlers
+// call it after a mutation commits, so every mutation is pushed to live
+// subscribers — not only declared `events:` with `deliver: websocket`.
+//
+// Listener-gated: when no websocket connection is registered for the
+// workspace this is a no-op — realtime publish work is never done when
+// nobody is listening, even if the entity declares a websocket publish.
+func NotifyMutation(deps DeliveryDeps, workspaceID, resource, event string) {
+	if deps.Hub == nil || !deps.Hub.HasListeners(workspaceID) {
+		return
+	}
+	deps.Hub.Broadcast(workspaceID, events.EventMessage{
+		Event:    event,
+		Resource: resource,
+		Emitted:  time.Now().UTC().Format(time.RFC3339Nano),
+	})
+}
+
 // DeliverEvents fans each emission out to its declared channels
 // (EventEmission.DeliverTo, already resolved by ResolveEmission from the
 // entity's events: block). Durability is gated purely by ev.Durable (from
@@ -73,12 +94,16 @@ func DeliverEvents(ctx context.Context, deps DeliveryDeps, workspaceID, resource
 		for _, ch := range ev.DeliverTo {
 			switch ch.Channel {
 			case "websocket":
-				if deps.Hub != nil {
+				// Listener-gated (realtime is non-durable, §5): no websocket
+				// connection for the workspace → skip both the immediate push
+				// and the outbox insurance — there is nobody to receive it
+				// and there is no replay for a late connection.
+				if deps.Hub != nil && deps.Hub.HasListeners(workspaceID) {
 					deps.Hub.Broadcast(workspaceID, msg)
-				}
-				if ev.Durable && deps.Outbox != nil && !outboxAlreadyEnqueued {
-					if _, err := deps.Outbox.Enqueue(ctx, workspaceID, ev.Name, resource, string(payloadJSON)); err != nil {
-						deps.logger().Error("event.outbox_enqueue_failed", map[string]any{"event": ev.Name, "channel": ch.Channel, "error": err.Error()})
+					if ev.Durable && deps.Outbox != nil && !outboxAlreadyEnqueued {
+						if _, err := deps.Outbox.Enqueue(ctx, workspaceID, ev.Name, resource, string(payloadJSON)); err != nil {
+							deps.logger().Error("event.outbox_enqueue_failed", map[string]any{"event": ev.Name, "channel": ch.Channel, "error": err.Error()})
+						}
 					}
 				}
 			case "audit_log":

@@ -67,10 +67,16 @@ func AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
-		// Extract token from Authorization header
+		// Extract token from Authorization header, falling back to the
+		// `token` query param — browsers cannot set custom headers on a
+		// WebSocket handshake, so the realtime client (/ _ui/_ws) authenticates
+		// via ?token=. Note: query-string tokens can leak into logs/referrers;
+		// prefer the header for regular REST calls.
 		token := ""
 		if authHeader := r.Header.Get("Authorization"); authHeader != "" {
 			token = strings.TrimPrefix(authHeader, "Bearer ")
+		} else if q := r.URL.Query().Get("token"); q != "" {
+			token = q
 		}
 
 		// Validate token and resolve identity

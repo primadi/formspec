@@ -89,6 +89,11 @@ func (r *Registry) Validate(resolve EntityResolver) []error {
 				addf("%s: Table %q: filter field %q not on entity %q", e.Source, name, f.Field, e.Spec.Entity)
 			}
 		}
+		for _, f := range e.Spec.FixedFilters {
+			if !fieldPathExists(resolve, e.Module, es, f.Field) {
+				addf("%s: Table %q: fixed_filters field %q not on entity %q", e.Source, name, f.Field, e.Spec.Entity)
+			}
+		}
 		for _, a := range append(append([]spec.TableAction{}, e.Spec.RowActions...), e.Spec.BulkActions...) {
 			if !builtinRowActions[a.Action] && !actionExists(es, a.Action) {
 				addf("%s: Table %q: action %q not on entity %q and not a builtin (view|edit|delete|export|print)",
@@ -112,6 +117,9 @@ func (r *Registry) Validate(resolve EntityResolver) []error {
 			addf("%s: Page %q: duplicate route %q (also on page %q)", e.Source, name, e.Spec.Route, other)
 		} else {
 			routes[e.Spec.Route] = name
+		}
+		if e.Spec.Route == "/app" || strings.HasPrefix(e.Spec.Route, "/app/") {
+			addf("%s: Page %q: route %q must not start with /app — the App's mount prefix is already prepended by the renderer; an authored /app-prefixed route doubles it and becomes unreachable", e.Source, name, e.Spec.Route)
 		}
 		if len(e.Spec.Blocks) > 0 && len(e.Spec.Tabs) > 0 {
 			addf("%s: Page %q: blocks and tabs are mutually exclusive", e.Source, name)
@@ -214,6 +222,16 @@ func (r *Registry) Validate(resolve EntityResolver) []error {
 					addf("%s: Kanban %q: column status %q not in enum_values of %q",
 						e.Source, name, c.Status, e.Spec.StatusField)
 				}
+			}
+		}
+		for _, f := range e.Spec.Filters {
+			if !fieldPathExists(resolve, e.Module, es, f.Field) {
+				addf("%s: Kanban %q: filter field %q not on entity %q", e.Source, name, f.Field, e.Spec.Entity)
+			}
+		}
+		for _, f := range e.Spec.FixedFilters {
+			if !fieldPathExists(resolve, e.Module, es, f.Field) {
+				addf("%s: Kanban %q: fixed_filters field %q not on entity %q", e.Source, name, f.Field, e.Spec.Entity)
 			}
 		}
 	}

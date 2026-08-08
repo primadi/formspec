@@ -124,3 +124,72 @@ func TestEvalExpr_UndefinedVariable(t *testing.T) {
 		t.Fatal("expected error for undefined variable")
 	}
 }
+
+func TestEvalExpr_Today(t *testing.T) {
+	result, err := EvalExpr("today()", nil)
+	if err != nil {
+		t.Fatalf("EvalExpr failed: %v", err)
+	}
+	got, ok := result.(string)
+	if !ok {
+		t.Fatalf("expected string, got %T: %v", result, result)
+	}
+	if len(got) != 10 || got[4] != '-' || got[7] != '-' {
+		t.Errorf("expected YYYY-MM-DD, got %q", got)
+	}
+}
+
+func TestEvalExpr_DaysAgo(t *testing.T) {
+	result, err := EvalExpr("days_ago(3)", nil)
+	if err != nil {
+		t.Fatalf("EvalExpr failed: %v", err)
+	}
+	got, ok := result.(string)
+	if !ok {
+		t.Fatalf("expected string, got %T: %v", result, result)
+	}
+	if len(got) != 10 || got[4] != '-' || got[7] != '-' {
+		t.Errorf("expected YYYY-MM-DD, got %q", got)
+	}
+}
+
+// TestEvalExpr_IsStaleFormula mirrors the visit entity's computed is_stale
+// formula: a record is stale when not completed/cancelled and its
+// transaction_date is older than the backdate limit.
+func TestEvalExpr_IsStaleFormula(t *testing.T) {
+	formula := `status not in ("completed", "cancelled") and transaction_date < days_ago(backdate_limit_days)`
+
+	// Stale: waiting + transaction_date far in the past
+	env := map[string]any{
+		"status":              "waiting",
+		"transaction_date":    "2020-01-01",
+		"backdate_limit_days": int64(3),
+	}
+	result, err := EvalExpr(formula, env)
+	if err != nil {
+		t.Fatalf("EvalExpr failed: %v", err)
+	}
+	if result != true {
+		t.Errorf("expected stale=true for old waiting visit, got %v", result)
+	}
+
+	// Not stale: completed
+	env["status"] = "completed"
+	result, err = EvalExpr(formula, env)
+	if err != nil {
+		t.Fatalf("EvalExpr failed: %v", err)
+	}
+	if result != false {
+		t.Errorf("expected stale=false for completed visit, got %v", result)
+	}
+
+	// Not stale: cancelled
+	env["status"] = "cancelled"
+	result, err = EvalExpr(formula, env)
+	if err != nil {
+		t.Fatalf("EvalExpr failed: %v", err)
+	}
+	if result != false {
+		t.Errorf("expected stale=false for cancelled visit, got %v", result)
+	}
+}

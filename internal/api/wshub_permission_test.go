@@ -65,6 +65,12 @@ func TestWSHub_Broadcast_FiltersByPermission(t *testing.T) {
 	noIdentity := &wsConn{id: "no-identity", workspace: "acme",
 		send: make(chan events.EventMessage, 4)}
 
+	// All three subscribe to everything; only the permission filter (2.6.6)
+	// distinguishes who may receive the event.
+	authorized.subscribe("*", "")
+	unauthorized.subscribe("*", "")
+	noIdentity.subscribe("*", "")
+
 	hub.register(authorized)
 	hub.register(unauthorized)
 	hub.register(noIdentity)
@@ -87,6 +93,7 @@ func TestWSHub_Broadcast_UnresolvableResourceDeliversUnfiltered(t *testing.T) {
 	conn := &wsConn{id: "c", workspace: "acme",
 		identity: &auth.Identity{UserID: "u1", Permissions: []string{"clinic.visits.view"}},
 		send:     make(chan events.EventMessage, 4)}
+	conn.subscribe("*", "")
 	hub.register(conn)
 
 	hub.Broadcast("acme", events.EventMessage{Event: "completed", Resource: "unknown/thing"})
@@ -96,6 +103,7 @@ func TestWSHub_Broadcast_UnresolvableResourceDeliversUnfiltered(t *testing.T) {
 	conn2 := &wsConn{id: "c2", workspace: "acme",
 		identity: &auth.Identity{UserID: "u1", Permissions: []string{}},
 		send:     make(chan events.EventMessage, 4)}
+	conn2.subscribe("*", "")
 	hubNoRegistry.register(conn2)
 	hubNoRegistry.Broadcast("acme", events.EventMessage{Event: "completed", Resource: "clinic/visit"})
 	expectMessage(t, conn2, true)

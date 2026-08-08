@@ -21,12 +21,16 @@ import { resolveForm } from "@/engine/derive"
 import { getLifecycle } from "@/engine/lifecycle"
 import { evalReadonlyWhen, evalVisibleWhen, evalRequiredWhen, evalCompute } from "@/lib/formaexpr"
 import { apiGet, apiPost, apiPatch } from "@/lib/api"
+import { titleCase } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { TextInput } from "@/widgets/TextInput"
 import { NumberInput } from "@/widgets/NumberInput"
 import { Select } from "@/widgets/Select"
 import { Switch } from "@/widgets/Switch"
 import { RelationPicker } from "@/widgets/RelationPicker"
+import { DateInput } from "@/widgets/DateInput"
+import { JsonInput } from "@/widgets/JsonInput"
+import { ChildTable } from "@/widgets/ChildTable"
 
 interface FormRendererProps {
   entity: EntitySchema
@@ -268,7 +272,7 @@ export default function FormRenderer({ entity, mode, id: fixedId, formRef, inOve
           </Button>
           <div>
             <h1 className="text-2xl font-bold tracking-tight">
-              {title} {entity.name.charAt(0).toUpperCase() + entity.name.slice(1)}
+              {title} {titleCase(entity.name)}
             </h1>
           </div>
         </div>
@@ -511,6 +515,43 @@ function FormFieldWidget({
           error={error}
         />
       )
+
+    case "datepicker":
+    case "date":
+    case "datetime":
+      return (
+        <DateInput
+          value={value as string ?? ""}
+          onChange={(v) => onChange(v)}
+          readonly={readonly}
+          withTime={entityField.type === "datetime"}
+          error={error}
+        />
+      )
+
+    case "json":
+      return (
+        <JsonInput
+          value={value}
+          onChange={(v) => onChange(v)}
+          placeholder={field.placeholder}
+          readonly={readonly}
+          error={error}
+        />
+      )
+
+    case "child-grid":
+    case "child":
+      return entityField.child ? (
+        <ChildTable
+          value={value as Record<string, unknown>[] | null}
+          onChange={(v) => onChange(v)}
+          child={entityField.child}
+          currentModule={currentModule ?? ""}
+          readonly={readonly}
+          error={error}
+        />
+      ) : null
 
     default:
       return (

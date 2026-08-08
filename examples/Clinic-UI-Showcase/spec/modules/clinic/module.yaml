@@ -37,4 +37,4 @@ spec:
           icon: "settings"
           view: system-settings
           when: "user.has('clinic.settings.update')"
-        - { label: "Data Master", icon: "database", route: "/app/master?tab=Dokter" }
+        - { label: "Data Master", icon: "database", route: "/master?tab=Dokter" }

@@ -24,6 +24,11 @@
       "$ref": "#/$defs/PrintOutput",
       "nullable": true
     },
+    "public": {
+      "description": "If true (default), a route /module/print/\u003cname\u003e is auto-generated.",
+      "type": "boolean",
+      "nullable": true
+    },
     "template": {
       "type": "string"
     }

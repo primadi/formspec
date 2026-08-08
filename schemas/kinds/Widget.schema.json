@@ -10,6 +10,11 @@
     "entity": {
       "type": "string"
     },
+    "public": {
+      "description": "If true (default), a route /module/widget/\u003cname\u003e is auto-generated.",
+      "type": "boolean",
+      "nullable": true
+    },
     "query": {
       "type": "string"
     },

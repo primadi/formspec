@@ -186,15 +186,22 @@ export function buildRoutes(options: RouteBuilderOptions): RouteObject[] {
     })
   }
 
-  // 9. Print routes
+  // 9. Print routes — with and without `:id` (browse the template with no
+  // data, or print a specific record — PrintRenderer already handles both
+  // via `useParams().id` being present or not).
   for (const print of bundle.prints ?? []) {
+    const printElement = (
+      <Suspense fallback={<Loading />}>
+        <PrintRenderer entry={print} />
+      </Suspense>
+    )
     routes.push({
       path: `${basePath}/print/${print.name}`,
-      Component: () => (
-        <Suspense fallback={<Loading />}>
-          <PrintRenderer entry={print} />
-        </Suspense>
-      ),
+      Component: () => printElement,
+    })
+    routes.push({
+      path: `${basePath}/print/${print.name}/:id`,
+      Component: () => printElement,
     })
   }
 

@@ -25,6 +25,11 @@
         "type": "string"
       }
     },
+    "public": {
+      "description": "If true (default), a route is generated for this page. Set false to restrict to embedding only.",
+      "type": "boolean",
+      "nullable": true
+    },
     "route": {
       "type": "string"
     },

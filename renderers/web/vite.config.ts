@@ -36,11 +36,15 @@ export default defineConfig({
       '/default/api/v1': {
         target: 'http://localhost:8080',
         changeOrigin: true,
+        ws: true, // forward WebSocket upgrade (realtime /_ui/_ws) in dev
       },
-      // Proxy _ui/* (meta API, entity CRUD) — matches what Go's viteSPAProxy intercepts
+      // Proxy _ui/* (meta API, entity CRUD) — matches what Go's viteSPAProxy intercepts.
+      // ws: true is REQUIRED for realtime: the browser connects to /_ui/_ws here,
+      // and without it the WebSocket upgrade hangs and realtime never receives events.
       '/default/_ui/': {
         target: 'http://localhost:8080',
         changeOrigin: true,
+        ws: true,
       },
     },
   },

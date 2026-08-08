@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/primadi/forma/internal/action"
+	"github.com/primadi/forma/internal/auth"
 	"github.com/primadi/forma/internal/entity"
 	"github.com/primadi/forma/pkg/spec"
 	db "github.com/primadi/forma/renderers/jsonbpersist"
@@ -78,7 +79,14 @@ def execute(resource, params, ctx):
 		if err != nil {
 			return err
 		}
-		_, err = s.Update(ctx, db.UpdateParams{WorkspaceID: workspaceID, ID: id, Version: version, UpdatedBy: "script", Data: data})
+		_, err = s.Update(ctx, db.UpdateParams{
+			WorkspaceID: workspaceID,
+			ID:          id,
+			Version:     version,
+			UpdatedBy:   "script",
+			Data:        data,
+			Permissions: auth.PermissionsFromContext(ctx),
+		})
 		return err
 	})
 	scriptEx.SetCreateHandler(func(ctx context.Context, workspaceID, module, entityName string, data map[string]any) (string, error) {

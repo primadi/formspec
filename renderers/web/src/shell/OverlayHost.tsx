@@ -31,6 +31,7 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet"
 import { useMetaStore } from "@/stores/meta"
+import { titleCase } from "@/lib/utils"
 import { Skeleton } from "@/components/ui/skeleton"
 
 const FormRenderer = lazy(() => import("@/kinds/form/FormRenderer"))
@@ -43,6 +44,10 @@ export function OverlayHost() {
 
   const action = searchParams.get("action")
   const formName = searchParams.get("form")
+  // Fallback for entities with no authored Form manifest — TableRenderer
+  // sends `entity=module.name` instead of `form` and OverlayHost derives the
+  // form spec the same way a standalone FormRenderer route would.
+  const entityParam = searchParams.get("entity")
   const id = searchParams.get("id") ?? undefined
   const mode = (searchParams.get("mode") ?? "modal") as "modal" | "drawer"
 
@@ -53,26 +58,28 @@ export function OverlayHost() {
     const next = new URLSearchParams(searchParams)
     next.delete("action")
     next.delete("form")
+    next.delete("entity")
     next.delete("id")
     next.delete("mode")
     const str = next.toString()
     navigate(str ? `?${str}` : ".", { replace: true })
   }, [searchParams, navigate])
 
-  if (!action || !formName) return null
+  if (!action || (!formName && !entityParam)) return null
 
-  const form = getForm(formName)
-  if (!form) return null
+  const form = formName ? getForm(formName) : undefined
+  if (formName && !form) return null
 
-  // Resolve entity from form spec (format: "module.entity")
-  const entityRef = form.spec.entity.split(".")
+  // Resolve entity: from the authored form's spec.entity ("module.entity"),
+  // or directly from the `entity` param in the derived-form fallback.
+  const entityRef = (form ? form.spec.entity : entityParam!).split(".")
   if (entityRef.length !== 2) return null
   const [module, entityName] = entityRef
   const entity = getEntity(module, entityName)
   if (!entity) return null
 
   // Determine overlay mode: authored spec > URL param > default modal
-  const overlayMode = form.spec.render?.mode ?? mode ?? "modal"
+  const overlayMode = form?.spec.render?.mode ?? mode ?? "modal"
   const isOpen = action === "create" || action === "edit"
   const formMode = action === "edit" ? "edit" : "create"
 
@@ -82,7 +89,7 @@ export function OverlayHost() {
         entity={entity}
         mode={formMode}
         id={id}
-        formRef={formName}
+        formRef={formName ?? undefined}
         inOverlay
         onClose={close}
       />
@@ -95,10 +102,10 @@ export function OverlayHost() {
         <SheetContent className="w-full sm:max-w-lg md:max-w-xl lg:max-w-2xl overflow-y-auto">
           <SheetHeader>
             <SheetTitle>
-              {action === "create" ? "New" : "Edit"} {entity.name}
+              {action === "create" ? "New" : "Edit"} {titleCase(entity.name)}
             </SheetTitle>
             <SheetDescription>
-              {form.spec.sections?.[0]?.description ?? `Fill in the details for this ${entity.name}.`}
+              {form?.spec.sections?.[0]?.description ?? `Fill in the details for this ${entity.name}.`}
             </SheetDescription>
           </SheetHeader>
           <div className="mt-6">
@@ -115,10 +122,10 @@ export function OverlayHost() {
       <DialogContent className="sm:max-w-lg md:max-w-xl overflow-y-auto max-h-[85vh]">
         <DialogHeader>
           <DialogTitle>
-            {action === "create" ? "New" : "Edit"} {entity.name}
+            {action === "create" ? "New" : "Edit"} {titleCase(entity.name)}
           </DialogTitle>
           <DialogDescription>
-            {form.spec.sections?.[0]?.description ?? `Fill in the details for this ${entity.name}.`}
+            {form?.spec.sections?.[0]?.description ?? `Fill in the details for this ${entity.name}.`}
           </DialogDescription>
         </DialogHeader>
         <div className="mt-4">

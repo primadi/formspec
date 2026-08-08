@@ -1,5 +1,8 @@
-# SHOWCASE: characteristic summary — sumber data Widget/Dashboard (§5 spec frontend:
-# "Dashboard widgets read summary entities or list actions only").
+# SHOWCASE: characteristic summary — proyeksi baca-saja (read-only via API,
+# tanpa menu derived). Dulu menjadi sumber data Widget/Dashboard; karena
+# projection engine (recompute otomatis) belum diimplementasikan, widget
+# dashboard kini membaca entity live `clinic/visit` — lihat
+# docs/plan/fix-clinic-dashboard-summary.md.
 # Router hanya generate list + find untuk summary. Tidak dapat menu derived.
 apiVersion: forma.dev/v1alpha1
 kind: Entity

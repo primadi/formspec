@@ -107,3 +107,14 @@ web-build:
 # Format code
 fmt:
 	go fmt ./...
+
+# Docs server — tampilkan docs/ di browser (http://localhost:8000/docs/)
+# Usage:
+#   make docs-serve          # port 8000
+#   make docs-serve PORT=9000
+docs-serve:
+	@test -f scripts/docs-serve.py || (echo "❌ scripts/docs-serve.py tidak ditemukan" && exit 1)
+	@python3 -c "import markdown" 2>/dev/null || pip install markdown Pygments
+	@python3 scripts/docs-serve.py --port $(if $(PORT),$(PORT),8000)
+
+.PHONY: docs-serve

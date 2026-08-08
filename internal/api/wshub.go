@@ -21,6 +21,91 @@ type wsConn struct {
 	identity  *auth.Identity // nil if no auth validator is configured (see Broadcast)
 	conn      *websocket.Conn
 	send      chan events.EventMessage
+
+	// mu guards the subscription state below. all marks a "*" subscription
+	// (every resource in the workspace); subs maps a subscribed resource
+	// ("module/entity") to the set of event names the connection wants, with
+	// the allEvents sentinel meaning every event on that resource. Delivery
+	// is subscription-based (Spec Resolution API §5): a connection that never
+	// subscribes receives nothing — filtered further by workspace and by the
+	// per-message permission check in Broadcast (2.6.6).
+	mu   sync.Mutex
+	all  bool
+	subs map[string]map[string]struct{}
+}
+
+// allEvents is the sentinel event name meaning "every event on this resource".
+const allEvents = "*"
+
+// wants reports whether the connection should receive an event. Delivery is
+// subscription-based: no subscription → nothing; a "*" subscription → every
+// resource in the workspace; otherwise only subscribed resources (and, when
+// the subscription is event-scoped, matching event names).
+func (c *wsConn) wants(resource, event string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.all {
+		return true
+	}
+	evs, ok := c.subs[resource]
+	if !ok {
+		return false
+	}
+	if _, all := evs[allEvents]; all {
+		return true
+	}
+	_, ok = evs[event]
+	return ok
+}
+
+// subscribe registers interest in a resource. resource "*" subscribes to the
+// whole workspace. An empty event subscribes to all events on the resource; a
+// non-empty event narrows the subscription to that event.
+func (c *wsConn) subscribe(resource, event string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if resource == "*" {
+		c.all = true
+		return
+	}
+	if c.subs == nil {
+		c.subs = make(map[string]map[string]struct{})
+	}
+	evs, ok := c.subs[resource]
+	if !ok {
+		evs = make(map[string]struct{})
+		c.subs[resource] = evs
+	}
+	if event == "" {
+		evs[allEvents] = struct{}{}
+	} else {
+		evs[event] = struct{}{}
+	}
+}
+
+// unsubscribe removes interest in a resource. resource "*" clears the
+// whole-workspace subscription. An empty event drops the resource entirely;
+// a non-empty event removes only that event, dropping the resource entry when
+// nothing remains.
+func (c *wsConn) unsubscribe(resource, event string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if resource == "*" {
+		c.all = false
+		return
+	}
+	evs, ok := c.subs[resource]
+	if !ok {
+		return
+	}
+	if event == "" {
+		delete(c.subs, resource)
+		return
+	}
+	delete(evs, event)
+	if len(evs) == 0 {
+		delete(c.subs, resource)
+	}
 }
 
 // WSHub is a workspace-scoped websocket connection manager implementing
@@ -94,6 +179,10 @@ func (h *WSHub) Broadcast(workspaceID string, msg events.EventMessage) {
 		if havePerm && c.identity != nil && !c.identity.HasPermission(perm) {
 			continue
 		}
+		// Subscription filter: only deliver events the connection asked for.
+		if !c.wants(msg.Resource, msg.Event) {
+			continue
+		}
 		select {
 		case c.send <- msg:
 		default:
@@ -102,6 +191,16 @@ func (h *WSHub) Broadcast(workspaceID string, msg events.EventMessage) {
 			// not the hub's.
 		}
 	}
+}
+
+// HasListeners reports whether at least one connection is registered for the
+// workspace. Cheap read-only check — callers gate realtime publish on it so an
+// event with no live listener does zero work (see action.NotifyMutation and
+// action.DeliverEvents).
+func (h *WSHub) HasListeners(workspaceID string) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return len(h.byWorkspace[workspaceID]) > 0
 }
 
 // viewPermissionFor resolves an EventMessage.Resource ("module/entity") to
@@ -137,11 +236,12 @@ func nextConnID() string {
 }
 
 // HandleWS upgrades an authenticated request to a websocket connection and
-// registers it in the hub, scoped to the caller's workspace. Push-only for
-// v1 — no inbound application protocol is defined; the read loop exists
-// solely to detect client disconnects and service ping/close control
-// frames (required by the underlying library to keep the connection
-// alive).
+// registers it in the hub, scoped to the caller's workspace. The wire is
+// push-only for event data; the only inbound application frames a client
+// sends are subscribe/unsubscribe directives (Spec Resolution API §5) that
+// tell the hub which resources (and optional events) this connection wants.
+// The read loop both serves ping/close control frames and applies those
+// subscription directives; Broadcast then only pushes matching events.
 func (b *RouterBuilder) HandleWS() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// workspaceFromContext already carries AuthMiddleware's dev/prod fallback
@@ -152,7 +252,14 @@ func (b *RouterBuilder) HandleWS() http.HandlerFunc {
 		workspaceID := workspaceFromContext(r.Context())
 		identity := IdentityFromContext(r.Context())
 
-		c, err := websocket.Accept(w, r, nil)
+		// InsecureSkipVerify disables coder/websocket's Origin-vs-Host check.
+		// It is required when the SPA is reached through a dev reverse proxy
+		// (Vite --dev-ui: Origin stays the browser's :5173 while Host becomes
+		// the backend's), and in general for any proxy where Origin != Host.
+		// Authorization is still enforced per-connection by AuthMiddleware
+		// (?token= for the handshake) and per-message by the workspace-scoped
+		// permission filter in Broadcast (2.6.6) — this channel is push-only.
+		c, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
 		if err != nil {
 			return
 		}
@@ -197,10 +304,43 @@ func writePump(ctx context.Context, c *wsConn, stop <-chan struct{}) {
 	}
 }
 
+// clientFrame is an inbound subscription-control message. The connection is
+// push-only for event data; the only application frames a client sends are
+// subscribe/unsubscribe directives.
+type clientFrame struct {
+	Op       string `json:"op"`       // "subscribe" | "unsubscribe"
+	Resource string `json:"resource"` // "module/entity" or "*"
+	Event    string `json:"event"`    // optional — empty = all events on the resource
+}
+
+// readPump reads until the client disconnects or errors. Inbound text frames
+// are parsed as subscription-control messages and applied to the connection;
+// control frames (ping/pong/close) are served internally by the library.
+// Malformed or unknown frames are ignored — never fatal.
 func readPump(ctx context.Context, c *wsConn) {
 	for {
-		if _, _, err := c.conn.Read(ctx); err != nil {
+		typ, data, err := c.conn.Read(ctx)
+		if err != nil {
 			return
+		}
+		if typ != websocket.MessageText {
+			continue
+		}
+		var f clientFrame
+		if json.Unmarshal(data, &f) != nil {
+			continue
+		}
+		switch f.Op {
+		case "subscribe":
+			if f.Resource != "" {
+				c.subscribe(f.Resource, f.Event)
+			}
+		case "unsubscribe":
+			if f.Resource != "" {
+				c.unsubscribe(f.Resource, f.Event)
+			}
+		default:
+			// unknown op — ignore
 		}
 	}
 }

@@ -246,6 +246,7 @@ type InsertParams struct {
 	WorkspaceID   string
 	CreatedBy     string
 	Data          map[string]any
+	Permissions   []string       // caller's effective permissions — used for backdate/forward-date override_permission
 	PendingEvents []PendingEvent // durable events to enqueue atomically with this insert (see PendingEvent)
 }
 
@@ -301,7 +302,7 @@ func (s *EntityStore) Insert(ctx context.Context, params InsertParams) (string, 
 		}
 
 		// Validate transaction_date policy (backdate/forward-date)
-		if err := s.validateTransactionDatePolicy(params.Data); err != nil {
+		if err := s.validateTransactionDatePolicy(params.Data, params.Permissions); err != nil {
 			return err
 		}
 
@@ -462,6 +463,7 @@ type UpdateParams struct {
 	Version       int // optimistic concurrency: update only if version matches
 	UpdatedBy     string
 	Data          map[string]any
+	Permissions   []string       // caller's effective permissions — used for backdate/forward-date override_permission
 	PendingEvents []PendingEvent // durable events to enqueue atomically with this update (see PendingEvent)
 }
 
@@ -497,7 +499,7 @@ func (s *EntityStore) Update(ctx context.Context, params UpdateParams) (int, err
 	}
 
 	// Validate transaction_date policy (backdate/forward-date)
-	if err := s.validateTransactionDatePolicy(params.Data); err != nil {
+	if err := s.validateTransactionDatePolicy(params.Data, params.Permissions); err != nil {
 		return 0, fmt.Errorf("%s update: %w", s.entity, err)
 	}
 
@@ -1652,11 +1654,22 @@ func parseJSON(s string) (map[string]any, error) {
 // evaluateComputed evaluates all computed fields for a record's data.
 // It modifies the data map in place by injecting computed values.
 func (s *EntityStore) evaluateComputed(data map[string]any) {
+	// Inject the entity's backdate limit so computed fields (e.g. is_stale)
+	// can reference it without hardcoding — follows config changes (3 ↔ 4 days).
+	backdateLimit := 3
+	if s.backdatePolicy != nil && s.backdatePolicy.MaxDaysBack > 0 {
+		backdateLimit = s.backdatePolicy.MaxDaysBack
+	}
 	for _, f := range s.computedFields {
 		if f.Computed == nil || f.Computed.Formula == "" {
 			continue
 		}
-		val, err := starlark.EvalExpr(f.Computed.Formula, data)
+		env := make(map[string]any, len(data)+1)
+		for k, v := range data {
+			env[k] = v
+		}
+		env["backdate_limit_days"] = backdateLimit
+		val, err := starlark.EvalExpr(f.Computed.Formula, env)
 		if err != nil {
 			// If evaluation fails, don't set the field — leave it absent
 			continue

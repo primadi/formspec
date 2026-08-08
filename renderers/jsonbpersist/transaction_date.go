@@ -2,6 +2,7 @@ package db
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -105,7 +106,12 @@ func (e *TransactionDatePolicyError) Error() string {
 
 // validateTransactionDatePolicy checks the transaction_date in data against the
 // entity's backdate/forward-date policy. Uses defaults if no policy is set.
-func (s *EntityStore) validateTransactionDatePolicy(data map[string]any) error {
+//
+// permissions carries the caller's effective permissions. If the entity's
+// backdate/forward-date policy declares an override_permission and the caller
+// holds it, the policy is bypassed — the "special path" for stale records,
+// so authorized staff can touch them without widening the policy itself.
+func (s *EntityStore) validateTransactionDatePolicy(data map[string]any, permissions []string) error {
 	transactionDate, exists := data["transaction_date"]
 	if !exists || transactionDate == nil || transactionDate == "" {
 		return nil // no transaction_date to validate
@@ -126,5 +132,40 @@ func (s *EntityStore) validateTransactionDatePolicy(data map[string]any) error {
 		maxDaysForward = s.forwardDatePolicy.MaxDaysForward
 	}
 
+	// override_permission: an authorized caller may bypass the policy without
+	// widening it (special path for stale records).
+	if s.backdatePolicy != nil && s.backdatePolicy.OverridePermission != "" &&
+		hasPermission(permissions, s.backdatePolicy.OverridePermission) {
+		return nil
+	}
+	if s.forwardDatePolicy != nil && s.forwardDatePolicy.OverridePermission != "" &&
+		hasPermission(permissions, s.forwardDatePolicy.OverridePermission) {
+		return nil
+	}
+
 	return ValidateTransactionDate(dateStr, maxDaysBack, maxDaysForward)
+}
+
+// hasPermission reports whether any held permission grants the required one,
+// mirroring auth.Identity.HasPermission wildcard semantics (exact match,
+// "a.b.*" prefix, and "*"). Kept local so the renderer stays decoupled from
+// internal/auth.
+func hasPermission(held []string, required string) bool {
+	if required == "" || required == "public" {
+		return true
+	}
+	for _, p := range held {
+		if p == "*" || p == required {
+			return true
+		}
+		if before, ok := strings.CutSuffix(p, ".*"); ok {
+			if strings.HasPrefix(required, before) {
+				rest := strings.TrimPrefix(required, before)
+				if strings.HasPrefix(rest, ".") && !strings.Contains(rest[1:], ".") {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }

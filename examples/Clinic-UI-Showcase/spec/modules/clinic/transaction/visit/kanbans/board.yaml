@@ -1,6 +1,11 @@
 # SHOWCASE kind: Kanban — board status kunjungan. Drag antar kolom =
 # transisi state machine (drop yang tidak punya transisi valid → snap-back).
 # Kolom `cancelled` sengaja tidak ditampilkan (subset kolom sah).
+#
+# Board di-scope per tanggal: filter `transaction_date` default `today` →
+# antrian hari ini saat dibuka, tetap bisa diganti user via date picker.
+# Nilai filter dikirim server-side (`transaction_date[eq]=YYYY-MM-DD`),
+# bukan disaring di klien — efisien untuk entity transaksi.
 apiVersion: forma.dev/v1alpha1
 kind: Kanban
 metadata:
@@ -17,9 +22,17 @@ spec:
   card_template:
     title: queue_number
     subtitle: patient.name
+    badge: stale_label
     fields: [polyclinic.name, doctor.name, complaint]
+  row_actions:
+    - action: "resolve-stale"
+      label: "Selesaikan (Stale)"
+      icon: "alert-triangle"
+      confirm_msg: "Selesaikan kunjungan stale ini? Ini pengecualian yang diaudit."
   realtime: true
-  filters: [polyclinic_id]
+  filters:
+    - { field: transaction_date, label: "Tanggal", type: date, default: today }
+    - { field: polyclinic_id, label: "Poliklinik", type: select, all_label: "(Semua Poli)" }
   search: true
   max_cards_per_column: 50
   sortable: true

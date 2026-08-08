@@ -13,6 +13,13 @@ spec:
   version: v1
   characteristic: transaction
 
+  # Governance: jendela entry transaction_date (3 hari ke belakang). Staf dengan
+  # visits.resolve-stale boleh melewati batas (path khusus) tanpa memperlebar
+  # policy — lihat docs/plan/backdate-override-resolve-stale.md.
+  backdate_policy:
+    max_days_back: 3
+    override_permission: visits.resolve-stale
+
   auth: { required: true, strategies: [token] }
 
   fields:
@@ -56,6 +63,16 @@ spec:
       type: enum
       enum_values: [waiting, in_consultation, completed, cancelled]
       index: true
+    - name: is_stale
+      type: boolean
+      description: Kunjungan menggantung — transaction_date melewati backdate limit dan belum selesai/batal
+      computed:
+        formula: 'status not in ("completed", "cancelled") and transaction_date < days_ago(backdate_limit_days)'
+    - name: stale_label
+      type: string
+      description: Label badge untuk kartu stale di board
+      computed:
+        formula: '"⚠ Stale" if (status not in ("completed", "cancelled") and transaction_date < days_ago(backdate_limit_days)) else ""'
     - name: treatments
       type: child
       child:
@@ -68,7 +85,9 @@ spec:
           - { name: price, type: decimal, rules: [required, positive] }
     - name: total
       type: decimal
-      rules: [positive]
+      # min: 0 — a completed visit without treatments legitimately totals 0
+      # (the old `positive` rule rejected 0 and blocked completing such visits).
+      rules: [min: 0]
     - name: started_at
       type: datetime
     - name: completed_at
@@ -80,7 +99,9 @@ spec:
     transitions:
       - { from: waiting, to: in_consultation, via: start-consultation }
       - { from: in_consultation, to: completed, via: complete,
-          guard: { expression: "!empty(diagnosis)", message: "Diagnosis harus diisi sebelum konsultasi selesai" } }
+          guard: { expression: "not empty(diagnosis)", message: "Diagnosis harus diisi sebelum konsultasi selesai" } }
+      - { from: in_consultation, to: completed, via: resolve-stale,
+          guard: { expression: "not empty(diagnosis)", message: "Diagnosis harus diisi sebelum menyelesaikan kunjungan stale" } }
       - { from: in_consultation, to: waiting, via: recall,
           guard: { expression: "empty(diagnosis) and empty(treatments)", message: "Tidak bisa recall — sudah ada diagnosis atau tindakan yang diberikan" } }
       - { from: [waiting, in_consultation], to: cancelled, via: cancel }
@@ -109,6 +130,15 @@ spec:
       emits: completed
       impl: { type: script_ref, ref: complete }
 
+    - name: resolve-stale
+      description: "Selesaikan kunjungan stale (melewati backdate policy) — path khusus, diaudit"
+      required_permission: visits.resolve-stale
+      audit: true
+      emits: completed-overdue
+      ui:
+        confirm: "Selesaikan kunjungan stale ini? Ini pengecualian yang diaudit."
+      impl: { type: script_ref, ref: resolve-stale }
+
     - name: cancel
       description: Batalkan kunjungan
       required_permission: visits.cancel
@@ -135,6 +165,16 @@ spec:
     - name: completed
       type: async
       description: Konsultasi selesai — realtime board + summary
+      payload:
+        fields: [id, queue_number, patient_id, doctor_id, total, completed_at]
+      deliver:
+        - channel: audit_log
+        - channel: websocket
+          target: { scope: workspace }
+
+    - name: completed-overdue
+      type: async
+      description: Konsultasi stale diselesaikan via path khusus — hilir tahu ini pengecualian
       payload:
         fields: [id, queue_number, patient_id, doctor_id, total, completed_at]
       deliver:

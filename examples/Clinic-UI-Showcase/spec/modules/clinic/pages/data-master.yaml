@@ -9,7 +9,7 @@ metadata:
   module: clinic
   description: Data Master — tabbed table untuk dokter, pasien, poliklinik
 spec:
-  route: /app/master
+  route: /master
   title: "Data Master"
   icon: "database"
   tabs:

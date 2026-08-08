@@ -19,7 +19,13 @@
     "filters": {
       "type": "array",
       "items": {
-        "type": "string"
+        "$ref": "#/$defs/FilterSpec"
+      }
+    },
+    "fixed_filters": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/FilterSpec"
       }
     },
     "max_cards_per_column": {
@@ -28,6 +34,11 @@
     "position_field": {
       "description": "field storing user-adjustable position (e.g. \"queue_position\")",
       "type": "string"
+    },
+    "public": {
+      "description": "If true (default), a route /module/kanban/\u003cname\u003e is auto-generated.",
+      "type": "boolean",
+      "nullable": true
     },
     "realtime": {
       "description": "default true (§12)",

@@ -2,7 +2,8 @@
 
 def execute(resource, params, ctx):
     total = 0
-    for t in resource.field.treatments:
+    # treatments is optional — a consultation can finish with no treatments.
+    for t in (resource.field.treatments or []):
         total += t["quantity"] * t["price"]
     resource.set("total", total)
     resource.set("status", "completed")

@@ -15,7 +15,7 @@
 import { useMemo } from "react"
 import { NavLink, useParams, useLocation } from "react-router-dom"
 
-import { cn } from "@/lib/utils"
+import { cn, titleCase } from "@/lib/utils"
 import { useMetaStore } from "@/stores/meta"
 import { useSessionStore } from "@/stores/session"
 import { can as checkPermission } from "@/engine/permissions"
@@ -74,14 +74,12 @@ export function Sidebar({ collapsed, onToggle: _onToggle, mobile, mobileOpen, on
       for (const [module, entities] of entitiesByModule) {
         if (entities.length === 0) continue
         const children = entities.map((e) => ({
-          label: e.label_field
-            ? e.name.charAt(0).toUpperCase() + e.name.slice(1)
-            : e.name,
+          label: e.label_field ? titleCase(e.name) : e.name,
           icon: "FileText" as string | undefined,
           route: `/${module}/${e.plural}`,
         }))
         items.push({
-          label: module.charAt(0).toUpperCase() + module.slice(1),
+          label: titleCase(module),
           icon: "Folder",
           children,
         })

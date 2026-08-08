@@ -29,7 +29,7 @@ func (c *Converter) Generate(collect *CollectResult) *GenerateResult {
 		"ChildDecl", "ComputedDecl", "IndexDecl", "UsesDecl",
 		"ParamsDecl", "ConditionDecl", "HookDecl", "IdempotencyDecl",
 		"EntityAuth", "ExposeConfig", "RateLimitSpec",
-		"ActionUIHint", "TableFilter", "FormSection", "FormField", "FormAction", "FormSubmit", "FormRenderDecl",
+		"ActionUIHint", "FilterSpec", "FormSection", "FormField", "FormAction", "FormSubmit", "FormRenderDecl",
 		"TableColumn", "TableAction", "BackdatePolicy", "ForwardDatePolicy",
 		"SoftDeactivateDecl", "PersistSpec", "ExtendStorage",
 		"NaturalKeyRuleDecl", "NaturalKeyPrefix", "StorageSpec", "FieldRef",

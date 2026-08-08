@@ -32,6 +32,11 @@ spec:
       sortable: true
       width: "140px"
       align: "center"
+    - field: is_stale
+      label: "Stale"
+      sortable: true
+      width: "80px"
+      align: "center"
     - field: total
       label: "Total"
       sortable: true
@@ -43,6 +48,7 @@ spec:
       width: "130px"
   filters:
     - { field: status, label: "Status", type: select }
+    - { field: is_stale, label: "Stale", type: select }
     - { field: transaction_date, label: "Tanggal", type: date_range }
     - { field: polyclinic_id, label: "Poliklinik", type: select }
     - { field: queue_number, label: "Cari No. Antrian", type: text }
@@ -56,6 +62,10 @@ spec:
     - action: "complete"
       label: "Selesai"
       icon: "check"
+    - action: "resolve-stale"
+      label: "Selesaikan (Stale)"
+      icon: "alert-triangle"
+      confirm_msg: "Selesaikan kunjungan stale ini? Ini pengecualian yang diaudit."
     - action: "cancel"
       label: "Batalkan"
       icon: "x"
@@ -64,4 +74,4 @@ spec:
       label: "Export CSV"
       icon: "download"
   search: true
-  realtime: true   # transport WebSocket menyusul Fase 3.5 — renderer fallback refetch
+  realtime: true   # event entity (visit.completed dll) → refetch tabel via useRealtime

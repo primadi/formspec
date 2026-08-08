@@ -282,6 +282,7 @@ func (f *HandlerFactory) HandleFind(module, entity string) http.HandlerFunc {
 						rec, err = store.GetByID(ctx, db.GetByIDParams{
 							WorkspaceID: workspaceID, ID: newID,
 						})
+						action.NotifyMutation(f.deliveryDeps, workspaceID, module+"/"+entity, "created")
 					}
 				}
 			}
@@ -362,6 +363,7 @@ func (f *HandlerFactory) HandleCreate(module, entity string) http.HandlerFunc {
 			WorkspaceID:   workspaceID,
 			CreatedBy:     createdBy,
 			Data:          execParams.Resource,
+			Permissions:   permissionsFromContext(ctx),
 			PendingEvents: pendingEvents,
 		})
 		if err != nil {
@@ -391,6 +393,10 @@ func (f *HandlerFactory) HandleCreate(module, entity string) http.HandlerFunc {
 				}
 			}
 		}
+
+		// Realtime channel (Spec Resolution API §5): every mutation is pushed
+		// to live listeners — listener-gated, no-op when nobody is connected.
+		action.NotifyMutation(f.deliveryDeps, workspaceID, module+"/"+entity, "created")
 
 		writeJSON(w, http.StatusCreated, SingleResponse{
 			Data: rec,
@@ -508,6 +514,7 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 			Version:       expectedVersion,
 			UpdatedBy:     updatedBy,
 			Data:          execParams.Resource,
+			Permissions:   permissionsFromContext(ctx),
 			PendingEvents: pendingEvents,
 		})
 		if err != nil {
@@ -531,6 +538,10 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 				}
 			}
 		}
+
+		// Realtime channel (Spec Resolution API §5): every mutation is pushed
+		// to live listeners — listener-gated, no-op when nobody is connected.
+		action.NotifyMutation(f.deliveryDeps, workspaceID, module+"/"+entity, "updated")
 
 		writeJSON(w, http.StatusOK, SingleResponse{
 			Data: rec,
@@ -562,6 +573,10 @@ func (f *HandlerFactory) HandleDelete(module, entity string) http.HandlerFunc {
 			writeError(w, http.StatusNotFound, "NOT_FOUND", err.Error())
 			return
 		}
+
+		// Realtime channel (Spec Resolution API §5): every mutation is pushed
+		// to live listeners — listener-gated, no-op when nobody is connected.
+		action.NotifyMutation(f.deliveryDeps, workspaceID, module+"/"+entity, "deleted")
 
 		w.WriteHeader(http.StatusNoContent)
 	}
@@ -639,6 +654,10 @@ func (f *HandlerFactory) HandleSubmit(module, entity string) http.HandlerFunc {
 			}
 		}
 
+		// Realtime channel (Spec Resolution API §5): every mutation is pushed
+		// to live listeners — listener-gated, no-op when nobody is connected.
+		action.NotifyMutation(f.deliveryDeps, workspaceID, module+"/"+entity, "updated")
+
 		writeJSON(w, http.StatusOK, SingleResponse{
 			Data: rec,
 			Meta: MetaSingle{RequestID: requestIDFromContext(ctx), Timestamp: time.Now().UTC().Format(time.RFC3339)},
@@ -711,6 +730,10 @@ func (f *HandlerFactory) HandleCancel(module, entity string) http.HandlerFunc {
 				}
 			}
 		}
+
+		// Realtime channel (Spec Resolution API §5): every mutation is pushed
+		// to live listeners — listener-gated, no-op when nobody is connected.
+		action.NotifyMutation(f.deliveryDeps, workspaceID, module+"/"+entity, "updated")
 
 		writeJSON(w, http.StatusOK, SingleResponse{
 			Data: rec,
@@ -800,6 +823,10 @@ func (f *HandlerFactory) HandleAmend(module, entity string) http.HandlerFunc {
 				}
 			}
 		}
+
+		// Realtime channel (Spec Resolution API §5): every mutation is pushed
+		// to live listeners — listener-gated, no-op when nobody is connected.
+		action.NotifyMutation(f.deliveryDeps, workspaceID, module+"/"+entity, "updated")
 
 		writeJSON(w, http.StatusCreated, SingleResponse{
 			Data: newRec,
@@ -959,6 +986,15 @@ func userFromContext(ctx context.Context) string {
 		return "anonymous"
 	}
 	return v
+}
+
+// permissionsFromContext extracts the caller's effective permissions from the
+// request context. Returns nil (no override) when unauthenticated.
+func permissionsFromContext(ctx context.Context) []string {
+	if id := IdentityFromContext(ctx); id != nil {
+		return id.Permissions
+	}
+	return nil
 }
 
 // requestIDFromContext extracts the request ID from the context.
@@ -1246,6 +1282,12 @@ func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, a
 		defer db.UnregisterScope(scopeID)
 		ctx = db.WithTxScope(ctx, scope, scopeID)
 
+		// Inject caller permissions into context so downstream resource.save()
+		// (e.g. Starlark script → store.Update) can respect override_permission.
+		if identity != nil {
+			ctx = auth.WithPermissions(ctx, identity.Permissions)
+		}
+
 		// hooks: entries scoped to this action name run as a before-phase
 		// around the dispatch below. actionSpec itself is NOT passed as the
 		// "own impl" (unlike create/update) — Dispatch already executes it;
@@ -1309,6 +1351,11 @@ func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, a
 			// its own best-effort enqueue, same as before this change.
 			action.DeliverEvents(ctx, f.deliveryDeps, workspaceID, module+"/"+entity, []action.EventEmission{*emitted}, enqueuedAtomically || !emitted.Durable)
 		}
+
+		// Realtime channel (Spec Resolution API §5): every custom action is
+		// pushed to live listeners under the action's own name — listener-
+		// gated, no-op when nobody is connected.
+		action.NotifyMutation(f.deliveryDeps, workspaceID, module+"/"+entity, actionName)
 
 		writeJSON(w, http.StatusOK, SingleResponse{
 			Data: result.Data,

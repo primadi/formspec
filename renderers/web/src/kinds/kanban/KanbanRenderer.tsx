@@ -26,7 +26,7 @@ import {
   verticalListSortingStrategy,
   useSortable,
 } from "@dnd-kit/sortable"
-import { Eye, Edit2, Trash2, GripVertical, MoreHorizontal } from "lucide-react"
+import { Eye, Edit2, Trash2, GripVertical, MoreHorizontal, AlertTriangle, Check, Play, X } from "lucide-react"
 
 import type {
   Entry,
@@ -34,13 +34,26 @@ import type {
   KanbanColumn,
   KanbanCard,
   TableAction,
+  FilterSpec,
+  EntitySchema,
+  MetaBundle,
 } from "@/types/manifest"
 import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
 import { resolveEntityRef } from "@/engine/entityRef"
 import { can as checkPermission } from "@/engine/permissions"
 import { useSurface } from "@/hooks/useSurface"
+import { useRealtime } from "@/hooks/useRealtime"
+import { useSelectFilterOptions } from "@/hooks/useSelectFilterOptions"
 import { apiList, apiPatch, apiDelete } from "@/lib/api"
+import {
+  buildFixedFilterParams,
+  buildUserFilterParams,
+  resolveFilterValue,
+  shouldShowAll,
+  allLabel,
+} from "@/lib/filters"
+import { titleCase } from "@/lib/utils"
 import { Badge } from "@/widgets/Badge"
 import { Input } from "@/components/ui/input"
 import { Search } from "lucide-react"
@@ -58,6 +71,68 @@ const POS_NULL_SENTINEL = Number.MAX_SAFE_INTEGER
 
 interface KanbanRendererProps {
   entry: Entry<KanbanSpec>
+}
+
+// ── Filter control ──
+//
+// One control per `filters` entry. Select options come from the entity field
+// definition (enum_values / related entity master data) — independent of the
+// currently loaded (date-scoped) records — plus a configurable "All" (clear)
+// option (`show_all` / `all_label`, default "(ALL)").
+
+function KanbanFilterControl({
+  filter,
+  entity,
+  metaBundle,
+  getClient,
+  value,
+  onChange,
+}: {
+  filter: FilterSpec
+  entity: EntitySchema | undefined
+  metaBundle: MetaBundle | null
+  getClient: () => import("ky").KyInstance
+  value: string
+  onChange: (value: string) => void
+}) {
+  const type = filter.type ?? "select"
+  const selectOptions = useSelectFilterOptions(filter, entity, metaBundle, getClient)
+
+  if (type === "date") {
+    return (
+      <Input
+        type="date"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={filter.label || filter.field}
+        className="h-9 w-40 text-xs"
+      />
+    )
+  }
+  if (type === "text") {
+    return (
+      <Input
+        placeholder={filter.label || filter.field}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-9 w-40 text-xs"
+      />
+    )
+  }
+  // select (default)
+  const showAll = shouldShowAll(filter)
+  const options = [
+    ...(showAll ? [{ value: "", label: allLabel(filter) }] : []),
+    ...selectOptions,
+  ]
+  return (
+    <Select
+      value={value}
+      onChange={onChange}
+      options={options}
+      placeholder={filter.label || filter.field}
+    />
+  )
 }
 
 // ── Field resolver ──
@@ -85,6 +160,7 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
   const { surfacePath } = useSurface()
   const getClient = useSessionStore((s) => s.getClient)
   const getEntity = useMetaStore((s) => s.getEntity)
+  const metaBundle = useMetaStore((s) => s.bundle)
   const me = useSessionStore((s) => s.me)
 
   const [entityModule, entityName] = resolveEntityRef(entry.spec.entity, entry.module)
@@ -98,7 +174,16 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null)
-  const [filterValues, setFilterValues] = useState<Record<string, string>>({})
+  // User-adjustable filters, pre-seeded from each filter's `default`
+  // (e.g. `{ field: transaction_date, type: date, default: today }` → the
+  // board opens scoped to the server's current date, still navigable).
+  const [filterValues, setFilterValues] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      (entry.spec.filters ?? [])
+        .map((f) => [f.field, resolveFilterValue(f.default)])
+        .filter(([, v]) => v !== ""),
+    ),
+  )
   const [pendingAction, setPendingAction] = useState<{
     action: TableAction
     record: Record<string, unknown>
@@ -112,35 +197,56 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
   )
 
   // ── Data fetching ──
-  const fetchRecords = useCallback(async () => {
+  const fetchRecords = useCallback(async (silent = false) => {
     if (!entity) {
       toast.error(`entity "${entry.spec.entity}" not found`)
       setLoading(false)
       return
     }
-    setLoading(true)
+    // Realtime refetch is silent — don't flash the loading spinner on events.
+    if (!silent) setLoading(true)
     try {
       const client = getClient()
       // Auto-default sort to position_field when sortable is enabled
       const sortField = entry.spec.sortable && entry.spec.position_field
         ? entry.spec.position_field
         : undefined
+      // Merge immutable fixed_filters + the user's active filter values
+      // (operator syntax `field[op]=value`) so the DB pre-filters rows
+      // before they hit the wire — e.g. a board scoped to one date via a
+      // filter with `default: today()`.
+      const searchParams: Record<string, string> = {
+        ...buildFixedFilterParams(entry.spec.fixed_filters),
+        ...buildUserFilterParams(entry.spec.filters ?? [], filterValues),
+      }
+      if (sortField) searchParams.sort = sortField
       const result = await apiList<Record<string, unknown>>(
         client,
         `${entity.module}/${entity.name}`,
-        sortField ? { sort: sortField } : undefined,
+        Object.keys(searchParams).length > 0 ? searchParams : undefined,
       )
       setRecords(result.items)
     } catch {
       toast.error("Failed to load kanban data")
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
-  }, [entity, entry.spec.entity, entry.spec.sortable, entry.spec.position_field, getClient])
+  }, [entity, entry.spec.entity, entry.spec.sortable, entry.spec.position_field, entry.spec.filters, entry.spec.fixed_filters, filterValues, getClient])
 
   useEffect(() => {
     fetchRecords()
   }, [fetchRecords])
+
+  // ── Realtime (spec §5): matching entity event → silent refetch ──
+  // Non-durable: reconnect also bumps the tick, so a dropped connection
+  // triggers a refetch too. Event-driven when the Kanban has realtime: true.
+  const realtimeTick = useRealtime(
+    entry.spec.realtime && entityModule && entityName ? `${entityModule}/${entityName}` : "",
+  )
+  useEffect(() => {
+    if (realtimeTick === 0) return
+    fetchRecords(true)
+  }, [realtimeTick, fetchRecords])
 
   // ── Filter/Search helpers ──
 
@@ -158,21 +264,12 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
           if (!searchMatch) return false
         }
 
-        // Apply filters from manifest — resolve relation names for _id fields
+        // Apply filters from manifest — match the server's filtering semantics:
+        // compare against the raw field value (e.g. the `_id` uuid for relation
+        // filters), not a resolved label.
         for (const [field, value] of Object.entries(filterValues)) {
           if (!value) continue
-          const relationKey = field.endsWith("_id") ? field.slice(0, -3) : null
-          let recordVal: string | null = null
-          if (relationKey) {
-            const rel = r[relationKey]
-            if (rel && typeof rel === "object" && "name" in (rel as Record<string, unknown>)) {
-              recordVal = (rel as Record<string, unknown>).name as string
-            }
-          }
-          if (recordVal == null) {
-            recordVal = String(r[field] ?? "")
-          }
-          if (recordVal !== value) return false
+          if (String(r[field] ?? "") !== value) return false
         }
 
         return true
@@ -180,37 +277,6 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
     },
     [records, statusField, search, filterValues],
   )
-
-  // ── Compute unique filter options per filter field ──
-  //
-  // For relation fields (convention: ends with `_id`), resolve the display
-  // label from the nested relation object — e.g. polyclinic_id →
-  // r.polyclinic.name → "Poli Jantung". Falls back to raw value if
-  // the relation object is not present.
-  const filterOptions = useMemo(() => {
-    const options: Record<string, string[]> = {}
-    for (const field of entry.spec.filters ?? []) {
-      const vals = new Set<string>()
-      // Try resolved relation name first (_id → relation.name)
-      const relationKey = field.endsWith("_id") ? field.slice(0, -3) : null
-      for (const r of records) {
-        let v: string | null = null
-        if (relationKey) {
-          const rel = r[relationKey]
-          if (rel && typeof rel === "object" && "name" in (rel as Record<string, unknown>)) {
-            v = (rel as Record<string, unknown>).name as string
-          }
-        }
-        if (v == null) {
-          const raw = r[field]
-          v = raw != null && raw !== "" ? String(raw) : null
-        }
-        if (v) vals.add(v)
-      }
-      options[field] = Array.from(vals).sort()
-    }
-    return options
-  }, [records, entry.spec.filters])
 
   // ── Drag handlers ──
 
@@ -492,24 +558,27 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
-            {entry.spec.entity} Board
+            {titleCase(entry.name)}
           </h1>
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Filter dropdowns */}
-          {entry.spec.filters?.map((field) => (
-            <div key={field} className="relative min-w-32">
-              <Select
-                value={filterValues[field] ?? ""}
+          {/* Filter controls — one per `filters` entry. `fixed_filters` are
+              NOT rendered: they are immutable, server-side scoping. */}
+          {entry.spec.filters?.map((f) => (
+            <div key={f.field} className="relative min-w-32">
+              <KanbanFilterControl
+                filter={f}
+                entity={entity}
+                metaBundle={metaBundle}
+                getClient={getClient}
+                value={filterValues[f.field] ?? ""}
                 onChange={(val) =>
                   setFilterValues((prev) => ({
                     ...prev,
-                    [field]: val,
+                    [f.field]: val,
                   }))
                 }
-                options={["", ...(filterOptions[field] ?? [])]}
-                placeholder={field}
               />
             </div>
           ))}
@@ -881,6 +950,14 @@ function SortableCard({
                         <Edit2 className="size-3" />
                       ) : action.icon === "trash" || action.action === "delete" ? (
                         <Trash2 className="size-3" />
+                      ) : action.icon === "check" ? (
+                        <Check className="size-3" />
+                      ) : action.icon === "play" ? (
+                        <Play className="size-3" />
+                      ) : action.icon === "x" ? (
+                        <X className="size-3" />
+                      ) : action.icon === "alert-triangle" ? (
+                        <AlertTriangle className="size-3" />
                       ) : null}
                       {action.label}
                     </button>

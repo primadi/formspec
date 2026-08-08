@@ -24,6 +24,9 @@ USER vscode
 RUN curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh -o /tmp/rtk-install.sh \
     && sh /tmp/rtk-install.sh \
     && rm -f /tmp/rtk-install.sh
+
+# Install opencode CLI (non-fatal — network flakiness on opencode.ai should not block build)
+RUN curl -fsSL --retry 3 --retry-delay 5 --retry-max-time 30 https://opencode.ai/install | bash || echo "WARNING: opencode CLI install skipped (network error)"
 USER root
 
 # [Optional] Uncomment the next lines to use go get to install anything else you need

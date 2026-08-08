@@ -10,9 +10,9 @@ import (
 	"testing"
 
 	"github.com/primadi/forma/internal/auth"
-	"github.com/primadi/forma/renderers/jsonbpersist"
 	"github.com/primadi/forma/internal/entity"
 	"github.com/primadi/forma/pkg/spec"
+	db "github.com/primadi/forma/renderers/jsonbpersist"
 )
 
 // setupAPIEnv creates an in-memory registry with test entities that expose REST.
@@ -393,9 +393,9 @@ func TestHTTPRouter_WithExposedEntity(t *testing.T) {
 	// We can't test the full handler without a working registry,
 	// but we can test the store directly
 	id, err := store.Insert(ctx, db.InsertParams{
-		WorkspaceID:  "test-workspace",
-		CreatedBy: "tester",
-		Data:      map[string]any{"name": "Widget", "sku": "WDG-001"},
+		WorkspaceID: "test-workspace",
+		CreatedBy:   "tester",
+		Data:        map[string]any{"name": "Widget", "sku": "WDG-001"},
 	})
 	if err != nil {
 		t.Fatalf("Insert failed: %v", err)
@@ -424,11 +424,11 @@ func TestHTTPRouter_WithExposedEntity(t *testing.T) {
 
 	// Update
 	newVersion, err := store.Update(ctx, db.UpdateParams{
-		WorkspaceID:  "test-workspace",
-		ID:        id,
-		Version:   rec.Version,
-		UpdatedBy: "tester",
-		Data:      map[string]any{"name": "Super Widget", "sku": "WDG-001"},
+		WorkspaceID: "test-workspace",
+		ID:          id,
+		Version:     rec.Version,
+		UpdatedBy:   "tester",
+		Data:        map[string]any{"name": "Super Widget", "sku": "WDG-001"},
 	})
 	if err != nil {
 		t.Fatalf("Update failed: %v", err)
@@ -830,6 +830,46 @@ func TestAuthMiddleware_CrossTenant404(t *testing.T) {
 }
 
 // fixedWorkspaceValidator is a test double returning an identity scoped to a fixed workspace.
+// recordingValidator records the token it was handed — proves AuthMiddleware
+// passes the credential through, regardless of whether it came from the
+// Authorization header or the `token` query param.
+type recordingValidator struct {
+	lastToken string
+}
+
+func (v *recordingValidator) Validate(_ context.Context, token string) (*auth.Identity, error) {
+	v.lastToken = token
+	if token == "" {
+		return nil, nil // anonymous — no identity
+	}
+	return &auth.Identity{UserID: "user1", WorkspaceID: "acme", Permissions: []string{"*"}}, nil
+}
+
+// TestAuthMiddleware_TokenQueryParam verifies the WebSocket auth path: browsers
+// cannot set the Authorization header on a WS handshake, so AuthMiddleware
+// must also accept the token from the `token` query param (used by the
+// realtime client at /_ui/_ws).
+func TestAuthMiddleware_TokenQueryParam(t *testing.T) {
+	v := &recordingValidator{}
+	SetAuthValidator(v)
+	defer SetAuthValidator(nil)
+
+	chain := WorkspaceMiddleware(AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})))
+
+	req := httptest.NewRequest("GET", "/acme/_ui/_ws?token=ws-secret", nil)
+	rec := httptest.NewRecorder()
+	chain.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	if v.lastToken != "ws-secret" {
+		t.Errorf("expected query-param token to reach the validator, got %q", v.lastToken)
+	}
+}
+
 type fixedWorkspaceValidator struct {
 	workspaceID string
 }

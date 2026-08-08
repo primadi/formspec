@@ -26,7 +26,7 @@ men-derive table, form, detail page, dan menu entry-nya (milestone 4.F3.6):
 | `clinic/doctor` | 6–12 field → derived form **drawer**; relation `belongs_to` → relation-picker |
 | `clinic/patient` | Coverage **semua tipe field** (string/enum/date/boolean/json/email/pattern) → field-widget library; hanya detail page-nya yang di-override |
 | `pharmacy/medicine` | Derived di module kedua → sidebar grouping per module |
-| `clinic/daily-visit-summary` | `characteristic: summary` → hanya list+find, **tidak dapat menu**, sumber widget |
+| `clinic/daily-visit-summary` | `characteristic: summary` → hanya list+find, **tidak dapat menu** *(App menu — lihat `clinic/module.yaml`'s `spec.menu`; entity ini tetap muncul di `_admin` nav generik, yang menampilkan semua entity setiap module terlepas dari `characteristic` — dua surface yang beda tujuan)*. Showcase characteristic read-only; **bukan** sumber widget — projection engine belum ada, jadi widget dashboard membaca entity live `clinic/visit` (lihat `docs/plan/fix-clinic-dashboard-summary.md`) |
 
 ### 12 UI Kinds
 
@@ -43,14 +43,14 @@ men-derive table, form, detail page, dan menu entry-nya (milestone 4.F3.6):
 | **Form** | `clinic/forms/visit-quick.yaml` | Step wizard, dropdown berantai |
 | **Table** | `clinic/tables/visit-table.yaml` | Kolom dot-path relation, sortable/width/align, `default_sort`, 4 filter (select/date_range/text), row_actions + `confirm_msg`, bulk_actions |
 | **Dashboard** | `clinic/dashboards/clinic-dashboard.yaml` | Grid layout x/y/w/h, **widget lintas module**, config per placement |
-| **Widget** | `clinic/widgets/*.yaml`, `pharmacy/widgets/*.yaml` | metric (sum/count/currency), chart (line, group_by), refresh_secs |
+| **Widget** | `clinic/transaction/visit/widgets/*.yaml`, `pharmacy/transaction/prescription/widgets/*.yaml` | metric (count/sum/currency), chart (line, group_by, count-mode), refresh_secs |
 | **Report** | `clinic/reports/revenue-by-polyclinic.yaml` | Params (date range + select), groups, totals, export csv/xlsx |
 | **Wizard** | `clinic/wizards/patient-registration.yaml` | 3 step (form → form ber-`depends_on` → commit `action`), `save: partial`, route `/wizard/:name`, `?step=N` |
 | **Kanban** | `pharmacy/kanbans/pharmacy-queue.yaml` | 4 kolom penuh, card_template, drag = update status optimistic |
 | **Kanban** | `clinic/kanbans/consultation-board.yaml` | Subset kolom (cancelled disembunyikan), transisi dijaga state machine |
 | **Timeline** | `clinic/timelines/patient-medical-history.yaml` | Entity append-only (update/delete disabled), date grouping |
-| **Menu** | `clinic/menus/clinic-main.yaml` | Nested 2 level, icon, order, route ke page/wizard/kanban/report; entity tanpa menu → derived entry |
-| **Menu** | `pharmacy/menus/pharmacy-main.yaml` | Grup module kedua, urutan `order` antar module |
+| **Menu** | `clinic/module.yaml` (`spec.menu`) | Nested 2 level, icon, order, route ke page/wizard/kanban/report; entity tanpa menu → derived entry |
+| **Menu** | `pharmacy/module.yaml` (`spec.menu`) | Grup module kedua, urutan `order` antar module |
 | **Print** | `clinic/prints/queue-ticket.yaml` | Format thermal |
 | **Print** | `clinic/prints/visit-invoice.yaml` | Format pdf + **html** (implementasi pertama renderer) |
 | **Print** | `pharmacy/prints/prescription-label.yaml` | Thermal, label per item |

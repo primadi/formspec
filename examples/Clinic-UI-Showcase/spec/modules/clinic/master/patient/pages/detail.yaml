@@ -9,7 +9,7 @@ metadata:
   module: clinic
   description: Detail pasien — profil, riwayat kunjungan, rekam medis
 spec:
-  route: /app/patients/:id
+  route: /clinic/patients/:id
   title: "Pasien — {patient.name}"
   icon: "user"
   permissions: [patients.view]

@@ -1,6 +1,8 @@
 # SHOWCASE kind: Dashboard — grid layout x/y/w/h, widget lintas module
 # (pharmacy-queue-count dari modul pharmacy — visibility katalog derived
-# dari permission user, D20). Widget hanya membaca summary entity / list.
+# dari permission user, D20). Widget metric/chart membaca entity live
+# (visit/prescription) + query, bukan summary entity (projection engine
+# belum ada — lihat docs/plan/fix-clinic-dashboard-summary.md).
 apiVersion: forma.dev/v1alpha1
 kind: Dashboard
 metadata:
@@ -22,4 +24,5 @@ spec:
       config: { range: 30d }
   customizable: true                  # user boleh tambah/kurangi widget dari katalog
   defaults: [visits-today, revenue-today]
+  realtime: true                      # event entity → refetch widget (useRealtime); refresh tetap backstop
   refresh: 60

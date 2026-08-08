@@ -137,13 +137,13 @@ versi mayor, breaking change menaikkan segmen versi. ETag pada `/_meta/ui`
 — bukan mekanisme kompatibilitas, jangan dicampur artinya dengan versi API.
 
 ## 7. Status Implementasi Hari Ini (Gap)
-- Filter per-pesan pada Realtime (§5) **belum diimplementasikan** sesuai
-  kontrak: hub websocket saat ini broadcast ke seluruh koneksi ter-registrasi
-  di satu workspace tanpa memfilter per `resource`/permission penerima —
-  client dipercaya mengabaikan pesan yang tidak relevan. Ini gap yang harus
-  ditutup sebelum dokumen ini naik ke Final, bukan detail kosmetik: tanpa
-  filter sisi-server, event bisa membocorkan payload ke caller yang tidak
-  punya permission `view` atas entity itu.
+- Filter per-pesan pada Realtime (§5) **sebagian sudah ditutup oleh
+  implementasi resmi** (lihat [`../renderers/realtime.md`](../renderers/realtime.md)):
+  hub websocket memfilter per subscription (client mendaftarkan resource/event
+  yang diinginkan lewat frame subscribe/unsubscribe) dan per permission
+  `{module}.{plural}.view` (2.6.6). Sisa gap yang belum ditutup: target
+  `{scope: user}` (saat ini hanya `{scope: workspace}`) dan heartbeat
+  ping/pong eksplisit.
 - Endpoint hari ini (§2) sudah sesuai bentuk kontrak ini (bundle per-App, bukan
   per-page `view-spec` seperti draft awal dokumen ini sebelum direvisi).
 

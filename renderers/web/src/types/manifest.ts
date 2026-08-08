@@ -153,7 +153,7 @@ export const FILTER_TEXT = "text"
 export const FILTER_SELECT = "select"
 export const FILTER_DATE_RANGE = "date_range"
 
-export type FilterType = "text" | "select" | "date_range"
+export type FilterType = "text" | "select" | "date" | "date_range"
 
 // ── Export Formats ──
 
@@ -574,7 +574,8 @@ export interface TableSpec {
   realtime?: boolean
   row_actions?: TableAction[]
   bulk_actions?: TableAction[]
-  filters?: TableFilter[]
+  filters?: FilterSpec[]
+  fixed_filters?: FilterSpec[]
 }
 
 export interface TableColumn {
@@ -595,10 +596,20 @@ export interface TableAction {
   confirm_msg?: string
 }
 
-export interface TableFilter {
+export interface FilterSpec {
   field: string
-  label: string
-  type: FilterType
+  label?: string
+  type?: FilterType
+  /** Filter operator sent to the list API — default "eq" (eq, neq, gt, gte,
+   *  lt, lte, between, in, nin, like, ilike, null, notnull). */
+  op?: string
+  /** Pre-set value for a user-adjustable filter. Supports "today" / "today()",
+   *  resolved by the renderer as the server's current date. */
+  default?: string
+  /** For select filters: show the "All" (clear) option. Default true. */
+  show_all?: boolean
+  /** For select filters: caption of the "All" (clear) option. Default "(ALL)". */
+  all_label?: string
 }
 
 // ── Dashboard (Frontend §6) ──
@@ -724,7 +735,8 @@ export interface KanbanSpec {
   columns: KanbanColumn[]
   card_template?: KanbanCard
   realtime?: boolean
-  filters?: string[]
+  filters?: FilterSpec[]
+  fixed_filters?: FilterSpec[]
   search?: boolean
   row_actions?: TableAction[]
   max_cards_per_column?: number

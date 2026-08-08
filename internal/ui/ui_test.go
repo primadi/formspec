@@ -42,7 +42,7 @@ apiVersion: forma.dev/v1alpha1
 kind: Page
 metadata: { name: order-list, module: billing }
 spec:
-  route: /app/orders
+  route: /orders
   title: Orders
   permissions: [orders.list]
   blocks:
@@ -52,7 +52,7 @@ apiVersion: forma.dev/v1alpha1
 kind: Page
 metadata: { name: settings, module: billing }
 spec:
-  route: /app/settings
+  route: /settings
   title: Settings
   tabs:
     - { label: General, form: { ref: order-edit, entity: order, id: "1" } }

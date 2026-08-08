@@ -21,6 +21,8 @@ func (f *fakeHub) Broadcast(workspaceID string, msg events.EventMessage) {
 	f.broadcasts = append(f.broadcasts, msg)
 }
 
+func (f *fakeHub) HasListeners(string) bool { return true }
+
 func newEventLogStore(t *testing.T) *EventLogStore {
 	t.Helper()
 	dir := t.TempDir()

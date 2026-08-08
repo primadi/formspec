@@ -40,7 +40,13 @@ func (h *DeliveryEventHandler) HandleEvent(ctx context.Context, workspaceID, eve
 	for _, ch := range channels {
 		switch ch.Channel {
 		case "websocket":
-			h.Hub.Broadcast(workspaceID, msg)
+			// Listener-gated: no live websocket connection for the workspace
+			// → skip the push. Realtime is non-durable, so there is no replay
+			// for a client that connects later. Audit log (below) is
+			// governance and stays unaffected.
+			if h.Hub != nil && h.Hub.HasListeners(workspaceID) {
+				h.Hub.Broadcast(workspaceID, msg)
+			}
 		case "audit_log":
 			if err := h.EventLog.Write(ctx, workspaceID, eventName, resource, []byte(payload)); err != nil {
 				return err

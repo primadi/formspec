@@ -914,6 +914,64 @@
         "number"
       ]
     },
+    "FilterSpec": {
+      "description": "FilterSpec is a generic filter declaration shared by every data kind that\nlists records (Table, Kanban, Listing, ApprovalInbox, …). A filter is used\nin one of two roles:\n  - `filters`: a user-adjustable control rendered in the kind's UI. If\n    `default` is set, the control is pre-seeded with that value (the user\n    can still change or clear it).\n  - `fixed_filters`: an immutable, server-side filter — always merged into\n    the list request, never rendered as a control and not user-clearable.\n\nThe resolved value is sent to the list API as `field[op]=value`, so `op`\ndefaults to \"eq\" and follows the backend filter operator set.\n",
+      "type": "object",
+      "properties": {
+        "all_label": {
+          "description": "For select filters: caption of the \\\"All\\\" (clear) option. Default \\\"(ALL)\\\".",
+          "type": "string"
+        },
+        "default": {
+          "description": "Pre-set value for a user-adjustable filter. Supports \\\"today\\\" / \\\"today()\\\", resolved by the renderer as the server's current date.",
+          "type": "string"
+        },
+        "field": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "op": {
+          "description": "Filter operator sent to the list API",
+          "type": "string",
+          "enum": [
+            "eq",
+            "neq",
+            "gt",
+            "gte",
+            "lt",
+            "lte",
+            "between",
+            "in",
+            "nin",
+            "like",
+            "ilike",
+            "null",
+            "notnull"
+          ]
+        },
+        "show_all": {
+          "description": "For select filters: show the \\\"All\\\" (clear) option. Default true.",
+          "type": "boolean",
+          "nullable": true
+        },
+        "type": {
+          "description": "Filter widget type",
+          "type": "string",
+          "enum": [
+            "text",
+            "select",
+            "date",
+            "date_range"
+          ]
+        }
+      },
+      "required": [
+        "field"
+      ],
+      "additionalProperties": false
+    },
     "FormAction": {
       "description": "FormAction is a custom action button on a form (Frontend §4).\n",
       "type": "object",
@@ -2185,33 +2243,6 @@
       },
       "required": [
         "field"
-      ],
-      "additionalProperties": false
-    },
-    "TableFilter": {
-      "description": "TableFilter is a filterable field in a table.\n",
-      "type": "object",
-      "properties": {
-        "field": {
-          "type": "string"
-        },
-        "label": {
-          "type": "string"
-        },
-        "type": {
-          "description": "Filter widget type",
-          "type": "string",
-          "enum": [
-            "text",
-            "select",
-            "date_range"
-          ]
-        }
-      },
-      "required": [
-        "field",
-        "label",
-        "type"
       ],
       "additionalProperties": false
     },
@@ -3589,6 +3620,64 @@
         "number"
       ]
     },
+    "FilterSpec": {
+      "description": "FilterSpec is a generic filter declaration shared by every data kind that\nlists records (Table, Kanban, Listing, ApprovalInbox, …). A filter is used\nin one of two roles:\n  - `filters`: a user-adjustable control rendered in the kind's UI. If\n    `default` is set, the control is pre-seeded with that value (the user\n    can still change or clear it).\n  - `fixed_filters`: an immutable, server-side filter — always merged into\n    the list request, never rendered as a control and not user-clearable.\n\nThe resolved value is sent to the list API as `field[op]=value`, so `op`\ndefaults to \"eq\" and follows the backend filter operator set.\n",
+      "type": "object",
+      "properties": {
+        "all_label": {
+          "description": "For select filters: caption of the \\\"All\\\" (clear) option. Default \\\"(ALL)\\\".",
+          "type": "string"
+        },
+        "default": {
+          "description": "Pre-set value for a user-adjustable filter. Supports \\\"today\\\" / \\\"today()\\\", resolved by the renderer as the server's current date.",
+          "type": "string"
+        },
+        "field": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "op": {
+          "description": "Filter operator sent to the list API",
+          "type": "string",
+          "enum": [
+            "eq",
+            "neq",
+            "gt",
+            "gte",
+            "lt",
+            "lte",
+            "between",
+            "in",
+            "nin",
+            "like",
+            "ilike",
+            "null",
+            "notnull"
+          ]
+        },
+        "show_all": {
+          "description": "For select filters: show the \\\"All\\\" (clear) option. Default true.",
+          "type": "boolean",
+          "nullable": true
+        },
+        "type": {
+          "description": "Filter widget type",
+          "type": "string",
+          "enum": [
+            "text",
+            "select",
+            "date",
+            "date_range"
+          ]
+        }
+      },
+      "required": [
+        "field"
+      ],
+      "additionalProperties": false
+    },
     "FormAction": {
       "description": "FormAction is a custom action button on a form (Frontend §4).\n",
       "type": "object",
@@ -4860,33 +4949,6 @@
       },
       "required": [
         "field"
-      ],
-      "additionalProperties": false
-    },
-    "TableFilter": {
-      "description": "TableFilter is a filterable field in a table.\n",
-      "type": "object",
-      "properties": {
-        "field": {
-          "type": "string"
-        },
-        "label": {
-          "type": "string"
-        },
-        "type": {
-          "description": "Filter widget type",
-          "type": "string",
-          "enum": [
-            "text",
-            "select",
-            "date_range"
-          ]
-        }
-      },
-      "required": [
-        "field",
-        "label",
-        "type"
       ],
       "additionalProperties": false
     },
@@ -6935,6 +6997,11 @@
                 "type": "string"
               }
             },
+            "public": {
+              "description": "If true (default), a route is generated for this page. Set false to restrict to embedding only.",
+              "type": "boolean",
+              "nullable": true
+            },
             "route": {
               "type": "string"
             },
@@ -7016,6 +7083,11 @@
             "mode": {
               "description": "create | edit | view",
               "type": "string"
+            },
+            "public": {
+              "description": "If true (default), a route /module/form/\u003cname\u003e is auto-generated. Set false for embed-only forms.",
+              "type": "boolean",
+              "nullable": true
             },
             "render": {
               "$ref": "#/$defs/FormRenderDecl",
@@ -7108,11 +7180,22 @@
             "filters": {
               "type": "array",
               "items": {
-                "$ref": "#/$defs/TableFilter"
+                "$ref": "#/$defs/FilterSpec"
+              }
+            },
+            "fixed_filters": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/FilterSpec"
               }
             },
             "page_size": {
               "type": "integer"
+            },
+            "public": {
+              "description": "If true (default), a route /module/table/\u003cname\u003e is auto-generated. Set false for embed-only tables.",
+              "type": "boolean",
+              "nullable": true
             },
             "realtime": {
               "type": "boolean"
@@ -7194,6 +7277,11 @@
             "description": {
               "type": "string"
             },
+            "public": {
+              "description": "If true (default), a route /module/dashboard/\u003cname\u003e is auto-generated.",
+              "type": "boolean",
+              "nullable": true
+            },
             "realtime": {
               "type": "boolean"
             },
@@ -7271,6 +7359,11 @@
             },
             "entity": {
               "type": "string"
+            },
+            "public": {
+              "description": "If true (default), a route /module/widget/\u003cname\u003e is auto-generated.",
+              "type": "boolean",
+              "nullable": true
             },
             "query": {
               "type": "string"
@@ -7374,6 +7467,11 @@
                 "$ref": "#/$defs/ReportParam"
               }
             },
+            "public": {
+              "description": "If true (default), a route /module/report/\u003cname\u003e is auto-generated.",
+              "type": "boolean",
+              "nullable": true
+            },
             "required_permission": {
               "type": "string"
             },
@@ -7452,6 +7550,11 @@
             },
             "on_complete": {
               "$ref": "#/$defs/WizardOnComplete",
+              "nullable": true
+            },
+            "public": {
+              "description": "If true (default), a route /module/wizard/\u003cname\u003e is auto-generated.",
+              "type": "boolean",
               "nullable": true
             },
             "steps": {
@@ -7535,7 +7638,13 @@
             "filters": {
               "type": "array",
               "items": {
-                "type": "string"
+                "$ref": "#/$defs/FilterSpec"
+              }
+            },
+            "fixed_filters": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/FilterSpec"
               }
             },
             "max_cards_per_column": {
@@ -7544,6 +7653,11 @@
             "position_field": {
               "description": "field storing user-adjustable position (e.g. \"queue_position\")",
               "type": "string"
+            },
+            "public": {
+              "description": "If true (default), a route /module/kanban/\u003cname\u003e is auto-generated.",
+              "type": "boolean",
+              "nullable": true
             },
             "realtime": {
               "description": "default true (§12)",
@@ -7652,6 +7766,11 @@
             "page_size": {
               "type": "integer"
             },
+            "public": {
+              "description": "If true (default), a route /module/timeline/\u003cname\u003e is auto-generated.",
+              "type": "boolean",
+              "nullable": true
+            },
             "sort": {
               "description": "asc | desc (default desc)",
               "type": "string"
@@ -7733,6 +7852,11 @@
               "$ref": "#/$defs/PrintOutput",
               "nullable": true
             },
+            "public": {
+              "description": "If true (default), a route /module/print/\u003cname\u003e is auto-generated.",
+              "type": "boolean",
+              "nullable": true
+            },
             "template": {
               "type": "string"
             }
@@ -7792,6 +7916,11 @@
           "description": "ThemeSpec defines look \u0026 feel as a distributable artifact (Frontend §10).\n",
           "type": "object",
           "properties": {
+            "public": {
+              "description": "If true (default), the theme is active and published in the bundle.",
+              "type": "boolean",
+              "nullable": true
+            },
             "stylesheet": {
               "type": "string"
             },
@@ -7868,6 +7997,11 @@
             },
             "entity": {
               "type": "string"
+            },
+            "public": {
+              "description": "If true (default), a route /module/calendar/\u003cname\u003e is auto-generated.",
+              "type": "boolean",
+              "nullable": true
             },
             "realtime": {
               "type": "boolean"
@@ -7954,7 +8088,7 @@
             "filters": {
               "type": "array",
               "items": {
-                "$ref": "#/$defs/TableFilter"
+                "$ref": "#/$defs/FilterSpec"
               }
             },
             "search": {
@@ -8019,7 +8153,7 @@
             "filters": {
               "type": "array",
               "items": {
-                "$ref": "#/$defs/TableFilter"
+                "$ref": "#/$defs/FilterSpec"
               }
             },
             "realtime": {

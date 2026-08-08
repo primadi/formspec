@@ -8,15 +8,40 @@
 //
 // Design doc §5.5 Page kind (F3)
 
-import { lazy, Suspense, useMemo } from "react"
-import { useSearchParams } from "react-router-dom"
+import { lazy, Suspense, useEffect, useMemo, useState } from "react"
+import { useParams, useSearchParams } from "react-router-dom"
 import type { Entry, PageSpec, PageBlock, PageTab } from "@/types/manifest"
 import { useMetaStore } from "@/stores/meta"
 import { useSessionStore } from "@/stores/session"
 import { can as checkPermission } from "@/engine/permissions"
 import { resolveEntityRef } from "@/engine/entityRef"
+import { apiGet } from "@/lib/api"
+import { interpolate } from "@/lib/interpolate"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
+
+/**
+ * Resolve a `:param`-style placeholder (the only kind Page blocks author,
+ * e.g. `form.id: ":id"`, `table.param: { patient_id: ":id" }`) against the
+ * current route's params. Anything not starting with `:` is a literal value,
+ * passed through unchanged.
+ */
+function resolveRouteParam(raw: string | undefined, routeParams: Readonly<Record<string, string | undefined>>): string | undefined {
+  if (!raw) return raw
+  if (!raw.startsWith(":")) return raw
+  return routeParams[raw.slice(1)]
+}
+
+function resolveRouteParams(raw: Record<string, unknown> | undefined, routeParams: Readonly<Record<string, string | undefined>>): Record<string, string> {
+  if (!raw) return {}
+  const out: Record<string, string> = {}
+  for (const [key, value] of Object.entries(raw)) {
+    if (typeof value !== "string") continue
+    const resolved = resolveRouteParam(value, routeParams)
+    if (resolved != null) out[key] = resolved
+  }
+  return out
+}
 
 // Lazy load kind renderers to avoid circular deps
 const TableRenderer = lazy(() => import("@/kinds/table/TableRenderer"))
@@ -63,11 +88,50 @@ export default function PageRenderer({ entry }: PageRendererProps) {
 function PageBlocks({ entry }: { entry: Entry<PageSpec> }) {
   const blocks = entry.spec.blocks ?? []
   const columns = entry.spec.layout?.columns ?? 1
+  const routeParams = useParams()
+  const getEntity = useMetaStore((s) => s.getEntity)
+  const getForm = useMetaStore((s) => s.getForm)
+  const getClient = useSessionStore((s) => s.getClient)
+
+  // Title interpolation (e.g. "Pasien — {patient.name}") needs whichever
+  // record its tokens reference — fetch the first form block that resolves
+  // to a concrete record id, keyed by that block's own entity name so
+  // "{patient.name}" and "{name}" both work.
+  const titleNeedsData = /\{[\w.]+\}/.test(entry.spec.title ?? "")
+  const [titleCtx, setTitleCtx] = useState<Record<string, unknown> | null>(null)
+
+  useEffect(() => {
+    if (!titleNeedsData) return
+    let cancelled = false
+    const load = async () => {
+      for (const block of blocks) {
+        if (!block.form) continue
+        const formEntry = block.form.ref ? getForm(block.form.ref) : undefined
+        const entityRef = formEntry?.spec.entity
+        if (!entityRef) continue
+        const entity = getEntity(...resolveEntityRef(entityRef, formEntry?.module ?? entry.module))
+        const id = resolveRouteParam(block.form.id, routeParams)
+        if (!entity || !id) continue
+        try {
+          const client = getClient()
+          const record = await apiGet<Record<string, unknown>>(client, `${entity.module}/${entity.name}/${id}`)
+          if (!cancelled) setTitleCtx({ ...record, [entity.name]: record })
+        } catch {
+          // leave titleCtx null — interpolate() falls back to the literal token
+        }
+        return
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [titleNeedsData, blocks, routeParams, getForm, getEntity, getClient, entry.module])
+
+  const title = titleCtx ? interpolate(entry.spec.title, titleCtx) : entry.spec.title
 
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">{entry.spec.title}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
         {entry.spec.description && (
           <p className="text-sm text-muted-foreground">{entry.spec.description}</p>
         )}
@@ -78,14 +142,14 @@ function PageBlocks({ entry }: { entry: Entry<PageSpec> }) {
         style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}
       >
         {blocks.map((block, idx) => (
-          <PageBlockRenderer key={idx} block={block} module={entry.module} />
+          <PageBlockRenderer key={idx} block={block} module={entry.module} routeParams={routeParams} />
         ))}
       </div>
     </div>
   )
 }
 
-function PageBlockRenderer({ block, module }: { block: PageBlock; module: string }) {
+function PageBlockRenderer({ block, module, routeParams }: { block: PageBlock; module: string; routeParams: Readonly<Record<string, string | undefined>> }) {
   const getEntity = useMetaStore((s) => s.getEntity)
   const getForm = useMetaStore((s) => s.getForm)
   const getTable = useMetaStore((s) => s.getTable)
@@ -105,7 +169,7 @@ function PageBlockRenderer({ block, module }: { block: PageBlock; module: string
             <FormRenderer
               entity={entity}
               mode={(block.form?.mode as "create" | "edit" | "view") ?? "view"}
-              id={block.form?.id}
+              id={resolveRouteParam(block.form?.id, routeParams)}
               formRef={block.form?.ref}
             />
           </Suspense>
@@ -122,12 +186,17 @@ function PageBlockRenderer({ block, module }: { block: PageBlock; module: string
     const entity = entityRef
       ? getEntity(...resolveEntityRef(entityRef, tableEntry?.module ?? module))
       : undefined
+    // eslint-disable-next-line react-hooks/rules-of-hooks -- block.table is stable per element (keyed list), so this hook order is consistent across renders
+    const fixedFilters = useMemo(
+      () => resolveRouteParams(block.table?.param, routeParams),
+      [block.table?.param, routeParams],
+    )
 
     if (entity) {
       return (
         <div className="rounded-md border p-4">
           <Suspense fallback={<Skeleton className="h-48" />}>
-            <TableRenderer entity={entity} hideTitle />
+            <TableRenderer entity={entity} hideTitle fixedFilters={fixedFilters} />
           </Suspense>
         </div>
       )

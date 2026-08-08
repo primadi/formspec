@@ -10,6 +10,7 @@ package starlark
 import (
 	"fmt"
 	"math"
+	"time"
 
 	"go.starlark.net/starlark"
 	"go.starlark.net/syntax"
@@ -43,6 +44,26 @@ func EvalExpr(expr string, env map[string]any) (any, error) {
 	// Add built-in constants and helpers
 	predeclared["math_pi"] = starlark.Float(math.Pi)
 	predeclared["math_e"] = starlark.Float(math.E)
+	predeclared["today"] = starlark.NewBuiltin("today", func(
+		thread *starlark.Thread,
+		fn *starlark.Builtin,
+		args starlark.Tuple,
+		kwargs []starlark.Tuple,
+	) (starlark.Value, error) {
+		return starlark.String(time.Now().Format("2006-01-02")), nil
+	})
+	predeclared["days_ago"] = starlark.NewBuiltin("days_ago", func(
+		thread *starlark.Thread,
+		fn *starlark.Builtin,
+		args starlark.Tuple,
+		kwargs []starlark.Tuple,
+	) (starlark.Value, error) {
+		var n int
+		if err := starlark.UnpackArgs("days_ago", args, kwargs, "days", &n); err != nil {
+			return nil, err
+		}
+		return starlark.String(time.Now().AddDate(0, 0, -n).Format("2006-01-02")), nil
+	})
 	predeclared["empty"] = starlark.NewBuiltin("empty", func(
 		thread *starlark.Thread,
 		fn *starlark.Builtin,

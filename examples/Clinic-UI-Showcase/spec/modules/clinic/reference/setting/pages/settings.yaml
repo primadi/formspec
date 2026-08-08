@@ -14,7 +14,7 @@ metadata:
   module: clinic
   description: Pengaturan sistem — tabs, satu form per grup setting
 spec:
-  route: /app/settings
+  route: /settings
   title: "Pengaturan Sistem"
   icon: "settings"
   permissions: [settings.update]

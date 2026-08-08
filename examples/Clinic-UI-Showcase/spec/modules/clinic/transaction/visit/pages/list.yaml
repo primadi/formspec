@@ -6,7 +6,7 @@ metadata:
   module: clinic
   description: Daftar kunjungan hari ini
 spec:
-  route: /app/visits
+  route: /visits
   title: "Kunjungan"
   icon: "clipboard-list"
   permissions: [visits.list]

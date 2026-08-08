@@ -15,6 +15,8 @@ import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
 import { resolveEntityRef } from "@/engine/entityRef"
 import { apiGet } from "@/lib/api"
+import { titleCase } from "@/lib/utils"
+import { interpolate, resolvePath } from "@/lib/interpolate"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/widgets/Badge"
 
@@ -23,7 +25,7 @@ interface PrintRendererProps {
 }
 
 export default function PrintRenderer({ entry }: PrintRendererProps) {
-  const { id } = useParams<{ id?: string }>()
+  const { id, workspace } = useParams<{ id?: string; workspace?: string }>()
   const getClient = useSessionStore((s) => s.getClient)
   const getEntity = useMetaStore((s) => s.getEntity)
 
@@ -67,6 +69,14 @@ export default function PrintRenderer({ entry }: PrintRendererProps) {
 
   const formatDate = entry.spec.output?.paper?.size ?? "A4"
 
+  // Interpolation context: flat record fields (already relation-expanded by
+  // the backend, e.g. record.polyclinic.name), the record again keyed by its
+  // own entity name (so `{visit.queue_number}` resolves the same as
+  // `{queue_number}`), and the current workspace.
+  const ctx: Record<string, unknown> | null = record
+    ? { ...record, [entry.spec.entity]: record, workspace: { name: workspace } }
+    : null
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -82,7 +92,7 @@ export default function PrintRenderer({ entry }: PrintRendererProps) {
         <div className="flex items-center justify-between no-print">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">
-              {entry.spec.entity} Document
+              {titleCase(entry.name)}
             </h1>
             <Badge value={`Format: ${formatDate}`} />
           </div>
@@ -105,11 +115,13 @@ export default function PrintRenderer({ entry }: PrintRendererProps) {
               <div className="text-2xl font-bold mb-2">Forma</div>
             )}
             {entry.spec.header.title && (
-              <h1 className="text-xl font-bold">{entry.spec.header.title}</h1>
+              <h1 className="text-xl font-bold">
+                {interpolate(entry.spec.header.title, ctx)}
+              </h1>
             )}
             {entry.spec.header.subtitle && (
               <p className="text-sm text-muted-foreground">
-                {entry.spec.header.subtitle}
+                {interpolate(entry.spec.header.subtitle, ctx)}
               </p>
             )}
           </div>
@@ -126,7 +138,7 @@ export default function PrintRenderer({ entry }: PrintRendererProps) {
                       <div key={field} className="flex justify-between border-b py-1">
                         <span className="text-muted-foreground">{field}</span>
                         <span className="font-medium">
-                          {record ? String(record[field] ?? "-") : `{${field}}`}
+                          {ctx ? resolveCellValue(ctx, field) : `{${field}}`}
                         </span>
                       </div>
                     ))}
@@ -172,10 +184,10 @@ export default function PrintRenderer({ entry }: PrintRendererProps) {
                   )
                 }
               }
-              if (item.totals && record) {
+              if (item.totals && ctx) {
                 return (
                   <div key={idx} className="text-right text-sm font-medium border-t pt-2">
-                    {item.totals.field}: {String(record[item.totals.field] ?? "-")}
+                    {item.totals.field}: {resolveCellValue(ctx, item.totals.field)}
                   </div>
                 )
               }
@@ -193,7 +205,7 @@ export default function PrintRenderer({ entry }: PrintRendererProps) {
         {/* Footer */}
         {entry.spec.footer && (
           <div className="border-t pt-4 mt-6 text-xs text-muted-foreground text-center">
-            {entry.spec.footer.text}
+            {interpolate(entry.spec.footer.text, ctx)}
           </div>
         )}
       </div>
@@ -219,4 +231,12 @@ export default function PrintRenderer({ entry }: PrintRendererProps) {
       `}</style>
     </div>
   )
+}
+
+// ── Cell value display (distinct from `interpolate` — this formats a single
+// resolved value for a `body.fields` cell, defaulting to "-" when missing,
+// rather than substituting tokens inside a larger string) ──
+function resolveCellValue(ctx: Record<string, unknown>, path: string): string {
+  const value = resolvePath(ctx, path)
+  return value == null || value === "" ? "-" : String(value)
 }

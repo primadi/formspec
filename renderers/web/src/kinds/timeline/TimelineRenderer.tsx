@@ -14,6 +14,7 @@ import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
 import { resolveEntityRef } from "@/engine/entityRef"
 import { apiList } from "@/lib/api"
+import { titleCase } from "@/lib/utils"
 import { Badge } from "@/widgets/Badge"
 
 interface TimelineRendererProps {
@@ -91,7 +92,7 @@ export default function TimelineRenderer({ entry }: TimelineRendererProps) {
     <div className="max-w-2xl mx-auto space-y-4">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">
-          {entry.spec.entity} Timeline
+          {titleCase(entry.name)}
         </h1>
         {entry.spec.empty_state && items.length === 0 && !loading && (
           <p className="text-sm text-muted-foreground">{entry.spec.empty_state}</p>

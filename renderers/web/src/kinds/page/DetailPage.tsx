@@ -18,6 +18,7 @@ import { can as checkPermission } from "@/engine/permissions"
 import { deriveDetailFields } from "@/engine/derive"
 import { getLifecycle, getAvailableTransitions } from "@/engine/lifecycle"
 import { apiGet } from "@/lib/api"
+import { titleCase } from "@/lib/utils"
 import { Badge } from "@/widgets/Badge"
 import { Button } from "@/components/ui/button"
 import ConfirmDialog from "@/components/ui/confirm-dialog"
@@ -132,7 +133,7 @@ export default function DetailPage({ entity }: DetailPageProps) {
         </Button>
         <div className="flex-1">
           <h1 className="text-2xl font-bold tracking-tight">
-            {entity.name.charAt(0).toUpperCase() + entity.name.slice(1)}
+            {titleCase(entity.name)}
           </h1>
           {entity.state_machine && currentState && (
             <Badge value={currentState} />

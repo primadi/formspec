@@ -16,6 +16,11 @@
       "description": "create | edit | view",
       "type": "string"
     },
+    "public": {
+      "description": "If true (default), a route /module/form/\u003cname\u003e is auto-generated. Set false for embed-only forms.",
+      "type": "boolean",
+      "nullable": true
+    },
     "render": {
       "$ref": "#/$defs/FormRenderDecl",
       "nullable": true

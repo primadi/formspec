@@ -31,6 +31,11 @@
         "$ref": "#/$defs/ReportParam"
       }
     },
+    "public": {
+      "description": "If true (default), a route /module/report/\u003cname\u003e is auto-generated.",
+      "type": "boolean",
+      "nullable": true
+    },
     "required_permission": {
       "type": "string"
     },

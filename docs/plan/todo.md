@@ -1,6 +1,6 @@
 # Master Plan: Forma Implementation
 
-**Last Updated**: 2026-08-04  
+**Last Updated**: 2026-08-07  
 **Status**: ✅ Fase 0 complete · ✅ Fase 1 (1.1–1.5) · ✅ Fase 2.1 · ✅ Fase 2.2 · ✅ Fase 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6) · ✅ Fase 5 (5.1–5.4) · ✅ Spec hot-reload · ✅ Fase 11 (review schema↔docs) · ✅ Audit spec↔schema + tambah TODO item · ✅ `forma validate` (3.1.1, engine+schema)  
 
 > `⬜` not started · `✅` complete · `⏸️` deferred  
@@ -313,7 +313,8 @@ layout contoh `examples/Clinic-UI-Showcase/spec/` (entity-centric + `spec/` cont
 - [ ] 5.5.5 Zero-config — derive columns from state machine or `group_by` enum  
 - [x] 5.5.6 Click card → detail page navigation  
 - [x] 5.5.7 Row actions (view/edit/delete/custom) with confirm + permission check  
-- [x] 5.5.8 Filter columns from `filters` manifest — Select dropdown per filter field  
+- [x] 5.5.8 Filter columns from `filters` manifest — Select dropdown per filter field
+- [x] 5.5.9 Filter generik server-side — `filters` objek (`default` seed, type `select`/`date`/`text`, `today()`) + `fixed_filters` immutable; `transaction_date[eq]=` untuk scope tanggal board (lihat `docs/plan/kanban-filter-tanggal-filter-generik.md`)  
 
 ### 5.6 `kind: Calendar`
 - [ ] 5.6.1 Month/week/day/resource views — `views: [month, week, day, resource]`  

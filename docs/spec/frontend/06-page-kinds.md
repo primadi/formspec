@@ -259,7 +259,45 @@ dilaporkan per baris**: baris yang gagal ditampilkan dengan alasannya, baris
 sukses tetap commit — tak pernah all-or-nothing diam-diam, tak pernah menelan
 error. Permission = permission `update` entity; baris yang caller tak berhak
 tak masuk seleksi editable.
+### 3.3 Kontrak Filter (dipakai bersama Table & Kanban)
 
+Model filter data kind generik, dipakai identik oleh `Table` dan `Kanban`
+(serta kind lain yang me-list record). Setiap filter dideklarasikan sebagai
+objek `FilterSpec` dan memegang salah satu dari dua peran:
+
+```yaml
+spec:
+  filters:
+    - { field: transaction_date, label: "Tanggal", type: date, default: today }
+    - { field: polyclinic_id, label: "Poliklinik", type: select }
+  fixed_filters:
+    - { field: tenant_id, default: tenant-1 }
+```
+
+- **`filters`** — kontrol yang bisa diubah user di UI. Bila `default` diisi,
+  kontrol ter-seed nilai itu saat dibuka (user tetap bisa mengganti/​mengosongkan).
+- **`fixed_filters`** — filter **immutable, server-side**: selalu digabung ke
+  request list, **tidak dirender sebagai kontrol**, dan tidak bisa dihapus
+  user. Dipakai untuk scope yang tak boleh diganggu (mis. pin satu tanggal,
+  satu tenant, satu konteks halaman).
+
+`FilterSpec`:
+
+| Field | Wajib | Deskripsi |
+|---|---|---|
+| `field` | ya | Nama field entity (boleh dot-path relation, mis. `patient.name`) |
+| `label` | tidak | Label kontrol; fallback `field` |
+| `type` | tidak | `select` (default) · `text` · `date` · `date_range` |
+| `op` | tidak | Operator filter API — default `eq` (set operator backend §6) |
+| `default` | tidak | Nilai seed. Mendukung `today` / `today()` (resolver = tanggal server, UTC) |
+| `show_all` | tidak | Hanya tipe `select`: tampilkan opsi "All" (clear). Default `true` |
+| `all_label` | tidak | Hanya tipe `select`: caption opsi "All" (clear). Default `"(ALL)"` |
+
+Nilai terkirim ke API sebagai `field[op]=value` (mis. `transaction_date[eq]=2026-08-07`),
+sehingga DB mem-filter **sebelum** baris dikirim. `fixed_filters` selalu menang
+atas pilihan user bila field-nya sama. `today()` meniadakan perbedaan zona
+waktu: memakai tanggal server (RFC3339 UTC), bukan tanggal lokal browser —
+sama dengan konvensi widget query.
 ## 4. `kanban`
 Papan kolom drag-drop — instance VisualSpecKind `tier: page`
 ([`02-visual-spec-kind.md`](02-visual-spec-kind.md)), dan contoh unggulan
@@ -341,6 +379,12 @@ spec:
     fields: [assignee.name, created_at]
   realtime: true
 ```
+
+**Filter & scope tanggal.** Kanban memakai kontrak filter yang sama dengan
+Table (§3.3). Filter `type: date` dengan `default: today` membuat board
+terbuka ter-scope ke satu tanggal (mis. antrean hari ini) dan tetap bisa
+diganti user via date picker; `fixed_filters` mem-pin scope yang tak bisa
+diganti user. Nilai filter dikirim server-side (`field[op]=value`).
 
 **Within-column ordering.** Renderer dapat mengurutkan kartu dalam satu kolom
 dan mengizinkan operator mengubah urutan via drag-to-reorder dalam kolom:

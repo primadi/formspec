@@ -19,6 +19,7 @@ import {
   type FormField,
   type MenuItem,
 } from "@/types/manifest"
+import { titleCase } from "@/lib/utils"
 
 // ── Main derive functions ──
 
@@ -353,7 +354,7 @@ function isBuiltinAction(name: string): boolean {
 }
 
 function entityDisplayName(entity: EntitySchema): string {
-  return entity.name.charAt(0).toUpperCase() + entity.name.slice(1).replace(/-/g, " ")
+  return titleCase(entity.name)
 }
 
 function entityIcon(_entity: EntitySchema): string | undefined {
@@ -361,7 +362,7 @@ function entityIcon(_entity: EntitySchema): string | undefined {
 }
 
 function moduleDisplayName(module: string): string {
-  return module.charAt(0).toUpperCase() + module.slice(1).replace(/-/g, " ")
+  return titleCase(module)
 }
 
 function moduleIcon(_module: string): string | undefined {

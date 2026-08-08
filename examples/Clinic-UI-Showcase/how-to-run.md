@@ -35,9 +35,12 @@ Buka `http://localhost:8080/default/_admin` — SPA sudah built-in.
 
 Verifikasi API:
 ```bash
-curl http://localhost:8080/default/api/v1/_meta/me
-# → {"data":{"user_id":"developer","workspace":"default","permissions":["*"]}}
+curl http://localhost:8080/default/_ui/_meta/me
+# → {"data":{"user_id":"developer","workspace":"default","roles":["admin"],"permissions":["*"]}}
 ```
+
+> Meta API ada di `/_ui/_meta/*` (sibling dari `/api/v1/*`, bukan nested di
+> dalamnya). `/api/v1/*` murni untuk REST CRUD entity yang di-generate.
 
 ### Lebih sederhana — dengan config file
 

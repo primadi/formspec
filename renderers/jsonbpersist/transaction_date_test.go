@@ -82,3 +82,29 @@ func TestValidateTransactionDate_BackdateUnlimited(t *testing.T) {
 		t.Errorf("backdate unlimited (max_days_back=0) should pass: %v", err)
 	}
 }
+
+func TestHasPermission(t *testing.T) {
+	cases := []struct {
+		name     string
+		held     []string
+		required string
+		want     bool
+	}{
+		{"empty required", []string{"visits.list"}, "", true},
+		{"public required", []string{"visits.list"}, "public", true},
+		{"exact match", []string{"visits.resolve-stale"}, "visits.resolve-stale", true},
+		{"wildcard one segment", []string{"visits.*"}, "visits.resolve-stale", true},
+		{"wildcard wrong prefix", []string{"pharmacy.*"}, "visits.resolve-stale", false},
+		{"wildcard too deep", []string{"visits.*"}, "visits.resolve.stale", false},
+		{"super wildcard", []string{"*"}, "anything.at.all", true},
+		{"no match", []string{"visits.complete"}, "visits.resolve-stale", false},
+		{"nil held", nil, "visits.resolve-stale", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := hasPermission(tc.held, tc.required); got != tc.want {
+				t.Errorf("hasPermission(%v, %q) = %v, want %v", tc.held, tc.required, got, tc.want)
+			}
+		})
+	}
+}

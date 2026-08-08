@@ -16,6 +16,23 @@ import (
 	"strings"
 )
 
+// contextKey is a private key type for context values to avoid collisions.
+type contextKey int
+
+const ctxPermissions contextKey = iota
+
+// WithPermissions stores caller permissions in the context.
+func WithPermissions(ctx context.Context, permissions []string) context.Context {
+	return context.WithValue(ctx, ctxPermissions, permissions)
+}
+
+// PermissionsFromContext extracts caller permissions from the context.
+// Returns nil if none were stored.
+func PermissionsFromContext(ctx context.Context) []string {
+	v, _ := ctx.Value(ctxPermissions).([]string)
+	return v
+}
+
 // Identity represents an authenticated caller.
 //
 // It carries the minimal set of claims needed for authorization decisions:

@@ -14,6 +14,11 @@
       "$ref": "#/$defs/WizardOnComplete",
       "nullable": true
     },
+    "public": {
+      "description": "If true (default), a route /module/wizard/\u003cname\u003e is auto-generated.",
+      "type": "boolean",
+      "nullable": true
+    },
     "steps": {
       "type": "array",
       "items": {

@@ -1,4 +1,6 @@
-# SHOWCASE kind: Widget tipe metric — stat card dari summary entity.
+# SHOWCASE kind: Widget tipe metric — jumlah kunjungan hari ini.
+# Baca entity transaksi `visit` langsung (count), bukan summary entity —
+# summary projection belum diimplementasikan (lihat docs/plan/fix-clinic-dashboard-summary.md).
 apiVersion: forma.dev/v1alpha1
 kind: Widget
 metadata:
@@ -8,9 +10,8 @@ metadata:
 spec:
   title: "Kunjungan Hari Ini"
   type: metric
-  entity: daily-visit-summary
-  query: "date = today()"
+  entity: visit
+  query: "transaction_date = today() and status != 'cancelled'"
   refresh_secs: 60
   config:
-    aggregate: sum
-    field: visit_count
+    aggregate: count
