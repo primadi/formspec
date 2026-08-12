@@ -5,7 +5,7 @@
 # This is a DEV CONVENIENCE ONLY (see README.md) — the single source of truth
 # for every module's content stays its own verticals/<name>/spec/ folder.
 # Nothing under the generated paths below should ever be hand-edited; re-run
-# this script instead. Production composition is per-App `forma apply` into
+# this script instead. Production composition is per-App `formspec apply` into
 # one workspace (docs/spec/02-core-basic.md §6.0), not this script.
 set -euo pipefail
 

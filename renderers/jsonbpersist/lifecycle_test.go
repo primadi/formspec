@@ -3,7 +3,7 @@ package db
 import (
 	"testing"
 
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 func TestLifecycleGuard_Create(t *testing.T) {
@@ -185,9 +185,9 @@ func TestLifecycleError(t *testing.T) {
 	err := &LifecycleError{
 		Action:    "submit",
 		DocStatus: "cancelled",
-		Code:      "FORMA.DOC.SUBMIT_NOT_DRAFT",
+		Code:      "FORMSPEC.DOC.SUBMIT_NOT_DRAFT",
 	}
-	expected := "[FORMA.DOC.SUBMIT_NOT_DRAFT] action \"submit\" blocked by doc_status=cancelled"
+	expected := "[FORMSPEC.DOC.SUBMIT_NOT_DRAFT] action \"submit\" blocked by doc_status=cancelled"
 	if err.Error() != expected {
 		t.Errorf("error message mismatch:\n  got:      %s\n  expected: %s", err.Error(), expected)
 	}

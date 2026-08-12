@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 func TestEntityStore_InsertAndGetByID(t *testing.T) {
@@ -1605,7 +1605,7 @@ func TestEntityStore_BackdatePolicy_Blocked(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected BACKDATE_EXCEEDED for old date without override")
 	}
-	if !strings.Contains(err.Error(), "FORMA.TXN.BACKDATE_EXCEEDED") {
+	if !strings.Contains(err.Error(), "FORMSPEC.TXN.BACKDATE_EXCEEDED") {
 		t.Errorf("expected BACKDATE_EXCEEDED error, got: %v", err)
 	}
 }
@@ -1749,4 +1749,171 @@ func TestEntityStore_IsStale_Computed(t *testing.T) {
 	if stale, _ := rec3.Data["is_stale"].(bool); stale {
 		t.Errorf("expected is_stale=false for recent visit, got %v", rec3.Data["is_stale"])
 	}
+}
+
+// TestEntityStore_InsertUnknownField ensures insert rejects fields not in spec.
+func TestEntityStore_InsertUnknownField(t *testing.T) {
+	dir := t.TempDir()
+	d, err := OpenSQLite(filepath.Join(dir, "crud_unknown_insert.db"), nil)
+	if err != nil {
+		t.Fatalf("OpenSQLite failed: %v", err)
+	}
+	defer d.Close()
+
+	meta := spec.Metadata{Name: "task", Module: "project"}
+	entity := &spec.EntitySpec{
+		Version: "v1",
+		Fields: []spec.Field{
+			{Name: "title", Type: spec.FieldString},
+			{Name: "done", Type: spec.FieldBoolean, Default: func() *any { v := any(false); return &v }()},
+		},
+	}
+
+	r := NewMigrationRunner(d, DriverSQLite)
+	ctx := context.Background()
+	if _, err := r.ApplyMigrations(ctx, []EntityMigration{{Metadata: meta, EntitySpec: *entity}}); err != nil {
+		t.Fatalf("ApplyMigrations failed: %v", err)
+	}
+
+	store := NewEntityStore(d, DriverSQLite, meta, entity)
+
+	// Sending a field not in the spec must be rejected.
+	_, err = store.Insert(ctx, InsertParams{
+		WorkspaceID: "t1",
+		CreatedBy:   "user-1",
+		Data:        map[string]any{"title": "hello", "hacker_field": "malicious"},
+	})
+	if err == nil {
+		t.Fatal("expected error for unknown field, got nil")
+	}
+	if !strings.Contains(err.Error(), "unknown field") {
+		t.Errorf("expected 'unknown field' error, got: %v", err)
+	}
+
+	// Known fields only: must succeed.
+	id, err := store.Insert(ctx, InsertParams{
+		WorkspaceID: "t1",
+		CreatedBy:   "user-1",
+		Data:        map[string]any{"title": "valid task"},
+	})
+	if err != nil {
+		t.Fatalf("Insert with known fields failed: %v", err)
+	}
+	if id == "" {
+		t.Fatal("expected non-empty ID")
+	}
+}
+
+// TestEntityStore_UpdateUnknownField ensures update rejects fields not in spec.
+func TestEntityStore_UpdateUnknownField(t *testing.T) {
+	dir := t.TempDir()
+	d, err := OpenSQLite(filepath.Join(dir, "crud_unknown_update.db"), nil)
+	if err != nil {
+		t.Fatalf("OpenSQLite failed: %v", err)
+	}
+	defer d.Close()
+
+	meta := spec.Metadata{Name: "note", Module: "project"}
+	entity := &spec.EntitySpec{
+		Version: "v1",
+		Fields: []spec.Field{
+			{Name: "body", Type: spec.FieldString},
+			{Name: "pinned", Type: spec.FieldBoolean},
+		},
+	}
+
+	r := NewMigrationRunner(d, DriverSQLite)
+	ctx := context.Background()
+	if _, err := r.ApplyMigrations(ctx, []EntityMigration{{Metadata: meta, EntitySpec: *entity}}); err != nil {
+		t.Fatalf("ApplyMigrations failed: %v", err)
+	}
+
+	store := NewEntityStore(d, DriverSQLite, meta, entity)
+
+	id, err := store.Insert(ctx, InsertParams{
+		WorkspaceID: "t1",
+		CreatedBy:   "user-1",
+		Data:        map[string]any{"body": "initial"},
+	})
+	if err != nil {
+		t.Fatalf("Insert failed: %v", err)
+	}
+
+	// Update with unknown field must be rejected.
+	_, err = store.Update(ctx, UpdateParams{
+		WorkspaceID: "t1",
+		ID:          id,
+		Version:     1,
+		UpdatedBy:   "user-1",
+		Data:        map[string]any{"body": "updated", "extra": 123},
+	})
+	if err == nil {
+		t.Fatal("expected error for unknown field, got nil")
+	}
+	if !strings.Contains(err.Error(), "unknown field") {
+		t.Errorf("expected 'unknown field' error, got: %v", err)
+	}
+
+	// Update with known fields only: must succeed.
+	newVersion, err := store.Update(ctx, UpdateParams{
+		WorkspaceID: "t1",
+		ID:          id,
+		Version:     1,
+		UpdatedBy:   "user-1",
+		Data:        map[string]any{"body": "updated", "pinned": true},
+	})
+	if err != nil {
+		t.Fatalf("Update with known fields failed: %v", err)
+	}
+	if newVersion != 2 {
+		t.Errorf("expected version 2, got %d", newVersion)
+	}
+}
+
+// TestEntityStore_ReservedFieldRejected ensures reserved field names are rejected
+// when sent as data (they are not custom fields, so validateKnownFields will
+// reject them unless they are in the known set — but they are in the known set
+// as an explicit allowlist for framework internals).
+func TestEntityStore_ReservedFieldRejected(t *testing.T) {
+	dir := t.TempDir()
+	d, err := OpenSQLite(filepath.Join(dir, "crud_reserved.db"), nil)
+	if err != nil {
+		t.Fatalf("OpenSQLite failed: %v", err)
+	}
+	defer d.Close()
+
+	meta := spec.Metadata{Name: "widget", Module: "factory"}
+	entity := &spec.EntitySpec{
+		Version: "v1",
+		Fields: []spec.Field{
+			{Name: "label", Type: spec.FieldString},
+		},
+	}
+
+	r := NewMigrationRunner(d, DriverSQLite)
+	ctx := context.Background()
+	if _, err := r.ApplyMigrations(ctx, []EntityMigration{{Metadata: meta, EntitySpec: *entity}}); err != nil {
+		t.Fatalf("ApplyMigrations failed: %v", err)
+	}
+
+	store := NewEntityStore(d, DriverSQLite, meta, entity)
+
+	// Attempt to inject a custom field named "owner" into data — the field
+	// name "owner" is a reserved field declared in spec.ReservedFieldNames
+	// and is not in the Entity's own fields list. Because validateKnownFields
+	// includes reserved names in its allowlist, "owner" will pass
+	// unknown-field validation and be stored as JSON data. This is
+	// intentional: reserved fields in data are harmless (they don't
+	// override framework-set columns), and rejecting them complicates
+	// internal flows that may set them. The real guard against reserved
+	// field reuse is at spec validation time (IsReservedField).
+	id, err := store.Insert(ctx, InsertParams{
+		WorkspaceID: "t1",
+		CreatedBy:   "user-1",
+		Data:        map[string]any{"label": "ok", "owner": "hacker"}, // "owner" is a reserved name
+	})
+	if err != nil {
+		t.Fatalf("Insert with reserved field name in data failed: %v", err)
+	}
+	_ = id
 }

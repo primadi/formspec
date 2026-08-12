@@ -5,7 +5,7 @@
 > Draft: isi di bawah kontrak yang berlaku.
 
 ## 1. Cakupan
-Kontrak observability untuk **engine Resource Plane** (`forma serve` — proses
+Kontrak observability untuk **engine Resource Plane** (`formspec serve` — proses
 yang menjalankan handler bisnis tenant). Ia mendefinisikan apa yang **wajib**
 di-*emit* setiap implementasi engine sehingga operator manapun (dan
 reimplementasi engine yang konform) bisa dimonitor dengan cara yang sama:
@@ -17,7 +17,7 @@ Observability governance (transparency log, decision log, evidence) adalah
 urusan [`04-control-plane.md`](04-control-plane.md) §7 dan
 [`05-plane-protocol.md`](05-plane-protocol.md) §4.4; kosakata health yang
 didefinisikan di sini (§5) adalah kontrak yang **dikonsumsi** oleh evidence
-`health` Plane Protocol dan oleh forma/ops — tetapi engine tidak pernah
+`health` Plane Protocol dan oleh formspec/ops — tetapi engine tidak pernah
 mendorong alert sendiri (§6).
 
 **Larangan keras (normatif, tidak bisa dikonfigurasi lepas):** telemetry
@@ -119,7 +119,7 @@ atribut span pada level default.
 **Propagasi konteks trace adalah bagian kontrak wire.** Engine **wajib**
 meng-inject dan menerima trace context format **W3C Trace Context**
 (`traceparent`/`tracestate`) pada: request HTTP masuk, dan setiap panggilan
-ke sidecar lewat transport SDK (`lib-forma-*`). Ini menjadikan trace utuh
+ke sidecar lewat transport SDK (`lib-formspec-*`). Ini menjadikan trace utuh
 lintas proses engine ↔ sidecar sebuah kewajiban interoperabilitas, bukan
 opsi implementasi — SDK sidecar konform **wajib** meneruskan header ini ke
 span-nya sendiri. Export trace (endpoint OTLP, sampling rate) adalah
@@ -153,26 +153,26 @@ evidence `health` yang dikirim ke Control Plane
 saja, tidak pernah data bisnis**.
 
 ## 6. Alerting — Stance
-Forma **tidak** membangun alerting engine sendiri. Kontrak ini berhenti pada
+FormSpec **tidak** membangun alerting engine sendiri. Kontrak ini berhenti pada
 **mengekspos** metrics (§3) dan health (§5) dalam format standar; **rule
 alerting, threshold, routing, dan on-call adalah tanggung jawab stack
 operator** (Prometheus Alertmanager, Grafana, dsb). Alasan sama dengan
 larangan write-back Plane Protocol: engine melaporkan keadaan, keputusan
 (termasuk "ini layak dibangunkan tengah malam") ada di lapisan governance/ops
-operator. forma/ops (aplikasi Forma first-party di atas Control Plane, bukan
+operator. formspec/ops (aplikasi FormSpec first-party di atas Control Plane, bukan
 bagian engine) **boleh** membangun surface alerting di atas kosakata health
 ini — tetapi itu aplikasi, bukan kewajiban engine.
 
-## 7. `forma logs`
+## 7. `formspec logs`
 Verb CLI untuk membaca stream log terstruktur (§2) dari engine — tail dan
 filter tanpa harus menyaring JSON manual. Normatif untuk perilaku;
 implementasi CLI mengikuti dokumen ini.
 
 ```bash
-forma logs --workspace corp-456 --follow            # tail live
-forma logs --module billing --entity invoice        # filter per module/entity
-forma logs --level error --since 1h                 # hanya error, jendela waktu
-forma logs --request-id req-abc123                   # satu request, lintas komponen
+formspec logs --workspace corp-456 --follow            # tail live
+formspec logs --module billing --entity invoice        # filter per module/entity
+formspec logs --level error --since 1h                 # hanya error, jendela waktu
+formspec logs --request-id req-abc123                   # satu request, lintas komponen
 ```
 
 | Flag | Fungsi |
@@ -185,14 +185,14 @@ forma logs --request-id req-abc123                   # satu request, lintas komp
 | `--since` / `--until` | Jendela waktu |
 | `--output` | `pretty` (default TTY) \| `json` (raw JSON lines) |
 
-`forma logs` **tidak pernah** menembus disiplin PII (§2.2): kalau `debug`
+`formspec logs` **tidak pernah** menembus disiplin PII (§2.2): kalau `debug`
 tidak diaktifkan operator, nilai bisnis tetap tidak ada di stream, dan
-`forma logs` tidak bisa memunculkannya. Verb ini **wajib** ditambahkan ke
-referensi CLI ([`../../cli-tools/02-forma-cli.md`](../../cli-tools/02-forma-cli.md)).
+`formspec logs` tidak bisa memunculkannya. Verb ini **wajib** ditambahkan ke
+referensi CLI ([`../../cli-tools/02-formspec-cli.md`](../../cli-tools/02-formspec-cli.md)).
 
 ## 8. Kode Error
 | Kode | Kondisi |
 |---|---|
 | `OBSERVABILITY_METRICS_DISABLED` | Endpoint `/metrics` diminta tapi dimatikan konfigurasi |
 | `OBSERVABILITY_DEBUG_FORBIDDEN` | Aktivasi log `debug` dicoba di `prod` tanpa otorisasi operator |
-| `LOGS_FILTER_INVALID` | Kombinasi filter `forma logs` tidak valid |
+| `LOGS_FILTER_INVALID` | Kombinasi filter `formspec logs` tidak valid |

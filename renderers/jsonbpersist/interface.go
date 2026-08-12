@@ -1,4 +1,4 @@
-// Package db provides the database abstraction layer for Forma.
+// Package db provides the database abstraction layer for FormSpec.
 //
 // It defines the DB interface that all storage operations use, supports
 // SQLite (development) and PostgreSQL (production), and provides a factory
@@ -10,8 +10,8 @@ import (
 	"database/sql"
 )
 
-// DB is the core database interface for Forma.
-// It wraps database/sql with Forma-specific convenience methods
+// DB is the core database interface for FormSpec.
+// It wraps database/sql with FormSpec-specific convenience methods
 // and ensures consistent behavior across SQLite and PostgreSQL.
 type DB interface {
 	// ExecContext executes a query without returning rows.

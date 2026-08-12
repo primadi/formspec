@@ -19,7 +19,7 @@ Valkey. **Kredensial tidak pernah
 inline** — selalu lewat `credential_ref` ke KMS/Vault.
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Datastore
 metadata:
   name: prod-postgres
@@ -29,7 +29,7 @@ spec:
   connection:
     host: pg-prod.internal
     port: 5432
-    database: forma_shared
+    database: formspec_shared
     pool: { max_open: 100, max_idle: 20, max_lifetime: 1h }
     lazy: false                # true = connect saat pemakaian pertama
   credential_ref: kms://prod/postgres-shared
@@ -75,7 +75,7 @@ murni pada apakah kedua Module berbagi instance fisik yang sama atau tidak.
 (`ctx.pubsub`), `storage` (`ctx.storage`), `config`, `kvstore`, `log`. Satu
 backend fisik boleh melayani banyak primitive.
 
-`spec.driver` — kompatibilitas dengan `serves` divalidasi `forma apply`:
+`spec.driver` — kompatibilitas dengan `serves` divalidasi `formspec apply`:
 
 | Driver | Kompatibel `serves` |
 |---|---|
@@ -104,7 +104,7 @@ set* — app developer **tidak boleh** mendefinisikan primitive infrastruktur
 baru sendiri. Kebutuhan yang tampak seperti primitive baru (scheduler, mail,
 notification, seeder/factory) diwujudkan sebagai **module resmi di atas
 primitive yang ada** (mail → `ctx.queue`, notification → `ctx.pubsub`,
-`forma/scheduler`/`forma/seed` di atas primitive terkait), bukan sebagai
+`formspec/scheduler`/`formspec/seed` di atas primitive terkait), bukan sebagai
 primitive tambahan. Set ini tetap tertutup supaya kontrak Datastore dan
 PersistBackend tidak perlu tumbuh setiap kali muncul kebutuhan konvenien
 baru.
@@ -143,7 +143,7 @@ registry, cek `access.permission` ceiling — operasi yang melampaui ceiling
 ## 5. Datastore `'default'`
 Tiap tipe primitive punya konsep Datastore default bernama `'default'` —
 `ctx.db()` tanpa argumen auto-resolve ke Datastore `'default'` tipe `db`,
-dst. **Dev mode** (`forma dev`) auto-provision `'default'` untuk semua tipe
+dst. **Dev mode** (`formspec dev`) auto-provision `'default'` untuk semua tipe
 primitive dengan backend ringan: `db`/`kvstore` → SQLite; `cache`/`lock`/
 `queue`/`pubsub` → in-memory; `storage` → filesystem lokal — zero config.
 **Produksi:** Cloud Owner **wajib** mendefinisikan minimal Datastore
@@ -155,7 +155,7 @@ primitive dengan backend ringan: `db`/`kvstore` → SQLite; `cache`/`lock`/
 | `DATASTORE_NOT_FOUND` | Datastore bernama tidak ditemukan di registry |
 | `DATASTORE_ACCESS_DENIED` | Datastore tidak dideklarasikan di `uses.datastores` module |
 | `DATASTORE_PERMISSION_DENIED` | Operasi melampaui ceiling `access.permission` |
-| `DATASTORE_DRIVER_INCOMPATIBLE` | `serves` tidak kompatibel `driver` (saat `forma apply`) |
+| `DATASTORE_DRIVER_INCOMPATIBLE` | `serves` tidak kompatibel `driver` (saat `formspec apply`) |
 | `DATASTORE_CREDENTIAL_MISSING` | `credential_ref` wajib tapi tidak diisi |
 
 ## 7. Lifecycle dan Kredensial
@@ -169,11 +169,11 @@ mengubah manifest Datastore itu sendiri. Health/konektivitas adalah urusan
 Koneksi operator/platform-managed ke datastore produksi memakai role
 **least-privilege**, bukan superuser manusia:
 
-- `forma_ops_backup` — hanya privilege `REPLICATION`, eksklusif untuk
+- `formspec_ops_backup` — hanya privilege `REPLICATION`, eksklusif untuk
   tooling backup/restore fisik (mis. `pg_basebackup`, WAL-G, pgBackRest
   continuous archiving); tidak punya jalur baca/tulis SQL ke data aplikasi,
   hanya akses replication-stream.
-- `forma_ops_ddl` — privilege DDL skema (create/alter table, index) untuk
+- `formspec_ops_ddl` — privilege DDL skema (create/alter table, index) untuk
   migrasi struktural, dengan `NOSUPERUSER`, tanpa `GRANT OPTION`, tanpa
   `CREATEROLE`, dan `REVOKE ALL` eksplisit pada DML — role ini tidak bisa
   baca/tulis baris aplikasi, hanya ubah skema.

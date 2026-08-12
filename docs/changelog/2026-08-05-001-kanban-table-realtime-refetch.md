@@ -19,7 +19,7 @@
 - Kanban board: create visit → start-consultation → complete → `visit.completed`
   event → board **silent refetch tanpa reload** → kolom "Selesai" 2→3.
 - Table: mekanisme sama (silent refetch via `setReloadKey` + `silentRefetch`).
-- `npx tsc -b --noEmit` bersih; `forma validate` [OK].
+- `npx tsc -b --noEmit` bersih; `formspec validate` [OK].
 
 ## Files affected
 - `renderers/web/src/kinds/kanban/KanbanRenderer.tsx` — import useRealtime, silent fetchRecords, realtime refetch effect

@@ -22,12 +22,12 @@ lalu setiap bulan salah satu anggota memenangkan undian dan menerima total pot.
 
 | Layer | Teknologi |
 |-------|-----------|
-| Framework | Forma (spec-first, declarative YAML) |
-| Backend | Go, module `github.com/primadi/forma` |
+| Framework | FormSpec (spec-first, declarative YAML) |
+| Backend | Go, module `github.com/primadi/formspec` |
 | Frontend | React + TypeScript + Vite + shadcn/ui (di-generate engine) |
 | Database | PostgreSQL (produksi) / SQLite (dev) |
 | Scripting | Starlark (sandboxed, script aksi custom) |
-| Manifest | YAML (`apiVersion: forma.dev/v1alpha1`) |
+| Manifest | YAML (`apiVersion: formspec.dev/v1alpha1`) |
 
 ## Prinsip Kunci
 
@@ -60,7 +60,7 @@ lalu setiap bulan salah satu anggota memenangkan undian dan menerima total pot.
 
 ```
 arisan/
-  forma-app.yaml               # Config CLI (bukan kind: Config)
+  formspec-app.yaml               # Config CLI (bukan kind: Config)
   spec/
     apps/
       arisan.yaml              # kind: App

@@ -4,7 +4,7 @@
 # yang tidak relevan untuk pembelian instan, dan memaksa OTC lewat situ akan
 # mengotori board antrian farmasi (pharmacy-queue kanban) dengan kartu yang
 # tak perlu ditindaklanjuti siapa pun.
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Entity
 metadata:
   name: otc-sale

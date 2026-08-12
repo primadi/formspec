@@ -13,7 +13,7 @@ field mendeklarasikan `type` dari katalog tertutup di §1.
 
 ## 1. Katalog Tipe
 
-Tipe adalah **himpunan tertutup** — `forma apply` menolak `type` di luar daftar
+Tipe adalah **himpunan tertutup** — `formspec apply` menolak `type` di luar daftar
 ini. Tiap tipe punya representasi kanonik yang identik di seluruh PersistBackend
 dan protokol; perbedaan hasil antar backend adalah non-konformansi.
 
@@ -171,7 +171,7 @@ settings:
 Field `money` yang meng-override `currency` ke kode selain
 `settings.currency.code` **wajib** menyertakan `decimal_places` sendiri di
 deklarasi field — tidak ada katalog untuk di-lookup, jadi tidak mendeklarasikan
-skala pada mata uang non-default adalah `VALIDATION_ERROR` saat `forma apply`,
+skala pada mata uang non-default adalah `VALIDATION_ERROR` saat `formspec apply`,
 bukan tebakan diam-diam (mis. asumsi "2 digit untuk semua mata uang").
 
 **Rounding normatif.** Default **banker's rounding** (round-half-to-even) — dipilih
@@ -188,7 +188,7 @@ jalur baca tipe `money`).
 
 **Open — FX & multi-currency.** Konversi antar mata uang (rate table, tanggal
 rate, revaluasi, gain/loss selisih kurs) **di luar scope core**. Ia menjadi
-domain modul resmi `forma/currency` (rate table + operasi konversi), yang belum
+domain modul resmi `formspec/currency` (rate table + operasi konversi), yang belum
 ditetapkan kontraknya. Yang masuk core sekarang: kebenaran **single-currency** —
 penyimpanan jumlah+mata uang, pembulatan, dan format. Menjumlahkan dua `money`
 dengan kode mata uang berbeda tanpa konversi eksplisit adalah error, bukan
@@ -246,7 +246,7 @@ Di atas itu, satu marker normatif mengaktifkan dukungan hierarki:
 ```
 
 `tree: true` **hanya** valid pada `relation` self-referential (`resource` = nama
-dokumen sendiri); `forma apply` menolaknya di tempat lain. Marker ini
+dokumen sendiri); `formspec apply` menolaknya di tempat lain. Marker ini
 mewajibkan PersistBackend menyediakan **query hierarki** — bukan sekadar lookup
 parent satu tingkat.
 

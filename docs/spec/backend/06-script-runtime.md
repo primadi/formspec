@@ -65,7 +65,7 @@ overdue = Invoice.query() \
 `group_by`/`having`, dan `include()` sesuai kontrak §16; terminatornya `.first()`
 (satu record atau `None`) atau varian pengembali-daftar (`.all()`). Query lintas
 `category` tetap dilarang ([`01-core-basic.md`](01-core-basic.md) §3,
-`FORMA.PERSIST.CROSS_CATEGORY`), juga dari script. Referensi entity lintas-module
+`FORMSPEC.PERSIST.CROSS_CATEGORY`), juga dari script. Referensi entity lintas-module
 memakai notasi qualifier `{module}/{entity}` ([`02-core-extended.md`](02-core-extended.md)
 §7) dan wajib dideklarasikan di `uses`.
 
@@ -88,7 +88,7 @@ di-dispatch langsung tanpa melewati jaringan ([`01-core-basic.md`](01-core-basic
 ## 5. Logging & Primitive `ctx.*`
 
 Katalog lengkap `ctx.*` (db/cache/lock/queue/pubsub/storage/kvstore, identitas,
-utility) hidup di [`../../runtimes/02-forma-resource.md`](../../runtimes/02-forma-resource.md)
+utility) hidup di [`../../runtimes/02-formspec-resource.md`](../../runtimes/02-formspec-resource.md)
 §4 dan [`04-persist-backend.md`](04-persist-backend.md) §5. Yang relevan untuk
 penulisan handler:
 
@@ -112,7 +112,7 @@ langsung ke envelope respons HTTP ([`01-core-basic.md`](01-core-basic.md) §8.5)
 | Return | Hasil |
 |---|---|
 | `ok(data)` | Sukses — `data` menjadi `data` di envelope respons (`2xx`). |
-| `fail(message, code?)` | Gagal — membatalkan transaksi action dan mengembalikan envelope error `{error: {code, message, details}, meta}`. Tanpa `code`, `fail` memakai kode error generik; `conditions`/error bisnis SEBAIKNYA membawa `code` bernamespace App (bukan `FORMA.*`, [`01-core-basic.md`](01-core-basic.md) §9). |
+| `fail(message, code?)` | Gagal — membatalkan transaksi action dan mengembalikan envelope error `{error: {code, message, details}, meta}`. Tanpa `code`, `fail` memakai kode error generik; `conditions`/error bisnis SEBAIKNYA membawa `code` bernamespace App (bukan `FORMSPEC.*`, [`01-core-basic.md`](01-core-basic.md) §9). |
 
 `fail()` di dalam handler membatalkan seluruh transaksi (§2 `save()` yang sudah
 terjadi ikut rollback) — tidak ada hasil parsial, konsisten dengan jaminan
@@ -135,7 +135,7 @@ plus method exported yang cocok dengan nama itu (`OrderResource` +
 `UpdateDiscountRule`). Aturan normatif:
 
 - **Nama harus unik dalam module.** Bila lebih dari satu `{Type}.{Method}` cocok
-  di seluruh `impl/` module, itu **error saat `forma apply`/build** — bukan
+  di seluruh `impl/` module, itu **error saat `formspec apply`/build** — bukan
   ambiguitas yang dibiarkan sampai runtime.
 - Tidak ada match sama sekali juga error build-time — `ref` menggantung ditolak
   sebelum deployment.

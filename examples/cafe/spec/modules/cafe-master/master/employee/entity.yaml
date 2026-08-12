@@ -1,0 +1,41 @@
+apiVersion: formspec.dev/v1alpha1
+kind: Entity
+metadata:
+  name: employee
+  module: cafe-master
+  description: "Karyawan kafe — staf dengan peran"
+spec:
+  version: v1
+  characteristic: master
+  lifecycle: plain_crud
+  display_field: name
+  plural: employees
+  fields:
+    - name: code
+      type: string
+      required: true
+      unique: true
+      title: "Kode Karyawan"
+      description: "Kode unik karyawan, contoh E-001"
+    - name: name
+      type: string
+      required: true
+      title: "Nama"
+    - name: role
+      type: enum
+      enum_values: [cashier, barista, waiter, manager]
+      required: true
+      title: "Peran"
+    - name: phone
+      type: string
+      title: "Telepon"
+    - name: is_active
+      type: boolean
+      default: true
+      title: "Aktif"
+  actions:
+    - name: submit
+      disabled: true
+  expose:
+    - type: rest
+      actions: [list, find, create, update, delete]

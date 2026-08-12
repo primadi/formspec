@@ -4,12 +4,23 @@
   "type": "object",
   "properties": {
     "implements": {
-      "description": "storage backend name",
-      "type": "string"
+      "description": "@schema {example: \"formspec/storage.entity-persist\"}",
+      "type": "string",
+      "examples": [
+        "formspec/storage.entity-persist"
+      ]
     },
     "trust_tier": {
-      "description": "official | verified | community",
-      "type": "string"
+      "description": "@schema {example: \"official\", enum: [\"official\", \"verified\", \"community\"]}",
+      "type": "string",
+      "enum": [
+        "official",
+        "verified",
+        "community"
+      ],
+      "examples": [
+        "official"
+      ]
     }
   },
   "required": [

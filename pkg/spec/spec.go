@@ -1,6 +1,6 @@
-// Package spec defines the Go types that mirror the Forma specification.
+// Package spec defines the Go types that mirror the FormSpec specification.
 // These are the canonical structs used throughout the runtime to represent
-// all Forma resource kinds.
+// all FormSpec resource kinds.
 //
 // The types in this package correspond 1:1 with the YAML manifest format
 // defined in docs/spec/backend/{01-core-basic,02-core-extended,03-entity-extension}.md,
@@ -8,10 +8,10 @@
 // and docs_old/spec/04-control-plane.md (pending migration).
 package spec
 
-// APIVersion is the current Forma API version string.
-const APIVersion = "forma.dev/v1alpha1"
+// APIVersion is the current FormSpec API version string.
+const APIVersion = "formspec.dev/v1alpha1"
 
-// Manifest is the top-level structure of every Forma YAML document.
+// Manifest is the top-level structure of every FormSpec YAML document.
 // It contains exactly four top-level keys: apiVersion, kind, metadata, spec.
 type Manifest struct {
 	APIVersion string         `yaml:"apiVersion" json:"apiVersion"`
@@ -21,7 +21,7 @@ type Manifest struct {
 	RawSpec    map[string]any `yaml:"-" json:"-"`       // raw spec for deferred parsing
 }
 
-// Metadata is common to all Forma resources.
+// Metadata is common to all FormSpec resources.
 type Metadata struct {
 	Name        string            `yaml:"name" json:"name"`
 	Module      string            `yaml:"module,omitempty" json:"module,omitempty"`
@@ -83,7 +83,7 @@ const (
 )
 
 // Characteristic classifies the data nature of an Entity (Core §4.1).
-// @schema {title: "Characteristic", description: "Data nature classification — determines storage strategy, partitioning, and API behavior"}
+// @schema {title: "Characteristic", description: "Data nature classification — determines storage strategy, partitioning, and API behavior", example: "transaction"}
 type Characteristic string
 
 const (
@@ -94,7 +94,7 @@ const (
 )
 
 // ImplType is the implementation strategy for an action (Core §4.1).
-// @schema {title: "Implementation Type", description: "How an action is implemented: script_ref (Starlark file), script (inline Starlark), native (Go), compiled (WASM), sidecar (external process)"}
+// @schema {title: "Implementation Type", description: "How an action is implemented: script_ref (Starlark file), script (inline Starlark), native (Go), compiled (WASM), sidecar (external process)", example: "native"}
 type ImplType string
 
 const (
@@ -114,7 +114,7 @@ const (
 	EnvModeProd EnvironmentMode = "prod"
 )
 
-// IsValidKind returns true if k is a known Forma kind.
+// IsValidKind returns true if k is a known FormSpec kind.
 func IsValidKind(k Kind) bool {
 	switch k {
 	case KindApp, KindModule, KindDocument, KindEntity, KindService, KindConfig, KindMigration, KindSubscription,

@@ -27,15 +27,15 @@ type Config struct {
 	Extra    map[string]string // Extra query parameters
 }
 
-// ParseDSN parses a Forma DSN string into a Config.
+// ParseDSN parses a FormSpec DSN string into a Config.
 //
 // Format:
 //
 //	sqlite:///absolute/path/to/data.db
 //	sqlite:relative/path/data.db
 //	sqlite:relative.db?_pragma=journal_mode(WAL)
-//	postgres://user:pass@localhost:5432/forma?sslmode=require
-//	postgres://user@localhost/forma?sslmode=require&schema=financial
+//	postgres://user:pass@localhost:5432/formspec?sslmode=require
+//	postgres://user@localhost/formspec?sslmode=require&schema=financial
 //
 // When no scheme is provided, defaults to sqlite.
 func ParseDSN(dsn string) (*Config, error) {
@@ -77,7 +77,7 @@ func ParseDSN(dsn string) (*Config, error) {
 			cfg.Database = path
 		}
 		if cfg.Database == "" {
-			cfg.Database = ".forma/data.db"
+			cfg.Database = ".formspec/data.db"
 		}
 
 	case scheme == "postgres", scheme == "postgresql":

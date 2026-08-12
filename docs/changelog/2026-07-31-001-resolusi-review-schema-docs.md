@@ -51,7 +51,7 @@ ditandai **Open** di docs dan ditracking ke plan/todo yang sudah ada.
 - `05-field-types.md`: §5.1 `computed` → `formula` (ekspresi Starlark inline,
   bukan `script` ref — sesuai runtime `renderers/jsonbpersist/crud.go`).
 - `07-vertical-modules.md`: catatan `publishes`/`consumes` → kini spec-blessed.
-- `docs/runtimes/02-forma-resource.md`: `DocumentSpec` → `EntitySpec`.
+- `docs/runtimes/02-formspec-resource.md`: `DocumentSpec` → `EntitySpec`.
 
 ## Catatan test (pre-existing, bukan akibat perubahan ini)
 

@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-This is a **Forma** application. Forma is a spec-first, declarative ecosystem
+This is a **FormSpec** application. FormSpec is a spec-first, declarative ecosystem
 for business applications. YAML manifests (apiVersion/kind/metadata/spec) are
 the single source of truth for API, UI, permissions, state machines, and events.
 
@@ -10,18 +10,18 @@ the single source of truth for API, UI, permissions, state machines, and events.
 
 This project includes AI skills in `.agents/skills/`:
 
-- **forma-spec-structure** — Navigate the Forma spec docs
-- **forma-kinds** — Complete catalog of all Forma resource kinds
+- **formspec-spec-structure** — Navigate the FormSpec spec docs
+- **formspec-kinds** — Complete catalog of all FormSpec resource kinds
 
 Use `/skills` in Copilot Chat to verify they are discovered. These skills give
-the agent domain-specific knowledge about Forma kinds, manifest formats, and
+the agent domain-specific knowledge about FormSpec kinds, manifest formats, and
 spec documentation.
 
 ## Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Backend | Go, module github.com/primadi/forma |
+| Backend | Go, module github.com/primadi/formspec |
 | Frontend | React + TypeScript + Vite + shadcn/ui |
 | Database | PostgreSQL (production) / SQLite (dev) |
 | Scripting | Starlark (sandboxed, editable via admin panel) |
@@ -31,9 +31,9 @@ spec documentation.
 
 | Command | Purpose |
 |---------|---------|
-| `forma dev` | Start development server (API + UI) |
-| `forma apply` | Register YAML manifests |
-| `forma generate` | Generate typed TypeScript client from Entity manifests |
+| `formspec dev` | Start development server (API + UI) |
+| `formspec apply` | Register YAML manifests |
+| `formspec generate` | Generate typed TypeScript client from Entity manifests |
 
 ## Conventions
 
@@ -50,7 +50,7 @@ spec documentation.
 
 ```
 crc-management/
-  forma-app.yaml       # CLI config (NOT a kind: Config manifest)
+  formspec-app.yaml       # CLI config (NOT a kind: Config manifest)
   spec/                # All YAML manifests
     apps/              # kind: App manifests
     modules/           # kind: Module -> Entity, Page, Form, etc.
@@ -58,9 +58,9 @@ crc-management/
   .agents/skills/      # AI skills for Copilot
 ```
 
-## Creating a Forma App
+## Creating a FormSpec App
 
-When asked to create a Forma app:
+When asked to create a FormSpec app:
 
 1. **Identify the business domain** — what entities are needed?
 2. **Choose Entity characteristics** — master, transaction, reference, or summary

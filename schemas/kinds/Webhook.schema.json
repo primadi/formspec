@@ -8,7 +8,11 @@
       "nullable": true
     },
     "for": {
-      "type": "string"
+      "description": "@schema {example: \"billing.invoice\"}",
+      "type": "string",
+      "examples": [
+        "billing.invoice"
+      ]
     },
     "idempotency_key": {
       "$ref": "#/$defs/IdempotencyDecl",
@@ -18,10 +22,25 @@
       "type": "boolean"
     },
     "method": {
-      "type": "string"
+      "description": "@schema {example: \"POST\", enum: [\"GET\", \"POST\", \"PUT\", \"PATCH\", \"DELETE\"]}",
+      "type": "string",
+      "enum": [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "examples": [
+        "POST"
+      ]
     },
     "path": {
-      "type": "string"
+      "description": "@schema {example: \"/webhooks/midtrans\"}",
+      "type": "string",
+      "examples": [
+        "/webhooks/midtrans"
+      ]
     }
   },
   "required": [

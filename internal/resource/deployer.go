@@ -6,8 +6,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/primadi/forma/internal/artifact"
-	"github.com/primadi/forma/internal/manifest"
+	"github.com/primadi/formspec/internal/artifact"
+	"github.com/primadi/formspec/internal/manifest"
 )
 
 // Deployer is the convergence engine that implements GitOps-style deployment.

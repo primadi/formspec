@@ -1,6 +1,6 @@
 # SHOWCASE: entity master kecil (≤5 field) TANPA manifest UI apapun.
 # Renderer harus men-derive: Table, Form (heuristik → modal), detail, menu entry.
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Entity
 metadata:
   name: polyclinic

@@ -10,7 +10,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 
-	formav1alpha1 "github.com/primadi/forma/internal/operator/api/v1alpha1"
+	formspecv1alpha1 "github.com/primadi/formspec/internal/operator/api/v1alpha1"
 )
 
 func intstrFromInt(port int) intstr.IntOrString {
@@ -25,7 +25,7 @@ func secretToDatastores(mgr ctrl.Manager) handler.EventHandler {
 		if !ok {
 			return nil
 		}
-		var list formav1alpha1.DatastoreList
+		var list formspecv1alpha1.DatastoreList
 		if err := mgr.GetClient().List(ctx, &list, client.InNamespace(secret.Namespace)); err != nil {
 			return nil
 		}
@@ -45,7 +45,7 @@ func secretToDatastores(mgr ctrl.Manager) handler.EventHandler {
 // Datastore.
 func datastoreToClaims(mgr ctrl.Manager) handler.EventHandler {
 	return handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []ctrl.Request {
-		var list formav1alpha1.ResourceClaimList
+		var list formspecv1alpha1.ResourceClaimList
 		if err := mgr.GetClient().List(ctx, &list, client.InNamespace(obj.GetNamespace())); err != nil {
 			return nil
 		}

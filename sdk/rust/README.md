@@ -1,15 +1,15 @@
-# lib-forma-rust
+# lib-formspec-rust
 
-Thin Rust client for `forma-sidecar` (docs/runtimes/04-forma-sidecar.md).
+Thin Rust client for `formspec-sidecar` (docs/runtimes/04-formspec-sidecar.md).
 Rust 1.75+, dependencies: `ureq` (HTTP + Unix socket), `serde`/`serde_json`.
 
 ```toml
 [dependencies]
-lib-forma = { path = "/path/to/sdk/rust" }
+lib-formspec = { path = "/path/to/sdk/rust" }
 ```
 
 ```rust
-use lib_forma::{App, ActionResult};
+use lib_formspec::{App, ActionResult};
 
 let mut app = App::new(); // sockets from FORMA_APP_SOCKET / FORMA_SIDECAR_SOCKET
 

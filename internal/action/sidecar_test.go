@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/primadi/forma/renderers/jsonbpersist"
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/renderers/jsonbpersist"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
-// startAppListener runs a minimal lib-forma-style /invoke listener on a
+// startAppListener runs a minimal lib-formspec-style /invoke listener on a
 // unix socket and returns its endpoint URL.
 func startAppListener(t *testing.T, handler http.HandlerFunc) string {
 	t.Helper()
@@ -120,14 +120,14 @@ func TestNewSidecarExecutorWithEndpoint_BadScheme(t *testing.T) {
 // TestSidecarExecutor_ForwardsScopeIdHeader verifies the sending half of
 // the cross-process TxScope correlation described in
 // renderers/jsonbpersist/txscope.go: when ctx carries an active scope,
-// Execute must forward its registry id as X-Forma-Scope-Id on the
+// Execute must forward its registry id as X-FormSpec-Scope-Id on the
 // outbound /invoke/... request — internal/sidecar/ctx.go's receiving half
 // (TestCtxHandler_ScopeIdJoinsSameTransaction) already proves the id gets
 // resolved back to the live scope; this proves it actually gets sent.
 func TestSidecarExecutor_ForwardsScopeIdHeader(t *testing.T) {
 	var gotHeader string
 	endpoint := startAppListener(t, func(w http.ResponseWriter, r *http.Request) {
-		gotHeader = r.Header.Get("X-Forma-Scope-Id")
+		gotHeader = r.Header.Get("X-FormSpec-Scope-Id")
 		json.NewEncoder(w).Encode(sidecarInvokeResponse{Data: map[string]any{}})
 	})
 
@@ -149,7 +149,7 @@ func TestSidecarExecutor_ForwardsScopeIdHeader(t *testing.T) {
 	}
 
 	if gotHeader != scopeID {
-		t.Fatalf("X-Forma-Scope-Id header = %q, want %q", gotHeader, scopeID)
+		t.Fatalf("X-FormSpec-Scope-Id header = %q, want %q", gotHeader, scopeID)
 	}
 }
 
@@ -160,7 +160,7 @@ func TestSidecarExecutor_ForwardsScopeIdHeader(t *testing.T) {
 func TestSidecarExecutor_NoScopeMeansNoHeader(t *testing.T) {
 	var sawHeader bool
 	endpoint := startAppListener(t, func(w http.ResponseWriter, r *http.Request) {
-		_, sawHeader = r.Header["X-Forma-Scope-Id"]
+		_, sawHeader = r.Header["X-FormSpec-Scope-Id"]
 		json.NewEncoder(w).Encode(sidecarInvokeResponse{Data: map[string]any{}})
 	})
 
@@ -177,6 +177,6 @@ func TestSidecarExecutor_NoScopeMeansNoHeader(t *testing.T) {
 	}
 
 	if sawHeader {
-		t.Fatal("expected no X-Forma-Scope-Id header when ctx carries no TxScope")
+		t.Fatal("expected no X-FormSpec-Scope-Id header when ctx carries no TxScope")
 	}
 }

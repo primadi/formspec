@@ -81,7 +81,7 @@ func jsonbExtractText(driver DriverType, column, field string) string {
 
 // EnforceReferenceGuard checks whether deleting or cancelling a record is
 // blocked by reference constraints. Returns nil if allowed, or a LifecycleError
-// with FORMA.REF.DELETE_BLOCKED/FORMA.REF.CANCEL_BLOCKED if blocked.
+// with FORMSPEC.REF.DELETE_BLOCKED/FORMSPEC.REF.CANCEL_BLOCKED if blocked.
 func (s *EntityStore) EnforceReferenceGuard(ctx context.Context, txdb DB, workspaceID, id, actionName string) error {
 	if actionName != "delete" && actionName != "cancel" {
 		return nil
@@ -95,9 +95,9 @@ func (s *EntityStore) EnforceReferenceGuard(ctx context.Context, txdb DB, worksp
 		return nil // no references found
 	}
 
-	code := "FORMA.REF.DELETE_BLOCKED"
+	code := "FORMSPEC.REF.DELETE_BLOCKED"
 	if actionName == "cancel" {
-		code = "FORMA.REF.CANCEL_BLOCKED"
+		code = "FORMSPEC.REF.CANCEL_BLOCKED"
 	}
 
 	return &LifecycleError{

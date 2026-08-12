@@ -6,7 +6,7 @@
 # antrian hari ini saat dibuka, tetap bisa diganti user via date picker.
 # Nilai filter dikirim server-side (`transaction_date[eq]=YYYY-MM-DD`),
 # bukan disaring di klien — efisien untuk entity transaksi.
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Kanban
 metadata:
   name: consultation-board

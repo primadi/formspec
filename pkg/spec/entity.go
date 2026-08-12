@@ -71,7 +71,9 @@ const (
 
 // EntitySpec defines a stateful, persisted business data resource (Core §4.1).
 type EntitySpec struct {
-	Version           string              `yaml:"version" json:"version"`
+	// @schema {example: "v1"}
+	Version string `yaml:"version" json:"version"`
+	// @schema {example: "invoices"}
 	Plural            string              `yaml:"plural,omitempty" json:"plural,omitempty"`
 	Characteristic    Characteristic      `yaml:"characteristic,omitempty" json:"characteristic,omitempty"`
 	Auth              *EntityAuth         `yaml:"auth,omitempty" json:"auth,omitempty"`
@@ -89,9 +91,11 @@ type EntitySpec struct {
 	Hooks             []HookDecl          `yaml:"hooks,omitempty" json:"hooks,omitempty"`
 	RateLimit         *RateLimitSpec      `yaml:"rate_limit,omitempty" json:"rate_limit,omitempty"`           // 1.4.1 resource-level rate limit (02-core-extended.md §17)
 	SoftDeactivate    *SoftDeactivateDecl `yaml:"soft_deactivate,omitempty" json:"soft_deactivate,omitempty"` // 1.4.10
-	Lifecycle         string              `yaml:"lifecycle,omitempty" json:"lifecycle,omitempty"`             // explicit frontend lifecycle: two_step_autosave | two_step_manual | plain_crud (default derived from actions)
-	DisplayField      string              `yaml:"display_field,omitempty" json:"display_field,omitempty"`     // field name used as display label for this entity in relation pickers & detail pages
-	NaturalKeyField   string              `yaml:"-" json:"-"`                                                 // resolved in ValidateEntitySpec: empty if none, field name if exactly one natural_key
+	// @schema {example: "plain_crud", enum: ["two_step_autosave", "two_step_manual", "plain_crud"]}
+	Lifecycle string `yaml:"lifecycle,omitempty" json:"lifecycle,omitempty"` // explicit frontend lifecycle: two_step_autosave | two_step_manual | plain_crud (default derived from actions)
+	// @schema {example: "name"}
+	DisplayField    string `yaml:"display_field,omitempty" json:"display_field,omitempty"` // field name used as display label for this entity in relation pickers & detail pages
+	NaturalKeyField string `yaml:"-" json:"-"`                                             // resolved in ValidateEntitySpec: empty if none, field name if exactly one natural_key
 }
 
 // DocumentSpec defines a stateful, persisted business data resource (Core §4.1).
@@ -477,7 +481,7 @@ type ActionUIHint struct {
 	Style   string `yaml:"style,omitempty" json:"style,omitempty"`
 	Icon    string `yaml:"icon,omitempty" json:"icon,omitempty"`
 	Confirm string `yaml:"confirm,omitempty" json:"confirm,omitempty"`
-	// @schema {description: "FormaExpr — condition to show this action button"}
+	// @schema {description: "FormSpecExpr — condition to show this action button"}
 	ShowWhen string `yaml:"show_when,omitempty" json:"show_when,omitempty"`
 }
 
@@ -782,29 +786,29 @@ const (
 //   - on_* → async
 //   - custom names → type MUST be explicit
 //
-// Returns error with FORMA.EVENT.* codes (2.4.5).
+// Returns error with FORMSPEC.EVENT.* codes (2.4.5).
 func ValidateEventNaming(event EventDecl) error {
 	isBefore := strings.HasPrefix(event.Name, "before_")
 	isOn := strings.HasPrefix(event.Name, "on_")
 
 	if !isBefore && !isOn {
 		if event.Type == "" {
-			return fmt.Errorf("[FORMA.EVENT.TYPE_MISSING] event %q: type is required for custom events (not prefixed before_/on_)", event.Name)
+			return fmt.Errorf("[FORMSPEC.EVENT.TYPE_MISSING] event %q: type is required for custom events (not prefixed before_/on_)", event.Name)
 		}
 		if event.Type != EventTypeSync && event.Type != EventTypeAsync {
-			return fmt.Errorf("[FORMA.EVENT.TYPE_MISMATCH] event %q: type must be 'sync' or 'async', got %q", event.Name, event.Type)
+			return fmt.Errorf("[FORMSPEC.EVENT.TYPE_MISMATCH] event %q: type must be 'sync' or 'async', got %q", event.Name, event.Type)
 		}
 		return nil
 	}
 
 	if isBefore {
 		if event.Type != "" && event.Type != EventTypeSync {
-			return fmt.Errorf("[FORMA.EVENT.TYPE_MISMATCH] event %q: before_* events must be 'sync', got %q", event.Name, event.Type)
+			return fmt.Errorf("[FORMSPEC.EVENT.TYPE_MISMATCH] event %q: before_* events must be 'sync', got %q", event.Name, event.Type)
 		}
 	}
 	if isOn {
 		if event.Type != "" && event.Type != EventTypeAsync {
-			return fmt.Errorf("[FORMA.EVENT.TYPE_MISMATCH] event %q: on_* events must be 'async', got %q", event.Name, event.Type)
+			return fmt.Errorf("[FORMSPEC.EVENT.TYPE_MISMATCH] event %q: on_* events must be 'async', got %q", event.Name, event.Type)
 		}
 	}
 

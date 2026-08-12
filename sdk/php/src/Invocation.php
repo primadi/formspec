@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Forma;
+namespace FormSpec;
 
 /**
  * One action invocation from the sidecar — the wire form of the engine's
- * ExecuteParams (docs/runtimes/04-forma-sidecar.md §4.2).
+ * ExecuteParams (docs/runtimes/04-formspec-sidecar.md §4.2).
  */
 final class Invocation
 {

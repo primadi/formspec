@@ -1,9 +1,9 @@
 # SHOWCASE kind: Form — resep internal (dari kunjungan) atau eksternal
-# (dibawa pasien dari dokter luar). visible_when/required_when (§6 FormaExpr)
+# (dibawa pasien dari dokter luar). visible_when/required_when (§6 FormSpecExpr)
 # menunjukkan sumber resep tanpa perlu validasi server (create tetap
 # unconditional-required, lihat entities/prescription.yaml). First Form di
 # modul pharmacy — CRUD resep sebelumnya 100% derived UI.
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Form
 metadata:
   name: prescription-edit

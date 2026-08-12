@@ -5,7 +5,7 @@
 > Draft: isi di bawah kontrak yang berlaku.
 
 ## 1. Lifecycle & State Machine
-Forma punya model status **dua lapis**, independen satu sama lain:
+FormSpec punya model status **dua lapis**, independen satu sama lain:
 
 1. **`doc_status`** — lifecycle bawaan, framework-enforced
    ([`01-core-basic.md`](01-core-basic.md) §1.2). Closed set: `draft |
@@ -61,7 +61,7 @@ hidup di `kind: Workflow` dan **menempel tanpa mengubah Entity** — pola yang
 sama dengan Subscription (§3), diterapkan ke transisi state machine:
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Workflow
 metadata: { name: journal-posting-approval, module: gl }
 spec:
@@ -79,7 +79,7 @@ Transisi yang di-intercept baru eksekusi setelah seluruh step yang berlaku
 mencapai quorum-nya; approval adalah pernyataan bertanda tangan yang tercatat
 di audit. Eligibilitas approver = keanggotaan role per-App. **Pemohon tidak
 pernah bisa menyetujui permintaannya sendiri.** Workflow selalu tampil di
-output gabungan `forma describe document` — perilaku yang menempel selalu
+output gabungan `formspec describe document` — perilaku yang menempel selalu
 ter-compile, tidak pernah tersembunyi.
 
 ### 2.1 Multi-Approver & Percabangan per Step
@@ -101,7 +101,7 @@ Satu step mendeklarasikan **berapa banyak** persetujuan yang dibutuhkan dan
   `mode` mengatur pengumpulan **di dalam** satu step; urutan **antar** step selalu
   berurutan (step 2 tidak mulai sebelum step 1 lolos).
 
-- `when` — kondisi FormaExpr atas `resource`: step hanya berlaku bila `when`
+- `when` — kondisi FormSpecExpr atas `resource`: step hanya berlaku bila `when`
   bernilai true (mis. `resource.amount > 100000000`). Step yang tidak berlaku
   di-skip tanpa menahan transisi.
 
@@ -156,11 +156,11 @@ event (`event.name`, `event.resource_id`, `event.occurred_at`, field payload
 event itu sendiri). **Subscription dinamis** (dibuat runtime lewat API/admin
 panel) adalah *data, bukan manifest* — manifest Subscription mendefinisikan
 apa yang ikut ter-ship bersama module, subscription dinamis mencatat pilihan
-operator, hidup di `forma.core`.
+operator, hidup di `formspec.core`.
 
 **Delivery channel** yang tersedia (di luar `queue`/`websocket`/`audit_log`
 Core Basic): `webhook` (keluar ke subscriber terdaftar, HMAC signed, retry),
-`notification` (bridge tipis ke module `forma/notify` — template & channel
+`notification` (bridge tipis ke module `formspec/notify` — template & channel
 provider live di module resmi, bukan di kontrak ini), `pubsub` (non-durable,
 at-most-once eksplisit).
 
@@ -179,7 +179,7 @@ memicunya.
 berjalan**; handler cuma pernah melihat payload yang sudah terverifikasi:
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Webhook
 metadata: { name: midtrans-webhook, module: billing }
 spec:
@@ -227,7 +227,7 @@ tanpa itu, cancel di sisi source akan terblokir permanen karena reference
 guard generik selalu memblokir tanpa ada yang tahu cara membuka jalannya.
 
 Target action **wajib** `idempotent: true` untuk pemanggilan cross-boundary
-(dataspace/proses berbeda) — `forma apply` menolak Integrator yang menyasar
+(dataspace/proses berbeda) — `formspec apply` menolak Integrator yang menyasar
 action non-idempotent. Same-transaction call tidak butuh `compensate` (ACID
 rollback sudah cukup); cross-boundary call mendaftarkan `compensate` ke Saga
 log.
@@ -251,7 +251,7 @@ untuk jawaban konkret jsonb-persist).
 
 `characteristic: summary` diisi **eksklusif** lewat event durable — bukan
 lewat action call biasa dari luar (`create`/`update`/`delete` permanen
-nonaktif via API, §1 Core Basic). Rebuild: `forma summary rebuild <document>`
+nonaktif via API, §1 Core Basic). Rebuild: `formspec summary rebuild <document>`
 me-replay event stream sumbernya ke projeksi baru — inilah alasan backup
 mengecualikan Summary (selalu bisa dihitung ulang selama transaksi sumbernya
 masih queryable, live maupun via archive).
@@ -303,12 +303,12 @@ batas ini adalah pekerjaan `type: service`/native (`impl.type: native`,
 bercabang berdasarkan environment. Routing ke Mockup vs koneksi asli murni
 config-driven lewat `kind: Config` (`mock_enabled: true`, default `true` di
 dev/CI; `false` → konektor asli). `ctx.environment` hanya boleh dipakai untuk
-logging — bukan untuk keputusan bisnis. `forma validate` SHOULD memperingatkan
+logging — bukan untuk keputusan bisnis. `formspec validate` SHOULD memperingatkan
 bila ditemukan percabangan bisnis atas `ctx.environment` di script.
 
 ## 9. Period Closing & Backdating
 
-Governing prose untuk kode `FORMA.PERIOD.*` dan `FORMA.TXN.*`
+Governing prose untuk kode `FORMSPEC.PERIOD.*` dan `FORMSPEC.TXN.*`
 ([`error-glossary.yaml`](error-glossary.yaml)). Semua guard di bawah ditegakkan
 **server-side, selalu** ([`01-core-basic.md`](01-core-basic.md) §3) — tidak
 peduli klien mengirim lewat HTTP, script, atau event.
@@ -351,18 +351,18 @@ spec:
   backdate_policy: { max_days_back: 7, override_permission: accounting.post_backdated }
 ```
 
-`transaction_date` yang mundur melebihi `max_days_back` → `FORMA.TXN.BACKDATE_EXCEEDED`;
-yang maju melebihi `max_days_forward` → `FORMA.TXN.FORWARD_DATE_EXCEEDED`.
+`transaction_date` yang mundur melebihi `max_days_back` → `FORMSPEC.TXN.BACKDATE_EXCEEDED`;
+yang maju melebihi `max_days_forward` → `FORMSPEC.TXN.FORWARD_DATE_EXCEEDED`.
 Override hanya mungkin bila pemanggil memegang `override_permission` yang
 dideklarasikan; `null` berarti mutlak tidak bisa di-override.
 
 ### 9.3 Period Closing
 
 Period boleh ditutup **per module maupun global** — konfigurasinya hidup di
-`forma.core` (`kind: Config`), sejalan dengan awal tahun fiskal
+`formspec.core` (`kind: Config`), sejalan dengan awal tahun fiskal
 (`settings.fiscal_year_start`, [`01-core-basic.md`](01-core-basic.md) §10) yang
 menentukan batas periode. Transaksi dengan `transaction_date` yang jatuh di
-periode tertutup **ditolak** dengan `FORMA.PERIOD.CLOSED` — berlaku untuk
+periode tertutup **ditolak** dengan `FORMSPEC.PERIOD.CLOSED` — berlaku untuk
 `create`, `update`, `submit`, maupun `amend` yang menyentuh periode itu.
 
 Period closing itu sendiri dimodelkan sebagai **Entity** (`period-closing`),
@@ -372,7 +372,7 @@ memicu finalisasi summary periode; `cancel` (reopen) memicu unfinalize.
 
 **Reopen butuh permission elevated + audit.** Membuka kembali periode tertutup
 mensyaratkan permission khusus (mis. `accounting.reopen_period`) dan alasan
-tercatat; tanpa keduanya → `FORMA.PERIOD.REOPEN_DENIED`. Setiap penutupan dan
+tercatat; tanpa keduanya → `FORMSPEC.PERIOD.REOPEN_DENIED`. Setiap penutupan dan
 pembukaan periode masuk audit trail bisnis (§11).
 
 ### 9.4 Resolusi `today`/`current` dari Kalender Bisnis
@@ -386,9 +386,9 @@ tanggal 4 sampai EOD-nya selesai).
 
 ## 10. Data Archiving & Retention
 
-Governing prose untuk kode `FORMA.ARCHIVE.*`
+Governing prose untuk kode `FORMSPEC.ARCHIVE.*`
 ([`error-glossary.yaml`](error-glossary.yaml)). Verb CLI-nya di
-[`../../cli-tools/02-forma-cli.md`](../../cli-tools/02-forma-cli.md)
+[`../../cli-tools/02-formspec-cli.md`](../../cli-tools/02-formspec-cli.md)
 (`archive run|view|restore-batch`).
 
 **Hanya transaksi yang diarsipkan; master di-snapshot** demi konsistensi
@@ -408,7 +408,7 @@ di-snapshot "as-of" tanggal arsip dan disimpan bersama transaksinya.
   transaksi sumbernya masih queryable (live maupun via archive) ia bisa dihitung
   ulang (§6).
 
-**Rencana arsip (`forma archive run`).** `--dry-run` memindai transaksi di atas
+**Rencana arsip (`formspec archive run`).** `--dry-run` memindai transaksi di atas
 cutoff, mengidentifikasi master yang direferensikan, dan menampilkan rencana
 (apa yang diarsipkan, master apa yang di-snapshot) untuk konfirmasi operator.
 Eksekusi menulis transaksi + snapshot master ke Parquet, menyetel flag
@@ -416,18 +416,18 @@ Eksekusi menulis transaksi + snapshot master ke Parquet, menyetel flag
 transaksi terarsip dari produksi.
 
 **Data terarsip terkunci dari penghapusan.** Selama sebuah master masih
-direferensikan transaksi terarsip, upaya menghapusnya → `FORMA.ARCHIVE.LOCKED_FOR_DELETION`
+direferensikan transaksi terarsip, upaya menghapusnya → `FORMSPEC.ARCHIVE.LOCKED_FOR_DELETION`
 (dengan `archived_reference_count`). Ini memperluas reference guard `delete`
 ([`01-core-basic.md`](01-core-basic.md) §1.2) ke referensi yang sudah pindah ke
 arsip — dangling reference tidak boleh terbentuk hanya karena transaksi
 penunjuknya diarsipkan.
 
-**Restore.** `forma archive view --batch-id <id>` mengueri Parquet langsung
-tanpa DB live. `forma archive restore-batch` hanya me-restore **ke staging**,
+**Restore.** `formspec archive view --batch-id <id>` mengueri Parquet langsung
+tanpa DB live. `formspec archive restore-batch` hanya me-restore **ke staging**,
 dengan urutan restore mengikuti dependency; restore selektif per-dokumen tidak
 didukung (risiko state korup).
 
-**Retention config (global, `forma.yaml`):**
+**Retention config (global, `formspec.yaml`):**
 
 ```yaml
 retention:
@@ -455,7 +455,7 @@ Kontraknya normatif; ini sumber "timeline" per-record yang dilihat pengguna.
 
 **Immutability.** Audit trail bersifat **append-only** — tidak ada API
 update/delete atasnya; framework yang menulis, kode developer tidak pernah
-memutasi entri yang sudah ada. Ini konsisten dengan `audit-log` di `forma.core`
+memutasi entri yang sudah ada. Ini konsisten dengan `audit-log` di `formspec.core`
 ([`01-core-basic.md`](01-core-basic.md) §7 channel `audit_log`).
 
 **Queryable per record.** Entri bisa ditarik per record (menjadi sumber blok
@@ -482,7 +482,7 @@ dipublikasikan. Permukaan UI (`/_ui/entity/`) **tidak** terpengaruh oleh
 di-override.
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Api
 metadata: { name: public, module: billing }
 spec:
@@ -631,7 +631,7 @@ deklarasinya hidup di **module yang meng-hook** (bukan di module yang di-hook),
 memakai notasi qualifier `{module}/...` (§7) dan **tunduk aturan `uses`/consent
 footprint yang sama** seperti akses lintas-module lain
 ([`01-core-basic.md`](01-core-basic.md) §5). Rantai hook terlihat di output
-gabungan `forma describe` (combined view) dan **muncul di consent footprint** —
+gabungan `formspec describe` (combined view) dan **muncul di consent footprint** —
 perilaku yang menempel selalu ter-compile, tidak pernah tersembunyi (pola yang
 sama dengan Workflow §2 dan Subscription §3).
 
@@ -654,7 +654,7 @@ PersistBackend dengan semantik identik:
 boleh menjangkau lintas `category` ([`01-core-basic.md`](01-core-basic.md) §3 —
 "tidak boleh di-join lintas kategori"); tidak ada raw SQL lintas-schema/
 lintas-kategori dalam bentuk apa pun. Upaya join lintas kategori adalah
-`FORMA.PERSIST.CROSS_CATEGORY` ([`error-glossary.yaml`](error-glossary.yaml)) —
+`FORMSPEC.PERSIST.CROSS_CATEGORY` ([`error-glossary.yaml`](error-glossary.yaml)) —
 isolasi ini ditegakkan framework, bukan sekadar konvensi. Bagaimana backend
 mewujudkan agregasi/window/hierarki adalah detail implementasi
 ([`04-persist-backend.md`](04-persist-backend.md) §2, "Query resolution");

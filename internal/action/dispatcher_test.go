@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 // testExecutor is a simple executor that returns a fixed result for testing.

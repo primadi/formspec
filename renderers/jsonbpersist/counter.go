@@ -8,7 +8,7 @@ import (
 )
 
 // NaturalKeyCounter manages sequential natural key generation.
-// Uses the forma_natural_key_counters system table with atomic increments.
+// Uses the formspec_natural_key_counters system table with atomic increments.
 //
 // Each counter is scoped by (tenant_id, resource, field, scope, period).
 // The period is computed from the current time based on the Reset strategy:
@@ -40,10 +40,10 @@ func (c *NaturalKeyCounter) NextSequence(ctx context.Context, workspaceID, resou
 
 	// Use INSERT ... ON CONFLICT DO UPDATE (UPSERT) for atomicity
 	query := `
-		INSERT INTO forma_natural_key_counters (tenant_id, resource, field, scope, period, counter)
+		INSERT INTO formspec_natural_key_counters (tenant_id, resource, field, scope, period, counter)
 		VALUES (?, ?, ?, ?, ?, 1)
 		ON CONFLICT(tenant_id, resource, field, scope, period) DO UPDATE
-		SET counter = forma_natural_key_counters.counter + 1
+		SET counter = formspec_natural_key_counters.counter + 1
 		RETURNING counter
 	`
 
@@ -64,7 +64,7 @@ func (c *NaturalKeyCounter) NextSequence(ctx context.Context, workspaceID, resou
 func (c *NaturalKeyCounter) nextSequenceFallback(ctx context.Context, workspaceID, resource, field, scope, period string) (int64, string, error) {
 	// Try insert first
 	_, err := c.db.ExecContext(ctx, `
-		INSERT INTO forma_natural_key_counters (tenant_id, resource, field, scope, period, counter)
+		INSERT INTO formspec_natural_key_counters (tenant_id, resource, field, scope, period, counter)
 		VALUES (?, ?, ?, ?, ?, 1)
 	`, workspaceID, resource, field, scope, period)
 
@@ -73,7 +73,7 @@ func (c *NaturalKeyCounter) nextSequenceFallback(ctx context.Context, workspaceI
 		// Row exists: increment
 		var counter int64
 		err2 := c.db.QueryRowContext(ctx, `
-			UPDATE forma_natural_key_counters
+			UPDATE formspec_natural_key_counters
 			SET counter = counter + 1
 			WHERE tenant_id = ? AND resource = ? AND field = ? AND scope = ? AND period = ?
 			RETURNING counter
@@ -125,7 +125,7 @@ func (c *NaturalKeyCounter) PeekCounter(ctx context.Context, workspaceID, resour
 
 	var counter int64
 	err := c.db.QueryRowContext(ctx, `
-		SELECT counter FROM forma_natural_key_counters
+		SELECT counter FROM formspec_natural_key_counters
 		WHERE tenant_id = ? AND resource = ? AND field = ? AND scope = ? AND period = ?
 	`, workspaceID, resource, field, scope, period).Scan(&counter)
 	if err != nil {
@@ -139,7 +139,7 @@ func (c *NaturalKeyCounter) PeekCounter(ctx context.Context, workspaceID, resour
 func (c *NaturalKeyCounter) ResetCounter(ctx context.Context, workspaceID, resource, field, scope, reset string) error {
 	period := computePeriod(reset)
 	_, err := c.db.ExecContext(ctx, `
-		UPDATE forma_natural_key_counters
+		UPDATE formspec_natural_key_counters
 		SET counter = 0
 		WHERE tenant_id = ? AND resource = ? AND field = ? AND scope = ? AND period = ?
 	`, workspaceID, resource, field, scope, period)

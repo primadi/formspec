@@ -10,9 +10,9 @@ import (
 	"sync/atomic"
 
 	"github.com/coder/websocket"
-	"github.com/primadi/forma/internal/auth"
-	"github.com/primadi/forma/internal/entity"
-	"github.com/primadi/forma/internal/events"
+	"github.com/primadi/formspec/internal/auth"
+	"github.com/primadi/formspec/internal/entity"
+	"github.com/primadi/formspec/internal/events"
 )
 
 type wsConn struct {

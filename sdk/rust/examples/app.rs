@@ -1,12 +1,12 @@
-/// Example lib-forma-rust app: the business-logic side of an
-/// `impl: {type: sidecar}` action. Run next to forma engine:
+/// Example lib-formspec-rust app: the business-logic side of an
+/// `impl: {type: sidecar}` action. Run next to formspec engine:
 ///
 /// ```text
-/// FORMA_APP_SOCKET=unix:///tmp/forma-app.sock \
-/// FORMA_SIDECAR_SOCKET=unix:///tmp/forma-sidecar.sock \
+/// FORMA_APP_SOCKET=unix:///tmp/formspec-app.sock \
+/// FORMA_SIDECAR_SOCKET=unix:///tmp/formspec-sidecar.sock \
 /// cargo run --example app
 /// ```
-use lib_forma::{App, ActionResult};
+use lib_formspec::{App, ActionResult};
 
 fn main() {
     let mut app = App::new();

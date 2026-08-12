@@ -1,0 +1,1 @@
+function e(e,t){return t.split(`.`).reduce((e,t)=>{if(!(typeof e!=`object`||!e))return e[t]},e)}function t(t,n){return t?n?t.replace(/\{([\w.]+)\}/g,(t,r)=>{let i=e(n,r);return i==null?t:String(i)}):t:``}export{e as n,t};

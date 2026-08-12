@@ -1,6 +1,6 @@
 # SHOWCASE: entity master sedang (6–12 field) TANPA manifest UI.
 # Derived form → heuristik drawer. Relation belongs_to → relation-picker derived.
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Entity
 metadata:
   name: doctor

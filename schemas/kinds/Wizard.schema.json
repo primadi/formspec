@@ -8,7 +8,11 @@
       "type": "string"
     },
     "entity": {
-      "type": "string"
+      "description": "@schema {example: \"clinic.visit\"}",
+      "type": "string",
+      "examples": [
+        "clinic.visit"
+      ]
     },
     "on_complete": {
       "$ref": "#/$defs/WizardOnComplete",
@@ -17,6 +21,9 @@
     "public": {
       "description": "If true (default), a route /module/wizard/\u003cname\u003e is auto-generated.",
       "type": "boolean",
+      "examples": [
+        "true"
+      ],
       "nullable": true
     },
     "steps": {

@@ -3,7 +3,7 @@
 ## Perubahan
 
 1. **Widget `query` → server-side filter.** `DashboardRenderer.tsx` kini
-   menerjemahkan `spec.query` (subset FormaExpr: `= today()`, `in [...]`,
+   menerjemahkan `spec.query` (subset FormSpecExpr: `= today()`, `in [...]`,
    `!=`, `=`, `==`, compound `and`) menjadi list filters `field[op]=value`
    via `translateWidgetQuery()` + `buildListParams()`, sehingga DB pre-filter
    sebelum data lewat wire. `applySimpleQuery` (client-side) jadi fallback
@@ -57,5 +57,5 @@ Node WS client menerima `{"event":"completed","resource":"clinic/visit",...}`.
 ## Referensi
 - Plan: `docs/plan/use-realtime-hook.md`, `docs/plan/fix-clinic-dashboard-summary.md`
 - Verifikasi: `npx tsc -b --noEmit`, `go build ./...`, `go vet ./internal/api/`,
-  `go test ./internal/api/ -count=1` (49 passed), `forma validate`, browser
+  `go test ./internal/api/ -count=1` (49 passed), `formspec validate`, browser
   `localhost:18080` (WS end-to-end).

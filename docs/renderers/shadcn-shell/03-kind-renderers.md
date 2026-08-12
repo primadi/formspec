@@ -26,7 +26,7 @@ Kelengkapan per kind (semua di `kinds/`, kecuali `menu` — dihapus, lihat
 | Kind | Status | Catatan |
 |---|---|---|
 | `Table` | Fungsional | TanStack Table headless, pagination/sort/search server-side, row action ber-`window.confirm()`. **Gap:** navigasi New/row action hardcode prefiks `/_admin` (lihat [`01-architecture.md`](01-architecture.md) §5); `Form.render` diabaikan sepenuhnya — selalu ke route halaman penuh, tidak pernah `OverlayHost`. |
-| `Form` | Fungsional | react-hook-form + zod (schema dibangun manual per tipe/rule field, bukan dari FormaExpr), auto-save debounced 2 detik untuk `two_step_autosave`, CAS `version` terkirim sebagai `If-Match`. **Gap:** tidak ada percabangan khusus 409 — conflict jatuh ke toast error generik, bukan alur refetch. |
+| `Form` | Fungsional | react-hook-form + zod (schema dibangun manual per tipe/rule field, bukan dari FormSpecExpr), auto-save debounced 2 detik untuk `two_step_autosave`, CAS `version` terkirim sebagai `If-Match`. **Gap:** tidak ada percabangan khusus 409 — conflict jatuh ke toast error generik, bukan alur refetch. |
 | `Page` | Fungsional (blocks & tabs) | Permission-gated per tab/blok, delegasi ke Table/Form. **Gap:** blok `component:` (custom component) murni placeholder teks — lihat [`04-theming-assets.md`](04-theming-assets.md) §2. |
 | `Dashboard`/`Widget` | Placeholder | Layout + filter permission jalan, tapi `MetricWidget` merender `"--"` literal (tidak fetch data sama sekali); chart/list widget semua placeholder teks. Tidak ada library chart terpasang meski tipe chart ada di schema. |
 | `Wizard` | Fungsional, melebihi rencana awal | Step state di `?step=N`, autosave per-instance ke `localStorage` (`?instance=<uuid>`), hook `on_enter`/`on_next`/`on_prev` best-effort, step type `search_select` dan form, `on_complete` (restart/redirect/banner) lengkap. **Gap:** step type `component:` custom masih placeholder. |
@@ -59,7 +59,7 @@ Keputusan yang bukan bagian kontrak (boleh berbeda di renderer lain):
 - Konfirmasi delete/void pakai `window.confirm()` browser-native, bukan
   dialog custom shadcn.
 - Toast notifikasi (`sonner`) dipanggil langsung tiap kind renderer, belum
-  lewat satu layanan `forma.ui` terpusat — lihat
+  lewat satu layanan `formspec.ui` terpusat — lihat
   [`04-theming-assets.md`](04-theming-assets.md) §3.
 - Ikon dikunci ke nama pustaka `lucide` (bukan bebas nama seperti disarankan
   spec) — cocok dengan catatan Open Question rencana desain awal, belum

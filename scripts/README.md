@@ -1,4 +1,4 @@
-# Forma Scripts
+# FormSpec Scripts
 
 ## docs-serve — Tampilkan `docs/` di Browser
 

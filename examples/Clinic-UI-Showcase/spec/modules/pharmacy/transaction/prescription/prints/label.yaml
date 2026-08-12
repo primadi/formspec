@@ -1,5 +1,5 @@
 # SHOWCASE kind: Print — label obat thermal (satu label per item resep).
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Print
 metadata:
   name: prescription-label

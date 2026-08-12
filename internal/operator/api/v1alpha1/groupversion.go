@@ -1,5 +1,5 @@
-// Package v1alpha1 contains the Forma CRD API types (group forma.dev)
-// consumed by forma-operator. The schemas mirror
+// Package v1alpha1 contains the FormSpec CRD API types (group formspec.dev)
+// consumed by formspec-operator. The schemas mirror
 // docs/architecture/06-k8s-operator.md §3; the CRD YAML manifests live in
 // deploy/operator/crds/.
 //
@@ -14,10 +14,10 @@ import (
 )
 
 var (
-	// GroupVersion is the group/version for the Forma CRDs.
-	GroupVersion = schema.GroupVersion{Group: "forma.dev", Version: "v1alpha1"}
+	// GroupVersion is the group/version for the FormSpec CRDs.
+	GroupVersion = schema.GroupVersion{Group: "formspec.dev", Version: "v1alpha1"}
 
-	// SchemeBuilder registers the Forma types into a runtime.Scheme.
+	// SchemeBuilder registers the FormSpec types into a runtime.Scheme.
 	SchemeBuilder = &scheme.Builder{GroupVersion: GroupVersion}
 
 	// AddToScheme adds the types in this group-version to the given scheme.

@@ -1,5 +1,5 @@
 # Customer edit form — update existing customer (separate page)
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Form
 metadata:
   name: customer-edit

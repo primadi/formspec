@@ -7,11 +7,11 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/primadi/forma/internal/auth"
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/internal/auth"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
-// Middleware chains for the Forma API router.
+// Middleware chains for the FormSpec API router.
 
 // authValidator is the active token validator, configured at startup.
 // In dev mode: DevValidator (synthetic identity). In prod mode: JWTValidator.

@@ -6,7 +6,7 @@ Semua perubahan dicatat dengan format `YYYY-MM-DD`. Versi aplikasi mengikuti
 ## [1.0.0] — 2026-08-03
 
 ### Added
-- **17 manifest** tervalidasi (`forma validate` → 17 OK, 0 problems):
+- **17 manifest** tervalidasi (`formspec validate` → 17 OK, 0 problems):
   - `kind: App` — `spec/apps/arisan.yaml` (root `/app/arisan`, menu 3 modul)
   - 3 `kind: Module` — `arisan-master`, `arisan-field`, `arisan-report`
   - 7 `kind: Entity`:
@@ -32,7 +32,7 @@ Semua perubahan dicatat dengan format `YYYY-MM-DD`. Versi aplikasi mengikuti
 ### Fixed
 - **Bug engine (SQLite deadlock)**: aksi custom `resource.fetch()` pada entity
   berelasi deadlock di SQLite. Dipatch lokal di module cache
-  (`resolveRelations` → `txReadDB(ctx, s.db)`) + rebuild `forma.exe`.
+  (`resolveRelations` → `txReadDB(ctx, s.db)`) + rebuild `formspec.exe`.
   Detail: [`engine-sqlite-deadlock.md`](./engine-sqlite-deadlock.md).
 - Flowchart Mermaid `run-lottery` — label node dengan `(...)` diperbaiki jadi
   `:` (validasi Mermaid).

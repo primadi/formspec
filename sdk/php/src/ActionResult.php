@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Forma;
+namespace FormSpec;
 
 /**
  * Structured handler result — the wire form of the engine's ExecuteResult.

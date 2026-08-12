@@ -1,14 +1,14 @@
-# lib-forma-php
+# lib-formspec-php
 
-Thin PHP client for `forma-sidecar` (docs/runtimes/04-forma-sidecar.md).
+Thin PHP client for `formspec-sidecar` (docs/runtimes/04-formspec-sidecar.md).
 Pure PHP ≥ 8.1, no dependencies beyond ext-curl/ext-json.
 
 ```bash
-composer require forma/lib-forma
+composer require formspec/lib-formspec
 ```
 
 ```php
-use Forma\{App, ActionResult, Ctx, Invocation};
+use FormSpec\{App, ActionResult, Ctx, Invocation};
 
 $app = new App(); // sockets from FORMA_APP_SOCKET / FORMA_SIDECAR_SOCKET
 

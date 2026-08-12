@@ -1,6 +1,6 @@
 # SHOWCASE kind: Widget tipe chart — line chart 30 hari dari entity live `visit`.
 # Tanpa `config.y` → renderer menghitung jumlah kunjungan per (hari, poliklinik).
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Widget
 metadata:
   name: visits-by-polyclinic

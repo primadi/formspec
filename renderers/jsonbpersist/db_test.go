@@ -28,7 +28,7 @@ func TestOpen_SQLite(t *testing.T) {
 
 func TestOpen_DefaultDevDSN(t *testing.T) {
 	// Test that the default DSN parses correctly
-	cfg, err := ParseDSN(".forma/data.db")
+	cfg, err := ParseDSN(".formspec/data.db")
 	if err != nil {
 		t.Fatalf("ParseDSN failed: %v", err)
 	}
@@ -208,15 +208,15 @@ func TestSQLite_TransactionRollback(t *testing.T) {
 }
 
 func TestSQLite_DefaultDevDSN(t *testing.T) {
-	cfg, err := ParseDSN(".forma/data.db")
+	cfg, err := ParseDSN(".formspec/data.db")
 	if err != nil {
 		t.Fatalf("ParseDSN failed: %v", err)
 	}
 	if cfg.Driver != DriverSQLite {
 		t.Errorf("expected sqlite, got %s", cfg.Driver)
 	}
-	if cfg.Database != ".forma/data.db" {
-		t.Errorf("expected .forma/data.db, got %s", cfg.Database)
+	if cfg.Database != ".formspec/data.db" {
+		t.Errorf("expected .formspec/data.db, got %s", cfg.Database)
 	}
 }
 

@@ -1,4 +1,4 @@
-# Forma Verticals
+# FormSpec Verticals
 
 Real, independently-installable ERP vertical Apps — not spec-conformance demos (those stay in
 [`examples/`](../examples/)). Full rationale, the App/Workspace composition model, ERPNext
@@ -21,7 +21,7 @@ comparison, and the gaps this exercise surfaced: **[`docs/architecture/07-vertic
 
 ## Each App is independent
 
-Every folder above is a complete, standalone `kind: App` (own `forma.yaml` + `module.yaml`) —
+Every folder above is a complete, standalone `kind: App` (own `formspec.yaml` + `module.yaml`) —
 none require any other vertical to load and validate. Prove it yourself:
 
 ```sh
@@ -39,11 +39,11 @@ different vendor's connector.
 
 Two ways, with very different maturity levels today:
 
-1. **Production (intended, not yet fully wired):** `forma apply` each App into one workspace
+1. **Production (intended, not yet fully wired):** `formspec apply` each App into one workspace
    (`docs/spec/02-core-basic.md` §6.0's two-stage Registration/Deployment pipeline). This is
    what makes the `publishes`/`consumes` cross-app grant model in §4.4 meaningful. Blocked
    today by a real engine gap: the Resource Plane's SyncAgent registry sync isn't wired to the
-   live HTTP router yet (`docs/runtimes/02-forma-resource.md:138`), so a workspace can *accept*
+   live HTTP router yet (`docs/runtimes/02-formspec-resource.md:138`), so a workspace can *accept*
    multiple Apps' manifests but can't yet *serve* them all through one running API.
 2. **Dev convenience (what actually works today):** [`reference-app/`](./reference-app/)'s
    `compose.sh` aggregates every vertical's manifests into one filesystem tree and loads it

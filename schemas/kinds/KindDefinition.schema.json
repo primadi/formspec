@@ -4,7 +4,11 @@
   "type": "object",
   "properties": {
     "group": {
-      "type": "string"
+      "description": "@schema {example: \"seed.formspec.dev\"}",
+      "type": "string",
+      "examples": [
+        "seed.formspec.dev"
+      ]
     },
     "handler": {
       "$ref": "#/$defs/ImplDecl",
@@ -12,11 +16,22 @@
     },
     "schema": {},
     "scope": {
-      "description": "module | app",
-      "type": "string"
+      "description": "@schema {example: \"module\", enum: [\"module\", \"app\"]}",
+      "type": "string",
+      "enum": [
+        "module",
+        "app"
+      ],
+      "examples": [
+        "module"
+      ]
     },
     "version": {
-      "type": "string"
+      "description": "@schema {example: \"v1\"}",
+      "type": "string",
+      "examples": [
+        "v1"
+      ]
     }
   },
   "required": [

@@ -1,5 +1,5 @@
-// Package controller implements the forma-operator reconcilers
-// (docs/runtimes/03-forma-operator.md §2): Workspace → Deployment/Service/
+// Package controller implements the formspec-operator reconcilers
+// (docs/runtimes/03-formspec-operator.md §2): Workspace → Deployment/Service/
 // Secret/ConfigMap/HPA, Datastore → credential validation, ResourceClaim →
 // signature-verified credential injection.
 package controller
@@ -25,24 +25,24 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	formav1alpha1 "github.com/primadi/forma/internal/operator/api/v1alpha1"
+	formspecv1alpha1 "github.com/primadi/formspec/internal/operator/api/v1alpha1"
 )
 
 const (
 	// managedByLabel marks resources created by this operator.
 	managedByLabel = "app.kubernetes.io/managed-by"
-	managedByValue = "forma-operator"
-	workspaceLabel = "forma.dev/workspace"
+	managedByValue = "formspec-operator"
+	workspaceLabel = "formspec.dev/workspace"
 
 	// binaryHashAnnotation on a Workspace is copied to the pod template to
 	// trigger a rolling restart when the artifact's compiled handler binary
 	// changes (docs/architecture/06-k8s-operator.md §5). Cluster Control
 	// surfaces restart_required; whoever consumes it stamps this annotation.
-	binaryHashAnnotation = "forma.dev/artifact-binary-hash"
+	binaryHashAnnotation = "formspec.dev/artifact-binary-hash"
 
 	// idleAnnotation marks a workspace as idle; with a scale-to-zero
 	// ClusterClass the Deployment is scaled to 0 replicas.
-	idleAnnotation = "forma.dev/idle"
+	idleAnnotation = "formspec.dev/idle"
 
 	featureAutoScaling = "auto-scaling"
 
@@ -50,19 +50,19 @@ const (
 )
 
 // WorkspaceStatusReporter forwards workspace status changes to Cluster
-// Control (docs/runtimes/03-forma-operator.md §3.2). Implementations must
+// Control (docs/runtimes/03-formspec-operator.md §3.2). Implementations must
 // be non-blocking or fast; a nil reporter disables reporting.
 type WorkspaceStatusReporter interface {
-	ReportWorkspaceStatus(ws *formav1alpha1.Workspace)
+	ReportWorkspaceStatus(ws *formspecv1alpha1.Workspace)
 }
 
-// WorkspaceReconciler reconciles a Workspace into a forma-resource
+// WorkspaceReconciler reconciles a Workspace into a formspec-resource
 // Deployment + Service + ConfigMap (+HPA), with datastore credentials
 // injected from approved ResourceClaims.
 type WorkspaceReconciler struct {
 	client.Client
-	// ResourceImage is the generic forma-resource image, version-pinned
-	// (e.g. "formahub/forma-resource:1.4.2").
+	// ResourceImage is the generic formspec-resource image, version-pinned
+	// (e.g. "formahub/formspec-resource:1.4.2").
 	ResourceImage string
 	// ControlClusterURL is injected into workspace pods as CONTROL_CLUSTER_URL.
 	ControlClusterURL string
@@ -70,11 +70,11 @@ type WorkspaceReconciler struct {
 	Reporter WorkspaceStatusReporter
 }
 
-// Reconcile drives the loop from docs/runtimes/03-forma-operator.md §2.3.
+// Reconcile drives the loop from docs/runtimes/03-formspec-operator.md §2.3.
 func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 
-	var ws formav1alpha1.Workspace
+	var ws formspecv1alpha1.Workspace
 	if err := r.Get(ctx, req.NamespacedName, &ws); err != nil {
 		// Deleted: Deployment/Service/ConfigMap/HPA are garbage-collected via
 		// owner references. Secrets are intentionally retained (§2.3).
@@ -82,11 +82,11 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	// 1. ClusterClass → scaling policy
-	var class formav1alpha1.ClusterClass
+	var class formspecv1alpha1.ClusterClass
 	if err := r.Get(ctx, types.NamespacedName{Name: ws.Spec.ClusterClass}, &class); err != nil {
 		if apierrors.IsNotFound(err) {
 			return r.updateStatus(ctx, &ws, 0, metav1.Condition{
-				Type: formav1alpha1.ConditionDegraded, Status: metav1.ConditionTrue,
+				Type: formspecv1alpha1.ConditionDegraded, Status: metav1.ConditionTrue,
 				Reason:  "ClusterClassNotFound",
 				Message: fmt.Sprintf("ClusterClass %q not found", ws.Spec.ClusterClass),
 			})
@@ -135,7 +135,7 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// 7. Status
 	cond := metav1.Condition{
-		Type: formav1alpha1.ConditionReady, Status: metav1.ConditionFalse,
+		Type: formspecv1alpha1.ConditionReady, Status: metav1.ConditionFalse,
 		Reason: "Progressing", Message: "Deployment not fully available yet",
 	}
 	if deploy.Status.ReadyReplicas >= desiredReplicas(&ws, &class) {
@@ -146,14 +146,14 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	return r.updateStatus(ctx, &ws, deploy.Status.ReadyReplicas, cond)
 }
 
-func deploymentName(ws *formav1alpha1.Workspace) string {
-	return "forma-resource-" + ws.Name
+func deploymentName(ws *formspecv1alpha1.Workspace) string {
+	return "formspec-resource-" + ws.Name
 }
 
 // desiredReplicas applies the ClusterClass scaling policy (D-ARCH-31):
 // the floor is minReplicas; a scale-to-zero class drops an idle-annotated
 // workspace to 0; otherwise at least one replica runs.
-func desiredReplicas(ws *formav1alpha1.Workspace, class *formav1alpha1.ClusterClass) int32 {
+func desiredReplicas(ws *formspecv1alpha1.Workspace, class *formspecv1alpha1.ClusterClass) int32 {
 	scaling := class.Spec.Scaling
 	if scaling.ScaleToZero && ws.Annotations[idleAnnotation] == "true" {
 		return 0
@@ -164,7 +164,7 @@ func desiredReplicas(ws *formav1alpha1.Workspace, class *formav1alpha1.ClusterCl
 	return scaling.MinReplicas
 }
 
-func (r *WorkspaceReconciler) buildDeployment(ws *formav1alpha1.Workspace, class *formav1alpha1.ClusterClass, claimEnv []corev1.EnvVar, deploy *appsv1.Deployment) error {
+func (r *WorkspaceReconciler) buildDeployment(ws *formspecv1alpha1.Workspace, class *formspecv1alpha1.ClusterClass, claimEnv []corev1.EnvVar, deploy *appsv1.Deployment) error {
 	replicas := desiredReplicas(ws, class)
 	labels := map[string]string{
 		managedByLabel: managedByValue,
@@ -183,7 +183,7 @@ func (r *WorkspaceReconciler) buildDeployment(ws *formav1alpha1.Workspace, class
 	env = append(env, claimEnv...)
 
 	container := corev1.Container{
-		Name:  "forma-resource",
+		Name:  "formspec-resource",
 		Image: r.ResourceImage,
 		Env:   env,
 		Ports: []corev1.ContainerPort{{Name: "http", ContainerPort: resourceContainerPort}},
@@ -250,15 +250,15 @@ func (r *WorkspaceReconciler) buildDeployment(ws *formav1alpha1.Workspace, class
 	return controllerutil.SetControllerReference(ws, deploy, r.Scheme())
 }
 
-// nodeSelector maps workspace placement fields onto the forma.dev node
+// nodeSelector maps workspace placement fields onto the formspec.dev node
 // labels (docs/architecture/06-k8s-operator.md §4).
-func nodeSelector(ws *formav1alpha1.Workspace) map[string]string {
+func nodeSelector(ws *formspecv1alpha1.Workspace) map[string]string {
 	sel := map[string]string{}
 	if ws.Spec.Environment != "" {
-		sel["forma.dev/environment"] = ws.Spec.Environment
+		sel["formspec.dev/environment"] = ws.Spec.Environment
 	}
 	if ws.Spec.Region != "" {
-		sel["forma.dev/region"] = ws.Spec.Region
+		sel["formspec.dev/region"] = ws.Spec.Region
 	}
 	if len(sel) == 0 {
 		return nil
@@ -266,7 +266,7 @@ func nodeSelector(ws *formav1alpha1.Workspace) map[string]string {
 	return sel
 }
 
-func (r *WorkspaceReconciler) buildService(ws *formav1alpha1.Workspace, svc *corev1.Service) error {
+func (r *WorkspaceReconciler) buildService(ws *formspecv1alpha1.Workspace, svc *corev1.Service) error {
 	svc.Labels = map[string]string{managedByLabel: managedByValue, workspaceLabel: ws.Name}
 	svc.Spec.Type = corev1.ServiceTypeClusterIP
 	svc.Spec.Selector = map[string]string{workspaceLabel: ws.Name}
@@ -276,7 +276,7 @@ func (r *WorkspaceReconciler) buildService(ws *formav1alpha1.Workspace, svc *cor
 	return controllerutil.SetControllerReference(ws, svc, r.Scheme())
 }
 
-func (r *WorkspaceReconciler) buildConfigMap(ws *formav1alpha1.Workspace, class *formav1alpha1.ClusterClass, cm *corev1.ConfigMap) error {
+func (r *WorkspaceReconciler) buildConfigMap(ws *formspecv1alpha1.Workspace, class *formspecv1alpha1.ClusterClass, cm *corev1.ConfigMap) error {
 	cm.Labels = map[string]string{managedByLabel: managedByValue, workspaceLabel: ws.Name}
 	cm.Data = map[string]string{
 		"workspace":    ws.Name,
@@ -287,7 +287,7 @@ func (r *WorkspaceReconciler) buildConfigMap(ws *formav1alpha1.Workspace, class 
 	return controllerutil.SetControllerReference(ws, cm, r.Scheme())
 }
 
-func (r *WorkspaceReconciler) reconcileHPA(ctx context.Context, ws *formav1alpha1.Workspace, class *formav1alpha1.ClusterClass) error {
+func (r *WorkspaceReconciler) reconcileHPA(ctx context.Context, ws *formspecv1alpha1.Workspace, class *formspecv1alpha1.ClusterClass) error {
 	hpa := &autoscalingv2.HorizontalPodAutoscaler{ObjectMeta: metav1.ObjectMeta{Name: deploymentName(ws), Namespace: ws.Namespace}}
 
 	if !class.HasFeature(featureAutoScaling) {
@@ -333,8 +333,8 @@ func (r *WorkspaceReconciler) reconcileHPA(ctx context.Context, ws *formav1alpha
 // this workspace and carry a Ready condition (§2.3 step 4). Each approved
 // claim contributes FORMA_DATASTORE_<NAME>_DSN sourced from the datastore's
 // endpoint Secret — the operator never reads the credential value itself.
-func (r *WorkspaceReconciler) claimEnvVars(ctx context.Context, ws *formav1alpha1.Workspace) ([]corev1.EnvVar, error) {
-	var claims formav1alpha1.ResourceClaimList
+func (r *WorkspaceReconciler) claimEnvVars(ctx context.Context, ws *formspecv1alpha1.Workspace) ([]corev1.EnvVar, error) {
+	var claims formspecv1alpha1.ResourceClaimList
 	if err := r.List(ctx, &claims, client.InNamespace(ws.Namespace)); err != nil {
 		return nil, fmt.Errorf("list resource claims: %w", err)
 	}
@@ -345,11 +345,11 @@ func (r *WorkspaceReconciler) claimEnvVars(ctx context.Context, ws *formav1alpha
 		if claim.Spec.Workspace != ws.Name {
 			continue
 		}
-		if !meta.IsStatusConditionTrue(claim.Status.Conditions, formav1alpha1.ConditionReady) {
+		if !meta.IsStatusConditionTrue(claim.Status.Conditions, formspecv1alpha1.ConditionReady) {
 			continue
 		}
 
-		var ds formav1alpha1.Datastore
+		var ds formspecv1alpha1.Datastore
 		if err := r.Get(ctx, types.NamespacedName{Name: claim.Spec.Datastore, Namespace: ws.Namespace}, &ds); err != nil {
 			if apierrors.IsNotFound(err) {
 				continue // claim references a datastore that no longer exists
@@ -377,24 +377,24 @@ func datastoreEnvName(dsName string) string {
 	return "FORMA_DATASTORE_" + sanitized + "_DSN"
 }
 
-func (r *WorkspaceReconciler) updateStatus(ctx context.Context, ws *formav1alpha1.Workspace, readyReplicas int32, cond metav1.Condition) (ctrl.Result, error) {
+func (r *WorkspaceReconciler) updateStatus(ctx context.Context, ws *formspecv1alpha1.Workspace, readyReplicas int32, cond metav1.Condition) (ctrl.Result, error) {
 	cond.ObservedGeneration = ws.Generation
 	meta.SetStatusCondition(&ws.Status.Conditions, cond)
 
 	// Keep the companion conditions coherent with the primary one.
 	progressing := metav1.ConditionFalse
-	if cond.Type == formav1alpha1.ConditionReady && cond.Status == metav1.ConditionFalse {
+	if cond.Type == formspecv1alpha1.ConditionReady && cond.Status == metav1.ConditionFalse {
 		progressing = metav1.ConditionTrue
 	}
 	meta.SetStatusCondition(&ws.Status.Conditions, metav1.Condition{
-		Type: formav1alpha1.ConditionProgressing, Status: progressing,
+		Type: formspecv1alpha1.ConditionProgressing, Status: progressing,
 		Reason: "Reconcile", ObservedGeneration: ws.Generation,
 	})
 
 	switch {
-	case meta.IsStatusConditionTrue(ws.Status.Conditions, formav1alpha1.ConditionDegraded):
+	case meta.IsStatusConditionTrue(ws.Status.Conditions, formspecv1alpha1.ConditionDegraded):
 		ws.Status.Phase = "Degraded"
-	case meta.IsStatusConditionTrue(ws.Status.Conditions, formav1alpha1.ConditionReady):
+	case meta.IsStatusConditionTrue(ws.Status.Conditions, formspecv1alpha1.ConditionReady):
 		ws.Status.Phase = "Ready"
 	default:
 		ws.Status.Phase = "Pending"
@@ -422,7 +422,7 @@ func (r *WorkspaceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // separate ClusterClassReconciler — the class is cache-only config, §2.1).
 func (r *WorkspaceReconciler) SetupWithManagerWithOptions(mgr ctrl.Manager, opts controller.Options) error {
 	mapClassToWorkspaces := func(ctx context.Context, obj client.Object) []ctrl.Request {
-		var list formav1alpha1.WorkspaceList
+		var list formspecv1alpha1.WorkspaceList
 		if err := mgr.GetClient().List(ctx, &list); err != nil {
 			return nil
 		}
@@ -438,7 +438,7 @@ func (r *WorkspaceReconciler) SetupWithManagerWithOptions(mgr ctrl.Manager, opts
 	}
 
 	mapClaimToWorkspace := func(ctx context.Context, obj client.Object) []ctrl.Request {
-		claim, ok := obj.(*formav1alpha1.ResourceClaim)
+		claim, ok := obj.(*formspecv1alpha1.ResourceClaim)
 		if !ok || claim.Spec.Workspace == "" {
 			return nil
 		}
@@ -449,12 +449,12 @@ func (r *WorkspaceReconciler) SetupWithManagerWithOptions(mgr ctrl.Manager, opts
 
 	return ctrl.NewControllerManagedBy(mgr).
 		WithOptions(opts).
-		For(&formav1alpha1.Workspace{}).
+		For(&formspecv1alpha1.Workspace{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.Service{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&autoscalingv2.HorizontalPodAutoscaler{}).
-		Watches(&formav1alpha1.ClusterClass{}, handler.EnqueueRequestsFromMapFunc(mapClassToWorkspaces)).
-		Watches(&formav1alpha1.ResourceClaim{}, handler.EnqueueRequestsFromMapFunc(mapClaimToWorkspace)).
+		Watches(&formspecv1alpha1.ClusterClass{}, handler.EnqueueRequestsFromMapFunc(mapClassToWorkspaces)).
+		Watches(&formspecv1alpha1.ResourceClaim{}, handler.EnqueueRequestsFromMapFunc(mapClaimToWorkspace)).
 		Complete(r)
 }

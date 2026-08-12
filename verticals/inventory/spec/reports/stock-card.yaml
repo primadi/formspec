@@ -1,5 +1,5 @@
 # Stock card report — per-product movement history
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Report
 metadata:
   name: stock-card

@@ -18,5 +18,5 @@ Di `renderers/web/src/hooks/useTheme.ts`, tambahkan guard: ketika dark mode + ne
 
 ### Referensi
 - Plan: docs/plan/todo.md
-- Spec: `reff_docs/Forma-Technical-Note-DX-dan-Entity-Extension.md`
+- Spec: `reff_docs/FormSpec-Technical-Note-DX-dan-Entity-Extension.md`
 - Issue: Wizard stepper completed step tidak terbaca di dark mode + neutral preset

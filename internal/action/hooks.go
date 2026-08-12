@@ -4,7 +4,7 @@ import (
 	"context"
 	"sort"
 
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 const defaultHookPriority = 10

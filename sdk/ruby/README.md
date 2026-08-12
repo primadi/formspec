@@ -1,22 +1,22 @@
-# lib-forma-ruby
+# lib-formspec-ruby
 
-Thin Ruby client for `forma-sidecar` (docs/runtimes/04-forma-sidecar.md).
+Thin Ruby client for `formspec-sidecar` (docs/runtimes/04-formspec-sidecar.md).
 Ruby 3.0+, stdlib only — no gems beyond the standard library.
 
 ```bash
-gem install lib-forma
+gem install lib-formspec
 ```
 
 ```ruby
-require "lib-forma"
+require "lib-formspec"
 
-app = Forma::App.new  # sockets from FORMA_APP_SOCKET / FORMA_SIDECAR_SOCKET
+app = FormSpec::App.new  # sockets from FORMA_APP_SOCKET / FORMA_SIDECAR_SOCKET
 
 app.handle("billing.invoice.approve") do |inv, ctx|
   rows = ctx.db.query("SELECT ...")                   # proxied to the sidecar engine
   ctx.cache.named("session-cache").get("key")         # named datastore
 
-  Forma::ActionResult.new(
+  FormSpec::ActionResult.new(
     { approved_at: Time.now.iso8601 },
     new_state: "approved"
   ).with_event("invoice.approved", { id: inv.resource_id })

@@ -4,7 +4,11 @@
   "type": "object",
   "properties": {
     "entity": {
-      "type": "string"
+      "description": "@schema {example: \"gl.journal-entry\"}",
+      "type": "string",
+      "examples": [
+        "gl.journal-entry"
+      ]
     },
     "escalation": {
       "$ref": "#/$defs/WorkflowEscalation",

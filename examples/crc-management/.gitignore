@@ -1,5 +1,5 @@
-# Forma runtime data
-.forma/
+# FormSpec runtime data
+.formspec/
 
 # Binaries
 bin/

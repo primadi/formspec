@@ -15,13 +15,13 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/primadi/forma/internal/manifest"
-	"github.com/primadi/forma/internal/permission"
-	"github.com/primadi/forma/pkg/spec"
-	db "github.com/primadi/forma/renderers/jsonbpersist"
+	"github.com/primadi/formspec/internal/manifest"
+	"github.com/primadi/formspec/internal/permission"
+	"github.com/primadi/formspec/pkg/spec"
+	db "github.com/primadi/formspec/renderers/jsonbpersist"
 )
 
-// Registry is the central entity registry for the Forma runtime.
+// Registry is the central entity registry for the FormSpec runtime.
 // It manages the lifecycle of entity definitions from YAML to database.
 type Registry struct {
 	mu           sync.RWMutex

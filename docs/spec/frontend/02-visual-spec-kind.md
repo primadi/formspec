@@ -11,7 +11,7 @@ inti: skema instance + kontrak yang wajib dipenuhi renderernya. Precedent-nya
 `MockupModule` kind — pola meta-kind yang sama, diterapkan ke lapisan visual.
 
 ```yaml
-apiVersion: forma/v1
+apiVersion: formspec/v1
 kind: VisualSpecKind
 metadata:
   name: kanban
@@ -27,7 +27,7 @@ Instance yang ditulis app developer tetap seperti Form kind sekarang — cuma
 ## 2. Field `tier` (wajib)
 `app | page | component` — menentukan di mana kind ini boleh dipakai/
 dikomposisi:
-- Tanpa `tier` eksplisit, `forma apply` tidak tahu apakah `kind: Kanban` boleh
+- Tanpa `tier` eksplisit, `formspec apply` tidak tahu apakah `kind: Kanban` boleh
   dipasang langsung sebagai isi route App (perlu `tier: page`), atau cuma boleh
   mengisi slot milik Page lain (`tier: component`).
 - `tier` juga jadi dasar validasi slot compatibility (§4): `accepts_slots`
@@ -55,7 +55,7 @@ sebagai **slot**: lubang dengan kontrak data-shape, bukan referensi ke
 komponen bernama spesifik.
 
 ```yaml
-apiVersion: forma/v1
+apiVersion: formspec/v1
 kind: VisualSpecKind
 metadata:
   name: dashboard
@@ -70,12 +70,12 @@ spec:
 ```
 
 ```yaml
-apiVersion: forma/v1
+apiVersion: formspec/v1
 kind: VisualSpecKind
 metadata:
   name: kpi-widget
 spec:
-  tier: component            # WAJIB component — forma apply menolak implements_slot dari tier lain
+  tier: component            # WAJIB component — formspec apply menolak implements_slot dari tier lain
   schema: {...}
   implements_slot: widget
 ```
@@ -101,8 +101,8 @@ spec:
 3. Kedalaman rekursi dibatasi satu level (Page menerima Component;
    Component-di-dalam-Component didefer sampai ada use case mendesak).
 
-## 5. Validasi `forma apply`
-`forma apply` memvalidasi `tier` sebelum menerima slot binding:
+## 5. Validasi `formspec apply`
+`formspec apply` memvalidasi `tier` sebelum menerima slot binding:
 `accepts_slots` hanya sah dari `tier: page` (atau `app`); `implements_slot`
 hanya sah dari `tier: component`. Kombinasi lain (mis. Page mendeklarasikan
 `implements_slot`, atau Component mendeklarasikan `accepts_slots`) ditolak saat

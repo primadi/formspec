@@ -87,7 +87,7 @@ export const usePrefsStore = create<PrefsState>()(
       setActiveTheme: (name) => set({ activeTheme: name }),
     }),
     {
-      name: "forma-prefs",
+      name: "formspec-prefs",
     },
   ),
 )

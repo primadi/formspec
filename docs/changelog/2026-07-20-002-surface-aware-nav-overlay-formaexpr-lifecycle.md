@@ -1,4 +1,4 @@
-# Surface-Aware Navigation, OverlayHost Wiring, FormaExpr Completeness, Lifecycle Patterns
+# Surface-Aware Navigation, OverlayHost Wiring, FormSpecExpr Completeness, Lifecycle Patterns
 
 **Date**: 2026-07-20  
 **Component**: `renderers/web/src/` (frontend shell + kinds)  
@@ -16,7 +16,7 @@
 - Wired `OverlayHost` to render `<FormRenderer>` inside Dialog/Sheet instead of placeholder "Fase 4.F3"
 - Updated `TableRenderer` to trigger overlays via `?action=create&form=...` search params when authored form has `render.mode` = modal/drawer
 
-### Phase C: FormaExpr Completeness (5.3.5)
+### Phase C: FormSpecExpr Completeness (5.3.5)
 - Added `evalVisibleWhen`, `evalRequiredWhen`, `evalCompute` imports and wiring in `FormRenderer`
 - Added `me` (user) from session store to `fieldContext`
 - `visible_when` — skips invisible fields and sections
@@ -35,7 +35,7 @@
 |---|---|
 | `renderers/web/src/hooks/useSurface.ts` | **NEW** — surface detection hook |
 | `renderers/web/src/kinds/table/TableRenderer.tsx` | 3 hardcoded nav → useSurface; overlay trigger; useSearchParams + metaBundle |
-| `renderers/web/src/kinds/form/FormRenderer.tsx` | 2 hardcoded nav → useSurface; inOverlay/onClose props; FormaExpr wiring; lifecycle patterns |
+| `renderers/web/src/kinds/form/FormRenderer.tsx` | 2 hardcoded nav → useSurface; inOverlay/onClose props; FormSpecExpr wiring; lifecycle patterns |
 | `renderers/web/src/kinds/page/DetailPage.tsx` | 2 hardcoded nav → useSurface |
 | `renderers/web/src/kinds/wizard/WizardRenderer.tsx` | 1 hardcoded nav → useSurface |
 | `renderers/web/src/shell/OverlayHost.tsx` | Wire FormRenderer, entity resolution, modal/drawer toggle |
@@ -46,5 +46,5 @@
 ## Verification
 - TypeScript compilation: `npx tsc --noEmit` → clean
 - Vite production build: `npx vite build` → success (1 warning: static+dynamic import FormRenderer)
-- Go backend: `go build ./cmd/forma/` → success
+- Go backend: `go build ./cmd/formspec/` → success
 - E2E: `TestVisitLifecycle_EndToEnd` passes; other tests fail due to fixture date backdate limit (pre-existing, unrelated)

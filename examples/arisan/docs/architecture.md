@@ -3,7 +3,7 @@
 ## Pendekatan: Spec-First
 
 Seluruh perilaku aplikasi dideklarasikan sebagai manifest YAML
-(`apiVersion: forma.dev/v1alpha1`). Engine Forma me-derive:
+(`apiVersion: formspec.dev/v1alpha1`). Engine FormSpec me-derive:
 
 - **REST API** untuk setiap entity (`/api/v1/{module}/{plural}`)
 - **UI** (Table, Form, Page) untuk setiap entity
@@ -40,7 +40,7 @@ Karakteristik menentukan perilaku yang di-derive engine:
 
 ### 1. `lifecycle: plain_crud` + `submit` disabled
 
-Entity di Forma default-nya punya `doc_status: draft` setelah create, dan
+Entity di FormSpec default-nya punya `doc_status: draft` setelah create, dan
 **relasi ke record draft ditolak** ("must be submitted or lifecycle-free").
 Karena aplikasi arisan ini berjalan tanpa alur approval dokumen, semua entity
 memakai:

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 func TestMigrationRunner_EnsureSystemTables(t *testing.T) {
@@ -26,13 +26,13 @@ func TestMigrationRunner_EnsureSystemTables(t *testing.T) {
 
 	// Verify system tables exist
 	systemTables := []string{
-		"forma_schema_migrations",
-		"forma_natural_key_counters",
-		"forma_idempotency_keys",
-		"forma_outbox",
-		"forma_extensions",
-		"forma_audit_log",
-		"forma_event_log",
+		"formspec_schema_migrations",
+		"formspec_natural_key_counters",
+		"formspec_idempotency_keys",
+		"formspec_outbox",
+		"formspec_extensions",
+		"formspec_audit_log",
+		"formspec_event_log",
 	}
 	for _, tbl := range systemTables {
 		exists, err := d.HasTable(ctx, "", tbl)
@@ -88,7 +88,7 @@ func TestMigrationRunner_ApplyMigrations_NewEntity(t *testing.T) {
 
 	// Verify migration was recorded
 	var count int
-	err = d.QueryRowContext(ctx, "SELECT COUNT(*) FROM forma_schema_migrations").Scan(&count)
+	err = d.QueryRowContext(ctx, "SELECT COUNT(*) FROM formspec_schema_migrations").Scan(&count)
 	if err != nil {
 		t.Fatalf("count migrations failed: %v", err)
 	}
@@ -295,13 +295,13 @@ func TestMigrationRunner_ExtensionMigration(t *testing.T) {
 		t.Error("expected ext_custext column to exist on billing_customers")
 	}
 
-	// Verify forma_extensions records
+	// Verify formspec_extensions records
 	var extCount int
 	err = d.QueryRowContext(ctx,
-		"SELECT COUNT(*) FROM forma_extensions WHERE resource = 'billing/customer' AND namespace = 'custext'",
+		"SELECT COUNT(*) FROM formspec_extensions WHERE resource = 'billing/customer' AND namespace = 'custext'",
 	).Scan(&extCount)
 	if err != nil {
-		t.Fatalf("query forma_extensions failed: %v", err)
+		t.Fatalf("query formspec_extensions failed: %v", err)
 	}
 	if extCount != 1 {
 		t.Errorf("expected 1 extension record, got %d", extCount)

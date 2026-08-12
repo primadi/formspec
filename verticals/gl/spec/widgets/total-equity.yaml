@@ -1,5 +1,5 @@
 # Total equity widget
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Widget
 metadata:
   name: total-equity

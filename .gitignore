@@ -7,8 +7,8 @@ obj/
 *.dylib
 
 # Compiled CLI binaries at repo root (output of `go build ./cmd/...`)
-/forma
-/forma-gen-schema
+/formspec
+/formspec-gen-schema
 
 # Test binary, built with `go test -c`
 *.test
@@ -17,8 +17,8 @@ obj/
 *.out
 coverage.html
 
-# Forma runtime data
-.forma/
+# FormSpec runtime data
+.formspec/
 
 # Dependencies
 vendor/

@@ -1,6 +1,6 @@
 {
-    "name": "forma/lib-forma",
-    "description": "Thin client SDK bridging a PHP app to forma-sidecar: /invoke listener + ctx.* proxy client",
+    "name": "formspec/lib-formspec",
+    "description": "Thin client SDK bridging a PHP app to formspec-sidecar: /invoke listener + ctx.* proxy client",
     "type": "library",
     "license": "FSL-1.1-ALv2",
     "require": {
@@ -10,7 +10,7 @@
     },
     "autoload": {
         "psr-4": {
-            "Forma\\": "src/"
+            "FormSpec\\": "src/"
         }
     }
 }

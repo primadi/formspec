@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 // ChildStore manages children of a single child field on a parent entity.

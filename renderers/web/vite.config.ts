@@ -5,16 +5,16 @@ import path from 'path'
 
 /**
  * Dev-only plugin: exposes `/_dev/hmr-reload` endpoint on the Vite dev server.
- * When the Forma backend detects a YAML spec change, it hits this endpoint,
- * and Vite broadcasts a custom 'forma:spec-reloaded' event to all connected
+ * When the FormSpec backend detects a YAML spec change, it hits this endpoint,
+ * and Vite broadcasts a custom 'formspec:spec-reloaded' event to all connected
  * browsers via the existing HMR WebSocket — no polling needed.
  */
 function formaHMRPlugin(): Plugin {
   return {
-    name: 'forma-hmr-reload',
+    name: 'formspec-hmr-reload',
     configureServer(server) {
       server.middlewares.use('/_dev/hmr-reload', (_req, res) => {
-        server.ws.send({ type: 'custom', event: 'forma:spec-reloaded' })
+        server.ws.send({ type: 'custom', event: 'formspec:spec-reloaded' })
         res.end('ok')
       })
     },
@@ -32,7 +32,7 @@ export default defineConfig({
   server: {
     host: true,
     proxy: {
-      // Proxy API calls to the Forma backend
+      // Proxy API calls to the FormSpec backend
       '/default/api/v1': {
         target: 'http://localhost:8080',
         changeOrigin: true,

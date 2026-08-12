@@ -2,7 +2,7 @@
  * OTC Sell handler — TypeScript demo of a sidecar action.
  *
  * Mirrors the logic of otc_sell.star but runs in a Node.js child process,
- * communicating with the forma engine over a unix domain socket.
+ * communicating with the formspec engine over a unix domain socket.
  *
  * Key difference from Starlark:
  *   - Uses ctx.entity().named("module/entity").decrement() instead of
@@ -11,7 +11,7 @@
  *     conditions on concurrent requests.
  */
 
-import { ActionResult, App } from "@forma/lib-forma";
+import { ActionResult, App } from "@formspec/lib-formspec";
 
 export function registerSellHandler(app: App): void {
   app.handle("pharmacy.otc-sale.sell", async (inv, ctx) => {

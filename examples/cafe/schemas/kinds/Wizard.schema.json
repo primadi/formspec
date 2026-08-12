@@ -1,0 +1,36 @@
+{
+  "title": "Wizard Spec",
+  "description": "WizardSpec defines a multi-step business process (Frontend §11).\n",
+  "type": "object",
+  "properties": {
+    "action": {
+      "description": "server action that commits all steps; if empty, final step plain-creates Entity",
+      "type": "string"
+    },
+    "entity": {
+      "type": "string"
+    },
+    "on_complete": {
+      "$ref": "#/$defs/WizardOnComplete",
+      "nullable": true
+    },
+    "public": {
+      "description": "If true (default), a route /module/wizard/\u003cname\u003e is auto-generated.",
+      "type": "boolean",
+      "nullable": true
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/WizardStep"
+      }
+    },
+    "title": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "title"
+  ],
+  "additionalProperties": false
+}

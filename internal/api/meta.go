@@ -10,7 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/primadi/forma/internal/ui"
+	"github.com/primadi/formspec/internal/ui"
 )
 
 // ─── Meta API (Frontend Spec §1.1, design doc §4.2) ───

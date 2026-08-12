@@ -9,12 +9,13 @@
     }
   ],
   "yaml.schemas": {
-    "schemas/forma.schema.json": [
+    "schemas/formspec.schema.json": [
       "examples/**/spec/**/*.yaml",
       "examples/**/spec/**/*.yml",
       "verticals/**/spec/**/*.yaml",
       "verticals/**/spec/**/*.yml"
     ]
   },
-  "python-envs.defaultEnvManager": "ms-python.python:system"
+  "python-envs.defaultEnvManager": "ms-python.python:system",
+  "python.analysis.typeCheckingMode": "strict"
 }

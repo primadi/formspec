@@ -1,5 +1,5 @@
-// Package sidecar implements the forma-sidecar side of the sidecar
-// protocol (docs/runtimes/04-forma-sidecar.md): a local HTTP listener
+// Package sidecar implements the formspec-sidecar side of the sidecar
+// protocol (docs/runtimes/04-formspec-sidecar.md): a local HTTP listener
 // (unix socket or localhost TCP) that lets a non-Go app process call
 // ctx.* primitives back into the engine, plus health aggregation over
 // the app process.
@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/primadi/forma/renderers/jsonbpersist"
+	"github.com/primadi/formspec/renderers/jsonbpersist"
 )
 
 // PrimitiveResolver resolves a primitive type ("db", "cache", "lock", ...)
@@ -73,7 +73,7 @@ type (
 )
 
 // ctxRequest is the union request body for all /ctx/{prim}/{op} calls
-// (docs/runtimes/04-forma-sidecar.md §4.3). Named selects a named datastore;
+// (docs/runtimes/04-formspec-sidecar.md §4.3). Named selects a named datastore;
 // empty means the default one. Entity-specific fields (Field, Amount,
 // Fields) are used by the entity primitive for atomic field operations.
 // Tenant isolation is NOT a request parameter — it is bound at connection
@@ -172,10 +172,10 @@ func (h *CtxHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// internal/action/sidecar.go), resolve it back to the live *TxScope so
 	// this entity operation joins the SAME transaction as the rest of that
 	// action's execution, instead of committing on its own. Both HTTP hops
-	// run in this one process (see cmd/forma/dev.go), so a lookup by id is
+	// run in this one process (see cmd/formspec/dev.go), so a lookup by id is
 	// all that's needed to reconstruct the effect of a plain ctx value
 	// having crossed the process boundary.
-	if scopeID := r.Header.Get("X-Forma-Scope-Id"); scopeID != "" {
+	if scopeID := r.Header.Get("X-FormSpec-Scope-Id"); scopeID != "" {
 		if scope, ok := db.LookupScope(scopeID); ok {
 			ctx = db.WithTxScope(ctx, scope, scopeID)
 		}

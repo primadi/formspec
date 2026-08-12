@@ -152,7 +152,7 @@ func TestOutboxWorker_RetryOnFailure(t *testing.T) {
 	// (bypass exponential backoff for test speed)
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	_, err = d.ExecContext(ctx,
-		"UPDATE forma_outbox SET next_retry_at = ? WHERE status = 'pending'", now)
+		"UPDATE formspec_outbox SET next_retry_at = ? WHERE status = 'pending'", now)
 	if err != nil {
 		t.Fatalf("update next_retry_at failed: %v", err)
 	}

@@ -3,7 +3,7 @@
 # dikendalikan query string (?action=create&form=patient-quick-create).
 # Entity patient juga tetap punya derived full form — dua Form untuk
 # satu entity dengan render berbeda adalah pola yang disengaja (§1.6).
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Form
 metadata:
   name: patient-quick-create

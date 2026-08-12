@@ -60,7 +60,7 @@ func OpenSQLite(dbPath string, extraPragmas map[string]string) (DB, error) {
 	return s, nil
 }
 
-// buildSQLiteDSN constructs the SQLite DSN with Forma-required pragmas.
+// buildSQLiteDSN constructs the SQLite DSN with FormSpec-required pragmas.
 // Uses a simple file: URI format that modernc.org/sqlite accepts.
 func buildSQLiteDSN(dbPath string, extraPragmas map[string]string) string {
 	var params []string

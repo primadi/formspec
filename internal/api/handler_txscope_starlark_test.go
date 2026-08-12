@@ -7,11 +7,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/primadi/forma/internal/action"
-	"github.com/primadi/forma/internal/auth"
-	"github.com/primadi/forma/internal/entity"
-	"github.com/primadi/forma/pkg/spec"
-	db "github.com/primadi/forma/renderers/jsonbpersist"
+	"github.com/primadi/formspec/internal/action"
+	"github.com/primadi/formspec/internal/auth"
+	"github.com/primadi/formspec/internal/entity"
+	"github.com/primadi/formspec/pkg/spec"
+	db "github.com/primadi/formspec/renderers/jsonbpersist"
 )
 
 // TestHandleCustomAction_StarlarkScript_RollsBackAcrossSaveAndCreate is the
@@ -19,7 +19,7 @@ import (
 // exercised TxScope via a NATIVE handler, but ctx only reaches
 // resource.save()/create() through a real Starlark script if the
 // ctx-threading fix (internal/starlark/executor.go, internal/action/script.go,
-// resource/forma.go) actually works end-to-end. This runs a real .star
+// resource/formspec.go) actually works end-to-end. This runs a real .star
 // script through HandleCustomAction: it saves the bound resource, creates a
 // second record via resource.create(), then fails — both writes must roll
 // back together, proving the script path shares the same TxScope as the
@@ -70,7 +70,7 @@ def execute(resource, params, ctx):
 		t.Fatalf("list before: %v", err)
 	}
 
-	// Wire the script executor exactly like resource/forma.go's
+	// Wire the script executor exactly like resource/formspec.go's
 	// newDispatcher does — the same Set*Handler closures, pointed at this
 	// test's registry instead of the real app's.
 	scriptEx := action.NewScriptExecutor(specDir)

@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	"github.com/primadi/forma/internal/entity"
-	"github.com/primadi/forma/internal/events"
-	db "github.com/primadi/forma/renderers/jsonbpersist"
+	"github.com/primadi/formspec/internal/entity"
+	"github.com/primadi/formspec/internal/events"
+	db "github.com/primadi/formspec/renderers/jsonbpersist"
 )
 
 func newTestRouterServer(t *testing.T) (*httptest.Server, *RouterBuilder) {

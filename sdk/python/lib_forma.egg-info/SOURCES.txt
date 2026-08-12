@@ -1,9 +1,0 @@
-README.md
-pyproject.toml
-lib_forma/__init__.py
-lib_forma/app.py
-lib_forma/ctx.py
-lib_forma.egg-info/PKG-INFO
-lib_forma.egg-info/SOURCES.txt
-lib_forma.egg-info/dependency_links.txt
-lib_forma.egg-info/top_level.txt

@@ -12,8 +12,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/primadi/forma/internal/manifest"
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/internal/manifest"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 // Entry is one parsed UI manifest of kind T.
@@ -198,7 +198,7 @@ func (r *Registry) ResolveViewRoute(module, name string) (string, error) {
 }
 
 // EntityResolver resolves an entity reference to its spec. Implemented by
-// the entity registry (adapter in resource/forma.go).
+// the entity registry (adapter in resource/formspec.go).
 type EntityResolver func(module, name string) (*spec.EntitySpec, bool)
 
 // resolveEntityRef resolves "customer" (module-local) or "clinic.visit"

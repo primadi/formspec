@@ -1,8 +1,8 @@
 [package]
-name = "lib-forma"
+name = "lib-formspec"
 version = "0.1.0"
 edition = "2021"
-description = "Thin Rust SDK for forma-sidecar communication: /invoke listener + ctx.* proxy client"
+description = "Thin Rust SDK for formspec-sidecar communication: /invoke listener + ctx.* proxy client"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
@@ -11,5 +11,5 @@ ureq = { version = "2", features = ["unix"] }
 chrono = { version = "0.4", features = ["serde"] }
 
 [lib]
-name = "lib_forma"
+name = "lib_formspec"
 path = "src/lib.rs"

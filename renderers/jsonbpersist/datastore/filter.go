@@ -1,7 +1,7 @@
 package datastore
 
 import (
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 // WorkspaceInfo holds runtime information about a workspace

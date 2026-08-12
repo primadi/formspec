@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/primadi/forma/internal/artifact"
+	"github.com/primadi/formspec/internal/artifact"
 )
 
 // SnapshotHandler handles GET /v1/snapshot — builds and returns the

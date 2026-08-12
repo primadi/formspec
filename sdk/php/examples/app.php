@@ -1,20 +1,20 @@
 <?php
 
-// Example lib-forma-php app: the business-logic side of an
-// impl: {type: sidecar} action. Run inside a pod next to forma-sidecar:
+// Example lib-formspec-php app: the business-logic side of an
+// impl: {type: sidecar} action. Run inside a pod next to formspec-sidecar:
 //
-//   FORMA_APP_SOCKET=/tmp/forma/app.sock \
-//   FORMA_SIDECAR_SOCKET=/tmp/forma/sidecar.sock \
+//   FORMA_APP_SOCKET=/tmp/formspec/app.sock \
+//   FORMA_SIDECAR_SOCKET=/tmp/formspec/sidecar.sock \
 //   php examples/app.php
 
 declare(strict_types=1);
 
 require __DIR__ . '/../vendor/autoload.php';
 
-use Forma\ActionResult;
-use Forma\App;
-use Forma\Ctx;
-use Forma\Invocation;
+use FormSpec\ActionResult;
+use FormSpec\App;
+use FormSpec\Ctx;
+use FormSpec\Invocation;
 
 $app = new App();
 

@@ -1,6 +1,6 @@
 # Membership tier discount rules configuration
 # Tenant-isolated — each workspace can set their own rules
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Config
 metadata:
   name: member-tier-discounts

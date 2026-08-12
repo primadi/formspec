@@ -1,6 +1,6 @@
 # SHOWCASE: master derived (tanpa manifest UI) di module kedua —
 # menguji derived module menu grouping per module di sidebar.
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Entity
 metadata:
   name: medicine

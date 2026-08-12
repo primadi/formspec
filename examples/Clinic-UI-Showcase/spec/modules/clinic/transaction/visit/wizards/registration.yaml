@@ -7,7 +7,7 @@
 # create ke entity visit, tanpa custom action. on_complete.restart membawa
 # loket langsung ke pendaftaran berikutnya, banner menampilkan nomor antrian
 # dari response submit terakhir.
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Wizard
 metadata:
   name: patient-registration

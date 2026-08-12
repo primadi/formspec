@@ -1,4 +1,4 @@
-# Forma — Petunjuk Repo
+# FormSpec — Petunjuk Repo
 
 ## Dokumentasi
 
@@ -25,7 +25,7 @@
 
 ## JSON Schema untuk YAML Editor
 
-- **`schemas/`** berisi JSON Schema (Draft-07) untuk semua Forma resource kind.
+- **`schemas/`** berisi JSON Schema (Draft-07) untuk semua FormSpec resource kind.
 - Digenenerate otomatis dari `pkg/spec/` via `make generate-schema`.
 - Terdaftar di `.vscode/settings.json` → `yaml.schemas` untuk autocomplete + validasi di spec YAML files.
 - Tambah `// @schema {key: val}` di Go struct comments untuk enhance generated schema (description, enum, minLength, pattern, dll).

@@ -7,7 +7,7 @@
 //
 // Features:
 //   - Permission-filtered items (hides when user lacks backing permission)
-//   - FormaExpr `when:` condition support
+//   - FormSpecExpr `when:` condition support
 //   - Nested collapsible groups
 //   - Icons from lucide-react by name
 //   - Active route highlighting
@@ -119,7 +119,7 @@ export function Sidebar({ collapsed, onToggle: _onToggle, mobile, mobileOpen, on
         >
           {/* Logo + close button */}
           <div className="flex h-14 items-center justify-between border-b px-4">
-            <span className="text-lg font-bold">Forma</span>
+            <span className="text-lg font-bold">FormSpec</span>
             <Button
               variant="ghost"
               size="icon"
@@ -173,7 +173,7 @@ export function Sidebar({ collapsed, onToggle: _onToggle, mobile, mobileOpen, on
             {collapsed ? (
               <span className="text-lg font-bold mx-auto">F</span>
             ) : (
-              <span className="text-lg font-bold">Forma</span>
+              <span className="text-lg font-bold">FormSpec</span>
             )}
           </div>
 

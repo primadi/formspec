@@ -68,7 +68,7 @@ Plane **tidak konform**.
 
 ```
 Developer          Control Plane              Resource Plane
-    │ forma apply       │                           │
+    │ formspec apply       │                           │
     │──────────────────►│ validasi, sha256, sign,   │
     │◄──────────────────│ simpan artifact           │
     │                    │        GET /v1/snapshot   │
@@ -80,7 +80,7 @@ Developer          Control Plane              Resource Plane
     │                    │◄──────────────────────────│ POST /v1/evidence
 ```
 
-**Tahap 1 — Registrasi.** `forma apply -f <path>` (atau `--watch` untuk
+**Tahap 1 — Registrasi.** `formspec apply -f <path>` (atau `--watch` untuk
 hot-reload) adalah **satu-satunya** cara mendaftarkan manifest. Control
 Plane memvalidasi, menghitung sha256 per file + envelope agregat,
 menandatangani artifact (kunci platform, atau self-signed di dev), dan
@@ -93,7 +93,7 @@ jaringan.
 **Mode dev:** kedua plane di mesin yang sama, pipeline sama secara
 struktural, disederhanakan: signing self-signed ed25519, tanpa approval,
 interval pull 10 detik (bukan 5 menit), plus endpoint dev-only `POST
-/v1/poll` — trigger lokal setelah `forma apply --watch` mendaftarkan
+/v1/poll` — trigger lokal setelah `formspec apply --watch` mendaftarkan
 artifact baru, memangkas latensi ke ~100ms. Ini **bukan** push Control→
 Resource, murni orkestrasi lokal di mesin developer.
 
@@ -192,7 +192,7 @@ mengganggu asimetri pull-only: push-hint hanya memberi tahu *ada snapshot baru*,
 Resource Plane tetap yang menarik dan memverifikasinya.
 
 **Versi & kompatibilitas.** Versi protokol dinegosiasikan saat sesi mulai
-(`forma-plane/1`); plane wajib menolak beroperasi terhadap versi mayor yang
+(`formspec-plane/1`); plane wajib menolak beroperasi terhadap versi mayor yang
 tidak dikenal. Skema snapshot berevolusi aditif dalam satu versi mayor —
 section tak dikenal diabaikan (forward-compatible), tapi konstruk
 signature/trust yang tak dikenal **tidak** — fail-closed. Toleransi
@@ -206,21 +206,21 @@ keempat**: **Operator ↔ Cluster Control** — bagaimana K8s Operator (atau
 reimplementasi kompatibel apapun) mendaftarkan node, melapor health,
 menyetor metering, dan melaporkan konvergensi Deployment ke Cluster Control.
 Menormatifkan sketsa "diusulkan" di
-[`../../runtimes/03-forma-operator.md`](../../runtimes/03-forma-operator.md)
+[`../../runtimes/03-formspec-operator.md`](../../runtimes/03-formspec-operator.md)
 §3.2 inilah yang menepati janji operator pihak-ketiga (D-ARCH-16,
 [`../../architecture/01-architecture-overview.md`](../../architecture/01-architecture-overview.md)
 §11): kompatibilitas dijaga lewat kontrak wire publik ini + skema CRD, bukan
-lewat kode `forma-operator` yang closed source.
+lewat kode `formspec-operator` yang closed source.
 
 **Asimetri yang sama berlaku.** Operator **tidak pernah** memutasi governance
 state; ia (a) **mengajukan** registrasi node yang menunggu approval, dan (b)
 **menambah** evidence append-only (health, metering, status Deployment). Ia
 **tidak** menarik snapshot desired-state — itu tetap tanggung jawab pod
-(`forma serve`), bukan operator ([`../../runtimes/03-forma-operator.md`](../../runtimes/03-forma-operator.md)
+(`formspec serve`), bukan operator ([`../../runtimes/03-formspec-operator.md`](../../runtimes/03-formspec-operator.md)
 §3.2).
 
 **Versi & tanda tangan.** Subprotokol dinegosiasikan sebagai
-`forma-operator/1`; semua request Operator → Cluster Control lewat **mTLS**
+`formspec-operator/1`; semua request Operator → Cluster Control lewat **mTLS**
 dan **ditandatangani** identitas operator, dengan `instance_id` + `sequence`
 monotonik per-operator (deteksi gap) — pola yang sama dengan evidence §4.4.
 Payload **tidak pernah** berisi data bisnis tenant.
@@ -231,11 +231,11 @@ approval → active):
 
 | Arah | Endpoint | Isi |
 |---|---|---|
-| Operator → Cluster Control | `POST /v1/operator/register` | Join token bertanda tangan Cloud Owner, identitas node/operator, label `forma.dev/*`, kapasitas |
+| Operator → Cluster Control | `POST /v1/operator/register` | Join token bertanda tangan Cloud Owner, identitas node/operator, label `formspec.dev/*`, kapasitas |
 
 Cluster Control merelay pendaftaran ke Region Control (satu-satunya pemegang
 state governance); node masuk status `pending` sampai di-approve lewat
-forma/ops. **Approval adalah keputusan governance** ([`04-control-plane.md`](04-control-plane.md)
+formspec/ops. **Approval adalah keputusan governance** ([`04-control-plane.md`](04-control-plane.md)
 §9) — bukan efek samping registrasi. Node non-approved **tidak** dapat
 kredensial dan **tidak** menjalankan beban kerja.
 
@@ -270,13 +270,13 @@ Ini **melengkapi**, bukan menggantikan, evidence `deploy_status` dari pod
 (§4.4): pod melaporkan konvergensi **artifact** (`loaded`/`failed`/…),
 Operator melaporkan konvergensi **Deployment K8s** (pod ada, ready, replica
 sesuai ClusterClass). Keduanya bersama membentuk status konvergensi yang
-dilihat `forma get deployment` ([`10-deployment-operations.md`](10-deployment-operations.md)
+dilihat `formspec get deployment` ([`10-deployment-operations.md`](10-deployment-operations.md)
 §2). Buffering saat Cluster Control tak terjangkau mengikuti aturan evidence
 §4.4 (buffer lokal, flush berurutan, dibatasi disk).
 
 ### 6.5 Kegagalan Graceful
 Sebelum sisi server endpoint ini ada, Operator **wajib** memperlakukan
 kegagalannya sebagai non-fatal — di-log rate-limited, **tidak** memblokir
-reconcile ([`../../runtimes/03-forma-operator.md`](../../runtimes/03-forma-operator.md)
+reconcile ([`../../runtimes/03-formspec-operator.md`](../../runtimes/03-formspec-operator.md)
 §7). Reconcile K8s tetap sumber kebenaran lokal cluster; channel ini
 observability + metering, bukan jalur kontrol beban kerja.

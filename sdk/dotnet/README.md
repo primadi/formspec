@@ -1,14 +1,14 @@
-# lib-forma-dotnet
+# lib-formspec-dotnet
 
-Thin .NET client for `forma-sidecar` (docs/runtimes/04-forma-sidecar.md).
+Thin .NET client for `formspec-sidecar` (docs/runtimes/04-formspec-sidecar.md).
 .NET 8.0+, stdlib only — no NuGet dependencies beyond the BCL.
 
 ```bash
-dotnet add package Forma.LibForma
+dotnet add package FormSpec.LibForma
 ```
 
 ```csharp
-using Forma;
+using FormSpec;
 
 var app = new App();  // sockets from FORMA_APP_SOCKET / FORMA_SIDECAR_SOCKET
 

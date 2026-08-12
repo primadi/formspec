@@ -21,7 +21,7 @@ Implementasi kind `Theme` ([`../../spec/frontend/05-app-kinds.md`](../../spec/fr
   daftar Theme dari `bundle.themes` (preview warna dari
   `tokens["color.primary"]`), plus 6 preset warna (ditampilkan hanya kalau
   tidak ada Theme manifest aktif). Preference persisten ke localStorage
-  (`forma-prefs`).
+  (`formspec-prefs`).
 - Token dasar (`index.css`) adalah token OKLCH shadcn/Tailwind v4 standar
   (`--background`, `--primary`, `--sidebar-*`, `--chart-1..5`) dengan blok
   override `.dark` — bukan custom.
@@ -31,7 +31,7 @@ switching bahkan tidak disebut di rencana desain awal.
 
 ## 2. Asset Pipeline
 **Belum diimplementasikan sama sekali** — bukan sekadar tertinggal, tapi
-benar-benar tidak ada kode: tidak ada kontrak `mount(el, props, forma)`,
+benar-benar tidak ada kode: tidak ada kontrak `mount(el, props, formspec)`,
 tidak ada mekanisme pemuatan script/asset dinamis. Satu-satunya jejak di
 kode adalah field tipe `BlockRef.asset` dan tiga teks placeholder literal
 ("Custom component: {name} ... supported in Fase 4.F6") di `PageRenderer.tsx`
@@ -40,11 +40,11 @@ harus dipenuhi kalau/ketika ini dibangun ada di
 [`../../spec/frontend/07-component-kinds.md`](../../spec/frontend/07-component-kinds.md)
 §4.
 
-## 3. Layanan `forma.ui`
-**Belum ada** objek `forma` yang di-inject ke component manapun (karena
+## 3. Layanan `formspec.ui`
+**Belum ada** objek `formspec` yang di-inject ke component manapun (karena
 component contract sendiri belum ada, §2). Toast (`sonner`) dipakai
 langsung di dalam tiap kind renderer lewat `import {toast} from "sonner"` —
-bukan lewat layanan `forma.ui.toast()` yang diekspos ke component eksternal
+bukan lewat layanan `formspec.ui.toast()` yang diekspos ke component eksternal
 seperti didesain di
 [`../../spec/frontend/07-component-kinds.md`](../../spec/frontend/07-component-kinds.md)
 §4. `dialog`/`confirm`/`drawer` juga belum ada bentuk terpusatnya —
@@ -53,7 +53,7 @@ konfirmasi destruktif hari ini pakai `window.confirm()` browser-native
 
 ## 4. Status Implementasi Hari Ini
 Ringkasan: Theme (§1) matang dan siap dipakai; Asset pipeline dan
-`forma.ui` (§2–§3) adalah pekerjaan yang belum dimulai, bukan yang
+`formspec.ui` (§2–§3) adalah pekerjaan yang belum dimulai, bukan yang
 "hampir selesai" — siapa pun yang merencanakan fitur berbasis custom
 component perlu tahu ini benar-benar dari nol, termasuk keputusan desain
 seperti bagaimana asset dimuat (bundled saat build web/, atau fetch dinamis

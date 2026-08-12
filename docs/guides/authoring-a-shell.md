@@ -12,11 +12,11 @@ Shell = interpreter penuh atas kontrak kind system: Layer 0 auto-generate
 ([`../spec/frontend/04-spec-resolution-api.md`](../spec/frontend/04-spec-resolution-api.md)
 §4) — bukan sekadar "panggil satu endpoint lalu render". Investasinya
 setara membangun ulang setengah framework per platform. Karena itu Shell
-baru **sebaiknya first-party Forma dulu** ("proven first, then offered to
+baru **sebaiknya first-party FormSpec dulu** ("proven first, then offered to
 community"), bukan dibuka ke komunitas dengan cara yang sama seperti
 Renderer Page/Component biasa
 ([`../spec/frontend/01-visual-hierarchy.md`](../spec/frontend/01-visual-hierarchy.md)
-§4). Kalau kamu bukan tim inti Forma, pertimbangkan dulu apakah yang kamu
+§4). Kalau kamu bukan tim inti FormSpec, pertimbangkan dulu apakah yang kamu
 butuhkan sebenarnya cukup Renderer baru untuk Shell yang sudah ada (lihat
 [`authoring-a-page-renderer.md`](authoring-a-page-renderer.md)) — jalur itu
 jauh lebih murah daripada Shell baru.
@@ -32,7 +32,7 @@ jauh lebih murah daripada Shell baru.
    Shell-mu menghosting App renderer, Page renderer, Component renderer;
    aturan `stack_family` (App shell + Page shell-integrated + Component
    satu stack) berlaku identik untuk Shell baru.
-3. **FormaExpr**
+3. **FormSpecExpr**
    ([`08-formaexpr.md`](../spec/frontend/08-formaexpr.md)) — interpreter
    ekspresi yang perilakunya identik dengan shell resmi untuk grammar yang
    sama (literal, `fields.x`, operator, `len`/`sum`, list literal — **tanpa**

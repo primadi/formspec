@@ -11,7 +11,7 @@ Implementasi konkret sebuah `VisualSpecKind`
 punya banyak Renderer — filosofi UX berbeda, stack berbeda:
 
 ```yaml
-apiVersion: forma/v1
+apiVersion: formspec/v1
 kind: Renderer
 metadata:
   name: kanban-vue-community
@@ -44,7 +44,7 @@ resmi (`trust_tier: official`) untuk `stack_family` Shell-nya secara default.
    resmi untuk `(implements, stack_family)`, ia dipakai tanpa deklarasi apa
    pun.
 2. **Tanpa Renderer resmi → wajib eksplisit, bukan fallback diam-diam.**
-   `forma apply` **error** bila sebuah instance membutuhkan
+   `formspec apply` **error** bila sebuah instance membutuhkan
    `(implements, stack_family)` yang tidak punya Renderer resmi dan tidak
    ada pilihan eksplisit. Pesan errornya wajib **menyarankan kandidat**
    ber-tier `verified` lalu `community` yang terdaftar untuk pasangan itu —
@@ -64,11 +64,11 @@ mengubah cara instance existing di-deploy, hanya menambah pilihan interpreter
 yang tersedia untuk `(implements, stack_family)` itu.
 
 **Renderer sebagai library yang bisa di-embed (arah embed terbalik, opsional).**
-Selain Forma merender pohon App/Page/Component-nya sendiri, sebuah Renderer
+Selain FormSpec merender pohon App/Page/Component-nya sendiri, sebuah Renderer
 **boleh** juga mengekspos adapter embeddable — mis. component bergaya
-`<FormaPage name="..." />` — yang memungkinkan aplikasi **host** (React/Vue/dll
-yang **bukan** dibangun di atas Forma) menyisipkan satu layar hasil render Forma
-ke dalam dirinya. Ini kebalikan arah embed yang biasa — Forma menyisipkan
+`<FormSpecPage name="..." />` — yang memungkinkan aplikasi **host** (React/Vue/dll
+yang **bukan** dibangun di atas FormSpec) menyisipkan satu layar hasil render FormSpec
+ke dalam dirinya. Ini kebalikan arah embed yang biasa — FormSpec menyisipkan
 component custom lewat escape hatch
 ([`07-component-kinds.md`](07-component-kinds.md) §4). Kapabilitas ini
 **opsional**: sebuah Renderer boleh menawarkannya, tapi bukan syarat konformansi

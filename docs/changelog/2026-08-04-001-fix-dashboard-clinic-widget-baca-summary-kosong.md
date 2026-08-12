@@ -5,7 +5,7 @@
 - **Bug**: Widget dashboard (`visits-today`, `revenue-today`, `visits-by-polyclinic`)
   membaca entity `clinic/daily-visit-summary` (`characteristic: summary`) yang
   **tidak pernah di-populate** — summary entity read-only via API dan belum ada
-  projection engine/recompute (`forma seed` juga belum diimplementasikan).
+  projection engine/recompute (`formspec seed` juga belum diimplementasikan).
   Akibatnya dashboard selalu `0` / `No data` walau ada kunjungan nyata.
   Diverifikasi: `clinic_daily_visit_summaries` = 0 rows, `clinic_visits` = 6
   (1 hari ini `Q20260804-001`).

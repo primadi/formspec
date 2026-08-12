@@ -8,7 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\src\FormaLib\FormaLib.csproj" />
+    <ProjectReference Include="..\src\FormSpecLib\FormSpecLib.csproj" />
   </ItemGroup>
 
 </Project>

@@ -25,7 +25,7 @@ Model dua-tingkat yang disepakati:
 | `renderers/jsonbpersist/crud.go` | `InsertParams`/`UpdateParams` + field `Permissions`; teruskan ke validasi; `evaluateComputed` inject `backdate_limit_days` ke env Starlark |
 | `internal/api/handler.go` | `permissionsFromContext()`; `HandleCreate`/`HandleUpdate` teruskan `identity.Permissions`; `HandleCustomAction` inject `auth.WithPermissions` ke ctx |
 | `internal/auth/auth.go` | `WithPermissions`/`PermissionsFromContext` — context propagation utk custom action path |
-| `resource/forma.go` | `SaveHandler` (resource.save script) teruskan `Permissions: auth.PermissionsFromContext(ctx)` — fix: script action gagal BACKDATE_EXCEEDED karena permission tidak sampai ke store |
+| `resource/formspec.go` | `SaveHandler` (resource.save script) teruskan `Permissions: auth.PermissionsFromContext(ctx)` — fix: script action gagal BACKDATE_EXCEEDED karena permission tidak sampai ke store |
 | `internal/starlark/evaluator.go` | builtin `today()` + `days_ago(n)` untuk formula computed |
 
 ## Perubahan Contoh (Clinic-UI-Showcase)

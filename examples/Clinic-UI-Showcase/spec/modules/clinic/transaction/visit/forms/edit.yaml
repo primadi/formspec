@@ -1,8 +1,8 @@
 # SHOWCASE kind: Form — form terpadat: render separate_page (dokumen padat +
-# child table, §1.6), multi-section, FormaExpr visible_when/required_when,
+# child table, §1.6), multi-section, FormSpecExpr visible_when/required_when,
 # read_only, help/placeholder, submit config. Ini form yang MENG-OVERRIDE
 # derived form untuk entity visit.
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Form
 metadata:
   name: visit-edit
@@ -35,7 +35,7 @@ spec:
         - field: diagnosis
           label: "Diagnosis"
           # Diagnosis hanya relevan & wajib begitu konsultasi dimulai —
-          # FormaExpr dievaluasi client-side, UX only (§6 spec).
+          # FormSpecExpr dievaluasi client-side, UX only (§6 spec).
           visible_when: "fields.status != 'waiting'"
           required_when: "fields.status == 'in_consultation'"
     - title: "Tindakan & Biaya"

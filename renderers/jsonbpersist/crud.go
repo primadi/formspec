@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/primadi/forma/internal/starlark"
-	"github.com/primadi/forma/internal/validation"
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/internal/starlark"
+	"github.com/primadi/formspec/internal/validation"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 // EntityStore provides CRUD operations for a single entity.
@@ -241,6 +241,32 @@ func (s *EntityStore) validateRequired(data map[string]any) error {
 	return nil
 }
 
+// validateKnownFields checks that every key in data is a declared field
+// (custom field, child relation, or reserved) or a framework-set field
+// (reserved field names). Unknown fields are rejected to prevent silent
+// acceptance of arbitrary data — this is a security boundary, not just a
+// data-quality check.
+func (s *EntityStore) validateKnownFields(data map[string]any) error {
+	// Build a set of known field names: custom fields + child relations.
+	known := make(map[string]bool, len(s.fields)+len(s.children)+len(spec.ReservedFieldNames))
+	for _, f := range s.fields {
+		known[f.Name] = true
+	}
+	for name := range s.children {
+		known[name] = true
+	}
+	for _, name := range spec.ReservedFieldNames {
+		known[name] = true
+	}
+
+	for key := range data {
+		if !known[key] {
+			return fmt.Errorf("%w: %q", ErrUnknownField, key)
+		}
+	}
+	return nil
+}
+
 // InsertParams holds the data for creating a new entity record.
 type InsertParams struct {
 	WorkspaceID   string
@@ -268,6 +294,11 @@ func (s *EntityStore) Insert(ctx context.Context, params InsertParams) (string, 
 
 	// Apply default values for fields not present in data
 	s.applyDefaults(params.Data)
+
+	// Reject unknown fields before entering the transaction
+	if err := s.validateKnownFields(params.Data); err != nil {
+		return "", fmt.Errorf("%s insert: %w", s.entity, err)
+	}
 
 	tbl := s.qualifiedTable()
 	id := NewUUIDv7()
@@ -478,6 +509,11 @@ func (s *EntityStore) Update(ctx context.Context, params UpdateParams) (int, err
 	if s.characteristic == spec.CharSummary {
 		return 0, fmt.Errorf("%w: summary entity %s/%s is read-only (create/update/delete disabled)",
 			ErrValidationRule, s.module, s.entity)
+	}
+
+	// Reject unknown fields early
+	if err := s.validateKnownFields(params.Data); err != nil {
+		return 0, fmt.Errorf("%s update: %w", s.entity, err)
 	}
 
 	// Validate required fields that are present in the update data
@@ -2123,3 +2159,6 @@ var ErrImmutableFieldChanged = fmt.Errorf("immutable field cannot be changed")
 
 // ErrValidationRule is returned when a field violates a validation rule.
 var ErrValidationRule = fmt.Errorf("field validation failed")
+
+// ErrUnknownField is returned when data contains a field that is not declared in the entity spec.
+var ErrUnknownField = fmt.Errorf("unknown field")

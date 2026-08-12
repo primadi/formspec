@@ -125,7 +125,7 @@ Subskripsi deklaratif terhadap perubahan entity, terpisah dari `/_meta/ui`:
   koneksi dibuka (permission caller bisa berubah selama koneksi hidup).
 - **Pemakaian deklaratif:** `realtime: true` pada Table/Dashboard/Kanban =
   auto-subscribe + patch baris di tempat.
-- **Pemakaian programatik:** `forma.subscribe("billing.order", cb)` di
+- **Pemakaian programatik:** `formspec.subscribe("billing.order", cb)` di
   component custom.
 - Realtime **non-durable by definisi** — client yang reconnect refetch lewat
   `/_meta/ui`/`/_meta/entities/...`, tidak ada replay.

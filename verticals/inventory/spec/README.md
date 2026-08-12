@@ -1,7 +1,7 @@
 # Inventory — Spec
 
 **Klasifikasi:** **App** standalone, independently installable — see [`docs/architecture/07-vertical-modules.md`](../../../docs/architecture/07-vertical-modules.md).
-**Spec target:** Forma Core Basic v0.2.0.
+**Spec target:** FormSpec Core Basic v0.2.0.
 
 > Formerly `examples/Inventory`. Moved to `verticals/inventory`; the `order-to-movement` Subscription that used to live here was extracted to its own app, `verticals/sales-inventory-integrator` — inventory no longer reaches into `billing` itself. `warehouse` now has a `branch_id` relation to `company.branch` for multi-branch support (see the architecture doc for why that's a plain field, not new framework machinery).
 
@@ -11,7 +11,7 @@
 verticals/inventory/
 ├── spec/
 │   ├── README.md
-│   ├── forma.yaml                                    # kind: App "inventory", publishes: stock-movements,
+│   ├── formspec.yaml                                    # kind: App "inventory", publishes: stock-movements,
 │   │                                                  #   consumes: company (branch-directory)
 │   ├── menus/, widgets/, reports/, tables/            # App-level UI
 │   ├── modules/
@@ -38,7 +38,7 @@ verticals/inventory/
 ## App Identity
 
 - **Name:** `inventory`
-- **Vendor:** `forma-dev`
+- **Vendor:** `formspec-dev`
 - **Modules:** `inventory`
 - **Permission namespace:** `inventory.*` (contoh: `inventory.stock-movements.apply`)
 - **Publishes:** `stock-movements` service (`create`, `apply`) — consumed by `sales-inventory-integrator`
@@ -48,7 +48,7 @@ verticals/inventory/
 
 | Konsep | Lokasi | Spec Source |
 |---|---|---|
-| `kind: App` — standalone deployable | forma.yaml | Core Basic §4.4 |
+| `kind: App` — standalone deployable | formspec.yaml | Core Basic §4.4 |
 | `characteristics: [master]` | product, warehouse | Core Basic §9.1 |
 | `characteristics: [transaction]` | stock-movement | Core Basic §9.1 |
 | `characteristics: [summary]` — system-managed | stock-level | Core Basic §9.1 |

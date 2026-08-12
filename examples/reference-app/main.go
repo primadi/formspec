@@ -1,10 +1,10 @@
-// Command reference-app is a minimal example of embedding the Forma
-// Resource engine into a Go application — see docs/runtimes/02-forma-resource.md
+// Command reference-app is a minimal example of embedding the FormSpec
+// Resource engine into a Go application — see docs/runtimes/02-formspec-resource.md
 // for the full embedding contract.
 //
 // Usage:
 //
-//	go run ./examples/reference-app [--dsn sqlite:.forma/data.db] [--spec ./verticals/billing/spec] [--addr :8080]
+//	go run ./examples/reference-app [--dsn sqlite:.formspec/data.db] [--spec ./verticals/billing/spec] [--addr :8080]
 package main
 
 import (
@@ -12,25 +12,25 @@ import (
 	"fmt"
 	"log"
 
-	forma "github.com/primadi/forma/resource"
+	formspec "github.com/primadi/formspec/resource"
 )
 
 func main() {
-	dsn := flag.String("dsn", "sqlite:.forma/data.db", "Database DSN")
+	dsn := flag.String("dsn", "sqlite:.formspec/data.db", "Database DSN")
 	specPath := flag.String("spec", "./verticals/billing/spec", "Path to spec directory")
 	addr := flag.String("addr", ":8080", "Listen address")
 	prodMode := flag.Bool("prod", false, "Enable production mode (JWT auth)")
 	jwtSecret := flag.String("jwt-secret", "", "JWT signing secret (required in prod mode for HMAC)")
-	jwtIssuer := flag.String("jwt-issuer", "forma", "JWT issuer")
+	jwtIssuer := flag.String("jwt-issuer", "formspec", "JWT issuer")
 	jwtPublicKey := flag.String("jwt-public-key", "", "Path to RSA/ECDSA public key file (PEM) for asymmetric JWT validation")
 	strictMode := flag.Bool("strict", false, "Enable strict enforcement of uses declarations")
 	webDir := flag.String("web-dir", "", "Renderer SPA root (web/dist) — serves /{ws}/_admin and /{ws}/app")
 	flag.Parse()
 
-	fmt.Println("🚀 Forma Reference App")
+	fmt.Println("🚀 FormSpec Reference App")
 	fmt.Println("======================")
 
-	app, err := forma.New(forma.Config{
+	app, err := formspec.New(formspec.Config{
 		DSN:              *dsn,
 		SpecPath:         *specPath,
 		Addr:             *addr,

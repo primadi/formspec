@@ -1,11 +1,11 @@
 package action
 
-import "github.com/primadi/forma/pkg/spec"
+import "github.com/primadi/formspec/pkg/spec"
 
 // ResolveEmission builds an EventEmission for an action's Emits value by
 // matching it against the entity's declared Events. Returns nil if Emits is
 // empty or no EventDecl matches (a spec-authoring mistake caught by
-// spec.ValidateActionEmits at forma-apply time, not a runtime failure).
+// spec.ValidateActionEmits at formspec-apply time, not a runtime failure).
 func ResolveEmission(events []spec.EventDecl, emits string, recordData map[string]any) *EventEmission {
 	if emits == "" {
 		return nil

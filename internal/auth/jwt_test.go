@@ -10,7 +10,7 @@ import (
 
 func TestJWTValidator_Validate(t *testing.T) {
 	secret := "test-secret-key"
-	issuer := "forma-test"
+	issuer := "formspec-test"
 	validator := NewJWTValidator(secret, issuer, "")
 
 	// Helper: create a valid token

@@ -2,7 +2,7 @@ volumes:
   minio-data:
 
 networks:
-  forma-net:
+  formspec-net:
     driver: bridge
 
 services:
@@ -18,7 +18,7 @@ services:
     ports:
       - "18080:8080"
     networks:
-      - forma-net
+      - formspec-net
     depends_on:
       - valkey
       - minio
@@ -30,7 +30,7 @@ services:
       - "11025:1025"   # SMTP
       - "18025:8025"   # Web UI
     networks:
-      - forma-net
+      - formspec-net
 
   minio:
     image: quay.io/minio/minio:latest
@@ -44,7 +44,7 @@ services:
       - .env
     command: server /data --console-address ":9001"
     networks:
-      - forma-net
+      - formspec-net
 
   valkey:
     image: valkey/valkey:latest
@@ -52,4 +52,4 @@ services:
     ports:
       - "16379:6379"
     networks:
-      - forma-net
+      - formspec-net

@@ -3,9 +3,9 @@
 **Version:** 1.1
 **Status:** Draft
 **License:** Creative Commons CC0
-**Governed by:** Forma Architecture Overview (D-ARCH-10, D-ARCH-11, D-ARCH-12, D-ARCH-27, D-ARCH-28, D-ARCH-31)
+**Governed by:** FormSpec Architecture Overview (D-ARCH-10, D-ARCH-11, D-ARCH-12, D-ARCH-27, D-ARCH-28, D-ARCH-31)
 
-> Forma tidak membangun mekanisme HA sendiri. **K8s menangani availability di level pod dan node.** Karena **1 workspace = 1 Deployment** (D-ARCH-31), identity workspace melekat pada Deployment — failover workspace *adalah* failover pod, dan itu urusan K8s. Forma menambahkan yang K8s tidak punya: scale-to-zero per tier, rollback artifact, dan eligibility rules untuk dedicated resources.
+> FormSpec tidak membangun mekanisme HA sendiri. **K8s menangani availability di level pod dan node.** Karena **1 workspace = 1 Deployment** (D-ARCH-31), identity workspace melekat pada Deployment — failover workspace *adalah* failover pod, dan itu urusan K8s. FormSpec menambahkan yang K8s tidak punya: scale-to-zero per tier, rollback artifact, dan eligibility rules untuk dedicated resources.
 
 ---
 
@@ -14,7 +14,7 @@
 | Layer | Ditangani oleh | Mekanisme |
 |---|---|---|
 | **Pod/Node** | K8s native | Liveness probe, restart, reschedule ke node lain |
-| **Workspace** | K8s (Deployment identity) + Forma | 1 workspace = 1 Deployment; scale-to-zero per ClusterClass; rollback artifact via `forma apply` |
+| **Workspace** | K8s (Deployment identity) + FormSpec | 1 workspace = 1 Deployment; scale-to-zero per ClusterClass; rollback artifact via `formspec apply` |
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -29,7 +29,7 @@
 │  │Node mati │──►│Reschedule│──►│Node lain │                │
 │  └──────────┘   └──────────┘   └──────────┘                │
 │                                                              │
-│  Forma handles:                                              │
+│  FormSpec handles:                                              │
 │  ┌──────────┐   ┌──────────┐   ┌──────────┐                │
 │  │Artifact  │──►│ Rollback │──►│ Versi    │                │
 │  │rusak     │   │ (apply)  │   │ stabil   │                │
@@ -46,7 +46,7 @@
 
 ## 2. Pod-Level HA (K8s Native)
 
-Ini **tidak memerlukan kode Forma**. K8s menyediakan out-of-the-box:
+Ini **tidak memerlukan kode FormSpec**. K8s menyediakan out-of-the-box:
 
 ### 2.1 Liveness Probe
 
@@ -91,7 +91,7 @@ spec:
           requiredDuringSchedulingIgnoredDuringExecution:
             - labelSelector:
                 matchLabels:
-                  app: forma-resource
+                  app: formspec-resource
               topologyKey: kubernetes.io/hostname
 ```
 
@@ -111,7 +111,7 @@ Dengan 3 replica + anti-affinity → pod tersebar di 3 node berbeda. 1 node mati
 | Proses hang / unresponsive | K8s | Liveness probe gagal 3x → restart |
 | Node mati | K8s | Reschedule pod ke node sehat (multi-replica: anti-affinity) |
 | Beban naik | K8s | HPA menambah replica (tier dengan auto-scaling) |
-| Artifact rusak (crash loop setelah deploy) | Forma | Pod emit `deploy_status: failed` → alert via forma/ops; developer rollback dengan `forma apply` versi sebelumnya |
+| Artifact rusak (crash loop setelah deploy) | FormSpec | Pod emit `deploy_status: failed` → alert via formspec/ops; developer rollback dengan `formspec apply` versi sebelumnya |
 
 ### 3.2 Scale-to-Zero — Menjawab Biaya Tenant Murah/Gratis
 
@@ -128,7 +128,7 @@ Workspace economy yang idle (tanpa traffic beberapa menit) di-scale ke 0 replica
 
 ### 3.3 Idempotency Key Guarantee
 
-Semua aksi di Forma menggunakan **idempotency key** (Overview §2). Ini membuat retry aman lintas restart maupun lintas replica:
+Semua aksi di FormSpec menggunakan **idempotency key** (Overview §2). Ini membuat retry aman lintas restart maupun lintas replica:
 
 - Client mengirim request dengan key `idem-abc-123`
 - Replica A memproses, menyimpan key → hasil (di DB, bukan di memori pod)
@@ -159,15 +159,15 @@ Untuk dedicated resource yang terikat node, failover memerlukan intervensi Cloud
 
 ## 4. Cluster-Level Failure
 
-**Seluruh K8s cluster down** adalah insiden infrastruktur — **bukan** sesuatu yang Forma auto-recover.
+**Seluruh K8s cluster down** adalah insiden infrastruktur — **bukan** sesuatu yang FormSpec auto-recover.
 
 | Yang terjadi | Tindakan |
 |---|---|
 | Cluster down | Semua workspace di cluster itu tidak available |
 | Region Control | Mendeteksi cluster down (missed heartbeat dari Cluster Control) |
-| Alert | Cloud Owner di-notifikasi via forma/ops |
+| Alert | Cloud Owner di-notifikasi via formspec/ops |
 | Recovery | Cloud Owner restore cluster (K8s admin task) ATAU migrasikan workspace ke cluster lain secara manual |
-| Workspace owner | Diberitahu via forma/console: "Workspace Anda mengalami gangguan. Tim kami sedang menangani." |
+| Workspace owner | Diberitahu via formspec/console: "Workspace Anda mengalami gangguan. Tim kami sedang menangani." |
 
 **Kenapa tidak auto-recover:** Memindahkan workspace antar cluster memerlukan:
 1. Memastikan data konsisten (DB dedicated tidak bisa dipindahkan otomatis)
@@ -187,12 +187,12 @@ Bagian ini menjawab pertanyaan yang sering muncul: **apa yang terjadi kalau cont
 
 | Tetap berjalan | Berhenti |
 |---|---|
-| Semua workspace melayani traffic (artifact sudah ter-load di pod) | Deploy baru (`forma apply` gagal) |
+| Semua workspace melayani traffic (artifact sudah ter-load di pod) | Deploy baru (`formspec apply` gagal) |
 | Cluster Control melayani snapshot/artifact dari cache | Perubahan policy, approval, signing |
 | Pod restart & failover K8s (image + artifact di cache cluster) | Registrasi resource baru |
 | Evidence dikumpulkan Cluster Control (buffered) | Transparency log append & checkpoint |
 
-**HA Region Control:** `forma-ctl --mode=region` adalah proses stateless di depan Postgres — dijalankan multi-instance di belakang load balancer, dengan Postgres HA (streaming replication / managed HA). Recovery target ditentukan SLA internal Cloud Owner; evidence yang ter-buffer di Cluster Control di-relay ulang setelah region control kembali (at-least-once, idempotent by design).
+**HA Region Control:** `formspec-ctl --mode=region` adalah proses stateless di depan Postgres — dijalankan multi-instance di belakang load balancer, dengan Postgres HA (streaming replication / managed HA). Recovery target ditentukan SLA internal Cloud Owner; evidence yang ter-buffer di Cluster Control di-relay ulang setelah region control kembali (at-least-once, idempotent by design).
 
 ### 5.2 Cluster Control Down
 
@@ -240,7 +240,7 @@ Tidak ada konsep "pod kosong menunggu assignment" dan tidak ada negosiasi reclai
 | `unhealthy` | Tidak merespons health check |
 | `dead` | 3x missed heartbeat (~90 detik) |
 
-Catatan: status di tabel ini adalah **observability di control plane** (apa yang dilihat Cloud Owner di forma/ops). Aksi restart/reschedule tetap dipicu oleh probe K8s (§2), bukan oleh heartbeat control plane.
+Catatan: status di tabel ini adalah **observability di control plane** (apa yang dilihat Cloud Owner di formspec/ops). Aksi restart/reschedule tetap dipicu oleh probe K8s (§2), bukan oleh heartbeat control plane.
 
 ---
 

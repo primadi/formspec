@@ -1,7 +1,7 @@
 # Midtrans Payment Gateway — Spec
 
 **Klasifikasi:** Module (`billing`), Service wrapper untuk Midtrans API.
-**Spec target:** Forma Core Basic v0.2.0 + Core Extended stub (Mockup, Webhook, Environment Binding).
+**Spec target:** FormSpec Core Basic v0.2.0 + Core Extended stub (Mockup, Webhook, Environment Binding).
 
 ## Struktur
 
@@ -33,7 +33,7 @@ Midtrans-Payment-Gateway/
 
 - **Name:** `billing`
 - **Permission namespace:** `billing.*` (contoh: `billing.midtrans.create-session`)
-- **Dependencies:** `forma/core`
+- **Dependencies:** `formspec/core`
 
 ## Konsep yang di-cover
 

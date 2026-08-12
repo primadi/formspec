@@ -1,13 +1,13 @@
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Module
 metadata:
   name: inventory
   description: Multi-warehouse inventory management
 spec:
   version: 1.0.0
-  vendor: forma-dev
+  vendor: formspec-dev
   depends:
-    - module: forma/core
+    - module: formspec/core
   # Default menu suggestion (Core Basic §4.5) — migrated from the old
   # standalone kind: Menu (spec/menus/inventory-menu.yaml). Most items have
   # no authored View backing them yet in this vertical, so they stay on the

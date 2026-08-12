@@ -1,6 +1,6 @@
 # SHOWCASE kind: Widget lintas module — dipasang di dashboard modul clinic.
 # Visibility di katalog derived dari permission list prescription (D20).
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Widget
 metadata:
   name: pharmacy-queue-count

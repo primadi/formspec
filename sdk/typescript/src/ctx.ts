@@ -1,14 +1,14 @@
 /**
  * App -> Sidecar direction: the ctx.* primitive client.
  *
- * Every method is an HTTP call to forma-sidecar's /ctx/{primitive}/{operation}
+ * Every method is an HTTP call to formspec-sidecar's /ctx/{primitive}/{operation}
  * endpoint — the same primitive contract Starlark scripts use. Node stdlib only.
  */
 
 import * as http from "node:http";
 
 /** Transport failure or sidecar-reported error. */
-export class FormaError extends Error {}
+export class FormSpecError extends Error {}
 
 interface CtxResponse {
   data?: unknown;
@@ -26,7 +26,7 @@ export class SidecarClient {
     endpoint?: string,
     private readonly timeoutMs: number = 30_000,
   ) {
-    endpoint ??= `unix://${process.env.FORMA_SIDECAR_SOCKET ?? "/tmp/forma/sidecar.sock"}`;
+    endpoint ??= `unix://${process.env.FORMA_SIDECAR_SOCKET ?? "/tmp/formspec/sidecar.sock"}`;
     if (endpoint.startsWith("unix://")) {
       this.socketPath = endpoint.slice("unix://".length);
     } else if (endpoint.startsWith("http://")) {
@@ -34,7 +34,7 @@ export class SidecarClient {
       this.host = url.hostname;
       this.port = url.port ? Number(url.port) : 80;
     } else {
-      throw new FormaError(
+      throw new FormSpecError(
         `sidecar endpoint ${endpoint}: unsupported scheme (want unix:// or http://)`,
       );
     }
@@ -68,7 +68,7 @@ export class SidecarClient {
           }
           if (res.statusCode !== 200) {
             reject(
-              new FormaError(
+              new FormSpecError(
                 `sidecar call ${path}: ${decoded.error ?? `HTTP ${res.statusCode}`}`,
               ),
             );
@@ -79,7 +79,7 @@ export class SidecarClient {
       });
       req.on("timeout", () => req.destroy(new Error("timeout")));
       req.on("error", (err) =>
-        reject(new FormaError(`sidecar call ${path}: ${err.message}`)),
+        reject(new FormSpecError(`sidecar call ${path}: ${err.message}`)),
       );
       req.end(payload);
     });

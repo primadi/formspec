@@ -14,4 +14,4 @@ Postgres maupun SQLite) memenuhinya ada di
 | [04-persist-backend.md](04-persist-backend.md) | Interface PersistBackend — seam penyimpanan setara Shell |
 | [05-field-types.md](05-field-types.md) | Katalog tipe field normatif, tipe `money`, kosakata validasi, dukungan tree/hierarki |
 | [06-script-runtime.md](06-script-runtime.md) | API penulisan handler script — entrypoint `execute`, objek `resource`, query dari script, akses lintas-entity, kontrak return `ok`/`fail`, resolusi `ref` native |
-| [error-glossary.yaml](error-glossary.yaml) | Kode error kanonik `FORMA.*` |
+| [error-glossary.yaml](error-glossary.yaml) | Kode error kanonik `FORMSPEC.*` |

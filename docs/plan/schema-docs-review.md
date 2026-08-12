@@ -36,10 +36,10 @@ ditandai **Open** di docs dan ditracking ke plan/todo yang sudah ada.
 - `internal/manifest/loader.go`, `internal/entity/{registry,registry_test}.go`,
   `internal/ui/{validate,ui_test}.go`
 - `renderers/web/src/types/manifest.ts`, `renderers/web/src/kinds/report/ReportRenderer.tsx`
-- `schemas/forma.schema.json` + `schemas/kinds/*` (regen)
+- `schemas/formspec.schema.json` + `schemas/kinds/*` (regen)
 - Docs: `06-page-kinds.md`, `07-component-kinds.md`, `05-field-types.md` (implied),
   `01-core-basic.md`, `02-workspace-app-module.md` (implied), `04-control-plane.md` (implied),
-  `06-datastore.md` (implied), `07-vertical-modules.md`, `docs/runtimes/02-forma-resource.md`
+  `06-datastore.md` (implied), `07-vertical-modules.md`, `docs/runtimes/02-formspec-resource.md`
 - Contoh manifest Report: `examples/*`, `verticals/*` (perbarui ke bentuk kode)
 
 ## Deferred (Open — bukan bagian effort ini)

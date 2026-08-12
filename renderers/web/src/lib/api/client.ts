@@ -1,4 +1,4 @@
-// ─── Forma API Client ───
+// ─── FormSpec API Client ───
 //
 // ky-based HTTP client with typed envelope unwrapping, auth, CAS,
 // and list parameter building. Designed for the renderer's Meta API

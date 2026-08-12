@@ -1,18 +1,18 @@
 ---
-title: Forma vs Custom Application (From Scratch)
-description: Comparing Forma's spec-first approach against building business applications entirely from scratch — the true competitor
+title: FormSpec vs Custom Application (From Scratch)
+description: Comparing FormSpec's spec-first approach against building business applications entirely from scratch — the true competitor
 date: 2026-07-06
 ---
 
-# Forma vs Custom Application (From Scratch)
+# FormSpec vs Custom Application (From Scratch)
 
-> **Forma** is a spec-first ecosystem for building business applications. **"Custom app"** means building the same application using general-purpose tools (Go, PostgreSQL, React, Redis) without a business application framework — the approach most teams use today.
+> **FormSpec** is a spec-first ecosystem for building business applications. **"Custom app"** means building the same application using general-purpose tools (Go, PostgreSQL, React, Redis) without a business application framework — the approach most teams use today.
 
-This is arguably the **most important comparison** in this directory. While Forma can be compared to Vercel, Spring Boot, Laravel, Frappe, PocketBase, Supabase, or Budibase — **none of those are Forma's real competition.** The real competitor is the default choice: building from scratch, because that's what most developers do.
+This is arguably the **most important comparison** in this directory. While FormSpec can be compared to Vercel, Spring Boot, Laravel, Frappe, PocketBase, Supabase, or Budibase — **none of those are FormSpec's real competition.** The real competitor is the default choice: building from scratch, because that's what most developers do.
 
 ---
 
-## 1. The Problem Forma Solves
+## 1. The Problem FormSpec Solves
 
 Building a business application from scratch requires solving the same set of problems **every single time**. Most teams discover these problems one by one — usually after production incidents.
 
@@ -31,13 +31,13 @@ Building a business application from scratch requires solving the same set of pr
 | **Permission enforcement** | Unauthorized action discovered post-deploy | Security incident |
 | **Natural key format** | Invoice numbers with gaps after rollback | Audit finding |
 
-**Forma solves all of these by design.** Building from scratch means solving each one manually — or discovering them later.
+**FormSpec solves all of these by design.** Building from scratch means solving each one manually — or discovering them later.
 
 ---
 
 ## 2. What You Must Build Yourself
 
-Here is the minimum checklist for a production-ready business application without Forma:
+Here is the minimum checklist for a production-ready business application without FormSpec:
 
 ### Database Layer
 - [ ] Connection pooling
@@ -95,7 +95,7 @@ Here is the minimum checklist for a production-ready business application withou
 
 ## 3. Feature Comparison
 
-| Dimension | Forma | Custom App (From Scratch) |
+| Dimension | FormSpec | Custom App (From Scratch) |
 |---|---|---|
 | **Paradigm** | Spec-first — write YAML, get API + UI + docs | Build everything manually |
 | **Backend language** | Go (native) + Starlark + sidecar | You choose (Go, Python, Node, Java, etc.) |
@@ -127,7 +127,7 @@ Here is the minimum checklist for a production-ready business application withou
 
 ## 4. Cost Analysis
 
-### Cost of Building Forma's Features Yourself
+### Cost of Building FormSpec's Features Yourself
 
 | Feature | Estimated Build Time | Maintenance Cost/Year | Risk if Wrong |
 |---|---|---|---|
@@ -142,11 +142,11 @@ Here is the minimum checklist for a production-ready business application withou
 | Auto-DDL migration | 3-6 weeks | Medium | Downtime |
 | **Total (conservative)** | **~6-9 months** | **High** | **Various** |
 
-Compare with Forma: **These features are done. Tested. Integrated.** You only build business logic.
+Compare with FormSpec: **These features are done. Tested. Integrated.** You only build business logic.
 
 ### Team Size Implications
 
-| Phase | Custom App | Forma |
+| Phase | Custom App | FormSpec |
 |---|---|---|
 | **Foundation** (infrastructure + patterns) | 1-3 developers, 3-6 months | 0 developers, 0 months (built-in) |
 | **Business logic** | 1-2 developers ongoing | 1-2 developers ongoing |
@@ -157,19 +157,19 @@ Compare with Forma: **These features are done. Tested. Integrated.** You only bu
 
 ## 5. When to Choose Which
 
-### Choose Forma when:
+### Choose FormSpec when:
 - You are building a **business application** that would benefit from enterprise patterns (idempotency, outbox, state machine, multi-tenancy).
 - You want to **ship faster** — days to working API+admin panel instead of months.
 - You don't want to **build and maintain** infrastructure code (migrations, auth, permissions, audit).
 - You value **structural guarantees** — the framework ensures patterns are correct.
 - **Governance matters** — you need policies, signing, audit trails.
-- Your team is **small** — Forma multiplies a small team's output.
+- Your team is **small** — FormSpec multiplies a small team's output.
 
 ### Choose custom app when:
-- You need **maximum flexibility** — Forma's conventions don't fit your use case.
+- You need **maximum flexibility** — FormSpec's conventions don't fit your use case.
 - You are building something that is **not a business application** (real-time game server, IoT platform, data pipeline, ML inference).
 - You have a **large team** with dedicated infrastructure engineers.
-- You have **very specific compliance requirements** that Forma's abstractions can't satisfy.
+- You have **very specific compliance requirements** that FormSpec's abstractions can't satisfy.
 - You want **no framework dependency** — full control over every dependency and pattern.
 - You are **already invested** in a specific stack (e.g., Python/Django, Node/Express) and migration cost exceeds benefits.
 
@@ -177,11 +177,11 @@ Compare with Forma: **These features are done. Tested. Integrated.** You only bu
 
 ## 6. Conclusion
 
-> **The biggest competitor to Forma is not another framework. It is the default choice: building from scratch, because that's what developers know how to do.**
+> **The biggest competitor to FormSpec is not another framework. It is the default choice: building from scratch, because that's what developers know how to do.**
 
 The trade-off is clear:
 
-| Custom App | Forma |
+| Custom App | FormSpec |
 |---|---|
 | Maximum flexibility | Convention with guardrails |
 | You own every line (control) | You own business logic only |
@@ -190,6 +190,6 @@ The trade-off is clear:
 | Patterns are DIY (often wrong) | Patterns are built-in (correct by default) |
 | Full freedom | 80% conventional, 20% custom (via `asset`) |
 
-Forma's value proposition is simple: **the features that take most teams 6-12 months to build, debug, and harden are provided out of the box — tested, documented, and integrated.** You start writing business logic on day one, not infrastructure code.
+FormSpec's value proposition is simple: **the features that take most teams 6-12 months to build, debug, and harden are provided out of the box — tested, documented, and integrated.** You start writing business logic on day one, not infrastructure code.
 
-> If you are building a business application and your alternative is "we'll build it from scratch because there's no framework that fits" — **Forma is the framework designed for exactly that situation.**
+> If you are building a business application and your alternative is "we'll build it from scratch because there's no framework that fits" — **FormSpec is the framework designed for exactly that situation.**

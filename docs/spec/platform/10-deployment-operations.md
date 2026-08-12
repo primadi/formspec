@@ -6,7 +6,7 @@
 
 ## 1. Cakupan
 Kontrak operasional untuk siklus hidup deployment: bagaimana artifact
-berpindah dari `forma apply` menjadi beban kerja yang konvergen, bagaimana
+berpindah dari `formspec apply` menjadi beban kerja yang konvergen, bagaimana
 rollback, canary, dan promotion antar environment bekerja, dan syarat DR/HA
 minimal yang membedakan deployment produksi konform dari dev. Dokumen ini
 **menaikkan** intent yang selama ini hanya di dokumen arsitektur
@@ -21,15 +21,15 @@ governance keputusan (policy, approval, signing, transparency log) ada di
 **jaminan siklus operasional** yang mengikat keduanya.
 
 ## 2. Kontrak Pipeline Deployment
-`forma apply` adalah satu-satunya jalan masuk
+`formspec apply` adalah satu-satunya jalan masuk
 ([`05-plane-protocol.md`](05-plane-protocol.md) §3). Kontrak durabilitasnya:
 
-1. **Artifact.** `forma apply` menghasilkan artifact ber-sha256 per file +
+1. **Artifact.** `formspec apply` menghasilkan artifact ber-sha256 per file +
    envelope agregat, ditandatangani (kunci platform di prod, self-signed
    ed25519 di dev) — [`05-plane-protocol.md`](05-plane-protocol.md) §4.2.
 2. **Registrasi wajib membuat Deployment record.** Registrasi yang berhasil
    **wajib** menciptakan/memperbarui satu **Deployment record** durable di
-   storage Control Plane (`forma_control`) sebelum `forma apply` melaporkan
+   storage Control Plane (`formspec_control`) sebelum `formspec apply` melaporkan
    sukses. Deployment record memuat: `artifact_id`, `version` (monotonik),
    `sha256`, environment, workspace target, waktu registrasi, dan status
    konvergensi awal `registered`.
@@ -40,10 +40,10 @@ governance keputusan (policy, approval, signing, transparency log) ada di
    evidence `deploy_status` ([`05-plane-protocol.md`](05-plane-protocol.md)
    §3.3–3.4).
 
-**Registered ≠ converged (normatif).** `forma apply` melapor sukses saat
+**Registered ≠ converged (normatif).** `formspec apply` melapor sukses saat
 registrasi **durable** — **bukan** saat beban kerja konvergen. Konvergensi
 bersifat eventual dan pull-based; statusnya diamati lewat evidence, bukan
-dijamin oleh return `apply`. `forma get deployment <name>` **wajib**
+dijamin oleh return `apply`. `formspec get deployment <name>` **wajib**
 menampilkan status konvergensi turunan dari evidence terakhir, minimal:
 `registered` → `converging` → `converged` → `failed` / `rolled_back`.
 Melaporkan sukses sebelum registrasi durable **tidak konform** (kegagalan
@@ -59,11 +59,11 @@ Karena hanya menunjuk artifact yang sudah pernah lolos verifikasi, rollback
 **tidak** melewati approval untuk versi yang sama — chain tanda tangannya
 sudah ada.
 
-`forma rollback` adalah verb CLI untuk memicunya:
+`formspec rollback` adalah verb CLI untuk memicunya:
 
 ```bash
-forma rollback deployment myapp --to-version 41     # ke versi eksplisit
-forma rollback deployment myapp                      # ke versi konvergen sebelumnya
+formspec rollback deployment myapp --to-version 41     # ke versi eksplisit
+formspec rollback deployment myapp                      # ke versi konvergen sebelumnya
 ```
 
 **Yang di-rollback vs tidak (normatif):**
@@ -120,7 +120,7 @@ lain tanpa build ulang. "staging" dan "production" adalah *nama* environment
 transisi artifact yang sama melewati Policy yang makin ketat.
 
 ```bash
-forma promote myapp --from staging --to production   # checksum diverifikasi identik
+formspec promote myapp --from staging --to production   # checksum diverifikasi identik
 ```
 
 Kontrak normatif:
@@ -135,16 +135,16 @@ Kontrak normatif:
 - Seluruh rangkaian (apply, approve, promote) adalah satu chain di
   transparency log ([`04-control-plane.md`](04-control-plane.md) §7).
 
-`forma promote` **wajib** ada sebagai verb CLI dan ditambahkan ke tabel verb
-[`../../cli-tools/02-forma-cli.md`](../../cli-tools/02-forma-cli.md) §1.
+`formspec promote` **wajib** ada sebagai verb CLI dan ditambahkan ke tabel verb
+[`../../cli-tools/02-formspec-cli.md`](../../cli-tools/02-formspec-cli.md) §1.
 
 ## 6. DR & HA — Requirement Minimal
-Forma tidak membangun mekanisme HA sendiri di level pod/node — itu K8s
+FormSpec tidak membangun mekanisme HA sendiri di level pod/node — itu K8s
 ([`../../architecture/05-failover.md`](../../architecture/05-failover.md) §1).
 Yang **wajib** dijamin di level kontrak:
 
 ### 6.1 Durabilitas Control Plane
-- Storage Control Plane (`forma_control`) **wajib** durable di produksi.
+- Storage Control Plane (`formspec_control`) **wajib** durable di produksi.
   Store in-memory adalah **dev-only, non-konform untuk produksi** — kehilangan
   Deployment record, transparency log, atau kontrak tidak boleh mungkin
   akibat restart proses.
@@ -163,7 +163,7 @@ yang dideklarasikan per Environment** ([`04-control-plane.md`](04-control-plane.
 Jadwal backup ([`04-control-plane.md`](04-control-plane.md) §6.1) **wajib**
 konsisten dengan RPO yang dideklarasikan (interval backup ≤ RPO). Deklarasi
 yang tidak konsisten (RPO 1 jam tapi backup harian) **wajib** ditolak
-`forma apply`.
+`formspec apply`.
 
 ```yaml
 # Environment spec — lihat 04-control-plane.md §2
@@ -185,7 +185,7 @@ spec:
   koordinasi routing — kompleksitas yang sengaja tidak diotomasi
   ([`../../architecture/05-failover.md`](../../architecture/05-failover.md) §4).
   Pemulihan region adalah **runbook manual Cloud Owner**: restore backup ke
-  region pemulihan → repoint routing → `forma apply` desired-state di region
+  region pemulihan → repoint routing → `formspec apply` desired-state di region
   baru. Kontrak ini mendokumentasikan batas itu dengan jujur alih-alih
   menjanjikan otomasi yang tidak ada.
 

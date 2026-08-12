@@ -1,11 +1,11 @@
 // Illustrative example of the generic FormaClient API — the shape
-// docs/cli-tools/03-forma-generate.md §5 builds a full React page around.
+// docs/cli-tools/03-formspec-generate.md §5 builds a full React page around.
 // This file exercises the client directly (no generated types) so it's
-// useful even before running `forma generate`.
+// useful even before running `formspec generate`.
 
 import { FormaApiError, FormaClient, FormaRecord } from "../src/index.js";
 
-// A hand-written stand-in for what `forma generate` would emit for this
+// A hand-written stand-in for what `formspec generate` would emit for this
 // entity — this example intentionally shows the client used *without*
 // codegen, but still needs a type to get typed ids/fields back.
 interface Invoice {
@@ -22,7 +22,7 @@ const client = new FormaClient({
 
 async function main() {
   // List, with pagination + search — the only query options wired
-  // server-side today (docs/cli-tools/03-forma-generate.md §4).
+  // server-side today (docs/cli-tools/03-formspec-generate.md §4).
   const page = await client.list("billing", "invoices", { perPage: 10, search: "acme" });
   console.log(`${page.total} invoice(s), page ${page.page}/${page.totalPages}`);
 

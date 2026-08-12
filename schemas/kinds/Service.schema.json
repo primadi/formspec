@@ -14,7 +14,11 @@
       "nullable": true
     },
     "version": {
-      "type": "string"
+      "description": "@schema {example: \"v1\"}",
+      "type": "string",
+      "examples": [
+        "v1"
+      ]
     }
   },
   "required": [

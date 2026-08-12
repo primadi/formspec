@@ -12,7 +12,7 @@ import (
 )
 
 // Health status values reported by the sidecar /health endpoint
-// (docs/runtimes/04-forma-sidecar.md §7).
+// (docs/runtimes/04-formspec-sidecar.md §7).
 const (
 	StatusHealthy = "healthy"
 	// StatusDegraded means the app process stopped answering pings but the
@@ -21,7 +21,7 @@ const (
 	StatusDegraded = "degraded"
 )
 
-// AppMonitor pings the app process's lib-forma listener periodically and
+// AppMonitor pings the app process's lib-formspec listener periodically and
 // aggregates the result into the sidecar's own health status.
 type AppMonitor struct {
 	client       *http.Client
@@ -131,7 +131,7 @@ func newLocalHTTPClient(endpoint string) (*http.Client, string, error) {
 				return d.DialContext(ctx, "unix", socketPath)
 			},
 		}
-		return &http.Client{Transport: transport}, "http://forma-app", nil
+		return &http.Client{Transport: transport}, "http://formspec-app", nil
 	case "http":
 		return &http.Client{}, strings.TrimRight(endpoint, "/"), nil
 	default:

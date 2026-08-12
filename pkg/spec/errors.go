@@ -5,83 +5,83 @@
 //
 // Generated from error-glossary.yaml v1.0.0.
 //
-// Error codes follow the pattern FORMA.{DOMAIN}.{NAME}. New codes MUST NOT
+// Error codes follow the pattern FORMSPEC.{DOMAIN}.{NAME}. New codes MUST NOT
 // reuse an existing code — third-party integrations that switch(error.code)
 // must not silently break.
 
 package spec
 
-// ErrorCode is a canonical Forma error code string.
+// ErrorCode is a canonical FormSpec error code string.
 type ErrorCode string
 
 // String returns the error code as a string.
 func (c ErrorCode) String() string { return string(c) }
 
-// ─── 1.5.1 Document Lifecycle (FORMA.DOC.*) ───
+// ─── 1.5.1 Document Lifecycle (FORMSPEC.DOC.*) ───
 
 const (
-	ErrorDocUpdateNotDraft       ErrorCode = "FORMA.DOC.UPDATE_NOT_DRAFT"
-	ErrorDocDeleteReferenced     ErrorCode = "FORMA.DOC.DELETE_REFERENCED"
-	ErrorDocCancelReferenced     ErrorCode = "FORMA.DOC.CANCEL_REFERENCED"
-	ErrorDocSubmitNotDraft       ErrorCode = "FORMA.DOC.SUBMIT_NOT_DRAFT"
-	ErrorDocAlreadySubmitted     ErrorCode = "FORMA.DOC.ALREADY_SUBMITTED"
-	ErrorDocAlreadyCancelled     ErrorCode = "FORMA.DOC.ALREADY_CANCELLED"
-	ErrorDocReservedField        ErrorCode = "FORMA.DOC.RESERVED_FIELD"
-	ErrorDocCreateSubmitNotAvail ErrorCode = "FORMA.DOC.CREATE_SUBMIT_NOT_AVAILABLE"
+	ErrorDocUpdateNotDraft       ErrorCode = "FORMSPEC.DOC.UPDATE_NOT_DRAFT"
+	ErrorDocDeleteReferenced     ErrorCode = "FORMSPEC.DOC.DELETE_REFERENCED"
+	ErrorDocCancelReferenced     ErrorCode = "FORMSPEC.DOC.CANCEL_REFERENCED"
+	ErrorDocSubmitNotDraft       ErrorCode = "FORMSPEC.DOC.SUBMIT_NOT_DRAFT"
+	ErrorDocAlreadySubmitted     ErrorCode = "FORMSPEC.DOC.ALREADY_SUBMITTED"
+	ErrorDocAlreadyCancelled     ErrorCode = "FORMSPEC.DOC.ALREADY_CANCELLED"
+	ErrorDocReservedField        ErrorCode = "FORMSPEC.DOC.RESERVED_FIELD"
+	ErrorDocCreateSubmitNotAvail ErrorCode = "FORMSPEC.DOC.CREATE_SUBMIT_NOT_AVAILABLE"
 )
 
-// ─── Transaction Date (FORMA.TXN.*) ───
+// ─── Transaction Date (FORMSPEC.TXN.*) ───
 
 const (
-	ErrorTxnTransactionDateMissing ErrorCode = "FORMA.TXN.TRANSACTION_DATE_MISSING"
-	ErrorTxnBackdateExceeded       ErrorCode = "FORMA.TXN.BACKDATE_EXCEEDED"
-	ErrorTxnForwardDateExceeded    ErrorCode = "FORMA.TXN.FORWARD_DATE_EXCEEDED"
+	ErrorTxnTransactionDateMissing ErrorCode = "FORMSPEC.TXN.TRANSACTION_DATE_MISSING"
+	ErrorTxnBackdateExceeded       ErrorCode = "FORMSPEC.TXN.BACKDATE_EXCEEDED"
+	ErrorTxnForwardDateExceeded    ErrorCode = "FORMSPEC.TXN.FORWARD_DATE_EXCEEDED"
 )
 
-// ─── Period Closing (FORMA.PERIOD.*) ───
+// ─── Period Closing (FORMSPEC.PERIOD.*) ───
 
 const (
-	ErrorPeriodClosed       ErrorCode = "FORMA.PERIOD.CLOSED"
-	ErrorPeriodReopenDenied ErrorCode = "FORMA.PERIOD.REOPEN_DENIED"
+	ErrorPeriodClosed       ErrorCode = "FORMSPEC.PERIOD.CLOSED"
+	ErrorPeriodReopenDenied ErrorCode = "FORMSPEC.PERIOD.REOPEN_DENIED"
 )
 
-// ─── Event Naming Convention (FORMA.EVENT.*) ───
+// ─── Event Naming Convention (FORMSPEC.EVENT.*) ───
 
 const (
-	ErrorEventTypeMismatch ErrorCode = "FORMA.EVENT.TYPE_MISMATCH"
-	ErrorEventTypeMissing  ErrorCode = "FORMA.EVENT.TYPE_MISSING"
+	ErrorEventTypeMismatch ErrorCode = "FORMSPEC.EVENT.TYPE_MISMATCH"
+	ErrorEventTypeMissing  ErrorCode = "FORMSPEC.EVENT.TYPE_MISSING"
 )
 
-// ─── Saga & Manual Intervention (FORMA.SAGA.*) ───
+// ─── Saga & Manual Intervention (FORMSPEC.SAGA.*) ───
 
 const (
-	ErrorSagaOutcomeUnknown     ErrorCode = "FORMA.SAGA.OUTCOME_UNKNOWN"
-	ErrorSagaCompensationFailed ErrorCode = "FORMA.SAGA.COMPENSATION_FAILED"
+	ErrorSagaOutcomeUnknown     ErrorCode = "FORMSPEC.SAGA.OUTCOME_UNKNOWN"
+	ErrorSagaCompensationFailed ErrorCode = "FORMSPEC.SAGA.COMPENSATION_FAILED"
 )
 
-// ─── Reference Guard (FORMA.REF.*) ───
+// ─── Reference Guard (FORMSPEC.REF.*) ───
 
 const (
-	ErrorRefDeleteBlocked ErrorCode = "FORMA.REF.DELETE_BLOCKED"
-	ErrorRefCancelBlocked ErrorCode = "FORMA.REF.CANCEL_BLOCKED"
+	ErrorRefDeleteBlocked ErrorCode = "FORMSPEC.REF.DELETE_BLOCKED"
+	ErrorRefCancelBlocked ErrorCode = "FORMSPEC.REF.CANCEL_BLOCKED"
 )
 
-// ─── Persistence & Category Isolation (FORMA.PERSIST.*) ───
+// ─── Persistence & Category Isolation (FORMSPEC.PERSIST.*) ───
 
 const (
-	ErrorPersistCrossCategory ErrorCode = "FORMA.PERSIST.CROSS_CATEGORY"
+	ErrorPersistCrossCategory ErrorCode = "FORMSPEC.PERSIST.CROSS_CATEGORY"
 )
 
-// ─── Archiving (FORMA.ARCHIVE.*) ───
+// ─── Archiving (FORMSPEC.ARCHIVE.*) ───
 
 const (
-	ErrorArchiveLockedForDeletion ErrorCode = "FORMA.ARCHIVE.LOCKED_FOR_DELETION"
+	ErrorArchiveLockedForDeletion ErrorCode = "FORMSPEC.ARCHIVE.LOCKED_FOR_DELETION"
 )
 
-// ─── General Validation (FORMA.VALIDATE.*) ───
+// ─── General Validation (FORMSPEC.VALIDATE.*) ───
 
 const (
-	ErrorValidateReservedActionModified ErrorCode = "FORMA.VALIDATE.RESERVED_ACTION_MODIFIED"
+	ErrorValidateReservedActionModified ErrorCode = "FORMSPEC.VALIDATE.RESERVED_ACTION_MODIFIED"
 )
 
 // ─── 1.5.2 Observability Error Codes (09-observability.md §8) ───
@@ -98,9 +98,9 @@ const (
 // Each entry maps a param name (from error-glossary.yaml) to its value.
 type ErrorParams map[string]string
 
-// FormaError is a structured error with a canonical code, human message, and
+// FormSpecError is a structured error with a canonical code, human message, and
 // optional parameter details. Used in API error envelopes (01-core-basic.md §8.5).
-type FormaError struct {
+type FormSpecError struct {
 	Code    ErrorCode     `yaml:"code" json:"code"`
 	Message string        `yaml:"message" json:"message"`
 	Details []ErrorDetail `yaml:"details,omitempty" json:"details,omitempty"`
@@ -113,8 +113,8 @@ type ErrorDetail struct {
 	Message string `yaml:"message" json:"message"`                 // human-readable detail
 }
 
-// Error implements the error interface for FormaError.
-func (e *FormaError) Error() string {
+// Error implements the error interface for FormSpecError.
+func (e *FormSpecError) Error() string {
 	if e.Message != "" {
 		return e.Message
 	}
@@ -124,25 +124,25 @@ func (e *FormaError) Error() string {
 // ErrorCodeSet returns all defined error codes.
 func ErrorCodeSet() []ErrorCode {
 	return []ErrorCode{
-		// FORMA.DOC
+		// FORMSPEC.DOC
 		ErrorDocUpdateNotDraft, ErrorDocDeleteReferenced, ErrorDocCancelReferenced,
 		ErrorDocSubmitNotDraft, ErrorDocAlreadySubmitted, ErrorDocAlreadyCancelled,
 		ErrorDocReservedField, ErrorDocCreateSubmitNotAvail,
-		// FORMA.TXN
+		// FORMSPEC.TXN
 		ErrorTxnTransactionDateMissing, ErrorTxnBackdateExceeded, ErrorTxnForwardDateExceeded,
-		// FORMA.PERIOD
+		// FORMSPEC.PERIOD
 		ErrorPeriodClosed, ErrorPeriodReopenDenied,
-		// FORMA.EVENT
+		// FORMSPEC.EVENT
 		ErrorEventTypeMismatch, ErrorEventTypeMissing,
-		// FORMA.SAGA
+		// FORMSPEC.SAGA
 		ErrorSagaOutcomeUnknown, ErrorSagaCompensationFailed,
-		// FORMA.REF
+		// FORMSPEC.REF
 		ErrorRefDeleteBlocked, ErrorRefCancelBlocked,
-		// FORMA.PERSIST
+		// FORMSPEC.PERSIST
 		ErrorPersistCrossCategory,
-		// FORMA.ARCHIVE
+		// FORMSPEC.ARCHIVE
 		ErrorArchiveLockedForDeletion,
-		// FORMA.VALIDATE
+		// FORMSPEC.VALIDATE
 		ErrorValidateReservedActionModified,
 		// Observability
 		ErrorObservabilityMetricsDisabled, ErrorObservabilityDebugForbidden, ErrorLogsFilterInvalid,

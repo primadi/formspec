@@ -1,9 +1,9 @@
 // Package report implements the Operator → Cluster Control reporting
-// contract (docs/runtimes/03-forma-operator.md §3.2): node health every 15
+// contract (docs/runtimes/03-formspec-operator.md §3.2): node health every 15
 // seconds, workspace status on change.
 //
 // The endpoints (/v1/node-health, /v1/workspace-status) are a proposed
-// extension of the plane protocol — forma-ctl does not serve them yet, so
+// extension of the plane protocol — formspec-ctl does not serve them yet, so
 // failures are logged at low volume and never block reconciliation.
 package report
 
@@ -19,7 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	formav1alpha1 "github.com/primadi/forma/internal/operator/api/v1alpha1"
+	formspecv1alpha1 "github.com/primadi/formspec/internal/operator/api/v1alpha1"
 )
 
 // NodeHealthInterval is the node reporting cadence
@@ -91,7 +91,7 @@ func (r *Reporter) reportNodeHealth(ctx context.Context) {
 	if err := r.reader.List(ctx, &nodes); err != nil {
 		return
 	}
-	var workspaces formav1alpha1.WorkspaceList
+	var workspaces formspecv1alpha1.WorkspaceList
 	if err := r.reader.List(ctx, &workspaces); err != nil {
 		return
 	}
@@ -115,7 +115,7 @@ func (r *Reporter) reportNodeHealth(ctx context.Context) {
 
 // ReportWorkspaceStatus posts one workspace's status; called by the
 // WorkspaceReconciler after each status update (on-change semantics).
-func (r *Reporter) ReportWorkspaceStatus(ws *formav1alpha1.Workspace) {
+func (r *Reporter) ReportWorkspaceStatus(ws *formspecv1alpha1.Workspace) {
 	if r.controlURL == "" {
 		return
 	}
@@ -162,7 +162,7 @@ func (r *Reporter) logFailure(path string, err error) {
 func formaLabels(labels map[string]string) map[string]string {
 	out := map[string]string{}
 	for k, v := range labels {
-		if len(k) > 10 && k[:10] == "forma.dev/" {
+		if len(k) > 10 && k[:10] == "formspec.dev/" {
 			out[k] = v
 		}
 	}

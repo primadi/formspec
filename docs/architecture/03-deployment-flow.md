@@ -3,7 +3,7 @@
 **Version:** 1.0
 **Status:** Draft
 **License:** Creative Commons CC0
-**Governed by:** Forma Architecture Overview · Forma Plane Protocol Spec
+**Governed by:** FormSpec Architecture Overview · FormSpec Plane Protocol Spec
 
 > Dokumen ini menjelaskan **bagaimana** YAML manifest berpindah dari laptop developer menjadi aplikasi yang berjalan di production — melalui pipeline dua-stage: registration (developer → Control Plane) dan deployment (Control Plane → Resource Plane). Detail wire protocol ada di `docs/spec/platform/05-plane-protocol.md`.
 
@@ -14,13 +14,13 @@
 ```mermaid
 sequenceDiagram
     participant Dev as Developer
-    participant CLI as forma apply CLI
-    participant RC as forma-ctl (region)
-    participant CC as forma-ctl (cluster)
-    participant OP as Forma Operator
-    participant RP as forma-resource pods
+    participant CLI as formspec apply CLI
+    participant RC as formspec-ctl (region)
+    participant CC as formspec-ctl (cluster)
+    participant OP as FormSpec Operator
+    participant RP as formspec-resource pods
 
-    Dev->>CLI: forma apply -f specs/
+    Dev->>CLI: formspec apply -f specs/
     CLI->>RC: POST /v1/artifacts (YAML files)
     RC->>RC: Validate YAML
     RC->>RC: Compute sha256
@@ -60,18 +60,18 @@ sequenceDiagram
 
 ## 2. Stage 1 — Registration (Developer → Region Control)
 
-`forma apply` adalah **satu-satunya** cara untuk mendaftarkan YAML manifest. Resource Plane **tidak boleh** membaca YAML langsung dari filesystem.
+`formspec apply` adalah **satu-satunya** cara untuk mendaftarkan YAML manifest. Resource Plane **tidak boleh** membaca YAML langsung dari filesystem.
 
 ### 2.1 Process
 
-1. Developer menjalankan `forma apply -f path/to/specs/` (atau `forma apply --watch` untuk hot-reload)
+1. Developer menjalankan `formspec apply -f path/to/specs/` (atau `formspec apply --watch` untuk hot-reload)
 2. CLI membaca semua file dalam direktori — YAML, **`star` (Starlark scripts)**, **binary handler (hasil `go build`)**, **source code (PHP/Python)**, **assets (CSS/JS)** — kirim sebagai artifact payload ke Region Control
 3. Region Control:
    - Parse multi-document YAML manifests
    - Validasi schema, kind, metadata, spec per kind
    - Compute **sha256** setiap file dan aggregate envelope hash
    - Sign artifact envelope dengan platform key (ed25519, atau self-signed di dev)
-   - Simpan artifact di DB (`forma_control.artifacts`)
+   - Simpan artifact di DB (`formspec_control.artifacts`)
    - Update desired `deployments` state dengan artifact version + hash baru
 4. Response: `{ artifact_id, version, sha256 }`
 
@@ -147,18 +147,18 @@ Saat Resource Plane memuat artifact baru:
 | **Approval** | None (auto-approved) | Policy-based approval chain |
 | **Cluster Control** | Tidak digunakan (resource langsung ke region) | Cache proxy — sync setiap 30s |
 | **Pull interval** | 10 detik | 5 menit |
-| **`forma apply`** | `--watch` untuk hot-reload | Run-once per deployment |
+| **`formspec apply`** | `--watch` untuk hot-reload | Run-once per deployment |
 | **Evidence** | Optional (logged locally) | Mandatory + transparency log |
 | **Local poll trigger** | `POST /v1/poll` (dev-only) | Tidak ada — menunggu pull cycle berikutnya |
 | **Revocation propagation** | Pull berikutnya (10 detik) | **Push-hint** — snapshot yang membawa revocation memicu pull segera + pull interval diperpendek sampai revocation terkonfirmasi (wajib per `docs/spec/platform/05-plane-protocol.md` §5 (Semantik Outage)) |
 | **Database** | SQLite | Postgres |
-| **Forma Operator** | Tidak digunakan | CRD controller |
+| **FormSpec Operator** | Tidak digunakan | CRD controller |
 
 ### 4.1 Dev Mode Simplification
 
 Di development, semua plane berjalan di mesin yang sama. Pipeline strukturnya identik tapi disederhanakan:
 
-- **Local poll trigger** (`POST /v1/poll`): setelah `forma apply --watch` mendaftarkan artifact baru, CLI mengirim HTTP call lokal ke Resource Plane untuk segera menarik snapshot. Mengurangi latency dari 10 detik menjadi ~100ms. Ini **bukan** Control→Resource push — hanya orkestrasi lokal.
+- **Local poll trigger** (`POST /v1/poll`): setelah `formspec apply --watch` mendaftarkan artifact baru, CLI mengirim HTTP call lokal ke Resource Plane untuk segera menarik snapshot. Mengurangi latency dari 10 detik menjadi ~100ms. Ini **bukan** Control→Resource push — hanya orkestrasi lokal.
 - **Tidak ada Cluster Control:** Resource Plane langsung menarik dari Region Control (local host).
 - **Tidak ada Operator:** Resource Plane dikelola manual oleh developer.
 
@@ -215,4 +215,4 @@ Cluster Control melakukan **batch relay** — mengumpulkan evidence dari semua p
 |---|---|
 | `docs/spec/platform/05-plane-protocol.md` | Wire protocol detail (endpoint, format, header) |
 | `docs/architecture/01-architecture-overview.md` | Multi-region topology, control levels |
-| `docs/architecture/06-k8s-operator.md` | Forma Operator, CRD reconciliation |
+| `docs/architecture/06-k8s-operator.md` | FormSpec Operator, CRD reconciliation |

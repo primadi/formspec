@@ -1,4 +1,4 @@
-// ─── Forma Manifest TypeScript Types ───
+// ─── FormSpec Manifest TypeScript Types ───
 //
 // Mirror of Go types from:
 //   - pkg/spec/frontend.go — 12 UI kind specs
@@ -15,7 +15,7 @@
 // Constants
 // ══════════════════════════════════════════════════════════════════════════════
 
-export const API_VERSION = "forma.dev/v1alpha1"
+export const API_VERSION = "formspec.dev/v1alpha1"
 
 // ── Resource Kinds ──
 
@@ -311,7 +311,7 @@ export interface ActionUIHint {
   style?: "primary" | "secondary" | "danger"
   icon?: string
   confirm?: string
-  show_when?: string // FormaExpr
+  show_when?: string // FormSpecExpr
 }
 
 export interface IdempotencyDecl {

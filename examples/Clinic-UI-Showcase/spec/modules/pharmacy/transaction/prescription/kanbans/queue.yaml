@@ -1,6 +1,6 @@
 # SHOWCASE kind: Kanban flagship — antrian farmasi (contoh kanonik §12 spec).
 # Drag = update status optimistic (409 CAS → snap-back + toast).
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Kanban
 metadata:
   name: pharmacy-queue

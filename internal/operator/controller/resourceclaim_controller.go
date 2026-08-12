@@ -13,11 +13,11 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	formav1alpha1 "github.com/primadi/forma/internal/operator/api/v1alpha1"
+	formspecv1alpha1 "github.com/primadi/formspec/internal/operator/api/v1alpha1"
 )
 
 // ResourceClaimReconciler verifies permission grants
-// (docs/runtimes/03-forma-operator.md §2.4):
+// (docs/runtimes/03-formspec-operator.md §2.4):
 //
 //  1. Verify the ed25519 signature against the datastore owner's public key.
 //  2. Check the claiming workspace is in the datastore's allowedTenants.
@@ -33,7 +33,7 @@ type ResourceClaimReconciler struct {
 
 // Reconcile sets Ready / Denied conditions on a ResourceClaim.
 func (r *ResourceClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	var claim formav1alpha1.ResourceClaim
+	var claim formspecv1alpha1.ResourceClaim
 	if err := r.Get(ctx, req.NamespacedName, &claim); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -45,11 +45,11 @@ func (r *ResourceClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		readyStatus, deniedStatus = metav1.ConditionFalse, metav1.ConditionTrue
 	}
 	meta.SetStatusCondition(&claim.Status.Conditions, metav1.Condition{
-		Type: formav1alpha1.ConditionReady, Status: readyStatus,
+		Type: formspecv1alpha1.ConditionReady, Status: readyStatus,
 		Reason: reason, Message: msg, ObservedGeneration: claim.Generation,
 	})
 	meta.SetStatusCondition(&claim.Status.Conditions, metav1.Condition{
-		Type: formav1alpha1.ConditionDenied, Status: deniedStatus,
+		Type: formspecv1alpha1.ConditionDenied, Status: deniedStatus,
 		Reason: reason, Message: msg, ObservedGeneration: claim.Generation,
 	})
 
@@ -59,12 +59,12 @@ func (r *ResourceClaimReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	return ctrl.Result{}, nil
 }
 
-func (r *ResourceClaimReconciler) evaluate(ctx context.Context, claim *formav1alpha1.ResourceClaim) (ready bool, reason, msg string) {
+func (r *ResourceClaimReconciler) evaluate(ctx context.Context, claim *formspecv1alpha1.ResourceClaim) (ready bool, reason, msg string) {
 	if claim.Spec.Datastore == "" || claim.Spec.Workspace == "" {
 		return false, "IncompleteSpec", "spec.datastore and spec.workspace are required"
 	}
 
-	var ds formav1alpha1.Datastore
+	var ds formspecv1alpha1.Datastore
 	if err := r.Get(ctx, types.NamespacedName{Name: claim.Spec.Datastore, Namespace: claim.Namespace}, &ds); err != nil {
 		if apierrors.IsNotFound(err) {
 			return false, "DatastoreNotFound", fmt.Sprintf("datastore %q not found", claim.Spec.Datastore)
@@ -94,7 +94,7 @@ func (r *ResourceClaimReconciler) evaluate(ctx context.Context, claim *formav1al
 	return true, "ClaimVerified", "signature valid and tenant allowed"
 }
 
-func (r *ResourceClaimReconciler) verifySignature(claim *formav1alpha1.ResourceClaim, ds *formav1alpha1.Datastore) (ok bool, reason, msg string) {
+func (r *ResourceClaimReconciler) verifySignature(claim *formspecv1alpha1.ResourceClaim, ds *formspecv1alpha1.Datastore) (ok bool, reason, msg string) {
 	if r.InsecureSkipSignatureVerify {
 		return true, "SignatureSkipped", "signature verification disabled (dev mode)"
 	}
@@ -124,7 +124,7 @@ func (r *ResourceClaimReconciler) verifySignature(claim *formav1alpha1.ResourceC
 // the owner key re-evaluates every claim on that datastore.
 func (r *ResourceClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&formav1alpha1.ResourceClaim{}).
-		Watches(&formav1alpha1.Datastore{}, datastoreToClaims(mgr)).
+		For(&formspecv1alpha1.ResourceClaim{}).
+		Watches(&formspecv1alpha1.Datastore{}, datastoreToClaims(mgr)).
 		Complete(r)
 }

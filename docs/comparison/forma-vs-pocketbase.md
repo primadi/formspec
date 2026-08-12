@@ -1,20 +1,20 @@
 ---
-title: Forma vs PocketBase
-description: Comparing Forma's spec-first ecosystem with PocketBase — the minimalist Go backend that inspired "One Definition, Many Protocols"
+title: FormSpec vs PocketBase
+description: Comparing FormSpec's spec-first ecosystem with PocketBase — the minimalist Go backend that inspired "One Definition, Many Protocols"
 date: 2026-07-06
 ---
 
-# Forma vs PocketBase
+# FormSpec vs PocketBase
 
-> **Forma** is a spec-first ecosystem for building business applications in Go. **PocketBase** is a minimalist Go backend with embedded SQLite, auto-generated CRUD API, admin UI, and realtime subscriptions — all from a single binary.
+> **FormSpec** is a spec-first ecosystem for building business applications in Go. **PocketBase** is a minimalist Go backend with embedded SQLite, auto-generated CRUD API, admin UI, and realtime subscriptions — all from a single binary.
 
-PocketBase is one of **Forma's six explicit inspirations**. Forma directly adopted PocketBase's principle of *"One Definition, Many Protocols"* — from a single resource definition, you automatically get HTTP endpoints, admin panel UI, API docs, and generated types. Understanding this comparison reveals the DNA they share and where Forma extends beyond PocketBase's scope.
+PocketBase is one of **FormSpec's six explicit inspirations**. FormSpec directly adopted PocketBase's principle of *"One Definition, Many Protocols"* — from a single resource definition, you automatically get HTTP endpoints, admin panel UI, API docs, and generated types. Understanding this comparison reveals the DNA they share and where FormSpec extends beyond PocketBase's scope.
 
 ---
 
 ## 1. Overview
 
-### Forma
+### FormSpec
 A complete ecosystem for business applications. YAML manifests define entities, state machines, actions, permissions, and UI events. Two-process architecture (Control + Resource Planes). Five implementation types (Go native, Starlark, compiled, sidecar). PostgreSQL + Valkey + MinIO. Module marketplace with pricing and governance.
 
 ### PocketBase
@@ -24,7 +24,7 @@ A minimalist Go backend. One binary with embedded SQLite. Auto-generates REST AP
 
 ## 2. Philosophy
 
-| | Forma | PocketBase |
+| | FormSpec | PocketBase |
 |---|---|---|
 | **Paradigm** | Spec-first, declarative (YAML files define everything before code) | Schema-first (define collections, then optionally extend with code) |
 | **Source of truth** | YAML manifests on disk (git-friendly) | Admin UI or JSON import/export (collections defined in UI or imported) |
@@ -32,11 +32,11 @@ A minimalist Go backend. One binary with embedded SQLite. Auto-generates REST AP
 | **Target app size** | Large business apps (ERP, POS, inventory, billing) | Small to medium apps (API backend, internal tools, MVPs) |
 | **Database** | PostgreSQL (production), SQLite (dev) | SQLite (embedded, always) |
 
-### What Forma took from PocketBase
+### What FormSpec took from PocketBase
 
-From the Foundation Document: *"The principle of 'One Definition, Many Protocols' — from a single resource definition, you automatically get HTTP endpoints, WebSocket handlers, admin panel UI, API docs, and generated types. Auth required by default; anonymous access must be explicitly declared. DX benchmark: `forma dev` — one command, everything runs."*
+From the Foundation Document: *"The principle of 'One Definition, Many Protocols' — from a single resource definition, you automatically get HTTP endpoints, WebSocket handlers, admin panel UI, API docs, and generated types. Auth required by default; anonymous access must be explicitly declared. DX benchmark: `formspec dev` — one command, everything runs."*
 
-| PocketBase Feature | Forma Equivalent | Notes |
+| PocketBase Feature | FormSpec Equivalent | Notes |
 |---|---|---|
 | Auto-generated CRUD API | ✅ Auto-generated REST API | Both derive endpoints from definitions |
 | Admin dashboard UI | ✅ Auto-generated admin panel | Derived from Entity manifests |
@@ -50,7 +50,7 @@ From the Foundation Document: *"The principle of 'One Definition, Many Protocols
 
 ## 3. Feature Comparison
 
-| Dimension | Forma | PocketBase |
+| Dimension | FormSpec | PocketBase |
 |---|---|---|
 | **Paradigm** | Spec-first (YAML on disk) | Schema-first (admin UI or JSON) |
 | **Backend language** | Go (native) + Starlark (script) + sidecar (any) | Go (core) + JS (Goja runtime for hooks) |
@@ -72,7 +72,7 @@ From the Foundation Document: *"The principle of 'One Definition, Many Protocols
 | **Realtime** | ✅ WebSocket push via `ctx.pubsub` | ✅ Server-Sent Events (SSE) — lightweight, built-in |
 | **Database Migration** | ✅ Automatic from YAML (idempotent, checksummed) | ✅ Auto-migration from schema changes (limited to SQLite) |
 | **Ecosystem / Marketplace** | Module registry with pricing models | ❌ No marketplace (SDK + examples only) |
-| **Deployment Model** | Self-host (single binary, Docker, K8s) + Forma Cloud | Single binary (embedded SQLite) — dead simple deploy |
+| **Deployment Model** | Self-host (single binary, Docker, K8s) + FormSpec Cloud | Single binary (embedded SQLite) — dead simple deploy |
 | **Production Scale** | Enterprise (PostgreSQL + Valkey + MinIO) | Small-to-medium (SQLite limits) |
 | **Binary size** | ~15-30 MB | ~30 MB (embedded SQLite + admin UI) |
 | **Learning Curve** | Medium — YAML + Go + Starlark + 2-plane architecture | Low — one binary, one command, collections defined in UI |
@@ -87,49 +87,49 @@ PocketBase is intentionally **minimalist**. The creator's philosophy is that mos
 - **Easy to deploy** — SQLite means no database server
 - **Limited for complex apps** — no state machine, no multi-tenancy, no outbox, no governance
 
-Forma is intentionally **comprehensive**. The philosophy is that enterprise patterns should be built into the framework because:
+FormSpec is intentionally **comprehensive**. The philosophy is that enterprise patterns should be built into the framework because:
 - Most developers don't implement them correctly (idempotency, outbox, locking)
 - Governance is impossible to retrofit
 - Multi-tenancy is hard to add later
 
-### When PocketBase beats Forma
+### When PocketBase beats FormSpec
 
 | Scenario | Why PocketBase wins |
 |---|---|
-| **Simple API backend** | PocketBase: one binary, one command, done. Forma: overkill. |
-| **MVP / prototype** | Collections in admin UI → API in 5 minutes. Forma needs YAML files + setup. |
-| **Small internal tool** | SQLite is sufficient, no infra management. Forma's PostgreSQL requirement is unnecessary. |
+| **Simple API backend** | PocketBase: one binary, one command, done. FormSpec: overkill. |
+| **MVP / prototype** | Collections in admin UI → API in 5 minutes. FormSpec needs YAML files + setup. |
+| **Small internal tool** | SQLite is sufficient, no infra management. FormSpec's PostgreSQL requirement is unnecessary. |
 | **Learning Go** | PocketBase is simpler to understand and extend. |
 | **Single-tenant app** | Multi-tenancy not needed — PocketBase is simpler. |
 
-### When Forma beats PocketBase
+### When FormSpec beats PocketBase
 
-| Scenario | Why Forma wins |
+| Scenario | Why FormSpec wins |
 |---|---|
-| **Multi-tenant SaaS** | Forma's workspace model is built-in. PocketBase needs DIY or separate instances. |
-| **Business app with state machine** | Forma has built-in state machine. PocketBase needs custom code. |
-| **High-reliability system** | Forma has idempotency, outbox, audit trail. PocketBase has none. |
-| **Large dataset (>50 GB)** | Forma uses PostgreSQL. PocketBase is limited by SQLite. |
-| **Compliance / governance** | Forma has Control Plane with policy, signing, audit. PocketBase has nothing. |
-| **Polyglot team** | Forma supports sidecar containers. PocketBase is Go + JS. |
-| **Multi-region deployment** | Forma supports PostgreSQL streaming. PocketBase is single-node SQLite. |
+| **Multi-tenant SaaS** | FormSpec's workspace model is built-in. PocketBase needs DIY or separate instances. |
+| **Business app with state machine** | FormSpec has built-in state machine. PocketBase needs custom code. |
+| **High-reliability system** | FormSpec has idempotency, outbox, audit trail. PocketBase has none. |
+| **Large dataset (>50 GB)** | FormSpec uses PostgreSQL. PocketBase is limited by SQLite. |
+| **Compliance / governance** | FormSpec has Control Plane with policy, signing, audit. PocketBase has nothing. |
+| **Polyglot team** | FormSpec supports sidecar containers. PocketBase is Go + JS. |
+| **Multi-region deployment** | FormSpec supports PostgreSQL streaming. PocketBase is single-node SQLite. |
 
 ---
 
 ## 5. Conclusion
 
-PocketBase and Forma share the same **core insight**: one definition should generate many surfaces automatically. But they target different scales:
+PocketBase and FormSpec share the same **core insight**: one definition should generate many surfaces automatically. But they target different scales:
 
 ```
 PocketBase:      Small/Medium ──► SQLite, one binary, simple auth, realtime
                      │
                      │ (grow beyond SQLite limits)
                      ▼
-Forma:          Medium/Large ──► PostgreSQL, two planes, governance, marketplace
+FormSpec:          Medium/Large ──► PostgreSQL, two planes, governance, marketplace
 ```
 
 **PocketBase is ideal for:** APIs, small internal tools, MVPs, prototypes, learning Go, single-tenant apps.
 
-**Forma is ideal for:** Multi-tenant business applications (ERP, POS, inventory, billing, healthcare) that need state machines, reliable events, audit trails, and governance.
+**FormSpec is ideal for:** Multi-tenant business applications (ERP, POS, inventory, billing, healthcare) that need state machines, reliable events, audit trails, and governance.
 
-> If PocketBase is the **Go backend equivalent of SQLite** (simple, embedded, great for small projects), Forma is the **Go backend equivalent of PostgreSQL** (heavier, more features, built for scale). Both are valid — use the right tool for the job.
+> If PocketBase is the **Go backend equivalent of SQLite** (simple, embedded, great for small projects), FormSpec is the **Go backend equivalent of PostgreSQL** (heavier, more features, built for scale). Both are valid — use the right tool for the job.

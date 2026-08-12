@@ -11,8 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	starlark "github.com/primadi/forma/internal/starlark"
-	"github.com/primadi/forma/pkg/spec"
+	starlark "github.com/primadi/formspec/internal/starlark"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 // ScriptExecutor implements action.Executor for script and script_ref impl types.

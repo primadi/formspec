@@ -3,30 +3,30 @@
 # Build all binaries
 all: build
 
-build: build-spa build-ctl build-forma build-operator
+build: build-spa build-ctl build-formspec build-operator
 
 build-ctl:
-	go build -o bin/forma-ctl ./cmd/forma-ctl
+	go build -o bin/formspec-ctl ./cmd/formspec-ctl
 
-# Build the forma CLI with embedded SPA.
-# build-spa builds web/dist/, then we copy it to cmd/forma/dist/ for go:embed.
-build-forma: build-spa
-	@mkdir -p cmd/forma/dist
-	cp -r renderers/web/dist/* cmd/forma/dist/
-	go build -o bin/forma ./cmd/forma
+# Build the formspec CLI with embedded SPA.
+# build-spa builds web/dist/, then we copy it to cmd/formspec/dist/ for go:embed.
+build-formspec: build-spa
+	@mkdir -p cmd/formspec/dist
+	cp -r renderers/web/dist/* cmd/formspec/dist/
+	go build -o bin/formspec ./cmd/formspec
 
 build-sidecar:
-	@echo "✅ Build complete: bin/forma"
+	@echo "✅ Build complete: bin/formspec"
 
 build-operator:
-	go build -o bin/forma-operator ./cmd/forma-operator
+	go build -o bin/formspec-operator ./cmd/formspec-operator
 
 # Build the frontend SPA. Requires npm dependencies installed (make web-deps).
 build-spa: web-deps
 	cd renderers/web && npm run build
 
-# forma-resource is a Go library (import "github.com/forma/forma"), not a
-# binary — see docs/runtimes/02-forma-resource.md. examples/reference-app
+# formspec-resource is a Go library (import "github.com/formspec/formspec"), not a
+# binary — see docs/runtimes/02-formspec-resource.md. examples/reference-app
 # demonstrates embedding it.
 
 # Run tests
@@ -45,17 +45,17 @@ lint:
 #   make dev              # start with default vertical (billing)
 #   make dev EXAMPLE=gl   # start with the gl vertical instead
 dev:
-	@echo "🔧 Forma Dev Environment"
+	@echo "🔧 FormSpec Dev Environment"
 	@echo "========================"
 	@echo ""
 	@echo "Starting Control Plane on :8443 ..."
-	go run ./cmd/forma-ctl serve --dev &
+	go run ./cmd/formspec-ctl serve --dev &
 	@echo "Starting reference app on :8080 ..."
 	@sleep 1
 	go run ./examples/reference-app --spec verticals/billing/spec &
 	@echo ""
 	@echo "📝 To register specs, run:"
-	@echo "   go run ./cmd/forma apply --control http://localhost:8443 verticals/billing/spec"
+	@echo "   go run ./cmd/formspec apply --control http://localhost:8443 verticals/billing/spec"
 	@echo ""
 	@echo "🌐 Reference app:  http://localhost:8080"
 	@echo "🛂 Control Plane:  http://localhost:8443"
@@ -63,31 +63,40 @@ dev:
 	@echo "Press Ctrl+C to stop all processes"
 	wait
 
-# Run specific example (legacy — use forma apply instead)
+# Run specific example (legacy — use formspec apply instead)
 run-example:
-	@echo "⚠️  Deprecated: use 'forma apply' to register specs to Control Plane"
-	@echo "   Example: go run ./cmd/forma apply --control http://localhost:8443 verticals/billing/spec"
+	@echo "⚠️  Deprecated: use 'formspec apply' to register specs to Control Plane"
+	@echo "   Example: go run ./cmd/formspec apply --control http://localhost:8443 verticals/billing/spec"
 
 # Clean build artifacts
 clean:
-	rm -rf bin/ .forma/
+	rm -rf bin/ .formspec/
 
-# Generate TypeScript types from spec (not implemented yet — see docs/cli-tools/01-forma-cli.md §5)
+# Generate TypeScript types from spec (not implemented yet — see docs/cli-tools/01-formspec-cli.md §5)
 generate:
-	@echo "⏳ 'forma generate' is not implemented yet — see docs/cli-tools/01-forma-cli.md §5"
+	@echo "⏳ 'formspec generate' is not implemented yet — see docs/cli-tools/01-formspec-cli.md §5"
 
 # Generate JSON Schema files from Go struct types in pkg/spec/
 # Output goes to schemas/ — register in VS Code via yaml.schemas
 generate-schema:
 	@echo "📐 Generating JSON Schema from Go types..."
-	@go run ./cmd/forma-gen-schema/ --out schemas
+	@go run ./cmd/formspec-gen-schema/ --out schemas
 	@echo "✅ JSON Schema files generated in schemas/"
+
+# Generate per-kind reference docs from Go struct types in pkg/spec/
+# Output goes to docs/kind/<group>/<Kind>.md — one file per kind, split in 4
+# groups (curation/data/ui/infra). Attribute tables are generated (zero drift);
+# narrative sections between <!-- generated:... --> markers are preserved.
+generate-kind-docs:
+	@echo "📄 Generating kind reference docs from Go types..."
+	@go run ./cmd/formspec-gen-kind-docs/ --out docs/kind
+	@echo "✅ Kind reference docs generated in docs/kind/"
 
 # Validate a spec tree against the engine loader AND the JSON Schema contract.
 # Usage: make validate-spec SPEC=examples/crc-management/spec
 validate-spec:
 	@test -n "$(SPEC)" || (echo "Usage: make validate-spec SPEC=<path to spec dir>" && exit 1)
-	@go run ./cmd/forma validate --spec $(SPEC)
+	@go run ./cmd/formspec validate --spec $(SPEC)
 
 # Download dependencies
 deps:

@@ -1,5 +1,5 @@
 # SHOWCASE kind: Print — tiket antrian THERMAL 58mm (POS pipeline).
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Print
 metadata:
   name: queue-ticket

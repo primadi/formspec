@@ -3,7 +3,7 @@ package validation
 import (
 	"testing"
 
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 func TestValidateActionParams_Required(t *testing.T) {

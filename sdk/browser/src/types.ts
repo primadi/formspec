@@ -1,6 +1,6 @@
 /**
  * Wire types — mirror the Go response envelopes in internal/api/handler.go
- * (docs_old/spec/02-core-basic.md §16). Every Forma entity record is the
+ * (docs_old/spec/02-core-basic.md §16). Every FormSpec entity record is the
  * entity's own fields flattened alongside these reserved framework columns
  * (internal/db/crud.go EntityRecord.MarshalJSON).
  */
@@ -14,7 +14,7 @@ export interface RecordMeta {
   updated_by: string;
 }
 
-/** A Forma entity record: framework columns + the entity's declared fields. */
+/** A FormSpec entity record: framework columns + the entity's declared fields. */
 export type FormaRecord<T = Record<string, unknown>> = RecordMeta & T;
 
 export interface MetaSingle {

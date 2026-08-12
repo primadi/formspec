@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/primadi/forma/internal/artifact"
+	"github.com/primadi/formspec/internal/artifact"
 )
 
 // Server is the Control Plane HTTP server.

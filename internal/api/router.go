@@ -9,14 +9,14 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/primadi/forma/internal/action"
-	forma_app "github.com/primadi/forma/internal/app"
-	"github.com/primadi/forma/internal/entity"
-	"github.com/primadi/forma/internal/ui"
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/internal/action"
+	formspec_app "github.com/primadi/formspec/internal/app"
+	"github.com/primadi/formspec/internal/entity"
+	"github.com/primadi/formspec/internal/ui"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
-// RouterBuilder constructs a Forma API router.
+// RouterBuilder constructs a FormSpec API router.
 // It wires middleware, route generation, and handler dispatch together.
 type RouterBuilder struct {
 	registry      *entity.Registry
@@ -27,7 +27,7 @@ type RouterBuilder struct {
 	webDir        string // static SPA root (web/dist); empty = no static serving
 	webFS         fs.FS  // embedded SPA (embed.FS); empty = no static serving
 	hub           *WSHub
-	apps          map[string]*forma_app.ResolvedApp // resolved kind: App manifests, keyed by name (Core §4.4)
+	apps          map[string]*formspec_app.ResolvedApp // resolved kind: App manifests, keyed by name (Core §4.4)
 	specVersionFn func() int64                      // returns the current spec version (for Meta API polling)
 }
 
@@ -73,7 +73,7 @@ func (b *RouterBuilder) SetUIRegistry(r *ui.Registry) {
 // enables /_meta/apps and app-scoped /_meta/ui bundles. A workspace MAY
 // resolve to more than one App; they all serve simultaneously, distinguished
 // by the `app` query param / their own root_url (Core §4.4).
-func (b *RouterBuilder) SetApps(apps map[string]*forma_app.ResolvedApp) {
+func (b *RouterBuilder) SetApps(apps map[string]*formspec_app.ResolvedApp) {
 	b.apps = apps
 }
 
@@ -91,7 +91,7 @@ func (b *RouterBuilder) SetWebFS(spaFS fs.FS) {
 	b.webFS = spaFS
 }
 
-// Hub returns the websocket hub backing /_ws, so callers (resource/forma.go)
+// Hub returns the websocket hub backing /_ws, so callers (resource/formspec.go)
 // can wire it into action.DeliveryDeps for event delivery.
 func (b *RouterBuilder) Hub() *WSHub {
 	return b.hub

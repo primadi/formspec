@@ -20,7 +20,11 @@
       "type": "string"
     },
     "entity": {
-      "type": "string"
+      "description": "@schema {example: \"clinic.medical_record\"}",
+      "type": "string",
+      "examples": [
+        "clinic.medical_record"
+      ]
     },
     "event_field": {
       "type": "string"
@@ -35,6 +39,9 @@
     "public": {
       "description": "If true (default), a route /module/timeline/\u003cname\u003e is auto-generated.",
       "type": "boolean",
+      "examples": [
+        "true"
+      ],
       "nullable": true
     },
     "sort": {

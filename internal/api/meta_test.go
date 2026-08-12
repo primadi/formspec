@@ -7,12 +7,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	forma_app "github.com/primadi/forma/internal/app"
-	"github.com/primadi/forma/internal/auth"
-	"github.com/primadi/forma/internal/entity"
-	"github.com/primadi/forma/internal/ui"
-	"github.com/primadi/forma/pkg/spec"
-	db "github.com/primadi/forma/renderers/jsonbpersist"
+	formspec_app "github.com/primadi/formspec/internal/app"
+	"github.com/primadi/formspec/internal/auth"
+	"github.com/primadi/formspec/internal/entity"
+	"github.com/primadi/formspec/internal/ui"
+	"github.com/primadi/formspec/pkg/spec"
+	db "github.com/primadi/formspec/renderers/jsonbpersist"
 )
 
 // setupMetaTestRouter builds a RouterBuilder with an empty entity registry,
@@ -32,7 +32,7 @@ func setupMetaTestRouter(t *testing.T) *RouterBuilder {
 	reg := entity.NewRegistry(d, db.DriverSQLite, dir)
 	b := NewRouterBuilder(reg)
 	b.SetUIRegistry(ui.NewRegistry())
-	b.SetApps(map[string]*forma_app.ResolvedApp{
+	b.SetApps(map[string]*formspec_app.ResolvedApp{
 		"storefront": {
 			Name:    "storefront",
 			Spec:    &spec.AppSpec{RootURL: "/app/storefront", Modules: []string{"sales"}},

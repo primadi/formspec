@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Forma;
+namespace FormSpec;
 
 /**
- * The lib-forma-php listener: accepts POST /invoke/{module}/{entity}/{action}
- * from forma-sidecar and dispatches to registered handlers. Also answers
+ * The lib-formspec-php listener: accepts POST /invoke/{module}/{entity}/{action}
+ * from formspec-sidecar and dispatches to registered handlers. Also answers
  * GET /health for the sidecar's app monitor.
  *
- *     $app = new Forma\App();
+ *     $app = new FormSpec\App();
  *     $app->handle('billing.invoice.approve', function (Invocation $inv, Ctx $ctx) {
  *         $ctx->lock()->acquire('invoice:' . $inv->resourceId);
  *         // ... business logic ...
@@ -33,8 +33,8 @@ final class App
     public function __construct(?string $listen = null, ?string $sidecarEndpoint = null)
     {
         $this->listen = $listen
-            ?? 'unix://' . ((getenv('FORMA_APP_SOCKET') ?: '/tmp/forma/app.sock'));
-        $sidecarEndpoint ??= 'unix://' . ((getenv('FORMA_SIDECAR_SOCKET') ?: '/tmp/forma/sidecar.sock'));
+            ?? 'unix://' . ((getenv('FORMA_APP_SOCKET') ?: '/tmp/formspec/app.sock'));
+        $sidecarEndpoint ??= 'unix://' . ((getenv('FORMA_SIDECAR_SOCKET') ?: '/tmp/formspec/sidecar.sock'));
         $this->ctx = new Ctx(new SidecarClient($sidecarEndpoint));
     }
 
@@ -55,7 +55,7 @@ final class App
     public function run(): void
     {
         if (!str_starts_with($this->listen, 'unix://')) {
-            throw new FormaException("listen {$this->listen}: only unix:// is supported by lib-forma-php");
+            throw new FormaException("listen {$this->listen}: only unix:// is supported by lib-formspec-php");
         }
         $socketPath = substr($this->listen, strlen('unix://'));
 
@@ -70,7 +70,7 @@ final class App
         }
         chmod($socketPath, 0666); // sidecar runs as a different user
 
-        fwrite(STDERR, "[lib-forma-php] listening on {$socketPath}\n");
+        fwrite(STDERR, "[lib-formspec-php] listening on {$socketPath}\n");
 
         while (($conn = @stream_socket_accept($server, -1)) !== false) {
             try {

@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/primadi/forma/internal/events"
-	"github.com/primadi/forma/pkg/spec"
-	db "github.com/primadi/forma/renderers/jsonbpersist"
+	"github.com/primadi/formspec/internal/events"
+	"github.com/primadi/formspec/pkg/spec"
+	db "github.com/primadi/formspec/renderers/jsonbpersist"
 )
 
 type fakeHub struct {

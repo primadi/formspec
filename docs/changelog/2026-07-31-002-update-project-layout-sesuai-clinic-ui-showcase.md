@@ -8,10 +8,10 @@ sebagai target desain karena banyak dokumen lain mereferensikan numbering-nya.
 ## Perubahan docs
 
 - **§1 Direktori Standar** ditulis ulang penuh (dengan subsection baru):
-  - `forma-app.yaml` kini dideskripsikan sebagai **config dev/serve** yang
+  - `formspec-app.yaml` kini dideskripsikan sebagai **config dev/serve** yang
     diparse CLI (bukan `kind: Config` — koreksi error label lama), dengan field
     `spec`/`dsn`/`runtime`/`app-dir`/`app-entrypoint`/`listen`/`themes`; nama
-    legacy `forma-sidecar.yaml`.
+    legacy `formspec-sidecar.yaml`.
   - Container `spec/` (lokasi bisa diubah via `--spec`/`spec:`), `spec/apps/`
     (multi-App, satu module di-mount beberapa App), dan struktur module
     entity-centric ber-grouping characteristic (`master/`/`transaction/`/
@@ -26,7 +26,7 @@ sebagai target desain karena banyak dokumen lain mereferensikan numbering-nya.
   (`app/` root via `app-dir` = model sekarang; `impl/` per module = native Go +
   target multi-runtime §3).
 - **§5 Status Implementasi** diperbarui: mencatat bahwa contoh berjalan dengan
-  model satu-runtime-global via `forma-app.yaml runtime: node` + `app/` root.
+  model satu-runtime-global via `formspec-app.yaml runtime: node` + `app/` root.
 - **§7 Referensi** ditambah referensi contoh kanonik + catatan dua konvensi
   folder di repo (entity-centric kanonik vs kind-based lama).
 
@@ -37,8 +37,8 @@ sebagai target desain karena banyak dokumen lain mereferensikan numbering-nya.
 
 ## Referensi
 
-- Contoh kanonik: `examples/Clinic-UI-Showcase/spec/`, `forma-app.yaml`,
+- Contoh kanonik: `examples/Clinic-UI-Showcase/spec/`, `formspec-app.yaml`,
   `app/src/handlers/otc_sell.ts`
 - Konvensi menu: `docs/spec/platform/02-workspace-app-module.md` §4
 - Kontrak loader: `internal/manifest/loader.go` (`Discover`)
-- Config dev: `cmd/forma/dev_config.go` (`configFile`, `findConfigFile`)
+- Config dev: `cmd/formspec/dev_config.go` (`configFile`, `findConfigFile`)

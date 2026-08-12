@@ -1,5 +1,5 @@
 # Stock movement table — inbound/outbound movements
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Table
 metadata:
   name: stock-movement-table

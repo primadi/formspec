@@ -1,7 +1,7 @@
 # SHOWCASE: pola lifecycle "1-step (create-submit)" — quick entry kasir (§1.7).
 # Tombol tunggal "Terima & Simpan" memakai reserved action create-submit.
 # Form quick-nya modal (forms/payment-quick.yaml), struk thermal (prints/receipt.yaml).
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Entity
 metadata:
   name: payment

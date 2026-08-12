@@ -3,19 +3,19 @@
 **Version:** 1.0
 **Status:** Draft
 **License:** Creative Commons CC0
-**Governed by:** Forma Architecture Overview (D-ARCH-5, D-ARCH-7, D-ARCH-8)
+**Governed by:** FormSpec Architecture Overview (D-ARCH-5, D-ARCH-7, D-ARCH-8)
 
-> Dokumen ini menjelaskan lifecycle registrasi infrastruktur di Forma: K8s node/cluster, datastore (Postgres/SQLite), dan cache (Valkey/Redis). Semua resource menggunakan mekanisme registrasi yang seragam: **token signed + approval**. Tidak ada binary `forma-server` — registrasi dilakukan oleh Cluster Control (`forma-ctl --mode=cluster`) yang berjalan di dalam cluster.
+> Dokumen ini menjelaskan lifecycle registrasi infrastruktur di FormSpec: K8s node/cluster, datastore (Postgres/SQLite), dan cache (Valkey/Redis). Semua resource menggunakan mekanisme registrasi yang seragam: **token signed + approval**. Tidak ada binary `formspec-server` — registrasi dilakukan oleh Cluster Control (`formspec-ctl --mode=cluster`) yang berjalan di dalam cluster.
 
 ---
 
 ## 1. Unified Registration Model
 
-Semua resource — K8s node, database, cache — didaftarkan ke forma-ctl dengan mekanisme yang sama:
+Semua resource — K8s node, database, cache — didaftarkan ke formspec-ctl dengan mekanisme yang sama:
 
 ```
 ┌──────────────┐     ┌──────────────────┐     ┌──────────────┐
-│  Resource    │     │  forma-ctl       │     │  forma/ops   │
+│  Resource    │     │  formspec-ctl       │     │  formspec/ops   │
 │  (server,    │     │  (region)        │     │  (Cloud      │
 │   DB, cache) │     │                  │     │   Owner)     │
 └──────┬───────┘     └────────┬─────────┘     └──────┬───────┘
@@ -50,7 +50,7 @@ Semua resource — K8s node, database, cache — didaftarkan ke forma-ctl dengan
 |---|---|---|---|
 | **Token (signed)** | ✅ ed25519 | ✅ ed25519 | ✅ ed25519 |
 | **mTLS** | ✅ | ✅ (opsional) | ✅ (opsional) |
-| **Approval** | ✅ via forma/ops | ✅ via forma/ops | ✅ via forma/ops |
+| **Approval** | ✅ via formspec/ops | ✅ via formspec/ops | ✅ via formspec/ops |
 
 ### 1.2 Token Structure
 
@@ -76,7 +76,7 @@ Semua resource — K8s node, database, cache — didaftarkan ke forma-ctl dengan
 
 ### 2.1 K8s Node/Cluster
 
-Setiap K8s worker node yang menjalankan forma-resource pods harus diregistrasi ke forma-ctl melalui Cluster Control. Tidak ada binary `forma-server` — node K8s dengan label `forma.dev/*` yang sudah disetujui oleh Cloud Owner sudah cukup.
+Setiap K8s worker node yang menjalankan formspec-resource pods harus diregistrasi ke formspec-ctl melalui Cluster Control. Tidak ada binary `formspec-server` — node K8s dengan label `formspec.dev/*` yang sudah disetujui oleh Cloud Owner sudah cukup.
 
 | Attribute | Description |
 |---|---|
@@ -88,7 +88,7 @@ Setiap K8s worker node yang menjalankan forma-resource pods harus diregistrasi k
 | `capabilities.features` | auto-scaling, multi-az, ddos-protection |
 | `allowedTenants` | `["*"]` (shared) atau list tenant spesifik (dedicated) |
 
-**Heartbeat:** satu jalur pelaporan — **Forma Operator** (yang watch K8s API) melaporkan node health ke Cluster Control setiap 15 detik; **Cluster Control** merelay agregat per node ke Region Control setiap 30 detik. Isi heartbeat:
+**Heartbeat:** satu jalur pelaporan — **FormSpec Operator** (yang watch K8s API) melaporkan node health ke Cluster Control setiap 15 detik; **Cluster Control** merelay agregat per node ke Region Control setiap 30 detik. Isi heartbeat:
 - Status (healthy / degraded)
 - Current workspace count
 - CPU/memory usage
@@ -109,7 +109,7 @@ Setiap K8s worker node yang menjalankan forma-resource pods harus diregistrasi k
 | `allowedTenants` | List workspace ID yang boleh pakai |
 | `owner` | `cloud-owner` (shared) atau `workspace-owner:{id}` (dedicated) |
 
-**Credentials:** Disimpan sebagai K8s Secret, tidak pernah dikirim dalam token. Hanya Forma Operator yang membaca Secret dan meng-inject sebagai environment variable ke pod forma-resource.
+**Credentials:** Disimpan sebagai K8s Secret, tidak pernah dikirim dalam token. Hanya FormSpec Operator yang membaca Secret dan meng-inject sebagai environment variable ke pod formspec-resource.
 
 ### 2.3 Cache (Valkey / Redis)
 
@@ -158,7 +158,7 @@ register ──► pending ──► active ──► degraded ──► dead �
 | Status | Arti | Tindakan |
 |---|---|---|
 | `register` | Resource baru mendaftar | Menunggu verifikasi token + mTLS |
-| `pending` | Token verified, menunggu approval | Cloud Owner review via forma/ops |
+| `pending` | Token verified, menunggu approval | Cloud Owner review via formspec/ops |
 | `active` | Disetujui, beroperasi normal | Menerima workspace assignment |
 | `degraded` | Sebagian kapasitas berkurang | Alert Cloud Owner, hentikan assignment baru |
 | `dead` | Heartbeat missed, tidak merespons | Workspace di resource ini tidak available |
@@ -195,10 +195,10 @@ allowedTenants:
 
 ### 5.2 ResourceClaim CRD Enforcement
 
-Forma Operator membaca `ResourceClaim` CRD dan meng-enforce permission:
+FormSpec Operator membaca `ResourceClaim` CRD dan meng-enforce permission:
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: ResourceClaim
 metadata:
   name: bengkel-pg-claim
@@ -290,7 +290,7 @@ kandidat berikutnya.
 | **Network egress** | K8s metrics API | Per pod → per workspace |
 | **API calls** | Resource plane counters | Per workspace |
 
-Semua metrik diagregasi per workspace untuk billing. Workspace owner bisa lihat usage mereka di forma/console.
+Semua metrik diagregasi per workspace untuk billing. Workspace owner bisa lihat usage mereka di formspec/console.
 
 ---
 
@@ -300,12 +300,12 @@ Dalam standalone mode (non-K8s), registrasi resource dilakukan manual via CLI:
 
 ```bash
 # Register datastore
-forma datastore register pg-myapp \
+formspec datastore register pg-myapp \
   --driver postgres \
   --endpoint "postgres://localhost:5432/myapp"
 
 # Register cache
-forma cache register valkey-myapp \
+formspec cache register valkey-myapp \
   --driver valkey \
   --endpoint "localhost:6379"
 ```

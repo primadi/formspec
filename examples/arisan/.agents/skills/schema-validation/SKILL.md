@@ -1,14 +1,14 @@
 ---
 name: schema-validation
-description: Validate Forma YAML manifests against the schema contract + engine loader, then repair every error to canonical form. Use when a generated or hand-written spec fails validation, when the user reports YAML/schema errors, after generating manifests with a skill (generate → validate → fix), or before `forma apply`/`forma dev`. Runs `forma validate`, interprets engine vs schema failures, applies the canonical fix, and re-validates until clean.
+description: Validate FormSpec YAML manifests against the schema contract + engine loader, then repair every error to canonical form. Use when a generated or hand-written spec fails validation, when the user reports YAML/schema errors, after generating manifests with a skill (generate → validate → fix), or before `formspec apply`/`formspec dev`. Runs `formspec validate`, interprets engine vs schema failures, applies the canonical fix, and re-validates until clean.
 metadata:
   version: "1.0"
-  source: cmd/forma/validate.go + schemas/
+  source: cmd/formspec/validate.go + schemas/
 ---
 
-# Forma Schema Validation & Repair
+# FormSpec Schema Validation & Repair
 
-Validate every Forma manifest against the contract, fix what fails, and
+Validate every FormSpec manifest against the contract, fix what fails, and
 re-validate until zero problems. Ground truth is the engine loader
 (`internal/manifest`) plus the JSON Schema contract (`schemas/`), which is
 generated from `pkg/spec` via `make generate-schema`.
@@ -16,7 +16,7 @@ generated from `pkg/spec` via `make generate-schema`.
 ## Core Loop (never skip steps)
 
 ```
-1. RUN    forma validate --spec <dir> [--schema <dir>] [--no-schema]
+1. RUN    formspec validate --spec <dir> [--schema <dir>] [--no-schema]
 2. READ   classify each FAIL as engine: vs schema:
 3. REPAIR apply the canonical fix (Repair Catalog below)
 4. RE-RUN until 0 problem(s) found
@@ -24,7 +24,7 @@ generated from `pkg/spec` via `make generate-schema`.
 ```
 
 Run from the project root (cwd with `spec/`) with the built binary, or from
-the forma repo via `go run ./cmd/forma validate --spec <path>`. If the binary
+the formspec repo via `go run ./cmd/formspec validate --spec <path>`. If the binary
 is stale (says "not implemented yet"), rebuild first: `make build`.
 
 The schema source is auto-detected — no flag needed: a `schemas/` folder next
@@ -37,7 +37,7 @@ one was used (`schema: <dir> (local)` or `schema: embedded`). Pass
 
 Each manifest is reported per layer:
 
-- `engine: ...` — the manifest would break `forma dev`/`forma apply`
+- `engine: ...` — the manifest would break `formspec dev`/`formspec apply`
   (YAML parse error, or deep Entity validation). **Hard error — fix first.**
 - `schema: ...` — violates the JSON Schema contract for that kind
   (App, Module, Form, Workflow, Table, ...) that the loader does not yet
@@ -79,7 +79,7 @@ Do NOT "fix" these by relaxing the schema unless that is a deliberate
 
 ## Verification
 
-- Re-run `forma validate --spec <dir>` → expect `0 problem(s) found`.
+- Re-run `formspec validate --spec <dir>` → expect `0 problem(s) found`.
 - Optionally run `go test ./internal/manifest/ -run TestExamplesLoadAndValidate`
-  (from the forma repo) to confirm the engine accepts every example/vertical.
+  (from the formspec repo) to confirm the engine accepts every example/vertical.
 - Report which files changed and why (one line each).

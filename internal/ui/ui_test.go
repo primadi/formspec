@@ -4,13 +4,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/primadi/forma/internal/manifest"
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/internal/manifest"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 // fixtureYAML is a minimal app exercising every frontend kind + cross-refs.
 const fixtureYAML = `
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Table
 metadata: { name: order-table, module: billing }
 spec:
@@ -26,7 +26,7 @@ spec:
     - { action: view, label: Detail }
     - { action: checkout, label: Checkout }
 ---
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Form
 metadata: { name: order-edit, module: billing }
 spec:
@@ -38,7 +38,7 @@ spec:
         - { field: number, read_only: true }
         - { field: status, visible_when: "fields.status != 'draft'" }
 ---
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Page
 metadata: { name: order-list, module: billing }
 spec:
@@ -48,7 +48,7 @@ spec:
   blocks:
     - table: { ref: order-table, entity: order }
 ---
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Page
 metadata: { name: settings, module: billing }
 spec:
@@ -57,7 +57,7 @@ spec:
   tabs:
     - { label: General, form: { ref: order-edit, entity: order, id: "1" } }
 ---
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Widget
 metadata: { name: rev-today, module: billing }
 spec:
@@ -65,7 +65,7 @@ spec:
   type: metric
   entity: order
 ---
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Dashboard
 metadata: { name: main-dash, module: billing }
 spec:
@@ -73,7 +73,7 @@ spec:
   widgets:
     - { ref: rev-today, layout: { x: 0, y: 0, w: 1, h: 1 } }
 ---
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Kanban
 metadata: { name: order-board, module: billing }
 spec:
@@ -83,7 +83,7 @@ spec:
     - { status: draft, label: Draft }
     - { status: paid, label: Paid }
 ---
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Timeline
 metadata: { name: order-history, module: billing }
 spec:
@@ -91,7 +91,7 @@ spec:
   date_field: created_at
   bind_param: customer_id
 ---
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Wizard
 metadata: { name: checkout-wiz, module: billing }
 spec:
@@ -101,7 +101,7 @@ spec:
     - { title: Edit, form: order-edit }
     - { title: Commit, action: checkout }
 ---
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Report
 metadata: { name: sales, module: billing }
 spec:
@@ -110,7 +110,7 @@ spec:
   columns:
     - { field: number, label: "No." }
 ---
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Print
 metadata: { name: receipt, module: billing }
 spec:
@@ -120,7 +120,7 @@ spec:
     - fields: [number]
     - separator: "---"
 ---
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Theme
 metadata: { name: dark, module: billing }
 spec:
@@ -209,12 +209,12 @@ func TestLoadAllKinds(t *testing.T) {
 func TestDuplicateNameRejected(t *testing.T) {
 	loader := manifest.NewLoader("")
 	dup := `
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Theme
 metadata: { name: main, module: a }
 spec: { tokens: { color.primary: "#111" } }
 ---
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Theme
 metadata: { name: main, module: b }
 spec: { tokens: { color.primary: "#222" } }
@@ -236,14 +236,14 @@ func TestValidateClean(t *testing.T) {
 
 func TestValidateCatchesErrors(t *testing.T) {
 	broken := `
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Table
 metadata: { name: bad-table, module: billing }
 spec:
   entity: nonexistent
   columns: [{ field: x }]
 ---
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Form
 metadata: { name: bad-form, module: billing }
 spec:
@@ -253,7 +253,7 @@ spec:
       fields:
         - { field: no_such_field }
 ---
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Kanban
 metadata: { name: bad-board, module: billing }
 spec:
@@ -262,7 +262,7 @@ spec:
   columns:
     - { status: bogus_status, label: X }
 ---
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Page
 metadata: { name: p1, module: billing }
 spec:
@@ -270,14 +270,14 @@ spec:
   title: A
   blocks: [{ table: { ref: missing-table } }]
 ---
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Page
 metadata: { name: p2, module: billing }
 spec:
   route: /dup
   title: B
 ---
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Table
 metadata: { name: disabled-action-table, module: billing }
 spec:
@@ -333,7 +333,7 @@ func TestDotPathRelationValidation(t *testing.T) {
 
 	// unknown target field through relation must error
 	bad := `
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Table
 metadata: { name: t2, module: billing }
 spec:

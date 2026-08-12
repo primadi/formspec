@@ -21,7 +21,7 @@ type OutboxStore struct {
 	driver DriverType
 }
 
-// OutboxRecord represents a row in forma_outbox.
+// OutboxRecord represents a row in formspec_outbox.
 type OutboxRecord struct {
 	ID             string
 	WorkspaceID    string
@@ -87,7 +87,7 @@ func enqueueOutboxWithParams(ctx context.Context, database DB, workspaceID, even
 	}
 
 	query := `
-		INSERT INTO forma_outbox (tenant_id, event_name, resource, payload, status, backoff, initial_delay_ms, created_at, next_retry_at)
+		INSERT INTO formspec_outbox (tenant_id, event_name, resource, payload, status, backoff, initial_delay_ms, created_at, next_retry_at)
 		VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?)
 		RETURNING id
 	`
@@ -105,7 +105,7 @@ func enqueueOutboxWithParams(ctx context.Context, database DB, workspaceID, even
 
 func enqueueOutboxFallback(ctx context.Context, database DB, workspaceID, eventName, resource, payload, now, backoff string, initialDelayMs int) (string, error) {
 	_, err := database.ExecContext(ctx, `
-		INSERT INTO forma_outbox (tenant_id, event_name, resource, payload, status, backoff, initial_delay_ms, created_at, next_retry_at)
+		INSERT INTO formspec_outbox (tenant_id, event_name, resource, payload, status, backoff, initial_delay_ms, created_at, next_retry_at)
 		VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?)
 	`, workspaceID, eventName, resource, payload, backoff, initialDelayMs, now, now)
 	if err != nil {
@@ -132,7 +132,7 @@ func (s *OutboxStore) Dequeue(ctx context.Context, batchSize int) ([]OutboxRecor
 
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, tenant_id, event_name, resource, payload, status, retry_count, max_retries, backoff, initial_delay_ms, created_at, next_retry_at
-		FROM forma_outbox
+		FROM formspec_outbox
 		WHERE status = 'pending' AND next_retry_at <= ?
 		ORDER BY created_at ASC
 		LIMIT ?
@@ -160,7 +160,7 @@ func (s *OutboxStore) Dequeue(ctx context.Context, batchSize int) ([]OutboxRecor
 	// Claim them
 	for _, rec := range records {
 		if _, err := s.db.ExecContext(ctx, `
-			UPDATE forma_outbox SET status = 'delivering' WHERE id = ? AND status = 'pending'
+			UPDATE formspec_outbox SET status = 'delivering' WHERE id = ? AND status = 'pending'
 		`, rec.ID); err != nil {
 			return nil, fmt.Errorf("outbox claim %s: %w", rec.ID, err)
 		}
@@ -172,7 +172,7 @@ func (s *OutboxStore) Dequeue(ctx context.Context, batchSize int) ([]OutboxRecor
 // MarkCompleted marks an outbox record as successfully delivered.
 func (s *OutboxStore) MarkCompleted(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx, `
-		UPDATE forma_outbox SET status = 'completed' WHERE id = ?
+		UPDATE formspec_outbox SET status = 'completed' WHERE id = ?
 	`, id)
 	return err
 }
@@ -186,7 +186,7 @@ func (s *OutboxStore) MarkFailed(ctx context.Context, id string, maxRetries int)
 	var currentStatus, backoff string
 	var initialDelayMs int
 	err := s.db.QueryRowContext(ctx, `
-		SELECT retry_count, status, backoff, initial_delay_ms FROM forma_outbox WHERE id = ?
+		SELECT retry_count, status, backoff, initial_delay_ms FROM formspec_outbox WHERE id = ?
 	`, id).Scan(&retryCount, &currentStatus, &backoff, &initialDelayMs)
 	if err != nil {
 		return fmt.Errorf("outbox mark failed get: %w", err)
@@ -197,7 +197,7 @@ func (s *OutboxStore) MarkFailed(ctx context.Context, id string, maxRetries int)
 	if newRetryCount > maxRetries {
 		// Max retries exceeded → mark as failed permanently
 		_, err = s.db.ExecContext(ctx, `
-			UPDATE forma_outbox SET status = 'failed', retry_count = ? WHERE id = ?
+			UPDATE formspec_outbox SET status = 'failed', retry_count = ? WHERE id = ?
 		`, newRetryCount, id)
 		return err
 	}
@@ -219,7 +219,7 @@ func (s *OutboxStore) MarkFailed(ctx context.Context, id string, maxRetries int)
 	nextRetry := time.Now().UTC().Add(time.Duration(delayMs) * time.Millisecond).Format(time.RFC3339Nano)
 
 	_, err = s.db.ExecContext(ctx, `
-		UPDATE forma_outbox SET status = 'pending', retry_count = ?, next_retry_at = ? WHERE id = ?
+		UPDATE formspec_outbox SET status = 'pending', retry_count = ?, next_retry_at = ? WHERE id = ?
 	`, newRetryCount, nextRetry, id)
 	return err
 }
@@ -227,7 +227,7 @@ func (s *OutboxStore) MarkFailed(ctx context.Context, id string, maxRetries int)
 // CountByStatus returns the count of outbox records grouped by status.
 func (s *OutboxStore) CountByStatus(ctx context.Context) (map[string]int, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT status, COUNT(*) as cnt FROM forma_outbox GROUP BY status
+		SELECT status, COUNT(*) as cnt FROM formspec_outbox GROUP BY status
 	`)
 	if err != nil {
 		return nil, fmt.Errorf("outbox count: %w", err)
@@ -250,7 +250,7 @@ func (s *OutboxStore) CountByStatus(ctx context.Context) (map[string]int, error)
 func (s *OutboxStore) Cleanup(ctx context.Context, olderThan time.Duration) (int64, error) {
 	cutoff := time.Now().UTC().Add(-olderThan).Format(time.RFC3339Nano)
 	result, err := s.db.ExecContext(ctx, `
-		DELETE FROM forma_outbox WHERE status = 'completed' AND created_at < ?
+		DELETE FROM formspec_outbox WHERE status = 'completed' AND created_at < ?
 	`, cutoff)
 	if err != nil {
 		return 0, fmt.Errorf("outbox cleanup: %w", err)
@@ -266,7 +266,7 @@ func (s *OutboxStore) Peek(ctx context.Context, limit int) ([]OutboxRecord, erro
 
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, tenant_id, event_name, resource, payload, status, retry_count, max_retries, created_at, next_retry_at
-		FROM forma_outbox
+		FROM formspec_outbox
 		ORDER BY created_at DESC
 		LIMIT ?
 	`, limit)
@@ -295,7 +295,7 @@ func (s *OutboxStore) GetByID(ctx context.Context, id string) (*OutboxRecord, er
 
 	err := s.db.QueryRowContext(ctx, `
 		SELECT id, tenant_id, event_name, resource, payload, status, retry_count, max_retries, created_at, next_retry_at
-		FROM forma_outbox WHERE id = ?
+		FROM formspec_outbox WHERE id = ?
 	`, id).Scan(&rec.ID, &rec.WorkspaceID, &rec.EventName, &rec.Resource,
 		&payload, &rec.Status, &rec.RetryCount, &rec.MaxRetries,
 		&rec.CreatedAt, &rec.NextRetryAt)

@@ -1,6 +1,6 @@
-# Forma Spec — Kontrak Normatif
+# FormSpec Spec — Kontrak Normatif
 
-Section ini memuat **kontrak** Forma: apa yang wajib dipenuhi oleh implementasi
+Section ini memuat **kontrak** FormSpec: apa yang wajib dipenuhi oleh implementasi
 manapun, terlepas dari teknologi yang dipakainya. Pernyataan prinsipnya, sekali
 dan otoritatif:
 
@@ -21,7 +21,7 @@ Konsekuensi praktis:
 - **Rendering adalah interpretasi runtime, bukan code generation.** Shell membaca
   spec lewat Spec Resolution API saat runtime
   ([`frontend/04-spec-resolution-api.md`](frontend/04-spec-resolution-api.md)).
-  Codegen (`forma generate`) hanya untuk developer Tier 2/3 yang menulis handler
+  Codegen (`formspec generate`) hanya untuk developer Tier 2/3 yang menulis handler
   native atau frontend custom.
 
 ## Sub-section
@@ -30,7 +30,12 @@ Konsekuensi praktis:
 |---|---|
 | [`platform/`](platform/) | Kedua sisi: model workspace/app/module, kind system & meta-kinds, control plane, plane protocol, datastore, marketplace |
 | [`backend/`](backend/) | Engine & PersistBackend manapun: model dokumen, action, lifecycle, extension, interface penyimpanan |
-| [`frontend/`](frontend/) | Shell & renderer visual manapun: hirarki 4 tier, VisualSpecKind, Renderer, Spec Resolution API, katalog kind, FormaExpr |
+| [`frontend/`](frontend/) | Shell & renderer visual manapun: hirarki 4 tier, VisualSpecKind, Renderer, Spec Resolution API, katalog kind, FormSpecExpr |
 
 Status dokumen: `Outline` (kerangka cakupan) → `Draft` (isi lengkap, terbuka
 revisi) → `Final` (mengikat; perubahan lewat bump versi).
+
+> **Referensi per-kind:** [`docs/kind/`](../kind/README.md) — satu file per kind
+> (33 file, 4 grup), tabel atribut **generated dari `pkg/spec`** (zero drift),
+> narasi manual. `docs/spec/` = kontrak per-concern; `docs/kind/` = referensi
+> atribut per-kind.

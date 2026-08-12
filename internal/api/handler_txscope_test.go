@@ -7,11 +7,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/primadi/forma/internal/action"
-	"github.com/primadi/forma/internal/entity"
-	"github.com/primadi/forma/internal/manifest"
-	"github.com/primadi/forma/pkg/spec"
-	db "github.com/primadi/forma/renderers/jsonbpersist"
+	"github.com/primadi/formspec/internal/action"
+	"github.com/primadi/formspec/internal/entity"
+	"github.com/primadi/formspec/internal/manifest"
+	"github.com/primadi/formspec/pkg/spec"
+	db "github.com/primadi/formspec/renderers/jsonbpersist"
 )
 
 // registerTestEntity applies migrations for entitySpec and registers it into

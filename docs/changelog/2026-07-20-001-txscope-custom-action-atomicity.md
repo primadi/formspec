@@ -33,14 +33,14 @@ but must error if it would span two genuinely different stores.
 - Process-local `scopeRegistry` (`RegisterScope`/`LookupScope`/
   `UnregisterScope`) correlates the sidecar protocol's two separate HTTP
   round-trips (outbound `/invoke/...`, inbound `/ctx/entity/{op}` — both
-  served by the same `forma dev` process, confirmed in `cmd/forma/dev.go`).
+  served by the same `formspec dev` process, confirmed in `cmd/formspec/dev.go`).
 
 ### ctx-threading fix (prerequisite, previously silently dropped)
 - `internal/starlark/executor.go`: `ScriptExecutor.Execute` and its five
   handler func-type fields (`SaveHandler`/`CallHandler`/`LoadHandler`/
   `CreateHandler`/`NextKeyHandler`) gained a `ctx context.Context` param.
 - `internal/action/script.go`: passes `ctx` through instead of dropping it.
-- `resource/forma.go`: the five `Set*Handler` closures use the passed
+- `resource/formspec.go`: the five `Set*Handler` closures use the passed
   `ctx` instead of hardcoding `context.Background()`.
 
 ### `EntityStore` scope-awareness (`renderers/jsonbpersist/crud.go`, `tx.go`)
@@ -69,7 +69,7 @@ parameter: `Insert` passes its own `txdb`, `Update` passes `txReadDB(ctx, s.db)`
 - Rolls back on any `RunBeforePhase`/`Dispatch` error; `ErrCrossStoreTx`
   surfaces as its own `CROSS_STORE_TX` error code (plain string, matching
   this handler's existing convention — not the still-unwired `pkg/spec`
-  FORMA.* glossary).
+  FORMSPEC.* glossary).
 - Resolves the emitted event and, if durable, enqueues it via
   `EnqueueOutboxTx` (new, `outbox.go`) onto the scope's own transaction —
   **before** `scope.Commit()`. `action.DeliverEvents` (best-effort
@@ -82,7 +82,7 @@ parameter: `Insert` passes its own `txdb`, `Update` passes `txReadDB(ctx, s.db)`
 
 ### Sidecar wiring (`internal/action/sidecar.go`, `internal/sidecar/ctx.go`)
 - `SidecarExecutor.Execute` forwards the active scope's registry id as a
-  new `X-Forma-Scope-Id` request header on the outbound `/invoke/...` call.
+  new `X-FormSpec-Scope-Id` request header on the outbound `/invoke/...` call.
 - `CtxHandler.ServeHTTP` reads that header on inbound `/ctx/{prim}/{op}`
   calls, looks up the scope, and wraps ctx before dispatch — no change
   needed to the `EntityLoader`/`EntityFullSaver`/`EntityFieldUpdater`/
@@ -112,10 +112,10 @@ parameter: `Insert` passes its own `txdb`, `Update` passes `txReadDB(ctx, s.db)`
 - `renderers/jsonbpersist/txscope_test.go` — new
 - `internal/starlark/executor.go` — ctx-threading
 - `internal/action/script.go` — ctx passthrough
-- `internal/action/sidecar.go` — `X-Forma-Scope-Id` header
+- `internal/action/sidecar.go` — `X-FormSpec-Scope-Id` header
 - `internal/sidecar/ctx.go` — scope lookup + ctx wrap
 - `internal/sidecar/txscope_test.go` — new
-- `resource/forma.go` — `Set*Handler` closures use real ctx
+- `resource/formspec.go` — `Set*Handler` closures use real ctx
 - `internal/api/handler.go` — `HandleCustomAction` scope wiring +
   commit-before-deliver ordering; `writeStoreError` `CROSS_STORE_TX` case
 - `internal/api/handler_txscope_test.go` — new
@@ -124,7 +124,7 @@ parameter: `Insert` passes its own `txdb`, `Update` passes `txReadDB(ctx, s.db)`
 - `go build ./...`, `go vet ./...` — clean.
 - Full `go test ./...` (60s timeout) — no hangs; only the two pre-existing,
   unrelated failures remain (`examples/Clinic-UI-Showcase` date-drift
-  fixture `BACKDATE_EXCEEDED`, `internal/manifest`'s `forma-app.yaml`
+  fixture `BACKDATE_EXCEEDED`, `internal/manifest`'s `formspec-app.yaml`
   parse error) — both confirmed via `git stash` during Fase 2.1 to predate
   this and today's work.
 - New tests: `renderers/jsonbpersist/txscope_test.go` (join reuse,
@@ -139,4 +139,4 @@ parameter: `Insert` passes its own `txdb`, `Update` passes `txReadDB(ctx, s.db)`
 ## References
 - docs/spec/backend/01-core-basic.md §3 (cross-Datastore async-only)
 - docs/renderers/jsonb-persist/01-architecture.md §3, §4 (updated to match)
-- docs/runtimes/04-forma-sidecar.md §4.3a (new `X-Forma-Scope-Id` section)
+- docs/runtimes/04-formspec-sidecar.md §4.3a (new `X-FormSpec-Scope-Id` section)

@@ -1,7 +1,7 @@
 # gl (General Ledger) — Spec
 
 **Klasifikasi:** **App** standalone, independently installable — see [`docs/architecture/07-vertical-modules.md`](../../../docs/architecture/07-vertical-modules.md).
-**Spec target:** Forma Core Basic v0.2.0.
+**Spec target:** FormSpec Core Basic v0.2.0.
 
 > Formerly `examples/General-Ledger`, module name `general-ledger`. Moved to `verticals/gl` and the module renamed to `gl` (matching the `gl.journal-entry` references already used by `billing.order`'s event target and by `internal/manifest/examples_roundtrip_test.go`). The `order-to-journal` Subscription that used to live here was extracted to its own app, `verticals/sales-gl-integrator` — gl no longer reaches into `billing` itself.
 
@@ -11,7 +11,7 @@
 verticals/gl/
 ├── spec/
 │   ├── README.md
-│   ├── forma.yaml                                    # kind: App "gl", publishes: journal-entries
+│   ├── formspec.yaml                                    # kind: App "gl", publishes: journal-entries
 │   ├── menus/, widgets/, reports/, tables/, dashboards/  # App-level UI
 │   ├── modules/
 │   │   └── gl/
@@ -36,7 +36,7 @@ verticals/gl/
 ## App Identity
 
 - **Name:** `gl`
-- **Vendor:** `forma-dev`
+- **Vendor:** `formspec-dev`
 - **Modules:** `gl`
 - **Permission namespace:** `gl.*` (e.g. `gl.journal-entries.post`)
 - **Publishes:** `journal-entries` service (`create`, `post`) — consumed by `sales-gl-integrator`
@@ -45,7 +45,7 @@ verticals/gl/
 
 | Konsep | Lokasi | Spec Source |
 |---|---|---|
-| `kind: App` — standalone deployable | forma.yaml | Core Basic §4.4 |
+| `kind: App` — standalone deployable | formspec.yaml | Core Basic §4.4 |
 | `characteristics: [reference]` — seeded, read-only | account | Core Basic §4.1, §9.1 |
 | `characteristics: [transaction]` — append-heavy | journal-entry | Core Basic §9.1 |
 | `characteristics: [summary]` — system-managed | gl-balance | Core Basic §9.1 |

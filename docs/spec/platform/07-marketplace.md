@@ -27,7 +27,7 @@ terverifikasi terhadap public key vendor di registry, plus proses review
 (manual atau otomatis, kebijakan Platform Operator).
 
 Manifest **tidak pernah dienkripsi** (keterbacaan adalah fitur — consent,
-`forma validate`, review diff, AI). Proteksi nilai komersial datang dari:
+`formspec validate`, review diff, AI). Proteksi nilai komersial datang dari:
 (1) IP sesungguhnya boleh biner lewat `impl` native/compiled tanpa source;
 (2) signed provenance — salinan yang di-rename tidak bisa memalsukan
 signature dan tidak bisa masuk environment governed Verified-only; (3)
@@ -52,16 +52,16 @@ berbayar — Verified Badge + signature valid; semua listing — metadata
 artifact publik (nama, vendor, versi, deskripsi, dependency graph,
 footprint permission).
 
-**Alur instalasi:** `forma module install` menampilkan footprint permission
+**Alur instalasi:** `formspec module install` menampilkan footprint permission
 (agregat `required_permission` + `uses`) untuk consent Workspace Owner
 sebelum instalasi selesai
 ([`04-control-plane.md`](04-control-plane.md) §3 consent gate). Update versi
 yang memperluas footprint memicu re-consent.
 
-**Instalasi tidak sama dengan aktivasi (normatif).** `forma module install`
+**Instalasi tidak sama dengan aktivasi (normatif).** `formspec module install`
 mem-fetch artifact ke `vendors/`
 ([`08-project-layout.md`](08-project-layout.md) §6.1), mencatat provenance
-di `forma.lock` (§6.2), dan menulis entri **ter-nonaktif** (marker blok
+di `formspec.lock` (§6.2), dan menulis entri **ter-nonaktif** (marker blok
 ter-comment) di manifest App
 ([`02-workspace-app-module.md`](02-workspace-app-module.md) §2.1,
 [`08-project-layout.md`](08-project-layout.md) §6.3) — bukan otomatis aktif.
@@ -69,12 +69,12 @@ Ini yang membuat bundle vendor (satu source, banyak module sekaligus) aman
 di-install: semua ter-download, tapi hanya module yang eksplisit
 diaktifkan developer yang masuk registry, kena permission graph, dan kena
 license gate (§9) — sisanya diam di disk tanpa konsekuensi apa pun. Flag
-`forma module install <source> --use` melewati dua langkah ini — langsung
+`formspec module install <source> --use` melewati dua langkah ini — langsung
 menulis entri ter-aktif.
 
 Re-install/update (mis. naik versi) **tidak boleh** mengubah status
 aktif/nonaktif entri yang sudah ada — hanya versi di dalam marker dan
-entri `forma.lock` yang diperbarui; status aktivasi adalah properti file
+entri `formspec.lock` yang diperbarui; status aktivasi adalah properti file
 yang dijaga (preserved), bukan digenerate ulang. Detail mekanisme folder,
 format marker, dan idempotensi ada di
 [`08-project-layout.md`](08-project-layout.md) §6.
@@ -103,7 +103,7 @@ menerima fee di titik gate produksi.
 environment non-produksi (`development`/`test`/`staging`,
 [`04-control-plane.md`](04-control-plane.md) §2) — gate lisensi aktif
 hanya saat label environment adalah `production`, dievaluasi di titik
-`forma promote --to production`
+`formspec promote --to production`
 ([`10-deployment-operations.md`](10-deployment-operations.md) §5), bukan
 di dalam handler saat runtime.
 

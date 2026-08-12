@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 // NativeHandler is a Go function that implements a native action.

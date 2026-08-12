@@ -1,26 +1,26 @@
-# Struktur Repo Forma
+# Struktur Repo FormSpec
 
 **Status:** Draft
 **License:** Creative Commons CC0
 
-> Dokumen ini untuk **kontributor codebase Forma** (bukan app developer yang membangun di atas Forma, dan bukan platform operator yang menjalankan Forma). Ia memetakan folder repo ke prinsip **spec adalah kontrak, renderer adalah implementasi** yang mendasari seluruh `docs/` — lihat [`docs/README.md`](../README.md) untuk prinsip itu sendiri.
+> Dokumen ini untuk **kontributor codebase FormSpec** (bukan app developer yang membangun di atas FormSpec, dan bukan platform operator yang menjalankan FormSpec). Ia memetakan folder repo ke prinsip **spec adalah kontrak, renderer adalah implementasi** yang mendasari seluruh `docs/` — lihat [`docs/README.md`](../README.md) untuk prinsip itu sendiri.
 
 ---
 
 ## 1. Tree Repo Saat Ini, Diberi Anotasi
 
 ```
-forma/
+formspec/
 ├── cmd/                       # Binary entrypoint
-│   ├── forma/                 # CLI utama + dev server — docs/cli-tools/01, 02-forma-dev
-│   ├── forma-ctl/              # Binary Control Plane — docs/cli-tools/02-forma-ctl, docs/runtimes/01
-│   └── forma-operator/         # K8s operator — docs/runtimes/03
+│   ├── formspec/                 # CLI utama + dev server — docs/cli-tools/01, 02-formspec-dev
+│   ├── formspec-ctl/              # Binary Control Plane — docs/cli-tools/02-formspec-ctl, docs/runtimes/01
+│   └── formspec-operator/         # K8s operator — docs/runtimes/03
 │
 ├── pkg/
 │   └── spec/                  # ★ REALISASI KODE DARI docs/spec/ — struct Go yang MENJADI kontrak
 │                               #   (Manifest, Kind enum, Document/Entity, Datastore, Frontend kinds).
 │                               #   Backend-agnostic, renderer-agnostic. Dipakai bersama oleh runtime
-│                               #   engine dan seluruh target codegen (cmd/forma/generate_*.go).
+│                               #   engine dan seluruh target codegen (cmd/formspec/generate_*.go).
 │
 ├── internal/
 │   ├── db/, datastore/        # ⚙ RENDERER — mengimplementasikan kontrak PersistBackend
@@ -37,7 +37,7 @@ forma/
 │   ├── action/, starlark/     # Eksekusi Action — kontrak docs/spec/backend/01-core-basic.md §5
 │   ├── ui/                    # Registry manifest UI sisi server — dikonsumsi shadcn-shell
 │   ├── entity/                # Model runtime Document/Entity
-│   ├── sidecar/                # Sisi server protokol sidecar — docs/runtimes/04-forma-sidecar.md
+│   ├── sidecar/                # Sisi server protokol sidecar — docs/runtimes/04-formspec-sidecar.md
 │   ├── control/, permission/, auth/  # Control plane + keamanan — docs/spec/platform/04
 │   ├── manifest/               # Loader & validator YAML
 │   ├── operator/               # Controller K8s — docs/architecture/06-k8s-operator.md
@@ -49,12 +49,12 @@ forma/
 │
 ├── sdk/                        # Client library tipis, satu per bahasa (go, php, python, node/
 │                                #   typescript, java, dotnet, ruby, rust, browser) — mengimplementasikan
-│                                #   sisi handler protokol sidecar (docs/runtimes/04-forma-sidecar.md
+│                                #   sisi handler protokol sidecar (docs/runtimes/04-formspec-sidecar.md
 │                                #   §4.4). Inilah yang membuat handler tiap Module bisa ditulis
 │                                #   dalam bahasa berbeda — lihat docs/spec/platform/08-project-layout.md.
 │
-├── resource/                   # forma-resource: library engine Go yang di-embed ke binary
-│                                #   forma/forma-sidecar — BUKAN untuk di-import app developer.
+├── resource/                   # formspec-resource: library engine Go yang di-embed ke binary
+│                                #   formspec/formspec-sidecar — BUKAN untuk di-import app developer.
 │
 ├── verticals/, examples/       # App referensi — instance spec (YAML workspace/app/module),
 │                                #   bukan kode framework. Bukti kontrak bisa diimplementasikan.
@@ -98,9 +98,9 @@ Ini **rename/move**, bukan rewrite — logic yang sudah teruji di `internal/db`,
 | `internal/api/` | [`docs/spec/frontend/04-spec-resolution-api.md`](../spec/frontend/04-spec-resolution-api.md), [`docs/spec/backend/01-core-basic.md`](../spec/backend/01-core-basic.md) §6/§8 | Engine yang menyajikan kedua kontrak |
 | `web/`, `internal/ui/` | [`docs/spec/frontend/`](../spec/frontend/README.md), [`docs/renderers/shadcn-shell/`](../renderers/shadcn-shell/README.md) | Renderer Shell resmi (target: `renderers/web/`, §2) |
 | `internal/action/`, `internal/starlark/` | [`docs/spec/backend/01-core-basic.md`](../spec/backend/01-core-basic.md) §5 | Eksekusi Action lintas 5 jenis impl |
-| `internal/sidecar/`, `sdk/*` | [`docs/runtimes/04-forma-sidecar.md`](../runtimes/04-forma-sidecar.md), [`docs/spec/platform/08-project-layout.md`](../spec/platform/08-project-layout.md) | Protokol handler lintas bahasa |
+| `internal/sidecar/`, `sdk/*` | [`docs/runtimes/04-formspec-sidecar.md`](../runtimes/04-formspec-sidecar.md), [`docs/spec/platform/08-project-layout.md`](../spec/platform/08-project-layout.md) | Protokol handler lintas bahasa |
 | `internal/control/`, `internal/permission/`, `internal/auth/` | [`docs/spec/platform/04-control-plane.md`](../spec/platform/04-control-plane.md) | Governance & keamanan |
-| `cmd/forma/`, `cmd/forma-ctl/` | [`docs/cli-tools/`](../cli-tools/README.md) | CLI |
+| `cmd/formspec/`, `cmd/formspec-ctl/` | [`docs/cli-tools/`](../cli-tools/README.md) | CLI |
 
 ---
 

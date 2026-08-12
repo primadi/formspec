@@ -20,7 +20,7 @@
 ### Phase 1: Core Guard Wiring (2.3.1, 2.3.2, 2.3.3, 2.3.5, 2.3.6)
 
 **`renderers/jsonbpersist/lifecycle.go`**
-- Tambah error codes: `FORMA.DOC.ALREADY_SUBMITTED`, `FORMA.DOC.ALREADY_CANCELLED`, `FORMA.DOC.CREATE_SUBMIT_NOT_AVAILABLE`, `FORMA.REF.DELETE_BLOCKED`, `FORMA.REF.CANCEL_BLOCKED`
+- Tambah error codes: `FORMSPEC.DOC.ALREADY_SUBMITTED`, `FORMSPEC.DOC.ALREADY_CANCELLED`, `FORMSPEC.DOC.CREATE_SUBMIT_NOT_AVAILABLE`, `FORMSPEC.REF.DELETE_BLOCKED`, `FORMSPEC.REF.CANCEL_BLOCKED`
 - Tambah `LifecycleGuard` untuk `update` dengan pengecekan `submitEnabled` (jika submit nonaktif → lifecycle-free → update selalu allowed)
 
 **`renderers/jsonbpersist/crud.go`**
@@ -51,7 +51,7 @@
   - `restrict` (default): sama seperti sekarang — cek doc_status
   - `cascade`: hapus referencing documents yang masih draft/lifecycle-free
   - `set_null`: set field ke null jika field tidak required
-- `SoftDelete`/`Cancel`: sebelum execute, cek apakah ada doc lain yang mereferensi entity ini → blokir dengan `FORMA.REF.DELETE_BLOCKED` / `FORMA.REF.CANCEL_BLOCKED`
+- `SoftDelete`/`Cancel`: sebelum execute, cek apakah ada doc lain yang mereferensi entity ini → blokir dengan `FORMSPEC.REF.DELETE_BLOCKED` / `FORMSPEC.REF.CANCEL_BLOCKED`
 
 ### Phase 3: Child Lifecycle & Sequence (2.3.8, 2.3.9)
 
@@ -65,7 +65,7 @@
 ### Phase 4: Characteristic Enforcement (2.3.11, 2.3.12)
 
 **`renderers/jsonbpersist/crud.go`**
-- `Insert()`, `Update()`, `SoftDelete()`: block untuk `characteristic: summary` → `FORMA.DOC.SUMMARY_IMMUTABLE`
+- `Insert()`, `Update()`, `SoftDelete()`: block untuk `characteristic: summary` → `FORMSPEC.DOC.SUMMARY_IMMUTABLE`
 - `ValidateDocumentSpec`: sudah validasi transaction_date + characteristic count ✅
 
 ### Phase 5: Error Codes (2.3.7)

@@ -2,7 +2,7 @@
 
 **Updated:** 2026-08-06
 
-Dokumen implementasi transport realtime Forma: bagaimana WebSocket di-handle di
+Dokumen implementasi transport realtime FormSpec: bagaimana WebSocket di-handle di
 sisi server (`internal/api/wshub.go`) dan di sisi client (renderer shadcn-shell,
 `renderers/web/src/hooks/useRealtime.ts`), optimasi yang sudah dilakukan, kind
 yang mendukung realtime, dan bagaimana lifecycle perpindahan halaman / refresh /

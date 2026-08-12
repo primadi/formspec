@@ -1,5 +1,5 @@
 # Journal entry table — general journal with debit/credit columns
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Table
 metadata:
   name: journal-table

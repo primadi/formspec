@@ -3,20 +3,20 @@
 **Status:** Design — belum diimplementasikan
 **License:** Creative Commons CC0
 
-> Lapisan kedua arsitektur Forma AI ([`01-architecture.md`](01-architecture.md)
-> §1): bagaimana `forma-consult` memanggil LLM — multi-provider lewat Vercel AI
+> Lapisan kedua arsitektur FormSpec AI ([`01-architecture.md`](01-architecture.md)
+> §1): bagaimana `formspec-consult` memanggil LLM — multi-provider lewat Vercel AI
 > SDK, kredensial BYOK milik developer, dan batas kemampuan minimum model.
 
 ---
 
 ## 1. Kenapa Vercel AI SDK
 
-`forma-consult` memakai **Vercel AI SDK** (TypeScript) sebagai fondasi provider
+`formspec-consult` memakai **Vercel AI SDK** (TypeScript) sebagai fondasi provider
 layer — bukan agentic framework besar, bukan tulis sendiri dari nol:
 
 - **`ToolLoopAgent`** — siklus kirim → cek `tool_use` → eksekusi → kembalikan
   `tool_result` ([`01-architecture.md`](01-architecture.md) §3) tersedia sebagai
-  abstraksi first-class; `forma-consult` tidak menulis loop-nya manual.
+  abstraksi first-class; `formspec-consult` tidak menulis loop-nya manual.
 - **Provider adapter 25+ provider** — format tool-call di API mentah berbeda
   per provider dan ini alasan konkret lapisan ini ada, bukan teoretis:
   Anthropic memakai content-block (`type: "tool_use"`, `input` objek JSON
@@ -25,26 +25,26 @@ layer — bukan agentic framework besar, bukan tulis sendiri dari nol:
   kompatibel format OpenAI; Gemini beda lagi (`functionCall` di dalam `parts`).
   Normalisasi lintas-provider ditangani adapter SDK yang sudah matang, bukan
   ditulis manual per provider.
-- **MCP client bawaan** — koneksi ke `forma mcp-serve` (stdio) dan
-  `forma-remote-mcp` (Streamable HTTP) tanpa implementasi protokol sendiri.
+- **MCP client bawaan** — koneksi ke `formspec mcp-serve` (stdio) dan
+  `formspec-remote-mcp` (Streamable HTTP) tanpa implementasi protokol sendiri.
 
 Ini penerapan prinsip "manfaatkan open source dulu" — kebutuhan spesifik
 komponen ini (multi-provider + MCP + tool loop) paling matang di ekosistem
-TypeScript hari ini; itulah alasan `forma-consult` berbahasa TypeScript
+TypeScript hari ini; itulah alasan `formspec-consult` berbahasa TypeScript
 sementara seluruh platform tetap Go ([`01-architecture.md`](01-architecture.md)
-§2). `forma-local-mcp` (Go) tidak perlu berubah per provider — protokol MCP
+§2). `formspec-local-mcp` (Go) tidak perlu berubah per provider — protokol MCP
 sendiri sudah bahasa/provider-agnostik by design.
 
-Forma Skill **bukan** urusan lapisan ini: skill tidak pernah jadi konsep di
+FormSpec Skill **bukan** urusan lapisan ini: skill tidak pernah jadi konsep di
 level API provider mana pun — murni konvensi client-side, dikirim sebagai teks
 biasa lewat `tool_result`, tanpa field khusus yang perlu dipahami provider
-([`06-forma-skill.md`](06-forma-skill.md) §3). Tidak perlu adapter per provider
+([`06-formspec-skill.md`](06-formspec-skill.md) §3). Tidak perlu adapter per provider
 untuk skill, beda dari kasus format tool-call di atas.
 
 ## 2. BYOK & Minimum Capability Bar
 
 **BYOK** — developer membawa API key sendiri; cost inference sepenuhnya
-ditanggung developer. Forma tidak menjadi reseller AI. Konsisten dengan prinsip
+ditanggung developer. FormSpec tidak menjadi reseller AI. Konsisten dengan prinsip
 BYOK untuk data sovereignty di bagian lain platform.
 
 **Tidak semua LLM setara — tidak ada klaim itu.** Tiga alasan:
@@ -59,7 +59,7 @@ BYOK untuk data sovereignty di bagian lain platform.
    mendukungnya.
 
 Kebijakan: **minimum capability bar** (lolos test tool-calling + context window
-minimum) + daftar provider yang sudah divalidasi Forma. Model yang gagal bar
+minimum) + daftar provider yang sudah divalidasi FormSpec. Model yang gagal bar
 ditolak dengan pesan jelas, bukan dibiarkan menghasilkan sesi berkualitas
 buruk. Benchmark konkret bar ini masih pertanyaan terbuka (§4).
 
@@ -113,5 +113,5 @@ berlaku ([`01-architecture.md`](01-architecture.md) §6).
 | Dokumen | Isi |
 |---|---|
 | [`01-architecture.md`](01-architecture.md) | Tool-use loop yang dijalankan lapisan ini; dua budget token |
-| [`02-forma-consult.md`](02-forma-consult.md) | Client yang menggunakan lapisan ini |
-| [`06-forma-skill.md`](06-forma-skill.md) | Kenapa skill tidak butuh dukungan provider |
+| [`02-formspec-consult.md`](02-formspec-consult.md) | Client yang menggunakan lapisan ini |
+| [`06-formspec-skill.md`](06-formspec-skill.md) | Kenapa skill tidak butuh dukungan provider |

@@ -1,11 +1,11 @@
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: App
 metadata:
   name: notifications
   description: WhatsApp notification reactions — subscribes to billing.order events
 spec:
   version: 1.0.0
-  vendor: forma-dev
+  vendor: formspec-dev
   root_url: /app/notifications
   modules: [notifications]
   consumes:

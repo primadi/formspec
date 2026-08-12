@@ -1,0 +1,28 @@
+{
+  "title": "KindDefinition Spec",
+  "description": "KindDefinitionSpec declares a new resource kind (CRD-like extension),\nincluding its schema and handler (platform/03-kind-system.md §2).\n",
+  "type": "object",
+  "properties": {
+    "group": {
+      "type": "string"
+    },
+    "handler": {
+      "$ref": "#/$defs/ImplDecl",
+      "nullable": true
+    },
+    "schema": {},
+    "scope": {
+      "description": "module | app",
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "group",
+    "version",
+    "handler"
+  ],
+  "additionalProperties": false
+}

@@ -1,7 +1,7 @@
 # SHOWCASE: entity append-only untuk kind: Timeline (§13 spec frontend).
 # update & delete di-disable → renderer tidak boleh render tombol edit/hapus;
 # Timeline = "read-only story".
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Entity
 metadata:
   name: medical-record

@@ -1,7 +1,7 @@
 /**
  * Sidecar -> App direction: the /invoke listener.
  *
- * Receives POST /invoke/{module}/{entity}/{action} from forma-sidecar and
+ * Receives POST /invoke/{module}/{entity}/{action} from formspec-sidecar and
  * dispatches to registered handler functions. Also answers GET /health for
  * the sidecar's app monitor. Node stdlib only.
  */
@@ -10,7 +10,7 @@ import * as fs from "node:fs";
 import * as http from "node:http";
 import * as path from "node:path";
 
-import { Ctx, FormaError, SidecarClient } from "./ctx";
+import { Ctx, FormSpecError, SidecarClient } from "./ctx";
 
 /** One action invocation — the wire form of the engine's ExecuteParams. */
 export interface Invocation {
@@ -70,7 +70,7 @@ export interface AppOptions {
 }
 
 /**
- * The lib-forma (TypeScript) listener.
+ * The lib-formspec (TypeScript) listener.
  *
  *     const app = new App();
  *     app.handle("billing.invoice.approve", async (inv, ctx) => {
@@ -88,14 +88,14 @@ export class App {
   constructor(options: AppOptions = {}) {
     this.listen =
       options.listen ??
-      `unix://${process.env.FORMA_APP_SOCKET ?? "/tmp/forma/app.sock"}`;
+      `unix://${process.env.FORMA_APP_SOCKET ?? "/tmp/formspec/app.sock"}`;
     this.ctx = new Ctx(new SidecarClient(options.sidecarEndpoint));
   }
 
   /** Register a handler for "module.entity.action". */
   handle(action: string, handler: Handler): void {
     if (this.handlers.has(action)) {
-      throw new FormaError(`handler for ${action} already registered`);
+      throw new FormSpecError(`handler for ${action} already registered`);
     }
     this.handlers.set(action, handler);
   }
@@ -103,8 +103,8 @@ export class App {
   /** Starts the listener; resolves once it is accepting connections. */
   run(): Promise<http.Server> {
     if (!this.listen.startsWith("unix://")) {
-      throw new FormaError(
-        `listen ${this.listen}: only unix:// is supported by lib-forma`,
+      throw new FormSpecError(
+        `listen ${this.listen}: only unix:// is supported by lib-formspec`,
       );
     }
     const socketPath = this.listen.slice("unix://".length);
@@ -120,14 +120,14 @@ export class App {
       server.once("error", reject);
       server.listen(socketPath, () => {
         fs.chmodSync(socketPath, 0o666); // sidecar runs as a different user
-        process.stderr.write(`[lib-forma] listening on ${socketPath}\n`);
+        process.stderr.write(`[lib-formspec] listening on ${socketPath}\n`);
         resolve(server);
       });
     });
   }
 
   private serve(req: http.IncomingMessage, res: http.ServerResponse): void {
-    const url = new URL(req.url ?? "/", "http://forma-app");
+    const url = new URL(req.url ?? "/", "http://formspec-app");
 
     if (req.method === "GET" && url.pathname === "/health") {
       respond(res, 200, { status: "healthy", handlers: this.handlers.size });

@@ -1,26 +1,26 @@
-# @forma/client
+# @formspec/client
 
-Typed browser/Node runtime for Forma's generated REST API
+Typed browser/Node runtime for FormSpec's generated REST API
 (docs_old/spec/02-core-basic.md §16). This is the hand-written half of
-`forma.api` (docs_old/spec/05-frontend.md §7) — `forma generate --lang
-typescript` (`cmd/forma/generate.go`) emits the typed half on top of it.
+`formspec.api` (docs_old/spec/05-frontend.md §7) — `formspec generate --lang
+typescript` (`cmd/formspec/generate.go`) emits the typed half on top of it.
 Zero runtime dependencies (native `fetch`), Node ≥ 18 or any modern browser.
 
 **Full guide (installation, codegen walkthrough, a React + shadcn
-example):** `docs/cli-tools/03-forma-generate.md`.
+example):** `docs/cli-tools/03-formspec-generate.md`.
 
 ```bash
-npm install @forma/client   # or, until published: npm install <path-to-sdk/browser>
+npm install @formspec/client   # or, until published: npm install <path-to-sdk/browser>
 ```
 
 ```ts
-import { FormaClient, FormaApiError } from "@forma/client";
-import { createApi } from "./generated/forma-client"; // forma generate output
+import { FormaClient, FormaApiError } from "@formspec/client";
+import { createApi } from "./generated/formspec-client"; // formspec generate output
 
 const client = new FormaClient({
   baseUrl: "https://api.example.com",
   workspace: "acme",
-  getToken: () => localStorage.getItem("forma_token") ?? undefined,
+  getToken: () => localStorage.getItem("formspec_token") ?? undefined,
 });
 const api = createApi(client);
 

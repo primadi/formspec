@@ -4,6 +4,7 @@ package spec
 
 // ServiceSpec defines a stateless, pure computation resource (Core §4.2).
 type ServiceSpec struct {
+	// @schema {example: "v1"}
 	Version string      `yaml:"version" json:"version"`
 	Actions []Action    `yaml:"actions" json:"actions"`
 	Auth    *EntityAuth `yaml:"auth,omitempty" json:"auth,omitempty"`
@@ -11,14 +12,18 @@ type ServiceSpec struct {
 
 // ModuleSpec defines a package of manifests (Core §4.3, Ref D19).
 type ModuleSpec struct {
-	Version string       `yaml:"version" json:"version"`
-	Vendor  string       `yaml:"vendor,omitempty" json:"vendor,omitempty"`     // publishing vendor (platform/02-workspace-app-module.md §2)
+	// @schema {example: "1.0.0"}
+	Version string `yaml:"version" json:"version"`
+	// @schema {example: "acme-corp"}
+	Vendor string `yaml:"vendor,omitempty" json:"vendor,omitempty"` // publishing vendor (platform/02-workspace-app-module.md §2)
+	// @schema {example: "formspec/core", description: "Module dependencies — array of {module, version?}"}
 	Depends []Dependency `yaml:"depends,omitempty" json:"depends,omitempty"`
 	// Datastore binds the module to a named kind: Datastore for ctx.db()
 	// (platform/06-datastore.md §1.1). Empty = resolve to Datastore 'default'.
+	// @schema {example: "default"}
 	Datastore string         `yaml:"datastore,omitempty" json:"datastore,omitempty"`
 	Config    map[string]any `yaml:"config,omitempty" json:"config,omitempty"`     // module-specific configuration (02-workspace-app-module.md §2)
-	AiIndex   *AiIndexDecl    `yaml:"ai_index,omitempty" json:"ai_index,omitempty"` // AI discovery metadata (ai/04-forma-remote-mcp.md §3)
+	AiIndex   *AiIndexDecl   `yaml:"ai_index,omitempty" json:"ai_index,omitempty"` // AI discovery metadata (ai/04-formspec-remote-mcp.md §3)
 	// Menu is a default navigation suggestion, module-relative (no `Module`
 	// field on its items — it's implicitly this module). An App adopts it
 	// wholesale via a `type: module` MenuItem (platform/02-workspace-app-module.md §4).
@@ -26,7 +31,7 @@ type ModuleSpec struct {
 }
 
 // AiIndexDecl is the optional AI discovery index on a Module
-// (ai/04-forma-remote-mcp.md §3). skills_for_ai is untrusted third-party input.
+// (ai/04-formspec-remote-mcp.md §3). skills_for_ai is untrusted third-party input.
 type AiIndexDecl struct {
 	Category           string   `yaml:"category,omitempty" json:"category,omitempty"`
 	Features           []string `yaml:"features,omitempty" json:"features,omitempty"`
@@ -47,16 +52,22 @@ type Dependency struct {
 // more than one App; all Apps in a workspace run simultaneously, mounted at
 // their own RootURL.
 type AppSpec struct {
-	Version        string         `yaml:"version" json:"version"`
-	Vendor         string         `yaml:"vendor" json:"vendor"`
-	RootURL        string         `yaml:"root_url" json:"root_url"`
-	Modules        []string       `yaml:"modules" json:"modules"`
-	AppRenderer    string         `yaml:"app_renderer,omitempty" json:"app_renderer,omitempty"` // named Renderer tier app (frontend/05-app-kinds.md)
-	ThemeRef       string         `yaml:"theme_ref,omitempty" json:"theme_ref,omitempty"`       // per-App Theme resolution (platform/02 §3)
-	AuthConfigRef  string         `yaml:"auth_config_ref,omitempty" json:"auth_config_ref,omitempty"` // per-App auth strategy config
-	Menu           []MenuItem     `yaml:"menu,omitempty" json:"menu,omitempty"`
-	Publishes      []AppInterface `yaml:"publishes,omitempty" json:"publishes,omitempty"`       // cross-app interfaces offered
-	Consumes       []AppConsume   `yaml:"consumes,omitempty" json:"consumes,omitempty"`         // cross-app interfaces needed → grant request
+	// @schema {example: "1.0.0"}
+	Version string `yaml:"version" json:"version"`
+	// @schema {example: "acme-corp"}
+	Vendor string `yaml:"vendor" json:"vendor"`
+	// @schema {example: "/app/klinik", pattern: "^/app/"}
+	RootURL string `yaml:"root_url" json:"root_url"`
+	// @schema {example: "[clinic, pharmacy]"}
+	Modules []string `yaml:"modules" json:"modules"`
+	// @schema {example: "shadcn-shell"}
+	AppRenderer string `yaml:"app_renderer,omitempty" json:"app_renderer,omitempty"` // named Renderer tier app (frontend/05-app-kinds.md)
+	// @schema {example: "ocean-blue"}
+	ThemeRef      string         `yaml:"theme_ref,omitempty" json:"theme_ref,omitempty"`             // per-App Theme resolution (platform/02 §3)
+	AuthConfigRef string         `yaml:"auth_config_ref,omitempty" json:"auth_config_ref,omitempty"` // per-App auth strategy config
+	Menu          []MenuItem     `yaml:"menu,omitempty" json:"menu,omitempty"`
+	Publishes     []AppInterface `yaml:"publishes,omitempty" json:"publishes,omitempty"` // cross-app interfaces offered
+	Consumes      []AppConsume   `yaml:"consumes,omitempty" json:"consumes,omitempty"`   // cross-app interfaces needed → grant request
 }
 
 // AppInterface is one cross-app service interface offered by an App
@@ -102,16 +113,21 @@ type SlotContract struct {
 // RendererSpec declares a concrete implementation of a VisualSpecKind
 // (frontend/03-renderer-kind.md).
 type RendererSpec struct {
-	Implements  string `yaml:"implements" json:"implements"`
+	// @schema {example: "formspec/visual.form-page"}
+	Implements string `yaml:"implements" json:"implements"`
+	// @schema {example: "react-shadcn"}
 	StackFamily string `yaml:"stack_family" json:"stack_family"` // e.g. react-shadcn, vue, flutter
-	TrustTier   string `yaml:"trust_tier" json:"trust_tier"`     // official | verified | community
+	// @schema {example: "official", enum: ["official", "verified", "community"]}
+	TrustTier string `yaml:"trust_tier" json:"trust_tier"` // official | verified | community
 }
 
 // PersistBackendSpec declares a storage seam implementation
 // (backend/04-persist-backend.md).
 type PersistBackendSpec struct {
+	// @schema {example: "formspec/storage.entity-persist"}
 	Implements string `yaml:"implements" json:"implements"` // storage backend name
-	TrustTier  string `yaml:"trust_tier" json:"trust_tier"` // official | verified | community
+	// @schema {example: "official", enum: ["official", "verified", "community"]}
+	TrustTier string `yaml:"trust_tier" json:"trust_tier"` // official | verified | community
 }
 
 // ─── MenuItem ───
@@ -136,7 +152,7 @@ type MenuItem struct {
 	Module   string     `yaml:"module,omitempty" json:"module,omitempty"`
 	View     string     `yaml:"view,omitempty" json:"view,omitempty"`   // name of a registered View resource
 	Route    string     `yaml:"route,omitempty" json:"route,omitempty"` // raw URL escape hatch (no registered View)
-	When     string     `yaml:"when,omitempty" json:"when,omitempty"`   // FormaExpr business condition
+	When     string     `yaml:"when,omitempty" json:"when,omitempty"`   // FormSpecExpr business condition
 	Children []MenuItem `yaml:"children,omitempty" json:"children,omitempty"`
 }
 
@@ -146,7 +162,9 @@ type MenuItem struct {
 // Keys are structured — each key declares its type, default value, and
 // whether it is a secret (never inlined in YAML, resolved per environment).
 // Scripts read values via ctx.config.get("key").
+// ConfigSpec declares module-level configuration keys (01-core-basic.md §10).
 type ConfigSpec struct {
+	// @schema {example: "{invoice_due_days: {type: int, default: 30}, smtp_host: {type: string, secret: true}}"}
 	Keys map[string]ConfigKey `yaml:"keys" json:"keys"`
 }
 
@@ -166,11 +184,14 @@ type ConfigKey struct {
 // Tier 2 (Streaming): adds store, retention, position, max_retry, dead_letter,
 // filter, transform, and explicit delivery channel.
 type SubscriptionSpec struct {
-	Events     []string         `yaml:"events" json:"events"`
-	Handler    ImplDecl         `yaml:"handler" json:"handler"`
-	Store      string           `yaml:"store,omitempty" json:"store,omitempty"`             // Tier 2: stream backend (redis, kafka)
-	Durable    string           `yaml:"durable,omitempty" json:"durable,omitempty"`         // Tier 2: durability mode
-	Retry      *RetryDecl       `yaml:"retry,omitempty" json:"retry,omitempty"`             // Tier 2
+	// @schema {example: "billing.invoice.on_submit"}
+	Events  []string `yaml:"events" json:"events"`
+	Handler ImplDecl `yaml:"handler" json:"handler"`
+	// @schema {example: "redis"}
+	Store   string     `yaml:"store,omitempty" json:"store,omitempty"`     // Tier 2: stream backend (redis, kafka)
+	Durable string     `yaml:"durable,omitempty" json:"durable,omitempty"` // Tier 2: durability mode
+	Retry   *RetryDecl `yaml:"retry,omitempty" json:"retry,omitempty"`     // Tier 2
+	// @schema {example: "latest", enum: ["latest", "earliest"]}
 	Position   string           `yaml:"position,omitempty" json:"position,omitempty"`       // Tier 2: latest | earliest | <id>
 	Filter     string           `yaml:"filter,omitempty" json:"filter,omitempty"`           // Tier 2: Starlark filter over event payload
 	Transform  string           `yaml:"transform,omitempty" json:"transform,omitempty"`     // Tier 2: Starlark transform over event payload
@@ -193,7 +214,9 @@ type SubDeliveryDecl struct {
 // MigrationSpec defines a custom DDL migration (01-core-basic.md §4).
 // Only DDL statements are allowed — DML is rejected at runtime.
 type MigrationSpec struct {
-	DDL    string `yaml:"ddl" json:"ddl"`
+	// @schema {example: "CREATE INDEX idx_invoice_date ON invoice(transaction_date)"}
+	DDL string `yaml:"ddl" json:"ddl"`
+	// @schema {example: "billing"}
 	Module string `yaml:"module,omitempty" json:"module,omitempty"` // owning module for table-level DDL
 }
 
@@ -202,6 +225,7 @@ type MigrationSpec struct {
 // WorkflowSpec defines an approval workflow attached to a state machine
 // transition (02-core-extended.md §2).
 type WorkflowSpec struct {
+	// @schema {example: "gl.journal-entry"}
 	Entity     string              `yaml:"entity" json:"entity"`
 	On         *WorkflowTrigger    `yaml:"on" json:"on"`
 	Steps      []WorkflowStep      `yaml:"steps" json:"steps"`
@@ -218,17 +242,20 @@ type WorkflowTrigger struct {
 // WorkflowTransitionRef identifies the intercepted transition by its
 // from/to states.
 type WorkflowTransitionRef struct {
+	// @schema {example: "draft"}
 	From string `yaml:"from" json:"from"`
-	To   string `yaml:"to" json:"to"`
+	// @schema {example: "posted"}
+	To string `yaml:"to" json:"to"`
 }
 
 // WorkflowStep is one approval step in the workflow chain.
 // Steps are evaluated sequentially; each must reach quorum before the next begins.
 type WorkflowStep struct {
+	// @schema {example: "[gl.supervisor]"}
 	Roles      []string        `yaml:"roles" json:"roles"`
 	Approvers  int             `yaml:"approvers,omitempty" json:"approvers,omitempty"` // quorum, default 1
 	Mode       string          `yaml:"mode,omitempty" json:"mode,omitempty"`           // all | any | sequential
-	When       string          `yaml:"when,omitempty" json:"when,omitempty"`           // FormaExpr — skip step if false
+	When       string          `yaml:"when,omitempty" json:"when,omitempty"`           // FormSpecExpr — skip step if false
 	Escalation *StepEscalation `yaml:"escalation,omitempty" json:"escalation,omitempty"`
 }
 
@@ -261,9 +288,11 @@ type ApiSpec struct {
 
 // ApiRESTConfig configures the REST external surface.
 type ApiRESTConfig struct {
-	BasePath string   `yaml:"base_path,omitempty" json:"base_path,omitempty"` // replaces {module} in route
-	Version  string   `yaml:"version,omitempty" json:"version,omitempty"`     // override {version} route
-	Disable  []string `yaml:"disable,omitempty" json:"disable,omitempty"`     // entities to opt-out
+	// @schema {example: "/invoices"}
+	BasePath string `yaml:"base_path,omitempty" json:"base_path,omitempty"` // replaces {module} in route
+	// @schema {example: "v2"}
+	Version string   `yaml:"version,omitempty" json:"version,omitempty"` // override {version} route
+	Disable []string `yaml:"disable,omitempty" json:"disable,omitempty"` // entities to opt-out
 }
 
 // ApiGRPCConfig configures the gRPC external surface.
@@ -277,8 +306,11 @@ type ApiGRPCConfig struct {
 // WebhookSpec defines a verified inbound webhook endpoint
 // (02-core-extended.md §4).
 type WebhookSpec struct {
-	For            string           `yaml:"for" json:"for"`
-	Method         string           `yaml:"method" json:"method"`
+	// @schema {example: "billing.invoice"}
+	For string `yaml:"for" json:"for"`
+	// @schema {example: "POST", enum: ["GET", "POST", "PUT", "PATCH", "DELETE"]}
+	Method string `yaml:"method" json:"method"`
+	// @schema {example: "/webhooks/midtrans"}
 	Path           string           `yaml:"path,omitempty" json:"path,omitempty"`
 	Auth           *WebhookAuth     `yaml:"auth" json:"auth"`
 	Idempotent     bool             `yaml:"idempotent,omitempty" json:"idempotent,omitempty"`
@@ -311,21 +343,26 @@ type WebhookKeyRef struct {
 // IntegratorSpec bridges two entities/modules that do not know each other
 // directly (02-core-extended.md §5).
 type IntegratorSpec struct {
-	Listen     *IntegratorListen `yaml:"listen" json:"listen"`
-	Call       *IntegratorCall   `yaml:"call" json:"call"`
-	Compensate string            `yaml:"compensate,omitempty" json:"compensate,omitempty"`
+	Listen *IntegratorListen `yaml:"listen" json:"listen"`
+	Call   *IntegratorCall   `yaml:"call" json:"call"`
+	// @schema {example: "gl.journal-entry.cancel"}
+	Compensate string `yaml:"compensate,omitempty" json:"compensate,omitempty"`
 }
 
 // IntegratorListen declares the source event to react to.
 type IntegratorListen struct {
+	// @schema {example: "sales.order"}
 	Resource string `yaml:"resource" json:"resource"`
-	Event    string `yaml:"event" json:"event"`
+	// @schema {example: "on_submit"}
+	Event string `yaml:"event" json:"event"`
 }
 
 // IntegratorCall declares the target action to invoke.
 type IntegratorCall struct {
+	// @schema {example: "gl.journal-entry"}
 	Resource string `yaml:"resource" json:"resource"`
-	Action   string `yaml:"action" json:"action"`
+	// @schema {example: "create"}
+	Action string `yaml:"action" json:"action"`
 }
 
 // ─── 1.1.6 MockupSpec ───
@@ -333,6 +370,7 @@ type IntegratorCall struct {
 // MockupSpec defines a simulated connector that implements the same contract
 // as the real integration (02-core-extended.md §8).
 type MockupSpec struct {
+	// @schema {example: "billing.payment-gateway"}
 	For       string `yaml:"for" json:"for"` // module.service or module.entity
 	ConfigRef string `yaml:"config_ref,omitempty" json:"config_ref,omitempty"`
 }
@@ -342,9 +380,12 @@ type MockupSpec struct {
 // KindDefinitionSpec declares a new resource kind (CRD-like extension),
 // including its schema and handler (platform/03-kind-system.md §2).
 type KindDefinitionSpec struct {
-	Group   string    `yaml:"group" json:"group"`
+	// @schema {example: "seed.formspec.dev"}
+	Group string `yaml:"group" json:"group"`
+	// @schema {example: "v1"}
 	Version string    `yaml:"version" json:"version"`
 	Schema  any       `yaml:"schema,omitempty" json:"schema,omitempty"`
 	Handler *ImplDecl `yaml:"handler" json:"handler"`
-	Scope   string    `yaml:"scope,omitempty" json:"scope,omitempty"` // module | app
+	// @schema {example: "module", enum: ["module", "app"]}
+	Scope string `yaml:"scope,omitempty" json:"scope,omitempty"` // module | app
 }

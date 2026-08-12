@@ -3,9 +3,9 @@ package api
 import (
 	"strings"
 
-	"github.com/primadi/forma/internal/entity"
-	"github.com/primadi/forma/pkg/spec"
-	db "github.com/primadi/forma/renderers/jsonbpersist"
+	"github.com/primadi/formspec/internal/entity"
+	"github.com/primadi/formspec/pkg/spec"
+	db "github.com/primadi/formspec/renderers/jsonbpersist"
 )
 
 // GenerateRoutes produces RouteDescriptors for all registered entities

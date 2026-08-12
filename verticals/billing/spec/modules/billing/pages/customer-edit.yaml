@@ -1,5 +1,5 @@
 # Customer edit page — full-page edit form
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Page
 metadata:
   name: customer-edit-page

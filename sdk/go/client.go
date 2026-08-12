@@ -1,8 +1,8 @@
-// Package forma is the thin Go SDK for forma sidecar communication.
+// Package formspec is the thin Go SDK for formspec sidecar communication.
 //
 // Usage:
 //
-//	client, err := forma.Connect("acme-corp")
+//	client, err := formspec.Connect("acme-corp")
 //	if err != nil { ... }
 //
 //	// Invoke a business logic handler
@@ -10,7 +10,7 @@
 //
 //	// Entity operations (workspace-scoped by the sidecar — no tenantId params)
 //	err := client.Entity().Update("ord-001", map[string]any{"status": "paid"})
-package forma
+package formspec
 
 import (
 	"bytes"
@@ -23,10 +23,10 @@ import (
 	"time"
 )
 
-// DefaultSidecarPath is the default Unix socket path for the forma sidecar.
-const DefaultSidecarPath = "/tmp/forma/sidecar.sock"
+// DefaultSidecarPath is the default Unix socket path for the formspec sidecar.
+const DefaultSidecarPath = "/tmp/formspec/sidecar.sock"
 
-// Client is a thin client for the forma sidecar.
+// Client is a thin client for the formspec sidecar.
 // It is scoped to a single workspace — the workspace ID is bound at
 // connection time and injected as a header on every request.
 type Client struct {
@@ -35,16 +35,16 @@ type Client struct {
 	workspaceID string
 }
 
-// Connect establishes a connection to the forma sidecar.
+// Connect establishes a connection to the formspec sidecar.
 // workspaceID is bound for the lifetime of this client.
 // If endpoint is empty, defaults to DefaultSidecarPath (Unix socket).
 //
 // The client communicates with the sidecar via HTTP over a Unix socket.
-// The workspace ID is automatically injected as X-Forma-Workspace header
+// The workspace ID is automatically injected as X-FormSpec-Workspace header
 // on every request — the sidecar derives the internal tenant ID from it.
 func Connect(workspaceID string, endpoint string) (*Client, error) {
 	if workspaceID == "" {
-		return nil, fmt.Errorf("forma: workspaceID is required")
+		return nil, fmt.Errorf("formspec: workspaceID is required")
 	}
 	if endpoint == "" {
 		endpoint = "unix://" + DefaultSidecarPath
@@ -56,7 +56,7 @@ func Connect(workspaceID string, endpoint string) (*Client, error) {
 func connect(workspaceID, endpoint string) (*Client, error) {
 	u, pathPrefix, transport, err := parseEndpoint(endpoint)
 	if err != nil {
-		return nil, fmt.Errorf("forma: %w", err)
+		return nil, fmt.Errorf("formspec: %w", err)
 	}
 
 	return &Client{
@@ -83,7 +83,7 @@ func parseEndpoint(endpoint string) (string, string, *http.Transport, error) {
 				return d.DialContext(context.Background(), "unix", socketPath)
 			},
 		}
-		return "http://forma-sidecar", "", transport, nil
+		return "http://formspec-sidecar", "", transport, nil
 	}
 
 	if endpoint[:4] == "http" {
@@ -101,21 +101,21 @@ func (c *Client) do(method, path string, body any) (*http.Response, error) {
 	if body != nil {
 		b, err := json.Marshal(body)
 		if err != nil {
-			return nil, fmt.Errorf("forma: marshal request: %w", err)
+			return nil, fmt.Errorf("formspec: marshal request: %w", err)
 		}
 		reqBody = bytes.NewReader(b)
 	}
 
 	req, err := http.NewRequest(method, c.baseURL+path, reqBody)
 	if err != nil {
-		return nil, fmt.Errorf("forma: create request: %w", err)
+		return nil, fmt.Errorf("formspec: create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Forma-Workspace", c.workspaceID)
+	req.Header.Set("X-FormSpec-Workspace", c.workspaceID)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("forma: request failed: %w", err)
+		return nil, fmt.Errorf("formspec: request failed: %w", err)
 	}
 	return resp, nil
 }
@@ -133,14 +133,14 @@ func (c *Client) doJSON(method, path string, body, target any) error {
 			Error string `json:"error"`
 		}
 		if json.NewDecoder(resp.Body).Decode(&errResp) == nil && errResp.Error != "" {
-			return fmt.Errorf("forma: %s", errResp.Error)
+			return fmt.Errorf("formspec: %s", errResp.Error)
 		}
-		return fmt.Errorf("forma: sidecar returned status %d", resp.StatusCode)
+		return fmt.Errorf("formspec: sidecar returned status %d", resp.StatusCode)
 	}
 
 	if target != nil {
 		if err := json.NewDecoder(resp.Body).Decode(target); err != nil {
-			return fmt.Errorf("forma: decode response: %w", err)
+			return fmt.Errorf("formspec: decode response: %w", err)
 		}
 	}
 	return nil

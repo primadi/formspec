@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 func TestNativeExecutor_RegisterAndExecute(t *testing.T) {

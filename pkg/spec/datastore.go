@@ -1,7 +1,7 @@
 // Package spec — Datastore Kind
 //
 // Defines the Go types for kind: Datastore, a Control Plane resource
-// that provisions named infrastructure backends for Forma primitives.
+// that provisions named infrastructure backends for FormSpec primitives.
 //
 // Datastores are defined and managed exclusively by the Control Plane.
 // The Resource Plane receives authorized datastores via the Plane Protocol
@@ -55,9 +55,11 @@ type DatastoreSpec struct {
 	// Serves lists which ctx.* primitives this datastore backs.
 	// One physical backend can serve multiple primitive types.
 	// Example: a Valkey instance can serve [cache, lock, kvstore, queue, pubsub].
+	// @schema {example: "[db]"}
 	Serves []PrimitiveType `yaml:"serves" json:"serves"`
 
 	// Driver identifies the backend technology.
+	// @schema {example: "postgres"}
 	Driver DatastoreDriver `yaml:"driver" json:"driver"`
 
 	// Connection holds connection parameters for the backend.
@@ -65,6 +67,7 @@ type DatastoreSpec struct {
 
 	// CredentialRef is a reference to KMS/Vault for credentials.
 	// Credentials MUST NOT be inlined in the YAML.
+	// @schema {example: "kms://workspace-default"}
 	CredentialRef string `yaml:"credential_ref,omitempty" json:"credential_ref,omitempty"`
 
 	// Access controls who (filter) can use this datastore and what

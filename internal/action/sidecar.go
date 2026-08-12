@@ -13,18 +13,18 @@ import (
 	"strings"
 	"time"
 
-	"github.com/primadi/forma/renderers/jsonbpersist"
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/renderers/jsonbpersist"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 // DefaultSidecarInvokeTimeout is how long the executor waits for the app
-// process to finish a handler before giving up (docs/runtimes/04-forma-sidecar.md §4.2).
+// process to finish a handler before giving up (docs/runtimes/04-formspec-sidecar.md §4.2).
 const DefaultSidecarInvokeTimeout = 30 * time.Second
 
 // SidecarExecutor executes impl: { type: sidecar } actions by invoking the
 // application process (PHP/Python/Node/...) over a local HTTP endpoint —
 // a unix domain socket (default) or localhost TCP — per the protocol in
-// docs/runtimes/04-forma-sidecar.md §4.2:
+// docs/runtimes/04-formspec-sidecar.md §4.2:
 //
 //	POST {endpoint}/invoke/{module}/{entity}/{action}
 //	body:     serialized ExecuteParams (resource_id, resource, params, ...)
@@ -32,7 +32,7 @@ const DefaultSidecarInvokeTimeout = 30 * time.Second
 //
 // A zero-value / NewSidecarExecutor() executor is unconfigured and fails
 // every Execute — that is the behavior embedded Go apps get, where no app
-// process exists. cmd/forma-sidecar wires a configured executor via
+// process exists. cmd/formspec-sidecar wires a configured executor via
 // NewSidecarExecutorWithEndpoint.
 type SidecarExecutor struct {
 	client  *http.Client
@@ -42,7 +42,7 @@ type SidecarExecutor struct {
 
 // NewSidecarExecutor creates an unconfigured sidecar executor. Execute
 // always fails until an app endpoint is configured — use
-// NewSidecarExecutorWithEndpoint in a forma-sidecar process.
+// NewSidecarExecutorWithEndpoint in a formspec-sidecar process.
 func NewSidecarExecutor() *SidecarExecutor {
 	return &SidecarExecutor{}
 }
@@ -50,7 +50,7 @@ func NewSidecarExecutor() *SidecarExecutor {
 // NewSidecarExecutorWithEndpoint creates a sidecar executor that invokes
 // app handlers at endpoint. Supported endpoint forms:
 //
-//	unix:///tmp/forma/app.sock   — HTTP/1.1 over a unix domain socket
+//	unix:///tmp/formspec/app.sock   — HTTP/1.1 over a unix domain socket
 //	http://localhost:9000            — HTTP over localhost TCP
 //
 // timeout bounds each handler invocation; zero means DefaultSidecarInvokeTimeout.
@@ -81,7 +81,7 @@ func NewSidecarExecutorWithEndpoint(endpoint string, timeout time.Duration) (*Si
 		}
 		return &SidecarExecutor{
 			client:  &http.Client{Transport: transport},
-			baseURL: "http://forma-app", // host is ignored; the dialer targets the socket
+			baseURL: "http://formspec-app", // host is ignored; the dialer targets the socket
 			timeout: timeout,
 		}, nil
 	case "http":
@@ -123,7 +123,7 @@ type sidecarInvokeResponse struct {
 func (e *SidecarExecutor) Execute(ctx context.Context, action spec.Action, params ExecuteParams) (*ExecuteResult, error) {
 	if e.client == nil {
 		return nil, fmt.Errorf(
-			"sidecar execution not configured (action %s.%s, ref=%s): no app endpoint — run under forma-sidecar or wire NewSidecarExecutorWithEndpoint",
+			"sidecar execution not configured (action %s.%s, ref=%s): no app endpoint — run under formspec-sidecar or wire NewSidecarExecutorWithEndpoint",
 			params.Module, params.ActionName, action.Impl.Ref,
 		)
 	}
@@ -159,7 +159,7 @@ func (e *SidecarExecutor) Execute(ctx context.Context, action spec.Action, param
 	// even though it's a separate HTTP round-trip. See
 	// renderers/jsonbpersist/txscope.go's scopeRegistry doc comment.
 	if scopeID := db.ScopeIDFromContext(ctx); scopeID != "" {
-		req.Header.Set("X-Forma-Scope-Id", scopeID)
+		req.Header.Set("X-FormSpec-Scope-Id", scopeID)
 	}
 
 	resp, err := e.client.Do(req)

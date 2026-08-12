@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/primadi/forma/internal/events"
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/internal/events"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 type fakeHub struct {

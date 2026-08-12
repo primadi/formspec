@@ -5,7 +5,7 @@
 > Draft: isi di bawah kontrak yang berlaku.
 
 ## 1. Peran Control Plane
-`forma-control` adalah salah satu dari dua binary Forma (selalu proses
+`formspec-control` adalah salah satu dari dua binary FormSpec (selalu proses
 terpisah, termasuk saat development —
 [`01-overview.md`](01-overview.md) §3). Ia menguasai: **Environment**
 (identitas ditetapkan infrastruktur, immutable dari Resource Plane),
@@ -23,7 +23,7 @@ bisnis. Resource Plane **tidak boleh** menulis balik ke Control Plane — ia
 menarik policy saat boot dan tiap 5 menit lewat mTLS, tetap melayani
 dengan policy terakhir yang diketahui kalau Control tidak terjangkau.
 Compute Control **stateless**; seluruh state hidup di storage sendiri
-(schema `forma_control`), tidak pernah dibagi dengan schema aplikasi.
+(schema `formspec_control`), tidak pernah dibagi dengan schema aplikasi.
 
 ## 2. Kind Control Plane
 | Kind | Concern |
@@ -33,7 +33,7 @@ Compute Control **stateless**; seluruh state hidup di storage sendiri
 | `Datastore` | Backend infrastruktur bernama — [`06-datastore.md`](06-datastore.md) |
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Environment
 metadata: { name: production }
 spec:
@@ -56,9 +56,9 @@ Policy yang lebih longgar-tapi-tercatat.
 Siklus artifact: **Sign → Apply → Approve → Promote**.
 
 ```bash
-forma sign -f order.yaml --key ~/.forma/keys/billing-team.key --environment staging
-forma apply -f order.yaml            # → approval request sesuai policy
-forma promote order --from staging --to production   # checksum sama diverifikasi
+formspec sign -f order.yaml --key ~/.formspec/keys/billing-team.key --environment staging
+formspec apply -f order.yaml            # → approval request sesuai policy
+formspec promote order --from staging --to production   # checksum sama diverifikasi
 ```
 
 `staging` dan `production` di sini adalah *nama* environment — keduanya
@@ -93,7 +93,7 @@ Control cuma menyimpan **public key**; **kunci platform** (per environment)
 
 **Empat peran owner simetris** (satu per objek yang dimiliki; satu identitas
 boleh pegang beberapa): Workspace Owner (data, user, billing), App Owner
-(artifact app), Module Owner (package module), Cloud Owner (instance Forma
+(artifact app), Module Owner (package module), Cloud Owner (instance FormSpec
 Cloud). Admin bertindak lewat **delegation certificate**: admin punya kunci
 sendiri, owner menandatangani sertifikat (scope, masa berlaku, revocable) —
 setiap tanda tangan admin wajib membawa sertifikatnya. **Non-delegable
@@ -140,7 +140,7 @@ embedded sebagai Go library di dalam binary Control Plane, tanpa proses
 tambahan), sehingga hanya ada satu decision log, bukan dua sistem paralel.
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Policy
 metadata: { name: prod-policy }
 spec:
@@ -153,7 +153,7 @@ spec:
     - no_signature
     - environment_override_attempt
   rego: |                     # escape hatch — full OPA
-    package forma.deploy
+    package formspec.deploy
     deny[msg] { input.time.weekday == "Friday"; input.time.hour >= 17; msg := "No production deploys on Friday evening" }
 ```
 
@@ -186,7 +186,7 @@ tenant:
 - **Tag klasifikasi artifact** — `public`/`internal`/`confidential`/`restricted`
   (§3).
 
-Verifikasi: `forma-ctl policy test` menjalankan table-driven test terhadap
+Verifikasi: `formspec-ctl policy test` menjalankan table-driven test terhadap
 policy yang sudah dikompilasi ke Rego, dipakai sebelum perubahan `kind: Policy`
 diterapkan.
 
@@ -266,12 +266,12 @@ samping publikasi mirror/endpoint publik di atas. Ini memberi bukti waktu yang
 bisa diverifikasi pihak ketiga tanpa mempercayai jam platform, dan bersifat
 melengkapi (bukan menggantikan) mekanisme externalisasi yang sudah ada.
 
-Verifikasi independen: `forma-ctl log verify --checkpoint <file>` membuktikan
+Verifikasi independen: `formspec-ctl log verify --checkpoint <file>` membuktikan
 tidak ada perubahan sejarah (history rewrite) sejak checkpoint tertentu.
 
 ## 8. REPL Governance
 
-Scope `forma repl` mengikuti profil kebijakan environment tempat ia dijalankan:
+Scope `formspec repl` mengikuti profil kebijakan environment tempat ia dijalankan:
 
 | Environment | Akses REPL |
 |---|---|
@@ -294,7 +294,7 @@ bersangkutan dan tetap tercatat di transparency log.
 
 Dua permukaan darurat untuk dua sisi yang berbeda, sengaja tidak disatukan:
 
-| | Resource Plane (`forma freeze`/`rollback`/`lock workspace`) | Control Plane (`forma-ctl freeze`/`revoke sessions`/`key rotate`) |
+| | Resource Plane (`formspec freeze`/`rollback`/`lock workspace`) | Control Plane (`formspec-ctl freeze`/`revoke sessions`/`key rotate`) |
 |---|---|---|
 | Dijalankan oleh | App Admin yang diotorisasi | Cloud Owner / Platform Operator |
 | Scope | Satu workspace/app | Seluruh environment |
@@ -302,8 +302,8 @@ Dua permukaan darurat untuk dua sisi yang berbeda, sengaja tidak disatukan:
 Setiap aksi darurat **wajib** menyertakan alasan, ditandatangani aktor, dan
 tercatat di transparency log — darurat bukan alasan melewati audit.
 
-**Lever bedah — `forma suspend scripts --all`.** Di antara freeze penuh dan
-operasi normal ada tuas darurat yang lebih sempit: `forma suspend scripts --all`
+**Lever bedah — `formspec suspend scripts --all`.** Di antara freeze penuh dan
+operasi normal ada tuas darurat yang lebih sempit: `formspec suspend scripts --all`
 menghentikan **seluruh eksekusi handler berskrip (Starlark)** se-workspace
 sambil engine **tetap** melayani traffic read/CRUD secara normal. Dipakai saat
 sumber masalah adalah logika scripted (hook, action) tapi data path inti sehat —
@@ -312,12 +312,12 @@ darurat lain: **wajib** `--reason`, ditandatangani aktor, tercatat di
 transparency log.
 
 **Prinsip desain "bedrock exception":** entrypoint darurat sisi Control Plane
-(`forma-ctl`) wajib berupa kode konvensional yang di-compile langsung ke dalam
+(`formspec-ctl`) wajib berupa kode konvensional yang di-compile langsung ke dalam
 binary yang sama dengan proses `serve` — bukan proses/binary terpisah yang
 bergantung pada komponen yang sedang ia perbaiki (database artifact, policy
 engine, dsb). Kalau alat darurat butuh sistem yang sedang rusak untuk bisa
 dipakai, ia gagal tepat saat paling dibutuhkan. Jalur eksekusinya konvensional/
 imperatif, bukan lewat evaluasi OPA/Rego yang mungkin justru jadi sumber
-masalah. Konsol resmi (`forma/console`, `forma/studio`, `forma/ops`) tidak
-tunduk pada aturan ini — mereka aplikasi Forma biasa di atas Control Plane;
-pengecualian ini hanya berlaku untuk `forma-ctl`.
+masalah. Konsol resmi (`formspec/console`, `formspec/studio`, `formspec/ops`) tidak
+tunduk pada aturan ini — mereka aplikasi FormSpec biasa di atas Control Plane;
+pengecualian ini hanya berlaku untuk `formspec-ctl`.

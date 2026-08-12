@@ -1,4 +1,4 @@
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: App
 metadata:
   name: sales-inventory-integrator
@@ -8,7 +8,7 @@ metadata:
     inventory without this app, or swap in a different vendor's connector.
 spec:
   version: 1.0.0
-  vendor: forma-dev
+  vendor: formspec-dev
   root_url: /app/sales-inventory-integrator
   modules: [sales-inventory-integrator]
   consumes:

@@ -3,7 +3,7 @@ package db
 import (
 	"fmt"
 
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 // LifecycleGuard validates that a reserved action can be executed given the
@@ -32,14 +32,14 @@ func LifecycleGuard(actionName string, docStatus spec.DocStatus) error {
 			return &LifecycleError{
 				Action:    "update",
 				DocStatus: string(docStatus),
-				Code:      "FORMA.DOC.UPDATE_NOT_DRAFT",
+				Code:      "FORMSPEC.DOC.UPDATE_NOT_DRAFT",
 			}
 		}
 		if docStatus == spec.DocStatusCancelled {
 			return &LifecycleError{
 				Action:    "update",
 				DocStatus: string(docStatus),
-				Code:      "FORMA.DOC.UPDATE_NOT_DRAFT",
+				Code:      "FORMSPEC.DOC.UPDATE_NOT_DRAFT",
 			}
 		}
 
@@ -48,21 +48,21 @@ func LifecycleGuard(actionName string, docStatus spec.DocStatus) error {
 			return &LifecycleError{
 				Action:    "submit",
 				DocStatus: string(docStatus),
-				Code:      "FORMA.DOC.ALREADY_SUBMITTED",
+				Code:      "FORMSPEC.DOC.ALREADY_SUBMITTED",
 			}
 		}
 		if docStatus == spec.DocStatusCancelled {
 			return &LifecycleError{
 				Action:    "submit",
 				DocStatus: string(docStatus),
-				Code:      "FORMA.DOC.SUBMIT_NOT_DRAFT",
+				Code:      "FORMSPEC.DOC.SUBMIT_NOT_DRAFT",
 			}
 		}
 		if docStatus == "" {
 			return &LifecycleError{
 				Action:    "submit",
 				DocStatus: "null",
-				Code:      "FORMA.DOC.SUBMIT_NOT_DRAFT",
+				Code:      "FORMSPEC.DOC.SUBMIT_NOT_DRAFT",
 			}
 		}
 
@@ -71,21 +71,21 @@ func LifecycleGuard(actionName string, docStatus spec.DocStatus) error {
 			return &LifecycleError{
 				Action:    "cancel",
 				DocStatus: string(docStatus),
-				Code:      "FORMA.DOC.ALREADY_CANCELLED",
+				Code:      "FORMSPEC.DOC.ALREADY_CANCELLED",
 			}
 		}
 		if docStatus == spec.DocStatusDraft {
 			return &LifecycleError{
 				Action:    "cancel",
 				DocStatus: string(docStatus),
-				Code:      "FORMA.DOC.CANCEL_NOT_SUBMITTED",
+				Code:      "FORMSPEC.DOC.CANCEL_NOT_SUBMITTED",
 			}
 		}
 		if docStatus == "" {
 			return &LifecycleError{
 				Action:    "cancel",
 				DocStatus: "null",
-				Code:      "FORMA.DOC.CANCEL_NOT_SUBMITTED",
+				Code:      "FORMSPEC.DOC.CANCEL_NOT_SUBMITTED",
 			}
 		}
 
@@ -94,14 +94,14 @@ func LifecycleGuard(actionName string, docStatus spec.DocStatus) error {
 			return &LifecycleError{
 				Action:    "delete",
 				DocStatus: string(docStatus),
-				Code:      "FORMA.DOC.DELETE_NOT_DRAFT",
+				Code:      "FORMSPEC.DOC.DELETE_NOT_DRAFT",
 			}
 		}
 		if docStatus == spec.DocStatusCancelled {
 			return &LifecycleError{
 				Action:    "delete",
 				DocStatus: string(docStatus),
-				Code:      "FORMA.DOC.DELETE_NOT_DRAFT",
+				Code:      "FORMSPEC.DOC.DELETE_NOT_DRAFT",
 			}
 		}
 
@@ -110,7 +110,7 @@ func LifecycleGuard(actionName string, docStatus spec.DocStatus) error {
 			return &LifecycleError{
 				Action:    "amend",
 				DocStatus: string(docStatus),
-				Code:      "FORMA.DOC.AMEND_NOT_SUBMITTED_OR_CANCELLED",
+				Code:      "FORMSPEC.DOC.AMEND_NOT_SUBMITTED_OR_CANCELLED",
 			}
 		}
 	}

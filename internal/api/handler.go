@@ -11,12 +11,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/primadi/forma/internal/action"
-	"github.com/primadi/forma/internal/auth"
-	entityengine "github.com/primadi/forma/internal/entity"
-	"github.com/primadi/forma/internal/validation"
-	"github.com/primadi/forma/pkg/spec"
-	db "github.com/primadi/forma/renderers/jsonbpersist"
+	"github.com/primadi/formspec/internal/action"
+	"github.com/primadi/formspec/internal/auth"
+	entityengine "github.com/primadi/formspec/internal/entity"
+	"github.com/primadi/formspec/internal/validation"
+	"github.com/primadi/formspec/pkg/spec"
+	db "github.com/primadi/formspec/renderers/jsonbpersist"
 )
 
 // HandlerFactory creates HTTP handlers backed by an EntityStore.

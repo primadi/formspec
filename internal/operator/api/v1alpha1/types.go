@@ -4,8 +4,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Condition types used across the Forma CRDs
-// (docs/runtimes/03-forma-operator.md §3.3).
+// Condition types used across the FormSpec CRDs
+// (docs/runtimes/03-formspec-operator.md §3.3).
 const (
 	ConditionReady       = "Ready"
 	ConditionProgressing = "Progressing"
@@ -92,13 +92,13 @@ type WorkspaceDatastoreRef struct {
 type WorkspaceSpec struct {
 	// Owner is the workspace owner key fingerprint.
 	Owner string `json:"owner,omitempty"`
-	// Region for data residency (matched against forma.dev/region node labels).
+	// Region for data residency (matched against formspec.dev/region node labels).
 	Region string `json:"region,omitempty"`
 	// ClusterClass selects the SLA/pricing tier.
 	ClusterClass string `json:"clusterClass"`
 	// Cluster pins a specific cluster (enterprise); usually empty.
 	Cluster string `json:"cluster,omitempty"`
-	// Environment is prod/staging/dev (matched against forma.dev/environment).
+	// Environment is prod/staging/dev (matched against formspec.dev/environment).
 	Environment string                  `json:"environment,omitempty"`
 	Resources   *WorkspaceResources     `json:"resources,omitempty"`
 	Datastores  []WorkspaceDatastoreRef `json:"datastores,omitempty"`
@@ -117,7 +117,7 @@ type WorkspaceStatus struct {
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
-// Workspace maps 1:1 to a forma-resource Deployment in the cluster.
+// Workspace maps 1:1 to a formspec-resource Deployment in the cluster.
 type Workspace struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

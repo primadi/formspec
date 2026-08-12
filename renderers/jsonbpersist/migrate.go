@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 // MigrationRecord tracks a completed migration.
@@ -18,7 +18,7 @@ type MigrationRecord struct {
 	AppliedAt   string
 }
 
-// MigrationRunner applies schema migrations for Forma entities.
+// MigrationRunner applies schema migrations for FormSpec entities.
 type MigrationRunner struct {
 	db     DB
 	driver DriverType
@@ -29,22 +29,22 @@ func NewMigrationRunner(db DB, driver DriverType) *MigrationRunner {
 	return &MigrationRunner{db: db, driver: driver}
 }
 
-// SystemTableDDLs returns the DDL statements for Forma system tables.
+// SystemTableDDLs returns the DDL statements for FormSpec system tables.
 // Uses dialect-aware SQL that works on both SQLite and PostgreSQL.
 func SystemTableDDLs(driver DriverType) []string {
 	ts := currentTimestamp(driver)
 
 	return []string{
-		// forma_schema_migrations
-		createTableSQL(driver, "forma_schema_migrations",
+		// formspec_schema_migrations
+		createTableSQL(driver, "formspec_schema_migrations",
 			"version     integer     PRIMARY KEY",
 			"description text        NOT NULL",
 			"checksum    text        NOT NULL",
 			fmt.Sprintf("applied_at  %s NOT NULL DEFAULT %s", ts, ts),
 		),
 
-		// forma_natural_key_counters
-		`CREATE TABLE IF NOT EXISTS forma_natural_key_counters (
+		// formspec_natural_key_counters
+		`CREATE TABLE IF NOT EXISTS formspec_natural_key_counters (
 			tenant_id   text    NOT NULL,
 			resource    text    NOT NULL,
 			field       text    NOT NULL,
@@ -54,8 +54,8 @@ func SystemTableDDLs(driver DriverType) []string {
 			PRIMARY KEY (tenant_id, resource, field, scope, period)
 		);`,
 
-		// forma_idempotency_keys
-		createTableSQL(driver, "forma_idempotency_keys",
+		// formspec_idempotency_keys
+		createTableSQL(driver, "formspec_idempotency_keys",
 			"tenant_id   text    NOT NULL",
 			"action      text    NOT NULL",
 			"key         text    NOT NULL",
@@ -66,8 +66,8 @@ func SystemTableDDLs(driver DriverType) []string {
 			"PRIMARY KEY (tenant_id, action, key)",
 		),
 
-		// forma_outbox — enhanced with backoff strategy + initial delay (2.4.4)
-		createTableSQL(driver, "forma_outbox",
+		// formspec_outbox — enhanced with backoff strategy + initial delay (2.4.4)
+		createTableSQL(driver, "formspec_outbox",
 			idColumn(driver),
 			"tenant_id       text    NOT NULL",
 			"event_name      text    NOT NULL",
@@ -82,8 +82,8 @@ func SystemTableDDLs(driver DriverType) []string {
 			fmt.Sprintf("next_retry_at   %s NOT NULL DEFAULT %s", ts, ts),
 		),
 
-		// forma_extensions — namespace reservation for entity extensions
-		`CREATE TABLE IF NOT EXISTS forma_extensions (
+		// formspec_extensions — namespace reservation for entity extensions
+		`CREATE TABLE IF NOT EXISTS formspec_extensions (
 			resource    text    NOT NULL,
 			namespace   text    NOT NULL,
 			module      text    NOT NULL,
@@ -92,8 +92,8 @@ func SystemTableDDLs(driver DriverType) []string {
 			PRIMARY KEY (resource, namespace)
 		);`,
 
-		// forma_audit_log — immutable audit trail for entity operations
-		createTableSQL(driver, "forma_audit_log",
+		// formspec_audit_log — immutable audit trail for entity operations
+		createTableSQL(driver, "formspec_audit_log",
 			idColumn(driver),
 			"tenant_id   text    NOT NULL",
 			"entity      text    NOT NULL",
@@ -104,10 +104,10 @@ func SystemTableDDLs(driver DriverType) []string {
 			fmt.Sprintf("created_at  %s NOT NULL DEFAULT %s", ts, ts),
 		),
 
-		// forma_event_log — durable record of delivered declared business
+		// formspec_event_log — durable record of delivered declared business
 		// events (deliver: {channel: audit_log}), distinct from
-		// forma_audit_log's CRUD-diff change history.
-		createTableSQL(driver, "forma_event_log",
+		// formspec_audit_log's CRUD-diff change history.
+		createTableSQL(driver, "formspec_event_log",
 			idColumn(driver),
 			"tenant_id    text    NOT NULL",
 			"event_name   text    NOT NULL",
@@ -139,13 +139,13 @@ func idColumn(driver DriverType) string {
 	return "id  uuid PRIMARY KEY DEFAULT gen_uuid_v7()"
 }
 
-// EnsureSystemTables creates all Forma system tables needed for runtime.
+// EnsureSystemTables creates all FormSpec system tables needed for runtime.
 func (r *MigrationRunner) EnsureSystemTables(ctx context.Context) error {
 	ddls := SystemTableDDLs(r.driver)
 	ddlNames := []string{
-		"forma_schema_migrations", "forma_natural_key_counters",
-		"forma_idempotency_keys", "forma_outbox",
-		"forma_extensions", "forma_audit_log", "forma_event_log",
+		"formspec_schema_migrations", "formspec_natural_key_counters",
+		"formspec_idempotency_keys", "formspec_outbox",
+		"formspec_extensions", "formspec_audit_log", "formspec_event_log",
 	}
 	for i, ddl := range ddls {
 		if _, err := r.db.ExecContext(ctx, ddl); err != nil {
@@ -162,7 +162,7 @@ func (r *MigrationRunner) EnsureSystemTables(ctx context.Context) error {
 // AppliedMigrations returns the list of already-applied migrations.
 func (r *MigrationRunner) AppliedMigrations(ctx context.Context) (map[string]string, error) {
 	rows, err := r.db.QueryContext(ctx,
-		"SELECT description, checksum FROM forma_schema_migrations ORDER BY version")
+		"SELECT description, checksum FROM formspec_schema_migrations ORDER BY version")
 	if err != nil {
 		return nil, fmt.Errorf("query migrations: %w", err)
 	}
@@ -182,7 +182,7 @@ func (r *MigrationRunner) AppliedMigrations(ctx context.Context) (map[string]str
 // RecordMigration records a migration as applied.
 func (r *MigrationRunner) RecordMigration(ctx context.Context, version int, desc, checksum string) error {
 	_, err := r.db.ExecContext(ctx,
-		"INSERT INTO forma_schema_migrations (version, description, checksum) VALUES (?, ?, ?)",
+		"INSERT INTO formspec_schema_migrations (version, description, checksum) VALUES (?, ?, ?)",
 		version, desc, checksum)
 	return err
 }
@@ -218,7 +218,7 @@ func (r *MigrationRunner) PlanMigrations(ctx context.Context, entities []EntityM
 			ns := em.EntitySpec.ExtendStorage.Namespace
 			var count int
 			if err := r.db.QueryRowContext(ctx,
-				"SELECT COUNT(*) FROM forma_extensions WHERE resource = ? AND namespace = ? AND status = 'active'",
+				"SELECT COUNT(*) FROM formspec_extensions WHERE resource = ? AND namespace = ? AND status = 'active'",
 				resource, ns).Scan(&count); err == nil && count > 0 {
 				return nil, fmt.Errorf("extension namespace %q already reserved for resource %q", ns, resource)
 			}
@@ -328,7 +328,7 @@ func (r *MigrationRunner) ApplyMigrations(ctx context.Context, entities []Entity
 
 	// Get current migration count for versioning
 	var currentVersion int
-	err := r.db.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM forma_schema_migrations").Scan(&currentVersion)
+	err := r.db.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM formspec_schema_migrations").Scan(&currentVersion)
 	if err != nil {
 		return 0, fmt.Errorf("apply migrations: get current version: %w", err)
 	}
@@ -379,7 +379,7 @@ func (r *MigrationRunner) ApplyMigrations(ctx context.Context, entities []Entity
 					}
 					if target != "" {
 						_, _ = r.db.ExecContext(ctx,
-							"INSERT OR IGNORE INTO forma_extensions (resource, namespace, module) VALUES (?, ?, ?)",
+							"INSERT OR IGNORE INTO formspec_extensions (resource, namespace, module) VALUES (?, ?, ?)",
 							target, ns, module)
 					}
 				}

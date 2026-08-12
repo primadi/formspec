@@ -1,14 +1,14 @@
-# @forma/lib-forma (TypeScript)
+# @formspec/lib-formspec (TypeScript)
 
-Thin Node.js/TypeScript client for `forma-sidecar`
-(docs/runtimes/04-forma-sidecar.md). Node ≥ 18, no runtime dependencies.
+Thin Node.js/TypeScript client for `formspec-sidecar`
+(docs/runtimes/04-formspec-sidecar.md). Node ≥ 18, no runtime dependencies.
 
 ```bash
-npm install @forma/lib-forma
+npm install @formspec/lib-formspec
 ```
 
 ```ts
-import { ActionResult, App } from "@forma/lib-forma";
+import { ActionResult, App } from "@formspec/lib-formspec";
 
 const app = new App(); // sockets from FORMA_APP_SOCKET / FORMA_SIDECAR_SOCKET
 

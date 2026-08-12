@@ -42,7 +42,7 @@ Registry namespace (memenuhi §3 kontrak "namespace tidak boleh dipakai
 ulang"):
 
 ```sql
-CREATE TABLE forma_extensions (
+CREATE TABLE formspec_extensions (
   resource    text NOT NULL,   -- billing/invoice
   namespace   text NOT NULL,   -- kastem1
   module      text NOT NULL,   -- my-customization
@@ -52,7 +52,7 @@ CREATE TABLE forma_extensions (
 );
 ```
 
-**Status implementasi:** DDL `ADD COLUMN ext_*` dan registry `forma_extensions`
+**Status implementasi:** DDL `ADD COLUMN ext_*` dan registry `formspec_extensions`
 di atas nyata dan dieksekusi migration engine saat extension dipasang.
 **Tapi belum ada jalur baca/tulis runtime ke kolom itu** — `ExtensionStore`
 (tipe yang seharusnya menjawab `invoice.ext("kastem1").project_code`,

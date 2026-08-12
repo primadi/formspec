@@ -1,11 +1,11 @@
-# Forma Architecture
+# FormSpec Architecture
 
 **Status:** Draft
 **License:** Creative Commons CC0
 
-> Dokumen arsitektur menjelaskan **bagaimana** Forma berjalan di production — topology deployment, resource registration, failover, K8s operator, dan admin surfaces. Dokumen ini bersifat **deskriptif/penjelasan**, bukan normatif. Spec normatif tetap di `docs/spec/`.
+> Dokumen arsitektur menjelaskan **bagaimana** FormSpec berjalan di production — topology deployment, resource registration, failover, K8s operator, dan admin surfaces. Dokumen ini bersifat **deskriptif/penjelasan**, bukan normatif. Spec normatif tetap di `docs/spec/`.
 >
-> Untuk fitur, desain internal, dan API tiap komponen runtime secara individual (Forma Control, Forma Resource, Forma Operator, Forma Sidecar), lihat **[`docs/runtimes/`](../runtimes/README.md)**. Untuk referensi CLI (`forma`, `forma-ctl`), lihat **[`docs/cli-tools/`](../cli-tools/README.md)**.
+> Untuk fitur, desain internal, dan API tiap komponen runtime secara individual (FormSpec Control, FormSpec Resource, FormSpec Operator, FormSpec Sidecar), lihat **[`docs/runtimes/`](../runtimes/README.md)**. Untuk referensi CLI (`formspec`, `formspec-ctl`), lihat **[`docs/cli-tools/`](../cli-tools/README.md)**.
 
 ---
 
@@ -14,12 +14,12 @@
 ```
 01-architecture-overview.md   ← Mulai dari sini
 02-admin-surfaces.md          ← Tiga admin UI + pemiliknya
-03-deployment-flow.md         ← Pipeline: forma apply → deploy → run
+03-deployment-flow.md         ← Pipeline: formspec apply → deploy → run
 04-resource-registration.md   ← Server, DB, Valkey lifecycle
 05-failover.md                ← HA, auto-failover, recovery
-06-k8s-operator.md            ← Forma Operator, CRD, ClusterClass
+06-k8s-operator.md            ← FormSpec Operator, CRD, ClusterClass
 07-vertical-modules.md        ← ERP module division: verticals/, App/Workspace composition, branch model
-08-repo-structure.md          ← Struktur folder repo Forma, lensa spec-vs-renderer (untuk kontributor codebase)
+08-repo-structure.md          ← Struktur folder repo FormSpec, lensa spec-vs-renderer (untuk kontributor codebase)
 ```
 
 ---
@@ -31,7 +31,7 @@
 | Order | Document |
 |---|---|
 | 1 | [`01-architecture-overview.md`](./01-architecture-overview.md) — Where does my app run? |
-| 2 | [`03-deployment-flow.md`](./03-deployment-flow.md) — How does `forma apply` work in production? |
+| 2 | [`03-deployment-flow.md`](./03-deployment-flow.md) — How does `formspec apply` work in production? |
 
 ### 🖥️ Platform Operator
 
@@ -40,14 +40,14 @@
 | 1 | [`01-architecture-overview.md`](./01-architecture-overview.md) — Full topology |
 | 2 | [`04-resource-registration.md`](./04-resource-registration.md) — Server, DB, Valkey registration |
 | 3 | [`05-failover.md`](./05-failover.md) — HA and auto-failover |
-| 4 | [`06-k8s-operator.md`](./06-k8s-operator.md) — Forma Operator + ClusterClass |
+| 4 | [`06-k8s-operator.md`](./06-k8s-operator.md) — FormSpec Operator + ClusterClass |
 
 ### 👤 Workspace Owner
 
 | Order | Document |
 |---|---|
 | 1 | [`01-architecture-overview.md`](./01-architecture-overview.md) — Regions, ClusterClass, tiers |
-| 2 | [`02-admin-surfaces.md`](./02-admin-surfaces.md) — forma/console features |
+| 2 | [`02-admin-surfaces.md`](./02-admin-surfaces.md) — formspec/console features |
 
 ### 🏢 ERP Vertical Author
 
@@ -79,5 +79,5 @@ Semua keputusan desain arsitektur tercatat sebagai D-ARCH-1 sampai D-ARCH-31 di 
 | `04-resource-registration.md` | `spec/platform/06-datastore.md`, `04-control-plane.md` |
 | `05-failover.md` | `spec/platform/05-plane-protocol.md` §1 |
 | `06-k8s-operator.md` | `spec/platform/03-kind-system.md` |
-| `07-vertical-modules.md` | `spec/platform/02-workspace-app-module.md` §1/§3, `spec/backend/01-core-basic.md` §5, `docs/comparison/forma-vs-frappe.md` |
+| `07-vertical-modules.md` | `spec/platform/02-workspace-app-module.md` §1/§3, `spec/backend/01-core-basic.md` §5, `docs/comparison/formspec-vs-frappe.md` |
 | `08-repo-structure.md` | [`docs/spec/README.md`](../spec/README.md) (prinsip contract-vs-renderer), [`docs/spec/platform/08-project-layout.md`](../spec/platform/08-project-layout.md) |

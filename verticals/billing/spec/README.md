@@ -1,7 +1,7 @@
 # billing — Spec
 
 **Klasifikasi:** **App** standalone, independently installable — see [`docs/architecture/07-vertical-modules.md`](../../../docs/architecture/07-vertical-modules.md).
-**Spec target:** Forma Core Basic v0.2.0 + Core Extended stub.
+**Spec target:** FormSpec Core Basic v0.2.0 + Core Extended stub.
 
 > Formerly split across two examples that turned out to be **the same module all along** (`module: billing` in both `module.yaml`s — see `SPEC-COMPATIBILITY-NOTES.md` T3): `examples/Customer` (customer/address entities + customer-management UI) and `examples/Order-to-Cash/spec/modules/billing` (order/checkout/payment-gateway, plus its own copy of customer/address). This merge is the fix for that duplication — one canonical `billing` module. Order-to-Cash's copy was kept as canonical (fuller); Customer's non-duplicate customer-management UI (`forms/customer-*`, `pages/customer-*`, `tables/customer-*`, `config/member-discounts.yaml`) was folded in. The `notifications` and `gl` modules that used to live alongside this in Order-to-Cash's `spec/modules/` are now their own apps (`verticals/notifications`, `verticals/gl`).
 
@@ -11,7 +11,7 @@
 verticals/billing/
 ├── spec/
 │   ├── README.md
-│   ├── forma.yaml                                    # kind: App "billing", publishes: order-events
+│   ├── formspec.yaml                                    # kind: App "billing", publishes: order-events
 │   ├── config/app.yaml
 │   └── modules/
 │       └── billing/
@@ -39,7 +39,7 @@ verticals/billing/
 ## App Identity
 
 - **Name:** `billing`
-- **Vendor:** `forma-dev`
+- **Vendor:** `formspec-dev`
 - **Modules:** `billing`
 - **Permission namespace:** `billing.*` (e.g. `billing.orders.checkout`)
 - **Publishes:** `order-events` (approximate mapping — see the architecture doc's gap list: `consumes`/`publishes` is only spec'd for `kind: Service`, not for a plain entity event like `order.paid`) — consumed by `notifications`, `sales-inventory-integrator`, `sales-gl-integrator`

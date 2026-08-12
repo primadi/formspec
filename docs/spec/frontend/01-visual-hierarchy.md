@@ -31,7 +31,7 @@ App shell + Page shell-integrated + Component wajib satu stack resmi yang sama
 saja — konsumsi API generik, tanpa Renderer kind sama sekali (tidak ada shared
 render tree untuk dijaga konsistensinya).
 
-Validasi `forma apply`:
+Validasi `formspec apply`:
 
 ```
 Jika Page dipasang di dalam App (shell-integrated):
@@ -50,7 +50,7 @@ interpreter penuh atas kontrak kind system (Layer 0 auto-generate, Navigation,
 Menu, Auth wiring, permission-aware rendering lewat Spec Resolution API,
 [`04-spec-resolution-api.md`](04-spec-resolution-api.md)) — investasinya
 setara membangun ulang setengah framework per platform, karena itu Shell baru
-**sebaiknya first-party Forma dulu** ("proven first, then offered to
+**sebaiknya first-party FormSpec dulu** ("proven first, then offered to
 community"), bukan dibuka ke komunitas dengan cara yang sama seperti Renderer
 Page/Component biasa di §3.
 

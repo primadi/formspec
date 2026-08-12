@@ -1,21 +1,21 @@
 ---
-name: forma-cli
-description: "Use when: working on Forma CLI — cmd/forma/, commands (apply, dev, validate, generate, etc.), flags, subcommand dispatch, or CLI documentation. Provides command status, implementation priority, and key design rules."
+name: formspec-cli
+description: "Use when: working on FormSpec CLI — cmd/formspec/, commands (apply, dev, validate, generate, etc.), flags, subcommand dispatch, or CLI documentation. Provides command status, implementation priority, and key design rules."
 ---
 
-# Forma CLI Skill
+# FormSpec CLI Skill
 
-Context for AI coding agents working on the Forma CLI (`cmd/forma/`).
+Context for AI coding agents working on the FormSpec CLI (`cmd/formspec/`).
 
 ## Key paths
-- `cmd/forma/main.go` — Entry point, subcommand dispatch
-- `cmd/forma/apply.go` — `forma apply`
-- `cmd/forma/dev.go` — `forma dev`
-- `cmd/forma/dev_vite.go` — Vite HMR integration
-- `cmd/forma/dev_runtime.go` — Sidecar runtime setup
-- `cmd/forma/dev_config.go` — Dev configuration
-- `cmd/forma/generate.go` — `forma generate`
-- `cmd/forma/generate_*.go` — Sidecar app scaffolders
+- `cmd/formspec/main.go` — Entry point, subcommand dispatch
+- `cmd/formspec/apply.go` — `formspec apply`
+- `cmd/formspec/dev.go` — `formspec dev`
+- `cmd/formspec/dev_vite.go` — Vite HMR integration
+- `cmd/formspec/dev_runtime.go` — Sidecar runtime setup
+- `cmd/formspec/dev_config.go` — Dev configuration
+- `cmd/formspec/generate.go` — `formspec generate`
+- `cmd/formspec/generate_*.go` — Sidecar app scaffolders
 
 ## Command Status
 | Command | Status |
@@ -26,7 +26,7 @@ Context for AI coding agents working on the Forma CLI (`cmd/forma/`).
 | `validate`, `check`, `new`, `diff`, `get`, `describe`, `delete`, `migrate`, `repl`, `seed`, `backup`, `restore`, `logs` | Stub ⏳ |
 | `promote`, `archive`, `saga`, `module`, `sign`, `script`, `freeze`, `rollback`, `lock`, `workspace` | Stub, deferred ⏸️ |
 
-## Implementation priority (per docs/cli-tools/01-forma-cli.md)
+## Implementation priority (per docs/cli-tools/01-formspec-cli.md)
 1. `validate` — CI gate, high value
 2. `new` — simple scaffold, quick DX win
 3. `dev` — meaningful after pipeline fixed
@@ -34,8 +34,8 @@ Context for AI coding agents working on the Forma CLI (`cmd/forma/`).
 5. Everything else
 
 ## Key design rules
-- Single binary: `cmd/forma` (not separate binaries per verb)
+- Single binary: `cmd/formspec` (not separate binaries per verb)
 - `//go:embed dist/*` embeds SPA for single-process serving
 - `--dev-ui` spawns Vite HMR for frontend development
 - Runtime auto-detect from project files (go.mod, package.json, etc.)
-- Config file: `forma-app.yaml`
+- Config file: `formspec-app.yaml`

@@ -18,8 +18,8 @@
   (`internal/api/handler.go`) dan `buildListParams` (`lib/api/client.ts`).
 - Regex manual (approach lama) cuma paham 1 klausa dan tidak scalable.
 - Starlark ditolak: evaluasi server-side = overhead VM per request + risiko
-  sandbox/DoS; interpreter Starlark di browser = dependency berat. FormaExpr
-  (`lib/formaexpr/`) adalah pilihan fallback client-side yang benar bila
+  sandbox/DoS; interpreter Starlark di browser = dependency berat. FormSpecExpr
+  (`lib/formspec-expr/`) adalah pilihan fallback client-side yang benar bila
   query tidak bisa di-push.
 
 ### Implementasi (`renderers/web/src/kinds/dashboard/DashboardRenderer.tsx`)

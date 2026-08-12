@@ -6,6 +6,19 @@
 > storage-agnostic; contoh SQL konkret hidup di dokumentasi renderer
 > jsonb-persist.
 
+## Daftar Isi
+
+1. [Entity](#1-entity-entity) — karakteristik, lifecycle doc_status, field reserved, child vs relation, auth, spec reference, lifecycle vs state_machine
+2. [Primary Key & Natural Key](#2-primary-key--natural-key)
+3. [Persistence Sebagai Kontrak](#3-persistence-sebagai-kontrak)
+4. [Migration = Structural Diff](#4-migration--structural-diff)
+5. [Action](#5-action) — impl types, UI hints, permission model, idempotensi, concurrency
+6. [Query & Filter Operator](#6-query--filter-operator)
+7. [Event & Outbox](#7-event--outbox)
+8. [Dua Permukaan API: UI vs External](#8-dua-permukaan-api-ui-vs-external)
+9. [Error Model](#9-error-model)
+10. [Config & Global Settings](#10-config--global-settings)
+
 ## 1. Entity (Entity)
 
 ### 1.1 Taksonomi Resource
@@ -13,7 +26,7 @@ Dua tipe resource: `type: document` (persisted, sumber kebenaran data bisnis)
 dan `type: service` (stateless, komputasi murni — tidak punya `characteristic`,
 `doc_status`, atau lifecycle guard).
 
-Entity punya `characteristic`, tepat satu nilai (mutually exclusive; `forma
+Entity punya `characteristic`, tepat satu nilai (mutually exclusive; `formspec
 apply` menolak lebih dari satu):
 
 | Characteristic | Arti | Wajib |
@@ -26,7 +39,7 @@ apply` menolak lebih dari satu):
 `summary` bukan tipe resource keempat — ia nilai `characteristic` yang sama
 kelasnya dengan `master`/`transaction`/`reference`.
 
-> **Find-or-create untuk reference.** Ketika `GET /{id}`找不到 record pada entity
+> **Find-or-create untuk reference.** Ketika `GET /{id}` tidak menemukan record pada entity
 > `characteristic: reference`, framework tidak langsung mengembalikan 404 —
 > melainkan mencari record yang sudah ada untuk workspace tersebut. Jika tidak
 > ada, framework auto-create record baru dengan nilai default dari field
@@ -39,7 +52,7 @@ Field berikut **reserved** — tidak boleh dipakai ulang sebagai nama field
 custom, otomatis ada di semua `type: document`, framework-managed: `owner`,
 `created_at`, `modified`, `doc_status`, `amends`, `amended_by`, `version`.
 `transaction_date` **wajib** dideklarasikan eksplisit untuk `characteristic:
-transaction` — `forma apply` menolak kalau tidak ada.
+transaction` — `formspec apply` menolak kalau tidak ada.
 
 Setiap Entity punya lifecycle bawaan lewat `doc_status` (`draft |
 submitted | cancelled`, closed set — kebutuhan proses bisnis granular pakai
@@ -59,7 +72,7 @@ ditegakkan lewat delapan reserved action:
 
 Developer boleh menambah `conditions` di atas guard dasar, **tidak boleh**
 melemahkannya. `create-submit`/`amend-submit` otomatis tersedia (tidak perlu
-dideklarasikan) begitu kedua action penyusunnya aktif; `forma apply` menolak
+dideklarasikan) begitu kedua action penyusunnya aktif; `formspec apply` menolak
 deklarasi eksplisit `create-submit` kalau `submit` di-`disabled: true`.
 
 **Gating transitif:** `submit` nonaktif → `cancel` dan `amend` implisit
@@ -152,6 +165,78 @@ audit. Enforcement nyata tetap di lapisan autentikasi (§8): otorisasi
 berbasis permission `{module}.{entity}.{action}` dijalankan server-side
 selalu, tanpa pengecualian.
 
+### 1.5 Entity Spec Reference — Atribut Lengkap
+
+Berikut adalah seluruh atribut yang bisa dideklarasikan di `spec` Entity.
+Atribut wajib ditandai **\[wajib\]**.
+
+| Atribut | Tipe | Wajib | Default | Keterangan |
+|---|---|---|---|---|
+| `version` | string | **Ya** | — | Versi skema Entity. Selalu `v1` untuk Entity baru. |
+| `characteristic` | enum | **Ya** | — | `master` / `transaction` / `reference` / `summary`. Mutually exclusive. |
+| `plural` | string | — | auto (nama + `s`) | Nama jamak untuk URL collection. |
+| `display_field` | string | — | `name` / field pertama | Field yang dipakai sebagai label di UI (dropdown, breadcrumb). |
+| `lifecycle` | string | — | `two_step_autosave` | `two_step_autosave` / `two_step_manual` / `plain_crud`. String enum, bukan map. |
+| `soft_deactivate` | object | — | disabled | `{ enabled: true }` — tambah action `deactivate` + `reactivate`. |
+| `fields` | array | — | `[]` | Daftar field custom. Lihat [`05-field-types.md`](05-field-types.md). |
+| `state_machine` | object | — | — | State machine untuk business states di luar `doc_status`. Field: `field`, `initial`, `states[]`, `transitions[]`. Lihat §1.6. |
+| `actions` | array | — | reserved actions | Custom action bernama di luar reserved. Field: `name`, `description`, `required_permission`, `uses`, `audit`, `ui`, `idempotent`. |
+| `expose` | array | — | `[]` (UI only) | `[{ type: rest, actions: [...] }]` — kontrol permukaan external API (§8.4). |
+| `persist` | object | — | — | `{ soft_delete, category, indexes[] }` — kontrak persistensi (§3). |
+| `auth` | object | — | `{ required: true }` | `{ required, strategies[] }` — persyaratan autentikasi (§1.4). |
+| `events` | array | — | reserved events | Event custom di luar `before_*`/`on_*` reserved. (§7). |
+| `indexes` | array | — | `[]` | Indeks tambahan: `[{ fields: [...], unique: true/false }]`. |
+
+### 1.6 `doc_status` vs `state_machine` — Dua Lapis State
+
+Entity punya **dua lapis state** yang independen namun bisa berinteraksi:
+
+| Lapis | Dikelola oleh | Scope | Kustomisasi |
+|---|---|---|---|
+| `doc_status` | Framework (built-in) | Lifecycle dokumen: `draft → submitted → cancelled` | Disable lewat `lifecycle: plain_crud` atau disable `submit`/`cancel`/`amend` |
+| Custom `state_machine` | Developer (deklaratif) | State bisnis: `draft → in_progress → completed` | Bebas mendefinisikan states, transitions, dan actions via `state_machine` block |
+
+Keduanya berjalan **bersamaan**: Entity bisa punya `doc_status: submitted`
+(immutable secara data) DAN `state_machine.field: in_progress` (state bisnis).
+Transition custom `via: complete` bisa di-guard dengan `conditions` yang
+memeriksa `doc_status` — misalnya, hanya izinkan transisi bisnis kalau
+dokumen sudah `submitted`.
+
+```yaml
+spec:
+  version: v1
+  characteristic: transaction
+  lifecycle: two_step_autosave     # doc_status aktif
+  fields:
+    - name: status
+      type: enum
+      enum_values: [draft, in_progress, completed, cancelled]
+      default: draft
+      index: true
+  state_machine:                   # state bisnis — paralel dengan doc_status
+    field: status
+    initial: draft
+    states:
+      - { name: draft, label: "Draft" }
+      - { name: in_progress, label: "In Progress" }
+      - { name: completed, label: "Completed" }
+      - { name: cancelled, label: "Cancelled" }
+    transitions:
+      - { from: draft, to: in_progress, via: start-work }
+      - { from: in_progress, to: completed, via: complete }
+      - { from: "*", to: cancelled, via: cancel }
+  actions:
+    - name: submit
+      disabled: false
+    - name: start-work
+      description: "Mulai pengerjaan"
+      required_permission: billing.invoice.start-work
+      audit: true
+```
+
+Untuk Workflow (approval multi-level yang meng-intercept transition
+state_machine), lihat [`02-core-extended.md`](02-core-extended.md) §2.
+
 ## 2. Primary Key & Natural Key
 Primary key: **UUID v7** (time-ordered) untuk semua Entity — ini kontrak,
 bukan pilihan per backend. Natural key adalah **unique constraint per
@@ -177,7 +262,7 @@ dipenuhi tiap PersistBackend lewat `ctx.next_key` — lihat
 
 ## 3. Persistence Sebagai Kontrak
 
-**Transaksi adalah kewajiban, bukan opsi.** Forma adalah framework aplikasi
+**Transaksi adalah kewajiban, bukan opsi.** FormSpec adalah framework aplikasi
 bisnis: setiap mutasi yang secara logis satu unit (mutasi entity + guard
 lifecycle + counter natural key + penulisan outbox) **wajib** atomik dalam
 satu transaksi PersistBackend — commit semua atau tidak sama sekali
@@ -187,6 +272,16 @@ constraint referensial dievaluasi server-side pada setiap jalur masuk
 (HTTP, script, event); frontend menegakkan hal yang sama untuk UX tapi tidak
 pernah menjadi satu-satunya penjaga — payload yang melewati frontend (atau
 dikirim langsung oleh klien yang tidak jujur) tetap tertahan di backend.
+
+**Unknown field = rejection (normatif).** Setiap field di payload
+`create`/`update` **wajib** ada di Entity spec (`spec.fields[]`), child
+relation (`spec.fields[].type: child`), atau reserved field name (framework-
+managed, tidak bisa dikirim user). Field yang tidak dikenal **harus ditolak**
+dengan `VALIDATION_ERROR` (422) — framework tidak boleh diam-diam menerima
+atau mengabaikan field arbitrer. Ini berlaku untuk semua jalur masuk: HTTP
+(UI surface + external API), Starlark script, dan event handler. Script
+yang membaca/menulis field tidak dikenal adalah error validasi, bukan
+silent no-op.
 
 **Multi-datastore per workspace (normatif).** Satu workspace **boleh**
 punya lebih dari satu Datastore transactional — binding-nya di level
@@ -262,7 +357,7 @@ actions:
 | `icon` | string | — | Nama ikon lucide-react (kebab-case, mis. `play`, `x`, `check`) |
 | `style` | string | `secondary` | `primary` (tombol solid), `secondary` (outline), `danger` (merah) |
 | `confirm` | string | — | Jika diisi, munculkan ConfirmDialog sebelum eksekusi; nilai = pesan |
-| `show_when` | string | — | FormaExpr; tombol hanya ditampilkan jika expression `true` |
+| `show_when` | string | — | FormSpecExpr; tombol hanya ditampilkan jika expression `true` |
 
 `confirm` adalah satu-satunya mekanisme konfirmasi untuk action — definisikan
 di entity, bukan di table/kanban. Table/kanban tetap bisa override via
@@ -278,7 +373,7 @@ mendeklarasikan dua hal secara eksplisit:
 adalah satu-satunya sumber kebenaran; implementasi wajib menegakkan permission
 lewat identity proxy untuk kelima jenis impl secara seragam, bukan hanya untuk
 `native`. `uses` yang undeclared harus ditolak saat resolusi, bukan silently
-diizinkan. Auto-scan kode (mis. `forma validate`) hanya berperan sebagai
+diizinkan. Auto-scan kode (mis. `formspec validate`) hanya berperan sebagai
 verifikator kejujuran deklarasi terhadap kode — bukan sumber grant, dan tidak
 pernah memberi grant sendiri. Footprint modul (agregat seluruh
 `required_permission` + `uses` miliknya) adalah dasar consent yang wajib
@@ -346,7 +441,7 @@ sort/filter yang benar — index tetap berguna untuk performa pada data besar.
 `before_cancel`) **selalu sync** — gate yang harus selesai sebelum state
 berubah. `on_*` (mis. `on_submit`) **selalu async** — notifikasi setelah
 commit. Event custom di luar pola ini **wajib** mendeklarasikan `type`
-eksplisit. `forma apply` menolak event yang `type`-nya kontradiktif dengan
+eksplisit. `formspec apply` menolak event yang `type`-nya kontradiktif dengan
 prefix-nya. Aturan ini otomatis berlaku untuk kedelapan reserved action (§1.2)
 — tiap reserved action punya `before_{action}` (sync) dan `on_{action}`
 (async) berpasangan tanpa perlu dideklarasikan manual.
@@ -376,7 +471,7 @@ sama; Subscription masuk consent footprint module konsumen.
 
 ## 8. Dua Permukaan API: UI vs External
 
-Forma menyediakan **dua permukaan (surface) API** untuk operasi data, dengan
+FormSpec menyediakan **dua permukaan (surface) API** untuk operasi data, dengan
 auth, gating, dan visibility yang berbeda — mengikuti pola route Laravel
 (`web.php` untuk UI, `api.php` untuk external service).
 
@@ -408,7 +503,7 @@ POST   /{ws}/_ui/entity/{module}/{entity}/{id}/{action} → custom action
 
 Permukaan ini **hanya tersedia kalau Entity opt-in** lewat `spec.expose:
 [{type: rest} | {type: grpc} | {type: ws}]`. Digunakan oleh third-party
-service, SDK (`forma generate`), dan integrasi eksternal.
+service, SDK (`formspec generate`), dan integrasi eksternal.
 
 ```
 GET    /{ws}/api/v1/{module}/{plural}             → list
@@ -421,15 +516,15 @@ POST   /{ws}/api/v1/{module}/{plural}/{id}/{action} → custom action
 
 | Aspek | Ketentuan |
 |---|---|
-| Auth | API key header (`X-Forma-Key`). **Tidak menerima** session cookie. |
+| Auth | API key header (`X-FormSpec-Key`). **Tidak menerima** session cookie. |
 | Gating | `spec.expose` (deny-by-default) + `required_permission` action-level ([§5](#5-action)) |
 | Field visibility | Field dengan `exclude: [public_api]` disembunyikan dari respons ([`05-field-types.md`](05-field-types.md) §5.3) |
 | Rate limit | Per API key + plan tier |
 | Audit attribution | `api_key_id`, `service_label` |
 | Ketersediaan | Hanya untuk Entity dengan `spec.expose` — tanpa expose, endpoint 404 |
 
-`forma generate` hanya menghasilkan typed client untuk permukaan external ini.
-Kalau tidak ada entity yang exposed, `forma generate` menolak berjalan — tidak
+`formspec generate` hanya menghasilkan typed client untuk permukaan external ini.
+Kalau tidak ada entity yang exposed, `formspec generate` menolak berjalan — tidak
 ada yang bisa digenerate.
 
 ### 8.3 Router & Middleware
@@ -442,7 +537,7 @@ berbeda di level router:
 | Route group | Middleware auth |
 |---|---|
 | `/_ui/` | Session cookie / OAuth |
-| `/api/v1/` | API key header (`X-Forma-Key`) |
+| `/api/v1/` | API key header (`X-FormSpec-Key`) |
 
 **Satu logic path internal.** Engine (validasi, permission enforcement, guard
 lifecycle, state machine, natural key generation, event publishing) adalah **satu
@@ -493,8 +588,8 @@ Kedua permukaan **wajib** mematuhi kontrak yang sama untuk:
 | Optimistic concurrency (`version`) | Update wajib membawa `version`; mismatch → `409 CONFLICT` |
 
 ## 9. Error Model
-Kode kanonik berformat `FORMA.{DOMAIN}.{REASON}` (mis.
-`FORMA.DOC.UPDATE_NOT_DRAFT`, `FORMA.PERIOD.CLOSED`) — satu file
+Kode kanonik berformat `FORMSPEC.{DOMAIN}.{REASON}` (mis.
+`FORMSPEC.DOC.UPDATE_NOT_DRAFT`, `FORMSPEC.PERIOD.CLOSED`) — satu file
 `error-glossary.yaml`, versioned bersama Core Basic, dipakai ganda sebagai
 matcher programatik **dan** kunci lookup i18n (tidak ada field `key` terpisah).
 `code` **tidak pernah** diubah atau dipakai ulang setelah rilis — integrasi
@@ -502,14 +597,14 @@ pihak ketiga yang `switch(error.code)` tidak boleh diam-diam rusak; situasi
 baru menambah entri baru. Error dari mekanisme framework (guard reserved
 action, dll.) wajib pakai kode kanonik ini, bukan pesan inline hard-coded.
 `conditions:` custom milik developer bebas pakai pesan sendiri, SEBAIKNYA
-tetap format `code` + `params` dengan namespace App sendiri (bukan `FORMA.*`).
+tetap format `code` + `params` dengan namespace App sendiri (bukan `FORMSPEC.*`).
 
 ## 10. Config & Global Settings
 
 Config adalah manifest, bukan dotenv:
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Config
 metadata:
   name: app
@@ -544,11 +639,11 @@ ditebak per komponen:
 Contoh konkret namespace `settings.*` di workspace Config:
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Config
 metadata:
   name: workspace
-  module: forma.core
+  module: formspec.core
 spec:
   keys:
     settings.default_currency:  { type: string, default: "USD" }

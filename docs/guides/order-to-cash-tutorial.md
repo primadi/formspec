@@ -1,10 +1,10 @@
 # Order-to-Cash Tutorial
 
 **Status:** Draft
-**Audience:** App Developers — first-time Forma users
-**Prerequisites:** Read [Forma Overview](../spec/platform/01-overview.md) and [Core Basic Spec](../spec/backend/01-core-basic.md)
+**Audience:** App Developers — first-time FormSpec users
+**Prerequisites:** Read [FormSpec Overview](../spec/platform/01-overview.md) and [Core Basic Spec](../spec/backend/01-core-basic.md)
 
-> This tutorial walks you through building a mini Order-to-Cash application with Forma, step by step. By the end, you will have: a working order management system with sequential order numbers, payment gateway integration, a transactional journal entry on payment, and email/WA notifications — all from declarative manifests with minimal code.
+> This tutorial walks you through building a mini Order-to-Cash application with FormSpec, step by step. By the end, you will have: a working order management system with sequential order numbers, payment gateway integration, a transactional journal entry on payment, and email/WA notifications — all from declarative manifests with minimal code.
 
 ---
 
@@ -32,14 +32,14 @@ Our Order-to-Cash flow: customer checkout → pay via payment gateway → after 
 Create the project:
 
 ```bash
-forma new tokoku
+formspec new tokoku
 ```
 
-This generates a standard Forma project structure (Core §5):
+This generates a standard FormSpec project structure (Core §5):
 
 ```
 tokoku/
-  forma.yaml                    # kind: App (root manifest)
+  formspec.yaml                    # kind: App (root manifest)
   modules/
     billing/                    # kind: Module
       module.yaml
@@ -60,10 +60,10 @@ tokoku/
 
 ## 3. Step 1 — App Manifest
 
-Create `forma.yaml`:
+Create `formspec.yaml`:
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: App
 metadata:
   name: tokoku
@@ -74,7 +74,7 @@ spec:
   modules: [billing, gl, notifications]
 ```
 
-This declares our app composes three modules. No `publishes` or `consumes` — this app doesn't offer cross-app interfaces and the payment gateway is an external integration (wrapped as a Service), not another Forma app.
+This declares our app composes three modules. No `publishes` or `consumes` — this app doesn't offer cross-app interfaces and the payment gateway is an external integration (wrapped as a Service), not another FormSpec app.
 
 ---
 
@@ -83,7 +83,7 @@ This declares our app composes three modules. No `publishes` or `consumes` — t
 First, the customer entity the order will reference. Create `modules/billing/entities/customer.yaml`:
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Entity
 metadata:
   name: customer
@@ -101,7 +101,7 @@ spec:
 Now the order itself. Create `modules/billing/entities/order.yaml`:
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Entity
 metadata:
   name: order
@@ -220,7 +220,7 @@ spec:
         - channel: reliable_event                 # FR4 — journal, no loss
           target: { resource: gl.journal-entry, action: create }   # defined in Step 6
           retry: { max: 10, backoff: exponential, initial_delay_ms: 1000 }
-          # failed-event is the built-in forma.core dead-letter entity
+          # failed-event is the built-in formspec.core dead-letter entity
           # (Core Basic §22) — nothing to define in this tutorial
           dead_letter: { resource: failed-event, action: create }
           idempotency_key: "order.paid.{id}"
@@ -286,7 +286,7 @@ That's 3 lines of business logic. All consequences of payment (journal, receipt,
 Create `modules/billing/services/payment-gateway.yaml`:
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Service
 metadata:
   name: payment-gateway
@@ -318,7 +318,7 @@ Because this is a `kind: Service`, it automatically gets auth, permission enforc
 Create `modules/gl/entities/journal-entry.yaml`:
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Entity
 metadata:
   name: journal-entry
@@ -355,7 +355,7 @@ Real scenario: the system has been running for months. Someone wants WA notifica
 Create `modules/notifications/subscriptions/wa-on-order-paid.yaml`:
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Subscription
 metadata:
   name: wa-on-order-paid
@@ -366,17 +366,17 @@ spec:
     - { channel: queue, job: send-wa-notification }
 ```
 
-The dividing line (D35): journal stays in `order`'s `deliver` because it's a billing promise (FR4). WA is `notifications` module's concern — Subscription. `forma describe entity billing.order` shows the merged fan-out (publisher deliver + all Subscriptions).
+The dividing line (D35): journal stays in `order`'s `deliver` because it's a billing promise (FR4). WA is `notifications` module's concern — Subscription. `formspec describe entity billing.order` shows the merged fan-out (publisher deliver + all Subscriptions).
 
 ---
 
 ## 10. Step 8 — Run It
 
 ```bash
-forma dev
+formspec dev
 ```
 
-This starts the complete local environment: Postgres, Valkey, Mailpit, MinIO, `forma-control` (dev/relaxed policy), and `forma-resource` with hot reload.
+This starts the complete local environment: Postgres, Valkey, Mailpit, MinIO, `formspec-control` (dev/relaxed policy), and `formspec-resource` with hot reload.
 
 - Visit `http://localhost:8080/_admin` — the admin panel is derived automatically from your entities
 - Create a customer, create an order, checkout → the payment gateway auto-routes to the mockup in dev
@@ -386,7 +386,7 @@ This starts the complete local environment: Postgres, Valkey, Mailpit, MinIO, `f
 
 ## 11. What Just Happened — Concept Map
 
-| Requirement | Forma Construct | Why It Works |
+| Requirement | FormSpec Construct | Why It Works |
 |---|---|---|
 | FR1 — Sequential numbers | `natural_key_rule` + `ctx.next_key()` | Locking, reset, formatting handled by framework |
 | FR2 — Payment gateway | `kind: Service` | External integration wrapped; mockup in dev via config |
@@ -404,6 +404,6 @@ This starts the complete local environment: Postgres, Valkey, Mailpit, MinIO, `f
 
 ## Next Steps
 
-- Read the [Order-to-Cash Companion](./order-to-cash-companion.md) for the deep technical analysis, including the "without Forma vs with Forma" comparison
+- Read the [Order-to-Cash Companion](./order-to-cash-companion.md) for the deep technical analysis, including the "without FormSpec vs with FormSpec" comparison
 - Explore [Core Extended](../spec/backend/02-core-extended.md) for Workflow (approval chains), Webhook signature verification, and Mockup environment binding
 - See [Entity Extension](../spec/backend/03-entity-extension.md) to learn how to add custom fields to marketplace modules without forking

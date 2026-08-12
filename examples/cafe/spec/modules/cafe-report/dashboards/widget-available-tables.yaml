@@ -1,0 +1,12 @@
+apiVersion: formspec.dev/v1alpha1
+kind: Widget
+metadata:
+  name: available-tables
+  module: cafe-report
+  description: "Jumlah meja yang tersedia"
+spec:
+  title: "Meja Tersedia"
+  type: metric
+  entity: cafe-master.table
+  query: "status == 'available'"
+  refresh_secs: 60

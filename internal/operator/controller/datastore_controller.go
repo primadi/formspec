@@ -12,12 +12,12 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	formav1alpha1 "github.com/primadi/forma/internal/operator/api/v1alpha1"
+	formspecv1alpha1 "github.com/primadi/formspec/internal/operator/api/v1alpha1"
 )
 
 // DatastoreReconciler validates registered datastores: the referenced
 // endpoint Secret must exist and hold a non-empty connection string
-// (docs/runtimes/03-forma-operator.md §1). Credentials stay in the Secret —
+// (docs/runtimes/03-formspec-operator.md §1). Credentials stay in the Secret —
 // the operator checks presence, it does not read them into its own state.
 //
 // Actually dialing the endpoint is driver-specific and deliberately not
@@ -28,7 +28,7 @@ type DatastoreReconciler struct {
 
 // Reconcile sets the Validated / Denied conditions on a Datastore.
 func (r *DatastoreReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	var ds formav1alpha1.Datastore
+	var ds formspecv1alpha1.Datastore
 	if err := r.Get(ctx, req.NamespacedName, &ds); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
@@ -40,7 +40,7 @@ func (r *DatastoreReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		status = metav1.ConditionFalse
 	}
 	meta.SetStatusCondition(&ds.Status.Conditions, metav1.Condition{
-		Type: formav1alpha1.ConditionValidated, Status: status,
+		Type: formspecv1alpha1.ConditionValidated, Status: status,
 		Reason: reason, Message: msg, ObservedGeneration: ds.Generation,
 	})
 	denied := metav1.ConditionFalse
@@ -48,7 +48,7 @@ func (r *DatastoreReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		denied = metav1.ConditionTrue
 	}
 	meta.SetStatusCondition(&ds.Status.Conditions, metav1.Condition{
-		Type: formav1alpha1.ConditionDenied, Status: denied,
+		Type: formspecv1alpha1.ConditionDenied, Status: denied,
 		Reason: reason, ObservedGeneration: ds.Generation,
 	})
 
@@ -58,7 +58,7 @@ func (r *DatastoreReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	return ctrl.Result{}, nil
 }
 
-func (r *DatastoreReconciler) validate(ctx context.Context, ds *formav1alpha1.Datastore) (ok bool, reason, msg string) {
+func (r *DatastoreReconciler) validate(ctx context.Context, ds *formspecv1alpha1.Datastore) (ok bool, reason, msg string) {
 	if ds.Spec.Driver == "" {
 		return false, "MissingDriver", "spec.driver is required"
 	}
@@ -84,7 +84,7 @@ func (r *DatastoreReconciler) validate(ctx context.Context, ds *formav1alpha1.Da
 // flips the datastore to Validated without manual intervention.
 func (r *DatastoreReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&formav1alpha1.Datastore{}).
+		For(&formspecv1alpha1.Datastore{}).
 		Watches(&corev1.Secret{}, secretToDatastores(mgr)).
 		Complete(r)
 }

@@ -28,7 +28,7 @@ type IdempotencyStore struct {
 	ttl    time.Duration
 }
 
-// IdempotencyRecord represents a row in forma_idempotency_keys.
+// IdempotencyRecord represents a row in formspec_idempotency_keys.
 type IdempotencyRecord struct {
 	WorkspaceID  string
 	Action    string
@@ -97,7 +97,7 @@ func (s *IdempotencyStore) TryClaim(ctx context.Context, workspaceID, action, ke
 	expiresStr := expiresAt.Format(time.RFC3339Nano)
 
 	_, err = s.db.ExecContext(ctx, `
-		INSERT INTO forma_idempotency_keys (tenant_id, action, key, status, expires_at)
+		INSERT INTO formspec_idempotency_keys (tenant_id, action, key, status, expires_at)
 		VALUES (?, ?, ?, 'pending', ?)
 	`, workspaceID, action, key, expiresStr)
 	if err != nil {
@@ -141,7 +141,7 @@ func (s *IdempotencyStore) GetResult(ctx context.Context, workspaceID, action, k
 func (s *IdempotencyStore) CleanupExpired(ctx context.Context) (int64, error) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	result, err := s.db.ExecContext(ctx, `
-		DELETE FROM forma_idempotency_keys
+		DELETE FROM formspec_idempotency_keys
 		WHERE expires_at < ?
 	`, now)
 	if err != nil {
@@ -158,7 +158,7 @@ func (s *IdempotencyStore) getByPK(ctx context.Context, workspaceID, action, key
 
 	err := s.db.QueryRowContext(ctx, `
 		SELECT tenant_id, action, key, status, response, expires_at, created_at
-		FROM forma_idempotency_keys
+		FROM formspec_idempotency_keys
 		WHERE tenant_id = ? AND action = ? AND key = ?
 	`, workspaceID, action, key).Scan(
 		&rec.WorkspaceID, &rec.Action, &rec.Key, &rec.Status,
@@ -180,7 +180,7 @@ func (s *IdempotencyStore) getByPK(ctx context.Context, workspaceID, action, key
 func (s *IdempotencyStore) updateStatus(ctx context.Context, workspaceID, action, key, status, response string) error {
 	if response != "" {
 		_, err := s.db.ExecContext(ctx, `
-			UPDATE forma_idempotency_keys
+			UPDATE formspec_idempotency_keys
 			SET status = ?, response = ?
 			WHERE tenant_id = ? AND action = ? AND key = ?
 		`, status, response, workspaceID, action, key)
@@ -188,7 +188,7 @@ func (s *IdempotencyStore) updateStatus(ctx context.Context, workspaceID, action
 	}
 
 	_, err := s.db.ExecContext(ctx, `
-		UPDATE forma_idempotency_keys
+		UPDATE formspec_idempotency_keys
 		SET status = ?
 		WHERE tenant_id = ? AND action = ? AND key = ?
 	`, status, workspaceID, action, key)

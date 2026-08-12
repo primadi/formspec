@@ -137,7 +137,7 @@ func ScopeIDFromContext(ctx context.Context) string {
 // The sidecar protocol is two separate HTTP round-trips — the outbound
 // POST {app-endpoint}/invoke/... call and the app process's inbound
 // POST /ctx/entity/{op} callback — both served by the same OS process
-// (confirmed in cmd/forma/dev.go: one `forma dev` binary runs both the
+// (confirmed in cmd/formspec/dev.go: one `formspec dev` binary runs both the
 // SidecarExecutor's outbound client and the CtxHandler's inbound
 // listener). A context.Context value cannot cross that process boundary,
 // so a generated id + this in-memory map reconstructs the same effect:

@@ -1,5 +1,5 @@
 # Customer detail page — full view with related address list
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Page
 metadata:
   name: customer-detail

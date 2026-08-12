@@ -7,8 +7,11 @@
       "type": "string"
     },
     "for": {
-      "description": "module.service or module.entity",
-      "type": "string"
+      "description": "@schema {example: \"billing.payment-gateway\"}",
+      "type": "string",
+      "examples": [
+        "billing.payment-gateway"
+      ]
     }
   },
   "required": [

@@ -5,7 +5,10 @@
   "properties": {
     "key_ref": {
       "description": "KeyRef is the location of the platform signing key (e.g. kms://prod-signing).",
-      "type": "string"
+      "type": "string",
+      "examples": [
+        "kms://prod-signing"
+      ]
     },
     "mode": {
       "$ref": "#/$defs/EnvironmentMode",
@@ -28,6 +31,9 @@
       "enum": [
         "shared",
         "exclusive"
+      ],
+      "examples": [
+        "shared"
       ]
     },
     "tier": {
@@ -37,6 +43,9 @@
         "standalone",
         "cloud",
         "enterprise"
+      ],
+      "examples": [
+        "cloud"
       ]
     }
   },

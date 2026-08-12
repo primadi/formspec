@@ -5,7 +5,7 @@ import (
 
 	"strings"
 
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 // normativeColumns are framework-managed columns present on every document
@@ -30,7 +30,7 @@ var builtinRowActions = map[string]bool{
 //   - kanban columns ⊆ status field enum values
 //   - dashboard/wizard refs resolve
 //
-// Errors are collected best-effort so `forma validate` can report all at once.
+// Errors are collected best-effort so `formspec validate` can report all at once.
 func (r *Registry) Validate(resolve EntityResolver) []error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

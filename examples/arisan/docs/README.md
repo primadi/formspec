@@ -1,7 +1,7 @@
 # Dokumentasi Proyek — Aplikasi Arisan
 
 Dokumentasi lengkap untuk aplikasi **Arisan** — platform iuran bulanan &
-penarikan bergilir (rotating savings) yang dibangun di atas **Forma**
+penarikan bergilir (rotating savings) yang dibangun di atas **FormSpec**
 (spec-first, declarative ecosystem).
 
 ## Daftar Isi
@@ -21,10 +21,10 @@ penarikan bergilir (rotating savings) yang dibangun di atas **Forma**
 
 ```bash
 # Validasi semua manifest
-forma validate --spec spec
+formspec validate --spec spec
 
 # Jalankan dev server (SQLite, hot-reload)
-forma dev --addr :18080
+formspec dev --addr :18080
 
 # UI aplikasi
 # http://localhost:18080/default/app/arisan

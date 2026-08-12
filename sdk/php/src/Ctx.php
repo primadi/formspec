@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Forma;
+namespace FormSpec;
 
 /**
  * The ctx.* surface handed to handlers. Every method call is an HTTP call
- * back to forma-sidecar (§4.3) — the same primitive contract Starlark
+ * back to formspec-sidecar (§4.3) — the same primitive contract Starlark
  * scripts use:
  *
  *     $ctx->db()->query('SELECT ...');

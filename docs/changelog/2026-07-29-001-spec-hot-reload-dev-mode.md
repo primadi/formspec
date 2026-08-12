@@ -1,11 +1,11 @@
-# Spec Hot-Reload di `forma dev`
+# Spec Hot-Reload di `formspec dev`
 
 **Tanggal**: 2026-07-29
 **Plan**: docs/plan/spec-hot-reload.md (bagian dari diskusi dengan AI)
 
 ## Perubahan
 
-### 1. `resource/forma.go` — `App.ReloadSpec()` method
+### 1. `resource/formspec.go` — `App.ReloadSpec()` method
 
 - Menambahkan `sync.RWMutex` (`mu`) ke `App` struct untuk proteksi atomic swap
 - Menambahkan `database` (db.DB) dan `driver` (db.DriverType) ke `App` — menyimpan referensi koneksi database untuk digunakan ulang saat reload
@@ -20,7 +20,7 @@
 
 - Menambahkan `SetHub(h *WSHub)` ke `RouterBuilder` — memungkinkan transfer WSHub yang sudah ada saat reload, sehingga WebSocket connections tidak terputus
 
-### 3. `cmd/forma/dev.go` — File watcher
+### 3. `cmd/formspec/dev.go` — File watcher
 
 - `watchSpecForChanges()` function: menggunakan `fsnotify` untuk memantau folder `spec/` dan semua subdirektori
 - Auto-watch subdirektori baru yang dibuat setelah watcher start
@@ -33,13 +33,13 @@
 
 | File | Perubahan |
 |---|---|
-| `resource/forma.go` | +App.ReloadSpec(), +mu/database/driver/nativeHandlers fields, refactor Handler/Routes/RouteCount/Registry |
+| `resource/formspec.go` | +App.ReloadSpec(), +mu/database/driver/nativeHandlers fields, refactor Handler/Routes/RouteCount/Registry |
 | `internal/api/router.go` | +SetHub() method |
-| `cmd/forma/dev.go` | +watchSpecForChanges(), import fsnotify |
+| `cmd/formspec/dev.go` | +watchSpecForChanges(), import fsnotify |
 
 ### Catatan
 
-- Dev mode only — `watchSpecForChanges` hanya jalan saat `forma dev`, tidak di `forma serve`/produksi
+- Dev mode only — `watchSpecForChanges` hanya jalan saat `formspec dev`, tidak di `formspec serve`/produksi
 - Full reload approach (Opsi A): semua spec dibaca ulang, registri dibuild dari nol, atomic swap pointer
-- Schema migration idempoten: `ApplyMigrations` cek `forma_schema_migrations` — hanya applied jika checksum berbeda
+- Schema migration idempoten: `ApplyMigrations` cek `formspec_schema_migrations` — hanya applied jika checksum berbeda
 - Native Go handlers preserved via `nativeHandlers` map

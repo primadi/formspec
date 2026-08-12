@@ -1,5 +1,5 @@
 # SHOWCASE: form kedua Configuration Page (tab "Billing & Struk"), row id="billing".
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Form
 metadata:
   name: settings-billing

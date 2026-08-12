@@ -1,4 +1,4 @@
-package forma
+package formspec
 
 import (
 	"context"
@@ -8,46 +8,46 @@ import (
 	"os"
 	"time"
 
-	"github.com/primadi/forma/internal/artifact"
-	"github.com/primadi/forma/internal/entity"
-	"github.com/primadi/forma/internal/manifest"
-	"github.com/primadi/forma/internal/resource"
-	db "github.com/primadi/forma/renderers/jsonbpersist"
+	"github.com/primadi/formspec/internal/artifact"
+	"github.com/primadi/formspec/internal/entity"
+	"github.com/primadi/formspec/internal/manifest"
+	"github.com/primadi/formspec/internal/resource"
+	db "github.com/primadi/formspec/renderers/jsonbpersist"
 )
 
-// SyncAgentConfig configures a SyncAgent — the client side of the Forma
+// SyncAgentConfig configures a SyncAgent — the client side of the FormSpec
 // plane protocol (see docs/architecture/03-deployment-flow.md and
-// docs/runtimes/01-forma-control.md).
+// docs/runtimes/01-formspec-control.md).
 type SyncAgentConfig struct {
-	DSN        string // Database DSN (default: "sqlite:.forma/data.db")
+	DSN        string // Database DSN (default: "sqlite:.formspec/data.db")
 	ControlURL string // Cluster/Region Control URL (default: "http://localhost:8443")
-	StateDir   string // Local state directory for manifest/evidence buffer (default: ".forma")
+	StateDir   string // Local state directory for manifest/evidence buffer (default: ".formspec")
 	Dev        bool   // Dev mode: 10s poll interval, unsigned artifact acceptance
 	PollPort   int    // Dev-only /v1/poll listener port (default: 8081)
 }
 
 func (c *SyncAgentConfig) applyDefaults() {
 	if c.DSN == "" {
-		c.DSN = "sqlite:.forma/data.db"
+		c.DSN = "sqlite:.formspec/data.db"
 	}
 	if c.ControlURL == "" {
 		c.ControlURL = "http://localhost:8443"
 	}
 	if c.StateDir == "" {
-		c.StateDir = ".forma"
+		c.StateDir = ".formspec"
 	}
 	if c.PollPort == 0 {
 		c.PollPort = 8081
 	}
 }
 
-// SyncAgent pulls artifacts from a Forma Control Plane and keeps a local
+// SyncAgent pulls artifacts from a FormSpec Control Plane and keeps a local
 // entity registry converged with the desired state (schema synced,
 // manifests registered).
 //
 // SyncAgent does NOT serve an HTTP API from the entities it loads — that
-// gap is tracked in docs/runtimes/02-forma-resource.md §7 (unifying this
-// pull-based convergence loop with the REST API generator in forma.go is
+// gap is tracked in docs/runtimes/02-formspec-resource.md §7 (unifying this
+// pull-based convergence loop with the REST API generator in formspec.go is
 // the top follow-up item for this package).
 type SyncAgent struct {
 	cfg      SyncAgentConfig
@@ -114,7 +114,7 @@ func NewSyncAgent(cfg SyncAgentConfig) (*SyncAgent, error) {
 func (a *SyncAgent) Registry() *entity.Registry { return a.reg }
 
 // Run starts the health ticker and convergence loop, and — in dev mode —
-// the local /v1/poll listener used by `forma apply --watch` for fast
+// the local /v1/poll listener used by `formspec apply --watch` for fast
 // refresh. It blocks until ctx is cancelled, then flushes buffered
 // evidence before returning.
 func (a *SyncAgent) Run(ctx context.Context) error {
@@ -155,14 +155,14 @@ func (a *SyncAgent) startDevPollListener(port int) {
 
 	server := &http.Server{Addr: fmt.Sprintf(":%d", port), Handler: mux}
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Printf("forma: dev poll listener error: %v", err)
+		log.Printf("formspec: dev poll listener error: %v", err)
 	}
 }
 
 // loadYAMLIntoRegistry parses artifact YAML files and registers Document/
 // Entity kinds into reg, then syncs the schema. Other kinds (Service,
 // Config, ...) are not yet consumed by any registry — see
-// docs/runtimes/02-forma-resource.md §7.
+// docs/runtimes/02-formspec-resource.md §7.
 func loadYAMLIntoRegistry(ctx context.Context, reg *entity.Registry, yamlFiles []artifact.FileManifest) error {
 	loader := manifest.NewLoader("")
 
@@ -170,7 +170,7 @@ func loadYAMLIntoRegistry(ctx context.Context, reg *entity.Registry, yamlFiles [
 		raws, errs := loader.ParseBytes(yf.Content, yf.Path)
 		if len(errs) > 0 {
 			for _, e := range errs {
-				log.Printf("forma: sync agent parse warning %s: %v", yf.Path, e)
+				log.Printf("formspec: sync agent parse warning %s: %v", yf.Path, e)
 			}
 			continue
 		}
@@ -181,11 +181,11 @@ func loadYAMLIntoRegistry(ctx context.Context, reg *entity.Registry, yamlFiles [
 			}
 			entitySpec, err := manifest.RawSpecToEntitySpec(raw.Spec.(map[string]any))
 			if err != nil {
-				log.Printf("forma: sync agent skip %s: parse spec: %v", raw.Source, err)
+				log.Printf("formspec: sync agent skip %s: parse spec: %v", raw.Source, err)
 				continue
 			}
 			if err := reg.RegisterArtifactManifest(raw, entitySpec); err != nil {
-				log.Printf("forma: sync agent skip %s: register: %v", raw.Source, err)
+				log.Printf("formspec: sync agent skip %s: register: %v", raw.Source, err)
 				continue
 			}
 		}
@@ -196,7 +196,7 @@ func loadYAMLIntoRegistry(ctx context.Context, reg *entity.Registry, yamlFiles [
 		return fmt.Errorf("sync schema: %w", err)
 	}
 	if applied > 0 {
-		log.Printf("forma: sync agent applied %d migration(s)", applied)
+		log.Printf("formspec: sync agent applied %d migration(s)", applied)
 	}
 	return nil
 }

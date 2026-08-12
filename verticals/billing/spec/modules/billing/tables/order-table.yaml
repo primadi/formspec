@@ -1,5 +1,5 @@
 # Order table — main order list with status indicators and actions
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Table
 metadata:
   name: order-table

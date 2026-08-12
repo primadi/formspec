@@ -17,7 +17,7 @@
 | Filter columns (filters dari manifest) | Medium | Small |
 | Search di kartu | ✅ sudah ada | — |
 | Realtime subscription | Low | Large (tergantung §5.8) |
-| drag_guard FormaExpr | Low | Medium |
+| drag_guard FormSpecExpr | Low | Medium |
 | Zero-config derivasi kolom | Low | Medium |
 
 ## File yang Terkena

@@ -1,7 +1,7 @@
 # SHOWCASE kind: Widget tipe metric dengan format currency.
 # Baca entity transaksi `visit` langsung (sum total), bukan summary entity —
 # summary projection belum diimplementasikan (lihat docs/plan/fix-clinic-dashboard-summary.md).
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Widget
 metadata:
   name: revenue-today

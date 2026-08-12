@@ -4,34 +4,82 @@
 
 > Draft: isi di bawah kontrak yang berlaku.
 
-## 1. Taksonomi Kind
-Seluruh kind Forma memakai format manifest yang sama
-(`apiVersion/kind/metadata/spec`,
-[`../backend/01-core-basic.md`](../backend/01-core-basic.md) §1) tapi
-terbagi per concern:
+> **Referensi atribut per-kind:** [`docs/kind/`](../../kind/README.md) — 33 file
+> (4 grup), tabel atribut generated dari `pkg/spec` + narasi manual. Dokumen ini
+> mendefinisikan taksonomi & meta-kind; `docs/kind/` mendefinisikan atribut tiap
+> kind.
 
-| Concern | Kind | Didefinisikan di |
-|---|---|---|
-| Model domain | `Entity`, `Service` | `spec/backend/01-core-basic.md` |
-| Kurasi | `App`, `Module` | `spec/platform/02-workspace-app-module.md` |
-| Konfigurasi | `Config` | `spec/backend/01-core-basic.md` §10 (Config & Global Settings) |
-| DDL custom | `Migration` | `spec/backend/01-core-basic.md` §4 |
-| Reaksi lintas-module | `Subscription` | `spec/backend/01-core-basic.md` §7 |
-| Proses bisnis | `Workflow` | `spec/backend/02-core-extended.md` §2 |
-| Permukaan API | `Api`, `Webhook`, `Mockup` | `spec/backend/02-core-extended.md` §12 (`Api`), §4 (`Webhook`), §8 (`Mockup`) |
-| Mekanisme ekstensi | `KindDefinition` | §2 di bawah |
-| Jembatan reaktif | `Integrator` | `spec/backend/02-core-extended.md` §5 |
-| Renderer visual | `Renderer` | `spec/frontend/03-renderer-kind.md` |
-| Renderer penyimpanan | `PersistBackend` | `spec/backend/04-persist-backend.md` |
-| Visual — hirarkis, bukan flat | Instance `VisualSpecKind` (Page, Form, Table, Dashboard, Widget, Report, Wizard, Kanban, Timeline, Calendar, Listing, ApprovalInbox, NotificationCenter, Print, Theme) | `spec/frontend/02,05,06,07` |
-| Governance | `Environment`, `Policy` | `spec/platform/04-control-plane.md` |
-| Infrastruktur | `Datastore` | `spec/platform/06-datastore.md` |
+## 1. Taksonomi Kind
+
+Seluruh 33 kind FormSpec memakai format manifest yang sama
+(`apiVersion/kind/metadata/spec`,
+[`../backend/01-core-basic.md`](../backend/01-core-basic.md) §1) dan
+dikelompokkan dalam **4 grup** yang mencerminkan struktur `docs/spec/`:
+
+| # | Grup | Jumlah | Definisi | Mirror `docs/spec/` |
+|---|---|---------|----------|------|
+| **Curation** | 2 | `App`, `Module` — struktur workspace, kurasi module, menu | `platform/` |
+| **Data** | 11 | `Entity`, `Service`, `Config`, `Migration`, `Subscription`, `Workflow`, `Api`, `Webhook`, `Mockup`, `Integrator`, `KindDefinition` — model domain, behaviour, integrasi | `backend/` |
+| **UI** | 15 | `Page`, `Form`, `Table`, `Dashboard`, `Widget`, `Report`, `Wizard`, `Kanban`, `Timeline`, `Calendar`, `Listing`, `ApprovalInbox`, `NotificationCenter`, `Print`, `Theme` — presentasi visual, override auto-derived | `frontend/` |
+| **Infra** | 5 | `Renderer`, `PersistBackend`, `Environment`, `Policy`, `Datastore` — runtime infrastructure, renderer, storage, governance | `platform/` |
+
+### Rincian per Grup
+
+**Curation** — didklarasikan pertama saat membangun aplikasi:
+| Kind | Didefinisikan di |
+|---|---|
+| `App` | `spec/platform/02-workspace-app-module.md` |
+| `Module` | `spec/platform/02-workspace-app-module.md` |
+
+**Data** — model domain, behaviour, event, integrasi:
+| Kind | Didefinisikan di |
+|---|---|
+| `Entity` | `spec/backend/01-core-basic.md` §1 |
+| `Service` | `spec/backend/01-core-basic.md` §1 |
+| `Config` | `spec/backend/01-core-basic.md` §10 |
+| `Migration` | `spec/backend/01-core-basic.md` §4 |
+| `Subscription` | `spec/backend/01-core-basic.md` §7 |
+| `Workflow` | `spec/backend/02-core-extended.md` §2 |
+| `Api` | `spec/backend/02-core-extended.md` §12 |
+| `Webhook` | `spec/backend/02-core-extended.md` §4 |
+| `Mockup` | `spec/backend/02-core-extended.md` §8 |
+| `Integrator` | `spec/backend/02-core-extended.md` §5 |
+| `KindDefinition` | §2 di bawah |
+
+**UI** — presentasi visual. Instance `VisualSpecKind` dengan tier `page`.
+Semua ada hanya untuk *override* auto-derived defaults dari Entity:
+| Kind | Didefinisikan di |
+|---|---|
+| `Page` | `spec/frontend/06-page-kinds.md` §1 |
+| `Form` | `spec/frontend/06-page-kinds.md` §2 |
+| `Table` | `spec/frontend/06-page-kinds.md` §3 |
+| `Dashboard` | `spec/frontend/06-page-kinds.md` §7 |
+| `Widget` | `spec/frontend/07-component-kinds.md` §2 |
+| `Report` | `spec/frontend/06-page-kinds.md` §8 |
+| `Wizard` | `spec/frontend/06-page-kinds.md` §6 |
+| `Kanban` | `spec/frontend/06-page-kinds.md` §4 |
+| `Timeline` | `spec/frontend/06-page-kinds.md` §9 |
+| `Calendar` | `spec/frontend/06-page-kinds.md` §5 |
+| `Listing` | `spec/frontend/06-page-kinds.md` §10 |
+| `ApprovalInbox` | `spec/frontend/06-page-kinds.md` §11 |
+| `NotificationCenter` | `spec/frontend/06-page-kinds.md` §12 |
+| `Print` | `spec/frontend/06-page-kinds.md` §8 |
+| `Theme` | `spec/frontend/05-app-kinds.md` §5 |
+
+**Infra** — runtime infrastructure & governance:
+| Kind | Didefinisikan di |
+|---|---|
+| `Renderer` | `spec/frontend/03-renderer-kind.md` |
+| `PersistBackend` | `spec/backend/04-persist-backend.md` |
+| `Environment` | `spec/platform/04-control-plane.md` |
+| `Policy` | `spec/platform/04-control-plane.md` |
+| `Datastore` | `spec/platform/06-datastore.md` |
 
 **Derived by default:** endpoint CRUD, admin panel, dan dokumentasi API
 digenerate otomatis dari manifest `Entity` — tanpa manifest tambahan
 apa pun. Kind visual (Page/Form/Table/dst.) ada hanya untuk *override*
-default itu ([`../frontend/06-page-kinds.md`](../frontend/06-page-kinds.md)
-§9).
+default itu. Lihat UI 3-layer wrapping model di
+[`../frontend/06-page-kinds.md`](../frontend/06-page-kinds.md) §14.
 
 **Guardrail:** app developer hampir tidak pernah perlu mendefinisikan kind
 baru — butuh kind baru berarti memperluas framework. 95% kasus jawabannya
@@ -44,11 +92,11 @@ Kind yang mendeklarasikan kind lain — extensible dalam tiga layer:
 pihak ketiga dengan kind namespaced, tunduk Verified Badge.
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: KindDefinition
-metadata: { name: Seed, module: forma/seed }
+metadata: { name: Seed, module: formspec/seed }
 spec:
-  group: seed.forma.dev              # instance pakai apiVersion: seed.forma.dev/v1
+  group: seed.formspec.dev              # instance pakai apiVersion: seed.formspec.dev/v1
   version: v1
   schema: { ... }                    # JSON Schema body instance
   handler: { type: native, ref: "FormaSeed.Apply" }
@@ -56,8 +104,8 @@ spec:
 ```
 
 Penamaan dinamespace lewat grup `apiVersion` (pola CRD) — kind built-in
-memiliki grup `forma.dev`, kind module hidup di grup sendiri
-(`seed.forma.dev`, `gl.acme-corp.dev`) — tabrakan namespace mustahil secara
+memiliki grup `formspec.dev`, kind module hidup di grup sendiri
+(`seed.formspec.dev`, `gl.acme-corp.dev`) — tabrakan namespace mustahil secara
 struktural. Handler berjalan di bawah `uses` module yang mendeklarasikannya
 — `KindDefinition` tidak memberi kekuatan runtime di luar footprint
 module-nya sendiri.

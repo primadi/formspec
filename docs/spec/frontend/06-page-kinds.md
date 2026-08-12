@@ -12,7 +12,7 @@ Layar ber-route yang menyusun blok. Ini kind dasar tier page — Form/Table
 dalam sebuah Page atau lewat route CRUD per-entity turunan framework.
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Page
 metadata:
   name: order-detail
@@ -72,7 +72,7 @@ detail — tanpa navigasi route. Deklaratif lewat `binds` pada blok detail; buka
 kind baru, cuma pola komposisi Page:
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Page
 metadata: { name: order-workbench, module: billing }
 spec:
@@ -106,7 +106,7 @@ menautkan seleksi, tidak melonggarkan gating.
 Layout + perilaku input satu Entity, menggantikan form hasil derivasi:
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Form
 metadata:
   name: order-edit
@@ -147,7 +147,7 @@ kedua).
 permission-gated otomatis
 ([`04-spec-resolution-api.md`](04-spec-resolution-api.md) §4). Vocabulary
 perilaku client tertutup: `visible_when`, `readonly_when`, `required_when`,
-`compute` (FormaExpr, [`08-formaexpr.md`](08-formaexpr.md)) — begitu butuh
+`compute` (FormSpecExpr, [`08-formaexpr.md`](08-formaexpr.md)) — begitu butuh
 efek imperatif, field itu jadi custom widget
 ([`07-component-kinds.md`](07-component-kinds.md) §4). `rules` field dari
 Entity manifest ditegakkan client-side untuk UX; **validasi server-side
@@ -188,7 +188,7 @@ opsional, bukan mengganti keduanya.
 Daftar ber-filter/sort/paginasi; kolom terderivasi dari entity:
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Table
 metadata: { name: order-list, module: billing }
 spec:
@@ -305,7 +305,7 @@ kontrak itu. Operasional: tiap kartu satu record entity, tiap kolom satu nilai
 status, drag antar kolom = transisi state.
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Kanban
 metadata: { name: support-board, module: helpdesk }
 spec:
@@ -345,7 +345,7 @@ kolom, tak diulang di kartu). Override lewat `card_template`
 - Transisi yang tak dideklarasikan → tak ada drop target; kalaupun dipaksa,
   server menolaknya (`STATE_TRANSITION_ERROR`, § core-extended §1).
 
-> **Open — `drag_guard`.** Pre-check UX sebelum drop (FormaExpr,
+> **Open — `drag_guard`.** Pre-check UX sebelum drop (FormSpecExpr,
 > [`08-formaexpr.md`](08-formaexpr.md)) belum diimplementasikan — ditracking di
 > `docs/plan/kanban-full-implementation.md`. Validasi server (guard state
 > machine) tetap otoritas dan sudah berjalan.
@@ -412,7 +412,7 @@ VisualSpecKind `tier: page`. Untuk penjadwalan (appointment, delivery
 planning).
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Calendar
 metadata: { name: appointment-calendar, module: clinic }
 spec:
@@ -480,7 +480,7 @@ bukan ke satu occurrence dari pattern berulang.
 menampilkan/mengedit pola tanggal yang dilihat manusia di Calendar —
 **bukan** mekanisme untuk menjalankan action terjadwal berkala (mis. tutup
 buku bulanan, generate invoice periodik). Kebutuhan itu domain modul resmi
-`forma/scheduler` di atas primitive yang ada
+`formspec/scheduler` di atas primitive yang ada
 ([`../platform/06-datastore.md`](../platform/06-datastore.md) §2 "Set
 primitive tertutup"), bukan Calendar.
 
@@ -490,7 +490,7 @@ navigasi stepper, validasi per-step, dependency antar-field, autosave
 per-instance, dan perilaku completion:
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Wizard
 metadata:
   name: patient-registration
@@ -547,7 +547,7 @@ spec:
   kunci `wizard:{name}:{instance}`, sehingga multi-tab dan refresh tidak
   saling menimpa. Tidak ada draft row sisi server.
 - UI custom di dalam step lewat `component:` — component menerima props
-  `{ wizard, step, data, forma }`.
+  `{ wizard, step, data, formspec }`.
 
 **Relasi ke kind lain:** Wizard adalah komposisi stateful dari step
 mirip-Form dengan shell stepper. Kalau prosesnya cuma section form linear
@@ -561,7 +561,7 @@ dan slot filling-nya). Dashboard **mereferensikan** widget by name — widget
 didefinisikan terpisah sebagai `kind: Widget`:
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Dashboard
 metadata: { name: sales-today, module: billing }
 spec:
@@ -577,7 +577,7 @@ spec:
 ```
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Widget
 metadata: { name: sales-today-stat, module: billing }
 spec:
@@ -602,7 +602,7 @@ katalog widget derived dari permission, mekanisme customizable — lihat
 Output tabular terparameterisasi:
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Report
 metadata: { name: sales-by-category, module: billing }
 spec:
@@ -640,7 +640,7 @@ async`); file mendarat di download tray.
 Dokumen cetak untuk satu entity, multi-target output:
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Print
 metadata: { name: receipt, module: billing }
 spec:
@@ -667,7 +667,7 @@ spec:
 (`thermal_58mm` cuma valid dengan `format: thermal`); semua format kecuali
 `html` render server-side, hasil ke download tray; `html` render di browser,
 stylesheet `@media print` disuntik renderer (menyembunyikan navigasi global);
-kertas custom (`custom: { width, height, unit }`) divalidasi saat `forma
+kertas custom (`custom: { width, height, unit }`) divalidasi saat `formspec
 validate`. Print programatik: `ctx.print(entity_id, "receipt")` — pemilihan
 format per-manifest Print, bukan per-panggilan.
 
@@ -676,7 +676,7 @@ Feed kronologis vertikal, dikelompokkan per tanggal — untuk audit trail
 append-only, activity log, rekam medis (ditulis sekali, tidak pernah diubah):
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Timeline
 metadata:
   name: patient-medical-history
@@ -724,7 +724,7 @@ menunggu tindakan caller. Instance VisualSpecKind `tier: page`. Tipis: mesin
 approval hidup di backend, kind ini hanya permukaan standarnya.
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: ApprovalInbox
 metadata: { name: my-approvals, module: core }
 spec:
@@ -749,12 +749,12 @@ opsional seperti Table.
 
 ## 12. `notification-center`
 Permukaan in-app notifikasi yang terkirim ke user saat ini — sumbernya module
-resmi `forma/notify` (bridge delivery `notification` dari Subscription,
+resmi `formspec/notify` (bridge delivery `notification` dari Subscription,
 [`../backend/02-core-extended.md`](../backend/02-core-extended.md) §3). Instance
 VisualSpecKind `tier: page`.
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: NotificationCenter
 metadata: { name: notifications, module: core }
 spec:
@@ -767,7 +767,7 @@ scoped seperti semua data. `realtime: true` **default** — item baru masuk
 in-place dan badge unread naik ([`04-spec-resolution-api.md`](04-spec-resolution-api.md)
 §5). Klik notifikasi → navigasi ke deep-link entity/Page yang dirujuknya (bila
 ada). Template pesan & channel provider (email/push/in-app) hidup di
-`forma/notify`, bukan di kontrak ini (§ core-extended §3) — kind ini hanya
+`formspec/notify`, bukan di kontrak ini (§ core-extended §3) — kind ini hanya
 permukaan in-app-nya.
 
 ## 13. Custom Page — Escape Hatch Expert
@@ -780,7 +780,7 @@ footprint backend yang ia konsumsi.
 > di `docs/plan/todo.md`. Kontrak di bawah adalah target desain.
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Page
 metadata: { name: dispatch-console, module: logistics }
 spec:
@@ -802,8 +802,8 @@ selalu di resource, [`../backend/01-core-basic.md`](../backend/01-core-basic.md)
 
 Yang **diinjeksikan** ke asset (kontrak mount
 [`07-component-kinds.md`](07-component-kinds.md) §4): client typed per entity
-yang di-bind, `forma.api`, `forma.subscribe`, `forma.navigate`, `forma.ui`, dan
-token `forma.theme`. Programmer menguasai 100% markup — tapi **wajib mengikuti
+yang di-bind, `formspec.api`, `formspec.subscribe`, `formspec.navigate`, `formspec.ui`, dan
+token `formspec.theme`. Programmer menguasai 100% markup — tapi **wajib mengikuti
 Shell tempat ia hidup**: di shadcn shell berarti React + shadcn
 (`stack_family`, [`01-visual-hierarchy.md`](01-visual-hierarchy.md) §3); kode
 custom tak lintas Shell.
@@ -813,12 +813,98 @@ render ke asset, tapi `mode: custom` men-declare footprint backend di **level
 Page** (bukan per-blok `needs:`) dan tak punya `blocks`/`tabs` sama sekali —
 Page itu sepenuhnya milik programmer. Ini anak tangga teratas kontrol frontend:
 Form terkelola → custom widget → component → custom Page → headless form engine
-→ raw `forma.api` ([`07-component-kinds.md`](07-component-kinds.md) §4).
+→ raw `formspec.api` ([`07-component-kinds.md`](07-component-kinds.md) §4).
 
-## 14. Derivasi Otomatis (Layer 0)
-Tiap Entity otomatis menghasilkan, tanpa manifest UI sama sekali: **Table**
-list, **Form** create/edit, **Page** detail, dan entry navigasi turunan di
-menu App (dikelompokkan per module Entity, untuk module yang belum
-tercakup entry `App.spec.menu`/`Module.spec.menu` yang ditulis eksplisit).
-Kind di tier ini ada untuk *override* default itu — tim bisa mengirim tool
-internal lengkap dengan nol manifest frontend.
+## 14. Derivasi Otomatis & UI 3-Layer Wrapping
+
+FormSpec UI mengikuti model **3-layer wrapping** yang ketat. Memahami model ini
+adalah kunci untuk tahu kapan perlu mendeklarasikan UI kind vs membiarkan
+engine men-derive semuanya secara otomatis.
+
+```
+┌─────────────────────────────────────────────┐
+│ PAGE  (route + composition)                 │
+│  /app/klinik/invoice/create                 │
+│                                             │
+│  ┌───────────────────────────────────────┐  │
+│  │ FORM / TABLE  (layout override)       │  │
+│  │  visible_when, readonly_when, ...     │  │
+│  │                                       │  │
+│  │  ┌─────────────────────────────────┐  │  │
+│  │  │ ENTITY  (data model)            │  │  │
+│  │  │  fields, state_machine,         │  │  │
+│  │  │  permissions, actions           │  │  │
+│  │  └─────────────────────────────────┘  │  │
+│  └───────────────────────────────────────┘  │
+└─────────────────────────────────────────────┘
+```
+
+### Layer 0 — Entity (selalu ada)
+
+Tiap Entity otomatis menghasilkan, **tanpa manifest UI sama sekali**:
+- REST API endpoint (UI surface: `/_ui/entity/` — lihat
+  [`backend/01-core-basic.md`](../backend/01-core-basic.md) §8.1)
+- **Table** — list/browse view dengan kolom terderivasi (§3.1)
+- **Form create** — form input data baru
+- **Form edit** — form ubah data existing
+- **Page detail** — halaman detail satu record (read-only)
+- Entry navigasi turunan di menu App (dikelompokkan per module Entity)
+
+Ini mencakup **80-95%** kebutuhan UI aplikasi bisnis. Developer tidak perlu
+menulis satu pun UI kind untuk mayoritas entity.
+
+### Aturan Wrapping — Kapan Override Diperlukan
+
+| Kamu deklarasi | Engine auto-derive | Kapan override? |
+|---|---|---|
+| `Entity` saja | Default Table + Form(create) + Form(edit) + Page(detail) | Field order/layout khusus, hide field, group field, validasi custom, multi-entity composition |
+| `Form` (`public: true`) | Auto-wrapped dalam Page, route `/<module>/form/<name>` | Form ini perlu Page kustom (multi-tab, side panel, master-detail) |
+| `Table` (`public: true`) | Auto-wrapped dalam Page, route `/<module>/table/<name>` | Table ini perlu Page kustom |
+| `Page` | Route langsung — tidak ada wrapping tambahan | — (Page selalu eksplisit) |
+| `Form`/`Table` (`public: false`) | Tidak punya route; hanya bisa di-embed di Page lain | — |
+
+### Decision Flow
+
+```
+Apakah auto-derived UI dari Entity cukup?
+  ├── YA → Done. Tidak perlu deklarasi UI kind apapun.
+  └── TIDAK → Apa yang perlu diubah?
+       ├── Urutan/label/hide field → deklarasi kind: Form
+       ├── Kolom/sort/filter → deklarasi kind: Table
+       ├── Komposisi multi-entity → deklarasi kind: Page (blocks/tabs)
+       ├── Dashboard/report/wizard → deklarasi UI kind sesuai
+       └── Custom component → deklarasi kind: Page dengan asset block
+```
+
+### `public` — Kontrol Route Auto-Generated
+
+Setiap visual kind punya field `public` (default `true`):
+
+| `public` | Perilaku |
+|---|---|
+| `true` (default) | Engine auto-generate Page wrapper + route `/<module>/<kind-lowercase>/<name>`. Kind bisa di-navigate langsung atau di-embed di Page lain. |
+| `false` | Tidak ada route. Kind hanya bisa tampil sebagai blok di dalam Page yang authored secara eksplisit. |
+
+```yaml
+kind: Form
+metadata:
+  name: quick-create-invoice
+  module: billing
+spec:
+  public: false   # embed-only — tidak punya route mandiri
+  entity: billing.invoice
+  mode: create
+```
+
+### Prinsip Kunci
+
+- **Entity dulu, override belakangan.** Tulis semua Entity, jalankan
+  `formspec dev`, lihat hasil auto-derived-nya, baru putuskan mana yang butuh
+  override.
+- **Jangan over-engineer.** Mayoritas entity tidak butuh UI kind sama sekali.
+  Kalau menulis `kind: Form` untuk setiap entity, itu anti-pattern.
+- **Override minimal.** Kalau cuma perlu mengubah 1-2 field, tulis Form dengan
+  hanya field yang berbeda — sisanya tetap auto-derived.
+- **Page = komposisi.** Page dipakai saat satu layar butuh banyak entity
+  (master-detail, tabs, multi-block). Bukan untuk sekadar mengubah tampilan
+  satu entity — itu domain Form/Table.

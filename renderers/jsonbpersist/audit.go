@@ -49,7 +49,7 @@ func (s *AuditStore) ListByEntity(ctx context.Context, workspaceID, entity, enti
 
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, tenant_id, entity, entity_id, action, actor, changes, created_at
-		FROM forma_audit_log
+		FROM formspec_audit_log
 		WHERE tenant_id = ? AND entity = ? AND entity_id = ?
 		ORDER BY created_at DESC
 		LIMIT ? OFFSET ?
@@ -86,7 +86,7 @@ func (s *AuditStore) ListByWorkspace(ctx context.Context, workspaceID, entity st
 	if entity != "" {
 		rows, err = s.db.QueryContext(ctx, `
 			SELECT id, tenant_id, entity, entity_id, action, actor, changes, created_at
-			FROM forma_audit_log
+			FROM formspec_audit_log
 			WHERE tenant_id = ? AND entity = ?
 			ORDER BY created_at DESC
 			LIMIT ? OFFSET ?
@@ -94,7 +94,7 @@ func (s *AuditStore) ListByWorkspace(ctx context.Context, workspaceID, entity st
 	} else {
 		rows, err = s.db.QueryContext(ctx, `
 			SELECT id, tenant_id, entity, entity_id, action, actor, changes, created_at
-			FROM forma_audit_log
+			FROM formspec_audit_log
 			WHERE tenant_id = ?
 			ORDER BY created_at DESC
 			LIMIT ? OFFSET ?
@@ -127,12 +127,12 @@ func writeAuditLog(ctx context.Context, db DB, driver DriverType, workspaceID, e
 	var err error
 	if driver == DriverPostgres {
 		_, err = db.ExecContext(ctx, `
-			INSERT INTO forma_audit_log (tenant_id, entity, entity_id, action, actor, changes, created_at)
+			INSERT INTO formspec_audit_log (tenant_id, entity, entity_id, action, actor, changes, created_at)
 			VALUES ($1, $2, $3, $4, $5, $6, $7)
 		`, workspaceID, entity, entityID, action, actor, changes, now)
 	} else {
 		_, err = db.ExecContext(ctx, `
-			INSERT INTO forma_audit_log (tenant_id, entity, entity_id, action, actor, changes, created_at)
+			INSERT INTO formspec_audit_log (tenant_id, entity, entity_id, action, actor, changes, created_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?)
 		`, workspaceID, entity, entityID, action, actor, changes, now)
 	}

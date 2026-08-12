@@ -1,7 +1,7 @@
-# Forma AI Skills
+# FormSpec AI Skills
 
-Skills in this directory are **distributed with the `forma` CLI binary**
-(via `//go:embed`) and written into new Forma projects by `forma init`.
+Skills in this directory are **distributed with the `formspec` CLI binary**
+(via `//go:embed`) and written into new FormSpec projects by `formspec init`.
 
 They follow the [agentskills.io](https://agentskills.io/specification) format
 and are placed in `.agents/skills/` in the scaffolded project so that
@@ -11,16 +11,17 @@ VS Code Copilot (and other compatible agents) can discover and use them.
 
 | Skill | Folder | Purpose |
 |-------|--------|---------|
-| Spec Structure | `forma-spec-structure/` | Navigate `docs/spec/` — which file covers what, doc status lifecycle, contract-vs-renderer principle |
-| Kinds Catalog | `forma-kinds/` | Complete catalog of all ~34 Forma resource kinds — when to use each, manifest format, gotchas |
-| Schema Validation | `schema-validation/` | Run `forma validate`, interpret engine vs schema errors, and repair all manifests to canonical form (generate → validate → fix → re-validate) |
+| Spec Structure | `formspec-spec-structure/` | Navigate `docs/spec/` — which file covers what, doc status lifecycle, contract-vs-renderer principle |
+| Kinds Catalog | `formspec-kinds/` | Complete catalog of all 33 FormSpec resource kinds grouped in 4 categories (Curation/Data/UI/Infra) + UI 3-layer wrapping model |
+| App Workflow | `formspec-app-workflow/` | Full lifecycle orchestrator — Discovery → Proposal → Draft (YAML spec) → Iterate (change management) |
+| Schema Validation | `schema-validation/` | Run `formspec validate`, interpret engine vs schema errors, and repair all manifests to canonical form (generate → validate → fix → re-validate) |
 
 ## Maintenance
 
 When `docs/spec/` changes (new kinds added, spec files reorganized):
 
 1. Update the relevant `SKILL.md` file(s) in this directory
-2. Run `go build ./cmd/forma` to verify the embedded files compile
+2. Run `go build ./cmd/formspec` to verify the embedded files compile
 3. Commit both the skill changes and the binary
 
 ### Adding a New Skill

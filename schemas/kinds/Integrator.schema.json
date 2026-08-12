@@ -8,7 +8,11 @@
       "nullable": true
     },
     "compensate": {
-      "type": "string"
+      "description": "@schema {example: \"gl.journal-entry.cancel\"}",
+      "type": "string",
+      "examples": [
+        "gl.journal-entry.cancel"
+      ]
     },
     "listen": {
       "$ref": "#/$defs/IntegratorListen",

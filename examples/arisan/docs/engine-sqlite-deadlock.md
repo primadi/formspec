@@ -3,7 +3,7 @@
 ## Status
 - **Discovered**: 2026-08-03 (smoke test Phase 7, local dev on SQLite)
 - **Verified fix applied locally** — automation scripts now work end-to-end on SQLite
-- **Upstream**: still unfixed in `github.com/primadi/forma@v0.0.0-20260803061320-e3d68a0bb6b7`
+- **Upstream**: still unfixed in `github.com/primadi/formspec@v0.0.0-20260803061320-e3d68a0bb6b7`
 
 ## Symptom
 A custom action (`script` / `script_ref` impl) whose `.star` script calls
@@ -42,11 +42,11 @@ free connection** → deadlock. The engine even documents this exact hazard in
 The bug is simply that `resolveRelations` missed adopting `txReadDB`.
 
 ## Local Patch Applied (module cache, NOT tracked in git)
-`forma.exe` was rebuilt from the patched module cache:
+`formspec.exe` was rebuilt from the patched module cache:
 
-- File: `%GOPATH%\pkg\mod\github.com\primadi\forma@v0.0.0-20260803061320-e3d68a0bb6b7\renderers\jsonbpersist\crud.go`
+- File: `%GOPATH%\pkg\mod\github.com\primadi\formspec@v0.0.0-20260803061320-e3d68a0bb6b7\renderers\jsonbpersist\crud.go`
 - Change: `s.db.QueryContext(...)` → `txReadDB(ctx, s.db).QueryContext(...)` (line ~1398, inside `resolveRelations`)
-- Rebuild: `go build -o %GOPATH%\bin\forma.exe ./cmd/forma` (run from the module dir)
+- Rebuild: `go build -o %GOPATH%\bin\formspec.exe ./cmd/formspec` (run from the module dir)
 
 ### ⚠️ Caveats
 1. **Untracked** — the patch lives only in the Go module cache. It is wiped by

@@ -4,4 +4,4 @@ Referensi kanonik lintas dokumen.
 
 | Dokumen | Isi |
 |---|---|
-| [glossary.md](glossary.md) | Istilah kanonik Forma dan definisinya |
+| [glossary.md](glossary.md) | Istilah kanonik FormSpec dan definisinya |

@@ -21,7 +21,7 @@
 - Changed `tableSpec` resolution to check `metaBundle.tables` for an authored Table manifest whose `spec.entity` matches the current entity (by qualified `module.name` or short name).
 - Falls back to `deriveTable(entity)` when no authored table is found.
 
-### Vite Proxy (`cmd/forma/dev.go`)
+### Vite Proxy (`cmd/formspec/dev.go`)
 
 - **Bug**: `viteSPAProxy` only passed through `/{ws}/api/*` routes to the backend. The UI surface routes (`/{ws}/_ui/_meta/*`, `/{ws}/_ui/entity/*`) were proxied to Vite and returned HTML instead of JSON, causing the SPA to fail loading data.
 - **Fix**: Added `/{ws}/_ui/*` to the passthrough list so meta API and entity CRUD requests reach the backend.
@@ -32,7 +32,7 @@
 |---|---|
 | `renderers/jsonbpersist/crud.go` | Added `resolveRelations()` method; called from `List()` and `hydrateAndCompute()` |
 | `renderers/web/src/kinds/table/TableRenderer.tsx` | Look up authored table manifest before deriving |
-| `cmd/forma/dev.go` | `viteSPAProxy` now passes through `/_ui/*` routes |
+| `cmd/formspec/dev.go` | `viteSPAProxy` now passes through `/_ui/*` routes |
 
 ## Notes
 

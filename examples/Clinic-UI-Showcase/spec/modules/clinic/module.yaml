@@ -1,4 +1,4 @@
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Module
 metadata:
   name: clinic
@@ -6,7 +6,7 @@ metadata:
 spec:
   version: 1.0.0
   depends:
-    - module: forma/core
+    - module: formspec/core
   # Default menu suggestion (Core Basic §4.5) — module-relative, no `module`
   # field on any item (implied: this module). An App adopts it wholesale via
   # a `type: module` entry in its own spec.menu (see spec/apps/*.yaml), and

@@ -7,17 +7,28 @@
       "type": "string"
     },
     "date_field": {
-      "type": "string"
+      "description": "@schema {example: \"scheduled_at\"}",
+      "type": "string",
+      "examples": [
+        "scheduled_at"
+      ]
     },
     "end_field": {
       "type": "string"
     },
     "entity": {
-      "type": "string"
+      "description": "@schema {example: \"clinic.appointment\"}",
+      "type": "string",
+      "examples": [
+        "clinic.appointment"
+      ]
     },
     "public": {
       "description": "If true (default), a route /module/calendar/\u003cname\u003e is auto-generated.",
       "type": "boolean",
+      "examples": [
+        "true"
+      ],
       "nullable": true
     },
     "realtime": {

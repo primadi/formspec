@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/primadi/forma/internal/events"
-	db "github.com/primadi/forma/renderers/jsonbpersist"
+	"github.com/primadi/formspec/internal/events"
+	db "github.com/primadi/formspec/renderers/jsonbpersist"
 )
 
 // DeliveryDeps bundles the dependencies DeliverEvents needs to fan out an
-// emission to its declared channels — injected once from resource/forma.go
+// emission to its declared channels — injected once from resource/formspec.go
 // into HandlerFactory.
 type DeliveryDeps struct {
 	Hub      events.Hub

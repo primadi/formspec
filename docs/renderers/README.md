@@ -1,6 +1,6 @@
 # Renderers — Implementasi Resmi
 
-Dokumentasi **implementasi** kontrak Forma. Berbeda dari [`../spec/`](../spec/README.md)
+Dokumentasi **implementasi** kontrak FormSpec. Berbeda dari [`../spec/`](../spec/README.md)
 yang normatif, isi section ini deskriptif: menjelaskan bagaimana implementasi
 resmi memenuhi kontraknya hari ini, dan boleh berubah tanpa mengubah kontrak.
 

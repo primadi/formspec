@@ -1,14 +1,14 @@
-# lib-forma-python
+# lib-formspec-python
 
-Thin Python client for `forma-sidecar` (docs/runtimes/04-forma-sidecar.md).
+Thin Python client for `formspec-sidecar` (docs/runtimes/04-formspec-sidecar.md).
 Python ≥ 3.9, stdlib only — no dependencies.
 
 ```bash
-pip install lib-forma
+pip install lib-formspec
 ```
 
 ```python
-from lib_forma import ActionResult, App, Ctx, Invocation
+from lib_formspec import ActionResult, App, Ctx, Invocation
 
 app = App()  # sockets from FORMA_APP_SOCKET / FORMA_SIDECAR_SOCKET
 

@@ -2,7 +2,7 @@
 # characteristic: reference → renderer TIDAK boleh render tombol "New"/"Delete";
 # hanya Update. Satu row per grup setting (id: "clinic", id: "billing"),
 # di-edit lewat pages/system-settings.yaml (Page tabs + Form mode: edit).
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Entity
 metadata:
   name: setting

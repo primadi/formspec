@@ -1,0 +1,12 @@
+# ── FormSpec Dev Config ──
+# This file configures `formspec dev` and `formspec serve`.
+# It is NOT a kind: Config manifest — it is CLI tooling config only.
+#
+# See docs/spec/platform/08-project-layout.md for the full reference.
+
+spec: spec
+dsn: sqlite:.formspec/crc-management.db
+# runtime: node          # uncomment if you have an app/ sidecar
+# app-dir: app
+# app-entrypoint: src/app.ts
+# dev: true

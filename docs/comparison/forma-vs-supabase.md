@@ -1,20 +1,20 @@
 ---
-title: Forma vs Supabase
-description: Comparing Forma's spec-first application framework with Supabase's Backend-as-a-Service approach
+title: FormSpec vs Supabase
+description: Comparing FormSpec's spec-first application framework with Supabase's Backend-as-a-Service approach
 date: 2026-07-06
 ---
 
-# Forma vs Supabase
+# FormSpec vs Supabase
 
-> **Forma** is a spec-first ecosystem for building business applications in Go. **Supabase** is an open-source Backend-as-a-Service (BaaS) that provides a managed PostgreSQL database, authentication, realtime subscriptions, storage, and edge functions — all accessible via client SDKs.
+> **FormSpec** is a spec-first ecosystem for building business applications in Go. **Supabase** is an open-source Backend-as-a-Service (BaaS) that provides a managed PostgreSQL database, authentication, realtime subscriptions, storage, and edge functions — all accessible via client SDKs.
 
-These two projects approach the same problem (building applications faster) from opposite directions: Forma is a **framework you run** (self-hosted or cloud); Supabase is a **service you connect to** (managed infrastructure with client libraries).
+These two projects approach the same problem (building applications faster) from opposite directions: FormSpec is a **framework you run** (self-hosted or cloud); Supabase is a **service you connect to** (managed infrastructure with client libraries).
 
 ---
 
 ## 1. Overview
 
-### Forma
+### FormSpec
 A spec-first, declarative framework where YAML manifests define entities, state machines, permissions, and UI. Runs as a Go binary (self-hosted or cloud). Business logic via Go native, Starlark scripting, or sidecar. Two-process architecture with governance Control Plane. PostgreSQL + Valkey + MinIO.
 
 ### Supabase
@@ -24,7 +24,7 @@ An open-source Firebase alternative. Provides managed PostgreSQL (with Row-Level
 
 ## 2. Philosophy
 
-| | Forma | Supabase |
+| | FormSpec | Supabase |
 |---|---|---|
 | **Approach** | Framework — you run it, it runs your logic | BaaS — you connect to it, your client talks to it |
 | **Where logic lives** | Server-side (Go, Starlark, sidecar) | Client-side (JS/TS SDK) or Edge Functions (Deno) |
@@ -39,14 +39,14 @@ An open-source Firebase alternative. Provides managed PostgreSQL (with Row-Level
 ## 3. Architecture
 
 ```
-Forma:                              Supabase:
+FormSpec:                              Supabase:
 ┌──────────────────────┐           ┌──────────────────────┐
 │  Your YAML Manifests │           │  Your Client App     │
 │  (kind: Entity, ...) │           │  (React, Flutter,    │
 └──────────┬───────────┘           │   Swift, etc.)       │
            │ loads                 └──────────┬───────────┘
 ┌──────────┴───────────┐                      │
-│  forma-resource       │              ┌───────┴───────┐
+│  formspec-resource       │              ┌───────┴───────┐
 │  (Go binary)          │              │  Supabase      │
 │                       │              │  Cloud         │
 │  Entity Engine        │              │               │
@@ -61,15 +61,15 @@ Forma:                              Supabase:
 ```
 
 **Key differences:**
-- Forma runs your business logic server-side. Supabase expects business logic in **client code** or **edge functions** (with their limitations).
-- Forma enforces permissions server-side via `required_permission`. Supabase uses **PostgreSQL Row-Level Security** — powerful but requires writing SQL policies.
-- Forma generates API from YAML. Supabase generates API from **database introspection** (schema-based).
+- FormSpec runs your business logic server-side. Supabase expects business logic in **client code** or **edge functions** (with their limitations).
+- FormSpec enforces permissions server-side via `required_permission`. Supabase uses **PostgreSQL Row-Level Security** — powerful but requires writing SQL policies.
+- FormSpec generates API from YAML. Supabase generates API from **database introspection** (schema-based).
 
 ---
 
 ## 4. Feature Comparison
 
-| Dimension | Forma | Supabase |
+| Dimension | FormSpec | Supabase |
 |---|---|---|
 | **Paradigm** | Spec-first application framework | Backend-as-a-Service |
 | **Backend language** | Go (native) + Starlark (script) + sidecar (any) | Client-side (JS/TS, Dart, Swift, Kotlin) + Edge Functions (Deno/TypeScript) |
@@ -91,9 +91,9 @@ Forma:                              Supabase:
 | **Polyglot Logic** | ✅ Sidecar container (PHP, Python, Node, Java) | ❌ Edge Functions run TypeScript only |
 | **Built-in Admin Panel** | ✅ Auto-generated from Entity manifests | ✅ Supabase Studio (table browser, SQL editor, schema designer) |
 | **Auto-generated API** | ✅ REST API from YAML manifests | ✅ REST + GraphQL API from database schema (via PostgREST) |
-| **Local Development** | `forma dev` (one command, Docker Compose) | ✅ Supabase CLI (`supabase start` — local Docker stack) |
-| **Hosting** | Self-host + Forma Cloud | Supabase Cloud (managed) + self-host option |
-| **Pricing** | FSL (free self-hosted) + Forma Cloud (paid tiers) | Free tier (generous) + paid plans (usage-based) |
+| **Local Development** | `formspec dev` (one command, Docker Compose) | ✅ Supabase CLI (`supabase start` — local Docker stack) |
+| **Hosting** | Self-host + FormSpec Cloud | Supabase Cloud (managed) + self-host option |
+| **Pricing** | FSL (free self-hosted) + FormSpec Cloud (paid tiers) | Free tier (generous) + paid plans (usage-based) |
 | **Open Source** | FSL (source available → Apache 2.0 after 2 years). Spec is CC0. | ✅ Apache 2.0 (fully open source) |
 | **Learning Curve** | Medium — YAML + Go + Starlark + 2-plane architecture | Low-Medium — if you know JS/SQL, Supabase is easy to start |
 
@@ -119,10 +119,10 @@ Client App ──► Supabase SDK ──► Supabase API
 - RLS policies are powerful but become **complex to maintain** as permission rules grow.
 - No built-in patterns for **state machines, idempotency, outbox, or locking** — you must build these yourself.
 
-### Forma: Server-Side Logic
+### FormSpec: Server-Side Logic
 
 ```
-Client App ──► forma-resource (Go binary)
+Client App ──► formspec-resource (Go binary)
                 │
                 │ Entity Engine (state machine, idempotency, outbox)
                 │ Action execution (Go native / Starlark / sidecar)
@@ -140,7 +140,7 @@ Client App ──► forma-resource (Go binary)
 
 ## 6. When to Choose Which
 
-### Choose Forma when:
+### Choose FormSpec when:
 - You are building a **business application** with complex server-side logic (state machines, approval workflows, multi-step transactions).
 - You need **enterprise patterns by default** — idempotency, outbox, locking, audit trail.
 - You prefer **server-side logic** over client-side or edge functions.
@@ -162,9 +162,9 @@ Client App ──► forma-resource (Go binary)
 
 ## 7. Conclusion
 
-Forma and Supabase approach the same goal from different directions:
+FormSpec and Supabase approach the same goal from different directions:
 
-| Supabase's approach | Forma's approach |
+| Supabase's approach | FormSpec's approach |
 |---|---|
 | Managed BaaS (you connect to it) | Self-hosted framework (you run it) |
 | Client-side logic + Edge Functions | Server-side logic (Go, Starlark, sidecar) |
@@ -173,6 +173,6 @@ Forma and Supabase approach the same goal from different directions:
 | Startups, mobile, real-time apps | Enterprise business applications |
 | No enterprise patterns built-in | Enterprise patterns by default |
 
-**They are not mutually exclusive.** A forward-looking architecture could use **Forma for the backend business logic** (entity engine, state machine, events) and **Supabase for the client-facing realtime layer** (realtime subscriptions, storage, auth providers) — though this duplicates some functionality.
+**They are not mutually exclusive.** A forward-looking architecture could use **FormSpec for the backend business logic** (entity engine, state machine, events) and **Supabase for the client-facing realtime layer** (realtime subscriptions, storage, auth providers) — though this duplicates some functionality.
 
-> If Supabase is the "managed backend for frontend developers," Forma is the "self-hosted framework for backend engineers building complex business systems." Both are valuable — the choice depends on where your logic lives and how much infrastructure you want to own.
+> If Supabase is the "managed backend for frontend developers," FormSpec is the "self-hosted framework for backend engineers building complex business systems." Both are valuable — the choice depends on where your logic lives and how much infrastructure you want to own.

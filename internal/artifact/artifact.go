@@ -1,4 +1,4 @@
-// Package artifact provides types and operations for Forma artifact
+// Package artifact provides types and operations for FormSpec artifact
 // management — the signed envelope format used by the Control Plane to
 // store and distribute YAML manifests, scripts, and assets to Resource Planes.
 //

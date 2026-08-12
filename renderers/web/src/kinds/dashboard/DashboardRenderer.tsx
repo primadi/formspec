@@ -136,7 +136,7 @@ function WidgetBody({
 // ── Metric widget ──
 //
 // Fetches spec.entity's records, applies spec.query (a small subset of
-// FormaExpr — see applySimpleQuery below), and aggregates spec.config.field
+// FormSpecExpr — see applySimpleQuery below), and aggregates spec.config.field
 // per spec.config.aggregate. Re-fetches every spec.refresh_secs.
 function MetricWidget({ spec, module, realtime }: { spec: WidgetSpec; module: string; realtime?: boolean }) {
   const getClient = useSessionStore((s) => s.getClient)
@@ -227,11 +227,11 @@ function formatMetric(value: number | null, config?: Record<string, unknown>): s
 }
 
 /**
- * Evaluates the narrow subset of FormaExpr actually used by Widget.spec.query:
+ * Evaluates the narrow subset of FormSpecExpr actually used by Widget.spec.query:
  * `field = today()`, `field in [...]`, and simple equality/inequality
  * (`field = 'x'`, `field == 'x'`, `field != 'x'`); multiple conditions may be
  * joined with ` and `. Falls back to no filtering for anything else — a full
- * FormaExpr-to-client-filter compiler is out of scope here (queries beyond
+ * FormSpecExpr-to-client-filter compiler is out of scope here (queries beyond
  * this are expected to be pre-filtered by the entity's own list endpoint via
  * spec.entity semantics — see translateWidgetQuery below).
  */
@@ -266,7 +266,7 @@ function applySimpleQuery(items: Record<string, unknown>[], query?: string): Rec
     return items.filter((it) => String(it[field] ?? "") !== val)
   }
 
-  // `==?` matches both `=` and `==` (FormaExpr uses `==`; showcase uses `=`).
+  // `==?` matches both `=` and `==` (FormSpecExpr uses `==`; showcase uses `=`).
   const eqMatch = q.match(/^(\w+)\s*==?\s*['"]?([\w.-]+)['"]?$/)
   if (eqMatch) {
     const [, field, val] = eqMatch
@@ -292,7 +292,7 @@ function serverToday(): string {
 }
 
 /**
- * Translates a widget `query` (the narrow FormaExpr subset above) into
+ * Translates a widget `query` (the narrow FormSpecExpr subset above) into
  * server-side list filters (`field[op]=value`) so the DB can pre-filter
  * before rows hit the wire. Handles `field = today()` → eq, `field in [...]`
  * → in, `field != 'v'` → neq, `field = 'v'`/`field == 'v'` → eq; compound

@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/primadi/forma/internal/artifact"
+	"github.com/primadi/formspec/internal/artifact"
 )
 
 // LocalManifestManager manages the local deployment manifest file.

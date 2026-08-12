@@ -1,0 +1,18 @@
+{
+  "title": "Mockup Spec",
+  "description": "MockupSpec defines a simulated connector that implements the same contract\nas the real integration (02-core-extended.md §8).\n",
+  "type": "object",
+  "properties": {
+    "config_ref": {
+      "type": "string"
+    },
+    "for": {
+      "description": "module.service or module.entity",
+      "type": "string"
+    }
+  },
+  "required": [
+    "for"
+  ],
+  "additionalProperties": false
+}

@@ -1,30 +1,30 @@
-# forma-operator Deployment (docs/runtimes/03-forma-operator.md §5).
+# formspec-operator Deployment (docs/runtimes/03-formspec-operator.md §5).
 # 2 replicas with leader election: one active, one standby.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: forma-operator
-  namespace: forma-system
+  name: formspec-operator
+  namespace: formspec-system
   labels:
-    app.kubernetes.io/name: forma-operator
+    app.kubernetes.io/name: formspec-operator
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app.kubernetes.io/name: forma-operator
+      app.kubernetes.io/name: formspec-operator
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: forma-operator
+        app.kubernetes.io/name: formspec-operator
     spec:
-      serviceAccountName: forma-operator
+      serviceAccountName: formspec-operator
       containers:
         - name: operator
-          image: registry.forma.dev/forma-operator:0.1.0
+          image: registry.formspec.dev/formspec-operator:0.1.0
           args:
             - --leader-elect
             - --control-cluster-url=$(CONTROL_CLUSTER_URL)
-            - --resource-image=formahub/forma-resource:0.1.0
+            - --resource-image=formahub/formspec-resource:0.1.0
           env:
             - name: CONTROL_CLUSTER_URL
               value: ""

@@ -14,18 +14,18 @@ import (
 	"regexp"
 	"testing"
 
-	forma "github.com/primadi/forma/resource"
+	formspec "github.com/primadi/formspec/resource"
 )
 
-func newTestApp(t *testing.T) *forma.App {
+func newTestApp(t *testing.T) *formspec.App {
 	t.Helper()
 	dsn := "sqlite:" + filepath.Join(t.TempDir(), "clinic_e2e.db")
-	app, err := forma.New(forma.Config{
+	app, err := formspec.New(formspec.Config{
 		SpecPath: "./spec",
 		DSN:      dsn,
 	})
 	if err != nil {
-		t.Fatalf("forma.New: %v", err)
+		t.Fatalf("formspec.New: %v", err)
 	}
 	return app
 }

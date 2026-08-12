@@ -3,7 +3,7 @@
 # dari permission user, D20). Widget metric/chart membaca entity live
 # (visit/prescription) + query, bukan summary entity (projection engine
 # belum ada — lihat docs/plan/fix-clinic-dashboard-summary.md).
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Dashboard
 metadata:
   name: clinic-dashboard

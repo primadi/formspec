@@ -1,0 +1,72 @@
+apiVersion: formspec.dev/v1alpha1
+kind: Entity
+metadata:
+  name: payment
+  module: cafe-order
+  description: "Pembayaran pesanan — metode dan status pembayaran"
+spec:
+  version: v1
+  characteristic: transaction
+  lifecycle: plain_crud
+  display_field: payment_number
+  plural: payments
+  fields:
+    - name: transaction_date
+      type: date
+      required: true
+      index: true
+      title: "Tanggal Bayar"
+    - name: payment_number
+      type: string
+      required: true
+      unique: true
+      title: "No. Pembayaran"
+      description: "Kode unik pembayaran, contoh PAY-20260811-001"
+    - name: order_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-order.order }
+      required: true
+      title: "Pesanan"
+    - name: amount
+      type: money
+      required: true
+      title: "Nominal"
+    - name: method
+      type: enum
+      enum_values: [cash, qris, debit, credit, ewallet]
+      required: true
+      title: "Metode Bayar"
+    - name: reference
+      type: string
+      title: "Ref Pembayaran"
+      description: "Referensi eksternal, contoh nomor transaksi QRIS"
+    - name: status
+      type: enum
+      enum_values: [pending, paid, refunded]
+      default: pending
+      index: true
+      title: "Status"
+  state_machine:
+    field: status
+    initial: pending
+    states:
+      - { name: pending, label: "Menunggu" }
+      - { name: paid, label: "Lunas" }
+      - { name: refunded, label: "Dikembalikan" }
+    transitions:
+      - { from: pending, to: paid, via: confirm }
+      - { from: pending, to: refunded, via: refund }
+  actions:
+    - name: submit
+      disabled: true
+    - name: confirm
+      description: "Konfirmasi pembayaran diterima"
+      required_permission: cafe-order.payment.confirm
+      audit: true
+    - name: refund
+      description: "Kembalikan pembayaran"
+      required_permission: cafe-order.payment.refund
+      audit: true
+  expose:
+    - type: rest
+      actions: [list, find, create, update, delete]

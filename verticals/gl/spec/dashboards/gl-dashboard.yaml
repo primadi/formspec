@@ -1,5 +1,5 @@
 # GL Dashboard — account summary widgets
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Dashboard
 metadata:
   name: gl-dashboard

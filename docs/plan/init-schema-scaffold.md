@@ -1,10 +1,10 @@
-# Plan — `forma init` membundel JSON Schema + `yaml.schemas`
+# Plan — `formspec init` membundel JSON Schema + `yaml.schemas`
 
 **Tanggal:** 2026-07-31 · **Status:** Done (implementasi)
 
 ## Masalah
 
-`forma init` menscaffold project baru (`spec/`, `forma-app.yaml`,
+`formspec init` menscaffold project baru (`spec/`, `formspec-app.yaml`,
 `.agents/skills/`, `.github/`) tetapi **tidak** menghasilkan:
 
 1. Direktori `schemas/` berisi JSON Schema per kind (Draft-07).
@@ -19,14 +19,14 @@ sudah menjadi bagian dari developer experience repo ini (lihat `CLAUDE.md`
 
 Mirror pola `AISkillsFS` (embed → extract saat init):
 
-1. **`embed_schemas.go`** (baru, package `github.com/primadi/forma`):
-   embed `schemas/forma.schema.json` + `schemas/kinds/*.schema.json` ke
+1. **`embed_schemas.go`** (baru, package `github.com/primadi/formspec`):
+   embed `schemas/formspec.schema.json` + `schemas/kinds/*.schema.json` ke
    `SchemasFS embed.FS`.
-2. **`cmd/forma/init.go`**:
+2. **`cmd/formspec/init.go`**:
    - `extractSchemas(targetDir)` — tulis `schemas/` ke project (dipakai dari
      `SchemasFS`, sama seperti `extractSkills`).
    - Tulis `.vscode/settings.json` berisi `yaml.schemas` yang memetakan
-     `schemas/forma.schema.json` → `spec/**/*.yaml` + `spec/**/*.yml`.
+     `schemas/formspec.schema.json` → `spec/**/*.yaml` + `spec/**/*.yml`.
      Hanya ditulis jika belum ada (tidak menimpa settings user).
    - Update usage text ("The project includes") + output sukses.
 
@@ -35,7 +35,7 @@ Mirror pola `AISkillsFS` (embed → extract saat init):
 | File | Aksi |
 |---|---|
 | `embed_schemas.go` | Baru — embed schemas |
-| `cmd/forma/init.go` | Ubah — extract schemas + tulis `.vscode/settings.json` |
+| `cmd/formspec/init.go` | Ubah — extract schemas + tulis `.vscode/settings.json` |
 | `docs/plan/todo.md` | Ubah — tambah item Fase 3.1 |
 | `docs/changelog/2026-07-31-004-init-bundle-schemas-yaml-schemas.md` | Baru |
 
@@ -43,4 +43,4 @@ Mirror pola `AISkillsFS` (embed → extract saat init):
 
 Small — ~1 jam, tidak ada dependensi antar task, referensi:
 `docs/spec/platform/08-project-layout.md`, `Makefile` target `generate-schema`,
-`docs/cli-tools/02-forma-cli.md`.
+`docs/cli-tools/02-formspec-cli.md`.

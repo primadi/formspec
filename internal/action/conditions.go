@@ -17,8 +17,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/primadi/forma/internal/starlark"
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/internal/starlark"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 // EvaluateConditions checks all conditions on an action against the current resource data.

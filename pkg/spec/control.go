@@ -4,25 +4,26 @@ package spec
 // (platform/04-control-plane.md §2, §5)
 //
 // These types define the *contract* for kind: Environment and kind: Policy
-// manifests. Control Plane runtime execution (forma-ctl) is still a separate
+// manifests. Control Plane runtime execution (formspec-ctl) is still a separate
 // effort — the structs exist so manifests parse, validate, and get JSON Schema
 // autocomplete/validation today.
 
 // EnvironmentSpec defines one deployment target (platform/04-control-plane.md §2).
 type EnvironmentSpec struct {
 	// Mode is the deployment environment mode — dev | prod.
-	// @schema {description: "Environment mode", enum: ["dev", "prod"]}
+	// @schema {description: "Environment mode", enum: ["dev", "prod"], example: "prod"}
 	Mode EnvironmentMode `yaml:"mode" json:"mode"`
 	// Tier classifies the deployment — standalone | cloud | enterprise.
-	// @schema {description: "Deployment tier", enum: ["standalone", "cloud", "enterprise"]}
+	// @schema {description: "Deployment tier", enum: ["standalone", "cloud", "enterprise"], example: "cloud"}
 	Tier string `yaml:"tier" json:"tier"`
 	// ResourcePool is the resource pool strategy — dev is always shared;
 	// prod is shared (prod-shared) or exclusive.
-	// @schema {description: "Resource pool strategy", enum: ["shared", "exclusive"]}
+	// @schema {description: "Resource pool strategy", enum: ["shared", "exclusive"], example: "shared"}
 	ResourcePool string `yaml:"resource_pool" json:"resource_pool"`
 	// ResourcePlanes lists the resource plane endpoints for this environment.
 	ResourcePlanes []EnvironmentPlane `yaml:"resource_planes" json:"resource_planes"`
 	// KeyRef is the location of the platform signing key (e.g. kms://prod-signing).
+	// @schema {example: "kms://prod-signing"}
 	KeyRef string `yaml:"key_ref" json:"key_ref"`
 	// Policy names the kind: Policy that applies to this environment.
 	Policy string `yaml:"policy" json:"policy"`

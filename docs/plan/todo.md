@@ -1,23 +1,31 @@
-# Master Plan: Forma Implementation
+# Master Plan: FormSpec Implementation
 
-**Last Updated**: 2026-08-07  
-**Status**: ✅ Fase 0 complete · ✅ Fase 1 (1.1–1.5) · ✅ Fase 2.1 · ✅ Fase 2.2 · ✅ Fase 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6) · ✅ Fase 5 (5.1–5.4) · ✅ Spec hot-reload · ✅ Fase 11 (review schema↔docs) · ✅ Audit spec↔schema + tambah TODO item · ✅ `forma validate` (3.1.1, engine+schema)  
+**Last Updated**: 2026-08-12  
+**Status**: ✅ Fase 0 complete · ✅ Fase 1 (1.1–1.5) · ✅ Fase 2.1 · ✅ Fase 2.2 · ✅ Fase 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6) · ✅ Fase 5 (5.1–5.4) · ✅ Spec hot-reload · ✅ Fase 11 (review schema↔docs) · ✅ Audit spec↔schema + tambah TODO item · ✅ `formspec validate` (3.1.1, engine+schema) · 🚧 Rename formspec→formspec (docs/plan/rename-formspec.md)  
 
 > `⬜` not started · `✅` complete · `⏸️` deferred  
 
-**Scope**: `forma dev` + `forma serve --mode=production` single-server.  
-**Deferred**: Control Plane (`forma-ctl`), K8s Operator, Marketplace — untuk cloud phase berikutnya.  
+**Scope**: `formspec dev` + `formspec serve --mode=production` single-server.  
+**Deferred**: Control Plane (`formspec-ctl`), K8s Operator, Marketplace — untuk cloud phase berikutnya.  
 **Sumber**: `docs/spec/backend/` (01–06), `docs/spec/frontend/` (01–08), `docs/spec/platform/` (01–10), `docs/cli-tools/` (01–05), `docs/renderers/jsonb-persist/` (01–04), `docs/renderers/shadcn-shell/` (01–04), `docs/ai/` (01–06).  
 **Catatan status sumber**: seluruh spec masih **Draft** (jsonb-persist masih **Outline**; `platform/08` §3–§6 "target desain") — mismatch todo↔docs bisa berarti docs-nya yang perlu diperbaiki. Audit penuh todo vs docs terakhir: 2026-07-19.
 
 **Catatan 2026-07-31**: `platform/08-project-layout.md` §1–§2 ditulis ulang agar match
 layout contoh `examples/Clinic-UI-Showcase/spec/` (entity-centric + `spec/` container +
-`forma-app.yaml` sebagai config dev) — lihat `docs/changelog/2026-07-31-002-update-project-layout-sesuai-clinic-ui-showcase.md`. §3–§6 tetap target desain.
+`formspec-app.yaml` sebagai config dev) — lihat `docs/changelog/2026-07-31-002-update-project-layout-sesuai-clinic-ui-showcase.md`. §3–§6 tetap target desain.
 
 **Catatan 2026-07-31**: `rtk` (CLI proxy token LLM) di-bake ke
 `.devcontainer/Dockerfile` (binary pinned v0.44.1 + `rtk init -g`) karena
 `~/.local/bin`/`~/.claude` tidak di-persist volume — lihat
 `docs/changelog/2026-07-31-003-bake-rtk-ke-devcontainer-dockerfile.md`.
+
+**Catatan 2026-08-11**: Jalur **agent-assisted app development tanpa MCP** selesai —
+lihat `docs/plan/agent-assisted-app-development.md`, guide
+`docs/guides/agent-assisted-app-development.md`, dan contoh `examples/cafe/`.
+`formspec-app-workflow` skill kini punya Phase Detection + No-MCP Tool Map;
+`formspec init` menulis copilot-instructions yang mereferensikan workflow 4 fase +
+`formspec validate` sebagai gate. Fase 10 (`formspec consult`/MCP) tetap di-defer;
+konten skill dibuat MCP-agnostic agar reuse saat Fase 10 landing.
 
 ---
 
@@ -48,7 +56,7 @@ layout contoh `examples/Clinic-UI-Showcase/spec/` (entity-centric + `spec/` cont
 - [x] 1.1.7 `KindDefinitionSpec` — CRD-like kind extension (`group`, `version`, `schema`, `handler`, `scope`)  
 - [x] 1.1.8 Update `SubscriptionSpec` — add Tier 2 fields (`store`, `retention`, `position`, `max_retry`, `dead_letter`, `filter`, `transform`, `delivery` channel)  
 - [x] 1.1.9 Update `ConfigSpec` — replace `map[string]any` with structured `ConfigKey` type (`type`, `default`, `secret` — per `01-core-basic.md` §10; `required` tidak ada di spec)  
-- [x] 1.1.10 `MenuItem` — kontrak menu App/Module (`platform/02-workspace-app-module.md` §4: `[]MenuItem` langsung tanpa wrapper, array-index order, nesting max 3 level, node adopt/group/leaf, `when` FormaExpr) + validasi apply §6 (`module` di menu anggota `App.spec.modules`, `root_url` unik prefix `/app/`, `Form`/`Table` bukan target `view`)  
+- [x] 1.1.10 `MenuItem` — kontrak menu App/Module (`platform/02-workspace-app-module.md` §4: `[]MenuItem` langsung tanpa wrapper, array-index order, nesting max 3 level, node adopt/group/leaf, `when` FormSpecExpr) + validasi apply §6 (`module` di menu anggota `App.spec.modules`, `root_url` unik prefix `/app/`, `Form`/`Table` bukan target `view`)  
 
 ### 1.2 Missing meta-kind structs ✅
 - [x] 1.2.1 `VisualSpecKindSpec` — declare new view type (`tier`, `schema`, `renderer_contract`, `accepts_slots`/`implements_slot`)  
@@ -76,19 +84,19 @@ layout contoh `examples/Clinic-UI-Showcase/spec/` (entity-centric + `spec/` cont
 - [ ] 1.4.12 `MoneyType` FX & multi-currency — konversi antar mata uang (rate table, tanggal efektif, spread) untuk field `money`; belum dispesifikasikan di `05-field-types.md` § "Open — FX & multi-currency"  
 
 ### 1.5 Error glossary Go types ✅
-- [x] 1.5.1 Go const/type mapping dari `error-glossary.yaml` (22 error codes → `FORMA.DOC.*`, `FORMA.TXN.*`, `FORMA.PERIOD.*`, `FORMA.EVENT.*`, `FORMA.SAGA.*`, `FORMA.REF.*`, `FORMA.PERSIST.*`, `FORMA.ARCHIVE.*`, `FORMA.VALIDATE.*`)  
+- [x] 1.5.1 Go const/type mapping dari `error-glossary.yaml` (22 error codes → `FORMSPEC.DOC.*`, `FORMSPEC.TXN.*`, `FORMSPEC.PERIOD.*`, `FORMSPEC.EVENT.*`, `FORMSPEC.SAGA.*`, `FORMSPEC.REF.*`, `FORMSPEC.PERSIST.*`, `FORMSPEC.ARCHIVE.*`, `FORMSPEC.VALIDATE.*`)  
 - [x] 1.5.2 Observability error codes — `OBSERVABILITY_METRICS_DISABLED`, `OBSERVABILITY_DEBUG_FORBIDDEN`, `LOGS_FILTER_INVALID` (`09-observability.md` §8)  
 
 ---
 
-## Fase 2: Engine Core — `forma dev` Reliability
+## Fase 2: Engine Core — `formspec dev` Reliability
 
-**Goal**: Atomic operations, correct PK, complete filters, lifecycle enforcement — agar `forma dev` bisa diandalkan untuk testing.
+**Goal**: Atomic operations, correct PK, complete filters, lifecycle enforcement — agar `formspec dev` bisa diandalkan untuk testing.
 
 **Progress**: 2.1 ✅ · 2.2 ✅ · 2.3 ✅ · 2.4 ✅ · 2.5 ✅ · 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6 ✅; 2.6.4 ⬜ blocked on 2.9.1 + new Starlark caller-context plumbing) · 2.7–2.9 ⬜
 
 ### 2.1 Database integrity ✅
-- [x] 2.1.1 Atomic mutation + outbox — wrap Entity INSERT/UPDATE/DELETE + outbox write dalam `BeginTx`/`Commit` (rollback on error). Terpenuhi untuk create/update HTTP (`InTx`) **dan** custom action (`HandleCustomAction` + `TxScope`, `renderers/jsonbpersist/txscope.go`) — satu transaksi request-scoped mencakup semua panggilan `resource.save()`/`.create()` (Starlark/native/sidecar via `X-Forma-Scope-Id`) dalam satu eksekusi action, join berdasar identitas store (bukan Module — multi-Module dalam satu Datastore fisik yang sama tetap atomik; lintas-Datastore genuinely berbeda → `ErrCrossStoreTx`). **Gap tersisa**: `RunAfterPhase` masih fire-and-forget (tidak rollback); SDK sidecar (`sdk/php`/`sdk/python`/`sdk/typescript`) belum mengirim `X-Forma-Scope-Id` (`01-architecture.md` §3, `runtimes/04-forma-sidecar.md` §4.3a).  
+- [x] 2.1.1 Atomic mutation + outbox — wrap Entity INSERT/UPDATE/DELETE + outbox write dalam `BeginTx`/`Commit` (rollback on error). Terpenuhi untuk create/update HTTP (`InTx`) **dan** custom action (`HandleCustomAction` + `TxScope`, `renderers/jsonbpersist/txscope.go`) — satu transaksi request-scoped mencakup semua panggilan `resource.save()`/`.create()` (Starlark/native/sidecar via `X-FormSpec-Scope-Id`) dalam satu eksekusi action, join berdasar identitas store (bukan Module — multi-Module dalam satu Datastore fisik yang sama tetap atomik; lintas-Datastore genuinely berbeda → `ErrCrossStoreTx`). **Gap tersisa**: `RunAfterPhase` masih fire-and-forget (tidak rollback); SDK sidecar (`sdk/php`/`sdk/python`/`sdk/typescript`) belum mengirim `X-FormSpec-Scope-Id` (`01-architecture.md` §3, `runtimes/04-formspec-sidecar.md` §4.3a).  
 - [x] 2.1.2 Natural key counter in same transaction as Entity insert — UPSERT counter + INSERT dalam satu `Tx` (`generateNaturalKeys` menerima DB terikat-transaksi; `04-query-and-keys.md` §2)  
 - [x] 2.1.3 UUID v7 PK — replace SQLite `INTEGER PRIMARY KEY AUTOINCREMENT` with UUID v7 generated at app layer (`NewUUIDv7`, kedua driver; child table PK juga ikut)  
 - [x] 2.1.4 Idempotency retention configurable — `IdempotencyStore` sekarang dikonstruksi di `resource.App` dengan TTL dari `Config.IdempotencyTTL` (default 24h via `db.DefaultIdempotencyTTL`), diekspos lewat `App.Idempotency()`. Resolusi dari manifest `kind: Config` (`core.idempotency_retention`) menunggu runtime Config-kind (Fase 7.2, belum ada) — `Config.IdempotencyTTL` adalah seam yang setara untuk saat ini.  
@@ -98,7 +106,7 @@ layout contoh `examples/Clinic-UI-Showcase/spec/` (entity-centric + `spec/` cont
 - [x] 2.2.1 Filter operators 13/13 (`eq neq gt gte lt lte between in nin like ilike null notnull` — `01-core-basic.md` §6) — added `between`, `ilike`, `null`, `notnull`; handler parsing supports `between` as comma-separated pair  
 - [x] 2.2.2 JSONB path fallback for non-indexed fields — `data->>'field'` (PG) / `json_extract(data, '$.field')` (SQLite) via `EntityStore.columnRefExpr()`  
 - [x] 2.2.3 Generated column dialect-aware — `generateGeneratedColumn` now accepts `DriverType`; PG uses `data->>'field'`, SQLite uses `json_extract`  
-- [x] 2.2.4 `exists:<resource>` real lookup — already wired in `resource/forma.go` via `SetEntityLookup`, queries entity registry  
+- [x] 2.2.4 `exists:<resource>` real lookup — already wired in `resource/formspec.go` via `SetEntityLookup`, queries entity registry  
 - [x] 2.2.5 Cross-module relation resolution — `ValidateRelationTargets` parses `{module}.{entity}` from `Relation.Resource`; registry injects `targetTableResolver` using spec's Plural (not naive `+s`)  
 
 ### 2.3 Lifecycle engine ✅
@@ -108,7 +116,7 @@ layout contoh `examples/Clinic-UI-Showcase/spec/` (entity-centric + `spec/` cont
 - [x] 2.3.4 Referenceability — already implemented via `ValidateRelationTargets()` (unchanged)
 - [x] 2.3.5 `delete` guard absolut — `LifecycleGuard("delete")` checked in `SoftDelete()`
 - [x] 2.3.6 `create-submit`/`amend-submit` auto-derived — `DeriveReservedActions()` exists (route-level skip for now)
-- [x] 2.3.7 Error codes lengkap — `FORMA.DOC.ALREADY_SUBMITTED`, `ALREADY_CANCELLED`, `SUBMIT_NOT_DRAFT`, `CANCEL_NOT_SUBMITTED`, `UPDATE_NOT_DRAFT`, `DELETE_NOT_DRAFT`, `AMEND_NOT_SUBMITTED_OR_CANCELLED`, `FORMA.REF.DELETE_BLOCKED`, `FORMA.REF.CANCEL_BLOCKED`
+- [x] 2.3.7 Error codes lengkap — `FORMSPEC.DOC.ALREADY_SUBMITTED`, `ALREADY_CANCELLED`, `SUBMIT_NOT_DRAFT`, `CANCEL_NOT_SUBMITTED`, `UPDATE_NOT_DRAFT`, `DELETE_NOT_DRAFT`, `AMEND_NOT_SUBMITTED_OR_CANCELLED`, `FORMSPEC.REF.DELETE_BLOCKED`, `FORMSPEC.REF.CANCEL_BLOCKED`
 - [x] 2.3.8 `child.sequence_field` enforcement — validate monotonically ordered line numbers on insert/reorder; auto-assign when client omits, validate when provided; reject duplicates/non-monotonic → `VALIDATION_ERROR` (422)
 - [x] 2.3.9 `child` lifecycle — child follows parent submit/cancel via `SubmitChildren()`/`CancelChildren()`; `doc_status` column added to child table DDL
 - [x] 2.3.10 `relation.on_delete` framework — `reference.go` with `CheckReferencingDocuments` + `EnforceReferenceGuard`; stub implementation (full on_delete 3 modes membutuhkan reference tracking system)
@@ -120,7 +128,7 @@ layout contoh `examples/Clinic-UI-Showcase/spec/` (entity-centric + `spec/` cont
 - [x] 2.4.2 Event priority ordering — hooks already support `Priority` field (0→default 10); `SelectHooks` sorts by priority; kelipatan 10 convention documented
 - [x] 2.4.3 Durability contract validation — new `ValidateEventDurability()` checks publisher non-durable + subscriber durable → error at apply
 - [x] 2.4.4 Outbox worker — `MarkFailed` enhanced with `backoff` strategy (exponential|linear|fixed) + `initial_delay_ms` support; outbox table DDL extended with columns
-- [x] 2.4.5 `FORMA.EVENT.TYPE_MISMATCH` + `FORMA.EVENT.TYPE_MISSING` — wired into `ValidateEventNaming()` error messages  
+- [x] 2.4.5 `FORMSPEC.EVENT.TYPE_MISMATCH` + `FORMSPEC.EVENT.TYPE_MISSING` — wired into `ValidateEventNaming()` error messages  
 
 ### 2.5 API infrastructure ✅
 - [x] 2.5.1 Two API surfaces — `/_ui/entity/` (all entities, session auth) + `/api/v1/` (exposed-only, API key); both share same internal logic
@@ -137,7 +145,7 @@ layout contoh `examples/Clinic-UI-Showcase/spec/` (entity-centric + `spec/` cont
 - [x] 2.6.1 Cross-tenant isolation — already in place: `AuthMiddleware` (`internal/api/middleware.go`) returns 404 (not 403) on identity-vs-URL workspace mismatch; every `EntityStore` query in `renderers/jsonbpersist/crud.go` scopes on `tenant_id`. Covered by existing `internal/api/api_test.go`/`renderers/jsonbpersist/crud_test.go`.  
 - [x] 2.6.2 Tenant ID auto-injection — already in place: `GenerateEntityDDL` (`renderers/jsonbpersist/ddl.go`) always emits `tenant_id` + tenant-scoped unique indexes.  
 - [x] 2.6.3 Permission auto-registration — `internal/entity/registry.go`'s `registerStandardPermissions()` (shared by `LoadEntities`/`RegisterArtifactManifest`) now also registers `submit`/`cancel`/`amend`, gated identically to route generation (`db.TransitiveDisabled` + `characteristic: summary`) so registered permissions never drift from actual routes. Format stays `{module}.{plural}.{action}`, matching `internal/api/generator.go`.  
-- [ ] 2.6.4 UsesEnforcement wiring — **not implemented; two concrete blockers found on inspection**: (a) `resource.call()`'s dispatch path (`resource/forma.go`'s `invokeAction`) carries no notion of "which action/module is calling", so there's nothing to check the caller's `uses` declaration against without new plumbing through the Starlark call-handler chain (`internal/action/script.go`'s `SetCallHandler`); (b) `ctx.db`/`ctx.secrets`/etc. enforcement is blocked on 2.9.1 (`CtxAPI.SetDatastoreResolver` — currently everything errors "not configured"). Module auto-suspend + incident audit are also wholly new subsystems (no existing scaffolding to extend). The existing `UsesEnforcement` middleware stub in `internal/api/middleware.go` remains unwired dead code — do not assume it's "ready to activate", its own doc comment overstates that.  
+- [ ] 2.6.4 UsesEnforcement wiring — **not implemented; two concrete blockers found on inspection**: (a) `resource.call()`'s dispatch path (`resource/formspec.go`'s `invokeAction`) carries no notion of "which action/module is calling", so there's nothing to check the caller's `uses` declaration against without new plumbing through the Starlark call-handler chain (`internal/action/script.go`'s `SetCallHandler`); (b) `ctx.db`/`ctx.secrets`/etc. enforcement is blocked on 2.9.1 (`CtxAPI.SetDatastoreResolver` — currently everything errors "not configured"). Module auto-suspend + incident audit are also wholly new subsystems (no existing scaffolding to extend). The existing `UsesEnforcement` middleware stub in `internal/api/middleware.go` remains unwired dead code — do not assume it's "ready to activate", its own doc comment overstates that.  
 - [x] 2.6.5 Optimistic concurrency — storage layer was already correct (`crud.go`'s `Update()` does `WHERE version = ?`; conflicts already mapped to 409), but `HandleUpdate` (`internal/api/handler.go`) silently ignored the client and always used the just-fetched version — meaning the `If-Match: version=N` header renderers/web's `apiPatch` (`renderers/web/src/lib/api/client.ts`) already sends on every Form autosave/Kanban drag-update was a no-op. Fixed: `HandleUpdate` now parses `If-Match` and uses the client's version for the CAS check when present; missing `If-Match` falls back to today's behavior in relaxed/dev mode but is `409 CONFLICT` when `SetStrictMode(true)` (production).  
 - [x] 2.6.6 WebSocket per-message permission filter — `wsConn` (`internal/api/wshub.go`) now carries the connection's `*auth.Identity` (captured in `HandleWS`); `Broadcast` resolves `EventMessage.Resource` to `{module}.{plural}.view` via the entity registry and skips connections lacking that permission. Fails open (delivers unfiltered) when identity is nil or the resource/registry can't be resolved, so it only engages once real auth is wired up — see the "identity/registry" branch in `internal/api/wshub_test.go`/`wshub_permission_test.go`.  
 
@@ -150,57 +158,57 @@ layout contoh `examples/Clinic-UI-Showcase/spec/` (entity-centric + `spec/` cont
 - [ ] 2.8.2 `spec.expose: [{type: rest, actions: [list, find]}]` → only those actions on `/api/v1/`  
 
 ### 2.9 `ctx.*` infrastructure primitives
-- [ ] 2.9.1 Wire `CtxAPI.SetDatastoreResolver` + implementasi `datastore.Open()` nyata — saat ini semua `ctx.db()/cache()/lock()/...` error "not configured"; fondasi Fase 7 (Service, Hook, Validation L6, sidecar proxy) (`runtimes/02-forma-resource.md` §7, `runtimes/04-forma-sidecar.md` §8)  
+- [ ] 2.9.1 Wire `CtxAPI.SetDatastoreResolver` + implementasi `datastore.Open()` nyata — saat ini semua `ctx.db()/cache()/lock()/...` error "not configured"; fondasi Fase 7 (Service, Hook, Validation L6, sidecar proxy) (`runtimes/02-formspec-resource.md` §7, `runtimes/04-formspec-sidecar.md` §8)  
 - [ ] 2.9.2 Closed set 9 primitive — `db`, `cache`, `lock`, `queue`, `pubsub`, `storage`, `config`, `kvstore`, `log` (`platform/06-datastore.md` §2), termasuk binding `.named()`  
 - [ ] 2.9.3 Dev auto-provision `'default'` per primitive — db/kvstore→SQLite, cache/lock/queue/pubsub→in-memory, storage→filesystem (`platform/06-datastore.md` §5)  
 - [ ] 2.9.4 `ctx.db()` module-scoped (normatif) — resolve ke Datastore milik Module; interaksi lintas-Module-lintas-Datastore WAJIB async, tanpa escape hatch `ctx.db` sekalipun dengan `uses` (`01-core-basic.md` §3/§5)  
 
 ---
 
-## Fase 3: CLI — `forma` Command Completion
+## Fase 3: CLI — `formspec` Command Completion
 
 **Goal**: `validate` → `check` → `new` → `dev` → `generate` → `diff/get/describe/delete` → `migrate/repl/seed` → `backup/restore/logs`.  
-**Priority**: per `docs/cli-tools/02-forma-cli.md` §13.1.
+**Priority**: per `docs/cli-tools/02-formspec-cli.md` §13.1.
 
 ### 3.1 High-priority (no backend dependency)
-- [x] 3.1.1 `forma validate --spec <path>` — dry-run validation dua lapis: engine loader (`internal/manifest`; parse + Entity deep-validation) + JSON Schema per kind (`schemas/kinds/*` via `santhosh-tekuri/jsonschema`, lihat `cmd/forma/validate.go`). Exit 1 bila ada gagal. 2026-07-31. Catatan: lapis schema lebih ketat dari engine untuk shorthand `guard`/`render` (Go `UnmarshalYAML` scalar+map tak bisa diekspresikan generator schema) — gunakan bentuk objek. Sisa: honesty scan Starlark → 3.1.1a.
-- [ ] 3.1.1a `forma validate` honesty scan Starlark (undeclared usage → error, declared-but-unused → warning, `ctx.environment` branching → warning) + flag `--fix`. ⏸️ Ditunda dari 3.1.1 karena butuh `internal/starlark` analyzer penuh.  
-- [ ] 3.1.2 `forma check [--fix] -f <path>` — cross-file analysis: unresolved varnames (error), FormaExpr ref to nonexistent field (error), undeclared cross-module access (error), unused cross-module declarations (warning). `--fix`: auto-add `depends_on`/`uses`, auto-remove unused.  
-- [ ] 3.1.3 `forma new <kind>` — scaffold: `new app <name>`, `new entity <name>`, `new module <name>`. Generate boilerplate YAML + directory.  
-- [x] 3.1.4 `forma init` bundel JSON Schema (`schemas/` dari `//go:embed`) + tulis `.vscode/settings.json` (`yaml.schemas` → `schemas/forma.schema.json` untuk `spec/**/*.yaml|yml`), agar YAML editor punya autocomplete/validasi langsung setelah scaffold — lihat `docs/plan/init-schema-scaffold.md`
+- [x] 3.1.1 `formspec validate --spec <path>` — dry-run validation dua lapis: engine loader (`internal/manifest`; parse + Entity deep-validation) + JSON Schema per kind (`schemas/kinds/*` via `santhosh-tekuri/jsonschema`, lihat `cmd/formspec/validate.go`). Exit 1 bila ada gagal. 2026-07-31. Catatan: lapis schema lebih ketat dari engine untuk shorthand `guard`/`render` (Go `UnmarshalYAML` scalar+map tak bisa diekspresikan generator schema) — gunakan bentuk objek. Sisa: honesty scan Starlark → 3.1.1a.
+- [ ] 3.1.1a `formspec validate` honesty scan Starlark (undeclared usage → error, declared-but-unused → warning, `ctx.environment` branching → warning) + flag `--fix`. ⏸️ Ditunda dari 3.1.1 karena butuh `internal/starlark` analyzer penuh.  
+- [ ] 3.1.2 `formspec check [--fix] -f <path>` — cross-file analysis: unresolved varnames (error), FormSpecExpr ref to nonexistent field (error), undeclared cross-module access (error), unused cross-module declarations (warning). `--fix`: auto-add `depends_on`/`uses`, auto-remove unused.  
+- [ ] 3.1.3 `formspec new <kind>` — scaffold: `new app <name>`, `new entity <name>`, `new module <name>`. Generate boilerplate YAML + directory.  
+- [x] 3.1.4 `formspec init` bundel JSON Schema (`schemas/` dari `//go:embed`) + tulis `.vscode/settings.json` (`yaml.schemas` → `schemas/formspec.schema.json` untuk `spec/**/*.yaml|yml`), agar YAML editor punya autocomplete/validasi langsung setelah scaffold — lihat `docs/plan/init-schema-scaffold.md`
 
-### 3.2 `forma dev` — verify against spec
+### 3.2 `formspec dev` — verify against spec
 - [x] 3.2.1 Verify 12 flags work: `--spec`, `--dsn`, `--addr`, `--listen` (none/local_http/unix_socket), `--app-endpoint` (none/local_http/unix_socket), `--runtime` (auto-detect + explicit override), `--dev`, `--dev-ui` (implies `--dev`+`--force`), `--force`, `--web-dir`, `--state-dir`, `--workspace-id`  
-- [x] 3.2.2 Runtime auto-detect — `go.mod` → go (local), `package.json` → node, `composer.json` → php, `requirements.txt`/`pyproject.toml` → python, `*.csproj` → dotnet (SDK belum tersedia) — per `01-forma-dev.md` §4; ruby/java TIDAK termasuk auto-detect `forma dev` (hanya konteks sidecar `spec.runtime`, lihat 7.15.1)  
-- [x] 3.2.3 SPA serving priority — explicit `--web-dir` > embedded `//go:embed` FS > auto-detect `renderers/web/dist/` (urutan per `01-forma-dev.md` §6; path auto-detect di docs masih `web/dist/` — stale pasca-restructure 0.3, perbaiki docs)  
-- [x] 3.2.4 Config file `forma-app.yaml` support  
+- [x] 3.2.2 Runtime auto-detect — `go.mod` → go (local), `package.json` → node, `composer.json` → php, `requirements.txt`/`pyproject.toml` → python, `*.csproj` → dotnet (SDK belum tersedia) — per `01-formspec-dev.md` §4; ruby/java TIDAK termasuk auto-detect `formspec dev` (hanya konteks sidecar `spec.runtime`, lihat 7.15.1)  
+- [x] 3.2.3 SPA serving priority — explicit `--web-dir` > embedded `//go:embed` FS > auto-detect `renderers/web/dist/` (urutan per `01-formspec-dev.md` §6; path auto-detect di docs masih `web/dist/` — stale pasca-restructure 0.3, perbaiki docs)  
+- [x] 3.2.4 Config file `formspec-app.yaml` support  
 - [x] 3.2.5 Two personas: Persona A (embedded SPA, 80%) + Persona B (`--dev-ui` Vite HMR, 20%)  
 - [x] 3.2.6 Add `check`, `promote`, `logs` to CLI dispatcher switch (currently fall to `usage()`)  
 
-### 3.3 `forma generate`
-- [ ] 3.3.1 `forma generate --lang typescript --spec <path> --out <dir>` — generate typed TS client from manifests  
+### 3.3 `formspec generate`
+- [ ] 3.3.1 `formspec generate --lang typescript --spec <path> --out <dir>` — generate typed TS client from manifests  
 - [ ] 3.3.2 Generate: typed interfaces, create/update input types, custom action params, `createApi()` function  
-- [ ] 3.3.3 Field type mapping per `03-forma-generate.md` §3: string/uuid/date/datetime→string, integer→number, decimal/number→**string** (never `number` — presisi), boolean→boolean, enum→union, json→unknown, relation→string, child→array; `money`/`file` belum ada di tabel docs §3 — tetapkan di spec dulu (amount money wajib string, bukan number)  
+- [ ] 3.3.3 Field type mapping per `03-formspec-generate.md` §3: string/uuid/date/datetime→string, integer→number, decimal/number→**string** (never `number` — presisi), boolean→boolean, enum→union, json→unknown, relation→string, child→array; `money`/`file` belum ada di tabel docs §3 — tetapkan di spec dulu (amount money wajib string, bukan number)  
 
 ### 3.4 Read-only CLI ops
-- [ ] 3.4.1 `forma diff -f <path>` — compare local vs deployed (dry-run)  
-- [ ] 3.4.2 `forma get <kind> <name>` — fetch resource, table/JSON output  
-- [ ] 3.4.3 `forma describe <kind> <name>` — detailed view: field, action, state machine, permission (`02-forma-cli.md` §2)  
+- [ ] 3.4.1 `formspec diff -f <path>` — compare local vs deployed (dry-run)  
+- [ ] 3.4.2 `formspec get <kind> <name>` — fetch resource, table/JSON output  
+- [ ] 3.4.3 `formspec describe <kind> <name>` — detailed view: field, action, state machine, permission (`02-formspec-cli.md` §2)  
 
 ### 3.5 Mutation CLI ops
-- [ ] 3.5.1 `forma delete <kind> <name> --confirm` — remove resource  
+- [ ] 3.5.1 `formspec delete <kind> <name> --confirm` — remove resource  
 
 ### 3.6 Engine-dependent CLI ops
-- [ ] 3.6.1 `forma migrate plan|apply` — structural diff from Entity changes, applied via migration runner  
-- [ ] 3.6.2 `forma repl [--environment]` — interactive Starlark console, full `ctx.*`, sandbox limits enforced  
-- [ ] 3.6.3 `forma seed [--module]` — run seeders from YAML seed files  
-- [ ] 3.6.4 `forma summary rebuild <entity>` — rebuild summary Entity dari replay event durable (`02-core-extended.md` §6)  
+- [ ] 3.6.1 `formspec migrate plan|apply` — structural diff from Entity changes, applied via migration runner  
+- [ ] 3.6.2 `formspec repl [--environment]` — interactive Starlark console, full `ctx.*`, sandbox limits enforced  
+- [ ] 3.6.3 `formspec seed [--module]` — run seeders from YAML seed files  
+- [ ] 3.6.4 `formspec summary rebuild <entity>` — rebuild summary Entity dari replay event durable (`02-core-extended.md` §6)  
 
 ### 3.7 Data lifecycle CLI ops
-- [ ] 3.7.1 `forma backup create [--full|--incremental|--filter]` — backup DB + artifacts, open format  
-- [ ] 3.7.2 `forma backup inspect <file>` — inspect backup contents  
-- [ ] 3.7.3 `forma restore --from <file> [--map-resource] [--conflict skip|overwrite|remap] [--dry-run]` — restore with conflict resolution  
-- [ ] 3.7.4 `forma logs [--workspace] [--module] [--entity] [--action] [--level] [--since] [--until] [--request-id] [--output pretty|json] [--follow]` — tail structured logs (`09-observability.md` §7)  
+- [ ] 3.7.1 `formspec backup create [--full|--incremental|--filter]` — backup DB + artifacts, open format  
+- [ ] 3.7.2 `formspec backup inspect <file>` — inspect backup contents  
+- [ ] 3.7.3 `formspec restore --from <file> [--map-resource] [--conflict skip|overwrite|remap] [--dry-run]` — restore with conflict resolution  
+- [ ] 3.7.4 `formspec logs [--workspace] [--module] [--entity] [--action] [--level] [--since] [--until] [--request-id] [--output pretty|json] [--follow]` — tail structured logs (`09-observability.md` §7)  
 
 ### 3.8 Deferred CLI ops
 - [ ] ⏸️ `promote`, `archive`, `saga`, `module`, `sign`, `script`, `freeze`, `rollback`, `lock`, `workspace create`, `suspend scripts` — depend on Control Plane or backend maturity  
@@ -227,12 +235,12 @@ layout contoh `examples/Clinic-UI-Showcase/spec/` (entity-centric + `spec/` cont
 - [ ] 4.3.1 Extension read — `entity.ext("namespace").field` via JSONB column access  
 - [ ] 4.3.2 Extension write — populate `ext_{namespace}` column  
 - [ ] 4.3.3 Extension uninstall — `DROP COLUMN ext_{namespace}` + remove registry entry + namespace lock (never reused)  
-- [ ] 4.3.4 Extension namespace collision prevention — `forma apply` rejects duplicate namespace for same target  
+- [ ] 4.3.4 Extension namespace collision prevention — `formspec apply` rejects duplicate namespace for same target  
 - [ ] 4.3.5 Extension `validate:` (additive business rule) — runs after base Entity L1–L6 validation, never overrides it; read-only access to base fields, may only require its own namespaced fields (`docs/spec/backend/03-entity-extension.md` §5)  
 
 ### 4.4 Category schemas
 - [ ] 4.4.1 6 category schemas: operational, financial, compliance, analytics, master, archive  
-- [ ] 4.4.2 Cross-category JOIN block — `FORMA.PERSIST.CROSS_CATEGORY` error  
+- [ ] 4.4.2 Cross-category JOIN block — `FORMSPEC.PERSIST.CROSS_CATEGORY` error  
 - [ ] 4.4.3 `spec.persist.category` enforcement at query time  
 
 ### 4.5 Query Builder
@@ -265,8 +273,8 @@ layout contoh `examples/Clinic-UI-Showcase/spec/` (entity-centric + `spec/` cont
 - [ ] 4.9.1 Archive transactions (`characteristic: transaction`) to Parquet when age ≥ `retention.archive_after`  
 - [ ] 4.9.2 Master snapshot "as-of" — referenced masters snapshotted alongside archived transactions  
 - [ ] 4.9.3 `locked_for_deletion` flag — master referenced by archived transaction cannot be deleted  
-- [ ] 4.9.4 `FORMA.ARCHIVE.LOCKED_FOR_DELETION` error code  
-- [ ] 4.9.5 `forma archive run [--dry-run]` / `view --batch-id` / `restore-batch`  
+- [ ] 4.9.4 `FORMSPEC.ARCHIVE.LOCKED_FOR_DELETION` error code  
+- [ ] 4.9.5 `formspec archive run [--dry-run]` / `view --batch-id` / `restore-batch`  
 
 ### 4.10 Soft-delete & soft-deactivation
 - [ ] 4.10.1 `persist.soft_delete: true` → `deleted_at` column + query auto-filters to `deleted_at IS NULL`  
@@ -276,7 +284,7 @@ layout contoh `examples/Clinic-UI-Showcase/spec/` (entity-centric + `spec/` cont
 
 ## Fase 5: Frontend — shadcn-shell Completeness
 
-**Goal**: Semua UI kind, widget, contract, dan FormaExpr sesuai spec. Bisa dites end-to-end.
+**Goal**: Semua UI kind, widget, contract, dan FormSpecExpr sesuai spec. Bisa dites end-to-end.
 
 ### 5.1 App Shell
 - [x] 5.1.1 `sidebar-nav` — full chrome, side navigation, breadcrumb (verified, working)  
@@ -296,7 +304,7 @@ layout contoh `examples/Clinic-UI-Showcase/spec/` (entity-centric + `spec/` cont
 - [x] 5.3.2 Wire `OverlayHost` — connected to Form.render modal/drawer  
 - [ ] 5.3.3 409 conflict handling — CAS version mismatch → "Data telah diubah oleh pengguna lain", offer reload + re-apply changes  
 - [x] 5.3.4 Lifecycle UI patterns — plain_crud (no submit), 2-step+auto-save (default), 2-step manual (Save Draft + Submit buttons), 1-step create-submit (single button, no draft)  
-- [x] 5.3.5 FormaExpr — `visible_when`, `readonly_when`, `required_when`, `compute` per field  
+- [x] 5.3.5 FormSpecExpr — `visible_when`, `readonly_when`, `required_when`, `compute` per field  
 
 ### 5.4 `kind: Table`
 - [x] 5.4.1 Fix hardcoded `/_admin` prefix — surface-aware navigation (`/app` vs `/_admin`)  
@@ -308,7 +316,7 @@ layout contoh `examples/Clinic-UI-Showcase/spec/` (entity-centric + `spec/` cont
 ### 5.5 `kind: Kanban`
 - [x] 5.5.1 Drag-and-drop — wire `@dnd-kit/core`; drag card antar kolom → PATCH `status_field`  
 - [x] 5.5.2 Optimistic update with server-enforced rollback (409 → snapshot restore)  
-- [ ] 5.5.3 `drag_guard` FormaExpr — pre-check UX, prevent drop that server will reject  
+- [ ] 5.5.3 `drag_guard` FormSpecExpr — pre-check UX, prevent drop that server will reject  
 - [x] 5.5.4 WIP limits — `max_cards_per_column`, soft UX enforcement (visual + toast)  
 - [ ] 5.5.5 Zero-config — derive columns from state machine or `group_by` enum  
 - [x] 5.5.6 Click card → detail page navigation  
@@ -338,11 +346,11 @@ layout contoh `examples/Clinic-UI-Showcase/spec/` (entity-centric + `spec/` cont
 
 ### 5.9 Asset Component Contract
 - [ ] 5.9.1 Dynamic ES module loader — load `asset` component at runtime  
-- [ ] 5.9.2 `forma` client injection — `forma.api` (typed, logged-in user), `forma.subscribe(entity, cb)`, `forma.navigate(page, params)`, `forma.theme` (tokens), `forma.components` (widget dasar untuk komposisi custom component — `07-component-kinds.md` §1)  
-- [ ] 5.9.3 `forma.ui` centralized service — `toast()`, `dialog()`, `confirm()`, `drawer()` (replace direct `sonner` imports + `window.confirm()`)  
-- [ ] 5.9.4 `forma.files` — upload/download tray  
-- [ ] 5.9.5 `forma.form(entity, {mode, id?})` — headless form engine: field state, dirty tracking, client validation from field rules, FormaExpr eval, `submit()` with CAS version  
-- [ ] 5.9.6 `needs:` declaration — frontend `uses` equivalent; `forma.api` calls outside `needs` fail client-side  
+- [ ] 5.9.2 `formspec` client injection — `formspec.api` (typed, logged-in user), `formspec.subscribe(entity, cb)`, `formspec.navigate(page, params)`, `formspec.theme` (tokens), `formspec.components` (widget dasar untuk komposisi custom component — `07-component-kinds.md` §1)  
+- [ ] 5.9.3 `formspec.ui` centralized service — `toast()`, `dialog()`, `confirm()`, `drawer()` (replace direct `sonner` imports + `window.confirm()`)  
+- [ ] 5.9.4 `formspec.files` — upload/download tray  
+- [ ] 5.9.5 `formspec.form(entity, {mode, id?})` — headless form engine: field state, dirty tracking, client validation from field rules, FormSpecExpr eval, `submit()` with CAS version  
+- [ ] 5.9.6 `needs:` declaration — frontend `uses` equivalent; `formspec.api` calls outside `needs` fail client-side  
 - [ ] 5.9.7 CSP sandbox — `connect-src` restricted to App origin only; no `window`/`document` global access outside container  
 - [ ] 5.9.8 CSS scoped — component CSS never leaks to chrome or other components  
 
@@ -351,15 +359,15 @@ layout contoh `examples/Clinic-UI-Showcase/spec/` (entity-centric + `spec/` cont
 - [ ] 5.10.2 JsonEditor — textarea + JSON validation  
 - [ ] 5.10.3 ChildGrid — inline table for `child` entities with `storage: table`  
 - [ ] 5.10.4 RichText — basic toolbar (bold/italic, list, link, heading) + server-sanitized HTML; NOT page builder  
-- [ ] 5.10.5 FileInput — upload to `ctx.storage`, preview (image/PDF), size/type enforcement from field rules, `forma.files` tray  
+- [ ] 5.10.5 FileInput — upload to `ctx.storage`, preview (image/PDF), size/type enforcement from field rules, `formspec.files` tray  
 - [ ] 5.10.6 DecimalInput — arbitrary-precision decimal with banker's rounding display  
 - [ ] 5.10.7 DateTimeInput — combined date + time picker  
 - [ ] 5.10.8 Base UI components — empty-state, breadcrumb, skeleton/loading, pagination, badge, card  
 - [ ] 5.10.9 Textarea — bagian himpunan tertutup widget wajib (`07-component-kinds.md` §1), belum tercantum sebagai widget existing di renderer  
 
-### 5.11 FormaExpr
+### 5.11 FormSpecExpr
 - [ ] 5.11.1 Audit grammar vs spec — verify lexer→parser→evaluator supports all operators from `08-formaexpr.md` §2  
-- [ ] 5.11.2 Deploy-time static validation — `forma apply`/`forma check` rejects unresolvable field references + invalid grammar (ERROR, not warning)  
+- [ ] 5.11.2 Deploy-time static validation — `formspec apply`/`formspec check` rejects unresolvable field references + invalid grammar (ERROR, not warning)  
 - [ ] 5.11.3 Runtime error state — nonexistent field reference → visible error state (never silent fail-safe/evaluate to `false`)  
 - [ ] 5.11.4 `title` interpolation — `"Order {order.number}"` pattern in Page/Wizard/Print titles  
 - [ ] 5.11.5 Cross-shell conformance test suite — identical interpretation across shells  
@@ -390,7 +398,7 @@ layout contoh `examples/Clinic-UI-Showcase/spec/` (entity-centric + `spec/` cont
 - [ ] 5.15.2 Wire `OverlayHost` — connect to Form.render modal/drawer and other overlay needs  
 
 ### 5.16 VisualSpecKind/Renderer registry & resolution
-- [ ] 5.16.1 Renderer resolution engine — pilih Renderer via `(implements, stack_family)`; hanya `official` auto-select; tanpa official → `forma apply` error + sarankan kandidat `verified`/`community`; override via map `renderers:` di App manifest + field `renderer:` per-instance; Renderer non-official masuk consent footprint (`03-renderer-kind.md` §3)  
+- [ ] 5.16.1 Renderer resolution engine — pilih Renderer via `(implements, stack_family)`; hanya `official` auto-select; tanpa official → `formspec apply` error + sarankan kandidat `verified`/`community`; override via map `renderers:` di App manifest + field `renderer:` per-instance; Renderer non-official masuk consent footprint (`03-renderer-kind.md` §3)  
 - [ ] 5.16.2 Slot-tier validation at apply — `accepts_slots` hanya sah dari `tier: page|app`, `implements_slot` hanya dari `tier: component`; kombinasi lain ditolak (`02-visual-spec-kind.md` §4–§5)  
 - [ ] 5.16.3 `stack_family` compatibility check — App shell + Page shell-integrated + Component wajib satu family; mismatch = compile-time error; Page independen tidak dicek (`01-visual-hierarchy.md` §3)  
 
@@ -419,12 +427,12 @@ layout contoh `examples/Clinic-UI-Showcase/spec/` (entity-centric + `spec/` cont
 - [ ] 6.3.2 `app-membership` Entity — populasi user per App + atribut membership (mis. kode cabang); TERPISAH dari `role-assignment` (penetapan role ke user dalam konteks App) (`platform/02` §9)  
 - [ ] 6.3.3 Admin delegation chain — workspace owner → app admin → module staff  
 - [ ] 6.3.4 4 symmetric owner roles — Workspace Owner, App Owner, Module Owner, Cloud Owner  
-- [ ] 6.3.5 `forma.core` resource set lengkap — `workspace`, `user`, `app-membership`, `role`, `role-assignment`, `api-key`, `session`, `job`, `audit-log`, `setting`; namespace selalu ada, dapat direferensikan tanpa `depends_on` (`platform/02` §9)  
+- [ ] 6.3.5 `formspec.core` resource set lengkap — `workspace`, `user`, `app-membership`, `role`, `role-assignment`, `api-key`, `session`, `job`, `audit-log`, `setting`; namespace selalu ada, dapat direferensikan tanpa `depends_on` (`platform/02` §9)  
 
 ### 6.4 API keys
 - [ ] 6.4.1 `api_key` Entity — create (return key once), list (masked), revoke, expiry  
 - [ ] 6.4.2 Scope — per workspace or per app  
-- [ ] 6.4.3 API key auth middleware — header `X-Forma-Key` (`01-core-basic.md` §8.2; surface external TIDAK menerima session cookie)  
+- [ ] 6.4.3 API key auth middleware — header `X-FormSpec-Key` (`01-core-basic.md` §8.2; surface external TIDAK menerima session cookie)  
 
 ### 6.5 Session management
 - [ ] 6.5.1 `session` Entity — session_id, user, workspace, IP, user-agent, created/expires/last_active  
@@ -434,7 +442,7 @@ layout contoh `examples/Clinic-UI-Showcase/spec/` (entity-centric + `spec/` cont
 - [ ] 6.5.5 Session expiry + cleanup job  
 
 ### 6.6 Auth middleware pipeline
-- [ ] 6.6.1 Auth method detection — Bearer JWT vs `X-Forma-Key` API key vs session cookie (session cookie hanya surface `/_ui`)  
+- [ ] 6.6.1 Auth method detection — Bearer JWT vs `X-FormSpec-Key` API key vs session cookie (session cookie hanya surface `/_ui`)  
 - [ ] 6.6.2 Token validation → identity extraction → permission loading → workspace context  
 - [ ] 6.6.3 Rate limiting per auth method  
 - [ ] 6.6.4 Audit log every auth attempt (success + failure)  
@@ -478,13 +486,13 @@ layout contoh `examples/Clinic-UI-Showcase/spec/` (entity-centric + `spec/` cont
 - [ ] 7.3.1 Tier 1 (outbox) — event → match Subscription → call handler; transactional  
 - [ ] 7.3.2 Tier 2 (streaming) — Redis/Kafka; at-least-once, positioned replay, filter/transform Starlark  
 - [ ] 7.3.3 `emits:` custom event emission — action declares `emits: <event-name>` → event emitted on action success  
-- [ ] 7.3.4 Dynamic subscriptions — runtime-created subscriptions as data (not manifest); live in `forma.core`  
-- [ ] 7.3.5 Delivery channels — `webhook` (outbound, HMAC signed, retry), `notification` (bridge to `forma/notify`), `pubsub` (non-durable, at-most-once)  
+- [ ] 7.3.4 Dynamic subscriptions — runtime-created subscriptions as data (not manifest); live in `formspec.core`  
+- [ ] 7.3.5 Delivery channels — `webhook` (outbound, HMAC signed, retry), `notification` (bridge to `formspec/notify`), `pubsub` (non-durable, at-most-once)  
 
 ### 7.4 `kind: Workflow` engine
 - [ ] 7.4.1 Approval state machine — attach to Entity transition without modifying Entity  
 - [ ] 7.4.2 Multi-approver modes — `all` (all eligible must approve), `any` (quorum from pool), `sequential` (chain order)  
-- [ ] 7.4.3 `when` condition — FormaExpr on `resource`; step skipped if false  
+- [ ] 7.4.3 `when` condition — FormSpecExpr on `resource`; step skipped if false  
 - [ ] 7.4.4 `escalation` — timeout (`after`), notify_roles, reassign_roles  
 - [ ] 7.4.5 Requester can never approve own request  
 - [ ] 7.4.6 Approval = signed statement recorded in audit trail  
@@ -505,7 +513,7 @@ layout contoh `examples/Clinic-UI-Showcase/spec/` (entity-centric + `spec/` cont
 - [ ] 7.7.1 Listen → call bridge — `listen.resource`+`event` triggers `call.resource`+`action`  
 - [ ] 7.7.2 Mandatory symmetric cancel handler — every Integrator MUST provide cancel handler  
 - [ ] 7.7.3 Target action must be `idempotent: true` for cross-boundary calls  
-- [ ] 7.7.4 Saga compensate — cross-boundary call registers `compensate` to Saga log; `FORMA.SAGA.*` errors  
+- [ ] 7.7.4 Saga compensate — cross-boundary call registers `compensate` to Saga log; `FORMSPEC.SAGA.*` errors  
 
 ### 7.8 Hook engine
 - [ ] 7.8.1 5 hook points — `before`, `after`, `on_error`, `before_deliver`, `after_deliver`  
@@ -531,9 +539,9 @@ layout contoh `examples/Clinic-UI-Showcase/spec/` (entity-centric + `spec/` cont
 ### 7.11 Period closing
 - [ ] 7.11.1 `period-closing` as Entity — gets lifecycle, reference guard, audit trail for free  
 - [ ] 7.11.2 `submit` → finalize summary period; `cancel` (reopen) → unfinalize  
-- [ ] 7.11.3 Reopen requires elevated permission + recorded reason → `FORMA.PERIOD.REOPEN_DENIED`  
+- [ ] 7.11.3 Reopen requires elevated permission + recorded reason → `FORMSPEC.PERIOD.REOPEN_DENIED`  
 - [ ] 7.11.4 Business calendar day resolution — `today`/`current` from EOD, not system clock  
-- [ ] 7.11.5 `FORMA.PERIOD.CLOSED` enforcement for create/update/submit/amend in closed period  
+- [ ] 7.11.5 `FORMSPEC.PERIOD.CLOSED` enforcement for create/update/submit/amend in closed period  
 
 ### 7.12 Rate limiter
 - [ ] 7.12.1 Per-resource rate limit — `max`, `per`, `scope` (tenant|user|ip|global), `strategy` (sliding_window|token_bucket)  
@@ -575,21 +583,21 @@ layout contoh `examples/Clinic-UI-Showcase/spec/` (entity-centric + `spec/` cont
 
 ### 7.19 `kind: Mockup` runtime
 - [ ] 7.19.1 Mock connector — simulated third-party API response; `for` menunjuk Service/Webhook yang di-mock; `config_ref` ke Config  
-- [ ] 7.19.2 Dev-only gate — Mockup hanya aktif di `forma dev`; production → `forma apply` menolak atau warning  
+- [ ] 7.19.2 Dev-only gate — Mockup hanya aktif di `formspec dev`; production → `formspec apply` menolak atau warning  
 
 ---
 
 ## Fase 8: Production Self-Hosting Single Server
 
-**Goal**: `forma serve --mode=production` — production-grade, single-server, no Control Plane.
+**Goal**: `formspec serve --mode=production` — production-grade, single-server, no Control Plane.
 
 ### 8.1 Production mode
-- [ ] 8.1.1 `forma serve --mode=production` — disable dev shortcuts: no auto-approve, no self-signed, no dev auth  
+- [ ] 8.1.1 `formspec serve --mode=production` — disable dev shortcuts: no auto-approve, no self-signed, no dev auth  
 - [ ] 8.1.2 Production JWT — RS256/ES256 (test + wire to config)  
 - [ ] 8.1.3 HTTPS — TLS configuration  
 - [ ] 8.1.4 Production datastore — Postgres (not SQLite)  
 - [ ] 8.1.5 CORS origin allow-list — production TIDAK boleh `Access-Control-Allow-Origin: *` (saat ini hardcoded, `runtimes/05-engine-api-layer.md` §2.2)  
-- [ ] 8.1.6 Peran DB least-privilege — `forma_ops_backup` (REPLICATION-only), `forma_ops_ddl` (DDL-only, NOSUPERUSER), tanpa superuser manusia (`platform/06-datastore.md` §8)  
+- [ ] 8.1.6 Peran DB least-privilege — `formspec_ops_backup` (REPLICATION-only), `formspec_ops_ddl` (DDL-only, NOSUPERUSER), tanpa superuser manusia (`platform/06-datastore.md` §8)  
 
 ### 8.2 Observability
 - [ ] 8.2.1 Structured JSON-lines logging — 12 mandatory fields: timestamp, level, request_id, workspace, module, entity, action, actor, duration_ms, error_code, trace_id, environment  
@@ -622,7 +630,7 @@ layout contoh `examples/Clinic-UI-Showcase/spec/` (entity-centric + `spec/` cont
 
 ### 10.1 Spec hot-reload ✅
 - [x] 10.1.1 `App.ReloadSpec()` — rebuild semua registri dari spec directory, atomic swap
-- [x] 10.1.2 `watchSpecForChanges()` — fsnotify watcher di `forma dev`, debounce 300ms
+- [x] 10.1.2 `watchSpecForChanges()` — fsnotify watcher di `formspec dev`, debounce 300ms
 - [x] 10.1.3 Native Go handlers preserved across reload via `nativeHandlers` map
 - [x] 10.1.4 WebSocket connections preserved via WSHub transfer
 - [x] 10.1.5 Auto-watch subdirektori baru
@@ -631,37 +639,48 @@ layout contoh `examples/Clinic-UI-Showcase/spec/` (entity-centric + `spec/` cont
 - [ ] 9.3.2 Validate generated types against manual `types/manifest.ts`  
 
 ### 9.4 Developer guide
-- [ ] 9.4.1 "Buat App Pertama Anda dengan Forma" — getting started guide  
+- [ ] 9.4.1 "Buat App Pertama Anda dengan FormSpec" — getting started guide  
 
 ### 9.5 Retirement
 - [ ] 9.5.1 Final audit `docs_old/` — verify all content migrated; archive or delete  
 
 ---
 
-## Fase 10: `forma consult` — AI Business Consultant & Spec Author
+## Fase 10: `formspec consult` — AI Business Consultant & Spec Author
 
-**Goal**: AI membantu discovery kebutuhan bisnis + menulis spec Forma yang valid, lewat grounding
+**Goal**: AI membantu discovery kebutuhan bisnis + menulis spec FormSpec yang valid, lewat grounding
 (tool nyata) dan validasi wajib server-side — bukan bergantung kedisiplinan LLM.
-**Depends on**: Module Vendoring §6/§2.1 (`vendors/`, `forma.lock`, alias — untuk
+**Depends on**: Module Vendoring §6/§2.1 (`vendors/`, `formspec.lock`, alias — untuk
 `list_installed_modules()` yang akurat) dan Marketplace (`ai_index`, trust tier) — keduanya masih
 di tabel Deferred di bawah, jadi Fase ini realistis baru mulai setelah salah satunya landing.
-**Sumber**: `docs/ai/` (README + 01–06), `docs/cli-tools/05-forma-consult.md` (referensi verb).
+**Sumber**: `docs/ai/` (README + 01–06), `docs/cli-tools/05-formspec-consult.md` (referensi verb).
 
-### 10.1 `forma mcp-serve` — subcommand Go baru
-- [ ] 10.1.1 Subcommand `forma mcp-serve` — expose `forma-local-mcp` lewat stdio, pembungkus tipis `forma-core` (`docs/ai/03-forma-local-mcp.md`)
+### 10.0 Jalur tanpa-MCP — agent-assisted app development ✅
+
+> Jalur yang berjalan hari ini **tanpa** MCP — lihat
+> `docs/plan/agent-assisted-app-development.md`. MCP (10.1–10.7 di bawah) tetap
+> di-defer.
+
+- [x] 10.0.1 Skill `formspec-app-workflow`: section Phase Detection + No-MCP Tool Map
+- [x] 10.0.2 `formspec init`: copilot-instructions mereferensikan workflow 4 fase + `formspec validate` gate; `init_test.go`
+- [x] 10.0.3 Guide `docs/guides/agent-assisted-app-development.md` + index
+- [x] 10.0.4 Contoh `examples/cafe/` (16 manifest, 0 problem) — dibangun lewat alur ini
+
+### 10.1 `formspec mcp-serve` — subcommand Go baru
+- [ ] 10.1.1 Subcommand `formspec mcp-serve` — expose `formspec-local-mcp` lewat stdio, pembungkus tipis `formspec-core` (`docs/ai/03-formspec-local-mcp.md`)
 - [ ] 10.1.2 Tool read-only: `list_kind_schemas(kind)`, `read_workspace_manifest()`, `list_installed_modules()`, `read_module_spec(module,kind,name)` (03 §1); untuk modul `vendors/` hanya ekstraksi field metadata, bukan dump mentah spec (02 §2, 04 §3.1)
 - [ ] 10.1.3 Tool `propose_spec_file(path,content)` — tulis draft ke sesi + jalankan `validate_spec` otomatis (03 §2)
 - [ ] 10.1.4 Tool `apply_draft(session,file)` — pindahkan draft ke lokasi asli, guard read-only `vendors/` (03 §4)
-- [ ] 10.1.5 Tool `validate_spec(yaml)` / `check_naming_conflict(name)` — reuse package sama dengan `forma apply --dry-run`/boot `forma-server`, bukan reimplementasi (03 §3)
-- [ ] 10.1.6 Tool `restart_server()` / `get_server_status()` / `stop_server()` — kontrol proses `forma dev` lokal (03 §5)
-- [ ] 10.1.7 Tool `list_skills()` / `read_skill(name)` — index dan isi Forma Skill (03 §1, 06)
+- [ ] 10.1.5 Tool `validate_spec(yaml)` / `check_naming_conflict(name)` — reuse package sama dengan `formspec apply --dry-run`/boot `formspec-server`, bukan reimplementasi (03 §3)
+- [ ] 10.1.6 Tool `restart_server()` / `get_server_status()` / `stop_server()` — kontrol proses `formspec dev` lokal (03 §5)
+- [ ] 10.1.7 Tool `list_skills()` / `read_skill(name)` — index dan isi FormSpec Skill (03 §1, 06)
 
-### 10.2 `forma-consult` client (TypeScript + Vercel AI SDK)
+### 10.2 `formspec-consult` client (TypeScript + Vercel AI SDK)
 - [ ] 10.2.1 Scaffold project TypeScript, compile jadi binary standalone via `bun build --compile` (`docs/ai/01-architecture.md` §2)
-- [ ] 10.2.2 Tool-use loop (`ToolLoopAgent`) — spawn `forma mcp-serve` sebagai child process stdio (01 §3)
+- [ ] 10.2.2 Tool-use loop (`ToolLoopAgent`) — spawn `formspec mcp-serve` sebagai child process stdio (01 §3)
 - [ ] 10.2.3 LLM Provider Layer — BYOK, provider adapter (Anthropic/OpenAI/dst.), minimum capability bar tool-calling + context window (`docs/ai/05-llm-provider-layer.md`)
 - [ ] 10.2.4 Credential storage — interface `CredentialStore`, `zalando/go-keyring` tiered ke environment variable (05 §3)
-- [ ] 10.2.5 REPL — kelola sesi, render diff (unified diff teks cukup untuk versi awal) (`docs/ai/02-forma-consult.md`)
+- [ ] 10.2.5 REPL — kelola sesi, render diff (unified diff teks cukup untuk versi awal) (`docs/ai/02-formspec-consult.md`)
 - [ ] 10.2.6 Auto-invoke deterministik saat sesi mulai (`read_workspace_manifest`+`list_installed_modules`+`list_skills`) — bukan bergantung inisiatif LLM (01 §5)
 - [ ] 10.2.7 Kompresi riwayat sesi panjang — distilasi turn lama jadi ringkasan terstruktur, transcript penuh tetap di disk, jaga pasangan `tool_use`/`tool_result` (01 §6)
 
@@ -671,24 +690,24 @@ di tabel Deferred di bawah, jadi Fase ini realistis baru mulai setelah salah sat
 - [ ] 10.3.3 Jalur online eksplisit terpisah untuk verifikasi signature/trust-tier vendor module (03 §3)
 
 ### 10.4 Session storage & diff
-- [ ] 10.4.1 `.forma/consult/{session}/` — `transcript.md`, `discovery-summary.md`, `draft/`, `undo/` (02 §3)
-- [ ] 10.4.2 `forma consult diff` — unified diff `draft/` vs `modules/`/`vendors/` project asli (02 §4)
+- [ ] 10.4.1 `.formspec/consult/{session}/` — `transcript.md`, `discovery-summary.md`, `draft/`, `undo/` (02 §3)
+- [ ] 10.4.2 `formspec consult diff` — unified diff `draft/` vs `modules/`/`vendors/` project asli (02 §4)
 - [ ] 10.4.3 Accept/reject per file → `apply_draft` (02 §4)
 
-### 10.5 `forma-remote-mcp` (Forma Cloud, hosted)
-- [ ] 10.5.1 Streamable HTTP server — `list_business_templates()`, `search_modules_registry(query)`, `get_module_detail(name)` (`docs/ai/04-forma-remote-mcp.md`)
-- [ ] 10.5.2 Katalog industry template awal, 100% Forma-authored — pattern YAML + probing questions (04 §1)
+### 10.5 `formspec-remote-mcp` (FormSpec Cloud, hosted)
+- [ ] 10.5.1 Streamable HTTP server — `list_business_templates()`, `search_modules_registry(query)`, `get_module_detail(name)` (`docs/ai/04-formspec-remote-mcp.md`)
+- [ ] 10.5.2 Katalog industry template awal, 100% FormSpec-authored — pattern YAML + probing questions (04 §1)
 - [ ] 10.5.3 pgvector embedding untuk `search_modules_registry` — model multilingual (Voyage AI/BGE-M3), hybrid dengan `aliases:` eksplisit (04 §2)
 - [ ] 10.5.4 `ai_index`/`skills_for_ai` untrusted-input handling — wajib selesai sebelum trust tier `community` dibuka untuk field ini (04 §3.1)
 
-### 10.6 Forma Skill
-- [ ] 10.6.1 Format YAML frontmatter + Markdown body — `name`, `description`, `applies_to_kind`, `min_core_spec_version` (`docs/ai/06-forma-skill.md` §2)
+### 10.6 FormSpec Skill
+- [ ] 10.6.1 Format YAML frontmatter + Markdown body — `name`, `description`, `applies_to_kind`, `min_core_spec_version` (`docs/ai/06-formspec-skill.md` §2)
 - [ ] 10.6.2 Skill pertama: entity-authoring, form-layout, entity-extension-authoring, module-vendoring (06 §2, §4)
-- [ ] 10.6.3 Bundling bersama instalasi `forma` (ikut siklus rilis, dicek vs Core Spec lokal), dibaca lewat `list_skills()`/`read_skill()` (06 §2–§3)
+- [ ] 10.6.3 Bundling bersama instalasi `formspec` (ikut siklus rilis, dicek vs Core Spec lokal), dibaca lewat `list_skills()`/`read_skill()` (06 §2–§3)
 - [ ] 10.6.4 Re-cek skill relevan sebagai bagian composite `propose_spec_file` — pemicu deterministik, bukan inisiatif LLM (06 §3)
 
 ### 10.7 Operational safety
-- [ ] 10.7.1 Snapshot & undo — auto-backup file-level di `.forma/consult/{session}/undo/` sebelum `apply_draft` menimpa (02 §4)
+- [ ] 10.7.1 Snapshot & undo — auto-backup file-level di `.formspec/consult/{session}/undo/` sebelum `apply_draft` menimpa (02 §4)
 - [ ] 10.7.2 Guard read-only `vendors/` ditegakkan di semua tool tulis, bukan konvensi dokumentasi (03 §4)
 
 ---
@@ -716,19 +735,19 @@ Referensi: `docs/changelog/2026-07-31-001-resolusi-review-schema-docs.md`.
 
 | Area | Reason |
 |---|---|
-| `forma-ctl` (all modes: region, cluster, standalone) | Control Plane — cloud deployment phase |
-| K8s Operator (`forma-operator`) | Production infrastructure |
+| `formspec-ctl` (all modes: region, cluster, standalone) | Control Plane — cloud deployment phase |
+| K8s Operator (`formspec-operator`) | Production infrastructure |
 | Marketplace (pricing, metering, licensing) | Business features |
 | Control Plane (Environment, Policy/OPA, transparency log, key model, contracts) | Governance |
 | Two-stage deployment pipeline (register→deploy, snapshot, evidence) | Requires Control Plane |
-| `forma promote/archive/saga/module/sign/script/freeze/rollback/lock/workspace/suspend` | CLI — depend on Control Plane |
-| Module vendoring & activation — `vendors/`/`overrides/` folders, `forma.lock`, install-time alias on name conflict, marker-based activation (`--use`), shadow copy (`forma override adopt/diff`) for `Form`/`Menu`/`VisualSpecKind` instances | Design agreed (`docs/spec/platform/08-project-layout.md` §6, `docs/spec/platform/02-workspace-app-module.md` §2.1), depends on `forma module install`/Marketplace maturity — open questions in §6.5 need resolving first |
-| `forma consult` task breakdown — see **Fase 10** above | Zero implementation; realistically starts after Module vendoring or Marketplace (below) lands |
+| `formspec promote/archive/saga/module/sign/script/freeze/rollback/lock/workspace/suspend` | CLI — depend on Control Plane |
+| Module vendoring & activation — `vendors/`/`overrides/` folders, `formspec.lock`, install-time alias on name conflict, marker-based activation (`--use`), shadow copy (`formspec override adopt/diff`) for `Form`/`Menu`/`VisualSpecKind` instances | Design agreed (`docs/spec/platform/08-project-layout.md` §6, `docs/spec/platform/02-workspace-app-module.md` §2.1), depends on `formspec module install`/Marketplace maturity — open questions in §6.5 need resolving first |
+| `formspec consult` task breakdown — see **Fase 10** above | Zero implementation; realistically starts after Module vendoring or Marketplace (below) lands |
 | Conformance test-suite VisualSpecKind/Renderer/PersistBackend (fixture, trust tier `verified`/`official`) | Terkait Marketplace/distribusi — `frontend/02` §6, `frontend/03` §5, `backend/04` §7 |
 | Print: thermal/dotmatrix | Niche — PDF sufficient |
 | gRPC + mTLS transport | Cloud deployment |
 | Platform signing (HSM/KMS) | Cloud deployment |
-| Generic Docker image (`formahub/forma-resource`) | Cloud deployment |
+| Generic Docker image (`formahub/formspec-resource`) | Cloud deployment |
 | Scale-to-zero | Cloud deployment |
 | Unmanaged client codegen (Dart, Flutter) | Future SDK |
 

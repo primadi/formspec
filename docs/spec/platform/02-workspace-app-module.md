@@ -22,13 +22,13 @@ pemilik objek. Satu Module yang sama boleh di-mount lebih dari satu App
 dalam workspace yang sama, masing-masing meng-expose subset berbeda (App
 internal vs App publik yang mengakses data sama).
 
-**Workspace adalah satu-satunya model multi-tenancy Forma.** Aplikasi
+**Workspace adalah satu-satunya model multi-tenancy FormSpec.** Aplikasi
 ditulis sepenuhnya *tenancy-blind* — tidak ada kode aplikasi yang memilih
 strategi tenancy, dan **setiap Entity tenant-isolated secara default,
 tanpa pengecualian**; satu workspace = satu tenant terisolasi. **Tidak ada
 akses lintas-workspace dalam bentuk apa pun** di dalam framework — kalau
 integrasi lintas-workspace suatu saat dibutuhkan, itu hidup di level
-external service, di luar Forma Framework. Data `characteristic: reference`
+external service, di luar FormSpec Framework. Data `characteristic: reference`
 dimiliki App Owner (di-seed lewat rilis, read-only bagi Data Owner;
 backend juga mendukung **find-or-create** otomatis saat pertama kali
 diakses — lihat [`backend/01-core-basic.md`](../backend/01-core-basic.md) §1.1);
@@ -36,7 +36,7 @@ seluruh data tenant-isolated lainnya dimiliki Data Owner. Strategi dan
 topologi isolasi (single vs multi, pooled vs isolated, tiering) **bukan
 urusan spec aplikasi** — diputuskan saat deployment oleh Platform Operator
 ([`04-control-plane.md`](04-control-plane.md) §2). Tenant besar yang ingin
-server sendiri memakai lisensi enterprise dan menjalankan Forma Cloud-nya
+server sendiri memakai lisensi enterprise dan menjalankan FormSpec Cloud-nya
 sendiri sebagai Platform Operator, bukan lewat mode tenancy khusus di dalam
 aplikasi.
 
@@ -46,11 +46,11 @@ scanning file, bukan didaftar manual (`metadata.name` = permission
 namespace). Struktur di dalamnya adalah *closed set*: Document,
 Service, instance VisualSpecKind (Page/Form/Table/dst.), dan deklarasi
 permission yang mengikat semuanya — bukan tipe bebas. Module tidak wajib
-mengisi semua jenis itu; Module murni integrasi (mis. `forma/tax-calculator`)
+mengisi semua jenis itu; Module murni integrasi (mis. `formspec/tax-calculator`)
 boleh cuma berisi Service.
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Module
 metadata:
   name: general-ledger
@@ -58,7 +58,7 @@ spec:
   version: 1.2.0
   vendor: acme-corp
   depends:
-    - module: forma/core
+    - module: formspec/core
     - module: billing
       version: ">=1.0 <2.0"
   datastore: default    # opsional — nama kind: Datastore untuk ctx.db()
@@ -70,8 +70,8 @@ spec:
     # Currency, locale, timezone → settings.* (global), bukan di sini
     # Lihat ../backend/01-core-basic.md §10
   menu: []    # default menu suggestion, module-relative — lihat §4
-  ai_index:   # opsional — metadata discovery untuk Forma AI, lihat
-              # ../../ai/04-forma-remote-mcp.md §3
+  ai_index:   # opsional — metadata discovery untuk FormSpec AI, lihat
+              # ../../ai/04-formspec-remote-mcp.md §3
     category: payment
     features: [charge, refund, webhook_callback]
     integration_pattern: |
@@ -84,9 +84,9 @@ spec:
 `metadata.name` yang ditulis pembuat module (mis. `billing`) **tidak
 dijamin unik secara global** — dua vendor berbeda boleh memilih nama yang
 sama. Identitas unik sesungguhnya ada di **source** module (mis.
-`github.com/acme/billing-module`), dicatat di `forma.lock`
+`github.com/acme/billing-module`), dicatat di `formspec.lock`
 ([`08-project-layout.md`](08-project-layout.md) §6.2). Ini hanya berlaku
-untuk module yang diinstal lewat `forma module install`
+untuk module yang diinstal lewat `formspec module install`
 ([`07-marketplace.md`](07-marketplace.md) §3) — Module lokal hand-authored
 tetap satu-satunya pemilik `metadata.name`-nya sendiri, tanpa alias.
 
@@ -100,14 +100,14 @@ spec:
   modules:
     - billing   # module lokal
 
-    # >>> forma:vendor github.com/acme/billing-module @1.0.0
+    # >>> formspec:vendor github.com/acme/billing-module @1.0.0
     # - acme-billing
-    # <<< forma:vendor
+    # <<< formspec:vendor
 ```
 
 Uncomment `- acme-billing` mengaktifkannya — bentuknya tetap string biasa,
 konsisten dengan elemen `App.spec.modules` lain (§3). Source dan versi asal
-tercatat di baris marker `>>>` dan di `forma.lock`
+tercatat di baris marker `>>>` dan di `formspec.lock`
 ([`08-project-layout.md`](08-project-layout.md) §6.2), bukan di bentuk
 entri itu sendiri.
 
@@ -118,7 +118,7 @@ surprise rename. Konsisten dengan prinsip gap-free yang sama dipegang di
 tempat lain di spec (mis. `ctx.next_key`, [`../backend/01-core-basic.md`](../backend/01-core-basic.md)) —
 nomor/nama tidak boleh berubah makna tergantung state runtime.
 
-**Enforcement saat boot:** `forma-server` mengecek nama efektif (alias
+**Enforcement saat boot:** `formspec-server` mengecek nama efektif (alias
 kalau ada, `metadata.name` kalau tidak) **hanya** untuk set module yang
 aktif. Bentrok di set aktif → refuse to boot dengan pesan jelas, minta
 alias manual. Module yang belum diaktifkan tidak pernah dicek — dua vendor
@@ -132,7 +132,7 @@ di satu workspace berjalan bersamaan dalam proses yang sama, dibedakan
 `root_url`.
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: App
 metadata:
   name: klinik-sehat-internal
@@ -187,16 +187,16 @@ di-resolve di level App, bukan enum tertutup:
   memeriksa atribut** App, user, membership, atau konteks lain
   (attribute-based) di samping pengecekan permission berbasis role.
 
-**"Forma-ID" bukan primitive tersendiri (normatif).** Konsep identitas
+**"FormSpec-ID" bukan primitive tersendiri (normatif).** Konsep identitas
 lintas-workspace dengan consent ledger portable (identitas manusia yang
 dikenali lintas banyak workspace, membawa riwayat consent) **di luar
-scope Forma Framework** — bertentangan langsung dengan prinsip tenancy §1:
+scope FormSpec Framework** — bertentangan langsung dengan prinsip tenancy §1:
 workspace adalah satu-satunya batas isolasi, tanpa akses lintas-workspace
 dalam bentuk apa pun. Kalau kebutuhan semacam itu muncul, tempatnya di
 level external service ([`../backend/01-core-basic.md`](../backend/01-core-basic.md)
-§3), bukan diselesaikan sebagai fitur Forma Framework.
+§3), bukan diselesaikan sebagai fitur FormSpec Framework.
 
-Yang tetap relevan dan **tidak butuh konsep baru**: Forma Cloud **boleh**
+Yang tetap relevan dan **tidak butuh konsep baru**: FormSpec Cloud **boleh**
 menawarkan server OIDC/OAuth terkelola sebagai kenyamanan infra — supaya
 App Owner tidak perlu memasang identity provider sendiri — persis seperti
 menawarkan Postgres terkelola. Ini cukup jadi **satu pilihan** di bawah
@@ -242,7 +242,7 @@ type MenuItem struct {
     Module   string      // wajib di leaf & node type:module; terlarang di grup
     View     string      // nama View terdaftar (Page/Table/Wizard/Kanban/Dashboard/Report/Timeline)
     Route    string      // escape hatch: URL mentah untuk leaf tanpa View terdaftar
-    When     string      // kondisi bisnis FormaExpr
+    When     string      // kondisi bisnis FormSpecExpr
     Children []MenuItem
 }
 ```
@@ -276,7 +276,7 @@ sendiri tanpa qualifier (`resource: invoice`, konteks sudah jelas satu
 module) — analog package-qualified reference di Go (`Invoice` dalam package
 sendiri vs `billing.Invoice` dari luar).
 
-## 6. Validasi `forma apply`
+## 6. Validasi `formspec apply`
 - Setiap `module` yang direferensikan di manapun dalam `App.spec.menu`
   (leaf atau adopt node) wajib anggota `App.spec.modules`.
 - `root_url` wajib unik lintas seluruh App dalam satu workspace dan diawali
@@ -326,12 +326,12 @@ bukan tambah primitive).
 **Akses lintas-module dalam satu workspace didukung penuh & terverifikasi
 tooling.** Selama masih dalam satu workspace, module boleh saling mengakses
 sesuai deklarasi `depends_on` + permission. Kejujuran deklarasi ditegakkan
-statis oleh **`forma check`** ([`../../cli-tools/02-forma-cli.md`](../../cli-tools/02-forma-cli.md)),
+statis oleh **`formspec check`** ([`../../cli-tools/02-formspec-cli.md`](../../cli-tools/02-formspec-cli.md)),
 yang wajib melaporkan minimal: (a) seluruh *unresolved varname* di script,
 (b) akses lintas-module yang **belum di-approve** (dipakai di kode tapi tak
 dideklarasikan/di-consent), dan (c) deklarasi lintas-module yang **tidak
 terpakai** (declared tapi tak pernah diakses — kandidat dicabut).
-`forma check --fix` memperbaiki yang bisa diperbaiki otomatis (menambah
+`formspec check --fix` memperbaiki yang bisa diperbaiki otomatis (menambah
 deklarasi yang kurang setelah konfirmasi, menghapus yang tak terpakai).
 
 ## 8. Identitas User & Membership
@@ -344,13 +344,13 @@ App publik dipakai pelanggan) walau keduanya me-mount Module yang sama.
 Definisi role tetap dimiliki Module → otomatis ter-scope per-App saat
 Module itu di-mount. Membership boleh membawa atribut (mis. kode cabang)
 yang dievaluasi authorization attribute-based (§3). Membership disimpan di
-`forma.core` dan didistribusikan ke Resource Plane lewat snapshot Plane
+`formspec.core` dan didistribusikan ke Resource Plane lewat snapshot Plane
 Protocol ([`04-control-plane.md`](04-control-plane.md) §1,
 [`05-plane-protocol.md`](05-plane-protocol.md) §4.1).
 
-## 9. Resource Bawaan `forma.core`
+## 9. Resource Bawaan `formspec.core`
 
-`forma.core` adalah namespace resource **yang selalu ada di setiap workspace**,
+`formspec.core` adalah namespace resource **yang selalu ada di setiap workspace**,
 terlepas dari Module apa pun yang terpasang — tidak perlu di-`depends_on`, tidak
 perlu diinstal, tidak dideklarasikan oleh Module mana pun. Enumerasi ini adalah
 referensi "apa yang selalu tersedia" bagi developer yang perlu merujuk resource
@@ -359,7 +359,7 @@ Module sendiri yang mendeklarasikannya.
 
 | Resource | Isi | Kaitan |
 |---|---|---|
-| `workspace` | Identitas dan metadata tenant — unit multi-tenancy tunggal Forma | §1 Model Kepemilikan |
+| `workspace` | Identitas dan metadata tenant — unit multi-tenancy tunggal FormSpec | §1 Model Kepemilikan |
 | `user` | Akun manusia di level workspace — satu akun per manusia | §8 Identitas User & Membership |
 | `app-membership` | Record membership per-App (populasi user + atribut mis. kode cabang, ter-scope per App) | §8 Identitas User & Membership |
 | `role` | Definisi role — dimiliki Module, otomatis ter-scope per-App saat Module di-mount | §8 |
@@ -370,11 +370,11 @@ Module sendiri yang mendeklarasikannya.
 | `audit-log` | Jejak audit bisnis append-only, immutable | [`../backend/02-core-extended.md`](../backend/02-core-extended.md) §11 Business Audit Trail |
 | `setting` | Namespace global-settings `settings.*` (workspace/App Config) | [`../backend/01-core-basic.md`](../backend/01-core-basic.md) §10 Config & Global Settings |
 
-Selain resource di atas, `forma.core` juga meng-expose **service endpoint
+Selain resource di atas, `formspec.core` juga meng-expose **service endpoint
 bawaan** `health` dan `metrics` untuk observability — kosakata health
 machine-readable dan set metric Prometheus didefinisikan di
 [`09-observability.md`](09-observability.md) (§5 Kosakata Health, §3 Metrics).
 
-Resource `forma.core` mengikuti model kepemilikan data workspace yang sama
+Resource `formspec.core` mengikuti model kepemilikan data workspace yang sama
 (§1): data ini milik workspace, bukan milik Module Owner mana pun. Akses tetap
 tunduk pada permission — merujuk resource ini bukan berarti bebas otorisasi.

@@ -1,4 +1,4 @@
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Module
 metadata:
   name: billing
@@ -6,7 +6,7 @@ metadata:
 spec:
   version: 1.0.0
   depends:
-    - module: forma/core
+    - module: formspec/core
   # Default menu suggestion (Core Basic §4.5) — migrated from the old
   # standalone kind: Menu (spec/modules/billing/menus/billing-menu.yaml).
   # `view:` leaves resolve their route from the referenced Page's own

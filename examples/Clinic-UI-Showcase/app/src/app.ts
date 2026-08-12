@@ -2,15 +2,15 @@
  * Clinic UI Showcase — TypeScript sidecar app entrypoint.
  *
  * Registers business-logic handlers for sidecar actions and starts the
- * App listener on FORMA_APP_SOCKET (unix:///tmp/forma/app.sock by default).
+ * App listener on FORMA_APP_SOCKET (unix:///tmp/formspec/app.sock by default).
  *
- * forma-sidecar (or forma dev --runtime node) will:
+ * formspec-sidecar (or formspec dev --runtime node) will:
  *   1. Spawn this app as a child process
  *   2. Call POST /invoke/pharmacy/otc-sale/sell when the sell action triggers
  *   3. Forward ctx.* primitive calls back to the engine over FORMA_SIDECAR_SOCKET
  */
 
-import { App } from "@forma/lib-forma";
+import { App } from "@formspec/lib-formspec";
 import { registerSellHandler } from "./handlers/otc_sell";
 
 const app = new App();

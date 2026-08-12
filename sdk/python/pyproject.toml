@@ -1,7 +1,7 @@
 [project]
-name = "lib-forma"
+name = "lib-formspec"
 version = "0.1.0"
-description = "Thin client SDK bridging a Python app to forma-sidecar: /invoke listener + ctx.* proxy client"
+description = "Thin client SDK bridging a Python app to formspec-sidecar: /invoke listener + ctx.* proxy client"
 license = { text = "FSL-1.1-ALv2" }
 requires-python = ">=3.9"
 
@@ -10,4 +10,4 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["lib_forma*"]
+include = ["lib_formspec*"]

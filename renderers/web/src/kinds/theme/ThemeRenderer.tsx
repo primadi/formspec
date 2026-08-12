@@ -79,7 +79,7 @@ export default function ThemeRenderer({ entry }: ThemeRendererProps) {
     // ── 2. Inject token <style> ──
     if (rules.length > 0) {
       const styleEl = document.createElement("style")
-      styleEl.id = `forma-theme-${entry.name}-tokens`
+      styleEl.id = `formspec-theme-${entry.name}-tokens`
       styleEl.textContent = rules.join("\n")
       document.head.appendChild(styleEl)
       styleRef.current = styleEl
@@ -88,7 +88,7 @@ export default function ThemeRenderer({ entry }: ThemeRendererProps) {
     // ── 3. Inject stylesheet if provided ──
     if (entry.spec.stylesheet) {
       const sheetEl = document.createElement("style")
-      sheetEl.id = `forma-theme-${entry.name}-sheet`
+      sheetEl.id = `formspec-theme-${entry.name}-sheet`
       sheetEl.textContent = entry.spec.stylesheet
       document.head.appendChild(sheetEl)
       sheetRef.current = sheetEl

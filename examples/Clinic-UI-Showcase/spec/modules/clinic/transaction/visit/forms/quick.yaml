@@ -1,6 +1,6 @@
 # SHOWCASE: form step-2 wizard — dropdown berantai (doctor_id ter-filter
 # polyclinic_id, dinyatakan depends_on di WizardStep).
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Form
 metadata:
   name: visit-quick

@@ -31,7 +31,7 @@ func TestValidateTransactionDate_BackdateExceeded(t *testing.T) {
 		if !ok {
 			t.Errorf("expected TransactionDatePolicyError, got %T", err)
 		}
-		if pe.Code != "FORMA.TXN.BACKDATE_EXCEEDED" {
+		if pe.Code != "FORMSPEC.TXN.BACKDATE_EXCEEDED" {
 			t.Errorf("expected code BACKDATE_EXCEEDED, got %s", pe.Code)
 		}
 	}
@@ -63,7 +63,7 @@ func TestValidateTransactionDate_ForwardDateExceeded(t *testing.T) {
 		if !ok {
 			t.Errorf("expected TransactionDatePolicyError, got %T", err)
 		}
-		if pe.Code != "FORMA.TXN.FORWARD_DATE_EXCEEDED" {
+		if pe.Code != "FORMSPEC.TXN.FORWARD_DATE_EXCEEDED" {
 			t.Errorf("expected code FORWARD_DATE_EXCEEDED, got %s", pe.Code)
 		}
 	}

@@ -1,20 +1,20 @@
 ---
-title: Forma vs Spring Boot
-description: Comparing Forma's spec-first declarative approach with Spring Boot's annotation-driven imperative ecosystem
+title: FormSpec vs Spring Boot
+description: Comparing FormSpec's spec-first declarative approach with Spring Boot's annotation-driven imperative ecosystem
 date: 2026-07-06
 ---
 
-# Forma vs Spring Boot
+# FormSpec vs Spring Boot
 
-> **Forma** is a spec-first ecosystem for building business applications in Go. **Spring Boot** is the dominant Java framework for enterprise application development, built on annotations, dependency injection, and a mature ecosystem of libraries.
+> **FormSpec** is a spec-first ecosystem for building business applications in Go. **Spring Boot** is the dominant Java framework for enterprise application development, built on annotations, dependency injection, and a mature ecosystem of libraries.
 
-These two frameworks target the same **enterprise application space** but with fundamentally different philosophies: declarative-contract-first (Forma) vs imperative-annotation-driven (Spring Boot).
+These two frameworks target the same **enterprise application space** but with fundamentally different philosophies: declarative-contract-first (FormSpec) vs imperative-annotation-driven (Spring Boot).
 
 ---
 
 ## 1. Overview
 
-### Forma
+### FormSpec
 A spec-first ecosystem where YAML manifests are the single source of truth for API, UI, documentation, state machines, permissions, and events. Built in Go (performance, low resource usage). Business logic via Go (native), Starlark (sandboxed scripting), or sidecar (any language). Includes a governance Control Plane with policy enforcement, artifact signing, and immutable audit trails.
 
 ### Spring Boot
@@ -24,7 +24,7 @@ The leading Java framework for enterprise applications. Uses annotations (`@Rest
 
 ## 2. Philosophy
 
-| | Forma | Spring Boot |
+| | FormSpec | Spring Boot |
 |---|---|---|
 | **How to define an entity** | Write YAML → framework generates schema, API, UI, types, docs | Write Java class + JPA annotations → framework generates schema, API (via `@RestResource`) |
 | **Source of truth** | The YAML manifest (one file, one truth) | The Java code + annotations (truth is scattered across files and annotations) |
@@ -37,17 +37,17 @@ The leading Java framework for enterprise applications. Uses annotations (`@Rest
 ## 3. Architecture
 
 ```
-Forma:                              Spring Boot:
+FormSpec:                              Spring Boot:
 ┌──────────────────────┐           ┌──────────────────────┐
 │  Control Plane        │           │  Your Application    │
-│  (forma-control)      │           │                      │
+│  (formspec-control)      │           │                      │
 │  Policy · Signing     │           │  @Controller         │
 │  Audit                │           │  @Service            │
 └──────────┬───────────┘           │  @Repository         │
            │ mTLS                  │  @Entity             │
 ┌──────────┴───────────┐           └──────────────────────┘
 │  Resource Plane       │                      │
-│  (forma-resource)     │              ┌───────┴───────┐
+│  (formspec-resource)     │              ┌───────┴───────┐
 │                      │              │  Spring        │
 │  Entity Engine       │              │  Framework     │
 │  State Machine       │              │  (DI, AOP,     │
@@ -59,15 +59,15 @@ Forma:                              Spring Boot:
 ```
 
 **Key differences:**
-- Forma has **two processes** (Control + Resource). Spring Boot runs as **a single process**.
-- Forma generates API routes **from YAML automatically**. Spring Boot generates routes **from annotations on methods**.
-- Forma uses **raw SQL** via `ctx.db`. Spring Boot standardizes on **JPA/Hibernate ORM**.
+- FormSpec has **two processes** (Control + Resource). Spring Boot runs as **a single process**.
+- FormSpec generates API routes **from YAML automatically**. Spring Boot generates routes **from annotations on methods**.
+- FormSpec uses **raw SQL** via `ctx.db`. Spring Boot standardizes on **JPA/Hibernate ORM**.
 
 ---
 
 ## 4. Feature Comparison
 
-| Dimension | Forma | Spring Boot |
+| Dimension | FormSpec | Spring Boot |
 |---|---|---|
 | **Paradigm** | Spec-first, declarative | Code-first, annotation-driven |
 | **Backend language** | Go (compiled, low resource usage) | Java / Kotlin (JVM, higher memory usage) |
@@ -87,7 +87,7 @@ Forma:                              Spring Boot:
 | **Scripting / Hot Reload** | ✅ Starlark (`script_ref`) — editable at runtime from admin panel | ❌ No built-in scripting (can integrate Lua, Groovy, or Nashorn but not idiomatic) |
 | **Polyglot Logic** | ✅ Sidecar container (PHP, Python, Node, Java) | ❌ JVM-only (Kotlin, Scala, etc. on JVM) |
 | **Ecosystem Maturity** | New (MVP in development) | Very mature (20+ years, vast library ecosystem) |
-| **Hosting** | Self-host (single binary, Docker, K8s) + Forma Cloud | Self-host (any: Tomcat, Jetty, K8s, cloud) |
+| **Hosting** | Self-host (single binary, Docker, K8s) + FormSpec Cloud | Self-host (any: Tomcat, Jetty, K8s, cloud) |
 | **Learning Curve** | Medium — YAML, Go, Starlark | High — Java ecosystem, JPA, DI, AOP, XML/Gradle/Maven |
 | **Startup time** | Instant (compiled Go binary) | Slow (JVM warmup, classpath scanning) |
 
@@ -95,7 +95,7 @@ Forma:                              Spring Boot:
 
 ## 5. When to Choose Which
 
-### Choose Forma when:
+### Choose FormSpec when:
 - You want **built-in enterprise patterns** that work out of the box (idempotency, outbox, locking, multi-tenancy) — no library research needed.
 - You value **low resource usage** and **fast startup** (microservices, serverless, edge deployment).
 - You want **governance by default** — policy enforcement, artifact signing, immutable audit.
@@ -115,9 +115,9 @@ Forma:                              Spring Boot:
 
 ## 6. Conclusion
 
-Forma and Spring Boot both target enterprise applications but approach them from opposite directions:
+FormSpec and Spring Boot both target enterprise applications but approach them from opposite directions:
 
-| Spring Boot | Forma |
+| Spring Boot | FormSpec |
 |---|---|
 | Java ecosystem, annotation-driven | Go, spec-first, declarative |
 | Vast library ecosystem (everything exists) | Small, curated set of official modules + marketplace |
@@ -127,6 +127,6 @@ Forma and Spring Boot both target enterprise applications but approach them from
 | ORM ecosystem (JPA/Hibernate) | Raw SQL (no ORM) |
 | Mature, battle-tested | New, rapidly evolving |
 
-**Spring Boot is the safe choice** for organizations that need proven reliability, massive hiring pools, and a library for every edge case. **Forma is the strategic choice** for teams that want lower operational overhead, built-in enterprise patterns, and a modern declarative workflow — without assembling 20 separate libraries.
+**Spring Boot is the safe choice** for organizations that need proven reliability, massive hiring pools, and a library for every edge case. **FormSpec is the strategic choice** for teams that want lower operational overhead, built-in enterprise patterns, and a modern declarative workflow — without assembling 20 separate libraries.
 
-> Forma's ambition is to make Go what Spring Boot made Java: **the language of choice for business applications.** But Forma adds what Spring Boot never had: a spec-first standard, a governance control plane, and a closed set of primitives that make security and reliability auditable by default.
+> FormSpec's ambition is to make Go what Spring Boot made Java: **the language of choice for business applications.** But FormSpec adds what Spring Boot never had: a spec-first standard, a governance control plane, and a closed set of primitives that make security and reliability auditable by default.

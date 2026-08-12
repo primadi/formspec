@@ -28,10 +28,17 @@
     "public": {
       "description": "If true (default), a route is generated for this page. Set false to restrict to embedding only.",
       "type": "boolean",
+      "examples": [
+        "true"
+      ],
       "nullable": true
     },
     "route": {
-      "type": "string"
+      "description": "@schema {example: \"/orders/:id\"}",
+      "type": "string",
+      "examples": [
+        "/orders/:id"
+      ]
     },
     "tabs": {
       "type": "array",
@@ -40,7 +47,11 @@
       }
     },
     "title": {
-      "type": "string"
+      "description": "@schema {example: \"Order {order.number}\"}",
+      "type": "string",
+      "examples": [
+        "Order {order.number}"
+      ]
     }
   },
   "required": [

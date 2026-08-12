@@ -3,7 +3,7 @@ package permission
 import (
 	"fmt"
 
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 // ValidateUses validates a UsesDecl declaration.

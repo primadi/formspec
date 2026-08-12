@@ -1,6 +1,6 @@
-# How to Run Forma
+# How to Run FormSpec
 
-Forma berjalan dengan **satu binary**: `forma`. Backend (Go API server) dan
+FormSpec berjalan dengan **satu binary**: `formspec`. Backend (Go API server) dan
 frontend (SPA React) sudah menjadi satu kesatuan — cukup satu perintah.
 
 ## Prasyarat
@@ -15,23 +15,23 @@ frontend (SPA React) sudah menjadi satu kesatuan — cukup satu perintah.
 
 ```bash
 # Dari root repository
-cd /workspaces/forma
+cd /workspaces/formspec
 
-go run ./cmd/forma/ dev \
+go run ./cmd/formspec/ dev \
   --spec examples/Clinic-UI-Showcase/spec \
-  --dsn "sqlite:.forma/clinic.db"
+  --dsn "sqlite:.formspec/clinic.db"
 ```
 
 Output yang diharapkan:
 ```
-[forma] engine loaded: 45 routes
-[forma] REST API on :8080
-[forma] SPA tersedia di http://localhost:8080/default/_admin
+[formspec] engine loaded: 45 routes
+[formspec] REST API on :8080
+[formspec] SPA tersedia di http://localhost:8080/default/_admin
 ```
 
 Buka `http://localhost:8080/default/_admin` — SPA sudah built-in.
 
-> **Tanpa npm, tanpa Vite, tanpa build frontend.** Cukup `forma dev`.
+> **Tanpa npm, tanpa Vite, tanpa build frontend.** Cukup `formspec dev`.
 
 Verifikasi API:
 ```bash
@@ -44,18 +44,18 @@ curl http://localhost:8080/default/_ui/_meta/me
 
 ### Lebih sederhana — dengan config file
 
-Buat `forma-sidecar.yaml` di folder project:
+Buat `formspec-sidecar.yaml` di folder project:
 
 ```yaml
 spec: examples/Clinic-UI-Showcase/spec
-dsn: sqlite:.forma/clinic.db
+dsn: sqlite:.formspec/clinic.db
 dev: true
 ```
 
 Lalu cukup:
 
 ```bash
-go run ./cmd/forma/ dev
+go run ./cmd/formspec/ dev
 ```
 
 ## Persona B — Butuh edit frontend (20% developer)
@@ -63,9 +63,9 @@ go run ./cmd/forma/ dev
 Jika Anda perlu mengedit `web/src/` (renderer, komponen, styles):
 
 ```bash
-go run ./cmd/forma/ dev \
+go run ./cmd/formspec/ dev \
   --spec examples/Clinic-UI-Showcase/spec \
-  --dsn "sqlite:.forma/clinic.db" \
+  --dsn "sqlite:.formspec/clinic.db" \
   --dev-ui
 ```
 
@@ -81,7 +81,7 @@ Edit file di `web/src/` → perubahan langsung kelihatan tanpa reload.
 
 **Terminal 1 — Backend:**
 ```bash
-go run ./cmd/forma/ dev --spec examples/Clinic-UI-Showcase/spec
+go run ./cmd/formspec/ dev --spec examples/Clinic-UI-Showcase/spec
 ```
 
 **Terminal 2 — Frontend:**
@@ -111,41 +111,41 @@ SPA sudah embedded di binary. Untuk production:
 cd web && npm run build && cd ..
 
 # Build binary
-cd /workspaces/forma
-go build ./cmd/forma/
+cd /workspaces/formspec
+go build ./cmd/formspec/
 
 # Jalankan
-./forma dev --spec ./spec
+./formspec dev --spec ./spec
 ```
 
 Atau gunakan `go install`:
 
 ```bash
-go install github.com/primadi/forma/cmd/forma@latest
-forma dev --spec ./my-app/spec
+go install github.com/primadi/formspec/cmd/formspec@latest
+formspec dev --spec ./my-app/spec
 ```
 
 ## Reset Database
 
 ```bash
-rm -rf .forma/
+rm -rf .formspec/
 ```
 
-Database akan auto-generate saat `forma dev` dijalankan ulang.
+Database akan auto-generate saat `formspec dev` dijalankan ulang.
 
 ## Flag Referensi
 
 | Flag | Default | Fungsi |
 |---|---|---|
 | `--spec` | `./spec` | Path ke direktori YAML manifests |
-| `--dsn` | `sqlite:.forma/data.db` | Database DSN (sqlite atau postgres) |
+| `--dsn` | `sqlite:.formspec/data.db` | Database DSN (sqlite atau postgres) |
 | `--addr` | `:8080` | REST API listen address |
 | `--listen` | `none` | Mode ctx listener: `none`, `local_http`, `unix_socket` |
 | `--app-endpoint` | `none` | Mode app endpoint: `none`, `local_http`, `unix_socket` |
 | `--runtime` | auto-detect | Runtime: `local`, `php`, `python`, `node` |
 | `--dev` | `false` | Dev mode (implied oleh `--dev-ui`) |
 | `--dev-ui` | `false` | Development UI: spawn Vite HMR |
-| `--state-dir` | `.forma` | Local state directory (auto-create) |
+| `--state-dir` | `.formspec` | Local state directory (auto-create) |
 | `--web-dir` | auto-detect | Override SPA directory |
 
 > `--listen` dan `--app-endpoint` default `none` — untuk single process tidak
@@ -155,7 +155,7 @@ Database akan auto-generate saat `forma dev` dijalankan ulang.
 
 ### Port already in use
 
-`forma dev` otomatis kill previous instance (`--force` implied saat `--dev`).
+`formspec dev` otomatis kill previous instance (`--force` implied saat `--dev`).
 Jika port dipakai program lain:
 
 ```bash
@@ -180,19 +180,19 @@ gunakan `--listen local_http` (TCP, tanpa permission khusus).
 ### Billing
 
 ```bash
-go run ./cmd/forma/ dev --spec verticals/billing/spec
+go run ./cmd/formspec/ dev --spec verticals/billing/spec
 ```
 
 ### Reference App
 
 ```bash
-go run ./cmd/forma/ dev --spec examples/reference-app/spec
+go run ./cmd/formspec/ dev --spec examples/reference-app/spec
 ```
 
 ## Arsitektur Singkat
 
 ```
-Browser ─── forma dev (:8080)
+Browser ─── formspec dev (:8080)
                 │
         ┌───────┴───────┐
         │  Entity Engine│
@@ -204,6 +204,6 @@ Browser ─── forma dev (:8080)
         └───────────────┘
 ```
 
-- **Single binary**: `forma` — backend + frontend dalam satu proses
+- **Single binary**: `formspec` — backend + frontend dalam satu proses
 - **SPA built-in**: via `//go:embed web/dist/*`
 - **Vite HMR**: opsional (`--dev-ui`) untuk development frontend

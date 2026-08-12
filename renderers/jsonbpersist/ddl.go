@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 // TableInfo holds the result of DDL generation for one entity.
@@ -306,7 +306,7 @@ func generateIndexConstraint(table, field string, unique bool) string {
 	return fmt.Sprintf("CREATE INDEX %s ON %s (%s);", idxName, table, colName)
 }
 
-// fieldTypeToSQL maps a Forma FieldType to SQL type.
+// fieldTypeToSQL maps a FormSpec FieldType to SQL type.
 // params: enumValues for FieldEnum
 func fieldTypeToSQL(ft spec.FieldType, _ []string) string {
 	switch ft {
@@ -413,7 +413,7 @@ func qualifiedName(schema, table string, driver DriverType) string {
 	return table
 }
 
-// TableName returns the entity table name following Forma convention.
+// TableName returns the entity table name following FormSpec convention.
 func TableName(module, entity, plural string) string {
 	if plural == "" {
 		plural = inflectPlural(entity)

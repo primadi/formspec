@@ -112,7 +112,7 @@ export default function PrintRenderer({ entry }: PrintRendererProps) {
         {entry.spec.header && (
           <div className="border-b pb-4 mb-6">
             {entry.spec.header.logo && (
-              <div className="text-2xl font-bold mb-2">Forma</div>
+              <div className="text-2xl font-bold mb-2">FormSpec</div>
             )}
             {entry.spec.header.title && (
               <h1 className="text-xl font-bold">

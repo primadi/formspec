@@ -1,14 +1,14 @@
 # Order-to-Cash Technical Companion
 
 **Status:** Draft
-**Audience:** Developers evaluating Forma — technical deep-dive
-**Prerequisites:** [Forma Overview](../spec/platform/01-overview.md) · [Core Basic Spec](../spec/backend/01-core-basic.md) · [O2C Tutorial](./order-to-cash-tutorial.md)
+**Audience:** Developers evaluating FormSpec — technical deep-dive
+**Prerequisites:** [FormSpec Overview](../spec/platform/01-overview.md) · [Core Basic Spec](../spec/backend/01-core-basic.md) · [O2C Tutorial](./order-to-cash-tutorial.md)
 
-> This document is the technical companion to the Order-to-Cash tutorial. It compares building the same application with and without Forma, catalogs the test-drive findings from writing the spec against real requirements, and maps every requirement to the exact Forma construct that handles it.
+> This document is the technical companion to the Order-to-Cash tutorial. It compares building the same application with and without FormSpec, catalogs the test-drive findings from writing the spec against real requirements, and maps every requirement to the exact FormSpec construct that handles it.
 
 ---
 
-## 1. Scenario A — Without Forma (Plain Go/Gin, Three Review Rounds)
+## 1. Scenario A — Without FormSpec (Plain Go/Gin, Three Review Rounds)
 
 What happens when an AI coding assistant builds this in plain Go, with a reviewer catching issues over three rounds:
 
@@ -29,9 +29,9 @@ What happens when an AI coding assistant builds this in plain Go, with a reviewe
 
 ---
 
-## 2. Scenario B — With Forma Core Basic
+## 2. Scenario B — With FormSpec Core Basic
 
-The same requirements, built with Forma (see the [tutorial](./order-to-cash-tutorial.md) for the full walkthrough). Every requirement maps to a **declared, framework-enforced construct**:
+The same requirements, built with FormSpec (see the [tutorial](./order-to-cash-tutorial.md) for the full walkthrough). Every requirement maps to a **declared, framework-enforced construct**:
 
 | Requirement | Construct | Why it's different |
 |---|---|---|
@@ -56,9 +56,9 @@ The same requirements, built with Forma (see the [tutorial](./order-to-cash-tuto
 
 ---
 
-## 3. Scenario C — Forma + Agent Skill
+## 3. Scenario C — FormSpec + Agent Skill
 
-Agent Skills are rules that constrain AI coding assistants to Forma's structural requirements:
+Agent Skills are rules that constrain AI coding assistants to FormSpec's structural requirements:
 
 - Manifest first, `impl` second
 - Every action MUST have `required_permission` + `uses` — missing = reject generation
@@ -67,7 +67,7 @@ Agent Skills are rules that constrain AI coding assistants to Forma's structural
 - External integrations MUST be `kind: Service`
 - Webhooks MUST have `idempotent: true`
 
-| | A (plain Go) | B (Forma) | C (Forma + Skill) |
+| | A (plain Go) | B (FormSpec) | C (FormSpec + Skill) |
 |---|---|---|---|
 | Rounds to correct | 3+, no clear limit | 1 (structure enforces) | 1 (AI is guardrailed) |
 | Subtle bugs survive | 2 proven | Vulnerability points declared | Same |
@@ -108,4 +108,4 @@ Writing this companion against the Core Basic v0.2.0 spec surfaced six findings:
 | 3 | Cross-module `deliver.reliable_event` targets needed fully qualified form | ✅ **Resolved:** `resource: gl.journal-entry` format standardized in spec §12.3 |
 | 4 | Webhook signature verification is a gap in Core Basic | ✅ **Acknowledged:** Home is `kind: Webhook` in Extended — gap is known, location is certain |
 | 5 | Declarative vs imperative boundary needed normatization (D33) — "blacklist/gateway/queue in YAML or script?" | ✅ **Resolved:** Litmus test — facts/guarantees → YAML, procedures → handler, event consequences → `deliver`. Result: `mark-paid` handler shrank from ~30 lines to 3 lines + the `deliver` block became the complete consequence map. Also found `channel: queue` missing from spec §12.3 and added it. |
-| 6 | `kind: Subscription` was born from the "idea arrives after the system is running" scenario (D35) — WA notification was in the wrong home (it's not a billing promise) | ✅ **Resolved:** Subscription created as the consumer-side reaction mechanism; prerequisite for signed-module ecosystem. Fan-out always compiled in `forma describe`. |
+| 6 | `kind: Subscription` was born from the "idea arrives after the system is running" scenario (D35) — WA notification was in the wrong home (it's not a billing promise) | ✅ **Resolved:** Subscription created as the consumer-side reaction mechanism; prerequisite for signed-module ecosystem. Fan-out always compiled in `formspec describe`. |

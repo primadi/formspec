@@ -1,11 +1,11 @@
-# Forma Operator & K8s Integration
+# FormSpec Operator & K8s Integration
 
 **Version:** 1.0
 **Status:** Draft
 **License:** Creative Commons CC0
-**Governed by:** Forma Architecture Overview (D-ARCH-13, D-ARCH-15, D-ARCH-18, D-ARCH-19, D-ARCH-28, D-ARCH-29, D-ARCH-31)
+**Governed by:** FormSpec Architecture Overview (D-ARCH-13, D-ARCH-15, D-ARCH-18, D-ARCH-19, D-ARCH-28, D-ARCH-29, D-ARCH-31)
 
-> Forma Operator adalah **CRD controller** yang berjalan di setiap K8s cluster dalam region. Ia menjembatani Forma concepts (Workspace, Datastore, ClusterClass) dengan K8s primitives (Deployment, Service, Secret, ConfigMap). Operator **closed source, enterprise/paid only**.
+> FormSpec Operator adalah **CRD controller** yang berjalan di setiap K8s cluster dalam region. Ia menjembatani FormSpec concepts (Workspace, Datastore, ClusterClass) dengan K8s primitives (Deployment, Service, Secret, ConfigMap). Operator **closed source, enterprise/paid only**.
 
 ---
 
@@ -21,12 +21,12 @@
 | Rolling update | Harus implementasi version tracking, drain, rollback | **Gratis** — Deployment strategy |
 | Scaling | Harus implementasi metrics collection, scale policy | **Gratis** — HPA |
 | Secret management | Harus implementasi encrypted store + injection | **Gratis** — K8s Secrets |
-| Workspace → pod | **Forma-specific** — tidak ada di K8s | **Forma Operator** |
-| Datastore → credential injection | **Forma-specific** | **Forma Operator** |
-| Resource permission enforcement | **Forma-specific** | **Forma Operator** |
-| Artifact pipeline | **Forma-specific** | **forma-ctl** |
+| Workspace → pod | **FormSpec-specific** — tidak ada di K8s | **FormSpec Operator** |
+| Datastore → credential injection | **FormSpec-specific** | **FormSpec Operator** |
+| Resource permission enforcement | **FormSpec-specific** | **FormSpec Operator** |
+| Artifact pipeline | **FormSpec-specific** | **formspec-ctl** |
 
-**Kesimpulan:** K8s handle 80% operational concerns. Forma Operator handle 20% Forma-specific orchestration. Tidak perlu membangun ulang apa yang sudah K8s sediakan.
+**Kesimpulan:** K8s handle 80% operational concerns. FormSpec Operator handle 20% FormSpec-specific orchestration. Tidak perlu membangun ulang apa yang sudah K8s sediakan.
 
 ---
 
@@ -37,7 +37,7 @@
 │                    K8s Cluster                                │
 │                                                               │
 │  ┌────────────────────────────────────────────────────────┐  │
-│  │                 Forma Operator                          │  │
+│  │                 FormSpec Operator                          │  │
 │  │                                                        │  │
 │  │  ┌──────────┐  ┌──────────┐  ┌──────────┐             │  │
 │  │  │Workspace │  │Datastore │  │Resource  │             │  │
@@ -61,11 +61,11 @@
 │       │ Create/Update                                         │
 │       ▼                                                       │
 │  ┌────────────────────────────────────────────────────────┐  │
-│  │  Deployment: forma-resource                            │  │
-│  │  Service: forma-resource (ClusterIP)                   │  │
+│  │  Deployment: formspec-resource                            │  │
+│  │  Service: formspec-resource (ClusterIP)                   │  │
 │  │  Secret: db-credentials                                │  │
 │  │  ConfigMap: workspace-config                           │  │
-│  │  HPA: forma-resource (CPU > 70%)                       │  │
+│  │  HPA: formspec-resource (CPU > 70%)                       │  │
 │  └────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -79,7 +79,7 @@
 Didefinisikan oleh Cloud Owner. Menentukan SLA, spesifikasi, dan harga setiap tier.
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: ClusterClass
 metadata:
   name: premium
@@ -109,7 +109,7 @@ spec:
 Dibuat saat Workspace Owner provision workspace.
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Workspace
 metadata:
   name: bank-mandiri-prod
@@ -131,7 +131,7 @@ spec:
 ```
 
 **Reconciliation:** Operator melihat Workspace CRD baru:
-1. Buat Deployment menggunakan **generic image** `formahub/forma-resource:1.4.2` (version/digest-pinned; 1 image untuk semua app, bukan image custom per app)
+1. Buat Deployment menggunakan **generic image** `formahub/formspec-resource:1.4.2` (version/digest-pinned; 1 image untuk semua app, bukan image custom per app)
 2. Set replicas & scaling sesuai ClusterClass: premium `minReplicas: 2` + anti-affinity + HPA; economy `minReplicas: 0` + scale-to-zero (lihat `05-failover.md` §3.2)
 3. Inject `CONTROL_CLUSTER_URL` dan `WORKSPACE_ID` sebagai env vars
 4. Buat Service (ClusterIP), Secret (DB credentials), ConfigMap (workspace config)
@@ -142,7 +142,7 @@ spec:
 Dibuat saat DB/Valkey/Redis diregistrasi.
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Datastore
 metadata:
   name: pg-bank-mandiri
@@ -166,7 +166,7 @@ spec:
 Mendefinisikan permission: resource mana bisa diakses workspace mana.
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: ResourceClaim
 metadata:
   name: bank-pg-claim
@@ -185,21 +185,21 @@ spec:
 
 ## 4. Node Labeling
 
-Node K8s di-label untuk kategorisasi infrastruktur. Label ini dipakai Forma Operator untuk placement pod.
+Node K8s di-label untuk kategorisasi infrastruktur. Label ini dipakai FormSpec Operator untuk placement pod.
 
 | Label | Nilai | Fungsi |
 |---|---|---|
-| `forma.dev/environment` | `prod`, `staging`, `dev` | Pisahkan workload prod dari non-prod |
-| `forma.dev/tier` | `enterprise`, `shared`, `dev` | Tentukan isolasi resource |
-| `forma.dev/region` | `jakarta`, `singapore`, `tokyo` | Data residency |
-| `forma.dev/capacity` | `high`, `medium`, `low` | Kapasitas node |
+| `formspec.dev/environment` | `prod`, `staging`, `dev` | Pisahkan workload prod dari non-prod |
+| `formspec.dev/tier` | `enterprise`, `shared`, `dev` | Tentukan isolasi resource |
+| `formspec.dev/region` | `jakarta`, `singapore`, `tokyo` | Data residency |
+| `formspec.dev/capacity` | `high`, `medium`, `low` | Kapasitas node |
 
 ```bash
 kubectl label node worker-1 \
-  forma.dev/environment=prod \
-  forma.dev/tier=enterprise \
-  forma.dev/region=jakarta \
-  forma.dev/capacity=high
+  formspec.dev/environment=prod \
+  formspec.dev/tier=enterprise \
+  formspec.dev/region=jakarta \
+  formspec.dev/capacity=high
 ```
 
 Operator menggunakan `nodeSelector` atau `nodeAffinity` untuk menempatkan pod di node yang sesuai.
@@ -218,7 +218,7 @@ Operator menggunakan `nodeSelector` atau `nodeAffinity` untuk menempatkan pod di
 │                                                      │
 │     Workspace Created:                               │
 │     ├── Create Deployment                            │
-│     │   image: formahub/forma-resource:1.4.2         │
+│     │   image: formahub/formspec-resource:1.4.2         │
 │     │   (generic, version-pinned, 1 utk semua app)   │
 │     ├── Set replicas sesuai ClusterClass             │
 │     │   (premium: 2+ / economy: scale-to-zero)       │
@@ -237,7 +237,7 @@ Operator menggunakan `nodeSelector` atau `nodeAffinity` untuk menempatkan pod di
 │     │   → tidak bisa hot-swap → emit deploy_status:  │
 │     │     restart_required (via Cluster Control)     │
 │     ├── Operator baca status → patch pod template    │
-│     │   annotation forma.dev/artifact-binary-hash    │
+│     │   annotation formspec.dev/artifact-binary-hash    │
 │     ├── K8s rolling restart — pod baru extract       │
 │     │   binary baru saat start                       │
 │     └── Image tetap sama (generic)                   │
@@ -283,15 +283,15 @@ Cluster Control menggunakan informasi ini untuk:
 
 Untuk dev/small deployment tanpa K8s:
 
-- **Tidak ada Operator** — semua manual via `forma` CLI
+- **Tidak ada Operator** — semua manual via `formspec` CLI
 - **Tidak ada CRD** — konfigurasi via file/command
 - **Tidak ada auto-reconciliation** — developer manage process manual
 
 ```bash
 # Standalone: start Control Plane
-forma-ctl serve --mode=standalone --port=8443 --db=sqlite:.forma/control.db
+formspec-ctl serve --mode=standalone --port=8443 --db=sqlite:.formspec/control.db
 
-# Standalone: run Go app (include forma-resource via import)
+# Standalone: run Go app (include formspec-resource via import)
 ./myapp --control-url=http://localhost:8443 --db=sqlite:data.db
 ```
 
@@ -301,14 +301,14 @@ forma-ctl serve --mode=standalone --port=8443 --db=sqlite:.forma/control.db
 
 | Komponen | Lisensi | Keterangan |
 |---|---|---|
-| **`forma-operator`** | **Closed source** | **Satu-satunya komponen closed source.** CRD controller untuk K8s orchestration — enterprise/paid only. Repo terpisah dari core |
-| `forma-ctl` | FSL | Open source — semua mode (region, cluster, standalone) |
-| `forma-resource` | FSL | **Go library** (`github.com/primadi/forma/resource`), di-compile jadi satu dengan app Go |
-| `forma-sidecar` | FSL | Open source — polyglot adapter wrapper |
-| `formahub/forma-resource` (version-pinned) | FSL | **Generic image** — 1 image untuk semua app. Berisi forma-resource engine + sidecar |
-| CLI tools (`forma`) | FSL | Open source — `apply` implemented, other verbs roadmap |
+| **`formspec-operator`** | **Closed source** | **Satu-satunya komponen closed source.** CRD controller untuk K8s orchestration — enterprise/paid only. Repo terpisah dari core |
+| `formspec-ctl` | FSL | Open source — semua mode (region, cluster, standalone) |
+| `formspec-resource` | FSL | **Go library** (`github.com/primadi/formspec/resource`), di-compile jadi satu dengan app Go |
+| `formspec-sidecar` | FSL | Open source — polyglot adapter wrapper |
+| `formahub/formspec-resource` (version-pinned) | FSL | **Generic image** — 1 image untuk semua app. Berisi formspec-resource engine + sidecar |
+| CLI tools (`formspec`) | FSL | Open source — `apply` implemented, other verbs roadmap |
 
-**Pihak ketiga boleh membuat operator alternatif open source yang kompatibel dengan Forma.** FSL melarang menjual managed service kompetitor, tapi tidak melarang membuat tooling alternatif. Ini menjaga ekosistem tetap terbuka sambil memberi Forma monetisasi yang adil melalui operator resmi.
+**Pihak ketiga boleh membuat operator alternatif open source yang kompatibel dengan FormSpec.** FSL melarang menjual managed service kompetitor, tapi tidak melarang membuat tooling alternatif. Ini menjaga ekosistem tetap terbuka sambil memberi FormSpec monetisasi yang adil melalui operator resmi.
 
 ---
 

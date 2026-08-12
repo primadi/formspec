@@ -1,4 +1,4 @@
-// Package db provides the database abstraction layer for Forma.
+// Package db provides the database abstraction layer for FormSpec.
 package db
 
 import (
@@ -6,11 +6,11 @@ import (
 )
 
 // DefaultDevDSN is the default DSN for development mode.
-const DefaultDevDSN = "sqlite://file:.forma/data.db"
+const DefaultDevDSN = "sqlite://file:.formspec/data.db"
 
 // Open opens a database connection based on the DSN.
 // Supports two schemes:
-//   - sqlite://file:.forma/data.db (default for dev)
+//   - sqlite://file:.formspec/data.db (default for dev)
 //   - postgres://user:pass@host:port/dbname?sslmode=require
 func Open(dsn string) (DB, error) {
 	cfg, err := ParseDSN(dsn)

@@ -9,7 +9,7 @@
 #
 # Frontend Spec §10 — Theme kind.
 
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Theme
 metadata:
   name: forest-mist

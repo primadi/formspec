@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Forma;
+namespace FormSpec;
 
 /**
  * One ctx primitive handle (db/cache/lock/...), optionally bound to a named

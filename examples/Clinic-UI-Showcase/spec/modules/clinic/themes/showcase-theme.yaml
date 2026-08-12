@@ -1,5 +1,5 @@
 # SHOWCASE kind: Theme — token → CSS custom properties (§10 spec frontend).
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Theme
 metadata:
   name: showcase-theme

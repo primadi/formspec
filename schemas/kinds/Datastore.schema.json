@@ -14,7 +14,10 @@
     },
     "credential_ref": {
       "description": "CredentialRef is a reference to KMS/Vault for credentials.",
-      "type": "string"
+      "type": "string",
+      "examples": [
+        "kms://workspace-default"
+      ]
     },
     "driver": {
       "$ref": "#/$defs/DatastoreDriver",
@@ -25,7 +28,10 @@
       "type": "array",
       "items": {
         "$ref": "#/$defs/PrimitiveType"
-      }
+      },
+      "examples": [
+        "[db]"
+      ]
     }
   },
   "required": [

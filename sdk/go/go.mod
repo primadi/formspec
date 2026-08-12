@@ -1,3 +1,3 @@
-module github.com/primadi/forma/sdk/go
+module github.com/primadi/formspec/sdk/go
 
 go 1.26.4

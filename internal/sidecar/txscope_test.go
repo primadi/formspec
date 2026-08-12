@@ -8,13 +8,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/primadi/forma/renderers/jsonbpersist"
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/renderers/jsonbpersist"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 // TestCtxHandler_ScopeIdJoinsSameTransaction proves the cross-process
 // correlation described in renderers/jsonbpersist/txscope.go: a request
-// carrying X-Forma-Scope-Id resolves back to the SAME live *db.TxScope a
+// carrying X-FormSpec-Scope-Id resolves back to the SAME live *db.TxScope a
 // direct in-process caller registered, and an entity write made through
 // the HTTP /ctx/entity/update path joins that transaction rather than
 // committing on its own — rolling back together with the in-process write
@@ -74,7 +74,7 @@ func TestCtxHandler_ScopeIdJoinsSameTransaction(t *testing.T) {
 	// The "app process" callback: an HTTP request carrying the scope id.
 	req := httptest.NewRequest(http.MethodPost, "/ctx/entity/update",
 		strings.NewReader(`{"key":"`+id+`","fields":{"note":"from-sidecar"}}`))
-	req.Header.Set("X-Forma-Scope-Id", scopeID)
+	req.Header.Set("X-FormSpec-Scope-Id", scopeID)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -100,7 +100,7 @@ func TestCtxHandler_ScopeIdJoinsSameTransaction(t *testing.T) {
 }
 
 // TestCtxHandler_NoScopeIdCommitsIndependently confirms the fallback: a
-// callback with no (or an unknown) X-Forma-Scope-Id header behaves exactly
+// callback with no (or an unknown) X-FormSpec-Scope-Id header behaves exactly
 // as before this change — a self-contained, independently committed write.
 func TestCtxHandler_NoScopeIdCommitsIndependently(t *testing.T) {
 	dir := t.TempDir()

@@ -52,7 +52,7 @@ Pemetaan tiap kemampuan wajib
 | Structural diff apply | `renderers/jsonbpersist/migrate.go` — `PlanMigrations`/`ApplyMigrations` menerjemahkan diff Document ke DDL Postgres/SQLite |
 | Query resolution | Operator filter kontrak diterjemahkan ke SQL/JSONB path — lihat [`04-query-and-keys.md`](04-query-and-keys.md) §1 |
 | Tree query resolution | Operator `descendant_of`/`ancestor_of`/`child_of`/`root` diterjemahkan ke prefix-match materialized path, **tanpa recursive CTE** — [`02-schema-strategies.md`](02-schema-strategies.md) §4, [`04-query-and-keys.md`](04-query-and-keys.md) §6 |
-| `ctx.next_key` | Tabel counter `forma_natural_key_counters`, alokasi di bawah lock — [`04-query-and-keys.md`](04-query-and-keys.md) §2 |
+| `ctx.next_key` | Tabel counter `formspec_natural_key_counters`, alokasi di bawah lock — [`04-query-and-keys.md`](04-query-and-keys.md) §2 |
 | Index generation | Generated column dari `data`, indexed — [`02-schema-strategies.md`](02-schema-strategies.md) §3 (**catatan dialek**, lihat §4 di sana) |
 | Uninstall extension bersih | **Belum diimplementasikan** — DDL `ADD COLUMN ext_*` dibuat saat extension dipasang, tapi tidak ada `DROP COLUMN`/rute uninstall di kode manapun. Lihat [`02-schema-strategies.md`](02-schema-strategies.md) §2. |
 
@@ -73,7 +73,7 @@ rollback semua. Ini menutup dua gap yang sebelumnya dicatat di sini:
    `HandleCreate`/`HandleUpdate` me-resolve emission event yang `durable`
    *sebelum* memanggil `Insert`/`Update`, lalu mengirimkannya lewat
    `InsertParams`/`UpdateParams.PendingEvents`; `EntityStore` meng-enqueue-nya
-   ke `forma_outbox` di transaksi yang sama dengan baris entity
+   ke `formspec_outbox` di transaksi yang sama dengan baris entity
    (`enqueueOutbox` di `outbox.go`, dipanggil dengan DB yang terikat
    transaksi, bukan `s.db` polos). `action.DeliverEvents` yang dipanggil
    sesudahnya menerima flag `outboxAlreadyEnqueued=true` sehingga tidak
@@ -87,8 +87,8 @@ membuka satu `TxScope` per eksekusi action, membungkusnya ke `ctx`
 `UpdateFields`/`IncrementField`/`DecrementField` yang dipanggil dalam satu
 eksekusi itu — lewat `resource.save()`/`resource.create()` Starlark,
 handler native, atau callback sidecar (`/ctx/entity/{op}`, dikorelasikan
-lewat header `X-Forma-Scope-Id`, lihat
-[`../runtimes/04-forma-sidecar.md`](../runtimes/04-forma-sidecar.md) §4.3a)
+lewat header `X-FormSpec-Scope-Id`, lihat
+[`../runtimes/04-formspec-sidecar.md`](../runtimes/04-formspec-sidecar.md) §4.3a)
 — ikut transaksi yang sama alih-alih commit sendiri-sendiri. Enqueue outbox
 untuk event durable juga naik ke transaksi yang sama (`EnqueueOutboxTx`),
 baru `scope.Commit()` di akhir; error di titik mana pun → `scope.Rollback()`
@@ -108,8 +108,8 @@ lintas-Module itu sendiri (yang tetap sah selama satu Datastore).
 `action.RunAfterPhase` masih tidak mengembalikan error (fire-and-forget,
 tidak berubah) — mutasi di after-hook yang gagal di situ tidak memicu
 rollback scope, sama seperti perilaku sebelum `TxScope` ada. SDK
-`lib-forma-*` (PHP/Python/TypeScript/dll di `sdk/`) belum ada yang mengirim
-`X-Forma-Scope-Id` — sampai diperbarui, callback `ctx.entity.*` dari app
+`lib-formspec-*` (PHP/Python/TypeScript/dll di `sdk/`) belum ada yang mengirim
+`X-FormSpec-Scope-Id` — sampai diperbarui, callback `ctx.entity.*` dari app
 process sidecar tetap commit independen (bukan regresi, gap follow-up
 terpisah).
 
@@ -123,7 +123,7 @@ terpisah).
   DAN custom action** (§3) — `BeginTx` dipakai lewat `InTx` (jalur mandiri)
   atau `TxScope` (jalur request-scoped, lintas beberapa panggilan store
   dalam satu eksekusi action). Sisi SDK sidecar untuk header
-  `X-Forma-Scope-Id` belum diperbarui (gap tercatat di §3).
+  `X-FormSpec-Scope-Id` belum diperbarui (gap tercatat di §3).
 - PK UUID v7 di kedua driver (§1) — penyimpangan SQLite sebelumnya sudah
   ditutup.
 - Uninstall extension bersih (§2 tabel) belum ada implementasinya sama

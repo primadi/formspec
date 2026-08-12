@@ -27,7 +27,7 @@ type Server struct {
 }
 
 // NewServer creates the local listener server. listenURL is
-// "unix:///tmp/forma/sidecar.sock" or "http://localhost:PORT".
+// "unix:///tmp/formspec/sidecar.sock" or "http://localhost:PORT".
 // engineOK reports engine health (nil error = healthy); it may be nil.
 func NewServer(listenURL string, ctxHandler *CtxHandler, monitor *AppMonitor, engineOK func() error) *Server {
 	return &Server{listenURL: listenURL, ctx: ctxHandler, monitor: monitor, engineOK: engineOK}

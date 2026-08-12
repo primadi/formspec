@@ -1,5 +1,5 @@
 # Today's revenue widget — metric card showing daily revenue
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Widget
 metadata:
   name: today-revenue

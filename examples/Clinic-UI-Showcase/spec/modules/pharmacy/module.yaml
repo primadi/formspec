@@ -1,4 +1,4 @@
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Module
 metadata:
   name: pharmacy
@@ -6,7 +6,7 @@ metadata:
 spec:
   version: 1.0.0
   depends:
-    - module: forma/core
+    - module: formspec/core
     - module: clinic
   # Default menu suggestion (Core Basic §4.5) — see clinic/module.yaml for
   # the full explanation. Migrated from the old

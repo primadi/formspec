@@ -12,20 +12,20 @@ Vite HMR — infrastruktur WebSocket yang sudah ada antara Vite dev server dan b
 
 ### Backend
 
-1. **`cmd/forma/dev.go`** — `watchSpecForChanges()` menerima parameter `viteHMRURL`. Setelah reload sukses, melakukan HTTP GET ke `http://localhost:<vitePort>/_dev/hmr-reload` (hanya saat `--dev-ui` aktif)
-2. **`resource/forma.go`** — `App.specVersion atomic.Int64` untuk logging
+1. **`cmd/formspec/dev.go`** — `watchSpecForChanges()` menerima parameter `viteHMRURL`. Setelah reload sukses, melakukan HTTP GET ke `http://localhost:<vitePort>/_dev/hmr-reload` (hanya saat `--dev-ui` aktif)
+2. **`resource/formspec.go`** — `App.specVersion atomic.Int64` untuk logging
 3. **Relokasi**: watcher dipindah ke setelah Vite section (step 13c), agar `viteProxyURL` sudah diketahui
 
 ### Vite Plugin (`vite.config.ts`)
 
 - Plugin `formaHMRPlugin()`:
   - Menambahkan middleware `/_dev/hmr-reload` di Vite dev server
-  - Saat dipanggil, mengirim custom event `forma:spec-reloaded` ke semua browser via `server.ws.send()`
+  - Saat dipanggil, mengirim custom event `formspec:spec-reloaded` ke semua browser via `server.ws.send()`
   - Plugin hanya aktif saat `vite dev` (dev mode) — tidak masuk production build
 
 ### Frontend
 
-1. **`renderers/web/src/App.tsx`** — `useEffect` dengan `import.meta.hot.on("forma:spec-reloaded", ...)`:
+1. **`renderers/web/src/App.tsx`** — `useEffect` dengan `import.meta.hot.on("formspec:spec-reloaded", ...)`:
    - Mendengarkan event HMR dari Vite
    - Memanggil `useMetaStore.getState().refresh()` → re-fetch full bundle
    - Cleanup `import.meta.hot.off()` saat unmount
@@ -37,7 +37,7 @@ Vite HMR — infrastruktur WebSocket yang sudah ada antara Vite dev server dan b
 ```
 Edit YAML → fsnotify → ReloadSpec() → HTTP GET → Vite /_dev/hmr-reload
                                                   ↓
-                                            server.ws.send('forma:spec-reloaded')
+                                            server.ws.send('formspec:spec-reloaded')
                                                   ↓
                                             Browser (via HMR WebSocket)
                                                   ↓
@@ -50,8 +50,8 @@ Edit YAML → fsnotify → ReloadSpec() → HTTP GET → Vite /_dev/hmr-reload
 
 | File | Perubahan |
 |---|---|
-| `cmd/forma/dev.go` | +viteHMRURL param, watcher dipindah ke after Vite, HTTP GET ke Vite setelah reload |
-| `resource/forma.go` | +specVersion atomic.Int64 (logging) |
+| `cmd/formspec/dev.go` | +viteHMRURL param, watcher dipindah ke after Vite, HTTP GET ke Vite setelah reload |
+| `resource/formspec.go` | +specVersion atomic.Int64 (logging) |
 | `renderers/web/vite.config.ts` | +formaHMRPlugin() — middleware `/_dev/hmr-reload` |
-| `renderers/web/src/App.tsx` | +import.meta.hot listener untuk `forma:spec-reloaded` |
+| `renderers/web/src/App.tsx` | +import.meta.hot listener untuk `formspec:spec-reloaded` |
 | `renderers/web/src/stores/meta.ts` | +refresh() action |

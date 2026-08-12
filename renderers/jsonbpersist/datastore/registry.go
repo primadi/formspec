@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 // Registry manages named datastore connections scoped to a single workspace.

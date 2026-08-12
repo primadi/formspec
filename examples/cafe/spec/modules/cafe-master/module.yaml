@@ -1,0 +1,16 @@
+apiVersion: formspec.dev/v1alpha1
+kind: Module
+metadata:
+  name: cafe-master
+  description: "Cafe Master Data — menu, meja, anggota, dan karyawan"
+spec:
+  version: 1.0.0
+  vendor: formspec
+  menu:
+    - label: "Master"
+      icon: "database"
+      children:
+        - { label: "Menu", icon: "coffee", route: /cafe-master/menu-items }
+        - { label: "Meja", icon: "armchair", route: /cafe-master/tables }
+        - { label: "Anggota", icon: "users", route: /cafe-master/members }
+        - { label: "Karyawan", icon: "user", route: /cafe-master/employees }

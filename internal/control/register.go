@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/primadi/forma/internal/artifact"
-	"github.com/primadi/forma/internal/manifest"
+	"github.com/primadi/formspec/internal/artifact"
+	"github.com/primadi/formspec/internal/manifest"
 )
 
 // RegisterHandler handles POST /v1/artifacts — receives YAML manifests,

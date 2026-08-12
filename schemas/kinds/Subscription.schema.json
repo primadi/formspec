@@ -18,10 +18,14 @@
       "type": "string"
     },
     "events": {
+      "description": "@schema {example: \"billing.invoice.on_submit\"}",
       "type": "array",
       "items": {
         "type": "string"
-      }
+      },
+      "examples": [
+        "billing.invoice.on_submit"
+      ]
     },
     "filter": {
       "description": "Tier 2: Starlark filter over event payload",
@@ -35,8 +39,15 @@
       "type": "integer"
     },
     "position": {
-      "description": "Tier 2: latest | earliest | \u003cid\u003e",
-      "type": "string"
+      "description": "@schema {example: \"latest\", enum: [\"latest\", \"earliest\"]}",
+      "type": "string",
+      "enum": [
+        "latest",
+        "earliest"
+      ],
+      "examples": [
+        "latest"
+      ]
     },
     "retention": {
       "description": "Tier 2: stream retention duration",
@@ -48,8 +59,11 @@
       "nullable": true
     },
     "store": {
-      "description": "Tier 2: stream backend (redis, kafka)",
-      "type": "string"
+      "description": "@schema {example: \"redis\"}",
+      "type": "string",
+      "examples": [
+        "redis"
+      ]
     },
     "transform": {
       "description": "Tier 2: Starlark transform over event payload",

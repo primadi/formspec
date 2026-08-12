@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/primadi/forma/internal/entity"
-	"github.com/primadi/forma/pkg/spec"
-	db "github.com/primadi/forma/renderers/jsonbpersist"
+	"github.com/primadi/formspec/internal/entity"
+	"github.com/primadi/formspec/pkg/spec"
+	db "github.com/primadi/formspec/renderers/jsonbpersist"
 )
 
 // setupUpdateTestEntity registers a simple "billing/order" entity and

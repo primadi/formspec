@@ -1,4 +1,4 @@
-// Package auth provides authentication and identity primitives for Forma.
+// Package auth provides authentication and identity primitives for FormSpec.
 //
 // It defines the Identity struct (user ID, workspace, permissions, roles),
 // the TokenValidator interface, and the AuthMode that switches between

@@ -3,7 +3,7 @@ package datastore
 import (
 	"testing"
 
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 func TestRegistry_RegisterNamed_And_Resolve(t *testing.T) {

@@ -1,4 +1,4 @@
-// Package action provides the central action execution engine for Forma.
+// Package action provides the central action execution engine for FormSpec.
 //
 // It dispatches action requests (from HTTP, events, or internal calls) to the
 // appropriate executor based on the action's impl type (native, script_ref,
@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 // ─── Types ───
@@ -108,7 +108,7 @@ func (d *Dispatcher) NativeExecutor() *NativeExecutor { return d.nativeEx }
 
 // SetNativeExecutor stores the native executor reference so that
 // Dispatcher.NativeExecutor() returns the same instance used for dispatch.
-// Called by resource/forma.go's newDispatcher after registering it.
+// Called by resource/formspec.go's newDispatcher after registering it.
 func (d *Dispatcher) SetNativeExecutor(ex *NativeExecutor) { d.nativeEx = ex }
 
 // NewDispatcher creates an action dispatcher with no executors registered.

@@ -1,11 +1,11 @@
 {
-  "name": "@forma/clinic-showcase-app",
+  "name": "@formspec/clinic-showcase-app",
   "version": "0.1.0",
   "private": true,
   "description": "Clinic UI Showcase — TypeScript sidecar app for OTC sell demo",
   "type": "commonjs",
   "dependencies": {
-    "@forma/lib-forma": "file:../../../sdk/typescript"
+    "@formspec/lib-formspec": "file:../../../sdk/typescript"
   },
   "devDependencies": {
     "typescript": "^5.5.0",

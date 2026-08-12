@@ -1,4 +1,4 @@
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Config
 metadata:
   name: gl

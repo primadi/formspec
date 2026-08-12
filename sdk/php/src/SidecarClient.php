@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Forma;
+namespace FormSpec;
 
 /**
- * HTTP client to the forma-sidecar local listener — unix domain socket
+ * HTTP client to the formspec-sidecar local listener — unix domain socket
  * (default) or localhost TCP.
  */
 final class SidecarClient
@@ -14,13 +14,13 @@ final class SidecarClient
     private readonly ?string $socketPath;
 
     /**
-     * @param string $endpoint "unix:///tmp/forma/sidecar.sock" or "http://localhost:PORT"
+     * @param string $endpoint "unix:///tmp/formspec/sidecar.sock" or "http://localhost:PORT"
      */
     public function __construct(string $endpoint, private readonly int $timeoutSeconds = 30)
     {
         if (str_starts_with($endpoint, 'unix://')) {
             $this->socketPath = substr($endpoint, strlen('unix://'));
-            $this->baseUrl = 'http://forma-sidecar'; // host ignored; curl dials the socket
+            $this->baseUrl = 'http://formspec-sidecar'; // host ignored; curl dials the socket
         } elseif (str_starts_with($endpoint, 'http://')) {
             $this->socketPath = null;
             $this->baseUrl = rtrim($endpoint, '/');

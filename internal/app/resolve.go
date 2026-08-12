@@ -12,9 +12,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/primadi/forma/internal/manifest"
-	"github.com/primadi/forma/internal/ui"
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/internal/manifest"
+	"github.com/primadi/formspec/internal/ui"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 // ResolvedApp is one fully-resolved App: its spec, the set of modules it

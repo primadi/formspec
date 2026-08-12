@@ -40,7 +40,7 @@ func ValidateTransactionDate(transactionDate string, maxDaysBack, maxDaysForward
 			Direction: "backdate",
 			Limit:     maxDaysBack,
 			Actual:    daysDiff,
-			Code:      "FORMA.TXN.BACKDATE_EXCEEDED",
+			Code:      "FORMSPEC.TXN.BACKDATE_EXCEEDED",
 		}
 	}
 
@@ -53,7 +53,7 @@ func ValidateTransactionDate(transactionDate string, maxDaysBack, maxDaysForward
 				Direction: "forward-date",
 				Limit:     maxDaysForward,
 				Actual:    daysForward,
-				Code:      "FORMA.TXN.FORWARD_DATE_EXCEEDED",
+				Code:      "FORMSPEC.TXN.FORWARD_DATE_EXCEEDED",
 			}
 		}
 	}

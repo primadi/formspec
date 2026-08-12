@@ -18,6 +18,9 @@
     "public": {
       "description": "If true (default), a route /module/dashboard/\u003cname\u003e is auto-generated.",
       "type": "boolean",
+      "examples": [
+        "true"
+      ],
       "nullable": true
     },
     "realtime": {

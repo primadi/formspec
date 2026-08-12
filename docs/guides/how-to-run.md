@@ -1,24 +1,24 @@
-# How to Run Forma
+# How to Run FormSpec
 
-Forma berjalan dalam satu proses engine (`forma dev`) + frontend (SPA React). App business logic dalam bahasa apapun (Go, PHP, Python, Ruby, Java, .NET, TypeScript, Rust) berjalan sebagai child process.
+FormSpec berjalan dalam satu proses engine (`formspec dev`) + frontend (SPA React). App business logic dalam bahasa apapun (Go, PHP, Python, Ruby, Java, .NET, TypeScript, Rust) berjalan sebagai child process.
 
 | Opsi | Cara | Terminal | HMR | Cocok untuk |
 |---|---|---|---|---|
-| **A — `--dev-ui`** | `forma dev` spawn Vite otomatis | **1** | ✅ | Development paling praktis |
-| **B — Manual** | `forma dev` + `npm run dev` | 2 | ✅ | Development |
-| **C — Static** | `forma dev` + `--web-dir` | 1 | ❌ | Demo / produksi |
+| **A — `--dev-ui`** | `formspec dev` spawn Vite otomatis | **1** | ✅ | Development paling praktis |
+| **B — Manual** | `formspec dev` + `npm run dev` | 2 | ✅ | Development |
+| **C — Static** | `formspec dev` + `--web-dir` | 1 | ❌ | Demo / produksi |
 
 ## Opsi A: Satu Terminal — `--dev-ui`
 
 ```bash
-go run ./cmd/forma/ dev \
+go run ./cmd/formspec/ dev \
   --spec examples/Clinic-UI-Showcase/spec \
-  --dsn "sqlite:.forma/clinic.db" \
+  --dsn "sqlite:.formspec/clinic.db" \
   --addr :8080 \
   --force --dev-ui
 ```
 
-`forma dev` akan:
+`formspec dev` akan:
 1. Kill engine sebelumnya (kalau ada) berkat `--force`
 2. Load engine + REST API di `:8080`
 3. Spawn `npm run dev` sebagai child process — Vite HMR siap di `:5173`
@@ -30,9 +30,9 @@ Buka **http://localhost:5173/default/_admin**.
 
 **Terminal 1 — Engine:**
 ```bash
-go run ./cmd/forma/ dev \
+go run ./cmd/formspec/ dev \
   --spec examples/Clinic-UI-Showcase/spec \
-  --dsn "sqlite:.forma/clinic.db" \
+  --dsn "sqlite:.formspec/clinic.db" \
   --addr :8080 \
   --dev --force
 ```
@@ -47,9 +47,9 @@ cd web && npm run dev
 ```bash
 cd web && npm run build
 
-go run ./cmd/forma/ dev \
+go run ./cmd/formspec/ dev \
   --spec examples/Clinic-UI-Showcase/spec \
-  --dsn "sqlite:.forma/clinic.db" \
+  --dsn "sqlite:.formspec/clinic.db" \
   --addr :8080 \
   --dev --force \
   --web-dir web/dist
@@ -64,23 +64,23 @@ Satu port `:8080` untuk API + SPA. Buka **http://localhost:8080/default/_admin**
 | Flag | Fungsi | Default |
 |---|---|---|
 | `--spec` | Path ke direktori YAML manifests | `./spec` |
-| `--dsn` | Database DSN (sqlite atau postgres) | `sqlite:.forma/data.db` |
+| `--dsn` | Database DSN (sqlite atau postgres) | `sqlite:.formspec/data.db` |
 | `--addr` | REST API listen address | `:8080` |
 | `--dev` | Dev mode (auth bypass, unsigned artifacts) | `false` |
-| `--state-dir` | Local state directory | `.forma` |
-| `--force` | Kill previous `forma` engine on same ports | `false` |
+| `--state-dir` | Local state directory | `.formspec` |
+| `--force` | Kill previous `formspec` engine on same ports | `false` |
 | `--web-dir` | Built SPA directory (e.g. `web/dist`) | `""` |
 | `--dev-ui` | Spawn `npm run dev` otomatis (implikasikan `--dev`) | `false` |
 | `--runtime` | App runtime: `auto`, `go`, `php`, `python`, `ruby`, `java`, `dotnet`, `rust`, `node` | `auto` |
-| `--app-dir` | App source directory (child-process runtime) | `.forma/app` |
+| `--app-dir` | App source directory (child-process runtime) | `.formspec/app` |
 | `--app-entrypoint` | Entrypoint file (default tergantung runtime) | auto |
 
-> `--listen` dan `--app-endpoint` sudah otomatis diatur oleh `forma dev` — tidak perlu di-set manual.
+> `--listen` dan `--app-endpoint` sudah otomatis diatur oleh `formspec dev` — tidak perlu di-set manual.
 
 ## Reset Database
 
 ```bash
-rm -rf .forma
+rm -rf .formspec
 ```
 
 Database auto-generate saat engine restart.
@@ -91,7 +91,7 @@ Database auto-generate saat engine restart.
 |---|---|
 | Port already in use | Tambah `--force` |
 | Blank page | Hard refresh (Ctrl+F5) |
-| Permission denied | `forma dev` pilih socket/HTTP otomatis berdasarkan environment |
+| Permission denied | `formspec dev` pilih socket/HTTP otomatis berdasarkan environment |
 | Hyphen di tabel SQL | Engine otomatis `-` → `_` (fix di `internal/db/crud.go`) |
 
 ## Prasyarat
@@ -102,9 +102,9 @@ Database auto-generate saat engine restart.
 | Node.js | 22+ | `node --version` |
 | npm | 10+ | `npm --version` |
 
-## 1. Engine — `forma dev`
+## 1. Engine — `formspec dev`
 
-`forma dev` adalah engine yang:
+`formspec dev` adalah engine yang:
 - Load YAML manifest dari direktori `--spec`
 - Generate tabel SQLite/Postgres sesuai entity spec
 - Serve REST API di `/{workspace}/api/v1/...`
@@ -116,22 +116,22 @@ Database auto-generate saat engine restart.
 
 ```bash
 # Dari root repository
-cd /workspaces/forma
+cd /workspaces/formspec
 
-go run ./cmd/forma/ dev \
+go run ./cmd/formspec/ dev \
   --spec examples/Clinic-UI-Showcase/spec \
-  --dsn "sqlite:.forma/clinic.db" \
+  --dsn "sqlite:.formspec/clinic.db" \
   --addr :8080 \
   --dev
 ```
 
 ### App Child Process
 
-App business logic dalam bahasa apapun berjalan sebagai **child process** dari `forma dev`. Engine dan app berkomunikasi via Unix socket:
+App business logic dalam bahasa apapun berjalan sebagai **child process** dari `formspec dev`. Engine dan app berkomunikasi via Unix socket:
 
 ```
 ┌───────────────────────────────────────────┐
-│ forma dev (engine)                         │
+│ formspec dev (engine)                         │
 │  • Entity engine, state machine           │
 │  • Permission enforcement                 │
 │  • Tenant isolation                       │
@@ -139,7 +139,7 @@ App business logic dalam bahasa apapun berjalan sebagai **child process** dari `
 │  • ctx.* primitives                       │
 │              │                            │
 │              ▼ Unix socket                │
-│  app child process (via lib-forma-*)      │
+│  app child process (via lib-formspec-*)      │
 │  • Business logic only                    │
 │  • Go / PHP / Python / Ruby / Java        │
 │    .NET / TypeScript / Rust               │
@@ -148,7 +148,7 @@ App business logic dalam bahasa apapun berjalan sebagai **child process** dari `
 
 ### Auto-detect Runtime
 
-`forma dev` mendeteksi runtime dari file di `--app-dir`:
+`formspec dev` mendeteksi runtime dari file di `--app-dir`:
 
 | File | Runtime |
 |---|---|
@@ -161,42 +161,42 @@ App business logic dalam bahasa apapun berjalan sebagai **child process** dari `
 | `pom.xml` / `build.gradle` | Java |
 | `*.csproj` / `*.sln` | .NET |
 
-Override manual dengan `--runtime <name>` atau `runtime:` di `forma-app.yaml`.
+Override manual dengan `--runtime <name>` atau `runtime:` di `formspec-app.yaml`.
 
 ### Flags
 
 | Flag | Fungsi | Default |
 |---|---|---|
 | `--spec` | Path ke direktori YAML manifests | `./spec` |
-| `--dsn` | Database DSN (sqlite atau postgres) | `sqlite:.forma/data.db` |
+| `--dsn` | Database DSN (sqlite atau postgres) | `sqlite:.formspec/data.db` |
 | `--addr` | REST API listen address | `:8080` |
 | `--dev` | Dev mode (auth bypass, unsigned artifacts) | `false` |
-| `--state-dir` | Local state directory | `.forma` |
-| **`--force`** | Kill previous `forma` engine on same ports | `false` |
+| `--state-dir` | Local state directory | `.formspec` |
+| **`--force`** | Kill previous `formspec` engine on same ports | `false` |
 | `--web-dir` | Built SPA directory | `""` |
 | `--dev-ui` | Auto-spawn Vite dev server | `false` |
 | `--runtime` | Override runtime auto-detect | `auto` |
-| `--app-dir` | App source directory | `.forma/app` |
+| `--app-dir` | App source directory | `.formspec/app` |
 | `--app-entrypoint` | Entrypoint file | auto |
 
 > `--listen` dan `--app-endpoint` sudah diatur internal — tidak perlu di-set manual. `--app-endpoint-url` untuk override jika perlu endpoint spesifik.
 
 ### --force Flag
 
-`--force` otomatis membunuh proses `forma` sebelumnya yang masih menempel di port yang sama, lalu restart yang baru. Jika port dipakai program **lain**, akan muncul error:
+`--force` otomatis membunuh proses `formspec` sebelumnya yang masih menempel di port yang sama, lalu restart yang baru. Jika port dipakai program **lain**, akan muncul error:
 
 ```bash
 port 8080 is already in use by "nginx" (PID 12345).
-Use --force to kill a previous forma instance, or stop the other program manually
+Use --force to kill a previous formspec instance, or stop the other program manually
 ```
 
 ### Contoh: Clinic UI Showcase
 
 ```bash
-mkdir -p .forma
-go run ./cmd/forma/ dev \
+mkdir -p .formspec
+go run ./cmd/formspec/ dev \
   --spec examples/Clinic-UI-Showcase/spec \
-  --dsn "sqlite:.forma/clinic.db" \
+  --dsn "sqlite:.formspec/clinic.db" \
   --addr :8080 \
   --dev \
   --force
@@ -204,10 +204,10 @@ go run ./cmd/forma/ dev \
 
 Output:
 ```
-port 8080 is held by a previous forma instance (PID 12345) — killing it...
-[forma] engine loaded: 45 routes
-[forma] ctx listener on unix:///tmp/forma/sidecar.sock
-[forma] REST API on :8080
+port 8080 is held by a previous formspec instance (PID 12345) — killing it...
+[formspec] engine loaded: 45 routes
+[formspec] ctx listener on unix:///tmp/formspec/sidecar.sock
+[formspec] REST API on :8080
 ```
 
 Verifikasi:
@@ -262,7 +262,7 @@ Jika backend di port berbeda, sesuaikan `target`.
 
 ## 3. Production Build
 
-Untuk production, gunakan `forma serve` (tanpa `--dev`):
+Untuk production, gunakan `formspec serve` (tanpa `--dev`):
 
 ```bash
 # Build SPA
@@ -270,14 +270,14 @@ cd web && npm run build
 cd ..
 
 # Jalankan engine dalam mode production
-go run ./cmd/forma/ serve \
+go run ./cmd/formspec/ serve \
   --spec examples/Clinic-UI-Showcase/spec \
-  --dsn "sqlite:.forma/clinic.db" \
+  --dsn "sqlite:.formspec/clinic.db" \
   --addr :8080 \
   --web-dir web/dist
 ```
 
-`forma serve` mengaktifkan:
+`formspec serve` mengaktifkan:
 - **JWT auth** — semua request API perlu token valid
 - **Strict `uses` enforcement** — action hanya bisa akses resource yang di-declare
 - **Production logging** — structured, tanpa debug output
@@ -292,10 +292,10 @@ Untuk deployment skala besar, gunakan nginx/caddy sebagai reverse proxy:
 
 ```bash
 # Hapus file SQLite
-rm .forma/clinic.db
+rm .formspec/clinic.db
 
 # Atau hapus seluruh state
-rm -rf .forma
+rm -rf .formspec
 ```
 
 Database akan auto-generate saat engine restart.
@@ -306,7 +306,7 @@ Database akan auto-generate saat engine restart.
 
 Gunakan `--force`:
 ```bash
-go run ./cmd/forma/ dev ... --force
+go run ./cmd/formspec/ dev ... --force
 ```
 
 Atau manual:
@@ -337,9 +337,9 @@ Engine otomatis mengganti `-` dengan `_` di nama tabel SQL. Jika masih error, pa
 ### Billing (formerly Order-to-Cash)
 
 ```bash
-go run ./cmd/forma/ dev \
+go run ./cmd/formspec/ dev \
   --spec verticals/billing/spec \
-  --dsn "sqlite:.forma/billing.db" \
+  --dsn "sqlite:.formspec/billing.db" \
   --addr :8080 \
   --dev \
   --force
@@ -348,9 +348,9 @@ go run ./cmd/forma/ dev \
 ### Reference App
 
 ```bash
-go run ./cmd/forma/ dev \
+go run ./cmd/formspec/ dev \
   --spec examples/reference-app/spec \
-  --dsn "sqlite:.forma/reference.db" \
+  --dsn "sqlite:.formspec/reference.db" \
   --addr :8080 \
   --dev \
   --force
@@ -359,7 +359,7 @@ go run ./cmd/forma/ dev \
 ## 7. Arsitektur Singkat
 
 ```
-Browser ─── Vite (:5173) ─── proxy /default/api/v1/ → forma dev (:8080)
+Browser ─── Vite (:5173) ─── proxy /default/api/v1/ → formspec dev (:8080)
                                                               │
                                                     ┌─────────┴──────────┐
                                                     │  Entity Engine     │
@@ -372,6 +372,6 @@ Browser ─── Vite (:5173) ─── proxy /default/api/v1/ → forma dev (:
 ```
 
 - **Vite** dev server: HMR, hot reload, proxy API ke engine
-- **`forma dev`**: Engine — entity engine, CRUD, permissions, Starlark, ctx.* primitives, spawn app child process
-- **App child process**: Business logic dalam bahasa apapun (Go/PHP/Python/Ruby/Java/.NET/TypeScript/Rust) via `lib-forma-*` SDK
+- **`formspec dev`**: Engine — entity engine, CRUD, permissions, Starlark, ctx.* primitives, spawn app child process
+- **App child process**: Business logic dalam bahasa apapun (Go/PHP/Python/Ruby/Java/.NET/TypeScript/Rust) via `lib-formspec-*` SDK
 - **SPA**: React 19 + shadcn/ui — runtime reader Meta API, manifest-driven renderer

@@ -1,0 +1,12 @@
+apiVersion: formspec.dev/v1alpha1
+kind: Widget
+metadata:
+  name: pending-payments
+  module: cafe-report
+  description: "Jumlah pembayaran yang masih menunggu konfirmasi"
+spec:
+  title: "Pembayaran Pending"
+  type: metric
+  entity: cafe-order.payment
+  query: "status == 'pending'"
+  refresh_secs: 60

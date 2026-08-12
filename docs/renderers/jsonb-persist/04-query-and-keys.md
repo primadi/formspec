@@ -28,7 +28,7 @@ perilakunya perlu disamakan.
 
 ```sql
 -- PK = tenant/resource/field/scope/period
-forma_natural_key_counters (tenant_id, resource, field, scope, period, seq)
+formspec_natural_key_counters (tenant_id, resource, field, scope, period, seq)
 ```
 
 `NaturalKeyCounter.NextSequence` meng-UPSERT baris counter secara atomik
@@ -62,7 +62,7 @@ field itu ternyata tidak diisi siapa pun.
 ([`../../spec/backend/01-core-basic.md`](../../spec/backend/01-core-basic.md)
 §5) — entry tidak pernah dihapus saat commit, kedaluwarsa via `CleanupExpired`
 lewat retention (`core.idempotency_retention`, default 24 jam,
-`IdempotencyStore.WithTTL`). `resource.App` (`resource/forma.go`) sekarang
+`IdempotencyStore.WithTTL`). `resource.App` (`resource/formspec.go`) sekarang
 membuat satu `IdempotencyStore` per App dengan TTL dari `Config.IdempotencyTTL`
 dan mengeksposnya lewat `App.Idempotency()` — TTL-nya nyata dipakai, bukan
 field yang dihitung lalu dibuang. Resolusi TTL dari manifest `kind: Config`

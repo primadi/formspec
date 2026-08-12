@@ -3,7 +3,7 @@
 # Resep bisa berasal dari kunjungan internal (visit_id) ATAU resep luar
 # (source: external + prescriber_name) — visit_id sengaja tidak required.
 # hooks: before/create menunjukkan cross-module resource.fetch (§0 fix).
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Entity
 metadata:
   name: prescription

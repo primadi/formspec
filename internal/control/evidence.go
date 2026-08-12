@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/primadi/forma/internal/artifact"
+	"github.com/primadi/formspec/internal/artifact"
 )
 
 // EvidenceHandler handles POST /v1/evidence — receives signed evidence

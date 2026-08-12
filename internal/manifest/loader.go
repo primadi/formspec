@@ -6,7 +6,7 @@
 //   - Schema validation per kind
 //   - Registration into the resource registry
 //
-// The parser mirrors the Core Basic spec §3 ("The Forma Manifest Format").
+// The parser mirrors the Core Basic spec §3 ("The FormSpec Manifest Format").
 package manifest
 
 import (
@@ -17,10 +17,10 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
-// Loader reads Forma manifests from a spec directory.
+// Loader reads FormSpec manifests from a spec directory.
 type Loader struct {
 	BasePath string
 	Strict   bool // reject unknown kinds / invalid schemas

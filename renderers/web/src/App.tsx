@@ -1,4 +1,4 @@
-// ─── Forma App ───
+// ─── FormSpec App ───
 //
 // Root component with boot sequence:
 // 1. Parse URL → workspace + surface
@@ -100,7 +100,7 @@ function SurfaceShell({ surface }: { surface: "admin" | "app" }) {
     }
   }, [workspace, sessionLoaded, boot, loadMeta, surface])
 
-  // Dev-mode only: listen for Vite HMR 'forma:spec-reloaded' events.
+  // Dev-mode only: listen for Vite HMR 'formspec:spec-reloaded' events.
   // When the backend reloads YAML specs, the Vite dev server broadcasts
   // this event and we re-fetch the meta bundle — no polling needed.
   useEffect(() => {
@@ -114,9 +114,9 @@ function SurfaceShell({ surface }: { surface: "admin" | "app" }) {
         state.refresh(workspace, surface, token)
       }
     }
-    hot.on("forma:spec-reloaded", handler)
+    hot.on("formspec:spec-reloaded", handler)
     return () => {
-      hot.off("forma:spec-reloaded", handler)
+      hot.off("formspec:spec-reloaded", handler)
     }
   }, [workspace, surface])
 
@@ -126,7 +126,7 @@ function SurfaceShell({ surface }: { surface: "admin" | "app" }) {
       <div className="flex min-h-screen items-center justify-center">
         <div className="space-y-4 w-full max-w-sm px-4">
           <div className="text-center">
-            <h1 className="text-2xl font-bold">Forma</h1>
+            <h1 className="text-2xl font-bold">FormSpec</h1>
           </div>
           <Skeleton className="h-4 w-full" />
           <Skeleton className="h-4 w-3/4" />
@@ -157,7 +157,7 @@ function SurfaceShell({ surface }: { surface: "admin" | "app" }) {
           {sessionError ?? metaError}
         </p>
         <p className="text-xs text-muted-foreground">
-          Make sure the Forma server is running.
+          Make sure the FormSpec server is running.
         </p>
       </div>
     )
@@ -262,7 +262,7 @@ function DefaultRedirect({
   return (
     <div className="flex min-h-[60vh] items-center justify-center">
       <div className="text-center">
-        <h2 className="text-xl font-semibold">Welcome to Forma</h2>
+        <h2 className="text-xl font-semibold">Welcome to FormSpec</h2>
         <p className="mt-2 text-sm text-muted-foreground">
           No entities found. Load a manifest to get started.
         </p>

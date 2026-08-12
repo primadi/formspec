@@ -9,7 +9,7 @@
 
 User: "hari ini ada 1 kunjungan, di dashboard tetap 0".
 
-Verifikasi langsung (DB sqlite `examples/Clinic-UI-Showcase/.forma/clinic.db` + API `forma dev --dev-ui`):
+Verifikasi langsung (DB sqlite `examples/Clinic-UI-Showcase/.formspec/clinic.db` + API `formspec dev --dev-ui`):
 
 - `clinic_visits` → **6 rows**, termasuk 1 kunjungan hari ini
   (`Q20260804-001`, `transaction_date: 2026-08-04`, `status: in_consultation`).
@@ -24,7 +24,7 @@ Entity `daily-visit-summary` ber-`characteristic: summary` — per spec,
 "system-managed projection — no CUD via API". `renderers/jsonbpersist/crud.go`
 menolak semua create/update/delete untuk `CharSummary`. **Tapi tidak ada
 projection engine / recompute / seed yang mengisi entity ini di mana pun**
-dalam codebase (`forma seed` belum diimplementasikan, tidak ada mapping
+dalam codebase (`formspec seed` belum diimplementasikan, tidak ada mapping
 summary→source entity di spec). Akibatnya tabel summary **permanen kosong** dan
 dashboard tidak akan pernah mencerminkan data kunjungan nyata — bukan sekadar
 "data kosong", melainkan jalur data yang putus.

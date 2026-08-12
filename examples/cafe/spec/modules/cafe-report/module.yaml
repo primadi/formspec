@@ -1,0 +1,16 @@
+apiVersion: formspec.dev/v1alpha1
+kind: Module
+metadata:
+  name: cafe-report
+  description: "Cafe Laporan — dashboard ringkasan dan rekap penjualan"
+spec:
+  version: 1.0.0
+  vendor: formspec
+  depends:
+    - module: cafe-order
+  menu:
+    - label: "Laporan"
+      icon: "bar-chart-3"
+      children:
+        - { label: "Dashboard Kafe", icon: "layout-dashboard", view: cafe-summary-dashboard }
+        - { label: "Rekap Penjualan", icon: "table", view: sales-recap-report }

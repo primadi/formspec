@@ -4,8 +4,11 @@
   "type": "object",
   "properties": {
     "app_renderer": {
-      "description": "named Renderer tier app (frontend/05-app-kinds.md)",
-      "type": "string"
+      "description": "@schema {example: \"shadcn-shell\"}",
+      "type": "string",
+      "examples": [
+        "shadcn-shell"
+      ]
     },
     "auth_config_ref": {
       "description": "per-App auth strategy config",
@@ -25,10 +28,14 @@
       }
     },
     "modules": {
+      "description": "@schema {example: \"[clinic, pharmacy]\"}",
       "type": "array",
       "items": {
         "type": "string"
-      }
+      },
+      "examples": [
+        "[clinic, pharmacy]"
+      ]
     },
     "publishes": {
       "description": "cross-app interfaces offered",
@@ -38,17 +45,33 @@
       }
     },
     "root_url": {
-      "type": "string"
+      "description": "@schema {example: \"/app/klinik\", pattern: \"^/app/\"}",
+      "type": "string",
+      "examples": [
+        "/app/klinik"
+      ],
+      "pattern": "^/app/"
     },
     "theme_ref": {
-      "description": "per-App Theme resolution (platform/02 §3)",
-      "type": "string"
+      "description": "@schema {example: \"ocean-blue\"}",
+      "type": "string",
+      "examples": [
+        "ocean-blue"
+      ]
     },
     "vendor": {
-      "type": "string"
+      "description": "@schema {example: \"acme-corp\"}",
+      "type": "string",
+      "examples": [
+        "acme-corp"
+      ]
     },
     "version": {
-      "type": "string"
+      "description": "@schema {example: \"1.0.0\"}",
+      "type": "string",
+      "examples": [
+        "1.0.0"
+      ]
     }
   },
   "required": [

@@ -67,7 +67,7 @@ Di-manage oleh **Platform Operator** dan dievaluasi oleh control plane
 Skema (`schemas/kinds/Policy.schema.json`):
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Policy
 metadata:
   name: ...
@@ -87,7 +87,7 @@ lapisan platform (bukan di `spec/modules/`).
 ## Arah Selanjutnya (TODO Keamanan)
 
 - [ ] Manifes `kind: Policy` untuk env produksi (approval transisi, dsb.)
-- [ ] Pemetaan role → permission di layer auth (di luar scope Forma spec)
+- [ ] Pemetaan role → permission di layer auth (di luar scope FormSpec spec)
 - [ ] Verifikasi `required_permission` benar-benar di-enforce oleh engine di
       produksi (pada dev, endpoint tidak memerlukan token — lihat
       `development.md`)

@@ -1,6 +1,6 @@
 # SHOWCASE kind: Print — invoice PDF A5 + varian HTML (window.print, tanpa server).
 # `html` adalah format pertama yang diimplementasi renderer (Fase 4.F5).
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Print
 metadata:
   name: visit-invoice

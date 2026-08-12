@@ -1,6 +1,6 @@
 # Midtrans payment gateway — configuration page
 # Admin sets server key, API URL, and simulation mode here
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Page
 metadata:
   name: midtrans-config-page

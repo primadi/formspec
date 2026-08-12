@@ -1,0 +1,30 @@
+{
+  "title": "VisualSpecKind Spec",
+  "description": "VisualSpecKindSpec declares a new view type — a meta-kind that defines the\nschema and renderer contract for a family of page/component instances\n(frontend/02-visual-spec-kind.md).\n",
+  "type": "object",
+  "properties": {
+    "accepts_slots": {
+      "description": "tier: page/app only",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SlotDecl"
+      }
+    },
+    "implements_slot": {
+      "description": "tier: component only",
+      "type": "string"
+    },
+    "renderer_contract": {},
+    "schema": {
+      "description": "JSON Schema for instance spec"
+    },
+    "tier": {
+      "description": "app | page | component",
+      "type": "string"
+    }
+  },
+  "required": [
+    "tier"
+  ],
+  "additionalProperties": false
+}

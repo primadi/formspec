@@ -12,7 +12,7 @@
         "--transport",
         "stdio",
         "--dsn",
-        "sqlite:///workspaces/forma/.forma/data.db"
+        "sqlite:///workspaces/formspec/.formspec/data.db"
       ]
     }
   }

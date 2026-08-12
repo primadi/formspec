@@ -19,7 +19,7 @@ App/Page/dst mengoverride derivasi).
 web/src/
 ├── App.tsx / main.tsx        # bootstrap, routing dua surface
 ├── lib/api/{client,meta}.ts  # ky client, envelope, fetcher _meta/*
-├── lib/formaexpr/            # lexer, parser, eval — interpreter FormaExpr
+├── lib/formspec-expr/            # lexer, parser, eval — interpreter FormSpecExpr
 ├── types/manifest.ts         # mirror pkg/spec/frontend.go + entity schema
 ├── stores/{session,meta,prefs}.ts   # zustand
 ├── engine/{derive,permissions,lifecycle,entityRef}.ts   # lihat §3, 02-derivation-engine.md
@@ -104,6 +104,6 @@ tidak diam-diam diasumsikan bekerja:
   tidak pernah dibaca renderer manapun. Lihat
   [`../../spec/frontend/04-spec-resolution-api.md`](../../spec/frontend/04-spec-resolution-api.md)
   §5 untuk kontrak yang harus dipenuhi nanti.
-- Component contract `asset` (mount/unmount, `forma.ui` service) **belum
+- Component contract `asset` (mount/unmount, `formspec.ui` service) **belum
   diimplementasikan sama sekali** — lihat
   [`04-theming-assets.md`](04-theming-assets.md) §2.

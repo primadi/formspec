@@ -1,20 +1,20 @@
 ---
-title: Forma vs Budibase / NocoDB
-description: Comparing Forma's spec-first declarative approach with visual low-code platforms for building business applications
+title: FormSpec vs Budibase / NocoDB
+description: Comparing FormSpec's spec-first declarative approach with visual low-code platforms for building business applications
 date: 2026-07-06
 ---
 
-# Forma vs Budibase / NocoDB
+# FormSpec vs Budibase / NocoDB
 
-> **Forma** is a spec-first, declarative ecosystem for building business applications in Go. **Budibase** and **NocoDB** are open-source low-code platforms that let you build business apps through a visual interface — drag-and-drop UI builder, spreadsheet-like data modeling, and point-and-click automation.
+> **FormSpec** is a spec-first, declarative ecosystem for building business applications in Go. **Budibase** and **NocoDB** are open-source low-code platforms that let you build business apps through a visual interface — drag-and-drop UI builder, spreadsheet-like data modeling, and point-and-click automation.
 
-This comparison examines Forma against the **visual low-code category** represented by Budibase and NocoDB — both popular open-source platforms for building internal tools and business applications without writing traditional code.
+This comparison examines FormSpec against the **visual low-code category** represented by Budibase and NocoDB — both popular open-source platforms for building internal tools and business applications without writing traditional code.
 
 ---
 
 ## 1. Overview
 
-### Forma
+### FormSpec
 A spec-first ecosystem where YAML manifests define entities, state machines, permissions, and UI. The frontend is a **manifest-driven renderer** — a React SPA that reads UI manifests at runtime and renders 12 kinds of UI pages (Table, Form, Dashboard, Kanban, Wizard, etc.). Business logic in Go, Starlark, or sidecar. Two-process architecture with governance Control Plane.
 
 ### Budibase
@@ -27,7 +27,7 @@ An open-source Airtable alternative that turns any SQL database into a smart spr
 
 ## 2. Philosophy
 
-| | Forma | Budibase | NocoDB |
+| | FormSpec | Budibase | NocoDB |
 |---|---|---|---|
 | **Primary interface** | YAML files (code, git-friendly) | Visual drag-and-drop UI builder | Spreadsheet-like grid (Airtable style) |
 | **Who builds the app** | Developers (Go + YAML) | Citizen developers + IT teams | Database admins + business users |
@@ -40,7 +40,7 @@ An open-source Airtable alternative that turns any SQL database into a smart spr
 
 ## 3. Feature Comparison
 
-| Dimension | Forma | Budibase | NocoDB |
+| Dimension | FormSpec | Budibase | NocoDB |
 |---|---|---|---|
 | **Paradigm** | Spec-first (YAML files) | Visual low-code (drag-and-drop) | Spreadsheet-first (Airtable-like) |
 | **Backend language** | Go (native) + Starlark + sidecar (any) | Internal (Node.js) + JavaScript in automations | Internal (Node.js) |
@@ -59,7 +59,7 @@ An open-source Airtable alternative that turns any SQL database into a smart spr
 | **Polyglot Logic** | ✅ Sidecar container (PHP, Python, Node, Java) | ❌ JavaScript only | ❌ JavaScript only |
 | **Built-in UI Components** | 12 UI kinds + shadcn/ui components + 80/20 hybrid low-code (custom component escape hatch) | ✅ Rich component library (30+ components — tables, forms, charts, maps, etc.) | ✅ Spreadsheet grid + form + gallery + Kanban views |
 | **UI Customization** | High — full React component via `asset` escape hatch | Medium — component props + CSS variables + custom JS | Low — layout options limited to what grid/form/gallery/Kanban offer |
-| **Hosting** | Self-host (single binary, Docker, K8s) + Forma Cloud | Self-host (Docker, K8s) + Budibase Cloud | Self-host (Docker) + NocoDB Cloud |
+| **Hosting** | Self-host (single binary, Docker, K8s) + FormSpec Cloud | Self-host (Docker, K8s) + Budibase Cloud | Self-host (Docker) + NocoDB Cloud |
 | **Open Source** | FSL (source available → Apache 2.0 after 2 years). Spec is CC0. | ✅ AGPL v3 + Budibase EE (paid) | ✅ AGPL v3 + NocoDB EE (paid) |
 | **Learning Curve** | Medium — YAML + Go + Starlark | Low — visual interface, no code needed | Low — spreadsheet UI, familiar to business users |
 | **Target Skill Level** | Professional developers | Citizen developers + IT pros | Business users + database admins |
@@ -68,12 +68,12 @@ An open-source Airtable alternative that turns any SQL database into a smart spr
 
 ## 4. The Fundamental Difference: File vs Visual
 
-### The Forma approach: YAML is the source of truth
+### The FormSpec approach: YAML is the source of truth
 
 ```
 Write YAML ──► git commit ──► CI validate ──► deploy
     │                              │
-    │ └── Entity definitions       │ └── forma validate
+    │ └── Entity definitions       │ └── formspec validate
     │ └── State machine            │ └── schema diff
     │ └── Permissions              │ └── permission audit
     │ └── UI kinds                 │
@@ -119,9 +119,9 @@ Drag-and-drop ──► Auto-save ──► Publish
 
 ## 5. The 80/20 Rule — Differently Applied
 
-Both Forma and Budibase/NocoDB acknowledge that ~80% of UI is patterned and ~20% is custom. But they draw the line differently:
+Both FormSpec and Budibase/NocoDB acknowledge that ~80% of UI is patterned and ~20% is custom. But they draw the line differently:
 
-| | Forma | Budibase / NocoDB |
+| | FormSpec | Budibase / NocoDB |
 |---|---|---|
 | **Patterned 80%** | YAML-defined — 12 UI kinds (Table, Form, Dashboard, Kanban, Wizard, Report, etc.) | Visual builder — drag-and-drop components (table, form, chart, map, etc.) |
 | **Custom 20%** | Full React component via `asset` escape hatch | JavaScript actions + custom component plugin |
@@ -134,7 +134,7 @@ Both Forma and Budibase/NocoDB acknowledge that ~80% of UI is patterned and ~20%
 
 ## 6. When to Choose Which
 
-### Choose Forma when:
+### Choose FormSpec when:
 - You are a **development team** building business applications with **complex server-side logic**.
 - You need **enterprise patterns** (idempotency, outbox, state machine, audit trail) enforced by the framework.
 - **Git workflows** are essential — code review, CI validation, rollback.
@@ -159,7 +159,7 @@ Both Forma and Budibase/NocoDB acknowledge that ~80% of UI is patterned and ~20%
 
 ## 7. Conclusion
 
-Forma, Budibase, and NocoDB exist on a spectrum of **abstraction vs control**:
+FormSpec, Budibase, and NocoDB exist on a spectrum of **abstraction vs control**:
 
 ```
                      Less Control / More Abstraction
@@ -169,13 +169,13 @@ NocoDB:     Spreadsheet UI for databases
               ↓
 Budibase:   Visual low-code platform
               ↓
-Forma:      Spec-first application framework
+FormSpec:      Spec-first application framework
 
                      ◄─────────────────────────────────
                      More Control / Less Abstraction
 ```
 
-| | NocoDB | Budibase | Forma |
+| | NocoDB | Budibase | FormSpec |
 |---|---|---|---|
 | **User** | Business user | Citizen developer | Professional developer |
 | **Interface** | Spreadsheet | Drag-and-drop | YAML files |
@@ -184,10 +184,10 @@ Forma:      Spec-first application framework
 | **Enterprise patterns** | ❌ None | ❌ None | ✅ Built-in |
 | **Git / DevOps** | ❌ Not native | ❌ Not native | ✅ Native |
 
-**Forma is not a competitor to Budibase or NocoDB for their target users.** They serve different audiences:
+**FormSpec is not a competitor to Budibase or NocoDB for their target users.** They serve different audiences:
 
-- **NocoDB users** want a spreadsheet — Forma is overkill.
-- **Budibase users** want to avoid coding — Forma requires coding.
-- **Forma users** want structural guarantees and governance — visual tools can't provide that.
+- **NocoDB users** want a spreadsheet — FormSpec is overkill.
+- **Budibase users** want to avoid coding — FormSpec requires coding.
+- **FormSpec users** want structural guarantees and governance — visual tools can't provide that.
 
-> If Budibase is **Excel with an API**, and NocoDB is **Airtable for your own database**, Forma is **PostgreSQL with compile-time guarantees** — more powerful, more rigid, and designed for professional developers building systems that need to be right.
+> If Budibase is **Excel with an API**, and NocoDB is **Airtable for your own database**, FormSpec is **PostgreSQL with compile-time guarantees** — more powerful, more rigid, and designed for professional developers building systems that need to be right.

@@ -20,7 +20,7 @@ dependent code in `internal/app/resolve.go`:
 ### Updated structs
 - **`SubscriptionSpec`** — added Tier 2 fields: `store`, `retention`, `position`, `max_retry`, `dead_letter`, `filter`, `transform`, `delivery` channel (02-core-extended.md §3)
 - **`ConfigSpec`** — replaced `map[string]any` with structured `ConfigKey` type (`type`, `default`, `secret` per 01-core-basic.md §10)
-- **`MenuSpec`/`MenuItem`** — added `MenuSpec` wrapper with `mode` (module/custom) and `items`; `MenuItem` updated with `When` (FormaExpr) (platform/02-workspace-app-module.md §4)
+- **`MenuSpec`/`MenuItem`** — added `MenuSpec` wrapper with `mode` (module/custom) and `items`; `MenuItem` updated with `When` (FormSpecExpr) (platform/02-workspace-app-module.md §4)
 
 ### Type changes
 - `AppSpec.Menu` changed from `[]MenuItem` to `*MenuSpec`

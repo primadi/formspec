@@ -1,12 +1,12 @@
-# `forma-remote-mcp` — Grounding Ekosistem Forma
+# `formspec-remote-mcp` — Grounding Ekosistem FormSpec
 
 **Status:** Design — belum diimplementasikan
 **License:** Creative Commons CC0
 
-> MCP server terpusat (Streamable HTTP, hosted Forma Cloud). Grounding "tentang
-> ekosistem Forma": industry template dan module registry publik — data bersama
-> lintas developer, dikurasi Forma, berpotensi multi-kontributor nanti. Dipisah
-> dari [`forma-local-mcp`](03-forma-local-mcp.md) berdasarkan kepemilikan data,
+> MCP server terpusat (Streamable HTTP, hosted FormSpec Cloud). Grounding "tentang
+> ekosistem FormSpec": industry template dan module registry publik — data bersama
+> lintas developer, dikurasi FormSpec, berpotensi multi-kontributor nanti. Dipisah
+> dari [`formspec-local-mcp`](03-formspec-local-mcp.md) berdasarkan kepemilikan data,
 > bukan ukuran ([`01-architecture.md`](01-architecture.md) §1).
 
 ---
@@ -36,9 +36,9 @@ candidate_entities:
 Template adalah meta-knowledge untuk discovery — **bukan** module yang
 di-install ke aplikasi, bukan bagian mekanisme `modules:`/`vendors/`. Ia hidup
 di server ini (bukan lokal) karena sekelas dengan module registry: dikurasi
-Forma sekarang, berpotensi multi-kontributor nanti — arsitekturnya disamakan
+FormSpec sekarang, berpotensi multi-kontributor nanti — arsitekturnya disamakan
 sejak awal supaya tidak perlu migrasi saat community template dibuka. Seluruh
-template awal ditulis Forma sendiri.
+template awal ditulis FormSpec sendiri.
 
 ## 2. Katalog Kecil vs Besar — Dua Pola Tool, Disengaja
 
@@ -90,7 +90,7 @@ spec:
 Dua jalur baca, sesuai kepemilikan data:
 
 - **Modul terinstal** (`vendors/` project ini) → `list_installed_modules()` di
-  `forma-local-mcp` mengembalikan index-nya.
+  `formspec-local-mcp` mengembalikan index-nya.
 - **Modul registry publik yang belum di-install** →
   `search_modules_registry`/`get_module_detail` di server ini.
 
@@ -114,7 +114,7 @@ Selama seluruh index masih first-party (`official`), risiko ini belum berlaku.
 
 ## 4. Pertanyaan Terbuka
 
-- Autentikasi dan rate-limit `forma-remote-mcp` — perlu API key Forma Cloud
+- Autentikasi dan rate-limit `formspec-remote-mcp` — perlu API key FormSpec Cloud
   terpisah dari BYOK LLM, atau akses baca/search bebas?
 - Apakah hasil pencarian boleh di-cache sementara di sisi lokal (per sesi)
   untuk mengurangi round-trip jaringan berulang?
@@ -127,6 +127,6 @@ Selama seluruh index masih first-party (`official`), risiko ini belum berlaku.
 | Dokumen | Isi |
 |---|---|
 | [`01-architecture.md`](01-architecture.md) | Pemisahan dua server berdasarkan kepemilikan data; strategi on-demand |
-| [`03-forma-local-mcp.md`](03-forma-local-mcp.md) | Server saudara — jalur baca `ai_index` modul terinstal |
+| [`03-formspec-local-mcp.md`](03-formspec-local-mcp.md) | Server saudara — jalur baca `ai_index` modul terinstal |
 | [`../spec/platform/02-workspace-app-module.md`](../spec/platform/02-workspace-app-module.md) | Manifest Module tempat `ai_index` dideklarasikan |
 | [`../spec/platform/07-marketplace.md`](../spec/platform/07-marketplace.md) | Trust tier — dasar analisis risiko §3.1 |

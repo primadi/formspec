@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 // These tests reproduce the deadlock documented in

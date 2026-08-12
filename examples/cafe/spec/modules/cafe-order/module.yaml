@@ -1,0 +1,16 @@
+apiVersion: formspec.dev/v1alpha1
+kind: Module
+metadata:
+  name: cafe-order
+  description: "Cafe Transaksi — pesanan dan pembayaran"
+spec:
+  version: 1.0.0
+  vendor: formspec
+  depends:
+    - module: cafe-master
+  menu:
+    - label: "Transaksi"
+      icon: "shopping-cart"
+      children:
+        - { label: "Pesanan", icon: "receipt", route: /cafe-order/orders }
+        - { label: "Pembayaran", icon: "credit-card", route: /cafe-order/payments }

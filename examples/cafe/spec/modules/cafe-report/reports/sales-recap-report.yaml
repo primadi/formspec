@@ -1,0 +1,24 @@
+apiVersion: formspec.dev/v1alpha1
+kind: Report
+metadata:
+  name: sales-recap-report
+  module: cafe-report
+  description: "Rekap penjualan per periode — no. pesanan, meja, total, dan status"
+spec:
+  title: "Rekap Penjualan"
+  entity: cafe-order.order
+  required_permission: cafe-report.sales-recap-report.view
+  export: [pdf, csv, xlsx]
+  parameters:
+    - { field: transaction_date, label: "Tanggal", type: "date" }
+    - { field: status, label: "Status", type: "select" }
+  groups:
+    - { field: status, label: "Status" }
+  columns:
+    - { field: transaction_date, label: "Tanggal" }
+    - { field: order_number, label: "No. Pesanan" }
+    - { field: table_id, label: "Meja" }
+    - { field: total_amount, label: "Total" }
+    - { field: status, label: "Status" }
+  totals:
+    - { label: "Total Penjualan", field: total_amount, fn: sum }

@@ -2,7 +2,7 @@
 //
 // Implementasi native untuk kind: Service "midtrans".
 // File ini TIDAK termasuk dalam deployment artifact.
-// Saat build: dikompilasi ke .forma/build/native.so, lalu di-fuse ke forma-resource binary.
+// Saat build: dikompilasi ke .formspec/build/native.so, lalu di-fuse ke formspec-resource binary.
 // Saat deploy: hanya spec/ + binary yang dikirim; impl/ dihapus.
 
 package billing

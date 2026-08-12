@@ -1,0 +1,12 @@
+apiVersion: formspec.dev/v1alpha1
+kind: Widget
+metadata:
+  name: open-orders
+  module: cafe-report
+  description: "Jumlah pesanan yang masih terbuka"
+spec:
+  title: "Pesanan Terbuka"
+  type: metric
+  entity: cafe-order.order
+  query: "status == 'open'"
+  refresh_secs: 60

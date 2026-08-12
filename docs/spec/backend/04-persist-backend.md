@@ -65,7 +65,7 @@ di-remap konsisten) serta laporan kompatibilitas `--dry-run` sebelum eksekusi.
 
 Operasi baca/ekspor (`list`, `find`, `export`, `backup`) **tidak boleh**
 license-gated, tanpa kedaluwarsa, di PersistBackend manapun — ini yang membuat
-implementasi Forma manapun bisa direstore oleh implementasi lain yang konform,
+implementasi FormSpec manapun bisa direstore oleh implementasi lain yang konform,
 memberi pemilik workspace jalan keluar yang kredibel dari satu operator/vendor.
 
 ## 4. Konvensi Query & Format API

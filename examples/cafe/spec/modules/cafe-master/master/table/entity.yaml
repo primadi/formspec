@@ -1,0 +1,40 @@
+apiVersion: formspec.dev/v1alpha1
+kind: Entity
+metadata:
+  name: table
+  module: cafe-master
+  description: "Meja kafe — kapasitas dan status ketersediaan"
+spec:
+  version: v1
+  characteristic: master
+  lifecycle: plain_crud
+  display_field: name
+  plural: tables
+  fields:
+    - name: code
+      type: string
+      required: true
+      unique: true
+      title: "Kode Meja"
+      description: "Kode unik meja, contoh T-01"
+    - name: name
+      type: string
+      required: true
+      title: "Nama Meja"
+    - name: capacity
+      type: integer
+      required: true
+      title: "Kapasitas"
+      description: "Jumlah orang maksimal"
+    - name: status
+      type: enum
+      enum_values: [available, occupied, reserved]
+      default: available
+      index: true
+      title: "Status"
+  actions:
+    - name: submit
+      disabled: true
+  expose:
+    - type: rest
+      actions: [list, find, create, update, delete]

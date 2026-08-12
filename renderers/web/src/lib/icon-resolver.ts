@@ -4,7 +4,7 @@
 // Used by ActionIcon component and Sidebar (and any future consumer).
 //
 // Why namespace import (`import *`):
-//   - Forma is a manifest-driven framework — icon names come from YAML
+//   - FormSpec is a manifest-driven framework — icon names come from YAML
 //     at runtime and can't be known at compile-time
 //   - Sidebar already bundles all lucide-react via this pattern,
 //     so no additional bundle cost

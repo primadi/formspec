@@ -1,5 +1,5 @@
 # Orders by status widget — pie/bar chart
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Widget
 metadata:
   name: orders-by-status

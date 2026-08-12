@@ -1,4 +1,4 @@
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: App
 metadata:
   name: klinik-internal
@@ -9,7 +9,7 @@ metadata:
     Ini App internal — staf klinik, akses penuh ke kedua module.
 spec:
   version: 1.0.0
-  vendor: forma-examples
+  vendor: formspec-examples
   root_url: /app/klinik-internal
   modules: [clinic, pharmacy]
   # Adopsi utuh default menu suggestion masing-masing module (Core Basic

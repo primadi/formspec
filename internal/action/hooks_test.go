@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 func TestSelectHooks_PriorityOrdering(t *testing.T) {

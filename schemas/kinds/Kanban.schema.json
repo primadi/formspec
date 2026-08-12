@@ -14,7 +14,11 @@
       }
     },
     "entity": {
-      "type": "string"
+      "description": "@schema {example: \"helpdesk.ticket\"}",
+      "type": "string",
+      "examples": [
+        "helpdesk.ticket"
+      ]
     },
     "filters": {
       "type": "array",
@@ -38,6 +42,9 @@
     "public": {
       "description": "If true (default), a route /module/kanban/\u003cname\u003e is auto-generated.",
       "type": "boolean",
+      "examples": [
+        "true"
+      ],
       "nullable": true
     },
     "realtime": {
@@ -59,7 +66,11 @@
       "type": "boolean"
     },
     "status_field": {
-      "type": "string"
+      "description": "@schema {example: \"status\"}",
+      "type": "string",
+      "examples": [
+        "status"
+      ]
     }
   },
   "required": [

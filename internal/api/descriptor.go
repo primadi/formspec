@@ -1,11 +1,11 @@
-// Package api provides the API generation and serving layer for Forma.
+// Package api provides the API generation and serving layer for FormSpec.
 //
 // It implements the deny-by-default exposure model (D49) with multi-protocol
 // routing (D50). Route descriptors are protocol-agnostic; the router dispatches
 // to the correct protocol adapter (REST via chi, gRPC, WebSocket).
 package api
 
-import "github.com/primadi/forma/pkg/spec"
+import "github.com/primadi/formspec/pkg/spec"
 
 // ProtocolType mirrors spec.ProtocolType for local convenience.
 type ProtocolType = spec.ProtocolType

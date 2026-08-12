@@ -7,7 +7,7 @@
 # Backend GetByID otomatis resolve dari UUID → _key fallback. Saat pertama
 # kali diakses tanpa record yang cocok, HandleFind auto-create record dengan
 # natural key value + field defaults.
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Page
 metadata:
   name: system-settings

@@ -4,7 +4,7 @@
 > tetap ke rekening bersama, lalu setiap bulan satu anggota memenangkan undian
 > dan menerima total pot.
 
-Dibangun di atas **Forma** — ekosistem spec-first & declarative: API, UI,
+Dibangun di atas **FormSpec** — ekosistem spec-first & declarative: API, UI,
 permission, state machine, dan event semuanya dideklarasikan sebagai manifest
 YAML, sisanya di-derive oleh engine.
 
@@ -20,24 +20,24 @@ YAML, sisanya di-derive oleh engine.
 
 ```bash
 # 1) Validasi seluruh manifest
-forma validate --spec spec          # → 17 manifest(s) validated, 0 problems
+formspec validate --spec spec          # → 17 manifest(s) validated, 0 problems
 
 # 2) Jalankan dev server (SQLite, hot-reload)
-forma dev --addr :18080
+formspec dev --addr :18080
 
 # 3) Buka UI
 #    Aplikasi : http://localhost:18080/default/app/arisan
 #    Admin    : http://localhost:18080/default/_admin
 ```
 
-> Prasyarat: binary `forma` di `PATH` (Go toolchain). Untuk produksi, ubah
-> `dsn` di `forma-app.yaml` ke PostgreSQL.
+> Prasyarat: binary `formspec` di `PATH` (Go toolchain). Untuk produksi, ubah
+> `dsn` di `formspec-app.yaml` ke PostgreSQL.
 
 ## Struktur
 
 ```
 arisan/
-  forma-app.yaml    # config CLI (bukan manifest)
+  formspec-app.yaml    # config CLI (bukan manifest)
   spec/             # seluruh manifest YAML (App, Module, Entity, dll.)
   docs/             # dokumentasi proyek (lihat di bawah)
   schemas/          # schema JSON engine
@@ -61,5 +61,5 @@ Baca [`docs/README.md`](docs/README.md) sebagai pintu masuk, atau langsung ke:
 
 ## Lisensi
 
-Proyek internal. Seluruh konten bersumber dari spesifikasi Forma
-(`github.com/primadi/forma`).
+Proyek internal. Seluruh konten bersumber dari spesifikasi FormSpec
+(`github.com/primadi/formspec`).

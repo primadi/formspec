@@ -5,11 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/primadi/forma/internal/auth"
-	"github.com/primadi/forma/internal/entity"
-	"github.com/primadi/forma/internal/events"
-	"github.com/primadi/forma/pkg/spec"
-	db "github.com/primadi/forma/renderers/jsonbpersist"
+	"github.com/primadi/formspec/internal/auth"
+	"github.com/primadi/formspec/internal/entity"
+	"github.com/primadi/formspec/internal/events"
+	"github.com/primadi/formspec/pkg/spec"
+	db "github.com/primadi/formspec/renderers/jsonbpersist"
 )
 
 // setupWSPermissionRegistry registers one exposed entity (clinic/visit,

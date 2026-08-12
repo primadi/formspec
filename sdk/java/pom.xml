@@ -4,14 +4,14 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>io.forma</groupId>
-    <artifactId>lib-forma</artifactId>
+    <groupId>io.formspec</groupId>
+    <artifactId>lib-formspec</artifactId>
     <version>0.1.0</version>
     <packaging>jar</packaging>
 
-    <name>lib-forma (Java)</name>
-    <description>Thin client SDK bridging a Java app to forma-sidecar: /invoke listener + ctx.* proxy client</description>
-    <url>https://github.com/primadi/forma</url>
+    <name>lib-formspec (Java)</name>
+    <description>Thin client SDK bridging a Java app to formspec-sidecar: /invoke listener + ctx.* proxy client</description>
+    <url>https://github.com/primadi/formaspec</url>
 
     <licenses>
         <license>
@@ -55,7 +55,7 @@
                 <artifactId>exec-maven-plugin</artifactId>
                 <version>3.1.0</version>
                 <configuration>
-                    <mainClass>io.forma.example.AppExample</mainClass>
+                    <mainClass>io.formspec.example.AppExample</mainClass>
                 </configuration>
             </plugin>
         </plugins>

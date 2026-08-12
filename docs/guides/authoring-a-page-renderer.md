@@ -58,7 +58,7 @@ Renderer-mu **wajib**:
   "kalau dikirim berarti boleh dipanggil" sebagai satu-satunya guard (server
   tetap menolak di resource level).
 - Mengevaluasi `visible_when`/`readonly_when`/`required_when`/`compute`
-  lewat interpreter FormaExpr
+  lewat interpreter FormSpecExpr
   ([`08-formaexpr.md`](../spec/frontend/08-formaexpr.md)) — bukan
   mengimplementasikan ulang grammar-nya sendiri; hasil evaluasi harus
   identik dengan shell resmi untuk ekspresi yang sama.
@@ -73,7 +73,7 @@ membaca spec saat runtime.
 
 ## 5. Registrasi dan Distribusi
 ```yaml
-apiVersion: forma/v1
+apiVersion: formspec/v1
 kind: Renderer
 metadata:
   name: kanban-vue-community

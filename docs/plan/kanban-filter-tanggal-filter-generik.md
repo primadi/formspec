@@ -76,5 +76,5 @@ Medium. Perubahan schema + renderer + manifest + docs; backend nol.
 1. `make generate-schema` — `FilterSpec` + `fixed_filters` di schema Kanban/Table. ✅
 2. `npx tsc --noEmit` web — bersih. ✅
 3. `go build`/`go test ./...` — hijau.
-4. `forma validate` board.yaml — lolos.
+4. `formspec validate` board.yaml — lolos.
 5. Manual: board default hari ini, ganti tanggal, polyclinic filter, realtime.

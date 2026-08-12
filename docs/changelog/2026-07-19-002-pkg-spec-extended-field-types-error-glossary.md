@@ -25,16 +25,16 @@
 - New types: `RateLimitSpec`, `FieldClassification` (with constants), `TreeDecl`, `SoftDeactivateDecl`, `StorageSpec`, `StorageTransform`
 
 ### 1.5 Error glossary (`pkg/spec/errors.go` — new file)
-- `ErrorCode` type, 22 `FORMA.*` error constants from `error-glossary.yaml`
+- `ErrorCode` type, 22 `FORMSPEC.*` error constants from `error-glossary.yaml`
 - 3 observability error codes (`OBSERVABILITY_METRICS_DISABLED`, `OBSERVABILITY_DEBUG_FORBIDDEN`, `LOGS_FILTER_INVALID`)
-- `FormaError` structured error type with `ErrorDetail`
+- `FormSpecError` structured error type with `ErrorDetail`
 - `ErrorCodeSet()` enumeration function
 
 ## Files affected
 - `pkg/spec/entity.go` — extended field types + FieldType additions
 - `pkg/spec/frontend.go` — CalendarSpec, ApprovalInboxSpec, NotificationCenterSpec, ListingSpec
 - `pkg/spec/resources.go` — VisualSpecKindSpec, RendererSpec, PersistBackendSpec, SlotDecl, SlotContract
-- `pkg/spec/errors.go` — new file: error code constants + FormaError type
+- `pkg/spec/errors.go` — new file: error code constants + FormSpecError type
 
 ## References
 - docs/spec/frontend/02-visual-spec-kind.md (§1–§6)

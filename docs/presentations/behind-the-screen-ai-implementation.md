@@ -1,7 +1,7 @@
 # Behind the Screen: Sharing Practical AI Implementations in Software Dev
 
 > Materi sesi sharing internal — cara pakai AI (Copilot/Claude Code/DeepSeek, dkk) secara
-> praktis dalam pekerjaan software development sehari-hari, ditutup dengan demo **Forma**
+> praktis dalam pekerjaan software development sehari-hari, ditutup dengan demo **FormSpec**
 > sebagai jawaban konkret atas celah yang masih ada di era AI-assisted development hari ini.
 >
 > Format: presentasi + live demo. Audiens: developer yang sudah pakai AI tool tapi ingin
@@ -16,7 +16,7 @@
 | 3 — Memperluas Indra AI (MCP, Skills) | 25 menit | Anatomi MCP (primitif, local vs remote) + Agent Skills sebagai standar terbuka (format, lokasi folder, koleksi referensi) |
 | 4 — Showcase Praktek Nyata | 20 menit | Termasuk live demo `@plan → @agent` — sisakan buffer 5 menit kalau demo meleset |
 | 5 — Repository-Driven Context & SOP | 10 menit | Bisa dipercepat, isinya ringkas |
-| 6 — Masa Depan Software Dev + Demo Forma | 30 menit | Bagian terberat — 10 menit paparan celah + objection-handling, 20 menit demo |
+| 6 — Masa Depan Software Dev + Demo FormSpec | 30 menit | Bagian terberat — 10 menit paparan celah + objection-handling, 20 menit demo |
 
 Kalau waktu sesi lebih pendek, pangkas dari Bagian 2 dan 5 dulu (paling mudah dipercepat tanpa
 kehilangan inti pesan) — jangan potong dari Bagian 4 dan 6 (demo adalah inti nilai sesi ini).
@@ -294,7 +294,7 @@ setiap kali — pengetahuan ada di repo, bukan di riwayat chat yang hilang begit
 
 ## Bagian 6 — Masa Depan Software Development dengan AI
 
-**Tujuan:** membedah keterbatasan AI saat ini, lalu menunjukkan bagaimana **Forma** — proyek yang
+**Tujuan:** membedah keterbatasan AI saat ini, lalu menunjukkan bagaimana **FormSpec** — proyek yang
 sedang dikembangkan — secara konkret menjawab celah tersebut.
 
 ### A. Apa yang Kurang Lengkap dari Era AI Saat Ini?
@@ -320,32 +320,32 @@ skeptis — sudah banyak yang kapok dengan low-code generation di masa lalu. Jaw
 masuk demo, bukan sesudah:
 
 - **Bedanya bukan "declarative vs kode"** — Frappe/ERPNext (`DocType`) sudah lebih dulu melakukan
-  ini dan terbukti production-proven 15+ tahun. Perbedaan Forma ada di **di mana kontrak itu
-  hidup**: DocType Frappe tersimpan sebagai row di database (`tabDocType`), Entity Forma tersimpan
+  ini dan terbukti production-proven 15+ tahun. Perbedaan FormSpec ada di **di mana kontrak itu
+  hidup**: DocType Frappe tersimpan sebagai row di database (`tabDocType`), Entity FormSpec tersimpan
   sebagai **file YAML di disk**.
 - Konsekuensinya konkret: file YAML **git-diffable, reviewable di PR, dan dibaca/ditulis AI
   secara natural** — sama seperti AI sudah terbiasa dengan manifest K8s/Docker Compose/CI config.
   DocType di database butuh tooling ekspor/impor khusus (`bench export-doc`) sebelum bisa masuk
   alur git/PR, dan AI perlu API call atau akses DB langsung untuk membacanya.
-- Forma juga tidak mengunci ke satu bahasa/ORM — logic bisa Go native, Starlark script, atau
+- FormSpec juga tidak mengunci ke satu bahasa/ORM — logic bisa Go native, Starlark script, atau
   sidecar bahasa apapun; akses data pakai raw SQL (`ctx.db`), bukan ORM abstraction yang
   membatasi query kompleks.
-- Kejujuran perlu disampaikan juga: Forma **masih MVP**, belum punya modul bisnis siap pakai
-  sebanyak ERPNext (30+ modul). Argumennya bukan "Forma sudah lebih lengkap", tapi "Forma
+- Kejujuran perlu disampaikan juga: FormSpec **masih MVP**, belum punya modul bisnis siap pakai
+  sebanyak ERPNext (30+ modul). Argumennya bukan "FormSpec sudah lebih lengkap", tapi "FormSpec
   dirancang supaya AI-assisted development bekerja lebih presisi di atasnya sejak awal."
 
-- Rujukan: `docs/comparison/forma-vs-frappe.md` §4 (YAML di disk vs DocType di DB) dan §6
+- Rujukan: `docs/comparison/formspec-vs-frappe.md` §4 (YAML di disk vs DocType di DB) dan §6
   (kapan pilih yang mana) — kutip langsung dari situ kalau ada pertanyaan lanjutan di sesi.
 
-### C. Live Demo: Forma Menjawab Keempat Celah Ini
+### C. Live Demo: FormSpec Menjawab Keempat Celah Ini
 
-**Forma** adalah platform *spec-driven* untuk aplikasi bisnis: aplikasi dideklarasikan sebagai
+**FormSpec** adalah platform *spec-driven* untuk aplikasi bisnis: aplikasi dideklarasikan sebagai
 kumpulan spec YAML (`workspace → app → module → kind`), diinterpretasikan saat runtime oleh satu
-engine (`forma`) dan sepasang implementasi resmi (renderer). Prinsip intinya:
+engine (`formspec`) dan sepasang implementasi resmi (renderer). Prinsip intinya:
 
 > **Spec adalah kontrak; renderer adalah implementasi kontrak itu.**
 
-Berikut pemetaan langsung celah di atas ke bagaimana Forma dibangun:
+Berikut pemetaan langsung celah di atas ke bagaimana FormSpec dibangun:
 
 #### 1 → Guardrails yang dipaksakan sistem, bukan sekadar instruksi teks
 
@@ -353,7 +353,7 @@ AI (atau developer manapun) tidak menulis SQL migration, route REST, atau state-
 bebas — semua itu **derivasi otomatis dari spec YAML** (`kind: Entity`, field, relasi, action,
 event, natural key). AI hanya boleh mengubah kontrak di dalam skema yang sudah didefinisikan;
 migration adalah *structural-diff* dari spec lama ke baru, bukan skrip bebas yang bisa lolos
-review. Errornya sendiri terstandarisasi (`FORMA.*` di `docs/spec/backend/error-glossary.yaml`),
+review. Errornya sendiri terstandarisasi (`FORMSPEC.*` di `docs/spec/backend/error-glossary.yaml`),
 bukan pesan ad-hoc yang beda-beda tiap developer/AI menulisnya.
 
 - Rujukan: `docs/spec/backend/01-core-basic.md` (Document/Entity/action sebagai kontrak),
@@ -361,22 +361,22 @@ bukan pesan ad-hoc yang beda-beda tiap developer/AI menulisnya.
 
 #### 2 → Infrastruktur & akses dideklarasikan, bukan dikonfigurasi manual
 
-Satu binary engine (`forma`) melayani **semua bahasa** (Go, PHP, Python, Ruby, Java, .NET,
+Satu binary engine (`formspec`) melayani **semua bahasa** (Go, PHP, Python, Ruby, Java, .NET,
 TypeScript, Rust) — app code berjalan sebagai child process yang berbicara ke engine lewat Unix
-socket via SDK tipis (`lib-forma-*`). Tidak ada topologi berbeda per bahasa yang harus dipahami
-AI atau developer. Di sisi cluster, `forma-operator` (K8s CRD controller) dan `forma-ctl`
+socket via SDK tipis (`lib-formspec-*`). Tidak ada topologi berbeda per bahasa yang harus dipahami
+AI atau developer. Di sisi cluster, `formspec-operator` (K8s CRD controller) dan `formspec-ctl`
 (`--mode=region/cluster`) membuat Workspace/Datastore/ResourceClaim sebagai objek deklaratif —
 developer memilih region + tier (`ClusterClass: premium/standard/economy`), tidak perlu tahu
 hypervisor atau topologi jaringan fisik di baliknya.
 
 - Rujukan: `docs/architecture/01-architecture-overview.md` §1–§2 (topology + component
-  inventory), `docs/runtimes/04-forma-sidecar.md` (protokol lintas bahasa).
+  inventory), `docs/runtimes/04-formspec-sidecar.md` (protokol lintas bahasa).
 
 #### 3 → Satu pipeline deployment, generic image, dev = prod secara desain
 
-`forma dev` dan `forma serve` adalah **binary yang sama**, beda mode — bukan dua sistem berbeda
-yang bisa divergen. Deployment mengikuti satu pipeline generik (`forma apply` → deploy → run)
-untuk semua App, semua bahasa. HA/failover dan reconciliation K8s ditangani `forma-operator`
+`formspec dev` dan `formspec serve` adalah **binary yang sama**, beda mode — bukan dua sistem berbeda
+yang bisa divergen. Deployment mengikuti satu pipeline generik (`formspec apply` → deploy → run)
+untuk semua App, semua bahasa. HA/failover dan reconciliation K8s ditangani `formspec-operator`
 secara otomatis, bukan runbook manual per tim.
 
 - Rujukan: `docs/guides/how-to-run.md` (dev vs prod, satu command), `docs/architecture/03-deployment-flow.md`,
@@ -393,7 +393,7 @@ vendor pihak ketiga closed-source) sudah punya jalur kontraktual sendiri lewat
 terbaca" (`docs/spec/platform/07-marketplace.md`).
 
 - Rujukan: `docs/architecture/07-vertical-modules.md` (taksonomi modul, perbandingan ERPNext),
-  `docs/comparison/forma-vs-frappe.md` (posisi Forma vs ekosistem existing terdekat).
+  `docs/comparison/formspec-vs-frappe.md` (posisi FormSpec vs ekosistem existing terdekat).
 
 #### Alur Demo yang Disarankan
 
@@ -401,8 +401,8 @@ terbaca" (`docs/spec/platform/07-marketplace.md`).
 
 | Opsi | Command | Kapan pakai |
 |---|---|---|
-| **Aman (default)** | `go run ./cmd/forma/ dev --spec examples/Clinic-UI-Showcase/spec --dsn "sqlite:.forma/clinic.db" --addr :8080 --force --dev-ui` | Sudah jadi contoh resmi yang terdokumentasi di `docs/guides/how-to-run.md` — paling kecil kemungkinan gagal di depan audiens |
-| **Naratif bisnis lebih kuat** | `go run ./cmd/forma/ dev --spec verticals/billing/spec --dsn "sqlite:.forma/billing.db" --addr :8080 --dev --force --dev-ui` | Kalau ingin cerita "modul vertikal siap pakai" terasa lebih konkret — **wajib gladi bersih dulu** sebelum sesi, karena vertical module masih berkembang dan belum sekokoh example app |
+| **Aman (default)** | `go run ./cmd/formspec/ dev --spec examples/Clinic-UI-Showcase/spec --dsn "sqlite:.formspec/clinic.db" --addr :8080 --force --dev-ui` | Sudah jadi contoh resmi yang terdokumentasi di `docs/guides/how-to-run.md` — paling kecil kemungkinan gagal di depan audiens |
+| **Naratif bisnis lebih kuat** | `go run ./cmd/formspec/ dev --spec verticals/billing/spec --dsn "sqlite:.formspec/billing.db" --addr :8080 --dev --force --dev-ui` | Kalau ingin cerita "modul vertikal siap pakai" terasa lebih konkret — **wajib gladi bersih dulu** sebelum sesi, karena vertical module masih berkembang dan belum sekokoh example app |
 
 Kalau tidak sempat gladi bersih penuh sebelum sesi, pakai opsi Aman. Siapkan juga screenshot/rekaman
 singkat sebagai fallback kalau demo tetap macet di tempat — jangan mengandalkan live demo 100% tanpa cadangan.
@@ -414,7 +414,7 @@ singkat sebagai fallback kalau demo tetap macet di tempat — jangan mengandalka
    efeknya otomatis merambat ke form, tabel, dan REST API tanpa AI perlu menyentuh migration
    SQL atau kode frontend. **Inilah guardrail nyata**: AI bekerja di dalam kontrak spec, bukan
    bebas menulis infrastruktur dari nol.
-5. Tutup dengan `docs/comparison/forma-vs-frappe.md` — posisikan Forma bukan sebagai "framework
+5. Tutup dengan `docs/comparison/formspec-vs-frappe.md` — posisikan FormSpec bukan sebagai "framework
    AI generatif lainnya", tapi sebagai lapisan kontrak yang membuat kerja AI (dan manusia)
    otomatis terpagari, portable lintas bahasa/infrastruktur, dan tidak reinventing modul bisnis
    yang sudah selesai dipikirkan orang lain.
@@ -425,5 +425,5 @@ AI hari ini sudah sangat baik menulis *logika*. Yang masih kurang adalah **pagar
 **peta infrastruktur**, **jalur deployment**, dan **modul bisnis siap pakai** — empat hal yang
 tidak selesai dengan prompt yang lebih baik, tapi dengan *sistem* yang secara desain memaksakan
 kontrak, menyederhanakan topologi, menyatukan pipeline, dan menyediakan blok bisnis yang sudah
-teruji. Forma adalah taruhan bahwa AI-assisted development akan jauh lebih produktif ketika AI
+teruji. FormSpec adalah taruhan bahwa AI-assisted development akan jauh lebih produktif ketika AI
 diberi rel yang jelas untuk berlari, bukan lapangan kosong tanpa batas.

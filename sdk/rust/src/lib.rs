@@ -1,7 +1,7 @@
-//! Thin Rust SDK for forma-sidecar communication.
+//! Thin Rust SDK for formspec-sidecar communication.
 //!
 //! Provides an [App] that listens on `FORMA_APP_SOCKET` (a Unix socket)
-//! for incoming invocations from the forma engine, and a [Ctx] proxy
+//! for incoming invocations from the formspec engine, and a [Ctx] proxy
 //! that forwards `ctx.*` primitive calls back to the engine over
 //! `FORMA_SIDECAR_SOCKET`.
 
@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 // ─── Public Types ───
 
-/// Represents an incoming action invocation from the forma engine.
+/// Represents an incoming action invocation from the formspec engine.
 #[derive(Debug, Deserialize)]
 pub struct Invocation {
     pub resource_id: String,
@@ -38,7 +38,7 @@ pub struct Event {
     pub durable: Option<bool>,
 }
 
-/// Proxy for `ctx.*` primitives — forwards calls to the forma engine.
+/// Proxy for `ctx.*` primitives — forwards calls to the formspec engine.
 pub struct Ctx {
     sidecar_socket: String,
 }
@@ -132,7 +132,7 @@ impl LockProxy {
 type HandlerFn = Box<dyn FnMut(Invocation, Ctx) -> ActionResult + Send>;
 
 /// The main application struct. Listens on `FORMA_APP_SOCKET` for incoming
-/// invocations from the forma engine.
+/// invocations from the formspec engine.
 pub struct App {
     handlers: HashMap<String, HandlerFn>,
     app_socket: String,
@@ -141,13 +141,13 @@ pub struct App {
 
 impl App {
     /// Create a new App. Reads socket paths from environment variables:
-    /// - `FORMA_APP_SOCKET` — where to listen for invocations (default: `unix:///tmp/forma-app.sock`)
-    /// - `FORMA_SIDECAR_SOCKET` — where to forward ctx.* calls (default: `unix:///tmp/forma-sidecar.sock`)
+    /// - `FORMA_APP_SOCKET` — where to listen for invocations (default: `unix:///tmp/formspec-app.sock`)
+    /// - `FORMA_SIDECAR_SOCKET` — where to forward ctx.* calls (default: `unix:///tmp/formspec-sidecar.sock`)
     pub fn new() -> Self {
         let app_socket = std::env::var("FORMA_APP_SOCKET")
-            .unwrap_or_else(|_| "unix:///tmp/forma-app.sock".to_string());
+            .unwrap_or_else(|_| "unix:///tmp/formspec-app.sock".to_string());
         let sidecar_socket = std::env::var("FORMA_SIDECAR_SOCKET")
-            .unwrap_or_else(|_| "unix:///tmp/forma-sidecar.sock".to_string());
+            .unwrap_or_else(|_| "unix:///tmp/formspec-sidecar.sock".to_string());
         Self {
             handlers: HashMap::new(),
             app_socket,
@@ -178,12 +178,12 @@ impl App {
         let listener = match std::os::unix::net::UnixListener::bind(&socket_path) {
             Ok(l) => l,
             Err(e) => {
-                eprintln!("[lib-forma] failed to bind {}: {}", socket_path, e);
+                eprintln!("[lib-formspec] failed to bind {}: {}", socket_path, e);
                 return;
             }
         };
 
-        eprintln!("[lib-forma] listening on {}", socket_path);
+        eprintln!("[lib-formspec] listening on {}", socket_path);
 
         for stream in listener.incoming() {
             match stream {
@@ -191,7 +191,7 @@ impl App {
                     use std::io::Read;
                     let mut buf = Vec::new();
                     if let Err(e) = stream.read_to_end(&mut buf) {
-                        eprintln!("[lib-forma] read error: {}", e);
+                        eprintln!("[lib-formspec] read error: {}", e);
                         continue;
                     }
                     // Handle invocation (simplified — full HTTP parsing in production)
@@ -207,7 +207,7 @@ impl App {
                     }
                 }
                 Err(e) => {
-                    eprintln!("[lib-forma] accept error: {}", e);
+                    eprintln!("[lib-formspec] accept error: {}", e);
                 }
             }
         }

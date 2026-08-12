@@ -3,7 +3,7 @@
 **Status:** Draft
 **License:** Creative Commons CC0
 
-> This document explains how Forma divides real business verticals (inventory, accounting, billing,
+> This document explains how FormSpec divides real business verticals (inventory, accounting, billing,
 > and the connectors between them) into independent Apps under [`verticals/`](../../verticals/),
 > why that shape was chosen, what it borrows from mature ERPs like ERPNext, and — in the spirit of
 > `examples/SPEC-COMPATIBILITY-NOTES.md` — where today's spec and engine fall short of what a real
@@ -21,13 +21,13 @@ product catalog. Those four have moved to [`verticals/`](../../verticals/README.
 conformance fixtures, not verticals.
 
 The name `verticals/` matches vocabulary already used in `docs/spec/platform/01-overview.md`: "Vertical
-modules (accounting, HRM, inventory) as first-class ecosystem citizens." Not `erp/` (Forma is a
+modules (accounting, HRM, inventory) as first-class ecosystem citizens." Not `erp/` (FormSpec is a
 general business-app platform — non-ERP verticals like Clinic could graduate here too, someday) and
 not `products/` (doesn't carry the established term).
 
 ## 2. Workspace → App → Module → Resource
 
-Forma's tenancy model is singular and explicit: `Workspace → App → Module → Resource`
+FormSpec's tenancy model is singular and explicit: `Workspace → App → Module → Resource`
 (`docs/spec/platform/02-workspace-app-module.md` §1). Installing multiple Apps into one Workspace is the *normal*
 case, not an edge case — it unifies tenant identity, the basis for cross-app grants
 (same document, §1 and §3).
@@ -45,7 +45,7 @@ case, not an edge case — it unifies tenant identity, the basis for cross-app g
 
 An earlier draft of this reorg tried to physically merge `Customer`/`General-Ledger`/`Inventory`/
 `billing` into one composed App, reasoning that the dev-mode loader (`resource.New(cfg)`) only
-reads one `SpecPath` (`resource/forma.go`, a single `string` field, no multi-root support). That
+reads one `SpecPath` (`resource/formspec.go`, a single `string` field, no multi-root support). That
 was wrong: nothing in the addressing scheme is App-scoped. `internal/entity/registry.go:30` keys
 specs by `"module/name"` only, and every vertical already boots standalone today
 (`go run ./examples/reference-app --spec ./verticals/inventory/spec` works with zero cross-app
@@ -69,7 +69,7 @@ at all, or swap in a different vendor's connector — the integrator is optional
 
 Contrast with ERPNext: its Stock module posts directly to GL via `StockController.make_gl_entries()`
 and a warehouse→account map — correct, battle-tested, but tightly coupled inside one codebase.
-Forma's `kind: Subscription` (D35, §12.5) already supports decoupling this; the reorg's job was
+FormSpec's `kind: Subscription` (D35, §12.5) already supports decoupling this; the reorg's job was
 just to stop burying the decoupled version inside the wrong module.
 
 **A caveat surfaced during this reorg, not resolved by it:** `billing.order`'s `paid` event has
@@ -83,11 +83,11 @@ simpler for a single fixed consumer; the separate integrator app is more optiona
 
 ## 4. ERPNext comparison
 
-| ERPNext module | Forma vertical here | Notes |
+| ERPNext module | FormSpec vertical here | Notes |
 |---|---|---|
-| Stock | `inventory` | ERPNext: warehouses, valuation (FIFO/LIFO/moving-avg/standard). Forma: simpler today, no valuation method yet. |
+| Stock | `inventory` | ERPNext: warehouses, valuation (FIFO/LIFO/moving-avg/standard). FormSpec: simpler today, no valuation method yet. |
 | Accounts | `gl` | Both double-entry; ERPNext's GL Entry auto-posts from Stock/Sales/Purchase controllers directly. |
-| Selling / part of Accounts Receivable | `billing` | ERPNext splits Selling (quotation→sales order) from Accounts (invoice); Forma's `billing` currently spans order+payment in one module. |
+| Selling / part of Accounts Receivable | `billing` | ERPNext splits Selling (quotation→sales order) from Accounts (invoice); FormSpec's `billing` currently spans order+payment in one module. |
 | Buying | *(not built — deferred, see §7)* | ERPNext: purchase order → purchase receipt → landed cost. |
 | — | `company` | Net-new; see §5. |
 
@@ -96,7 +96,7 @@ long-running thread literally titled "Multicompany or branch or cost center - co
 up choosing between a full separate **Company** (heavy, separate books), a **Cost Center**
 (accounting-only, doesn't scope stock), or a **Warehouse** (stock-only, doesn't scope sales/HR),
 because ERPNext has no first-class Branch construct (its only "Branch" doctype is HR-scoped,
-employee assignment only). Forma avoids this by making `company.branch` one first-class master
+employee assignment only). FormSpec avoids this by making `company.branch` one first-class master
 entity from the start, referenced explicitly by whichever entities need it (see §5) — not
 overloaded onto Warehouse or Cost Center.
 
@@ -111,7 +111,7 @@ self-referencing `parent_id` for a hierarchy, `is_active`) plus explicit `branch
 company.branch` relation fields on whichever entities need branch scoping. First (and, in this
 pass, only) consumer: `inventory.warehouse`.
 
-Named `company`, not `core` — every `module.yaml` already declares `depends: [{module: forma/core}]`
+Named `company`, not `core` — every `module.yaml` already declares `depends: [{module: formspec/core}]`
 for the *framework's* core module; a second, unrelated "core" would collide in name only, but would
 still confuse readers.
 
@@ -146,7 +146,7 @@ both call sites hardcoded `""`. Fixed as a small, additive, backward-compatible 
   backing for an explicit `ctx.next_key(field)` call from a script) has no resource data in scope to
   resolve `scope_field` from — it only ever sees `tenantID, module, name, fieldName`. Wiring that
   path the same way would mean threading resource data through `internal/action/dispatcher.go`,
-  `internal/starlark/executor.go`, and `resource/forma.go`'s `NextKeyHandler` chain — out of scope
+  `internal/starlark/executor.go`, and `resource/formspec.go`'s `NextKeyHandler` chain — out of scope
   for this pass. `ctx.next_key()` always uses the tenant-wide scope regardless of `scope_field`
   today; the automatic on-create path (what document numbering actually needs) is what's fixed.
 - Documented in `docs/spec/backend/01-core-basic.md` §2, alongside `strategy`/`format`/`prefix`/`reset`.
@@ -174,7 +174,7 @@ Mirroring `examples/SPEC-COMPATIBILITY-NOTES.md`'s format — gap, evidence, sta
 | No branch/multi-location construct | No `branch_id` in `ddl.go`; no tree field type in `pkg/spec/entity.go` | Modeled as a plain master entity + convention (§5); only viable path given the spec today |
 | `App.consumes`/`publishes` only demonstrated for `kind: Service` | `spec/platform/02-workspace-app-module.md` §3's only example is `service: icd-lookup` | This reorg approximates it for plain entity events (`billing.order.paid`) with an invented `service:` name in each `consumes`/`publishes` block — now spec-blessed: `AppSpec.Publishes`/`Consumes` are structured `{service, actions}` / `{app, service, actions}` (`pkg/spec/resources.go`) |
 | Cross-app grant enforcement unimplemented | No App-scoped grant-checking anywhere in `internal/permission`/`internal/action` | Spec'd (D25, §15.3), zero runtime implementation — not attempted here |
-| SyncAgent registry sync not wired to the live HTTP router | `docs/runtimes/02-forma-resource.md:138` | A real multi-App workspace can *accept* manifests via `forma apply` per App but can't yet *serve* them together end-to-end; `reference-app` uses a dev-mode filesystem-aggregation workaround instead (§9), same shortcut every pre-existing example already used |
+| SyncAgent registry sync not wired to the live HTTP router | `docs/runtimes/02-formspec-resource.md:138` | A real multi-App workspace can *accept* manifests via `formspec apply` per App but can't yet *serve* them together end-to-end; `reference-app` uses a dev-mode filesystem-aggregation workaround instead (§9), same shortcut every pre-existing example already used |
 | `impl: compiled` (WASM/Go plugin) unimplemented | `pkg/spec/spec.go:96` is a bare string constant; no executor registered in `internal/action` | Spec'd (`spec/backend/01-core-basic.md` §5), not built — noted for future closed-source vendor modules (see §10) |
 | `EntitySpec.Tenant *TenantDecl` unwired | Zero consumers in `internal/db`/`internal/entity` | Same class of "spec got ahead of the engine" gap as the natural-key `scope` parameter was, before §6's fix |
 | `natural_key_rule.scope_field` doesn't reach `ctx.next_key()` | See §6 | Automatic on-create path fixed; explicit script path is a known follow-up |
@@ -187,9 +187,9 @@ Summary: `compose.sh` copies each vertical's `spec/modules/<name>/` (plus, for `
 their App-level UI folders, namespaced per-app to avoid collisions like both shipping their own
 `config/app.yaml`) into one aggregated tree, loaded via the ordinary single-`SpecPath` dev loader.
 This is explicitly the same shortcut `spec/platform/02-workspace-app-module.md` §6 calls
-"non-conformant" for direct filesystem loading — tolerated here because the *conformant* path (per-App `forma apply` into one
+"non-conformant" for direct filesystem loading — tolerated here because the *conformant* path (per-App `formspec apply` into one
 workspace) can't yet serve a converged result end-to-end (§8's SyncAgent gap). When that's fixed,
-`reference-app` should be replaced by real per-App `forma apply` calls against one workspace.
+`reference-app` should be replaced by real per-App `formspec apply` calls against one workspace.
 
 ## 10. Roadmap (explicitly deferred)
 

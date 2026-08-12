@@ -3,7 +3,7 @@ package ui
 import (
 	"strings"
 
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 // ─── Meta API payloads (design doc §4.2) ───
@@ -90,7 +90,7 @@ type Bundle struct {
 type PermissionChecker func(permission string) bool
 
 // EntityLister enumerates registered entities. Implemented by the entity
-// registry (adapter in resource/forma.go).
+// registry (adapter in resource/formspec.go).
 type EntityLister func() []EntityDescriptor
 
 // EntityDescriptor pairs an entity spec with its metadata for bundle building.

@@ -1,11 +1,11 @@
 ---
-name: forma-backend
-description: "Use when: working on Forma Go backend code — Entity, Service, PersistBackend, Starlark, API, auth, manifest loading, or any package under internal/ renderers/jsonbpersist/ or pkg/spec/. Provides project structure, kind system, implementation types, and key design rules."
+name: formspec-backend
+description: "Use when: working on FormSpec Go backend code — Entity, Service, PersistBackend, Starlark, API, auth, manifest loading, or any package under internal/ renderers/jsonbpersist/ or pkg/spec/. Provides project structure, kind system, implementation types, and key design rules."
 ---
 
-# Forma Backend Skill
+# FormSpec Backend Skill
 
-Context for AI coding agents working on the Forma backend (Go, Starlark, YAML).
+Context for AI coding agents working on the FormSpec backend (Go, Starlark, YAML).
 
 ## Key paths
 - `pkg/spec/` — Go types that ARE the contract (entity.go, frontend.go, resources.go, datastore.go)
@@ -21,7 +21,7 @@ Context for AI coding agents working on the Forma backend (Go, Starlark, YAML).
 - `internal/app/` — App resolution (ResolvedApp, menu tree)
 - `internal/ui/` — UI registry for frontend kinds, meta response builders
 - `internal/validation/` — Cross-field validation (after/before/exists)
-- `cmd/forma/` — CLI binary (apply, dev, generate, dev_vite, dev_runtime)
+- `cmd/formspec/` — CLI binary (apply, dev, generate, dev_vite, dev_runtime)
 
 ## Kind system
 - `kind: Entity` — stateful resource (was "Document") with characteristic: master|transaction|reference|summary
@@ -48,4 +48,4 @@ Context for AI coding agents working on the Forma backend (Go, Starlark, YAML).
 - `spec.expose` = deny-by-default; `/_ui/entity/` always available
 - Permission = resource + action, never hardcoded role names
 - Use `ctx.*` for all infrastructure (ctx.db, ctx.cache, ctx.lock, ctx.queue, ctx.pubsub, ctx.storage)
-- Error codes: FORMA.{DOMAIN}.{REASON}
+- Error codes: FORMSPEC.{DOMAIN}.{REASON}

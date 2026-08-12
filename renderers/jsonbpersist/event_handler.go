@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/primadi/forma/internal/events"
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/internal/events"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 // SpecLookup resolves the delivery channels declared for a specific

@@ -1,7 +1,7 @@
 # SHOWCASE: coverage TIPE FIELD terluas (string/enum/date/boolean/json/…)
 # + plain CRUD eksplisit (submit disabled). Table & form default = derived;
 # hanya detail page-nya yang di-override (pages/patient-detail.yaml).
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Entity
 metadata:
   name: patient

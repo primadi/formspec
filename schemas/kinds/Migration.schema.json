@@ -4,11 +4,18 @@
   "type": "object",
   "properties": {
     "ddl": {
-      "type": "string"
+      "description": "@schema {example: \"CREATE INDEX idx_invoice_date ON invoice(transaction_date)\"}",
+      "type": "string",
+      "examples": [
+        "CREATE INDEX idx_invoice_date ON invoice(transaction_date)"
+      ]
     },
     "module": {
-      "description": "owning module for table-level DDL",
-      "type": "string"
+      "description": "@schema {example: \"billing\"}",
+      "type": "string",
+      "examples": [
+        "billing"
+      ]
     }
   },
   "required": [

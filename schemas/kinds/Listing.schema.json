@@ -10,7 +10,11 @@
       }
     },
     "entity": {
-      "type": "string"
+      "description": "@schema {example: \"shop.product\"}",
+      "type": "string",
+      "examples": [
+        "shop.product"
+      ]
     },
     "filters": {
       "type": "array",

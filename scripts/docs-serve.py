@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Forma Docs Server — tampilkan docs/ dengan nyaman di browser.
+"""FormSpec Docs Server — tampilkan docs/ dengan nyaman di browser.
 
 Server HTTP ringan yang merender Markdown menjadi halaman HTML yang rapi
 dengan navigasi sidebar, pencarian, dan syntax highlighting (server-side).
@@ -440,7 +440,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 <body>
 <header class="site-header">
   <button class="burger" id="burger" aria-label="Menu">☰</button>
-  <div class="brand"><span class="dot">◆</span> Forma Docs</div>
+  <div class="brand"><span class="dot">◆</span> FormSpec Docs</div>
   <div class="search-box">
     <input id="search" type="search" placeholder="Cari di dokumentasi…" autocomplete="off">
     <button class="search-clear" id="search-clear" aria-label="Bersihkan">✕</button>
@@ -488,7 +488,7 @@ def _footer(rel: str) -> str:
     rel_esc = html.escape(rel)
     return (
         '<div class="page-footer">'
-        f"<span>Dokumentasi Forma · {rel_esc}</span>"
+        f"<span>Dokumentasi FormSpec · {rel_esc}</span>"
         "<span>Rendered by docs-serve</span>"
         "</div>"
     )
@@ -663,7 +663,7 @@ class DocsHandler(BaseHTTPRequestHandler):
 
 def main() -> None:
     global ROOT_DIR, PORT
-    parser = argparse.ArgumentParser(description="Forma Docs Server")
+    parser = argparse.ArgumentParser(description="FormSpec Docs Server")
     parser.add_argument("--port", type=int, default=PORT, help="port (default %d)" % PORT)
     parser.add_argument("--dir", default=ROOT_DIR, help="root direktori dokumen")
     parser.add_argument("--host", default="0.0.0.0", help="bind host (default 0.0.0.0)")
@@ -680,7 +680,7 @@ def main() -> None:
     server = ThreadingHTTPServer((args.host, args.port), DocsHandler)
     url = f"http://localhost:{args.port}/docs/"
     print("=" * 56)
-    print("  Forma Docs Server")
+    print("  FormSpec Docs Server")
     print("  Buka di browser:  " + url)
     print(f"  Root dokumen:     {ROOT_DIR}")
     print("  Tekan Ctrl+C untuk berhenti")

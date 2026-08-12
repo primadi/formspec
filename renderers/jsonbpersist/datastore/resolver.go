@@ -1,7 +1,7 @@
 package datastore
 
 import (
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 // Resolver provides convenience methods for resolving datastores by name or default.

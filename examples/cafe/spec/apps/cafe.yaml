@@ -1,0 +1,22 @@
+apiVersion: formspec.dev/v1alpha1
+kind: App
+metadata:
+  name: cafe
+  description: "Aplikasi Kafe — pesanan, pembayaran, dan laporan penjualan"
+  labels:
+    domain: cafe
+spec:
+  version: 1.0.0
+  vendor: formspec
+  root_url: /app/kafe
+  modules:
+    - cafe-master
+    - cafe-order
+    - cafe-report
+  menu:
+    - type: module
+      module: cafe-master
+    - type: module
+      module: cafe-order
+    - type: module
+      module: cafe-report

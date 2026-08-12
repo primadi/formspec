@@ -1,13 +1,13 @@
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Module
 metadata:
   name: gl
   description: Double-entry accounting core
 spec:
   version: 1.0.0
-  vendor: forma-dev
+  vendor: formspec-dev
   depends:
-    - module: forma/core
+    - module: formspec/core
   config:
     default_currency: IDR
     fiscal_year_start: "01-01"

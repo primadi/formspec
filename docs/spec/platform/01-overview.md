@@ -1,11 +1,11 @@
-# Forma Overview
+# FormSpec Overview
 
 **Version:** 0.1.0 · **Status:** Draft
 
 > Draft: isi di bawah kontrak yang berlaku.
 
-## 1. Apa itu Forma
-Forma adalah ekosistem spec-first untuk membangun aplikasi bisnis multi-tenant
+## 1. Apa itu FormSpec
+FormSpec adalah ekosistem spec-first untuk membangun aplikasi bisnis multi-tenant
 transaksional (POS multi-cabang, inventory, billing, klinik, HRM, order
 management). Ia adalah **standar terbuka (CC0) dengan implementasi
 referensi**, bukan sekadar framework — siapa pun boleh membangun implementasi
@@ -38,7 +38,7 @@ di-deploy sekali, membaca spec untuk App/Page apa pun.
 ## 3. Anatomi Sistem
 ```
 Spec YAML (Entity/Service/Page/…)
-        │  forma apply — dua-tahap: Control Plane registrasi → Resource Plane pull
+        │  formspec apply — dua-tahap: Control Plane registrasi → Resource Plane pull
         ▼
 ┌─────────────────────── Resource Plane ───────────────────────┐
 │ Engine: CRUD, Action, State Machine, Event/Outbox             │
@@ -61,12 +61,12 @@ Lihat [`04-control-plane.md`](04-control-plane.md) dan
   ([`../frontend/06-page-kinds.md`](../frontend/06-page-kinds.md) §14).
 - **Tier 2/3 developer** — menulis handler native/script, frontend custom
   (`asset`, [`../frontend/07-component-kinds.md`](../frontend/07-component-kinds.md)
-  §4), atau konsumen codegen (`forma generate`,
-  [`../../cli-tools/03-forma-generate.md`](../../cli-tools/03-forma-generate.md)).
+  §4), atau konsumen codegen (`formspec generate`,
+  [`../../cli-tools/03-formspec-generate.md`](../../cli-tools/03-formspec-generate.md)).
 - **Renderer/Shell author** — menambah Renderer visual atau PersistBackend
   baru ([`../frontend/03-renderer-kind.md`](../frontend/03-renderer-kind.md),
   [`../backend/04-persist-backend.md`](../backend/04-persist-backend.md) §7).
-- **Platform operator** — menjalankan Forma untuk banyak workspace lewat
+- **Platform operator** — menjalankan FormSpec untuk banyak workspace lewat
   Control Plane ([`04-control-plane.md`](04-control-plane.md)).
 
 Empat peran **owner** simetris di level platform (bukan user aplikasi
@@ -75,7 +75,7 @@ bisnis) — Workspace Owner (Data Owner), App/Module Owner, Cloud Owner
 Detail delegasi dan kunci di [`04-control-plane.md`](04-control-plane.md) §4.
 
 ## 5. Batas Scope
-Yang bukan urusan Forma: Page yang benar-benar lepas dari App bebas stack
+Yang bukan urusan FormSpec: Page yang benar-benar lepas dari App bebas stack
 apa saja lewat API generik, tanpa Renderer kind sama sekali
 ([`../frontend/01-visual-hierarchy.md`](../frontend/01-visual-hierarchy.md)
 §3). Unmanaged client (Flutter, native, SPA lain) adalah konsumen API kelas

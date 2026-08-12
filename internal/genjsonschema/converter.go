@@ -1,9 +1,9 @@
 // Package genjsonschema reads Go struct types from pkg/spec and generates
-// JSON Schema (Draft-07) files for every Forma resource kind.
+// JSON Schema (Draft-07) files for every FormSpec resource kind.
 //
 // Usage:
 //
-//	converter := genjsonschema.New("github.com/primadi/forma/pkg/spec")
+//	converter := genjsonschema.New("github.com/primadi/formspec/pkg/spec")
 //	defs := converter.Collect()        // first pass: gather all type info
 //	schemas := converter.Generate(defs) // second pass: produce JSON Schema
 package genjsonschema
@@ -54,8 +54,8 @@ type Schema struct {
 	MaxProperties        *int               `json:"maxProperties,omitempty"`
 }
 
-// schemaAnnotation holds extra schema metadata parsed from // @schema comments.
-type schemaAnnotation struct {
+// SchemaAnnotation holds extra schema metadata parsed from // @schema comments.
+type SchemaAnnotation struct {
 	Description         string   `json:"description,omitempty"`
 	MarkdownDescription string   `json:"markdownDescription,omitempty"`
 	Example             string   `json:"example,omitempty"`
@@ -76,8 +76,8 @@ type TypeDef struct {
 	Fields      []FieldDef // for structs
 	EnumValues  []string   // for enum types
 	Underlying  string     // underlying type name for aliases
-	Comment     string     // godoc comment
-	Annotation  *schemaAnnotation
+	Comment     string
+	Annotation  *SchemaAnnotation
 	Type        types.Type // original Go type
 	PackagePath string
 }
@@ -93,7 +93,7 @@ type FieldDef struct {
 	OmitEmpty  bool   // yaml:",omitempty"
 	Tag        string // full yaml tag
 	Comment    string
-	Annotation *schemaAnnotation
+	Annotation *SchemaAnnotation
 	GoType     types.Type
 	NamedType  *string // for named types, the name
 
@@ -576,28 +576,25 @@ func extractFieldComment(comments map[string]map[string]string, typeName, fieldN
 
 // parseSchemaAnnotation parses // @schema { ... } from a comment string.
 // Supports both strict JSON and Go-like key: value format.
-func parseSchemaAnnotation(comment string) *schemaAnnotation {
+func parseSchemaAnnotation(comment string) *SchemaAnnotation {
 	if comment == "" {
 		return nil
 	}
 
-	re := regexp.MustCompile(`@schema\s*\{([^}]*)\}`)
-	matches := re.FindStringSubmatch(comment)
-	if len(matches) < 2 {
+	content, ok := extractSchemaBody(comment)
+	if !ok {
 		return nil
 	}
 
-	content := strings.TrimSpace(matches[1])
-
 	// Try strict JSON first
 	jsonStr := "{" + content + "}"
-	var ann schemaAnnotation
+	var ann SchemaAnnotation
 	if err := json.Unmarshal([]byte(jsonStr), &ann); err == nil {
 		return &ann
 	}
 
 	// Fallback: manual parse for Go-like key: value format (unquoted keys)
-	ann = schemaAnnotation{}
+	ann = SchemaAnnotation{}
 	parts := splitAnnotationParts(content)
 	for _, part := range parts {
 		colonIdx := strings.Index(part, ":")
@@ -646,6 +643,48 @@ func parseSchemaAnnotation(comment string) *schemaAnnotation {
 		}
 	}
 	return &ann
+}
+
+// extractSchemaBody returns the content between the balanced braces following
+// the @schema keyword. It handles nested braces (e.g. example values that
+// themselves contain `{...}`) and quoted strings, so a value like
+// `example: "Order {order.number}"` is not truncated at the inner brace.
+func extractSchemaBody(comment string) (string, bool) {
+	idx := strings.Index(comment, "@schema")
+	if idx < 0 {
+		return "", false
+	}
+	rest := comment[idx:]
+	open := strings.Index(rest, "{")
+	if open < 0 {
+		return "", false
+	}
+	start := open + 1
+	depth := 1
+	inQuote := false
+	var quoteChar byte
+	for i := start; i < len(rest); i++ {
+		ch := rest[i]
+		if inQuote {
+			if ch == quoteChar && (i == 0 || rest[i-1] != '\\') {
+				inQuote = false
+			}
+			continue
+		}
+		switch ch {
+		case '"', '\'':
+			inQuote = true
+			quoteChar = ch
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return strings.TrimSpace(rest[start:i]), true
+			}
+		}
+	}
+	return "", false
 }
 
 // splitAnnotationParts splits "a: 1, b: \"hello\", c: [x, y]" by comma

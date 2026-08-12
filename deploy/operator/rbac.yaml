@@ -1,21 +1,21 @@
-# RBAC for forma-operator (docs/runtimes/03-forma-operator.md §3.4).
+# RBAC for formspec-operator (docs/runtimes/03-formspec-operator.md §3.4).
 # Namespace-scoped Secret access tightening (one namespace per workspace)
 # is an open design decision — this grants the cluster-wide superset.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: forma-operator
-  namespace: forma-system
+  name: formspec-operator
+  namespace: formspec-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: forma-operator
+  name: formspec-operator
 rules:
-  - apiGroups: ["forma.dev"]
+  - apiGroups: ["formspec.dev"]
     resources: ["workspaces", "datastores", "resourceclaims", "clusterclasses"]
     verbs: ["get", "list", "watch", "update", "patch"]
-  - apiGroups: ["forma.dev"]
+  - apiGroups: ["formspec.dev"]
     resources: ["workspaces/status", "datastores/status", "resourceclaims/status"]
     verbs: ["update", "patch"]
   - apiGroups: ["apps"]
@@ -37,22 +37,22 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: forma-operator
+  name: formspec-operator
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: forma-operator
+  name: formspec-operator
 subjects:
   - kind: ServiceAccount
-    name: forma-operator
-    namespace: forma-system
+    name: formspec-operator
+    namespace: formspec-system
 ---
 # Leader election needs Lease access only in the operator's own namespace.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: forma-operator-leader-election
-  namespace: forma-system
+  name: formspec-operator-leader-election
+  namespace: formspec-system
 rules:
   - apiGroups: ["coordination.k8s.io"]
     resources: ["leases"]
@@ -61,13 +61,13 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: forma-operator-leader-election
-  namespace: forma-system
+  name: formspec-operator-leader-election
+  namespace: formspec-system
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: forma-operator-leader-election
+  name: formspec-operator-leader-election
 subjects:
   - kind: ServiceAccount
-    name: forma-operator
-    namespace: forma-system
+    name: formspec-operator
+    namespace: formspec-system

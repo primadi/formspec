@@ -8,10 +8,10 @@
 ### 2.3.7 Error Codes
 - **`renderers/jsonbpersist/lifecycle.go`**: 
   - `LifecycleGuard` now returns specific error codes per error-glossary.yaml:
-    - `submit` from `submitted` → `FORMA.DOC.ALREADY_SUBMITTED`
-    - `submit` from `cancelled` → `FORMA.DOC.SUBMIT_NOT_DRAFT`
-    - `cancel` from `cancelled` → `FORMA.DOC.ALREADY_CANCELLED`
-    - `cancel` from `draft`/`null` → `FORMA.DOC.CANCEL_NOT_SUBMITTED`
+    - `submit` from `submitted` → `FORMSPEC.DOC.ALREADY_SUBMITTED`
+    - `submit` from `cancelled` → `FORMSPEC.DOC.SUBMIT_NOT_DRAFT`
+    - `cancel` from `cancelled` → `FORMSPEC.DOC.ALREADY_CANCELLED`
+    - `cancel` from `draft`/`null` → `FORMSPEC.DOC.CANCEL_NOT_SUBMITTED`
     - `update`/`delete` from any non-draft → appropriate code
   - Removed `Required` field from `LifecycleError` (simplified)
 - **`renderers/jsonbpersist/lifecycle_test.go`**: Updated error message assertions
@@ -19,7 +19,7 @@
 ### 2.3.10 Relation on_delete Framework
 - **`renderers/jsonbpersist/reference.go`** (new): 
   - `CheckReferencingDocuments()` — stub (full implementation needs reference tracking system)
-  - `EnforceReferenceGuard()` — returns `FORMA.REF.DELETE_BLOCKED` / `FORMA.REF.CANCEL_BLOCKED`
+  - `EnforceReferenceGuard()` — returns `FORMSPEC.REF.DELETE_BLOCKED` / `FORMSPEC.REF.CANCEL_BLOCKED`
 - **`renderers/jsonbpersist/crud.go`**: `SoftDelete()` now calls `EnforceReferenceGuard()`
 
 ### 2.3.12 Summary Immutability

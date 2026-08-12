@@ -1,14 +1,14 @@
-"""Example lib-forma-python app: the business-logic side of an
-impl: {type: sidecar} action. Run inside a pod next to forma-sidecar:
+"""Example lib-formspec-python app: the business-logic side of an
+impl: {type: sidecar} action. Run inside a pod next to formspec-sidecar:
 
-    FORMA_APP_SOCKET=/tmp/forma/app.sock \
-    FORMA_SIDECAR_SOCKET=/tmp/forma/sidecar.sock \
+    FORMA_APP_SOCKET=/tmp/formspec/app.sock \
+    FORMA_SIDECAR_SOCKET=/tmp/formspec/sidecar.sock \
     python examples/app.py
 """
 
 from datetime import datetime, timezone
 
-from lib_forma import ActionResult, App, Ctx, Invocation
+from lib_formspec import ActionResult, App, Ctx, Invocation
 
 app = App()
 

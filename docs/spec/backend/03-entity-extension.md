@@ -10,7 +10,7 @@ Module lain menambah field/perilaku ke Entity yang dimiliki module lain
 merusak jalur upgrade-nya, tanpa mengorbankan performa query:
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Entity
 metadata:
   name: invoice-ext
@@ -44,7 +44,7 @@ bentuk konkretnya tidak dikunci di sini.
 
 ## 3. Konflik & Presedensi
 **Namespace sekali dipakai tidak boleh dipakai ulang** untuk target yang
-sama — aktif maupun sudah di-drop, kecuali di-purge eksplisit. `forma apply`
+sama — aktif maupun sudah di-drop, kecuali di-purge eksplisit. `formspec apply`
 menolak namespace yang sudah tercatat untuk resource yang sama, mencegah dua
 module independen memilih namespace sama secara tidak sengaja.
 
@@ -66,7 +66,7 @@ qualifier `module/resource`), akses field lintas-extension lewat kode
 ## 4. Extension dan Permission
 Field extension ber-`index: true` berarti mengubah DDL tabel milik module
 dasar — ini titik coupling, tapi terkendali: terjadi saat migration time
-(bisa di-review lewat `forma apply --dry-run`), field tanpa `index: true`
+(bisa di-review lewat `formspec apply --dry-run`), field tanpa `index: true`
 (default) sama sekali tidak menyentuh DDL. Module extension **wajib**
 mendeklarasikan akses tulis ke kategori persist target lewat `uses: { db:
 { write: [<category>] } }` ([`01-core-basic.md`](01-core-basic.md) §5) —
@@ -78,7 +78,7 @@ Selain field, Entity Extension boleh menambah pemeriksaan `business_rules`
 miliknya sendiri lewat `spec.validate` — **aditif, bukan pengganti**:
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Entity
 metadata:
   name: invoice-ext

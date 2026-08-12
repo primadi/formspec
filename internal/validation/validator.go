@@ -1,5 +1,5 @@
 // Package validation provides cross-field validation and action parameter validation
-// for Forma entities.
+// for FormSpec entities.
 //
 // Cross-field rules validate relationships between multiple fields in the same record:
 //   - after:<field> — value must be after another field's value
@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 // ─── Entity Lookup for exists:<resource> ───

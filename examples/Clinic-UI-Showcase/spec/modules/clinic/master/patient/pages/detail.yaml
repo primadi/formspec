@@ -1,8 +1,8 @@
 # SHOWCASE kind: Page — route ber-:param + multi-block:
 # form view-mode + table ter-filter param + widget + html block.
 # Meng-exercise: BlockRef.id dari route param, BlockRef.param passing,
-# title interpolation FormaExpr ("{patient.name}").
-apiVersion: forma.dev/v1alpha1
+# title interpolation FormSpecExpr ("{patient.name}").
+apiVersion: formspec.dev/v1alpha1
 kind: Page
 metadata:
   name: patient-detail

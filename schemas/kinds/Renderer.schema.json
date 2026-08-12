@@ -4,15 +4,30 @@
   "type": "object",
   "properties": {
     "implements": {
-      "type": "string"
+      "description": "@schema {example: \"formspec/visual.form-page\"}",
+      "type": "string",
+      "examples": [
+        "formspec/visual.form-page"
+      ]
     },
     "stack_family": {
-      "description": "e.g. react-shadcn, vue, flutter",
-      "type": "string"
+      "description": "@schema {example: \"react-shadcn\"}",
+      "type": "string",
+      "examples": [
+        "react-shadcn"
+      ]
     },
     "trust_tier": {
-      "description": "official | verified | community",
-      "type": "string"
+      "description": "@schema {example: \"official\", enum: [\"official\", \"verified\", \"community\"]}",
+      "type": "string",
+      "enum": [
+        "official",
+        "verified",
+        "community"
+      ],
+      "examples": [
+        "official"
+      ]
     }
   },
   "required": [

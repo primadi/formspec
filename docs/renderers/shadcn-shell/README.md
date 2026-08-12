@@ -2,7 +2,7 @@
 
 **Updated:** 2026-07-15 · Status: Outline
 
-Shell resmi Forma: SPA React + TypeScript + shadcn/ui yang menginterpretasikan
+Shell resmi FormSpec: SPA React + TypeScript + shadcn/ui yang menginterpretasikan
 spec saat runtime lewat Spec Resolution API. Kode: `web/`.
 
 | Dokumen | Cakupan |

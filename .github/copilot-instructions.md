@@ -1,8 +1,8 @@
-# Forma Framework — Agent Instructions
+# FormSpec Framework — Agent Instructions
 
 ## Project Overview
 
-Forma adalah **spec-first, declarative ecosystem untuk business applications di Go**.
+FormSpec adalah **spec-first, declarative ecosystem untuk business applications di Go**.
 YAML manifest (`apiVersion`/`kind`/`metadata`/`spec`) adalah single source of truth untuk API, UI, permissions, state machines, dan events.
 
 Tiga tipe file: `yaml` (deskripsi), `script` (Starlark logic), `asset` (static/custom UI).
@@ -11,7 +11,7 @@ Tiga tipe file: `yaml` (deskripsi), `script` (Starlark logic), `asset` (static/c
 
 ## Architecture
 
-- **Dua proses selalu**: `forma-control` (control plane — governance, policy, keys) + `forma-resource` (resource plane — business logic, API, rendering)
+- **Dua proses selalu**: `formspec-control` (control plane — governance, policy, keys) + `formspec-resource` (resource plane — business logic, API, rendering)
 - **Go** untuk performance-critical logic (`native`/`compiled`)
 - **Starlark** untuk sandboxed scripting (bisa di-edit via admin panel tanpa redeploy)
 - **Sidecar pattern** untuk polyglot (PHP, Python, Node, Java)
@@ -23,7 +23,7 @@ Tiga tipe file: `yaml` (deskripsi), `script` (Starlark logic), `asset` (static/c
 
 | Layer | Teknologi |
 |---|---|
-| Backend | Go 1.26, module `github.com/primadi/forma` |
+| Backend | Go 1.26, module `github.com/primadi/formspec` |
 | YAML | `gopkg.in/yaml.v3` |
 | Frontend | React 19 + TypeScript 6 + Vite 8 |
 | UI | shadcn/ui (Nova preset) + Tailwind CSS v4 |
@@ -44,9 +44,9 @@ Tiga tipe file: `yaml` (deskripsi), `script` (Starlark logic), `asset` (static/c
 
 ```
 cmd/
-  forma/               # Developer CLI
-  forma-ctl/           # Control Plane binary
-  forma-operator/      # Kubernetes Operator
+  formspec/               # Developer CLI
+  formspec-ctl/           # Control Plane binary
+  formspec-operator/      # Kubernetes Operator
 internal/
   api/                 # API handlers
   auth/                # Authentication
@@ -66,7 +66,7 @@ renderers/
     index.css          # Tailwind + shadcn CSS variables
     renderer/          # Manifest-driven renderer engine
       kinds/           #   Renderers per Kind (Page, Form, Table, etc.)
-      expr/            #   FormaExpr AST interpreter
+      expr/            #   FormSpecExpr AST interpreter
       components/      #   Base component library
     api/               # Generated typed API client
     generated/         # Generated TS types dari `make generate`
@@ -89,7 +89,7 @@ reff_docs/             # Reference docs, drafts, contoh lama
 Semua YAML manifest mengikuti format K8s-style:
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Entity               # PascalCase, huruf besar di awal
 metadata:
   name: invoice            # kebab-case, unique per (kind, module)
@@ -156,7 +156,7 @@ spec:
 - **Derived by default**: Setiap Entity auto-generate Table, Forms (create/edit), detail Page, dan Menu entries
 - **Design-time layout locking**: Modal/Drawer/SeparatePage ditentukan di manifest, tidak bisa di-switch di runtime
 - **Hybrid Low-Code**: ~80% patterned UI via YAML, ~20% via `asset` custom component (JS/TS)
-- **FormaExpr**: Starlark expression subset untuk `visible_when`, `readonly_when`, `required_when`, `compute`
+- **FormSpecExpr**: Starlark expression subset untuk `visible_when`, `readonly_when`, `required_when`, `compute`
 
 ### shadcn/ui Components
 
@@ -187,7 +187,7 @@ spec:
 | Backend unit tests | `go test ./...` atau `make test` |
 | Backend verbose | `make test-verbose` |
 | Frontend | `cd web && vitest` |
-| YAML validation | `forma validate` |
+| YAML validation | `formspec validate` |
 
 ---
 
@@ -195,7 +195,7 @@ spec:
 
 ```makefile
 make build       # Build all Go binaries
-make dev         # Run dev server (forma-resource --dev)
+make dev         # Run dev server (formspec-resource --dev)
 make test        # Run Go tests
 make generate    # Generate TypeScript types from spec -> web/src/generated
 make web-dev     # Run frontend dev server (Vite)
@@ -215,13 +215,13 @@ make clean       # Clean build artifacts
 | `docs/spec/02-core-basic.md` | Core spec — minimal implementation yang harus dipenuhi |
 | `docs/spec/03-core-extended.md` | Extended kinds — Workflow, Api, Webhook |
 | `docs/spec/04-control-plane.md` | Control Plane — Environment, Policy, signing, audit |
-| `docs/spec/05-frontend.md` | Frontend spec — 12 UI kinds, renderer contract, FormaExpr |
+| `docs/spec/05-frontend.md` | Frontend spec — 12 UI kinds, renderer contract, FormSpecExpr |
 | `docs/spec/06-plane-protocol.md` | Plane Protocol — komunikasi Control ↔ Resource |
 | `docs/spec/07-marketplace.md` | Marketplace spec — pricing, metering, licensing |
 | `docs/spec/10-entity-extension.md` | Entity Extension — add fields to owned entities |
 | `docs/spec/11-reference.md` | Glossary & semua design decisions (D1–D48) |
-| `reff_docs/Forma-Foundation-Document-v2.0.md` | Foundation doc — latar belakang, keputusan fundamental |
-| `reff_docs/Forma-Technical-Note-DX-dan-Entity-Extension.md` | Technical note — DX dan entity extension |
+| `reff_docs/FormSpec-Foundation-Document-v2.0.md` | Foundation doc — latar belakang, keputusan fundamental |
+| `reff_docs/FormSpec-Technical-Note-DX-dan-Entity-Extension.md` | Technical note — DX dan entity extension |
 | `pkg/spec/entity.go` | Go struct untuk Entity manifest |
 | `pkg/spec/frontend.go` | Go struct untuk frontend kinds |
 | `pkg/spec/spec.go` | Enum dan shared types |

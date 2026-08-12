@@ -132,7 +132,7 @@ Recovery → Logging → CORS → RequestID → Workspace → Auth
 **Yang secara sengaja tidak ada di sini**: `internal/permission` (registry
 "uses" declaration, footprint modul lintas-modul) **tidak** dipanggil dari
 jalur request `internal/api` manapun — package itu dipakai saat load
-manifest (`internal/entity/registry.go`) dan `resource/forma.go` untuk
+manifest (`internal/entity/registry.go`) dan `resource/formspec.go` untuk
 validasi statis, bukan sebagai penjaga per-request. Penegakan permission
 per-request murni `RequirePermission` + `auth.Identity.HasPermission` di
 atas. `UsesEnforcement` (`middleware.go:255-268`) ada sebagai kerangka
@@ -286,7 +286,7 @@ Spec Resolution API naik ke status Final — lihat §5 di bawah.
    diimplementasikan itu (lihat `jsonb-persist/02-schema-strategies.md` §2).
 5. **State machine enforcement dan `emits:` events** tidak diaudit ulang di
    sini secara detail — sudah dicatat sebagai gap di
-   [`02-forma-resource.md`](02-forma-resource.md) §7 poin 4 dan 5
+   [`02-formspec-resource.md`](02-formspec-resource.md) §7 poin 4 dan 5
    (`internal/api.HandleCustomAction` tidak memanggil
    `entity.StateMachineEngine`; `ExecuteResult.Events` tidak pernah
    diisi/dikonsumsi). Disebut ulang di sini karena keduanya terjadi persis
@@ -300,5 +300,5 @@ Spec Resolution API naik ke status Final — lihat §5 di bawah.
 |---|---|
 | `docs/spec/frontend/04-spec-resolution-api.md` | Kontrak normatif Meta API + Realtime yang diaudit di §3–§4 dokumen ini |
 | `docs/spec/backend/01-core-basic.md` §5, §8 | `required_permission`, response envelope/kode error |
-| `docs/runtimes/02-forma-resource.md` | Engine yang di-serve paket ini (entity engine, dispatcher, registry) |
+| `docs/runtimes/02-formspec-resource.md` | Engine yang di-serve paket ini (entity engine, dispatcher, registry) |
 | `docs/renderers/jsonb-persist/02-schema-strategies.md` §2 | Extension column (`ext_*`), status implementasi baca/tulis |

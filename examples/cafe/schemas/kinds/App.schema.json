@@ -1,0 +1,60 @@
+{
+  "title": "App Spec",
+  "description": "AppSpec is the root project manifest (Core §4.4). A Workspace MAY contain\nmore than one App; all Apps in a workspace run simultaneously, mounted at\ntheir own RootURL.\n",
+  "type": "object",
+  "properties": {
+    "app_renderer": {
+      "description": "named Renderer tier app (frontend/05-app-kinds.md)",
+      "type": "string"
+    },
+    "auth_config_ref": {
+      "description": "per-App auth strategy config",
+      "type": "string"
+    },
+    "consumes": {
+      "description": "cross-app interfaces needed → grant request",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/AppConsume"
+      }
+    },
+    "menu": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/MenuItem"
+      }
+    },
+    "modules": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "publishes": {
+      "description": "cross-app interfaces offered",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/AppInterface"
+      }
+    },
+    "root_url": {
+      "type": "string"
+    },
+    "theme_ref": {
+      "description": "per-App Theme resolution (platform/02 §3)",
+      "type": "string"
+    },
+    "vendor": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "version",
+    "vendor",
+    "root_url"
+  ],
+  "additionalProperties": false
+}

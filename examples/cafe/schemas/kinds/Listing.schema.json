@@ -1,0 +1,29 @@
+{
+  "title": "Listing Spec",
+  "description": "ListingSpec defines a public catalog page (06-page-kinds.md §10).\nInstance of VisualSpecKind tier: page. Similar to table-list but without\nAuth-wrap assumptions and without row_actions/bulk_actions.\n",
+  "type": "object",
+  "properties": {
+    "columns": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/TableColumn"
+      }
+    },
+    "entity": {
+      "type": "string"
+    },
+    "filters": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/FilterSpec"
+      }
+    },
+    "search": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "entity"
+  ],
+  "additionalProperties": false
+}

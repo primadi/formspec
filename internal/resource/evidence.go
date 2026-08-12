@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/primadi/forma/internal/artifact"
+	"github.com/primadi/formspec/internal/artifact"
 )
 
 // EvidenceSender buffers evidence records locally and sends them to the

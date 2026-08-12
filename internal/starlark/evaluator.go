@@ -1,4 +1,4 @@
-// Package starlark provides a Starlark expression evaluator for Forma computed fields.
+// Package starlark provides a Starlark expression evaluator for FormSpec computed fields.
 //
 // Computed fields use Starlark expressions (a Python-like subset) to derive values
 // from other fields in the same record. The evaluator runs in a sandboxed environment

@@ -2,7 +2,7 @@ FROM mcr.microsoft.com/devcontainers/go:2-1.26-trixie
 
 # Install additional OS packages
 #
-# php-cli + php-curl: needed to run/test sdk/php (lib-forma-php) — the
+# php-cli + php-curl: needed to run/test sdk/php (lib-formspec-php) — the
 # SidecarClient uses ext-curl for unix-socket HTTP. Python 3 and Node.js
 # are provided by devcontainer.json features (see .devcontainer/devcontainer.json),
 # so sdk/python and sdk/typescript need no extra packages here.

@@ -1,11 +1,11 @@
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: App
 metadata:
   name: gl
   description: Double-entry accounting core — standalone app
 spec:
   version: 1.0.0
-  vendor: forma-dev
+  vendor: formspec-dev
   root_url: /app/gl
   modules: [gl]
   menu:

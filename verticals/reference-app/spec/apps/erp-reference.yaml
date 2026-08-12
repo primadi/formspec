@@ -1,14 +1,14 @@
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: App
 metadata:
   name: erp-reference
   description: >
     Dev-mode composition of every vertical under verticals/ — NOT the
     production path. Run compose.sh first (see README.md). Production
-    composition is per-App `forma apply` into one workspace.
+    composition is per-App `formspec apply` into one workspace.
 spec:
   version: 1.0.0
-  vendor: forma-dev
+  vendor: formspec-dev
   root_url: /app/erp-reference
   modules:
     [

@@ -11,7 +11,7 @@ CRC (Checklist Management System) untuk Trakindo Utama — heavy equipment deale
   5 master entities, 4 transaction entities (2 dengan state machine), 9 pages,
   17 forms, 9 tables, 1 dashboard, 4 widgets, 2 reports
 - **README.md** — dokumentasi lengkap domain, fitur, struktur, cara menjalankan
-- **`forma.yaml`** — dev config untuk `forma dev`
+- **`formspec.yaml`** — dev config untuk `formspec dev`
 
 ## Domain
 

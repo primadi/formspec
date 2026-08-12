@@ -1,0 +1,12 @@
+apiVersion: formspec.dev/v1alpha1
+kind: Widget
+metadata:
+  name: paid-orders
+  module: cafe-report
+  description: "Jumlah pesanan yang sudah lunas"
+spec:
+  title: "Pesanan Lunas"
+  type: metric
+  entity: cafe-order.order
+  query: "status == 'paid'"
+  refresh_secs: 60

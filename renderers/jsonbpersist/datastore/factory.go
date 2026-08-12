@@ -3,7 +3,7 @@ package datastore
 import (
 	"fmt"
 
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 // ConnectionFactory creates connection pools for a specific driver.

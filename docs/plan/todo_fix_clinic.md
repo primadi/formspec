@@ -3,7 +3,7 @@
 **Audit**: 2026-08-04. **Fixes applied**: 2026-08-04 (same day, follow-up session).
 
 Semua item di bawah **sudah diperbaiki dan diverifikasi ulang di browser**
-(Playwright headless, `forma dev --dev-ui`) kecuali yang ditandai eksplisit
+(Playwright headless, `formspec dev --dev-ui`) kecuali yang ditandai eksplisit
 "belum diuji tuntas". `go build ./...`, `go vet ./...`, `go test ./...`
 (minus 9 kegagalan pre-existing yang tidak terkait — lihat catatan di
 bagian bawah), dan `tsc -b --noEmit` semua bersih setelah perubahan.
@@ -16,7 +16,7 @@ bagian bawah), dan `tsc -b --noEmit` semua bersih setelah perubahan.
   Root cause: widget `visits-today` / `revenue-today` / `visits-by-polyclinic`
   membaca entity `daily-visit-summary` (`characteristic: summary`) yang
   **tidak pernah di-populate** — summary read-only via API dan belum ada
-  projection engine/recompute di codebase (`forma seed` belum ada).
+  projection engine/recompute di codebase (`formspec seed` belum ada).
   Diverifikasi: `clinic_daily_visit_summaries` = 0 rows padahal `clinic_visits`
   punya 6 rows termasuk 1 hari ini. **Fix**: repoint ketiga widget ke entity
   live `clinic/visit` (precedent: `pharmacy-queue-count` & widget arisan sudah
@@ -125,7 +125,7 @@ bagian bawah), dan `tsc -b --noEmit` semua bersih setelah perubahan.
 
 - [x] **3. Widget (metric + chart) tidak fetch data sama sekali.**
   Fixed di `DashboardRenderer.tsx`: `MetricWidget` sekarang fetch entity
-  list, terapkan `spec.query` (subset kecil FormaExpr yang dipakai showcase
+  list, terapkan `spec.query` (subset kecil FormSpecExpr yang dipakai showcase
   ini: `field = today()` dan `field in [...]`), agregasi
   (`sum`/`count`/`avg`/`min`/`max`) sesuai `spec.config`, format
   currency/percentage, dan auto-refresh tiap `refresh_secs`.
@@ -265,9 +265,9 @@ bagian bawah), dan `tsc -b --noEmit` semua bersih setelah perubahan.
   broadcast untuk SEMUA mutasi (bukan cuma declared events), listener-gated
   via `HasListeners`. Fix transport `--dev-ui`: Vite proxy `ws: true` +
   `AcceptOptions.InsecureSkipVerify`. Changelog `2026-08-05-002`.
-- [ ] Theme switching UI (5 tema wired via `forma-app.yaml`) — belum
+- [ ] Theme switching UI (5 tema wired via `formspec-app.yaml`) — belum
   ditemukan switcher-nya di avatar/user menu; belum digali lebih dalam.
-- [ ] FormaExpr `visible_when`/`required_when` cross-field — belum diuji
+- [ ] FormSpecExpr `visible_when`/`required_when` cross-field — belum diuji
   aktif (isi field A, lihat field B react).
 - [ ] State machine guard (mis. diagnosis wajib sebelum visit selesai) —
   row action transisi sudah kelihatan benar (state-aware), tapi guard
@@ -286,12 +286,12 @@ bagian bawah), dan `tsc -b --noEmit` semua bersih setelah perubahan.
   (tidak disentuh), tapi worth di-follow-up terpisah.
 - `internal/ui/validate.go`'s `Registry.Validate()` — dipastikan dipanggil
   dari test suite (`internal/ui/ui_test.go`), TAPI grep ke seluruh
-  `cmd/`/`internal/` tidak menemukan pemanggilan dari `forma dev`/`forma
+  `cmd/`/`internal/` tidak menemukan pemanggilan dari `formspec dev`/`formspec
   validate` CLI manapun. Kemungkinan besar validasi semantik lintas-file
   ini (termasuk defensive check baru utk route `/app`) **tidak pernah
   jalan di runtime nyata**, hanya di test. Di luar scope sesi ini untuk
   di-wire, tapi flag utk perhatian — nilainya baru kelihatan kalau memang
-  dipanggil saat `forma dev` start atau `forma validate`.
+  dipanggil saat `formspec dev` start atau `formspec validate`.
 - Bug yang sama (`route: /app/...` di depan) ditemukan juga tersebar di
   `verticals/billing`, `verticals/gl`, `verticals/inventory`,
   `verticals/reference-app` (bukan cuma Clinic-UI-Showcase) — TIDAK

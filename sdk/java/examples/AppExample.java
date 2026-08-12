@@ -1,15 +1,15 @@
-import io.forma.*;
+import io.formspec.*;
 
 import java.time.Instant;
 import java.util.Map;
 
 /**
- * Example lib-forma-java app: the business-logic side of an
- * {@code impl: {type: sidecar}} action. Run inside a pod next to forma-sidecar:
+ * Example lib-formspec-java app: the business-logic side of an
+ * {@code impl: {type: sidecar}} action. Run inside a pod next to formspec-sidecar:
  *
  * <pre>{@code
  * FORMA_APP_SOCKET=http://localhost:9801 \
- * FORMA_SIDECAR_SOCKET=unix:///var/run/forma/sidecar.sock \
+ * FORMA_SIDECAR_SOCKET=unix:///var/run/formspec/sidecar.sock \
  * mvn exec:java -Dexec.mainClass=AppExample
  * }</pre>
  */

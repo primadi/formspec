@@ -10,7 +10,11 @@
       }
     },
     "entity": {
-      "type": "string"
+      "description": "@schema {example: \"billing.order\"}",
+      "type": "string",
+      "examples": [
+        "billing.order"
+      ]
     },
     "footer": {
       "$ref": "#/$defs/PrintFooter",
@@ -27,6 +31,9 @@
     "public": {
       "description": "If true (default), a route /module/print/\u003cname\u003e is auto-generated.",
       "type": "boolean",
+      "examples": [
+        "true"
+      ],
       "nullable": true
     },
     "template": {

@@ -1,5 +1,5 @@
 # Subscription: listen for order checkout events → create payment session
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Subscription
 metadata:
   name: order-checkout-create-payment

@@ -9,7 +9,7 @@ import (
 
 // EventLogRecord represents a single delivered-event log entry — the
 // durable record behind an event's deliver: {channel: audit_log} contract.
-// Distinct from AuditRecord (forma_audit_log), which tracks CRUD field
+// Distinct from AuditRecord (formspec_audit_log), which tracks CRUD field
 // diffs, not arbitrary named business events.
 type EventLogRecord struct {
 	ID          string `json:"id"`
@@ -40,12 +40,12 @@ func (s *EventLogStore) Write(ctx context.Context, workspaceID, eventName, resou
 	var err error
 	if s.driver == DriverPostgres {
 		_, err = s.db.ExecContext(ctx, `
-			INSERT INTO forma_event_log (tenant_id, event_name, resource, payload, delivered_at)
+			INSERT INTO formspec_event_log (tenant_id, event_name, resource, payload, delivered_at)
 			VALUES ($1, $2, $3, $4, $5)
 		`, workspaceID, eventName, resource, string(payload), now)
 	} else {
 		_, err = s.db.ExecContext(ctx, `
-			INSERT INTO forma_event_log (tenant_id, event_name, resource, payload, delivered_at)
+			INSERT INTO formspec_event_log (tenant_id, event_name, resource, payload, delivered_at)
 			VALUES (?, ?, ?, ?, ?)
 		`, workspaceID, eventName, resource, string(payload), now)
 	}
@@ -68,7 +68,7 @@ func (s *EventLogStore) ListByWorkspace(ctx context.Context, workspaceID, resour
 	if resource != "" {
 		rows, err = s.db.QueryContext(ctx, `
 			SELECT id, tenant_id, event_name, resource, payload, delivered_at
-			FROM forma_event_log
+			FROM formspec_event_log
 			WHERE tenant_id = ? AND resource = ?
 			ORDER BY delivered_at DESC
 			LIMIT ? OFFSET ?
@@ -76,7 +76,7 @@ func (s *EventLogStore) ListByWorkspace(ctx context.Context, workspaceID, resour
 	} else {
 		rows, err = s.db.QueryContext(ctx, `
 			SELECT id, tenant_id, event_name, resource, payload, delivered_at
-			FROM forma_event_log
+			FROM formspec_event_log
 			WHERE tenant_id = ?
 			ORDER BY delivered_at DESC
 			LIMIT ? OFFSET ?

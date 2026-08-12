@@ -27,8 +27,11 @@
       }
     },
     "display_field": {
-      "description": "field name used as display label for this entity in relation pickers \u0026 detail pages",
-      "type": "string"
+      "description": "@schema {example: \"name\"}",
+      "type": "string",
+      "examples": [
+        "name"
+      ]
     },
     "events": {
       "type": "array",
@@ -69,15 +72,27 @@
       }
     },
     "lifecycle": {
-      "description": "explicit frontend lifecycle: two_step_autosave | two_step_manual | plain_crud (default derived from actions)",
-      "type": "string"
+      "description": "@schema {example: \"plain_crud\", enum: [\"two_step_autosave\", \"two_step_manual\", \"plain_crud\"]}",
+      "type": "string",
+      "enum": [
+        "two_step_autosave",
+        "two_step_manual",
+        "plain_crud"
+      ],
+      "examples": [
+        "plain_crud"
+      ]
     },
     "persist": {
       "$ref": "#/$defs/PersistSpec",
       "nullable": true
     },
     "plural": {
-      "type": "string"
+      "description": "@schema {example: \"invoices\"}",
+      "type": "string",
+      "examples": [
+        "invoices"
+      ]
     },
     "rate_limit": {
       "$ref": "#/$defs/RateLimitSpec",
@@ -94,7 +109,11 @@
       "nullable": true
     },
     "version": {
-      "type": "string"
+      "description": "@schema {example: \"v1\"}",
+      "type": "string",
+      "examples": [
+        "v1"
+      ]
     }
   },
   "required": [

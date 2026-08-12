@@ -1,4 +1,4 @@
-// Package permission provides the permission model and registry for Forma.
+// Package permission provides the permission model and registry for FormSpec.
 //
 // It implements D20 — the explicit permission model:
 //   - Every action declares `required_permission` (caller guard)

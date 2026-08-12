@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/primadi/forma/internal/artifact"
+	"github.com/primadi/formspec/internal/artifact"
 )
 
 // SnapshotFetcher pulls desired-state snapshots from the Control Plane

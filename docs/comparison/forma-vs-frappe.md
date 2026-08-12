@@ -1,20 +1,20 @@
 ---
-title: Forma vs Frappe (ERPNext)
-description: Comparing Forma's spec-first ecosystem with Frappe/ERPNext — the most similar project, and the inspiration for Entity and Module concepts
+title: FormSpec vs Frappe (ERPNext)
+description: Comparing FormSpec's spec-first ecosystem with Frappe/ERPNext — the most similar project, and the inspiration for Entity and Module concepts
 date: 2026-07-06
 ---
 
-# Forma vs Frappe (ERPNext)
+# FormSpec vs Frappe (ERPNext)
 
-> **Forma** is a spec-first ecosystem for building business applications in Go. **Frappe** (with ERPNext) is a full-stack low-code framework in Python, best known for powering the ERPNext ecosystem.
+> **FormSpec** is a spec-first ecosystem for building business applications in Go. **Frappe** (with ERPNext) is a full-stack low-code framework in Python, best known for powering the ERPNext ecosystem.
 
-Of all the comparisons in this directory, **this is the most important one.** Frappe is the closest existing project to Forma — and Forma's `kind: Entity` is directly inspired by Frappe's `DocType`. Understanding the similarities and differences reveals whether Forma is "just another Frappe" or something fundamentally new.
+Of all the comparisons in this directory, **this is the most important one.** Frappe is the closest existing project to FormSpec — and FormSpec's `kind: Entity` is directly inspired by Frappe's `DocType`. Understanding the similarities and differences reveals whether FormSpec is "just another Frappe" or something fundamentally new.
 
 ---
 
 ## 1. Overview
 
-### Forma
+### FormSpec
 Spec-first ecosystem for business applications in Go. YAML manifests define entities, state machines, actions, permissions, and UI. Includes a governance Control Plane, six `ctx.*` primitives, five implementation types (native Go, Starlark, compiled, sidecar), and a marketplace. Two-process architecture (Control + Resource planes).
 
 ### Frappe / ERPNext
@@ -24,7 +24,7 @@ A full-stack low-code framework in Python. **DocType** is the central concept �
 
 ## 2. Philosophy
 
-| | Forma | Frappe |
+| | FormSpec | Frappe |
 |---|---|---|
 | **Paradigm** | Spec-first, declarative (YAML files) | Low-code (DocType defined in DB, Python code for logic) |
 | **Source of truth** | YAML files on disk (git-friendly, AI-friendly) | Database (DocType JSON stored in `tabDocType`) |
@@ -33,11 +33,11 @@ A full-stack low-code framework in Python. **DocType** is the central concept �
 | **Governance** | Built-in Control Plane (OPA/Rego, signing, audit) | None — rely on Frappe's permission system |
 | **Marketplace** | Module registry with pricing & metering | Frappe Marketplace (apps, themes, paid listings) |
 
-### What Forma took from Frappe
+### What FormSpec took from Frappe
 
 From the Foundation Document: *"How to define business entities, workflows, and modules declaratively. DocType → `kind: Entity`. Vertical modules (accounting, HRM, inventory) as first-class ecosystem citizens."*
 
-| Frappe Concept | Forma Equivalent | Notes |
+| Frappe Concept | FormSpec Equivalent | Notes |
 |---|---|---|
 | DocType | `kind: Entity` | Core data definition — fields, child tables, naming series |
 | Workflow | `state_machine` (in Entity) + `kind: Workflow` | State transitions with guards, approval steps |
@@ -53,7 +53,7 @@ From the Foundation Document: *"How to define business entities, workflows, and 
 
 ## 3. Feature Comparison
 
-| Dimension | Forma | Frappe / ERPNext |
+| Dimension | FormSpec | Frappe / ERPNext |
 |---|---|---|
 | **Paradigm** | Spec-first (YAML files on disk) | Low-code (DocType defined in DB, Python code) |
 | **Backend language** | Go (compiled) + Starlark script + sidecar (any language) | Python (interpreted) |
@@ -72,7 +72,7 @@ From the Foundation Document: *"How to define business entities, workflows, and 
 | **Built-in Admin Panel** | ✅ Instant — derived from Entity manifests | ✅ Form/List views auto-generated from DocType |
 | **Built-in ERP Modules** | ❌ Not included (modules are marketplace items) | ✅ ERPNext ships with 30+ ready modules (accounting, HR, inventory, CRM, manufacturing, etc.) |
 | **Ecosystem / Marketplace** | Module registry with pricing models (free, subscription, per-seat, per-call) + verifiable metering | Frappe Marketplace — apps, themes, paid listings |
-| **Hosting** | Self-host (single binary, Docker, K8s) + Forma Cloud | Self-host + Frappe Cloud (managed) |
+| **Hosting** | Self-host (single binary, Docker, K8s) + FormSpec Cloud | Self-host + Frappe Cloud (managed) |
 | **Performance** | High — compiled Go, low resource usage | Moderate — Python (interpreted, GIL-bound for CPU tasks) |
 | **Memory footprint** | ~10-50 MB | ~100-300 MB (Python + MariaDB) |
 | **Maturity** | New (MVP in development) | Mature (15+ years, production-proven at scale) |
@@ -92,20 +92,20 @@ This single design decision has profound implications:
 - AI tools cannot easily read/edit — they need API calls or direct DB access
 - Merging changes requires custom tooling
 
-### Forma: YAML Files on Disk
+### FormSpec: YAML Files on Disk
 - Define entities as `kind: Entity` YAML files in your project
 - Changes are **git-diffable, mergeable, reviewable**
 - AI tools read/edit YAML naturally — it's the same format as K8s, Docker Compose, CI configs
-- `forma validate` runs on every PR — structural errors caught before deploy
+- `formspec validate` runs on every PR — structural errors caught before deploy
 - Visual editor (planned) writes YAML to files → git remains the source of truth
 
-**This makes Forma fundamentally more compatible with modern GitOps and AI-assisted development workflows.**
+**This makes FormSpec fundamentally more compatible with modern GitOps and AI-assisted development workflows.**
 
 ---
 
 ## 5. The ERPNext Advantage
 
-Frappe/ERPNext has something Forma cannot match today: **ERPNext itself.** It includes 30+ ready-to-use business modules:
+Frappe/ERPNext has something FormSpec cannot match today: **ERPNext itself.** It includes 30+ ready-to-use business modules:
 
 - Accounting (GL, AR, AP, budgeting, cost centers)
 - Human Resources (employees, payroll, leave, attendance)
@@ -116,13 +116,13 @@ Frappe/ERPNext has something Forma cannot match today: **ERPNext itself.** It in
 - Projects (tasks, timesheets, billing)
 - Assets, Healthcare, Education, Non-Profit, and more
 
-Forma will have a **marketplace** where such modules can be built and sold — but they don't exist yet. Building a complete ERP on Forma is possible but requires developing each module.
+FormSpec will have a **marketplace** where such modules can be built and sold — but they don't exist yet. Building a complete ERP on FormSpec is possible but requires developing each module.
 
 ---
 
 ## 6. When to Choose Which
 
-### Choose Forma when:
+### Choose FormSpec when:
 - You want a **modern, GitOps-native** workflow — YAML on disk, diff in PRs, validate in CI.
 - **AI-assisted development** is a priority — YAML files are trivially read/written by AI.
 - You prefer **Go** for performance, type safety, and low resource usage.
@@ -137,15 +137,15 @@ Forma will have a **marketplace** where such modules can be built and sold — b
 - You want a **proven, mature platform** (15+ years of production use).
 - You need **ready-made business modules** that work out of the box.
 - You want the **Frappe ecosystem** — hundreds of community apps on the marketplace.
-- You prefer **GPL v3** license (Forma uses FSL).
+- You prefer **GPL v3** license (FormSpec uses FSL).
 
 ---
 
 ## 7. Conclusion
 
-Frappe/ERPNext is the **closest existing project** to Forma — and in many ways, the most important comparison. Here's the honest assessment:
+Frappe/ERPNext is the **closest existing project** to FormSpec — and in many ways, the most important comparison. Here's the honest assessment:
 
-| Frappe/ERPNext is better today because: | Forma will eventually be better because: |
+| Frappe/ERPNext is better today because: | FormSpec will eventually be better because: |
 |---|---|
 | Has ERPNext — 30+ ready modules | GitOps-native (YAML files on disk) |
 | Mature (15+ years) | Designed for AI-assisted development |
@@ -157,6 +157,6 @@ Frappe/ERPNext is the **closest existing project** to Forma — and in many ways
 
 **If you need ERP functionality today, choose Frappe/ERPNext.** It's production-proven and feature-complete.
 
-**If you are building a new business application framework and want modern GitOps, AI-native workflows, Go performance, and governance by default — Forma is the architecture designed for that future.**
+**If you are building a new business application framework and want modern GitOps, AI-native workflows, Go performance, and governance by default — FormSpec is the architecture designed for that future.**
 
-> Forma does not aim to be "Frappe in Go." It aims to be what Frappe would look like if it were designed today: YAML-native, GitOps-ready, AI-friendly, with governance and polyglot execution built in from the start.
+> FormSpec does not aim to be "Frappe in Go." It aims to be what Frappe would look like if it were designed today: YAML-native, GitOps-ready, AI-friendly, with governance and polyglot execution built in from the start.

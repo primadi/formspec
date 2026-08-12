@@ -3,9 +3,9 @@
 **Version:** 1.0
 **Status:** Draft
 **License:** Creative Commons CC0
-**Governed by:** Forma Architecture Overview (D-ARCH-1, D-ARCH-2, D-ARCH-3, D-ARCH-17)
+**Governed by:** FormSpec Architecture Overview (D-ARCH-1, D-ARCH-2, D-ARCH-3, D-ARCH-17)
 
-> Forma memiliki **tiga admin UI** dengan pemilik, lisensi, dan fungsi yang berbeda. Dokumen ini menjelaskan masing-masing secara detail. **Penting:** spec `spec/frontend/01-visual-hierarchy.md` adalah untuk UI aplikasi bisnis, **bukan** untuk admin UI yang dijelaskan di sini.
+> FormSpec memiliki **tiga admin UI** dengan pemilik, lisensi, dan fungsi yang berbeda. Dokumen ini menjelaskan masing-masing secara detail. **Penting:** spec `spec/frontend/01-visual-hierarchy.md` adalah untuk UI aplikasi bisnis, **bukan** untuk admin UI yang dijelaskan di sini.
 
 ---
 
@@ -16,7 +16,7 @@
 │                      Tiga Admin UI                            │
 │                                                               │
 │  ┌─────────────────┐   ┌─────────────────┐   ┌────────────┐ │
-│  │   forma/ops     │   │  forma/console  │   │  /_admin   │ │
+│  │   formspec/ops     │   │  formspec/console  │   │  /_admin   │ │
 │  │                 │   │                 │   │            │ │
 │  │ Pemilik:        │   │ Pemilik:        │   │ Pemilik:   │ │
 │  │ Cloud Owner     │   │ Workspace Owner │   │ App Owner  │ │
@@ -37,20 +37,20 @@
 
 ---
 
-## 2. forma/ops — Control Plane Admin
+## 2. formspec/ops — Control Plane Admin
 
-**Audience:** Cloud Owner / Platform Operator — tim infra yang menjalankan Forma Cloud.
+**Audience:** Cloud Owner / Platform Operator — tim infra yang menjalankan FormSpec Cloud.
 
-**Akses:** `forma/ops.{region}.forma.dev`
+**Akses:** `formspec/ops.{region}.formspec.dev`
 
-**Lisensi:** Closed source, first-party Forma.
+**Lisensi:** Closed source, first-party FormSpec.
 
 ### 2.1 Features
 
 | Kategori | Fitur |
 |---|---|
 | **Environment** | CRUD environment (name, mode dev/prod, tier, resource pool) |
-| **Node Management** | Lihat semua K8s node terdaftar, approve/reject pending node, lihat status (active/dead/draining), label & tag node (`forma.dev/*`) |
+| **Node Management** | Lihat semua K8s node terdaftar, approve/reject pending node, lihat status (active/dead/draining), label & tag node (`formspec.dev/*`) |
 | **Cluster Management** | Lihat semua K8s cluster dalam region, lihat kapasitas (workspace count, CPU/mem usage), health status per cluster |
 | **ClusterClass** | Definisikan ClusterClass (premium/standard/economy) — SLA, spesifikasi, harga, fitur, maxWorkspaces |
 | **Datastore** | Lihat semua datastore terdaftar (DB, Valkey, Redis), approve/reject pending, lihat tenant affinity, usage metrics |
@@ -65,19 +65,19 @@
 
 ### 2.2 Dogfooding
 
-`forma/ops` adalah **aplikasi Forma yang dibangun dengan Forma sendiri**. Ia berjalan di dedicated workspace di Resource Plane operations dan mengakses Control Plane melalui bridge `kind: Service`.
+`formspec/ops` adalah **aplikasi FormSpec yang dibangun dengan FormSpec sendiri**. Ia berjalan di dedicated workspace di Resource Plane operations dan mengakses Control Plane melalui bridge `kind: Service`.
 
-**Bootstrap (chicken-and-egg):** approve cluster/resource membutuhkan forma/ops, tapi forma/ops sendiri berjalan di atas cluster. Solusinya: region baru di-bootstrap via **CLI admin** — Cloud Owner men-seed key pertama dan meng-approve cluster + workspace operations pertama langsung lewat API `forma-ctl --mode=region` (CLI, tanpa UI). Setelah forma/ops ter-deploy di workspace operations tersebut, seluruh approval berikutnya berjalan lewat UI. Bootstrap path ini adalah operasi one-time per region dan tercatat di transparency log seperti approval lainnya.
+**Bootstrap (chicken-and-egg):** approve cluster/resource membutuhkan formspec/ops, tapi formspec/ops sendiri berjalan di atas cluster. Solusinya: region baru di-bootstrap via **CLI admin** — Cloud Owner men-seed key pertama dan meng-approve cluster + workspace operations pertama langsung lewat API `formspec-ctl --mode=region` (CLI, tanpa UI). Setelah formspec/ops ter-deploy di workspace operations tersebut, seluruh approval berikutnya berjalan lewat UI. Bootstrap path ini adalah operasi one-time per region dan tercatat di transparency log seperti approval lainnya.
 
 ---
 
-## 3. forma/console — Resource Plane Admin (Workspace Owner)
+## 3. formspec/console — Resource Plane Admin (Workspace Owner)
 
-**Audience:** Workspace Owner — pemilik bisnis (bengkel, klinik, enterprise) yang menggunakan aplikasi di atas Forma.
+**Audience:** Workspace Owner — pemilik bisnis (bengkel, klinik, enterprise) yang menggunakan aplikasi di atas FormSpec.
 
-**Akses:** `console.{region}.forma.dev`
+**Akses:** `console.{region}.formspec.dev`
 
-**Lisensi:** Closed source, first-party Forma.
+**Lisensi:** Closed source, first-party FormSpec.
 
 ### 3.1 Features
 
@@ -96,15 +96,15 @@
 
 ### 3.2 Bukan Pengganti Admin Panel Bisnis
 
-> **Penting:** `forma/console` **bukan** pengganti admin panel bisnis (`/_admin`). Workspace Owner menggunakan **dua** antarmuka berbeda:
-> - **forma/console** — untuk hal-hal level "hosting/langganan" (billing, user management, backup)
+> **Penting:** `formspec/console` **bukan** pengganti admin panel bisnis (`/_admin`). Workspace Owner menggunakan **dua** antarmuka berbeda:
+> - **formspec/console** — untuk hal-hal level "hosting/langganan" (billing, user management, backup)
 > - **Admin panel bisnis** (`/_admin`) — untuk operasional harian (input data, lihat laporan, proses transaksi)
 >
-> Analogi: forma/console adalah **cPanel**, admin panel bisnis adalah **aplikasi WordPress** yang di-hosting di atasnya.
+> Analogi: formspec/console adalah **cPanel**, admin panel bisnis adalah **aplikasi WordPress** yang di-hosting di atasnya.
 
 ### 3.3 Dogfooding
 
-Sama seperti `forma/ops`, `forma/console` adalah aplikasi Forma yang dibangun dengan Forma sendiri.
+Sama seperti `formspec/ops`, `formspec/console` adalah aplikasi FormSpec yang dibangun dengan FormSpec sendiri.
 
 ---
 
@@ -112,9 +112,9 @@ Sama seperti `forma/ops`, `forma/console` adalah aplikasi Forma yang dibangun de
 
 **Audience:** Staf operasional Workspace Owner (kasir, resepsionis, admin) dan App Owner.
 
-**Akses:** `{workspace}.forma.dev/_admin`
+**Akses:** `{workspace}.formspec.dev/_admin`
 
-**Lisensi:** Open source — auto-generated dari Document manifest. Milik App Owner, bukan milik Forma.
+**Lisensi:** Open source — auto-generated dari Document manifest. Milik App Owner, bukan milik FormSpec.
 
 ### 4.1 Features (Auto-Generated)
 
@@ -143,15 +143,15 @@ dan `docs/spec/frontend/07-component-kinds.md`:
 
 ~20% UI yang tidak bisa di-pattern-kan menggunakan `asset` custom component (JS/TS).
 
-### 4.4 Bukan Milik Forma
+### 4.4 Bukan Milik FormSpec
 
-Admin panel bisnis **bukan** aplikasi Forma. Forma hanya menyediakan mesin generatornya. Data, UI, dan logic adalah milik App Owner/Workspace Owner sepenuhnya.
+Admin panel bisnis **bukan** aplikasi FormSpec. FormSpec hanya menyediakan mesin generatornya. Data, UI, dan logic adalah milik App Owner/Workspace Owner sepenuhnya.
 
 ---
 
 ## 5. Permissions & Access Control
 
-| User | forma/ops | forma/console | /_admin |
+| User | formspec/ops | formspec/console | /_admin |
 |---|---|---|---|
 | **Cloud Owner** | ✅ Full access | ❌ | ❌ |
 | **Cloud Owner Admin** (delegated) | ✅ Scoped access | ❌ | ❌ |
@@ -162,12 +162,12 @@ Admin panel bisnis **bukan** aplikasi Forma. Forma hanya menyediakan mesin gener
 
 ---
 
-## 6. Future: forma/studio (Roadmap)
+## 6. Future: formspec/studio (Roadmap)
 
-**forma/studio** adalah UI low-code untuk App Owner — direncanakan sebagai alat bantu:
+**formspec/studio** adalah UI low-code untuk App Owner — direncanakan sebagai alat bantu:
 - Natural language → draft resource YAML (AI-assisted)
 - Commit ke git dari GUI
-- Preview visual sebelum `forma apply`
+- Preview visual sebelum `formspec apply`
 - Template vertikal siap pakai
 
 Status: roadmap, bukan bagian dari spec saat ini.

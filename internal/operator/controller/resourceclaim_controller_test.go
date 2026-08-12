@@ -13,23 +13,23 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	formav1alpha1 "github.com/primadi/forma/internal/operator/api/v1alpha1"
+	formspecv1alpha1 "github.com/primadi/formspec/internal/operator/api/v1alpha1"
 )
 
 func newTestScheme(t *testing.T) *runtime.Scheme {
 	t.Helper()
 	s := runtime.NewScheme()
-	if err := formav1alpha1.AddToScheme(s); err != nil {
+	if err := formspecv1alpha1.AddToScheme(s); err != nil {
 		t.Fatalf("add scheme: %v", err)
 	}
 	return s
 }
 
-func signedClaim(t *testing.T, priv ed25519.PrivateKey) *formav1alpha1.ResourceClaim {
+func signedClaim(t *testing.T, priv ed25519.PrivateKey) *formspecv1alpha1.ResourceClaim {
 	t.Helper()
-	claim := &formav1alpha1.ResourceClaim{
+	claim := &formspecv1alpha1.ResourceClaim{
 		ObjectMeta: metav1.ObjectMeta{Name: "bank-pg-claim", Namespace: "default"},
-		Spec: formav1alpha1.ResourceClaimSpec{
+		Spec: formspecv1alpha1.ResourceClaimSpec{
 			Datastore:  "pg-bank",
 			Workspace:  "bank-prod",
 			Permission: "read-write",
@@ -47,11 +47,11 @@ func TestResourceClaimReconcile(t *testing.T) {
 		t.Fatalf("keygen: %v", err)
 	}
 
-	datastore := &formav1alpha1.Datastore{
+	datastore := &formspecv1alpha1.Datastore{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg-bank", Namespace: "default"},
-		Spec: formav1alpha1.DatastoreSpec{
+		Spec: formspecv1alpha1.DatastoreSpec{
 			Driver:            "postgres",
-			EndpointSecretRef: formav1alpha1.SecretKeyRef{Name: "pg-creds", Key: "dsn"},
+			EndpointSecretRef: formspecv1alpha1.SecretKeyRef{Name: "pg-creds", Key: "dsn"},
 			AllowedTenants:    []string{"workspace:bank-prod"},
 			OwnerPublicKey:    hex.EncodeToString(pub),
 		},
@@ -59,19 +59,19 @@ func TestResourceClaimReconcile(t *testing.T) {
 
 	cases := []struct {
 		name      string
-		mutate    func(*formav1alpha1.ResourceClaim, *formav1alpha1.Datastore)
+		mutate    func(*formspecv1alpha1.ResourceClaim, *formspecv1alpha1.Datastore)
 		wantReady bool
 		reason    string
 	}{
 		{
 			name:      "valid signature and allowed workspace",
-			mutate:    func(*formav1alpha1.ResourceClaim, *formav1alpha1.Datastore) {},
+			mutate:    func(*formspecv1alpha1.ResourceClaim, *formspecv1alpha1.Datastore) {},
 			wantReady: true,
 			reason:    "ClaimVerified",
 		},
 		{
 			name: "tenant not in allowedTenants",
-			mutate: func(c *formav1alpha1.ResourceClaim, _ *formav1alpha1.Datastore) {
+			mutate: func(c *formspecv1alpha1.ResourceClaim, _ *formspecv1alpha1.Datastore) {
 				c.Spec.Workspace = "intruder"
 			},
 			wantReady: false,
@@ -79,7 +79,7 @@ func TestResourceClaimReconcile(t *testing.T) {
 		},
 		{
 			name: "tampered permission breaks signature",
-			mutate: func(c *formav1alpha1.ResourceClaim, _ *formav1alpha1.Datastore) {
+			mutate: func(c *formspecv1alpha1.ResourceClaim, _ *formspecv1alpha1.Datastore) {
 				c.Spec.Permission = "read-only" // signed as read-write
 			},
 			wantReady: false,
@@ -87,7 +87,7 @@ func TestResourceClaimReconcile(t *testing.T) {
 		},
 		{
 			name: "datastore without owner key",
-			mutate: func(_ *formav1alpha1.ResourceClaim, ds *formav1alpha1.Datastore) {
+			mutate: func(_ *formspecv1alpha1.ResourceClaim, ds *formspecv1alpha1.Datastore) {
 				ds.Spec.OwnerPublicKey = ""
 			},
 			wantReady: false,
@@ -117,17 +117,17 @@ func TestResourceClaimReconcile(t *testing.T) {
 				t.Fatalf("reconcile: %v", err)
 			}
 
-			var got formav1alpha1.ResourceClaim
+			var got formspecv1alpha1.ResourceClaim
 			if err := cl.Get(context.Background(), types.NamespacedName{Name: claim.Name, Namespace: claim.Namespace}, &got); err != nil {
 				t.Fatalf("get claim: %v", err)
 			}
 
-			ready := meta.IsStatusConditionTrue(got.Status.Conditions, formav1alpha1.ConditionReady)
-			denied := meta.IsStatusConditionTrue(got.Status.Conditions, formav1alpha1.ConditionDenied)
+			ready := meta.IsStatusConditionTrue(got.Status.Conditions, formspecv1alpha1.ConditionReady)
+			denied := meta.IsStatusConditionTrue(got.Status.Conditions, formspecv1alpha1.ConditionDenied)
 			if ready != tc.wantReady || denied == tc.wantReady {
 				t.Fatalf("ready=%v denied=%v, want ready=%v", ready, denied, tc.wantReady)
 			}
-			cond := meta.FindStatusCondition(got.Status.Conditions, formav1alpha1.ConditionReady)
+			cond := meta.FindStatusCondition(got.Status.Conditions, formspecv1alpha1.ConditionReady)
 			if cond.Reason != tc.reason {
 				t.Errorf("reason = %q, want %q", cond.Reason, tc.reason)
 			}
@@ -140,11 +140,11 @@ func TestResourceClaimReconcile_DevSkipsSignature(t *testing.T) {
 	_ = pub
 	claim := signedClaim(t, priv)
 	claim.Spec.Signature = "" // no signature at all
-	ds := &formav1alpha1.Datastore{
+	ds := &formspecv1alpha1.Datastore{
 		ObjectMeta: metav1.ObjectMeta{Name: "pg-bank", Namespace: "default"},
-		Spec: formav1alpha1.DatastoreSpec{
+		Spec: formspecv1alpha1.DatastoreSpec{
 			Driver:            "postgres",
-			EndpointSecretRef: formav1alpha1.SecretKeyRef{Name: "pg-creds", Key: "dsn"},
+			EndpointSecretRef: formspecv1alpha1.SecretKeyRef{Name: "pg-creds", Key: "dsn"},
 			AllowedTenants:    []string{"workspace:bank-prod"},
 		},
 	}
@@ -162,32 +162,32 @@ func TestResourceClaimReconcile_DevSkipsSignature(t *testing.T) {
 		t.Fatalf("reconcile: %v", err)
 	}
 
-	var got formav1alpha1.ResourceClaim
+	var got formspecv1alpha1.ResourceClaim
 	if err := cl.Get(context.Background(), types.NamespacedName{Name: claim.Name, Namespace: claim.Namespace}, &got); err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	if !meta.IsStatusConditionTrue(got.Status.Conditions, formav1alpha1.ConditionReady) {
+	if !meta.IsStatusConditionTrue(got.Status.Conditions, formspecv1alpha1.ConditionReady) {
 		t.Fatal("dev mode should mark unsigned claim Ready")
 	}
 }
 
 func TestDesiredReplicas(t *testing.T) {
-	ws := &formav1alpha1.Workspace{}
-	class := &formav1alpha1.ClusterClass{
-		Spec: formav1alpha1.ClusterClassSpec{Scaling: formav1alpha1.ClusterClassScaling{MinReplicas: 2}},
+	ws := &formspecv1alpha1.Workspace{}
+	class := &formspecv1alpha1.ClusterClass{
+		Spec: formspecv1alpha1.ClusterClassSpec{Scaling: formspecv1alpha1.ClusterClassScaling{MinReplicas: 2}},
 	}
 	if got := desiredReplicas(ws, class); got != 2 {
 		t.Errorf("premium replicas = %d, want 2", got)
 	}
 
-	economy := &formav1alpha1.ClusterClass{
-		Spec: formav1alpha1.ClusterClassSpec{Scaling: formav1alpha1.ClusterClassScaling{MinReplicas: 0, ScaleToZero: true}},
+	economy := &formspecv1alpha1.ClusterClass{
+		Spec: formspecv1alpha1.ClusterClassSpec{Scaling: formspecv1alpha1.ClusterClassScaling{MinReplicas: 0, ScaleToZero: true}},
 	}
 	if got := desiredReplicas(ws, economy); got != 1 {
 		t.Errorf("active economy replicas = %d, want 1", got)
 	}
 
-	idle := &formav1alpha1.Workspace{
+	idle := &formspecv1alpha1.Workspace{
 		ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{idleAnnotation: "true"}},
 	}
 	if got := desiredReplicas(idle, economy); got != 0 {

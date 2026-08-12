@@ -192,7 +192,7 @@ func structToSchema(td *TypeDef, collect *CollectResult, sharedDefs map[string]*
 		}
 		s.Properties[fd.Name] = prop
 
-		// Array fields (slices) are not required — Forma derives them by
+		// Array fields (slices) are not required — FormSpec derives them by
 		// default when omitted. Only scalar/object fields enforce required.
 		if fd.Required && fd.TypeKind != "slice" {
 			required = append(required, fd.Name)
@@ -444,7 +444,7 @@ func enumToSchema(td *TypeDef) *Schema {
 }
 
 // applyAnnotation applies annotation metadata to a schema.
-func applyAnnotation(s *Schema, ann *schemaAnnotation) {
+func applyAnnotation(s *Schema, ann *SchemaAnnotation) {
 	if ann.Description != "" {
 		s.Description = ann.Description
 	}
@@ -487,15 +487,15 @@ func applyAnnotation(s *Schema, ann *schemaAnnotation) {
 func buildRootSchema(collect *CollectResult, sharedDefs map[string]*Schema, kindSchemas map[string]*Schema) *Schema {
 	root := &Schema{
 		Schema: "http://json-schema.org/draft-07/schema#",
-		Title:  "Forma Manifest",
-		Description: "JSON Schema for Forma YAML manifests (forma.dev/v1alpha1).\n" +
+		Title:  "FormSpec Manifest",
+		Description: "JSON Schema for FormSpec YAML manifests (formspec.dev/v1alpha1).\n" +
 			"Validates the apiVersion/kind/metadata/spec structure and routes to kind-specific specs.",
 		Type: "object",
 		Properties: map[string]*Schema{
 			"apiVersion": {
 				Type:        "string",
-				Const:       "forma.dev/v1alpha1",
-				Description: "Forma API version — must be forma.dev/v1alpha1",
+				Const:       "formspec.dev/v1alpha1",
+				Description: "FormSpec API version — must be formspec.dev/v1alpha1",
 			},
 			"kind": {
 				Type:        "string",
@@ -595,7 +595,7 @@ func buildRootSchema(collect *CollectResult, sharedDefs map[string]*Schema, kind
 			Properties: map[string]*Schema{
 				"apiVersion": {
 					Type:  "string",
-					Const: "forma.dev/v1alpha1",
+					Const: "formspec.dev/v1alpha1",
 				},
 				"kind":     kindSchema,
 				"metadata": metadataSchema, // inlined, not $ref, to avoid $ref resolution issues in some validators

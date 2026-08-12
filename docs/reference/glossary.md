@@ -19,7 +19,7 @@
   seperti Page/Form/Table) — satu Module = satu bounded context bisnis utuh.
   Isi ditemukan lewat scanning file (bukan didaftar manual); Module yang sama
   boleh di-mount lebih dari satu App dalam Workspace yang sama.
-- **Kind** — Satuan taksonomi manifest Forma: seluruh kind memakai format
+- **Kind** — Satuan taksonomi manifest FormSpec: seluruh kind memakai format
   `apiVersion/kind/metadata/spec` yang sama, terbagi menurut concern (model
   domain, kurasi, konfigurasi, DDL, proses bisnis, visual, governance,
   infrastruktur) dan menurut plane tempat ia hidup (Control atau Resource).
@@ -92,7 +92,7 @@
   shell (mis. `react-shadcn`, `vue`, `flutter`) — App shell, Page
   shell-integrated, dan Component wajib berbagi `stack_family` yang sama
   supaya tetap satu render tree; mismatch adalah compile-time error saat
-  `forma apply`.
+  `formspec apply`.
 - **trust tier** — Klasifikasi kepercayaan (`official | verified | community`)
   yang seragam untuk Renderer, PersistBackend, dan Module Registry — tier
   `official` dipakai sebagai default resolusi, tier lain butuh proses
@@ -110,7 +110,7 @@
   Document); Layer 1 adalah manifest minim yang meng-override sebagian
   default itu — keduanya tanpa perlu dev environment lokal.
 - **Tier 2/3 developer** — Persona yang menulis handler native/script kustom,
-  frontend custom (`asset`), atau mengonsumsi codegen (`forma generate`) —
+  frontend custom (`asset`), atau mengonsumsi codegen (`formspec generate`) —
   berbeda dari App developer Layer 0/1 yang cukup mengandalkan derivasi
   otomatis dari Document.
 
@@ -139,7 +139,7 @@
   tiap PersistBackend lewat `ctx.next_key`.
 
 - **Plane (control/resource)** — Dua proses/binary terpisah dalam arsitektur
-  Forma: Control Plane (`forma-control`) menguasai governance (Environment,
+  FormSpec: Control Plane (`formspec-control`) menguasai governance (Environment,
   Policy, kunci, kontrak, transparency log) tanpa pernah membaca data bisnis
   atau mengeksekusi handler bisnis; Resource Plane menjalankan Engine (CRUD,
   Action, State Machine, Event/Outbox), Spec Resolution API, dan

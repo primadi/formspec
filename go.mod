@@ -1,4 +1,4 @@
-module github.com/primadi/forma
+module github.com/primadi/formspec
 
 go 1.26.4
 

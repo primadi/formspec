@@ -10,15 +10,30 @@
       }
     },
     "entity": {
-      "type": "string"
+      "description": "@schema {example: \"billing.order\"}",
+      "type": "string",
+      "examples": [
+        "billing.order"
+      ]
     },
     "mode": {
-      "description": "create | edit | view",
-      "type": "string"
+      "description": "@schema {example: \"edit\", enum: [\"create\", \"edit\", \"view\"]}",
+      "type": "string",
+      "enum": [
+        "create",
+        "edit",
+        "view"
+      ],
+      "examples": [
+        "edit"
+      ]
     },
     "public": {
       "description": "If true (default), a route /module/form/\u003cname\u003e is auto-generated. Set false for embed-only forms.",
       "type": "boolean",
+      "examples": [
+        "true"
+      ],
       "nullable": true
     },
     "render": {

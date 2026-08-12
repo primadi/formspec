@@ -1,6 +1,6 @@
-# Forma UI Themes
+# FormSpec UI Themes
 
-Kumpulan tema untuk Forma web. Setiap tema adalah **module standalone** yang bisa dipasang di workspace mana pun.
+Kumpulan tema untuk FormSpec web. Setiap tema adalah **module standalone** yang bisa dipasang di workspace mana pun.
 
 ## Cara Pakai
 
@@ -8,11 +8,11 @@ Kumpulan tema untuk Forma web. Setiap tema adalah **module standalone** yang bis
 # 1. Copy folder tema ke spec/modules/ project
 cp -r ui-theme/<nama-theme> path/to/spec/modules/
 
-# 2. Tambahkan nama module ke spec/forma.yaml
+# 2. Tambahkan nama module ke spec/formspec.yaml
 #    modules: [..., ocean-blue]
 
 # 3. Jalankan dev server
-cd path/to && go run cmd/forma/ dev
+cd path/to && go run cmd/formspec/ dev
 ```
 
 > **Catatan:** Symlink (`ln -s`) tidak didukung. Go's `filepath.Walk` tidak follow symlinks. Selalu gunakan `cp -r`.
@@ -82,6 +82,6 @@ my-custom-theme/
 ## Security Policy
 
 - **Hanya YAML manifest** yang bisa di-load dari `spec/modules/`
-- `module.yaml` + `kind: Theme` → divalidasi oleh `forma validate`
+- `module.yaml` + `kind: Theme` → divalidasi oleh `formspec validate`
 - Image/asset eksternal → referensi URL absolut di `stylesheet`
 - Tidak ada loading dari path di luar workspace root

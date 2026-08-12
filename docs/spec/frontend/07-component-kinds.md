@@ -24,7 +24,7 @@ tidak tumbuh secara informal**: widget baru ditambahkan dengan mendaftarkan
 ([`02-visual-spec-kind.md`](02-visual-spec-kind.md) §2, §6) — bukan dengan
 memperluas daftar di atas secara ad-hoc. Component custom
 ([`../frontend/07-component-kinds.md`](07-component-kinds.md) §4 di bawah) boleh
-menyusun ulang lewat `forma.components` — bukan menulis ulang widget dasar dari
+menyusun ulang lewat `formspec.components` — bukan menulis ulang widget dasar dari
 nol. Restyle tampilan pustaka ini adalah urusan `kind: Theme`
 ([`05-app-kinds.md`](05-app-kinds.md) §5) — Theme tidak pernah mengubah semantik
 layout atau melewati visibilitas berbasis permission (§ Spec Resolution API —
@@ -43,7 +43,7 @@ tenant-isolated seperti semua data.
 - **Batas ukuran & tipe** yang diizinkan dibaca dari field rules — ditegakkan
   client untuk UX, server tetap otoritas
   ([`../backend/01-core-basic.md`](../backend/01-core-basic.md) §3).
-- Tray upload/download disediakan renderer (`forma.files`, §4) — `fileinput`
+- Tray upload/download disediakan renderer (`formspec.files`, §4) — `fileinput`
   adalah widget dasar, bukan kind tersendiri.
 
 ### 1.2 `richtext` — Rich Text
@@ -65,7 +65,7 @@ Component yang mengisi slot `widget` milik Page tier (mis. Dashboard —
 ([`02-visual-spec-kind.md`](02-visual-spec-kind.md) §4):
 
 ```yaml
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Widget
 metadata:
   name: gl-cashflow-chart
@@ -107,7 +107,7 @@ spec:
 
 **Dashboard customizable:** kalau `spec.customizable: true`, layout user
 (tambah/hapus/urutkan dari katalog widget) tersimpan sebagai *runtime
-preference* di `forma.core` — **manifest mendefinisikan apa yang mungkin;
+preference* di `formspec.core` — **manifest mendefinisikan apa yang mungkin;
 preference mencatat apa yang dipilih.** Tidak pernah ditulis balik ke YAML.
 
 ## 4. `asset` — Escape Hatch Component
@@ -117,21 +117,21 @@ Untuk ~20% UI yang tidak berpola. Component adalah **ES module** di
 ```js
 // modules/billing/assets/payment-timeline.js
 export default {
-  mount(el, props, forma) { /* render ke el */ },
+  mount(el, props, formspec) { /* render ke el */ },
   unmount(el) { }
 }
 ```
 
-`forma` adalah client yang di-inject: **`forma.api`** (generated, typed —
+`formspec` adalah client yang di-inject: **`formspec.api`** (generated, typed —
 berjalan sebagai user yang login, seluruh keamanan tetap server-side),
-`forma.subscribe(entity, cb)` (realtime,
+`formspec.subscribe(entity, cb)` (realtime,
 [`04-spec-resolution-api.md`](04-spec-resolution-api.md) §5),
-`forma.navigate(page, params)`, `forma.theme` (token), **`forma.ui`**
-(`toast`, `dialog`, `confirm`, `drawer`), dan `forma.files` (upload/download
+`formspec.navigate(page, params)`, `formspec.theme` (token), **`formspec.ui`**
+(`toast`, `dialog`, `confirm`, `drawer`), dan `formspec.files` (upload/download
 tray — infrastruktur renderer, bukan kind tersendiri).
 
 **`needs:`— `uses`-nya frontend.** Component itu opaque bagi derivasi
-footprint, jadi component yang memanggil `forma.api` **wajib** mendeklarasikan
+footprint, jadi component yang memanggil `formspec.api` **wajib** mendeklarasikan
 apa yang ia sentuh di tempat ia dipasang:
 
 ```yaml
@@ -148,8 +148,8 @@ apa yang ia sentuh di tempat ia dipasang:
 > `uses` di sisi backend sudah berjalan; deklarasi `needs` di manifest adalah
 > target kontrak berikutnya.
 
-Panggilan `forma.api` di luar `needs` gagal client-side (dan memang tidak
-pernah diotorisasi server-side juga). `forma validate` memperingatkan
+Panggilan `formspec.api` di luar `needs` gagal client-side (dan memang tidak
+pernah diotorisasi server-side juga). `formspec validate` memperingatkan
 deklarasi yang tidak dipakai.
 
 **Batas sandbox CSP (normatif, bukan anjuran).** Component custom yang dimuat
@@ -157,9 +157,9 @@ lewat escape hatch `asset` dikungkung Content-Security-Policy: `connect-src`
 dibatasi **hanya ke origin App itu sendiri**. Konsekuensi yang mengikat:
 component **dilarang** membaca state global `window`/`document` di luar
 container-nya sendiri, dan **dilarang** melakukan fetch/connect ke endpoint
-apa pun selain lewat client `forma.api` yang di-inject. Ini batas keamanan atas
+apa pun selain lewat client `formspec.api` yang di-inject. Ini batas keamanan atas
 escape hatch, bukan pedoman opsional — jalur data satu-satunya keluar dari
-component adalah `forma.*`.
+component adalah `formspec.*`.
 
 **CSS bundle scoped ke container.** Bundle CSS sebuah component custom
 di-inject **scoped ke container-nya sendiri** (mis. CSS Modules, Shadow DOM,
@@ -168,14 +168,14 @@ chrome Page/App di sekitarnya atau ke component lain. Ini konsisten dengan
 prinsip styling terpusat di `kind: Theme`
 ([`05-app-kinds.md`](05-app-kinds.md) §5).
 
-**Headless Form Engine.** `forma.form(entity, { mode, id? })` mengembalikan
+**Headless Form Engine.** `formspec.form(entity, { mode, id? })` mengembalikan
 instance form **headless**: field state, dirty tracking, validasi client dari
-field rules, evaluasi FormaExpr
+field rules, evaluasi FormSpecExpr
 ([`08-formaexpr.md`](08-formaexpr.md)), dan `submit()` yang sudah terhubung ke
 action yang tepat (create/update, dengan CAS `version`). Tanpa layout, tanpa
 widget — developer menguasai 100% markup. Tangga kontrol penuh: Form
 terkelola → custom widget → component → full-custom Page → headless → raw
-`forma.api`.
+`formspec.api`.
 
 **Unmanaged client** (Flutter, native, SPA lain) adalah **konsumen API
 kelas satu hari ini**: HTTP, realtime WebSocket, permission server-enforced,
@@ -184,7 +184,7 @@ ada satupun di dokumen ini yang wajib dipenuhi client semacam itu.
 
 ## 5. Menambah Component Kind Baru
 Lewat `VisualSpecKind` `tier: component`
-([`02-visual-spec-kind.md`](02-visual-spec-kind.md)); `forma apply` menolak
+([`02-visual-spec-kind.md`](02-visual-spec-kind.md)); `formspec apply` menolak
 `implements_slot` dari tier selain `component`. Distribusi lewat marketplace
 ([`../platform/07-marketplace.md`](../platform/07-marketplace.md)), sama
 seperti menambah VisualSpecKind tier lain.

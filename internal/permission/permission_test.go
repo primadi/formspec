@@ -3,7 +3,7 @@ package permission
 import (
 	"testing"
 
-	"github.com/primadi/forma/pkg/spec"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 // mockHasPermission is a simple implementation of the HasPermission interface

@@ -1,0 +1,24 @@
+{
+  "title": "Renderer Spec",
+  "description": "RendererSpec declares a concrete implementation of a VisualSpecKind\n(frontend/03-renderer-kind.md).\n",
+  "type": "object",
+  "properties": {
+    "implements": {
+      "type": "string"
+    },
+    "stack_family": {
+      "description": "e.g. react-shadcn, vue, flutter",
+      "type": "string"
+    },
+    "trust_tier": {
+      "description": "official | verified | community",
+      "type": "string"
+    }
+  },
+  "required": [
+    "implements",
+    "stack_family",
+    "trust_tier"
+  ],
+  "additionalProperties": false
+}

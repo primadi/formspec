@@ -35,7 +35,7 @@ men-derive table, form, detail page, dan menu entry-nya (milestone 4.F3.6):
 | **Page** | `clinic/pages/visits-page.yaml` | Block table tunggal, permissions |
 | **Page** | `clinic/pages/patient-detail.yaml` | Route `:param`, multi-block (form view + table ber-`param` + html), title interpolation `{patient.name}` |
 | **Page** | `clinic/pages/system-settings.yaml` | **Varian tabs** + Configuration Page pattern (reference doc, tanpa New/Delete) |
-| **Form** | `clinic/forms/visit-edit.yaml` | `render: separate_page`, multi-section, `visible_when`/`required_when` (FormaExpr), `read_only`, child grid, submit config |
+| **Form** | `clinic/forms/visit-edit.yaml` | `render: separate_page`, multi-section, `visible_when`/`required_when` (FormSpecExpr), `read_only`, child grid, submit config |
 | **Form** | `clinic/forms/patient-quick-create.yaml` | `render: modal` — dialog via query string |
 | **Form** | `clinic/forms/payment-quick.yaml` | Modal + `required_when` bergantung field lain |
 | **Form** | `clinic/forms/patient-card.yaml` | Dipakai `mode: view` sebagai block |
@@ -72,7 +72,7 @@ men-derive table, form, detail page, dan menu entry-nya (milestone 4.F3.6):
 |---|---|
 | Permission-driven UI (§1.4) | Semua action punya `required_permission`; row_actions/menu harus hilang bila permission tidak dimiliki (uji dengan JWT ber-perms subset) |
 | State machine → tombol transisi | `visit` (3 transisi + guard diagnosis), `prescription` (4 transisi) |
-| FormaExpr | `visible_when`/`required_when` di 4 form, title interpolation di `patient-detail`, guard `len(resource.items) > 0` |
+| FormSpecExpr | `visible_when`/`required_when` di 4 form, title interpolation di `patient-detail`, guard `len(resource.items) > 0` |
 | Natural key + config prefix | `visit.queue_number` (reset daily, prefix dari `Config clinic.queue_prefix`) |
 | Child table (jsonb) | `visit.treatments`, `prescription.items` |
 | Relation lintas module | `prescription.visit_id → clinic.visit` |
@@ -89,7 +89,7 @@ Backend (API saja — Meta API & renderer belum dibangun, ini fixture untuknya):
 ```bash
 go run ./examples/reference-app \
   --spec examples/Clinic-UI-Showcase/spec \
-  --dsn "sqlite://.forma/clinic.db" \
+  --dsn "sqlite://.formspec/clinic.db" \
   --addr :8080
 ```
 
@@ -128,7 +128,7 @@ curl "http://localhost:8080/demo/api/v1/clinic/visits?sort=-transaction_date&sta
 
 ```
 spec/
-├── forma.yaml                      # kind: App — klinik-sehat
+├── formspec.yaml                      # kind: App — klinik-sehat
 └── modules/
     ├── clinic/
     │   ├── module.yaml

@@ -1,0 +1,6 @@
+Metadata-Version: 2.4
+Name: lib-formspec
+Version: 0.1.0
+Summary: Thin client SDK bridging a Python app to formspec-sidecar: /invoke listener + ctx.* proxy client
+License: FSL-1.1-ALv2
+Requires-Python: >=3.9

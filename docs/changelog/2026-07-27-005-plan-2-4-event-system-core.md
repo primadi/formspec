@@ -25,7 +25,7 @@
   - Dequeue scan diperbarui untuk kolom baru
 
 ### 2.4.5 Error Codes
-- **`pkg/spec/entity.go`**: `ValidateEventNaming()` error messages include `[FORMA.EVENT.TYPE_MISMATCH]` dan `[FORMA.EVENT.TYPE_MISSING]`
+- **`pkg/spec/entity.go`**: `ValidateEventNaming()` error messages include `[FORMSPEC.EVENT.TYPE_MISMATCH]` dan `[FORMSPEC.EVENT.TYPE_MISSING]`
 
 ## File yang terkena
 - `pkg/spec/entity.go`

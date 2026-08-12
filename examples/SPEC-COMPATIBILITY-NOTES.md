@@ -1,7 +1,7 @@
 # Spec Compatibility Notes — Hasil Test Drive Examples
 
 **Tanggal:** 2026-07-03
-**Spec target:** Forma Core Basic v0.2.0 + Core Extended stub (`docs/spec/forma-core-extended-stub.md`)
+**Spec target:** FormSpec Core Basic v0.2.0 + Core Extended stub (`docs/spec/formspec-core-extended-stub.md`)
 **Examples yang diuji:** Customer, Midtrans PG, General Ledger, Inventory, Order-to-Cash
 
 ---
@@ -31,7 +31,7 @@ Semua 5 example **berhasil diekspresikan tanpa konstruksi di luar spec**. Tidak 
 
 Spec §5 hanya menyebutkan tiga file types (`.yaml`, `.star`, `assets/*`) dan tidak menyebutkan letak Go source code untuk `impl: native`.
 
-**Status:** ✅ SELESAI — §5.1 `impl/` directory ditambahkan ke Core Basic. `impl/` adalah build-time only, committed ke repo, excluded dari deployment artifact. Hasil kompilasi masuk `.forma/build/`.
+**Status:** ✅ SELESAI — §5.1 `impl/` directory ditambahkan ke Core Basic. `impl/` adalah build-time only, committed ke repo, excluded dari deployment artifact. Hasil kompilasi masuk `.formspec/build/`.
 
 ### T2: Konvensi `ref` di `impl: native` belum distandarisasi
 
@@ -51,9 +51,9 @@ Customer entity muncul di 2 tempat (Customer/spec dan O2C/spec). GL entity muncu
 
 Spec mengatakan "A Module is a package of manifests — identity, version, and dependencies only. It does NOT list its contents." Tapi saat install, footprint module harus ditampilkan ke user untuk consent.
 
-**Dampak:** Perlu tooling (`forma module footprint`) untuk mengekstrak footprint dari scanning manifests. Tidak ada di spec.
+**Dampak:** Perlu tooling (`formspec module footprint`) untuk mengekstrak footprint dari scanning manifests. Tidak ada di spec.
 
-**Usulan:** Tambahkan section "Module Footprint" atau command reference `forma module describe`.
+**Usulan:** Tambahkan section "Module Footprint" atau command reference `formspec module describe`.
 
 ### T5: `child: { storage: table }` vs `jsonb` — kapan pakai yang mana?
 
@@ -77,7 +77,7 @@ Setiap Entity butuh 4 top-level keys (`apiVersion`, `kind`, `metadata`, `spec`).
 
 **Skor DX:** ⭐⭐⭐ (3/5) — wajar untuk deklaratif, tapi mungkin butuh scaffolding tool.
 
-**Usulan:** `forma generate entity customer --module billing` untuk generate boilerplate.
+**Usulan:** `formspec generate entity customer --module billing` untuk generate boilerplate.
 
 ### DX3: Permission auto-prefix sangat membantu
 
@@ -89,7 +89,7 @@ Setiap Entity butuh 4 top-level keys (`apiVersion`, `kind`, `metadata`, `spec`).
 
 Developer harus paham kapan pakai Starlark (simple, hot-updatable) vs Go (performa, network, kompleks). Ini dual mindset yang bisa membingungkan.
 
-**Status:** ✅ SELESAI — §6.3 "Choosing `script_ref` vs `native`" ditambahkan sebagai non-normative guidance. Litmus test: hanya baca/tulis field resource sendiri atau panggil resource Forma lain → `script_ref`; butuh network/filesystem/library eksternal → `native`.
+**Status:** ✅ SELESAI — §6.3 "Choosing `script_ref` vs `native`" ditambahkan sebagai non-normative guidance. Litmus test: hanya baca/tulis field resource sendiri atau panggil resource FormSpec lain → `script_ref`; butuh network/filesystem/library eksternal → `native`.
 
 ### DX5: `deliver` blok sangat powerful
 
@@ -105,10 +105,10 @@ Blok `deliver` di event menjadi **peta lengkap konsekuensi** — 4 kelas jaminan
 |---|---|---|---|
 | R1 | Tambahkan `impl/` directory di §5 Project Layout | HIGH | ✅ Done (§5.1) |
 | R2 | Standarisasi mekanisme resolusi `ref` di `impl: native` | HIGH | ✅ Done (§6.2) |
-| R3 | Tambahkan `forma module footprint` atau command serupa | MEDIUM | Tunda — sudah cukup di §4.5 prose |
+| R3 | Tambahkan `formspec module footprint` atau command serupa | MEDIUM | Tunda — sudah cukup di §4.5 prose |
 | R4 | Tambah decision tree `child: storage` (jsonb vs table) | MEDIUM | ✅ Done (§10.3) |
 | R5 | Tambah decision matrix `.star` vs Go `impl/` | MEDIUM | ✅ Done (§6.3, non-normative) |
-| R6 | Scaffolding command: `forma generate entity/module/service` | LOW | Tunda — nice-to-have |
+| R6 | Scaffolding command: `formspec generate entity/module/service` | LOW | Tunda — nice-to-have |
 | R7 | Global `.devcontainer/` untuk DX2 testing | TUNDA | Menunggu kejelasan DX2 |
 
 ---

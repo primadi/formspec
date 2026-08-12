@@ -21,7 +21,7 @@
 - **`renderers/jsonbpersist/ddl.go`**: `generateGeneratedColumn` sekarang menerima `DriverType`; PG: `data->>'field'`, SQLite: `json_extract(data, '$.field')`; kedua caller di-update
 
 ### 2.2.4 `exists:<resource>` real lookup
-- Tidak ada perubahan — sudah di-wire di `resource/forma.go` via `SetEntityLookup` yang memanggil entity registry; diverifikasi berfungsi
+- Tidak ada perubahan — sudah di-wire di `resource/formspec.go` via `SetEntityLookup` yang memanggil entity registry; diverifikasi berfungsi
 
 ### 2.2.5 Cross-module relation resolution
 - **`renderers/jsonbpersist/crud.go`**: `ValidateRelationTargets` sekarang parse `f.Relation.Resource` sebagai `{module}.{entity}` atau `{entity}` (same module); menggunakan `targetTableResolver` jika tersedia

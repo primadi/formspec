@@ -1,5 +1,5 @@
 # SHOWCASE kind: Page — komposisi blocks paling sederhana (1 table block).
-apiVersion: forma.dev/v1alpha1
+apiVersion: formspec.dev/v1alpha1
 kind: Page
 metadata:
   name: visits-page

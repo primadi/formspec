@@ -8,11 +8,18 @@
       "additionalProperties": {}
     },
     "entity": {
-      "type": "string"
+      "description": "@schema {example: \"sales-daily-summary\"}",
+      "type": "string",
+      "examples": [
+        "sales-daily-summary"
+      ]
     },
     "public": {
       "description": "If true (default), a route /module/widget/\u003cname\u003e is auto-generated.",
       "type": "boolean",
+      "examples": [
+        "true"
+      ],
       "nullable": true
     },
     "query": {
@@ -26,11 +33,24 @@
       "nullable": true
     },
     "title": {
-      "type": "string"
+      "description": "@schema {example: \"Today's Revenue\"}",
+      "type": "string",
+      "examples": [
+        "Today's Revenue"
+      ]
     },
     "type": {
-      "description": "metric | chart | table | list",
-      "type": "string"
+      "description": "@schema {example: \"metric\", enum: [\"metric\", \"chart\", \"table\", \"list\"]}",
+      "type": "string",
+      "enum": [
+        "metric",
+        "chart",
+        "table",
+        "list"
+      ],
+      "examples": [
+        "metric"
+      ]
     }
   },
   "required": [

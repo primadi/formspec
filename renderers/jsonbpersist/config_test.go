@@ -5,28 +5,28 @@ import (
 )
 
 func TestParseDSN_SQLiteRelative(t *testing.T) {
-	cfg, err := ParseDSN(".forma/data.db")
+	cfg, err := ParseDSN(".formspec/data.db")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if cfg.Driver != DriverSQLite {
 		t.Errorf("expected sqlite, got %s", cfg.Driver)
 	}
-	if cfg.Database != ".forma/data.db" {
-		t.Errorf("expected .forma/data.db, got %s", cfg.Database)
+	if cfg.Database != ".formspec/data.db" {
+		t.Errorf("expected .formspec/data.db, got %s", cfg.Database)
 	}
 }
 
 func TestParseDSN_SQLiteExplicit(t *testing.T) {
-	cfg, err := ParseDSN("sqlite:.forma/dev.db")
+	cfg, err := ParseDSN("sqlite:.formspec/dev.db")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if cfg.Driver != DriverSQLite {
 		t.Errorf("expected sqlite, got %s", cfg.Driver)
 	}
-	if cfg.Database != ".forma/dev.db" {
-		t.Errorf("expected .forma/dev.db, got %s", cfg.Database)
+	if cfg.Database != ".formspec/dev.db" {
+		t.Errorf("expected .formspec/dev.db, got %s", cfg.Database)
 	}
 }
 
@@ -85,13 +85,13 @@ func TestParseDSN_SQLiteEmptyPathDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.Database != ".forma/data.db" {
-		t.Errorf("expected .forma/data.db, got %s", cfg.Database)
+	if cfg.Database != ".formspec/data.db" {
+		t.Errorf("expected .formspec/data.db, got %s", cfg.Database)
 	}
 }
 
 func TestParseDSN_Postgres(t *testing.T) {
-	cfg, err := ParseDSN("postgres://user:pass@localhost:5432/forma?sslmode=require")
+	cfg, err := ParseDSN("postgres://user:pass@localhost:5432/formspec?sslmode=require")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -107,8 +107,8 @@ func TestParseDSN_Postgres(t *testing.T) {
 	if cfg.User != "user" {
 		t.Errorf("expected user, got %s", cfg.User)
 	}
-	if cfg.Database != "forma" {
-		t.Errorf("expected forma, got %s", cfg.Database)
+	if cfg.Database != "formspec" {
+		t.Errorf("expected formspec, got %s", cfg.Database)
 	}
 	if cfg.Extra["sslmode"] != "require" {
 		t.Errorf("expected require, got %s", cfg.Extra["sslmode"])
@@ -116,7 +116,7 @@ func TestParseDSN_Postgres(t *testing.T) {
 }
 
 func TestParseDSN_PostgresDefaultPort(t *testing.T) {
-	cfg, err := ParseDSN("postgres://user@localhost/forma")
+	cfg, err := ParseDSN("postgres://user@localhost/formspec")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -126,7 +126,7 @@ func TestParseDSN_PostgresDefaultPort(t *testing.T) {
 }
 
 func TestParseDSN_PostgresWithSchema(t *testing.T) {
-	cfg, err := ParseDSN("postgres://user@localhost/forma?schema=financial")
+	cfg, err := ParseDSN("postgres://user@localhost/formspec?schema=financial")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -156,14 +156,14 @@ func TestPostgresConnString(t *testing.T) {
 		Port:     "5432",
 		User:     "admin",
 		Password: "secret",
-		Database: "forma",
+		Database: "formspec",
 		Extra:    map[string]string{"sslmode": "require"},
 	}
 	conn := cfg.PostgresConnString()
 	if conn == "" {
 		t.Fatal("expected non-empty connection string")
 	}
-	checks := []string{"host=localhost", "port=5432", "user=admin", "password=secret", "dbname=forma", "sslmode=require"}
+	checks := []string{"host=localhost", "port=5432", "user=admin", "password=secret", "dbname=formspec", "sslmode=require"}
 	for _, s := range checks {
 		if !stringsContains(conn, s) {
 			t.Errorf("expected conn string to contain %q", s)
