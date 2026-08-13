@@ -1,10 +1,16 @@
 # Cloudflare Pages redirects
 
-# www → apex (jika domain www.formspec.dev di-assign ke project ini)
+#
 
-https://www.formspec.dev/* https://formspec.dev/:splat 301
+# CATATAN: domain-level redirect (www.formspec.dev → formspec.dev) TIDAK bisa
 
-# Skema schema yang didokumentasikan CLI (docs/cli-tools/02-formspec-cli.md §2):
+# lewat \_redirects (source wajib path relatif, domain redirect tidak didukung).
+
+# Gunakan Redirect Rule di dashboard Cloudflare:
+
+# Rules → Redirect Rules → www.formspec.dev/* → https://formspec.dev/:splat (301)
+
+# URL yang didokumentasikan CLI (docs/cli-tools/02-formspec-cli.md §2):
 
 # formspec.dev/schemas/... → schemas.formspec.dev/...
 

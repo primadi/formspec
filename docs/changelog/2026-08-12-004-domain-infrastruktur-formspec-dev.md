@@ -8,8 +8,9 @@ hosting — semua dengan build hijau.
 
 - **Landing page** `site/` (Vite + React + TS + Tailwind v4): hero, 6
   `ctx.*` primitives, arsitektur 2-plane, 5 tipe impl, derived-by-default,
-  marketplace, quickstart CLI. `public/` berisi `_redirects` (www→apex,
-  `formspec.dev/schemas/*`→schemas subdomain), `_headers`, `robots.txt`,
+  marketplace, quickstart CLI. `public/` berisi `_redirects`
+  (`formspec.dev/schemas/*`→schemas subdomain; `www→apex` via Redirect Rule
+  dashboard, bukan `_redirects`), `_headers`, `robots.txt`,
   `.well-known/security.txt`. Build → `site/dist/` (Cloudflare Pages).
 - **Docs site** `docs-site/` (VitePress 1.6.4): `srcDir` memakai symlink
   `docs-site/docs → ../docs` (single source of truth) + `preserveSymlinks`

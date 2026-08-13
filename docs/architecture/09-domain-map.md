@@ -17,22 +17,22 @@ setup DNS di Cloudflare serta deployment.
 
 ## Peta Subdomain
 
-| Subdomain                       | Fungsi                                                            | Hosting             | Fase | Status                                      |
-| ------------------------------- | ----------------------------------------------------------------- | ------------------- | ---- | ------------------------------------------- |
-| `formspec.dev` (apex)           | Landing page / marketing                                          | Cloudflare Pages    | 1    | ✅ dirancang (`site/`)                      |
-| `www.formspec.dev`              | Redirect → apex                                                   | Cloudflare Redirect | 1    | ✅ dirancang (`site/public/_redirects`)     |
-| `docs.formspec.dev`             | Dokumentasi (VitePress, baca `docs/`)                             | Cloudflare Pages    | 2    | ✅ dirancang (`docs-site/`)                 |
-| `schemas.formspec.dev`          | JSON Schema per kind (`v1` + `latest`)                            | Cloudflare R2/Pages | 3    | ✅ dirancang (`scripts/publish-schemas.sh`) |
-| `formspec.dev/schemas/*`        | Redirect → `schemas.formspec.dev` (URL yang didokumentasikan CLI) | Cloudflare Redirect | 3    | ✅ dirancang                                |
-| `registry.formspec.dev`         | Module registry / marketplace API                                 | VPS                 | 5    | ⏸️ deferred                                 |
-| `mcp.formspec.dev`              | `formspec-remote-mcp` (Streamable HTTP + pgvector)                | VPS                 | 5    | ⏸️ deferred                                 |
-| `api.formspec.dev`              | Public API gateway / Spec Resolution API                          | VPS                 | 5    | ⏸️ deferred                                 |
-| `control.{region}.formspec.dev` | Control plane per region                                          | VPS                 | 5    | ⏸️ deferred                                 |
-| `ops.formspec.dev`              | Admin/ops surfaces                                                | VPS                 | 5    | ⏸️ deferred                                 |
-| `try.formspec.dev`              | Playground / live demo reference-app                              | VPS/Pages           | 5    | ⏸️ deferred                                 |
-| `status.formspec.dev`           | Status/uptime page                                                | Cloudflare Pages    | 5    | ⏸️ deferred                                 |
-| `assets.formspec.dev` / `cdn`   | Artifact statis (renderer, theme, module signed)                  | Cloudflare R2       | 5    | ⏸️ deferred                                 |
-| `send.formspec.dev`             | Subdomain pengirim email (SPF/DKIM isolasi)                       | Resend              | 0    | 🔲 belum di-setup                           |
+| Subdomain                       | Fungsi                                                            | Hosting                  | Fase | Status                                             |
+| ------------------------------- | ----------------------------------------------------------------- | ------------------------ | ---- | -------------------------------------------------- |
+| `formspec.dev` (apex)           | Landing page / marketing                                          | Cloudflare Pages         | 1    | ✅ dirancang (`site/`)                             |
+| `www.formspec.dev`              | Redirect → apex                                                   | Cloudflare Redirect Rule | 1    | ✅ dirancang (dashboard Rules, bukan `_redirects`) |
+| `docs.formspec.dev`             | Dokumentasi (VitePress, baca `docs/`)                             | Cloudflare Pages         | 2    | ✅ dirancang (`docs-site/`)                        |
+| `schemas.formspec.dev`          | JSON Schema per kind (`v1` + `latest`)                            | Cloudflare R2/Pages      | 3    | ✅ dirancang (`scripts/publish-schemas.sh`)        |
+| `formspec.dev/schemas/*`        | Redirect → `schemas.formspec.dev` (URL yang didokumentasikan CLI) | Cloudflare Redirect      | 3    | ✅ dirancang                                       |
+| `registry.formspec.dev`         | Module registry / marketplace API                                 | VPS                      | 5    | ⏸️ deferred                                        |
+| `mcp.formspec.dev`              | `formspec-remote-mcp` (Streamable HTTP + pgvector)                | VPS                      | 5    | ⏸️ deferred                                        |
+| `api.formspec.dev`              | Public API gateway / Spec Resolution API                          | VPS                      | 5    | ⏸️ deferred                                        |
+| `control.{region}.formspec.dev` | Control plane per region                                          | VPS                      | 5    | ⏸️ deferred                                        |
+| `ops.formspec.dev`              | Admin/ops surfaces                                                | VPS                      | 5    | ⏸️ deferred                                        |
+| `try.formspec.dev`              | Playground / live demo reference-app                              | VPS/Pages                | 5    | ⏸️ deferred                                        |
+| `status.formspec.dev`           | Status/uptime page                                                | Cloudflare Pages         | 5    | ⏸️ deferred                                        |
+| `assets.formspec.dev` / `cdn`   | Artifact statis (renderer, theme, module signed)                  | Cloudflare R2            | 5    | ⏸️ deferred                                        |
+| `send.formspec.dev`             | Subdomain pengirim email (SPF/DKIM isolasi)                       | Resend                   | 0    | 🔲 belum di-setup                                  |
 
 ## Referensi URL di Repo (yang sudah ada)
 

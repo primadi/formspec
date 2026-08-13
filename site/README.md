@@ -29,7 +29,9 @@ Project Pages terhubung ke repo ini:
 
 Redirect & header dikelola lewat file di `public/`:
 
-- `_redirects` — `www → apex` dan `formspec.dev/schemas/* → schemas.formspec.dev/*`
+- `_redirects` — `formspec.dev/schemas/* → schemas.formspec.dev/*` (redirect
+  `www → apex` di-handle lewat **Redirect Rule** dashboard Cloudflare, bukan
+  `_redirects` — domain redirect tidak didukung di `_redirects`)
 - `_headers` — security headers (CSP, X-Frame-Options, dsb.)
 - `.well-known/security.txt` — kontak keamanan
 
