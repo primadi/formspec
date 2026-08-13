@@ -38,11 +38,17 @@ npm run preview        # preview build lokal
 
 ## Deploy (Cloudflare Pages)
 
-Project Pages terhubung ke repo ini (folder root `docs-site`, build command
-`npm run build`, output directory `dist`). Custom domain `docs.formspec.dev`.
+Project Pages terhubung ke repo ini:
 
-**Catatan CI:** symlink `docs-site/docs` di-ignore di `.gitignore` — pipeline
-harus membuatnya dulu (`ln -sfn ../docs docs`) sebelum `npm run build`.
+- **Root directory**: `docs-site`
+- **Build command**: `npm install && ln -sfn ../docs docs && npm run build`
+- **Deploy command**: `npx wrangler deploy` (default)
+- **Output**: dibaca dari `wrangler.toml` (`[assets] directory = "./dist"`)
+- Custom domain `docs.formspec.dev`
+
+**Catatan CI:** symlink `docs-site/docs` di-ignore di `.gitignore` — build
+command harus membuatnya dulu (`ln -sfn ../docs docs`) sebelum
+`npm run build`.
 
 Redirect & header dikelola lewat file di `public/`.
 

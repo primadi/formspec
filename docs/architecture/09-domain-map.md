@@ -93,9 +93,9 @@ publik.
 > UI Pages terbaru memakai **flow berbasis wrangler** — form utama hanya
 > berisi _Project name_, _Build command_, _Deploy command_, dan _Build for
 > non-production branch_. **Output directory diambil dari `wrangler.toml`**
-> (`pages_build_output_dir`), dan **Root directory ada di Advanced settings**
+> (`[assets] directory`), dan **Root directory ada di Advanced settings**
 > — bukan di form utama. `site/wrangler.toml` & `docs-site/wrangler.toml`
-> sudah berisi `pages_build_output_dir = "dist"`.
+> sudah berisi `[assets] directory = "./dist"`.
 
 Diulang 1× per project (site, docs, schemas). Prasyarat: repo
 `github.com/primadi/formspec` sudah di-push.
@@ -130,7 +130,7 @@ Diulang 1× per project (site, docs, schemas). Prasyarat: repo
 
    > Root directory menentukan folder tempat build + `wrangler.toml`
    > dieksekusi. Output folder tidak perlu diisi — sudah ada di
-   > `wrangler.toml` (`pages_build_output_dir = "dist"`).
+   > `wrangler.toml` (`[assets] directory = "./dist"`).
 
 6. Klik **Save and Deploy** → tunggu build pertama selesai (Status: Ready).
 7. **Pasang custom domain**: halaman project → tab **Custom domains** →

@@ -1,6 +1,8 @@
 # Cloudflare Pages — deployment config untuk landing formspec.dev
-# Build via: npm install && npm run build
-# Output: site/dist (dikirim oleh Cloudflare Pages build pipeline)
+# Deploy command: npx wrangler deploy (flow wrangler baru → pakai [assets],
+# bukan pages_build_output_dir yang legacy untuk `wrangler pages deploy`).
 name = "formspec-site"
 compatibility_date = "2026-08-12"
-pages_build_output_dir = "dist"
+
+[assets]
+directory = "./dist"

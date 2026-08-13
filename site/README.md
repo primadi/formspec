@@ -19,8 +19,13 @@ npm run preview      # preview build lokal
 
 ## Deploy (Cloudflare Pages)
 
-Project Pages terhubung ke repo ini (folder root `site`, build command
-`npm run build`, output directory `dist`). Custom domain `formspec.dev`.
+Project Pages terhubung ke repo ini:
+
+- **Root directory**: `site`
+- **Build command**: `npm install && npm run build`
+- **Deploy command**: `npx wrangler deploy` (default)
+- **Output**: dibaca dari `wrangler.toml` (`[assets] directory = "./dist"`)
+- Custom domain `formspec.dev` (+ `www.formspec.dev`, lalu redirect ke apex)
 
 Redirect & header dikelola lewat file di `public/`:
 
