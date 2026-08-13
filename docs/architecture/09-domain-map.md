@@ -90,6 +90,13 @@ publik.
 
 ## Cara Membuat Project Cloudflare Pages
 
+> UI Pages terbaru memakai **flow berbasis wrangler** — form utama hanya
+> berisi _Project name_, _Build command_, _Deploy command_, dan _Build for
+> non-production branch_. **Output directory diambil dari `wrangler.toml`**
+> (`pages_build_output_dir`), dan **Root directory ada di Advanced settings**
+> — bukan di form utama. `site/wrangler.toml` & `docs-site/wrangler.toml`
+> sudah berisi `pages_build_output_dir = "dist"`.
+
 Diulang 1× per project (site, docs, schemas). Prasyarat: repo
 `github.com/primadi/formspec` sudah di-push.
 
@@ -97,27 +104,46 @@ Diulang 1× per project (site, docs, schemas). Prasyarat: repo
 2. Menu kiri: **Workers & Pages** → tab **Create** → **Pages** → **Connect to Git**.
 3. Pilih provider **GitHub** → Authorize → pilih repo `primadi/formspec`.
    - _Production branch_: `main` (deploy otomatis tiap push ke main).
-4. Isi **Build configuration** (Build settings):
+4. Isi form utama:
 
-   | Project            | Production branch | Framework preset        | Build command                                          | Build output directory | Root directory |
-   | ------------------ | ----------------- | ----------------------- | ------------------------------------------------------ | ---------------------- | -------------- |
-   | `formspec-site`    | `main`            | _Vite_ (atau None)      | `npm install && npm run build`                         | `dist`                 | `site`         |
-   | `formspec-docs`    | `main`            | _VitePress_ (atau None) | `npm install && ln -sfn ../docs docs && npm run build` | `dist`                 | `docs-site`    |
-   | `formspec-schemas` | `main`            | _None_                  | _(kosong — statis)_                                    | `dist`                 | `schemas`      |
+   | Project | Project name       | Build command                                          | Deploy command                  |
+   | ------- | ------------------ | ------------------------------------------------------ | ------------------------------- |
+   | Landing | `formspec-site`    | `npm install && npm run build`                         | `npx wrangler deploy` (default) |
+   | Docs    | `formspec-docs`    | `npm install && ln -sfn ../docs docs && npm run build` | `npx wrangler deploy` (default) |
+   | Schemas | `formspec-schemas` | `npx wrangler deploy` (tanpa build — statis)           | `npx wrangler deploy` (default) |
+   - **Build for non-production branch**: biarkan `true` (buat preview
+     deployment untuk tiap PR/branch) atau set `false` kalau hanya mau
+     produksi.
+   - **Deploy command**: biarkan default `npx wrangler deploy` — wrangler
+     membaca `wrangler.toml` di root directory untuk tahu output folder.
 
    > ⚠️ `formspec-docs` **wajib** menyertakan `ln -sfn ../docs docs` di build
    > command — symlink di-ignore git, tanpa itu build gagal resolve Vue.
-   >
-   > Untuk `formspec-schemas`: jalankan `make publish-schemas` dulu, commit
-   > hasil `schemas/dist/`, lalu arahkan ke folder itu (root `schemas`,
-   > output `dist`, tanpa build command).
 
-5. Klik **Save and Deploy** → tunggu build pertama selesai (Status: Ready).
-6. **Pasang custom domain**: halaman project → tab **Custom domains** →
+5. Buka **Advanced settings** → **Root directory**:
+
+   | Project            | Root directory |
+   | ------------------ | -------------- |
+   | `formspec-site`    | `site`         |
+   | `formspec-docs`    | `docs-site`    |
+   | `formspec-schemas` | `schemas`      |
+
+   > Root directory menentukan folder tempat build + `wrangler.toml`
+   > dieksekusi. Output folder tidak perlu diisi — sudah ada di
+   > `wrangler.toml` (`pages_build_output_dir = "dist"`).
+
+6. Klik **Save and Deploy** → tunggu build pertama selesai (Status: Ready).
+7. **Pasang custom domain**: halaman project → tab **Custom domains** →
    **Set up a custom domain** → ketik domain sesuai tabel di atas (mis.
    `docs.formspec.dev`) → **Activate domain**. Cloudflare otomatis membuat
    record CNAME-nya.
-7. Setelah aktif, verifikasi HTTPS via `curl -I https://<domain>`.
+8. Setelah aktif, verifikasi HTTPS via `curl -I https://<domain>`.
+
+> **Catatan untuk `formspec-schemas`:** `schemas/dist/` di-ignore git, jadi
+> dua pilihan: (a) **R2 bucket** (direkomendasikan — `make publish-schemas
+ARGS="--upload --bucket formspec-schemas"`), atau (b) Pages statis dengan
+> commit `schemas/dist/` secara paksa (`git add -f schemas/dist/`). Kalau
+> memilih R2, project Pages `formspec-schemas` tidak perlu dibuat.
 
 > **Alternatif Direct Upload** (tanpa GitHub): project → _Upload assets_ →
 > drag folder build output. Tidak ada auto-deploy; upload ulang manual tiap

@@ -1,0 +1,8 @@
+# Cloudflare Pages — deployment config untuk schemas.formspec.dev
+# Skema di-stage ke schemas/dist/ via make publish-schemas (atau
+# scripts/publish-schemas.sh), lalu folder itu di-serve statis.
+# Catatan: schemas/dist di-ignore git — untuk jalur Pages, commit paksa
+# (`git add -f schemas/dist/`), atau lebih baik pakai R2 bucket.
+name = "formspec-schemas"
+compatibility_date = "2026-08-13"
+pages_build_output_dir = "dist"
