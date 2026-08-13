@@ -1,0 +1,4 @@
+# Cloudflare Pages redirects — docs.formspec.dev
+# SPA fallback: semua route VitePress sudah pre-rendered (SSG), tidak perlu fallback.
+# www → apex docs
+https://www.docs.formspec.dev/*  https://docs.formspec.dev/:splat  301

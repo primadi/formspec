@@ -1,5 +1,10 @@
 {
   "servers": {
+    "codebase-memory": {
+      "type": "stdio",
+      "command": "/home/vscode/.local/bin/codebase-memory-mcp",
+      "args": []
+    },
     "shadcn": {
       "command": "npx",
       "args": ["shadcn@latest", "mcp"]

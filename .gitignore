@@ -44,3 +44,16 @@ web/dist/
 web/build/
 sdk/typescript/dist/
 sdk/browser/dist/
+
+# Landing site (site/ = Vite+React)
+site/dist/
+site/node_modules/
+
+# Docs site (docs-site/ = VitePress)
+docs-site/node_modules/
+docs-site/dist/
+# Symlink build-time docs-site/docs -> ../docs (dibuat saat setup, lihat docs-site/README.md)
+docs-site/docs
+
+# Schema publish staging (dihasilkan scripts/publish-schemas.sh)
+schemas/dist/

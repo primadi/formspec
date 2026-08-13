@@ -1,0 +1,11 @@
+# Cloudflare Pages redirects
+
+# www → apex (jika domain www.formspec.dev di-assign ke project ini)
+
+https://www.formspec.dev/* https://formspec.dev/:splat 301
+
+# Skema schema yang didokumentasikan CLI (docs/cli-tools/02-formspec-cli.md §2):
+
+# formspec.dev/schemas/... → schemas.formspec.dev/...
+
+/schemas/\* https://schemas.formspec.dev/:splat 302

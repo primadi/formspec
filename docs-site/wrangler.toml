@@ -1,0 +1,6 @@
+# Cloudflare Pages — deployment config untuk docs.formspec.dev
+# Build via: npm install && npm run build
+# Output: docs-site/dist (dikirim oleh Cloudflare Pages build pipeline)
+name = "formspec-docs"
+compatibility_date = "2026-08-12"
+pages_build_output_dir = "dist"

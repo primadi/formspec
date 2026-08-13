@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /_admin
+Disallow: /api/
+
+Sitemap: https://formspec.dev/sitemap.xml

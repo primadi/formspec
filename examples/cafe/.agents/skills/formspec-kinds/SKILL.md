@@ -16,12 +16,12 @@ This catalog groups all 33 built-in kinds into **4 categories**:
 > (zero drift) + narasi manual (kapan memakai, contoh YAML, gotchas). Skill ini
 > adalah katalog ringkas + gotchas; `docs/kind/` adalah referensi detailnya.
 
-| # | Group | Count | Contains | Mirrors |
-|---|---|---------|-----|
-| **Curation** | 2 | `App`, `Module` | `docs/spec/platform/` |
-| **Data** | 11 | `Entity`, `Service`, `Config`, `Migration`, `Subscription`, `Workflow`, `Api`, `Webhook`, `Mockup`, `Integrator`, `KindDefinition` | `docs/spec/backend/` |
-| **UI** | 15 | `Page`, `Form`, `Table`, `Dashboard`, `Widget`, `Report`, `Wizard`, `Kanban`, `Timeline`, `Calendar`, `Listing`, `ApprovalInbox`, `NotificationCenter`, `Print`, `Theme` | `docs/spec/frontend/` |
-| **Infra** | 5 | `Renderer`, `PersistBackend`, `Environment`, `Policy`, `Datastore` | `docs/spec/platform/` |
+| #            | Group | Count                                                                                                                                                                    | Contains              | Mirrors |
+| ------------ | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------- | ------- |
+| **Curation** | 2     | `App`, `Module`                                                                                                                                                          | `docs/spec/platform/` |
+| **Data**     | 11    | `Entity`, `Service`, `Config`, `Migration`, `Subscription`, `Workflow`, `Api`, `Webhook`, `Mockup`, `Integrator`, `KindDefinition`                                       | `docs/spec/backend/`  |
+| **UI**       | 15    | `Page`, `Form`, `Table`, `Dashboard`, `Widget`, `Report`, `Wizard`, `Kanban`, `Timeline`, `Calendar`, `Listing`, `ApprovalInbox`, `NotificationCenter`, `Print`, `Theme` | `docs/spec/frontend/` |
+| **Infra**    | 5     | `Renderer`, `PersistBackend`, `Environment`, `Policy`, `Datastore`                                                                                                       | `docs/spec/platform/` |
 
 ## Universal Manifest Format
 
@@ -29,11 +29,11 @@ All kinds share the same top-level structure:
 
 ```yaml
 apiVersion: formspec.dev/v1alpha1
-kind: Entity               # PascalCase
+kind: Entity # PascalCase
 metadata:
-  name: invoice            # kebab-case, unique per (kind, module)
-  module: billing          # owning module
-  description: "..."       # recommended for AI readability
+  name: invoice # kebab-case, unique per (kind, module)
+  module: billing # owning module
+  description: "..." # recommended for AI readability
   labels: {}
   annotations: {}
 spec:
@@ -41,6 +41,7 @@ spec:
 ```
 
 Key rules:
+
 - `metadata.name` — kebab-case, unique per (kind, module)
 - `metadata.module` — owning module name
 - `metadata.description` — **always include** for AI readability
@@ -52,7 +53,7 @@ Key rules:
 
 Curation kinds define the **workspace structure** — App and Module. These are
 the first kinds you declare when building a FormSpec application. They define
-*boundaries* and *composition*, not behavior.
+_boundaries_ and _composition_, not behavior.
 
 ### App — Curated Collection of Modules
 
@@ -72,11 +73,11 @@ that catalog.**
 The menu is defined in `spec.menu` as a list of `MenuItem` nodes. Three
 node types (validated at load):
 
-| Node | `type` | level | Required | Forbidden |
-|------|--------|-------|----------|-----------|
-| **Adopt** | `module` | 1 only | `module` | `label`, `icon`, `view`, `route`, `children` |
-| **Group** | (empty) | 1–2 | `label`, `children` | `module`, `view`, `route` |
-| **Leaf** | (empty) | 2–3 | `label`, `module`, exactly one of `view`/`route` | `children` |
+| Node      | `type`   | level  | Required                                         | Forbidden                                    |
+| --------- | -------- | ------ | ------------------------------------------------ | -------------------------------------------- |
+| **Adopt** | `module` | 1 only | `module`                                         | `label`, `icon`, `view`, `route`, `children` |
+| **Group** | (empty)  | 1–2    | `label`, `children`                              | `module`, `view`, `route`                    |
+| **Leaf**  | (empty)  | 2–3    | `label`, `module`, exactly one of `view`/`route` | `children`                                   |
 
 - **Adopt node** splices the entire `Module.spec.menu` default suggestion at
   this position. Module must be in `spec.modules`.
@@ -101,9 +102,18 @@ spec:
       icon: "pill"
       children:
         - { label: "Antrian Resep", view: pharmacy-queue, module: pharmacy }
-        - { label: "Semua Resep", route: /pharmacy/prescriptions, module: pharmacy }
+        - {
+            label: "Semua Resep",
+            route: /pharmacy/prescriptions,
+            module: pharmacy,
+          }
     # Leaf: direct view (resolved server-side to /wizard/checklist-fill)
-    - { label: "Isi Checklist", icon: "edit", view: checklist-fill-wizard, module: crc-field }
+    - {
+        label: "Isi Checklist",
+        icon: "edit",
+        view: checklist-fill-wizard,
+        module: crc-field,
+      }
 ```
 
 ### Module — Bounded Context
@@ -134,7 +144,11 @@ spec:
     - label: "Klinik"
       icon: "stethoscope"
       children:
-        - { label: "Dashboard", icon: "layout-dashboard", view: clinic-dashboard }
+        - {
+            label: "Dashboard",
+            icon: "layout-dashboard",
+            view: clinic-dashboard,
+          }
         - { label: "Daftar Kunjungan", icon: "list", view: visits-page }
         - label: "Kasir"
           icon: "wallet"
@@ -144,10 +158,11 @@ spec:
 
 **Menu structure rule (1–2 levels, always categorized).** Every menu
 (`App.spec.menu` and `Module.spec.menu`) must be authored as a tree of
-**Group nodes** (a `label` + `children`) with **Leaf nodes** underneath —
-never as bare top-level leaves. The renderer nests any orphan leaf (a leaf
-with no enclosing group) under the **last** group it saw, which silently
-corrupts the navigation. Concretely:
+**Group nodes** (a `label` + `children`) with **Leaf nodes** underneath.
+The renderer treats each top-level item independently — a leaf without
+children renders as a standalone link, and the resolver never re-nests
+leaves — so keep the structure explicit and categorized to avoid ambiguous
+navigation. Concretely:
 
 - **Level 1 = category** (Group node: `label` + `children`).
 - **Level 2 = item** (Leaf node: `label` + exactly one of `view`/`route`).
@@ -156,6 +171,27 @@ corrupts the navigation. Concretely:
 - Every module's default menu suggestion should open with its own category
   group so adopted modules render as distinct top-level categories instead
   of collapsing into one.
+- **The one allowed level-1 leaf: a landing Dashboard.** If the app has a
+  Dashboard, put it as the **first** top-level leaf (`label` + `module` +
+  `view`) at position 0 — it is the landing page users see on open. Avoid
+  other bare top-level leaves.
+
+**App menu ordering (curation heuristic).** Order `App.spec.menu` by access
+frequency, most-used first. For a typical transaction-heavy business app the
+default is **Transaksi → Laporan → Master → Config/Pengaturan**:
+
+| Position | Item               | Why                                          |
+| -------- | ------------------ | -------------------------------------------- |
+| 1        | Dashboard (if any) | Landing — summary at a glance on open        |
+| 2        | Transaksi          | Daily operations (orders, payments, visits)  |
+| 3        | Laporan            | Consulted regularly (recaps, reports)        |
+| 4        | Master             | Mostly set up early, referenced occasionally |
+| 5        | Config/Pengaturan  | Rarely changed (settings, admin)             |
+
+This is a **heuristic, not a hard rule** — a master-heavy app (e.g. a
+product catalog) may lead with Master instead. "Config" here means a UI
+settings/administration module (Pengaturan), **not** `kind: Config`
+(module configuration).
 
 Canonical 2-level module menu (each module = one or more categories):
 
@@ -167,26 +203,38 @@ spec:
   version: 1.0.0
   vendor: trakindo
   menu:
-    - label: "Eksekusi"          # level 1 — category (Group node)
+    - label: "Eksekusi" # level 1 — category (Group node)
       icon: "clipboard-check"
       children:
-        - { label: "Dokumen Checklist", icon: "clipboard-check", route: /crc-field/checklist-documents }  # level 2 — leaf
+        - {
+            label: "Dokumen Checklist",
+            icon: "clipboard-check",
+            route: /crc-field/checklist-documents,
+          } # level 2 — leaf
         - { label: "Isi Checklist", icon: "edit", view: checklist-fill-wizard }
 ```
 
 A module with several concerns uses several categories (each a Group node):
 
 ```yaml
-  menu:
-    - label: "Laporan"
-      icon: "bar-chart-3"
-      children:
-        - { label: "CRC Summary", icon: "layout-dashboard", view: crc-summary-dashboard }
-        - { label: "Laporan Ringkasan", icon: "bar-chart-3", view: checklist-summary-report }
-    - label: "Portal"
-      icon: "globe"
-      children:
-        - { label: "Portal Customer", icon: "globe", view: customer-portal }
+menu:
+  - label: "Laporan"
+    icon: "bar-chart-3"
+    children:
+      - {
+          label: "CRC Summary",
+          icon: "layout-dashboard",
+          view: crc-summary-dashboard,
+        }
+      - {
+          label: "Laporan Ringkasan",
+          icon: "bar-chart-3",
+          view: checklist-summary-report,
+        }
+  - label: "Portal"
+    icon: "globe"
+    children:
+      - { label: "Portal Customer", icon: "globe", view: customer-portal }
 ```
 
 **view resolves ALL visual kinds** (via server-side registration):
@@ -207,12 +255,13 @@ metadata:
   name: quick-create-invoice
   module: billing
 spec:
-  public: true   # default — auto-Page route /billing/form/quick-create-invoice
+  public: true # default — auto-Page route /billing/form/quick-create-invoice
   entity: billing.invoice
   mode: create
 ```
 
 **Menu resolution flow:**
+
 1. `App.spec.menu` defines the tree (authoritative).
 2. `type: module` adopt nodes expand to `Module.spec.menu` (default
    suggestion) — App can freely override/restrict/rearrange.
@@ -233,6 +282,7 @@ module.
 ### Entity — Stateful Business Data
 
 The most important kind. Represents persistent business data with:
+
 - **Characteristic** (mutually exclusive):
   - `master` — stable reference data (Customer, Product). May have lifecycle.
   - `transaction` — append-heavy, time-partitioned (Invoice, Journal Entry). **Requires** explicit `transaction_date` field.
@@ -285,7 +335,7 @@ fields:
     required: true
 ```
 
-**`child`** declares an *embedded* collection (inline fields, storage
+**`child`** declares an _embedded_ collection (inline fields, storage
 jsonb|table) — it is NOT a reference to another entity:
 
 ```yaml
@@ -305,11 +355,11 @@ If the child must be a separately CRUD-able entity, use `relation`
 
 **`expose`** canonical list form (`docs/spec/backend/01-core-basic.md` §8.4):
 
-| Value | Meaning |
-|---|---|
-| `expose: []` / omitted | UI + internal callers only; external API → 404 |
-| `expose: [{ type: rest, actions: [list, find] }]` | read-only external API |
-| `expose: [{ type: rest, actions: [list, find, create, update, delete] }]` | full CRUD external API |
+| Value                                                                     | Meaning                                        |
+| ------------------------------------------------------------------------- | ---------------------------------------------- |
+| `expose: []` / omitted                                                    | UI + internal callers only; external API → 404 |
+| `expose: [{ type: rest, actions: [list, find] }]`                         | read-only external API                         |
+| `expose: [{ type: rest, actions: [list, find, create, update, delete] }]` | full CRUD external API                         |
 
 `expose` only controls the external surface; UI is always available and gated
 by permissions. `kind: Api` overrides how the external surface is published.
@@ -445,8 +495,11 @@ spec:
   on: { transition: { from: draft, to: posted } }
   steps:
     - { roles: [gl.supervisor], approvers: 1 }
-    - { roles: [gl.controller], approvers: 1,
-        when: "resource.amount > 100000000" }
+    - {
+        roles: [gl.controller],
+        approvers: 1,
+        when: "resource.amount > 100000000",
+      }
   on_reject: { to: rejected }
   escalation: { after: 48h, notify_roles: [gl.manager] }
 ```
@@ -525,13 +578,13 @@ engine auto-derive everything.
 
 **Wrapping rules — what the engine generates automatically:**
 
-| You declare | Engine auto-derives | When to override |
-|---|---|---|
-| `Entity` only | Default Table + Form(create) + Form(edit) + Page(detail) + REST API + Admin menu entries | You need custom field order/layout, hide specific fields, group fields, or compose multiple entities on one page |
-| `Form` (`public: true`) | Auto-wrapped in Page with route `/<module>/form/<name>` | This form needs a custom Page (multi-tab, side panel, complex composition) |
-| `Table` (`public: true`) | Auto-wrapped in Page with route `/<module>/table/<name>` | This table needs a custom Page |
-| `Page` | Route directly — no additional wrapping | — (Page is always explicit) |
-| `Form`/`Table` (`public: false`) | No route; only usable as embedded block inside an authored Page | — |
+| You declare                      | Engine auto-derives                                                                      | When to override                                                                                                 |
+| -------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `Entity` only                    | Default Table + Form(create) + Form(edit) + Page(detail) + REST API + Admin menu entries | You need custom field order/layout, hide specific fields, group fields, or compose multiple entities on one page |
+| `Form` (`public: true`)          | Auto-wrapped in Page with route `/<module>/form/<name>`                                  | This form needs a custom Page (multi-tab, side panel, complex composition)                                       |
+| `Table` (`public: true`)         | Auto-wrapped in Page with route `/<module>/table/<name>`                                 | This table needs a custom Page                                                                                   |
+| `Page`                           | Route directly — no additional wrapping                                                  | — (Page is always explicit)                                                                                      |
+| `Form`/`Table` (`public: false`) | No route; only usable as embedded block inside an authored Page                          | —                                                                                                                |
 
 **Decision flow — do I need a UI kind override?**
 
@@ -650,58 +703,58 @@ Declares a named database/object-storage connection.
 
 ### Curation
 
-| What you need | Kind to use |
-|---------------|-------------|
-| Define bounded context, own entities | `Module` |
-| Curate modules into a user-facing app | `App` |
+| What you need                         | Kind to use |
+| ------------------------------------- | ----------- |
+| Define bounded context, own entities  | `Module`    |
+| Curate modules into a user-facing app | `App`       |
 
 ### Data
 
-| What you need | Kind to use |
-|---------------|-------------|
-| Store & manage transactional data | `Entity` (`characteristic: transaction`) |
-| Stable reference data | `Entity` (`characteristic: master`) |
-| Read-only seed data | `Entity` (`characteristic: reference`) |
-| System-managed aggregates | `Entity` (`characteristic: summary`) |
-| Computation without state | `Service` |
-| Module-level configuration | `Config` |
-| Custom DDL (index, trigger) | `Migration` |
-| React to another resource's events | `Subscription` |
-| Approval-based state transitions | `Workflow` |
-| Override external API surface | `Api` |
-| Inbound webhook endpoint | `Webhook` |
-| Mock third-party integration | `Mockup` |
-| Cross-module reactive bridge | `Integrator` |
-| Extend the kind system | `KindDefinition` |
+| What you need                      | Kind to use                              |
+| ---------------------------------- | ---------------------------------------- |
+| Store & manage transactional data  | `Entity` (`characteristic: transaction`) |
+| Stable reference data              | `Entity` (`characteristic: master`)      |
+| Read-only seed data                | `Entity` (`characteristic: reference`)   |
+| System-managed aggregates          | `Entity` (`characteristic: summary`)     |
+| Computation without state          | `Service`                                |
+| Module-level configuration         | `Config`                                 |
+| Custom DDL (index, trigger)        | `Migration`                              |
+| React to another resource's events | `Subscription`                           |
+| Approval-based state transitions   | `Workflow`                               |
+| Override external API surface      | `Api`                                    |
+| Inbound webhook endpoint           | `Webhook`                                |
+| Mock third-party integration       | `Mockup`                                 |
+| Cross-module reactive bridge       | `Integrator`                             |
+| Extend the kind system             | `KindDefinition`                         |
 
 ### UI
 
-| What you need | Kind to use |
-|---------------|-------------|
-| Screen / route with UI composition | `Page` |
-| Data entry form (override default) | `Form` |
-| List / browse table (override default) | `Table` |
-| Multi-step process | `Wizard` |
-| Drag-drop status board | `Kanban` |
-| Chronological event feed | `Timeline` |
-| Calendar view | `Calendar` |
-| Dashboard with widgets | `Dashboard` + `Widget` |
-| Parameterized report | `Report` |
-| Printable document | `Print` |
-| Public catalog | `Listing` |
-| Approval task queue | `ApprovalInbox` |
-| Notification center | `NotificationCenter` |
-| Look & feel | `Theme` |
+| What you need                          | Kind to use            |
+| -------------------------------------- | ---------------------- |
+| Screen / route with UI composition     | `Page`                 |
+| Data entry form (override default)     | `Form`                 |
+| List / browse table (override default) | `Table`                |
+| Multi-step process                     | `Wizard`               |
+| Drag-drop status board                 | `Kanban`               |
+| Chronological event feed               | `Timeline`             |
+| Calendar view                          | `Calendar`             |
+| Dashboard with widgets                 | `Dashboard` + `Widget` |
+| Parameterized report                   | `Report`               |
+| Printable document                     | `Print`                |
+| Public catalog                         | `Listing`              |
+| Approval task queue                    | `ApprovalInbox`        |
+| Notification center                    | `NotificationCenter`   |
+| Look & feel                            | `Theme`                |
 
 ### Infra
 
-| What you need | Kind to use |
-|---------------|-------------|
-| Visual renderer implementation | `Renderer` |
+| What you need                   | Kind to use      |
+| ------------------------------- | ---------------- |
+| Visual renderer implementation  | `Renderer`       |
 | Storage renderer implementation | `PersistBackend` |
-| Named DB/storage connection | `Datastore` |
-| Deployment target | `Environment` |
-| Governance rule | `Policy` |
+| Named DB/storage connection     | `Datastore`      |
+| Deployment target               | `Environment`    |
+| Governance rule                 | `Policy`         |
 
 ---
 
@@ -740,7 +793,8 @@ Declares a named database/object-storage connection.
   gets a standalone route via auto-derived Page wrapper. Set `public: false`
   for embed-only Forms/Tables.
 - **Menu nesting is capped at 3 levels.** Adopt nodes only at level 1; groups
-  at levels 1–2; leaves at levels 2–3.
+  at levels 1–2; leaves at levels 1–3 — the landing Dashboard is the
+  canonical level-1 leaf.
 - **Table `default_sort` must reference an existing field** on the target entity.
   Check the entity's field list before setting `default_sort`. Framework-managed
   fields (`id`, `version`, `created_at`, `updated_at`, `created_by`, `updated_by`,

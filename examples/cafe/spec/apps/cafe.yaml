@@ -14,9 +14,18 @@ spec:
     - cafe-order
     - cafe-report
   menu:
-    - type: module
-      module: cafe-master
+    - label: "Dashboard"
+      icon: "layout-dashboard"
+      module: cafe-report
+      view: cafe-summary-dashboard
     - type: module
       module: cafe-order
+    - label: "Laporan"
+      icon: "bar-chart-3"
+      children:
+        - label: "Rekap Penjualan"
+          icon: "table"
+          module: cafe-report
+          view: sales-recap-report
     - type: module
-      module: cafe-report
+      module: cafe-master

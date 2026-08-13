@@ -83,6 +83,14 @@ generate-schema:
 	@go run ./cmd/formspec-gen-schema/ --out schemas
 	@echo "✅ JSON Schema files generated in schemas/"
 
+# Stage (dan opsional upload) schema versi ke schemas/dist/ untuk
+# schemas.formspec.dev. Default: stage v1 lokal. Upload R2: tambah --upload.
+#   make publish-schemas                         # stage v1
+#   make publish-schemas ARGS="--version v1 --upload --bucket formspec-schemas"
+publish-schemas:
+	@test -f scripts/publish-schemas.sh || (echo "❌ scripts/publish-schemas.sh tidak ditemukan" && exit 1)
+	@./scripts/publish-schemas.sh $(ARGS)
+
 # Generate per-kind reference docs from Go struct types in pkg/spec/
 # Output goes to docs/kind/<group>/<Kind>.md — one file per kind, split in 4
 # groups (curation/data/ui/infra). Attribute tables are generated (zero drift);

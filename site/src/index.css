@@ -1,0 +1,65 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
+    monospace;
+
+  --color-surface-950: #07070d;
+  --color-surface-900: #0a0a14;
+  --color-surface-800: #12121f;
+  --color-surface-700: #1c1c2e;
+  --color-surface-600: #2a2a42;
+
+  --color-accent-300: #a5b4fc;
+  --color-accent-400: #818cf8;
+  --color-accent-500: #6366f1;
+  --color-accent-600: #4f46e5;
+
+  --color-mint-300: #6ee7b7;
+  --color-mint-400: #34d399;
+  --color-mint-500: #10b981;
+
+  --color-amber-300: #fcd34d;
+  --color-amber-400: #fbbf24;
+
+  --color-rose-400: #fb7185;
+
+  --color-cyan-400: #22d3ee;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-surface-950);
+  color: #e5e7eb;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Subtle grid + glow background for hero */
+.bg-grid {
+  background-image:
+    linear-gradient(to right, rgba(99, 102, 241, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(99, 102, 241, 0.06) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+
+.glow {
+  background: radial-gradient(
+    ellipse 60% 45% at 50% 0%,
+    rgba(99, 102, 241, 0.22),
+    transparent 70%
+  );
+}
+
+::selection {
+  background: var(--color-accent-500);
+  color: white;
+}

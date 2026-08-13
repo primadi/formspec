@@ -1,0 +1,4 @@
+Contact: https://github.com/primadi/formspec/issues
+Expires: 2027-08-12T00:00:00.000Z
+Preferred-Languages: id, en
+Canonical: https://formspec.dev/.well-known/security.txt
