@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FormSpec — Usulan Logo</title>
+<style>
+  :root {
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 48px 24px;
+    background: #0b0b0f;
+    color: #e4e4e7;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  header { max-width: 980px; margin: 0 auto 40px; }
+  h1 { font-size: 28px; margin: 0 0 8px; letter-spacing: -0.02em; }
+  h1 .accent { color: #818cf8; }
+  header p { color: #a1a1aa; margin: 0; line-height: 1.6; max-width: 640px; }
+  .grid {
+    max-width: 980px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+  }
+  .card {
+    background: #16161d;
+    border: 1px solid #26262f;
+    border-radius: 16px;
+    padding: 24px;
+  }
+  .card h2 { font-size: 15px; margin: 0 0 4px; }
+  .card .tag { font-size: 12px; color: #10b981; margin-bottom: 16px; }
+  .card .rationale { font-size: 13px; color: #a1a1aa; line-height: 1.55; min-height: 60px; }
+  .big {
+    display: flex;
+    justify-content: center;
+    padding: 16px 0 8px;
+  }
+  .sizes {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 12px 0 4px;
+    border-top: 1px dashed #2b2b35;
+    margin-top: 12px;
+    color: #71717a;
+    font-size: 11px;
+  }
+  .sizes .row { display: flex; align-items: center; gap: 8px; }
+  .favorite {
+    border-color: #6366f1;
+    box-shadow: 0 0 0 1px #6366f1;
+    position: relative;
+  }
+  .favorite::before {
+    content: "REKOMENDASI";
+    position: absolute;
+    top: -10px;
+    right: 16px;
+    background: #6366f1;
+    color: #fff;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    padding: 3px 8px;
+    border-radius: 999px;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Usulan Logo <span class="accent">FormSpec</span></h1>
+  <p>Logo saat ini masih monogram &quot;M&quot;. Berikut tiga konsep sederhana yang menceritakan
+  &quot;spec-first, declarative&quot;. Warna mengikuti brand yang ada: gradien indigo <code>#6366f1</code>
+  → emerald <code>#10b981</code>.</p>
+</header>
+
+<div class="grid">
+
+  <div class="card favorite">
+    <h2>A — Spec Stack</h2>
+    <div class="tag">Bidang form / lapisan spec</div>
+    <div class="big">
+      <svg width="96" height="96" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="64" height="64" rx="16" fill="url(#pA)"/>
+        <rect x="13" y="15" width="38" height="8" rx="4" fill="#fff"/>
+        <rect x="13" y="28" width="28" height="8" rx="4" fill="#fff" fill-opacity="0.85"/>
+        <rect x="13" y="41" width="18" height="8" rx="4" fill="#fff" fill-opacity="0.70"/>
+        <defs><linearGradient id="pA" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#6366f1"/><stop offset="1" stop-color="#10b981"/></linearGradient></defs>
+      </svg>
+    </div>
+    <p class="rationale">Tiga batang horizontal menurun — abstraksi &quot;field&quot; pada sebuah form
+    sekaligus &quot;lapisan&quot; struktur YAML yang bersarang. Paling bersih, paling khas, dan tetap
+    terbaca di ukuran favicon.</p>
+    <div class="sizes">
+      <span>Uji ukuran:</span>
+      <span class="row"><svg width="32" height="32" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="64" height="64" rx="16" fill="url(#pA2)"/><rect x="13" y="15" width="38" height="8" rx="4" fill="#fff"/><rect x="13" y="28" width="28" height="8" rx="4" fill="#fff" fill-opacity="0.85"/><rect x="13" y="41" width="18" height="8" rx="4" fill="#fff" fill-opacity="0.70"/><defs><linearGradient id="pA2" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop stop-color="#6366f1"/><stop offset="1" stop-color="#10b981"/></linearGradient></defs></svg> 32px</span>
+      <span class="row"><svg width="16" height="16" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="64" height="64" rx="16" fill="url(#pA3)"/><rect x="13" y="15" width="38" height="8" rx="4" fill="#fff"/><rect x="13" y="28" width="28" height="8" rx="4" fill="#fff" fill-opacity="0.85"/><rect x="13" y="41" width="18" height="8" rx="4" fill="#fff" fill-opacity="0.70"/><defs><linearGradient id="pA3" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop stop-color="#6366f1"/><stop offset="1" stop-color="#10b981"/></linearGradient></defs></svg> 16px</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>B — Spec Brace</h2>
+    <div class="tag">Kurung kurawal / kontrak</div>
+    <div class="big">
+      <svg width="96" height="96" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="64" height="64" rx="16" fill="url(#pB)"/>
+        <path d="M21 15c7 0 9 4.5 9 10.5 0 3.5 2 5.5 8 6.5-6 1-8 3-8 6.5 0 6-2 10.5-9 10.5" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+        <defs><linearGradient id="pB" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#6366f1"/><stop offset="1" stop-color="#10b981"/></linearGradient></defs>
+      </svg>
+    </div>
+    <p class="rationale">Kurung kurawal <code>{</code> — simbol &quot;spec / deklarasi&quot;.
+    Cocok untuk narasi &quot;Contract before Implementation&quot;, tapi kurang mengingatkan pada
+    &quot;Form&quot;.</p>
+    <div class="sizes">
+      <span>Uji ukuran:</span>
+      <span class="row"><svg width="16" height="16" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="64" height="64" rx="16" fill="url(#pB2)"/><path d="M21 15c7 0 9 4.5 9 10.5 0 3.5 2 5.5 8 6.5-6 1-8 3-8 6.5 0 6-2 10.5-9 10.5" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><defs><linearGradient id="pB2" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop stop-color="#6366f1"/><stop offset="1" stop-color="#10b981"/></linearGradient></defs></svg> 16px</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>C — F Monogram</h2>
+    <div class="tag">Huruf F geometris</div>
+    <div class="big">
+      <svg width="96" height="96" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="64" height="64" rx="16" fill="url(#pC)"/>
+        <rect x="17" y="16" width="7" height="32" rx="3.5" fill="#fff"/>
+        <rect x="17" y="16" width="29" height="7" rx="3.5" fill="#fff"/>
+        <rect x="17" y="28.5" width="22" height="7" rx="3.5" fill="#fff" fill-opacity="0.88"/>
+        <defs><linearGradient id="pC" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#6366f1"/><stop offset="1" stop-color="#10b981"/></linearGradient></defs>
+      </svg>
+    </div>
+    <p class="rationale">Evolusi paling minim dari logo saat ini: huruf &quot;M&quot; diganti
+    &quot;F&quot; (Form). Tetap monogram, jadi tidak menyelesaikan masalah &quot;cuma huruf&quot;,
+    tapi familiar bagi pengguna lama.</p>
+    <div class="sizes">
+      <span>Uji ukuran:</span>
+      <span class="row"><svg width="16" height="16" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="64" height="64" rx="16" fill="url(#pC2)"/><rect x="17" y="16" width="7" height="32" rx="3.5" fill="#fff"/><rect x="17" y="16" width="29" height="7" rx="3.5" fill="#fff"/><rect x="17" y="28.5" width="22" height="7" rx="3.5" fill="#fff" fill-opacity="0.88"/><defs><linearGradient id="pC2" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop stop-color="#6366f1"/><stop offset="1" stop-color="#10b981"/></linearGradient></defs></svg> 16px</span>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

@@ -112,8 +112,7 @@ cat > "$DIST_DIR/index.html" <<EOF
   a { color: #818cf8; text-decoration: none; }
   a:hover { text-decoration: underline; }
   .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; }
-  .dot { width: 28px; height: 28px; border-radius: 8px;
-    background: linear-gradient(135deg, #6366f1, #10b981); display: inline-block; }
+  .brand svg { border-radius: 8px; }
   .desc { color: #a1a1aa; }
   .box { background: #131a2b; border: 1px solid #232c44; border-radius: 12px; padding: 20px 24px; }
   ul { margin: 0; padding-left: 18px; }
@@ -123,7 +122,7 @@ cat > "$DIST_DIR/index.html" <<EOF
 </head>
 <body>
 <main>
-  <div class="brand"><span class="dot"></span> FormSpec</div>
+  <div class="brand"><svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden="true"><rect width="64" height="64" rx="16" fill="url(#fsg)"/><rect x="13" y="15" width="38" height="8" rx="4" fill="#fff"/><rect x="13" y="28" width="28" height="8" rx="4" fill="#fff" fill-opacity="0.85"/><rect x="13" y="41" width="18" height="8" rx="4" fill="#fff" fill-opacity="0.70"/><defs><linearGradient id="fsg" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop stop-color="#6366f1"/><stop offset="1" stop-color="#10b981"/></linearGradient></defs></svg> FormSpec</div>
   <h1>Registry JSON Schema</h1>
   <p class="desc">JSON Schema (Draft-07) untuk semua resource kind FormSpec, di-generate dari <code>pkg/spec</code> (Go types).</p>
 

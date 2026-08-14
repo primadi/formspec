@@ -33,6 +33,55 @@ import {
 
 import { resolveIcon } from "@/lib/icon-resolver"
 
+// ── Logo mark (Spec Stack) ──
+
+function LogoMark({ size = 24 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 64 64"
+      fill="none"
+      aria-hidden
+      className="shrink-0"
+    >
+      <rect width="64" height="64" rx="16" fill="url(#fslogo)" />
+      <rect x="13" y="15" width="38" height="8" rx="4" fill="#fff" />
+      <rect
+        x="13"
+        y="28"
+        width="28"
+        height="8"
+        rx="4"
+        fill="#fff"
+        fillOpacity="0.85"
+      />
+      <rect
+        x="13"
+        y="41"
+        width="18"
+        height="8"
+        rx="4"
+        fill="#fff"
+        fillOpacity="0.70"
+      />
+      <defs>
+        <linearGradient
+          id="fslogo"
+          x1="0"
+          y1="0"
+          x2="64"
+          y2="64"
+          gradientUnits="userSpaceOnUse"
+        >
+          <stop stopColor="#6366f1" />
+          <stop offset="1" stopColor="#10b981" />
+        </linearGradient>
+      </defs>
+    </svg>
+  )
+}
+
 // ── Sidebar Props ──
 
 interface SidebarProps {
@@ -43,7 +92,13 @@ interface SidebarProps {
   onMobileClose?: () => void
 }
 
-export function Sidebar({ collapsed, onToggle: _onToggle, mobile, mobileOpen, onMobileClose }: SidebarProps) {
+export function Sidebar({
+  collapsed,
+  onToggle: _onToggle,
+  mobile,
+  mobileOpen,
+  onMobileClose,
+}: SidebarProps) {
   const { workspace } = useParams<{ workspace: string }>()
   const bundle = useMetaStore((s) => s.bundle)
   const me = useSessionStore((s) => s.me)
@@ -58,8 +113,12 @@ export function Sidebar({ collapsed, onToggle: _onToggle, mobile, mobileOpen, on
   // (`/{workspace}/_admin`, no trailing segment), which is exactly what's
   // hit on first load before any redirect appends a subpath.
   const adminPrefix = `/${workspace}/_admin`
-  const isAdmin = location.pathname === adminPrefix || location.pathname.startsWith(`${adminPrefix}/`)
-  const surfacePrefix = isAdmin ? `/${workspace}/_admin` : `/${workspace}${bundle?.app.root_url ?? "/app"}`
+  const isAdmin =
+    location.pathname === adminPrefix ||
+    location.pathname.startsWith(`${adminPrefix}/`)
+  const surfacePrefix = isAdmin
+    ? `/${workspace}/_admin`
+    : `/${workspace}${bundle?.app.root_url ?? "/app"}`
 
   const menuItems = useMemo(() => {
     if (!bundle || !me) return []
@@ -98,7 +157,9 @@ export function Sidebar({ collapsed, onToggle: _onToggle, mobile, mobileOpen, on
         .filter((item) => filterMenuItem(item, me.permissions))
         .map((item) => ({
           ...item,
-          children: item.children?.length ? filterTree(item.children) : undefined,
+          children: item.children?.length
+            ? filterTree(item.children)
+            : undefined,
         }))
 
     return filterTree(bundle.menu ?? [])
@@ -119,7 +180,10 @@ export function Sidebar({ collapsed, onToggle: _onToggle, mobile, mobileOpen, on
         >
           {/* Logo + close button */}
           <div className="flex h-14 items-center justify-between border-b px-4">
-            <span className="text-lg font-bold">FormSpec</span>
+            <div className="flex items-center gap-2">
+              <LogoMark size={22} />
+              <span className="text-lg font-bold">FormSpec</span>
+            </div>
             <Button
               variant="ghost"
               size="icon"
@@ -171,9 +235,12 @@ export function Sidebar({ collapsed, onToggle: _onToggle, mobile, mobileOpen, on
           {/* Logo */}
           <div className="flex h-14 items-center border-b px-4">
             {collapsed ? (
-              <span className="text-lg font-bold mx-auto">F</span>
+              <LogoMark size={24} />
             ) : (
-              <span className="text-lg font-bold">FormSpec</span>
+              <div className="flex items-center gap-2">
+                <LogoMark size={24} />
+                <span className="text-lg font-bold">FormSpec</span>
+              </div>
             )}
           </div>
 
@@ -345,13 +412,7 @@ function SidebarGroup({
     )
   }
 
-  return (
-    <SidebarLink
-      item={item}
-      collapsed={collapsed}
-      basePath={basePath}
-    />
-  )
+  return <SidebarLink item={item} collapsed={collapsed} basePath={basePath} />
 }
 
 // ── Sidebar Link (single item) ──
@@ -379,7 +440,10 @@ function SidebarLink({
           render={
             <NavLink
               to={to}
-              className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "w-full justify-center")}
+              className={cn(
+                buttonVariants({ variant: "ghost", size: "icon" }),
+                "w-full justify-center",
+              )}
             />
           }
         >

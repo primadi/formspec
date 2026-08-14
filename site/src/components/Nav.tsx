@@ -14,17 +14,36 @@ export function Logo() {
       href="/"
       className="flex items-center gap-2 font-semibold tracking-tight"
     >
-      <svg width="28" height="28" viewBox="0 0 32 32" fill="none" aria-hidden>
-        <rect width="32" height="32" rx="8" fill="url(#lg)" />
-        <path
-          d="M9 21V11l7 8 7-8v10"
-          stroke="white"
-          strokeWidth="2.6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
+      <svg width="28" height="28" viewBox="0 0 64 64" fill="none" aria-hidden>
+        <rect width="64" height="64" rx="16" fill="url(#lg)" />
+        <rect x="13" y="15" width="38" height="8" rx="4" fill="white" />
+        <rect
+          x="13"
+          y="28"
+          width="28"
+          height="8"
+          rx="4"
+          fill="white"
+          fillOpacity="0.85"
+        />
+        <rect
+          x="13"
+          y="41"
+          width="18"
+          height="8"
+          rx="4"
+          fill="white"
+          fillOpacity="0.70"
         />
         <defs>
-          <linearGradient id="lg" x1="0" y1="0" x2="32" y2="32">
+          <linearGradient
+            id="lg"
+            x1="0"
+            y1="0"
+            x2="64"
+            y2="64"
+            gradientUnits="userSpaceOnUse"
+          >
             <stop stopColor="#6366f1" />
             <stop offset="1" stopColor="#10b981" />
           </linearGradient>

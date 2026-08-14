@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none" role="img" aria-label="FormSpec — Spec Brace">
+  <rect width="64" height="64" rx="16" fill="url(#gB)"/>
+  <path d="M21 15c7 0 9 4.5 9 10.5 0 3.5 2 5.5 8 6.5-6 1-8 3-8 6.5 0 6-2 10.5-9 10.5"
+        stroke="#ffffff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <defs>
+    <linearGradient id="gB" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6366f1"/>
+      <stop offset="1" stop-color="#10b981"/>
+    </linearGradient>
+  </defs>
+</svg>
