@@ -1,0 +1,68 @@
+{
+  "title": "Report Spec",
+  "description": "ReportSpec defines a parameterized tabular report (Frontend §5).\n",
+  "type": "object",
+  "properties": {
+    "columns": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ReportColumn"
+      }
+    },
+    "entity": {
+      "description": "@schema {example: \"billing.order\"}",
+      "type": "string",
+      "examples": [
+        "billing.order"
+      ]
+    },
+    "export": {
+      "description": "pdf | csv | xlsx",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "groups": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ReportGroup"
+      }
+    },
+    "parameters": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ReportParam"
+      }
+    },
+    "public": {
+      "description": "If true (default), a route /module/report/\u003cname\u003e is auto-generated.",
+      "type": "boolean",
+      "examples": [
+        "true"
+      ],
+      "nullable": true
+    },
+    "required_permission": {
+      "type": "string"
+    },
+    "title": {
+      "description": "@schema {example: \"Sales by Category\"}",
+      "type": "string",
+      "examples": [
+        "Sales by Category"
+      ]
+    },
+    "totals": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ReportTotal"
+      }
+    }
+  },
+  "required": [
+    "title",
+    "entity"
+  ],
+  "additionalProperties": false
+}

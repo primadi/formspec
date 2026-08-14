@@ -1,0 +1,21 @@
+{
+  "title": "Mockup Spec",
+  "description": "MockupSpec defines a simulated connector that implements the same contract\nas the real integration (02-core-extended.md §8).\n",
+  "type": "object",
+  "properties": {
+    "config_ref": {
+      "type": "string"
+    },
+    "for": {
+      "description": "@schema {example: \"billing.payment-gateway\"}",
+      "type": "string",
+      "examples": [
+        "billing.payment-gateway"
+      ]
+    }
+  },
+  "required": [
+    "for"
+  ],
+  "additionalProperties": false
+}

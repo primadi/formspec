@@ -1,0 +1,56 @@
+{
+  "title": "Calendar Spec",
+  "description": "CalendarSpec defines a calendar view for date/datetime entity data\n(06-page-kinds.md §5). Instance of VisualSpecKind tier: page.\n",
+  "type": "object",
+  "properties": {
+    "color_field": {
+      "type": "string"
+    },
+    "date_field": {
+      "description": "@schema {example: \"scheduled_at\"}",
+      "type": "string",
+      "examples": [
+        "scheduled_at"
+      ]
+    },
+    "end_field": {
+      "type": "string"
+    },
+    "entity": {
+      "description": "@schema {example: \"clinic.appointment\"}",
+      "type": "string",
+      "examples": [
+        "clinic.appointment"
+      ]
+    },
+    "public": {
+      "description": "If true (default), a route /module/calendar/\u003cname\u003e is auto-generated.",
+      "type": "boolean",
+      "examples": [
+        "true"
+      ],
+      "nullable": true
+    },
+    "realtime": {
+      "type": "boolean"
+    },
+    "resource_field": {
+      "type": "string"
+    },
+    "title_field": {
+      "type": "string"
+    },
+    "views": {
+      "description": "month, week, day, resource (default month)",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "entity",
+    "date_field"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,20 @@
+{
+  "title": "ApprovalInbox Spec",
+  "description": "ApprovalInboxSpec defines the pending-approval task queue page\n(06-page-kinds.md §11). Instance of VisualSpecKind tier: page.\nZero-config: sources are pending Workflow steps eligible for the caller.\n",
+  "type": "object",
+  "properties": {
+    "filters": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/FilterSpec"
+      }
+    },
+    "realtime": {
+      "type": "boolean"
+    },
+    "search": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": false
+}

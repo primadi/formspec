@@ -1,0 +1,21 @@
+{
+  "title": "Config Spec",
+  "description": "ConfigSpec defines runtime configuration values (Core §4.5, §10).\nKeys are structured — each key declares its type, default value, and\nwhether it is a secret (never inlined in YAML, resolved per environment).\nScripts read values via ctx.config.get(\"key\").\nConfigSpec declares module-level configuration keys (01-core-basic.md §10).\n",
+  "type": "object",
+  "properties": {
+    "keys": {
+      "description": "@schema {example: \"{invoice_due_days: {type: int, default: 30}, smtp_host: {type: string, secret: true}}\"}",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/ConfigKey"
+      },
+      "examples": [
+        "{invoice_due_days: {type: int, default: 30}, smtp_host: {type: string, secret: true}}"
+      ]
+    }
+  },
+  "required": [
+    "keys"
+  ],
+  "additionalProperties": false
+}

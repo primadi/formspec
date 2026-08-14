@@ -1,0 +1,31 @@
+{
+  "title": "PersistBackend Spec",
+  "description": "PersistBackendSpec declares a storage seam implementation\n(backend/04-persist-backend.md).\n",
+  "type": "object",
+  "properties": {
+    "implements": {
+      "description": "@schema {example: \"formspec/storage.entity-persist\"}",
+      "type": "string",
+      "examples": [
+        "formspec/storage.entity-persist"
+      ]
+    },
+    "trust_tier": {
+      "description": "@schema {example: \"official\", enum: [\"official\", \"verified\", \"community\"]}",
+      "type": "string",
+      "enum": [
+        "official",
+        "verified",
+        "community"
+      ],
+      "examples": [
+        "official"
+      ]
+    }
+  },
+  "required": [
+    "implements",
+    "trust_tier"
+  ],
+  "additionalProperties": false
+}

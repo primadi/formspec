@@ -1,0 +1,25 @@
+{
+  "title": "Migration Spec",
+  "description": "MigrationSpec defines a custom DDL migration (01-core-basic.md §4).\nOnly DDL statements are allowed — DML is rejected at runtime.\n",
+  "type": "object",
+  "properties": {
+    "ddl": {
+      "description": "@schema {example: \"CREATE INDEX idx_invoice_date ON invoice(transaction_date)\"}",
+      "type": "string",
+      "examples": [
+        "CREATE INDEX idx_invoice_date ON invoice(transaction_date)"
+      ]
+    },
+    "module": {
+      "description": "@schema {example: \"billing\"}",
+      "type": "string",
+      "examples": [
+        "billing"
+      ]
+    }
+  },
+  "required": [
+    "ddl"
+  ],
+  "additionalProperties": false
+}

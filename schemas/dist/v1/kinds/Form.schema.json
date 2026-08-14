@@ -1,0 +1,58 @@
+{
+  "title": "Form Spec",
+  "description": "FormSpec defines an input/edit layout (Frontend §4).\n",
+  "type": "object",
+  "properties": {
+    "actions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/FormAction"
+      }
+    },
+    "entity": {
+      "description": "@schema {example: \"billing.order\"}",
+      "type": "string",
+      "examples": [
+        "billing.order"
+      ]
+    },
+    "mode": {
+      "description": "@schema {example: \"edit\", enum: [\"create\", \"edit\", \"view\"]}",
+      "type": "string",
+      "enum": [
+        "create",
+        "edit",
+        "view"
+      ],
+      "examples": [
+        "edit"
+      ]
+    },
+    "public": {
+      "description": "If true (default), a route /module/form/\u003cname\u003e is auto-generated. Set false for embed-only forms.",
+      "type": "boolean",
+      "examples": [
+        "true"
+      ],
+      "nullable": true
+    },
+    "render": {
+      "$ref": "#/$defs/FormRenderDecl",
+      "nullable": true
+    },
+    "sections": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/FormSection"
+      }
+    },
+    "submit": {
+      "$ref": "#/$defs/FormSubmit",
+      "nullable": true
+    }
+  },
+  "required": [
+    "entity"
+  ],
+  "additionalProperties": false
+}

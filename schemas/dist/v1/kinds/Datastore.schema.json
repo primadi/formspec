@@ -1,0 +1,42 @@
+{
+  "title": "Datastore Spec",
+  "description": "DatastoreSpec is the spec body for kind: Datastore.\n",
+  "type": "object",
+  "properties": {
+    "access": {
+      "$ref": "#/$defs/DatastoreAccess",
+      "description": "Access controls who (filter) can use this datastore and what",
+      "nullable": true
+    },
+    "connection": {
+      "$ref": "#/$defs/DatastoreConnection",
+      "description": "Connection holds connection parameters for the backend."
+    },
+    "credential_ref": {
+      "description": "CredentialRef is a reference to KMS/Vault for credentials.",
+      "type": "string",
+      "examples": [
+        "kms://workspace-default"
+      ]
+    },
+    "driver": {
+      "$ref": "#/$defs/DatastoreDriver",
+      "description": "Driver identifies the backend technology."
+    },
+    "serves": {
+      "description": "Serves lists which ctx.* primitives this datastore backs.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PrimitiveType"
+      },
+      "examples": [
+        "[db]"
+      ]
+    }
+  },
+  "required": [
+    "driver",
+    "connection"
+  ],
+  "additionalProperties": false
+}

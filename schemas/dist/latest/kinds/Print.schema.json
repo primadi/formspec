@@ -1,0 +1,47 @@
+{
+  "title": "Print Spec",
+  "description": "PrintSpec defines a printable document template (Frontend §9).\nOne format per manifest — declared via `output.format` (Frontend §9).\n",
+  "type": "object",
+  "properties": {
+    "body": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PrintBodyItem"
+      }
+    },
+    "entity": {
+      "description": "@schema {example: \"billing.order\"}",
+      "type": "string",
+      "examples": [
+        "billing.order"
+      ]
+    },
+    "footer": {
+      "$ref": "#/$defs/PrintFooter",
+      "nullable": true
+    },
+    "header": {
+      "$ref": "#/$defs/PrintHeader",
+      "nullable": true
+    },
+    "output": {
+      "$ref": "#/$defs/PrintOutput",
+      "nullable": true
+    },
+    "public": {
+      "description": "If true (default), a route /module/print/\u003cname\u003e is auto-generated.",
+      "type": "boolean",
+      "examples": [
+        "true"
+      ],
+      "nullable": true
+    },
+    "template": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "entity"
+  ],
+  "additionalProperties": false
+}

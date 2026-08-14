@@ -1,0 +1,39 @@
+{
+  "title": "Renderer Spec",
+  "description": "RendererSpec declares a concrete implementation of a VisualSpecKind\n(frontend/03-renderer-kind.md).\n",
+  "type": "object",
+  "properties": {
+    "implements": {
+      "description": "@schema {example: \"formspec/visual.form-page\"}",
+      "type": "string",
+      "examples": [
+        "formspec/visual.form-page"
+      ]
+    },
+    "stack_family": {
+      "description": "@schema {example: \"react-shadcn\"}",
+      "type": "string",
+      "examples": [
+        "react-shadcn"
+      ]
+    },
+    "trust_tier": {
+      "description": "@schema {example: \"official\", enum: [\"official\", \"verified\", \"community\"]}",
+      "type": "string",
+      "enum": [
+        "official",
+        "verified",
+        "community"
+      ],
+      "examples": [
+        "official"
+      ]
+    }
+  },
+  "required": [
+    "implements",
+    "stack_family",
+    "trust_tier"
+  ],
+  "additionalProperties": false
+}

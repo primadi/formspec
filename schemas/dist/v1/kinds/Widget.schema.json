@@ -1,0 +1,61 @@
+{
+  "title": "Widget Spec",
+  "description": "WidgetSpec defines a reusable dashboard widget (Frontend §5).\n",
+  "type": "object",
+  "properties": {
+    "config": {
+      "type": "object",
+      "additionalProperties": {}
+    },
+    "entity": {
+      "description": "@schema {example: \"sales-daily-summary\"}",
+      "type": "string",
+      "examples": [
+        "sales-daily-summary"
+      ]
+    },
+    "public": {
+      "description": "If true (default), a route /module/widget/\u003cname\u003e is auto-generated.",
+      "type": "boolean",
+      "examples": [
+        "true"
+      ],
+      "nullable": true
+    },
+    "query": {
+      "type": "string"
+    },
+    "refresh_secs": {
+      "type": "integer"
+    },
+    "size": {
+      "$ref": "#/$defs/WidgetLayout",
+      "nullable": true
+    },
+    "title": {
+      "description": "@schema {example: \"Today's Revenue\"}",
+      "type": "string",
+      "examples": [
+        "Today's Revenue"
+      ]
+    },
+    "type": {
+      "description": "@schema {example: \"metric\", enum: [\"metric\", \"chart\", \"table\", \"list\"]}",
+      "type": "string",
+      "enum": [
+        "metric",
+        "chart",
+        "table",
+        "list"
+      ],
+      "examples": [
+        "metric"
+      ]
+    }
+  },
+  "required": [
+    "title",
+    "type"
+  ],
+  "additionalProperties": false
+}

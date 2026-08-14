@@ -1,0 +1,11 @@
+{
+  "title": "NotificationCenter Spec",
+  "description": "NotificationCenterSpec defines the in-app notification page\n(06-page-kinds.md §12). Instance of VisualSpecKind tier: page.\nZero-config: lists caller's notifications from formspec/notify.\n",
+  "type": "object",
+  "properties": {
+    "realtime": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": false
+}

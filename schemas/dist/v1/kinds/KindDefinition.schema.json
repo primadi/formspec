@@ -1,0 +1,43 @@
+{
+  "title": "KindDefinition Spec",
+  "description": "KindDefinitionSpec declares a new resource kind (CRD-like extension),\nincluding its schema and handler (platform/03-kind-system.md §2).\n",
+  "type": "object",
+  "properties": {
+    "group": {
+      "description": "@schema {example: \"seed.formspec.dev\"}",
+      "type": "string",
+      "examples": [
+        "seed.formspec.dev"
+      ]
+    },
+    "handler": {
+      "$ref": "#/$defs/ImplDecl",
+      "nullable": true
+    },
+    "schema": {},
+    "scope": {
+      "description": "@schema {example: \"module\", enum: [\"module\", \"app\"]}",
+      "type": "string",
+      "enum": [
+        "module",
+        "app"
+      ],
+      "examples": [
+        "module"
+      ]
+    },
+    "version": {
+      "description": "@schema {example: \"v1\"}",
+      "type": "string",
+      "examples": [
+        "v1"
+      ]
+    }
+  },
+  "required": [
+    "group",
+    "version",
+    "handler"
+  ],
+  "additionalProperties": false
+}

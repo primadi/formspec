@@ -1,0 +1,35 @@
+{
+  "title": "Policy Spec",
+  "description": "PolicySpec defines governance rules evaluated on control-plane decisions\n(platform/04-control-plane.md §5). The escape hatch `rego` is compiled into\nthe same OPA evaluation engine as the structured vocabulary.\n",
+  "type": "object",
+  "properties": {
+    "blocked": {
+      "description": "Blocked is the policy floor — rules that cannot be configured away.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "rego": {
+      "description": "Rego is the escape hatch — full OPA policy body.",
+      "type": "string"
+    },
+    "require_approval": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PolicyApproval"
+      }
+    },
+    "require_signing": {
+      "type": "boolean"
+    },
+    "require_staging_first": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "require_signing",
+    "require_staging_first"
+  ],
+  "additionalProperties": false
+}

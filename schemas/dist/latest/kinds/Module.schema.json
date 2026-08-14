@@ -1,0 +1,59 @@
+{
+  "title": "Module Spec",
+  "description": "ModuleSpec defines a package of manifests (Core §4.3, Ref D19).\n",
+  "type": "object",
+  "properties": {
+    "ai_index": {
+      "$ref": "#/$defs/AiIndexDecl",
+      "description": "AI discovery metadata (ai/04-formspec-remote-mcp.md §3)",
+      "nullable": true
+    },
+    "config": {
+      "description": "module-specific configuration (02-workspace-app-module.md §2)",
+      "type": "object",
+      "additionalProperties": {}
+    },
+    "datastore": {
+      "description": "Datastore binds the module to a named kind: Datastore for ctx.db()",
+      "type": "string",
+      "examples": [
+        "default"
+      ]
+    },
+    "depends": {
+      "description": "Module dependencies — array of {module, version?}",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Dependency"
+      },
+      "examples": [
+        "formspec/core"
+      ]
+    },
+    "menu": {
+      "description": "Menu is a default navigation suggestion, module-relative (no `Module`",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/MenuItem"
+      }
+    },
+    "vendor": {
+      "description": "@schema {example: \"acme-corp\"}",
+      "type": "string",
+      "examples": [
+        "acme-corp"
+      ]
+    },
+    "version": {
+      "description": "@schema {example: \"1.0.0\"}",
+      "type": "string",
+      "examples": [
+        "1.0.0"
+      ]
+    }
+  },
+  "required": [
+    "version"
+  ],
+  "additionalProperties": false
+}

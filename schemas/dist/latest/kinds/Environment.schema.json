@@ -1,0 +1,60 @@
+{
+  "title": "Environment Spec",
+  "description": "EnvironmentSpec defines one deployment target (platform/04-control-plane.md §2).\n",
+  "type": "object",
+  "properties": {
+    "key_ref": {
+      "description": "KeyRef is the location of the platform signing key (e.g. kms://prod-signing).",
+      "type": "string",
+      "examples": [
+        "kms://prod-signing"
+      ]
+    },
+    "mode": {
+      "$ref": "#/$defs/EnvironmentMode",
+      "description": "Mode is the deployment environment mode — dev | prod."
+    },
+    "policy": {
+      "description": "Policy names the kind: Policy that applies to this environment.",
+      "type": "string"
+    },
+    "resource_planes": {
+      "description": "ResourcePlanes lists the resource plane endpoints for this environment.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/EnvironmentPlane"
+      }
+    },
+    "resource_pool": {
+      "description": "Resource pool strategy",
+      "type": "string",
+      "enum": [
+        "shared",
+        "exclusive"
+      ],
+      "examples": [
+        "shared"
+      ]
+    },
+    "tier": {
+      "description": "Deployment tier",
+      "type": "string",
+      "enum": [
+        "standalone",
+        "cloud",
+        "enterprise"
+      ],
+      "examples": [
+        "cloud"
+      ]
+    }
+  },
+  "required": [
+    "mode",
+    "tier",
+    "resource_pool",
+    "key_ref",
+    "policy"
+  ],
+  "additionalProperties": false
+}

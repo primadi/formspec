@@ -1,0 +1,123 @@
+{
+  "title": "Entity Spec",
+  "description": "EntitySpec defines a stateful, persisted business data resource (Core §4.1).\n",
+  "type": "object",
+  "properties": {
+    "actions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Action"
+      }
+    },
+    "auth": {
+      "$ref": "#/$defs/EntityAuth",
+      "nullable": true
+    },
+    "backdate_policy": {
+      "$ref": "#/$defs/BackdatePolicy",
+      "nullable": true
+    },
+    "characteristic": {
+      "$ref": "#/$defs/Characteristic"
+    },
+    "deliver": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/DeliveryDecl"
+      }
+    },
+    "display_field": {
+      "description": "@schema {example: \"name\"}",
+      "type": "string",
+      "examples": [
+        "name"
+      ]
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/EventDecl"
+      }
+    },
+    "expose": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ExposeConfig"
+      }
+    },
+    "extend_storage": {
+      "$ref": "#/$defs/ExtendStorage",
+      "nullable": true
+    },
+    "fields": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Field"
+      }
+    },
+    "forward_date_policy": {
+      "$ref": "#/$defs/ForwardDatePolicy",
+      "nullable": true
+    },
+    "hooks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/HookDecl"
+      }
+    },
+    "indexes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/IndexDecl"
+      }
+    },
+    "lifecycle": {
+      "description": "@schema {example: \"plain_crud\", enum: [\"two_step_autosave\", \"two_step_manual\", \"plain_crud\"]}",
+      "type": "string",
+      "enum": [
+        "two_step_autosave",
+        "two_step_manual",
+        "plain_crud"
+      ],
+      "examples": [
+        "plain_crud"
+      ]
+    },
+    "persist": {
+      "$ref": "#/$defs/PersistSpec",
+      "nullable": true
+    },
+    "plural": {
+      "description": "@schema {example: \"invoices\"}",
+      "type": "string",
+      "examples": [
+        "invoices"
+      ]
+    },
+    "rate_limit": {
+      "$ref": "#/$defs/RateLimitSpec",
+      "description": "1.4.1 resource-level rate limit (02-core-extended.md §17)",
+      "nullable": true
+    },
+    "soft_deactivate": {
+      "$ref": "#/$defs/SoftDeactivateDecl",
+      "description": "1.4.10",
+      "nullable": true
+    },
+    "state_machine": {
+      "$ref": "#/$defs/StateMachine",
+      "nullable": true
+    },
+    "version": {
+      "description": "@schema {example: \"v1\"}",
+      "type": "string",
+      "examples": [
+        "v1"
+      ]
+    }
+  },
+  "required": [
+    "version"
+  ],
+  "additionalProperties": false
+}

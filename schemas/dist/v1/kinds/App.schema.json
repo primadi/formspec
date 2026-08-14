@@ -1,0 +1,83 @@
+{
+  "title": "App Spec",
+  "description": "AppSpec is the root project manifest (Core §4.4). A Workspace MAY contain\nmore than one App; all Apps in a workspace run simultaneously, mounted at\ntheir own RootURL.\n",
+  "type": "object",
+  "properties": {
+    "app_renderer": {
+      "description": "@schema {example: \"shadcn-shell\"}",
+      "type": "string",
+      "examples": [
+        "shadcn-shell"
+      ]
+    },
+    "auth_config_ref": {
+      "description": "per-App auth strategy config",
+      "type": "string"
+    },
+    "consumes": {
+      "description": "cross-app interfaces needed → grant request",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/AppConsume"
+      }
+    },
+    "menu": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/MenuItem"
+      }
+    },
+    "modules": {
+      "description": "@schema {example: \"[clinic, pharmacy]\"}",
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "examples": [
+        "[clinic, pharmacy]"
+      ]
+    },
+    "publishes": {
+      "description": "cross-app interfaces offered",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/AppInterface"
+      }
+    },
+    "root_url": {
+      "description": "@schema {example: \"/app/klinik\", pattern: \"^/app/\"}",
+      "type": "string",
+      "examples": [
+        "/app/klinik"
+      ],
+      "pattern": "^/app/"
+    },
+    "theme_ref": {
+      "description": "@schema {example: \"ocean-blue\"}",
+      "type": "string",
+      "examples": [
+        "ocean-blue"
+      ]
+    },
+    "vendor": {
+      "description": "@schema {example: \"acme-corp\"}",
+      "type": "string",
+      "examples": [
+        "acme-corp"
+      ]
+    },
+    "version": {
+      "description": "@schema {example: \"1.0.0\"}",
+      "type": "string",
+      "examples": [
+        "1.0.0"
+      ]
+    }
+  },
+  "required": [
+    "version",
+    "vendor",
+    "root_url"
+  ],
+  "additionalProperties": false
+}

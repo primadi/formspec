@@ -1,0 +1,25 @@
+{
+  "title": "Theme Spec",
+  "description": "ThemeSpec defines look \u0026 feel as a distributable artifact (Frontend §10).\n",
+  "type": "object",
+  "properties": {
+    "public": {
+      "description": "If true (default), the theme is active and published in the bundle.",
+      "type": "boolean",
+      "nullable": true
+    },
+    "stylesheet": {
+      "type": "string"
+    },
+    "tokens": {
+      "type": "object",
+      "additionalProperties": {}
+    },
+    "widgets": {
+      "description": "base widget → asset skin",
+      "type": "object",
+      "additionalProperties": {}
+    }
+  },
+  "additionalProperties": false
+}

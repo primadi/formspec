@@ -1,0 +1,12 @@
+{
+  "name": "formspec-schemas",
+  "version": "v1",
+  "description": "JSON Schema (Draft-07) untuk resource kinds FormSpec.",
+  "apiVersion": "formspec.dev/v1alpha1",
+  "schemaDraft": "http://json-schema.org/draft-07/schema#",
+  "files": {
+    "root": "https://schemas.formspec.dev/v1/formspec.schema.json",
+    "kinds": "https://schemas.formspec.dev/v1/kinds/{Kind}.schema.json"
+  },
+  "publishedAt": "2026-08-14T08:32:19Z"
+}
