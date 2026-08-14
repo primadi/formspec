@@ -92,6 +92,22 @@ echo "📎 Membuat alias 'latest' → '$VERSION' ..."
 rm -rf "$DIST_DIR/latest"
 cp -r "$DIST_DIR/$VERSION" "$DIST_DIR/latest"
 
+# Favicon di root — ikon tab untuk schemas.formspec.dev.
+cat > "$DIST_DIR/favicon.svg" <<'SVG'
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 64 64" fill="none">
+  <rect width="64" height="64" rx="16" fill="url(#fsg)"/>
+  <rect x="13" y="15" width="38" height="8" rx="4" fill="#ffffff"/>
+  <rect x="13" y="28" width="28" height="8" rx="4" fill="#ffffff" fill-opacity="0.85"/>
+  <rect x="13" y="41" width="18" height="8" rx="4" fill="#ffffff" fill-opacity="0.70"/>
+  <defs>
+    <linearGradient id="fsg" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6366f1"/>
+      <stop offset="1" stop-color="#10b981"/>
+    </linearGradient>
+  </defs>
+</svg>
+SVG
+
 # Landing page di root (index.html) — supaya https://schemas.formspec.dev
 # (base URL) tidak 404: menampilkan versi + link ke semua schema.
 cat > "$DIST_DIR/index.html" <<EOF
@@ -101,6 +117,7 @@ cat > "$DIST_DIR/index.html" <<EOF
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>FormSpec — Registry JSON Schema</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -151,6 +168,7 @@ EOF
 echo ""
 echo "✅ Selesai stage:"
 echo "   $DIST_DIR/index.html  (landing page)"
+echo "   $DIST_DIR/favicon.svg (ikon tab)"
 echo "   $DIST_DIR/$VERSION/"
 echo "   $DIST_DIR/latest/  (alias)"
 echo ""

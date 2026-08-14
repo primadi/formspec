@@ -17,7 +17,10 @@ FormSpec lakukan (spec-first, declarative). Mark baru menggabungkan "Form" (bari
 - `renderers/react-shadcn/src/shell/Sidebar.tsx` (komponen `LogoMark` di
   sidebar mobile + desktop, mengganti "F" saat collapsed)
 - `scripts/publish-schemas.sh` + `schemas/dist/index.html` (brand registry
-  schema: `.dot` → mark SVG)
+  schema: `.dot` → mark SVG; + favicon `<link>` dan staging `favicon.svg`)
+- `docs-site/dist/favicon.svg` (hasil build VitePress — source `public/` sudah
+  update, dist disinkronkan)
+- `schemas/dist/favicon.svg` (favicon registry, baru — sebelumnya tidak ada)
 - `brand/` (aset proposal: 3 konsep + `preview.html`)
 
 **Referensi:** proposal di `brand/README.md`. Catatan: bundle admin SPA yang
