@@ -2,11 +2,12 @@
   "name": "formspec-schemas",
   "version": "v1",
   "description": "JSON Schema (Draft-07) untuk resource kinds FormSpec.",
-  "apiVersion": "formspec.dev/v1alpha1",
+  "apiVersion": "formspec.dev/v1",
   "schemaDraft": "http://json-schema.org/draft-07/schema#",
   "files": {
     "root": "https://schemas.formspec.dev/v1/formspec.schema.json",
     "kinds": "https://schemas.formspec.dev/v1/kinds/{Kind}.schema.json"
   },
-  "publishedAt": "2026-08-14T08:32:19Z"
+  "kinds": ["Api","App","ApprovalInbox","Calendar","Config","Dashboard","Datastore","Entity","Environment","Form","Integrator","Kanban","KindDefinition","Listing","Migration","Mockup","Module","NotificationCenter","Page","PersistBackend","Policy","Print","Renderer","Report","Service","Subscription","Table","Theme","Timeline","VisualSpecKind","Webhook","Widget","Wizard","Workflow"],
+  "publishedAt": "2026-08-14T10:20:47Z"
 }
