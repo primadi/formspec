@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FormSpec — Registry JSON Schema</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: #0b0f1a; color: #e4e4e7; line-height: 1.6; }
+  main { max-width: 880px; margin: 0 auto; padding: 56px 24px; }
+  h1 { font-size: 28px; margin: 8px 0 4px; }
+  h2 { font-size: 18px; margin-top: 40px; color: #a1a1aa; }
+  a { color: #818cf8; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+  .dot { width: 28px; height: 28px; border-radius: 8px;
+    background: linear-gradient(135deg, #6366f1, #10b981); display: inline-block; }
+  .desc { color: #a1a1aa; }
+  .box { background: #131a2b; border: 1px solid #232c44; border-radius: 12px; padding: 20px 24px; }
+  ul { margin: 0; padding-left: 18px; }
+  li { margin: 6px 0; }
+  code { background: #1c2740; padding: 2px 6px; border-radius: 6px; font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="brand"><span class="dot"></span> FormSpec</div>
+  <h1>Registry JSON Schema</h1>
+  <p class="desc">JSON Schema (Draft-07) untuk semua resource kind FormSpec, di-generate dari <code>pkg/spec</code> (Go types).</p>
+
+  <h2>Root schema</h2>
+  <div class="box">
+    <ul>
+      <li><a href="/v1/formspec.schema.json">/v1/formspec.schema.json</a> — schema root (discriminator)</li>
+      <li><a href="/latest/formspec.schema.json">/latest/formspec.schema.json</a> — alias versi terbaru</li>
+      <li><a href="/v1/index.json">/v1/index.json</a> — metadata versi + daftar kinds</li>
+    </ul>
+  </div>
+
+  <h2>Schema per kind (v1)</h2>
+  <div class="box">
+    <ul>
+        <li><a href="/v1/kinds/Api.schema.json">Api</a></li>        <li><a href="/v1/kinds/ApprovalInbox.schema.json">ApprovalInbox</a></li>        <li><a href="/v1/kinds/App.schema.json">App</a></li>        <li><a href="/v1/kinds/Calendar.schema.json">Calendar</a></li>        <li><a href="/v1/kinds/Config.schema.json">Config</a></li>        <li><a href="/v1/kinds/Dashboard.schema.json">Dashboard</a></li>        <li><a href="/v1/kinds/Datastore.schema.json">Datastore</a></li>        <li><a href="/v1/kinds/Entity.schema.json">Entity</a></li>        <li><a href="/v1/kinds/Environment.schema.json">Environment</a></li>        <li><a href="/v1/kinds/Form.schema.json">Form</a></li>        <li><a href="/v1/kinds/Integrator.schema.json">Integrator</a></li>        <li><a href="/v1/kinds/Kanban.schema.json">Kanban</a></li>        <li><a href="/v1/kinds/KindDefinition.schema.json">KindDefinition</a></li>        <li><a href="/v1/kinds/Listing.schema.json">Listing</a></li>        <li><a href="/v1/kinds/Migration.schema.json">Migration</a></li>        <li><a href="/v1/kinds/Mockup.schema.json">Mockup</a></li>        <li><a href="/v1/kinds/Module.schema.json">Module</a></li>        <li><a href="/v1/kinds/NotificationCenter.schema.json">NotificationCenter</a></li>        <li><a href="/v1/kinds/Page.schema.json">Page</a></li>        <li><a href="/v1/kinds/PersistBackend.schema.json">PersistBackend</a></li>        <li><a href="/v1/kinds/Policy.schema.json">Policy</a></li>        <li><a href="/v1/kinds/Print.schema.json">Print</a></li>        <li><a href="/v1/kinds/Renderer.schema.json">Renderer</a></li>        <li><a href="/v1/kinds/Report.schema.json">Report</a></li>        <li><a href="/v1/kinds/Service.schema.json">Service</a></li>        <li><a href="/v1/kinds/Subscription.schema.json">Subscription</a></li>        <li><a href="/v1/kinds/Table.schema.json">Table</a></li>        <li><a href="/v1/kinds/Theme.schema.json">Theme</a></li>        <li><a href="/v1/kinds/Timeline.schema.json">Timeline</a></li>        <li><a href="/v1/kinds/VisualSpecKind.schema.json">VisualSpecKind</a></li>        <li><a href="/v1/kinds/Webhook.schema.json">Webhook</a></li>        <li><a href="/v1/kinds/Widget.schema.json">Widget</a></li>        <li><a href="/v1/kinds/Wizard.schema.json">Wizard</a></li>        <li><a href="/v1/kinds/Workflow.schema.json">Workflow</a></li>
+    </ul>
+  </div>
+
+  <p class="desc" style="margin-top: 32px">Registry di-serve statis dari Cloudflare (R2/Pages). Lihat <code>schemas/README.md</code> untuk cara publish.</p>
+</main>
+</body>
+</html>

@@ -9,5 +9,5 @@
     "kinds": "https://schemas.formspec.dev/v1/kinds/{Kind}.schema.json"
   },
   "kinds": ["Api","App","ApprovalInbox","Calendar","Config","Dashboard","Datastore","Entity","Environment","Form","Integrator","Kanban","KindDefinition","Listing","Migration","Mockup","Module","NotificationCenter","Page","PersistBackend","Policy","Print","Renderer","Report","Service","Subscription","Table","Theme","Timeline","VisualSpecKind","Webhook","Widget","Wizard","Workflow"],
-  "publishedAt": "2026-08-14T10:38:26Z"
+  "publishedAt": "2026-08-14T11:02:31Z"
 }
