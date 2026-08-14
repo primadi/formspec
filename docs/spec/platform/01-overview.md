@@ -5,6 +5,7 @@
 > Draft: isi di bawah kontrak yang berlaku.
 
 ## 1. Apa itu FormSpec
+
 FormSpec adalah ekosistem spec-first untuk membangun aplikasi bisnis multi-tenant
 transaksional (POS multi-cabang, inventory, billing, klinik, HRM, order
 management). Ia adalah **standar terbuka (CC0) dengan implementasi
@@ -22,6 +23,7 @@ lewat pola sidecar (PHP/Python/Node/Java) —
 [`../backend/01-core-basic.md`](../backend/01-core-basic.md) §5.
 
 ## 2. Prinsip Inti: Spec = Kontrak, Renderer = Implementasi
+
 **Spec adalah kontrak; renderer adalah implementasi kontrak itu** — prinsip
 yang sama berlaku di tiga lapisan: visual (Shell/Renderer,
 [`../frontend/01-visual-hierarchy.md`](../frontend/01-visual-hierarchy.md)),
@@ -30,12 +32,13 @@ penyimpanan (PersistBackend,
 eksekusi action (lima jenis `impl`,
 [`../backend/01-core-basic.md`](../backend/01-core-basic.md) §5). Konsekuensi
 yang mengikat: kalau implementasi kedua suatu seam ingin dimungkinkan
-kelak, *seam*-nya harus dirancang sejak implementasi pertama dibangun —
+kelak, _seam_-nya harus dirancang sejak implementasi pertama dibangun —
 bukan ditambal belakangan. Rendering dan resolusi spec terjadi saat
 **runtime** (interpretasi), bukan code generation — satu interpreter
 di-deploy sekali, membaca spec untuk App/Page apa pun.
 
 ## 3. Anatomi Sistem
+
 ```
 Spec YAML (Entity/Service/Page/…)
         │  formspec apply — dua-tahap: Control Plane registrasi → Resource Plane pull
@@ -52,10 +55,12 @@ Spec YAML (Entity/Service/Page/…)
 │ business logic                                                │
 └─────────────────────────────────────────────────────────────┘
 ```
+
 Lihat [`04-control-plane.md`](04-control-plane.md) dan
 [`05-plane-protocol.md`](05-plane-protocol.md) untuk kontrak dua plane ini.
 
 ## 4. Persona dan Tier Developer
+
 - **App developer** (Layer 0/1) — nol atau minim manifest frontend, tanpa dev
   environment lokal; CRUD derived otomatis dari Entity
   ([`../frontend/06-page-kinds.md`](../frontend/06-page-kinds.md) §14).
@@ -75,6 +80,7 @@ bisnis) — Workspace Owner (Data Owner), App/Module Owner, Cloud Owner
 Detail delegasi dan kunci di [`04-control-plane.md`](04-control-plane.md) §4.
 
 ## 5. Batas Scope
+
 Yang bukan urusan FormSpec: Page yang benar-benar lepas dari App bebas stack
 apa saja lewat API generik, tanpa Renderer kind sama sekali
 ([`../frontend/01-visual-hierarchy.md`](../frontend/01-visual-hierarchy.md)
@@ -83,11 +89,12 @@ satu — tidak ada satu pun kontrak di `docs/spec/frontend/` yang wajib
 dipenuhinya.
 
 ## 6. Peta Dokumen Spec
-| Bagian | Isi |
-|---|---|
-| [`spec/platform/`](README.md) | Kontrak lintas sisi — overview (ini), workspace/App/Module, kind system, control plane, plane protocol, datastore, marketplace |
-| [`spec/backend/`](../backend/README.md) | Kontrak data & perilaku — Entity, Action, Event, PersistBackend |
-| [`spec/frontend/`](../frontend/README.md) | Kontrak visual — Shell/App/Page/Component, VisualSpecKind, Renderer, Spec Resolution API |
+
+| Bagian                                    | Isi                                                                                                                            |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| [`spec/platform/`](README.md)             | Kontrak lintas sisi — overview (ini), workspace/App/Module, kind system, control plane, plane protocol, datastore, marketplace |
+| [`spec/backend/`](../backend/README.md)   | Kontrak data & perilaku — Entity, Action, Event, PersistBackend                                                                |
+| [`spec/frontend/`](../frontend/README.md) | Kontrak visual — Shell/App/Page/Component, VisualSpecKind, Renderer, Spec Resolution API                                       |
 
 Urutan baca disarankan per persona ada di [`../../README.md`](../../README.md)
 "Jalur Baca per Persona".

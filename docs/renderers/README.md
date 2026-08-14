@@ -4,9 +4,9 @@ Dokumentasi **implementasi** kontrak FormSpec. Berbeda dari [`../spec/`](../spec
 yang normatif, isi section ini deskriptif: menjelaskan bagaimana implementasi
 resmi memenuhi kontraknya hari ini, dan boleh berubah tanpa mengubah kontrak.
 
-| Seam | Kontrak | Implementasi resmi |
-|---|---|---|
-| Shell (visual) | [`spec/frontend/`](../spec/frontend/) | [`shadcn-shell/`](shadcn-shell/) — React + shadcn/ui, interpreter runtime |
+| Seam                         | Kontrak                                                                       | Implementasi resmi                                                                      |
+| ---------------------------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Shell (visual)               | [`spec/frontend/`](../spec/frontend/)                                         | [`shadcn-shell/`](shadcn-shell/) — React + shadcn/ui, interpreter runtime               |
 | PersistBackend (penyimpanan) | [`spec/backend/04-persist-backend.md`](../spec/backend/04-persist-backend.md) | [`jsonb-persist/`](jsonb-persist/) — hybrid JSONB, jalan di atas Postgres maupun SQLite |
 
 Topik lintas (server + client) yang diimplementasikan di atas satu seam:

@@ -5,12 +5,14 @@
 > Outline: heading menetapkan cakupan; isi ditulis bertahap.
 
 ## 1. Hybrid JSONB
+
 Layout kolom, tipe, path payload. Ini satu-satunya strategi skema renderer ini
 — PersistBackend dengan strategi berbeda (mis. tiap field jadi kolom nyata)
 adalah implementasi terpisah, bukan mode di dalam `jsonb-persist`; lihat
 [`../README.md`](../README.md) soal tempat implementasi lain terdaftar.
 
 ## 2. Extension Column
+
 Tiap extension ([`../../spec/backend/03-entity-extension.md`](../../spec/backend/03-entity-extension.md))
 dapat **kolom fisik baru**, bukan tabel terpisah, bukan nested path di dalam
 `data`:
@@ -63,9 +65,10 @@ ini. Uninstall (`DROP COLUMN`) juga belum ada implementasinya sama sekali —
 lihat [`01-architecture.md`](01-architecture.md) §4.
 
 ## 3. Index Generation
+
 `persist.indexes` dan field extension ber-`index: true`
 ([`../../spec/backend/03-entity-extension.md`](../../spec/backend/03-entity-extension.md)
-§4) diterjemahkan ke *generated column* + index biasa. Untuk kolom
+§4) diterjemahkan ke _generated column_ + index biasa. Untuk kolom
 **extension**, ini sudah benar dialeknya:
 
 ```sql
@@ -149,12 +152,12 @@ terlibat dalam query hierarki.
 Path dikelola framework **server-side, selalu** — klien tidak bisa menulis
 `__tpath.*`:
 
-| Operasi | Perilaku |
-|---|---|
-| **Create root** (parent null) | path = `""` |
-| **Create child** (parent = X) | path = path(X) + `.` + id_baru |
-| **Move / reparent** | path node + seluruh subtree dihitung ulang dalam satu transaksi; lock di parent lama & baru mencegah concurrent reparent |
-| **Delete** | `relation.on_delete` berlaku — `cascade` menghapus subtree (path ikut terhapus), `restrict` menolak jika masih ada anak |
+| Operasi                       | Perilaku                                                                                                                 |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| **Create root** (parent null) | path = `""`                                                                                                              |
+| **Create child** (parent = X) | path = path(X) + `.` + id_baru                                                                                           |
+| **Move / reparent**           | path node + seluruh subtree dihitung ulang dalam satu transaksi; lock di parent lama & baru mencegah concurrent reparent |
+| **Delete**                    | `relation.on_delete` berlaku — `cascade` menghapus subtree (path ikut terhapus), `restrict` menolak jika masih ada anak  |
 
 ### 4.5 Translasi Operator Tree
 
@@ -162,11 +165,11 @@ Lihat [`04-query-and-keys.md`](04-query-and-keys.md) §6 untuk translasi
 lengkap operator `descendant_of` / `ancestor_of` / `child_of` / `root` ke
 prefix-match B-tree. Ringkasan:
 
-| Operator kontrak | Strategi jsonb-persist |
-|---|---|
+| Operator kontrak    | Strategi jsonb-persist                                    |
+| ------------------- | --------------------------------------------------------- |
 | `descendant_of=<X>` | `_tpath_… LIKE '<path(X)>.<X>.%'` — prefix-match, indexed |
-| `ancestor_of=<X>` | Parse path(X), `WHERE id IN (…)` — lookup PK langsung |
-| `child_of=<X>` | `parent_id = <X>` — field relation biasa, bukan path |
-| `root` | `parent_id IS NULL` — indeks standar pada kolom FK |
+| `ancestor_of=<X>`   | Parse path(X), `WHERE id IN (…)` — lookup PK langsung     |
+| `child_of=<X>`      | `parent_id = <X>` — field relation biasa, bukan path      |
+| `root`              | `parent_id IS NULL` — indeks standar pada kolom FK        |
 
 **Tidak ada recursive CTE di backend ini.**

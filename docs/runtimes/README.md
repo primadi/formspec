@@ -13,13 +13,13 @@
 
 ## Komponen
 
-| # | Komponen | Wujud | Lisensi | Dokumen |
-|---|---|---|---|---|
-| 1 | **FormSpec Control** | Binary (3 mode: region/cluster/standalone) | FSL (open source) | [`01-formspec-ctl.md`](./01-formspec-ctl.md) |
-| 2 | **FormSpec Resource** | Go library (`import "github.com/primadi/formspec/resource"`) | FSL (open source) | [`02-formspec-resource.md`](./02-formspec-resource.md) |
-| 3 | **FormSpec Operator** | Binary (K8s CRD controller) | **Closed source** | [`03-formspec-operator.md`](./03-formspec-operator.md) |
-| 4 | **FormSpec Sidecar** | Binary (embed FormSpec Resource + socket listener) | FSL (open source) | [`04-formspec-sidecar.md`](./04-formspec-sidecar.md) |
-| 5 | **Engine API Layer** | Lapisan HTTP runtime engine (`internal/api`) | FSL (open source) | [`05-engine-api-layer.md`](./05-engine-api-layer.md) |
+| #   | Komponen              | Wujud                                                        | Lisensi           | Dokumen                                                |
+| --- | --------------------- | ------------------------------------------------------------ | ----------------- | ------------------------------------------------------ |
+| 1   | **FormSpec Control**  | Binary (3 mode: region/cluster/standalone)                   | FSL (open source) | [`01-formspec-ctl.md`](./01-formspec-ctl.md)           |
+| 2   | **FormSpec Resource** | Go library (`import "github.com/primadi/formspec/resource"`) | FSL (open source) | [`02-formspec-resource.md`](./02-formspec-resource.md) |
+| 3   | **FormSpec Operator** | Binary (K8s CRD controller)                                  | **Closed source** | [`03-formspec-operator.md`](./03-formspec-operator.md) |
+| 4   | **FormSpec Sidecar**  | Binary (embed FormSpec Resource + socket listener)           | FSL (open source) | [`04-formspec-sidecar.md`](./04-formspec-sidecar.md)   |
+| 5   | **Engine API Layer**  | Lapisan HTTP runtime engine (`internal/api`)                 | FSL (open source) | [`05-engine-api-layer.md`](./05-engine-api-layer.md)   |
 
 ```
                     ┌─────────────────┐
@@ -54,12 +54,12 @@
 
 ## Status Implementasi (Ringkas)
 
-| Komponen | Status kode hari ini |
-|---|---|
-| FormSpec Control | Ada (`cmd/formspec-ctl`), tapi single-mode (belum region/cluster/standalone split), storage in-memory, dan **pipeline register→deployment belum tersambung** — lihat `01-formspec-ctl.md` §7 |
+| Komponen          | Status kode hari ini                                                                                                                                                                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| FormSpec Control  | Ada (`cmd/formspec-ctl`), tapi single-mode (belum region/cluster/standalone split), storage in-memory, dan **pipeline register→deployment belum tersambung** — lihat `01-formspec-ctl.md` §7                                                                             |
 | FormSpec Resource | Facade publik nyata di `resource/` (`resource/formspec.go` App, `resource/syncagent.go` SyncAgent — lihat `examples/reference-app`), tapi kedua jalur masih terpisah: `App` (serve) tidak menyambung ke `SyncAgent` (pull artifact) — lihat `02-formspec-resource.md` §7 |
-| FormSpec Operator | Implementasi awal ada (`cmd/formspec-operator` + `internal/operator`: tiga reconciler, verifikasi ed25519, reporter) — endpoint reporting sisi `formspec-ctl` belum ada — lihat `03-formspec-operator.md` §7 |
-| FormSpec Sidecar | Implementasi awal ada (`cmd/formspec-sidecar` + `internal/sidecar`: `SidecarExecutor`, socket server `POST /ctx/*`, dua mode runtime, pull artifact) — hot-rebuild & transaksi multi-operasi belum — lihat `04-formspec-sidecar.md` §8 |
+| FormSpec Operator | Implementasi awal ada (`cmd/formspec-operator` + `internal/operator`: tiga reconciler, verifikasi ed25519, reporter) — endpoint reporting sisi `formspec-ctl` belum ada — lihat `03-formspec-operator.md` §7                                                             |
+| FormSpec Sidecar  | Implementasi awal ada (`cmd/formspec-sidecar` + `internal/sidecar`: `SidecarExecutor`, socket server `POST /ctx/*`, dua mode runtime, pull artifact) — hot-rebuild & transaksi multi-operasi belum — lihat `04-formspec-sidecar.md` §8                                   |
 
 Tiap dokumen punya bagian **"Status Implementasi Hari Ini"** yang mencatat gap konkret antara desain dan kode, plus urutan pembangunan yang disarankan — supaya dokumen ini berguna sebagai peta kerja teknis, bukan cuma spesifikasi aspirasional.
 
@@ -67,8 +67,8 @@ Tiap dokumen punya bagian **"Status Implementasi Hari Ini"** yang mencatat gap k
 
 ## Kaitan dengan Dokumen Lain
 
-| Kalau Anda ingin tahu... | Baca |
-|---|---|
+| Kalau Anda ingin tahu...                                                | Baca                 |
+| ----------------------------------------------------------------------- | -------------------- |
 | Bagaimana semua komponen ini di-deploy & saling terhubung di production | `docs/architecture/` |
-| Skema YAML normatif (Document, Entity, Action, dst) | `docs/spec/` |
-| Fitur/desain/API internal satu komponen tertentu | Dokumen ini |
+| Skema YAML normatif (Document, Entity, Action, dst)                     | `docs/spec/`         |
+| Fitur/desain/API internal satu komponen tertentu                        | Dokumen ini          |

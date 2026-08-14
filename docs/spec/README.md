@@ -26,10 +26,10 @@ Konsekuensi praktis:
 
 ## Sub-section
 
-| Direktori | Kontrak untuk |
-|---|---|
-| [`platform/`](platform/) | Kedua sisi: model workspace/app/module, kind system & meta-kinds, control plane, plane protocol, datastore, marketplace |
-| [`backend/`](backend/) | Engine & PersistBackend manapun: model dokumen, action, lifecycle, extension, interface penyimpanan |
+| Direktori                | Kontrak untuk                                                                                                              |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| [`platform/`](platform/) | Kedua sisi: model workspace/app/module, kind system & meta-kinds, control plane, plane protocol, datastore, marketplace    |
+| [`backend/`](backend/)   | Engine & PersistBackend manapun: model dokumen, action, lifecycle, extension, interface penyimpanan                        |
 | [`frontend/`](frontend/) | Shell & renderer visual manapun: hirarki 4 tier, VisualSpecKind, Renderer, Spec Resolution API, katalog kind, FormSpecExpr |
 
 Status dokumen: `Outline` (kerangka cakupan) → `Draft` (isi lengkap, terbuka

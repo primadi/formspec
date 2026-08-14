@@ -83,24 +83,24 @@ renderers/
                                   #   fully-relational: renderers/<nama-backend>/)
 ```
 
-Nama `jsonb-persist` (bukan `persist-postgres`) sengaja menandai bahwa yang membedakan implementasi ini bukan engine SQL-nya (backend ini sudah jalan di Postgres **dan** SQLite hari ini) — melainkan *strategi skemanya* (JSONB). Implementasi PersistBackend lain di masa depan dibedakan dari strategi skemanya juga (mis. fully-relational), bukan dari database yang dipakainya.
+Nama `jsonb-persist` (bukan `persist-postgres`) sengaja menandai bahwa yang membedakan implementasi ini bukan engine SQL-nya (backend ini sudah jalan di Postgres **dan** SQLite hari ini) — melainkan _strategi skemanya_ (JSONB). Implementasi PersistBackend lain di masa depan dibedakan dari strategi skemanya juga (mis. fully-relational), bukan dari database yang dipakainya.
 
-Ini **rename/move**, bukan rewrite — logic yang sudah teruji di `internal/db`, `internal/datastore`, dan `web/` pindah lokasi & import path, tidak ditulis ulang (lihat argumen *port bertahap* di §4). Belum dieksekusi; dicatat di sini supaya restrukturisasi kode berikutnya punya target yang jelas, bukan menerka-nerka ulang.
+Ini **rename/move**, bukan rewrite — logic yang sudah teruji di `internal/db`, `internal/datastore`, dan `web/` pindah lokasi & import path, tidak ditulis ulang (lihat argumen _port bertahap_ di §4). Belum dieksekusi; dicatat di sini supaya restrukturisasi kode berikutnya punya target yang jelas, bukan menerka-nerka ulang.
 
 ---
 
 ## 3. Pemetaan Kode ↔ Dokumen
 
-| Kode | Dokumen terkait | Peran |
-|---|---|---|
-| `pkg/spec/` | [`docs/spec/`](../spec/README.md) (semua) | Skema kontrak sebagai struct Go |
-| `internal/db/`, `internal/datastore/` | [`docs/spec/backend/04-persist-backend.md`](../spec/backend/04-persist-backend.md), [`docs/renderers/jsonb-persist/`](../renderers/jsonb-persist/README.md) | Renderer PersistBackend (target: `renderers/jsonb-persist/`, §2) |
-| `internal/api/` | [`docs/spec/frontend/04-spec-resolution-api.md`](../spec/frontend/04-spec-resolution-api.md), [`docs/spec/backend/01-core-basic.md`](../spec/backend/01-core-basic.md) §6/§8 | Engine yang menyajikan kedua kontrak |
-| `web/`, `internal/ui/` | [`docs/spec/frontend/`](../spec/frontend/README.md), [`docs/renderers/shadcn-shell/`](../renderers/shadcn-shell/README.md) | Renderer Shell resmi (target: `renderers/web/`, §2) |
-| `internal/action/`, `internal/starlark/` | [`docs/spec/backend/01-core-basic.md`](../spec/backend/01-core-basic.md) §5 | Eksekusi Action lintas 5 jenis impl |
-| `internal/sidecar/`, `sdk/*` | [`docs/runtimes/04-formspec-sidecar.md`](../runtimes/04-formspec-sidecar.md), [`docs/spec/platform/08-project-layout.md`](../spec/platform/08-project-layout.md) | Protokol handler lintas bahasa |
-| `internal/control/`, `internal/permission/`, `internal/auth/` | [`docs/spec/platform/04-control-plane.md`](../spec/platform/04-control-plane.md) | Governance & keamanan |
-| `cmd/formspec/`, `cmd/formspec-ctl/` | [`docs/cli-tools/`](../cli-tools/README.md) | CLI |
+| Kode                                                          | Dokumen terkait                                                                                                                                                              | Peran                                                            |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `pkg/spec/`                                                   | [`docs/spec/`](../spec/README.md) (semua)                                                                                                                                    | Skema kontrak sebagai struct Go                                  |
+| `internal/db/`, `internal/datastore/`                         | [`docs/spec/backend/04-persist-backend.md`](../spec/backend/04-persist-backend.md), [`docs/renderers/jsonb-persist/`](../renderers/jsonb-persist/README.md)                  | Renderer PersistBackend (target: `renderers/jsonb-persist/`, §2) |
+| `internal/api/`                                               | [`docs/spec/frontend/04-spec-resolution-api.md`](../spec/frontend/04-spec-resolution-api.md), [`docs/spec/backend/01-core-basic.md`](../spec/backend/01-core-basic.md) §6/§8 | Engine yang menyajikan kedua kontrak                             |
+| `web/`, `internal/ui/`                                        | [`docs/spec/frontend/`](../spec/frontend/README.md), [`docs/renderers/shadcn-shell/`](../renderers/shadcn-shell/README.md)                                                   | Renderer Shell resmi (target: `renderers/web/`, §2)              |
+| `internal/action/`, `internal/starlark/`                      | [`docs/spec/backend/01-core-basic.md`](../spec/backend/01-core-basic.md) §5                                                                                                  | Eksekusi Action lintas 5 jenis impl                              |
+| `internal/sidecar/`, `sdk/*`                                  | [`docs/runtimes/04-formspec-sidecar.md`](../runtimes/04-formspec-sidecar.md), [`docs/spec/platform/08-project-layout.md`](../spec/platform/08-project-layout.md)             | Protokol handler lintas bahasa                                   |
+| `internal/control/`, `internal/permission/`, `internal/auth/` | [`docs/spec/platform/04-control-plane.md`](../spec/platform/04-control-plane.md)                                                                                             | Governance & keamanan                                            |
+| `cmd/formspec/`, `cmd/formspec-ctl/`                          | [`docs/cli-tools/`](../cli-tools/README.md)                                                                                                                                  | CLI                                                              |
 
 ---
 
@@ -114,4 +114,4 @@ Struktur kode hari ini **belum sepenuhnya** mencerminkan pemisahan kontrak-vs-re
 - **Belum ada registry `VisualSpecKind`/`Renderer` di `pkg/spec`.** Hirarki Shell/App/Page/Component (`docs/spec/frontend/01-03`) masih implisit di `web/kinds/`, bukan kind formal yang bisa di-apply.
 - **Sidecar masih satu-proses-per-project**, belum mendukung satu Module satu runtime bahasa berbeda — lihat gap detail di [`docs/spec/platform/08-project-layout.md`](../spec/platform/08-project-layout.md) §5.
 
-Sisi positif (argumen untuk *port bertahap* — rename/move ke §2, bukan rewrite total, saat fase kode nanti dimulai): `pkg/spec` sudah terpisah bersih dari engine; `web/` sudah interpreter runtime (bukan build-per-app); `internal/db` sudah punya driver ganda (Postgres+SQLite) — fondasi menuju PersistBackend sejati sudah ada, tinggal diformalkan jadi interface.
+Sisi positif (argumen untuk _port bertahap_ — rename/move ke §2, bukan rewrite total, saat fase kode nanti dimulai): `pkg/spec` sudah terpisah bersih dari engine; `web/` sudah interpreter runtime (bukan build-per-app); `internal/db` sudah punya driver ganda (Postgres+SQLite) — fondasi menuju PersistBackend sejati sudah ada, tinggal diformalkan jadi interface.

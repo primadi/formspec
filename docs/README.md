@@ -12,20 +12,20 @@ deskriptif) — ditambah section pendukung.
 
 ## Peta Dokumen
 
-| Section | Isi | Sifat |
-|---|---|---|
-| [`spec/platform/`](spec/platform/) | Kontrak lintas sisi: overview, workspace/app/module, kind system, control plane, plane protocol, datastore, marketplace | Normatif, semver |
-| [`spec/backend/`](spec/backend/) | Kontrak data & perilaku: core basic/extended, entity extension, **PersistBackend** | Normatif, semver |
-| [`spec/frontend/`](spec/frontend/) | Kontrak visual: hirarki Shell→App→Page→Component, **VisualSpecKind**, **Renderer**, **Spec Resolution API**, katalog kind per tier, FormSpecExpr | Normatif, semver |
-| [`renderers/shadcn-shell/`](renderers/shadcn-shell/) | Frontend renderer resmi (React + shadcn/ui) | Deskriptif, dated |
-| [`renderers/jsonb-persist/`](renderers/jsonb-persist/) | Backend renderer resmi (PersistBackend hybrid JSONB, Postgres/SQLite) | Deskriptif, dated |
-| [`architecture/`](architecture/) | Topologi deployment, HA/failover, K8s operator, admin surfaces, struktur repo | Deskriptif |
-| [`runtimes/`](runtimes/) | Internals per komponen runtime: formspec-ctl, formspec-resource, formspec-operator, formspec-sidecar, engine API layer | Deskriptif |
-| [`cli-tools/`](cli-tools/) | Referensi CLI: formspec, formspec-ctl, formspec dev, formspec generate, formspec consult | Deskriptif |
-| [`ai/`](ai/README.md) | FormSpec AI: `formspec-consult`, `formspec-local-mcp`/`formspec-remote-mcp`, LLM provider layer (Vercel AI SDK, BYOK), FormSpec Skill | Deskriptif — design, belum diimplementasikan |
-| [`guides/`](guides/) | Cara menjalankan, tutorial Order-to-Cash, panduan menulis renderer/shell/persist-backend | Tutorial |
-| [`reference/`](reference/) | Glossary istilah kanonik | Referensi |
-| [`comparison/`](comparison/) | FormSpec dibandingkan platform lain | Referensi |
+| Section                                                | Isi                                                                                                                                              | Sifat                                        |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------- |
+| [`spec/platform/`](spec/platform/)                     | Kontrak lintas sisi: overview, workspace/app/module, kind system, control plane, plane protocol, datastore, marketplace                          | Normatif, semver                             |
+| [`spec/backend/`](spec/backend/)                       | Kontrak data & perilaku: core basic/extended, entity extension, **PersistBackend**                                                               | Normatif, semver                             |
+| [`spec/frontend/`](spec/frontend/)                     | Kontrak visual: hirarki Shell→App→Page→Component, **VisualSpecKind**, **Renderer**, **Spec Resolution API**, katalog kind per tier, FormSpecExpr | Normatif, semver                             |
+| [`renderers/shadcn-shell/`](renderers/shadcn-shell/)   | Frontend renderer resmi (React + shadcn/ui)                                                                                                      | Deskriptif, dated                            |
+| [`renderers/jsonb-persist/`](renderers/jsonb-persist/) | Backend renderer resmi (PersistBackend hybrid JSONB, Postgres/SQLite)                                                                            | Deskriptif, dated                            |
+| [`architecture/`](architecture/)                       | Topologi deployment, HA/failover, K8s operator, admin surfaces, struktur repo                                                                    | Deskriptif                                   |
+| [`runtimes/`](runtimes/)                               | Internals per komponen runtime: formspec-ctl, formspec-resource, formspec-operator, formspec-sidecar, engine API layer                           | Deskriptif                                   |
+| [`cli-tools/`](cli-tools/)                             | Referensi CLI: formspec, formspec-ctl, formspec dev, formspec generate, formspec consult                                                         | Deskriptif                                   |
+| [`ai/`](ai/README.md)                                  | FormSpec AI: `formspec-consult`, `formspec-local-mcp`/`formspec-remote-mcp`, LLM provider layer (Vercel AI SDK, BYOK), FormSpec Skill            | Deskriptif — design, belum diimplementasikan |
+| [`guides/`](guides/)                                   | Cara menjalankan, tutorial Order-to-Cash, panduan menulis renderer/shell/persist-backend                                                         | Tutorial                                     |
+| [`reference/`](reference/)                             | Glossary istilah kanonik                                                                                                                         | Referensi                                    |
+| [`comparison/`](comparison/)                           | FormSpec dibandingkan platform lain                                                                                                              | Referensi                                    |
 
 ## Jalur Baca per Persona
 

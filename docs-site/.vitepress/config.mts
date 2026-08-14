@@ -12,6 +12,23 @@ const publicDir = fileURLToPath(new URL("../public", import.meta.url))
 // Sidebar item helper
 const item = (text: string, link: string) => ({ text, link })
 
+// Docs source menulis link ke folder-index sebagai "x/README.md" — bentuk yang
+// klikable di editor (VS Code) dan GitHub. VitePress hanya memperlakukan
+// index.md sebagai folder route, bukan README.md, sehingga "x/README.md" tanpa
+// perlakuan khusus akan dirender "x/README" → 404. Helper ini menormalkan href
+// ke bentuk folder ("x/README.md" → "x/", "../README.md" → "../", dst.) sebelum
+// linkPlugin milik VitePress menormalisasi & mendaftarkan dead-link.
+function fixReadmeHref(href: string): string {
+  // Link eksternal / protokol khusus tidak disentuh
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(href)) return href
+  const hash = href.match(/#.*$/)?.[0] ?? ""
+  const path = hash ? href.slice(0, -hash.length) : href
+  const dir = path.match(/^(.*\/)README\.md$/i)?.[1]
+  if (dir !== undefined) return dir + hash
+  if (/^README\.md$/i.test(path)) return "./" + hash
+  return href
+}
+
 const specBackend = [
   item("Backend Spec", "/spec/backend/"),
   item("Core Basic", "/spec/backend/01-core-basic"),
@@ -245,6 +262,24 @@ export default defineConfig({
   // terpengaruh (keduanya diproses terpisah dari raw HTML).
   markdown: {
     html: false,
+    config(md) {
+      // Bungkus rule link_open (milik VitePress) supaya href "x/README.md"
+      // dikoreksi ke "x/" sebelum linkPlugin menormalisasi URL dan mencatat
+      // dead-link. Dengan begitu:
+      //   - source tetap pakai "x/README.md" → klikable di editor & GitHub
+      //   - output site benar "x/" → tidak 404 (rewrites README.md → index.md)
+      const originalLinkOpen =
+        md.renderer.rules.link_open ??
+        ((tokens, idx, opts, env, self) => self.renderToken(tokens, idx, opts))
+      md.renderer.rules.link_open = (tokens, idx, opts, env, self) => {
+        const token = tokens[idx]
+        const hrefIndex = token.attrIndex("href")
+        if (hrefIndex >= 0 && token.attrs) {
+          token.attrs[hrefIndex][1] = fixReadmeHref(token.attrs[hrefIndex][1])
+        }
+        return originalLinkOpen(tokens, idx, opts, env, self)
+      }
+    },
   },
   // Cek dead-link tetap aktif untuk error nyata, tapi toleransi kategori
   // berikut (folder internal yang memang tidak ikut di-site, konvensi
