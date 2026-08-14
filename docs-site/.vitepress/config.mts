@@ -332,6 +332,8 @@ export default defineConfig({
   ],
   themeConfig: {
     logo: "/favicon.svg",
+    // Brand (logo + "FormSpec") di kiri atas → landing site, bukan root docs
+    logoLink: "https://formspec.dev",
     nav: [
       { text: "Spec", link: "/spec/", activeMatch: "/spec/" },
       { text: "Kinds", link: "/kind/", activeMatch: "/kind/" },
