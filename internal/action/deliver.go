@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/primadi/formspec/internal/events"
-	db "github.com/primadi/formspec/renderers/jsonbpersist"
+	db "github.com/primadi/formspec/renderers/jsonb-persist"
 )
 
 // DeliveryDeps bundles the dependencies DeliverEvents needs to fan out an
@@ -31,7 +31,7 @@ func (d DeliveryDeps) logger() RuntimeLogger {
 // handlers) can enqueue a durable event to the outbox atomically, in the
 // same transaction as the entity mutation that produced it, before
 // DeliverEvents ever runs (see EntityStore.Insert/Update's PendingEvents
-// param in renderers/jsonbpersist). Core Basic §7 requires the entity
+// param in renderers/jsonb-persist). Core Basic §7 requires the entity
 // mutation and its durable outbox entry to commit together or not at all.
 func BuildEventMessage(resource string, ev EventEmission) ([]byte, error) {
 	msg := events.EventMessage{

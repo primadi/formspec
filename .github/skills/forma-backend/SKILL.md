@@ -1,6 +1,6 @@
 ---
 name: formspec-backend
-description: "Use when: working on FormSpec Go backend code — Entity, Service, PersistBackend, Starlark, API, auth, manifest loading, or any package under internal/ renderers/jsonbpersist/ or pkg/spec/. Provides project structure, kind system, implementation types, and key design rules."
+description: "Use when: working on FormSpec Go backend code — Entity, Service, PersistBackend, Starlark, API, auth, manifest loading, or any package under internal/ renderers/jsonb-persist/ or pkg/spec/. Provides project structure, kind system, implementation types, and key design rules."
 ---
 
 # FormSpec Backend Skill
@@ -9,7 +9,7 @@ Context for AI coding agents working on the FormSpec backend (Go, Starlark, YAML
 
 ## Key paths
 - `pkg/spec/` — Go types that ARE the contract (entity.go, frontend.go, resources.go, datastore.go)
-- `renderers/jsonbpersist/` — PersistBackend renderer (db, datastore, crud, ddl, migrate, outbox, extension)
+- `renderers/jsonb-persist/` — PersistBackend renderer (db, datastore, crud, ddl, migrate, outbox, extension)
 - `internal/api/` — HTTP router, handlers, meta API, middleware, WebSocket hub
 - `internal/action/` — Action dispatcher (native, script, sidecar, hooks, events)
 - `internal/starlark/` — Sandboxed Starlark runtime (executor, context, resource, primitives)

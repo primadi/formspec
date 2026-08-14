@@ -1,5 +1,5 @@
 # Total equity widget
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Widget
 metadata:
   name: total-equity

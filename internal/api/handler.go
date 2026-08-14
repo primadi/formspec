@@ -16,7 +16,7 @@ import (
 	entityengine "github.com/primadi/formspec/internal/entity"
 	"github.com/primadi/formspec/internal/validation"
 	"github.com/primadi/formspec/pkg/spec"
-	db "github.com/primadi/formspec/renderers/jsonbpersist"
+	db "github.com/primadi/formspec/renderers/jsonb-persist"
 )
 
 // HandlerFactory creates HTTP handlers backed by an EntityStore.
@@ -442,7 +442,7 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 
 		// Optimistic concurrency (2.6.5): the client is expected to echo back
 		// the version it last read via `If-Match: version=<N>` (already sent
-		// by renderers/web's apiPatch on every Form autosave and Kanban
+		// by renderers/react-shadcn's apiPatch on every Form autosave and Kanban
 		// drag-update). When present, that client-supplied version — not
 		// whatever GetByID just fetched — is what gets passed to Update(),
 		// so a stale read genuinely conflicts instead of silently winning.
@@ -1073,7 +1073,7 @@ func buildListLinks(u *url.URL, page, perPage, totalPages int) ListLinks {
 }
 
 // parseIfMatchVersion parses the "If-Match: version=<N>" header sent by
-// renderers/web's apiPatch (see lib/api/client.ts). Returns (version,
+// renderers/react-shadcn's apiPatch (see lib/api/client.ts). Returns (version,
 // present, valid) — present is false if the header is absent entirely;
 // valid is false if it's present but doesn't match the expected format.
 func parseIfMatchVersion(r *http.Request) (version int, present bool, valid bool) {
@@ -1276,7 +1276,7 @@ func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, a
 		// execution — every resource.save()/create()/load()/call() the
 		// dispatched script (or native/sidecar impl) performs joins this
 		// SAME transaction instead of each committing on its own. See
-		// renderers/jsonbpersist/txscope.go.
+		// renderers/jsonb-persist/txscope.go.
 		scope := db.NewTxScope()
 		scopeID := db.RegisterScope(scope)
 		defer db.UnregisterScope(scopeID)

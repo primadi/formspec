@@ -439,7 +439,7 @@ Workspace owner **tidak perlu tahu cluster fisik**. Mereka memilih **ClusterClas
 
 ```yaml
 # Cloud Owner definisikan ClusterClass
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: ClusterClass
 metadata:
   name: premium
@@ -463,7 +463,7 @@ spec:
 
 ```yaml
 # Workspace Owner pilih class + region
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Workspace
 metadata:
   name: bank-mandiri-prod

@@ -33,7 +33,7 @@ yang menunjuk ke module yang memilikinya.
 ## Contoh Manifest
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Module
 metadata:
   name: clinic

@@ -67,7 +67,7 @@ Di-manage oleh **Platform Operator** dan dievaluasi oleh control plane
 Skema (`schemas/kinds/Policy.schema.json`):
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Policy
 metadata:
   name: ...

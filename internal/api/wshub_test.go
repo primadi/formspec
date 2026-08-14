@@ -12,7 +12,7 @@ import (
 	"github.com/coder/websocket"
 	"github.com/primadi/formspec/internal/entity"
 	"github.com/primadi/formspec/internal/events"
-	db "github.com/primadi/formspec/renderers/jsonbpersist"
+	db "github.com/primadi/formspec/renderers/jsonb-persist"
 )
 
 func newTestRouterServer(t *testing.T) (*httptest.Server, *RouterBuilder) {

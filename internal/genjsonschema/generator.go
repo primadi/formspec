@@ -488,14 +488,14 @@ func buildRootSchema(collect *CollectResult, sharedDefs map[string]*Schema, kind
 	root := &Schema{
 		Schema: "http://json-schema.org/draft-07/schema#",
 		Title:  "FormSpec Manifest",
-		Description: "JSON Schema for FormSpec YAML manifests (formspec.dev/v1alpha1).\n" +
+		Description: "JSON Schema for FormSpec YAML manifests (formspec.dev/v1).\n" +
 			"Validates the apiVersion/kind/metadata/spec structure and routes to kind-specific specs.",
 		Type: "object",
 		Properties: map[string]*Schema{
 			"apiVersion": {
 				Type:        "string",
-				Const:       "formspec.dev/v1alpha1",
-				Description: "FormSpec API version — must be formspec.dev/v1alpha1",
+				Const:       "formspec.dev/v1",
+				Description: "FormSpec API version — must be formspec.dev/v1",
 			},
 			"kind": {
 				Type:        "string",
@@ -595,7 +595,7 @@ func buildRootSchema(collect *CollectResult, sharedDefs map[string]*Schema, kind
 			Properties: map[string]*Schema{
 				"apiVersion": {
 					Type:  "string",
-					Const: "formspec.dev/v1alpha1",
+					Const: "formspec.dev/v1",
 				},
 				"kind":     kindSchema,
 				"metadata": metadataSchema, // inlined, not $ref, to avoid $ref resolution issues in some validators

@@ -1,6 +1,6 @@
 # SHOWCASE: form untuk Configuration Page (tab "Klinik" di pages/system-settings.yaml).
 # Mode edit atas row tetap id="clinic". Tanpa create — struktur di-seed module.
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Form
 metadata:
   name: settings-clinic

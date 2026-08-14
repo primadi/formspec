@@ -1,6 +1,6 @@
 # The one new cross-module artifact reference-app adds on top of what each
 # composed vertical already ships — proves cross-module UI composition works.
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Dashboard
 metadata:
   name: erp-overview

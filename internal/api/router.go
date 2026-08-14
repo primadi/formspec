@@ -24,11 +24,11 @@ type RouterBuilder struct {
 	factory       *HandlerFactory
 	dispatcher    *action.Dispatcher
 	uiRegistry    *ui.Registry
-	webDir        string // static SPA root (web/dist); empty = no static serving
+	webDir        string // static SPA root (renderers/react-shadcn/dist); empty = no static serving
 	webFS         fs.FS  // embedded SPA (embed.FS); empty = no static serving
 	hub           *WSHub
 	apps          map[string]*formspec_app.ResolvedApp // resolved kind: App manifests, keyed by name (Core §4.4)
-	specVersionFn func() int64                      // returns the current spec version (for Meta API polling)
+	specVersionFn func() int64                         // returns the current spec version (for Meta API polling)
 }
 
 // NewRouterBuilder creates a new router builder backed by the entity registry.
@@ -77,7 +77,7 @@ func (b *RouterBuilder) SetApps(apps map[string]*formspec_app.ResolvedApp) {
 	b.apps = apps
 }
 
-// SetWebDir enables static SPA serving from dir (typically web/dist) at
+// SetWebDir enables static SPA serving from dir (typically renderers/react-shadcn/dist) at
 // /{ws}/_admin and /{ws}/app with an index.html fallback for client-side
 // routes. Call before BuildHTTP.
 func (b *RouterBuilder) SetWebDir(dir string) {

@@ -63,7 +63,7 @@ tokoku/
 Create `formspec.yaml`:
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: App
 metadata:
   name: tokoku
@@ -83,7 +83,7 @@ This declares our app composes three modules. No `publishes` or `consumes` — t
 First, the customer entity the order will reference. Create `modules/billing/entities/customer.yaml`:
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Entity
 metadata:
   name: customer
@@ -101,7 +101,7 @@ spec:
 Now the order itself. Create `modules/billing/entities/order.yaml`:
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Entity
 metadata:
   name: order
@@ -286,7 +286,7 @@ That's 3 lines of business logic. All consequences of payment (journal, receipt,
 Create `modules/billing/services/payment-gateway.yaml`:
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Service
 metadata:
   name: payment-gateway
@@ -318,7 +318,7 @@ Because this is a `kind: Service`, it automatically gets auth, permission enforc
 Create `modules/gl/entities/journal-entry.yaml`:
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Entity
 metadata:
   name: journal-entry
@@ -355,7 +355,7 @@ Real scenario: the system has been running for months. Someone wants WA notifica
 Create `modules/notifications/subscriptions/wa-on-order-paid.yaml`:
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Subscription
 metadata:
   name: wa-on-order-paid

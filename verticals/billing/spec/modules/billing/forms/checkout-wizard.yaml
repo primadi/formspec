@@ -1,6 +1,6 @@
 # Checkout wizard — multi-step order creation
 # Step 1: Select customer → Step 2: Add items → Step 3: Apply discount → Step 4: Review & confirm
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Wizard
 metadata:
   name: checkout-wizard

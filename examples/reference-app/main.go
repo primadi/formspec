@@ -24,7 +24,7 @@ func main() {
 	jwtIssuer := flag.String("jwt-issuer", "formspec", "JWT issuer")
 	jwtPublicKey := flag.String("jwt-public-key", "", "Path to RSA/ECDSA public key file (PEM) for asymmetric JWT validation")
 	strictMode := flag.Bool("strict", false, "Enable strict enforcement of uses declarations")
-	webDir := flag.String("web-dir", "", "Renderer SPA root (web/dist) — serves /{ws}/_admin and /{ws}/app")
+	webDir := flag.String("web-dir", "", "Renderer SPA root (renderers/react-shadcn/dist) — serves /{ws}/_admin and /{ws}/app")
 	flag.Parse()
 
 	fmt.Println("🚀 FormSpec Reference App")

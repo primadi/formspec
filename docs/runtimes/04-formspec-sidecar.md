@@ -173,7 +173,7 @@ Praktik: pilih `decrement`/`increment` alih-alih `get`+modify+`set` untuk field 
 **Multi-operasi dalam satu handler kini BISA satu transaksi** — lewat header
 `X-FormSpec-Scope-Id` (baru). Saat `HandleCustomAction` men-dispatch action
 bertipe `sidecar`, ia sudah membuka `TxScope` request-scoped untuk seluruh
-eksekusi action itu (`renderers/jsonbpersist/txscope.go`); `SidecarExecutor`
+eksekusi action itu (`renderers/jsonb-persist/txscope.go`); `SidecarExecutor`
 (`internal/action/sidecar.go`) menyertakan id scope itu sebagai header
 `X-FormSpec-Scope-Id` pada request `POST /invoke/...` (§4.2). **App process
 wajib menyimpan header ini selama menangani satu `/invoke/...` dan

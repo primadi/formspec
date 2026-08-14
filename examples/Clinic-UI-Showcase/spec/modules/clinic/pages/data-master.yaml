@@ -2,7 +2,7 @@
 # Mengelompokkan tiga master-data kecil (Dokter, Pasien, Poliklinik) dalam
 # satu route dengan tabbed interface, menghindari clutter di sidebar menu.
 # Tiap tab menampilkan Table (list view) dari entity masing-masing.
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Page
 metadata:
   name: data-master

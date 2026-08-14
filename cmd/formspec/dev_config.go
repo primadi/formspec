@@ -35,6 +35,7 @@ type configFile struct {
 	ControlURL       *string  `yaml:"control-cluster-url"`
 	WorkspaceIDAlt   *string  `yaml:"workspace-id-alt"` // unused reserved
 	Themes           []string `yaml:"themes"`           // additional theme manifest directories
+	SchemaRegistry   *string  `yaml:"schema-registry"`  // schema registry base URL (default https://schemas.formspec.dev)
 }
 
 // mergeConfigFile tries to read formspec-app.yaml and merge values into cfg.

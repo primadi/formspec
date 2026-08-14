@@ -12,7 +12,7 @@ Layar ber-route yang menyusun blok. Ini kind dasar tier page — Form/Table
 dalam sebuah Page atau lewat route CRUD per-entity turunan framework.
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Page
 metadata:
   name: order-detail
@@ -72,7 +72,7 @@ detail — tanpa navigasi route. Deklaratif lewat `binds` pada blok detail; buka
 kind baru, cuma pola komposisi Page:
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Page
 metadata: { name: order-workbench, module: billing }
 spec:
@@ -106,7 +106,7 @@ menautkan seleksi, tidak melonggarkan gating.
 Layout + perilaku input satu Entity, menggantikan form hasil derivasi:
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Form
 metadata:
   name: order-edit
@@ -188,7 +188,7 @@ opsional, bukan mengganti keduanya.
 Daftar ber-filter/sort/paginasi; kolom terderivasi dari entity:
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Table
 metadata: { name: order-list, module: billing }
 spec:
@@ -305,7 +305,7 @@ kontrak itu. Operasional: tiap kartu satu record entity, tiap kolom satu nilai
 status, drag antar kolom = transisi state.
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Kanban
 metadata: { name: support-board, module: helpdesk }
 spec:
@@ -412,7 +412,7 @@ VisualSpecKind `tier: page`. Untuk penjadwalan (appointment, delivery
 planning).
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Calendar
 metadata: { name: appointment-calendar, module: clinic }
 spec:
@@ -490,7 +490,7 @@ navigasi stepper, validasi per-step, dependency antar-field, autosave
 per-instance, dan perilaku completion:
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Wizard
 metadata:
   name: patient-registration
@@ -561,7 +561,7 @@ dan slot filling-nya). Dashboard **mereferensikan** widget by name — widget
 didefinisikan terpisah sebagai `kind: Widget`:
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Dashboard
 metadata: { name: sales-today, module: billing }
 spec:
@@ -577,7 +577,7 @@ spec:
 ```
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Widget
 metadata: { name: sales-today-stat, module: billing }
 spec:
@@ -602,7 +602,7 @@ katalog widget derived dari permission, mekanisme customizable — lihat
 Output tabular terparameterisasi:
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Report
 metadata: { name: sales-by-category, module: billing }
 spec:
@@ -640,7 +640,7 @@ async`); file mendarat di download tray.
 Dokumen cetak untuk satu entity, multi-target output:
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Print
 metadata: { name: receipt, module: billing }
 spec:
@@ -676,7 +676,7 @@ Feed kronologis vertikal, dikelompokkan per tanggal — untuk audit trail
 append-only, activity log, rekam medis (ditulis sekali, tidak pernah diubah):
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Timeline
 metadata:
   name: patient-medical-history
@@ -724,7 +724,7 @@ menunggu tindakan caller. Instance VisualSpecKind `tier: page`. Tipis: mesin
 approval hidup di backend, kind ini hanya permukaan standarnya.
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: ApprovalInbox
 metadata: { name: my-approvals, module: core }
 spec:
@@ -754,7 +754,7 @@ resmi `formspec/notify` (bridge delivery `notification` dari Subscription,
 VisualSpecKind `tier: page`.
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: NotificationCenter
 metadata: { name: notifications, module: core }
 spec:
@@ -780,7 +780,7 @@ footprint backend yang ia konsumsi.
 > di `docs/plan/todo.md`. Kontrak di bawah adalah target desain.
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Page
 metadata: { name: dispatch-console, module: logistics }
 spec:

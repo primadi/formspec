@@ -2,7 +2,7 @@
 # form view-mode + table ter-filter param + widget + html block.
 # Meng-exercise: BlockRef.id dari route param, BlockRef.param passing,
 # title interpolation FormSpecExpr ("{patient.name}").
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Page
 metadata:
   name: patient-detail

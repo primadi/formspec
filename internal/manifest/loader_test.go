@@ -36,7 +36,7 @@ func TestValidate(t *testing.T) {
 		{
 			name: "valid manifest",
 			raw: RawManifest{
-				APIVersion: "formspec.dev/v1alpha1",
+				APIVersion: "formspec.dev/v1",
 				Kind:       "Entity",
 				Metadata:   RawMetadata{Name: "test"},
 			},
@@ -53,7 +53,7 @@ func TestValidate(t *testing.T) {
 		{
 			name: "missing kind",
 			raw: RawManifest{
-				APIVersion: "formspec.dev/v1alpha1",
+				APIVersion: "formspec.dev/v1",
 				Metadata:   RawMetadata{Name: "test"},
 			},
 			wantErr: true,
@@ -61,7 +61,7 @@ func TestValidate(t *testing.T) {
 		{
 			name: "missing name",
 			raw: RawManifest{
-				APIVersion: "formspec.dev/v1alpha1",
+				APIVersion: "formspec.dev/v1",
 				Kind:       "Entity",
 			},
 			wantErr: true,
@@ -90,7 +90,7 @@ func TestValidate_EntityExtensionValidation(t *testing.T) {
 		{
 			name: "base entity without extension",
 			raw: RawManifest{
-				APIVersion: "formspec.dev/v1alpha1",
+				APIVersion: "formspec.dev/v1",
 				Kind:       "Entity",
 				Metadata:   RawMetadata{Name: "customer"},
 				Spec: map[string]any{
@@ -105,7 +105,7 @@ func TestValidate_EntityExtensionValidation(t *testing.T) {
 		{
 			name: "extension with required field rejected",
 			raw: RawManifest{
-				APIVersion: "formspec.dev/v1alpha1",
+				APIVersion: "formspec.dev/v1",
 				Kind:       "Entity",
 				Metadata:   RawMetadata{Name: "invoice-ext"},
 				Spec: map[string]any{
@@ -125,7 +125,7 @@ func TestValidate_EntityExtensionValidation(t *testing.T) {
 		{
 			name: "extension without required accepted",
 			raw: RawManifest{
-				APIVersion: "formspec.dev/v1alpha1",
+				APIVersion: "formspec.dev/v1",
 				Kind:       "Entity",
 				Metadata:   RawMetadata{Name: "invoice-ext"},
 				Spec: map[string]any{
@@ -144,7 +144,7 @@ func TestValidate_EntityExtensionValidation(t *testing.T) {
 		{
 			name: "extension missing target",
 			raw: RawManifest{
-				APIVersion: "formspec.dev/v1alpha1",
+				APIVersion: "formspec.dev/v1",
 				Kind:       "Entity",
 				Metadata:   RawMetadata{Name: "invoice-ext"},
 				Spec: map[string]any{
@@ -163,7 +163,7 @@ func TestValidate_EntityExtensionValidation(t *testing.T) {
 		{
 			name: "extension invalid target format",
 			raw: RawManifest{
-				APIVersion: "formspec.dev/v1alpha1",
+				APIVersion: "formspec.dev/v1",
 				Kind:       "Entity",
 				Metadata:   RawMetadata{Name: "invoice-ext"},
 				Spec: map[string]any{
@@ -183,7 +183,7 @@ func TestValidate_EntityExtensionValidation(t *testing.T) {
 		{
 			name: "extension missing namespace",
 			raw: RawManifest{
-				APIVersion: "formspec.dev/v1alpha1",
+				APIVersion: "formspec.dev/v1",
 				Kind:       "Entity",
 				Metadata:   RawMetadata{Name: "invoice-ext"},
 				Spec: map[string]any{
@@ -202,7 +202,7 @@ func TestValidate_EntityExtensionValidation(t *testing.T) {
 		{
 			name: "non-entity kind skips entity validation",
 			raw: RawManifest{
-				APIVersion: "formspec.dev/v1alpha1",
+				APIVersion: "formspec.dev/v1",
 				Kind:       "Module",
 				Metadata:   RawMetadata{Name: "billing"},
 				Spec:       map[string]any{"version": "v1"},

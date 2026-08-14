@@ -2,7 +2,7 @@
 # (status pending) → kasir klik action "sell" di halaman record untuk
 # menyelesaikan transaksi (idiom "create idle, script action finalizes" yang
 # sama dipakai visit/prescription).
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Form
 metadata:
   name: otc-sale-quick

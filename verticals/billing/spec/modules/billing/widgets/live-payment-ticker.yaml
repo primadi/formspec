@@ -1,5 +1,5 @@
 # Live payment ticker widget — realtime payment notifications via WebSocket
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Widget
 metadata:
   name: live-payment-ticker

@@ -27,7 +27,7 @@ pembayaran, dan laporan penjualan.
 | Frontend | React + TypeScript + Vite + shadcn/ui (di-generate engine) |
 | Database | PostgreSQL (produksi) / SQLite (dev) |
 | Scripting | Starlark (sandboxed, script aksi custom) |
-| Manifest | YAML (`apiVersion: formspec.dev/v1alpha1`) |
+| Manifest | YAML (`apiVersion: formspec.dev/v1`) |
 
 ## Prinsip Kunci
 

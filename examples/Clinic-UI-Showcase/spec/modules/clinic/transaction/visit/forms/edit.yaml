@@ -2,7 +2,7 @@
 # child table, §1.6), multi-section, FormSpecExpr visible_when/required_when,
 # read_only, help/placeholder, submit config. Ini form yang MENG-OVERRIDE
 # derived form untuk entity visit.
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Form
 metadata:
   name: visit-edit

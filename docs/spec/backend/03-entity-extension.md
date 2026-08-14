@@ -10,7 +10,7 @@ Module lain menambah field/perilaku ke Entity yang dimiliki module lain
 merusak jalur upgrade-nya, tanpa mengorbankan performa query:
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Entity
 metadata:
   name: invoice-ext
@@ -78,7 +78,7 @@ Selain field, Entity Extension boleh menambah pemeriksaan `business_rules`
 miliknya sendiri lewat `spec.validate` — **aditif, bukan pengganti**:
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Entity
 metadata:
   name: invoice-ext

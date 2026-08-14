@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/primadi/formspec/renderers/jsonbpersist"
+	"github.com/primadi/formspec/renderers/jsonb-persist"
 )
 
 // PrimitiveResolver resolves a primitive type ("db", "cache", "lock", ...)

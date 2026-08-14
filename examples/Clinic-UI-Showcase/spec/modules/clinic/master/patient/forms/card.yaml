@@ -1,7 +1,7 @@
 # SHOWCASE kind: Form dipakai mode VIEW sebagai block di Page (patient-detail).
 # BlockRef.mode: view membuat semua field readonly — form yang sama bisa
 # dipakai view/edit tergantung konteks block.
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Form
 metadata:
   name: patient-card

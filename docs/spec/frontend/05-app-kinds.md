@@ -37,7 +37,7 @@ lewat `theme_ref` di `App.spec`
 ([`../platform/02-workspace-app-module.md`](../platform/02-workspace-app-module.md) §3):
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Theme
 metadata:
   name: batik-dark

@@ -12,7 +12,7 @@ import (
 	"github.com/primadi/formspec/internal/entity"
 	"github.com/primadi/formspec/internal/ui"
 	"github.com/primadi/formspec/pkg/spec"
-	db "github.com/primadi/formspec/renderers/jsonbpersist"
+	db "github.com/primadi/formspec/renderers/jsonb-persist"
 )
 
 // setupMetaTestRouter builds a RouterBuilder with an empty entity registry,

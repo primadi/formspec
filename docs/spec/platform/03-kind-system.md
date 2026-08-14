@@ -93,7 +93,7 @@ Kind yang mendeklarasikan kind lain — extensible dalam tiga layer:
 pihak ketiga dengan kind namespaced, tunduk Verified Badge.
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: KindDefinition
 metadata: { name: Seed, module: formspec/seed }
 spec:

@@ -4,7 +4,7 @@
 
 Dokumen implementasi transport realtime FormSpec: bagaimana WebSocket di-handle di
 sisi server (`internal/api/wshub.go`) dan di sisi client (renderer shadcn-shell,
-`renderers/web/src/hooks/useRealtime.ts`), optimasi yang sudah dilakukan, kind
+`renderers/react-shadcn/src/hooks/useRealtime.ts`), optimasi yang sudah dilakukan, kind
 yang mendukung realtime, dan bagaimana lifecycle perpindahan halaman / refresh /
 putus koneksi ditangani. Kontrak normatifnya ada di
 [`../spec/frontend/04-spec-resolution-api.md`](../spec/frontend/04-spec-resolution-api.md) §5.
@@ -32,12 +32,12 @@ WebSocket ke client yang sedang terhubung. Prinsip kuncinya:
 
 ### 2.1 Endpoint, auth, dan koneksi
 
-| Aspek | Detail |
-|---|---|
-| Endpoint | `/{workspace}/_ui/_ws` (`internal/api/router.go` → `HandleWS` di `internal/api/wshub.go`) |
-| Auth | `AuthMiddleware` — identity dari header `Authorization` atau query `?token=` (browser tidak bisa set header saat WS handshake). Dev fallback → identity `nil` |
+| Aspek        | Detail                                                                                                                                                                                                                             |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Endpoint     | `/{workspace}/_ui/_ws` (`internal/api/router.go` → `HandleWS` di `internal/api/wshub.go`)                                                                                                                                          |
+| Auth         | `AuthMiddleware` — identity dari header `Authorization` atau query `?token=` (browser tidak bisa set header saat WS handshake). Dev fallback → identity `nil`                                                                      |
 | Origin check | `websocket.Accept(..., &AcceptOptions{InsecureSkipVerify: true})` — diperlukan saat SPA diakses lewat reverse proxy dev (Vite) yang membuat `Origin` ≠ `Host`; auth tetap dijaga oleh AuthMiddleware + filter permission per-pesan |
-| Protocol | Push-only untuk data; frame masuk dari client hanya subscription-control |
+| Protocol     | Push-only untuk data; frame masuk dari client hanya subscription-control                                                                                                                                                           |
 
 Koneksi (`wsConn`) punya channel `send` buffered (kapasitas 32) dan satu
 writer goroutine sendiri (`writePump`) — socket yang lambat/macet di-drop
@@ -101,7 +101,7 @@ Dua jalur yang mengisi hub:
 - **`action.DeliverEvents`** — mengirim declared events (`events:` dengan
   `deliver: [websocket]`) pada resource. Untuk channel websocket juga
   listener-gated; event durable di-enqueue ke outbox sebagai insurance, dan
-  outbox worker (`renderers/jsonbpersist/event_handler.go`) ikut
+  outbox worker (`renderers/jsonb-persist/event_handler.go`) ikut
   listener-gated saat me-broadcast ke websocket. Channel non-websocket
   (audit_log, queue, reliable_event) tidak terpengaruh oleh gating ini.
 
@@ -114,10 +114,10 @@ delivery code: `Broadcast(workspaceID, msg)` + `HasListeners(workspaceID) bool`.
 
 ### 3.1 Hook `useRealtime`
 
-`renderers/web/src/hooks/useRealtime.ts` — hook inti:
+`renderers/react-shadcn/src/hooks/useRealtime.ts` — hook inti:
 
 ```ts
-const tick = useRealtime("clinic/visit")              // semua event entity
+const tick = useRealtime("clinic/visit") // semua event entity
 const tick = useRealtime("clinic/visit", { event: "completed" }) // satu event
 ```
 
@@ -181,17 +181,17 @@ sebuah `Set`; **tidak membuka koneksi WebSocket sendiri**.
 
 ## 4. Optimasi yang Sudah Dilakukan
 
-| # | Optimasi | Keterangan |
-|---|---|---|
-| 1 | **Satu WebSocket per tab** | Singleton `RealtimeClient` dibagi semua konsumen; bukan satu koneksi per listener |
-| 2 | **Server-side subscription filter** | Server hanya mengirim event sesuai subscription; hemat bandwidth & privasi (tidak bocorkan event entity lain) |
-| 3 | **Filter permission per-pesan** (2.6.6) | Event tidak diterima koneksi tanpa permission `view` atas resource-nya |
-| 4 | **Listener-gated publish** (`HasListeners`) | Tanpa listener → `NotifyMutation`/`DeliverEvents`/outbox-worker websocket tidak menjalankan apa pun, meski spec mendeklarasikan `deliver: websocket` |
-| 5 | **Slow-consumer drop** | Channel send buffered (32) + `select default` — socket lambat tidak pernah memblokir hub |
-| 6 | **Satu writer goroutine per koneksi** | `writePump` mengisolasi penulisan per socket |
-| 7 | **Delta subscription sync** | Client hanya mengirim perubahan subscription, bukan seluruh state, tiap kali ada perubahan |
-| 8 | **Exponential backoff reconnect** | 1s → 15s (cap), reset saat sukses; + refetch on reconnect (non-durable) |
-| 9 | **Auto unsubscribe / global persist** | Lifecycle React: unsubscribe otomatis saat pindah halaman; subscriber global di shell bertahan |
+| #   | Optimasi                                    | Keterangan                                                                                                                                           |
+| --- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Satu WebSocket per tab**                  | Singleton `RealtimeClient` dibagi semua konsumen; bukan satu koneksi per listener                                                                    |
+| 2   | **Server-side subscription filter**         | Server hanya mengirim event sesuai subscription; hemat bandwidth & privasi (tidak bocorkan event entity lain)                                        |
+| 3   | **Filter permission per-pesan** (2.6.6)     | Event tidak diterima koneksi tanpa permission `view` atas resource-nya                                                                               |
+| 4   | **Listener-gated publish** (`HasListeners`) | Tanpa listener → `NotifyMutation`/`DeliverEvents`/outbox-worker websocket tidak menjalankan apa pun, meski spec mendeklarasikan `deliver: websocket` |
+| 5   | **Slow-consumer drop**                      | Channel send buffered (32) + `select default` — socket lambat tidak pernah memblokir hub                                                             |
+| 6   | **Satu writer goroutine per koneksi**       | `writePump` mengisolasi penulisan per socket                                                                                                         |
+| 7   | **Delta subscription sync**                 | Client hanya mengirim perubahan subscription, bukan seluruh state, tiap kali ada perubahan                                                           |
+| 8   | **Exponential backoff reconnect**           | 1s → 15s (cap), reset saat sukses; + refetch on reconnect (non-durable)                                                                              |
+| 9   | **Auto unsubscribe / global persist**       | Lifecycle React: unsubscribe otomatis saat pindah halaman; subscriber global di shell bertahan                                                       |
 
 ---
 
@@ -199,11 +199,11 @@ sebuah `Set`; **tidak membuka koneksi WebSocket sendiri**.
 
 ### Sudah berjalan (renderer memakai `useRealtime`)
 
-| Kind | Flag | Perilaku |
-|---|---|---|
-| **Table** | `realtime: true` | Silent refetch baris pada event entity (created/updated/deleted/action) |
-| **Kanban** | `realtime: true` (default) | Silent refetch — kartu muncul/pindah/berubah status dari client lain |
-| **Dashboard** | `realtime: true` | Widget metric & chart refetch pada event entity sumbernya |
+| Kind          | Flag                       | Perilaku                                                                |
+| ------------- | -------------------------- | ----------------------------------------------------------------------- |
+| **Table**     | `realtime: true`           | Silent refetch baris pada event entity (created/updated/deleted/action) |
+| **Kanban**    | `realtime: true` (default) | Silent refetch — kartu muncul/pindah/berubah status dari client lain    |
+| **Dashboard** | `realtime: true`           | Widget metric & chart refetch pada event entity sumbernya               |
 
 Widget (`kind: Widget`) **tidak punya flag realtime sendiri** — mewarisi flag
 `realtime` dashboard tempat ia ditempel; `refresh` (polling) tetap berfungsi
@@ -211,12 +211,12 @@ sebagai backstop.
 
 ### Terdefinisi di spec tapi belum diimplementasikan
 
-| Kind | Status renderer |
-|---|---|
-| **Calendar** | Field `realtime` ada di spec; renderer `calendar/` belum ada |
-| **ApprovalInbox** | Field `realtime` ada; renderer `approval-inbox/` belum ada |
-| **NotificationCenter** | Field `realtime` ada; renderer `notification-center/` belum ada |
-| **Timeline** | Renderer `timeline/` ada, tapi belum memakai `useRealtime` — tinggal wiring pola sama dengan Kanban/Table |
+| Kind                   | Status renderer                                                                                           |
+| ---------------------- | --------------------------------------------------------------------------------------------------------- |
+| **Calendar**           | Field `realtime` ada di spec; renderer `calendar/` belum ada                                              |
+| **ApprovalInbox**      | Field `realtime` ada; renderer `approval-inbox/` belum ada                                                |
+| **NotificationCenter** | Field `realtime` ada; renderer `notification-center/` belum ada                                           |
+| **Timeline**           | Renderer `timeline/` ada, tapi belum memakai `useRealtime` — tinggal wiring pola sama dengan Kanban/Table |
 
 ---
 
@@ -235,6 +235,7 @@ Server ──► Client (text frame, push-only)
 ```
 
 Semantik subscription server (`wsConn.wants`):
+
 - Tidak pernah subscribe → tidak menerima apa pun.
 - subscribe `"*"` → semua resource di workspace (tetap tunduk filter permission).
 - subscribe `resource` (tanpa event) → semua event resource itu.
@@ -257,12 +258,12 @@ Semantik subscription server (`wsConn.wants`):
 
 ## 8. File Kunci
 
-| Path | Peran |
-|---|---|
-| `internal/api/wshub.go` | WSHub, connection manager, subscription filter, read/write pump |
-| `internal/api/router.go` | Route `/{workspace}/_ui/_ws` |
-| `internal/events/hub.go` | Kontrak `events.Hub` (`Broadcast` + `HasListeners`) |
-| `internal/action/deliver.go` | `NotifyMutation` (generic events) + `DeliverEvents` (declared events) |
-| `renderers/jsonbpersist/event_handler.go` | Outbox worker → websocket (listener-gated) |
-| `renderers/web/src/hooks/useRealtime.ts` | Hook + singleton `RealtimeClient` |
-| `renderers/web/src/kinds/{table,kanban,dashboard}/` | Renderer yang memakai realtime |
+| Path                                                         | Peran                                                                 |
+| ------------------------------------------------------------ | --------------------------------------------------------------------- |
+| `internal/api/wshub.go`                                      | WSHub, connection manager, subscription filter, read/write pump       |
+| `internal/api/router.go`                                     | Route `/{workspace}/_ui/_ws`                                          |
+| `internal/events/hub.go`                                     | Kontrak `events.Hub` (`Broadcast` + `HasListeners`)                   |
+| `internal/action/deliver.go`                                 | `NotifyMutation` (generic events) + `DeliverEvents` (declared events) |
+| `renderers/jsonb-persist/event_handler.go`                    | Outbox worker → websocket (listener-gated)                            |
+| `renderers/react-shadcn/src/hooks/useRealtime.ts`            | Hook + singleton `RealtimeClient`                                     |
+| `renderers/react-shadcn/src/kinds/{table,kanban,dashboard}/` | Renderer yang memakai realtime                                        |

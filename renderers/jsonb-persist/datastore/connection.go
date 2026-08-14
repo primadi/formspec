@@ -16,7 +16,7 @@ type ConnectionConfig struct {
 // ConnectionPool manages a pool of connections to a datastore backend.
 // It provides health checking and lifecycle management.
 // The actual connection implementation is driver-specific and
-// integrated with the existing renderers/jsonbpersist, cache, lock, etc. packages.
+// integrated with the existing renderers/jsonb-persist, cache, lock, etc. packages.
 type ConnectionPool struct {
 	mu        sync.RWMutex
 	config    ConnectionConfig

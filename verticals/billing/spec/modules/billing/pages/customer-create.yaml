@@ -1,5 +1,5 @@
 # Customer create page — full-page form
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Page
 metadata:
   name: customer-create-page

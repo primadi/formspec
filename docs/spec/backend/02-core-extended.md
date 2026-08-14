@@ -61,7 +61,7 @@ hidup di `kind: Workflow` dan **menempel tanpa mengubah Entity** — pola yang
 sama dengan Subscription (§3), diterapkan ke transisi state machine:
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Workflow
 metadata: { name: journal-posting-approval, module: gl }
 spec:
@@ -179,7 +179,7 @@ memicunya.
 berjalan**; handler cuma pernah melihat payload yang sudah terverifikasi:
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Webhook
 metadata: { name: midtrans-webhook, module: billing }
 spec:
@@ -482,7 +482,7 @@ dipublikasikan. Permukaan UI (`/_ui/entity/`) **tidak** terpengaruh oleh
 di-override.
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Api
 metadata: { name: public, module: billing }
 spec:

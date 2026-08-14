@@ -3,7 +3,7 @@
 # → pola "2-step + auto-save" (§1.7 spec frontend).
 # UI-nya di-override penuh: tables/visit-table.yaml, forms/visit-edit.yaml,
 # kanbans/consultation-board.yaml, prints/queue-ticket.yaml.
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Entity
 metadata:
   name: visit

@@ -9,7 +9,7 @@ import (
 
 	"github.com/primadi/formspec/internal/entity"
 	"github.com/primadi/formspec/pkg/spec"
-	db "github.com/primadi/formspec/renderers/jsonbpersist"
+	db "github.com/primadi/formspec/renderers/jsonb-persist"
 )
 
 // setupUpdateTestEntity registers a simple "billing/order" entity and
@@ -63,7 +63,7 @@ func doUpdate(t *testing.T, factory *HandlerFactory, id, ifMatch string) *httpte
 }
 
 // TestHandleUpdate_IfMatch_CorrectVersionSucceeds verifies the server now
-// actually honors the If-Match header renderers/web's apiPatch already
+// actually honors the If-Match header renderers/react-shadcn's apiPatch already
 // sends (lib/api/client.ts) — a matching version updates normally.
 func TestHandleUpdate_IfMatch_CorrectVersionSucceeds(t *testing.T) {
 	factory, id, version := setupUpdateTestEntity(t)

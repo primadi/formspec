@@ -43,9 +43,10 @@ formspec/
 │   ├── operator/               # Controller K8s — docs/architecture/06-k8s-operator.md
 │   ├── resource/, app/, artifact/, validation/, events/, tenant/, service/, ctx/  # pendukung
 │
-├── web/                        # ⚙ RENDERER — shadcn-shell resmi (React) — docs/renderers/shadcn-shell/.
+├── renderers/react-shadcn/     # ⚙ RENDERER — shadcn-shell resmi (React) — docs/renderers/shadcn-shell/.
 │                                #   Mengimplementasikan hirarki Shell/App/Page/Component
-│                                #   (docs/spec/frontend/01-03). Target lokasi: renderers/web/ — §2.
+│                                #   (docs/spec/frontend/01-03). Renderer PersistBackend di
+│                                #   renderers/jsonb-persist/ — lihat §2.
 │
 ├── sdk/                        # Client library tipis, satu per bahasa (go, php, python, node/
 │                                #   typescript, java, dotnet, ruby, rust, browser) — mengimplementasikan
@@ -75,7 +76,7 @@ Hari ini implementasi tiap seam tersebar (`web/` di root, `internal/db`+`interna
 
 ```
 renderers/
-├── web/                        # Shell resmi (shadcn-shell) — pindahan dari web/ root
+├── react-shadcn/               # Shell resmi (shadcn-shell) — React + shadcn/ui
 │                                #   (target slot shell kedua, mis. Flutter: renderers/<nama-shell>/)
 │
 └── jsonb-persist/               # PersistBackend resmi — pindahan dari internal/db + internal/datastore
@@ -96,7 +97,7 @@ Ini **rename/move**, bukan rewrite — logic yang sudah teruji di `internal/db`,
 | `pkg/spec/`                                                   | [`docs/spec/`](../spec/README.md) (semua)                                                                                                                                    | Skema kontrak sebagai struct Go                                  |
 | `internal/db/`, `internal/datastore/`                         | [`docs/spec/backend/04-persist-backend.md`](../spec/backend/04-persist-backend.md), [`docs/renderers/jsonb-persist/`](../renderers/jsonb-persist/README.md)                  | Renderer PersistBackend (target: `renderers/jsonb-persist/`, §2) |
 | `internal/api/`                                               | [`docs/spec/frontend/04-spec-resolution-api.md`](../spec/frontend/04-spec-resolution-api.md), [`docs/spec/backend/01-core-basic.md`](../spec/backend/01-core-basic.md) §6/§8 | Engine yang menyajikan kedua kontrak                             |
-| `web/`, `internal/ui/`                                        | [`docs/spec/frontend/`](../spec/frontend/README.md), [`docs/renderers/shadcn-shell/`](../renderers/shadcn-shell/README.md)                                                   | Renderer Shell resmi (target: `renderers/web/`, §2)              |
+| `renderers/react-shadcn/`, `internal/ui/`                     | [`docs/spec/frontend/`](../spec/frontend/README.md), [`docs/renderers/shadcn-shell/`](../renderers/shadcn-shell/README.md)                                                   | Renderer Shell resmi (target: `renderers/react-shadcn/`, §2)     |
 | `internal/action/`, `internal/starlark/`                      | [`docs/spec/backend/01-core-basic.md`](../spec/backend/01-core-basic.md) §5                                                                                                  | Eksekusi Action lintas 5 jenis impl                              |
 | `internal/sidecar/`, `sdk/*`                                  | [`docs/runtimes/04-formspec-sidecar.md`](../runtimes/04-formspec-sidecar.md), [`docs/spec/platform/08-project-layout.md`](../spec/platform/08-project-layout.md)             | Protokol handler lintas bahasa                                   |
 | `internal/control/`, `internal/permission/`, `internal/auth/` | [`docs/spec/platform/04-control-plane.md`](../spec/platform/04-control-plane.md)                                                                                             | Governance & keamanan                                            |

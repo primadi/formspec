@@ -39,7 +39,7 @@ import (
 
 	"github.com/primadi/formspec/internal/sidecar"
 	"github.com/primadi/formspec/pkg/spec"
-	"github.com/primadi/formspec/renderers/jsonbpersist/datastore"
+	"github.com/primadi/formspec/renderers/jsonb-persist/datastore"
 	formspec "github.com/primadi/formspec/resource"
 )
 
@@ -177,7 +177,7 @@ func runDev(args []string) {
 		ThemeDirs:            cfg.ThemeDirs,
 	}
 
-	// SPA serving priority: --web-dir > auto-detect renderers/web/dist/ > embedded FS
+	// SPA serving priority: --web-dir > auto-detect renderers/react-shadcn/dist/ > embedded FS
 	// When --dev-ui is active the backend does NOT serve the SPA directly;
 	// instead SPA requests are reverse-proxied to the Vite dev server (see §13b).
 	if cfg.DevUI {
@@ -185,7 +185,7 @@ func runDev(args []string) {
 	} else if cfg.WebDir != "" {
 		formaCfg.WebDir = cfg.WebDir
 	} else if found := findWebDist(); found != "" {
-		// Auto-detect renderers/web/dist/ — picks up npm run rebuilds immediately
+		// Auto-detect renderers/react-shadcn/dist/ — picks up npm run rebuilds immediately
 		cfg.WebDir = found
 		formaCfg.WebDir = cfg.WebDir
 		log.Printf("[formspec] SPA from folder: %s", cfg.WebDir)
@@ -451,7 +451,7 @@ func chdirIfPositionalArg(args []string) []string {
 	return args[1:]
 }
 
-// findWebDist walks up from CWD looking for renderers/web/dist/ directory.
+// findWebDist walks up from CWD looking for renderers/react-shadcn/dist/ directory.
 // Returns the absolute path if found, empty string otherwise.
 func findWebDist() string {
 	dir, err := os.Getwd()
@@ -459,7 +459,7 @@ func findWebDist() string {
 		return ""
 	}
 	for {
-		candidate := filepath.Join(dir, "renderers", "web", "dist")
+		candidate := filepath.Join(dir, "renderers", "react-shadcn", "dist")
 		if st, err := os.Stat(candidate); err == nil && st.IsDir() {
 			return candidate
 		}

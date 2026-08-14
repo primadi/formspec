@@ -28,7 +28,7 @@ menghindari kolisi merek/CLI/domain, produk di-rename total menjadi
 | Lama | Baru |
 |---|---|
 | `github.com/primadi/formspec` (go.mod + import) | `github.com/primadi/formspecspec` |
-| `formspec.dev/v1alpha1` (apiVersion) | `formspec.dev/v1alpha1` |
+| `formspec.dev/v1` (apiVersion) | `formspec.dev/v1` |
 | `formspec/v1` (VisualSpecKind) | `formspec/v1` |
 | `formspec` CLI → `cmd/formspec/` | `formspec` → `cmd/formspec/` |
 | `formspec-ctl` | `formspec-ctl` |
@@ -56,7 +56,7 @@ menghindari kolisi merek/CLI/domain, produk di-rename total menjadi
    `resource/formspec.go`→`resource/formspec.go`, semua import, fixtures.
 2. Schema: `make generate-schema` → `schemas/formspec.schema.json`; update
    `.vscode/settings.json` (`yaml.schemas`); salinan schema di contoh & testdata.
-3. apiVersion manifest: sed `formspec.dev/v1alpha1` → `formspec.dev/v1alpha1` di
+3. apiVersion manifest: sed `formspec.dev/v1` → `formspec.dev/v1` di
    semua `*.yaml|yml` (contoh, testdata, CRD, rbac, image registry).
 4. CLI & config: `formspec-app.yaml` di scaffold, help text, `.gitignore`.
 5. Frontend: `src/lib/formspec-expr/` → `src/lib/formspec-expr/` + ident; logo

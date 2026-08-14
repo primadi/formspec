@@ -27,7 +27,7 @@
 ## Contoh Manifest
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Mockup
 metadata:
   name: midtrans-mock

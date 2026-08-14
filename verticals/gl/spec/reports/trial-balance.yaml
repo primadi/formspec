@@ -1,5 +1,5 @@
 # Trial balance report
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Report
 metadata:
   name: trial-balance

@@ -1,11 +1,50 @@
 package main
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+// newTestRegistry serves the given schemas dir (cmd/formspec → ../.. before chdir)
+// as a v1 schema registry, so `formspec init` can fetch schemas without network.
+func newTestRegistry(t *testing.T, schemasDir string) *httptest.Server {
+	t.Helper()
+	root, err := os.ReadFile(filepath.Join(schemasDir, "formspec.schema.json"))
+	if err != nil {
+		t.Fatalf("read repo schemas: %v", err)
+	}
+	kindFiles, _ := filepath.Glob(filepath.Join(schemasDir, "kinds", "*.schema.json"))
+	kinds := make([]string, 0, len(kindFiles))
+	for _, f := range kindFiles {
+		kinds = append(kinds, strings.TrimSuffix(filepath.Base(f), ".schema.json"))
+	}
+	index, _ := json.Marshal(map[string]any{"version": "v1", "kinds": kinds})
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v1/formspec.schema.json", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(root)
+	})
+	mux.HandleFunc("/v1/index.json", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(index)
+	})
+	mux.HandleFunc("/v1/kinds/", func(w http.ResponseWriter, r *http.Request) {
+		name := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/v1/kinds/"), ".schema.json")
+		data, err := os.ReadFile(filepath.Join(schemasDir, "kinds", name+".schema.json"))
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write(data)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv
+}
 
 // TestRunInit_ScaffoldsProject verifies `formspec init` produces the standard
 // layout, extracts embedded AI skills into .agents/skills/, writes the JSON
@@ -19,10 +58,17 @@ func TestRunInit_ScaffoldsProject(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	repoSchemas := filepath.Join(oldWD, "..", "..", "schemas")
 	if err := os.Chdir(work); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chdir(oldWD) })
+
+	// Schemas are fetched from the registry (online by design). Point the
+	// registry at a local test server and isolate the cache.
+	srv := newTestRegistry(t, repoSchemas)
+	t.Setenv("FORMSPEC_SCHEMA_REGISTRY", srv.URL)
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 
 	runInit([]string{"--force", "testapp"})
 

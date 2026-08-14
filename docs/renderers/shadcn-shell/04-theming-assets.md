@@ -5,6 +5,7 @@
 > Draft: isi di bawah kondisi kode hari ini.
 
 ## 1. Theme
+
 Implementasi kind `Theme` ([`../../spec/frontend/05-app-kinds.md`](../../spec/frontend/05-app-kinds.md)
 §5) sudah lengkap, melebihi cakupan minimal kontraknya:
 
@@ -30,6 +31,7 @@ Implementasi kind `Theme` ([`../../spec/frontend/05-app-kinds.md`](../../spec/fr
 switching bahkan tidak disebut di rencana desain awal.
 
 ## 2. Asset Pipeline
+
 **Belum diimplementasikan sama sekali** — bukan sekadar tertinggal, tapi
 benar-benar tidak ada kode: tidak ada kontrak `mount(el, props, formspec)`,
 tidak ada mekanisme pemuatan script/asset dinamis. Satu-satunya jejak di
@@ -41,6 +43,7 @@ harus dipenuhi kalau/ketika ini dibangun ada di
 §4.
 
 ## 3. Layanan `formspec.ui`
+
 **Belum ada** objek `formspec` yang di-inject ke component manapun (karena
 component contract sendiri belum ada, §2). Toast (`sonner`) dipakai
 langsung di dalam tiap kind renderer lewat `import {toast} from "sonner"` —
@@ -52,11 +55,12 @@ konfirmasi destruktif hari ini pakai `window.confirm()` browser-native
 (lihat [`03-kind-renderers.md`](03-kind-renderers.md) §5).
 
 ## 4. Status Implementasi Hari Ini
+
 Ringkasan: Theme (§1) matang dan siap dipakai; Asset pipeline dan
 `formspec.ui` (§2–§3) adalah pekerjaan yang belum dimulai, bukan yang
 "hampir selesai" — siapa pun yang merencanakan fitur berbasis custom
 component perlu tahu ini benar-benar dari nol, termasuk keputusan desain
-seperti bagaimana asset dimuat (bundled saat build web/, atau fetch dinamis
+seperti bagaimana asset dimuat (bundled saat build renderers/react-shadcn/, atau fetch dinamis
 saat runtime dari module) yang belum diputuskan di kontrak
 ([`../../spec/frontend/07-component-kinds.md`](../../spec/frontend/07-component-kinds.md)
 tidak menspesifikasikan mekanisme pemuatan, hanya kontrak `mount()`-nya).

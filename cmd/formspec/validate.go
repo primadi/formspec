@@ -12,11 +12,13 @@
 //
 // Usage:
 //
-//	formspec validate [--spec <path>] [--schema <dir>] [--no-schema]
+//	formspec validate [--spec <path>] [--schema <dir>] [--no-schema] [--schema-refresh]
 //
-// The JSON Schema is auto-detected: a local `schemas/` dir next to the spec
-// dir (<spec>/../schemas) is preferred, then `./schemas` (cwd), then the
-// schema embedded into the binary. `--schema` overrides detection explicitly.
+// The schema version is read from each manifest's apiVersion (formspec.dev/v1)
+// and fetched from the schema registry (default https://schemas.formspec.dev),
+// then cached locally — a new spec version never requires a CLI reinstall.
+// `--schema <dir>` overrides with a local schemas/ dir (no versioning).
+// `--schema-refresh` re-fetches from the registry even if already cached.
 // Exit code 1 if any manifest fails either layer.
 //
 // The schema layer is stricter than the engine for constructs whose Go type has
@@ -31,20 +33,22 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 
-	formspecroot "github.com/primadi/formspec"
 	"github.com/primadi/formspec/internal/manifest"
+	"github.com/primadi/formspec/internal/schemaregistry"
 )
 
 func runValidate(args []string) {
 	fs := flag.NewFlagSet("validate", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	specPath := fs.String("spec", "spec", "path to the spec directory (default: spec)")
-	schemaDir := fs.String("schema", "", "path to a schemas/ dir (default: auto-detect <spec>/../schemas, then ./schemas, then embedded schema)")
+	schemaDir := fs.String("schema", "", "path to a local schemas/ dir (override; bypasses the registry)")
 	noSchema := fs.Bool("no-schema", false, "skip JSON Schema validation (engine loader only)")
+	refresh := fs.Bool("schema-refresh", false, "re-fetch schema version(s) from the registry even if cached")
 	if err := fs.Parse(args); err != nil {
 		os.Exit(2)
 	}
@@ -74,20 +78,70 @@ func runValidate(args []string) {
 		}
 	}
 
-	// ── Layer 2: JSON Schema validation per kind ──
-	var ksc *kindSchemaCompiler
+	// ── Layer 2: JSON Schema validation, version-routed ──
+	//   * --schema <dir>: one local compiler for every manifest (no versioning).
+	//   * default: the schema version comes from each manifest's apiVersion;
+	//     fetched from the registry and cached locally when missing.
+	var compilers map[string]*kindSchemaCompiler // key: version, or "*" for --schema override
+	versionOf := map[string]string{}             // manifest.Source -> version key
+	versionErrs := map[string]string{}           // manifest.Source -> apiVersion error
 	if !*noSchema {
-		used := resolveSchemaDir(*specPath, *schemaDir)
-		if used != "" {
-			fmt.Printf("schema: %s (local)\n", used)
+		reg := schemaregistry.New(schemaRegistryBaseURL())
+		compilers = map[string]*kindSchemaCompiler{}
+		kindsByVer := map[string]map[string]bool{}
+
+		if *schemaDir != "" {
+			c, err := newKindSchemaCompiler(*schemaDir)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "formspec validate: schema: %v\n", err)
+				os.Exit(2)
+			}
+			compilers["*"] = c
+			for _, m := range res.Manifests {
+				versionOf[m.Source] = "*"
+			}
+			fmt.Printf("schema: %s (local override)\n", *schemaDir)
 		} else {
-			fmt.Printf("schema: embedded\n")
-		}
-		var err error
-		ksc, err = newKindSchemaCompiler(used)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "formspec validate: schema: %v\n", err)
-			os.Exit(2)
+			for _, m := range res.Manifests {
+				v, err := schemaregistry.ParseVersion(m.APIVersion)
+				if err != nil {
+					versionErrs[m.Source] = err.Error()
+					continue
+				}
+				versionOf[m.Source] = v
+				if kindsByVer[v] == nil {
+					kindsByVer[v] = map[string]bool{}
+				}
+				kindsByVer[v][m.Kind] = true
+			}
+			versions := make([]string, 0, len(kindsByVer))
+			for v := range kindsByVer {
+				versions = append(versions, v)
+			}
+			sort.Strings(versions)
+			for _, v := range versions {
+				kinds := make([]string, 0, len(kindsByVer[v]))
+				for k := range kindsByVer[v] {
+					kinds = append(kinds, k)
+				}
+				sort.Strings(kinds)
+				if err := reg.Ensure(v, kinds, *refresh); err != nil {
+					fmt.Fprintf(os.Stderr, "formspec validate: schema %s: %v\n", v, err)
+					os.Exit(2)
+				}
+				dir, err := reg.VersionDir(v)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "formspec validate: schema %s: %v\n", v, err)
+					os.Exit(2)
+				}
+				c, err := newKindSchemaCompiler(dir)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "formspec validate: schema %s: %v\n", v, err)
+					os.Exit(2)
+				}
+				compilers[v] = c
+				fmt.Printf("schema: %s (registry %s, cache %s)\n", v, reg.BaseURL, dir)
+			}
 		}
 	}
 
@@ -98,9 +152,13 @@ func runValidate(args []string) {
 		if errMsg, ok := engineRejects[m.Source]; ok {
 			msgs = append(msgs, "engine: "+errMsg)
 		}
-		if ksc != nil {
-			if sErr := validateSchema(ksc, m); sErr != "" {
-				msgs = append(msgs, "schema: "+sErr)
+		if compilers != nil {
+			if verErr, ok := versionErrs[m.Source]; ok {
+				msgs = append(msgs, "schema: "+verErr)
+			} else if c, ok := compilers[versionOf[m.Source]]; ok {
+				if sErr := validateSchema(c, m); sErr != "" {
+					msgs = append(msgs, "schema: "+sErr)
+				}
 			}
 		}
 		if len(msgs) > 0 {
@@ -120,27 +178,6 @@ func runValidate(args []string) {
 	}
 }
 
-// resolveSchemaDir decides which schema directory to use:
-//  1. an explicit --schema dir (used as-is; broken dir → error downstream)
-//  2. a `schemas/` folder next to the spec dir (<spec>/../schemas)
-//  3. a `./schemas` folder in the current working directory
-//  4. "" → fall back to the schema embedded into the binary
-func resolveSchemaDir(specPath, explicit string) string {
-	if explicit != "" {
-		return explicit
-	}
-	candidates := []string{
-		filepath.Join(filepath.Dir(specPath), "schemas"),
-		filepath.Join(".", "schemas"),
-	}
-	for _, c := range candidates {
-		if info, err := os.Stat(c); err == nil && info.IsDir() {
-			return c
-		}
-	}
-	return ""
-}
-
 // kindSchemaCompiler compiles and caches one document schema per kind.
 // Each kind schema is the merge of schemas/kinds/<Kind>.schema.json (the spec
 // body) with the shared $defs from formspec.schema.json, wrapped in the universal
@@ -149,20 +186,14 @@ func resolveSchemaDir(specPath, explicit string) string {
 // would otherwise report every kind branch at once).
 type kindSchemaCompiler struct {
 	rootDefs map[string]any
-	kindDir  string // "" = embedded
+	kindDir  string
 	cache    map[string]*jsonschema.Schema
 	loaded   map[string][]byte
 }
 
 func newKindSchemaCompiler(schemaDir string) (*kindSchemaCompiler, error) {
 	c := &kindSchemaCompiler{kindDir: schemaDir, cache: map[string]*jsonschema.Schema{}, loaded: map[string][]byte{}}
-	var rootData []byte
-	var err error
-	if schemaDir != "" {
-		rootData, err = os.ReadFile(schemaDir + "/formspec.schema.json")
-	} else {
-		rootData, err = formspecroot.SchemasFS.ReadFile("schemas/formspec.schema.json")
-	}
+	rootData, err := os.ReadFile(filepath.Join(schemaDir, "formspec.schema.json"))
 	if err != nil {
 		return nil, fmt.Errorf("read formspec.schema.json: %w", err)
 	}
@@ -233,13 +264,7 @@ func (c *kindSchemaCompiler) readKindSchema(kind string) ([]byte, error) {
 	if data, ok := c.loaded[kind]; ok {
 		return data, nil
 	}
-	var data []byte
-	var err error
-	if c.kindDir != "" {
-		data, err = os.ReadFile(c.kindDir + "/kinds/" + kind + ".schema.json")
-	} else {
-		data, err = formspecroot.SchemasFS.ReadFile("schemas/kinds/" + kind + ".schema.json")
-	}
+	data, err := os.ReadFile(filepath.Join(c.kindDir, "kinds", kind+".schema.json"))
 	if err != nil {
 		return nil, fmt.Errorf("read %s.schema.json: %w", kind, err)
 	}

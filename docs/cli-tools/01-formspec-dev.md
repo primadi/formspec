@@ -14,9 +14,9 @@
 
 FormSpec mengenal **dua persona** developer:
 
-| Persona | Kebutuhan | Command |
-|---|---|---|
-| **A** (80%) | UI jadi, tidak edit frontend | `formspec dev` |
+| Persona     | Kebutuhan                    | Command                 |
+| ----------- | ---------------------------- | ----------------------- |
+| **A** (80%) | UI jadi, tidak edit frontend | `formspec dev`          |
 | **B** (20%) | Edit renderer/komponen React | `formspec dev --dev-ui` |
 
 Persona A cukup satu perintah — SPA sudah embedded di binary (`//go:embed`).
@@ -44,7 +44,7 @@ formspec dev --spec ./my-app/spec --dev-ui
 
 - Backend API di `:8080`
 - Vite HMR di `:5173`
-- Edit `web/src/` → perubahan langsung kelihatan
+- Edit `renderers/react-shadcn/src/` → perubahan langsung kelihatan
 - `--dev-ui` implied `--dev` + `--force`
 
 ### Dengan config file
@@ -67,19 +67,19 @@ formspec dev
 
 ## 3. Flag Reference
 
-| Flag | Default | Deskripsi |
-|---|---|---|
-| `--spec` | `./spec` | Path direktori YAML manifests |
-| `--dsn` | `sqlite:.formspec/data.db` | Database DSN |
-| `--addr` | `:8080` | REST API listen address |
-| `--listen` | `none` | Mode ctx listener (lihat §5) |
-| `--app-endpoint` | `none` | Mode app endpoint (lihat §5) |
-| `--runtime` | auto-detect | Runtime app process |
-| `--dev` | `false` | Dev mode (auth bypass) |
-| `--dev-ui` | `false` | Dev mode + Vite HMR (implied `--dev`) |
-| `--state-dir` | `.formspec` | State directory (auto-create) |
-| `--web-dir` | auto-detect | Override SPA directory |
-| `--workspace-id` | `default` | Workspace/tenant ID |
+| Flag             | Default                    | Deskripsi                             |
+| ---------------- | -------------------------- | ------------------------------------- |
+| `--spec`         | `./spec`                   | Path direktori YAML manifests         |
+| `--dsn`          | `sqlite:.formspec/data.db` | Database DSN                          |
+| `--addr`         | `:8080`                    | REST API listen address               |
+| `--listen`       | `none`                     | Mode ctx listener (lihat §5)          |
+| `--app-endpoint` | `none`                     | Mode app endpoint (lihat §5)          |
+| `--runtime`      | auto-detect                | Runtime app process                   |
+| `--dev`          | `false`                    | Dev mode (auth bypass)                |
+| `--dev-ui`       | `false`                    | Dev mode + Vite HMR (implied `--dev`) |
+| `--state-dir`    | `.formspec`                | State directory (auto-create)         |
+| `--web-dir`      | auto-detect                | Override SPA directory                |
+| `--workspace-id` | `default`                  | Workspace/tenant ID                   |
 
 ---
 
@@ -87,14 +87,14 @@ formspec dev
 
 `formspec dev` mendeteksi runtime dari project files di CWD:
 
-| File | Runtime | Keterangan |
-|---|---|---|
-| `go.mod` | `local` | Go — gunakan `go run .` untuk server sendiri |
-| `composer.json` | `php` | Sidecar spawn `app.php` |
-| `package.json` | `node` | Sidecar spawn `app.js` |
-| `pyproject.toml` / `requirements.txt` | `python` | Sidecar spawn `app.py` |
-| `*.csproj` / `*.sln` | `local` | .NET SDK belum tersedia |
-| (none) | `local` | API-only, tanpa app process |
+| File                                  | Runtime  | Keterangan                                   |
+| ------------------------------------- | -------- | -------------------------------------------- |
+| `go.mod`                              | `local`  | Go — gunakan `go run .` untuk server sendiri |
+| `composer.json`                       | `php`    | Sidecar spawn `app.php`                      |
+| `package.json`                        | `node`   | Sidecar spawn `app.js`                       |
+| `pyproject.toml` / `requirements.txt` | `python` | Sidecar spawn `app.py`                       |
+| `*.csproj` / `*.sln`                  | `local`  | .NET SDK belum tersedia                      |
+| (none)                                | `local`  | API-only, tanpa app process                  |
 
 Override dengan `--runtime` eksplisit:
 
@@ -109,11 +109,11 @@ formspec dev --runtime local  # paksa single-process
 
 `--listen` dan `--app-endpoint` memiliki 3 mode:
 
-| Mode | Arti | Kapan Digunakan |
-|---|---|---|
-| `none` | **Default.** Tidak ada ctx listener atau app endpoint | Single process, tanpa app process |
-| `local_http` | TCP localhost (`:9090` / `:9091`) | Dev dengan app process (PHP/Python/Node) |
-| `unix_socket` | Unix socket (`/tmp/formspec/...`) | Production di K8s pod |
+| Mode          | Arti                                                  | Kapan Digunakan                          |
+| ------------- | ----------------------------------------------------- | ---------------------------------------- |
+| `none`        | **Default.** Tidak ada ctx listener atau app endpoint | Single process, tanpa app process        |
+| `local_http`  | TCP localhost (`:9090` / `:9091`)                     | Dev dengan app process (PHP/Python/Node) |
+| `unix_socket` | Unix socket (`/tmp/formspec/...`)                     | Production di K8s pod                    |
 
 Backward compatibility: `--listen "http://127.0.0.1:9090"` auto-detect sebagai
 `local_http`. `--listen "unix:///tmp/formspec/sidecar.sock"` auto-detect
@@ -133,7 +133,7 @@ formspec dev --listen local_http --app-endpoint local_http --runtime php
 
 1. **`--web-dir` eksplisit** — serve dari folder yang ditentukan
 2. **`//go:embed`** — SPA embedded di binary (release build)
-3. **Auto-detect** — cari `web/dist/index.html`, `./dist/index.html`, `./index.html`
+3. **Auto-detect** — cari `renderers/react-shadcn/dist/index.html`, `./dist/index.html`, `./index.html`
 4. **Tidak ditemukan** — API-only, warning "SPA not found"
 
 ---
@@ -149,12 +149,12 @@ Format:
 spec: ./spec
 dsn: sqlite:.formspec/data.db
 addr: :8080
-listen: none            # none | local_http | unix_socket
-app-endpoint: none       # none | local_http | unix_socket
-listen-url: ""           # custom URL, override listen
+listen: none # none | local_http | unix_socket
+app-endpoint: none # none | local_http | unix_socket
+listen-url: "" # custom URL, override listen
 app-endpoint-url: ""
 workspace-id: default
-runtime: auto            # auto | local | php | python | node
+runtime: auto # auto | local | php | python | node
 state-dir: .formspec
 dev: false
 force: false

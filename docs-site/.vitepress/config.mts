@@ -7,7 +7,8 @@ import { fileURLToPath } from "node:url"
 // Config file berada di docs-site/.vitepress/, jadi path dihitung relatif dari situ.
 const docsDir = fileURLToPath(new URL("../docs", import.meta.url))
 const outDir = fileURLToPath(new URL("../dist", import.meta.url))
-const publicDir = fileURLToPath(new URL("../public", import.meta.url))
+// Catatan: public dir VitePress default = <root>/public (docs-site/public),
+// tidak perlu (dan tidak bisa) di-set lewat top-level config.
 
 // Sidebar item helper
 const item = (text: string, link: string) => ({ text, link })
@@ -232,7 +233,6 @@ export default defineConfig({
   cleanUrls: true,
   srcDir: docsDir,
   outDir,
-  publicDir,
   // Docs source memakai README.md sebagai index tiap folder. VitePress tidak
   // otomatis memetakan README.md → index folder, jadi rewrite eksplisit:
   //   README.md            → index.md          (home /)

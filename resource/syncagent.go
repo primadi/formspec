@@ -12,7 +12,7 @@ import (
 	"github.com/primadi/formspec/internal/entity"
 	"github.com/primadi/formspec/internal/manifest"
 	"github.com/primadi/formspec/internal/resource"
-	db "github.com/primadi/formspec/renderers/jsonbpersist"
+	db "github.com/primadi/formspec/renderers/jsonb-persist"
 )
 
 // SyncAgentConfig configures a SyncAgent — the client side of the FormSpec

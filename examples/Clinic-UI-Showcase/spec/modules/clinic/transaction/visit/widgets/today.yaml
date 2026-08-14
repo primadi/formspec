@@ -1,7 +1,7 @@
 # SHOWCASE kind: Widget tipe metric — jumlah kunjungan hari ini.
 # Baca entity transaksi `visit` langsung (count), bukan summary entity —
 # summary projection belum diimplementasikan (lihat docs/plan/fix-clinic-dashboard-summary.md).
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Widget
 metadata:
   name: visits-today

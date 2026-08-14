@@ -2,7 +2,7 @@
 
 **Updated:** 2026-07-20 · Status: Outline
 
-> Outline: heading menetapkan cakupan; isi ditulis bertahap dari kode `renderers/jsonbpersist/`.
+> Outline: heading menetapkan cakupan; isi ditulis bertahap dari kode `renderers/jsonb-persist/`.
 
 ## 1. Hybrid JSONB
 Kolom inti relasional + payload JSONB. Tabel per Document mengikuti struktur
@@ -28,7 +28,7 @@ CREATE TABLE {schema}.{module}_{plural} (
 ```
 
 **Kontrak §2 terpenuhi:** PK adalah UUID v7 di kedua driver, digenerate di
-app layer (`NewUUIDv7` di `renderers/jsonbpersist/tx.go`) dan disertakan
+app layer (`NewUUIDv7` di `renderers/jsonb-persist/tx.go`) dan disertakan
 eksplisit pada tiap `INSERT` — bukan `DEFAULT` khusus driver. Sebelumnya
 SQLite memakai `integer PRIMARY KEY AUTOINCREMENT`; itu sudah ditutup, tidak
 lagi jadi penyimpangan per-backend.
@@ -49,7 +49,7 @@ Pemetaan tiap kemampuan wajib
 
 | Kemampuan kontrak | Mekanisme jsonb-persist |
 |---|---|
-| Structural diff apply | `renderers/jsonbpersist/migrate.go` — `PlanMigrations`/`ApplyMigrations` menerjemahkan diff Document ke DDL Postgres/SQLite |
+| Structural diff apply | `renderers/jsonb-persist/migrate.go` — `PlanMigrations`/`ApplyMigrations` menerjemahkan diff Document ke DDL Postgres/SQLite |
 | Query resolution | Operator filter kontrak diterjemahkan ke SQL/JSONB path — lihat [`04-query-and-keys.md`](04-query-and-keys.md) §1 |
 | Tree query resolution | Operator `descendant_of`/`ancestor_of`/`child_of`/`root` diterjemahkan ke prefix-match materialized path, **tanpa recursive CTE** — [`02-schema-strategies.md`](02-schema-strategies.md) §4, [`04-query-and-keys.md`](04-query-and-keys.md) §6 |
 | `ctx.next_key` | Tabel counter `formspec_natural_key_counters`, alokasi di bawah lock — [`04-query-and-keys.md`](04-query-and-keys.md) §2 |
@@ -58,7 +58,7 @@ Pemetaan tiap kemampuan wajib
 
 ## 3. Transaksi, Outbox, Audit
 `DB.BeginTx`/`Tx` sekarang benar-benar dipakai lewat `InTx` (helper di
-`renderers/jsonbpersist/tx.go`): `EntityStore.Insert`/`Update`/`SoftDelete`
+`renderers/jsonb-persist/tx.go`): `EntityStore.Insert`/`Update`/`SoftDelete`
 membungkus seluruh isi mutasinya — UPSERT counter natural key, `INSERT`/
 `UPDATE` baris utama, sinkronisasi child table, audit log, dan (untuk
 Insert/Update) enqueue outbox — dalam satu transaksi, commit semua atau
@@ -81,7 +81,7 @@ rollback semua. Ini menutup dua gap yang sebelumnya dicatat di sini:
    (push websocket langsung, tulis event log non-durable).
 
 **Custom action (Starlark/native/sidecar) kini juga atomik** lewat
-`TxScope` (`renderers/jsonbpersist/txscope.go`). `HandleCustomAction`
+`TxScope` (`renderers/jsonb-persist/txscope.go`). `HandleCustomAction`
 membuka satu `TxScope` per eksekusi action, membungkusnya ke `ctx`
 (`db.WithTxScope`); setiap `EntityStore.Insert`/`Update`/`SoftDelete`/
 `UpdateFields`/`IncrementField`/`DecrementField` yang dipanggil dalam satu
@@ -114,7 +114,7 @@ process sidecar tetap commit independen (bukan regresi, gap follow-up
 terpisah).
 
 ## 4. Status Implementasi Hari Ini
-- `renderers/jsonbpersist.DB`/`Tx` belum jadi seam PersistBackend yang
+- `renderers/jsonb-persist.DB`/`Tx` belum jadi seam PersistBackend yang
   bersih — bocor semantik SQL (`ExecContext`, `QueryContext`,
   `Driver() *sql.DB`) ke pemanggil, dan migration engine menghasilkan
   `DDLResult` (teks SQL) sebagai representasi diff-nya, bukan diff

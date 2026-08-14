@@ -1,5 +1,5 @@
 # Customer view form — read-only display (used in detail page)
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Form
 metadata:
   name: customer-view

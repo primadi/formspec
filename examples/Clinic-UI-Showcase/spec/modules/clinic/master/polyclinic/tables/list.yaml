@@ -1,7 +1,7 @@
 # SHOWCASE: authored Table minimal untuk master Poliklinik.
 # Columns sepenuhnya derived dari entity spec — tidak perlu deklarasi kolom
 # eksplisit. Digunakan oleh kind: Page tabs Data Master.
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Table
 metadata:
   name: polyclinic-table

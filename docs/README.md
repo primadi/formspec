@@ -43,7 +43,7 @@ deskriptif) — ditambah section pendukung.
 `architecture/01-architecture-overview` → `runtimes/` → `cli-tools/04-formspec-ctl`.
 
 **Framework contributor** (mengubah kode FormSpec sendiri — `cmd/`, `internal/`,
-`pkg/`, `web/`, `sdk/`): `architecture/08-repo-structure` → dokumen `spec/`
+`pkg/`, `renderers/react-shadcn/`, `sdk/`): `architecture/08-repo-structure` → dokumen `spec/`
 atau `renderers/` yang relevan dengan area yang disentuh.
 
 ## Konvensi

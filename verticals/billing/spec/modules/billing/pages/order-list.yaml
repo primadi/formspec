@@ -1,5 +1,5 @@
 # Order list page — table view with filters for status, date range
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Page
 metadata:
   name: order-list

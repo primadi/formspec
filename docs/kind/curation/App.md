@@ -31,7 +31,7 @@ katalog, App.menu = daftar belanja dari katalog.**
 ## Contoh Manifest
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: App
 metadata:
   name: klinik-internal

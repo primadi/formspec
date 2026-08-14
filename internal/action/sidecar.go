@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/primadi/formspec/renderers/jsonbpersist"
+	"github.com/primadi/formspec/renderers/jsonb-persist"
 	"github.com/primadi/formspec/pkg/spec"
 )
 
@@ -157,7 +157,7 @@ func (e *SidecarExecutor) Execute(ctx context.Context, action spec.Action, param
 	// process can echo it back on its /ctx/entity/{op} callbacks — the Go
 	// host reconstructs the same scope server-side (internal/sidecar/ctx.go)
 	// even though it's a separate HTTP round-trip. See
-	// renderers/jsonbpersist/txscope.go's scopeRegistry doc comment.
+	// renderers/jsonb-persist/txscope.go's scopeRegistry doc comment.
 	if scopeID := db.ScopeIDFromContext(ctx); scopeID != "" {
 		req.Header.Set("X-FormSpec-Scope-Id", scopeID)
 	}

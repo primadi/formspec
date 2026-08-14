@@ -18,7 +18,7 @@ import (
 	"github.com/primadi/formspec/internal/manifest"
 	"github.com/primadi/formspec/internal/permission"
 	"github.com/primadi/formspec/pkg/spec"
-	db "github.com/primadi/formspec/renderers/jsonbpersist"
+	db "github.com/primadi/formspec/renderers/jsonb-persist"
 )
 
 // Registry is the central entity registry for the FormSpec runtime.

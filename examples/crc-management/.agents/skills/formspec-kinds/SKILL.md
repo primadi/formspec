@@ -16,7 +16,7 @@ This catalog lists every built-in kind, grouped by concern.
 All kinds share the same top-level structure:
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Entity               # PascalCase
 metadata:
   name: invoice            # kebab-case, unique per (kind, module)
@@ -72,7 +72,7 @@ The most important kind. Represents persistent business data with:
 - **Update after submit is always denied** — Entity is immutable after submit. Use named custom actions for post-submit changes.
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Entity
 metadata:
   name: invoice
@@ -184,7 +184,7 @@ legacy alias. `guard` is `{ expression, message }`, not a list of roles.
 Stateless, pure computation. No `characteristic`, `doc_status`, or lifecycle guards.
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Service
 metadata:
   name: tax-calculator
@@ -214,7 +214,7 @@ multiple Apps in the same workspace.
 `spec.version`, `spec.vendor`, and `spec.root_url` are **required**.
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: App
 metadata:
   name: klinik-internal
@@ -243,7 +243,7 @@ closed set: Entity, Service, and VisualSpecKind instances.
 `{module, version?}`), NOT `depends_on`.
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Module
 metadata:
   name: billing
@@ -265,7 +265,7 @@ Module configuration, read via `ctx.config` in scripts.
 **Not to be confused** with `formspec-app.yaml` (which is CLI dev/serve config).
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Config
 metadata:
   name: billing-config
@@ -283,7 +283,7 @@ don't cover. The framework computes structural diffs automatically — use
 Migration only when you need something beyond what fields express.
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Migration
 metadata:
   name: add-invoice-index
@@ -298,7 +298,7 @@ spec:
 React to events from another module's resources.
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Subscription
 metadata:
   name: on-invoice-submitted
@@ -324,7 +324,7 @@ Workflow only intercepts a single `from → to` transition and adds approval
 steps. Never declare `states:`/`transitions:` inside a Workflow manifest.
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Workflow
 metadata:
   name: journal-posting-approval
@@ -482,7 +482,7 @@ Extends the kind system. Used by official modules (e.g., `Seed`, `Schedule`,
 `MailTemplate`) or third-party modules with namespaced kinds.
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: KindDefinition
 metadata:
   name: Seed

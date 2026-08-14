@@ -24,7 +24,7 @@
 ## Contoh Manifest
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Timeline
 metadata:
   name: patient-medical-history

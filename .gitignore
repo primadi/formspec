@@ -40,8 +40,6 @@ Thumbs.db
 
 # Node (frontend)
 node_modules/
-web/dist/
-web/build/
 sdk/typescript/dist/
 sdk/browser/dist/
 
@@ -54,6 +52,3 @@ docs-site/node_modules/
 docs-site/dist/
 # Symlink build-time docs-site/docs -> ../docs (dibuat saat setup, lihat docs-site/README.md)
 docs-site/docs
-
-# Schema publish staging (dihasilkan scripts/publish-schemas.sh)
-schemas/dist/

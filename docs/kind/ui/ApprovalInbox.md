@@ -24,7 +24,7 @@
 ## Contoh Manifest
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: ApprovalInbox
 metadata: { name: my-approvals, module: core }
 spec:

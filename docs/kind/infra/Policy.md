@@ -27,7 +27,7 @@
 ## Contoh Manifest
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Policy
 metadata:
   name: data-residency

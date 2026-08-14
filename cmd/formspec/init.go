@@ -26,6 +26,7 @@ import (
 	"strings"
 
 	formspec "github.com/primadi/formspec"
+	"github.com/primadi/formspec/internal/schemaregistry"
 )
 
 // bt is a placeholder for backtick (`) in raw string literals.
@@ -127,13 +128,14 @@ func runInit(args []string) {
 
 	// formspec-app.yaml
 	writeFile("formspec-app.yaml", fmt.Sprintf(`# ── FormSpec Dev Config ──
-# This file configures {BT}formspec dev{BT} and {BT}formspec serve{BT}.
-# It is NOT a kind: Config manifest — it is CLI tooling config only.
+# This file configures {BT}formspec dev{BT}, {BT}formspec serve{BT}, and the
+# schema registry. It is NOT a kind: Config manifest — it is CLI tooling config only.
 #
 # See docs/spec/platform/08-project-layout.md for the full reference.
 
 spec: spec
 dsn: sqlite:.formspec/%s.db
+# schema-registry: https://schemas.formspec.dev   # override dengan FORMSPEC_SCHEMA_REGISTRY
 # runtime: node          # uncomment if you have an app/ sidecar
 # app-dir: app
 # app-entrypoint: src/app.ts
@@ -177,11 +179,12 @@ Thumbs.db
 		os.Exit(1)
 	}
 
-	// Write embedded JSON Schema files to schemas/
-	fmt.Fprintf(os.Stderr, "Extracting JSON Schema...\n")
-	if err := extractSchemas(targetDir); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: cannot extract schemas: %v\n", err)
-		os.Exit(1)
+	// Fetch JSON Schema files from the registry into schemas/ (editor autocomplete).
+	fmt.Fprintf(os.Stderr, "Fetching JSON Schema (registry)...\n")
+	if err := fetchSchemas(targetDir); err != nil {
+		fmt.Fprintf(os.Stderr, "  ⚠️  cannot fetch schemas: %v\n", err)
+		fmt.Fprintf(os.Stderr, "     Project tetap ter-scaffold — jalankan ulang saat online atau\n")
+		fmt.Fprintf(os.Stderr, "     gunakan \"formspec schema fetch v1\" untuk autocomplete editor (schemas/ dilewati).\n")
 	}
 
 	// Register schemas for the YAML editor (.vscode/settings.json).
@@ -403,41 +406,52 @@ func extractSkills(targetDir string) error {
 	})
 }
 
-// extractSchemas reads the JSON Schema files embedded in the binary and
-// writes them to schemas/ in the target project, so the YAML editor can
-// validate FormSpec manifests (see .vscode/settings.json -> yaml.schemas).
-func extractSchemas(targetDir string) error {
-	return fs.WalkDir(formspec.SchemasFS, ".", func(path string, d fs.DirEntry, err error) error {
+// fetchSchemas fetches the v1 schema set from the registry into the target
+// project's schemas/ dir, so the YAML editor gets autocomplete + validation
+// (see .vscode/settings.json -> yaml.schemas). The registry client first caches
+// the schemas locally (os.UserCacheDir()/formspec/schemas) so later runs — and
+// `formspec validate` — work without network.
+func fetchSchemas(targetDir string) error {
+	reg := schemaregistry.New(schemaRegistryBaseURL())
+	if err := reg.EnsureFull("v1", false); err != nil {
+		return err
+	}
+	srcDir, err := reg.VersionDir("v1")
+	if err != nil {
+		return err
+	}
+	return copySchemas(srcDir, filepath.Join(targetDir, "schemas"))
+}
+
+// copySchemas copies formspec.schema.json + kinds/*.schema.json from srcDir
+// into destDir, preserving the layout expected by .vscode/settings.json.
+func copySchemas(srcDir, destDir string) error {
+	files := []string{"formspec.schema.json"}
+	kindEntries, err := os.ReadDir(filepath.Join(srcDir, "kinds"))
+	if err != nil {
+		return fmt.Errorf("read cached kinds: %w", err)
+	}
+	for _, e := range kindEntries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".schema.json") {
+			files = append(files, "kinds/"+e.Name())
+		}
+	}
+	for _, rel := range files {
+		src := filepath.Join(srcDir, rel)
+		dst := filepath.Join(destDir, rel)
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			return fmt.Errorf("mkdir %s: %w", filepath.Dir(dst), err)
+		}
+		data, err := os.ReadFile(src)
 		if err != nil {
-			return err
+			return fmt.Errorf("read %s: %w", rel, err)
 		}
-		if d.IsDir() {
-			return nil
+		if err := os.WriteFile(dst, data, 0o644); err != nil {
+			return fmt.Errorf("write %s: %w", rel, err)
 		}
-
-		// path is like "schemas/formspec.schema.json" or "schemas/kinds/Entity.schema.json"
-		relPath := strings.TrimPrefix(path, "schemas/")
-		if relPath == path {
-			return nil // not a schema file
-		}
-
-		destPath := filepath.Join(targetDir, "schemas", relPath)
-		if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
-			return fmt.Errorf("mkdir %s: %w", filepath.Dir(destPath), err)
-		}
-
-		data, err := fs.ReadFile(formspec.SchemasFS, path)
-		if err != nil {
-			return fmt.Errorf("read embedded %s: %w", path, err)
-		}
-
-		if err := os.WriteFile(destPath, data, 0644); err != nil {
-			return fmt.Errorf("write %s: %w", destPath, err)
-		}
-
-		fmt.Fprintf(os.Stderr, "  ✓ schemas/%s\n", relPath)
-		return nil
-	})
+		fmt.Fprintf(os.Stderr, "  ✓ schemas/%s\n", rel)
+	}
+	return nil
 }
 
 // printTree prints a directory tree for display after scaffolding.

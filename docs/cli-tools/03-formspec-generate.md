@@ -13,10 +13,10 @@ The normative API delivery contract this client generates against (exposure mode
 
 FormSpec's browser client is split in two:
 
-| Layer                            | What it is                                                                                | Where it lives                                                        | Hand-edited?                                                           |
-| -------------------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| **Runtime** (`@formspec/client`) | Auth, HTTP transport, pagination, error mapping — the plumbing every entity's calls share | `sdk/browser` (npm package)                                           | No — a stable, hand-written library you install                        |
-| **Generated types**              | One TypeScript interface + one typed method group per exposed entity                      | Wherever `--out` points (e.g. `web/src/generated/formspec-client.ts`) | **Never** — regenerate after every manifest change; the header says so |
+| Layer                            | What it is                                                                                | Where it lives                                                                           | Hand-edited?                                                           |
+| -------------------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| **Runtime** (`@formspec/client`) | Auth, HTTP transport, pagination, error mapping — the plumbing every entity's calls share | `sdk/browser` (npm package)                                                              | No — a stable, hand-written library you install                        |
+| **Generated types**              | One TypeScript interface + one typed method group per exposed entity                      | Wherever `--out` points (e.g. `renderers/react-shadcn/src/generated/formspec-client.ts`) | **Never** — regenerate after every manifest change; the header says so |
 
 You always need both: the generated file `import`s `@formspec/client` and calls its generic methods with your entity's real types filled in.
 
@@ -140,15 +140,15 @@ try {
 
 ## 5. Building a Page by Hand — Walkthrough (React + shadcn)
 
-This is the pattern for `web/` (React + Vite + shadcn/Tailwind, see `web/package.json`) today — there is no renderer yet, so _every_ page is "manual" in the sense the eventual renderer's `asset` escape-hatch component contract means: an ES module with a `mount(el, props, formspec)` entry point, framework-agnostic. This will keep working once/if a renderer exists, since it's the same underlying client.
+This is the pattern for `renderers/react-shadcn/` (React + Vite + shadcn/Tailwind, see `renderers/react-shadcn/package.json`) today — there is no renderer yet, so _every_ page is "manual" in the sense the eventual renderer's `asset` escape-hatch component contract means: an ES module with a `mount(el, props, formspec)` entry point, framework-agnostic. This will keep working once/if a renderer exists, since it's the same underlying client.
 
 **1. Generate, once per manifest change:**
 
 ```bash
-formspec generate --spec ./spec --out web/src/generated/formspec-client.ts
+formspec generate --spec ./spec --out renderers/react-shadcn/src/generated/formspec-client.ts
 ```
 
-**2. Wire the client once** (e.g. `web/src/lib/formspec.ts`):
+**2. Wire the client once** (e.g. `renderers/react-shadcn/src/lib/formspec.ts`):
 
 ```ts
 import { FormaClient } from "@formspec/client"
@@ -164,7 +164,7 @@ export const formaClient = new FormaClient({
 export const api = createApi(formaClient)
 ```
 
-**3. A list page** — no data-fetching library required (though `@tanstack/react-query` — not currently a `web/` dependency — is a natural fit if you want caching/revalidation; the client returns plain Promises either way):
+**3. A list page** — no data-fetching library required (though `@tanstack/react-query` — not currently a `renderers/react-shadcn/` dependency — is a natural fit if you want caching/revalidation; the client returns plain Promises either way):
 
 ```tsx
 import { useEffect, useState } from "react"
@@ -202,7 +202,7 @@ export function InvoiceListPage() {
 }
 ```
 
-**4. A create form** (with `react-hook-form` + `zod`, both already in `web/package.json`):
+**4. A create form** (with `react-hook-form` + `zod`, both already in `renderers/react-shadcn/package.json`):
 
 ```tsx
 import { useForm } from "react-hook-form"

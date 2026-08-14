@@ -2,11 +2,11 @@
 
 FormSpec berjalan dalam satu proses engine (`formspec dev`) + frontend (SPA React). App business logic dalam bahasa apapun (Go, PHP, Python, Ruby, Java, .NET, TypeScript, Rust) berjalan sebagai child process.
 
-| Opsi | Cara | Terminal | HMR | Cocok untuk |
-|---|---|---|---|---|
-| **A — `--dev-ui`** | `formspec dev` spawn Vite otomatis | **1** | ✅ | Development paling praktis |
-| **B — Manual** | `formspec dev` + `npm run dev` | 2 | ✅ | Development |
-| **C — Static** | `formspec dev` + `--web-dir` | 1 | ❌ | Demo / produksi |
+| Opsi               | Cara                               | Terminal | HMR | Cocok untuk                |
+| ------------------ | ---------------------------------- | -------- | --- | -------------------------- |
+| **A — `--dev-ui`** | `formspec dev` spawn Vite otomatis | **1**    | ✅  | Development paling praktis |
+| **B — Manual**     | `formspec dev` + `npm run dev`     | 2        | ✅  | Development                |
+| **C — Static**     | `formspec dev` + `--web-dir`       | 1        | ❌  | Demo / produksi            |
 
 ## Opsi A: Satu Terminal — `--dev-ui`
 
@@ -19,16 +19,18 @@ go run ./cmd/formspec/ dev \
 ```
 
 `formspec dev` akan:
+
 1. Kill engine sebelumnya (kalau ada) berkat `--force`
 2. Load engine + REST API di `:8080`
 3. Spawn `npm run dev` sebagai child process — Vite HMR siap di `:5173`
 4. Saat `Ctrl+C`, Vite ikut dimatikan
 
-Buka **http://localhost:5173/default/_admin**.
+Buka **http://localhost:5173/default/\_admin**.
 
 ## Opsi B: Dua Terminal
 
 **Terminal 1 — Engine:**
+
 ```bash
 go run ./cmd/formspec/ dev \
   --spec examples/Clinic-UI-Showcase/spec \
@@ -38,42 +40,43 @@ go run ./cmd/formspec/ dev \
 ```
 
 **Terminal 2 — Frontend (Vite HMR):**
+
 ```bash
-cd web && npm run dev
+cd renderers/react-shadcn && npm run dev
 ```
 
 ## Opsi C: Static SPA (tanpa Vite)
 
 ```bash
-cd web && npm run build
+cd renderers/react-shadcn && npm run build
 
 go run ./cmd/formspec/ dev \
   --spec examples/Clinic-UI-Showcase/spec \
   --dsn "sqlite:.formspec/clinic.db" \
   --addr :8080 \
   --dev --force \
-  --web-dir web/dist
+  --web-dir renderers/react-shadcn/dist
 ```
 
-Satu port `:8080` untuk API + SPA. Buka **http://localhost:8080/default/_admin**.
+Satu port `:8080` untuk API + SPA. Buka **http://localhost:8080/default/\_admin**.
 
 > Setiap edit frontend perlu `npm run build` ulang.
 
 ## Flags
 
-| Flag | Fungsi | Default |
-|---|---|---|
-| `--spec` | Path ke direktori YAML manifests | `./spec` |
-| `--dsn` | Database DSN (sqlite atau postgres) | `sqlite:.formspec/data.db` |
-| `--addr` | REST API listen address | `:8080` |
-| `--dev` | Dev mode (auth bypass, unsigned artifacts) | `false` |
-| `--state-dir` | Local state directory | `.formspec` |
-| `--force` | Kill previous `formspec` engine on same ports | `false` |
-| `--web-dir` | Built SPA directory (e.g. `web/dist`) | `""` |
-| `--dev-ui` | Spawn `npm run dev` otomatis (implikasikan `--dev`) | `false` |
-| `--runtime` | App runtime: `auto`, `go`, `php`, `python`, `ruby`, `java`, `dotnet`, `rust`, `node` | `auto` |
-| `--app-dir` | App source directory (child-process runtime) | `.formspec/app` |
-| `--app-entrypoint` | Entrypoint file (default tergantung runtime) | auto |
+| Flag               | Fungsi                                                                               | Default                    |
+| ------------------ | ------------------------------------------------------------------------------------ | -------------------------- |
+| `--spec`           | Path ke direktori YAML manifests                                                     | `./spec`                   |
+| `--dsn`            | Database DSN (sqlite atau postgres)                                                  | `sqlite:.formspec/data.db` |
+| `--addr`           | REST API listen address                                                              | `:8080`                    |
+| `--dev`            | Dev mode (auth bypass, unsigned artifacts)                                           | `false`                    |
+| `--state-dir`      | Local state directory                                                                | `.formspec`                |
+| `--force`          | Kill previous `formspec` engine on same ports                                        | `false`                    |
+| `--web-dir`        | Built SPA directory (e.g. `renderers/react-shadcn/dist`)                             | `""`                       |
+| `--dev-ui`         | Spawn `npm run dev` otomatis (implikasikan `--dev`)                                  | `false`                    |
+| `--runtime`        | App runtime: `auto`, `go`, `php`, `python`, `ruby`, `java`, `dotnet`, `rust`, `node` | `auto`                     |
+| `--app-dir`        | App source directory (child-process runtime)                                         | `.formspec/app`            |
+| `--app-entrypoint` | Entrypoint file (default tergantung runtime)                                         | auto                       |
 
 > `--listen` dan `--app-endpoint` sudah otomatis diatur oleh `formspec dev` — tidak perlu di-set manual.
 
@@ -87,30 +90,31 @@ Database auto-generate saat engine restart.
 
 ## Troubleshooting
 
-| Masalah | Solusi |
-|---|---|
-| Port already in use | Tambah `--force` |
-| Blank page | Hard refresh (Ctrl+F5) |
-| Permission denied | `formspec dev` pilih socket/HTTP otomatis berdasarkan environment |
-| Hyphen di tabel SQL | Engine otomatis `-` → `_` (fix di `internal/db/crud.go`) |
+| Masalah             | Solusi                                                            |
+| ------------------- | ----------------------------------------------------------------- |
+| Port already in use | Tambah `--force`                                                  |
+| Blank page          | Hard refresh (Ctrl+F5)                                            |
+| Permission denied   | `formspec dev` pilih socket/HTTP otomatis berdasarkan environment |
+| Hyphen di tabel SQL | Engine otomatis `-` → `_` (fix di `internal/db/crud.go`)          |
 
 ## Prasyarat
 
-| Tool | Minimal | Cek |
-|---|---|---|
-| Go | 1.26+ | `go version` |
-| Node.js | 22+ | `node --version` |
-| npm | 10+ | `npm --version` |
+| Tool    | Minimal | Cek              |
+| ------- | ------- | ---------------- |
+| Go      | 1.26+   | `go version`     |
+| Node.js | 22+     | `node --version` |
+| npm     | 10+     | `npm --version`  |
 
 ## 1. Engine — `formspec dev`
 
 `formspec dev` adalah engine yang:
+
 - Load YAML manifest dari direktori `--spec`
 - Generate tabel SQLite/Postgres sesuai entity spec
 - Serve REST API di `/{workspace}/api/v1/...`
 - Serve Meta API di `/{workspace}/api/v1/_meta/...`
 - Auto-detect runtime dari `--app-dir` dan spawn app child process
-- Enforce permission, tenant isolation, ctx.* primitives
+- Enforce permission, tenant isolation, ctx.\* primitives
 
 ### Command
 
@@ -150,34 +154,34 @@ App business logic dalam bahasa apapun berjalan sebagai **child process** dari `
 
 `formspec dev` mendeteksi runtime dari file di `--app-dir`:
 
-| File | Runtime |
-|---|---|
-| `go.mod` | Go |
-| `Cargo.toml` | Rust |
-| `package.json` | Node.js / TypeScript |
-| `composer.json` | PHP |
-| `pyproject.toml` / `requirements.txt` | Python |
-| `Gemfile` | Ruby |
-| `pom.xml` / `build.gradle` | Java |
-| `*.csproj` / `*.sln` | .NET |
+| File                                  | Runtime              |
+| ------------------------------------- | -------------------- |
+| `go.mod`                              | Go                   |
+| `Cargo.toml`                          | Rust                 |
+| `package.json`                        | Node.js / TypeScript |
+| `composer.json`                       | PHP                  |
+| `pyproject.toml` / `requirements.txt` | Python               |
+| `Gemfile`                             | Ruby                 |
+| `pom.xml` / `build.gradle`            | Java                 |
+| `*.csproj` / `*.sln`                  | .NET                 |
 
 Override manual dengan `--runtime <name>` atau `runtime:` di `formspec-app.yaml`.
 
 ### Flags
 
-| Flag | Fungsi | Default |
-|---|---|---|
-| `--spec` | Path ke direktori YAML manifests | `./spec` |
-| `--dsn` | Database DSN (sqlite atau postgres) | `sqlite:.formspec/data.db` |
-| `--addr` | REST API listen address | `:8080` |
-| `--dev` | Dev mode (auth bypass, unsigned artifacts) | `false` |
-| `--state-dir` | Local state directory | `.formspec` |
-| **`--force`** | Kill previous `formspec` engine on same ports | `false` |
-| `--web-dir` | Built SPA directory | `""` |
-| `--dev-ui` | Auto-spawn Vite dev server | `false` |
-| `--runtime` | Override runtime auto-detect | `auto` |
-| `--app-dir` | App source directory | `.formspec/app` |
-| `--app-entrypoint` | Entrypoint file | auto |
+| Flag               | Fungsi                                        | Default                    |
+| ------------------ | --------------------------------------------- | -------------------------- |
+| `--spec`           | Path ke direktori YAML manifests              | `./spec`                   |
+| `--dsn`            | Database DSN (sqlite atau postgres)           | `sqlite:.formspec/data.db` |
+| `--addr`           | REST API listen address                       | `:8080`                    |
+| `--dev`            | Dev mode (auth bypass, unsigned artifacts)    | `false`                    |
+| `--state-dir`      | Local state directory                         | `.formspec`                |
+| **`--force`**      | Kill previous `formspec` engine on same ports | `false`                    |
+| `--web-dir`        | Built SPA directory                           | `""`                       |
+| `--dev-ui`         | Auto-spawn Vite dev server                    | `false`                    |
+| `--runtime`        | Override runtime auto-detect                  | `auto`                     |
+| `--app-dir`        | App source directory                          | `.formspec/app`            |
+| `--app-entrypoint` | Entrypoint file                               | auto                       |
 
 > `--listen` dan `--app-endpoint` sudah diatur internal — tidak perlu di-set manual. `--app-endpoint-url` untuk override jika perlu endpoint spesifik.
 
@@ -203,6 +207,7 @@ go run ./cmd/formspec/ dev \
 ```
 
 Output:
+
 ```
 port 8080 is held by a previous formspec instance (PID 12345) — killing it...
 [formspec] engine loaded: 45 routes
@@ -211,6 +216,7 @@ port 8080 is held by a previous formspec instance (PID 12345) — killing it...
 ```
 
 Verifikasi:
+
 ```bash
 curl http://localhost:8080/default/api/v1/_meta/me
 # → {"data":{"user_id":"developer","workspace":"default","permissions":["*"]}}
@@ -223,7 +229,7 @@ Frontend adalah SPA React 19 yang membaca Meta API secara runtime.
 ### Command
 
 ```bash
-cd web
+cd renderers/react-shadcn
 
 # Install dependencies (pertama kali)
 npm install
@@ -234,7 +240,7 @@ npm run dev
 
 ### Vite Proxy
 
-Vite perlu proxy API calls ke backend. Konfigurasi ada di `web/vite.config.ts`:
+Vite perlu proxy API calls ke backend. Konfigurasi ada di `renderers/react-shadcn/vite.config.ts`:
 
 ```typescript
 server: {
@@ -251,14 +257,14 @@ Jika backend di port berbeda, sesuaikan `target`.
 
 ### Akses
 
-| URL | Keterangan |
-|---|---|
-| `http://localhost:5173/default/_admin` | Admin panel — derived CRUD untuk semua entity |
-| `http://localhost:5173/default/_admin/{module}/{plural}` | List view entity |
-| `http://localhost:5173/default/_admin/{module}/{plural}/new` | Create form |
-| `http://localhost:5173/default/_admin/{module}/{plural}/{id}` | Detail page |
-| `http://localhost:5173/default/_admin/{module}/{plural}/{id}/edit` | Edit form |
-| `http://localhost:5173/default/app` | App surface (override UI kinds) |
+| URL                                                                | Keterangan                                    |
+| ------------------------------------------------------------------ | --------------------------------------------- |
+| `http://localhost:5173/default/_admin`                             | Admin panel — derived CRUD untuk semua entity |
+| `http://localhost:5173/default/_admin/{module}/{plural}`           | List view entity                              |
+| `http://localhost:5173/default/_admin/{module}/{plural}/new`       | Create form                                   |
+| `http://localhost:5173/default/_admin/{module}/{plural}/{id}`      | Detail page                                   |
+| `http://localhost:5173/default/_admin/{module}/{plural}/{id}/edit` | Edit form                                     |
+| `http://localhost:5173/default/app`                                | App surface (override UI kinds)               |
 
 ## 3. Production Build
 
@@ -266,7 +272,7 @@ Untuk production, gunakan `formspec serve` (tanpa `--dev`):
 
 ```bash
 # Build SPA
-cd web && npm run build
+cd renderers/react-shadcn && npm run build
 cd ..
 
 # Jalankan engine dalam mode production
@@ -274,17 +280,19 @@ go run ./cmd/formspec/ serve \
   --spec examples/Clinic-UI-Showcase/spec \
   --dsn "sqlite:.formspec/clinic.db" \
   --addr :8080 \
-  --web-dir web/dist
+  --web-dir renderers/react-shadcn/dist
 ```
 
 `formspec serve` mengaktifkan:
+
 - **JWT auth** — semua request API perlu token valid
 - **Strict `uses` enforcement** — action hanya bisa akses resource yang di-declare
 - **Production logging** — structured, tanpa debug output
 - **No auto-reload** — app child process dijalankan sekali, tidak di-watch
 
 Untuk deployment skala besar, gunakan nginx/caddy sebagai reverse proxy:
-- Serve `web/dist/` untuk static assets
+
+- Serve `renderers/react-shadcn/dist/` untuk static assets
 - Proxy `/{workspace}/api/` ke `localhost:8080`
 - Rate limiting, SSL termination, CDN
 
@@ -305,11 +313,13 @@ Database akan auto-generate saat engine restart.
 ### Port already in use
 
 Gunakan `--force`:
+
 ```bash
 go run ./cmd/formspec/ dev ... --force
 ```
 
 Atau manual:
+
 ```bash
 # Cek proses yang pakai port
 lsof -i :8080
@@ -372,6 +382,6 @@ Browser ─── Vite (:5173) ─── proxy /default/api/v1/ → formspec dev
 ```
 
 - **Vite** dev server: HMR, hot reload, proxy API ke engine
-- **`formspec dev`**: Engine — entity engine, CRUD, permissions, Starlark, ctx.* primitives, spawn app child process
+- **`formspec dev`**: Engine — entity engine, CRUD, permissions, Starlark, ctx.\* primitives, spawn app child process
 - **App child process**: Business logic dalam bahasa apapun (Go/PHP/Python/Ruby/Java/.NET/TypeScript/Rust) via `lib-formspec-*` SDK
 - **SPA**: React 19 + shadcn/ui — runtime reader Meta API, manifest-driven renderer

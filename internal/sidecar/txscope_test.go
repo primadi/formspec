@@ -8,12 +8,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/primadi/formspec/renderers/jsonbpersist"
+	"github.com/primadi/formspec/renderers/jsonb-persist"
 	"github.com/primadi/formspec/pkg/spec"
 )
 
 // TestCtxHandler_ScopeIdJoinsSameTransaction proves the cross-process
-// correlation described in renderers/jsonbpersist/txscope.go: a request
+// correlation described in renderers/jsonb-persist/txscope.go: a request
 // carrying X-FormSpec-Scope-Id resolves back to the SAME live *db.TxScope a
 // direct in-process caller registered, and an entity write made through
 // the HTTP /ctx/entity/update path joins that transaction rather than

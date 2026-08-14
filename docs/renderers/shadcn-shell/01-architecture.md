@@ -2,11 +2,12 @@
 
 **Updated:** 2026-07-16 · Status: Draft
 
-> Draft: isi di bawah kondisi kode `web/src` hari ini, bukan rencana desain.
+> Draft: isi di bawah kondisi kode `renderers/react-shadcn/src` hari ini, bukan rencana desain.
 > §5 mencatat kesenjangan terhadap kontrak `docs/spec/frontend/` — bagian itu
 > boleh berubah tanpa mengubah kontrak.
 
 ## 1. Interpreter Runtime
+
 SPA React yang di-deploy sekali dan me-render App apa pun dari spec saat
 runtime — bukan build artifact per-app, konsisten dengan
 [`../../spec/frontend/01-visual-hierarchy.md`](../../spec/frontend/01-visual-hierarchy.md).
@@ -15,8 +16,9 @@ derived dari Entity, tanpa manifest UI) dan `/{workspace}/app/*` (manifest
 App/Page/dst mengoverride derivasi).
 
 ## 2. Struktur Kode
+
 ```
-web/src/
+renderers/react-shadcn/src/
 ├── App.tsx / main.tsx        # bootstrap, routing dua surface
 ├── lib/api/{client,meta}.ts  # ky client, envelope, fetcher _meta/*
 ├── lib/formspec-expr/            # lexer, parser, eval — interpreter FormSpecExpr
@@ -34,10 +36,11 @@ Tidak ada `kinds/menu/` — navigasi bukan kind tersendiri, sudah dihapus
 mengikuti keputusan `App.spec.menu`/`Module.spec.menu` sebagai satu-satunya
 sumber (lihat komentar `types/manifest.ts`: "No KIND_MENU — navigation isn't
 a standalone kind"). `engine/registry.tsx` (registry kind→component generik)
-dan `web/src/api/`, `web/src/assets/` (sisa scaffold Vite) **ada di repo
+dan `renderers/react-shadcn/src/api/`, `renderers/react-shadcn/src/assets/` (sisa scaffold Vite) **ada di repo
 tapi tidak dipakai** — lihat §5.
 
 ## 3. Bootstrap & Resolusi App
+
 `Root()` (`App.tsx`) mendaftarkan dua route top-level:
 `/:workspace/_admin/*` dan `/:workspace/app/*`. `SurfaceShell({surface})`
 menjalankan boot:
@@ -69,6 +72,7 @@ didesain semula — lihat `docs/spec/platform/02-workspace-app-module.md`
 (masih Outline, menunggu Draft di S8).
 
 ## 4. Konsumsi Spec Resolution API
+
 Endpoint yang dipakai (lihat kontraknya di
 [`../../spec/frontend/04-spec-resolution-api.md`](../../spec/frontend/04-spec-resolution-api.md)
 §2): `_meta/apps`, `_meta/ui` (mode `admin`/`appName`), `_meta/me`,
@@ -81,6 +85,7 @@ percabangan eksplisit untuk status 409** di mana pun; error CAS conflict
 jatuh ke jalur error generik (`toast.error`), bukan alur refetch-khusus.
 
 ## 5. Status Implementasi Hari Ini
+
 Bagian yang terbukti belum/tidak sesuai rencana desain awal — dicatat supaya
 tidak diam-diam diasumsikan bekerja:
 

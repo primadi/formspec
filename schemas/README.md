@@ -18,6 +18,19 @@ make publish-schemas ARGS="--upload --bucket formspec-schemas"   # + upload R2
 make publish-schemas ARGS="--version v2 --upload --bucket formspec-schemas"
 ```
 
+### Konsumsi oleh CLI (online)
+
+`formspec validate`, `formspec init`, dan `formspec schema` mengambil schema
+langsung dari registry (bukan embed di binary):
+
+- Versi spec dibaca dari `apiVersion` manifest (`formspec.dev/v1` → versi `v1`).
+- Schema di-cache lokal di `os.UserCacheDir()/formspec/schemas/<version>`.
+- `index.json` tiap versi memuat daftar `kinds` — registry bersifat
+  self-describing, sehingga `formspec init`/`formspec schema fetch` tahu set
+  schema lengkap tanpa daftar hardcoded di CLI.
+- Registry base URL: env `FORMSPEC_SCHEMA_REGISTRY` > `schema-registry:` di
+  `formspec-app.yaml` > default `https://schemas.formspec.dev`.
+
 ### Layout versi
 
 ```
@@ -44,7 +57,7 @@ https://schemas.formspec.dev/latest/kinds/Entity.schema.json
 
 1. Buat bucket `formspec-schemas`, set **public access** + custom domain
    `schemas.formspec.dev` (Cloudflare dashboard).
-2. `make publish-schemas ARGS="--upload --bucket formspec-spec"` (butuh
+2. `make publish-schemas ARGS="--upload --bucket formspec-schemas"` (butuh
    `CLOUDFLARE_API_TOKEN` + wrangler login).
 
 **Opsi B — Cloudflare Pages (static):**

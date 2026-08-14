@@ -13,10 +13,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/primadi/formspec/internal/schemaregistry"
 	"github.com/primadi/formspec/pkg/spec"
 )
 
@@ -198,15 +200,14 @@ func (l *Loader) parseFile(path string) ([]RawManifest, []ParseError) {
 	return manifests, errs
 }
 
-// KnownKinds is the catalog of built-in resource kinds across the spec documents
-// (Core Basic §4, Core Extended, Frontend, Control Plane). Unknown kinds MUST
-// fail validation (Core Basic §4). Third-party kinds are registered via
+// KindSet is the accepted kind catalog for one spec version.
+type KindSet map[string]bool
+
+// KnownKinds is the kind catalog for spec version v1 — kept as the exported
+// name for backward compatibility (skills/docs reference it). Unknown kinds
+// MUST fail validation (Core Basic §4). Third-party kinds are registered via
 // KindDefinition; until that mechanism lands, only built-ins are accepted.
-// KnownKinds is the catalog of built-in resource kinds across the spec documents
-// (Core Basic §4, Core Extended, Frontend, Control Plane). Unknown kinds MUST
-// fail validation (Core Basic §4). Third-party kinds are registered via
-// KindDefinition; until that mechanism lands, only built-ins are accepted.
-var KnownKinds = map[string]bool{
+var KnownKinds = KindSet{
 	// Core Basic
 	"App": true, "Module": true, "Document": true, "Entity": true, "Service": true,
 	"Config": true, "Migration": true, "Subscription": true,
@@ -220,22 +221,50 @@ var KnownKinds = map[string]bool{
 	"Environment": true, "Policy": true, "Datastore": true,
 }
 
-// Validate performs basic validation on a raw manifest.
+// Versions maps a spec version (the segment of apiVersion, e.g. "v1") to the
+// kinds accepted by that version. New spec versions register here — plus a
+// per-version validator — so v1, v2, ... can coexist without a CLI rename.
+var Versions = map[string]KindSet{
+	"v1": KnownKinds,
+}
+
+// supportedVersions returns a comma-separated list of the versions the engine
+// currently implements, for error messages.
+func supportedVersions() string {
+	keys := make([]string, 0, len(Versions))
+	for k := range Versions {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return strings.Join(keys, ", ")
+}
+
+// Validate performs basic validation on a raw manifest, routed by the spec
+// version declared in apiVersion (formspec.dev/v1).
 func (l *Loader) Validate(raw RawManifest) error {
 	if raw.APIVersion == "" {
 		return fmt.Errorf("%s: apiVersion is required", raw.Source)
 	}
+	version, err := schemaregistry.ParseVersion(raw.APIVersion)
+	if err != nil {
+		return fmt.Errorf("%s: %w", raw.Source, err)
+	}
+	kinds, ok := Versions[version]
+	if !ok {
+		return fmt.Errorf("%s: unsupported spec version %q (this CLI implements %s)", raw.Source, version, supportedVersions())
+	}
 	if raw.Kind == "" {
 		return fmt.Errorf("%s: kind is required", raw.Source)
 	}
-	if !KnownKinds[raw.Kind] {
-		return fmt.Errorf("%s: unknown kind %q", raw.Source, raw.Kind)
+	if !kinds[raw.Kind] {
+		return fmt.Errorf("%s: unknown kind %q for spec version %s", raw.Source, raw.Kind, version)
 	}
 	if raw.Metadata.Name == "" {
 		return fmt.Errorf("%s: metadata.name is required", raw.Source)
 	}
 
-	// Type-specific validation
+	// Type-specific validation (v1 semantics — the Entity/Document contract).
+	// Future versions may branch here with their own validator.
 	if (raw.Kind == "Entity" || raw.Kind == "Document") && raw.Spec != nil {
 		entitySpec, err := RawSpecToEntitySpec(raw.Spec.(map[string]any))
 		if err != nil {

@@ -9,10 +9,10 @@ build-ctl:
 	go build -o bin/formspec-ctl ./cmd/formspec-ctl
 
 # Build the formspec CLI with embedded SPA.
-# build-spa builds web/dist/, then we copy it to cmd/formspec/dist/ for go:embed.
+# build-spa builds renderers/react-shadcn/dist/, then we copy it to cmd/formspec/dist/ for go:embed.
 build-formspec: build-spa
 	@mkdir -p cmd/formspec/dist
-	cp -r renderers/web/dist/* cmd/formspec/dist/
+	cp -r renderers/react-shadcn/dist/* cmd/formspec/dist/
 	go build -o bin/formspec ./cmd/formspec
 
 build-sidecar:
@@ -23,7 +23,7 @@ build-operator:
 
 # Build the frontend SPA. Requires npm dependencies installed (make web-deps).
 build-spa: web-deps
-	cd renderers/web && npm run build
+	cd renderers/react-shadcn && npm run build
 
 # formspec-resource is a Go library (import "github.com/formspec/formspec"), not a
 # binary — see docs/runtimes/02-formspec-resource.md. examples/reference-app
@@ -113,13 +113,13 @@ deps:
 
 # Frontend
 web-deps:
-	cd renderers/web && npm install
+	cd renderers/react-shadcn && npm install
 
 web-dev:
-	cd renderers/web && npm run dev
+	cd renderers/react-shadcn && npm run dev
 
 web-build:
-	cd renderers/web && npm run build
+	cd renderers/react-shadcn && npm run build
 
 # Format code
 fmt:

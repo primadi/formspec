@@ -1,5 +1,5 @@
 # Low stock alert widget — highlights items below minimum stock level
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Widget
 metadata:
   name: low-stock-alert

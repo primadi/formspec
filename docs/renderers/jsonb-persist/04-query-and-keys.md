@@ -35,7 +35,7 @@ formspec_natural_key_counters (tenant_id, resource, field, scope, period, seq)
 (satu statement, gap-free dan duplicate-free untuk nilai counter itu
 sendiri) — bukan lewat scan `MAX()`. Pada jalur auto-generate saat `create`
 (`EntityStore.Insert`), UPSERT ini sekarang jalan **di transaksi yang sama**
-dengan `INSERT` baris Document (`InTx`, `renderers/jsonbpersist/tx.go`) —
+dengan `INSERT` baris Document (`InTx`, `renderers/jsonb-persist/tx.go`) —
 kalau insert gagal setelah counter terlanjur increment, rollback membatalkan
 keduanya, menutup gap yang sebelumnya dicatat di sini (lihat
 [`01-architecture.md`](01-architecture.md) §3 untuk cakupan penuh mutasi

@@ -1,5 +1,5 @@
 # Webhook log viewer — audit trail for all incoming payment webhooks
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Page
 metadata:
   name: midtrans-webhook-log

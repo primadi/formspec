@@ -1,7 +1,7 @@
 # SHOWCASE kind: Timeline — feed kronologis append-only (§13 spec frontend).
 # Entity medical-record punya update/delete disabled → renderer tanpa tombol
 # edit/hapus; infinite scroll + date grouping.
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Timeline
 metadata:
   name: patient-medical-history

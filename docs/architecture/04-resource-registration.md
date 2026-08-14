@@ -198,7 +198,7 @@ allowedTenants:
 FormSpec Operator membaca `ResourceClaim` CRD dan meng-enforce permission:
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: ResourceClaim
 metadata:
   name: bengkel-pg-claim

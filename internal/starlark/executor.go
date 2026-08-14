@@ -202,7 +202,7 @@ type ScriptExecutor struct {
 	// concurrency (CAS) — see db.UpdateParams.Version. ctx carries the
 	// request-scoped TxScope (if any) so this write joins the same
 	// transaction as everything else in the current action execution — see
-	// renderers/jsonbpersist/txscope.go.
+	// renderers/jsonb-persist/txscope.go.
 	SaveHandler func(ctx context.Context, workspaceID, module, entity, id string, version int, data map[string]any) error
 
 	// CallHandler is the cross-resource call function.

@@ -10,19 +10,19 @@
 
 ## 1. Ringkasan Verb
 
-| Kategori | Verb |
-|---|---|
-| **Deployment** | `apply`, `diff`, `delete`, `get`, `describe`, `validate`, `check [--fix]`, `promote` |
-| **Scaffolding** | `new <kind>` |
-| **Dev loop** | `dev`, `repl` |
-| **Codegen** | `generate` |
-| **Data lifecycle** | `migrate`, `seed`, `backup create\|inspect`, `restore` |
-| **Data archival** | `archive run\|view\|restore-batch` |
-| **Distributed workflow** | `saga list\|resolve` |
-| **Marketplace & signing** | `module list\|install\|uninstall`, `sign` |
-| **Scripting** | `script validate\|test` |
-| **Emergency (Resource Plane)** | `freeze`, `rollback`, `lock workspace` |
-| **Ops** | `workspace create`, `logs` |
+| Kategori                       | Verb                                                                                 |
+| ------------------------------ | ------------------------------------------------------------------------------------ |
+| **Deployment**                 | `apply`, `diff`, `delete`, `get`, `describe`, `validate`, `check [--fix]`, `promote` |
+| **Scaffolding**                | `new <kind>`                                                                         |
+| **Dev loop**                   | `dev`, `repl`                                                                        |
+| **Codegen**                    | `generate`                                                                           |
+| **Data lifecycle**             | `migrate`, `seed`, `backup create\|inspect`, `restore`                               |
+| **Data archival**              | `archive run\|view\|restore-batch`                                                   |
+| **Distributed workflow**       | `saga list\|resolve`                                                                 |
+| **Marketplace & signing**      | `module list\|install\|uninstall`, `sign`                                            |
+| **Scripting**                  | `script validate\|test`                                                              |
+| **Emergency (Resource Plane)** | `freeze`, `rollback`, `lock workspace`                                               |
+| **Ops**                        | `workspace create`, `logs`                                                           |
 
 ---
 
@@ -75,14 +75,21 @@ scan Starlark masih roadmap.
 ```bash
 formspec validate --spec myapp/spec             # default: ./spec
 formspec validate --spec myapp/spec --no-schema # engine loader saja
-formspec validate --spec myapp/spec --schema schemas/  # paksa pakai schema dir ini
+formspec validate --spec myapp/spec --schema schemas/  # paksa pakai schema dir lokal ini
+formspec validate --spec myapp/spec --schema-refresh   # re-fetch dari registry walau sudah ter-cache
 ```
 
-**Auto-deteksi schema:** tanpa `--schema`, `formspec validate` memakai schema
-lokal bila ada — urutan: `<spec>/../schemas` (folder `schemas/` di sebelah
-`spec/`, layout project `formspec init`), lalu `./schemas` (cwd), lalu schema
-yang di-embed di binary. Sumber yang dipakai dicetak di baris pertama output
-(`schema: <dir> (local)` atau `schema: embedded`).
+**Versi schema dari `apiVersion`:** tanpa `--schema`, `formspec validate`
+membaca versi spec dari `apiVersion` tiap manifest (`formspec.dev/v1`) dan
+memakai JSON Schema dari **schema registry** (default
+`https://schemas.formspec.dev`; override `FORMSPEC_SCHEMA_REGISTRY` atau
+`schema-registry:` di `formspec-app.yaml`). Schema di-cache lokal di
+`os.UserCacheDir()/formspec/schemas/<version>` — versi spec baru tidak perlu
+install ulang CLI. `--schema <dir>` memaksa pakai folder `schemas/` lokal
+(tanpa versioning). `--schema-refresh` mengulang fetch dari registry meski
+sudah ter-cache. Sumber yang dipakai dicetak di baris pertama output
+(`schema: v1 (registry <url>, cache <dir>)` atau `schema: <dir> (local
+override)`).
 
 Dua lapis, keduanya dilaporkan per manifest:
 
@@ -107,6 +114,24 @@ Roadmap (todo 3.1.1): honesty scan untuk script Starlark — undeclared usage �
 error, declared-but-unused → warning, `ctx.environment` branching → warning.
 
 `formspec validate` **tidak pernah memberi grant** — ia cuma verifikator kejujuran otomatis atas deklarasi `required_permission`/`uses` setiap action terhadap kode sungguhan, bukan sumber kebenaran permission itu sendiri. Model permission lengkap (kelima jenis impl, kenapa grant tidak pernah diturunkan dari pemakaian): [`docs/spec/backend/01-core-basic.md`](../spec/backend/01-core-basic.md) §5. Aturan environment binding pada business logic (kenapa `ctx.environment` hanya untuk logging, bukan percabangan bisnis): [`docs/spec/backend/02-core-extended.md`](../spec/backend/02-core-extended.md) §8. Dijalankan tiap PR sebagai gate CI.
+
+### `formspec schema`
+
+Kelola cache JSON Schema versi lokal. Schema di-fetch dari registry (default
+`https://schemas.formspec.dev`) dan di-cache di
+`os.UserCacheDir()/formspec/schemas/<version>`. `formspec validate` dan
+`formspec init` memakai cache yang sama.
+
+```bash
+formspec schema fetch v1                  # fetch/cache versi v1 (default v1)
+formspec schema fetch v1 --out schemas    # + salin ke folder schemas/ project
+formspec schema update v1                 # force re-fetch dari registry
+formspec schema list                      # daftar versi yang ter-cache
+formspec schema clear                     # hapus seluruh cache
+```
+
+Registry bisa di-override via env `FORMSPEC_SCHEMA_REGISTRY` atau
+`schema-registry:` di `formspec-app.yaml`.
 
 ### `formspec check [--fix]`
 
@@ -171,7 +196,7 @@ formspec new document invoice           # scaffold Document + field dasar
 ### `formspec dev`
 
 Development server — satu perintah untuk menjalankan backend API + SPA frontend.
-SPA sudah embedded dalam binary (`//go:embed web/dist/*`), tidak perlu npm.
+SPA sudah embedded dalam binary (`//go:embed renderers/react-shadcn/dist/*`), tidak perlu npm.
 
 ```bash
 # Single process — API + SPA di :8080
@@ -185,39 +210,40 @@ formspec dev
 ```
 
 **Behavior:**
+
 - Membaca YAML manifests dari `--spec` (default: `./spec`)
 - Generate tabel database sesuai entity spec
 - Serve REST API di `--addr` (default: `:8080`)
 - Serve SPA (embedded atau dari `--web-dir`)
 - Auto-detect runtime dari project files (`composer.json` → PHP, dll.)
-- `--dev-ui`: spawn Vite HMR (cari `web/` dari CWD atau module cache)
+- `--dev-ui`: spawn Vite HMR (cari `renderers/react-shadcn/` dari CWD atau module cache)
 - `--force` implied oleh `--dev` / `--dev-ui`
 
 **Flag referensi:**
 
-| Flag | Default | Fungsi |
-|---|---|---|
-| `--spec` | `./spec` | Path ke direktori YAML manifests |
-| `--dsn` | `sqlite:.formspec/data.db` | Database DSN |
-| `--addr` | `:8080` | REST API listen address |
-| `--listen` | `none` | Ctx listener mode: `none`, `local_http`, `unix_socket` |
-| `--app-endpoint` | `none` | App endpoint mode: `none`, `local_http`, `unix_socket` |
-| `--runtime` | auto-detect | Runtime auto-detect (php/python/node) |
-| `--dev-ui` | `false` | Start Vite HMR (implies `--dev`) |
-| `--dev` | `false` | Dev mode (auth bypass) |
-| `--force` | `false` | Kill previous instance. Implied oleh `--dev` / `--dev-ui` |
-| `--web-dir` | auto-detect | Override SPA directory |
-| `--state-dir` | `.formspec` | State directory (auto-create) |
+| Flag             | Default                    | Fungsi                                                    |
+| ---------------- | -------------------------- | --------------------------------------------------------- |
+| `--spec`         | `./spec`                   | Path ke direktori YAML manifests                          |
+| `--dsn`          | `sqlite:.formspec/data.db` | Database DSN                                              |
+| `--addr`         | `:8080`                    | REST API listen address                                   |
+| `--listen`       | `none`                     | Ctx listener mode: `none`, `local_http`, `unix_socket`    |
+| `--app-endpoint` | `none`                     | App endpoint mode: `none`, `local_http`, `unix_socket`    |
+| `--runtime`      | auto-detect                | Runtime auto-detect (php/python/node)                     |
+| `--dev-ui`       | `false`                    | Start Vite HMR (implies `--dev`)                          |
+| `--dev`          | `false`                    | Dev mode (auth bypass)                                    |
+| `--force`        | `false`                    | Kill previous instance. Implied oleh `--dev` / `--dev-ui` |
+| `--web-dir`      | auto-detect                | Override SPA directory                                    |
+| `--state-dir`    | `.formspec`                | State directory (auto-create)                             |
 
 **Runtime auto-detect:**
 
-| File di CWD | Runtime |
-|---|---|
-| `composer.json` | php |
-| `package.json` | node |
-| `pyproject.toml` / `requirements.txt` | python |
-| `go.mod` | local (Go) |
-| (none) | local (API-only) |
+| File di CWD                           | Runtime          |
+| ------------------------------------- | ---------------- |
+| `composer.json`                       | php              |
+| `package.json`                        | node             |
+| `pyproject.toml` / `requirements.txt` | python           |
+| `go.mod`                              | local (Go)       |
+| (none)                                | local (API-only) |
 
 Referensi lengkap flag, mode `--listen`/`--app-endpoint`, dan arsitektur proses: [`01-formspec-dev.md`](01-formspec-dev.md).
 
@@ -323,10 +349,10 @@ Restore **hanya ke staging**, restore dependency-ordered, **selective per-docume
 
 Antrian intervensi manual untuk `compensation-failure-log` (resource `formspec.core`, `persist.category: compliance`):
 
-| Sub-status | Arti | Tindakan benar |
-|---|---|---|
-| `compensation_failed` | Step gagal, undo dicoba, undo juga gagal | Manusia perbaiki manual — state sudah diketahui |
-| `outcome_unknown` | Tidak diketahui apakah step berhasil, retry habis | Manusia **verifikasi state aktual dulu** — tombol retry/compensate otomatis TIDAK boleh ditampilkan |
+| Sub-status            | Arti                                              | Tindakan benar                                                                                      |
+| --------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `compensation_failed` | Step gagal, undo dicoba, undo juga gagal          | Manusia perbaiki manual — state sudah diketahui                                                     |
+| `outcome_unknown`     | Tidak diketahui apakah step berhasil, retry habis | Manusia **verifikasi state aktual dulu** — tombol retry/compensate otomatis TIDAK boleh ditampilkan |
 
 ```bash
 formspec saga list --status outcome_unknown
@@ -441,13 +467,13 @@ muncul kalau operator mengaktifkan level `debug`, yang off secara default di
 
 **`formspec apply` ada dan sudah jadi subcommand asli** dari binary `cmd/formspec` (bukan lagi binary terpisah `formspec-apply`). Verb lain di dispatcher `cmd/formspec/main.go` langsung mencetak `not implemented yet` dan exit 1 kalau dipanggil — bukan silent-fail.
 
-| Verb | Status | Catatan |
-|---|---|---|
-| `apply` | ⚠️ Sebagian | Subcommand nyata di `cmd/formspec`, tapi pipeline register→deploy putus di sisi server — lihat [`docs/runtimes/01-formspec-ctl.md`](../runtimes/01-formspec-ctl.md) §7 |
-| `apply --watch` | ✅ | `fsnotify`, debounce 500ms |
-| `validate` | ✅ Sebagian | Engine loader + JSON Schema per kind; honesty scan Starlark masih roadmap (§2) |
-| `new`, `dev`, `generate`, `migrate` | ⏳ | Belum dikerjakan |
-| Semua verb lain (§2–§12) | ❌ Belum ada logic | Dikenali dispatcher, tapi cuma print "not implemented yet" — lihat `cmd/formspec/main.go` |
+| Verb                                | Status             | Catatan                                                                                                                                                                |
+| ----------------------------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apply`                             | ⚠️ Sebagian        | Subcommand nyata di `cmd/formspec`, tapi pipeline register→deploy putus di sisi server — lihat [`docs/runtimes/01-formspec-ctl.md`](../runtimes/01-formspec-ctl.md) §7 |
+| `apply --watch`                     | ✅                 | `fsnotify`, debounce 500ms                                                                                                                                             |
+| `validate`                          | ✅ Sebagian        | Engine loader + JSON Schema per kind; honesty scan Starlark masih roadmap (§2)                                                                                         |
+| `new`, `dev`, `generate`, `migrate` | ⏳                 | Belum dikerjakan                                                                                                                                                       |
+| Semua verb lain (§2–§12)            | ❌ Belum ada logic | Dikenali dispatcher, tapi cuma print "not implemented yet" — lihat `cmd/formspec/main.go`                                                                              |
 
 ### 13.1 Urutan Pembangunan yang Disarankan
 
@@ -461,14 +487,14 @@ muncul kalau operator mengaktifkan level `debug`, yang off secara default di
 
 ## 14. Referensi
 
-| Dokumen | Isi |
-|---|---|
-| [`docs/runtimes/01-formspec-ctl.md`](../runtimes/01-formspec-ctl.md) | API server yang jadi target `apply`/`diff`/`get` |
-| [`docs/architecture/03-deployment-flow.md`](../architecture/03-deployment-flow.md) | Bagaimana `formspec apply` masuk ke pipeline deployment production |
-| [`04-formspec-ctl.md`](04-formspec-ctl.md) | CLI darurat Platform Operator (binary berbeda peran, sama proses) |
-| [`01-formspec-dev.md`](01-formspec-dev.md) | Referensi lengkap `formspec dev` |
-| [`03-formspec-generate.md`](03-formspec-generate.md) | Referensi lengkap `formspec generate` + browser client SDK |
-| [`docs/spec/backend/01-core-basic.md`](../spec/backend/01-core-basic.md) | Kontrak: model permission, query/filter, API delivery |
-| [`docs/spec/backend/02-core-extended.md`](../spec/backend/02-core-extended.md) | Kontrak: Mockup & environment binding |
-| [`docs/spec/backend/04-persist-backend.md`](../spec/backend/04-persist-backend.md) | Kontrak: jaminan backup/restore |
-| [`docs/spec/platform/04-control-plane.md`](../spec/platform/04-control-plane.md) | Kontrak: Policy, transparency log, REPL governance, emergency controls |
+| Dokumen                                                                            | Isi                                                                    |
+| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| [`docs/runtimes/01-formspec-ctl.md`](../runtimes/01-formspec-ctl.md)               | API server yang jadi target `apply`/`diff`/`get`                       |
+| [`docs/architecture/03-deployment-flow.md`](../architecture/03-deployment-flow.md) | Bagaimana `formspec apply` masuk ke pipeline deployment production     |
+| [`04-formspec-ctl.md`](04-formspec-ctl.md)                                         | CLI darurat Platform Operator (binary berbeda peran, sama proses)      |
+| [`01-formspec-dev.md`](01-formspec-dev.md)                                         | Referensi lengkap `formspec dev`                                       |
+| [`03-formspec-generate.md`](03-formspec-generate.md)                               | Referensi lengkap `formspec generate` + browser client SDK             |
+| [`docs/spec/backend/01-core-basic.md`](../spec/backend/01-core-basic.md)           | Kontrak: model permission, query/filter, API delivery                  |
+| [`docs/spec/backend/02-core-extended.md`](../spec/backend/02-core-extended.md)     | Kontrak: Mockup & environment binding                                  |
+| [`docs/spec/backend/04-persist-backend.md`](../spec/backend/04-persist-backend.md) | Kontrak: jaminan backup/restore                                        |
+| [`docs/spec/platform/04-control-plane.md`](../spec/platform/04-control-plane.md)   | Kontrak: Policy, transparency log, REPL governance, emergency controls |

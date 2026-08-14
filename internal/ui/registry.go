@@ -154,7 +154,7 @@ func (r *Registry) Count() int {
 // ResolveViewRoute resolves a menu item's `view` reference (module + name,
 // Core §4.4) to a concrete route. Page uses its own explicit Route; every
 // other independently-routable View kind uses the `/<kind-lowercase>/<name>`
-// convention (matching web/src/shell/router.tsx's buildRoutes), so the route
+// convention (matching renderers/react-shadcn/src/shell/router.tsx's buildRoutes), so the route
 // is never duplicated/hand-kept-in-sync in the menu item itself.
 //
 // Form and Table are resolvable here — they each get an auto-derived Page

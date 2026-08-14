@@ -149,6 +149,31 @@ ARGS="--upload --bucket formspec-schemas"`), atau (b) Pages statis dengan
 > drag folder build output. Tidak ada auto-deploy; upload ulang manual tiap
 > perubahan. Untuk repo ini lebih baik _Connect to Git_ agar auto-deploy.
 
+### Optimasi build monorepo: Build watch paths
+
+> **Kenapa perlu:** Git integration Pages men-trigger build **semua** project
+> pada tiap push ke `main` — dashboard tidak punya path filter bawaan.
+> Perubahan data di `docs/` ikut memicu rebuild `formspec-site` yang tidak
+> perlu. Solusi native: **Build watch paths** (Settings → Build → Build watch
+> paths) membatasi path yang memicu build per project.
+
+| Project         | Include paths         | Exclude paths | Efek                                                     |
+| --------------- | --------------------- | ------------- | -------------------------------------------------------- |
+| `formspec-site` | `site/*`              | _(kosong)_    | Hanya push yang menyentuh `site/` yang memicu rebuild    |
+| `formspec-docs` | `docs/*, docs-site/*` | _(kosong)_    | Hanya push yang menyentuh `docs/` atau `docs-site/` saja |
+
+Wildcard `*` mencocokkan termasuk path separator (`/`), jadi `docs/*` juga
+menangkap perubahan di subfolder (mis. `docs/spec/...`). Urutan evaluasi:
+path yang match **excludes** diabaikan dulu, sisanya dicek ke **includes**;
+ada match → build jalan, tidak ada → build di-skip. Pengecualian perilaku
+Cloudflare: push kosong, ≥3000 file, atau ≥20 commit tetap memicu build.
+
+> **Alternatif (config-as-code):** GitHub Actions dengan `paths:` filter +
+> Cloudflare **Deployment Hook** per project. Lebih terlihat di repo, tapi
+> butuh secret GitHub (`CF_DEPLOY_HOOK_*`) + mematikan _Automatic
+> deployments_ (PR preview dari Git integration ikut mati). Build watch
+> paths lebih sederhana dan mempertahankan PR preview — jadi pilihan utama.
+
 ## Email (Resend)
 
 - Outbound via subdomain `send.formspec.dev` (isolasi SPF/DKIM dari apex).

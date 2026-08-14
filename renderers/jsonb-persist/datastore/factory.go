@@ -43,7 +43,7 @@ func NewFactory(driver spec.DatastoreDriver) (ConnectionFactory, error) {
 type sqliteFactory struct{}
 
 func (f *sqliteFactory) Open(ds spec.DatastoreSpec) (*ConnectionPool, error) {
-	// TODO: integrate with renderers/jsonbpersist package for SQLite connections
+	// TODO: integrate with renderers/jsonb-persist package for SQLite connections
 	return NewConnectionPool(ConnectionConfig{
 		Driver:  "sqlite",
 		DSN:     ds.Connection.Database,

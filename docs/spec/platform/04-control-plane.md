@@ -33,7 +33,7 @@ Compute Control **stateless**; seluruh state hidup di storage sendiri
 | `Datastore` | Backend infrastruktur bernama — [`06-datastore.md`](06-datastore.md) |
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Environment
 metadata: { name: production }
 spec:
@@ -140,7 +140,7 @@ embedded sebagai Go library di dalam binary Control Plane, tanpa proses
 tambahan), sehingga hanya ada satu decision log, bukan dua sistem paralel.
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Policy
 metadata: { name: prod-policy }
 spec:

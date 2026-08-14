@@ -4,7 +4,7 @@
 # dashboard kini membaca entity live `clinic/visit` — lihat
 # docs/plan/fix-clinic-dashboard-summary.md.
 # Router hanya generate list + find untuk summary. Tidak dapat menu derived.
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Entity
 metadata:
   name: daily-visit-summary

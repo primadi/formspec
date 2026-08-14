@@ -1,5 +1,5 @@
 # Order detail page — full view with items, payments, timeline
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Page
 metadata:
   name: order-detail

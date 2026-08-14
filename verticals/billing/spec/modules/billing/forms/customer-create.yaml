@@ -1,6 +1,6 @@
 # Customer create form — new customer entry
 # Renders as separate_page (many fields), not modal
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Form
 metadata:
   name: customer-create

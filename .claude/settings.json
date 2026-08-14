@@ -72,7 +72,7 @@
       "Bash(kill 9731 10314 10395)",
       "Bash(curl -s \"http://localhost:8080/default/api/v1/clinic/patients?search=1111222233337777\")",
       "Bash(sed -i \"s/'9876543210009999'/String\\(Date.now\\(\\)\\).padStart\\(16,'9'\\)/\" /tmp/claude-1000/-workspaces-formspec/80a7b182-2b97-4d8f-ade3-81c559e5113c/scratchpad/wizard_probe2.js)",
-      "Bash(git -C /workspaces/formspec status --short web/src/)",
+      "Bash(git -C /workspaces/formspec status --short renderers/react-shadcn/src/)",
       "Bash(kill 9731 10361)",
       "Bash(nohup go run ./cmd/formspec-sidecar/ --spec examples/Clinic-UI-Showcase/spec --dsn \"sqlite:.formspec/clinic.db\" --addr :8080 --listen \"http://127.0.0.1:9090\" --app-endpoint \"http://127.0.0.1:9091\" --force)",
       "Bash(disown)",
@@ -104,7 +104,7 @@
       "Bash(pkill -f \"formspec-sidecar\")",
       "Bash(pkill -f \"vite\")",
       "Bash(pkill -9 -f \"formspec-sidecar\")",
-      "Bash(pkill -9 -f \"node /workspaces/formspec/web/node_modules/.bin/vite\")",
+      "Bash(pkill -9 -f \"node /workspaces/formspec/renderers/react-shadcn/node_modules/.bin/vite\")",
       "Bash(kill -9 10096 10097 10396 100052 100053)",
       "Bash(gofmt -l -w internal/starlark/resource.go internal/starlark/resource_test.go)",
       "Bash(gofmt -l -w /workspaces/formspec/pkg/spec/entity.go)",
@@ -127,8 +127,6 @@
       "Bash(grep -n \"^func Dial\\\\|type DialOptions\" /go/pkg/mod/github.com/coder/websocket@v1.8.15/dial.go | head -10)",
       "Bash(gofmt -l -w /workspaces/formspec/internal/api/wshub_test.go)"
     ],
-    "additionalDirectories": [
-      "/workspaces/formspec/.formspec"
-    ]
+    "additionalDirectories": ["/workspaces/formspec/.formspec"]
   }
 }

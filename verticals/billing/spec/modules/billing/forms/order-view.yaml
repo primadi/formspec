@@ -1,5 +1,5 @@
 # Order view form — read-only display of order details
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Form
 metadata:
   name: order-view

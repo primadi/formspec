@@ -22,7 +22,10 @@ func validateSchemaString(t *testing.T, ksc *kindSchemaCompiler, yamlDoc string)
 
 func newTestCompiler(t *testing.T) *kindSchemaCompiler {
 	t.Helper()
-	ksc, err := newKindSchemaCompiler("")
+	// Compiled against the repo's generated schemas (../../schemas from the
+	// cmd/formspec package dir). The registry/cache path is exercised by the
+	// schemaregistry package tests.
+	ksc, err := newKindSchemaCompiler("../../schemas")
 	if err != nil {
 		t.Fatalf("compiler: %v", err)
 	}
@@ -32,7 +35,7 @@ func newTestCompiler(t *testing.T) *kindSchemaCompiler {
 func TestValidateSchema_ValidEntity(t *testing.T) {
 	ksc := newTestCompiler(t)
 	doc := `
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Entity
 metadata: { name: widget, module: inventory }
 spec:
@@ -49,7 +52,7 @@ spec:
 func TestValidateSchema_ExposeShorthandRejected(t *testing.T) {
 	ksc := newTestCompiler(t)
 	doc := `
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Entity
 metadata: { name: widget, module: inventory }
 spec:
@@ -71,7 +74,7 @@ spec:
 func TestValidateSchema_LifecycleMapRejected(t *testing.T) {
 	ksc := newTestCompiler(t)
 	doc := `
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Entity
 metadata: { name: widget, module: inventory }
 spec:
@@ -91,7 +94,7 @@ func TestValidateSchema_RelationShorthandRejected(t *testing.T) {
 	ksc := newTestCompiler(t)
 	// `target` is not a valid Field property; canonical is a sibling `relation`.
 	doc := `
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Entity
 metadata: { name: widget, module: inventory }
 spec:
@@ -109,7 +112,7 @@ spec:
 func TestValidateSchema_CanonicalRelationAccepted(t *testing.T) {
 	ksc := newTestCompiler(t)
 	doc := `
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Entity
 metadata: { name: widget, module: inventory }
 spec:
@@ -129,7 +132,7 @@ func TestValidateSchema_WorkflowStatesRejected(t *testing.T) {
 	ksc := newTestCompiler(t)
 	// The stale Workflow shape (custom states/transitions) must be rejected.
 	doc := `
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Workflow
 metadata: { name: wf, module: gl }
 spec:
@@ -148,7 +151,7 @@ spec:
 func TestValidateSchema_CanonicalWorkflowAccepted(t *testing.T) {
 	ksc := newTestCompiler(t)
 	doc := `
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Workflow
 metadata: { name: wf, module: gl }
 spec:
@@ -166,7 +169,7 @@ spec:
 func TestValidateSchema_AppRequiresRootURL(t *testing.T) {
 	ksc := newTestCompiler(t)
 	doc := `
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: App
 metadata: { name: myapp, description: "demo" }
 spec:

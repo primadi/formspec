@@ -22,7 +22,7 @@ func writeSpecFile(t *testing.T, dir, name, content string) {
 func TestGenerateTypeScript_NoExposedEntities(t *testing.T) {
 	dir := t.TempDir()
 	writeSpecFile(t, dir, "widget.yaml", `
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Entity
 metadata: { name: widget, module: inventory }
 spec:
@@ -44,7 +44,7 @@ spec:
 func TestGenerateTypeScript_FullEntity(t *testing.T) {
 	dir := t.TempDir()
 	writeSpecFile(t, dir, "invoice.yaml", `
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Entity
 metadata: { name: invoice, module: billing }
 spec:
@@ -109,7 +109,7 @@ spec:
 	}
 
 	// Field keys must never be camelCased — they must match the literal
-	// wire JSON key exactly (renderers/jsonbpersist EntityRecord.MarshalJSON spreads
+	// wire JSON key exactly (renderers/jsonb-persist EntityRecord.MarshalJSON spreads
 	// Data verbatim, no case transform).
 	if strings.Contains(ts, "customerId") {
 		t.Error("field name was camelCased — must stay literal to match the wire format")

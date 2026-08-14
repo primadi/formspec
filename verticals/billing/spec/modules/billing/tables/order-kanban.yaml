@@ -1,5 +1,5 @@
 # Order kanban board — drag-and-drop status board
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Kanban
 metadata:
   name: order-kanban-board

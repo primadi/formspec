@@ -3,7 +3,7 @@
 # section ketiga 2 kolom (biaya).
 # Dipilih oleh resolveForm() untuk mode create karena naming pattern:
 # {entity.name}-create = visit-create.
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Form
 metadata:
   name: visit-create

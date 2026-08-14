@@ -604,7 +604,7 @@ tetap format `code` + `params` dengan namespace App sendiri (bukan `FORMSPEC.*`)
 Config adalah manifest, bukan dotenv:
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Config
 metadata:
   name: app
@@ -639,7 +639,7 @@ ditebak per komponen:
 Contoh konkret namespace `settings.*` di workspace Config:
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Config
 metadata:
   name: workspace

@@ -1,6 +1,6 @@
 # SHOWCASE kind: Form — modal + pola 1-step create-submit (§1.7)
 # + required_when/visible_when bergantung nilai field lain (FormSpecExpr).
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Form
 metadata:
   name: payment-quick

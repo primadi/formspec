@@ -46,7 +46,7 @@ import (
 	"github.com/primadi/formspec/internal/ui"
 	"github.com/primadi/formspec/internal/validation"
 	"github.com/primadi/formspec/pkg/spec"
-	db "github.com/primadi/formspec/renderers/jsonbpersist"
+	db "github.com/primadi/formspec/renderers/jsonb-persist"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -72,7 +72,7 @@ type Config struct {
 	SidecarEndpoint      string
 	SidecarInvokeTimeout time.Duration // per-invoke timeout (default: action.DefaultSidecarInvokeTimeout)
 
-	// WebDir is the built renderer SPA root (web/dist). When set, the app
+	// WebDir is the built renderer SPA root (renderers/react-shadcn/dist). When set, the app
 	// serves it at /{ws}/_admin and /{ws}/app with an index.html fallback
 	// for client-side routes. Empty = API only (unless WebFS is set).
 	WebDir string

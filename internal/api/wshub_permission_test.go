@@ -9,7 +9,7 @@ import (
 	"github.com/primadi/formspec/internal/entity"
 	"github.com/primadi/formspec/internal/events"
 	"github.com/primadi/formspec/pkg/spec"
-	db "github.com/primadi/formspec/renderers/jsonbpersist"
+	db "github.com/primadi/formspec/renderers/jsonb-persist"
 )
 
 // setupWSPermissionRegistry registers one exposed entity (clinic/visit,

@@ -315,7 +315,7 @@ func (r *ResourceAPI) builtinCreate() *starlark.Builtin {
 		}
 
 		// The new record only has what we just wrote, and version 1 (the
-		// DB's default on insert, per renderers/jsonbpersist/ddl.go) — the caller can
+		// DB's default on insert, per renderers/jsonb-persist/ddl.go) — the caller can
 		// resource.fetch() it back if it needs server-computed fields or the
 		// authoritative version.
 		created := make(map[string]any, len(dataMap))

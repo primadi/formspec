@@ -62,18 +62,22 @@ for f in "$OUT_DIR"/kinds/*.schema.json; do
   cp "$f" "$DIST_DIR/$VERSION/kinds/$(basename "$f")"
 done
 
-# Metadata versi (index.json)
+# Metadata versi (index.json) — berisi daftar kinds yang dipublish supaya
+# `formspec schema fetch` / `formspec init` tahu set schema lengkap dari
+# registry itu sendiri (self-describing), bukan dari daftar hardcoded CLI.
+KINDS_ARRAY=$(for f in "$OUT_DIR"/kinds/*.schema.json; do basename "$f" .schema.json; done | sort | sed 's/^/"/; s/$/"/' | paste -sd, -)
 cat > "$DIST_DIR/$VERSION/index.json" <<EOF
 {
   "name": "formspec-schemas",
   "version": "$VERSION",
   "description": "JSON Schema (Draft-07) untuk resource kinds FormSpec.",
-  "apiVersion": "formspec.dev/v1alpha1",
+  "apiVersion": "formspec.dev/v1",
   "schemaDraft": "http://json-schema.org/draft-07/schema#",
   "files": {
     "root": "https://schemas.formspec.dev/$VERSION/formspec.schema.json",
     "kinds": "https://schemas.formspec.dev/$VERSION/kinds/{Kind}.schema.json"
   },
+  "kinds": [$KINDS_ARRAY],
   "publishedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 EOF

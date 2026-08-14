@@ -50,7 +50,7 @@ mengisi semua jenis itu; Module murni integrasi (mis. `formspec/tax-calculator`)
 boleh cuma berisi Service.
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Module
 metadata:
   name: general-ledger
@@ -132,7 +132,7 @@ di satu workspace berjalan bersamaan dalam proses yang sama, dibedakan
 `root_url`.
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: App
 metadata:
   name: klinik-sehat-internal

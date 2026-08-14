@@ -101,15 +101,16 @@ runtime, dan kode app berada:
 
 ```yaml
 # formspec-app.yaml — contoh Clinic-UI-Showcase
-spec: spec                       # lokasi container spec (§1.2)
-dsn: sqlite:.formspec/clinic.db     # datastore engine
-runtime: node                    # runtime sidecar untuk impl.type: sidecar
-app-dir: app                     # lokasi kode app sidecar (§2.3)
-app-entrypoint: src/app.ts       # entrypoint app sidecar
-listen: unix_socket              # socket server engine
-app-endpoint: unix_socket        # socket invoke sidecar
-dev: true                        # mode dev (hot-reload spec, dst.)
-themes:                          # direktori theme tambahan (bisa di luar spec/)
+spec: spec # lokasi container spec (§1.2)
+dsn: sqlite:.formspec/clinic.db # datastore engine
+# schema-registry: https://schemas.formspec.dev   # registry JSON Schema (default; override FORMSPEC_SCHEMA_REGISTRY)
+runtime: node # runtime sidecar untuk impl.type: sidecar
+app-dir: app # lokasi kode app sidecar (§2.3)
+app-entrypoint: src/app.ts # entrypoint app sidecar
+listen: unix_socket # socket server engine
+app-endpoint: unix_socket # socket invoke sidecar
+dev: true # mode dev (hot-reload spec, dst.)
+themes: # direktori theme tambahan (bisa di luar spec/)
   - ../../ui-theme/batik-theme
 ```
 
@@ -139,11 +140,11 @@ di §2.3.
 
 ### 2.1 Tiga Jenis File dan Tempatnya
 
-| Jenis | Ekstensi | Isi | Lokasi umum |
-|---|---|---|---|
-| Deskripsi | `.yaml`/`.yml` | Seluruh manifest (App, Module, Entity, UI kinds, dst.) | `spec/apps/`, `spec/modules/<module>/**` |
-| Logika | `.star` | Script Starlark untuk action/guard | `scripts/` di dalam folder entity (§2.2), atau level module |
-| Statis/Custom UI | `assets/*` | Aset biner + komponen UI custom (asset escape hatch) | dalam module, di luar `spec/` |
+| Jenis            | Ekstensi       | Isi                                                    | Lokasi umum                                                 |
+| ---------------- | -------------- | ------------------------------------------------------ | ----------------------------------------------------------- |
+| Deskripsi        | `.yaml`/`.yml` | Seluruh manifest (App, Module, Entity, UI kinds, dst.) | `spec/apps/`, `spec/modules/<module>/**`                    |
+| Logika           | `.star`        | Script Starlark untuk action/guard                     | `scripts/` di dalam folder entity (§2.2), atau level module |
+| Statis/Custom UI | `assets/*`     | Aset biner + komponen UI custom (asset escape hatch)   | dalam module, di luar `spec/`                               |
 
 **Git adalah sumber kebenaran.** Manifest selalu berupa file teks di
 repositori — tidak pernah format biner proprietary maupun state tersembunyi
@@ -236,20 +237,20 @@ global untuk seluruh project:
 
 ```yaml
 # modules/billing/module.yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Module
 metadata: { name: billing }
 spec:
-  runtime: typescript        # module ini dilayani proses Node terpisah
+  runtime: typescript # module ini dilayani proses Node terpisah
 ```
 
 ```yaml
 # modules/pharmacy/module.yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Module
 metadata: { name: pharmacy }
 spec:
-  runtime: php                # module ini dilayani proses PHP terpisah
+  runtime: php # module ini dilayani proses PHP terpisah
 ```
 
 Nilai `runtime` yang valid: `local` (default — native compiled-in, tanpa proses
@@ -356,6 +357,7 @@ HTTP, `depends`/`depends_on`, dan referensi menu di App tidak pernah encode
 asal folder, hanya nama.
 
 ### 6.2 `formspec.lock`
+
 Mencatat, per module terinstal: `source` (mis.
 `github.com/acme/billing-module` — identitas unik sesungguhnya, §2.1 di
 atas), `version`, `checksum`, `signature`, dan `trust_tier`
@@ -365,6 +367,7 @@ konflik nama juga dicatat di sini, mengikat ke `source` yang sama supaya
 alias baru. Format skema lengkap belum dituliskan — lihat §6.5.
 
 ### 6.3 Model Aktivasi: Default Nonaktif, Uncomment untuk Pakai
+
 `formspec module install` menulis entri **ter-comment** di `App.spec.modules`
 ([`02-workspace-app-module.md`](02-workspace-app-module.md) §3) di bawah
 blok marker terstruktur `>>> formspec:vendor ... <<< formspec:vendor` — bukan
@@ -391,6 +394,7 @@ jadi target dependency. Aktivasi adalah keputusan developer/project yang
 eksplisit, bukan efek samping instalasi.
 
 ### 6.4 Kustomisasi Vendor Module Tanpa Edit Langsung (Shadow Copy)
+
 `vendors/` read-only (§6.1), tapi kebutuhan riil developer tidak berhenti
 di "pakai apa adanya" — sering perlu ubah layout form, caption, urutan
 section, atau visibility field tertentu dari module vendor, tanpa
@@ -417,13 +421,13 @@ checksum → tidak ada deteksi drift di §6.4.2.
 
 **6.4.1 Whitelist per Kind (ditegakkan saat boot, bukan konvensi):**
 
-| Kind | Boleh di-shadow-copy | Tidak boleh |
-|---|---|---|
-| `Form` | Layout (section, `columns`, grouping), caption/label, urutan field, visibility (`hidden`) | — (kind ini murni presentation) |
-| `Menu`/`Navigation` (`App.spec.menu`) | Label, icon, urutan, visibility | — |
-| Instance `VisualSpecKind` lain (Table/Kanban/Calendar/dst., [`../frontend/02-visual-spec-kind.md`](../frontend/02-visual-spec-kind.md)) | Kolom ditampilkan, default sort | — |
-| `Entity` (termasuk `business_rules`/L4–L6 validation, [`../backend/02-core-extended.md`](../backend/02-core-extended.md) §14) | — (tidak ada jalur shadow-copy) | Semua — field/validasi tambahan pakai **Entity Extension** ([`../backend/03-entity-extension.md`](../backend/03-entity-extension.md)) |
-| `Service`/`Workflow` | — (tidak ada jalur shadow-copy) | Semua — perilaku lintas-module pakai pola **Integrator** ([`../backend/02-core-extended.md`](../backend/02-core-extended.md) §5) |
+| Kind                                                                                                                                    | Boleh di-shadow-copy                                                                      | Tidak boleh                                                                                                                           |
+| --------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `Form`                                                                                                                                  | Layout (section, `columns`, grouping), caption/label, urutan field, visibility (`hidden`) | — (kind ini murni presentation)                                                                                                       |
+| `Menu`/`Navigation` (`App.spec.menu`)                                                                                                   | Label, icon, urutan, visibility                                                           | —                                                                                                                                     |
+| Instance `VisualSpecKind` lain (Table/Kanban/Calendar/dst., [`../frontend/02-visual-spec-kind.md`](../frontend/02-visual-spec-kind.md)) | Kolom ditampilkan, default sort                                                           | —                                                                                                                                     |
+| `Entity` (termasuk `business_rules`/L4–L6 validation, [`../backend/02-core-extended.md`](../backend/02-core-extended.md) §14)           | — (tidak ada jalur shadow-copy)                                                           | Semua — field/validasi tambahan pakai **Entity Extension** ([`../backend/03-entity-extension.md`](../backend/03-entity-extension.md)) |
+| `Service`/`Workflow`                                                                                                                    | — (tidak ada jalur shadow-copy)                                                           | Semua — perilaku lintas-module pakai pola **Integrator** ([`../backend/02-core-extended.md`](../backend/02-core-extended.md) §5)      |
 
 Field-field yang boleh di-shadow-copy pada dasarnya presentation-layer
 saja — sejalan dengan lingkup `kind: Form` yang memang didesain untuk
@@ -445,6 +449,7 @@ karena developer memang sudah sengaja ambil alih penuh file itu):
 ```
 
 ### 6.5 Status Implementasi Hari Ini (Gap)
+
 Seluruh §6 adalah **target desain, belum diimplementasikan** — `vendors/`,
 `overrides/`, `formspec.lock`, marker aktivasi, dan `formspec override
 adopt|diff` tidak ada di `formspec dev`/CLI hari ini
@@ -477,16 +482,16 @@ kerja untuk detail):
 
 ## 7. Referensi
 
-| Dokumen | Isi |
-|---|---|
-| [`examples/Clinic-UI-Showcase/`](../../../examples/Clinic-UI-Showcase/) | Contoh kanonik layout §1–§2: dua App, dua Module, spec entity-centric, app sidecar `app/` |
-| [`03-kind-system.md`](03-kind-system.md) | Taksonomi kind, derived-by-default, pemetaan kind → plane |
-| [`02-workspace-app-module.md`](02-workspace-app-module.md) | Model workspace/App/Module yang jadi dasar §3; menu (§4); alias saat konflik nama (§2.1) |
-| [`07-marketplace.md`](07-marketplace.md) | Instalasi, trust tier, dan model aktivasi module vendor (§6 di atas) |
-| [`../backend/03-entity-extension.md`](../backend/03-entity-extension.md) | Entity Extension — jalur aditif untuk field/validasi tambahan pada Entity vendor |
-| [`../backend/06-script-runtime.md`](../backend/06-script-runtime.md) | Resolusi `ref` handler native di `impl/` (§7) — memakai §2 dokumen ini |
-| [`docs/runtimes/04-formspec-sidecar.md`](../../runtimes/04-formspec-sidecar.md) | Protokol sidecar per proses (§4), mode eksekusi (§5), gap implementasi (§8) |
-| [`docs/architecture/08-repo-structure.md`](../../architecture/08-repo-structure.md) | Bagaimana `sdk/*` dan `internal/sidecar` merealisasikan kontrak ini di kode |
+| Dokumen                                                                             | Isi                                                                                       |
+| ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| [`examples/Clinic-UI-Showcase/`](../../../examples/Clinic-UI-Showcase/)             | Contoh kanonik layout §1–§2: dua App, dua Module, spec entity-centric, app sidecar `app/` |
+| [`03-kind-system.md`](03-kind-system.md)                                            | Taksonomi kind, derived-by-default, pemetaan kind → plane                                 |
+| [`02-workspace-app-module.md`](02-workspace-app-module.md)                          | Model workspace/App/Module yang jadi dasar §3; menu (§4); alias saat konflik nama (§2.1)  |
+| [`07-marketplace.md`](07-marketplace.md)                                            | Instalasi, trust tier, dan model aktivasi module vendor (§6 di atas)                      |
+| [`../backend/03-entity-extension.md`](../backend/03-entity-extension.md)            | Entity Extension — jalur aditif untuk field/validasi tambahan pada Entity vendor          |
+| [`../backend/06-script-runtime.md`](../backend/06-script-runtime.md)                | Resolusi `ref` handler native di `impl/` (§7) — memakai §2 dokumen ini                    |
+| [`docs/runtimes/04-formspec-sidecar.md`](../../runtimes/04-formspec-sidecar.md)     | Protokol sidecar per proses (§4), mode eksekusi (§5), gap implementasi (§8)               |
+| [`docs/architecture/08-repo-structure.md`](../../architecture/08-repo-structure.md) | Bagaimana `sdk/*` dan `internal/sidecar` merealisasikan kontrak ini di kode               |
 
 > **Dua konvensi folder di repo:** contoh `examples/Clinic-UI-Showcase/`
 > memakai folder entity-centric + characteristic grouping (kanonik, §2.2).

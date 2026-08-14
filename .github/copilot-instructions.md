@@ -21,22 +21,22 @@ Tiga tipe file: `yaml` (deskripsi), `script` (Starlark logic), `asset` (static/c
 
 ## Stack
 
-| Layer | Teknologi |
-|---|---|
-| Backend | Go 1.26, module `github.com/primadi/formspec` |
-| YAML | `gopkg.in/yaml.v3` |
-| Frontend | React 19 + TypeScript 6 + Vite 8 |
-| UI | shadcn/ui (Nova preset) + Tailwind CSS v4 |
-| Routing | react-router-dom |
-| State | zustand |
-| Form | react-hook-form + zod |
-| HTTP client | ky |
-| Table | @tanstack/react-table |
-| DnD | @dnd-kit/core + @dnd-kit/sortable |
-| Icons | lucide-react |
-| Toast | sonner |
-| Database | PostgreSQL |
-| Object Storage | MinIO |
+| Layer          | Teknologi                                     |
+| -------------- | --------------------------------------------- |
+| Backend        | Go 1.26, module `github.com/primadi/formspec` |
+| YAML           | `gopkg.in/yaml.v3`                            |
+| Frontend       | React 19 + TypeScript 6 + Vite 8              |
+| UI             | shadcn/ui (Nova preset) + Tailwind CSS v4     |
+| Routing        | react-router-dom                              |
+| State          | zustand                                       |
+| Form           | react-hook-form + zod                         |
+| HTTP client    | ky                                            |
+| Table          | @tanstack/react-table                         |
+| DnD            | @dnd-kit/core + @dnd-kit/sortable             |
+| Icons          | lucide-react                                  |
+| Toast          | sonner                                        |
+| Database       | PostgreSQL                                    |
+| Object Storage | MinIO                                         |
 
 ---
 
@@ -58,9 +58,9 @@ internal/
   tenant/              # Tenant isolation
 pkg/spec/              # Go spec types (entity.go, frontend.go, resources.go, spec.go)
 renderers/
-  jsonbpersist/        # PersistBackend renderer (JSONB strategy, Postgres+SQLite)
-  web/                 # Frontend: React + TypeScript + Vite (shadcn-shell)
-  web/src/
+  jsonb-persist/        # PersistBackend renderer (JSONB strategy, Postgres+SQLite)
+  react-shadcn/        # Frontend: React + TypeScript + Vite (shadcn-shell)
+  react-shadcn/src/
     App.tsx            # Root dengan BrowserRouter
     main.tsx           # Entry point
     index.css          # Tailwind + shadcn CSS variables
@@ -89,12 +89,12 @@ reff_docs/             # Reference docs, drafts, contoh lama
 Semua YAML manifest mengikuti format K8s-style:
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
-kind: Entity               # PascalCase, huruf besar di awal
+apiVersion: formspec.dev/v1
+kind: Entity # PascalCase, huruf besar di awal
 metadata:
-  name: invoice            # kebab-case, unique per (kind, module)
-  module: billing          # owning module
-  description: "..."       # recommended untuk AI readability
+  name: invoice # kebab-case, unique per (kind, module)
+  module: billing # owning module
+  description: "..." # recommended untuk AI readability
   labels: {}
   annotations: {}
 spec:
@@ -103,49 +103,49 @@ spec:
 
 ### Resource Kinds — Backend
 
-| Kind | Concern |
-|---|---|
-| `App` | Root project manifest, unit deployment |
-| `Module` | Package of code + manifests |
-| `Entity` | Stateful data — CRUD, state machine, events, permissions |
-| `Service` | Stateless computation |
-| `Config` | Module configuration |
-| `Migration` | Data migration |
-| `Subscription` | Event subscription |
-| `Workflow` | Approval attached to state machine (Extended) |
-| `Api` | API exposure override (Extended) |
-| `Webhook` | Verified inbound endpoints (Extended) |
-| `Environment` | Deployment target (Control Plane) |
-| `Policy` | Governance rules (Control Plane) |
+| Kind           | Concern                                                  |
+| -------------- | -------------------------------------------------------- |
+| `App`          | Root project manifest, unit deployment                   |
+| `Module`       | Package of code + manifests                              |
+| `Entity`       | Stateful data — CRUD, state machine, events, permissions |
+| `Service`      | Stateless computation                                    |
+| `Config`       | Module configuration                                     |
+| `Migration`    | Data migration                                           |
+| `Subscription` | Event subscription                                       |
+| `Workflow`     | Approval attached to state machine (Extended)            |
+| `Api`          | API exposure override (Extended)                         |
+| `Webhook`      | Verified inbound endpoints (Extended)                    |
+| `Environment`  | Deployment target (Control Plane)                        |
+| `Policy`       | Governance rules (Control Plane)                         |
 
 ### Resource Kinds — Frontend
 
-| Kind | Concern |
-|---|---|
-| `Page` | Route + UI composition (blocks, tabs, or full component) |
-| `Form` | Input/edit layout per entity |
-| `Table` | List/browse per entity |
-| `Dashboard` | Widget canvas |
-| `Widget` | Single dashboard widget |
-| `Report` | Parameterized tabular report |
-| `Wizard` | Multi-step business process |
-| `Kanban` | Drag-and-drop status board |
-| `Timeline` | Chronological event journal |
-| `Calendar` | Calendar view for date-based entity data |
-| `Listing` | Public catalog (paired with landing-page App kind) |
-| `ApprovalInbox` | Pending approval task queue |
-| `NotificationCenter` | In-app notification feed |
-| `Print` | Printable document |
-| `Theme` | Look & feel (CSS variables) |
+| Kind                 | Concern                                                  |
+| -------------------- | -------------------------------------------------------- |
+| `Page`               | Route + UI composition (blocks, tabs, or full component) |
+| `Form`               | Input/edit layout per entity                             |
+| `Table`              | List/browse per entity                                   |
+| `Dashboard`          | Widget canvas                                            |
+| `Widget`             | Single dashboard widget                                  |
+| `Report`             | Parameterized tabular report                             |
+| `Wizard`             | Multi-step business process                              |
+| `Kanban`             | Drag-and-drop status board                               |
+| `Timeline`           | Chronological event journal                              |
+| `Calendar`           | Calendar view for date-based entity data                 |
+| `Listing`            | Public catalog (paired with landing-page App kind)       |
+| `ApprovalInbox`      | Pending approval task queue                              |
+| `NotificationCenter` | In-app notification feed                                 |
+| `Print`              | Printable document                                       |
+| `Theme`              | Look & feel (CSS variables)                              |
 
 ### Entity Characteristics
 
-| Characteristic | Sifat |
-|---|---|
-| `master` | Stable data — categories, products, customers |
-| `transaction` | Append-heavy, time-partitioned — orders, invoices, journal entries |
-| `reference` | Read-only seed data — provinces, tax rates, chart of accounts |
-| `summary` | System-managed projection — no CUD via API |
+| Characteristic | Sifat                                                              |
+| -------------- | ------------------------------------------------------------------ |
+| `master`       | Stable data — categories, products, customers                      |
+| `transaction`  | Append-heavy, time-partitioned — orders, invoices, journal entries |
+| `reference`    | Read-only seed data — provinces, tax rates, chart of accounts      |
+| `summary`      | System-managed projection — no CUD via API                         |
 
 ---
 
@@ -182,12 +182,12 @@ spec:
 
 ## Testing
 
-| Type | Command |
-|---|---|
-| Backend unit tests | `go test ./...` atau `make test` |
-| Backend verbose | `make test-verbose` |
-| Frontend | `cd web && vitest` |
-| YAML validation | `formspec validate` |
+| Type               | Command                               |
+| ------------------ | ------------------------------------- |
+| Backend unit tests | `go test ./...` atau `make test`      |
+| Backend verbose    | `make test-verbose`                   |
+| Frontend           | `cd renderers/react-shadcn && vitest` |
+| YAML validation    | `formspec validate`                   |
 
 ---
 
@@ -197,7 +197,7 @@ spec:
 make build       # Build all Go binaries
 make dev         # Run dev server (formspec-resource --dev)
 make test        # Run Go tests
-make generate    # Generate TypeScript types from spec -> web/src/generated
+make generate    # Generate TypeScript types from spec -> renderers/react-shadcn/src/generated
 make web-dev     # Run frontend dev server (Vite)
 make web-build   # Build frontend for production
 make web-deps    # Install frontend npm dependencies
@@ -209,23 +209,23 @@ make clean       # Clean build artifacts
 
 ## Key Reference Files
 
-| Path | Isi |
-|---|---|
-| `docs/spec/01-overview.md` | Visi, arsitektur, prinsip, 6 sources of inspiration |
-| `docs/spec/02-core-basic.md` | Core spec — minimal implementation yang harus dipenuhi |
-| `docs/spec/03-core-extended.md` | Extended kinds — Workflow, Api, Webhook |
-| `docs/spec/04-control-plane.md` | Control Plane — Environment, Policy, signing, audit |
-| `docs/spec/05-frontend.md` | Frontend spec — 12 UI kinds, renderer contract, FormSpecExpr |
-| `docs/spec/06-plane-protocol.md` | Plane Protocol — komunikasi Control ↔ Resource |
-| `docs/spec/07-marketplace.md` | Marketplace spec — pricing, metering, licensing |
-| `docs/spec/10-entity-extension.md` | Entity Extension — add fields to owned entities |
-| `docs/spec/11-reference.md` | Glossary & semua design decisions (D1–D48) |
-| `reff_docs/FormSpec-Foundation-Document-v2.0.md` | Foundation doc — latar belakang, keputusan fundamental |
-| `reff_docs/FormSpec-Technical-Note-DX-dan-Entity-Extension.md` | Technical note — DX dan entity extension |
-| `pkg/spec/entity.go` | Go struct untuk Entity manifest |
-| `pkg/spec/frontend.go` | Go struct untuk frontend kinds |
-| `pkg/spec/spec.go` | Enum dan shared types |
-| `internal/manifest/loader.go` | Manifest loader — load, parse, validate YAML |
+| Path                                                           | Isi                                                          |
+| -------------------------------------------------------------- | ------------------------------------------------------------ |
+| `docs/spec/01-overview.md`                                     | Visi, arsitektur, prinsip, 6 sources of inspiration          |
+| `docs/spec/02-core-basic.md`                                   | Core spec — minimal implementation yang harus dipenuhi       |
+| `docs/spec/03-core-extended.md`                                | Extended kinds — Workflow, Api, Webhook                      |
+| `docs/spec/04-control-plane.md`                                | Control Plane — Environment, Policy, signing, audit          |
+| `docs/spec/05-frontend.md`                                     | Frontend spec — 12 UI kinds, renderer contract, FormSpecExpr |
+| `docs/spec/06-plane-protocol.md`                               | Plane Protocol — komunikasi Control ↔ Resource               |
+| `docs/spec/07-marketplace.md`                                  | Marketplace spec — pricing, metering, licensing              |
+| `docs/spec/10-entity-extension.md`                             | Entity Extension — add fields to owned entities              |
+| `docs/spec/11-reference.md`                                    | Glossary & semua design decisions (D1–D48)                   |
+| `reff_docs/FormSpec-Foundation-Document-v2.0.md`               | Foundation doc — latar belakang, keputusan fundamental       |
+| `reff_docs/FormSpec-Technical-Note-DX-dan-Entity-Extension.md` | Technical note — DX dan entity extension                     |
+| `pkg/spec/entity.go`                                           | Go struct untuk Entity manifest                              |
+| `pkg/spec/frontend.go`                                         | Go struct untuk frontend kinds                               |
+| `pkg/spec/spec.go`                                             | Enum dan shared types                                        |
+| `internal/manifest/loader.go`                                  | Manifest loader — load, parse, validate YAML                 |
 
 ---
 
@@ -274,13 +274,13 @@ Setiap kali ada perubahan code, **catat di `docs/changelog/`**:
 
 File utama: `docs/plan/todo.md`.
 
-| Aksi | Aturan |
-|---|---|
-| Task selesai | Tandai ✅ dan catat timestamp selesai |
-| Butuh catatan | Tambahkan komentar inline di bawah task |
+| Aksi                         | Aturan                                                    |
+| ---------------------------- | --------------------------------------------------------- |
+| Task selesai                 | Tandai ✅ dan catat timestamp selesai                     |
+| Butuh catatan                | Tambahkan komentar inline di bawah task                   |
 | Pekerjaan ditunda (deferred) | Tambahkan task baru dengan status ⏸️ dan alasan penundaan |
-| Task baru ditemukan | Tambahkan ke fase yang sesuai, jangan hapus task lama |
-| Update `Last Updated` | Selalu update tanggal di header todo.md |
+| Task baru ditemukan          | Tambahkan ke fase yang sesuai, jangan hapus task lama     |
+| Update `Last Updated`        | Selalu update tanggal di header todo.md                   |
 
 ### 4. Code → Plan Traceability
 
@@ -302,15 +302,16 @@ Jika selama implementasi ada keputusan teknis, trade-off, atau konteks yang perl
 
 Saat melakukan audit (membandingkan code terhadap spec atau todo):
 
-| Langkah | Output |
-|---|---|
-| Jalankan audit | Simpan hasil di `docs/audit/<topik>-<tanggal>.md` |
-| Identifikasi gap | List gap dengan severity (critical / major / minor) |
-| Selesaikan gap | Implementasi perbaikan sesuai workflow di atas |
-| Gap selesai | Update changelog, dan update dokumen terkait (spec, plan, todo) jika dibutuhkan |
-| Gap tidak bisa diselesaikan | Catat sebagai deferred todo dengan alasan |
+| Langkah                     | Output                                                                          |
+| --------------------------- | ------------------------------------------------------------------------------- |
+| Jalankan audit              | Simpan hasil di `docs/audit/<topik>-<tanggal>.md`                               |
+| Identifikasi gap            | List gap dengan severity (critical / major / minor)                             |
+| Selesaikan gap              | Implementasi perbaikan sesuai workflow di atas                                  |
+| Gap selesai                 | Update changelog, dan update dokumen terkait (spec, plan, todo) jika dibutuhkan |
+| Gap tidak bisa diselesaikan | Catat sebagai deferred todo dengan alasan                                       |
 
 <!-- rtk-instructions v2 -->
+
 # RTK — Token-Optimized CLI
 
 **rtk** is a CLI proxy that filters and compresses command outputs, saving 60-90% tokens.
@@ -336,4 +337,5 @@ rtk gain --history    # Per-command savings history
 rtk discover          # Find missed rtk opportunities
 rtk proxy <cmd>       # Run raw (no filtering) but track usage
 ```
+
 <!-- /rtk-instructions -->

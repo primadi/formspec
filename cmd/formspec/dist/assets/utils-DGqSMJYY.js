@@ -1,0 +1,1 @@
+import{Rt as e,zt as t}from"./vendor-react-CeGuSl6t.js";function n(...n){return e(t(n))}function r(e){return e.replace(/[-_]+/g,` `).trim().replace(/\b\w/g,e=>e.toUpperCase())}export{r as n,n as t};

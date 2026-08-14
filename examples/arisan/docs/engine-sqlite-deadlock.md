@@ -16,7 +16,7 @@ A custom action (`script` / `script_ref` impl) whose `.star` script calls
 - On PostgreSQL (production) the same scripts run fine (no deadlock).
 
 ## Root Cause
-`renderers/jsonbpersist/crud.go` → `(*EntityStore).resolveRelations()` executes
+`renderers/jsonb-persist/crud.go` → `(*EntityStore).resolveRelations()` executes
 its batch relation query on the **raw base connection**:
 
 ```go
@@ -30,7 +30,7 @@ rows, err := txReadDB(ctx, s.db).QueryContext(ctx, q, idArgs...)   // FIX
 ```
 
 Why it deadlocks: a custom action runs inside a request-scoped `TxScope`
-(`renderers/jsonbpersist/txscope.go`). `TxScope.join()` lazily opens a
+(`renderers/jsonb-persist/txscope.go`). `TxScope.join()` lazily opens a
 transaction on the *only* SQLite connection (single connection, write lock).
 `resolveRelations` then tries to read through the base pool, which has **no
 free connection** → deadlock. The engine even documents this exact hazard in
@@ -44,7 +44,7 @@ The bug is simply that `resolveRelations` missed adopting `txReadDB`.
 ## Local Patch Applied (module cache, NOT tracked in git)
 `formspec.exe` was rebuilt from the patched module cache:
 
-- File: `%GOPATH%\pkg\mod\github.com\primadi\formspec@v0.0.0-20260803061320-e3d68a0bb6b7\renderers\jsonbpersist\crud.go`
+- File: `%GOPATH%\pkg\mod\github.com\primadi\formspec@v0.0.0-20260803061320-e3d68a0bb6b7\renderers\jsonb-persist\crud.go`
 - Change: `s.db.QueryContext(...)` → `txReadDB(ctx, s.db).QueryContext(...)` (line ~1398, inside `resolveRelations`)
 - Rebuild: `go build -o %GOPATH%\bin\formspec.exe ./cmd/formspec` (run from the module dir)
 

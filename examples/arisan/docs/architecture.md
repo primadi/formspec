@@ -3,7 +3,7 @@
 ## Pendekatan: Spec-First
 
 Seluruh perilaku aplikasi dideklarasikan sebagai manifest YAML
-(`apiVersion: formspec.dev/v1alpha1`). Engine FormSpec me-derive:
+(`apiVersion: formspec.dev/v1`). Engine FormSpec me-derive:
 
 - **REST API** untuk setiap entity (`/api/v1/{module}/{plural}`)
 - **UI** (Table, Form, Page) untuk setiap entity

@@ -3,7 +3,7 @@
 # menunjukkan sumber resep tanpa perlu validasi server (create tetap
 # unconditional-required, lihat entities/prescription.yaml). First Form di
 # modul pharmacy — CRUD resep sebelumnya 100% derived UI.
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Form
 metadata:
   name: prescription-edit

@@ -19,7 +19,7 @@ Valkey. **Kredensial tidak pernah
 inline** — selalu lewat `credential_ref` ke KMS/Vault.
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Datastore
 metadata:
   name: prod-postgres

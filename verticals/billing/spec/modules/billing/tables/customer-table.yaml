@@ -1,5 +1,5 @@
 # Customer table — list view with columns, actions, and filters
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Table
 metadata:
   name: customer-table

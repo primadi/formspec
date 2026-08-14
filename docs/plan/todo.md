@@ -1,7 +1,7 @@
 # Master Plan: FormSpec Implementation
 
-**Last Updated**: 2026-08-12  
-**Status**: ✅ Fase 0 complete · ✅ Fase 1 (1.1–1.5) · ✅ Fase 2.1 · ✅ Fase 2.2 · ✅ Fase 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6) · ✅ Fase 5 (5.1–5.4) · ✅ Spec hot-reload · ✅ Fase 11 (review schema↔docs) · ✅ Audit spec↔schema + tambah TODO item · ✅ `formspec validate` (3.1.1, engine+schema) · 🚧 Rename formspec→formspec (docs/plan/rename-formspec.md) · 🚧 Fase 12 Domain Infrastruktur (docs/architecture/09-domain-map.md)
+**Last Updated**: 2026-08-14  
+**Status**: ✅ Fase 0 complete · ✅ Fase 1 (1.1–1.5) · ✅ Fase 2.1 · ✅ Fase 2.2 · ✅ Fase 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6) · ✅ Fase 5 (5.1–5.4) · ✅ Spec hot-reload · ✅ Fase 11 (review schema↔docs) · ✅ Audit spec↔schema + tambah TODO item · ✅ `formspec validate` (3.1.1, engine+schema) · 🚧 Rename formspec→formspec (docs/plan/rename-formspec.md) · 🚧 Fase 12 Domain Infrastruktur (docs/architecture/09-domain-map.md) · ✅ Schema registry online (docs/plan/schema-registry-online.md)
 
 > `⬜` not started · `✅` complete · `⏸️` deferred
 
@@ -31,14 +31,16 @@ konten skill dibuat MCP-agnostic agar reuse saat Fase 10 landing.
 
 ## Fase 0: Documentation & Repo Foundation ✅ COMPLETE
 
-| Item                                                                          | Status |
-| ----------------------------------------------------------------------------- | ------ |
-| 0.1 Fix CLI doc numbering (01-dev, 02-cli, 03-generate, 04-ctl)               | ✅     |
-| 0.2 Fix Document → Entity in docs/spec/                                       | ✅     |
-| 0.3 Repo restructure: `web/` → `renderers/web/`                               | ✅     |
-| 0.4 Repo restructure: `internal/db/`+`datastore/` → `renderers/jsonbpersist/` | ✅     |
-| 0.5 AI instructions + 3 skills (backend, frontend, cli)                       | ✅     |
-| 0.6 Verify no `docs_old/` refs in `docs/`                                     | ✅     |
+| Item                                                                                                                | Status        |
+| ------------------------------------------------------------------------------------------------------------------- | ------------- |
+| 0.1 Fix CLI doc numbering (01-dev, 02-cli, 03-generate, 04-ctl)                                                     | ✅            |
+| 0.2 Fix Document → Entity in docs/spec/                                                                             | ✅            |
+| 0.3 Repo restructure: `web/` → `renderers/web/`                                                                     | ✅            |
+| 0.4 Repo restructure: `internal/db/`+`datastore/` → `renderers/jsonbpersist/`                                       | ✅            |
+| 0.5 AI instructions + 3 skills (backend, frontend, cli)                                                             | ✅            |
+| 0.6 Verify no `docs_old/` refs in `docs/`                                                                           | ✅            |
+| 0.7 Rename `renderers/web/` → `renderers/react-shadcn/` (+ cleanup ref `web/` stale di docs aktif)                  | ✅ 2026-08-14 |
+| 0.8 Rename `renderers/jsonbpersist/` → `renderers/jsonb-persist/` (selaras nama docs; paket `db`/`datastore` tetap) | ✅ 2026-08-14 |
 
 ---
 
@@ -827,16 +829,17 @@ Referensi: `docs/changelog/2026-07-31-001-resolusi-review-schema-docs.md`.
 Setup domain, landing, docs site, dan schema hosting. Referensi:
 `docs/architecture/09-domain-map.md`, `docs/plan/rename-formspec.md`.
 
-| Item                                                                        | Status | Catatan                                                                            |
-| --------------------------------------------------------------------------- | ------ | ---------------------------------------------------------------------------------- |
-| 12.1 DNS Cloudflare: nameserver, records, SSL Full (strict), redirect rules | 🔲     | Manual — butuh akses akun Cloudflare/registrar                                     |
-| 12.2 Landing page `formspec.dev` (`site/`, Vite+React)                      | ✅     | Build hijau; deploy Pages belum (butuh akun)                                       |
-| 12.3 Docs site `docs.formspec.dev` (`docs-site/`, VitePress)                | ✅     | Build hijau (123 halaman); changelog/plan/presentations/technical-notes di-exclude |
-| 12.4 Schema hosting `schemas.formspec.dev` (`scripts/publish-schemas.sh`)   | ✅     | Stage v1 + alias latest; upload R2 belum                                           |
-| 12.5 Email Resend `send.formspec.dev` (SPF/DKIM/DMARC)                      | 🔲     | Manual — butuh akun Resend + set DNS                                               |
-| 12.6 Reserve subdomain backend (registry/mcp/api/ops/status/try/control.\*) | 🔲     | Manual — Cloudflare DNS                                                            |
-| 12.7 `security.txt`, `.well-known`, `robots.txt`, `_redirects`/`_headers`   | ✅     | Di `site/public/` & `docs-site/public/`                                            |
-| 12.8 Deploy CI: Pages project (site/, docs-site/, schemas)                  | 🔲     | Manual — butuh akun Cloudflare                                                     |
+| Item                                                                                            | Status | Catatan                                                                            |
+| ----------------------------------------------------------------------------------------------- | ------ | ---------------------------------------------------------------------------------- |
+| 12.1 DNS Cloudflare: nameserver, records, SSL Full (strict), redirect rules                     | 🔲     | Manual — butuh akses akun Cloudflare/registrar                                     |
+| 12.2 Landing page `formspec.dev` (`site/`, Vite+React)                                          | ✅     | Build hijau; deploy Pages belum (butuh akun)                                       |
+| 12.3 Docs site `docs.formspec.dev` (`docs-site/`, VitePress)                                    | ✅     | Build hijau (123 halaman); changelog/plan/presentations/technical-notes di-exclude |
+| 12.4 Schema hosting `schemas.formspec.dev` (`scripts/publish-schemas.sh`)                       | ✅     | Stage v1 + alias latest; upload R2 belum                                           |
+| 12.5 Email Resend `send.formspec.dev` (SPF/DKIM/DMARC)                                          | 🔲     | Manual — butuh akun Resend + set DNS                                               |
+| 12.6 Reserve subdomain backend (registry/mcp/api/ops/status/try/control.\*)                     | 🔲     | Manual — Cloudflare DNS                                                            |
+| 12.7 `security.txt`, `.well-known`, `robots.txt`, `_redirects`/`_headers`                       | ✅     | Di `site/public/` & `docs-site/public/`                                            |
+| 12.8 Deploy CI: Pages project (site/, docs-site/, schemas)                                      | 🔲     | Manual — pakai Build watch paths (changelog 2026-08-14-001)                        |
+| 12.9 Schema registry online: versi di `apiVersion`, `formspec schema`, cache lokal, hapus embed | ✅     | `docs/plan/schema-registry-online.md` + changelog 2026-08-14-004                   |
 
 ## Deferred (Cloud Phase)
 

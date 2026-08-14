@@ -5413,13 +5413,13 @@
     }
   },
   "title": "FormSpec Manifest",
-  "description": "JSON Schema for FormSpec YAML manifests (formspec.dev/v1alpha1).\nValidates the apiVersion/kind/metadata/spec structure and routes to kind-specific specs.",
+  "description": "JSON Schema for FormSpec YAML manifests (formspec.dev/v1).\nValidates the apiVersion/kind/metadata/spec structure and routes to kind-specific specs.",
   "type": "object",
   "properties": {
     "apiVersion": {
-      "description": "FormSpec API version — must be formspec.dev/v1alpha1",
+      "description": "FormSpec API version — must be formspec.dev/v1",
       "type": "string",
-      "const": "formspec.dev/v1alpha1"
+      "const": "formspec.dev/v1"
     },
     "kind": {
       "description": "Resource kind — determines the structure of `spec`",
@@ -5479,7 +5479,7 @@
       "properties": {
         "apiVersion": {
           "type": "string",
-          "const": "formspec.dev/v1alpha1"
+          "const": "formspec.dev/v1"
         },
         "kind": {
           "type": "string",
@@ -5584,7 +5584,7 @@
       "properties": {
         "apiVersion": {
           "type": "string",
-          "const": "formspec.dev/v1alpha1"
+          "const": "formspec.dev/v1"
         },
         "kind": {
           "type": "string",
@@ -5674,7 +5674,7 @@
       "properties": {
         "apiVersion": {
           "type": "string",
-          "const": "formspec.dev/v1alpha1"
+          "const": "formspec.dev/v1"
         },
         "kind": {
           "type": "string",
@@ -5823,7 +5823,7 @@
       "properties": {
         "apiVersion": {
           "type": "string",
-          "const": "formspec.dev/v1alpha1"
+          "const": "formspec.dev/v1"
         },
         "kind": {
           "type": "string",
@@ -5892,7 +5892,7 @@
       "properties": {
         "apiVersion": {
           "type": "string",
-          "const": "formspec.dev/v1alpha1"
+          "const": "formspec.dev/v1"
         },
         "kind": {
           "type": "string",
@@ -5954,7 +5954,7 @@
       "properties": {
         "apiVersion": {
           "type": "string",
-          "const": "formspec.dev/v1alpha1"
+          "const": "formspec.dev/v1"
         },
         "kind": {
           "type": "string",
@@ -6017,7 +6017,7 @@
       "properties": {
         "apiVersion": {
           "type": "string",
-          "const": "formspec.dev/v1alpha1"
+          "const": "formspec.dev/v1"
         },
         "kind": {
           "type": "string",
@@ -6125,7 +6125,7 @@
       "properties": {
         "apiVersion": {
           "type": "string",
-          "const": "formspec.dev/v1alpha1"
+          "const": "formspec.dev/v1"
         },
         "kind": {
           "type": "string",
@@ -6203,7 +6203,7 @@
       "properties": {
         "apiVersion": {
           "type": "string",
-          "const": "formspec.dev/v1alpha1"
+          "const": "formspec.dev/v1"
         },
         "kind": {
           "type": "string",
@@ -6264,7 +6264,7 @@
       "properties": {
         "apiVersion": {
           "type": "string",
-          "const": "formspec.dev/v1alpha1"
+          "const": "formspec.dev/v1"
         },
         "kind": {
           "type": "string",
@@ -6342,7 +6342,7 @@
       "properties": {
         "apiVersion": {
           "type": "string",
-          "const": "formspec.dev/v1alpha1"
+          "const": "formspec.dev/v1"
         },
         "kind": {
           "type": "string",
@@ -6410,7 +6410,7 @@
       "properties": {
         "apiVersion": {
           "type": "string",
-          "const": "formspec.dev/v1alpha1"
+          "const": "formspec.dev/v1"
         },
         "kind": {
           "type": "string",
@@ -6473,7 +6473,7 @@
       "properties": {
         "apiVersion": {
           "type": "string",
-          "const": "formspec.dev/v1alpha1"
+          "const": "formspec.dev/v1"
         },
         "kind": {
           "type": "string",
@@ -6546,7 +6546,7 @@
       "properties": {
         "apiVersion": {
           "type": "string",
-          "const": "formspec.dev/v1alpha1"
+          "const": "formspec.dev/v1"
         },
         "kind": {
           "type": "string",
@@ -6642,7 +6642,7 @@
       "properties": {
         "apiVersion": {
           "type": "string",
-          "const": "formspec.dev/v1alpha1"
+          "const": "formspec.dev/v1"
         },
         "kind": {
           "type": "string",
@@ -6722,7 +6722,7 @@
       "properties": {
         "apiVersion": {
           "type": "string",
-          "const": "formspec.dev/v1alpha1"
+          "const": "formspec.dev/v1"
         },
         "kind": {
           "type": "string",
@@ -6803,7 +6803,7 @@
       "properties": {
         "apiVersion": {
           "type": "string",
-          "const": "formspec.dev/v1alpha1"
+          "const": "formspec.dev/v1"
         },
         "kind": {
           "type": "string",
@@ -6872,7 +6872,7 @@
       "properties": {
         "apiVersion": {
           "type": "string",
-          "const": "formspec.dev/v1alpha1"
+          "const": "formspec.dev/v1"
         },
         "kind": {
           "type": "string",
@@ -6937,7 +6937,7 @@
       "properties": {
         "apiVersion": {
           "type": "string",
-          "const": "formspec.dev/v1alpha1"
+          "const": "formspec.dev/v1"
         },
         "kind": {
           "type": "string",
@@ -7033,7 +7033,7 @@
       "properties": {
         "apiVersion": {
           "type": "string",
-          "const": "formspec.dev/v1alpha1"
+          "const": "formspec.dev/v1"
         },
         "kind": {
           "type": "string",
@@ -7121,7 +7121,7 @@
       "properties": {
         "apiVersion": {
           "type": "string",
-          "const": "formspec.dev/v1alpha1"
+          "const": "formspec.dev/v1"
         },
         "kind": {
           "type": "string",
@@ -7227,7 +7227,7 @@
       "properties": {
         "apiVersion": {
           "type": "string",
-          "const": "formspec.dev/v1alpha1"
+          "const": "formspec.dev/v1"
         },
         "kind": {
           "type": "string",
@@ -7315,7 +7315,7 @@
       "properties": {
         "apiVersion": {
           "type": "string",
-          "const": "formspec.dev/v1alpha1"
+          "const": "formspec.dev/v1"
         },
         "kind": {
           "type": "string",
@@ -7401,7 +7401,7 @@
       "properties": {
         "apiVersion": {
           "type": "string",
-          "const": "formspec.dev/v1alpha1"
+          "const": "formspec.dev/v1"
         },
         "kind": {
           "type": "string",
@@ -7503,7 +7503,7 @@
       "properties": {
         "apiVersion": {
           "type": "string",
-          "const": "formspec.dev/v1alpha1"
+          "const": "formspec.dev/v1"
         },
         "kind": {
           "type": "string",
@@ -7584,7 +7584,7 @@
       "properties": {
         "apiVersion": {
           "type": "string",
-          "const": "formspec.dev/v1alpha1"
+          "const": "formspec.dev/v1"
         },
         "kind": {
           "type": "string",
@@ -7699,7 +7699,7 @@
       "properties": {
         "apiVersion": {
           "type": "string",
-          "const": "formspec.dev/v1alpha1"
+          "const": "formspec.dev/v1"
         },
         "kind": {
           "type": "string",
@@ -7793,7 +7793,7 @@
       "properties": {
         "apiVersion": {
           "type": "string",
-          "const": "formspec.dev/v1alpha1"
+          "const": "formspec.dev/v1"
         },
         "kind": {
           "type": "string",
@@ -7878,7 +7878,7 @@
       "properties": {
         "apiVersion": {
           "type": "string",
-          "const": "formspec.dev/v1alpha1"
+          "const": "formspec.dev/v1"
         },
         "kind": {
           "type": "string",
@@ -7948,7 +7948,7 @@
       "properties": {
         "apiVersion": {
           "type": "string",
-          "const": "formspec.dev/v1alpha1"
+          "const": "formspec.dev/v1"
         },
         "kind": {
           "type": "string",
@@ -8038,7 +8038,7 @@
       "properties": {
         "apiVersion": {
           "type": "string",
-          "const": "formspec.dev/v1alpha1"
+          "const": "formspec.dev/v1"
         },
         "kind": {
           "type": "string",
@@ -8112,7 +8112,7 @@
       "properties": {
         "apiVersion": {
           "type": "string",
-          "const": "formspec.dev/v1alpha1"
+          "const": "formspec.dev/v1"
         },
         "kind": {
           "type": "string",
@@ -8177,7 +8177,7 @@
       "properties": {
         "apiVersion": {
           "type": "string",
-          "const": "formspec.dev/v1alpha1"
+          "const": "formspec.dev/v1"
         },
         "kind": {
           "type": "string",
@@ -8233,7 +8233,7 @@
       "properties": {
         "apiVersion": {
           "type": "string",
-          "const": "formspec.dev/v1alpha1"
+          "const": "formspec.dev/v1"
         },
         "kind": {
           "type": "string",

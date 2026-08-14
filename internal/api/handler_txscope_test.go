@@ -11,7 +11,7 @@ import (
 	"github.com/primadi/formspec/internal/entity"
 	"github.com/primadi/formspec/internal/manifest"
 	"github.com/primadi/formspec/pkg/spec"
-	db "github.com/primadi/formspec/renderers/jsonbpersist"
+	db "github.com/primadi/formspec/renderers/jsonb-persist"
 )
 
 // registerTestEntity applies migrations for entitySpec and registers it into

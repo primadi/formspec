@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/primadi/formspec/renderers/jsonbpersist"
+	"github.com/primadi/formspec/renderers/jsonb-persist"
 	"github.com/primadi/formspec/pkg/spec"
 )
 
@@ -119,7 +119,7 @@ func TestNewSidecarExecutorWithEndpoint_BadScheme(t *testing.T) {
 
 // TestSidecarExecutor_ForwardsScopeIdHeader verifies the sending half of
 // the cross-process TxScope correlation described in
-// renderers/jsonbpersist/txscope.go: when ctx carries an active scope,
+// renderers/jsonb-persist/txscope.go: when ctx carries an active scope,
 // Execute must forward its registry id as X-FormSpec-Scope-Id on the
 // outbound /invoke/... request — internal/sidecar/ctx.go's receiving half
 // (TestCtxHandler_ScopeIdJoinsSameTransaction) already proves the id gets

@@ -34,7 +34,7 @@ mengubah tampilan satu entity. Lihat `docs/spec/frontend/06-page-kinds.md` §14.
 ## Contoh Manifest
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Page
 metadata:
   name: order-detail

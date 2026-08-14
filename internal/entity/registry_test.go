@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/primadi/formspec/renderers/jsonbpersist"
+	"github.com/primadi/formspec/renderers/jsonb-persist"
 )
 
 func setupTestRegistry(t *testing.T, specRelPath string) (*Registry, db.DB) {

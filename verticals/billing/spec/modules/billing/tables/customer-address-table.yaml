@@ -1,5 +1,5 @@
 # Address table — child table shown in customer detail page
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Table
 metadata:
   name: customer-address-table

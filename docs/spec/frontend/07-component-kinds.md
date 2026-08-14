@@ -65,7 +65,7 @@ Component yang mengisi slot `widget` milik Page tier (mis. Dashboard —
 ([`02-visual-spec-kind.md`](02-visual-spec-kind.md) §4):
 
 ```yaml
-apiVersion: formspec.dev/v1alpha1
+apiVersion: formspec.dev/v1
 kind: Widget
 metadata:
   name: gl-cashflow-chart

@@ -12,7 +12,7 @@ import (
 	"github.com/primadi/formspec/internal/auth"
 	"github.com/primadi/formspec/internal/entity"
 	"github.com/primadi/formspec/pkg/spec"
-	db "github.com/primadi/formspec/renderers/jsonbpersist"
+	db "github.com/primadi/formspec/renderers/jsonb-persist"
 )
 
 // setupAPIEnv creates an in-memory registry with test entities that expose REST.

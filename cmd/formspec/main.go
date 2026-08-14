@@ -1,7 +1,7 @@
 // Command formspec is the developer CLI — one binary, subcommand per verb.
 // See docs/cli-tools/01-formspec-cli.md for the full verb reference.
 //
-// SPA frontend (renderers/web/dist/) is embedded into the binary so `formspec dev` serves
+// SPA frontend (renderers/react-shadcn/dist/) is embedded into the binary so `formspec dev` serves
 // both API and UI from a single process — no separate frontend server needed.
 package main
 
@@ -61,6 +61,8 @@ func main() {
 		runValidate(os.Args[2:])
 	case "init":
 		runInit(os.Args[2:])
+	case "schema":
+		runSchema(os.Args[2:])
 	case "diff", "delete", "get", "describe", "repl",
 		"migrate", "seed", "backup", "restore", "archive", "saga", "module", "sign", "script",
 		"freeze", "rollback", "lock", "workspace":
@@ -89,6 +91,7 @@ func usage() {
 	fmt.Fprintf(os.Stderr, "  new app             Alias for `generate node-app`\n")
 	fmt.Fprintf(os.Stderr, "  dev                 Development server (API + SPA built-in)\n")
 	fmt.Fprintf(os.Stderr, "  init                Scaffold a new FormSpec project with standard layout\n")
+	fmt.Fprintf(os.Stderr, "  schema              Manage cached JSON Schema versions (fetch, update, list, clear)\n")
 	fmt.Fprintf(os.Stderr, "\nNot yet implemented (see docs/cli-tools/01-formspec-cli.md):\n")
 	fmt.Fprintf(os.Stderr, "  diff, delete, get, describe, repl,\n")
 	fmt.Fprintf(os.Stderr, "  migrate, seed, backup, restore, archive, saga, module, sign, script,\n")

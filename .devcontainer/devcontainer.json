@@ -1,74 +1,74 @@
 // For format details, see https://aka.ms/devcontainer.json. For config options, see the
 // README at: https://github.com/devcontainers/templates/tree/main/src/go-postgres
 {
-	"name": "Go",
-	"dockerComposeFile": "compose.yaml",
-	"service": "app",
-	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
-	"features": {
-		"ghcr.io/devcontainers/features/python:1": {
-			"version": "latest"
-		},
-		"ghcr.io/devcontainers/features/node:2.1.0": {
-			"version": "lts"
-		}
-		// Java (JDK 17 + Maven) — commented out to save ~319 MB disk + JVM RAM.
-		// Enable when working on sdk/java:
-		// 1. Uncomment the block below
-		// 2. Dev Containers: Rebuild and Reopen in Container
-		//"ghcr.io/devcontainers/features/java:1": {
-		//	"version": "17",
-		//	"installMaven": true,
-		//	"installGradle": false
-		//},
-		// .NET SDK — commented out to save ~613 MB disk.
-		// Enable when working on sdk/dotnet:
-		// 1. Uncomment the block below
-		// 2. Dev Containers: Rebuild and Reopen in Container
-		//"ghcr.io/devcontainers/features/dotnet:2.5.0": {
-		//	"version": "lts"
-		//},
-		// Ruby — commented out to save ~151 MB disk (rarely needed).
-		// Enable when working on sdk/ruby:
-		// 1. Uncomment the block below
-		// 2. Dev Containers: Rebuild and Reopen in Container
-		//"ghcr.io/devcontainers/features/ruby:2.0.0": {
-		//	"version": "latest"
-		//}
-	},
-	"customizations": {
-		"vscode": {
-			"extensions": [
-				"Vizards.deepseek-v4-for-copilot",
-				"ltmoerdani.opencode-copilot-chat",
-				"phgn.vscode-starlark",
-				"dbaeumer.vscode-eslint",
-				"esbenp.prettier-vscode",
-				"bradlc.vscode-tailwindcss",
-				"dbcode.dbcode",
-				"Anthropic.claude-code",
-				"redhat.vscode-yaml"
-			]
-		}
-	},
+  "name": "Go",
+  "dockerComposeFile": "compose.yaml",
+  "service": "app",
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "features": {
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "latest"
+    },
+    "ghcr.io/devcontainers/features/node:2.1.0": {
+      "version": "lts"
+    }
+    // Java (JDK 17 + Maven) — commented out to save ~319 MB disk + JVM RAM.
+    // Enable when working on sdk/java:
+    // 1. Uncomment the block below
+    // 2. Dev Containers: Rebuild and Reopen in Container
+    //"ghcr.io/devcontainers/features/java:1": {
+    //	"version": "17",
+    //	"installMaven": true,
+    //	"installGradle": false
+    //},
+    // .NET SDK — commented out to save ~613 MB disk.
+    // Enable when working on sdk/dotnet:
+    // 1. Uncomment the block below
+    // 2. Dev Containers: Rebuild and Reopen in Container
+    //"ghcr.io/devcontainers/features/dotnet:2.5.0": {
+    //	"version": "lts"
+    //},
+    // Ruby — commented out to save ~151 MB disk (rarely needed).
+    // Enable when working on sdk/ruby:
+    // 1. Uncomment the block below
+    // 2. Dev Containers: Rebuild and Reopen in Container
+    //"ghcr.io/devcontainers/features/ruby:2.0.0": {
+    //	"version": "latest"
+    //}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "Vizards.deepseek-v4-for-copilot",
+        "ltmoerdani.opencode-copilot-chat",
+        "phgn.vscode-starlark",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "bradlc.vscode-tailwindcss",
+        "dbcode.dbcode",
+        "Anthropic.claude-code",
+        "redhat.vscode-yaml"
+      ]
+    }
+  },
 
-	// Features to add to the dev container. More info: https:// containers.dev/features.
-	// "features": {},
+  // Features to add to the dev container. More info: https:// containers.dev/features.
+  // "features": {},
 
-	// Configure tool-specific properties.
-	// "customizations": {},
+  // Configure tool-specific properties.
+  // "customizations": {},
 
-	// Forward ports ke host (Windows/Mac). Prefix 1 untuk menghindari tabrakan.
-	// 18080 = formspec-resource API | 19000 = MinIO API | 19001 = MinIO Console
-	// 16379 = Valkey | 11025 = Mailpit SMTP | 18025 = Mailpit UI
-	// Keep this on IPv4 localhost to avoid Docker's flaky IPv6 forwarding in this environment.
-	"forwardPorts": [18080, 19000, 19001, 16379, 11025, 18025],
+  // Forward ports ke host (Windows/Mac). Prefix 1 untuk menghindari tabrakan.
+  // 18080 = formspec-resource API | 19000 = MinIO API | 19001 = MinIO Console
+  // 16379 = Valkey | 11025 = Mailpit SMTP | 18025 = Mailpit UI
+  // Keep this on IPv4 localhost to avoid Docker's flaky IPv6 forwarding in this environment.
+  "forwardPorts": [18080, 19000, 19001, 16379, 11025, 18025],
 
-	// Use 'postCreateCommand' to run commands after the container is created.
-	// RTK global hooks must re-run here because /home/vscode state is ephemeral
-	// across container rebuilds. --auto-patch skips the settings.json prompt.
-	"postCreateCommand": "cd renderers/web && [ -f package.json ] && npm install || true; mkdir -p /home/vscode/.claude && RTK_TELEMETRY_DISABLED=1 /home/vscode/.local/bin/rtk init -g --auto-patch && RTK_TELEMETRY_DISABLED=1 /home/vscode/.local/bin/rtk init -g --opencode"
+  // Use 'postCreateCommand' to run commands after the container is created.
+  // RTK global hooks must re-run here because /home/vscode state is ephemeral
+  // across container rebuilds. --auto-patch skips the settings.json prompt.
+  "postCreateCommand": "cd renderers/react-shadcn && [ -f package.json ] && npm install || true; mkdir -p /home/vscode/.claude && RTK_TELEMETRY_DISABLED=1 /home/vscode/.local/bin/rtk init -g --auto-patch && RTK_TELEMETRY_DISABLED=1 /home/vscode/.local/bin/rtk init -g --opencode"
 
-	// Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
-	// "remoteUser": "root"
+  // Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
+  // "remoteUser": "root"
 }
