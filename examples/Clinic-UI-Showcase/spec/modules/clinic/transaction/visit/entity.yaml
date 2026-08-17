@@ -107,6 +107,9 @@ spec:
       - { from: [waiting, in_consultation], to: cancelled, via: cancel }
 
   actions:
+    - name: submit
+      disabled: true
+
     - name: update
       conditions:
         - script: "status in ['waiting', 'in_consultation']"

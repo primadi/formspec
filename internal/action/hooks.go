@@ -49,7 +49,14 @@ func effectivePriority(h spec.HookDecl) int {
 // store.Insert/Update) must not run either.
 func RunBeforePhase(ctx context.Context, disp *Dispatcher, hooks []spec.HookDecl, actionSpec *spec.Action, actionName string, params *ExecuteParams) error {
 	for _, h := range SelectHooks(hooks, spec.HookOnBefore, actionName) {
-		if _, err := disp.Dispatch(ctx, spec.Action{Name: actionName, Impl: h.Impl}, *params); err != nil {
+		// A hook runs as part of the enclosing action, so it inherits the
+		// action's uses declaration — cross-module resource access from a
+		// hook is gated by the action's uses.resources (todo 2.6.4).
+		hookAction := spec.Action{Name: actionName, Impl: h.Impl}
+		if actionSpec != nil {
+			hookAction.Uses = actionSpec.Uses
+		}
+		if _, err := disp.Dispatch(ctx, hookAction, *params); err != nil {
 			runOnErrorPhase(ctx, disp, hooks, actionName, params, err)
 			return err
 		}
@@ -71,7 +78,11 @@ func RunBeforePhase(ctx context.Context, disp *Dispatcher, hooks []spec.HookDecl
 // cancel something already committed").
 func RunAfterPhase(ctx context.Context, disp *Dispatcher, hooks []spec.HookDecl, actionSpec *spec.Action, actionName string, persisted ExecuteParams) {
 	for _, h := range SelectHooks(hooks, spec.HookOnAfter, actionName) {
-		if _, err := disp.Dispatch(ctx, spec.Action{Name: actionName, Impl: h.Impl}, persisted); err != nil {
+		hookAction := spec.Action{Name: actionName, Impl: h.Impl}
+		if actionSpec != nil {
+			hookAction.Uses = actionSpec.Uses
+		}
+		if _, err := disp.Dispatch(ctx, hookAction, persisted); err != nil {
 			logger(persisted).Error("hook.after.failed", map[string]any{"action": actionName, "error": err.Error()})
 			runOnErrorPhase(ctx, disp, hooks, actionName, &persisted, err)
 		}

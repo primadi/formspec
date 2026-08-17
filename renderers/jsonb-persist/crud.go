@@ -267,6 +267,40 @@ func (s *EntityStore) validateKnownFields(data map[string]any) error {
 	return nil
 }
 
+// stripEnrichedRelations removes nested relation objects that
+// resolveRelations injected into a record's Data map during a read
+// (e.g. Data["patient"] = {...} for field patient_id). These enriched
+// aliases are read-side conveniences for the frontend — they are never
+// legitimate write inputs (callers write the *_id scalar, not the nested
+// object) and would otherwise be rejected by validateKnownFields as
+// unknown fields when the same map is written back (script resource.save()
+// re-persists the whole loaded record; PATCH merges onto the fetched Data).
+//
+// A key is stripped only when it is a relation alias AND its value is a
+// nested object — a client sending a scalar under an unknown name is still
+// rejected by validateKnownFields.
+func (s *EntityStore) stripEnrichedRelations(data map[string]any) {
+	if len(data) == 0 {
+		return
+	}
+	for _, f := range s.fields {
+		if f.Relation == nil || f.Relation.Type != "belongs_to" {
+			continue
+		}
+		// Determine relation alias exactly like resolveRelations:
+		// "patient_id" → "patient", else fallback to resource name.
+		alias := strings.TrimSuffix(f.Name, "_id")
+		if alias == f.Name {
+			alias = f.Relation.Resource
+		}
+		if v, ok := data[alias]; ok {
+			if _, isMap := v.(map[string]any); isMap {
+				delete(data, alias)
+			}
+		}
+	}
+}
+
 // InsertParams holds the data for creating a new entity record.
 type InsertParams struct {
 	WorkspaceID   string
@@ -294,6 +328,11 @@ func (s *EntityStore) Insert(ctx context.Context, params InsertParams) (string, 
 
 	// Apply default values for fields not present in data
 	s.applyDefaults(params.Data)
+
+	// Strip read-side relation enrichment (nested objects injected by
+	// resolveRelations) before validation — a script resource.create() may
+	// re-persist a fetched record that carries relation aliases.
+	s.stripEnrichedRelations(params.Data)
 
 	// Reject unknown fields before entering the transaction
 	if err := s.validateKnownFields(params.Data); err != nil {
@@ -511,11 +550,16 @@ func (s *EntityStore) Update(ctx context.Context, params UpdateParams) (int, err
 			ErrValidationRule, s.module, s.entity)
 	}
 
+	// Strip read-side relation enrichment (nested objects injected by
+	// resolveRelations) before validation — PATCH merges onto the fetched
+	// Data and script resource.save() re-persists the whole loaded record,
+	// so both can carry relation aliases that are never legitimate writes.
+	s.stripEnrichedRelations(params.Data)
+
 	// Reject unknown fields early
 	if err := s.validateKnownFields(params.Data); err != nil {
 		return 0, fmt.Errorf("%s update: %w", s.entity, err)
 	}
-
 	// Validate required fields that are present in the update data
 	if err := s.validateRequired(params.Data); err != nil {
 		return 0, fmt.Errorf("%s update: %w", s.entity, err)

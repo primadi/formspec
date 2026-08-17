@@ -13,9 +13,18 @@ import (
 	"path/filepath"
 	"regexp"
 	"testing"
+	"time"
 
 	formspec "github.com/primadi/formspec/resource"
 )
+
+// recentDate returns a transaction_date within the default backdate window
+// (3 days) so tests don't fail as wall-clock time advances past a hardcoded
+// date. The visit entity has an override_permission, but otc-sale and
+// prescription use the default 3-day limit.
+func recentDate() string {
+	return time.Now().AddDate(0, 0, -1).Format("2006-01-02")
+}
 
 func newTestApp(t *testing.T) *formspec.App {
 	t.Helper()
@@ -144,7 +153,7 @@ func TestVisitLifecycle_EndToEnd(t *testing.T) {
 	// action is needed. queue_number is generated automatically here
 	// (natural_key_rule).
 	status, env := do(t, handler, "POST", "/demo/_ui/entity/clinic/visit", map[string]any{
-		"transaction_date": "2026-07-12",
+		"transaction_date": recentDate(),
 		"patient_id":       patientID,
 		"polyclinic_id":    polyclinicID,
 		"doctor_id":        doctorID,
@@ -233,7 +242,7 @@ func TestVisitComplete_RejectsMissingDiagnosis(t *testing.T) {
 	polyclinicID, doctorID, patientID := createFixtures(t, handler)
 
 	status, env := do(t, handler, "POST", "/demo/_ui/entity/clinic/visit", map[string]any{
-		"transaction_date": "2026-07-12",
+		"transaction_date": recentDate(),
 		"patient_id":       patientID,
 		"polyclinic_id":    polyclinicID,
 		"doctor_id":        doctorID,
@@ -262,7 +271,7 @@ func TestPrescriptionLifecycle_EndToEnd(t *testing.T) {
 	polyclinicID, doctorID, patientID := createFixtures(t, handler)
 
 	status, env := do(t, handler, "POST", "/demo/_ui/entity/clinic/visit", map[string]any{
-		"transaction_date": "2026-07-12",
+		"transaction_date": recentDate(),
 		"patient_id":       patientID,
 		"polyclinic_id":    polyclinicID,
 		"doctor_id":        doctorID,
@@ -286,7 +295,7 @@ func TestPrescriptionLifecycle_EndToEnd(t *testing.T) {
 	medicineID := dataMap(t, env)["id"].(string)
 
 	status, env = do(t, handler, "POST", "/demo/_ui/entity/pharmacy/prescription", map[string]any{
-		"transaction_date": "2026-07-12",
+		"transaction_date": recentDate(),
 		"visit_id":         visitID,
 		"patient_name":     "Jane Doe",
 		"items": []map[string]any{

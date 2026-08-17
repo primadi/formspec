@@ -27,6 +27,16 @@ lihat `docs/plan/agent-assisted-app-development.md`, guide
 `formspec validate` sebagai gate. Fase 10 (`formspec consult`/MCP) tetap di-defer;
 konten skill dibuat MCP-agnostic agar reuse saat Fase 10 landing.
 
+**Catatan 2026-08-17**: 9 test gagal `examples/Clinic-UI-Showcase` (sebelumnya
+"pre-existing") **diperbaiki** — ternyata 4 bug nyata yang saling menutupi:
+(1) hook script tidak resolve karena `HandleCreate`/`HandleUpdate` tidak mengisi
+`SpecDir`; (2) `resource.save()`/PATCH menulis balik alias relasi ter-enrich
+(`patient`) → `stripEnrichedRelations` di `Update`/`Insert`; (3) guard
+`!empty(items)` invalid Starlark → `not empty(items)`; (4) visit lifecycle-active
+tanpa route submit → `submit: disabled` (lifecycle-free). Plus test time-dependent
+(hardcoded date) → `recentDate()`. `go test ./...` kini **571 pass, 0 fail**.
+Lihat `docs/changelog/2026-08-17-003-fix-clinic-e2e-failures.md`.
+
 ---
 
 ## Fase 0: Documentation & Repo Foundation ✅ COMPLETE

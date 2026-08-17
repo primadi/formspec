@@ -21,11 +21,12 @@ import (
 
 // HandlerFactory creates HTTP handlers backed by an EntityStore.
 type HandlerFactory struct {
-	registry     EntityStoreProvider
-	dispatcher   *action.Dispatcher
-	specLookup   func(module, name string) (*spec.EntitySpec, bool) // optional — enables sort/filter validation, hooks, and event resolution
-	deliveryDeps action.DeliveryDeps
-	idempotency  *db.IdempotencyStore // wired when idempotency enforcement is enabled (todo 2.7)
+	registry      EntityStoreProvider
+	dispatcher    *action.Dispatcher
+	specLookup    func(module, name string) (*spec.EntitySpec, bool) // optional — enables sort/filter validation, hooks, and event resolution
+	specDirLookup func(module, name string) (string, bool)           // optional — resolves the entity's spec directory for hook/custom script refs
+	deliveryDeps  action.DeliveryDeps
+	idempotency   *db.IdempotencyStore // wired when idempotency enforcement is enabled (todo 2.7)
 }
 
 // EntityStoreProvider abstracts the entity registry for handler use.
@@ -48,6 +49,26 @@ func (f *HandlerFactory) SetDispatcher(d *action.Dispatcher) {
 // hook/event resolution on create, update, and custom actions.
 func (f *HandlerFactory) SetSpecLookup(fn func(module, name string) (*spec.EntitySpec, bool)) {
 	f.specLookup = fn
+}
+
+// SetSpecDirLookup wires entity-spec-directory resolution. When set,
+// HandleCreate/HandleUpdate resolve the entity's own YAML directory so hook
+// script refs (before/after/on_error on create/update) resolve relative to
+// the entity's directory — same as HandleCustomAction, which receives
+// specDir from the router. Without it, hook scripts fall back to spec-root
+// resolution and can't find entity-nested scripts.
+func (f *HandlerFactory) SetSpecDirLookup(fn func(module, name string) (string, bool)) {
+	f.specDirLookup = fn
+}
+
+// entitySpecDir resolves the entity's spec directory, or "" when the lookup
+// isn't wired or the entity isn't registered.
+func (f *HandlerFactory) entitySpecDir(module, name string) string {
+	if f.specDirLookup == nil {
+		return ""
+	}
+	dir, _ := f.specDirLookup(module, name)
+	return dir
 }
 
 // SetDeliveryDeps wires the event-delivery dependencies (hub, outbox, event
@@ -510,6 +531,7 @@ func (f *HandlerFactory) HandleCreate(module, entity string) http.HandlerFunc {
 		execParams := &action.ExecuteParams{
 			Module: module, Entity: entity, ActionName: "create",
 			Resource: body, Params: body, WorkspaceID: workspaceID, UserID: createdBy,
+			SpecDir: f.entitySpecDir(module, entity),
 		}
 		if err := action.RunBeforePhase(ctx, f.dispatcher, hooks, actionSpec, "create", execParams); err != nil {
 			writeError(w, http.StatusUnprocessableEntity, "HOOK_ABORTED", err.Error())
@@ -673,6 +695,7 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 			Module: module, Entity: entity, ActionName: "update", ResourceID: id,
 			Resource: merged, ResourceVersion: current.Version, Params: body,
 			WorkspaceID: workspaceID, UserID: updatedBy,
+			SpecDir: f.entitySpecDir(module, entity),
 		}
 		if err := action.RunBeforePhase(ctx, f.dispatcher, hooks, actionSpec, "update", execParams); err != nil {
 			writeError(w, http.StatusUnprocessableEntity, "HOOK_ABORTED", err.Error())

@@ -62,7 +62,7 @@ spec:
     initial: pending
     transitions:
       - { from: pending, to: completed, via: sell,
-          guard: { expression: "!empty(items)", message: "Minimal satu item harus ditambahkan sebelum penjualan dapat diselesaikan" } }
+          guard: { expression: "not empty(items)", message: "Minimal satu item harus ditambahkan sebelum penjualan dapat diselesaikan" } }
       - { from: pending, to: cancelled, via: cancel }
 
   actions:

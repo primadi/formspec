@@ -83,6 +83,11 @@ spec:
   actions:
     - name: create
       emits: created
+      # before/create hook (derive-patient-name) does a cross-module
+      # resource.fetch("clinic.patient", ...) — declared here so the
+      # uses.resources enforcement (todo 2.6.4) allows it.
+      uses:
+        resources: [clinic.patient]
 
     - name: delete
       disabled: true

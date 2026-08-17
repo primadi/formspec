@@ -22,7 +22,7 @@ func TestOTCSale_EndToEnd(t *testing.T) {
 	medicineID := dataMap(t, env)["id"].(string)
 
 	status, env = do(t, handler, "POST", "/demo/_ui/entity/pharmacy/otc-sale", map[string]any{
-		"transaction_date": "2026-07-12",
+		"transaction_date": recentDate(),
 		"buyer_name":       "Pembeli Umum",
 		"items": []map[string]any{
 			{"line_number": 1, "medicine_id": medicineID, "quantity": 4, "unit_price": 1000},
@@ -78,7 +78,7 @@ func TestOTCSale_Cancel(t *testing.T) {
 	medicineID := dataMap(t, env)["id"].(string)
 
 	status, env = do(t, handler, "POST", "/demo/_ui/entity/pharmacy/otc-sale", map[string]any{
-		"transaction_date": "2026-07-12",
+		"transaction_date": recentDate(),
 		"items": []map[string]any{
 			{"line_number": 1, "medicine_id": medicineID, "quantity": 2, "unit_price": 500},
 		},
@@ -127,7 +127,7 @@ func TestOTCSale_StockGuardRejectsInsufficientStock(t *testing.T) {
 	medicineID := dataMap(t, env)["id"].(string)
 
 	status, env = do(t, handler, "POST", "/demo/_ui/entity/pharmacy/otc-sale", map[string]any{
-		"transaction_date": "2026-07-12",
+		"transaction_date": recentDate(),
 		"items": []map[string]any{
 			{"line_number": 1, "medicine_id": medicineID, "quantity": 5, "unit_price": 1000},
 		},
@@ -150,7 +150,7 @@ func TestOTCSale_SellRejectsEmptyItems(t *testing.T) {
 	handler := app.Handler()
 
 	status, env := do(t, handler, "POST", "/demo/_ui/entity/pharmacy/otc-sale", map[string]any{
-		"transaction_date": "2026-07-12",
+		"transaction_date": recentDate(),
 		"buyer_name":       "No Items Buyer",
 	})
 	if status != http.StatusCreated {

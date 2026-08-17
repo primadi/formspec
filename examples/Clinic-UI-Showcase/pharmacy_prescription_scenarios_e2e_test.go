@@ -17,7 +17,7 @@ func TestPrescriptionInternal_PatientIdDerivesPatientName(t *testing.T) {
 	polyclinicID, doctorID, patientID := createFixtures(t, handler)
 
 	status, env := do(t, handler, "POST", "/demo/_ui/entity/clinic/visit", map[string]any{
-		"transaction_date": "2026-07-12",
+		"transaction_date": recentDate(),
 		"patient_id":       patientID,
 		"polyclinic_id":    polyclinicID,
 		"doctor_id":        doctorID,
@@ -41,7 +41,7 @@ func TestPrescriptionInternal_PatientIdDerivesPatientName(t *testing.T) {
 	// required-field check runs, since it mutates the same data map Insert
 	// validates against.
 	status, env = do(t, handler, "POST", "/demo/_ui/entity/pharmacy/prescription", map[string]any{
-		"transaction_date": "2026-07-12",
+		"transaction_date": recentDate(),
 		"visit_id":         visitID,
 		"patient_id":       patientID,
 		"items": []map[string]any{
@@ -76,7 +76,7 @@ func TestPrescriptionExternal_NoVisitId_Succeeds(t *testing.T) {
 	medicineID := dataMap(t, env)["id"].(string)
 
 	status, env = do(t, handler, "POST", "/demo/_ui/entity/pharmacy/prescription", map[string]any{
-		"transaction_date": "2026-07-12",
+		"transaction_date": recentDate(),
 		"source":           "external",
 		"prescriber_name":  "dr. Budi Santoso (RS Luar)",
 		"patient_name":     "Walk-in Patient",
@@ -113,7 +113,7 @@ func TestPrescriptionCreate_VisitIDOptional_Regression(t *testing.T) {
 	medicineID := dataMap(t, env)["id"].(string)
 
 	status, env = do(t, handler, "POST", "/demo/_ui/entity/pharmacy/prescription", map[string]any{
-		"transaction_date": "2026-07-12",
+		"transaction_date": recentDate(),
 		"patient_name":     "No Visit Patient",
 		"items": []map[string]any{
 			{"line_number": 1, "medicine_id": medicineID, "quantity": 1, "dosage_instructions": "1x1 sehari"},

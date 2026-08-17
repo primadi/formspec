@@ -47,6 +47,16 @@ func NewRouterBuilder(registry *entity.Registry) *RouterBuilder {
 		}
 		return info.EntitySpec, true
 	})
+	// Entity-spec-directory lookup enables hook scripts on create/update to
+	// resolve refs relative to the entity's own YAML directory (same as
+	// HandleCustomAction's router-passed specDir).
+	b.factory.SetSpecDirLookup(func(module, name string) (string, bool) {
+		info, ok := registry.GetEntity(module, name)
+		if !ok || info.Source == "" {
+			return "", false
+		}
+		return filepath.Dir(strings.SplitN(info.Source, "#", 2)[0]), true
+	})
 	return b
 }
 
