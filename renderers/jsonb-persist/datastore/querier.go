@@ -3,7 +3,7 @@ package datastore
 import (
 	"context"
 
-	"github.com/primadi/formspec/renderers/jsonb-persist"
+	db "github.com/primadi/formspec/renderers/jsonb-persist"
 )
 
 // Querier is the capability interface a ctx.db() connection must implement

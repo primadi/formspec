@@ -1,4 +1,4 @@
-# 2026-08-17-005 — Wire ctx.* datastore resolver + real ctx.db().query()
+# 2026-08-17-005 — Wire ctx.\* datastore resolver + real ctx.db().query()
 
 **Apa:** Menuntaskan Fase 2.9.1 — `ctx.db()` (dan primitif `ctx.*` lain) kini
 me-resolve ke koneksi nyata, dan `ctx.db().query()` benar-benar jalan terhadap

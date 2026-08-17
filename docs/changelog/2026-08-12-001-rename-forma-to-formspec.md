@@ -9,22 +9,22 @@ roadmap Go Q3 2026). Benturan CLI + pencarian tidak bisa dihindari.
 
 ## Yang berubah
 
-| Aspek | Detail |
-|---|---|
-| Module path | `github.com/primadi/forma` → `github.com/primadi/formspec` |
-| apiVersion | `forma.dev/v1alpha1` → `formspec.dev/v1alpha1`; `forma/v1` → `formspec/v1` |
-| Binary | `forma`/`forma-ctl`/`forma-operator`/`forma-gen-schema`/`forma-gen-kind-docs` → `formspec*` |
-| CLI | `formspec dev/apply/validate/generate/init/check/consult` |
-| Config file | `forma-app.yaml` → `formspec-app.yaml` |
-| Brand text | "Forma" → "FormSpec" di semua prose aktual |
-| Error codes | `FORMA.*` → `FORMSPEC.*` |
-| FormaExpr | `FormSpecExpr` (folder `lib/formaexpr` → `lib/formspec-expr`, doc `08-formaexpr.md` → `08-formspec-expr.md`) |
-| FormaError | `FormSpecError` (pkg/spec + semua SDK) |
-| Schema | `schemas/forma.schema.json` → `schemas/formspec.schema.json` |
-| System DB | `forma_*` (outbox, audit_log, event_log, schema_migrations, control, shared, ops_backup, ops_ddl) → `formspec_*` |
-| SDK packages | Java `io/forma` → `io/formspec`, Python `lib_forma` → `lib_formspec`, Ruby `lib/forma` → `lib/formspec` |
-| Deploy | CRD `forma.dev_*.yaml` → `formspec.dev_*.yaml`; image `registry.formspec.dev`; apiGroups K8s `formspec.dev` |
-| Docs | `docs/cli-tools/*-forma-*.md` + `docs/runtimes/*-forma-*.md` di-rename; isi semua ditulis ulang |
+| Aspek        | Detail                                                                                                            |
+| ------------ | ----------------------------------------------------------------------------------------------------------------- |
+| Module path  | `github.com/primadi/forma` → `github.com/primadi/formspec`                                                        |
+| apiVersion   | `forma.dev/v1alpha1` → `formspec.dev/v1alpha1`; `forma/v1` → `formspec/v1`                                        |
+| Binary       | `forma`/`forma-ctl`/`forma-operator`/`forma-gen-schema`/`forma-gen-kind-docs` → `formspec*`                       |
+| CLI          | `formspec dev/apply/validate/generate/init/check/consult`                                                         |
+| Config file  | `forma-app.yaml` → `formspec-app.yaml`                                                                            |
+| Brand text   | "Forma" → "FormSpec" di semua prose aktual                                                                        |
+| Error codes  | `FORMA.*` → `FORMSPEC.*`                                                                                          |
+| FormaExpr    | `FormSpecExpr` (folder `lib/formaexpr` → `lib/formspec-expr`, doc `08-formaexpr.md` → `08-formspec-expr.md`)      |
+| FormaError   | `FormSpecError` (pkg/spec + semua SDK)                                                                            |
+| Schema       | `schemas/forma.schema.json` → `schemas/formspec.schema.json`                                                      |
+| System DB    | `forma_*` (outbox, audit*log, event_log, schema_migrations, control, shared, ops_backup, ops_ddl) → `formspec*\*` |
+| SDK packages | Java `io/forma` → `io/formspec`, Python `lib_forma` → `lib_formspec`, Ruby `lib/forma` → `lib/formspec`           |
+| Deploy       | CRD `forma.dev_*.yaml` → `formspec.dev_*.yaml`; image `registry.formspec.dev`; apiGroups K8s `formspec.dev`       |
+| Docs         | `docs/cli-tools/*-forma-*.md` + `docs/runtimes/*-forma-*.md` di-rename; isi semua ditulis ulang                   |
 
 ## Scope exclusion
 

@@ -25,28 +25,28 @@ menghindari kolisi merek/CLI/domain, produk di-rename total menjadi
 
 ## Mapping Nama
 
-| Lama | Baru |
-|---|---|
-| `github.com/primadi/formspec` (go.mod + import) | `github.com/primadi/formspecspec` |
-| `formspec.dev/v1` (apiVersion) | `formspec.dev/v1` |
-| `formspec/v1` (VisualSpecKind) | `formspec/v1` |
-| `formspec` CLI → `cmd/formspec/` | `formspec` → `cmd/formspec/` |
-| `formspec-ctl` | `formspec-ctl` |
-| `formspec-operator` | `formspec-operator` |
-| `formspec-gen-schema` | `formspec-gen-schema` |
-| `formspec-gen-kind-docs` | `formspec-gen-kind-docs` |
-| `formspec-resource` / `formspec-control` / `formspec-sidecar` | `formspec-resource` / `formspec-control` / `formspec-sidecar` |
-| `FormSpecError` | `FormSpecError` |
-| `FormSpecExpr` / `formaexpr` | `FormSpecExpr` / `formspec-expr` |
+| Lama                                                                                               | Baru                                                                                                        |
+| -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `github.com/primadi/formspec` (go.mod + import)                                                    | `github.com/primadi/formspecspec`                                                                           |
+| `formspec.dev/v1` (apiVersion)                                                                     | `formspec.dev/v1`                                                                                           |
+| `formspec/v1` (VisualSpecKind)                                                                     | `formspec/v1`                                                                                               |
+| `formspec` CLI → `cmd/formspec/`                                                                   | `formspec` → `cmd/formspec/`                                                                                |
+| `formspec-ctl`                                                                                     | `formspec-ctl`                                                                                              |
+| `formspec-operator`                                                                                | `formspec-operator`                                                                                         |
+| `formspec-gen-schema`                                                                              | `formspec-gen-schema`                                                                                       |
+| `formspec-gen-kind-docs`                                                                           | `formspec-gen-kind-docs`                                                                                    |
+| `formspec-resource` / `formspec-control` / `formspec-sidecar`                                      | `formspec-resource` / `formspec-control` / `formspec-sidecar`                                               |
+| `FormSpecError`                                                                                    | `FormSpecError`                                                                                             |
+| `FormSpecExpr` / `formaexpr`                                                                       | `FormSpecExpr` / `formspec-expr`                                                                            |
 | `FormSpecLib` / `FormSpecPage` / `FormaShell` / `FormaWidget` / `FormaContext` / `FormSpecElement` | `FormSpecLib` / `FormSpecPage` / `FormSpecShell` / `FormSpecWidget` / `FormSpecContext` / `FormSpecElement` |
-| `formspec-app.yaml` | `formspec-app.yaml` |
-| `schemas/formspec.schema.json` | `schemas/formspec.schema.json` |
-| Error code prefix `FORMSPEC.` | `FORMSPEC.` |
-| Java `io/formspec` | `io/formspec` |
-| Python `lib_formspec` | `lib_formspec` |
-| Ruby `lib/formspec` | `lib/formspec` |
-| `registry.formspec.dev` (deploy) | `registry.formspec.dev` |
-| API group K8s `formspec.dev` (CRD/rbac) | `formspec.dev` |
+| `formspec-app.yaml`                                                                                | `formspec-app.yaml`                                                                                         |
+| `schemas/formspec.schema.json`                                                                     | `schemas/formspec.schema.json`                                                                              |
+| Error code prefix `FORMSPEC.`                                                                      | `FORMSPEC.`                                                                                                 |
+| Java `io/formspec`                                                                                 | `io/formspec`                                                                                               |
+| Python `lib_formspec`                                                                              | `lib_formspec`                                                                                              |
+| Ruby `lib/formspec`                                                                                | `lib/formspec`                                                                                              |
+| `registry.formspec.dev` (deploy)                                                                   | `registry.formspec.dev`                                                                                     |
+| API group K8s `formspec.dev` (CRD/rbac)                                                            | `formspec.dev`                                                                                              |
 
 ## Fase
 

@@ -67,7 +67,7 @@
   // Use 'postCreateCommand' to run commands after the container is created.
   // RTK global hooks must re-run here because /home/vscode state is ephemeral
   // across container rebuilds. --auto-patch skips the settings.json prompt.
-  "postCreateCommand": "cd renderers/react-shadcn && [ -f package.json ] && npm install || true; mkdir -p /home/vscode/.claude && RTK_TELEMETRY_DISABLED=1 /home/vscode/.local/bin/rtk init -g --auto-patch && RTK_TELEMETRY_DISABLED=1 /home/vscode/.local/bin/rtk init -g --opencode"
+  "postCreateCommand": "cd renderers/react-shadcn && [ -f package.json ] && npm install || true; mkdir -p /home/vscode/.claude && RTK_TELEMETRY_DISABLED=1 /home/vscode/.local/bin/rtk init -g --auto-patch && RTK_TELEMETRY_DISABLED=1 /home/vscode/.local/bin/rtk init -g --opencode; curl -fsSL https://raw.githubusercontent.com/DeusData/codebase-memory-mcp/main/install.sh | bash && codebase-memory-mcp config set auto_index true && codebase-memory-mcp config set auto_watch true && codebase-memory-mcp cli --progress index_repository --repo-path /workspaces/formspec || echo 'WARNING: codebase-memory-mcp install/config/index skipped (network error)'"
 
   // Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
   // "remoteUser": "root"

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/primadi/formspec/renderers/jsonb-persist"
+	db "github.com/primadi/formspec/renderers/jsonb-persist"
 )
 
 // TestDBQuerier_QueryAgainstSQLite proves the DBQuerier adapter runs a real

@@ -21,15 +21,15 @@ Ini fondasi Fase 7 (Service, Hook, Validation L6, sidecar proxy).
 
 ## Perubahan
 
-| File | Perubahan |
-|---|---|
-| `internal/starlark/primitive.go` | Definisikan capability interfaces (`Querier`, `KVGetter`, `KVSetter`, `KVDeleter`, `Locker`); implementasikan operasi `query/get/set/delete/acquire/release` memakai interface tsb; ambil Go context dari thread-local |
-| `internal/starlark/executor.go` | `ScriptExecutor` + field `datastoreResolver` + `SetDatastoreResolver`; `ExecuteScript` menerima `ctx context.Context` dan menyimpannya di thread (`SetLocal`); `Execute` memanggil `ctxObj.SetDatastoreResolver` |
-| `internal/action/script.go` | `SetDatastoreResolver` forwarding ke engine |
-| `renderers/jsonb-persist/datastore/querier.go` | Adapter `dbQuerier` — bungkus `db.DB` jadi `Querier` (Query → `[]map[string]any`) |
-| `resource/formspec.go` | `newDispatcher` menerima `database db.DB`; wire resolver: `(db, "default")` → `dbQuerier`; primitif lain → error jelas |
-| `cmd/formspec/dev.go` | Wire resolver yang sama ke ScriptExecutor (dev mode) |
-| `internal/starlark/primitive_test.go` | Test `ctx.db().query()` terhadap SQLite in-memory |
+| File                                           | Perubahan                                                                                                                                                                                                              |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `internal/starlark/primitive.go`               | Definisikan capability interfaces (`Querier`, `KVGetter`, `KVSetter`, `KVDeleter`, `Locker`); implementasikan operasi `query/get/set/delete/acquire/release` memakai interface tsb; ambil Go context dari thread-local |
+| `internal/starlark/executor.go`                | `ScriptExecutor` + field `datastoreResolver` + `SetDatastoreResolver`; `ExecuteScript` menerima `ctx context.Context` dan menyimpannya di thread (`SetLocal`); `Execute` memanggil `ctxObj.SetDatastoreResolver`       |
+| `internal/action/script.go`                    | `SetDatastoreResolver` forwarding ke engine                                                                                                                                                                            |
+| `renderers/jsonb-persist/datastore/querier.go` | Adapter `dbQuerier` — bungkus `db.DB` jadi `Querier` (Query → `[]map[string]any`)                                                                                                                                      |
+| `resource/formspec.go`                         | `newDispatcher` menerima `database db.DB`; wire resolver: `(db, "default")` → `dbQuerier`; primitif lain → error jelas                                                                                                 |
+| `cmd/formspec/dev.go`                          | Wire resolver yang sama ke ScriptExecutor (dev mode)                                                                                                                                                                   |
+| `internal/starlark/primitive_test.go`          | Test `ctx.db().query()` terhadap SQLite in-memory                                                                                                                                                                      |
 
 ## Keputusan
 
