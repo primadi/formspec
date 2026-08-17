@@ -1,7 +1,7 @@
 # Master Plan: FormSpec Implementation
 
 **Last Updated**: 2026-08-17  
-**Status**: ✅ Fase 0 complete · ✅ Fase 1 (1.1–1.5) · ✅ Fase 2.1 · ✅ Fase 2.2 · ✅ Fase 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6) · ✅ Fase 2.7 (idempotency prepare flow) · ✅ Fase 2.8 (spec.expose) · ✅ Fase 5 (5.1–5.4) · ✅ Spec hot-reload · ✅ Fase 11 (review schema↔docs) · ✅ Audit spec↔schema + tambah TODO item · ✅ `formspec validate` (3.1.1, engine+schema) · ✅ Rename forma→formspec (docs/plan/rename-formspec.md) · 🚧 Fase 12 Domain Infrastruktur (docs/architecture/09-domain-map.md) · ✅ Schema registry online (docs/plan/schema-registry-online.md)
+**Status**: ✅ Fase 0 complete · ✅ Fase 1 (1.1–1.5) · ✅ Fase 2.1 · ✅ Fase 2.2 · ✅ Fase 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6) · ✅ Fase 2.7 (idempotency prepare flow) · ✅ Fase 2.8 (spec.expose) · ✅ Fase 2.9.1 (ctx.db().query) · ✅ Fase 5 (5.1–5.4) · ✅ Spec hot-reload · ✅ Fase 11 (review schema↔docs) · ✅ Audit spec↔schema + tambah TODO item · ✅ `formspec validate` (3.1.1, engine+schema) · ✅ Rename forma→formspec (docs/plan/rename-formspec.md) · 🚧 Fase 12 Domain Infrastruktur (docs/architecture/09-domain-map.md) · ✅ Schema registry online (docs/plan/schema-registry-online.md)
 
 > `⬜` not started · `✅` complete · `⏸️` deferred
 
@@ -110,7 +110,7 @@ Lihat `docs/changelog/2026-08-17-003-fix-clinic-e2e-failures.md`.
 
 **Goal**: Atomic operations, correct PK, complete filters, lifecycle enforcement — agar `formspec dev` bisa diandalkan untuk testing.
 
-**Progress**: 2.1 ✅ · 2.2 ✅ · 2.3 ✅ · 2.4 ✅ · 2.5 ✅ · 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6 ✅; 2.6.4 ⬜ sebagian — cross-module resource access enforced, ctx.\*/secrets masih blocked on 2.9.1) · 2.7 ✅ · 2.8 ✅ · 2.9 ⬜
+**Progress**: 2.1 ✅ · 2.2 ✅ · 2.3 ✅ · 2.4 ✅ · 2.5 ✅ · 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6 ✅; 2.6.4 ⬜ sebagian — cross-module resource access enforced, ctx.\*/secrets masih blocked on 2.9.1) · 2.7 ✅ · 2.8 ✅ · 2.9 (2.9.1 ✅; 2.9.2–2.9.4 ⬜)
 
 ### 2.1 Database integrity ✅
 
@@ -184,7 +184,7 @@ Lihat `docs/changelog/2026-08-17-003-fix-clinic-e2e-failures.md`.
 
 ### 2.9 `ctx.*` infrastructure primitives
 
-- [ ] 2.9.1 Wire `CtxAPI.SetDatastoreResolver` + implementasi `datastore.Open()` nyata — saat ini semua `ctx.db()/cache()/lock()/...` error "not configured"; fondasi Fase 7 (Service, Hook, Validation L6, sidecar proxy) (`runtimes/02-formspec-resource.md` §7, `runtimes/04-formspec-sidecar.md` §8)
+- [x] 2.9.1 Wire `CtxAPI.SetDatastoreResolver` + implementasi `datastore.Open()` nyata — `ctx.db().query()` kini jalan terhadap database utama app (SQLite dev / Postgres prod) via `datastore.DBQuerier`; resolver di-wire dari `newDispatcher` (`resource/formspec.go`) → `action.ScriptExecutor.SetDatastoreResolver` → `starlark.ScriptExecutor` → `CtxAPI`; Go context di-thread lewat `starlark.Thread.SetLocal`; `primitiveRunner` operasi (`query/get/set/delete/acquire/release`) memakai capability interfaces (`Querier`/`KVGetter`/`KVSetter`/`KVDeleter`/`Locker`). Primitif lain + named datastore masih error jelas ("no live datastore ... only db/default is wired") — menunggu 2.9.2–2.9.4. Lihat `docs/plan/ctx-datastore-resolver.md`. (`runtimes/02-formspec-resource.md` §7, `runtimes/04-formspec-sidecar.md` §8)
 - [ ] 2.9.2 Closed set 9 primitive — `db`, `cache`, `lock`, `queue`, `pubsub`, `storage`, `config`, `kvstore`, `log` (`platform/06-datastore.md` §2), termasuk binding `.named()`
 - [ ] 2.9.3 Dev auto-provision `'default'` per primitive — db/kvstore→SQLite, cache/lock/queue/pubsub→in-memory, storage→filesystem (`platform/06-datastore.md` §5)
 - [ ] 2.9.4 `ctx.db()` module-scoped (normatif) — resolve ke Datastore milik Module; interaksi lintas-Module-lintas-Datastore WAJIB async, tanpa escape hatch `ctx.db` sekalipun dengan `uses` (`01-core-basic.md` §3/§5)

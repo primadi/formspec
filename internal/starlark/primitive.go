@@ -1,10 +1,61 @@
 package starlark
 
 import (
+	"context"
 	"fmt"
+	"time"
 
 	"go.starlark.net/starlark"
 )
+
+// ─── Capability interfaces ───
+//
+// A resolved ctx primitive connection (returned by the datastore resolver)
+// may implement any of these capability interfaces. Operations on a
+// connection that does not implement the matching interface fail with a
+// clear "not yet implemented for this backend" error — the same surface the
+// sidecar exposes (docs/runtimes/04-formspec-sidecar.md §4.3). Go interfaces
+// are structural, so a single backend adapter can satisfy both this contract
+// and the sidecar's identical one.
+type (
+	// Querier serves ctx.db().query(sql, args...).
+	Querier interface {
+		Query(ctx context.Context, sql string, args ...any) ([]map[string]any, error)
+	}
+	// KVGetter serves ctx.cache().get(key) / ctx.kvstore().get(key).
+	KVGetter interface {
+		Get(ctx context.Context, key string) (any, error)
+	}
+	// KVSetter serves ctx.cache().set(key, value, ttl=...) / ctx.kvstore().set(...).
+	KVSetter interface {
+		Set(ctx context.Context, key string, value any, ttl time.Duration) error
+	}
+	// KVDeleter serves ctx.cache().delete(key) / ctx.kvstore().delete(key).
+	KVDeleter interface {
+		Delete(ctx context.Context, key string) error
+	}
+	// Locker serves ctx.lock().acquire(key, ttl) / ctx.lock().release(key).
+	Locker interface {
+		Acquire(ctx context.Context, key string, ttl time.Duration) (bool, error)
+		Release(ctx context.Context, key string) error
+	}
+)
+
+// ctxKey is the thread-local key under which the Go context.Context for the
+// current script execution is stored (set by ExecuteScript). primitiveRunner
+// operations retrieve it so backend calls carry the request context.
+const ctxKey = "formspec.go.context"
+
+// threadContext returns the Go context stored on the Starlark thread, or
+// context.Background() when none was set (e.g. direct unit-test callers).
+func threadContext(thread *starlark.Thread) context.Context {
+	if v := thread.Local(ctxKey); v != nil {
+		if c, ok := v.(context.Context); ok {
+			return c
+		}
+	}
+	return context.Background()
+}
 
 // ─── primitiveHandle — callable ctx primitive with .named() support ───
 //
@@ -150,8 +201,15 @@ func (r *primitiveRunner) builtinQuery() *starlark.Builtin {
 		if err := starlark.UnpackArgs("query", args, kwargs, "sql", &sql); err != nil {
 			return nil, err
 		}
-		// TODO: execute query against resolved connection
-		return starlark.None, fmt.Errorf("ctx.%s.query: not yet implemented (connection=%q)", r.primType, r.name)
+		q, ok := r.conn.(Querier)
+		if !ok {
+			return starlark.None, fmt.Errorf("ctx.%s.query: not yet implemented for this backend (connection=%q)", r.primType, r.name)
+		}
+		rows, err := q.Query(threadContext(thread), sql)
+		if err != nil {
+			return nil, fmt.Errorf("ctx.%s.query: %w", r.primType, err)
+		}
+		return toStarlark(rows)
 	})
 }
 
@@ -166,7 +224,15 @@ func (r *primitiveRunner) builtinGet() *starlark.Builtin {
 		if err := starlark.UnpackArgs("get", args, kwargs, "key", &key); err != nil {
 			return nil, err
 		}
-		return starlark.None, fmt.Errorf("ctx.%s.get: not yet implemented (connection=%q)", r.primType, r.name)
+		g, ok := r.conn.(KVGetter)
+		if !ok {
+			return starlark.None, fmt.Errorf("ctx.%s.get: not yet implemented for this backend (connection=%q)", r.primType, r.name)
+		}
+		val, err := g.Get(threadContext(thread), key)
+		if err != nil {
+			return nil, fmt.Errorf("ctx.%s.get: %w", r.primType, err)
+		}
+		return toStarlark(val)
 	})
 }
 
@@ -177,7 +243,20 @@ func (r *primitiveRunner) builtinSet() *starlark.Builtin {
 		args starlark.Tuple,
 		kwargs []starlark.Tuple,
 	) (starlark.Value, error) {
-		return starlark.None, fmt.Errorf("ctx.%s.set: not yet implemented (connection=%q)", r.primType, r.name)
+		var key string
+		var value starlark.Value
+		var ttl int64
+		if err := starlark.UnpackArgs("set", args, kwargs, "key", &key, "value", &value, "ttl?", &ttl); err != nil {
+			return nil, err
+		}
+		s, ok := r.conn.(KVSetter)
+		if !ok {
+			return starlark.None, fmt.Errorf("ctx.%s.set: not yet implemented for this backend (connection=%q)", r.primType, r.name)
+		}
+		if err := s.Set(threadContext(thread), key, fromStarlark(value), time.Duration(ttl)*time.Second); err != nil {
+			return nil, fmt.Errorf("ctx.%s.set: %w", r.primType, err)
+		}
+		return starlark.None, nil
 	})
 }
 
@@ -188,7 +267,18 @@ func (r *primitiveRunner) builtinDelete() *starlark.Builtin {
 		args starlark.Tuple,
 		kwargs []starlark.Tuple,
 	) (starlark.Value, error) {
-		return starlark.None, fmt.Errorf("ctx.%s.delete: not yet implemented (connection=%q)", r.primType, r.name)
+		var key string
+		if err := starlark.UnpackArgs("delete", args, kwargs, "key", &key); err != nil {
+			return nil, err
+		}
+		d, ok := r.conn.(KVDeleter)
+		if !ok {
+			return starlark.None, fmt.Errorf("ctx.%s.delete: not yet implemented for this backend (connection=%q)", r.primType, r.name)
+		}
+		if err := d.Delete(threadContext(thread), key); err != nil {
+			return nil, fmt.Errorf("ctx.%s.delete: %w", r.primType, err)
+		}
+		return starlark.None, nil
 	})
 }
 
@@ -199,7 +289,20 @@ func (r *primitiveRunner) builtinAcquire() *starlark.Builtin {
 		args starlark.Tuple,
 		kwargs []starlark.Tuple,
 	) (starlark.Value, error) {
-		return starlark.None, fmt.Errorf("ctx.%s.acquire: not yet implemented (connection=%q)", r.primType, r.name)
+		var key string
+		var ttl int64
+		if err := starlark.UnpackArgs("acquire", args, kwargs, "key", &key, "ttl?", &ttl); err != nil {
+			return nil, err
+		}
+		l, ok := r.conn.(Locker)
+		if !ok {
+			return starlark.None, fmt.Errorf("ctx.%s.acquire: not yet implemented for this backend (connection=%q)", r.primType, r.name)
+		}
+		acquired, err := l.Acquire(threadContext(thread), key, time.Duration(ttl)*time.Second)
+		if err != nil {
+			return nil, fmt.Errorf("ctx.%s.acquire: %w", r.primType, err)
+		}
+		return starlark.Bool(acquired), nil
 	})
 }
 
@@ -210,6 +313,17 @@ func (r *primitiveRunner) builtinRelease() *starlark.Builtin {
 		args starlark.Tuple,
 		kwargs []starlark.Tuple,
 	) (starlark.Value, error) {
-		return starlark.None, fmt.Errorf("ctx.%s.release: not yet implemented (connection=%q)", r.primType, r.name)
+		var key string
+		if err := starlark.UnpackArgs("release", args, kwargs, "key", &key); err != nil {
+			return nil, err
+		}
+		l, ok := r.conn.(Locker)
+		if !ok {
+			return starlark.None, fmt.Errorf("ctx.%s.release: not yet implemented for this backend (connection=%q)", r.primType, r.name)
+		}
+		if err := l.Release(threadContext(thread), key); err != nil {
+			return nil, fmt.Errorf("ctx.%s.release: %w", r.primType, err)
+		}
+		return starlark.None, nil
 	})
 }

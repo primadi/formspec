@@ -1,6 +1,7 @@
 package starlark
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -38,7 +39,7 @@ func TestExecuteScript_CompileCache_NoCrossCallStateBleed(t *testing.T) {
 			ctxObj := NewCtxAPI("demo", "", "user", "", nil)
 			ctxObj.Now = now
 
-			result, err := ExecuteScript(scriptPath, res, nil, ctxObj)
+			result, err := ExecuteScript(context.Background(), scriptPath, res, nil, ctxObj)
 			if err != nil {
 				errs[i] = err
 				return
@@ -88,7 +89,7 @@ func TestExecuteScript_CompileCache_InvalidatesOnEdit(t *testing.T) {
 	ctxObj.Now = now
 
 	write("v1")
-	result, err := ExecuteScript(scriptPath, res, nil, ctxObj)
+	result, err := ExecuteScript(context.Background(), scriptPath, res, nil, ctxObj)
 	if err != nil || !result.OK {
 		t.Fatalf("first exec: result=%+v err=%v", result, err)
 	}
@@ -97,7 +98,7 @@ func TestExecuteScript_CompileCache_InvalidatesOnEdit(t *testing.T) {
 	}
 
 	write("v2")
-	result, err = ExecuteScript(scriptPath, res, nil, ctxObj)
+	result, err = ExecuteScript(context.Background(), scriptPath, res, nil, ctxObj)
 	if err != nil || !result.OK {
 		t.Fatalf("second exec: result=%+v err=%v", result, err)
 	}

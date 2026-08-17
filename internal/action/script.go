@@ -74,6 +74,14 @@ func (e *ScriptExecutor) SetNextKeyHandler(fn func(ctx context.Context, workspac
 	e.engine.NextKeyHandler = fn
 }
 
+// SetDatastoreResolver wires the ctx.* primitive resolver into the engine so
+// scripts can call ctx.db()/ctx.cache()/... against live datastore
+// connections (todo 2.9.1). A nil resolver keeps the current behavior where
+// every ctx.* primitive errors with "datastore resolver not configured".
+func (e *ScriptExecutor) SetDatastoreResolver(resolver func(primitiveType, name string) (interface{}, error)) {
+	e.engine.SetDatastoreResolver(resolver)
+}
+
 // Execute runs the script for the given action. ctx is threaded through to
 // the engine (and from there to every resource.*/ctx.* handler) so a
 // request-scoped TxScope, if one is active, is honored by every mutation

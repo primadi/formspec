@@ -33,6 +33,9 @@ type ScriptResult struct {
 // ExecuteScript runs a Starlark script from a .star file.
 //
 // Parameters:
+//   - ctx: the Go context for the execution; stored on the Starlark thread so
+//     ctx.* primitive operations (ctx.db().query, ctx.cache().get, ...) carry
+//     the request context into backend calls.
 //   - scriptPath: absolute path to the .star file
 //   - resource: the ResourceAPI for the current entity record
 //   - params: input parameters from the action request
@@ -41,7 +44,7 @@ type ScriptResult struct {
 // The script MUST define: def execute(resource, params, ctx)
 // It signals success via: return ok(data)  or  return ok()
 // It signals failure via: return fail("message")  or  return fail({"field": "error"})
-func ExecuteScript(scriptPath string, resource *ResourceAPI, params map[string]any, ctxObj *CtxAPI) (*ScriptResult, error) {
+func ExecuteScript(ctx context.Context, scriptPath string, resource *ResourceAPI, params map[string]any, ctxObj *CtxAPI) (*ScriptResult, error) {
 	start := time.Now()
 
 	// Validate the script file exists
@@ -55,6 +58,9 @@ func ExecuteScript(scriptPath string, resource *ResourceAPI, params map[string]a
 		Print: func(_ *starlark.Thread, msg string) {},
 		Load:  nil, // no imports in sandbox
 	}
+	// Store the Go context on the thread so ctx.* primitive operations can
+	// retrieve it (see threadContext in primitive.go).
+	thread.SetLocal(ctxKey, ctx)
 
 	// Predeclare the built-in result helpers: ok() and fail()
 	predeclared := starlark.StringDict{
@@ -221,6 +227,20 @@ type ScriptExecutor struct {
 	// NextKeyHandler generates natural keys, scoped to the entity that owns
 	// the field (natural key counters are per module/entity/field).
 	NextKeyHandler func(ctx context.Context, workspaceID, module, entity, fieldName string) (string, error)
+
+	// DatastoreResolver resolves a ctx primitive ("db", "cache", "lock", ...)
+	// and datastore name ("default" or a named datastore) to a live
+	// connection. It is wired into the CtxAPI before script execution so
+	// ctx.db()/ctx.cache()/... resolve to real backends instead of failing
+	// with "datastore resolver not configured" (todo 2.9.1). A nil resolver
+	// keeps the current behavior (every ctx.* primitive errors).
+	DatastoreResolver func(primitiveType, name string) (interface{}, error)
+}
+
+// SetDatastoreResolver sets the resolver used to wire ctx.* primitives to
+// live datastore connections. See DatastoreResolver.
+func (e *ScriptExecutor) SetDatastoreResolver(resolver func(primitiveType, name string) (interface{}, error)) {
+	e.DatastoreResolver = resolver
 }
 
 // NewScriptExecutor creates a ScriptExecutor with the given resolution function.
@@ -266,6 +286,9 @@ func (e *ScriptExecutor) Execute(ctx context.Context, scriptPath string, module,
 
 	// Build ctx
 	ctxObj := NewCtxAPI(workspaceID, "", userID, "", nil)
+	if e.DatastoreResolver != nil {
+		ctxObj.SetDatastoreResolver(e.DatastoreResolver)
+	}
 	if e.NextKeyHandler != nil {
 		ctxObj.NextKey = func(fieldName string) (string, error) {
 			return e.NextKeyHandler(ctx, workspaceID, module, entity, fieldName)
@@ -273,5 +296,5 @@ func (e *ScriptExecutor) Execute(ctx context.Context, scriptPath string, module,
 	}
 	ctxObj.Now = now
 
-	return ExecuteScript(scriptPath, res, params, ctxObj)
+	return ExecuteScript(ctx, scriptPath, res, params, ctxObj)
 }

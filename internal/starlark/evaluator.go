@@ -132,6 +132,17 @@ func toStarlark(v any) (starlark.Value, error) {
 			elements[i] = sv
 		}
 		return starlark.NewList(elements), nil
+	case []map[string]any:
+		// Query results (ctx.db().query) come back as []map[string]any.
+		elements := make([]starlark.Value, len(x))
+		for i, elem := range x {
+			sv, err := toStarlark(elem)
+			if err != nil {
+				return nil, err
+			}
+			elements[i] = sv
+		}
+		return starlark.NewList(elements), nil
 	case map[string]any:
 		d := starlark.NewDict(len(x))
 		for k, val := range x {

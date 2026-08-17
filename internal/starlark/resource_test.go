@@ -1,6 +1,7 @@
 package starlark
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -66,7 +67,7 @@ func TestResourceAPI_Fetch_CrossModule(t *testing.T) {
 	ctxObj := NewCtxAPI("demo", "", "user", "", nil)
 	ctxObj.Now = now
 
-	result, err := ExecuteScript(scriptPath, res, nil, ctxObj)
+	result, err := ExecuteScript(context.Background(), scriptPath, res, nil, ctxObj)
 	if err != nil {
 		t.Fatalf("ExecuteScript error: %v", err)
 	}
@@ -101,7 +102,7 @@ func TestResourceAPI_Fetch_SameModule_Regression(t *testing.T) {
 	ctxObj := NewCtxAPI("demo", "", "user", "", nil)
 	ctxObj.Now = now
 
-	result, err := ExecuteScript(scriptPath, res, nil, ctxObj)
+	result, err := ExecuteScript(context.Background(), scriptPath, res, nil, ctxObj)
 	if err != nil {
 		t.Fatalf("ExecuteScript error: %v", err)
 	}
@@ -137,7 +138,7 @@ func TestResourceAPI_Create_CrossModule(t *testing.T) {
 	ctxObj := NewCtxAPI("demo", "", "user", "", nil)
 	ctxObj.Now = now
 
-	result, err := ExecuteScript(scriptPath, res, nil, ctxObj)
+	result, err := ExecuteScript(context.Background(), scriptPath, res, nil, ctxObj)
 	if err != nil {
 		t.Fatalf("ExecuteScript error: %v", err)
 	}
@@ -169,7 +170,7 @@ func TestResourceAPI_Create_SameModule_Regression(t *testing.T) {
 	ctxObj := NewCtxAPI("demo", "", "user", "", nil)
 	ctxObj.Now = now
 
-	result, err := ExecuteScript(scriptPath, res, nil, ctxObj)
+	result, err := ExecuteScript(context.Background(), scriptPath, res, nil, ctxObj)
 	if err != nil {
 		t.Fatalf("ExecuteScript error: %v", err)
 	}
@@ -197,7 +198,7 @@ func TestResourceAPI_Call_CrossModule(t *testing.T) {
 	ctxObj := NewCtxAPI("demo", "", "user", "", nil)
 	ctxObj.Now = now
 
-	result, err := ExecuteScript(scriptPath, res, nil, ctxObj)
+	result, err := ExecuteScript(context.Background(), scriptPath, res, nil, ctxObj)
 	if err != nil {
 		t.Fatalf("ExecuteScript error: %v", err)
 	}
@@ -225,7 +226,7 @@ func TestResourceAPI_Call_SameModule_Regression(t *testing.T) {
 	ctxObj := NewCtxAPI("demo", "", "user", "", nil)
 	ctxObj.Now = now
 
-	result, err := ExecuteScript(scriptPath, res, nil, ctxObj)
+	result, err := ExecuteScript(context.Background(), scriptPath, res, nil, ctxObj)
 	if err != nil {
 		t.Fatalf("ExecuteScript error: %v", err)
 	}

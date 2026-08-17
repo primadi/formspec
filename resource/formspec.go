@@ -47,6 +47,7 @@ import (
 	"github.com/primadi/formspec/internal/validation"
 	"github.com/primadi/formspec/pkg/spec"
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
+	"github.com/primadi/formspec/renderers/jsonb-persist/datastore"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -304,7 +305,7 @@ func New(cfg Config) (*App, error) {
 
 	rb := api.NewRouterBuilder(reg)
 	rb.BuildRoutes()
-	disp := newDispatcher(reg, cfg)
+	disp := newDispatcher(reg, database, cfg)
 	nativeEx := disp.NativeExecutor() // get the native executor from dispatcher
 	rb.SetDispatcher(disp)
 	rb.SetUIRegistry(uiReg)
@@ -524,7 +525,7 @@ func (a *App) ReloadSpec() error {
 	// captures it. Reads from the live App's atomic counter.
 	newRB.SetSpecVersionFn(func() int64 { return a.specVersion.Load() })
 	newRB.BuildRoutes()
-	newDisp := newDispatcher(newReg, a.cfg)
+	newDisp := newDispatcher(newReg, a.database, a.cfg)
 
 	// Re-register native Go handlers on the new dispatcher.
 	a.mu.RLock()
@@ -612,10 +613,22 @@ func configureAuth(cfg Config) error {
 	return nil
 }
 
-func newDispatcher(reg *entity.Registry, cfg Config) *action.Dispatcher {
+func newDispatcher(reg *entity.Registry, database db.DB, cfg Config) *action.Dispatcher {
 	disp := action.NewDispatcher()
 
 	scriptEx := action.NewScriptExecutor(cfg.SpecPath)
+	// Wire the ctx.* primitive resolver (todo 2.9.1): the "db" primitive
+	// resolves to the app's primary database (SQLite in dev, Postgres in
+	// prod) so scripts can run ctx.db().query(...). Other primitives
+	// (cache/lock/queue/pubsub/storage/kvstore) and named datastores are not
+	// yet backed by a live connection in single-server mode — the resolver
+	// returns a clear error so scripts fail loudly instead of silently.
+	scriptEx.SetDatastoreResolver(func(primitiveType, name string) (interface{}, error) {
+		if primitiveType == "db" && (name == "" || name == "default") {
+			return &datastore.DBQuerier{DB: database}, nil
+		}
+		return nil, fmt.Errorf("ctx.%s: no live datastore for %q in single-server mode (only db/default is wired; todo 2.9.2–2.9.4)", primitiveType, name)
+	})
 	scriptEx.SetSaveHandler(func(ctx context.Context, workspaceID, module, entityName, id string, version int, data map[string]any) error {
 		if id == "" {
 			return fmt.Errorf("resource.save: cannot save before the record exists — use resource.set() during a before-create hook/impl; the framework persists automatically")
