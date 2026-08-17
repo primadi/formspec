@@ -201,11 +201,11 @@ const guides = [
 const ai = [
   item("FormSpec AI", "/ai/"),
   item("AI Architecture", "/ai/01-architecture"),
-  item("formspec consult", "/ai/02-forma-consult"),
-  item("Local MCP", "/ai/03-forma-local-mcp"),
-  item("Remote MCP", "/ai/04-forma-remote-mcp"),
+  item("formspec consult", "/ai/02-formspec-consult"),
+  item("Local MCP", "/ai/03-formspec-local-mcp"),
+  item("Remote MCP", "/ai/04-formspec-remote-mcp"),
   item("LLM Provider Layer", "/ai/05-llm-provider-layer"),
-  item("FormSpec Skill", "/ai/06-forma-skill"),
+  item("FormSpec Skill", "/ai/06-formspec-skill"),
 ]
 
 const reference = [
@@ -215,14 +215,14 @@ const reference = [
 
 const comparison = [
   item("Comparison", "/comparison/"),
-  item("vs Frappe", "/comparison/forma-vs-frappe"),
-  item("vs Laravel", "/comparison/forma-vs-laravel"),
-  item("vs Vercel", "/comparison/forma-vs-vercel"),
-  item("vs Budibase", "/comparison/forma-vs-budibase"),
-  item("vs PocketBase", "/comparison/forma-vs-pocketbase"),
-  item("vs Supabase", "/comparison/forma-vs-supabase"),
-  item("vs Spring Boot", "/comparison/forma-vs-springboot"),
-  item("vs Custom App", "/comparison/forma-vs-custom-app"),
+  item("vs Frappe", "/comparison/formspec-vs-frappe"),
+  item("vs Laravel", "/comparison/formspec-vs-laravel"),
+  item("vs Vercel", "/comparison/formspec-vs-vercel"),
+  item("vs Budibase", "/comparison/formspec-vs-budibase"),
+  item("vs PocketBase", "/comparison/formspec-vs-pocketbase"),
+  item("vs Supabase", "/comparison/formspec-vs-supabase"),
+  item("vs Spring Boot", "/comparison/formspec-vs-springboot"),
+  item("vs Custom App", "/comparison/formspec-vs-custom-app"),
 ]
 
 export default defineConfig({
@@ -299,12 +299,7 @@ export default defineConfig({
       // (VitePress memetakan README.md → root folder). Bukan kesalahan site.
       if (/\/index$/.test(link)) return true
       // Sisa rename forma→formspec (belum selesai di docs source)
-      if (
-        /08-formaexpr|formspec-vs-|02-formspec-consult|03-formspec-local-mcp|04-formspec-remote-mcp|06-formspec-skill/.test(
-          link,
-        )
-      )
-        return true
+      if (/08-formaexpr/.test(link)) return true
       // Link relatif stale di docs source: kind docs (docs/kind/<group>/)
       // menaut "../spec/..." tapi kedalaman seharusnya "../../spec/...".
       // Fix sebenarnya di generator kind-docs (di luar scope docs-site);

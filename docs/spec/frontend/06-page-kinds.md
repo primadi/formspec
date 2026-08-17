@@ -147,7 +147,7 @@ kedua).
 permission-gated otomatis
 ([`04-spec-resolution-api.md`](04-spec-resolution-api.md) §4). Vocabulary
 perilaku client tertutup: `visible_when`, `readonly_when`, `required_when`,
-`compute` (FormSpecExpr, [`08-formaexpr.md`](08-formaexpr.md)) — begitu butuh
+`compute` (FormSpecExpr, [`08-formspec-expr.md`](08-formspec-expr.md)) — begitu butuh
 efek imperatif, field itu jadi custom widget
 ([`07-component-kinds.md`](07-component-kinds.md) §4). `rules` field dari
 Entity manifest ditegakkan client-side untuk UX; **validasi server-side
@@ -346,7 +346,7 @@ kolom, tak diulang di kartu). Override lewat `card_template`
   server menolaknya (`STATE_TRANSITION_ERROR`, § core-extended §1).
 
 > **Open — `drag_guard`.** Pre-check UX sebelum drop (FormSpecExpr,
-> [`08-formaexpr.md`](08-formaexpr.md)) belum diimplementasikan — ditracking di
+> [`08-formspec-expr.md`](08-formspec-expr.md)) belum diimplementasikan — ditracking di
 > `docs/plan/kanban-full-implementation.md`. Validasi server (guard state
 > machine) tetap otoritas dan sudah berjalan.
 

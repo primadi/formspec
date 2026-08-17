@@ -153,7 +153,7 @@ penambahan deklarasi adalah perluasan footprint consent, tidak pernah
 diam-diam), dan menghapus deklarasi yang tidak terpakai. Error kelas
 unresolved-reference **menggagalkan `formspec apply`** — inilah yang menjamin
 error referensi FormSpecExpr/script tidak mungkin muncul di runtime
-([`../spec/frontend/08-formaexpr.md`](../spec/frontend/08-formaexpr.md),
+([`../spec/frontend/08-formspec-expr.md`](../spec/frontend/08-formspec-expr.md),
 [`../spec/platform/02-workspace-app-module.md`](../spec/platform/02-workspace-app-module.md) §7).
 
 ### `formspec promote`

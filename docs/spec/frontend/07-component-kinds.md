@@ -171,7 +171,7 @@ prinsip styling terpusat di `kind: Theme`
 **Headless Form Engine.** `formspec.form(entity, { mode, id? })` mengembalikan
 instance form **headless**: field state, dirty tracking, validasi client dari
 field rules, evaluasi FormSpecExpr
-([`08-formaexpr.md`](08-formaexpr.md)), dan `submit()` yang sudah terhubung ke
+([`08-formspec-expr.md`](08-formspec-expr.md)), dan `submit()` yang sudah terhubung ke
 action yang tepat (create/update, dengan CAS `version`). Tanpa layout, tanpa
 widget — developer menguasai 100% markup. Tangga kontrol penuh: Form
 terkelola → custom widget → component → full-custom Page → headless → raw

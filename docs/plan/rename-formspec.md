@@ -1,6 +1,6 @@
-# Plan — Rename "formspec" → "formspec"
+# Plan — Rename "forma" → "formspec"
 
-**Tanggal**: 2026-08-12 · **Status**: In Progress
+**Tanggal**: 2026-08-12 · **Status**: Complete (2026-08-17 — sisa rename docs/ai + comparison + `08-formaexpr` refs dibereskan)
 **Referensi**: `docs/spec/platform/01-overview.md` (visi), `CLAUDE.md` (konvensi repo),
 `docs/plan/todo.md` (master plan)
 
@@ -60,7 +60,7 @@ menghindari kolisi merek/CLI/domain, produk di-rename total menjadi
    semua `*.yaml|yml` (contoh, testdata, CRD, rbac, image registry).
 4. CLI & config: `formspec-app.yaml` di scaffold, help text, `.gitignore`.
 5. Frontend: `src/lib/formspec-expr/` → `src/lib/formspec-expr/` + ident; logo
-   `PrintRenderer`; `docs/spec/frontend/08-formaexpr.md` → `08-formspec-expr.md`.
+   `PrintRenderer`; `docs/spec/frontend/08-formspec-expr.md` → `08-formspec-expr.md`.
 6. SDK 9 bahasa: Go/Java/Python/Ruby/TS/Dotnet/Php/Browser.
 7. Docs & instructions: `docs/cli-tools/`, `docs/runtimes/`, `CLAUDE.md`,
    `.github/`, `ai_skills/`, contoh.

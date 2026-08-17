@@ -72,7 +72,7 @@ sub-folders, each with its own `README.md` as the entry point:
 | `05-app-kinds.md` | App-tier catalog: sidebar-nav, topnav, landing-page |
 | `06-page-kinds.md` | Page-tier catalog: data-entry, table, master-detail, kanban, calendar, wizard, dashboard, report, timeline, approval-inbox, notification-center, custom page |
 | `07-component-kinds.md` | Component-tier catalog: input (incl. fileinput, richtext), widget, slot filling, asset |
-| `08-formaexpr.md` | Client-side expression grammar (visible_when, readonly_when, required_when, compute) — applies to all shells |
+| `08-formspec-expr.md` | Client-side expression grammar (visible_when, readonly_when, required_when, compute) — applies to all shells |
 
 ## Doc Status Lifecycle
 

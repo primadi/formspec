@@ -22,6 +22,6 @@ Tiga tingkat di dalamnya dideklarasikan lewat meta-kind **VisualSpecKind**
 | [05-app-kinds.md](05-app-kinds.md) | Katalog tier app: sidebar-nav, topnav, landing-page |
 | [06-page-kinds.md](06-page-kinds.md) | Katalog tier page: data-entry, table (inline/batch edit), master-detail, kanban, calendar, wizard, dashboard, report, timeline, approval-inbox, notification-center, custom page, … |
 | [07-component-kinds.md](07-component-kinds.md) | Katalog tier component: input (termasuk fileinput, richtext), widget, slot filling, asset |
-| [08-formaexpr.md](08-formaexpr.md) | Grammar ekspresi client-side, berlaku untuk semua shell |
+| [08-formspec-expr.md](08-formspec-expr.md) | Grammar ekspresi client-side, berlaku untuk semua shell |
 
 Renderer/shell author: baca 01 → 02 → 03 → 04, lalu katalog tier yang relevan.

@@ -33,7 +33,7 @@ jauh lebih murah daripada Shell baru.
    aturan `stack_family` (App shell + Page shell-integrated + Component
    satu stack) berlaku identik untuk Shell baru.
 3. **FormSpecExpr**
-   ([`08-formaexpr.md`](../spec/frontend/08-formaexpr.md)) — interpreter
+   ([`08-formspec-expr.md`](../spec/frontend/08-formspec-expr.md)) — interpreter
    ekspresi yang perilakunya identik dengan shell resmi untuk grammar yang
    sama (literal, `fields.x`, operator, `len`/`sum`, list literal — **tanpa**
    list comprehension, lihat catatan gap di §2 dokumen itu).

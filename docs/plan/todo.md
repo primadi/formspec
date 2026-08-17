@@ -1,7 +1,7 @@
 # Master Plan: FormSpec Implementation
 
 **Last Updated**: 2026-08-17  
-**Status**: ✅ Fase 0 complete · ✅ Fase 1 (1.1–1.5) · ✅ Fase 2.1 · ✅ Fase 2.2 · ✅ Fase 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6) · ✅ Fase 2.7 (idempotency prepare flow) · ✅ Fase 2.8 (spec.expose) · ✅ Fase 5 (5.1–5.4) · ✅ Spec hot-reload · ✅ Fase 11 (review schema↔docs) · ✅ Audit spec↔schema + tambah TODO item · ✅ `formspec validate` (3.1.1, engine+schema) · 🚧 Rename formspec→formspec (docs/plan/rename-formspec.md) · 🚧 Fase 12 Domain Infrastruktur (docs/architecture/09-domain-map.md) · ✅ Schema registry online (docs/plan/schema-registry-online.md)
+**Status**: ✅ Fase 0 complete · ✅ Fase 1 (1.1–1.5) · ✅ Fase 2.1 · ✅ Fase 2.2 · ✅ Fase 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6) · ✅ Fase 2.7 (idempotency prepare flow) · ✅ Fase 2.8 (spec.expose) · ✅ Fase 5 (5.1–5.4) · ✅ Spec hot-reload · ✅ Fase 11 (review schema↔docs) · ✅ Audit spec↔schema + tambah TODO item · ✅ `formspec validate` (3.1.1, engine+schema) · ✅ Rename forma→formspec (docs/plan/rename-formspec.md) · 🚧 Fase 12 Domain Infrastruktur (docs/architecture/09-domain-map.md) · ✅ Schema registry online (docs/plan/schema-registry-online.md)
 
 > `⬜` not started · `✅` complete · `⏸️` deferred
 
@@ -421,7 +421,7 @@ Lihat `docs/changelog/2026-08-17-003-fix-clinic-e2e-failures.md`.
 
 ### 5.11 FormSpecExpr
 
-- [ ] 5.11.1 Audit grammar vs spec — verify lexer→parser→evaluator supports all operators from `08-formaexpr.md` §2
+- [ ] 5.11.1 Audit grammar vs spec — verify lexer→parser→evaluator supports all operators from `08-formspec-expr.md` §2
 - [ ] 5.11.2 Deploy-time static validation — `formspec apply`/`formspec check` rejects unresolvable field references + invalid grammar (ERROR, not warning)
 - [ ] 5.11.3 Runtime error state — nonexistent field reference → visible error state (never silent fail-safe/evaluate to `false`)
 - [ ] 5.11.4 `title` interpolation — `"Order {order.number}"` pattern in Page/Wizard/Print titles

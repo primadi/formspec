@@ -40,7 +40,7 @@ setup DNS di Cloudflare serta deployment.
 | ----------------------------------------- | ----------------------------------------------------------------------------------- |
 | `formspec.dev/schemas` (JSON Schema)      | `docs/cli-tools/02-formspec-cli.md` §2                                              |
 | `registry.formspec.dev` (module registry) | `docs/cli-tools/02-formspec-cli.md` §9, `docs/plan/rename-formspec.md`              |
-| `formspec-remote-mcp` (hosted MCP)        | `docs/ai/04-forma-remote-mcp.md`                                                    |
+| `formspec-remote-mcp` (hosted MCP)        | `docs/ai/04-formspec-remote-mcp.md`                                                    |
 | `control.{region}.formspec.dev`           | `docs/architecture/01-architecture-overview.md`, `docs/runtimes/01-formspec-ctl.md` |
 | `formspec/ops.{region}.formspec.dev`      | `docs/architecture/02-admin-surfaces.md`                                            |
 

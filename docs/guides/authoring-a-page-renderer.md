@@ -59,7 +59,7 @@ Renderer-mu **wajib**:
   tetap menolak di resource level).
 - Mengevaluasi `visible_when`/`readonly_when`/`required_when`/`compute`
   lewat interpreter FormSpecExpr
-  ([`08-formaexpr.md`](../spec/frontend/08-formaexpr.md)) — bukan
+  ([`08-formspec-expr.md`](../spec/frontend/08-formspec-expr.md)) — bukan
   mengimplementasikan ulang grammar-nya sendiri; hasil evaluasi harus
   identik dengan shell resmi untuk ekspresi yang sama.
 
