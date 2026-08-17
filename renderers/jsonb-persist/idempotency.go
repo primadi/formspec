@@ -136,6 +136,14 @@ func (s *IdempotencyStore) GetResult(ctx context.Context, workspaceID, action, k
 	return rec, nil
 }
 
+// Lookup retrieves the idempotency record for a key regardless of status
+// (pending | completed | failed), or nil when absent. This lets callers
+// distinguish an in-flight pending key (duplicate → 409) from a failed key
+// (retry allowed) — TryClaim alone collapses both into "retryable".
+func (s *IdempotencyStore) Lookup(ctx context.Context, workspaceID, action, key string) (*IdempotencyRecord, error) {
+	return s.getByPK(ctx, workspaceID, action, key)
+}
+
 // CleanupExpired removes expired idempotency keys from the database.
 // Returns the number of rows deleted.
 func (s *IdempotencyStore) CleanupExpired(ctx context.Context) (int64, error) {

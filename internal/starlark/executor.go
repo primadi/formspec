@@ -205,14 +205,18 @@ type ScriptExecutor struct {
 	// renderers/jsonb-persist/txscope.go.
 	SaveHandler func(ctx context.Context, workspaceID, module, entity, id string, version int, data map[string]any) error
 
-	// CallHandler is the cross-resource call function.
-	CallHandler func(ctx context.Context, workspaceID, fromModule, targetModule, targetEntity, action string, params map[string]any) (any, error)
+	// CallHandler is the cross-resource call function. callerResources is
+	// the calling action's declared uses.resources (todo 2.6.4) — the
+	// resource layer checks cross-module calls against it.
+	CallHandler func(ctx context.Context, workspaceID, fromModule, targetModule, targetEntity, action string, params map[string]any, callerResources []string) (any, error)
 
 	// LoadHandler loads another entity by ID, returning its data and version.
-	LoadHandler func(ctx context.Context, workspaceID, module, entity, id string) (map[string]any, int, error)
+	// callerResources is the calling action's declared uses.resources.
+	LoadHandler func(ctx context.Context, workspaceID, fromModule, module, entity, id string, callerResources []string) (map[string]any, int, error)
 
 	// CreateHandler creates a new record of another entity, returning its ID.
-	CreateHandler func(ctx context.Context, workspaceID, module, entity string, data map[string]any) (string, error)
+	// callerResources is the calling action's declared uses.resources.
+	CreateHandler func(ctx context.Context, workspaceID, fromModule, module, entity string, data map[string]any, callerResources []string) (string, error)
 
 	// NextKeyHandler generates natural keys, scoped to the entity that owns
 	// the field (natural key counters are per module/entity/field).
@@ -232,7 +236,7 @@ func NewScriptExecutor(resolver func(ref string) (string, error)) *ScriptExecuto
 // to every handler — so a script's resource.save()/create()/load()/call()
 // calls all join the same transaction as the rest of the action's
 // execution instead of each opening its own.
-func (e *ScriptExecutor) Execute(ctx context.Context, scriptPath string, module, entity, id string, resourceData map[string]any, params map[string]any, workspaceID, userID string, resourceVersion int) (*ScriptResult, error) {
+func (e *ScriptExecutor) Execute(ctx context.Context, scriptPath string, module, entity, id string, resourceData map[string]any, params map[string]any, workspaceID, userID string, resourceVersion int, callerResources []string) (*ScriptResult, error) {
 	// Build resource API
 	res := NewResourceAPI(module, entity, id, resourceVersion, resourceData)
 	if e.SaveHandler != nil {
@@ -246,17 +250,17 @@ func (e *ScriptExecutor) Execute(ctx context.Context, scriptPath string, module,
 			if targetModule == "" {
 				targetModule = module
 			}
-			return e.CallHandler(ctx, workspaceID, module, targetModule, targetEntity, actionName, p)
+			return e.CallHandler(ctx, workspaceID, module, targetModule, targetEntity, actionName, p, callerResources)
 		})
 	}
 	if e.LoadHandler != nil {
 		res.SetLoadFunc(func(m, ent, eid string) (map[string]any, int, error) {
-			return e.LoadHandler(ctx, workspaceID, m, ent, eid)
+			return e.LoadHandler(ctx, workspaceID, module, m, ent, eid, callerResources)
 		})
 	}
 	if e.CreateHandler != nil {
 		res.SetCreateFunc(func(m, ent string, data map[string]any) (string, error) {
-			return e.CreateHandler(ctx, workspaceID, m, ent, data)
+			return e.CreateHandler(ctx, workspaceID, module, m, ent, data, callerResources)
 		})
 	}
 

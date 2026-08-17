@@ -25,6 +25,7 @@ type HandlerFactory struct {
 	dispatcher   *action.Dispatcher
 	specLookup   func(module, name string) (*spec.EntitySpec, bool) // optional — enables sort/filter validation, hooks, and event resolution
 	deliveryDeps action.DeliveryDeps
+	idempotency  *db.IdempotencyStore // wired when idempotency enforcement is enabled (todo 2.7)
 }
 
 // EntityStoreProvider abstracts the entity registry for handler use.
@@ -53,6 +54,167 @@ func (f *HandlerFactory) SetSpecLookup(fn func(module, name string) (*spec.Entit
 // log) used to fan out declared events after a successful action.
 func (f *HandlerFactory) SetDeliveryDeps(deps action.DeliveryDeps) {
 	f.deliveryDeps = deps
+}
+
+// SetIdempotencyStore wires the idempotency-key store used to enforce
+// idempotent actions (todo 2.7, 01-core-basic §5). When nil, idempotency
+// enforcement is a no-op (actions run exactly as before).
+func (f *HandlerFactory) SetIdempotencyStore(store *db.IdempotencyStore) {
+	f.idempotency = store
+}
+
+// resolveIdempotencyKey extracts the caller-supplied idempotency key for an
+// action per its idempotency_key declaration (01-core-basic §5):
+//
+//   - from: header → Idempotency-Key request header
+//   - from: server → the key issued by the prepare endpoint is sent back in
+//     the Idempotency-Key header
+//   - from: param  → query param named by field (fallback "idempotency_key")
+//
+// Returns "" when the action is not idempotent, declares no key source, or
+// the caller supplied no key.
+func resolveIdempotencyKey(r *http.Request, a *spec.Action) string {
+	if a == nil || !a.Idempotent || a.IdempotencyKey == nil {
+		return ""
+	}
+	switch a.IdempotencyKey.From {
+	case "header", "server":
+		return strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	case "param":
+		field := a.IdempotencyKey.Field
+		if field == "" {
+			field = "idempotency_key"
+		}
+		return strings.TrimSpace(r.URL.Query().Get(field))
+	default:
+		return ""
+	}
+}
+
+// idempotencyEnvelope wraps a completed action's HTTP response so a replay
+// can reproduce the exact status + body (todo 2.7.2).
+type idempotencyEnvelope struct {
+	Status int             `json:"status"`
+	Body   json.RawMessage `json:"body"`
+}
+
+// replayIdempotent writes a stored completed response back to the client,
+// reproducing the original status code and body. Returns true if the replay
+// was written (caller must not proceed with execution).
+func replayIdempotent(w http.ResponseWriter, rec *db.IdempotencyRecord) bool {
+	if rec == nil || rec.Response == "" {
+		return false
+	}
+	var env idempotencyEnvelope
+	if err := json.Unmarshal([]byte(rec.Response), &env); err != nil {
+		// Fallback: stored value is a bare body — replay with 200.
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(rec.Response))
+		return true
+	}
+	status := env.Status
+	if status == 0 {
+		status = http.StatusOK
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_, _ = w.Write(env.Body)
+	return true
+}
+
+// beginIdempotent runs the idempotency gate for an idempotent action. It
+// returns the resolved key and whether execution should proceed:
+//
+//   - completed key → replays the stored response and returns proceed=false
+//   - pending key (in-flight duplicate) → writes 409 and returns proceed=false
+//   - failed / new / expired key → claims execution, returns proceed=true
+//
+// When the action isn't idempotent or no store is wired, it returns
+// proceed=true with an empty key (exact prior behavior).
+func (f *HandlerFactory) beginIdempotent(w http.ResponseWriter, r *http.Request, ctx context.Context, workspaceID, actionName string, a *spec.Action) (key string, proceed bool) {
+	if a == nil || !a.Idempotent || f.idempotency == nil {
+		return "", true
+	}
+
+	key = resolveIdempotencyKey(r, a)
+	if key == "" {
+		writeError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR",
+			"idempotent action requires an idempotency key (Idempotency-Key header or declared param)")
+		return "", false
+	}
+
+	// Look up the key first so we can distinguish an in-flight pending key
+	// (duplicate → 409) from a failed key (retry allowed). TryClaim alone
+	// collapses both into "retryable".
+	existing, err := f.idempotency.Lookup(ctx, workspaceID, actionName, key)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "idempotency lookup failed: "+err.Error())
+		return "", false
+	}
+
+	if existing != nil {
+		switch existing.Status {
+		case "completed":
+			// Duplicate after completed → replay the original response. A
+			// completed key must never re-execute, even if the stored body
+			// is unexpectedly malformed.
+			if !replayIdempotent(w, existing) {
+				writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "stored idempotent response unavailable")
+			}
+			return "", false
+		case "pending":
+			// Duplicate while pending (in-flight) → 409 CONFLICT.
+			writeError(w, http.StatusConflict, "CONFLICT", "idempotency key already in progress")
+			return "", false
+		case "failed":
+			// Previous attempt failed → allow retry (fall through to claim).
+		}
+	}
+
+	// New key, expired key, or failed attempt → claim execution. TryClaim
+	// inserts a fresh pending row (or resets an expired one) and returns
+	// claimed=true; a completed key it somehow missed is replayed.
+	claimed, rec, err := f.idempotency.TryClaim(ctx, workspaceID, actionName, key)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "idempotency claim failed: "+err.Error())
+		return "", false
+	}
+	if !claimed && rec != nil && rec.Status == "completed" {
+		if !replayIdempotent(w, rec) {
+			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "stored idempotent response unavailable")
+		}
+		return "", false
+	}
+
+	// Proceed with execution.
+	return key, true
+}
+
+// completeIdempotent records a successful action response against the key.
+// The response is stored so a duplicate call replays the exact result.
+func (f *HandlerFactory) completeIdempotent(ctx context.Context, workspaceID, actionName, key string, status int, body []byte) {
+	if key == "" || f.idempotency == nil {
+		return
+	}
+	env, err := json.Marshal(idempotencyEnvelope{Status: status, Body: body})
+	if err != nil {
+		return
+	}
+	_ = f.idempotency.RecordCompleted(ctx, workspaceID, actionName, key, string(env))
+}
+
+// failIdempotent records a failed action attempt against the key so a retry
+// with the same key is allowed (todo 2.7.2 — failed ≠ in-flight pending).
+func (f *HandlerFactory) failIdempotent(ctx context.Context, workspaceID, actionName, key string, status int, body []byte) {
+	if key == "" || f.idempotency == nil {
+		return
+	}
+	env, err := json.Marshal(idempotencyEnvelope{Status: status, Body: body})
+	if err != nil {
+		return
+	}
+	_ = f.idempotency.RecordFailed(ctx, workspaceID, actionName, key, string(env))
 }
 
 // resolveAction returns the *spec.Action named name from es, or nil if es
@@ -337,6 +499,14 @@ func (f *HandlerFactory) HandleCreate(module, entity string) http.HandlerFunc {
 			hooks = entitySpec.Hooks
 		}
 
+		// Idempotency gate (todo 2.7): if create is declared idempotent with a
+		// key source, claim the key up front. Completed keys replay the stored
+		// response; in-flight keys get 409; new/failed keys proceed.
+		idemKey, proceed := f.beginIdempotent(w, r, ctx, workspaceID, "create", actionSpec)
+		if !proceed {
+			return
+		}
+
 		execParams := &action.ExecuteParams{
 			Module: module, Entity: entity, ActionName: "create",
 			Resource: body, Params: body, WorkspaceID: workspaceID, UserID: createdBy,
@@ -367,6 +537,14 @@ func (f *HandlerFactory) HandleCreate(module, entity string) http.HandlerFunc {
 			PendingEvents: pendingEvents,
 		})
 		if err != nil {
+			// Record the failed attempt so a retry with the same key is
+			// allowed (todo 2.7.2 — failed ≠ in-flight pending).
+			if eb, jerr := json.Marshal(ErrorResponse{
+				Error: ErrorDetail{Code: "VALIDATION_ERROR", Message: err.Error()},
+				Meta:  MetaSingle{Timestamp: time.Now().UTC().Format(time.RFC3339)},
+			}); jerr == nil {
+				f.failIdempotent(ctx, workspaceID, "create", idemKey, http.StatusUnprocessableEntity, eb)
+			}
 			writeStoreError(w, err)
 			return
 		}
@@ -398,10 +576,16 @@ func (f *HandlerFactory) HandleCreate(module, entity string) http.HandlerFunc {
 		// to live listeners — listener-gated, no-op when nobody is connected.
 		action.NotifyMutation(f.deliveryDeps, workspaceID, module+"/"+entity, "created")
 
-		writeJSON(w, http.StatusCreated, SingleResponse{
+		resp := SingleResponse{
 			Data: rec,
 			Meta: MetaSingle{RequestID: requestIDFromContext(ctx), Timestamp: time.Now().UTC().Format(time.RFC3339)},
-		})
+		}
+		// Record the completed idempotency key (if any) with the exact body
+		// so a duplicate call replays the same response.
+		if bodyBytes, err := json.Marshal(resp); err == nil {
+			f.completeIdempotent(ctx, workspaceID, "create", idemKey, http.StatusCreated, bodyBytes)
+		}
+		writeJSON(w, http.StatusCreated, resp)
 	}
 }
 
@@ -1169,6 +1353,14 @@ func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, a
 		userID := userFromContext(ctx)
 		resourceID := r.PathValue("id")
 
+		// Idempotency gate (todo 2.7): custom actions declared idempotent
+		// claim the key up front. Completed keys replay the stored response;
+		// in-flight keys get 409; new/failed keys proceed.
+		idemKey, proceed := f.beginIdempotent(w, r, ctx, workspaceID, actionName, &actionSpec)
+		if !proceed {
+			return
+		}
+
 		// Parse request body as params
 		var params map[string]any
 		if r.Body != nil && r.ContentLength > 0 {
@@ -1301,6 +1493,12 @@ func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, a
 		result, err := f.dispatcher.Dispatch(ctx, actionSpec, execParams)
 		if err != nil {
 			scope.Rollback()
+			if eb, jerr := json.Marshal(ErrorResponse{
+				Error: ErrorDetail{Code: "ACTION_ERROR", Message: err.Error()},
+				Meta:  MetaSingle{Timestamp: time.Now().UTC().Format(time.RFC3339)},
+			}); jerr == nil {
+				f.failIdempotent(ctx, workspaceID, actionName, idemKey, http.StatusInternalServerError, eb)
+			}
 			if errors.Is(err, db.ErrCrossStoreTx) {
 				writeError(w, http.StatusInternalServerError, "CROSS_STORE_TX", err.Error())
 				return
@@ -1357,9 +1555,43 @@ func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, a
 		// gated, no-op when nobody is connected.
 		action.NotifyMutation(f.deliveryDeps, workspaceID, module+"/"+entity, actionName)
 
-		writeJSON(w, http.StatusOK, SingleResponse{
+		resp := SingleResponse{
 			Data: result.Data,
 			Meta: MetaSingle{RequestID: requestIDFromContext(ctx), Timestamp: time.Now().UTC().Format(time.RFC3339)},
+		}
+		// Record the completed idempotency key (if any) so a duplicate call
+		// replays the same response (todo 2.7.2).
+		if bodyBytes, err := json.Marshal(resp); err == nil {
+			f.completeIdempotent(ctx, workspaceID, actionName, idemKey, http.StatusOK, bodyBytes)
+		}
+		writeJSON(w, http.StatusOK, resp)
+	}
+}
+
+// HandlePrepare returns a handler for the two-step idempotency prepare flow
+// (todo 2.7.1, 01-core-basic §5). It issues a fresh idempotency key for a
+// server-sourced idempotent action:
+//
+//	POST /api/v1/{module}/{plural}/create/prepare         (create)
+//	POST /api/v1/{module}/{plural}/{action}/prepare       (custom action)
+//
+// The client attaches the returned key to the actual action call via the
+// Idempotency-Key header. Only actions declared `idempotent: true` with
+// `idempotency_key.from: server` expose a prepare route; anything else 404s.
+func (f *HandlerFactory) HandlePrepare(module, entity, actionName string, actionSpec spec.Action) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Guard: prepare is only meaningful for server-sourced idempotent
+		// actions. The router only registers these routes for such actions,
+		// but the check keeps this handler safe to invoke directly.
+		if !actionSpec.Idempotent || actionSpec.IdempotencyKey == nil || actionSpec.IdempotencyKey.From != "server" {
+			writeError(w, http.StatusNotFound, "NOT_FOUND", "prepare is not available for this action")
+			return
+		}
+
+		key := db.NewUUIDv7()
+		writeJSON(w, http.StatusOK, SingleResponse{
+			Data: map[string]any{"idempotency_key": key},
+			Meta: MetaSingle{RequestID: requestIDFromContext(r.Context()), Timestamp: time.Now().UTC().Format(time.RFC3339)},
 		})
 	}
 }

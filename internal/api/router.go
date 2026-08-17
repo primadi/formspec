@@ -14,6 +14,7 @@ import (
 	"github.com/primadi/formspec/internal/entity"
 	"github.com/primadi/formspec/internal/ui"
 	"github.com/primadi/formspec/pkg/spec"
+	db "github.com/primadi/formspec/renderers/jsonb-persist"
 )
 
 // RouterBuilder constructs a FormSpec API router.
@@ -61,6 +62,12 @@ func (b *RouterBuilder) SetDispatcher(d *action.Dispatcher) {
 // declared events after a successful action.
 func (b *RouterBuilder) SetDeliveryDeps(deps action.DeliveryDeps) {
 	b.factory.SetDeliveryDeps(deps)
+}
+
+// SetIdempotencyStore wires the idempotency-key store used to enforce
+// idempotent actions and serve the prepare endpoint (todo 2.7).
+func (b *RouterBuilder) SetIdempotencyStore(store *db.IdempotencyStore) {
+	b.factory.SetIdempotencyStore(store)
 }
 
 // SetUIRegistry wires the frontend UI registry; enables the Meta API
@@ -296,6 +303,32 @@ func (b *RouterBuilder) registerRoute(r chi.Router, rd RouteDescriptor) {
 		}
 
 		handler = b.factory.HandleCustomAction(rd.Module, rd.Entity, rd.Action, *actionSpec, specDir)
+	case "prepare":
+		// Two-step idempotency prepare (todo 2.7.1): issue a fresh key for
+		// a server-sourced idempotent action.
+		specInfo, ok := b.registry.GetEntity(rd.Module, rd.Entity)
+		if !ok || specInfo.EntitySpec == nil {
+			handler = func(w http.ResponseWriter, r *http.Request) {
+				writeError(w, http.StatusNotFound, "NOT_FOUND",
+					"entity not found: "+rd.Module+"/"+rd.Entity)
+			}
+			break
+		}
+		var actionSpec *spec.Action
+		for i, a := range specInfo.EntitySpec.Actions {
+			if a.Name == rd.Action {
+				actionSpec = &specInfo.EntitySpec.Actions[i]
+				break
+			}
+		}
+		if actionSpec == nil {
+			handler = func(w http.ResponseWriter, r *http.Request) {
+				writeError(w, http.StatusNotFound, "NOT_FOUND",
+					"action not found: "+rd.Action)
+			}
+			break
+		}
+		handler = b.factory.HandlePrepare(rd.Module, rd.Entity, rd.Action, *actionSpec)
 	default:
 		return // unknown handler type, skip
 	}
@@ -367,6 +400,22 @@ func (b *RouterBuilder) registerRouteWithPattern(r chi.Router, rd RouteDescripto
 			specDir = filepath.Dir(strings.SplitN(src, "#", 2)[0])
 		}
 		handler = b.factory.HandleCustomAction(rd.Module, rd.Entity, rd.Action, *actionSpec, specDir)
+	case "prepare":
+		specInfo, ok := b.registry.GetEntity(rd.Module, rd.Entity)
+		if !ok || specInfo.EntitySpec == nil {
+			return
+		}
+		var actionSpec *spec.Action
+		for i, a := range specInfo.EntitySpec.Actions {
+			if a.Name == rd.Action {
+				actionSpec = &specInfo.EntitySpec.Actions[i]
+				break
+			}
+		}
+		if actionSpec == nil {
+			return
+		}
+		handler = b.factory.HandlePrepare(rd.Module, rd.Entity, rd.Action, *actionSpec)
 	default:
 		return
 	}

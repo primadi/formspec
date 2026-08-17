@@ -89,7 +89,7 @@ def execute(resource, params, ctx):
 		})
 		return err
 	})
-	scriptEx.SetCreateHandler(func(ctx context.Context, workspaceID, module, entityName string, data map[string]any) (string, error) {
+	scriptEx.SetCreateHandler(func(ctx context.Context, workspaceID, fromModule, module, entityName string, data map[string]any, callerResources []string) (string, error) {
 		s, err := reg.GetEntityStore(module, entityName)
 		if err != nil {
 			return "", err

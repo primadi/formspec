@@ -1,7 +1,7 @@
 # Master Plan: FormSpec Implementation
 
-**Last Updated**: 2026-08-14  
-**Status**: ✅ Fase 0 complete · ✅ Fase 1 (1.1–1.5) · ✅ Fase 2.1 · ✅ Fase 2.2 · ✅ Fase 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6) · ✅ Fase 5 (5.1–5.4) · ✅ Spec hot-reload · ✅ Fase 11 (review schema↔docs) · ✅ Audit spec↔schema + tambah TODO item · ✅ `formspec validate` (3.1.1, engine+schema) · 🚧 Rename formspec→formspec (docs/plan/rename-formspec.md) · 🚧 Fase 12 Domain Infrastruktur (docs/architecture/09-domain-map.md) · ✅ Schema registry online (docs/plan/schema-registry-online.md)
+**Last Updated**: 2026-08-17  
+**Status**: ✅ Fase 0 complete · ✅ Fase 1 (1.1–1.5) · ✅ Fase 2.1 · ✅ Fase 2.2 · ✅ Fase 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6) · ✅ Fase 2.7 (idempotency prepare flow) · ✅ Fase 2.8 (spec.expose) · ✅ Fase 5 (5.1–5.4) · ✅ Spec hot-reload · ✅ Fase 11 (review schema↔docs) · ✅ Audit spec↔schema + tambah TODO item · ✅ `formspec validate` (3.1.1, engine+schema) · 🚧 Rename formspec→formspec (docs/plan/rename-formspec.md) · 🚧 Fase 12 Domain Infrastruktur (docs/architecture/09-domain-map.md) · ✅ Schema registry online (docs/plan/schema-registry-online.md)
 
 > `⬜` not started · `✅` complete · `⏸️` deferred
 
@@ -100,7 +100,7 @@ konten skill dibuat MCP-agnostic agar reuse saat Fase 10 landing.
 
 **Goal**: Atomic operations, correct PK, complete filters, lifecycle enforcement — agar `formspec dev` bisa diandalkan untuk testing.
 
-**Progress**: 2.1 ✅ · 2.2 ✅ · 2.3 ✅ · 2.4 ✅ · 2.5 ✅ · 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6 ✅; 2.6.4 ⬜ blocked on 2.9.1 + new Starlark caller-context plumbing) · 2.7–2.9 ⬜
+**Progress**: 2.1 ✅ · 2.2 ✅ · 2.3 ✅ · 2.4 ✅ · 2.5 ✅ · 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6 ✅; 2.6.4 ⬜ sebagian — cross-module resource access enforced, ctx.\*/secrets masih blocked on 2.9.1) · 2.7 ✅ · 2.8 ✅ · 2.9 ⬜
 
 ### 2.1 Database integrity ✅
 
@@ -158,19 +158,19 @@ konten skill dibuat MCP-agnostic agar reuse saat Fase 10 landing.
 - [x] 2.6.1 Cross-tenant isolation — already in place: `AuthMiddleware` (`internal/api/middleware.go`) returns 404 (not 403) on identity-vs-URL workspace mismatch; every `EntityStore` query in `renderers/jsonbpersist/crud.go` scopes on `tenant_id`. Covered by existing `internal/api/api_test.go`/`renderers/jsonbpersist/crud_test.go`.
 - [x] 2.6.2 Tenant ID auto-injection — already in place: `GenerateEntityDDL` (`renderers/jsonbpersist/ddl.go`) always emits `tenant_id` + tenant-scoped unique indexes.
 - [x] 2.6.3 Permission auto-registration — `internal/entity/registry.go`'s `registerStandardPermissions()` (shared by `LoadEntities`/`RegisterArtifactManifest`) now also registers `submit`/`cancel`/`amend`, gated identically to route generation (`db.TransitiveDisabled` + `characteristic: summary`) so registered permissions never drift from actual routes. Format stays `{module}.{plural}.{action}`, matching `internal/api/generator.go`.
-- [ ] 2.6.4 UsesEnforcement wiring — **not implemented; two concrete blockers found on inspection**: (a) `resource.call()`'s dispatch path (`resource/formspec.go`'s `invokeAction`) carries no notion of "which action/module is calling", so there's nothing to check the caller's `uses` declaration against without new plumbing through the Starlark call-handler chain (`internal/action/script.go`'s `SetCallHandler`); (b) `ctx.db`/`ctx.secrets`/etc. enforcement is blocked on 2.9.1 (`CtxAPI.SetDatastoreResolver` — currently everything errors "not configured"). Module auto-suspend + incident audit are also wholly new subsystems (no existing scaffolding to extend). The existing `UsesEnforcement` middleware stub in `internal/api/middleware.go` remains unwired dead code — do not assume it's "ready to activate", its own doc comment overstates that.
+- [x] 2.6.4 UsesEnforcement wiring (cross-module resource access) — **partially implemented**: blocker (a) resolved. Caller `uses.resources` kini di-thread dari `internal/action/script.go` (`declaredUsesResources`) → `internal/starlark.ScriptExecutor.Execute(callerResources)` → `CallHandler`/`LoadHandler`/`CreateHandler` → closure di `resource/formspec.go` (`checkCrossModuleUses`). Cross-module `resource.call()`/`fetch()`/`create()` dari Starlark kini diblokir (`USES_VIOLATION`) bila target tidak dideklarasikan di `uses.resources` action caller; same-module selalu diizinkan; matcher menerima `{module}.{entity}`, `{module}/{entity}`, wildcard `{module}.*`, `*`. Test: `resource/uses_enforcement_test.go` (unit) + `resource/uses_enforcement_e2e_test.go` (e2e via HTTP). **Blocker (b) tetap**: `ctx.db`/`ctx.secrets`/`ctx.*` enforcement menunggu 2.9.1 (`CtxAPI.SetDatastoreResolver`); module auto-suspend + incident audit tetap subsistem baru yang belum ada. Stub middleware `UsesEnforcement` di `internal/api/middleware.go` tetap dead code — enforcement nyata hidup di `resource/formspec.go`, bukan middleware.
 - [x] 2.6.5 Optimistic concurrency — storage layer was already correct (`crud.go`'s `Update()` does `WHERE version = ?`; conflicts already mapped to 409), but `HandleUpdate` (`internal/api/handler.go`) silently ignored the client and always used the just-fetched version — meaning the `If-Match: version=N` header renderers/web's `apiPatch` (`renderers/web/src/lib/api/client.ts`) already sends on every Form autosave/Kanban drag-update was a no-op. Fixed: `HandleUpdate` now parses `If-Match` and uses the client's version for the CAS check when present; missing `If-Match` falls back to today's behavior in relaxed/dev mode but is `409 CONFLICT` when `SetStrictMode(true)` (production).
 - [x] 2.6.6 WebSocket per-message permission filter — `wsConn` (`internal/api/wshub.go`) now carries the connection's `*auth.Identity` (captured in `HandleWS`); `Broadcast` resolves `EventMessage.Resource` to `{module}.{plural}.view` via the entity registry and skips connections lacking that permission. Fails open (delivers unfiltered) when identity is nil or the resource/registry can't be resolved, so it only engages once real auth is wired up — see the "identity/registry" branch in `internal/api/wshub_test.go`/`wshub_permission_test.go`.
 
-### 2.7 Idempotency
+### 2.7 Idempotency ✅
 
-- [ ] 2.7.1 Two-step prepare flow — `POST /{resource}/{action}/prepare` → receive key → retry action with key
-- [ ] 2.7.2 Idempotency store — `(tenant, action, key) → pending|completed + response` (`01-core-basic.md` §5 — tanpa state `failed`); duplicate after completed → replay; duplicate during pending → wait/409
+- [x] 2.7.1 Two-step prepare flow — `POST /{resource}/{action}/prepare` → receive key → retry action with key. Endpoint `HandlePrepare` (server-sourced idempotent actions only; header/param-sourced 404), route `POST /api/v1/{module}/{plural}/create/prepare` + `/{action}/prepare` di kedua surface (external + `/_ui/entity/`). Lihat `docs/plan/idempotency-prepare-flow.md`.
+- [x] 2.7.2 Idempotency store — `(tenant, action, key) → pending|completed + response` (`01-core-basic.md` §5 — tanpa state `failed`); enforcement di `HandleCreate` + `HandleCustomAction`: duplicate after completed → replay response asli (status + body); duplicate saat pending (in-flight) → 409; failed → retry diizinkan. `IdempotencyStore.Lookup` membedakan pending vs failed (TryClaim menggabungkan keduanya). Store di-wire ke router di `New()` + `ReloadSpec()`.
 
-### 2.8 `spec.expose` enforcement
+### 2.8 `spec.expose` enforcement ✅
 
-- [ ] 2.8.1 `spec.expose: []` → external API returns 404 for all endpoints; UI surface unaffected
-- [ ] 2.8.2 `spec.expose: [{type: rest, actions: [list, find]}]` → only those actions on `/api/v1/`
+- [x] 2.8.1 `spec.expose: []` → external API returns 404 for all endpoints; UI surface unaffected — `GenerateRoutes` skip entity tanpa expose; `GenerateUIRoutes` selalu include semua entity (`internal/api/generator.go`; test `TestGenerateRoutes_NoExpose`/`TestHTTPRouter_404OnUnexposed`)
+- [x] 2.8.2 `spec.expose: [{type: rest, actions: [list, find]}]` → only those actions on `/api/v1/` — `generateRESTRoutes` filter `allowed` dari `exp.Actions` (test `TestGenerateRoutes_WithExpose`)
 
 ### 2.9 `ctx.*` infrastructure primitives
 

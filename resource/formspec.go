@@ -362,6 +362,9 @@ func New(cfg Config) (*App, error) {
 	})
 
 	idempotencyStore := db.NewIdempotencyStore(database, driver).WithTTL(cfg.IdempotencyTTL)
+	// Wire the idempotency store into the router so idempotent actions are
+	// enforced and the prepare endpoint (todo 2.7) is served.
+	rb.SetIdempotencyStore(idempotencyStore)
 
 	app := &App{
 		cfg: cfg, database: database, driver: driver,
@@ -547,6 +550,10 @@ func (a *App) ReloadSpec() error {
 	eventLogStore := db.NewEventLogStore(a.database, a.driver)
 	newRB.SetDeliveryDeps(action.DeliveryDeps{Hub: oldHub, Outbox: outboxStore, EventLog: eventLogStore})
 
+	// Wire the idempotency store (todo 2.7) — same store instance, so
+	// in-flight keys survive a spec reload.
+	newRB.SetIdempotencyStore(a.idempotency)
+
 	newHandler := newRB.BuildHTTP()
 
 	// ── 5. Re-wire process-global validation entity lookup ──
@@ -627,13 +634,19 @@ func newDispatcher(reg *entity.Registry, cfg Config) *action.Dispatcher {
 		})
 		return err
 	})
-	scriptEx.SetCallHandler(func(ctx context.Context, workspaceID, fromModule, targetModule, targetEntity, actionName string, params map[string]any) (any, error) {
+	scriptEx.SetCallHandler(func(ctx context.Context, workspaceID, fromModule, targetModule, targetEntity, actionName string, params map[string]any, callerResources []string) (any, error) {
 		if targetModule == "" {
 			targetModule = fromModule
 		}
+		if err := checkCrossModuleUses(fromModule, targetModule, targetEntity, callerResources); err != nil {
+			return nil, err
+		}
 		return invokeAction(ctx, reg, disp, workspaceID, targetModule, targetEntity, actionName, "", params)
 	})
-	scriptEx.SetLoadHandler(func(ctx context.Context, workspaceID, module, entityName, id string) (map[string]any, int, error) {
+	scriptEx.SetLoadHandler(func(ctx context.Context, workspaceID, fromModule, module, entityName, id string, callerResources []string) (map[string]any, int, error) {
+		if err := checkCrossModuleUses(fromModule, module, entityName, callerResources); err != nil {
+			return nil, 0, err
+		}
 		store, err := reg.GetEntityStore(module, entityName)
 		if err != nil {
 			return nil, 0, fmt.Errorf("get store: %w", err)
@@ -647,7 +660,10 @@ func newDispatcher(reg *entity.Registry, cfg Config) *action.Dispatcher {
 		}
 		return rec.Data, rec.Version, nil
 	})
-	scriptEx.SetCreateHandler(func(ctx context.Context, workspaceID, module, entityName string, data map[string]any) (string, error) {
+	scriptEx.SetCreateHandler(func(ctx context.Context, workspaceID, fromModule, module, entityName string, data map[string]any, callerResources []string) (string, error) {
+		if err := checkCrossModuleUses(fromModule, module, entityName, callerResources); err != nil {
+			return "", err
+		}
 		store, err := reg.GetEntityStore(module, entityName)
 		if err != nil {
 			return "", fmt.Errorf("get store: %w", err)
@@ -678,6 +694,41 @@ func newDispatcher(reg *entity.Registry, cfg Config) *action.Dispatcher {
 // db.EntityStore.Insert, since it must run before required-field validation).
 func generateNextKey(ctx context.Context, reg *entity.Registry, workspaceID, module, entityName, fieldName string) (string, error) {
 	return reg.GenerateNaturalKey(ctx, workspaceID, module, entityName, fieldName)
+}
+
+// checkCrossModuleUses enforces the uses.resources contract (01-core-basic §5)
+// for cross-resource access from Starlark scripts (todo 2.6.4):
+//
+//   - same-module or unqualified access is always allowed (a module owns its
+//     own resources);
+//   - cross-module access is allowed only when the target resource is declared
+//     in the caller action's uses.resources — as "{module}.{entity}",
+//     "{module}/{entity}", a module wildcard "{module}.*", or "*".
+//
+// declared is the caller's uses.resources (nil-safe). A violation returns a
+// USES_VIOLATION error that aborts the script action.
+func checkCrossModuleUses(fromModule, targetModule, targetEntity string, declared []string) error {
+	if targetModule == "" || targetModule == fromModule {
+		return nil
+	}
+
+	declaredRefs := func() map[string]bool {
+		m := make(map[string]bool, len(declared))
+		for _, d := range declared {
+			m[d] = true
+		}
+		return m
+	}
+	refs := declaredRefs()
+
+	target := targetModule + "." + targetEntity
+	slashTarget := targetModule + "/" + targetEntity
+	wildcard := targetModule + ".*"
+	if refs[target] || refs[slashTarget] || refs[wildcard] || refs["*"] {
+		return nil
+	}
+
+	return fmt.Errorf("USES_VIOLATION: undeclared cross-module access to %s from module %s — add it to the action's uses.resources", target, fromModule)
 }
 
 // invokeAction runs a named action on module/entity — the resource.call()

@@ -5,6 +5,7 @@
 > Outline: heading menetapkan cakupan; isi ditulis bertahap.
 
 ## 1. Translasi Filter Operator
+
 **Cakupan hari ini lebih sempit dari kontrak.** Operator kontrak
 ([`../../spec/backend/01-core-basic.md`](../../spec/backend/01-core-basic.md)
 §6 mendaftar `eq neq gt gte lt lte between in nin like ilike null notnull`)
@@ -22,6 +23,7 @@ sepenuhnya — cuma ada satu jalur (generated column), bukan dua jalur yang
 perilakunya perlu disamakan.
 
 ## 2. Natural Key Counter
+
 `ctx.next_key` ([`../../spec/backend/01-core-basic.md`](../../spec/backend/01-core-basic.md)
 §2, [`../../spec/backend/04-persist-backend.md`](../../spec/backend/04-persist-backend.md)
 §2) diimplementasikan lewat tabel counter:
@@ -40,8 +42,8 @@ kalau insert gagal setelah counter terlanjur increment, rollback membatalkan
 keduanya, menutup gap yang sebelumnya dicatat di sini (lihat
 [`01-architecture.md`](01-architecture.md) §3 untuk cakupan penuh mutasi
 atomik ini, termasuk apa yang masih belum tercakup). Mode gap-free penuh
-("angka tidak pernah bolong sama sekali") tetap belum berarti *lock ditahan
-lintas request bersamaan* — ini "counter dan insert commit/rollback
+("angka tidak pernah bolong sama sekali") tetap belum berarti _lock ditahan
+lintas request bersamaan_ — ini "counter dan insert commit/rollback
 bersama", bukan serialisasi antar request konkuren, yang cukup untuk
 kontrak ini (gap-free per unit transaksi, bukan zero-contention). `scope_field`
 opsional memetakan nilai field lain (mis. `branch_id`) jadi komponen `scope`,
@@ -58,6 +60,7 @@ tanpa menyentuh counter, dan validasi required-field jadi pengaman kalau
 field itu ternyata tidak diisi siapa pun.
 
 ## 3. Idempotency Store
+
 `(tenant, action, key) → pending | completed | failed + response tersimpan`
 ([`../../spec/backend/01-core-basic.md`](../../spec/backend/01-core-basic.md)
 §5) — entry tidak pernah dihapus saat commit, kedaluwarsa via `CleanupExpired`
@@ -69,11 +72,35 @@ field yang dihitung lalu dibuang. Resolusi TTL dari manifest `kind: Config`
 (`core.idempotency_retention` sebagai key config, bukan field Go) menunggu
 runtime Config-kind (belum ada registry-nya — lihat Fase 7.2 di
 `docs/plan/todo.md`); sampai saat itu, `Config.IdempotencyTTL` adalah seam
-konfigurasi yang setara, sama seperti `JWTSecret` dkk. Jalur HTTP
-prepare-flow (`POST /{resource}/{action}/prepare`) yang benar-benar memakai
-store ini saat request masuk belum ada (Fase 2.7) — bagian itu tetap gap.
+konfigurasi yang setara, sama seperti `JWTSecret` dkk.
+
+**Jalur HTTP sudah aktif (Fase 2.7, 2026-08-17).** Store di-wire ke router
+(`RouterBuilder.SetIdempotencyStore`) di `New()` dan `ReloadSpec()`, dan
+dipakai oleh:
+
+- **Prepare dua-langkah** (`01-core-basic.md` §5): action `idempotent: true`
+  dengan `idempotency_key.from: server` mengekspos
+  `POST /api/v1/{module}/{plural}/create/prepare` (create) dan
+  `POST /api/v1/{module}/{plural}/{action}/prepare` (custom action) di kedua
+  surface (external + `/_ui/entity/`). Endpoint mengeluarkan key UUID v7;
+  klien melampirkan key itu di header `Idempotency-Key` saat memanggil action
+  sebenarnya. Action `from: header`/`param` tidak punya endpoint prepare
+  (klien menyuplai key sendiri).
+- **Enforcement di handler** (`HandleCreate` + `HandleCustomAction`):
+  - key `completed` → replay response asli (status + body tersimpan);
+  - key `pending` (in-flight) → `409 CONFLICT`;
+  - key `failed` → retry diizinkan;
+  - key baru / kedaluwarsa → klaim + eksekusi.
+    `IdempotencyStore.Lookup` membedakan pending vs failed — `TryClaim` sendiri
+    menggabungkan keduanya sebagai "retryable". Action idempotent tanpa key →
+    `422 VALIDATION_ERROR`.
+
+Frontend (`renderers/react-shadcn/src/lib/api/client.ts`) sudah mengirim header
+`Idempotency-Key` via `apiPost(..., {idempotencyKey})` — kini server
+menghormatinya.
 
 ## 4. Summary Multi-Source
+
 Kontrak "gabungkan sources by join_key"
 ([`../../spec/backend/02-core-extended.md`](../../spec/backend/02-core-extended.md)
 §6) dijawab lewat SQL join biasa antar tabel yang di-generate framework ini —
@@ -82,6 +109,7 @@ itu dipopulasikan dari event durable (rebuild via replay event stream, bukan
 query on-demand terhadap sources-nya).
 
 ## 5. Dialek `ctx.db`
+
 Resource yang memilih `ctx.db` ([`../../spec/backend/04-persist-backend.md`](../../spec/backend/04-persist-backend.md)
 §5) mendapat SQL mentah sesuai driver aktif (`DriverName()` — `sqlite` untuk
 dev, `postgres` untuk produksi) lewat `internal/db.DB`. Dialek SQL antar

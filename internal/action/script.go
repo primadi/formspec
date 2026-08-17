@@ -49,18 +49,23 @@ func (e *ScriptExecutor) SetSaveHandler(fn func(ctx context.Context, workspaceID
 	e.engine.SaveHandler = fn
 }
 
-// SetCallHandler sets the cross-resource call callback.
-func (e *ScriptExecutor) SetCallHandler(fn func(ctx context.Context, workspaceID, fromModule, targetModule, targetEntity, action string, params map[string]any) (any, error)) {
+// SetCallHandler sets the cross-resource call callback. callerResources is
+// the calling action's declared uses.resources (nil-safe) — the framework
+// checks cross-module calls against it (todo 2.6.4).
+func (e *ScriptExecutor) SetCallHandler(fn func(ctx context.Context, workspaceID, fromModule, targetModule, targetEntity, action string, params map[string]any, callerResources []string) (any, error)) {
 	e.engine.CallHandler = fn
 }
 
-// SetLoadHandler sets the entity load callback.
-func (e *ScriptExecutor) SetLoadHandler(fn func(ctx context.Context, workspaceID, module, entity, id string) (map[string]any, int, error)) {
+// SetLoadHandler sets the entity load callback. callerResources is the
+// calling action's declared uses.resources (todo 2.6.4).
+func (e *ScriptExecutor) SetLoadHandler(fn func(ctx context.Context, workspaceID, fromModule, module, entity, id string, callerResources []string) (map[string]any, int, error)) {
 	e.engine.LoadHandler = fn
 }
 
-// SetCreateHandler sets the entity create callback used by resource.create() in scripts.
-func (e *ScriptExecutor) SetCreateHandler(fn func(ctx context.Context, workspaceID, module, entity string, data map[string]any) (string, error)) {
+// SetCreateHandler sets the entity create callback used by resource.create()
+// in scripts. callerResources is the calling action's declared
+// uses.resources (todo 2.6.4).
+func (e *ScriptExecutor) SetCreateHandler(fn func(ctx context.Context, workspaceID, fromModule, module, entity string, data map[string]any, callerResources []string) (string, error)) {
 	e.engine.CreateHandler = fn
 }
 
@@ -96,6 +101,7 @@ func (e *ScriptExecutor) Execute(ctx context.Context, action spec.Action, params
 		params.WorkspaceID,
 		params.UserID,
 		params.ResourceVersion,
+		declaredUsesResources(action),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("script execution error: %w", err)
@@ -106,6 +112,17 @@ func (e *ScriptExecutor) Execute(ctx context.Context, action spec.Action, params
 	}
 
 	return &ExecuteResult{Data: result.Data}, nil
+}
+
+// declaredUsesResources returns the caller action's declared uses.resources
+// as a []string, or nil when the action declares no uses block (todo 2.6.4).
+// This is threaded through the script execution chain so cross-module
+// resource access can be checked against it at runtime.
+func declaredUsesResources(action spec.Action) []string {
+	if action.Uses == nil {
+		return nil
+	}
+	return action.Uses.Resources
 }
 
 // resolveScript resolves a script ref to an absolute file path.

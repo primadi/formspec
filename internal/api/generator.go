@@ -48,6 +48,11 @@ func GenerateRoutes(registry *entity.Registry) []RouteDescriptor {
 			}
 			// Future: grpc, ws
 		}
+
+		// Two-step idempotency prepare (todo 2.7.1): every server-sourced
+		// idempotent action (create and custom) exposes a prepare endpoint
+		// on the external surface.
+		routes = append(routes, generatePrepareRoutes(info.Module, info.Name, plural, es, isSummary, disabled)...)
 	}
 
 	return routes
@@ -89,6 +94,10 @@ func GenerateUIRoutes(registry *entity.Registry) []RouteDescriptor {
 		uiActions := []string{"list", "find", "create", "update", "delete"}
 		uiExp := spec.ExposeConfig{Type: spec.ProtocolREST, Actions: uiActions}
 		routes = append(routes, generateRESTRoutes(info.Module, info.Name, plural, uiExp, isSummary, disabled)...)
+
+		// Two-step idempotency prepare (todo 2.7.1) on the UI surface too —
+		// the primary use case is browser double-submit on create.
+		routes = append(routes, generatePrepareRoutes(info.Module, info.Name, plural, es, isSummary, disabled)...)
 	}
 
 	// Rewrite path prefixes from /api/v1/... to /_ui/entity/...
@@ -164,6 +173,75 @@ func generateRESTRoutes(module, name, plural string, exp spec.ExposeConfig, isSu
 			Handler:            "auto",
 			RequiredPermission: perm,
 		})
+	}
+
+	return routes
+}
+
+// generatePrepareRoutes creates two-step idempotency prepare routes for
+// server-sourced idempotent actions (todo 2.7.1, 01-core-basic §5):
+//
+//	POST /api/v1/{module}/{plural}/create/prepare     (idempotent create)
+//	POST /api/v1/{module}/{plural}/{action}/prepare   (idempotent custom action)
+//
+// Only actions declared `idempotent: true` with `idempotency_key.from: server`
+// expose a prepare endpoint — header/param-sourced actions let the client
+// supply its own key and need no prepare step. Lifecycle actions
+// (submit/cancel/amend) are excluded: their idempotency is guarded by the
+// state machine, not a client key.
+func generatePrepareRoutes(module, name, plural string, es *spec.EntitySpec, isSummary bool, disabled map[string]bool) []RouteDescriptor {
+	var routes []RouteDescriptor
+
+	if es == nil || isSummary {
+		return routes
+	}
+
+	pathPrefix := "/api/v1/" + module + "/" + plural
+
+	for _, a := range es.Actions {
+		// Only server-sourced idempotent actions (create + custom) get a
+		// prepare endpoint.
+		if a.Disabled || !a.Idempotent || a.IdempotencyKey == nil || a.IdempotencyKey.From != "server" {
+			continue
+		}
+		switch a.Name {
+		case "submit", "cancel", "amend":
+			continue
+		case "create":
+			if disabled["create"] {
+				continue
+			}
+			routes = append(routes, RouteDescriptor{
+				Module:             module,
+				Entity:             name,
+				Plural:             plural,
+				Action:             "create",
+				Method:             "POST",
+				Path:               pathPrefix + "/create/prepare",
+				Protocol:           spec.ProtocolREST,
+				Handler:            "prepare",
+				RequiredPermission: module + "." + plural + ".create",
+			})
+		default:
+			perm := a.RequiredPermission
+			if perm == "" {
+				perm = module + "." + plural + "." + a.Name
+			}
+			routes = append(routes, RouteDescriptor{
+				Module:             module,
+				Entity:             name,
+				Plural:             plural,
+				Action:             a.Name,
+				Method:             "POST",
+				// Literal action name in the path so chi's static-segment
+				// priority disambiguates /{action}/prepare from the custom
+				// action route /{id}/{action}.
+				Path:               pathPrefix + "/" + a.Name + "/prepare",
+				Protocol:           spec.ProtocolREST,
+				Handler:            "prepare",
+				RequiredPermission: perm,
+			})
+		}
 	}
 
 	return routes

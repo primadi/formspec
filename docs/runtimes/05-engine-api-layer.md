@@ -15,7 +15,7 @@ mengimplementasikan bisnis logic sendiri, hanya:
   `Actions`) menjadi route chi + payload JSON, dan sebaliknya (request →
   parameter panggilan ke `internal/db`/`internal/action`).
 - **Penegakan auth/permission per-request**: memverifikasi token dan
-  memblokir request yang tidak punya permission — tapi *sumber kebenaran*
+  memblokir request yang tidak punya permission — tapi _sumber kebenaran_
   permission (apa yang dipunyai user, apa yang dibutuhkan action) datang dari
   `internal/auth` dan spec, bukan didefinisikan di paket ini.
 - **Endpoint meta**: menyajikan bundle manifest visual (`internal/ui`) ke
@@ -33,7 +33,7 @@ memanggil API publik paket-paket itu dari handler HTTP —
 bukan mengimplementasikan penyimpanan sendiri (`internal/api/handler.go:21-37`).
 
 Batasnya dengan **frontend renderer**: `internal/api` tidak tahu apa pun
-soal Shell/Page/component. Ia menyajikan *data* (entity schema, manifest
+soal Shell/Page/component. Ia menyajikan _data_ (entity schema, manifest
 visual sudah difilter permission, bundle CRUD) lewat kontrak
 [Spec Resolution API](../spec/frontend/04-spec-resolution-api.md); bagaimana
 data itu dirender sepenuhnya urusan Shell (`docs/renderers/shadcn-shell/`).
@@ -136,10 +136,10 @@ manifest (`internal/entity/registry.go`) dan `resource/formspec.go` untuk
 validasi statis, bukan sebagai penjaga per-request. Penegakan permission
 per-request murni `RequirePermission` + `auth.Identity.HasPermission` di
 atas. `UsesEnforcement` (`middleware.go:255-268`) ada sebagai kerangka
-middleware tapi **selalu meloloskan request** — baik strict maupun relaxed
-mode — karena belum disambungkan ke runtime Starlark manapun (komentar
-`// TODO(Fase 2)` di kode); middleware ini didefinisikan tapi tidak
-terdaftar di `BuildHTTP` sama sekali hari ini.
+middleware tapi **selalu meloloskan request** — karena enforcement "uses"
+yang nyata hidup di runtime script (`resource/formspec.go`'s
+`checkCrossModuleUses`, todo 2.6.4), bukan di middleware HTTP ini; middleware
+tidak terdaftar di `BuildHTTP`.
 
 ## 3. Endpoint Meta
 
@@ -244,7 +244,7 @@ sama dipakai kontrak).
 
 ### 4.3 Status Terhadap Kontrak Realtime (Spec Resolution API §5)
 
-Kontrak mensyaratkan filter sisi-server *per pesan*: caller menerima event
+Kontrak mensyaratkan filter sisi-server _per pesan_: caller menerima event
 hanya kalau punya permission `view` atas entity itu, dievaluasi ulang tiap
 pesan (bukan sekali saat koneksi dibuka). **Audit kode saat ini
 mengonfirmasi gap ini masih ada**: `WSHub` cuma mengenal `workspaceID`
@@ -269,11 +269,17 @@ Spec Resolution API naik ke status Final — lihat §5 di bawah.
    sudah tersedia saat `HandleWS` meng-upgrade), dan mengevaluasinya ulang
    tiap pesan keluar — bukan sekali di awal koneksi (permission caller bisa
    berubah selama koneksi hidup).
-2. **`UsesEnforcement` middleware adalah kerangka kosong** (§2.2) —
-   `internal/api/middleware.go:255-268` selalu meloloskan request di kedua
-   mode (`strictMode` true maupun false); tidak disambungkan ke runtime
-   Starlark manapun dan **tidak terdaftar** di `BuildHTTP`. Penegakan "uses"
-   declaration (D20/D46) belum berjalan sama sekali dari jalur HTTP.
+2. **Penegakan `uses` kini hidup di runtime script, bukan middleware** (§2.2) —
+   `internal/api/middleware.go:255-268` tetap kerangka kosong yang tidak
+   terdaftar di `BuildHTTP` (dead code). Enforcement nyata ada di
+   `resource/formspec.go`'s `newDispatcher`: caller `uses.resources` di-thread
+   melalui rantai script (`internal/action/script.go` →
+   `internal/starlark/executor.go`) dan `checkCrossModuleUses` memblokir
+   cross-module `resource.call()`/`fetch()`/`create()` yang tidak
+   dideklarasikan dengan `USES_VIOLATION` (todo 2.6.4, 2026-08-17).
+   **Gap tersisa**: `ctx.db`/`ctx.secrets`/`ctx.*` enforcement menunggu 2.9.1
+   (`CtxAPI.SetDatastoreResolver`); module auto-suspend + incident audit belum
+   ada.
 3. **CORS permisif tanpa konfigurasi** (§2.2) — `CORSMiddleware`
    (`middleware.go:166-178`) selalu mengizinkan `Access-Control-Allow-Origin: *`,
    tidak ada allow-list per-workspace/environment; cocok untuk dev, belum
@@ -296,9 +302,9 @@ Spec Resolution API naik ke status Final — lihat §5 di bawah.
 
 ## 6. References
 
-| Dokumen | Isi |
-|---|---|
-| `docs/spec/frontend/04-spec-resolution-api.md` | Kontrak normatif Meta API + Realtime yang diaudit di §3–§4 dokumen ini |
-| `docs/spec/backend/01-core-basic.md` §5, §8 | `required_permission`, response envelope/kode error |
-| `docs/runtimes/02-formspec-resource.md` | Engine yang di-serve paket ini (entity engine, dispatcher, registry) |
-| `docs/renderers/jsonb-persist/02-schema-strategies.md` §2 | Extension column (`ext_*`), status implementasi baca/tulis |
+| Dokumen                                                   | Isi                                                                    |
+| --------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `docs/spec/frontend/04-spec-resolution-api.md`            | Kontrak normatif Meta API + Realtime yang diaudit di §3–§4 dokumen ini |
+| `docs/spec/backend/01-core-basic.md` §5, §8               | `required_permission`, response envelope/kode error                    |
+| `docs/runtimes/02-formspec-resource.md`                   | Engine yang di-serve paket ini (entity engine, dispatcher, registry)   |
+| `docs/renderers/jsonb-persist/02-schema-strategies.md` §2 | Extension column (`ext_*`), status implementasi baca/tulis             |
