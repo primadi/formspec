@@ -94,6 +94,35 @@ func (b *RouterBuilder) SetApps(apps map[string]*formspec_app.ResolvedApp) {
 	b.apps = apps
 }
 
+// publicEntities returns the set of "module/entity" keys mounted by any
+// `access: public` App (frontend/05-app-kinds.md §1). A public App's surface
+// is served anonymously, so the entities it mounts get anonymous read +
+// create on the UI surface.
+func (b *RouterBuilder) publicEntities() map[string]bool {
+	out := map[string]bool{}
+	for _, app := range b.apps {
+		if app.Spec.Access != spec.AppAccessPublic {
+			continue
+		}
+		for module := range app.Modules {
+			// Mark the whole module public — the App author chose
+			// `access: public` knowing the surface is anonymous.
+			out[module+"/*"] = true
+		}
+	}
+	return out
+}
+
+// isPublicEntity reports whether module/entity is mounted by a public App
+// (see publicEntities).
+func (b *RouterBuilder) isPublicEntity(module, entity string) bool {
+	pub := b.publicEntities()
+	if pub[module+"/*"] {
+		return true
+	}
+	return pub[module+"/"+entity]
+}
+
 // SetWebDir enables static SPA serving from dir (typically renderers/react-shadcn/dist) at
 // /{ws}/_admin and /{ws}/app with an index.html fallback for client-side
 // routes. Call before BuildHTTP.
@@ -185,6 +214,14 @@ func (b *RouterBuilder) BuildHTTP() http.Handler {
 						continue
 					}
 					pattern := strings.TrimPrefix(rd.Path, "/_ui/entity")
+					// Public App entities: anonymous read + create on
+					// the UI surface (frontend/05-app-kinds.md §1). Update/
+					// delete stay permission-gated — they're admin ops that
+					// live in a private App.
+					if b.isPublicEntity(rd.Module, rd.Entity) &&
+						(rd.Action == "list" || rd.Action == "find" || rd.Action == "create") {
+						rd.RequiredPermission = "public"
+					}
 					b.registerRouteWithPattern(r, rd, pattern)
 				}
 			})
@@ -192,6 +229,11 @@ func (b *RouterBuilder) BuildHTTP() http.Handler {
 
 		// ─── External API surface (§8.2): /api/v1/ ───
 		r.Route("/api/v1", func(r chi.Router) {
+			// Auth endpoints — public (no auth required). Login issues the
+			// initial token pair; refresh rotates it (todo 6.1.1/6.1.3).
+			r.Post("/auth/login", b.HandleLogin())
+			r.Post("/auth/refresh", b.HandleRefresh())
+
 			for _, rd := range b.routes {
 				if rd.Protocol != ProtocolREST {
 					continue
@@ -275,6 +317,10 @@ func (b *RouterBuilder) registerRoute(r chi.Router, rd RouteDescriptor) {
 			handler = b.factory.HandleCancel(rd.Module, rd.Entity)
 		case "amend":
 			handler = b.factory.HandleAmend(rd.Module, rd.Entity)
+		case "deactivate":
+			handler = b.factory.HandleDeactivate(rd.Module, rd.Entity)
+		case "reactivate":
+			handler = b.factory.HandleReactivate(rd.Module, rd.Entity)
 		default:
 			return // unknown auto action, skip
 		}
@@ -387,6 +433,10 @@ func (b *RouterBuilder) registerRouteWithPattern(r chi.Router, rd RouteDescripto
 			handler = b.factory.HandleCancel(rd.Module, rd.Entity)
 		case "amend":
 			handler = b.factory.HandleAmend(rd.Module, rd.Entity)
+		case "deactivate":
+			handler = b.factory.HandleDeactivate(rd.Module, rd.Entity)
+		case "reactivate":
+			handler = b.factory.HandleReactivate(rd.Module, rd.Entity)
 		default:
 			return
 		}

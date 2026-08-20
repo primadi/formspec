@@ -14,7 +14,18 @@ import (
 
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
+
+	"github.com/primadi/formspec/pkg/spec"
 )
+
+// declaredUsesResources returns the caller action's declared uses.resources
+// as a []string, or nil when the action declares no uses block (todo 2.6.4).
+func declaredUsesResources(uses *spec.UsesDecl) []string {
+	if uses == nil {
+		return nil
+	}
+	return uses.Resources
+}
 
 // ScriptResult is the outcome of a script execution.
 type ScriptResult struct {
@@ -235,12 +246,22 @@ type ScriptExecutor struct {
 	// with "datastore resolver not configured" (todo 2.9.1). A nil resolver
 	// keeps the current behavior (every ctx.* primitive errors).
 	DatastoreResolver func(primitiveType, name string) (interface{}, error)
+
+	// StrictPrimitives enables strict enforcement of ctx.* primitive access
+	// against the caller action's uses.primitives (todo 2.6.4). Off by
+	// default (dev mode); enabled in ProdMode/StrictMode.
+	StrictPrimitives bool
 }
 
 // SetDatastoreResolver sets the resolver used to wire ctx.* primitives to
 // live datastore connections. See DatastoreResolver.
 func (e *ScriptExecutor) SetDatastoreResolver(resolver func(primitiveType, name string) (interface{}, error)) {
 	e.DatastoreResolver = resolver
+}
+
+// SetStrictPrimitives toggles strict ctx.* primitive enforcement (todo 2.6.4).
+func (e *ScriptExecutor) SetStrictPrimitives(strict bool) {
+	e.StrictPrimitives = strict
 }
 
 // NewScriptExecutor creates a ScriptExecutor with the given resolution function.
@@ -256,9 +277,10 @@ func NewScriptExecutor(resolver func(ref string) (string, error)) *ScriptExecuto
 // to every handler — so a script's resource.save()/create()/load()/call()
 // calls all join the same transaction as the rest of the action's
 // execution instead of each opening its own.
-func (e *ScriptExecutor) Execute(ctx context.Context, scriptPath string, module, entity, id string, resourceData map[string]any, params map[string]any, workspaceID, userID string, resourceVersion int, callerResources []string) (*ScriptResult, error) {
+func (e *ScriptExecutor) Execute(ctx context.Context, scriptPath string, module, entity, id string, resourceData map[string]any, params map[string]any, workspaceID, userID string, resourceVersion int, uses *spec.UsesDecl) (*ScriptResult, error) {
 	// Build resource API
 	res := NewResourceAPI(module, entity, id, resourceVersion, resourceData)
+	callerResources := declaredUsesResources(uses)
 	if e.SaveHandler != nil {
 		res.SetSaveFunc(func(m, ent, rid string, v int, data map[string]any) error {
 			return e.SaveHandler(ctx, workspaceID, m, ent, rid, v, data)
@@ -286,6 +308,8 @@ func (e *ScriptExecutor) Execute(ctx context.Context, scriptPath string, module,
 
 	// Build ctx
 	ctxObj := NewCtxAPI(workspaceID, "", userID, "", nil)
+	ctxObj.SetUses(uses)
+	ctxObj.SetStrictPrimitives(e.StrictPrimitives)
 	if e.DatastoreResolver != nil {
 		ctxObj.SetDatastoreResolver(e.DatastoreResolver)
 	}

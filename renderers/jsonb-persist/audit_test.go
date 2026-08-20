@@ -22,17 +22,17 @@ func TestAuditStore_WriteAndListByEntity(t *testing.T) {
 	}
 
 	// Write audit logs directly
-	err = writeAuditLog(ctx, d, DriverSQLite, "tenant-1", "billing/invoice", "inv-001", "create", "user-1", `{"total": 100}`)
+	err = writeAuditLog(ctx, d, DriverSQLite, "tenant-1", "billing/invoice", "inv-001", "create", "user-1", `{"total": 100}`, "req-1")
 	if err != nil {
 		t.Fatalf("writeAuditLog failed: %v", err)
 	}
 
-	err = writeAuditLog(ctx, d, DriverSQLite, "tenant-1", "billing/invoice", "inv-001", "update", "user-2", `{"status": {"old": "draft", "new": "sent"}}`)
+	err = writeAuditLog(ctx, d, DriverSQLite, "tenant-1", "billing/invoice", "inv-001", "update", "user-2", `{"status": {"old": "draft", "new": "sent"}}`, "req-2")
 	if err != nil {
 		t.Fatalf("writeAuditLog failed: %v", err)
 	}
 
-	err = writeAuditLog(ctx, d, DriverSQLite, "tenant-1", "billing/invoice", "inv-002", "create", "user-1", `{"total": 200}`)
+	err = writeAuditLog(ctx, d, DriverSQLite, "tenant-1", "billing/invoice", "inv-002", "create", "user-1", `{"total": 200}`, "req-3")
 	if err != nil {
 		t.Fatalf("writeAuditLog failed: %v", err)
 	}
@@ -72,9 +72,9 @@ func TestAuditStore_ListByTenant(t *testing.T) {
 	}
 
 	// Write audit logs for two tenants
-	_ = writeAuditLog(ctx, d, DriverSQLite, "tenant-a", "billing/invoice", "inv-001", "create", "user-1", `{}`)
-	_ = writeAuditLog(ctx, d, DriverSQLite, "tenant-b", "billing/invoice", "inv-002", "create", "user-2", `{}`)
-	_ = writeAuditLog(ctx, d, DriverSQLite, "tenant-a", "billing/order", "ord-001", "create", "user-1", `{}`)
+	_ = writeAuditLog(ctx, d, DriverSQLite, "tenant-a", "billing/invoice", "inv-001", "create", "user-1", `{}`, "")
+	_ = writeAuditLog(ctx, d, DriverSQLite, "tenant-b", "billing/invoice", "inv-002", "create", "user-2", `{}`, "")
+	_ = writeAuditLog(ctx, d, DriverSQLite, "tenant-a", "billing/order", "ord-001", "create", "user-1", `{}`, "")
 
 	store := NewAuditStore(d, DriverSQLite)
 
@@ -111,8 +111,8 @@ func TestAuditStore_TenantIsolation(t *testing.T) {
 		t.Fatalf("EnsureSystemTables failed: %v", err)
 	}
 
-	_ = writeAuditLog(ctx, d, DriverSQLite, "tenant-a", "billing/invoice", "inv-001", "create", "u1", `{}`)
-	_ = writeAuditLog(ctx, d, DriverSQLite, "tenant-b", "billing/invoice", "inv-002", "create", "u2", `{}`)
+	_ = writeAuditLog(ctx, d, DriverSQLite, "tenant-a", "billing/invoice", "inv-001", "create", "u1", `{}`, "")
+	_ = writeAuditLog(ctx, d, DriverSQLite, "tenant-b", "billing/invoice", "inv-002", "create", "u2", `{}`, "")
 
 	store := NewAuditStore(d, DriverSQLite)
 
@@ -143,7 +143,7 @@ func TestWriteAuditLog_ErrorOnNilDB(t *testing.T) {
 	}
 	d.Close()
 
-	err = writeAuditLog(ctx, d, DriverSQLite, "t1", "test/entity", "id-1", "create", "u1", `{}`)
+	err = writeAuditLog(ctx, d, DriverSQLite, "t1", "test/entity", "id-1", "create", "u1", `{}`, "")
 	if err == nil {
 		t.Fatal("expected error writing audit log to closed DB")
 	}

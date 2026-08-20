@@ -6,6 +6,7 @@
 > `docs/spec/frontend/`, dirujuk di tiap langkah.
 
 ## 1. Kelas Investasi
+
 Shell = interpreter penuh atas kontrak kind system: Layer 0 auto-generate
 ([`../spec/frontend/06-page-kinds.md`](../spec/frontend/06-page-kinds.md)
 §9), Navigation, Menu, Auth wiring, permission-aware rendering
@@ -22,6 +23,7 @@ butuhkan sebenarnya cukup Renderer baru untuk Shell yang sudah ada (lihat
 jauh lebih murah daripada Shell baru.
 
 ## 2. Kontrak yang Wajib Dipenuhi
+
 1. **Spec Resolution API**
    ([`../spec/frontend/04-spec-resolution-api.md`](../spec/frontend/04-spec-resolution-api.md))
    — endpoint `_meta/apps`, `_meta/ui`, `_meta/me`, `_meta/entities/...`;
@@ -43,6 +45,7 @@ jauh lebih murah daripada Shell baru.
    satu Shell yang sama.
 
 ## 3. Pemetaan Katalog Renderer
+
 Isi katalog app/page/component kind (lihat shell resmi sebagai acuan
 struktur, bukan acuan kelengkapan — lihat
 [`../renderers/shadcn-shell/03-kind-renderers.md`](../renderers/shadcn-shell/03-kind-renderers.md)
@@ -55,17 +58,18 @@ ke widget native platform target-mu — misalnya untuk Shell Flutter (lihat
 contoh perbandingan di
 [`01-visual-hierarchy.md`](../spec/frontend/01-visual-hierarchy.md) §4):
 
-| Tier | shadcn-shell | Flutter (contoh) |
-|---|---|---|
-| App renderer | `sidebar-nav`, `topnav`, `landing-page` | `bottom-tab`, `drawer-nav`, `onboarding-flow` |
-| Page renderer | `data-entry`, `wizard`, `kanban`, `listing`, `report` | jenis yang sama — satu spec, renderer beda |
-| Component renderer | `textinput`, `dateinput`, `widget` | native `TextField`, `DatePicker`, `widget` |
+| Tier               | shadcn-shell                                          | Flutter (contoh)                              |
+| ------------------ | ----------------------------------------------------- | --------------------------------------------- |
+| App renderer       | `sidebar-nav`, `topnav`, `no-nav`                     | `bottom-tab`, `drawer-nav`, `onboarding-flow` |
+| Page renderer      | `data-entry`, `wizard`, `kanban`, `listing`, `report` | jenis yang sama — satu spec, renderer beda    |
+| Component renderer | `textinput`, `dateinput`, `widget`                    | native `TextField`, `DatePicker`, `widget`    |
 
 Write once tetap berlaku (§5 di `01-visual-hierarchy.md`) — satu definisi
 Kanban dipakai baik shadcn-shell maupun Shell-mu tanpa ditulis ulang; yang
 berubah cuma katalog renderer-nya.
 
 ## 4. Navigation Model
+
 **Catatan constraint yang belum final** — sidebar/topnav mengasumsikan
 URL-based routing (web); Shell native (mis. Flutter) idiomatik pakai
 stack-based push/pop dan bottom-tab/drawer, paradigma navigasi yang berbeda
@@ -75,6 +79,7 @@ mendesain Shell barumu, bukan keputusan final yang tinggal diikuti
 ([`01-visual-hierarchy.md`](../spec/frontend/01-visual-hierarchy.md) §4).
 
 ## 5. Konformansi
+
 **Open** — sama seperti Renderer dan PersistBackend, mekanisme verifikasi
 formal bahwa sebuah Shell memenuhi kontrak §2 belum dirumuskan
 ([`../spec/frontend/03-renderer-kind.md`](../spec/frontend/03-renderer-kind.md)

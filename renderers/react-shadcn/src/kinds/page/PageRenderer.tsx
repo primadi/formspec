@@ -19,6 +19,7 @@ import { apiGet } from "@/lib/api"
 import { interpolate } from "@/lib/interpolate"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
+import { SectionBlockRenderer } from "@/components/sections/SectionBlocks"
 
 /**
  * Resolve a `:param`-style placeholder (the only kind Page blocks author,
@@ -26,13 +27,19 @@ import { cn } from "@/lib/utils"
  * current route's params. Anything not starting with `:` is a literal value,
  * passed through unchanged.
  */
-function resolveRouteParam(raw: string | undefined, routeParams: Readonly<Record<string, string | undefined>>): string | undefined {
+function resolveRouteParam(
+  raw: string | undefined,
+  routeParams: Readonly<Record<string, string | undefined>>,
+): string | undefined {
   if (!raw) return raw
   if (!raw.startsWith(":")) return raw
   return routeParams[raw.slice(1)]
 }
 
-function resolveRouteParams(raw: Record<string, unknown> | undefined, routeParams: Readonly<Record<string, string | undefined>>): Record<string, string> {
+function resolveRouteParams(
+  raw: Record<string, unknown> | undefined,
+  routeParams: Readonly<Record<string, string | undefined>>,
+): Record<string, string> {
   if (!raw) return {}
   const out: Record<string, string> = {}
   for (const [key, value] of Object.entries(raw)) {
@@ -58,7 +65,9 @@ export default function PageRenderer({ entry }: PageRendererProps) {
   const permitted = useMemo(() => {
     if (!entry.spec.permissions?.length) return true
     if (!me) return false
-    return entry.spec.permissions.some((p) => checkPermission(p, me.permissions))
+    return entry.spec.permissions.some((p) =>
+      checkPermission(p, me.permissions),
+    )
   }, [entry.spec.permissions, me])
 
   if (!permitted) {
@@ -89,6 +98,8 @@ function PageBlocks({ entry }: { entry: Entry<PageSpec> }) {
   const blocks = entry.spec.blocks ?? []
   const columns = entry.spec.layout?.columns ?? 1
   const routeParams = useParams()
+  const { workspace = "default" } = useParams<{ workspace: string }>()
+  const rootUrl = useMetaStore((s) => s.bundle?.app.root_url ?? "/")
   const getEntity = useMetaStore((s) => s.getEntity)
   const getForm = useMetaStore((s) => s.getForm)
   const getClient = useSessionStore((s) => s.getClient)
@@ -109,12 +120,17 @@ function PageBlocks({ entry }: { entry: Entry<PageSpec> }) {
         const formEntry = block.form.ref ? getForm(block.form.ref) : undefined
         const entityRef = formEntry?.spec.entity
         if (!entityRef) continue
-        const entity = getEntity(...resolveEntityRef(entityRef, formEntry?.module ?? entry.module))
+        const entity = getEntity(
+          ...resolveEntityRef(entityRef, formEntry?.module ?? entry.module),
+        )
         const id = resolveRouteParam(block.form.id, routeParams)
         if (!entity || !id) continue
         try {
           const client = getClient()
-          const record = await apiGet<Record<string, unknown>>(client, `${entity.module}/${entity.name}/${id}`)
+          const record = await apiGet<Record<string, unknown>>(
+            client,
+            `${entity.module}/${entity.name}/${id}`,
+          )
           if (!cancelled) setTitleCtx({ ...record, [entity.name]: record })
         } catch {
           // leave titleCtx null — interpolate() falls back to the literal token
@@ -123,17 +139,31 @@ function PageBlocks({ entry }: { entry: Entry<PageSpec> }) {
       }
     }
     load()
-    return () => { cancelled = true }
-  }, [titleNeedsData, blocks, routeParams, getForm, getEntity, getClient, entry.module])
+    return () => {
+      cancelled = true
+    }
+  }, [
+    titleNeedsData,
+    blocks,
+    routeParams,
+    getForm,
+    getEntity,
+    getClient,
+    entry.module,
+  ])
 
-  const title = titleCtx ? interpolate(entry.spec.title, titleCtx) : entry.spec.title
+  const title = titleCtx
+    ? interpolate(entry.spec.title, titleCtx)
+    : entry.spec.title
 
   return (
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
         {entry.spec.description && (
-          <p className="text-sm text-muted-foreground">{entry.spec.description}</p>
+          <p className="text-sm text-muted-foreground">
+            {entry.spec.description}
+          </p>
         )}
       </div>
 
@@ -142,14 +172,33 @@ function PageBlocks({ entry }: { entry: Entry<PageSpec> }) {
         style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}
       >
         {blocks.map((block, idx) => (
-          <PageBlockRenderer key={idx} block={block} module={entry.module} routeParams={routeParams} />
+          <PageBlockRenderer
+            key={idx}
+            block={block}
+            module={entry.module}
+            routeParams={routeParams}
+            workspace={workspace}
+            rootUrl={rootUrl}
+          />
         ))}
       </div>
     </div>
   )
 }
 
-function PageBlockRenderer({ block, module, routeParams }: { block: PageBlock; module: string; routeParams: Readonly<Record<string, string | undefined>> }) {
+function PageBlockRenderer({
+  block,
+  module,
+  routeParams,
+  workspace,
+  rootUrl,
+}: {
+  block: PageBlock
+  module: string
+  routeParams: Readonly<Record<string, string | undefined>>
+  workspace: string
+  rootUrl: string
+}) {
   const getEntity = useMetaStore((s) => s.getEntity)
   const getForm = useMetaStore((s) => s.getForm)
   const getTable = useMetaStore((s) => s.getTable)
@@ -176,7 +225,11 @@ function PageBlockRenderer({ block, module, routeParams }: { block: PageBlock; m
         </div>
       )
     }
-    return <div className="rounded-md border p-4 text-sm text-muted-foreground">Form: {block.form.ref}</div>
+    return (
+      <div className="rounded-md border p-4 text-sm text-muted-foreground">
+        Form: {block.form.ref}
+      </div>
+    )
   }
 
   // Table block — entity resolved from the referenced Table manifest's spec.entity
@@ -196,12 +249,20 @@ function PageBlockRenderer({ block, module, routeParams }: { block: PageBlock; m
       return (
         <div className="rounded-md border p-4">
           <Suspense fallback={<Skeleton className="h-48" />}>
-            <TableRenderer entity={entity} hideTitle fixedFilters={fixedFilters} />
+            <TableRenderer
+              entity={entity}
+              hideTitle
+              fixedFilters={fixedFilters}
+            />
           </Suspense>
         </div>
       )
     }
-    return <div className="rounded-md border p-4 text-sm text-muted-foreground">Table: {block.table.ref}</div>
+    return (
+      <div className="rounded-md border p-4 text-sm text-muted-foreground">
+        Table: {block.table.ref}
+      </div>
+    )
   }
 
   // Widget block
@@ -219,7 +280,8 @@ function PageBlockRenderer({ block, module, routeParams }: { block: PageBlock; m
     return (
       <div className="rounded-md border border-dashed p-4">
         <p className="text-sm text-muted-foreground text-center">
-          Custom component: {block.component.asset || block.component.ref || "unknown"}
+          Custom component:{" "}
+          {block.component.asset || block.component.ref || "unknown"}
         </p>
         <p className="text-xs text-muted-foreground text-center mt-1">
           Component blocks supported in Fase 4.F6
@@ -234,6 +296,18 @@ function PageBlockRenderer({ block, module, routeParams }: { block: PageBlock; m
       <div
         className="rounded-md border p-4 prose prose-sm max-w-none"
         dangerouslySetInnerHTML={{ __html: block.html }}
+      />
+    )
+  }
+
+  // Section block — declarative presentation (06-page-kinds.md §1). Rendered
+  // full-bleed (no border wrapper) since sections are full-width regions.
+  if (block.section) {
+    return (
+      <SectionBlockRenderer
+        block={block.section}
+        workspace={workspace}
+        rootUrl={rootUrl}
       />
     )
   }
@@ -258,9 +332,13 @@ function PageTabs({ entry }: { entry: Entry<PageSpec> }) {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">{entry.spec.title}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">
+          {entry.spec.title}
+        </h1>
         {entry.spec.description && (
-          <p className="text-sm text-muted-foreground">{entry.spec.description}</p>
+          <p className="text-sm text-muted-foreground">
+            {entry.spec.description}
+          </p>
         )}
       </div>
 
@@ -294,7 +372,11 @@ function PageTabs({ entry }: { entry: Entry<PageSpec> }) {
       {activeIndex >= 0 && (
         <div className="pt-2">
           <Suspense fallback={<Skeleton className="h-48" />}>
-            <TabContent key={activeTab} tab={tabs[activeIndex]} module={entry.module} />
+            <TabContent
+              key={activeTab}
+              tab={tabs[activeIndex]}
+              module={entry.module}
+            />
           </Suspense>
         </div>
       )}
@@ -327,7 +409,11 @@ function TabContent({ tab, module }: { tab: PageTab; module: string }) {
         </Suspense>
       )
     }
-    return <div className="rounded-md border p-4 text-sm text-muted-foreground">Form: {tab.form.ref}</div>
+    return (
+      <div className="rounded-md border p-4 text-sm text-muted-foreground">
+        Form: {tab.form.ref}
+      </div>
+    )
   }
 
   if (tab.table) {
@@ -345,7 +431,11 @@ function TabContent({ tab, module }: { tab: PageTab; module: string }) {
         </Suspense>
       )
     }
-    return <div className="rounded-md border p-4 text-sm text-muted-foreground">Table: {tab.table.ref}</div>
+    return (
+      <div className="rounded-md border p-4 text-sm text-muted-foreground">
+        Table: {tab.table.ref}
+      </div>
+    )
   }
 
   if (tab.component) {
@@ -358,4 +448,3 @@ function TabContent({ tab, module }: { tab: PageTab; module: string }) {
 
   return null
 }
-

@@ -41,6 +41,19 @@ type ActionSummary struct {
 type AppSummary struct {
 	Name    string `json:"name"`
 	RootURL string `json:"root_url"`
+	// AppRenderer is the resolved App renderer archetype (frontend/
+	// 05-app-kinds.md): sidebar-nav | topnav | no-nav. The renderer picks the
+	// shell chrome for the whole App surface.
+	AppRenderer string `json:"app_renderer,omitempty"`
+	// Access is the resolved auth axis (frontend/05-app-kinds.md §1):
+	// private | public. Public Apps boot anonymously.
+	Access string `json:"access,omitempty"`
+	// StackFamily is the shell implementation (frontend/03-renderer-kind.md),
+	// e.g. react-shadcn.
+	StackFamily string `json:"stack_family,omitempty"`
+	// PersistBackend is the entity persist backend (backend/04-persist-
+	// backend.md), e.g. jsonb-persist.
+	PersistBackend string `json:"persist_backend,omitempty"`
 }
 
 // AppContext scopes BuildBundle to one resolved App: which modules it mounts
@@ -49,10 +62,14 @@ type AppSummary struct {
 // to routes — see internal/app.Resolve). A zero-value AppContext (Modules
 // nil) disables module filtering, for callers with no App concept yet.
 type AppContext struct {
-	Name    string
-	RootURL string
-	Modules map[string]bool
-	Menu    []spec.MenuItem
+	Name           string
+	RootURL        string
+	AppRenderer    string
+	Access         string
+	StackFamily    string
+	PersistBackend string
+	Modules        map[string]bool
+	Menu           []spec.MenuItem
 }
 
 // allows reports whether a manifest belonging to module may ship in this
@@ -83,6 +100,7 @@ type Bundle struct {
 	Menu       []spec.MenuItem              `json:"menu"`
 	Prints     []*Entry[spec.PrintSpec]     `json:"prints"`
 	Themes     []*Entry[spec.ThemeSpec]     `json:"themes"`
+	Listings   []*Entry[spec.ListingSpec]   `json:"listings"`
 }
 
 // PermissionChecker reports whether the caller holds a permission
@@ -122,7 +140,14 @@ func (r *Registry) BuildBundle(entities EntityLister, can PermissionChecker, app
 		menu = []spec.MenuItem{}
 	}
 	b := &Bundle{
-		App:        AppSummary{Name: appCtx.Name, RootURL: appCtx.RootURL},
+		App: AppSummary{
+			Name:           appCtx.Name,
+			RootURL:        appCtx.RootURL,
+			AppRenderer:    appCtx.AppRenderer,
+			Access:         appCtx.Access,
+			StackFamily:    appCtx.StackFamily,
+			PersistBackend: appCtx.PersistBackend,
+		},
 		Menu:       menu,
 		Pages:      []*Entry[spec.PageSpec]{},
 		Forms:      []*Entry[spec.FormSpec]{},
@@ -135,6 +160,7 @@ func (r *Registry) BuildBundle(entities EntityLister, can PermissionChecker, app
 		Timelines:  []*Entry[spec.TimelineSpec]{},
 		Prints:     []*Entry[spec.PrintSpec]{},
 		Themes:     []*Entry[spec.ThemeSpec]{},
+		Listings:   []*Entry[spec.ListingSpec]{},
 	}
 
 	visible := map[string]bool{} // "module/name" → caller can see entity
@@ -210,6 +236,11 @@ func (r *Registry) BuildBundle(entities EntityLister, can PermissionChecker, app
 	for _, k := range sortedKeys(r.Prints) {
 		if e := r.Prints[k]; appCtx.allows(e.Module) && entityVisible(e.Module, e.Spec.Entity) {
 			b.Prints = append(b.Prints, e)
+		}
+	}
+	for _, k := range sortedKeys(r.Listings) {
+		if e := r.Listings[k]; appCtx.allows(e.Module) && entityVisible(e.Module, e.Spec.Entity) {
+			b.Listings = append(b.Listings, e)
 		}
 	}
 	for _, k := range sortedKeys(r.Dashboards) {
@@ -340,6 +371,10 @@ func formActionPerm(mode string) string {
 		return "create"
 	}
 }
+
+// FormActionPerm is the exported form of formActionPerm, used by the auth
+// materializer to derive a form's entity-action permission from its mode.
+func FormActionPerm(mode string) string { return formActionPerm(mode) }
 
 // permForEntityBacked derives the required_permission for an entity-backed
 // view: {module}.{entity}.{action}. entityRef may be "customer" (module-local)

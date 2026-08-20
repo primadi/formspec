@@ -648,7 +648,8 @@ Calendar view for Entity data with date fields (e.g., appointments, deadlines).
 
 ### Listing — Public Catalog
 
-Public-facing listing, paired with `landing-page` App kind.
+Public-facing listing, paired with an App `access: public` (usually
+`app_renderer: no-nav`).
 
 ### ApprovalInbox — Pending Approval Task Queue
 

@@ -7,6 +7,7 @@
 > semua shell.
 
 ## 1. `kind: Page` — Routing & Komposisi
+
 Layar ber-route yang menyusun blok. Ini kind dasar tier page — Form/Table
 (§2, §3) sendiri **tidak** independen routable, cuma tampil sebagai blok di
 dalam sebuah Page atau lewat route CRUD per-entity turunan framework.
@@ -21,7 +22,7 @@ spec:
   route: /orders/:id
   title: "Order {order.number}"
   blocks:
-    - form:  { ref: order-edit, id: ":id", mode: view }
+    - form: { ref: order-edit, id: ":id", mode: view }
     - table: { ref: order-payments, param: { order_id: ":id" } }
     - component:
         asset: billing/assets/payment-timeline.js
@@ -34,15 +35,46 @@ blok mereferensikan Form/Table lewat nama atau meng-inline component
 ([`07-component-kinds.md`](07-component-kinds.md) §4). **Full-custom page** =
 satu entry `component:` tanpa blocks/tabs.
 
+**Blok `section:` — presentasi deklaratif.** Page bisa memuat blok `section:`
+(closed set: `hero`, `feature_grid`, `card`, `carousel`, `cta`) — region
+presentasi penuh-lebar tanpa data binding dan tanpa auth. Generik dan
+reusable di App mana pun (public `no-nav`, sidebar-nav, topnav, ...), bukan
+milik satu archetype. Murni deklaratif — nol field styling; seluruh token
+visual hidup di `kind: Theme` ([`05-app-kinds.md`](05-app-kinds.md) §5),
+tidak pernah inline.
+
+```yaml
+spec:
+  route: /
+  title: "Home"
+  blocks:
+    - section:
+        type: hero
+        title: "Toko Kami"
+        subtitle: "Belanja mudah, aman, dan cepat."
+        cta: { label: "Lihat Katalog", href: /listing/product-catalog }
+    - section:
+        type: feature_grid
+        title: "Kenapa Kami"
+        items:
+          - { icon: zap, title: "Cepat", text: "24 jam." }
+    - section:
+        type: carousel
+        autoplay: true
+        items: [{ title: "A", text: "..." }, { title: "B", text: "..." }]
+```
+
 **Varian tabs** — beberapa sub-layar dalam satu route:
+
 ```yaml
 spec:
   route: /settings
   tabs:
-    - { label: General,  form:  { ref: settings-general } }
-    - { label: Tax,      form:  { ref: settings-tax } }
+    - { label: General, form: { ref: settings-general } }
+    - { label: Tax, form: { ref: settings-tax } }
     - { label: Products, table: { ref: product-list } }
 ```
+
 `blocks` dan `tabs` mutually exclusive. Renderer memperlakukan tiap tab
 sebagai resource yang di-permission-check independen.
 
@@ -67,6 +99,7 @@ record baru dengan nilai default dari entity spec. Lihat
 implementasi.
 
 ### 1.1 Master-detail (split view)
+
 Pola dua blok bersisian di mana seleksi baris pada blok list menggerakkan blok
 detail — tanpa navigasi route. Deklaratif lewat `binds` pada blok detail; bukan
 kind baru, cuma pola komposisi Page:
@@ -77,15 +110,16 @@ kind: Page
 metadata: { name: order-workbench, module: billing }
 spec:
   route: /orders/workbench
-  layout: { mode: split }               # master kiri (sempit), detail kanan (lebar)
+  layout: { mode: split } # master kiri (sempit), detail kanan (lebar)
   blocks:
-    - table: { ref: order-list }          # master — sumber seleksi
+    - table: { ref: order-list } # master — sumber seleksi
     - form:
         ref: order-detail
-        binds: { source: order-list, param: id }         # detail mengikuti seleksi
+        binds: { source: order-list, param: id } # detail mengikuti seleksi
 ```
 
 **`binds`:**
+
 - `source` — nama blok list (Table/listing) yang jadi sumber seleksi.
 - `param` — field record terpilih yang diinjeksikan ke blok detail sebagai
   konteksnya (biasanya `id`, menggantikan peran `:id` route).
@@ -103,6 +137,7 @@ menautkan seleksi, tidak melonggarkan gating.
 > Saat ini master-detail dilakukan via `param` + route (`:id`) biasa.
 
 ## 2. `data-entry` (`kind: Form`)
+
 Layout + perilaku input satu Entity, menggantikan form hasil derivasi:
 
 ```yaml
@@ -113,8 +148,8 @@ metadata:
   module: billing
 spec:
   entity: order
-  mode: edit                    # create | edit | view
-  render: { mode: separate_page }   # modal | drawer | separate_page (default: modal)
+  mode: edit # create | edit | view
+  render: { mode: separate_page } # modal | drawer | separate_page (default: modal)
   sections:
     - title: Customer
       columns: 2
@@ -124,19 +159,22 @@ spec:
     - title: Totals
       visible_when: "fields.items != null and len(fields.items) > 0"
       fields:
-        - { field: total, read_only: true,
-            compute: "sum([i.quantity * i.price for i in fields.items])" }
+        - {
+            field: total,
+            read_only: true,
+            compute: "sum([i.quantity * i.price for i in fields.items])",
+          }
   actions:
     - { action: checkout, label: "Checkout", style: primary }
 ```
 
 **`render` — keputusan container design-time**, bukan runtime:
 
-| `render` | Perilaku | Kapan dipakai |
-|---|---|---|
+| `render`          | Perilaku                                                                             | Kapan dipakai                                                             |
+| ----------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
 | `modal` (default) | Dialog overlay di atas Page saat ini; route tak berubah, state di baliknya tetap ada | Entity ringan (≤5 field), create/edit cepat tanpa kehilangan konteks list |
-| `drawer` | Panel slide-in dari kanan, sama sifatnya dengan modal tapi lebih lebar | Form medium (5–12 field), khususnya `columns: 2` |
-| `separate_page` | Route sendiri, breadcrumb + URL sendiri | Entity padat (12+ field, child table, validasi kompleks), butuh deep-link |
+| `drawer`          | Panel slide-in dari kanan, sama sifatnya dengan modal tapi lebih lebar               | Form medium (5–12 field), khususnya `columns: 2`                          |
+| `separate_page`   | Route sendiri, breadcrumb + URL sendiri                                              | Entity padat (12+ field, child table, validasi kompleks), butuh deep-link |
 
 Entity yang sama boleh punya banyak Form dengan `render` berbeda (mis. modal
 quick-create + separate_page full-edit) — keputusan per-Form, ditegakkan
@@ -158,6 +196,7 @@ sesuai skema dan renderer) maupun shorthand skalar `render: separate_page` —
 keduanya disetarakan saat parse.
 
 ### 2.1 Pola UI: Lifecycle vs Plain CRUD
+
 Renderer memilih pola UI berdasar apakah reserved action `submit` aktif di
 Entity ([`../backend/01-core-basic.md`](../backend/01-core-basic.md) §1.2)
 — **bukan** berdasar `characteristic: transaction` (dua flag itu independen:
@@ -174,17 +213,18 @@ submit AKTIF (default)
     Default kalau tidak dideklarasikan: 2-step + auto-save.
 ```
 
-| Pola | Kapan dipakai | UI |
-|---|---|---|
-| **2-step + auto-save** (default) | Entity kompleks, butuh review (Invoice, Order, Contract) | Auto-save senyap saat draft (debounced `update`), satu tombol "Submit" eksplisit |
-| **2-step manual** | Draft sengaja dipisah untuk direview orang lain dulu | Tombol "Save Draft" + "Submit" terpisah |
-| **1-step (`create-submit`)** | Entry cepat volume tinggi (POS, antrean klinik) | Satu tombol, pakai reserved action `create-submit` ([`../backend/01-core-basic.md`](../backend/01-core-basic.md) §1.2) — tanpa konsep draft di UI, atomik |
+| Pola                             | Kapan dipakai                                            | UI                                                                                                                                                        |
+| -------------------------------- | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **2-step + auto-save** (default) | Entity kompleks, butuh review (Invoice, Order, Contract) | Auto-save senyap saat draft (debounced `update`), satu tombol "Submit" eksplisit                                                                          |
+| **2-step manual**                | Draft sengaja dipisah untuk direview orang lain dulu     | Tombol "Save Draft" + "Submit" terpisah                                                                                                                   |
+| **1-step (`create-submit`)**     | Entry cepat volume tinggi (POS, antrean klinik)          | Satu tombol, pakai reserved action `create-submit` ([`../backend/01-core-basic.md`](../backend/01-core-basic.md) §1.2) — tanpa konsep draft di UI, atomik |
 
 Dua tombol standar (Save Draft/auto-save, Submit) selalu otomatis tersedia
 dari model tanpa perlu dideklarasikan; `create-submit` menambah jalur cepat
 opsional, bukan mengganti keduanya.
 
 ## 3. `table-list` (`kind: Table`)
+
 Daftar ber-filter/sort/paginasi; kolom terderivasi dari entity:
 
 ```yaml
@@ -201,7 +241,7 @@ spec:
   filters:
     - { field: status, label: Status, type: select }
     - { field: created_at, label: "Created", type: date_range }
-  default_sort: -created_at       # "field" = asc, "-field" = desc
+  default_sort: -created_at # "field" = asc, "-field" = desc
   search: true
   realtime: true
   row_actions: [mark-paid, void]
@@ -213,6 +253,7 @@ spec:
 `bulk_actions` permission-gated otomatis, sama seperti action Form.
 
 ### 3.1 Prioritas & Overflow Kolom (derivasi — normatif)
+
 Table tanpa `columns:` eksplisit menderivasi kolomnya dari entity. Derivasi
 **tidak boleh** membuang field secara diam-diam. Default normatif:
 
@@ -233,6 +274,7 @@ kolom) sehingga field lain tak pernah bisa dilihat — pemotongan tanpa jalan
 akses balik adalah data-loss, bukan layout.
 
 ### 3.2 Inline & Batch Editing
+
 Opsional, opt-in per Table:
 
 ```yaml
@@ -259,6 +301,7 @@ dilaporkan per baris**: baris yang gagal ditampilkan dengan alasannya, baris
 sukses tetap commit — tak pernah all-or-nothing diam-diam, tak pernah menelan
 error. Permission = permission `update` entity; baris yang caller tak berhak
 tak masuk seleksi editable.
+
 ### 3.3 Kontrak Filter (dipakai bersama Table & Kanban)
 
 Model filter data kind generik, dipakai identik oleh `Table` dan `Kanban`
@@ -283,22 +326,24 @@ spec:
 
 `FilterSpec`:
 
-| Field | Wajib | Deskripsi |
-|---|---|---|
-| `field` | ya | Nama field entity (boleh dot-path relation, mis. `patient.name`) |
-| `label` | tidak | Label kontrol; fallback `field` |
-| `type` | tidak | `select` (default) · `text` · `date` · `date_range` |
-| `op` | tidak | Operator filter API — default `eq` (set operator backend §6) |
-| `default` | tidak | Nilai seed. Mendukung `today` / `today()` (resolver = tanggal server, UTC) |
-| `show_all` | tidak | Hanya tipe `select`: tampilkan opsi "All" (clear). Default `true` |
-| `all_label` | tidak | Hanya tipe `select`: caption opsi "All" (clear). Default `"(ALL)"` |
+| Field       | Wajib | Deskripsi                                                                  |
+| ----------- | ----- | -------------------------------------------------------------------------- |
+| `field`     | ya    | Nama field entity (boleh dot-path relation, mis. `patient.name`)           |
+| `label`     | tidak | Label kontrol; fallback `field`                                            |
+| `type`      | tidak | `select` (default) · `text` · `date` · `date_range`                        |
+| `op`        | tidak | Operator filter API — default `eq` (set operator backend §6)               |
+| `default`   | tidak | Nilai seed. Mendukung `today` / `today()` (resolver = tanggal server, UTC) |
+| `show_all`  | tidak | Hanya tipe `select`: tampilkan opsi "All" (clear). Default `true`          |
+| `all_label` | tidak | Hanya tipe `select`: caption opsi "All" (clear). Default `"(ALL)"`         |
 
 Nilai terkirim ke API sebagai `field[op]=value` (mis. `transaction_date[eq]=2026-08-07`),
 sehingga DB mem-filter **sebelum** baris dikirim. `fixed_filters` selalu menang
 atas pilihan user bila field-nya sama. `today()` meniadakan perbedaan zona
 waktu: memakai tanggal server (RFC3339 UTC), bukan tanggal lokal browser —
 sama dengan konvensi widget query.
+
 ## 4. `kanban`
+
 Papan kolom drag-drop — instance VisualSpecKind `tier: page`
 ([`02-visual-spec-kind.md`](02-visual-spec-kind.md)), dan contoh unggulan
 kontrak itu. Operasional: tiap kartu satu record entity, tiap kolom satu nilai
@@ -310,7 +355,7 @@ kind: Kanban
 metadata: { name: support-board, module: helpdesk }
 spec:
   entity: ticket
-  status_field: status      # wajib — field state machine/enum yang jadi kolom
+  status_field: status # wajib — field state machine/enum yang jadi kolom
   realtime: true
 ```
 
@@ -325,6 +370,7 @@ sebagai kolom.
 > diimplementasikan — ditracking di `docs/plan/kanban-full-implementation.md`.
 
 **Derivasi kolom:**
+
 - `columns:` eksplisit **menang penuh** — setiap entry `{ status, label, color }`
   (nilai, urutan).
 - Tanpa `columns:` eksplisit, renderer menderivasi kolom dari nilai unik
@@ -337,6 +383,7 @@ kolom, tak diulang di kartu). Override lewat `card_template`
 (`{ title, subtitle, badge, assignee, fields, component }`).
 
 **Drag-drop = state transition:**
+
 - Menjatuhkan kartu ke kolom lain memanggil action `via` transisi yang cocok
   (`from` = kolom asal, `to` = kolom tujuan). **Guard state machine dievaluasi
   server-side — otoritas.** Permission drag = permission action transisi itu
@@ -365,12 +412,13 @@ memotong kartu tanpa indikator "muat lebih" (prinsip no-silent-drop yang sama
 dengan Table §3.1).
 
 Override penuh:
+
 ```yaml
 spec:
   entity: ticket
   status_field: status
   columns:
-    - { status: low,    label: Low }
+    - { status: low, label: Low }
     - { status: normal, label: Normal, color: blue }
     - { status: urgent, label: Urgent, color: red }
   card_template:
@@ -407,6 +455,7 @@ dan pemindahan status adalah aksi utama (support queue, order fulfillment,
 triage board). Table kalau operasi utama adalah sort/filter/edit banyak kolom.
 
 ## 5. `calendar`
+
 View kalender atas entity yang punya field tanggal/waktu — instance
 VisualSpecKind `tier: page`. Untuk penjadwalan (appointment, delivery
 planning).
@@ -430,6 +479,7 @@ detail/Form entity itu.
 resource scheduling.
 
 **Field:**
+
 - `date_field` (wajib) — tanggal/datetime awal event.
 - `end_field` (opsional) — event rentang (start–end); tanpa ini event
   titik-waktu.
@@ -439,6 +489,7 @@ resource scheduling.
 - `color_field` (opsional) — pewarnaan kategori.
 
 **Interaksi:**
+
 - Klik event → detail/form (sama seperti `link` kolom Table).
 - Klik slot kosong → Form create dengan `date_field` ter-prefill.
 - **Drag reschedule** → memanggil action `update` yang mengubah `date_field`
@@ -457,7 +508,7 @@ Calendar/Outlook — bukan grammar bikinan sendiri, supaya interop
 langsung dipakai:
 
 ```yaml
-- { name: recurrence, type: string }   # nilai: "FREQ=WEEKLY;BYDAY=MO;INTERVAL=2"
+- { name: recurrence, type: string } # nilai: "FREQ=WEEKLY;BYDAY=MO;INTERVAL=2"
 ```
 
 **Expansion terjadi saat baca/render**, bukan materialized rows di
@@ -485,6 +536,7 @@ buku bulanan, generate invoice periodik). Kebutuhan itu domain modul resmi
 primitive tertutup"), bukan Calendar.
 
 ## 6. `wizard`
+
 Proses bisnis sekuensial multi-step lintas entity; framework mengurus
 navigasi stepper, validasi per-step, dependency antar-field, autosave
 per-instance, dan perilaku completion:
@@ -497,9 +549,9 @@ metadata:
   module: clinic
 spec:
   title: "Patient Registration — {step.title}"
-  entity: visit             # tanpa `action`: step akhir create biasa di entity ini
+  entity: visit # tanpa `action`: step akhir create biasa di entity ini
   on_complete:
-    restart: true            # reset stepData/currentStep ke 0, bukan navigasi keluar
+    restart: true # reset stepData/currentStep ke 0, bukan navigasi keluar
     banner:
       - { label: "Queue Number", field: response.queue_number }
   steps:
@@ -507,13 +559,23 @@ spec:
       layout: search_select
       entity: patient
       search_fields: [nik, name, phone]
-      allow_create: true                 # tombol "New Patient" kalau tidak ketemu
+      allow_create: true # tombol "New Patient" kalau tidak ketemu
     - title: "Select Poly & Doctor"
       required: [polyclinic_id, doctor_id]
       fields:
-        - { field: polyclinic_id, entity: polyclinic, type: dropdown, required: true }
-        - { field: doctor_id, entity: doctor, type: dropdown, required: true,
-            depends_on: polyclinic_id }
+        - {
+            field: polyclinic_id,
+            entity: polyclinic,
+            type: dropdown,
+            required: true,
+          }
+        - {
+            field: doctor_id,
+            entity: doctor,
+            type: dropdown,
+            required: true,
+            depends_on: polyclinic_id,
+          }
       on_prev: discard-poly-selection
     - title: "Confirm & Submit"
       on_enter: prefill-visit-defaults
@@ -522,6 +584,7 @@ spec:
 ```
 
 **Aturan:**
+
 - `action` (level wizard) opsional. Kalau diisi: action server-side yang
   atomik menulis seluruh data step saat submit final, wajib ada di minimal
   satu entity yang terlibat. Kalau tidak diisi: step akhir melakukan `create`
@@ -555,6 +618,7 @@ tanpa penegakan sekuensial, pakai `kind: Form` dengan `sections` biasa (§2)
 — bukan Wizard.
 
 ## 7. `dashboard`
+
 Grid slot `widget` ([`02-visual-spec-kind.md`](02-visual-spec-kind.md) §4,
 [`07-component-kinds.md`](07-component-kinds.md) §2–§3 untuk kontrak Widget
 dan slot filling-nya). Dashboard **mereferensikan** widget by name — widget
@@ -565,9 +629,9 @@ apiVersion: formspec.dev/v1
 kind: Dashboard
 metadata: { name: sales-today, module: billing }
 spec:
-  customizable: true                   # user boleh tambah/hapus/urutkan dari katalog widget
+  customizable: true # user boleh tambah/hapus/urutkan dari katalog widget
   defaults: [sales-today-stat, gl-cashflow-chart]
-  refresh: 60                          # atau realtime: true
+  refresh: 60 # atau realtime: true
   widgets:
     - ref: sales-today-stat
       layout: { x: 0, y: 0, w: 4, h: 2 }
@@ -582,9 +646,9 @@ kind: Widget
 metadata: { name: sales-today-stat, module: billing }
 spec:
   title: "Today's Revenue"
-  type: metric                       # metric | chart | table | list
+  type: metric # metric | chart | table | list
   entity: sales-daily-summary
-  config: { field: total }           # specifik per type
+  config: { field: total } # specifik per type
 ```
 
 `DashboardWidget` = `{ ref, layout: {x,y,w,h}, config }`; `WidgetSpec` =
@@ -599,6 +663,7 @@ katalog widget derived dari permission, mekanisme customizable — lihat
 ## 8. `report` dan `print`
 
 ### `kind: Report`
+
 Output tabular terparameterisasi:
 
 ```yaml
@@ -611,7 +676,7 @@ spec:
   required_permission: reports.sales-by-category
   parameters:
     - { field: date_from, label: "Dari", type: date, required: true }
-    - { field: date_to,   label: "Sampai", type: date, required: true }
+    - { field: date_to, label: "Sampai", type: date, required: true }
   columns:
     - { field: number, label: "No." }
     - { field: customer.name, label: "Customer" }
@@ -632,11 +697,12 @@ PersistBackend, [`../backend/02-core-extended.md`](../backend/02-core-extended.m
 async`); file mendarat di download tray.
 
 > **Open — `source.filter`.** Filter parameterized deklaratif (`source:
-> { entity, filter }` dengan `":param"` placeholder) belum didukung skema —
+{ entity, filter }` dengan `":param"` placeholder) belum didukung skema —
 > parameter saat ini dikirim sebagai filter query `?<field>=<value>` per
 > `parameters[]` saat eksekusi report.
 
 ### `kind: Print`
+
 Dokumen cetak untuk satu entity, multi-target output:
 
 ```yaml
@@ -646,7 +712,7 @@ metadata: { name: receipt, module: billing }
 spec:
   entity: order
   output:
-    format: pdf                   # pdf | thermal | dotmatrix | html
+    format: pdf # pdf | thermal | dotmatrix | html
     paper: { size: A5, margin: 12mm }
   header: { logo: true, title: "Receipt {order.number}" }
   body:
@@ -656,12 +722,12 @@ spec:
   footer: { text: "Thank you — {tenant.name}" }
 ```
 
-| Format | Pipeline | Ukuran kertas | Kegunaan |
-|---|---|---|---|
-| `pdf` (default) | Generate PDF server-side | `A4`, `A5`, `Letter`, `Legal`, `custom` | Invoice, surat jalan, laporan |
-| `thermal` | Server-side ESC/POS byte stream → printer mentah | `thermal_58mm`, `thermal_80mm` | Struk POS, slip apotek, tiket antrean |
-| `dotmatrix` | Teks polos + escape code server-side, printer continuous-feed | `dotmatrix_80col`, `dotmatrix_136col` | Pick list gudang, print akuntansi legacy |
-| `html` | `window.print()` client-side + CSS `@media print` — tanpa render server | Ukuran apa saja lewat CSS `@page` | Print browser-native, preview-sebelum-print |
+| Format          | Pipeline                                                                | Ukuran kertas                           | Kegunaan                                    |
+| --------------- | ----------------------------------------------------------------------- | --------------------------------------- | ------------------------------------------- |
+| `pdf` (default) | Generate PDF server-side                                                | `A4`, `A5`, `Letter`, `Legal`, `custom` | Invoice, surat jalan, laporan               |
+| `thermal`       | Server-side ESC/POS byte stream → printer mentah                        | `thermal_58mm`, `thermal_80mm`          | Struk POS, slip apotek, tiket antrean       |
+| `dotmatrix`     | Teks polos + escape code server-side, printer continuous-feed           | `dotmatrix_80col`, `dotmatrix_136col`   | Pick list gudang, print akuntansi legacy    |
+| `html`          | `window.print()` client-side + CSS `@media print` — tanpa render server | Ukuran apa saja lewat CSS `@page`       | Print browser-native, preview-sebelum-print |
 
 **Aturan:** `output.paper.size` divalidasi terhadap format terpilih
 (`thermal_58mm` cuma valid dengan `format: thermal`); semua format kecuali
@@ -672,6 +738,7 @@ validate`. Print programatik: `ctx.print(entity_id, "receipt")` — pemilihan
 format per-manifest Print, bukan per-panggilan.
 
 ## 9. `timeline` / `timeseries`
+
 Feed kronologis vertikal, dikelompokkan per tanggal — untuk audit trail
 append-only, activity log, rekam medis (ditulis sekali, tidak pernah diubah):
 
@@ -683,14 +750,14 @@ metadata:
   module: clinic
 spec:
   entity: medical_record
-  bind_param: patient_id                  # konteks filter — dari route/parent page/nilai tetap
+  bind_param: patient_id # konteks filter — dari route/parent page/nilai tetap
   bind_value: ":patient_id"
   display:
     title_field: visit_date
     subtitle_field: doctor.name
     content_field: diagnosis_and_notes
     icon_field: visit_type
-  group_by: date                          # date | month | year | none
+  group_by: date # date | month | year | none
   sort: desc
   page_size: 20
 ```
@@ -707,17 +774,20 @@ card baru masuk di atas tanpa mengganggu posisi scroll. Custom card lewat
 
 **Kapan pakai Timeline vs Table:** Timeline kalau urutan waktu adalah
 narasi utama (rekam medis, audit log, activity feed) — pada dasarnya
-*cerita read-only*. Table kalau user perlu sort/filter/operate baris —
-*permukaan operasional*.
+_cerita read-only_. Table kalau user perlu sort/filter/operate baris —
+_permukaan operasional_.
 
 ## 10. `listing`
-Katalog publik (e-commerce, movie search) — pasangan alami App kind
-`landing-page` ([`05-app-kinds.md`](05-app-kinds.md) §4). Secara struktural
+
+Katalog publik (e-commerce, movie search) — pasangan alami App `access:
+public` (biasanya `app_renderer: no-nav`,
+[`05-app-kinds.md`](05-app-kinds.md) §4). Secara struktural
 mirip `table-list` (§3) tapi tanpa asumsi Auth-wrap dari App renderer-nya, dan
 tanpa `row_actions`/`bulk_actions` yang menyiratkan operasi tulis
 terautentikasi.
 
 ## 11. `approval-inbox`
+
 Task-queue "persetujuan saya" — daftar step approval Workflow
 ([`../backend/02-core-extended.md`](../backend/02-core-extended.md) §2) yang
 menunggu tindakan caller. Instance VisualSpecKind `tier: page`. Tipis: mesin
@@ -748,6 +818,7 @@ pending caller, `realtime: true` default (subscribe perubahan Workflow,
 opsional seperti Table.
 
 ## 12. `notification-center`
+
 Permukaan in-app notifikasi yang terkirim ke user saat ini — sumbernya module
 resmi `formspec/notify` (bridge delivery `notification` dari Subscription,
 [`../backend/02-core-extended.md`](../backend/02-core-extended.md) §3). Instance
@@ -771,6 +842,7 @@ ada). Template pesan & channel provider (email/push/in-app) hidup di
 permukaan in-app-nya.
 
 ## 13. Custom Page — Escape Hatch Expert
+
 Untuk layar yang tak berpola sama sekali: `kind: Page` dengan `mode: custom`
 menyerahkan **seluruh** rendering ke kode programmer, sambil tetap men-declare
 footprint backend yang ia konsumsi.
@@ -842,6 +914,7 @@ engine men-derive semuanya secara otomatis.
 ### Layer 0 — Entity (selalu ada)
 
 Tiap Entity otomatis menghasilkan, **tanpa manifest UI sama sekali**:
+
 - REST API endpoint (UI surface: `/_ui/entity/` — lihat
   [`backend/01-core-basic.md`](../backend/01-core-basic.md) §8.1)
 - **Table** — list/browse view dengan kolom terderivasi (§3.1)
@@ -855,13 +928,13 @@ menulis satu pun UI kind untuk mayoritas entity.
 
 ### Aturan Wrapping — Kapan Override Diperlukan
 
-| Kamu deklarasi | Engine auto-derive | Kapan override? |
-|---|---|---|
-| `Entity` saja | Default Table + Form(create) + Form(edit) + Page(detail) | Field order/layout khusus, hide field, group field, validasi custom, multi-entity composition |
-| `Form` (`public: true`) | Auto-wrapped dalam Page, route `/<module>/form/<name>` | Form ini perlu Page kustom (multi-tab, side panel, master-detail) |
-| `Table` (`public: true`) | Auto-wrapped dalam Page, route `/<module>/table/<name>` | Table ini perlu Page kustom |
-| `Page` | Route langsung — tidak ada wrapping tambahan | — (Page selalu eksplisit) |
-| `Form`/`Table` (`public: false`) | Tidak punya route; hanya bisa di-embed di Page lain | — |
+| Kamu deklarasi                   | Engine auto-derive                                       | Kapan override?                                                                               |
+| -------------------------------- | -------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `Entity` saja                    | Default Table + Form(create) + Form(edit) + Page(detail) | Field order/layout khusus, hide field, group field, validasi custom, multi-entity composition |
+| `Form` (`public: true`)          | Auto-wrapped dalam Page, route `/<module>/form/<name>`   | Form ini perlu Page kustom (multi-tab, side panel, master-detail)                             |
+| `Table` (`public: true`)         | Auto-wrapped dalam Page, route `/<module>/table/<name>`  | Table ini perlu Page kustom                                                                   |
+| `Page`                           | Route langsung — tidak ada wrapping tambahan             | — (Page selalu eksplisit)                                                                     |
+| `Form`/`Table` (`public: false`) | Tidak punya route; hanya bisa di-embed di Page lain      | —                                                                                             |
 
 ### Decision Flow
 
@@ -880,10 +953,10 @@ Apakah auto-derived UI dari Entity cukup?
 
 Setiap visual kind punya field `public` (default `true`):
 
-| `public` | Perilaku |
-|---|---|
+| `public`         | Perilaku                                                                                                                                  |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | `true` (default) | Engine auto-generate Page wrapper + route `/<module>/<kind-lowercase>/<name>`. Kind bisa di-navigate langsung atau di-embed di Page lain. |
-| `false` | Tidak ada route. Kind hanya bisa tampil sebagai blok di dalam Page yang authored secara eksplisit. |
+| `false`          | Tidak ada route. Kind hanya bisa tampil sebagai blok di dalam Page yang authored secara eksplisit.                                        |
 
 ```yaml
 kind: Form
@@ -891,7 +964,7 @@ metadata:
   name: quick-create-invoice
   module: billing
 spec:
-  public: false   # embed-only — tidak punya route mandiri
+  public: false # embed-only — tidak punya route mandiri
   entity: billing.invoice
   mode: create
 ```

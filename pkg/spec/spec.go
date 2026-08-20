@@ -80,6 +80,7 @@ const (
 	KindTimeline  Kind = "Timeline"
 	KindPrint     Kind = "Print"
 	KindTheme     Kind = "Theme"
+	KindListing   Kind = "Listing"
 )
 
 // Characteristic classifies the data nature of an Entity (Core §4.1).

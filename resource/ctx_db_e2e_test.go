@@ -91,7 +91,7 @@ func TestCtxDBQuery_EndToEnd(t *testing.T) {
 
 	// Create a record so the custom action has a resource to act on.
 	status, out := doJSON(t, app, "POST", "/demo/_ui/entity/alpha/order", map[string]any{
-		"transaction_date": "2026-08-16",
+		"transaction_date": recentDate(),
 		"number":           "ORD-1",
 	})
 	if status != http.StatusCreated {

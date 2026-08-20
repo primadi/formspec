@@ -82,6 +82,12 @@ func (e *ScriptExecutor) SetDatastoreResolver(resolver func(primitiveType, name 
 	e.engine.SetDatastoreResolver(resolver)
 }
 
+// SetStrictPrimitives toggles strict ctx.* primitive enforcement against the
+// caller action's uses.primitives (todo 2.6.4).
+func (e *ScriptExecutor) SetStrictPrimitives(strict bool) {
+	e.engine.SetStrictPrimitives(strict)
+}
+
 // Execute runs the script for the given action. ctx is threaded through to
 // the engine (and from there to every resource.*/ctx.* handler) so a
 // request-scoped TxScope, if one is active, is honored by every mutation
@@ -109,7 +115,7 @@ func (e *ScriptExecutor) Execute(ctx context.Context, action spec.Action, params
 		params.WorkspaceID,
 		params.UserID,
 		params.ResourceVersion,
-		declaredUsesResources(action),
+		action.Uses,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("script execution error: %w", err)
@@ -120,17 +126,6 @@ func (e *ScriptExecutor) Execute(ctx context.Context, action spec.Action, params
 	}
 
 	return &ExecuteResult{Data: result.Data}, nil
-}
-
-// declaredUsesResources returns the caller action's declared uses.resources
-// as a []string, or nil when the action declares no uses block (todo 2.6.4).
-// This is threaded through the script execution chain so cross-module
-// resource access can be checked against it at runtime.
-func declaredUsesResources(action spec.Action) []string {
-	if action.Uses == nil {
-		return nil
-	}
-	return action.Uses.Resources
 }
 
 // resolveScript resolves a script ref to an absolute file path.

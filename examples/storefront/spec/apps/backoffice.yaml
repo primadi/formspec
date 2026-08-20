@@ -1,0 +1,23 @@
+apiVersion: formspec.dev/v1
+kind: App
+metadata:
+  name: backoffice
+  description: "Admin storefront — kelola produk dan pendaftaran pelanggan"
+  labels:
+    domain: commerce
+spec:
+  version: 1.0.0
+  vendor: formspec
+  root_url: /app/backoffice
+  app_renderer: sidebar-nav
+  access: private
+  stack_family: react-shadcn
+  persist_backend: jsonb-persist
+  modules:
+    - catalog
+  menu:
+    - label: "Master"
+      icon: "database"
+      children:
+        - { label: "Produk", icon: "package", route: /catalog/products }
+        - { label: "Pendaftaran", icon: "users", route: /catalog/registrations }

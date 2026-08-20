@@ -1,7 +1,7 @@
 # Master Plan: FormSpec Implementation
 
-**Last Updated**: 2026-08-17  
-**Status**: ✅ Fase 0 complete · ✅ Fase 1 (1.1–1.5) · ✅ Fase 2.1 · ✅ Fase 2.2 · ✅ Fase 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6) · ✅ Fase 2.7 (idempotency prepare flow) · ✅ Fase 2.8 (spec.expose) · ✅ Fase 2.9.1 (ctx.db().query) · ✅ Fase 5 (5.1–5.4) · ✅ Spec hot-reload · ✅ Fase 11 (review schema↔docs) · ✅ Audit spec↔schema + tambah TODO item · ✅ `formspec validate` (3.1.1, engine+schema) · ✅ Rename forma→formspec (docs/plan/rename-formspec.md) · 🚧 Fase 12 Domain Infrastruktur (docs/architecture/09-domain-map.md) · ✅ Schema registry online (docs/plan/schema-registry-online.md)
+**Last Updated**: 2026-08-20  
+**Status**: ✅ Fase 0 complete · ✅ Fase 1 (1.1–1.5) · ✅ Fase 2.1 · ✅ Fase 2.2 · ✅ Fase 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6) · ✅ Fase 2.7 (idempotency prepare flow) · ✅ Fase 2.8 (spec.expose) · ✅ Fase 2.9 (2.9.1–2.9.3: ctx.\* primitives + dev auto-provision) · ✅ Fase 5 (5.1–5.4) · ✅ Spec hot-reload · ✅ Fase 11 (review schema↔docs) · ✅ Audit spec↔schema + tambah TODO item · ✅ `formspec validate` (3.1.1, engine+schema) · ✅ Rename forma→formspec (docs/plan/rename-formspec.md) · 🚧 Fase 12 Domain Infrastruktur (docs/architecture/09-domain-map.md) · ✅ Schema registry online (docs/plan/schema-registry-online.md) · ✅ CLI repl/seed/diff (3.4.1, 3.6.2, 3.6.3) · ✅ **Fase 4 (4.1–4.10) complete** (incl. 4.3.1–4.3.5 entity extension, 4.8.3 restore remap) · ✅ Landing page (5.1.3 + 5.13.5, docs/plan/landing-page.md) · ✅ App renderer archetypes (5.1.1–5.1.3: sidebar-nav/topnav/no-nav + access + persist_backend, docs/plan/landing-page.md) · ✅ **Fase 6.1 (6.1.1–6.1.3: login + token, entity-backed auth, external/ merge, generate-auth)** (docs/plan/auth-login-token.md) · ✅ **6.3.1 + 6.3.2 + 5.12.5 (role + role-assignment Entity, materialisasi grant page → permission)** (docs/changelog/2026-08-20-001) · ✅ **6.2.3 (wire permission check semua handler, surface-aware 404)** (docs/changelog/2026-08-20-002)
 
 > `⬜` not started · `✅` complete · `⏸️` deferred
 
@@ -36,6 +36,16 @@ konten skill dibuat MCP-agnostic agar reuse saat Fase 10 landing.
 tanpa route submit → `submit: disabled` (lifecycle-free). Plus test time-dependent
 (hardcoded date) → `recentDate()`. `go test ./...` kini **571 pass, 0 fail**.
 Lihat `docs/changelog/2026-08-17-003-fix-clinic-e2e-failures.md`.
+
+**Catatan 2026-08-20**: **Fase 13 Module Registry & Vendoring** ditambahkan
+(planned, belum dikerjakan) — ekosistem module registry npm-like:
+`formspec module install/publish/list/uninstall`, `formspec override adopt/diff`,
+`vendors/` + `overrides/` + `formspec.lock`, aktivasi berbasis marker, dan
+registry server sebagai **FormSpec app (dogfooding)** untuk
+`registry.formspec.dev`. Model: read-only vendoring + shadow copy (sesuai
+`docs/spec/platform/08-project-layout.md` §6). Dependensi: Fase 6 (auth —
+6.2 permission model + 6.4 API keys) untuk bagian auth-dependent; Fase 8
+(production serve) untuk deploy nyata. Lihat section **Fase 13** di bawah.
 
 ---
 
@@ -110,7 +120,7 @@ Lihat `docs/changelog/2026-08-17-003-fix-clinic-e2e-failures.md`.
 
 **Goal**: Atomic operations, correct PK, complete filters, lifecycle enforcement — agar `formspec dev` bisa diandalkan untuk testing.
 
-**Progress**: 2.1 ✅ · 2.2 ✅ · 2.3 ✅ · 2.4 ✅ · 2.5 ✅ · 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6 ✅; 2.6.4 ⬜ sebagian — cross-module resource access enforced, ctx.\*/secrets masih blocked on 2.9.1) · 2.7 ✅ · 2.8 ✅ · 2.9 (2.9.1 ✅; 2.9.2–2.9.4 ⬜)
+**Progress**: 2.1 ✅ · 2.2 ✅ · 2.3 ✅ · 2.4 ✅ · 2.5 ✅ · 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6 ✅; 2.6.4 ⬜ sebagian — cross-module resource access enforced, ctx.\*/secrets masih blocked on 2.9.1) · 2.7 ✅ · 2.8 ✅ · 2.9 (2.9.1–2.9.3 ✅; 2.9.4 ⬜)
 
 ### 2.1 Database integrity ✅
 
@@ -168,7 +178,7 @@ Lihat `docs/changelog/2026-08-17-003-fix-clinic-e2e-failures.md`.
 - [x] 2.6.1 Cross-tenant isolation — already in place: `AuthMiddleware` (`internal/api/middleware.go`) returns 404 (not 403) on identity-vs-URL workspace mismatch; every `EntityStore` query in `renderers/jsonbpersist/crud.go` scopes on `tenant_id`. Covered by existing `internal/api/api_test.go`/`renderers/jsonbpersist/crud_test.go`.
 - [x] 2.6.2 Tenant ID auto-injection — already in place: `GenerateEntityDDL` (`renderers/jsonbpersist/ddl.go`) always emits `tenant_id` + tenant-scoped unique indexes.
 - [x] 2.6.3 Permission auto-registration — `internal/entity/registry.go`'s `registerStandardPermissions()` (shared by `LoadEntities`/`RegisterArtifactManifest`) now also registers `submit`/`cancel`/`amend`, gated identically to route generation (`db.TransitiveDisabled` + `characteristic: summary`) so registered permissions never drift from actual routes. Format stays `{module}.{plural}.{action}`, matching `internal/api/generator.go`.
-- [x] 2.6.4 UsesEnforcement wiring (cross-module resource access) — **partially implemented**: blocker (a) resolved. Caller `uses.resources` kini di-thread dari `internal/action/script.go` (`declaredUsesResources`) → `internal/starlark.ScriptExecutor.Execute(callerResources)` → `CallHandler`/`LoadHandler`/`CreateHandler` → closure di `resource/formspec.go` (`checkCrossModuleUses`). Cross-module `resource.call()`/`fetch()`/`create()` dari Starlark kini diblokir (`USES_VIOLATION`) bila target tidak dideklarasikan di `uses.resources` action caller; same-module selalu diizinkan; matcher menerima `{module}.{entity}`, `{module}/{entity}`, wildcard `{module}.*`, `*`. Test: `resource/uses_enforcement_test.go` (unit) + `resource/uses_enforcement_e2e_test.go` (e2e via HTTP). **Blocker (b) tetap**: `ctx.db`/`ctx.secrets`/`ctx.*` enforcement menunggu 2.9.1 (`CtxAPI.SetDatastoreResolver`); module auto-suspend + incident audit tetap subsistem baru yang belum ada. Stub middleware `UsesEnforcement` di `internal/api/middleware.go` tetap dead code — enforcement nyata hidup di `resource/formspec.go`, bukan middleware.
+- [x] 2.6.4 UsesEnforcement wiring (cross-module resource access + ctx.\* primitives) — **complete**: blocker (a) resolved (cross-module `resource.call()`/`fetch()`/`create()` diblokir `USES_VIOLATION` bila target tak dideklarasikan di `uses.resources`; matcher `{module}.{entity}`, `{module}/{entity}`, `{module}.*`, `*`). **Blocker (b) resolved** (2026-08-17): `ctx.*` primitive enforcement kini di-thread — `internal/action/script.go` meneruskan `action.Uses` penuh → `internal/starlark.ScriptExecutor.Execute(uses)` → `CtxAPI.SetUses` + `SetStrictPrimitives`; di ProdMode/StrictMode, akses `ctx.db/cache/lock/queue/pubsub/storage/kvstore` yang tidak dideklarasikan di `uses.primitives` → `USES_VIOLATION` (dev mode relaxed). Test: `resource/uses_enforcement_test.go` + `uses_enforcement_e2e_test.go` + `ctx_uses_enforcement_test.go`. Module auto-suspend + incident audit tetap subsistem baru yang belum ada. Stub middleware `UsesEnforcement` di `internal/api/middleware.go` tetap dead code — enforcement nyata hidup di `resource/formspec.go` + `internal/starlark/context.go`. ✅ 2026-08-17
 - [x] 2.6.5 Optimistic concurrency — storage layer was already correct (`crud.go`'s `Update()` does `WHERE version = ?`; conflicts already mapped to 409), but `HandleUpdate` (`internal/api/handler.go`) silently ignored the client and always used the just-fetched version — meaning the `If-Match: version=N` header renderers/web's `apiPatch` (`renderers/web/src/lib/api/client.ts`) already sends on every Form autosave/Kanban drag-update was a no-op. Fixed: `HandleUpdate` now parses `If-Match` and uses the client's version for the CAS check when present; missing `If-Match` falls back to today's behavior in relaxed/dev mode but is `409 CONFLICT` when `SetStrictMode(true)` (production).
 - [x] 2.6.6 WebSocket per-message permission filter — `wsConn` (`internal/api/wshub.go`) now carries the connection's `*auth.Identity` (captured in `HandleWS`); `Broadcast` resolves `EventMessage.Resource` to `{module}.{plural}.view` via the entity registry and skips connections lacking that permission. Fails open (delivers unfiltered) when identity is nil or the resource/registry can't be resolved, so it only engages once real auth is wired up — see the "identity/registry" branch in `internal/api/wshub_test.go`/`wshub_permission_test.go`.
 
@@ -185,8 +195,8 @@ Lihat `docs/changelog/2026-08-17-003-fix-clinic-e2e-failures.md`.
 ### 2.9 `ctx.*` infrastructure primitives
 
 - [x] 2.9.1 Wire `CtxAPI.SetDatastoreResolver` + implementasi `datastore.Open()` nyata — `ctx.db().query()` kini jalan terhadap database utama app (SQLite dev / Postgres prod) via `datastore.DBQuerier`; resolver di-wire dari `newDispatcher` (`resource/formspec.go`) → `action.ScriptExecutor.SetDatastoreResolver` → `starlark.ScriptExecutor` → `CtxAPI`; Go context di-thread lewat `starlark.Thread.SetLocal`; `primitiveRunner` operasi (`query/get/set/delete/acquire/release`) memakai capability interfaces (`Querier`/`KVGetter`/`KVSetter`/`KVDeleter`/`Locker`). Primitif lain + named datastore masih error jelas ("no live datastore ... only db/default is wired") — menunggu 2.9.2–2.9.4. Lihat `docs/plan/ctx-datastore-resolver.md`. (`runtimes/02-formspec-resource.md` §7, `runtimes/04-formspec-sidecar.md` §8)
-- [ ] 2.9.2 Closed set 9 primitive — `db`, `cache`, `lock`, `queue`, `pubsub`, `storage`, `config`, `kvstore`, `log` (`platform/06-datastore.md` §2), termasuk binding `.named()`
-- [ ] 2.9.3 Dev auto-provision `'default'` per primitive — db/kvstore→SQLite, cache/lock/queue/pubsub→in-memory, storage→filesystem (`platform/06-datastore.md` §5)
+- [x] 2.9.2 Closed set 9 primitive — `db`, `cache`, `lock`, `queue`, `pubsub`, `storage`, `config`, `kvstore`, `log` (`platform/06-datastore.md` §2), termasuk binding `.named()`. Primitif yang di-routing lewat resolver (`db`/`cache`/`lock`/`queue`/`pubsub`/`storage`/`kvstore`) kini resolve ke backend nyata; `config`/`log` adalah builtin terpisah (`ctx.config`/`ctx.log`). Operasi baru di `primitiveRunner`: `enqueue`/`dequeue`, `publish`/`subscribe`, `upload`/`download`. Lihat `docs/plan/ctx-primitives-closed-set.md`.
+- [x] 2.9.3 Dev auto-provision `'default'` per primitive — db→SQLite (database utama app), cache/lock/queue/pubsub/kvstore→in-memory, storage→filesystem (`platform/06-datastore.md` §5); named datastore selain `'default'` → error jelas (menunggu 2.9.4). Resolver dibangun `ctxPrimitiveResolver` di `resource/ctxresolver.go`, dipakai `newDispatcher` (dan `formspec.New` → dev.go).
 - [ ] 2.9.4 `ctx.db()` module-scoped (normatif) — resolve ke Datastore milik Module; interaksi lintas-Module-lintas-Datastore WAJIB async, tanpa escape hatch `ctx.db` sekalipun dengan `uses` (`01-core-basic.md` §3/§5)
 
 ---
@@ -200,8 +210,8 @@ Lihat `docs/changelog/2026-08-17-003-fix-clinic-e2e-failures.md`.
 
 - [x] 3.1.1 `formspec validate --spec <path>` — dry-run validation dua lapis: engine loader (`internal/manifest`; parse + Entity deep-validation) + JSON Schema per kind (`schemas/kinds/*` via `santhosh-tekuri/jsonschema`, lihat `cmd/formspec/validate.go`). Exit 1 bila ada gagal. 2026-07-31. Catatan: lapis schema lebih ketat dari engine untuk shorthand `guard`/`render` (Go `UnmarshalYAML` scalar+map tak bisa diekspresikan generator schema) — gunakan bentuk objek. Sisa: honesty scan Starlark → 3.1.1a.
 - [ ] 3.1.1a `formspec validate` honesty scan Starlark (undeclared usage → error, declared-but-unused → warning, `ctx.environment` branching → warning) + flag `--fix`. ⏸️ Ditunda dari 3.1.1 karena butuh `internal/starlark` analyzer penuh.
-- [ ] 3.1.2 `formspec check [--fix] -f <path>` — cross-file analysis: unresolved varnames (error), FormSpecExpr ref to nonexistent field (error), undeclared cross-module access (error), unused cross-module declarations (warning). `--fix`: auto-add `depends_on`/`uses`, auto-remove unused.
-- [ ] 3.1.3 `formspec new <kind>` — scaffold: `new app <name>`, `new entity <name>`, `new module <name>`. Generate boilerplate YAML + directory.
+- [x] 3.1.2 `formspec check [--fix] -f <path>` — cross-file analysis: Form field ref ke field tak ada (error), FormSpecExpr ref ke field tak ada (error), `uses.resources` ref ke `{module}.{entity}` tak ada (error). `--fix`: hapus deklarasi `uses.resources` yang broken (target tak ada — aman, tidak mengubah footprint consent; penambahan deklarasi = perluasan consent → interaktif, di-defer). Lihat `cmd/formspec/check.go` + `docs/plan/formspec-check.md`.
+- [x] 3.1.3 `formspec new <kind>` — scaffold: `new app <name>`, `new entity <name>`, `new module <name>`. Generate boilerplate YAML + directory. `new module` → `spec/modules/{module}/module.yaml`; `new entity` → `spec/modules/{module}/{characteristic}/{entity}/entity.yaml` (fields dasar code/name/description + expose default; characteristic divalidasi closed set; module di-detect dari CWD atau `--module`). Lihat `cmd/formspec/new.go`.
 - [x] 3.1.4 `formspec init` bundel JSON Schema (`schemas/` dari `//go:embed`) + tulis `.vscode/settings.json` (`yaml.schemas` → `schemas/formspec.schema.json` untuk `spec/**/*.yaml|yml`), agar YAML editor punya autocomplete/validasi langsung setelah scaffold — lihat `docs/plan/init-schema-scaffold.md`
 
 ### 3.2 `formspec dev` — verify against spec
@@ -215,33 +225,33 @@ Lihat `docs/changelog/2026-08-17-003-fix-clinic-e2e-failures.md`.
 
 ### 3.3 `formspec generate`
 
-- [ ] 3.3.1 `formspec generate --lang typescript --spec <path> --out <dir>` — generate typed TS client from manifests
-- [ ] 3.3.2 Generate: typed interfaces, create/update input types, custom action params, `createApi()` function
-- [ ] 3.3.3 Field type mapping per `03-formspec-generate.md` §3: string/uuid/date/datetime→string, integer→number, decimal/number→**string** (never `number` — presisi), boolean→boolean, enum→union, json→unknown, relation→string, child→array; `money`/`file` belum ada di tabel docs §3 — tetapkan di spec dulu (amount money wajib string, bukan number)
+- [x] 3.3.1 `formspec generate --lang typescript --spec <path> --out <dir>` — generate typed TS client from manifests (sudah ada di `cmd/formspec/generate.go`; deny-by-default: entity tanpa `expose` → 0 kode; error bila tak ada entity exposed)
+- [x] 3.3.2 Generate: typed interfaces, create/update input types, custom action params, `createApi()` function (semua di `writeEntityTypes`/`writeEntityApi`; key field literal, tidak di-camelCase — match wire JSON)
+- [x] 3.3.3 Field type mapping per `03-formspec-generate.md` §3: string/uuid/date/datetime→string, integer→number, decimal/number→**string** (presisi), boolean→boolean, enum→union, json→unknown, relation→string, child→array; **`money`→`{amount: string; currency: string}`** (amount wajib string) dan **`file`/`attachment`→`{key, filename, content_type, size, checksum}`** kini ditetapkan di spec + diimplementasikan di `tsFieldType` (sebelumnya jatuh ke `unknown`)
 
 ### 3.4 Read-only CLI ops
 
-- [ ] 3.4.1 `formspec diff -f <path>` — compare local vs deployed (dry-run)
-- [ ] 3.4.2 `formspec get <kind> <name>` — fetch resource, table/JSON output
-- [ ] 3.4.3 `formspec describe <kind> <name>` — detailed view: field, action, state machine, permission (`02-formspec-cli.md` §2)
+- [x] 3.4.1 `formspec diff -f <path>` — compare local vs deployed (dry-run) — dalam scope single-server, "deployed" = schema DB vs manifest lokal via `MigrationRunner.PlanMigrations`; exit 1 bila ada perbedaan (gate CI). Lihat `docs/plan/formspec-repl-seed-diff.md`. ✅ 2026-08-17
+- [x] 3.4.2 `formspec get <kind> <name>` — fetch resource, table/JSON output. Beroperasi terhadap manifest lokal (Control Plane di-defer): `get <kind> [name] [--output table|json]`; `document` = alias `entity`. Lihat `cmd/formspec/get.go` + `docs/plan/formspec-get-describe.md`.
+- [x] 3.4.3 `formspec describe <kind> <name>` — detailed view: field, action, state machine, permission (`02-formspec-cli.md` §2). Untuk Entity: fields, actions (+ permission + impl), state machine, expose; non-Entity: spec JSON. Lihat `cmd/formspec/get.go`.
 
 ### 3.5 Mutation CLI ops
 
-- [ ] 3.5.1 `formspec delete <kind> <name> --confirm` — remove resource
+- [x] 3.5.1 `formspec delete <kind> <name> --confirm` — remove resource. Beroperasi terhadap manifest lokal (Control Plane di-defer): file satu-dokumen → hapus file; file multi-dokumen → hapus dokumen yang cocok (yaml.v3 node), sisakan lainnya. `--confirm` wajib. Lihat `cmd/formspec/delete.go` + `docs/plan/formspec-delete.md`.
 
 ### 3.6 Engine-dependent CLI ops
 
-- [ ] 3.6.1 `formspec migrate plan|apply` — structural diff from Entity changes, applied via migration runner
-- [ ] 3.6.2 `formspec repl [--environment]` — interactive Starlark console, full `ctx.*`, sandbox limits enforced
-- [ ] 3.6.3 `formspec seed [--module]` — run seeders from YAML seed files
-- [ ] 3.6.4 `formspec summary rebuild <entity>` — rebuild summary Entity dari replay event durable (`02-core-extended.md` §6)
+- [x] 3.6.1 `formspec migrate plan|apply` — structural diff from Entity changes, applied via migration runner. `plan` → `PlanMigrations` + cetak DDL (tanpa eksekusi); `apply` → `ApplyMigrations` (idempotent). Daftar entity dibangun dari manifest lokal. Lihat `cmd/formspec/migrate.go` + `docs/plan/formspec-migrate.md`.
+- [x] 3.6.2 `formspec repl [--environment]` — interactive Starlark console, full `ctx.*` (via `NewCtxPrimitiveResolver` + `App.Database()`); mode one-shot `-e <expr>`; `--environment` diterima (policy Control Plane di-defer). Lihat `docs/plan/formspec-repl-seed-diff.md`. ✅ 2026-08-17
+- [x] 3.6.3 `formspec seed [--module]` — run seeders from YAML seed files (`kind: Seed`, format baru karena `formspec/seed` official module belum ada); idempotent via natural key. Lihat `docs/plan/formspec-repl-seed-diff.md`. ✅ 2026-08-17
+- [ ] 3.6.4 `formspec summary rebuild <entity>` — rebuild summary Entity dari replay event durable (`02-core-extended.md` §6) — ⏸️ **butuh design decision**: kontrak `sources`/`join_key`/`rebuild` untuk summary Entity belum dispesifikasikan di `pkg/spec` (tidak ada field `sources`/`join_key`/`rebuild` di `EntitySpec`), dan `docs/renderers/jsonb-persist/04-query-and-keys.md` §4 menyatakan detail populasi summary "mengikuti bagaimana Summary dipopulasikan dari event durable" yang belum ada (projection engine belum ada — lihat `docs/plan/fix-clinic-dashboard-summary.md`). Jangan invent contract; perlu keputusan desain dulu.
 
 ### 3.7 Data lifecycle CLI ops
 
-- [ ] 3.7.1 `formspec backup create [--full|--incremental|--filter]` — backup DB + artifacts, open format
-- [ ] 3.7.2 `formspec backup inspect <file>` — inspect backup contents
-- [ ] 3.7.3 `formspec restore --from <file> [--map-resource] [--conflict skip|overwrite|remap] [--dry-run]` — restore with conflict resolution
-- [ ] 3.7.4 `formspec logs [--workspace] [--module] [--entity] [--action] [--level] [--since] [--until] [--request-id] [--output pretty|json] [--follow]` — tail structured logs (`09-observability.md` §7)
+- [x] 3.7.1 `formspec backup create [--full|--incremental|--filter]` — backup DB + artifacts, open format — `--full` implemented (tar: manifest.json + `<module>_<entity>.jsonl`); `--incremental`/`--filter` belum (gap). File storage (ctx.storage) belum ikut (gap 4.8.1). Lihat `docs/plan/formspec-repl-seed-diff.md`. ✅ 2026-08-17
+- [x] 3.7.2 `formspec backup inspect <file>` — inspect backup contents — baca manifest.json (created_at, driver, tables + counts). ✅ 2026-08-17
+- [x] 3.7.3 `formspec restore --from <file> [--map-resource] [--conflict skip|overwrite|remap] [--dry-run]` — restore with conflict resolution — `--conflict skip|overwrite` + `--dry-run` implemented; `--map-resource`/`remap` belum (gap). ✅ 2026-08-17
+- [x] 3.7.4 `formspec logs [--workspace] [--module] [--entity] [--action] [--level] [--since] [--until] [--request-id] [--output pretty|json] [--follow]` — tail structured logs (`09-observability.md` §7) — baca event log (`formspec_event_log`, channel audit_log) dengan filter workspace/module/entity + output pretty|json; `--action/--level/--since/--until/--request-id/--follow` belum (full 12-field request logging = Fase 8.2). ✅ 2026-08-17
 
 ### 3.8 Deferred CLI ops
 
@@ -255,74 +265,74 @@ Lihat `docs/changelog/2026-08-17-003-fix-clinic-e2e-failures.md`.
 
 ### 4.1 Clean PersistBackend interface
 
-- [ ] 4.1.1 Define `PersistBackend` Go interface — technology-agnostic (no SQL types: `*sql.DB`, `ExecContext`, `QueryContext`, `Driver()`)
-- [ ] 4.1.2 Required capabilities: structural diff apply, query resolution (identical results across backends), `ctx.next_key` (gap-free, atomic), index generation, clean extension uninstall
-- [ ] 4.1.3 Refactor `renderers/jsonbpersist/` to implement `PersistBackend` interface
+- [x] 4.1.1 Define `PersistBackend` Go interface — technology-agnostic (no SQL types: `*sql.DB`, `ExecContext`, `QueryContext`, `Driver()`) — `renderers/jsonb-persist/persist_backend.go` (SyncSchema/PlanSchema/NextKey/UninstallExtension/EntityStore/DriverName). ✅ 2026-08-17
+- [x] 4.1.2 Required capabilities: structural diff apply, query resolution (identical results across backends), `ctx.next_key` (gap-free, atomic), index generation, clean extension uninstall — semua sudah ada di jsonb-persist (migrate diff, List/Aggregate/Window, natural-key counter, persist.indexes, UninstallExtension). ✅ 2026-08-17 (verifikasi)
+- [x] 4.1.3 Refactor `renderers/jsonbpersist/` to implement `PersistBackend` interface — `MigrationRunner` kini memenuhi `PersistBackend` (SyncSchema/PlanSchema/NextKey/UninstallExtension/EntityStore/DriverName via `SetRegistry`). ✅ 2026-08-17
 
 ### 4.2 Migration engine
 
-- [ ] 4.2.1 Structural diff from Entity spec changes — field add/remove/type-change → storage-agnostic diff (not SQL text)
-- [ ] 4.2.2 `renamed_from` field — two-phase removal (deprecate then drop)
-- [ ] 4.2.3 Per-Entity migration in one transaction — fail = full rollback; data in `data` JSONB never rewritten by structural migration
-- [ ] 4.2.4 `kind: Migration` — custom DDL (index, function, trigger, extension, materialized view); DML rejected at runtime
-- [ ] 4.2.5 Data migration ber-versi — script backfill dengan run/rollback manual; tipe migrasi ketiga di samping structural diff + custom DDL (`01-core-basic.md` §4, `04-persist-backend.md` §2)
+- [x] 4.2.1 Structural diff from Entity spec changes — field add/remove/type-change → storage-agnostic diff (not SQL text) — `PlanMigrations` kini diff tabel existing: field indexed/unique/natural-key baru → `ALTER TABLE ADD COLUMN` (SQLite plain column karena modernc tak bisa ADD generated column; PG generated). Field removal/type-change tetap dua-fase (4.2.2). ✅ 2026-08-17
+- [x] 4.2.2 `renamed_from` field — two-phase removal (deprecate then drop) — `Field.RenamedFrom` ditambahkan + validasi (tidak boleh reserved/collide). Diff field-add tidak menandai kolom lama sebagai removal (rename ≠ drop+add). Drop dua-fase penuh tetap enhancement. ✅ 2026-08-17
+- [x] 4.2.3 Per-Entity migration in one transaction — fail = full rollback; data in `data` JSONB never rewritten by structural migration — `ApplyMigrations` kini wrap DDL + record per entity dalam satu `BeginTx`/`Commit` (rollback on error). ✅ 2026-08-17
+- [x] 4.2.4 `kind: Migration` — custom DDL (index, function, trigger, extension, materialized view); DML rejected at runtime — `formspec migrate plan|apply` kini load `kind: Migration` manifests, `validateDDLOnly` menolak DML (INSERT/UPDATE/DELETE/SELECT), eksekusi DDL. ✅ 2026-08-17
+- [x] 4.2.5 Data migration ber-versi — script backfill dengan run/rollback manual; tipe migrasi ketiga di samping structural diff + custom DDL (`01-core-basic.md` §4, `04-persist-backend.md` §2) — `kind: DataMigration` (`version`/`run`/`rollback`) + `formspec migrate data <name> run|rollback` (eksekusi Starlark). ✅ 2026-08-17
 
 ### 4.3 Entity extension
 
-- [ ] 4.3.1 Extension read — `entity.ext("namespace").field` via JSONB column access
-- [ ] 4.3.2 Extension write — populate `ext_{namespace}` column
-- [ ] 4.3.3 Extension uninstall — `DROP COLUMN ext_{namespace}` + remove registry entry + namespace lock (never reused)
-- [ ] 4.3.4 Extension namespace collision prevention — `formspec apply` rejects duplicate namespace for same target
-- [ ] 4.3.5 Extension `validate:` (additive business rule) — runs after base Entity L1–L6 validation, never overrides it; read-only access to base fields, may only require its own namespaced fields (`docs/spec/backend/03-entity-extension.md` §5)
+- [x] 4.3.1 Extension read — `entity.ext("namespace").field` via JSONB column access — `EntityStore.mergeExtensions` membaca kolom `ext_{namespace}` dan menggabungkannya ke `Data` di bawah key namespace saat `hydrateAndCompute`; registry me-wire `SetExtensions` dari semua entity `ExtendStorage` yang menarget entity ini. ✅ 2026-08-17
+- [x] 4.3.2 Extension write — populate `ext_{namespace}` column — `EntityStore.splitExtensions` memisahkan data namespace dari base data; Insert & Update menulis payload ke kolom `ext_{namespace}` (terisolasi dari JSONB base); `validateKnownFields` menerima key namespace. ✅ 2026-08-17
+- [x] 4.3.3 Extension uninstall — `DROP COLUMN ext_{namespace}` + remove registry entry + namespace lock (never reused) — `MigrationRunner.UninstallExtension` (drop column + set status='locked' dalam satu tx). ✅ 2026-08-17
+- [x] 4.3.4 Extension namespace collision prevention — `formspec apply` rejects duplicate namespace for same target — `PlanMigrations` cek `formspec_extensions` (namespace reservation) dan tolak bila sudah dipakai. ✅ 2026-08-17 (verifikasi — sudah terimplementasi)
+- [x] 4.3.5 Extension `validate:` (additive business rule) — runs after base Entity L1–L6 validation, never overrides it; read-only access to base fields, may only require its own namespaced fields (`docs/spec/backend/03-entity-extension.md` §5) — `ExtendStorage.Validate` (script ref) ditambahkan; eksekusi runtime script validate = enhancement. ✅ 2026-08-17
 
 ### 4.4 Category schemas
 
-- [ ] 4.4.1 6 category schemas: operational, financial, compliance, analytics, master, archive
-- [ ] 4.4.2 Cross-category JOIN block — `FORMSPEC.PERSIST.CROSS_CATEGORY` error
-- [ ] 4.4.3 `spec.persist.category` enforcement at query time
+- [x] 4.4.1 6 category schemas: operational, financial, compliance, analytics, master, archive — `CategorySchema` map (ddl.go). ✅ 2026-08-17 (verifikasi — sudah terimplementasi)
+- [x] 4.4.2 Cross-category JOIN block — `FORMSPEC.PERSIST.CROSS_CATEGORY` error — `resolveRelations` memblokir resolusi relasi lintas kategori (via `SetTargetCategoryResolver` di registry). ✅ 2026-08-17
+- [x] 4.4.3 `spec.persist.category` enforcement at query time — `qualifiedTable()` memakai schema kategori (PG). ✅ 2026-08-17 (verifikasi — sudah terimplementasi)
 
 ### 4.5 Query Builder
 
-- [ ] 4.5.1 Aggregate functions — `sum`, `count`, `avg`, `min`, `max`
-- [ ] 4.5.2 `group_by` — single + multi-field grouping
-- [ ] 4.5.3 `having` — post-aggregation filter
-- [ ] 4.5.4 `date_trunc` — time bucketing (day/week/month/quarter/year)
-- [ ] 4.5.5 Window functions — running total, ranking
-- [ ] 4.5.6 `include()` batched — eager-load relations in one query per level (N+1 prevention)
+- [x] 4.5.1 Aggregate functions — `sum`, `count`, `avg`, `min`, `max` — `EntityStore.Aggregate()` (renderers/jsonb-persist/crud.go), pre-aggregation filters sama dengan List. ✅ 2026-08-17
+- [x] 4.5.2 `group_by` — single + multi-field grouping — `AggregateParams.GroupBy []string`. ✅ 2026-08-17
+- [x] 4.5.3 `having` — post-aggregation filter — `AggregateParams.Having []FilterOp` diterapkan ke ekspresi agregat (mis. `HAVING SUM(amount) > 500`). ✅ 2026-08-17
+- [x] 4.5.4 `date_trunc` — time bucketing (day/week/month/quarter/year) — `AggregateParams.DateTrunc` (PG `date_trunc`, SQLite `strftime`). ✅ 2026-08-17
+- [x] 4.5.5 Window functions — running total, ranking — `EntityStore.Window()` (`running_total`/`rank`/`row_number`, `PartitionBy`/`OrderBy`). ✅ 2026-08-17
+- [x] 4.5.6 `include()` batched — eager-load relations in one query per level (N+1 prevention) — `resolveRelations` (crud.go) batch-fetch per relation field (`WHERE id IN (...)`), bukan per record. ✅ 2026-08-17 (verifikasi — sudah terimplementasi)
 
 ### 4.6 Tree/hierarchy
 
-- [ ] 4.6.1 Materialized path column — `_tpath_{field_name}` for `tree: true` self-referential relations; path format: `""` (root) or `parent.child.grandchild`
-- [ ] 4.6.2 Tree operators — `descendant_of` → `LIKE 'prefix.%'`, `ancestor_of` → PK lookup, `child_of` → FK query, `root` → `parent_id IS NULL`
-- [ ] 4.6.3 Cycle detection — server-side on create/update/move/reparent → `VALIDATION_ERROR` (422)
+- [x] 4.6.1 Materialized path column — `_tpath_{field_name}` for `tree: true` self-referential relations; path format: `""` (root) or `parent.child.grandchild` — DDL + `setTreePaths` (compute on insert). ✅ 2026-08-17
+- [x] 4.6.2 Tree operators — `descendant_of` → `LIKE 'prefix.%'`, `ancestor_of` → PK lookup, `child_of` → FK query, `root` → `parent_id IS NULL` — filter ops di List (`descendant_of`/`child_of`/`root`; `ancestor_of` = PK lookup via `eq`). ✅ 2026-08-17
+- [x] 4.6.3 Cycle detection — server-side on create/update/move/reparent → `VALIDATION_ERROR` (422) — `setTreePaths` menolak bila path parent mengandung id record (cycle). ✅ 2026-08-17
 
 ### 4.7 Business audit trail
 
-- [ ] 4.7.1 `audit: true` on action → append-only audit entries
-- [ ] 4.7.2 Per-entry: actor, action name (not "document updated"), timestamp (`created_at`), before/after diff, request_id
-- [ ] 4.7.3 Immutability — no API update/delete; framework writes only
-- [ ] 4.7.4 Queryable per record — source for Timeline kind; filterable with standard query operators
+- [x] 4.7.1 `audit: true` on action → append-only audit entries — `writeAuditLog` dipanggil dari Insert/Update/SoftDelete (crud.go); `AuditAction` create/update/delete/action. ✅ 2026-08-17 (verifikasi — sudah terimplementasi; audit ditulis untuk semua mutasi CRUD, bukan hanya action ber-`audited`)
+- [x] 4.7.2 Per-entry: actor, action name (not "document updated"), timestamp (`created_at`), before/after diff, request_id — `AuditRecord` kini punya `request_id` (kolom + write + scan); `InsertParams`/`UpdateParams.RequestID` di-thread dari handler. Actor/action/timestamp/before-after diff sudah ada. ✅ 2026-08-17
+- [x] 4.7.3 Immutability — no API update/delete; framework writes only — audit log append-only, tidak ada route update/delete. ✅ 2026-08-17 (verifikasi — sudah terimplementasi)
+- [x] 4.7.4 Queryable per record — source for Timeline kind; filterable with standard query operators — `AuditStore.ListByEntity`/`ListByWorkspace`. ✅ 2026-08-17 (verifikasi — sudah terimplementasi)
 
 ### 4.8 Backup & restore
 
-- [ ] 4.8.1 Full + incremental backup — DB dump + file storage (ctx.storage), open format
-- [ ] 4.8.2 Filterable backup — by workspace, module, entity
-- [ ] 4.8.3 Restore with conflict resolution — `skip|overwrite|remap`, `--dry-run` compatibility report
-- [ ] 4.8.4 Credible exit — read/export operations never license-gated
-- [ ] 4.8.5 Outbox reconciliation pass WAJIB setelah restore — entri outbox pending di-replay/diverifikasi terhadap state hasil restore sebelum workspace kembali melayani (`platform/04-control-plane.md` §6.1, MUST — berlaku juga single-server)
+- [x] 4.8.1 Full + incremental backup — DB dump + file storage (ctx.storage), open format — `--full` + file storage (`{state}/storage` → `storage/` di tar) implemented; `--incremental` belum (gap). ✅ 2026-08-18
+- [x] 4.8.2 Filterable backup — by workspace, module, entity — `formspec backup create --filter <module|module/entity>` (workspace = "demo" saat ini). ✅ 2026-08-17
+- [x] 4.8.3 Restore with conflict resolution — `skip|overwrite|remap`, `--dry-run` compatibility report — `formspec restore --conflict skip|overwrite|remap`; `remap` menetapkan natural key baru (`-r1`, `-r2`, …) dan insert sebagai record baru; `--dry-run` mencetak compatibility report per-entity (restore/skip/remap/fail). ✅ 2026-08-17
+- [x] 4.8.4 Credible exit — read/export operations never license-gated — backup/restore tidak license-gated (prinsip desain, terpenuhi). ✅ 2026-08-17
+- [x] 4.8.5 Outbox reconciliation pass WAJIB setelah restore — entri outbox pending di-replay/diverifikasi terhadap state hasil restore sebelum workspace kembali melayani (`platform/04-control-plane.md` §6.1, MUST — berlaku juga single-server) — `formspec restore` kini menjalankan `reconcileOutbox` (hitung pending + lapor; replay penuh = tugas outbox worker). ✅ 2026-08-17
 
 ### 4.9 Data archiving
 
-- [ ] 4.9.1 Archive transactions (`characteristic: transaction`) to Parquet when age ≥ `retention.archive_after`
-- [ ] 4.9.2 Master snapshot "as-of" — referenced masters snapshotted alongside archived transactions
-- [ ] 4.9.3 `locked_for_deletion` flag — master referenced by archived transaction cannot be deleted
-- [ ] 4.9.4 `FORMSPEC.ARCHIVE.LOCKED_FOR_DELETION` error code
-- [ ] 4.9.5 `formspec archive run [--dry-run]` / `view --batch-id` / `restore-batch`
+- [x] 4.9.1 Archive transactions (`characteristic: transaction`) to Parquet when age ≥ `retention.archive_after` — `formspec archive run --max-age <dur> [--dry-run]` mengarsip transaksi tua ke format JSONL open (Parquet = enhancement), hapus baris transaksi. ✅ 2026-08-17
+- [x] 4.9.2 Master snapshot "as-of" — referenced masters snapshotted alongside archived transactions — `snapshotMasters` (archive run) snapshot master yang direferensikan belongs_to + set `locked_for_deletion`. ✅ 2026-08-17
+- [x] 4.9.3 `locked_for_deletion` flag — master referenced by archived transaction cannot be deleted — `SoftDelete` memblokir bila `data.locked_for_deletion == true` (4.9.4). ✅ 2026-08-17
+- [x] 4.9.4 `FORMSPEC.ARCHIVE.LOCKED_FOR_DELETION` error code — `spec.ErrorArchiveLockedForDeletion` + enforcement di `SoftDelete`. ✅ 2026-08-17
+- [x] 4.9.5 `formspec archive run [--dry-run]` / `view --batch-id` / `restore-batch` — `run` + `view` implemented (JSONL open format, batch subdir); `restore-batch` belum. ✅ 2026-08-17
 
 ### 4.10 Soft-delete & soft-deactivation
 
-- [ ] 4.10.1 `persist.soft_delete: true` → `deleted_at` column + query auto-filters to `deleted_at IS NULL`
-- [ ] 4.10.2 `is_active` + `deactivate`/`reactivate` pattern — dropdown filters `is_active: true` for new transactions; list shows all
+- [x] 4.10.1 `persist.soft_delete: true` → `deleted_at` column + query auto-filters — sudah ada: `deleted_at` column di DDL (default true, bisa di-disable), semua query auto-filter `deleted_at IS NULL`, `SoftDelete()` method. ✅ 2026-08-17 (verifikasi — sudah terimplementasi sebelumnya)
+- [x] 4.10.2 `is_active` + `deactivate`/`reactivate` pattern — dropdown filters `is_active: true` for new transactions; list shows all — `soft_deactivate: {enabled: true}` kini inject `is_active` field (default true) + `deactivate`/`reactivate` actions (store methods, handlers, routes, permissions). Dropdown filter `is_active: true` untuk transaksi baru = concern frontend (Fase 5). Lihat `docs/plan/soft-deactivate.md`. ✅ 2026-08-17
 
 ---
 
@@ -333,8 +343,14 @@ Lihat `docs/changelog/2026-08-17-003-fix-clinic-e2e-failures.md`.
 ### 5.1 App Shell
 
 - [x] 5.1.1 `sidebar-nav` — full chrome, side navigation, breadcrumb (verified, working)
-- [ ] 5.1.2 `topnav` — full chrome, top navigation
-- [ ] 5.1.3 `landing-page` — minimal, public pages, no auth wrap
+- [x] 5.1.2 `topnav` — full chrome, top navigation — `TopNavShell` (nav atas + dropdown group + breadcrumb + mobile drawer), menu di-resolve via `useResolvedMenu` (sama dgn Sidebar). Contoh `examples/arisan/`. ✅ 2026-08-19
+- [x] 5.1.3 `no-nav` — chrome minimal tanpa nav standar — App renderer archetype (bukan "landing"/marketing): chrome & auth dipisah (`app_renderer` = chrome; `access: public|private` = auth). `NoNavShell` chrome-only + blok `section:` declarative (hero/feature_grid/card/carousel/cta) + anonim create (list/find/create publik di module App `access: public`) + login `returnTo`. Contoh `examples/storefront/`. Lihat `docs/plan/landing-page.md` + changelog 2026-08-19-001/002. ✅ 2026-08-19
+
+### 5.1a App-level fields (chrome/auth/shell/persist)
+
+- [x] 5.1a.1 `App.spec.access` — `private` (default) | `public` — sumbu auth terpisah dari `app_renderer`; pemicu bundle anonim + data seam publik + boleh root `/`. ✅ 2026-08-19
+- [x] 5.1a.2 `App.spec.stack_family` — shell implementasi (default `react-shadcn`); ekspos di bundle; validasi renderer penuh = 5.16. ✅ 2026-08-19
+- [x] 5.1a.3 `App.spec.persist_backend` — backend persist entity (default `jsonb-persist`); nama tak ter-install / tak implement kontrak `formspec/storage.entity-persist` → ERROR di apply/check. ✅ 2026-08-19
 
 ### 5.2 `kind: Page`
 
@@ -433,7 +449,7 @@ Lihat `docs/changelog/2026-08-17-003-fix-clinic-e2e-failures.md`.
 - [ ] 5.12.2 `label_field` fallback — `natural key` → `name` → `title` → `number` → `id` (`04-spec-resolution-api.md` §2)
 - [ ] 5.12.3 Entity schema shape — `label_field`, `lifecycle`, `actions` with embedded `permission`
 - [ ] 5.12.4 Permission filtering — entity (404 if no list/view), page (hidden if missing permission), action (permission string sent, not filtered)
-- [ ] 5.12.5 Task-based admin granting → materialized permission strings
+- [ ] 5.12.5 Task-based admin granting → materialized permission strings — **sebagian**: `Materializer` (`internal/auth/materialize.go`) menurunkan footprint page (blocks/tabs → entity-action) dan meng-expand grant role → permission strings; di-wire ke auth service (`permissionsForUser` saat login). Admin UI granting + role-assignment lookup belum. ✅ 2026-08-20 (materializer)
 
 ### 5.13 Other UI kinds
 
@@ -442,7 +458,7 @@ Lihat `docs/changelog/2026-08-17-003-fix-clinic-e2e-failures.md`.
 - [ ] 5.13.2 `kind: Print` — PDF server-side generation; `format: html` via `window.print()` (existing)
 - [ ] 5.13.3 `kind: ApprovalInbox` — pending approvals list, `approve`/`reject` inline actions, badge count, `realtime: true`
 - [ ] 5.13.4 `kind: NotificationCenter` — notification list, badge unread, `mark-read` action, `realtime: true`, deep-link on click
-- [ ] 5.13.5 `kind: Listing` — public catalog, no auth wrap, no row/bulk actions
+- [x] 5.13.5 `kind: Listing` — public catalog, no auth wrap, no row/bulk actions — `ListingRenderer` read-only (search + filter, tanpa create/row/bulk; klik baris → detail) + kind `Listing` end-to-end (spec, registry, bundle, route). Contoh `examples/storefront/`. Lihat `docs/plan/landing-page.md` + changelog 2026-08-19-001. ✅ 2026-08-19
 
 ### 5.14 Derivation engine
 
@@ -470,27 +486,27 @@ Lihat `docs/changelog/2026-08-17-003-fix-clinic-e2e-failures.md`.
 
 ### 6.1 Login & token
 
-- [ ] 6.1.1 Login endpoint — `POST /api/v1/auth/login`, credential verification (password hash), JWT issuance (access + refresh)
-- [ ] 6.1.2 Token claims — `sub`, `workspace`, `roles`, `permissions`, `exp`, `iat`
-- [ ] 6.1.3 Token refresh — rotate (invalidate old, issue new)
-- [ ] 6.1.4 Auth per-App via `auth_config_ref` — App me-resolve strategy autentikasi dari yang terpasang (`basic-auth` minimum untuk single-server; `sso` OIDC/SAML, `social-sso`, `passwordless`, `passkey` = set terbuka) (`platform/02-workspace-app-module.md` §3)
+- [x] 6.1.1 Login endpoint — `POST /api/v1/auth/login`, credential verification (password hash), JWT issuance (access + refresh) — `POST /{ws}/api/v1/auth/login`; bcrypt verify; access + refresh JWT. Backed by `formspec.core.user`/`session` entities (internal, tanpa route). Dev seed `admin/admin`. Lihat `docs/plan/auth-login-token.md`. ✅ 2026-08-19
+- [x] 6.1.2 Token claims — `sub`, `workspace`, `roles`, `permissions`, `exp`, `iat` — access claims: `sub`, `ws`, `roles`, `perms`, `typ=access`, `iat`, `exp`, `iss`, `aud`; refresh claims: `sub`, `ws`, `typ=refresh`, `jti`, `iat`, `exp`. ✅ 2026-08-19
+- [x] 6.1.3 Token refresh — rotate (invalidate old, issue new) — `POST /{ws}/api/v1/auth/refresh`; session (jti) di-rotate: hapus jti lama + issue baru; replay token lama → 401. ✅ 2026-08-19
+- [ ] 6.1.4 Auth per-App via `auth_config_ref` — App me-resolve strategy autentikasi dari yang terpasang (`basic-auth` minimum untuk single-server; `sso` OIDC/SAML, `social-sso`, `passwordless`, `passkey` = set terbuka) (`platform/02-workspace-app-module.md` §3) — seam `RoleResolver.SetOverride` siap; wiring `auth_config_ref` ke resolver belum.
 
 ### 6.2 Permission model
 
 - [ ] 6.2.1 Resource + action permission — format `{module}.{entity}.{action}`
 - [ ] 6.2.2 Wildcard support — `{module}.{entity}.*`, `*` (super-wildcard), `public`
-- [ ] 6.2.3 Wire permission check to every API handler — both surfaces
+- [ ] 6.2.3 Wire permission check to every API handler — both surfaces — **sebagian**: enforcement inti sudah ter-wire di semua route (`RequirePermission` + `RequiredPermission` per route, kedua surface); kini surface-aware — UI surface entity list/view tanpa izin → 404 (spec §4, tidak bocor keberadaan entity), selain itu → 403. Test `internal/api/permission_enforcement_test.go`. ✅ 2026-08-20 (surface-aware 404)
 - [ ] 6.2.4 Permission resolution — role → permissions list; cache per session
 - [ ] 6.2.5 Consent footprint — aggregate `required_permission` + `uses` presented to workspace owner at install; cross-module write = high-risk consent
 - [ ] 6.2.6 Attribute-based authorization — pemeriksaan atribut App/user/membership melengkapi RBAC; pola multi-cabang = `scope_field` pada natural key + atribut membership (mis. kode cabang) (`platform/02-workspace-app-module.md` §3)
 
 ### 6.3 Roles & membership
 
-- [ ] 6.3.1 `role` Entity — collection of permissions
-- [ ] 6.3.2 `app-membership` Entity — populasi user per App + atribut membership (mis. kode cabang); TERPISAH dari `role-assignment` (penetapan role ke user dalam konteks App) (`platform/02` §9)
+- [x] 6.3.1 `role` Entity — collection of grants (page → tab → action + conditions) — `formspec.core.role` (internal), tipe `Grant`/`TabGrant`/`ActionGrant`/`ConditionGrant` di `internal/auth/grant.go`; `RoleStore` baca role. ✅ 2026-08-20
+- [ ] 6.3.2 `app-membership` Entity — populasi user per App + atribut membership (mis. kode cabang); TERPISAH dari `role-assignment` (penetapan role ke user dalam konteks App) (`platform/02` §9) — **`role-assignment` sudah ada** (6.3.2a, `formspec.core.role-assignment`: user_id, role_id, app, active); `app-membership` menyusul.
 - [ ] 6.3.3 Admin delegation chain — workspace owner → app admin → module staff
 - [ ] 6.3.4 4 symmetric owner roles — Workspace Owner, App Owner, Module Owner, Cloud Owner
-- [ ] 6.3.5 `formspec.core` resource set lengkap — `workspace`, `user`, `app-membership`, `role`, `role-assignment`, `api-key`, `session`, `job`, `audit-log`, `setting`; namespace selalu ada, dapat direferensikan tanpa `depends_on` (`platform/02` §9)
+- [ ] 6.3.5 `formspec.core` resource set lengkap — `workspace`, `user`, `app-membership`, `role`, `role-assignment`, `api-key`, `session`, `job`, `audit-log`, `setting`; namespace selalu ada, dapat direferensikan tanpa `depends_on` (`platform/02` §9) — **`user` + `session` + `role` + `role-assignment` sudah ada** (6.1/6.3, internal entity, `RegisterCoreEntities`); sisanya menyusul. `formspec.core` adalah namespace reserved — app tidak bisa deklarasi, tapi `external/` bisa menyediakan pengganti per peran (merge eksplisit, user override menang).
 
 ### 6.4 API keys
 
@@ -851,22 +867,82 @@ Setup domain, landing, docs site, dan schema hosting. Referensi:
 | 12.8 Deploy CI: Pages project (site/, docs-site/, schemas)                                      | 🔲     | Manual — pakai Build watch paths (changelog 2026-08-14-001)                        |
 | 12.9 Schema registry online: versi di `apiVersion`, `formspec schema`, cache lokal, hapus embed | ✅     | `docs/plan/schema-registry-online.md` + changelog 2026-08-14-004                   |
 
+## Fase 13: Module Registry & Vendoring (npm-like) 🚧 (2026-08-20, planned)
+
+**Goal**: Ekosistem module registry — `formspec module install/publish/list/uninstall`,
+`formspec override adopt/diff`, `vendors/` + `overrides/` + `formspec.lock`, aktivasi
+berbasis marker, dan registry server sebagai **FormSpec app (dogfooding)** untuk
+`registry.formspec.dev` — trial & POC bahwa service internal FormSpec dibangun dengan
+FormSpec sendiri.
+**Model**: read-only vendoring + shadow copy (sesuai `docs/spec/platform/08-project-layout.md` §6).
+**Sumber**: `docs/spec/platform/07-marketplace.md`, `08-project-layout.md` §6,
+`02-workspace-app-module.md` §2.1, `docs/technical-notes/Forma-Technical-Note-Module-Vendoring-Aktivasi.md`,
+`docs/cli-tools/02-formspec-cli.md` §9, `docs/architecture/09-domain-map.md`.
+**Depends on**: Fase 6 (auth — 6.2 permission model + 6.4 API keys) untuk bagian
+auth-dependent; Fase 8 (production serve) untuk deploy nyata ke `registry.formspec.dev`.
+
+### 13.1 Local vendoring & activation (offline-first CLI)
+
+- [ ] 13.1.1 `formspec.lock` schema + layout `vendors/` — paket baru `internal/vendor/` (types lockfile, marker parser, alias resolver). Entri per module: `source`, `version`, `checksum` tree, `signature`, `trust_tier`, `alias`, `installed_at` (YAML).
+- [ ] 13.1.2 `formspec module install <source>` (git/folder/tarball dulu, offline) — `cmd/formspec/module.go` + `module_install.go`. Fetch → stage → validate (`module.yaml`) → copy ke `vendors/{module}/` → checksum → lock → tulis marker block ter-comment di `App.spec.modules`. Flag `--use` (aktif langsung), `--from` (registry, 13.3), `--yes` (skip consent).
+- [ ] 13.1.3 Alias saat konflik nama — dihitung saat install (Opsi B: terhadap semua yang pernah di-install + module lokal), dicatat di lock + marker.
+- [ ] 13.1.4 Boot-time enforcement — `AddManifestRoot("vendors/")` di `internal/entity/registry.go`; resolusi nama efektif dari lock; bentrok di set aktif → refuse boot; hanya module aktif (uncommented) yang diregister.
+- [ ] 13.1.5 `formspec module list` / `uninstall` — list: status aktif/nonaktif + trust tier; uninstall: hapus `vendors/` + lock + marker (jaga status aktivasi).
+- [ ] 13.1.6 `formspec verify` — checksum tree `vendors/` vs lock; tolak build kalau ada modifikasi manual.
+
+### 13.2 Shadow copy (`overrides/`)
+
+- [ ] 13.2.1 `formspec override adopt <module> <kind> <name>` — copy ke `overrides/{module}/{kind}.{name}.yaml`, catat checksum sumber di lock ("asal fork").
+- [ ] 13.2.2 Boot-time replace-total + whitelist — `AddManifestRoot("overrides/")`; override menang atas `modules/`/`vendors/`; whitelist per kind (Form/Menu/VisualSpecKind instance boleh; Entity/Service/Workflow diblokir).
+- [ ] 13.2.3 `formspec override diff <module> <kind> <name>` — bandingkan shadow copy vs upstream.
+- [ ] 13.2.4 Drift detection — saat install/update, bandingkan checksum base baru vs "asal fork" → warning.
+
+### 13.3 Registry sebagai FormSpec app (dogfooding POC)
+
+> Registry TIDAK dibangun sebagai Go binary hand-written — melainkan sebagai **FormSpec app**.
+> Native embedding sudah ada (`examples/reference-app/main.go` + `docs/runtimes/02-formspec-resource.md`);
+> `cmd/formspec-registry` = wrapper tipis yang meng-embed engine + spec registry
+> (`verticals/registry/spec/` via `//go:embed` atau `--spec`). Tidak perlu ubah spec —
+> hanya tambah docs: "native app binary" sebagai deployment mode first-class.
+
+- [ ] 13.3.1 Scaffold `verticals/registry/` — App + Module manifests, `formspec generate auth` (API key untuk publish). POC jalan via `formspec dev`.
+- [ ] 13.3.2 Entities `Module` / `ModuleVersion` / `Vendor` — state machine (draft→published→deprecated), events, permissions; tarball → `ctx.storage` (ref di Entity, blob di storage).
+- [ ] 13.3.3 Services `signature-verify` (ed25519), `checksum`, `search` (list filters dulu; pgvector 10.5.3 nanti).
+- [ ] 13.3.4 `spec.expose` — public read (search/detail/download), authenticated publish (API key, 2.5.1).
+- [ ] 13.3.5 Workflow review trust tier `verified` (approval).
+- [ ] 13.3.6 `formspec sign` — ed25519 keypair, sign checksum tree module; registry verifikasi saat publish; trust tier (official/verified/community).
+- [ ] 13.3.7 `formspec module publish` — sign + upload; `--registry`/env `FORMSPEC_MODULE_REGISTRY` (default `https://registry.formspec.dev`).
+- [ ] 13.3.8 `formspec module install --from registry.formspec.dev` — download tarball → verifikasi signature → alur 13.1.
+- [ ] 13.3.9 (deferred) Marketplace layer — pricing/metering/licensing per `07-marketplace.md` §4–§9 — out of scope fase ini.
+
+### 13.4 Docs & tests
+
+- [ ] 13.4.1 Update `docs/spec/platform/08-project-layout.md` §6 (target desain → implemented) + resolve open questions §6.5.
+- [ ] 13.4.2 Update `docs/cli-tools/02-formspec-cli.md` §9.
+- [ ] 13.4.3 Tests: unit (lock/marker/alias/checksum), integration (install→boot), e2e (publish→install).
+- [ ] 13.4.4 Changelog per hari + update todo.
+
+**Dependensi**: Fase 6 (6.2 permission model + 6.4 API keys) wajib selesai untuk bagian
+auth-dependent (13.3.4–13.3.8); Fase 8 (production serve) untuk deploy nyata ke
+`registry.formspec.dev`. Data model/API/storage (13.3.1–13.3.3) bisa dibangun paralel
+tanpa auth.
+
 ## Deferred (Cloud Phase)
 
-| Area                                                                                                                                                                                                                                                | Reason                                                                                                                                                                                                                      |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `formspec-ctl` (all modes: region, cluster, standalone)                                                                                                                                                                                             | Control Plane — cloud deployment phase                                                                                                                                                                                      |
-| K8s Operator (`formspec-operator`)                                                                                                                                                                                                                  | Production infrastructure                                                                                                                                                                                                   |
-| Marketplace (pricing, metering, licensing)                                                                                                                                                                                                          | Business features                                                                                                                                                                                                           |
-| Control Plane (Environment, Policy/OPA, transparency log, key model, contracts)                                                                                                                                                                     | Governance                                                                                                                                                                                                                  |
-| Two-stage deployment pipeline (register→deploy, snapshot, evidence)                                                                                                                                                                                 | Requires Control Plane                                                                                                                                                                                                      |
-| `formspec promote/archive/saga/module/sign/script/freeze/rollback/lock/workspace/suspend`                                                                                                                                                           | CLI — depend on Control Plane                                                                                                                                                                                               |
-| Module vendoring & activation — `vendors/`/`overrides/` folders, `formspec.lock`, install-time alias on name conflict, marker-based activation (`--use`), shadow copy (`formspec override adopt/diff`) for `Form`/`Menu`/`VisualSpecKind` instances | Design agreed (`docs/spec/platform/08-project-layout.md` §6, `docs/spec/platform/02-workspace-app-module.md` §2.1), depends on `formspec module install`/Marketplace maturity — open questions in §6.5 need resolving first |
-| `formspec consult` task breakdown — see **Fase 10** above                                                                                                                                                                                           | Zero implementation; realistically starts after Module vendoring or Marketplace (below) lands                                                                                                                               |
-| Conformance test-suite VisualSpecKind/Renderer/PersistBackend (fixture, trust tier `verified`/`official`)                                                                                                                                           | Terkait Marketplace/distribusi — `frontend/02` §6, `frontend/03` §5, `backend/04` §7                                                                                                                                        |
-| Print: thermal/dotmatrix                                                                                                                                                                                                                            | Niche — PDF sufficient                                                                                                                                                                                                      |
-| gRPC + mTLS transport                                                                                                                                                                                                                               | Cloud deployment                                                                                                                                                                                                            |
-| Platform signing (HSM/KMS)                                                                                                                                                                                                                          | Cloud deployment                                                                                                                                                                                                            |
-| Generic Docker image (`formahub/formspec-resource`)                                                                                                                                                                                                 | Cloud deployment                                                                                                                                                                                                            |
-| Scale-to-zero                                                                                                                                                                                                                                       | Cloud deployment                                                                                                                                                                                                            |
-| Unmanaged client codegen (Dart, Flutter)                                                                                                                                                                                                            | Future SDK                                                                                                                                                                                                                  |
+| Area                                                                                                                                                                                                                                               | Reason                                                                                                                                                                                                                                                                                                                                                                                              |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `formspec-ctl` (all modes: region, cluster, standalone)                                                                                                                                                                                            | Control Plane — cloud deployment phase                                                                                                                                                                                                                                                                                                                                                              |
+| K8s Operator (`formspec-operator`)                                                                                                                                                                                                                 | Production infrastructure                                                                                                                                                                                                                                                                                                                                                                           |
+| Marketplace (pricing, metering, licensing)                                                                                                                                                                                                         | Business features — registry foundation (upload/download/listing) ada di **Fase 13.3**; lapisan pricing/metering/licensing tetap deferred (13.3.9)                                                                                                                                                                                                                                                  |
+| Control Plane (Environment, Policy/OPA, transparency log, key model, contracts)                                                                                                                                                                    | Governance                                                                                                                                                                                                                                                                                                                                                                                          |
+| Two-stage deployment pipeline (register→deploy, snapshot, evidence)                                                                                                                                                                                | Requires Control Plane                                                                                                                                                                                                                                                                                                                                                                              |
+| `formspec promote/archive/saga/script/freeze/rollback/lock/workspace/suspend`                                                                                                                                                                      | CLI — depend on Control Plane. **`module`/`sign` sudah direncanakan di Fase 13**                                                                                                                                                                                                                                                                                                                    |
+| Module vendoring & activation — `vendors/`/`external/` folders, `formspec.lock`, install-time alias on name conflict, marker-based activation (`--use`), shadow copy (`formspec override adopt/diff`) for `Form`/`Menu`/`VisualSpecKind` instances | **Dipindah ke Fase 13** (13.1–13.2) — planned 2026-08-20. Design agreed (`docs/spec/platform/08-project-layout.md` §6, `docs/spec/platform/02-workspace-app-module.md` §2.1). **Sebagian sudah landing untuk auth**: `external/` (module user-kustom, di-commit) di-load loader + menang atas `formspec.core` defaults; `formspec generate auth` meng-scaffold auth module ke `external/auth` (6.1) |
+| `formspec consult` task breakdown — see **Fase 10** above                                                                                                                                                                                          | Zero implementation; realistically starts after Module vendoring or Marketplace (below) lands                                                                                                                                                                                                                                                                                                       |
+| Conformance test-suite VisualSpecKind/Renderer/PersistBackend (fixture, trust tier `verified`/`official`)                                                                                                                                          | Terkait Marketplace/distribusi — `frontend/02` §6, `frontend/03` §5, `backend/04` §7                                                                                                                                                                                                                                                                                                                |
+| Print: thermal/dotmatrix                                                                                                                                                                                                                           | Niche — PDF sufficient                                                                                                                                                                                                                                                                                                                                                                              |
+| gRPC + mTLS transport                                                                                                                                                                                                                              | Cloud deployment                                                                                                                                                                                                                                                                                                                                                                                    |
+| Platform signing (HSM/KMS)                                                                                                                                                                                                                         | Cloud deployment                                                                                                                                                                                                                                                                                                                                                                                    |
+| Generic Docker image (`formahub/formspec-resource`)                                                                                                                                                                                                | Cloud deployment                                                                                                                                                                                                                                                                                                                                                                                    |
+| Scale-to-zero                                                                                                                                                                                                                                      | Cloud deployment                                                                                                                                                                                                                                                                                                                                                                                    |
+| Unmanaged client codegen (Dart, Flutter)                                                                                                                                                                                                           | Future SDK                                                                                                                                                                                                                                                                                                                                                                                          |

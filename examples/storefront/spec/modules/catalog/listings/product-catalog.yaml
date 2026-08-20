@@ -1,0 +1,16 @@
+apiVersion: formspec.dev/v1
+kind: Listing
+metadata:
+  name: product-catalog
+  module: catalog
+  description: "Katalog produk publik"
+spec:
+  entity: catalog.product
+  columns:
+    - { field: code, label: "Kode" }
+    - { field: name, label: "Nama" }
+    - { field: category, label: "Kategori" }
+    - { field: price, label: "Harga", format: currency }
+  filters:
+    - { field: category, label: "Kategori", type: select }
+  search: true

@@ -314,6 +314,86 @@ func TestMigrationRunner_ExtensionMigration(t *testing.T) {
 	}
 }
 
+func TestMigrationRunner_UninstallExtension(t *testing.T) {
+	dir := t.TempDir()
+	d, err := OpenSQLite(filepath.Join(dir, "migrate_uninst.db"), nil)
+	if err != nil {
+		t.Fatalf("OpenSQLite failed: %v", err)
+	}
+	defer d.Close()
+
+	r := NewMigrationRunner(d, DriverSQLite)
+	ctx := context.Background()
+
+	// Base entity.
+	if _, err := r.ApplyMigrations(ctx, []EntityMigration{
+		{
+			Metadata: spec.Metadata{Name: "customer", Module: "billing"},
+			EntitySpec: spec.EntitySpec{
+				Version: "v1",
+				Fields:  []spec.Field{{Name: "name", Type: spec.FieldString}},
+			},
+		},
+	}); err != nil {
+		t.Fatalf("apply base: %v", err)
+	}
+
+	// Extension with a plain (non-unique) field so no generated column
+	// depends on ext_custext (SQLite DROP COLUMN limitation).
+	if _, err := r.ApplyMigrations(ctx, []EntityMigration{
+		{
+			Metadata: spec.Metadata{Name: "custext", Module: "billing"},
+			EntitySpec: spec.EntitySpec{
+				Version: "v1",
+				Fields:  []spec.Field{{Name: "loyalty_tier", Type: spec.FieldString, Default: "bronze"}},
+				ExtendStorage: &spec.ExtendStorage{
+					Target:    "billing/customer",
+					Namespace: "custext",
+				},
+			},
+		},
+	}); err != nil {
+		t.Fatalf("apply extension: %v", err)
+	}
+
+	// Verify column exists.
+	var colCount int
+	if err := d.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM pragma_table_info('billing_customers') WHERE name = 'ext_custext'",
+	).Scan(&colCount); err != nil {
+		t.Fatalf("query column: %v", err)
+	}
+	if colCount != 1 {
+		t.Fatalf("expected ext_custext column, got %d", colCount)
+	}
+
+	// Uninstall (4.3.3).
+	if err := r.UninstallExtension(ctx, "billing_customers", "custext"); err != nil {
+		t.Fatalf("UninstallExtension: %v", err)
+	}
+
+	// Column dropped.
+	if err := d.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM pragma_table_info('billing_customers') WHERE name = 'ext_custext'",
+	).Scan(&colCount); err != nil {
+		t.Fatalf("query after uninstall: %v", err)
+	}
+	if colCount != 0 {
+		t.Fatalf("expected column dropped, got %d", colCount)
+	}
+
+	// Namespace locked.
+	var status string
+	if err := d.QueryRowContext(ctx,
+		"SELECT status FROM formspec_extensions WHERE namespace = 'custext'",
+	).Scan(&status); err != nil {
+		t.Fatalf("query status: %v", err)
+	}
+	if status != "locked" {
+		t.Fatalf("expected status 'locked', got %q", status)
+	}
+}
+
 func TestMigrationRunner_ChecksumChange(t *testing.T) {
 	dir := t.TempDir()
 	d, err := OpenSQLite(filepath.Join(dir, "migrate_ck.db"), nil)
@@ -366,6 +446,84 @@ func TestMigrationRunner_ChecksumChange(t *testing.T) {
 	}
 	if applied2 != 0 {
 		t.Errorf("expected 0 migrations (add-only), got %d", applied2)
+	}
+}
+
+func TestMigrationRunner_FieldAddDiff(t *testing.T) {
+	dir := t.TempDir()
+	d, err := OpenSQLite(filepath.Join(dir, "migrate_fieldadd.db"), nil)
+	if err != nil {
+		t.Fatalf("OpenSQLite failed: %v", err)
+	}
+	defer d.Close()
+
+	r := NewMigrationRunner(d, DriverSQLite)
+	ctx := context.Background()
+
+	// Initial entity with a plain field.
+	entities := []EntityMigration{
+		{
+			Metadata: spec.Metadata{Name: "item", Module: "test"},
+			EntitySpec: spec.EntitySpec{
+				Version: "v1",
+				Fields:  []spec.Field{{Name: "name", Type: spec.FieldString}},
+			},
+		},
+	}
+	if _, err := r.ApplyMigrations(ctx, entities); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+
+	// Add a new indexed field → should generate ALTER TABLE ADD COLUMN.
+	entities2 := []EntityMigration{
+		{
+			Metadata: spec.Metadata{Name: "item", Module: "test"},
+			EntitySpec: spec.EntitySpec{
+				Version: "v1",
+				Fields: []spec.Field{
+					{Name: "name", Type: spec.FieldString},
+					{Name: "code", Type: spec.FieldString, Index: true},
+				},
+			},
+		},
+	}
+
+	results, err := r.PlanMigrations(ctx, entities2)
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 diff migration, got %d", len(results))
+	}
+	if !strings.Contains(results[0].DDL, "ADD COLUMN") {
+		t.Fatalf("expected ALTER TABLE ADD COLUMN, got %q", results[0].DDL)
+	}
+	t.Logf("diff DDL: %s", results[0].DDL)
+
+	// Apply → column added.
+	appliedDiff, err := r.ApplyMigrations(ctx, entities2)
+	if err != nil {
+		t.Fatalf("apply diff: %v", err)
+	}
+	if appliedDiff != 1 {
+		t.Fatalf("expected 1 diff migration applied, got %d", appliedDiff)
+	}
+	var colCount int
+	if err := d.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM pragma_table_info('test_items') WHERE name = '_code'",
+	).Scan(&colCount); err != nil {
+		t.Fatalf("query column: %v", err)
+	}
+	if colCount != 1 {
+		rows, _ := d.QueryContext(ctx, "SELECT name FROM pragma_table_info('test_items')")
+		var names []string
+		for rows.Next() {
+			var n string
+			rows.Scan(&n)
+			names = append(names, n)
+		}
+		rows.Close()
+		t.Fatalf("expected _code column added, got %d; columns: %v", colCount, names)
 	}
 }
 

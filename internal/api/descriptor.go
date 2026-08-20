@@ -28,6 +28,11 @@ type RouteDescriptor struct {
 	Protocol           spec.ProtocolType // rest, grpc, ws
 	Handler            string            // "auto" for CRUD, or custom action name
 	RequiredPermission string            // permission string like "billing.customers.list" or "public"; empty = no check (internal only)
+	// Public marks a route as anonymously accessible on the UI surface —
+	// set at registration time for entities mounted by an `access: public`
+	// App (frontend/05-app-kinds.md §1). Read (list/find) + create are
+	// public; update/delete stay permission-gated.
+	Public bool
 }
 
 // StandardRESTActions is the set of auto-generated REST actions for entities.
@@ -47,4 +52,7 @@ var StandardRESTActions = []struct {
 	{Action: "submit", Method: "POST", PathSuffix: "/{id}/submit", PermissionAction: "submit"},
 	{Action: "cancel", Method: "POST", PathSuffix: "/{id}/cancel", PermissionAction: "cancel"},
 	{Action: "amend", Method: "POST", PathSuffix: "/{id}/amend", PermissionAction: "amend"},
+	// Soft-deactivation actions (1.4.10 / 4.10.2, 02-core-extended.md §19):
+	{Action: "deactivate", Method: "POST", PathSuffix: "/{id}/deactivate", PermissionAction: "deactivate"},
+	{Action: "reactivate", Method: "POST", PathSuffix: "/{id}/reactivate", PermissionAction: "reactivate"},
 }

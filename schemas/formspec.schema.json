@@ -187,6 +187,14 @@
       },
       "additionalProperties": false
     },
+    "AppAccess": {
+      "description": "AppAccess controls whether an App's surface is publicly reachable without\nauthentication (frontend/05-app-kinds.md §1). `private` is the\nsecure-by-default. Orthogonal to the App renderer archetype: any of\nsidebar-nav/topnav/no-nav may be public or private.\n",
+      "type": "string",
+      "enum": [
+        "private",
+        "public"
+      ]
+    },
     "AppConsume": {
       "description": "AppConsume is one cross-app interface an App depends on; it triggers a\ngrant request to the owning App (02-workspace-app-module.md §3).\n",
       "type": "object",
@@ -757,6 +765,10 @@
         },
         "target": {
           "type": "string"
+        },
+        "validate": {
+          "description": "Validate is an additive business rule (4.3.5): a Starlark script ref",
+          "type": "string"
         }
       },
       "required": [
@@ -832,6 +844,10 @@
         "relation": {
           "$ref": "#/$defs/RelationDecl",
           "nullable": true
+        },
+        "renamed_from": {
+          "description": "4.2.2 RenamedFrom — declares that this field was renamed from the given",
+          "type": "string"
         },
         "required": {
           "type": "boolean"
@@ -1377,7 +1393,8 @@
         "Kanban",
         "Timeline",
         "Print",
-        "Theme"
+        "Theme",
+        "Listing"
       ]
     },
     "KvstoreUseDecl": {
@@ -1530,6 +1547,10 @@
         },
         "html": {
           "type": "string"
+        },
+        "section": {
+          "$ref": "#/$defs/SectionBlock",
+          "nullable": true
         },
         "table": {
           "$ref": "#/$defs/BlockRef",
@@ -2004,6 +2025,138 @@
         },
         "max": {
           "type": "integer"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SectionBlock": {
+      "description": "SectionBlock is a declarative presentation section inside a Page\n(frontend/06-page-kinds.md §1). Sections are generic — reusable in any App\n(marketing/hero, no-nav, sidebar-nav, ...): pure presentation, no data\nbinding, no auth, and zero styling fields — every visual token lives in\nkind: Theme (frontend/05-app-kinds.md §5), never inline.\n",
+      "type": "object",
+      "properties": {
+        "autoplay": {
+          "description": "Autoplay + IntervalMS drive carousel auto-advance (default off / 5000ms).",
+          "type": "boolean"
+        },
+        "columns": {
+          "description": "Columns controls the grid width for feature_grid / card (default 3).",
+          "type": "integer"
+        },
+        "cta": {
+          "$ref": "#/$defs/SectionCTA",
+          "nullable": true
+        },
+        "image": {
+          "description": "@schema {example: \"assets/hero.png\"}",
+          "type": "string",
+          "examples": [
+            "assets/hero.png"
+          ]
+        },
+        "interval_ms": {
+          "type": "integer"
+        },
+        "items": {
+          "description": "Items is the content list for feature_grid / card / carousel.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SectionItem"
+          }
+        },
+        "subtitle": {
+          "description": "@schema {example: \"Satu platform untuk jadwal, pasien, dan tagihan.\"}",
+          "type": "string",
+          "examples": [
+            "Satu platform untuk jadwal, pasien, dan tagihan."
+          ]
+        },
+        "title": {
+          "description": "@schema {example: \"Kelola klinik Anda\"}",
+          "type": "string",
+          "examples": [
+            "Kelola klinik Anda"
+          ]
+        },
+        "type": {
+          "description": "Section block type — closed set.",
+          "type": "string",
+          "enum": [
+            "hero",
+            "feature_grid",
+            "card",
+            "carousel",
+            "cta"
+          ]
+        },
+        "variant": {
+          "description": "@schema {example: \"primary\"}",
+          "type": "string",
+          "examples": [
+            "primary"
+          ]
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "SectionCTA": {
+      "description": "SectionCTA is one call-to-action link inside a section block.\n",
+      "type": "object",
+      "properties": {
+        "href": {
+          "description": "@schema {example: \"/app\"}",
+          "type": "string",
+          "examples": [
+            "/app"
+          ]
+        },
+        "label": {
+          "description": "@schema {example: \"Mulai\"}",
+          "type": "string",
+          "examples": [
+            "Mulai"
+          ]
+        },
+        "variant": {
+          "description": "@schema {example: \"primary\", enum: [\"primary\", \"secondary\", \"ghost\"]}",
+          "type": "string",
+          "enum": [
+            "primary",
+            "secondary",
+            "ghost"
+          ],
+          "examples": [
+            "primary"
+          ]
+        }
+      },
+      "required": [
+        "label",
+        "href"
+      ],
+      "additionalProperties": false
+    },
+    "SectionItem": {
+      "description": "SectionItem is one content entry in a feature_grid / card / carousel block.\n",
+      "type": "object",
+      "properties": {
+        "cta": {
+          "$ref": "#/$defs/SectionCTA",
+          "nullable": true
+        },
+        "icon": {
+          "description": "Icon is a lucide icon name (renderer-specific; closed to the shell's",
+          "type": "string"
+        },
+        "image": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
         }
       },
       "additionalProperties": false
@@ -2933,6 +3086,14 @@
       },
       "additionalProperties": false
     },
+    "AppAccess": {
+      "description": "AppAccess controls whether an App's surface is publicly reachable without\nauthentication (frontend/05-app-kinds.md §1). `private` is the\nsecure-by-default. Orthogonal to the App renderer archetype: any of\nsidebar-nav/topnav/no-nav may be public or private.\n",
+      "type": "string",
+      "enum": [
+        "private",
+        "public"
+      ]
+    },
     "AppConsume": {
       "description": "AppConsume is one cross-app interface an App depends on; it triggers a\ngrant request to the owning App (02-workspace-app-module.md §3).\n",
       "type": "object",
@@ -3503,6 +3664,10 @@
         },
         "target": {
           "type": "string"
+        },
+        "validate": {
+          "description": "Validate is an additive business rule (4.3.5): a Starlark script ref",
+          "type": "string"
         }
       },
       "required": [
@@ -3578,6 +3743,10 @@
         "relation": {
           "$ref": "#/$defs/RelationDecl",
           "nullable": true
+        },
+        "renamed_from": {
+          "description": "4.2.2 RenamedFrom — declares that this field was renamed from the given",
+          "type": "string"
         },
         "required": {
           "type": "boolean"
@@ -4123,7 +4292,8 @@
         "Kanban",
         "Timeline",
         "Print",
-        "Theme"
+        "Theme",
+        "Listing"
       ]
     },
     "KvstoreUseDecl": {
@@ -4276,6 +4446,10 @@
         },
         "html": {
           "type": "string"
+        },
+        "section": {
+          "$ref": "#/$defs/SectionBlock",
+          "nullable": true
         },
         "table": {
           "$ref": "#/$defs/BlockRef",
@@ -4750,6 +4924,138 @@
         },
         "max": {
           "type": "integer"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SectionBlock": {
+      "description": "SectionBlock is a declarative presentation section inside a Page\n(frontend/06-page-kinds.md §1). Sections are generic — reusable in any App\n(marketing/hero, no-nav, sidebar-nav, ...): pure presentation, no data\nbinding, no auth, and zero styling fields — every visual token lives in\nkind: Theme (frontend/05-app-kinds.md §5), never inline.\n",
+      "type": "object",
+      "properties": {
+        "autoplay": {
+          "description": "Autoplay + IntervalMS drive carousel auto-advance (default off / 5000ms).",
+          "type": "boolean"
+        },
+        "columns": {
+          "description": "Columns controls the grid width for feature_grid / card (default 3).",
+          "type": "integer"
+        },
+        "cta": {
+          "$ref": "#/$defs/SectionCTA",
+          "nullable": true
+        },
+        "image": {
+          "description": "@schema {example: \"assets/hero.png\"}",
+          "type": "string",
+          "examples": [
+            "assets/hero.png"
+          ]
+        },
+        "interval_ms": {
+          "type": "integer"
+        },
+        "items": {
+          "description": "Items is the content list for feature_grid / card / carousel.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SectionItem"
+          }
+        },
+        "subtitle": {
+          "description": "@schema {example: \"Satu platform untuk jadwal, pasien, dan tagihan.\"}",
+          "type": "string",
+          "examples": [
+            "Satu platform untuk jadwal, pasien, dan tagihan."
+          ]
+        },
+        "title": {
+          "description": "@schema {example: \"Kelola klinik Anda\"}",
+          "type": "string",
+          "examples": [
+            "Kelola klinik Anda"
+          ]
+        },
+        "type": {
+          "description": "Section block type — closed set.",
+          "type": "string",
+          "enum": [
+            "hero",
+            "feature_grid",
+            "card",
+            "carousel",
+            "cta"
+          ]
+        },
+        "variant": {
+          "description": "@schema {example: \"primary\"}",
+          "type": "string",
+          "examples": [
+            "primary"
+          ]
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "SectionCTA": {
+      "description": "SectionCTA is one call-to-action link inside a section block.\n",
+      "type": "object",
+      "properties": {
+        "href": {
+          "description": "@schema {example: \"/app\"}",
+          "type": "string",
+          "examples": [
+            "/app"
+          ]
+        },
+        "label": {
+          "description": "@schema {example: \"Mulai\"}",
+          "type": "string",
+          "examples": [
+            "Mulai"
+          ]
+        },
+        "variant": {
+          "description": "@schema {example: \"primary\", enum: [\"primary\", \"secondary\", \"ghost\"]}",
+          "type": "string",
+          "enum": [
+            "primary",
+            "secondary",
+            "ghost"
+          ],
+          "examples": [
+            "primary"
+          ]
+        }
+      },
+      "required": [
+        "label",
+        "href"
+      ],
+      "additionalProperties": false
+    },
+    "SectionItem": {
+      "description": "SectionItem is one content entry in a feature_grid / card / carousel block.\n",
+      "type": "object",
+      "properties": {
+        "cta": {
+          "$ref": "#/$defs/SectionCTA",
+          "nullable": true
+        },
+        "icon": {
+          "description": "Icon is a lucide icon name (renderer-specific; closed to the shell's",
+          "type": "string"
+        },
+        "image": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
         }
       },
       "additionalProperties": false
@@ -5597,11 +5903,20 @@
           "description": "AppSpec is the root project manifest (Core §4.4). A Workspace MAY contain\nmore than one App; all Apps in a workspace run simultaneously, mounted at\ntheir own RootURL.\n",
           "type": "object",
           "properties": {
+            "access": {
+              "$ref": "#/$defs/AppAccess",
+              "description": "@schema {example: \"private\", enum: [\"private\", \"public\"]}"
+            },
             "app_renderer": {
-              "description": "@schema {example: \"shadcn-shell\"}",
+              "description": "@schema {example: \"no-nav\", enum: [\"sidebar-nav\", \"topnav\", \"no-nav\"]}",
               "type": "string",
+              "enum": [
+                "sidebar-nav",
+                "topnav",
+                "no-nav"
+              ],
               "examples": [
-                "shadcn-shell"
+                "no-nav"
               ]
             },
             "auth_config_ref": {
@@ -5631,6 +5946,13 @@
                 "[clinic, pharmacy]"
               ]
             },
+            "persist_backend": {
+              "description": "@schema {example: \"jsonb-persist\"}",
+              "type": "string",
+              "examples": [
+                "jsonb-persist"
+              ]
+            },
             "publishes": {
               "description": "cross-app interfaces offered",
               "type": "array",
@@ -5639,12 +5961,19 @@
               }
             },
             "root_url": {
-              "description": "@schema {example: \"/app/klinik\", pattern: \"^/app/\"}",
+              "description": "@schema {example: \"/app/klinik\", pattern: \"^(/|/app(/.*)?)$\"}",
               "type": "string",
               "examples": [
                 "/app/klinik"
               ],
-              "pattern": "^/app/"
+              "pattern": "^(/|/app(/.*)?)$"
+            },
+            "stack_family": {
+              "description": "@schema {example: \"react-shadcn\"}",
+              "type": "string",
+              "examples": [
+                "react-shadcn"
+              ]
             },
             "theme_ref": {
               "description": "@schema {example: \"ocean-blue\"}",

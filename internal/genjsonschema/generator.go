@@ -35,6 +35,7 @@ func (c *Converter) Generate(collect *CollectResult) *GenerateResult {
 		"NaturalKeyRuleDecl", "NaturalKeyPrefix", "StorageSpec", "FieldRef",
 		"DeliveryDecl", "PublishDecl", "PayloadDecl", "EventDeliveryDecl", "DeliveryTarget",
 		"RetryDecl", "PageBlock", "PageTab", "BlockRef", "DashboardWidget", "WidgetLayout",
+		"SectionBlock", "SectionCTA", "SectionItem",
 		"ReportParam", "ReportColumn", "ReportGroup", "ReportTotal", "WizardStep",
 		"WizardOnComplete", "WizardSummaryItem", "KanbanColumn", "KanbanCard",
 		"PrintOutput", "PrintPaper", "PrintCustomPaper", "PrintHeader", "PrintBodyItem",

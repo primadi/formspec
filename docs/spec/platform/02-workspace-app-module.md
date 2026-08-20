@@ -6,9 +6,11 @@
 > ditandai eksplisit sebagai **Open**.
 
 ## 1. Model Kepemilikan
+
 ```
 Workspace → App → Module → Resource
 ```
+
 Satu workspace berisi banyak App dan banyak Module. **Module memiliki
 objek** (Entity, Service, dan seluruh instance VisualSpecKind — Page,
 Form, Table, dst.) — satu Module = satu bounded context bisnis utuh,
@@ -23,7 +25,7 @@ dalam workspace yang sama, masing-masing meng-expose subset berbeda (App
 internal vs App publik yang mengakses data sama).
 
 **Workspace adalah satu-satunya model multi-tenancy FormSpec.** Aplikasi
-ditulis sepenuhnya *tenancy-blind* — tidak ada kode aplikasi yang memilih
+ditulis sepenuhnya _tenancy-blind_ — tidak ada kode aplikasi yang memilih
 strategi tenancy, dan **setiap Entity tenant-isolated secara default,
 tanpa pengecualian**; satu workspace = satu tenant terisolasi. **Tidak ada
 akses lintas-workspace dalam bentuk apa pun** di dalam framework — kalau
@@ -41,9 +43,10 @@ sendiri sebagai Platform Operator, bukan lewat mode tenancy khusus di dalam
 aplikasi.
 
 ## 2. Module
+
 Package manifest — identitas, versi, dependency. Isi ditemukan lewat
 scanning file, bukan didaftar manual (`metadata.name` = permission
-namespace). Struktur di dalamnya adalah *closed set*: Document,
+namespace). Struktur di dalamnya adalah _closed set_: Document,
 Service, instance VisualSpecKind (Page/Form/Table/dst.), dan deklarasi
 permission yang mengikat semuanya — bukan tipe bebas. Module tidak wajib
 mengisi semua jenis itu; Module murni integrasi (mis. `formspec/tax-calculator`)
@@ -61,17 +64,18 @@ spec:
     - module: formspec/core
     - module: billing
       version: ">=1.0 <2.0"
-  datastore: default    # opsional — nama kind: Datastore untuk ctx.db()
-                        # module ini; default kalau tidak diisi. Lihat
-                        # ../backend/01-core-basic.md §3 dan 06-datastore.md §1.1
+  datastore:
+    default # opsional — nama kind: Datastore untuk ctx.db()
+    # module ini; default kalau tidak diisi. Lihat
+    # ../backend/01-core-basic.md §3 dan 06-datastore.md §1.1
   config:
-    fiscal_year_start: "04-01"   # module-specific: GL mulai tahun fiskal April
-    coa_structure: "4-2-2-2"     # module-specific: struktur kode akun 4 segmen
+    fiscal_year_start: "04-01" # module-specific: GL mulai tahun fiskal April
+    coa_structure: "4-2-2-2" # module-specific: struktur kode akun 4 segmen
     # Currency, locale, timezone → settings.* (global), bukan di sini
     # Lihat ../backend/01-core-basic.md §10
-  menu: []    # default menu suggestion, module-relative — lihat §4
-  ai_index:   # opsional — metadata discovery untuk FormSpec AI, lihat
-              # ../../ai/04-formspec-remote-mcp.md §3
+  menu: [] # default menu suggestion, module-relative — lihat §4
+  ai_index: # opsional — metadata discovery untuk FormSpec AI, lihat
+    # ../../ai/04-formspec-remote-mcp.md §3
     category: payment
     features: [charge, refund, webhook_callback]
     integration_pattern: |
@@ -81,6 +85,7 @@ spec:
 ```
 
 ### 2.1 Identitas Unik & Alias saat Konflik Nama (Module Vendor)
+
 `metadata.name` yang ditulis pembuat module (mis. `billing`) **tidak
 dijamin unik secara global** — dua vendor berbeda boleh memilih nama yang
 sama. Identitas unik sesungguhnya ada di **source** module (mis.
@@ -98,7 +103,8 @@ dicatat sebagai blok marker di manifest App
 ```yaml
 spec:
   modules:
-    - billing   # module lokal
+    - billing # module lokal
+
 
     # >>> formspec:vendor github.com/acme/billing-module @1.0.0
     # - acme-billing
@@ -126,6 +132,7 @@ module bernama sama boleh nangkring bersamaan di `vendors/` selama tidak
 dua-duanya aktif tanpa alias.
 
 ## 3. App
+
 Root project manifest — unit deployment, trust boundary, dan publikasi
 interface. Satu workspace **boleh** berisi lebih dari satu App; seluruh App
 di satu workspace berjalan bersamaan dalam proses yang sama, dibedakan
@@ -139,14 +146,14 @@ metadata:
 spec:
   version: 2.1.0
   vendor: acme-corp
-  root_url: /app/klinik-internal   # prefiks routing, wajib unik per App dalam satu workspace
+  root_url: /app/klinik-internal # prefiks routing, wajib unik per App dalam satu workspace
   modules: [billing, acme-corp/general-ledger]
-  app_renderer: sidebar-nav        # pilih App renderer — lihat spec/frontend/05-app-kinds.md
-  menu: []                        # lihat §4
-  publishes:                      # interface lintas-app yang ditawarkan
+  app_renderer: sidebar-nav # pilih App renderer — lihat spec/frontend/05-app-kinds.md
+  menu: [] # lihat §4
+  publishes: # interface lintas-app yang ditawarkan
     - service: icd-lookup
       actions: [search, find]
-  consumes:                       # interface lintas-app yang dibutuhkan → memicu grant request
+  consumes: # interface lintas-app yang dibutuhkan → memicu grant request
     - app: bpjs-gateway
       service: claims
       actions: [submit-claim]
@@ -156,12 +163,14 @@ Default private. Akses lintas-app hanya lewat publish → request → **grant
 disetujui Data Owner**, tercatat, revocable, metered
 ([`04-control-plane.md`](04-control-plane.md) §5 Contracts).
 
-`app_renderer` memilih Renderer tier `app` yang dipasang App ini
+`app_renderer` memilih archetype chrome App ini
 ([`../frontend/01-visual-hierarchy.md`](../frontend/01-visual-hierarchy.md),
 [`../frontend/05-app-kinds.md`](../frontend/05-app-kinds.md)) — nilainya
-nama Renderer terdaftar (`sidebar-nav`, `topnav`, `landing-page`, dst),
+nama Renderer terdaftar (`sidebar-nav`, `topnav`, `no-nav`, dst),
 bukan enum tertutup di level kontrak App (Renderer baru bisa didaftarkan
-kapan saja tanpa mengubah skema App).
+kapan saja tanpa mengubah skema App). Auth dipisah di `access`
+(`private`/`public`); `stack_family` memilih shell implementasi;
+`persist_backend` memilih backend persist entity.
 
 **Theme adalah app-specific (normatif).** Theme di-resolve di **level App**
 lewat field `theme_ref` di `App.spec` — bukan per workspace. Alasannya:
@@ -215,6 +224,7 @@ kurasi UI yang benar-benar berbeda, barulah App terpisah dipertimbangkan —
 sebagai keputusan kurasi, bukan keharusan teknis.
 
 ## 4. Menu
+
 **Menu milik App, independen dari Module** — bukan keputusan estetika,
 konsekuensi langsung dari fakta bahwa View/Action yang di-expose bisa
 berbeda per App-mount (App publik cuma expose `wizard`+`cek-status`, App
@@ -249,6 +259,7 @@ type MenuItem struct {
 
 Nesting dibatasi **3 level**; tiap node wajib salah satu dari tiga bentuk
 (divalidasi saat load, bukan diam-diam dipaksa jadi bentuk lain):
+
 1. **Adopt node** (`type: module`, level 1 saja) — wajib `module`; menyisipkan
    seluruh menu suggestion Module itu di posisi ini.
 2. **Group node** (punya `children`, level 1/2) — wajib `label` +
@@ -268,6 +279,7 @@ ada `kind: Menu` standalone — sudah dilebur seluruhnya ke `App.spec.menu`
 (otoritatif) dan `Module.spec.menu` (saran default).
 
 ## 5. Qualifier Referensi Antar Module
+
 Notasi `module/resource` untuk referensi lintas module — konsisten dengan
 `sources.resource`, penamaan named script `{module}/{script-name}`
 ([`../backend/02-core-extended.md`](../backend/02-core-extended.md) §7),
@@ -277,12 +289,14 @@ module) — analog package-qualified reference di Go (`Invoice` dalam package
 sendiri vs `billing.Invoice` dari luar).
 
 ## 6. Validasi `formspec apply`
+
 - Setiap `module` yang direferensikan di manapun dalam `App.spec.menu`
   (leaf atau adopt node) wajib anggota `App.spec.modules`.
 - `root_url` wajib unik lintas seluruh App dalam satu workspace dan diawali
   `/app/`.
 
 ## 7. Akses Lintas-Module
+
 Tiga jenis interaksi, level coupling berbeda — disarankan urutan preferensi
 dari longgar ke erat: **event subscribe** (paling longgar, async, tanpa
 dependency waktu-boot — `kind: Subscription`,
@@ -291,10 +305,10 @@ service call** (A cukup tahu kontrak Action, tidak tahu skema internal B),
 **entity read langsung** (paling erat — dibatasi untuk kasus read-only
 sederhana, mis. cek data referensi). Framework tidak melarang entity read
 lintas-module, tapi konvensi mengarahkan ke pola lebih longgar untuk apa pun
-yang menyangkut *behavior*, bukan sekadar baca.
+yang menyangkut _behavior_, bukan sekadar baca.
 
 **Kalau kedua Module beda `spec.datastore` (§2), preferensi di atas jadi
-keharusan (normatif):** *entity read langsung* dan *action/service call*
+keharusan (normatif):** _entity read langsung_ dan _action/service call_
 lewat `ctx.db` sama-sama **tidak tersedia** lintas-Datastore — satu-satunya
 jalur yang tersisa adalah **event subscribe**
 ([`../backend/01-core-basic.md`](../backend/01-core-basic.md) §3,
@@ -313,7 +327,7 @@ menginstal module dari dua vendor marketplace berbeda, keduanya perlu saling
 baca data) butuh **consent eksplisit dari Workspace Owner** — bukan dari
 Module Owner asal data, konsisten dengan prinsip data adalah milik workspace
 (lihat [`04-control-plane.md`](04-control-plane.md) §5 soal model contract/
-consent). Module Owner cuma menyediakan *permukaan publik* (subset Entity/
+consent). Module Owner cuma menyediakan _permukaan publik_ (subset Entity/
 Action yang sengaja di-expose untuk dikonsumsi Module lain); keputusan
 "boleh dikonsumsi atau tidak" tetap di tangan Workspace Owner.
 
@@ -327,7 +341,7 @@ bukan tambah primitive).
 tooling.** Selama masih dalam satu workspace, module boleh saling mengakses
 sesuai deklarasi `depends_on` + permission. Kejujuran deklarasi ditegakkan
 statis oleh **`formspec check`** ([`../../cli-tools/02-formspec-cli.md`](../../cli-tools/02-formspec-cli.md)),
-yang wajib melaporkan minimal: (a) seluruh *unresolved varname* di script,
+yang wajib melaporkan minimal: (a) seluruh _unresolved varname_ di script,
 (b) akses lintas-module yang **belum di-approve** (dipakai di kode tapi tak
 dideklarasikan/di-consent), dan (c) deklarasi lintas-module yang **tidak
 terpakai** (declared tapi tak pernah diakses — kandidat dicabut).
@@ -357,18 +371,18 @@ referensi "apa yang selalu tersedia" bagi developer yang perlu merujuk resource
 ini (mis. mengueri audit log, mengecek role assignment) tanpa harus memiliki
 Module sendiri yang mendeklarasikannya.
 
-| Resource | Isi | Kaitan |
-|---|---|---|
-| `workspace` | Identitas dan metadata tenant — unit multi-tenancy tunggal FormSpec | §1 Model Kepemilikan |
-| `user` | Akun manusia di level workspace — satu akun per manusia | §8 Identitas User & Membership |
-| `app-membership` | Record membership per-App (populasi user + atribut mis. kode cabang, ter-scope per App) | §8 Identitas User & Membership |
-| `role` | Definisi role — dimiliki Module, otomatis ter-scope per-App saat Module di-mount | §8 |
-| `role-assignment` | Penetapan role ke user dalam konteks App tertentu | §8 |
-| `api-key` | Kredensial akses non-interaktif (service/integrasi) | [`04-control-plane.md`](04-control-plane.md) §5 |
-| `session` | Sesi login aktif user | §3 (auth per-App) |
-| `job` | Pelacakan async job — mengikat kontrak wire async action ([`../backend/02-core-extended.md`](../backend/02-core-extended.md)) | — |
-| `audit-log` | Jejak audit bisnis append-only, immutable | [`../backend/02-core-extended.md`](../backend/02-core-extended.md) §11 Business Audit Trail |
-| `setting` | Namespace global-settings `settings.*` (workspace/App Config) | [`../backend/01-core-basic.md`](../backend/01-core-basic.md) §10 Config & Global Settings |
+| Resource          | Isi                                                                                                                           | Kaitan                                                                                      |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `workspace`       | Identitas dan metadata tenant — unit multi-tenancy tunggal FormSpec                                                           | §1 Model Kepemilikan                                                                        |
+| `user`            | Akun manusia di level workspace — satu akun per manusia                                                                       | §8 Identitas User & Membership                                                              |
+| `app-membership`  | Record membership per-App (populasi user + atribut mis. kode cabang, ter-scope per App)                                       | §8 Identitas User & Membership                                                              |
+| `role`            | Definisi role — dimiliki Module, otomatis ter-scope per-App saat Module di-mount                                              | §8                                                                                          |
+| `role-assignment` | Penetapan role ke user dalam konteks App tertentu                                                                             | §8                                                                                          |
+| `api-key`         | Kredensial akses non-interaktif (service/integrasi)                                                                           | [`04-control-plane.md`](04-control-plane.md) §5                                             |
+| `session`         | Sesi login aktif user                                                                                                         | §3 (auth per-App)                                                                           |
+| `job`             | Pelacakan async job — mengikat kontrak wire async action ([`../backend/02-core-extended.md`](../backend/02-core-extended.md)) | —                                                                                           |
+| `audit-log`       | Jejak audit bisnis append-only, immutable                                                                                     | [`../backend/02-core-extended.md`](../backend/02-core-extended.md) §11 Business Audit Trail |
+| `setting`         | Namespace global-settings `settings.*` (workspace/App Config)                                                                 | [`../backend/01-core-basic.md`](../backend/01-core-basic.md) §10 Config & Global Settings   |
 
 Selain resource di atas, `formspec.core` juga meng-expose **service endpoint
 bawaan** `health` dan `metrics` untuk observability — kosakata health

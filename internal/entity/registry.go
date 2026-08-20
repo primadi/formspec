@@ -40,6 +40,10 @@ type SpecInfo struct {
 	EntitySpec *spec.EntitySpec
 	Source     string        // file path + document index
 	TableInfo  *db.TableInfo // cached DDL result (populated after SyncSchema)
+	// Internal marks framework-owned entities (e.g. formspec.core.user) that
+	// must never be exposed via API routes or the meta bundle. They are only
+	// reachable by framework code through GetEntityStore directly.
+	Internal bool
 }
 
 // EntityInfo is a lightweight summary of a registered entity.
@@ -64,6 +68,23 @@ func NewRegistry(database db.DB, driver db.DriverType, specBasePath string) *Reg
 		stores:       make(map[string]*db.EntityStore),
 		permRegistry: permission.NewRegistry(),
 	}
+}
+
+// AddManifestRoot appends an additional manifest root (e.g. external/) to the
+// loader. Roots are walked after the base spec path; later roots win on
+// duplicate entity keys (user override wins). Call before LoadEntities.
+func (r *Registry) AddManifestRoot(path string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.loader.AddRoot(path)
+}
+
+// HasEntity reports whether an entity is registered for module/name.
+func (r *Registry) HasEntity(module, name string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	_, ok := r.specs[entityKey(module, name)]
+	return ok
 }
 
 // entityKey returns the registry key for a module/entity pair.
@@ -183,6 +204,18 @@ func (r *Registry) registerStandardPermissions(module, entityName string, entity
 		{"cancel", module + "." + plural + ".cancel"},
 		{"amend", module + "." + plural + ".amend"},
 	}
+	if entitySpec.SoftDeactivate != nil && entitySpec.SoftDeactivate.Enabled {
+		standardActions = append(standardActions,
+			struct {
+				name       string
+				permission string
+			}{"deactivate", module + "." + plural + ".deactivate"},
+			struct {
+				name       string
+				permission string
+			}{"reactivate", module + "." + plural + ".reactivate"},
+		)
+	}
 	for _, sa := range standardActions {
 		if fullDisabled[sa.name] {
 			continue
@@ -254,6 +287,38 @@ func (r *Registry) RegisterArtifactManifest(raw manifest.RawManifest, entitySpec
 		r.permRegistry.SetModuleDescription(module, raw.Metadata.Description)
 	}
 
+	return nil
+}
+
+// RegisterCoreEntity registers a framework-owned entity (e.g. formspec.core.user)
+// programmatically. Core entities are marked Internal — they never get API
+// routes or meta-bundle exposure, and are only reachable via GetEntityStore.
+//
+// Unlike RegisterArtifactManifest, this does not register permissions (core
+// entities are not user-facing) and does not require an Expose config.
+func (r *Registry) RegisterCoreEntity(module, name, description string, entitySpec *spec.EntitySpec) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	key := entityKey(module, name)
+	if _, exists := r.specs[key]; exists {
+		return fmt.Errorf("core entity %q already registered", key)
+	}
+
+	if err := spec.ValidateEntitySpec(entitySpec); err != nil {
+		return fmt.Errorf("core entity %s/%s: validate: %w", module, name, err)
+	}
+
+	r.specs[key] = &SpecInfo{
+		Metadata: spec.Metadata{
+			Name:        name,
+			Module:      module,
+			Description: description,
+		},
+		EntitySpec: entitySpec,
+		Source:     "builtin:" + key,
+		Internal:   true,
+	}
 	return nil
 }
 
@@ -344,6 +409,41 @@ func (r *Registry) GetEntityStore(module, name string) (*db.EntityStore, error) 
 		}
 		return ti.TableName, nil
 	})
+
+	// Wire the cross-category resolver (4.4.2) — returns the target entity's
+	// persist.category so relation resolution can block cross-category JOINs.
+	newStore.SetTargetCategoryResolver(func(targetModule, targetEntityName string) string {
+		targetKey := entityKey(targetModule, targetEntityName)
+		r.mu.RLock()
+		targetInfo, ok := r.specs[targetKey]
+		r.mu.RUnlock()
+		if !ok || targetInfo.EntitySpec == nil || targetInfo.EntitySpec.Persist == nil {
+			return ""
+		}
+		return targetInfo.EntitySpec.Persist.Category
+	})
+
+	// Wire extension columns (4.3.1/4.3.2): scan all registered entities for
+	// ExtendStorage targeting this entity, and register their namespaced
+	// ext_{namespace} columns so the store merges them into reads and splits
+	// them out on writes.
+	extensions := map[string]string{}
+	r.mu.RLock()
+	for _, si := range r.specs {
+		if si.EntitySpec == nil || si.EntitySpec.ExtendStorage == nil {
+			continue
+		}
+		if si.EntitySpec.ExtendStorage.Target == key {
+			ns := si.EntitySpec.ExtendStorage.Namespace
+			if ns != "" {
+				extensions[ns] = "ext_" + ns
+			}
+		}
+	}
+	r.mu.RUnlock()
+	if len(extensions) > 0 {
+		newStore.SetExtensions(extensions)
+	}
 
 	// Wire the referencing-entity resolver for referential integrity
 	// enforcement on delete/cancel. Scans all registered entity specs for
@@ -472,6 +572,11 @@ func (r *Registry) ListEntities() []EntityInfo {
 
 	result := make([]EntityInfo, 0, len(r.specs))
 	for _, info := range r.specs {
+		// Skip framework-owned internal entities (formspec.core.*) — they
+		// must never surface in routes or the meta bundle.
+		if info.Internal {
+			continue
+		}
 		char := string(info.EntitySpec.Characteristic)
 
 		tableName := ""

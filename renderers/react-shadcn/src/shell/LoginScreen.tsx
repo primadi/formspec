@@ -4,7 +4,6 @@
 // In dev mode, the boot sequence auto-creates a synthetic identity.
 
 import { useState, type FormEvent } from "react"
-import { useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
@@ -13,7 +12,6 @@ interface LoginScreenProps {
 }
 
 export function LoginScreen({ onLogin }: LoginScreenProps) {
-  const navigate = useNavigate()
   const [workspace, setWorkspace] = useState("")
   const [token, setToken] = useState("")
   const [loading, setLoading] = useState(false)
@@ -28,8 +26,9 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
     setLoading(true)
     setError(null)
     try {
+      // Navigation after login is the parent's responsibility (LoginPage
+      // handles the `returnTo` redirect) — this screen only authenticates.
       await onLogin(workspace.trim(), token.trim())
-      navigate(`/${workspace}/_admin`)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed")
     } finally {
@@ -82,9 +81,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
             />
           </div>
 
-          {error && (
-            <p className="text-sm text-destructive">{error}</p>
-          )}
+          {error && <p className="text-sm text-destructive">{error}</p>}
 
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? "Signing in..." : "Sign In"}

@@ -557,6 +557,7 @@ func (f *HandlerFactory) HandleCreate(module, entity string) http.HandlerFunc {
 			Data:          execParams.Resource,
 			Permissions:   permissionsFromContext(ctx),
 			PendingEvents: pendingEvents,
+			RequestID:     requestIDFromContext(ctx),
 		})
 		if err != nil {
 			// Record the failed attempt so a retry with the same key is
@@ -723,6 +724,7 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 			Data:          execParams.Resource,
 			Permissions:   permissionsFromContext(ctx),
 			PendingEvents: pendingEvents,
+			RequestID:     requestIDFromContext(ctx),
 		})
 		if err != nil {
 			writeStoreError(w, err)
@@ -1037,6 +1039,90 @@ func (f *HandlerFactory) HandleAmend(module, entity string) http.HandlerFunc {
 
 		writeJSON(w, http.StatusCreated, SingleResponse{
 			Data: newRec,
+			Meta: MetaSingle{RequestID: requestIDFromContext(ctx), Timestamp: time.Now().UTC().Format(time.RFC3339)},
+		})
+	}
+}
+
+// HandleDeactivate returns a POST /{id}/deactivate handler that sets
+// is_active=false (soft-deactivation pattern, 1.4.10 / 4.10.2).
+func (f *HandlerFactory) HandleDeactivate(module, entity string) http.HandlerFunc {
+	return f.handleSetActive(module, entity, "deactivate", false)
+}
+
+// HandleReactivate returns a POST /{id}/reactivate handler that sets
+// is_active=true (soft-deactivation pattern).
+func (f *HandlerFactory) HandleReactivate(module, entity string) http.HandlerFunc {
+	return f.handleSetActive(module, entity, "reactivate", true)
+}
+
+// handleSetActive is the shared implementation for deactivate/reactivate.
+func (f *HandlerFactory) handleSetActive(module, entity, actionName string, active bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		store, err := f.registry.GetEntityStore(module, entity)
+		if err != nil {
+			writeError(w, http.StatusNotFound, "NOT_FOUND", "entity not found: "+err.Error())
+			return
+		}
+
+		workspaceID := workspaceFromContext(ctx)
+		userID := userFromContext(ctx)
+		id := r.PathValue("id")
+
+		rec, err := store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: id})
+		if err != nil {
+			writeError(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+			return
+		}
+
+		var entitySpec *spec.EntitySpec
+		if f.specLookup != nil {
+			entitySpec, _ = f.specLookup(module, entity)
+		}
+		actionSpec := resolveAction(entitySpec, actionName)
+		var hooks []spec.HookDecl
+		if entitySpec != nil {
+			hooks = entitySpec.Hooks
+		}
+
+		execParams := &action.ExecuteParams{
+			Module: module, Entity: entity, ActionName: actionName,
+			ResourceID: id, Resource: rec.Data,
+			WorkspaceID: workspaceID, UserID: userID,
+		}
+		if err := action.RunBeforePhase(ctx, f.dispatcher, hooks, actionSpec, actionName, execParams); err != nil {
+			writeError(w, http.StatusUnprocessableEntity, "HOOK_ABORTED", err.Error())
+			return
+		}
+
+		if active {
+			err = store.Reactivate(ctx, workspaceID, id, userID)
+		} else {
+			err = store.Deactivate(ctx, workspaceID, id, userID)
+		}
+		if err != nil {
+			writeStoreError(w, err)
+			return
+		}
+
+		rec, err = store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: id})
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "updated but fetch failed: "+err.Error())
+			return
+		}
+
+		if rec != nil {
+			action.RunAfterPhase(ctx, f.dispatcher, hooks, actionSpec, actionName, action.ExecuteParams{
+				Module: module, Entity: entity, ActionName: actionName, ResourceID: id,
+				Resource: rec.Data, WorkspaceID: workspaceID, UserID: userID,
+			})
+		}
+
+		action.NotifyMutation(f.deliveryDeps, workspaceID, module+"/"+entity, "updated")
+
+		writeJSON(w, http.StatusOK, SingleResponse{
+			Data: rec,
 			Meta: MetaSingle{RequestID: requestIDFromContext(ctx), Timestamp: time.Now().UTC().Format(time.RFC3339)},
 		})
 	}

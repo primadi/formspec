@@ -1,0 +1,39 @@
+apiVersion: formspec.dev/v1
+kind: Page
+metadata:
+  name: home
+  module: catalog
+  description: "Halaman utama storefront — hero, fitur, katalog unggulan, dan pendaftaran"
+spec:
+  route: /
+  title: "Selamat Datang"
+  blocks:
+    - section:
+        type: hero
+        title: "Toko Kami"
+        subtitle: "Belanja mudah, aman, dan cepat. Temukan produk terbaik untuk kebutuhan Anda."
+        cta: { label: "Lihat Katalog", href: /listing/product-catalog }
+    - section:
+        type: feature_grid
+        title: "Kenapa Memilih Kami"
+        subtitle: "Tiga alasan pelanggan mempercayai kami."
+        items:
+          - { icon: zap, title: "Cepat", text: "Pengiriman dalam 24 jam ke seluruh kota." }
+          - { icon: shield, title: "Aman", text: "Pembayaran terenkripsi dan terlindungi." }
+          - { icon: heart, title: "Ramah", text: "Layanan pelanggan siap membantu 24/7." }
+    - section:
+        type: carousel
+        title: "Kategori Unggulan"
+        autoplay: true
+        items:
+          - { icon: sparkles, title: "Elektronik", text: "Gadget dan aksesori terbaru.", cta: { label: "Lihat", href: /listing/product-catalog } }
+          - { icon: star, title: "Fashion", text: "Gaya terbaru untuk semua usia.", cta: { label: "Lihat", href: /listing/product-catalog } }
+          - { icon: globe, title: "Rumah", text: "Perlengkapan rumah tangga berkualitas.", cta: { label: "Lihat", href: /listing/product-catalog } }
+    - form:
+        ref: register
+        mode: create
+    - section:
+        type: cta
+        title: "Siap Bergabung?"
+        subtitle: "Daftar sekarang untuk mendapatkan penawaran terbaik."
+        cta: { label: "Daftar", href: / }

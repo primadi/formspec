@@ -1,0 +1,20 @@
+apiVersion: formspec.dev/v1
+kind: App
+metadata:
+  name: storefront
+  description: "Toko online publik — halaman depan, katalog produk, dan pendaftaran pelanggan"
+  labels:
+    domain: commerce
+spec:
+  version: 1.0.0
+  vendor: formspec
+  root_url: /
+  app_renderer: no-nav
+  access: public
+  stack_family: react-shadcn
+  persist_backend: jsonb-persist
+  modules:
+    - catalog
+  menu:
+    - { label: "Beranda", route: / }
+    - { label: "Katalog", route: /listing/product-catalog }

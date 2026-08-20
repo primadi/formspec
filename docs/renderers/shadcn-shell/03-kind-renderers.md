@@ -14,12 +14,31 @@ hardcoded di `shell/router.tsx`.
 
 ## 2. Tier App
 
-`sidebar-nav` (satu-satunya App renderer yang diimplementasikan hari ini):
-sidebar statis di desktop, overlay slide-in dengan backdrop di mobile
-(`useMediaQuery("(max-width: 767px)")`, tertutup otomatis saat route
-berganti) — fitur ini **sudah lengkap**. `topnav`/`landing-page`
+Ketiga archetype App renderer diimplementasikan di shell ini
 ([`../../spec/frontend/05-app-kinds.md`](../../spec/frontend/05-app-kinds.md)
-§3–§4) belum punya renderer terpisah di kode.
+§1). Pemilihan shell per surface dilakukan di `src/App.tsx` dari
+`bundle.app.app_renderer` lewat registry `APP_SHELLS`
+(`sidebar-nav` → `AppShell`, `topnav` → `TopNavShell`, `no-nav` →
+`NoNavShell`). Auth (`access`) adalah sumbu terpisah — boot anonim saat
+`access: public`, boot session saat `private`.
+
+`sidebar-nav` (default): sidebar statis di desktop, overlay slide-in dengan
+backdrop di mobile (`useMediaQuery("(max-width: 767px)")`, tertutup otomatis
+saat route berganti) — **lengkap**.
+
+`topnav`: chrome penuh dengan navigasi atas — brand + nav horizontal
+(item level-1; group → dropdown) + breadcrumb + theme switcher + avatar,
+tanpa sidebar kiri. Mobile → hamburger membuka drawer berisi tree yang sama.
+Menu di-resolve lewat hook bersama `useResolvedMenu` (sama dengan Sidebar).
+Contoh: `examples/arisan/` (`app_renderer: topnav`). **Lengkap.**
+
+`no-nav`: chrome minimal tanpa nav standar — brand bar + nav opsional +
+footer + `Outlet`, tanpa sidebar/breadcrumb. Dipakai untuk App `access:
+public` (marketing/landing) maupun `private` (kiosk/full-screen). Blok
+`section:` pada `kind: Page` dirender oleh
+`src/components/sections/SectionBlocks.tsx` (hero, feature_grid, card,
+carousel, cta). Contoh: `examples/storefront/` (`no-nav` + `public`).
+**Lengkap.**
 
 ## 3. Tier Page
 

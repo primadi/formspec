@@ -29,7 +29,7 @@ Context for AI coding agents working on the FormSpec CLI (`cmd/formspec/`).
 | `apply`                                                                                                                 | Partial ✅        |
 | `dev`                                                                                                                   | Partial ✅        |
 | `generate --lang typescript`                                                                                            | Implemented ✅    |
-| `validate`, `check`, `new`, `diff`, `get`, `describe`, `delete`, `migrate`, `repl`, `seed`, `backup`, `restore`, `logs` | Stub ⏳           |
+| `validate`, `check`, `new`, `diff`, `get`, `describe`, `delete`, `migrate`, `repl`, `seed`, `backup`, `restore`, `logs` | Implemented ✅    |
 | `schema` (fetch/update/list/clear)                                                                                      | Implemented ✅    |
 | `promote`, `archive`, `saga`, `module`, `sign`, `script`, `freeze`, `rollback`, `lock`, `workspace`                     | Stub, deferred ⏸️ |
 

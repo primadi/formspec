@@ -23,6 +23,12 @@ func SetAuthValidator(v auth.TokenValidator) {
 	authValidator = v
 }
 
+// GetAuthValidator returns the current global token validator (may be nil).
+// Used by tests to restore the previous validator after overriding it.
+func GetAuthValidator() auth.TokenValidator {
+	return authValidator
+}
+
 // WorkspaceMiddleware extracts the workspace slug from the URL, resolves it,
 // and injects the workspace ID into the request context.
 //
@@ -128,6 +134,17 @@ func AuthMiddleware(next http.Handler) http.Handler {
 //   - If the identity lacks the permission, returns 403 Forbidden.
 //   - Otherwise, passes through to the next handler.
 //
+// RequirePermission returns middleware that enforces a specific permission.
+//
+// Rules:
+//   - If required is empty or "public", everyone is allowed (including anonymous).
+//   - If the identity is nil (no auth), returns 401 Unauthorized.
+//   - If the identity lacks the permission, returns 403 Forbidden — EXCEPT on
+//     the UI surface (/_ui/) for entity list/view access, which returns 404
+//     NOT_FOUND per spec (frontend/04-spec-resolution-api.md §4): a caller
+//     without list/view on an entity must not learn the entity exists.
+//   - Otherwise, passes through to the next handler.
+//
 // Usage in chi router:
 //
 //	r.With(RequirePermission("billing.invoices.list")).Get("/...", handler)
@@ -148,6 +165,12 @@ func RequirePermission(required string) func(http.Handler) http.Handler {
 			}
 
 			if !identity.HasPermission(required) {
+				// UI surface + entity list/view → 404 (don't leak existence).
+				if isUISurface(r.URL.Path) && isEntityVisibilityPerm(required) {
+					writeError(w, http.StatusNotFound, "NOT_FOUND",
+						"resource not found")
+					return
+				}
 				writeError(w, http.StatusForbidden, "FORBIDDEN",
 					"missing permission: "+required)
 				return
@@ -156,6 +179,30 @@ func RequirePermission(required string) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// isUISurface reports whether the request path targets the UI surface
+// (/{ws}/_ui/...), as opposed to the external API (/{ws}/api/v1/...).
+func isUISurface(path string) bool {
+	// Path is like "/{ws}/_ui/entity/..." — find the "_ui" segment.
+	trimmed := strings.TrimPrefix(path, "/")
+	parts := strings.SplitN(trimmed, "/", 3)
+	if len(parts) < 2 {
+		return false
+	}
+	return parts[1] == "_ui"
+}
+
+// isEntityVisibilityPerm reports whether a permission string is an entity
+// list/view permission (the ones that gate entity existence per spec §4).
+func isEntityVisibilityPerm(perm string) bool {
+	// Format: {module}.{plural}.{action} — check the last segment.
+	idx := strings.LastIndexByte(perm, '.')
+	if idx < 0 {
+		return false
+	}
+	action := perm[idx+1:]
+	return action == "list" || action == "view"
 }
 
 // RequestIDMiddleware generates a unique request ID for every request.

@@ -19,14 +19,15 @@ const (
 
 // AuditRecord represents a single audit log entry.
 type AuditRecord struct {
-	ID        string `json:"id"`
-	WorkspaceID  string `json:"tenant_id"`
-	Entity    string `json:"entity"`    // resource name (e.g. "billing/invoice")
-	EntityID  string `json:"entity_id"` // PK of the entity record
-	Action    string `json:"action"`    // create | update | delete | action
-	Actor     string `json:"actor"`     // user or system identifier
-	Changes   string `json:"changes"`   // JSON: {"field": {"old": ..., "new": ...}}
-	CreatedAt string `json:"created_at"`
+	ID          string `json:"id"`
+	WorkspaceID string `json:"tenant_id"`
+	Entity      string `json:"entity"`     // resource name (e.g. "billing/invoice")
+	EntityID    string `json:"entity_id"`  // PK of the entity record
+	Action      string `json:"action"`     // create | update | delete | action
+	Actor       string `json:"actor"`      // user or system identifier
+	Changes     string `json:"changes"`    // JSON: {"field": {"old": ..., "new": ...}}
+	RequestID   string `json:"request_id"` // originating request id (4.7.2)
+	CreatedAt   string `json:"created_at"`
 }
 
 // AuditStore provides read access to the audit log.
@@ -48,7 +49,7 @@ func (s *AuditStore) ListByEntity(ctx context.Context, workspaceID, entity, enti
 	}
 
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, tenant_id, entity, entity_id, action, actor, changes, created_at
+		SELECT id, tenant_id, entity, entity_id, action, actor, changes, request_id, created_at
 		FROM formspec_audit_log
 		WHERE tenant_id = ? AND entity = ? AND entity_id = ?
 		ORDER BY created_at DESC
@@ -63,7 +64,7 @@ func (s *AuditStore) ListByEntity(ctx context.Context, workspaceID, entity, enti
 	for rows.Next() {
 		var rec AuditRecord
 		if err := rows.Scan(&rec.ID, &rec.WorkspaceID, &rec.Entity, &rec.EntityID,
-			&rec.Action, &rec.Actor, &rec.Changes, &rec.CreatedAt); err != nil {
+			&rec.Action, &rec.Actor, &rec.Changes, &rec.RequestID, &rec.CreatedAt); err != nil {
 			return nil, fmt.Errorf("audit scan: %w", err)
 		}
 		records = append(records, rec)
@@ -85,7 +86,7 @@ func (s *AuditStore) ListByWorkspace(ctx context.Context, workspaceID, entity st
 
 	if entity != "" {
 		rows, err = s.db.QueryContext(ctx, `
-			SELECT id, tenant_id, entity, entity_id, action, actor, changes, created_at
+			SELECT id, tenant_id, entity, entity_id, action, actor, changes, request_id, created_at
 			FROM formspec_audit_log
 			WHERE tenant_id = ? AND entity = ?
 			ORDER BY created_at DESC
@@ -93,7 +94,7 @@ func (s *AuditStore) ListByWorkspace(ctx context.Context, workspaceID, entity st
 		`, workspaceID, entity, limit, offset)
 	} else {
 		rows, err = s.db.QueryContext(ctx, `
-			SELECT id, tenant_id, entity, entity_id, action, actor, changes, created_at
+			SELECT id, tenant_id, entity, entity_id, action, actor, changes, request_id, created_at
 			FROM formspec_audit_log
 			WHERE tenant_id = ?
 			ORDER BY created_at DESC
@@ -109,7 +110,7 @@ func (s *AuditStore) ListByWorkspace(ctx context.Context, workspaceID, entity st
 	for rows.Next() {
 		var rec AuditRecord
 		if err := rows.Scan(&rec.ID, &rec.WorkspaceID, &rec.Entity, &rec.EntityID,
-			&rec.Action, &rec.Actor, &rec.Changes, &rec.CreatedAt); err != nil {
+			&rec.Action, &rec.Actor, &rec.Changes, &rec.RequestID, &rec.CreatedAt); err != nil {
 			return nil, fmt.Errorf("audit scan: %w", err)
 		}
 		records = append(records, rec)
@@ -121,20 +122,20 @@ func (s *AuditStore) ListByWorkspace(ctx context.Context, workspaceID, entity st
 }
 
 // writeAuditLog inserts an audit record. This is called internally by the CRUD layer.
-func writeAuditLog(ctx context.Context, db DB, driver DriverType, workspaceID, entity, entityID, action, actor, changes string) error {
+func writeAuditLog(ctx context.Context, db DB, driver DriverType, workspaceID, entity, entityID, action, actor, changes, requestID string) error {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
 	var err error
 	if driver == DriverPostgres {
 		_, err = db.ExecContext(ctx, `
-			INSERT INTO formspec_audit_log (tenant_id, entity, entity_id, action, actor, changes, created_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
-		`, workspaceID, entity, entityID, action, actor, changes, now)
+			INSERT INTO formspec_audit_log (tenant_id, entity, entity_id, action, actor, changes, request_id, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		`, workspaceID, entity, entityID, action, actor, changes, requestID, now)
 	} else {
 		_, err = db.ExecContext(ctx, `
-			INSERT INTO formspec_audit_log (tenant_id, entity, entity_id, action, actor, changes, created_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?)
-		`, workspaceID, entity, entityID, action, actor, changes, now)
+			INSERT INTO formspec_audit_log (tenant_id, entity, entity_id, action, actor, changes, request_id, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		`, workspaceID, entity, entityID, action, actor, changes, requestID, now)
 	}
 
 	if err != nil {

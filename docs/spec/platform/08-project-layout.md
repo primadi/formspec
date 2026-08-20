@@ -468,6 +468,18 @@ kerja untuk detail):
 - Bagaimana `formspec module install` menangani bundle (satu source, banyak
   module) secara teknis — manifest bundle terpisah, atau `ModulePublish`
   boleh mendeklarasikan banyak module sekaligus?
+
+**Catatan 2026-08-19 — `external/` (module user-kustom):** Sebagai langkah
+pertama menuju §6, konsep **`external/`** diperkenalkan dan diimplementasikan
+untuk auth (todo 6.1, `docs/plan/auth-login-token.md`): folder module
+external yang **dikustomisasi user dan wajib di-commit ke git** — berbeda
+dari `vendors/` (readonly, tidak di-commit). Loader men-scan `external/`
+sebagai root tambahan; entity di sana **menang** atas default bawaan
+`formspec.core` (user override menang). Alur DX: `formspec generate auth`
+meng-scaffold auth module ke `external/auth` untuk dikustomisasi. Konsep
+`external/` ini diharapkan menjadi fondasi `overrides/` §6.4 yang lebih
+luas (shadow copy per-kind) di fase berikutnya.
+
 - Apakah shadow-copy (§6.4) perlu dilacak versinya sendiri secara
   eksplisit di `formspec.lock` (bukan cuma checksum "asal fork"), supaya
   `formspec override diff` bisa tunjukkan riwayat?

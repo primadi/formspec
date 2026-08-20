@@ -18,14 +18,16 @@ const TableRenderer = lazy(() => import("@/kinds/table/TableRenderer"))
 const FormRenderer = lazy(() => import("@/kinds/form/FormRenderer"))
 const DetailPage = lazy(() => import("@/kinds/page/DetailPage"))
 const PageRenderer = lazy(() => import("@/kinds/page/PageRenderer"))
-const DashboardRenderer = lazy(() => import("@/kinds/dashboard/DashboardRenderer"))
+const DashboardRenderer = lazy(
+  () => import("@/kinds/dashboard/DashboardRenderer"),
+)
 const WidgetRenderer = lazy(() => import("@/kinds/widget/WidgetRenderer"))
 const WizardRenderer = lazy(() => import("@/kinds/wizard/WizardRenderer"))
 const KanbanRenderer = lazy(() => import("@/kinds/kanban/KanbanRenderer"))
 const TimelineRenderer = lazy(() => import("@/kinds/timeline/TimelineRenderer"))
 const ReportRenderer = lazy(() => import("@/kinds/report/ReportRenderer"))
 const PrintRenderer = lazy(() => import("@/kinds/print/PrintRenderer"))
-
+const ListingRenderer = lazy(() => import("@/kinds/listing/ListingRenderer"))
 
 function Loading() {
   return (
@@ -202,6 +204,20 @@ export function buildRoutes(options: RouteBuilderOptions): RouteObject[] {
     routes.push({
       path: `${basePath}/print/${print.name}/:id`,
       Component: () => printElement,
+    })
+  }
+
+  // 10. Listing routes — public catalog (06-page-kinds.md §10). A listing is
+  // a read-only list (no row/bulk actions, no create). Clicking a row
+  // navigates to the entity's public detail route.
+  for (const listing of bundle.listings ?? []) {
+    routes.push({
+      path: `${basePath}/listing/${listing.name}`,
+      Component: () => (
+        <Suspense fallback={<Loading />}>
+          <ListingRenderer entry={listing} />
+        </Suspense>
+      ),
     })
   }
 

@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/primadi/formspec/internal/ui"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 // ─── Meta API (Frontend Spec §1.1, design doc §4.2) ───
@@ -43,6 +44,14 @@ func callerChecker(r *http.Request) ui.PermissionChecker {
 type appMetaSummary struct {
 	Name    string `json:"name"`
 	RootURL string `json:"root_url"`
+	// AppRenderer is the resolved App renderer archetype (frontend/05-app-kinds.md).
+	AppRenderer string `json:"app_renderer,omitempty"`
+	// Access is the resolved auth axis: private | public.
+	Access string `json:"access,omitempty"`
+	// StackFamily is the shell implementation (e.g. react-shadcn).
+	StackFamily string `json:"stack_family,omitempty"`
+	// PersistBackend is the entity persist backend (e.g. jsonb-persist).
+	PersistBackend string `json:"persist_backend,omitempty"`
 }
 
 // HandleMetaApps lists every resolved App in this workspace (name + root_url)
@@ -60,7 +69,14 @@ func (b *RouterBuilder) HandleMetaApps() http.HandlerFunc {
 		out := make([]appMetaSummary, 0, len(names))
 		for _, name := range names {
 			a := b.apps[name]
-			out = append(out, appMetaSummary{Name: a.Name, RootURL: a.Spec.RootURL})
+			out = append(out, appMetaSummary{
+				Name:           a.Name,
+				RootURL:        a.Spec.RootURL,
+				AppRenderer:    a.Spec.AppRenderer,
+				Access:         string(a.Spec.Access),
+				StackFamily:    a.Spec.StackFamily,
+				PersistBackend: a.Spec.PersistBackend,
+			})
 		}
 
 		writeJSON(w, http.StatusOK, SingleResponse{
@@ -92,10 +108,14 @@ func (b *RouterBuilder) resolveAppContext(r *http.Request) (ui.AppContext, strin
 		return ui.AppContext{}, "unknown app " + name
 	}
 	return ui.AppContext{
-		Name:    resolved.Name,
-		RootURL: resolved.Spec.RootURL,
-		Modules: resolved.Modules,
-		Menu:    resolved.Menu,
+		Name:           resolved.Name,
+		RootURL:        resolved.Spec.RootURL,
+		AppRenderer:    resolved.Spec.AppRenderer,
+		Access:         string(resolved.Spec.Access),
+		StackFamily:    resolved.Spec.StackFamily,
+		PersistBackend: resolved.Spec.PersistBackend,
+		Modules:        resolved.Modules,
+		Menu:           resolved.Menu,
 	}, ""
 }
 
@@ -135,7 +155,15 @@ func (b *RouterBuilder) HandleMetaUI() http.HandlerFunc {
 				writeError(w, http.StatusBadRequest, "BAD_REQUEST", errMsg)
 				return
 			}
-			bundle = b.uiRegistry.BuildBundle(b.listEntityDescriptors, callerChecker(r), appCtx)
+			// An `access: public` App is entirely public (frontend/
+			// 05-app-kinds.md §1): its bundle ships to anonymous callers with
+			// every entity in its modules visible. Private Apps keep
+			// per-entity permission filtering.
+			can := callerChecker(r)
+			if appCtx.Access == string(spec.AppAccessPublic) {
+				can = func(string) bool { return true }
+			}
+			bundle = b.uiRegistry.BuildBundle(b.listEntityDescriptors, can, appCtx)
 		}
 
 		payload, err := json.Marshal(SingleResponse{

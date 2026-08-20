@@ -25,7 +25,8 @@ import (
 // Loader reads FormSpec manifests from a spec directory.
 type Loader struct {
 	BasePath string
-	Strict   bool // reject unknown kinds / invalid schemas
+	Roots    []string // additional manifest roots (e.g. external/, vendors/) — walked after BasePath
+	Strict   bool     // reject unknown kinds / invalid schemas
 }
 
 // NewLoader creates a manifest loader for the given base path.
@@ -33,36 +34,57 @@ func NewLoader(basePath string) *Loader {
 	return &Loader{BasePath: basePath, Strict: true}
 }
 
-// Discover walks the spec directory and returns all .yaml / .yml files.
+// AddRoot appends an additional manifest root to walk. Roots are walked after
+// BasePath; later roots win on duplicate entity keys (user override wins).
+func (l *Loader) AddRoot(path string) {
+	if path == "" {
+		return
+	}
+	l.Roots = append(l.Roots, path)
+}
+
+// Discover walks the spec directory (and any additional roots) and returns
+// all .yaml / .yml files.
 func (l *Loader) Discover() ([]string, error) {
 	var files []string
 
-	err := filepath.Walk(l.BasePath, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info.IsDir() {
-			// Skip hidden directories and non-spec directories
-			base := filepath.Base(path)
-			if strings.HasPrefix(base, ".") || base == "node_modules" {
-				return filepath.SkipDir
+	roots := make([]string, 0, 1+len(l.Roots))
+	if l.BasePath != "" {
+		roots = append(roots, l.BasePath)
+	}
+	roots = append(roots, l.Roots...)
+
+	for _, root := range roots {
+		err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
 			}
-			// Skip impl/ directory (build-time Go code, not manifests)
-			if base == "impl" {
-				return filepath.SkipDir
+			if info.IsDir() {
+				// Skip hidden directories and non-spec directories
+				base := filepath.Base(path)
+				if strings.HasPrefix(base, ".") || base == "node_modules" {
+					return filepath.SkipDir
+				}
+				// Skip impl/ directory (build-time Go code, not manifests)
+				if base == "impl" {
+					return filepath.SkipDir
+				}
+				return nil
 			}
+
+			ext := strings.ToLower(filepath.Ext(path))
+			if ext == ".yaml" || ext == ".yml" {
+				files = append(files, path)
+			}
+
 			return nil
+		})
+		if err != nil {
+			return nil, err
 		}
+	}
 
-		ext := strings.ToLower(filepath.Ext(path))
-		if ext == ".yaml" || ext == ".yml" {
-			files = append(files, path)
-		}
-
-		return nil
-	})
-
-	return files, err
+	return files, nil
 }
 
 // ParseError represents a manifest parsing error with location info.
@@ -216,7 +238,7 @@ var KnownKinds = KindSet{
 	// Frontend — no "Menu": navigation lives in App.spec.menu / Module.spec.menu.
 	"Page": true, "Form": true, "Table": true, "Dashboard": true, "Widget": true,
 	"Report": true, "Wizard": true, "Kanban": true, "Timeline": true,
-	"Print": true, "Theme": true,
+	"Print": true, "Theme": true, "Listing": true,
 	// Control Plane
 	"Environment": true, "Policy": true, "Datastore": true,
 }
@@ -271,6 +293,28 @@ func (l *Loader) Validate(raw RawManifest) error {
 			return fmt.Errorf("%s: invalid spec: %w", raw.Source, err)
 		}
 		if err := spec.ValidateEntitySpec(entitySpec); err != nil {
+			return fmt.Errorf("%s: %w", raw.Source, err)
+		}
+	}
+
+	// App: app_renderer must be a known App renderer (closed set).
+	if raw.Kind == "App" && raw.Spec != nil {
+		appSpec, err := RawSpecToAppSpec(raw.Spec.(map[string]any))
+		if err != nil {
+			return fmt.Errorf("%s: invalid spec: %w", raw.Source, err)
+		}
+		if err := spec.ValidateAppSpec(appSpec); err != nil {
+			return fmt.Errorf("%s: %w", raw.Source, err)
+		}
+	}
+
+	// Page: blocks/tabs mutual exclusion + section block closed set.
+	if raw.Kind == "Page" && raw.Spec != nil {
+		pageSpec, err := RawSpecTo[spec.PageSpec](raw.Spec.(map[string]any))
+		if err != nil {
+			return fmt.Errorf("%s: invalid spec: %w", raw.Source, err)
+		}
+		if err := spec.ValidatePageSpec(pageSpec); err != nil {
 			return fmt.Errorf("%s: %w", raw.Source, err)
 		}
 	}

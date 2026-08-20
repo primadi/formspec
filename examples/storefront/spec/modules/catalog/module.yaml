@@ -1,0 +1,8 @@
+apiVersion: formspec.dev/v1
+kind: Module
+metadata:
+  name: catalog
+  description: "Katalog produk dan pendaftaran pelanggan toko online"
+spec:
+  version: 1.0.0
+  vendor: formspec

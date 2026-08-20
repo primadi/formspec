@@ -173,6 +173,11 @@ type Field struct {
 	// 1.4.11 StorageSpec — file field configuration (05-field-types.md §1.3).
 	// Only valid when Type == FieldFile.
 	Storage *StorageSpec `yaml:"storage,omitempty" json:"storage,omitempty"`
+
+	// 4.2.2 RenamedFrom — declares that this field was renamed from the given
+	// old field name, so the migration engine treats it as a rename (two-phase
+	// removal) instead of drop+add (01-core-basic.md §4).
+	RenamedFrom string `yaml:"renamed_from,omitempty" json:"renamed_from,omitempty"`
 }
 
 // FieldType is the data type of a field (Core §10.1, 05-field-types.md §1.1).
@@ -312,6 +317,24 @@ func ValidateEntitySpec(d *EntitySpec) error {
 		}
 	}
 
+	// renamed_from (4.2.2): the old name must not collide with another field
+	// in the same entity, and must not be a reserved name.
+	seen := make(map[string]bool, len(d.Fields))
+	for _, f := range d.Fields {
+		seen[f.Name] = true
+	}
+	for _, f := range d.Fields {
+		if f.RenamedFrom == "" {
+			continue
+		}
+		if IsReservedField(f.RenamedFrom) {
+			return fmt.Errorf("field %q: renamed_from %q is a reserved field name", f.Name, f.RenamedFrom)
+		}
+		if seen[f.RenamedFrom] {
+			return fmt.Errorf("field %q: renamed_from %q collides with an existing field", f.Name, f.RenamedFrom)
+		}
+	}
+
 	// natural_key_rule: strategy/reset enums (01-core-basic.md §2)
 	for _, f := range d.Fields {
 		if f.NaturalKeyRule == nil {
@@ -375,6 +398,29 @@ func ValidateEntitySpec(d *EntitySpec) error {
 			}
 		}
 		d.NaturalKeyField = nkField
+	}
+
+	// Soft-deactivation pattern (1.4.10 / 4.10.2, 02-core-extended.md §19):
+	// soft_deactivate: {enabled: true} adds an `is_active` boolean field
+	// (default true) plus deactivate/reactivate actions. Inject the field if
+	// the author did not declare it, so DDL generation, field validation, and
+	// the store all see it uniformly.
+	if d.SoftDeactivate != nil && d.SoftDeactivate.Enabled {
+		hasIsActive := false
+		for _, f := range d.Fields {
+			if f.Name == "is_active" {
+				hasIsActive = true
+				break
+			}
+		}
+		if !hasIsActive {
+			d.Fields = append(d.Fields, Field{
+				Name:    "is_active",
+				Type:    FieldBoolean,
+				Title:   "Active",
+				Default: true,
+			})
+		}
 	}
 
 	// transaction_date required for characteristic: transaction
@@ -910,6 +956,11 @@ type NaturalKeyPrefix struct {
 type ExtendStorage struct {
 	Target    string `yaml:"target" json:"target"`
 	Namespace string `yaml:"namespace" json:"namespace"`
+	// Validate is an additive business rule (4.3.5): a Starlark script ref
+	// that runs after the base entity's L1–L6 validation. It never overrides
+	// base validation, has read-only access to base fields, and may only
+	// require its own namespaced fields.
+	Validate string `yaml:"validate,omitempty" json:"validate,omitempty"`
 }
 
 // BackdatePolicy controls how far back a transaction_date can be set (§14a).

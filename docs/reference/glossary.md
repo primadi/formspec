@@ -5,7 +5,7 @@
 > Definisi di sini kanonik dan mengikat pemakaian di seluruh dokumentasi.
 
 - **Workspace** — Unit kepemilikan tertinggi dalam model `Workspace → App →
-  Module → Resource`: dimiliki satu Data Owner (Workspace Owner), menampung
+Module → Resource`: dimiliki satu Data Owner (Workspace Owner), menampung
   banyak App dan Module yang berjalan atas identitas tenant yang sama. Data
   bisnis selalu menjadi milik Workspace tempat resource berjalan, bukan milik
   App/Module yang menghasilkannya.
@@ -57,11 +57,11 @@
   App/Page/Component renderer — satu App selalu memakai satu Shell. Bukan
   `VisualSpecKind` dan tidak punya nilai `tier`; dipilih lewat `stack_family`
   renderer yang dipasang.
-- **App renderer** — Tingkat kedua hirarki visual: menentukan asumsi bootstrap
-  subtree sebuah App — siapa menguasai chrome penuh (Auth-wrap, menu
-  persisten, header) versus bootstrap minimal (halaman publik). Contoh:
-  `sidebar-nav`, `topnav`, `landing-page` — dipilih lewat field `app_renderer`
-  di manifest App.
+- **App renderer** — Tingkat kedua hirarki visual: menentukan bentuk
+  chrome/navigasi subtree sebuah App — chrome penuh (menu persisten, header)
+  versus minimal (tanpa nav standar). Contoh:
+  `sidebar-nav`, `topnav`, `no-nav` — dipilih lewat field `app_renderer`
+  di manifest App. Auth adalah sumbu terpisah (`access`: `private`/`public`).
 - **Page renderer** — Tingkat ketiga hirarki visual: mengisi konten utama
   sebuah route di dalam App renderer, mis. `data-entry`, `wizard`, `kanban`,
   `table-list`, `report`, `listing`.
@@ -80,7 +80,7 @@
   yang mengonsumsi Spec Resolution API, bukan build step per kombinasi
   spec+renderer.
 - **tier** — Field wajib pada `VisualSpecKind` bernilai `app | page |
-  component`, menentukan di mana sebuah kind boleh dipakai/dikomposisi — dasar
+component`, menentukan di mana sebuah kind boleh dipakai/dikomposisi — dasar
   validasi slot compatibility (`accepts_slots` hanya sah dari tier
   `page`/`app`; `implements_slot` hanya sah dari tier `component`).
 - **slot** — Perluasan `VisualSpecKind` untuk pola Page yang menerima Component

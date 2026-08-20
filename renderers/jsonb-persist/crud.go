@@ -46,6 +46,26 @@ type EntityStore struct {
 	// CheckReferencingDocuments for referential integrity enforcement on
 	// delete/cancel. Set by the entity registry; when nil the check is skipped.
 	referencingEntityResolver ReferencingEntityResolver
+
+	// category is this entity's persist.category ("" = operational default).
+	category string
+
+	// targetCategoryResolver resolves a target (module, entity) pair to its
+	// persist.category, used to block cross-category relation resolution
+	// (4.4.2). Set by the entity registry; when nil the check is skipped.
+	targetCategoryResolver func(module, entity string) string
+
+	// extensions maps extension namespace → ext_{namespace} column name
+	// (4.3.1/4.3.2). When set, extension data is merged into reads and split
+	// out on writes.
+	extensions map[string]string
+}
+
+// SetExtensions registers extension columns (namespace → ext_{namespace}) so
+// the store merges extension data into reads and splits it out on writes
+// (4.3.1/4.3.2).
+func (s *EntityStore) SetExtensions(extensions map[string]string) {
+	s.extensions = extensions
 }
 
 // SetTargetTableResolver installs a table-name resolver for cross-module
@@ -54,6 +74,13 @@ type EntityStore struct {
 // {module}_{plural} convention is used.
 func (s *EntityStore) SetTargetTableResolver(fn func(module, entity string) (string, error)) {
 	s.targetTableResolver = fn
+}
+
+// SetTargetCategoryResolver installs a resolver that returns a target
+// entity's persist.category, used to block cross-category relation resolution
+// (4.4.2).
+func (s *EntityStore) SetTargetCategoryResolver(fn func(module, entity string) string) {
+	s.targetCategoryResolver = fn
 }
 
 // PendingEvent is a durable event to enqueue to the outbox in the same
@@ -128,6 +155,7 @@ func NewEntityStore(db DB, driver DriverType, meta spec.Metadata, entity *spec.E
 		characteristic:    entity.Characteristic,
 		backdatePolicy:    entity.BackdatePolicy,
 		forwardDatePolicy: entity.ForwardDatePolicy,
+		category:          schema,
 	}
 }
 
@@ -248,7 +276,7 @@ func (s *EntityStore) validateRequired(data map[string]any) error {
 // data-quality check.
 func (s *EntityStore) validateKnownFields(data map[string]any) error {
 	// Build a set of known field names: custom fields + child relations.
-	known := make(map[string]bool, len(s.fields)+len(s.children)+len(spec.ReservedFieldNames))
+	known := make(map[string]bool, len(s.fields)+len(s.children)+len(spec.ReservedFieldNames)+len(s.extensions))
 	for _, f := range s.fields {
 		known[f.Name] = true
 	}
@@ -257,6 +285,11 @@ func (s *EntityStore) validateKnownFields(data map[string]any) error {
 	}
 	for _, name := range spec.ReservedFieldNames {
 		known[name] = true
+	}
+	// Extension namespaces (4.3.2) are legitimate write inputs — they are
+	// split out into their ext_{namespace} columns, not stored in base data.
+	for ns := range s.extensions {
+		known[ns] = true
 	}
 
 	for key := range data {
@@ -308,6 +341,7 @@ type InsertParams struct {
 	Data          map[string]any
 	Permissions   []string       // caller's effective permissions — used for backdate/forward-date override_permission
 	PendingEvents []PendingEvent // durable events to enqueue atomically with this insert (see PendingEvent)
+	RequestID     string         // originating request id, recorded in the audit trail (4.7.2)
 }
 
 // Insert creates a new entity record and returns its ID. The natural-key
@@ -387,6 +421,10 @@ func (s *EntityStore) Insert(ctx context.Context, params InsertParams) (string, 
 			}
 		}
 
+		// Split extension data (4.3.2): namespaced keys are written to their
+		// ext_{namespace} columns, not the base data JSONB.
+		extData := s.splitExtensions(parentData)
+
 		// Set initial doc_status: draft if lifecycle active, NULL if lifecycle-free
 		initialDocStatus := "NULL"
 		if s.submitEnabled {
@@ -407,6 +445,29 @@ func (s *EntityStore) Insert(ctx context.Context, params InsertParams) (string, 
 			return fmt.Errorf("insert row: %w", err)
 		}
 
+		// Write extension data (4.3.2): each namespaced payload goes to its
+		// ext_{namespace} column, isolated from the base data JSONB.
+		for ns, ext := range extData {
+			if len(ext) == 0 {
+				continue
+			}
+			col, ok := s.extensions[ns]
+			if !ok {
+				continue
+			}
+			if _, err := txdb.ExecContext(ctx,
+				fmt.Sprintf("UPDATE %s SET %s = ? WHERE id = ?", tbl, col),
+				toJSONString(ext), id); err != nil {
+				return fmt.Errorf("write extension %s: %w", ns, err)
+			}
+		}
+
+		// Tree/hierarchy (4.6.1): compute and store the materialized path for
+		// each tree: true self-referential relation.
+		if err := s.setTreePaths(ctx, txdb, params.WorkspaceID, id, params.Data); err != nil {
+			return fmt.Errorf("insert tree paths: %w", err)
+		}
+
 		// Insert children into child tables
 		for name, ch := range childrenData {
 			cs := s.children[name]
@@ -423,7 +484,7 @@ func (s *EntityStore) Insert(ctx context.Context, params InsertParams) (string, 
 		// durable outbox).
 		changesJSON := toJSONString(params.Data)
 		if err := writeAuditLog(ctx, txdb, s.driver, params.WorkspaceID, resource, id,
-			string(AuditActionCreate), params.CreatedBy, changesJSON); err != nil {
+			string(AuditActionCreate), params.CreatedBy, changesJSON, params.RequestID); err != nil {
 			log.Printf("[WARN] audit write failed (create %s/%s): %v", resource, id, err)
 		}
 
@@ -463,12 +524,63 @@ func (s *EntityStore) hydrateAndCompute(ctx context.Context, rec *EntityRecord, 
 		}
 		rec.Data = hydrated
 	}
+	// Merge extension data (4.3.1): ext_{namespace} columns are merged into
+	// the record's Data under their namespace key.
+	if err := s.mergeExtensions(ctx, rec); err != nil {
+		return nil, err
+	}
 	s.evaluateComputed(rec.Data)
 
 	// Resolve belongs_to relations for this single record
 	s.resolveRelations(ctx, []EntityRecord{*rec}, workspaceID)
 
 	return rec, nil
+}
+
+// mergeExtensions reads each registered ext_{namespace} column and merges it
+// into the record's Data under the namespace key (4.3.1).
+func (s *EntityStore) mergeExtensions(ctx context.Context, rec *EntityRecord) error {
+	if len(s.extensions) == 0 {
+		return nil
+	}
+	tbl := s.qualifiedTable()
+	for ns, col := range s.extensions {
+		var raw string
+		err := txReadDB(ctx, s.db).QueryRowContext(ctx,
+			fmt.Sprintf("SELECT %s FROM %s WHERE id = ?", col, tbl), rec.ID).Scan(&raw)
+		if err != nil {
+			continue // no extension data for this record
+		}
+		if raw == "" || raw == "{}" {
+			continue
+		}
+		var ext map[string]any
+		if err := json.Unmarshal([]byte(raw), &ext); err != nil {
+			continue
+		}
+		if rec.Data == nil {
+			rec.Data = map[string]any{}
+		}
+		rec.Data[ns] = ext
+	}
+	return nil
+}
+
+// splitExtensions extracts extension data (keys matching registered
+// namespaces) from the input data into a map of namespace → ext column data,
+// and removes them from the base data (4.3.2).
+func (s *EntityStore) splitExtensions(data map[string]any) map[string]map[string]any {
+	out := map[string]map[string]any{}
+	if len(s.extensions) == 0 {
+		return out
+	}
+	for ns := range s.extensions {
+		if ext, ok := data[ns].(map[string]any); ok {
+			out[ns] = ext
+			delete(data, ns)
+		}
+	}
+	return out
 }
 
 // GetByID fetches a single entity record by ID.
@@ -535,6 +647,7 @@ type UpdateParams struct {
 	Data          map[string]any
 	Permissions   []string       // caller's effective permissions — used for backdate/forward-date override_permission
 	PendingEvents []PendingEvent // durable events to enqueue atomically with this update (see PendingEvent)
+	RequestID     string         // originating request id, recorded in the audit trail (4.7.2)
 }
 
 // Update updates an entity record with optimistic concurrency control.
@@ -593,6 +706,10 @@ func (s *EntityStore) Update(ctx context.Context, params UpdateParams) (int, err
 			parentData = pd
 		}
 	}
+
+	// Split extension data (4.3.2): namespaced keys are written to their
+	// ext_{namespace} columns, not the base data JSONB.
+	extData := s.splitExtensions(parentData)
 
 	tbl := s.qualifiedTable()
 
@@ -672,6 +789,29 @@ func (s *EntityStore) Update(ctx context.Context, params UpdateParams) (int, err
 			}
 		}
 
+		// Write extension data (4.3.2): each namespaced payload goes to its
+		// ext_{namespace} column, isolated from the base data JSONB.
+		for ns, ext := range extData {
+			if len(ext) == 0 {
+				continue
+			}
+			col, ok := s.extensions[ns]
+			if !ok {
+				continue
+			}
+			if _, err := txdb.ExecContext(ctx,
+				fmt.Sprintf("UPDATE %s SET %s = ? WHERE id = ?", tbl, col),
+				toJSONString(ext), resolvedID); err != nil {
+				return fmt.Errorf("write extension %s: %w", ns, err)
+			}
+		}
+
+		// Tree/hierarchy (4.6.1/4.6.3): recompute the materialized path on
+		// reparent, and reject cycles.
+		if err := s.setTreePaths(ctx, txdb, params.WorkspaceID, resolvedID, parentData); err != nil {
+			return err
+		}
+
 		resource := s.module + "/" + s.entity
 
 		// Write audit log with changes diff — best-effort, same as Insert.
@@ -679,7 +819,7 @@ func (s *EntityStore) Update(ctx context.Context, params UpdateParams) (int, err
 		if len(changes) > 0 {
 			changesJSON := serializeChangeMap(changes)
 			if err := writeAuditLog(ctx, txdb, s.driver, params.WorkspaceID, resource, resolvedID,
-				string(AuditActionUpdate), params.UpdatedBy, changesJSON); err != nil {
+				string(AuditActionUpdate), params.UpdatedBy, changesJSON, params.RequestID); err != nil {
 				log.Printf("[WARN] audit write failed (update %s/%s): %v", resource, resolvedID, err)
 			}
 		}
@@ -729,6 +869,12 @@ func (s *EntityStore) SoftDelete(ctx context.Context, workspaceID, id string) er
 		return fmt.Errorf("%s delete: %w", s.entity, guardErr)
 	}
 
+	// Archive lock (4.9.3): a master referenced by an archived transaction is
+	// flagged locked_for_deletion=true and cannot be deleted.
+	if locked, _ := rec.Data["locked_for_deletion"].(bool); locked {
+		return fmt.Errorf("%s delete: %s", s.entity, spec.ErrorArchiveLockedForDeletion)
+	}
+
 	if !s.softDelete {
 		delErr := runTx(ctx, s.db, func(txdb DB) error {
 			// Delete children first (child tables have ON DELETE CASCADE,
@@ -770,7 +916,7 @@ func (s *EntityStore) SoftDelete(ctx context.Context, workspaceID, id string) er
 		// Write audit log
 		resource := s.module + "/" + s.entity
 		if err := writeAuditLog(ctx, txdb, s.driver, workspaceID, resource, id,
-			string(AuditActionDelete), "system", "{}"); err != nil {
+			string(AuditActionDelete), "system", "{}", ""); err != nil {
 			// Audit failure is non-fatal — log warning but don't fail the delete
 			log.Printf("[WARN] audit write failed (delete %s/%s): %v", resource, id, err)
 		}
@@ -1069,6 +1215,46 @@ func (s *EntityStore) Cancel(ctx context.Context, workspaceID, id, userID string
 	return nil
 }
 
+// Deactivate sets is_active=false on a record (soft-deactivation pattern,
+// 1.4.10 / 4.10.2, 02-core-extended.md §19). Only valid when the entity
+// declares soft_deactivate: {enabled: true}. Uses optimistic concurrency via
+// the record's current version.
+func (s *EntityStore) Deactivate(ctx context.Context, workspaceID, id, userID string) error {
+	return s.setActive(ctx, workspaceID, id, userID, false)
+}
+
+// Reactivate sets is_active=true on a record (soft-deactivation pattern).
+func (s *EntityStore) Reactivate(ctx context.Context, workspaceID, id, userID string) error {
+	return s.setActive(ctx, workspaceID, id, userID, true)
+}
+
+// setActive updates the is_active field in the record's data JSONB.
+func (s *EntityStore) setActive(ctx context.Context, workspaceID, id, userID string, active bool) error {
+	rec, err := s.GetByID(ctx, GetByIDParams{WorkspaceID: workspaceID, ID: id})
+	if err != nil {
+		return fmt.Errorf("%s set_active: fetch: %w", s.entity, err)
+	}
+	if rec == nil {
+		return fmt.Errorf("%s set_active: %w", s.entity, ErrNotFound)
+	}
+	data := rec.Data
+	if data == nil {
+		data = map[string]any{}
+	}
+	data["is_active"] = active
+	_, err = s.Update(ctx, UpdateParams{
+		WorkspaceID: workspaceID,
+		ID:          id,
+		Version:     rec.Version,
+		UpdatedBy:   userID,
+		Data:        data,
+	})
+	if err != nil {
+		return fmt.Errorf("%s set_active: %w", s.entity, err)
+	}
+	return nil
+}
+
 // Amend atomically cancels the original and creates a linked new document as draft.
 // Sets amends (on new) and amended_by (on original) reserved fields.
 func (s *EntityStore) Amend(ctx context.Context, workspaceID, originalID, userID string, newData map[string]any) (string, error) {
@@ -1338,6 +1524,24 @@ func (s *EntityStore) List(ctx context.Context, params ListParams) (*ListResult,
 			}
 			whereClauses = append(whereClauses, fmt.Sprintf("%s %s (%s)", col, op, placeholders))
 			args = append(args, values...)
+		case "descendant_of":
+			// Tree operator (4.6.2): rows whose materialized path starts with
+			// the given ancestor's path prefix. Value is the ancestor's path
+			// (e.g. "a.b") or its id (resolved to its path).
+			prefix, ok := filter.Value.(string)
+			if !ok || prefix == "" {
+				continue
+			}
+			tpath := fmt.Sprintf("_tpath_%s", field)
+			whereClauses = append(whereClauses, fmt.Sprintf("%s LIKE ?", tpath))
+			args = append(args, prefix+".%")
+		case "child_of":
+			// Tree operator (4.6.2): direct children (parent FK equals value).
+			whereClauses = append(whereClauses, fmt.Sprintf("%s = ?", col))
+			args = append(args, filter.Value)
+		case "root":
+			// Tree operator (4.6.2): root nodes (no parent).
+			whereClauses = append(whereClauses, fmt.Sprintf("%s IS NULL", col))
 		}
 	}
 
@@ -1413,6 +1617,392 @@ func (s *EntityStore) List(ctx context.Context, params ListParams) (*ListResult,
 	}, nil
 }
 
+// AggregateParams holds the inputs for an aggregate query (4.5.1–4.5.3).
+type AggregateParams struct {
+	WorkspaceID string
+	// Func is the aggregate function: sum, count, avg, min, max.
+	Func string
+	// Field is the field to aggregate. Empty for count (COUNT(*)).
+	Field string
+	// GroupBy lists fields to group by (single or multi-field).
+	GroupBy []string
+	// DateTrunc enables time bucketing (4.5.4): truncate the given date
+	// field to the given unit (day|week|month|quarter|year) and group by it.
+	DateTrunc *DateTruncDecl
+	// Having holds post-aggregation filters applied to the aggregate
+	// expression (4.5.3), e.g. HAVING SUM(amount) > 500.
+	Having []FilterOp
+	// Filters holds pre-aggregation filters (same operators as List).
+	Filters map[string]FilterOp
+}
+
+// DateTruncDecl declares a date_trunc time bucket (4.5.4).
+type DateTruncDecl struct {
+	Field string // date/datetime field to truncate
+	Unit  string // day | week | month | quarter | year
+}
+
+// AggregateGroup is one row of an aggregate result.
+type AggregateGroup struct {
+	// Key maps each group-by field to its value (empty when no group_by).
+	Key map[string]any
+	// Value is the aggregate result for this group.
+	Value float64
+}
+
+// AggregateResult is the outcome of an aggregate query.
+type AggregateResult struct {
+	Groups []AggregateGroup
+}
+
+// Aggregate runs an aggregate query (sum/count/avg/min/max) over the entity,
+// optionally grouped by one or more fields (4.5.1–4.5.3). Pre-aggregation
+// filters use the same operators as List; Having filters apply after
+// grouping.
+func (s *EntityStore) Aggregate(ctx context.Context, params AggregateParams) (*AggregateResult, error) {
+	fn := strings.ToLower(params.Func)
+	switch fn {
+	case "sum", "count", "avg", "min", "max":
+	default:
+		return nil, fmt.Errorf("%s aggregate: unknown function %q (want sum|count|avg|min|max)", s.entity, params.Func)
+	}
+
+	tbl := s.qualifiedTable()
+	var whereClauses []string
+	var args []any
+
+	whereClauses = append(whereClauses, "tenant_id = ?")
+	args = append(args, params.WorkspaceID)
+	if s.softDelete {
+		whereClauses = append(whereClauses, "deleted_at IS NULL")
+	}
+	for field, filter := range params.Filters {
+		col := s.columnRefExpr(field)
+		switch filter.Op {
+		case "eq":
+			whereClauses = append(whereClauses, fmt.Sprintf("%s = ?", col))
+			args = append(args, filter.Value)
+		case "neq":
+			whereClauses = append(whereClauses, fmt.Sprintf("%s != ?", col))
+			args = append(args, filter.Value)
+		case "gt":
+			whereClauses = append(whereClauses, fmt.Sprintf("%s > ?", col))
+			args = append(args, filter.Value)
+		case "gte":
+			whereClauses = append(whereClauses, fmt.Sprintf("%s >= ?", col))
+			args = append(args, filter.Value)
+		case "lt":
+			whereClauses = append(whereClauses, fmt.Sprintf("%s < ?", col))
+			args = append(args, filter.Value)
+		case "lte":
+			whereClauses = append(whereClauses, fmt.Sprintf("%s <= ?", col))
+			args = append(args, filter.Value)
+		case "null":
+			whereClauses = append(whereClauses, fmt.Sprintf("%s IS NULL", col))
+		case "notnull":
+			whereClauses = append(whereClauses, fmt.Sprintf("%s IS NOT NULL", col))
+		case "between":
+			values := toAnySlice(filter.Value)
+			if len(values) == 2 {
+				whereClauses = append(whereClauses, fmt.Sprintf("%s BETWEEN ? AND ?", col))
+				args = append(args, values[0], values[1])
+			}
+		}
+	}
+	whereStr := strings.Join(whereClauses, " AND ")
+
+	// Build the aggregate expression.
+	var aggExpr string
+	if fn == "count" && params.Field == "" {
+		aggExpr = "COUNT(*)"
+	} else {
+		aggExpr = fmt.Sprintf("%s(%s)", strings.ToUpper(fn), s.columnRefExpr(params.Field))
+	}
+
+	// Group-by columns.
+	var groupCols []string
+	for _, g := range params.GroupBy {
+		groupCols = append(groupCols, s.columnRefExpr(g))
+	}
+
+	// date_trunc time bucket (4.5.4): truncate the date field and group by it.
+	truncKey := ""
+	if params.DateTrunc != nil {
+		unit := strings.ToLower(params.DateTrunc.Unit)
+		switch unit {
+		case "day", "week", "month", "quarter", "year":
+		default:
+			return nil, fmt.Errorf("%s aggregate: unknown date_trunc unit %q (want day|week|month|quarter|year)", s.entity, params.DateTrunc.Unit)
+		}
+		col := s.columnRefExpr(params.DateTrunc.Field)
+		var expr string
+		if s.driver == DriverPostgres {
+			expr = fmt.Sprintf("date_trunc('%s', %s)", unit, col)
+		} else {
+			// SQLite: strftime with the appropriate format.
+			format := map[string]string{
+				"day": "%Y-%m-%d", "week": "%Y-%W", "month": "%Y-%m",
+				"quarter": "%Y-%m", "year": "%Y",
+			}[unit]
+			expr = fmt.Sprintf("strftime('%s', %s)", format, col)
+		}
+		groupCols = append(groupCols, expr)
+		truncKey = params.DateTrunc.Field + ":" + unit
+	}
+
+	// Having clause (post-aggregation). The filter applies to the aggregate
+	// expression itself (e.g. HAVING SUM(amount) > 500).
+	var havingClauses []string
+	for _, h := range params.Having {
+		switch h.Op {
+		case "gt":
+			havingClauses = append(havingClauses, fmt.Sprintf("%s > ?", aggExpr))
+			args = append(args, h.Value)
+		case "gte":
+			havingClauses = append(havingClauses, fmt.Sprintf("%s >= ?", aggExpr))
+			args = append(args, h.Value)
+		case "lt":
+			havingClauses = append(havingClauses, fmt.Sprintf("%s < ?", aggExpr))
+			args = append(args, h.Value)
+		case "lte":
+			havingClauses = append(havingClauses, fmt.Sprintf("%s <= ?", aggExpr))
+			args = append(args, h.Value)
+		case "eq":
+			havingClauses = append(havingClauses, fmt.Sprintf("%s = ?", aggExpr))
+			args = append(args, h.Value)
+		}
+	}
+
+	selectParts := []string{aggExpr}
+	if len(groupCols) > 0 {
+		selectParts = append(groupCols, aggExpr)
+	}
+	query := fmt.Sprintf("SELECT %s FROM %s WHERE %s", strings.Join(selectParts, ", "), tbl, whereStr)
+	if len(groupCols) > 0 {
+		query += " GROUP BY " + strings.Join(groupCols, ", ")
+	}
+	if len(havingClauses) > 0 {
+		query += " HAVING " + strings.Join(havingClauses, " AND ")
+	}
+
+	rows, err := txReadDB(ctx, s.db).QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("%s aggregate: %w", s.entity, err)
+	}
+	defer rows.Close()
+
+	result := &AggregateResult{}
+	for rows.Next() {
+		group := AggregateGroup{Key: map[string]any{}}
+		scanTargets := make([]any, 0, len(groupCols)+1)
+		for range groupCols {
+			var v any
+			scanTargets = append(scanTargets, &v)
+		}
+		var aggVal float64
+		scanTargets = append(scanTargets, &aggVal)
+		if err := rows.Scan(scanTargets...); err != nil {
+			return nil, fmt.Errorf("%s aggregate scan: %w", s.entity, err)
+		}
+		for i, g := range params.GroupBy {
+			group.Key[g] = derefAny(scanTargets[i])
+		}
+		if truncKey != "" {
+			group.Key[truncKey] = derefAny(scanTargets[len(params.GroupBy)])
+		}
+		group.Value = aggVal
+		result.Groups = append(result.Groups, group)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("%s aggregate rows: %w", s.entity, err)
+	}
+	return result, nil
+}
+
+// derefAny unwraps a *interface{} returned by database/sql scans.
+func derefAny(v any) any {
+	if p, ok := v.(*any); ok {
+		if p == nil {
+			return nil
+		}
+		return *p
+	}
+	return v
+}
+
+// setTreePaths computes and stores the materialized path (_tpath_{field}) for
+// each tree: true self-referential relation on insert (4.6.1). Path format:
+// "" (root) or "parent.child.grandchild". The parent's path is looked up from
+// the parent record's _tpath column.
+func (s *EntityStore) setTreePaths(ctx context.Context, txdb DB, workspaceID, id string, data map[string]any) error {
+	for _, f := range s.fields {
+		if !f.Tree || f.Relation == nil {
+			continue
+		}
+		parentID, _ := data[f.Name].(string)
+		path := id
+		if parentID != "" {
+			tbl := s.qualifiedTable()
+			var parentPath string
+			err := txdb.QueryRowContext(ctx,
+				fmt.Sprintf("SELECT _tpath_%s FROM %s WHERE id = ? AND tenant_id = ?", f.Name, tbl),
+				parentID, workspaceID).Scan(&parentPath)
+			if err != nil {
+				// Parent not found or no path — treat as root.
+				parentPath = ""
+			}
+			// Cycle detection (4.6.3): if the parent's path already contains
+			// this record's id, reparenting would create a cycle.
+			if strings.Contains(parentPath, id) {
+				return fmt.Errorf("%s tree: %w: cycle detected (parent %s is a descendant of %s)",
+					s.entity, ErrValidationRule, parentID, id)
+			}
+			if parentPath != "" {
+				path = parentPath + "." + id
+			}
+		}
+		if _, err := txdb.ExecContext(ctx,
+			fmt.Sprintf("UPDATE %s SET _tpath_%s = ? WHERE id = ?", s.qualifiedTable(), f.Name),
+			path, id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// WindowParams holds the inputs for a window-function query (4.5.5).
+type WindowParams struct {
+	WorkspaceID string
+	// Func is the window function: running_total, rank, row_number.
+	Func string
+	// Field is the field for running_total (ignored for rank/row_number).
+	Field string
+	// OrderBy lists fields to order the window by ("-field" for DESC).
+	OrderBy []string
+	// PartitionBy lists fields to partition the window by.
+	PartitionBy []string
+	// Filters holds pre-aggregation filters (same operators as List).
+	Filters map[string]FilterOp
+}
+
+// WindowRow is one row of a window-function result.
+type WindowRow struct {
+	// Data is the record's business data.
+	Data map[string]any
+	// Value is the window value (running total, rank, or row number).
+	Value float64
+}
+
+// WindowResult is the outcome of a window-function query.
+type WindowResult struct {
+	Rows []WindowRow
+}
+
+// Window runs a window-function query (4.5.5): running_total, rank, or
+// row_number, optionally partitioned and ordered.
+func (s *EntityStore) Window(ctx context.Context, params WindowParams) (*WindowResult, error) {
+	fn := strings.ToLower(params.Func)
+	switch fn {
+	case "running_total", "rank", "row_number":
+	default:
+		return nil, fmt.Errorf("%s window: unknown function %q (want running_total|rank|row_number)", s.entity, params.Func)
+	}
+
+	tbl := s.qualifiedTable()
+	var whereClauses []string
+	var args []any
+
+	whereClauses = append(whereClauses, "tenant_id = ?")
+	args = append(args, params.WorkspaceID)
+	if s.softDelete {
+		whereClauses = append(whereClauses, "deleted_at IS NULL")
+	}
+	for field, filter := range params.Filters {
+		col := s.columnRefExpr(field)
+		switch filter.Op {
+		case "eq":
+			whereClauses = append(whereClauses, fmt.Sprintf("%s = ?", col))
+			args = append(args, filter.Value)
+		case "gt":
+			whereClauses = append(whereClauses, fmt.Sprintf("%s > ?", col))
+			args = append(args, filter.Value)
+		case "gte":
+			whereClauses = append(whereClauses, fmt.Sprintf("%s >= ?", col))
+			args = append(args, filter.Value)
+		case "lt":
+			whereClauses = append(whereClauses, fmt.Sprintf("%s < ?", col))
+			args = append(args, filter.Value)
+		case "lte":
+			whereClauses = append(whereClauses, fmt.Sprintf("%s <= ?", col))
+			args = append(args, filter.Value)
+		}
+	}
+	whereStr := strings.Join(whereClauses, " AND ")
+
+	// Build the window expression.
+	var winExpr string
+	switch fn {
+	case "running_total":
+		winExpr = fmt.Sprintf("SUM(%s) OVER (%s)", s.columnRefExpr(params.Field), s.windowSpec(params))
+	case "rank":
+		winExpr = fmt.Sprintf("RANK() OVER (%s)", s.windowSpec(params))
+	case "row_number":
+		winExpr = fmt.Sprintf("ROW_NUMBER() OVER (%s)", s.windowSpec(params))
+	}
+
+	query := fmt.Sprintf("SELECT data, %s FROM %s WHERE %s", winExpr, tbl, whereStr)
+
+	rows, err := txReadDB(ctx, s.db).QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("%s window: %w", s.entity, err)
+	}
+	defer rows.Close()
+
+	result := &WindowResult{}
+	for rows.Next() {
+		var dataStr string
+		var val float64
+		if err := rows.Scan(&dataStr, &val); err != nil {
+			return nil, fmt.Errorf("%s window scan: %w", s.entity, err)
+		}
+		var data map[string]any
+		if err := json.Unmarshal([]byte(dataStr), &data); err != nil {
+			return nil, fmt.Errorf("%s window data: %w", s.entity, err)
+		}
+		result.Rows = append(result.Rows, WindowRow{Data: data, Value: val})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("%s window rows: %w", s.entity, err)
+	}
+	return result, nil
+}
+
+// windowSpec builds the OVER (...) clause: PARTITION BY + ORDER BY.
+func (s *EntityStore) windowSpec(params WindowParams) string {
+	var parts []string
+	if len(params.PartitionBy) > 0 {
+		var cols []string
+		for _, p := range params.PartitionBy {
+			cols = append(cols, s.columnRefExpr(p))
+		}
+		parts = append(parts, "PARTITION BY "+strings.Join(cols, ", "))
+	}
+	if len(params.OrderBy) > 0 {
+		var cols []string
+		for _, o := range params.OrderBy {
+			dir := "ASC"
+			field := o
+			if strings.HasPrefix(o, "-") {
+				dir = "DESC"
+				field = o[1:]
+			}
+			cols = append(cols, s.columnRefExpr(field)+" "+dir)
+		}
+		parts = append(parts, "ORDER BY "+strings.Join(cols, ", "))
+	}
+	return strings.Join(parts, " ")
+}
+
 // resolveRelations populates nested relation data for a list of records.
 // For each belongs_to relation field, it batch-fetches the referenced
 // records and adds them as nested objects keyed by relation alias.
@@ -1470,6 +2060,18 @@ func (s *EntityStore) resolveRelations(ctx context.Context, records []EntityReco
 		if dotIdx := strings.Index(targetEntity, "."); dotIdx >= 0 {
 			targetModule = targetEntity[:dotIdx]
 			targetEntity = targetEntity[dotIdx+1:]
+		}
+
+		// Cross-category JOIN block (4.4.2): a relation may not resolve across
+		// persist categories (FORMSPEC.PERSIST.CROSS_CATEGORY). Skipped when no
+		// category resolver is wired.
+		if s.targetCategoryResolver != nil {
+			targetCat := s.targetCategoryResolver(targetModule, targetEntity)
+			if targetCat != "" && s.category != "" && targetCat != s.category {
+				log.Printf("[WARN] resolve relation %s: cross-category JOIN blocked (%s vs %s) — FORMSPEC.PERSIST.CROSS_CATEGORY",
+					f.Name, s.category, targetCat)
+				continue
+			}
 		}
 
 		targetTable := TableName(targetModule, targetEntity, "")
@@ -1714,8 +2316,24 @@ func writeJSONValue(b *strings.Builder, v any) {
 			b.WriteString(toJSONString(item))
 		}
 		b.WriteByte(']')
+	case []string:
+		b.WriteByte('[')
+		for i, item := range val {
+			if i > 0 {
+				b.WriteByte(',')
+			}
+			writeJSONValue(b, item)
+		}
+		b.WriteByte(']')
 	default:
-		fmt.Fprintf(b, "%v", val)
+		// Fall back to encoding/json for any other type (slices of ints,
+		// nested structures, etc.) so we never emit malformed JSON.
+		enc, err := json.Marshal(val)
+		if err != nil {
+			b.WriteString("null")
+			return
+		}
+		b.Write(enc)
 	}
 }
 

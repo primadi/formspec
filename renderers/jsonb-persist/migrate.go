@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"fmt"
 	"sort"
 	"strings"
@@ -22,12 +23,60 @@ type MigrationRecord struct {
 type MigrationRunner struct {
 	db     DB
 	driver DriverType
+	// registry is used by EntityStore/NextKey to satisfy the PersistBackend
+	// contract (4.1.3). Set via SetRegistry.
+	registry interface {
+		GetEntityStore(module, name string) (*EntityStore, error)
+		GenerateNaturalKey(ctx context.Context, workspaceID, module, name, fieldName string) (string, error)
+	}
 }
 
 // NewMigrationRunner creates a new migration runner.
 func NewMigrationRunner(db DB, driver DriverType) *MigrationRunner {
 	return &MigrationRunner{db: db, driver: driver}
 }
+
+// SetRegistry wires an entity registry so the runner can satisfy the
+// EntityStore/NextKey parts of the PersistBackend contract (4.1.3).
+func (r *MigrationRunner) SetRegistry(reg interface {
+	GetEntityStore(module, name string) (*EntityStore, error)
+	GenerateNaturalKey(ctx context.Context, workspaceID, module, name, fieldName string) (string, error)
+}) {
+	r.registry = reg
+}
+
+// SyncSchema implements PersistBackend.SyncSchema (4.1.1).
+func (r *MigrationRunner) SyncSchema(ctx context.Context, entities []EntityMigration) (int, error) {
+	return r.ApplyMigrations(ctx, entities)
+}
+
+// PlanSchema implements PersistBackend.PlanSchema (4.1.1).
+func (r *MigrationRunner) PlanSchema(ctx context.Context, entities []EntityMigration) ([]DDLResult, error) {
+	return r.PlanMigrations(ctx, entities)
+}
+
+// DriverName implements PersistBackend.DriverName (4.1.1).
+func (r *MigrationRunner) DriverName() string { return string(r.driver) }
+
+// NextKey implements PersistBackend.NextKey (4.1.1) — delegates to the
+// registry's natural-key counter (gap-free, atomic).
+func (r *MigrationRunner) NextKey(ctx context.Context, workspaceID, module, entity, field string) (string, error) {
+	if r.registry == nil {
+		return "", fmt.Errorf("next_key: no registry wired — call SetRegistry")
+	}
+	return r.registry.GenerateNaturalKey(ctx, workspaceID, module, entity, field)
+}
+
+// EntityStore implements PersistBackend.EntityStore (4.1.1).
+func (r *MigrationRunner) EntityStore(module, entity string) (*EntityStore, error) {
+	if r.registry == nil {
+		return nil, fmt.Errorf("entity store: no registry wired — call SetRegistry")
+	}
+	return r.registry.GetEntityStore(module, entity)
+}
+
+// Compile-time check: MigrationRunner satisfies the PersistBackend contract.
+var _ PersistBackend = (*MigrationRunner)(nil)
 
 // SystemTableDDLs returns the DDL statements for FormSpec system tables.
 // Uses dialect-aware SQL that works on both SQLite and PostgreSQL.
@@ -101,6 +150,7 @@ func SystemTableDDLs(driver DriverType) []string {
 			"action      text    NOT NULL",
 			"actor       text    NOT NULL DEFAULT 'system'",
 			"changes     text    NOT NULL DEFAULT '{}'",
+			"request_id  text    NOT NULL DEFAULT ''",
 			fmt.Sprintf("created_at  %s NOT NULL DEFAULT %s", ts, ts),
 		),
 
@@ -155,6 +205,40 @@ func (r *MigrationRunner) EnsureSystemTables(ctx context.Context) error {
 			}
 			return fmt.Errorf("create system table %s: %w", name, err)
 		}
+	}
+	return nil
+}
+
+// UninstallExtension drops an entity extension column (ext_{namespace}) and
+// marks its namespace as locked so it is never reused (4.3.3). The DROP and
+// the namespace-lock update commit in one transaction.
+func (r *MigrationRunner) UninstallExtension(ctx context.Context, tableName, namespace string) error {
+	if tableName == "" || namespace == "" {
+		return fmt.Errorf("uninstall extension: tableName and namespace required")
+	}
+	col := "ext_" + namespace
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("uninstall extension: begin tx: %w", err)
+	}
+
+	// Drop the extension column.
+	dropSQL := fmt.Sprintf("ALTER TABLE %s DROP COLUMN %s", tableName, col)
+	if _, err := tx.ExecContext(ctx, dropSQL); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("uninstall extension: drop column: %w", err)
+	}
+
+	// Mark the namespace as locked (never reused).
+	if _, err := tx.ExecContext(ctx,
+		"UPDATE formspec_extensions SET status = 'locked' WHERE namespace = ?", namespace); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("uninstall extension: lock namespace: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("uninstall extension: commit: %w", err)
 	}
 	return nil
 }
@@ -274,8 +358,23 @@ func (r *MigrationRunner) PlanMigrations(ctx context.Context, entities []EntityM
 			if existingChecksum == checksum {
 				continue // Already applied, unchanged
 			}
-			// Checksum mismatch — would need alter, but v1 is add-only
-			// Just skip for now
+			// Checksum mismatch — the entity changed. Diff the existing table
+			// to add generated columns for new indexed/unique/natural-key
+			// fields (4.2.1). Field removal/type-change is two-phase (4.2.2)
+			// and not auto-applied here.
+			alterDDL, added, err := r.diffExistingTable(ctx, ti, em.EntitySpec)
+			if err != nil {
+				return nil, fmt.Errorf("plan migrations: diff %s: %w", ti.TableName, err)
+			}
+			if added > 0 {
+				results = append(results, DDLResult{
+					TableInfo:   ti,
+					DDL:         alterDDL,
+					Checksum:    checksumDDL(alterDDL),
+					IsNew:       false,
+					Description: desc,
+				})
+			}
 			continue
 		}
 
@@ -286,8 +385,23 @@ func (r *MigrationRunner) PlanMigrations(ctx context.Context, entities []EntityM
 		}
 
 		if exists {
-			// Table exists but migration not recorded — skip (assume manual)
-			// In v1 we're add-only; future versions will diff columns
+			// Table exists but migration not recorded — diff columns (4.2.1):
+			// add generated columns for indexed/unique/natural-key fields that
+			// are missing. Field removal/type-change is two-phase (4.2.2) and
+			// not auto-applied here.
+			alterDDL, added, err := r.diffExistingTable(ctx, ti, em.EntitySpec)
+			if err != nil {
+				return nil, fmt.Errorf("plan migrations: diff %s: %w", ti.TableName, err)
+			}
+			if added > 0 {
+				results = append(results, DDLResult{
+					TableInfo:   ti,
+					DDL:         alterDDL,
+					Checksum:    checksumDDL(alterDDL),
+					IsNew:       false,
+					Description: desc,
+				})
+			}
 			continue
 		}
 
@@ -345,14 +459,26 @@ func (r *MigrationRunner) ApplyMigrations(ctx context.Context, entities []Entity
 			desc = fmt.Sprintf("entity:%s/%s", plan.TableInfo.Module, plan.TableInfo.Entity)
 		}
 
+		// Per-entity migration in one transaction (4.2.3): the DDL and its
+		// migration record commit together or not at all — a failure rolls
+		// back the whole entity migration.
+		tx, err := r.db.BeginTx(ctx, nil)
+		if err != nil {
+			return applied, fmt.Errorf("apply migrations: begin tx for %s: %w", desc, err)
+		}
+
 		// Execute DDL
-		if _, err := r.db.ExecContext(ctx, plan.DDL); err != nil {
+		if _, err := tx.ExecContext(ctx, plan.DDL); err != nil {
+			_ = tx.Rollback()
 			return applied, fmt.Errorf("apply migrations: execute DDL for %s: %w\nDDL: %s", desc, err, plan.DDL)
 		}
 
 		// Record migration
 		currentVersion++
-		if err := r.RecordMigration(ctx, currentVersion, desc, plan.Checksum); err != nil {
+		if _, err := tx.ExecContext(ctx,
+			"INSERT INTO formspec_schema_migrations (version, description, checksum) VALUES (?, ?, ?)",
+			currentVersion, desc, plan.Checksum); err != nil {
+			_ = tx.Rollback()
 			return applied, fmt.Errorf("apply migrations: record %s: %w", desc, err)
 		}
 
@@ -378,7 +504,7 @@ func (r *MigrationRunner) ApplyMigrations(ctx context.Context, entities []Entity
 						}
 					}
 					if target != "" {
-						_, _ = r.db.ExecContext(ctx,
+						_, _ = tx.ExecContext(ctx,
 							"INSERT OR IGNORE INTO formspec_extensions (resource, namespace, module) VALUES (?, ?, ?)",
 							target, ns, module)
 					}
@@ -386,10 +512,80 @@ func (r *MigrationRunner) ApplyMigrations(ctx context.Context, entities []Entity
 			}
 		}
 
+		if err := tx.Commit(); err != nil {
+			return applied, fmt.Errorf("apply migrations: commit %s: %w", desc, err)
+		}
+
 		applied++
 	}
 
 	return applied, nil
+}
+
+// diffExistingTable compares an existing table's columns against the desired
+// entity spec and returns ALTER TABLE DDL for missing generated columns
+// (indexed/unique/natural-key fields). Returns the number of columns added.
+func (r *MigrationRunner) diffExistingTable(ctx context.Context, ti *TableInfo, entity spec.EntitySpec) (string, int, error) {
+	existing, err := r.existingColumns(ctx, ti.Schema, ti.TableName)
+	if err != nil {
+		return "", 0, err
+	}
+
+	var alters []string
+	added := 0
+	for _, f := range entity.Fields {
+		if f.Type == spec.FieldChild || f.Type == spec.FieldRelation {
+			continue
+		}
+		if !(f.Index || f.Unique || f.NaturalKey) {
+			continue
+		}
+		col := generatedColumnName(f.Name)
+		if existing[col] {
+			continue
+		}
+		sqlType := fieldTypeToSQL(f.Type, f.EnumValues)
+		// Note: the modernc SQLite driver cannot ALTER TABLE ADD COLUMN with
+		// a GENERATED ALWAYS AS column (it silently no-ops), so the diff adds
+		// a plain column. On Postgres a generated column is used.
+		colDef := fmt.Sprintf("%s %s", col, sqlType)
+		if r.driver == DriverPostgres {
+			colDef = generateGeneratedColumn(f.Name, sqlType, r.driver)
+		}
+		alters = append(alters, fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s;",
+			qualifiedName(ti.Schema, ti.TableName, r.driver), colDef))
+		added++
+	}
+	return strings.Join(alters, "\n"), added, nil
+}
+
+// existingColumns returns the set of column names present in a table.
+func (r *MigrationRunner) existingColumns(ctx context.Context, schema, table string) (map[string]bool, error) {
+	cols := make(map[string]bool)
+	var rows *sql.Rows
+	var err error
+
+	if r.driver == DriverPostgres {
+		rows, err = r.db.QueryContext(ctx,
+			"SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2",
+			schema, table)
+	} else {
+		rows, err = r.db.QueryContext(ctx,
+			"SELECT name FROM pragma_table_info(?)", table)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("list columns %s: %w", table, err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, fmt.Errorf("scan column: %w", err)
+		}
+		cols[name] = true
+	}
+	return cols, rows.Err()
 }
 
 // EntityMigration holds an entity manifest for migration.

@@ -21,6 +21,7 @@ import {
   type TimelineSpec,
   type PrintSpec,
   type ThemeSpec,
+  type ListingSpec,
   type AppSummary,
 } from "@/types/manifest"
 import { fetchMetaBundle, fetchMetaApps } from "@/lib/api"
@@ -30,7 +31,10 @@ import { FormaApiError } from "@/types/manifest"
 // longest root_url prefix match, after stripping the leading {workspace}
 // path segment. Falls back to the first App when nothing matches (e.g. the
 // _admin surface, which isn't scoped to any App's root_url).
-function detectAppName(pathname: string, apps: AppSummary[]): string | undefined {
+function detectAppName(
+  pathname: string,
+  apps: AppSummary[],
+): string | undefined {
   if (apps.length === 0) return undefined
   if (apps.length === 1) return apps[0].name
 
@@ -56,13 +60,24 @@ export interface MetaState {
   forbidden: boolean
 
   // ── Actions ──
-  load: (workspace: string, surface: "admin" | "app", token?: string) => Promise<void>
+  load: (
+    workspace: string,
+    surface: "admin" | "app",
+    token?: string,
+  ) => Promise<void>
   reset: () => void
-  refresh: (workspace: string, surface: "admin" | "app", token?: string) => Promise<void>
+  refresh: (
+    workspace: string,
+    surface: "admin" | "app",
+    token?: string,
+  ) => Promise<void>
 
   // ── Entity Lookups ──
   getEntity: (module: string, name: string) => EntitySchema | undefined
-  getEntityByPlural: (module: string, plural: string) => EntitySchema | undefined
+  getEntityByPlural: (
+    module: string,
+    plural: string,
+  ) => EntitySchema | undefined
 
   // ── Manifest Lookups ──
   getPage: (name: string) => Entry<PageSpec> | undefined
@@ -76,6 +91,7 @@ export interface MetaState {
   getTimeline: (name: string) => Entry<TimelineSpec> | undefined
   getPrint: (name: string) => Entry<PrintSpec> | undefined
   getTheme: (name: string) => Entry<ThemeSpec> | undefined
+  getListing: (name: string) => Entry<ListingSpec> | undefined
 
   // ── Derived Helpers ──
   /** Get all entities that need default UI derivation (not yet covered by authored pages/tables/forms) */
@@ -111,6 +127,7 @@ function createLookups(bundle: MetaBundle) {
   const timelines = byName(bundle.timelines)
   const prints = byName(bundle.prints)
   const themes = byName(bundle.themes)
+  const listings = byName(bundle.listings)
 
   return {
     entitiesByKey,
@@ -126,6 +143,7 @@ function createLookups(bundle: MetaBundle) {
     timelines,
     prints,
     themes,
+    listings,
   }
 }
 
@@ -133,7 +151,8 @@ function createLookups(bundle: MetaBundle) {
 function getOrBuildLookups(bundle: MetaBundle | null) {
   if (!bundle) return null
   // Cache on the bundle reference to avoid rebuilding on every selector call
-  if ((bundle as any).__lookups) return (bundle as any).__lookups as ReturnType<typeof createLookups>
+  if ((bundle as any).__lookups)
+    return (bundle as any).__lookups as ReturnType<typeof createLookups>
   const lookups = createLookups(bundle)
   ;(bundle as any).__lookups = lookups
   return lookups
@@ -164,12 +183,17 @@ export const useMetaStore = create<MetaState>((set, get) => ({
         set({ loading: false, error: null, forbidden: true })
         return
       }
-      const message = err instanceof Error ? err.message : "Failed to load meta bundle"
+      const message =
+        err instanceof Error ? err.message : "Failed to load meta bundle"
       set({ loading: false, error: message })
     }
   },
 
-  refresh: async (workspace: string, surface: "admin" | "app", token?: string) => {
+  refresh: async (
+    workspace: string,
+    surface: "admin" | "app",
+    token?: string,
+  ) => {
     try {
       let bundle: MetaBundle
       if (surface === "admin") {
@@ -202,14 +226,22 @@ export const useMetaStore = create<MetaState>((set, get) => ({
   getPage: (name: string) => getOrBuildLookups(get().bundle)?.pages.get(name),
   getForm: (name: string) => getOrBuildLookups(get().bundle)?.forms.get(name),
   getTable: (name: string) => getOrBuildLookups(get().bundle)?.tables.get(name),
-  getDashboard: (name: string) => getOrBuildLookups(get().bundle)?.dashboards.get(name),
-  getWidget: (name: string) => getOrBuildLookups(get().bundle)?.widgets.get(name),
-  getReport: (name: string) => getOrBuildLookups(get().bundle)?.reports.get(name),
-  getWizard: (name: string) => getOrBuildLookups(get().bundle)?.wizards.get(name),
-  getKanban: (name: string) => getOrBuildLookups(get().bundle)?.kanbans.get(name),
-  getTimeline: (name: string) => getOrBuildLookups(get().bundle)?.timelines.get(name),
+  getDashboard: (name: string) =>
+    getOrBuildLookups(get().bundle)?.dashboards.get(name),
+  getWidget: (name: string) =>
+    getOrBuildLookups(get().bundle)?.widgets.get(name),
+  getReport: (name: string) =>
+    getOrBuildLookups(get().bundle)?.reports.get(name),
+  getWizard: (name: string) =>
+    getOrBuildLookups(get().bundle)?.wizards.get(name),
+  getKanban: (name: string) =>
+    getOrBuildLookups(get().bundle)?.kanbans.get(name),
+  getTimeline: (name: string) =>
+    getOrBuildLookups(get().bundle)?.timelines.get(name),
   getPrint: (name: string) => getOrBuildLookups(get().bundle)?.prints.get(name),
   getTheme: (name: string) => getOrBuildLookups(get().bundle)?.themes.get(name),
+  getListing: (name: string) =>
+    getOrBuildLookups(get().bundle)?.listings.get(name),
 
   getDerivedEntities: () => {
     const bundle = get().bundle
@@ -221,9 +253,7 @@ export const useMetaStore = create<MetaState>((set, get) => ({
     for (const f of bundle.forms) authoredNames.add(f.name)
     for (const t of bundle.tables) authoredNames.add(t.name)
 
-    return bundle.entities.filter(
-      (e) => !authoredNames.has(e.name),
-    )
+    return bundle.entities.filter((e) => !authoredNames.has(e.name))
   },
 
   getEntitiesByModule: () => {

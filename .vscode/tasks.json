@@ -1,6 +1,10 @@
 {
     "version": "2.0.0",
     "tasks": [
+        // NOTE: Task dotnet dinonaktifkan sementara karena dotnet SDK
+        // belum terinstal di dev container (selalu gagal: "dotnet: command not found").
+        // Aktifkan kembali dengan menghapus komentar saat dotnet sudah dibutuhkan.
+        /*
         {
             "label": "build",
             "command": "dotnet",
@@ -37,5 +41,6 @@
             ],
             "problemMatcher": "$msCompile"
         }
+        */
     ]
 }

@@ -479,3 +479,51 @@ func TestLabelFieldFallbacks(t *testing.T) {
 		t.Errorf("want id fallback, got %s", lf)
 	}
 }
+
+// TestListingKind verifies `kind: Listing` (public catalog, 06-page-kinds.md
+// §10) registers in the UI registry and ships in the meta bundle when its
+// entity is visible.
+func TestListingKind(t *testing.T) {
+	loader := manifest.NewLoader("")
+	listing := `
+apiVersion: formspec.dev/v1alpha1
+kind: Listing
+metadata: { name: product-catalog, module: billing, description: "Katalog produk" }
+spec:
+  entity: order
+  columns:
+    - { field: number, label: "No." }
+    - { field: status, label: "Status" }
+  search: true
+`
+	raws, errs := loader.ParseBytes([]byte(listing), "listing.yaml")
+	if len(errs) > 0 {
+		t.Fatalf("parse listing: %v", errs)
+	}
+	r := NewRegistry()
+	if loadErrs := r.Load(raws); len(loadErrs) > 0 {
+		t.Fatalf("load listing: %v", loadErrs)
+	}
+	if r.Listings["product-catalog"] == nil {
+		t.Fatal("listing not registered in registry")
+	}
+	if r.Listings["product-catalog"].Spec.Entity != "order" {
+		t.Errorf("listing entity not parsed: %+v", r.Listings["product-catalog"].Spec)
+	}
+
+	// Bundle: visible entity → listing ships; hidden entity → listing omitted.
+	entities := func() []EntityDescriptor {
+		return []EntityDescriptor{{Module: "billing", Name: "order", Spec: orderEntity()}}
+	}
+	canAll := func(string) bool { return true }
+	b := r.BuildBundle(entities, canAll, AppContext{})
+	if len(b.Listings) != 1 || b.Listings[0].Name != "product-catalog" {
+		t.Fatalf("expected listing in bundle, got %+v", b.Listings)
+	}
+
+	canNone := func(string) bool { return false }
+	b2 := r.BuildBundle(entities, canNone, AppContext{})
+	if len(b2.Listings) != 0 {
+		t.Fatalf("expected no listing when entity hidden, got %+v", b2.Listings)
+	}
+}

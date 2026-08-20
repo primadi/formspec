@@ -119,3 +119,80 @@ func TestHandleMetaUI_AppScoped_UnaffectedByAdminChange(t *testing.T) {
 		t.Errorf("expected bundle scoped to storefront, got %q", bundle.App.Name)
 	}
 }
+
+func TestHandleMetaUI_PublicApp_AnonymousAllowed(t *testing.T) {
+	b := setupMetaTestRouter(t)
+	// Reconfigure the app as `access: public` (entirely public, no-nav).
+	b.SetApps(map[string]*formspec_app.ResolvedApp{
+		"storefront": {
+			Name:    "storefront",
+			Spec:    &spec.AppSpec{RootURL: "/", AppRenderer: "no-nav", Access: spec.AppAccessPublic, Modules: []string{"sales"}},
+			Modules: map[string]bool{"sales": true},
+		},
+	})
+	handler := b.HandleMetaUI()
+
+	// No identity in context — anonymous caller.
+	req := httptest.NewRequest("GET", "/demo/_ui/_meta/ui?app=storefront", nil)
+	req = req.WithContext(context.Background())
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("expected 200 for anonymous public App bundle, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp SingleResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	data, _ := json.Marshal(resp.Data)
+	var bundle ui.Bundle
+	if err := json.Unmarshal(data, &bundle); err != nil {
+		t.Fatalf("decode bundle: %v", err)
+	}
+	if bundle.App.AppRenderer != "no-nav" {
+		t.Errorf("expected app_renderer no-nav, got %q", bundle.App.AppRenderer)
+	}
+	if bundle.App.Access != "public" {
+		t.Errorf("expected access public, got %q", bundle.App.Access)
+	}
+}
+
+func TestPublicEntities_PublicApp(t *testing.T) {
+	b := setupMetaTestRouter(t)
+	b.SetApps(map[string]*formspec_app.ResolvedApp{
+		"storefront": {
+			Name:    "storefront",
+			Spec:    &spec.AppSpec{RootURL: "/", AppRenderer: "no-nav", Access: spec.AppAccessPublic, Modules: []string{"sales"}},
+			Modules: map[string]bool{"sales": true},
+		},
+		"backoffice": {
+			Name:    "backoffice",
+			Spec:    &spec.AppSpec{RootURL: "/app", AppRenderer: "topnav", Access: spec.AppAccessPrivate, Modules: []string{"sales"}},
+			Modules: map[string]bool{"sales": true},
+		},
+	})
+
+	if !b.isPublicEntity("sales", "product") {
+		t.Error("expected sales/product to be public (mounted by public App)")
+	}
+	if b.isPublicEntity("hr", "employee") {
+		t.Error("expected hr/employee to NOT be public (not in public App modules)")
+	}
+}
+
+func TestPublicEntities_NoPublicApp(t *testing.T) {
+	b := setupMetaTestRouter(t)
+	// Only private Apps (any renderer) — nothing is public.
+	b.SetApps(map[string]*formspec_app.ResolvedApp{
+		"backoffice": {
+			Name:    "backoffice",
+			Spec:    &spec.AppSpec{RootURL: "/app", AppRenderer: "no-nav", Access: spec.AppAccessPrivate, Modules: []string{"sales"}},
+			Modules: map[string]bool{"sales": true},
+		},
+	})
+	if b.isPublicEntity("sales", "product") {
+		t.Error("expected sales/product to NOT be public with only private Apps")
+	}
+}

@@ -44,7 +44,7 @@ func GenerateRoutes(registry *entity.Registry) []RouteDescriptor {
 
 		for _, exp := range es.Expose {
 			if exp.Type == spec.ProtocolREST {
-				routes = append(routes, generateRESTRoutes(info.Module, info.Name, plural, exp, isSummary, disabled)...)
+				routes = append(routes, generateRESTRoutes(info.Module, info.Name, plural, exp, isSummary, disabled, es.SoftDeactivate != nil && es.SoftDeactivate.Enabled)...)
 			}
 			// Future: grpc, ws
 		}
@@ -92,8 +92,11 @@ func GenerateUIRoutes(registry *entity.Registry) []RouteDescriptor {
 		// ignored. All standard CRUD actions (including delete) are available
 		// on the UI surface unless explicitly disabled in entity actions.
 		uiActions := []string{"list", "find", "create", "update", "delete"}
+		if es.SoftDeactivate != nil && es.SoftDeactivate.Enabled {
+			uiActions = append(uiActions, "deactivate", "reactivate")
+		}
 		uiExp := spec.ExposeConfig{Type: spec.ProtocolREST, Actions: uiActions}
-		routes = append(routes, generateRESTRoutes(info.Module, info.Name, plural, uiExp, isSummary, disabled)...)
+		routes = append(routes, generateRESTRoutes(info.Module, info.Name, plural, uiExp, isSummary, disabled, es.SoftDeactivate != nil && es.SoftDeactivate.Enabled)...)
 
 		// Two-step idempotency prepare (todo 2.7.1) on the UI surface too —
 		// the primary use case is browser double-submit on create.
@@ -111,7 +114,7 @@ func GenerateUIRoutes(registry *entity.Registry) []RouteDescriptor {
 
 // generateRESTRoutes creates REST route descriptors for one entity.
 // Applies transitive gating (2.3.2) and auto-derives composite actions (2.3.6).
-func generateRESTRoutes(module, name, plural string, exp spec.ExposeConfig, isSummary bool, disabled map[string]bool) []RouteDescriptor {
+func generateRESTRoutes(module, name, plural string, exp spec.ExposeConfig, isSummary bool, disabled map[string]bool, softDeactivate bool) []RouteDescriptor {
 	var routes []RouteDescriptor
 
 	// Apply transitive gating (2.3.2): submit disabled → cancel/amend implicitly disabled;
@@ -149,13 +152,18 @@ func generateRESTRoutes(module, name, plural string, exp spec.ExposeConfig, isSu
 			continue
 		}
 
+		// Soft-deactivation actions only exist when soft_deactivate is enabled
+		if (std.Action == "deactivate" || std.Action == "reactivate") && !softDeactivate {
+			continue
+		}
+
 		// Filter: if actions are specified, only include those
 		if !useAll && !allowed[std.Action] {
 			continue
 		}
 
 		// Default: skip delete and lifecycle unless explicitly enabled
-		if useAll && (std.Action == "delete" || std.Action == "submit" || std.Action == "cancel" || std.Action == "amend") {
+		if useAll && (std.Action == "delete" || std.Action == "submit" || std.Action == "cancel" || std.Action == "amend" || std.Action == "deactivate" || std.Action == "reactivate") {
 			continue
 		}
 
@@ -228,11 +236,11 @@ func generatePrepareRoutes(module, name, plural string, es *spec.EntitySpec, isS
 				perm = module + "." + plural + "." + a.Name
 			}
 			routes = append(routes, RouteDescriptor{
-				Module:             module,
-				Entity:             name,
-				Plural:             plural,
-				Action:             a.Name,
-				Method:             "POST",
+				Module: module,
+				Entity: name,
+				Plural: plural,
+				Action: a.Name,
+				Method: "POST",
 				// Literal action name in the path so chi's static-segment
 				// priority disambiguates /{action}/prepare from the custom
 				// action route /{id}/{action}.

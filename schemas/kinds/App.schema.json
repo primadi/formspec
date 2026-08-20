@@ -3,11 +3,20 @@
   "description": "AppSpec is the root project manifest (Core §4.4). A Workspace MAY contain\nmore than one App; all Apps in a workspace run simultaneously, mounted at\ntheir own RootURL.\n",
   "type": "object",
   "properties": {
+    "access": {
+      "$ref": "#/$defs/AppAccess",
+      "description": "@schema {example: \"private\", enum: [\"private\", \"public\"]}"
+    },
     "app_renderer": {
-      "description": "@schema {example: \"shadcn-shell\"}",
+      "description": "@schema {example: \"no-nav\", enum: [\"sidebar-nav\", \"topnav\", \"no-nav\"]}",
       "type": "string",
+      "enum": [
+        "sidebar-nav",
+        "topnav",
+        "no-nav"
+      ],
       "examples": [
-        "shadcn-shell"
+        "no-nav"
       ]
     },
     "auth_config_ref": {
@@ -37,6 +46,13 @@
         "[clinic, pharmacy]"
       ]
     },
+    "persist_backend": {
+      "description": "@schema {example: \"jsonb-persist\"}",
+      "type": "string",
+      "examples": [
+        "jsonb-persist"
+      ]
+    },
     "publishes": {
       "description": "cross-app interfaces offered",
       "type": "array",
@@ -45,12 +61,19 @@
       }
     },
     "root_url": {
-      "description": "@schema {example: \"/app/klinik\", pattern: \"^/app/\"}",
+      "description": "@schema {example: \"/app/klinik\", pattern: \"^(/|/app(/.*)?)$\"}",
       "type": "string",
       "examples": [
         "/app/klinik"
       ],
-      "pattern": "^/app/"
+      "pattern": "^(/|/app(/.*)?)$"
+    },
+    "stack_family": {
+      "description": "@schema {example: \"react-shadcn\"}",
+      "type": "string",
+      "examples": [
+        "react-shadcn"
+      ]
     },
     "theme_ref": {
       "description": "@schema {example: \"ocean-blue\"}",

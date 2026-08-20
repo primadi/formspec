@@ -136,6 +136,29 @@ func TestFieldIsRequired(t *testing.T) {
 	}
 }
 
+// TestTsFieldType_MoneyAndFile verifies the money and file/attachment field
+// types map to their wire representation (todo 3.3.3): money amount is a
+// string (arbitrary precision, never number), and file is a ctx.storage
+// reference with canonical metadata.
+func TestTsFieldType_MoneyAndFile(t *testing.T) {
+	cases := []struct {
+		name string
+		f    spec.Field
+		want string
+	}{
+		{"money", spec.Field{Type: spec.FieldMoney}, "{ amount: string; currency: string }"},
+		{"file", spec.Field{Type: spec.FieldFile}, "{ key: string; filename: string; content_type: string; size: number; checksum: string }"},
+		{"attachment alias", spec.Field{Type: spec.FieldAttachment}, "{ key: string; filename: string; content_type: string; size: number; checksum: string }"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tsFieldType(tc.f); got != tc.want {
+				t.Errorf("tsFieldType(%s) = %q, want %q", tc.f.Type, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestPascalCase(t *testing.T) {
 	cases := map[string]string{
 		"invoice":        "Invoice",

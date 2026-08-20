@@ -26,6 +26,8 @@ package formspec
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"io/fs"
 	"net/http"
@@ -47,7 +49,6 @@ import (
 	"github.com/primadi/formspec/internal/validation"
 	"github.com/primadi/formspec/pkg/spec"
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
-	"github.com/primadi/formspec/renderers/jsonb-persist/datastore"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -89,6 +90,12 @@ type Config struct {
 	// Useful for shared/global theme registries. Paths can be absolute
 	// or relative to the working directory.
 	ThemeDirs []string
+
+	// ExternalDir is an additional manifest root for user-customized modules
+	// (committed to git, unlike vendors/). Entities declared here win over
+	// built-in formspec.core defaults (todo 6.1 merge strategy). Empty =
+	// no external overrides.
+	ExternalDir string
 }
 
 func (c *Config) applyDefaults() {
@@ -163,6 +170,15 @@ type App struct {
 	// specVersion is incremented on every ReloadSpec() call. Exposed via
 	// the Meta API so the frontend can detect when the bundle changed.
 	specVersion atomic.Int64
+}
+
+// Database returns the app's underlying database handle. Exposed so CLI
+// commands (e.g. `formspec repl`) can build the same ctx.* primitive resolver
+// that newDispatcher wires into scripts (todo 2.9.1–2.9.3).
+func (a *App) Database() db.DB {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.database
 }
 
 // Idempotency returns the app's idempotency-key store, configured with
@@ -248,6 +264,16 @@ func New(cfg Config) (*App, error) {
 	}
 
 	reg := entity.NewRegistry(database, driver, cfg.SpecPath)
+	// Load external/ overrides (user-customized modules, committed to git) —
+	// they win over built-in formspec.core defaults (todo 6.1 merge strategy).
+	if cfg.ExternalDir != "" {
+		reg.AddManifestRoot(cfg.ExternalDir)
+	}
+	// Register framework-owned auth entities (formspec.core.user/session)
+	// before loading user manifests, so external/ overrides can replace them.
+	if err := auth.RegisterCoreEntities(reg); err != nil {
+		return nil, fmt.Errorf("register core entities: %w", err)
+	}
 	for _, loadErr := range reg.LoadEntities() {
 		fmt.Fprintf(os.Stderr, "formspec: load warning: %v\n", loadErr)
 	}
@@ -315,6 +341,41 @@ func New(cfg Config) (*App, error) {
 	}
 	if cfg.WebFS != nil {
 		rb.SetWebFS(cfg.WebFS)
+	}
+
+	// Auth service (todo 6.1): login + refresh backed by formspec.core
+	// entities (overridable via external/ or auth_config_ref). The issuer
+	// uses the same secret/issuer as the JWT validator configured in
+	// configureAuth, so issued tokens validate against the middleware.
+	authRoles := auth.NewRoleResolver(reg)
+	// In dev mode with no explicit secret, generate a random one so issued
+	// tokens are signed with a real secret (still dev-only; ProdMode
+	// requires an explicit JWTSecret or JWTPublicKeyPath).
+	issuerSecret := cfg.JWTSecret
+	if issuerSecret == "" {
+		issuerSecret = randomDevSecret()
+	}
+	authSvc, err := auth.NewService(authRoles, auth.NewTokenIssuer(
+		issuerSecret, cfg.JWTIssuer, "", 0, 0))
+	if err != nil {
+		return nil, fmt.Errorf("construct auth service: %w", err)
+	}
+	// Wire role-based permission materialization (todo 6.3/5.12.5): the role
+	// store reads formspec.core.role grants, and the materializer expands
+	// page/tab/action grants into concrete {module}.{entity}.{action}
+	// permission strings using the UI + entity registries.
+	if roleStore, err := authRoles.Resolve(auth.RoleRole); err == nil {
+		authSvc.SetRoleStore(auth.NewRoleStore(roleStore))
+	}
+	authSvc.SetMaterializer(auth.NewMaterializer(uiReg, reg))
+	api.SetAuthService(authSvc)
+
+	// Seed a default dev user so login works out of the box in dev mode.
+	// Never seeds in ProdMode.
+	if !cfg.ProdMode {
+		if err := authSvc.SeedDevUser(context.Background(), cfg.WorkspaceID, "admin", "admin"); err != nil {
+			fmt.Fprintf(os.Stderr, "formspec: warning: seed dev user: %v\n", err)
+		}
 	}
 
 	validation.SetEntityLookup(func(module, entityName, id string) (bool, error) {
@@ -613,22 +674,34 @@ func configureAuth(cfg Config) error {
 	return nil
 }
 
+// randomDevSecret generates a random HMAC secret for dev-mode token signing
+// when no explicit JWTSecret is configured. Dev-only — ProdMode requires an
+// explicit secret or public key.
+func randomDevSecret() string {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		// Fall back to a fixed dev secret if the OS entropy source fails
+		// (should never happen in practice).
+		return "formspec-dev-secret-change-me"
+	}
+	return hex.EncodeToString(b)
+}
+
 func newDispatcher(reg *entity.Registry, database db.DB, cfg Config) *action.Dispatcher {
 	disp := action.NewDispatcher()
 
 	scriptEx := action.NewScriptExecutor(cfg.SpecPath)
-	// Wire the ctx.* primitive resolver (todo 2.9.1): the "db" primitive
-	// resolves to the app's primary database (SQLite in dev, Postgres in
-	// prod) so scripts can run ctx.db().query(...). Other primitives
-	// (cache/lock/queue/pubsub/storage/kvstore) and named datastores are not
-	// yet backed by a live connection in single-server mode — the resolver
-	// returns a clear error so scripts fail loudly instead of silently.
-	scriptEx.SetDatastoreResolver(func(primitiveType, name string) (interface{}, error) {
-		if primitiveType == "db" && (name == "" || name == "default") {
-			return &datastore.DBQuerier{DB: database}, nil
-		}
-		return nil, fmt.Errorf("ctx.%s: no live datastore for %q in single-server mode (only db/default is wired; todo 2.9.2–2.9.4)", primitiveType, name)
-	})
+	// Wire the ctx.* primitive resolver (todo 2.9.1–2.9.3): the closed set of
+	// 9 primitives auto-provisions its 'default' backend in single-server
+	// mode — db → app's primary database (SQLite dev / Postgres prod),
+	// cache/lock/queue/pubsub/kvstore → in-memory, storage → filesystem,
+	// config → in-memory registry. Named datastores (from the Control Plane
+	// snapshot) are not yet backed by a live connection (todo 2.9.4) and
+	// fail loudly.
+	scriptEx.SetDatastoreResolver(ctxPrimitiveResolver(database, stateDirFromDSN(cfg.DSN)))
+	// Strict ctx.* primitive enforcement (todo 2.6.4): in ProdMode/StrictMode,
+	// a script may only use ctx.* primitives it declared in uses.primitives.
+	scriptEx.SetStrictPrimitives(cfg.StrictMode || cfg.ProdMode)
 	scriptEx.SetSaveHandler(func(ctx context.Context, workspaceID, module, entityName, id string, version int, data map[string]any) error {
 		if id == "" {
 			return fmt.Errorf("resource.save: cannot save before the record exists — use resource.set() during a before-create hook/impl; the framework persists automatically")

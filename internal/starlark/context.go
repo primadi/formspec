@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"go.starlark.net/starlark"
+
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 // CtxAPI is the Starlark-callable ctx object.
@@ -29,6 +31,12 @@ type CtxAPI struct {
 	Log       *logAPI
 	NextKey   func(fieldName string) (string, error)
 	Config    *configAPI
+
+	// uses is the caller action's declared uses block (todo 2.6.4). When
+	// strictPrimitives is true, accessing a ctx.* primitive not listed in
+	// uses.primitives is rejected with a USES_VIOLATION error.
+	uses             *spec.UsesDecl
+	strictPrimitives bool
 
 	// Primitive handles — callable starlark values with .named() support.
 	// Each is lazily initialized via the getter methods.
@@ -52,6 +60,37 @@ func NewCtxAPI(workspaceID, workspaceName, userID, userRole string, userPerms []
 		Now:       now,
 		Log:       newLogAPI(),
 	}
+}
+
+// SetUses records the caller action's declared uses block so ctx.* primitive
+// access can be checked against it (todo 2.6.4).
+func (c *CtxAPI) SetUses(uses *spec.UsesDecl) {
+	c.uses = uses
+}
+
+// SetStrictPrimitives toggles strict enforcement of ctx.* primitive access
+// against uses.primitives. Off by default (dev mode); enabled in
+// ProdMode/StrictMode.
+func (c *CtxAPI) SetStrictPrimitives(strict bool) {
+	c.strictPrimitives = strict
+}
+
+// checkPrimitive enforces that a ctx.* primitive is declared in
+// uses.primitives when strict mode is on. Returns nil when relaxed or when
+// the primitive is declared.
+func (c *CtxAPI) checkPrimitive(name string) error {
+	if !c.strictPrimitives {
+		return nil
+	}
+	if c.uses == nil {
+		return fmt.Errorf("USES_VIOLATION: ctx.%s used but the action declares no uses block — add uses.primitives: [%s]", name, name)
+	}
+	for _, p := range c.uses.Primitives {
+		if p == name {
+			return nil
+		}
+	}
+	return fmt.Errorf("USES_VIOLATION: ctx.%s used but not declared in uses.primitives — add %q to the action's uses.primitives", name, name)
 }
 
 // SetDatastoreResolver sets the resolver function for named datastore lookups.
@@ -96,36 +135,57 @@ func (c *CtxAPI) Attr(name string) (starlark.Value, error) {
 	case "config":
 		return c.Config, nil
 	case "db":
+		if err := c.checkPrimitive("db"); err != nil {
+			return nil, err
+		}
 		if c.db == nil {
 			return starlark.None, fmt.Errorf("ctx.db: datastore resolver not configured")
 		}
 		return c.db, nil
 	case "cache":
+		if err := c.checkPrimitive("cache"); err != nil {
+			return nil, err
+		}
 		if c.cache == nil {
 			return starlark.None, fmt.Errorf("ctx.cache: datastore resolver not configured")
 		}
 		return c.cache, nil
 	case "lock":
+		if err := c.checkPrimitive("lock"); err != nil {
+			return nil, err
+		}
 		if c.lock == nil {
 			return starlark.None, fmt.Errorf("ctx.lock: datastore resolver not configured")
 		}
 		return c.lock, nil
 	case "queue":
+		if err := c.checkPrimitive("queue"); err != nil {
+			return nil, err
+		}
 		if c.queue == nil {
 			return starlark.None, fmt.Errorf("ctx.queue: datastore resolver not configured")
 		}
 		return c.queue, nil
 	case "pubsub":
+		if err := c.checkPrimitive("pubsub"); err != nil {
+			return nil, err
+		}
 		if c.pubsub == nil {
 			return starlark.None, fmt.Errorf("ctx.pubsub: datastore resolver not configured")
 		}
 		return c.pubsub, nil
 	case "storage":
+		if err := c.checkPrimitive("storage"); err != nil {
+			return nil, err
+		}
 		if c.storage == nil {
 			return starlark.None, fmt.Errorf("ctx.storage: datastore resolver not configured")
 		}
 		return c.storage, nil
 	case "kvstore":
+		if err := c.checkPrimitive("kvstore"); err != nil {
+			return nil, err
+		}
 		if c.kvstore == nil {
 			return starlark.None, fmt.Errorf("ctx.kvstore: datastore resolver not configured")
 		}

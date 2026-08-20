@@ -10,7 +10,15 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
+
+// recentDate returns yesterday's date (YYYY-MM-DD) — a transaction_date that
+// is always within the default backdate limit, so tests are not
+// time-dependent.
+func recentDate() string {
+	return time.Now().AddDate(0, 0, -1).Format("2006-01-02")
+}
 
 // buildUsesSpecDir writes a minimal two-module spec (alpha + beta) to dir.
 // alpha's order entity exposes a custom action `peek` implemented by

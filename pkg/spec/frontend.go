@@ -1,6 +1,10 @@
 package spec
 
-import "gopkg.in/yaml.v3"
+import (
+	"fmt"
+
+	"gopkg.in/yaml.v3"
+)
 
 // ─── Frontend Kinds (Frontend Spec §2–§13) ───
 
@@ -32,11 +36,59 @@ type PageLayout struct {
 
 // PageBlock is a compositional unit within a Page.
 type PageBlock struct {
-	Form      *BlockRef `yaml:"form,omitempty" json:"form,omitempty"`
-	Table     *BlockRef `yaml:"table,omitempty" json:"table,omitempty"`
-	Component *BlockRef `yaml:"component,omitempty" json:"component,omitempty"`
-	Widget    *BlockRef `yaml:"widget,omitempty" json:"widget,omitempty"`
-	HTML      string    `yaml:"html,omitempty" json:"html,omitempty"`
+	Form      *BlockRef     `yaml:"form,omitempty" json:"form,omitempty"`
+	Table     *BlockRef     `yaml:"table,omitempty" json:"table,omitempty"`
+	Component *BlockRef     `yaml:"component,omitempty" json:"component,omitempty"`
+	Widget    *BlockRef     `yaml:"widget,omitempty" json:"widget,omitempty"`
+	HTML      string        `yaml:"html,omitempty" json:"html,omitempty"`
+	Section   *SectionBlock `yaml:"section,omitempty" json:"section,omitempty"`
+}
+
+// SectionBlock is a declarative presentation section inside a Page
+// (frontend/06-page-kinds.md §1). Sections are generic — reusable in any App
+// (marketing/hero, no-nav, sidebar-nav, ...): pure presentation, no data
+// binding, no auth, and zero styling fields — every visual token lives in
+// kind: Theme (frontend/05-app-kinds.md §5), never inline.
+type SectionBlock struct {
+	// @schema {description: "Section block type — closed set.", enum: ["hero", "feature_grid", "card", "carousel", "cta"]}
+	Type string `yaml:"type" json:"type"`
+	// @schema {example: "Kelola klinik Anda"}
+	Title string `yaml:"title,omitempty" json:"title,omitempty"`
+	// @schema {example: "Satu platform untuk jadwal, pasien, dan tagihan."}
+	Subtitle string `yaml:"subtitle,omitempty" json:"subtitle,omitempty"`
+	// @schema {example: "assets/hero.png"}
+	Image string `yaml:"image,omitempty" json:"image,omitempty"`
+	// @schema {example: "primary"}
+	Variant string      `yaml:"variant,omitempty" json:"variant,omitempty"` // hero/cta: primary | secondary | ghost
+	CTA     *SectionCTA `yaml:"cta,omitempty" json:"cta,omitempty"`
+	// Items is the content list for feature_grid / card / carousel.
+	Items []SectionItem `yaml:"items,omitempty" json:"items,omitempty"`
+	// Columns controls the grid width for feature_grid / card (default 3).
+	Columns int `yaml:"columns,omitempty" json:"columns,omitempty"`
+	// Autoplay + IntervalMS drive carousel auto-advance (default off / 5000ms).
+	Autoplay   bool `yaml:"autoplay,omitempty" json:"autoplay,omitempty"`
+	IntervalMS int  `yaml:"interval_ms,omitempty" json:"interval_ms,omitempty"`
+}
+
+// SectionCTA is one call-to-action link inside a section block.
+type SectionCTA struct {
+	// @schema {example: "Mulai"}
+	Label string `yaml:"label" json:"label"`
+	// @schema {example: "/app"}
+	Href string `yaml:"href" json:"href"`
+	// @schema {example: "primary", enum: ["primary", "secondary", "ghost"]}
+	Variant string `yaml:"variant,omitempty" json:"variant,omitempty"`
+}
+
+// SectionItem is one content entry in a feature_grid / card / carousel block.
+type SectionItem struct {
+	Title string `yaml:"title,omitempty" json:"title,omitempty"`
+	Text  string `yaml:"text,omitempty" json:"text,omitempty"`
+	// Icon is a lucide icon name (renderer-specific; closed to the shell's
+	// icon library — frontend/03-kind-renderers.md §5).
+	Icon  string      `yaml:"icon,omitempty" json:"icon,omitempty"`
+	Image string      `yaml:"image,omitempty" json:"image,omitempty"`
+	CTA   *SectionCTA `yaml:"cta,omitempty" json:"cta,omitempty"`
 }
 
 // PageTab is one tab on a tabbed page (Frontend §3, tabs variant).
@@ -519,4 +571,33 @@ type ListingSpec struct {
 	Columns []TableColumn `yaml:"columns" json:"columns"`
 	Filters []FilterSpec  `yaml:"filters,omitempty" json:"filters,omitempty"`
 	Search  bool          `yaml:"search,omitempty" json:"search,omitempty"`
+}
+
+// SectionBlockTypes is the closed set of section block types
+// (frontend/06-page-kinds.md §1).
+var SectionBlockTypes = map[string]bool{
+	"hero":         true,
+	"feature_grid": true,
+	"card":         true,
+	"carousel":     true,
+	"cta":          true,
+}
+
+// ValidatePageSpec validates a PageSpec, returning an error if any constraint
+// is violated. Enforces:
+//   - `blocks` and `tabs` are mutually exclusive.
+//   - Section blocks use a known type (closed set).
+func ValidatePageSpec(p *PageSpec) error {
+	if len(p.Blocks) > 0 && len(p.Tabs) > 0 {
+		return fmt.Errorf("page: `blocks` and `tabs` are mutually exclusive")
+	}
+	for i, blk := range p.Blocks {
+		if blk.Section == nil {
+			continue
+		}
+		if !SectionBlockTypes[blk.Section.Type] {
+			return fmt.Errorf("page block %d: section.type %q is not a known section block (closed set: hero, feature_grid, card, carousel, cta)", i, blk.Section.Type)
+		}
+	}
+	return nil
 }

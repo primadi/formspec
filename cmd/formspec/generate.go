@@ -21,9 +21,9 @@ import (
 	"strings"
 
 	"github.com/primadi/formspec/internal/api"
-	"github.com/primadi/formspec/renderers/jsonb-persist"
 	"github.com/primadi/formspec/internal/entity"
 	"github.com/primadi/formspec/pkg/spec"
+	db "github.com/primadi/formspec/renderers/jsonb-persist"
 )
 
 func runGenerate(args []string) {
@@ -300,6 +300,14 @@ func tsFieldType(f spec.Field) string {
 		return strings.Join(quoted, " | ")
 	case spec.FieldJSON:
 		return "unknown"
+	case spec.FieldMoney:
+		// money is a first-class {amount, currency} pair (05-field-types.md §2).
+		// amount is arbitrary-precision decimal → string, never number.
+		return "{ amount: string; currency: string }"
+	case spec.FieldFile, spec.FieldAttachment:
+		// file/attachment is a pointer to a ctx.storage object with canonical
+		// metadata (05-field-types.md §1.3): key, filename, content_type, size, checksum.
+		return "{ key: string; filename: string; content_type: string; size: number; checksum: string }"
 	case spec.FieldRelation:
 		// A relation field on the entity itself is the referenced ID
 		// (belongs_to); has_many/has_one are not modeled as record fields.

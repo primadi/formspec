@@ -9,8 +9,6 @@
 // Written manually once. Codegen (Fase 6.4) will replace this later.
 // Field names use snake_case to match the JSON wire format from the Go server.
 
-
-
 // ══════════════════════════════════════════════════════════════════════════════
 // Constants
 // ══════════════════════════════════════════════════════════════════════════════
@@ -44,16 +42,38 @@ export const KIND_KANBAN = "Kanban"
 export const KIND_TIMELINE = "Timeline"
 export const KIND_PRINT = "Print"
 export const KIND_THEME = "Theme"
+export const KIND_LISTING = "Listing"
 
 // No KIND_MENU — navigation isn't a standalone kind. It lives as
 // App.spec.menu (authoritative) / Module.spec.menu (default suggestion),
 // both typed as MenuItem[] below (Core Basic §4.4/§4.5).
 export type ResourceKind =
-  | "App" | "Module" | "Document" | "Entity" | "Service" | "Config"
-  | "Migration" | "Subscription" | "Workflow" | "Api" | "Webhook"
-  | "Environment" | "Policy" | "Datastore"
-  | "Page" | "Form" | "Table" | "Dashboard" | "Widget" | "Report"
-  | "Wizard" | "Kanban" | "Timeline" | "Print" | "Theme"
+  | "App"
+  | "Module"
+  | "Document"
+  | "Entity"
+  | "Service"
+  | "Config"
+  | "Migration"
+  | "Subscription"
+  | "Workflow"
+  | "Api"
+  | "Webhook"
+  | "Environment"
+  | "Policy"
+  | "Datastore"
+  | "Page"
+  | "Form"
+  | "Table"
+  | "Dashboard"
+  | "Widget"
+  | "Report"
+  | "Wizard"
+  | "Kanban"
+  | "Timeline"
+  | "Print"
+  | "Theme"
+  | "Listing"
 
 // ── Field Types ──
 
@@ -71,8 +91,18 @@ export const FIELD_CHILD = "child"
 export const FIELD_NUMBER = "number" // deprecated, backward compat
 
 export type FieldType =
-  | "string" | "integer" | "decimal" | "boolean" | "enum"
-  | "date" | "datetime" | "json" | "uuid" | "relation" | "child" | "number"
+  | "string"
+  | "integer"
+  | "decimal"
+  | "boolean"
+  | "enum"
+  | "date"
+  | "datetime"
+  | "json"
+  | "uuid"
+  | "relation"
+  | "child"
+  | "number"
 
 // ── Characteristics ──
 
@@ -106,7 +136,12 @@ export const IMPL_NATIVE = "native"
 export const IMPL_COMPILED = "compiled"
 export const IMPL_SIDECAR = "sidecar"
 
-export type ImplType = "script_ref" | "script" | "native" | "compiled" | "sidecar"
+export type ImplType =
+  | "script_ref"
+  | "script"
+  | "native"
+  | "compiled"
+  | "sidecar"
 
 // ── Protocol Types ──
 
@@ -127,15 +162,26 @@ export type DocStatus = "draft" | "submitted" | "cancelled" | ""
 // ── Reserved Field Names ──
 
 export const RESERVED_FIELD_NAMES = [
-  "owner", "created_at", "modified", "doc_status",
-  "amends", "amended_by", "version",
+  "owner",
+  "created_at",
+  "modified",
+  "doc_status",
+  "amends",
+  "amended_by",
+  "version",
 ] as const
 
 // ── Reserved Action Names ──
 
 export const RESERVED_ACTION_NAMES = [
-  "create", "update", "submit", "cancel", "delete",
-  "amend", "create-submit", "amend-submit",
+  "create",
+  "update",
+  "submit",
+  "cancel",
+  "delete",
+  "amend",
+  "create-submit",
+  "amend-submit",
 ] as const
 
 // ── Widget Types ──
@@ -496,6 +542,36 @@ export interface PageBlock {
   component?: BlockRef
   widget?: BlockRef
   html?: string
+  section?: SectionBlock
+}
+
+/** Declarative presentation section inside a Page (frontend/06-page-kinds.md §1). */
+export interface SectionBlock {
+  /** Closed set: hero | feature_grid | card | carousel | cta */
+  type: string
+  title?: string
+  subtitle?: string
+  image?: string
+  variant?: string
+  cta?: SectionCTA
+  items?: SectionItem[]
+  columns?: number
+  autoplay?: boolean
+  interval_ms?: number
+}
+
+export interface SectionCTA {
+  label: string
+  href: string
+  variant?: "primary" | "secondary" | "ghost"
+}
+
+export interface SectionItem {
+  title?: string
+  text?: string
+  icon?: string
+  image?: string
+  cta?: SectionCTA
 }
 
 export interface PageTab {
@@ -509,7 +585,7 @@ export interface BlockRef {
   ref?: string
   asset?: string
   id?: string
-  mode?: "view" | "edit"
+  mode?: "view" | "edit" | "create"
   param?: Record<string, unknown>
   props?: Record<string, unknown>
 }
@@ -610,6 +686,18 @@ export interface FilterSpec {
   show_all?: boolean
   /** For select filters: caption of the "All" (clear) option. Default "(ALL)". */
   all_label?: string
+}
+
+// ── Listing (Frontend §10, 06-page-kinds.md) ──
+// Public catalog (e-commerce, movie search) — structural sibling of Table
+// but without the auth-wrap assumptions of its App renderer and without
+// row/bulk actions that imply authenticated writes.
+
+export interface ListingSpec {
+  entity: string
+  columns: TableColumn[]
+  filters?: FilterSpec[]
+  search?: boolean
 }
 
 // ── Dashboard (Frontend §6) ──
@@ -905,6 +993,14 @@ export interface ActionSummary {
 export interface AppSummary {
   name: string
   root_url: string
+  /** Resolved App renderer archetype (frontend/05-app-kinds.md): sidebar-nav | topnav | no-nav */
+  app_renderer?: string
+  /** Auth axis: private | public. Public Apps boot anonymously. */
+  access?: "private" | "public"
+  /** Shell implementation (frontend/03-renderer-kind.md): react-shadcn */
+  stack_family?: string
+  /** Entity persist backend (backend/04-persist-backend.md): jsonb-persist */
+  persist_backend?: string
 }
 
 export interface MetaBundle {
@@ -922,6 +1018,7 @@ export interface MetaBundle {
   menu: MenuItem[]
   prints: Entry<PrintSpec>[]
   themes: Entry<ThemeSpec>[]
+  listings: Entry<ListingSpec>[]
 }
 
 export interface MeResponse {
@@ -988,7 +1085,16 @@ export interface FilterOpValue {
   value: string
 }
 
-export type FilterOp = "eq" | "neq" | "gt" | "gte" | "lt" | "lte" | "like" | "in" | "nin"
+export type FilterOp =
+  | "eq"
+  | "neq"
+  | "gt"
+  | "gte"
+  | "lt"
+  | "lte"
+  | "like"
+  | "in"
+  | "nin"
 
 export class FormaApiError extends Error {
   status: number
@@ -1017,7 +1123,10 @@ export class FormaApiError extends Error {
  * The three lifecycle patterns derived server-side (Frontend §1.7).
  * Sent as the `lifecycle` field on EntitySchema.
  */
-export type LifecyclePattern = "plain_crud" | "two_step_autosave" | "two_step_manual"
+export type LifecyclePattern =
+  | "plain_crud"
+  | "two_step_autosave"
+  | "two_step_manual"
 
 /**
  * Heuristic form render mode derived by the derivation engine.

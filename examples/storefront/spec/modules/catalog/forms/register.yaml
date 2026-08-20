@@ -1,0 +1,17 @@
+apiVersion: formspec.dev/v1
+kind: Form
+metadata:
+  name: register
+  module: catalog
+  description: "Formulir pendaftaran pelanggan publik"
+spec:
+  entity: catalog.registration
+  mode: create
+  sections:
+    - title: "Data Diri"
+      fields:
+        - { field: name }
+        - { field: email }
+        - { field: phone }
+  submit:
+    label: "Daftar"

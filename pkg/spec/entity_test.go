@@ -17,6 +17,42 @@ func TestValidateEntitySpec_BaseEntity(t *testing.T) {
 	}
 }
 
+func TestValidateEntitySpec_RenamedFrom(t *testing.T) {
+	// Valid rename.
+	e := &EntitySpec{
+		Version: "v1",
+		Fields: []Field{
+			{Name: "full_name", Type: FieldString, RenamedFrom: "name"},
+		},
+	}
+	if err := ValidateEntitySpec(e); err != nil {
+		t.Errorf("expected no error for valid rename, got %v", err)
+	}
+
+	// renamed_from collides with an existing field.
+	e2 := &EntitySpec{
+		Version: "v1",
+		Fields: []Field{
+			{Name: "full_name", Type: FieldString, RenamedFrom: "name"},
+			{Name: "name", Type: FieldString},
+		},
+	}
+	if err := ValidateEntitySpec(e2); err == nil {
+		t.Error("expected error when renamed_from collides with existing field")
+	}
+
+	// renamed_from is a reserved name.
+	e3 := &EntitySpec{
+		Version: "v1",
+		Fields: []Field{
+			{Name: "full_name", Type: FieldString, RenamedFrom: "version"},
+		},
+	}
+	if err := ValidateEntitySpec(e3); err == nil {
+		t.Error("expected error when renamed_from is a reserved name")
+	}
+}
+
 func TestValidateEntitySpec_ExtensionNoRequired(t *testing.T) {
 	e := &EntitySpec{
 		Version: "v1",

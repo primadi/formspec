@@ -9,6 +9,10 @@ spec:
   version: 1.0.0
   vendor: arisan
   root_url: /app/arisan
+  app_renderer: topnav
+  access: private
+  stack_family: react-shadcn
+  persist_backend: jsonb-persist
   modules:
     - arisan-master
     - arisan-field

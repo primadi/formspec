@@ -1,0 +1,39 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: registration
+  module: catalog
+  description: "Pendaftaran pelanggan publik via halaman landing"
+spec:
+  version: v1
+  characteristic: transaction
+  lifecycle: plain_crud
+  display_field: email
+  plural: registrations
+  fields:
+    - name: name
+      type: string
+      required: true
+      title: "Nama"
+    - name: email
+      type: string
+      required: true
+      unique: true
+      title: "Email"
+    - name: phone
+      type: string
+      title: "Telepon"
+    - name: transaction_date
+      type: date
+      title: "Tanggal"
+    - name: status
+      type: enum
+      enum_values: [new, contacted, converted]
+      default: new
+      title: "Status"
+  actions:
+    - name: submit
+      disabled: true
+  expose:
+    - type: rest
+      actions: [list, find, create]

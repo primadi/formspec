@@ -42,6 +42,7 @@ type Registry struct {
 	Timelines  map[string]*Entry[spec.TimelineSpec]
 	Prints     map[string]*Entry[spec.PrintSpec]
 	Themes     map[string]*Entry[spec.ThemeSpec]
+	Listings   map[string]*Entry[spec.ListingSpec]
 }
 
 // NewRegistry creates an empty UI registry.
@@ -58,6 +59,7 @@ func NewRegistry() *Registry {
 		Timelines:  map[string]*Entry[spec.TimelineSpec]{},
 		Prints:     map[string]*Entry[spec.PrintSpec]{},
 		Themes:     map[string]*Entry[spec.ThemeSpec]{},
+		Listings:   map[string]*Entry[spec.ListingSpec]{},
 	}
 }
 
@@ -117,6 +119,8 @@ func (r *Registry) register(raw manifest.RawManifest) error {
 		return registerInto(r.Prints, raw)
 	case spec.KindTheme:
 		return registerInto(r.Themes, raw)
+	case spec.KindListing:
+		return registerInto(r.Listings, raw)
 	default:
 		return nil // not a frontend kind
 	}

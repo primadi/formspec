@@ -39,6 +39,25 @@ type (
 		Acquire(ctx context.Context, key string, ttl time.Duration) (bool, error)
 		Release(ctx context.Context, key string) error
 	}
+	// Queue serves ctx.queue().enqueue(name, payload) / ctx.queue().dequeue(name).
+	Queue interface {
+		Enqueue(ctx context.Context, name string, payload any) error
+		Dequeue(ctx context.Context, name string) (any, error)
+	}
+	// PubSub serves ctx.pubsub().publish(channel, payload) / ctx.pubsub().subscribe(channel, cb).
+	PubSub interface {
+		Publish(ctx context.Context, channel string, payload any) error
+		Subscribe(ctx context.Context, channel string, cb func(payload any)) error
+	}
+	// Storage serves ctx.storage().upload(path, data) / ctx.storage().download(path).
+	Storage interface {
+		Upload(ctx context.Context, path string, data []byte) error
+		Download(ctx context.Context, path string) ([]byte, error)
+	}
+	// Config serves ctx.config().get(key) for non-secret config keys.
+	Config interface {
+		Get(ctx context.Context, key string) (any, error)
+	}
 )
 
 // ctxKey is the thread-local key under which the Go context.Context for the
@@ -181,13 +200,26 @@ func (r *primitiveRunner) Attr(name string) (starlark.Value, error) {
 		return r.builtinAcquire(), nil
 	case "release":
 		return r.builtinRelease(), nil
+	case "enqueue":
+		return r.builtinEnqueue(), nil
+	case "dequeue":
+		return r.builtinDequeue(), nil
+	case "publish":
+		return r.builtinPublish(), nil
+	case "subscribe":
+		return r.builtinSubscribe(), nil
+	case "upload":
+		return r.builtinUpload(), nil
+	case "download":
+		return r.builtinDownload(), nil
 	default:
 		return nil, starlark.NoSuchAttrError(fmt.Sprintf("%s connection has no .%s", r.primType, name))
 	}
 }
 
 func (r *primitiveRunner) AttrNames() []string {
-	return []string{"query", "get", "set", "delete", "acquire", "release"}
+	return []string{"query", "get", "set", "delete", "acquire", "release",
+		"enqueue", "dequeue", "publish", "subscribe", "upload", "download"}
 }
 
 func (r *primitiveRunner) builtinQuery() *starlark.Builtin {
@@ -325,5 +357,154 @@ func (r *primitiveRunner) builtinRelease() *starlark.Builtin {
 			return nil, fmt.Errorf("ctx.%s.release: %w", r.primType, err)
 		}
 		return starlark.None, nil
+	})
+}
+
+func (r *primitiveRunner) builtinEnqueue() *starlark.Builtin {
+	return starlark.NewBuiltin(r.primType+".enqueue", func(
+		thread *starlark.Thread,
+		fn *starlark.Builtin,
+		args starlark.Tuple,
+		kwargs []starlark.Tuple,
+	) (starlark.Value, error) {
+		var name string
+		var payload starlark.Value
+		if err := starlark.UnpackArgs("enqueue", args, kwargs, "name", &name, "payload", &payload); err != nil {
+			return nil, err
+		}
+		q, ok := r.conn.(Queue)
+		if !ok {
+			return starlark.None, fmt.Errorf("ctx.%s.enqueue: not yet implemented for this backend (connection=%q)", r.primType, r.name)
+		}
+		if err := q.Enqueue(threadContext(thread), name, fromStarlark(payload)); err != nil {
+			return nil, fmt.Errorf("ctx.%s.enqueue: %w", r.primType, err)
+		}
+		return starlark.None, nil
+	})
+}
+
+func (r *primitiveRunner) builtinDequeue() *starlark.Builtin {
+	return starlark.NewBuiltin(r.primType+".dequeue", func(
+		thread *starlark.Thread,
+		fn *starlark.Builtin,
+		args starlark.Tuple,
+		kwargs []starlark.Tuple,
+	) (starlark.Value, error) {
+		var name string
+		if err := starlark.UnpackArgs("dequeue", args, kwargs, "name", &name); err != nil {
+			return nil, err
+		}
+		q, ok := r.conn.(Queue)
+		if !ok {
+			return starlark.None, fmt.Errorf("ctx.%s.dequeue: not yet implemented for this backend (connection=%q)", r.primType, r.name)
+		}
+		payload, err := q.Dequeue(threadContext(thread), name)
+		if err != nil {
+			return nil, fmt.Errorf("ctx.%s.dequeue: %w", r.primType, err)
+		}
+		sv, err := toStarlark(payload)
+		if err != nil {
+			return nil, err
+		}
+		return sv, nil
+	})
+}
+
+func (r *primitiveRunner) builtinPublish() *starlark.Builtin {
+	return starlark.NewBuiltin(r.primType+".publish", func(
+		thread *starlark.Thread,
+		fn *starlark.Builtin,
+		args starlark.Tuple,
+		kwargs []starlark.Tuple,
+	) (starlark.Value, error) {
+		var channel string
+		var payload starlark.Value
+		if err := starlark.UnpackArgs("publish", args, kwargs, "channel", &channel, "payload", &payload); err != nil {
+			return nil, err
+		}
+		ps, ok := r.conn.(PubSub)
+		if !ok {
+			return starlark.None, fmt.Errorf("ctx.%s.publish: not yet implemented for this backend (connection=%q)", r.primType, r.name)
+		}
+		if err := ps.Publish(threadContext(thread), channel, fromStarlark(payload)); err != nil {
+			return nil, fmt.Errorf("ctx.%s.publish: %w", r.primType, err)
+		}
+		return starlark.None, nil
+	})
+}
+
+func (r *primitiveRunner) builtinSubscribe() *starlark.Builtin {
+	return starlark.NewBuiltin(r.primType+".subscribe", func(
+		thread *starlark.Thread,
+		fn *starlark.Builtin,
+		args starlark.Tuple,
+		kwargs []starlark.Tuple,
+	) (starlark.Value, error) {
+		var channel string
+		var cb starlark.Callable
+		if err := starlark.UnpackArgs("subscribe", args, kwargs, "channel", &channel, "callback", &cb); err != nil {
+			return nil, err
+		}
+		ps, ok := r.conn.(PubSub)
+		if !ok {
+			return starlark.None, fmt.Errorf("ctx.%s.subscribe: not yet implemented for this backend (connection=%q)", r.primType, r.name)
+		}
+		err := ps.Subscribe(threadContext(thread), channel, func(payload any) {
+			sv, convErr := toStarlark(payload)
+			if convErr != nil {
+				return
+			}
+			_, _ = starlark.Call(thread, cb, starlark.Tuple{sv}, nil)
+		})
+		if err != nil {
+			return nil, fmt.Errorf("ctx.%s.subscribe: %w", r.primType, err)
+		}
+		return starlark.None, nil
+	})
+}
+
+func (r *primitiveRunner) builtinUpload() *starlark.Builtin {
+	return starlark.NewBuiltin(r.primType+".upload", func(
+		thread *starlark.Thread,
+		fn *starlark.Builtin,
+		args starlark.Tuple,
+		kwargs []starlark.Tuple,
+	) (starlark.Value, error) {
+		var path string
+		var data starlark.Bytes
+		if err := starlark.UnpackArgs("upload", args, kwargs, "path", &path, "data", &data); err != nil {
+			return nil, err
+		}
+		s, ok := r.conn.(Storage)
+		if !ok {
+			return starlark.None, fmt.Errorf("ctx.%s.upload: not yet implemented for this backend (connection=%q)", r.primType, r.name)
+		}
+		if err := s.Upload(threadContext(thread), path, []byte(data)); err != nil {
+			return nil, fmt.Errorf("ctx.%s.upload: %w", r.primType, err)
+		}
+		return starlark.None, nil
+	})
+}
+
+func (r *primitiveRunner) builtinDownload() *starlark.Builtin {
+	return starlark.NewBuiltin(r.primType+".download", func(
+		thread *starlark.Thread,
+		fn *starlark.Builtin,
+		args starlark.Tuple,
+		kwargs []starlark.Tuple,
+	) (starlark.Value, error) {
+		var path string
+		if err := starlark.UnpackArgs("download", args, kwargs, "path", &path); err != nil {
+			return nil, err
+		}
+		s, ok := r.conn.(Storage)
+		if !ok {
+			return starlark.None, fmt.Errorf("ctx.%s.download: not yet implemented for this backend (connection=%q)", r.primType, r.name)
+		}
+		data, err := s.Download(threadContext(thread), path)
+		if err != nil {
+			return nil, fmt.Errorf("ctx.%s.download: %w", r.primType, err)
+		}
+		return starlark.Bytes(data), nil
 	})
 }

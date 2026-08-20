@@ -68,11 +68,35 @@ func Resolve(manifests []manifest.RawManifest, uiReg *ui.Registry) (map[string]*
 		if as.RootURL == "" {
 			return nil, fmt.Errorf("app %q: spec.root_url is required", name)
 		}
+		// Apply the default App renderer when omitted (frontend/05-app-kinds.md).
+		if as.AppRenderer == "" {
+			as.AppRenderer = spec.DefaultAppRenderer
+		}
+		// Secure-by-default auth, plus the only installed shell/persist
+		// implementations.
+		if as.Access == "" {
+			as.Access = spec.AppAccessPrivate
+		}
+		if as.StackFamily == "" {
+			as.StackFamily = spec.DefaultStackFamily
+		}
+		if as.PersistBackend == "" {
+			as.PersistBackend = spec.DefaultPersistBackend
+		}
+		if err := spec.ValidateAppSpec(as); err != nil {
+			return nil, fmt.Errorf("app %q: %w", name, err)
+		}
 		// The renderer SPA is only mounted at /{workspace}/app/* (and
 		// /{workspace}/_admin, which isn't App-scoped) — see
 		// internal/api/router.go BuildHTTP. root_url must live under that
 		// mount for the static handler to actually serve the App's shell.
-		if as.RootURL != "/app" && !strings.HasPrefix(as.RootURL, "/app/") {
+		// Exception: a `public` App may own the workspace root "/" — its
+		// surface is served anonymously at /{workspace}/.
+		if as.Access == spec.AppAccessPublic {
+			if as.RootURL != "/" && as.RootURL != "/app" && !strings.HasPrefix(as.RootURL, "/app/") {
+				return nil, fmt.Errorf("app %q: public root_url %q must be \"/\" or start with \"/app/\"", name, as.RootURL)
+			}
+		} else if as.RootURL != "/app" && !strings.HasPrefix(as.RootURL, "/app/") {
 			return nil, fmt.Errorf("app %q: root_url %q must start with \"/app/\"", name, as.RootURL)
 		}
 		if existing, ok := rootURLs[as.RootURL]; ok {

@@ -171,6 +171,14 @@ func GenerateEntityDDL(meta spec.Metadata, entity *spec.EntitySpec, driver Drive
 					indexes = append(indexes, idx)
 				}
 			}
+			// Tree/hierarchy (4.6.1): a self-referential relation marked
+			// tree: true gets a materialized-path column _tpath_{field}.
+			if f.Tree {
+				columns = append(columns, fmt.Sprintf("_tpath_%s  text", f.Name))
+				indexes = append(indexes,
+					fmt.Sprintf("CREATE INDEX idx_%s_tpath_%s ON %s (_tpath_%s);",
+						ti.TableName, f.Name, ti.TableName, f.Name))
+			}
 			continue
 		}
 
@@ -423,9 +431,12 @@ func TableName(module, entity, plural string) string {
 
 // sanitizeIdent makes a manifest name safe as an unquoted SQL identifier:
 // kebab-case resource names (e.g. "medical-record") become snake_case table
-// names. Manifest names stay kebab-case everywhere else (routes, permissions).
+// names, and dotted module names (e.g. "formspec.core") become underscore
+// names ("formspec_core"). Manifest names stay kebab-case/dotted everywhere
+// else (routes, permissions).
 func sanitizeIdent(s string) string {
-	return strings.ReplaceAll(s, "-", "_")
+	s = strings.ReplaceAll(s, "-", "_")
+	return strings.ReplaceAll(s, ".", "_")
 }
 
 // ExtensionDDLInfo holds the DDL for an entity extension.

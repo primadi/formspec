@@ -1,5 +1,7 @@
 package spec
 
+import "fmt"
+
 // ─── Backend Kind Specs ───
 
 // ServiceSpec defines a stateless, pure computation resource (Core §4.2).
@@ -56,12 +58,18 @@ type AppSpec struct {
 	Version string `yaml:"version" json:"version"`
 	// @schema {example: "acme-corp"}
 	Vendor string `yaml:"vendor" json:"vendor"`
-	// @schema {example: "/app/klinik", pattern: "^/app/"}
+	// @schema {example: "/app/klinik", pattern: "^(/|/app(/.*)?)$"}
 	RootURL string `yaml:"root_url" json:"root_url"`
 	// @schema {example: "[clinic, pharmacy]"}
 	Modules []string `yaml:"modules" json:"modules"`
-	// @schema {example: "shadcn-shell"}
-	AppRenderer string `yaml:"app_renderer,omitempty" json:"app_renderer,omitempty"` // named Renderer tier app (frontend/05-app-kinds.md)
+	// @schema {example: "no-nav", enum: ["sidebar-nav", "topnav", "no-nav"]}
+	AppRenderer string `yaml:"app_renderer,omitempty" json:"app_renderer,omitempty"` // chrome archetype (frontend/05-app-kinds.md): sidebar-nav | topnav | no-nav
+	// @schema {example: "private", enum: ["private", "public"]}
+	Access AppAccess `yaml:"access,omitempty" json:"access,omitempty"` // auth: private (default) | public — orthogonal to app_renderer
+	// @schema {example: "react-shadcn"}
+	StackFamily string `yaml:"stack_family,omitempty" json:"stack_family,omitempty"` // shell implementation (frontend/03-renderer-kind.md)
+	// @schema {example: "jsonb-persist"}
+	PersistBackend string `yaml:"persist_backend,omitempty" json:"persist_backend,omitempty"` // entity persist backend (backend/04-persist-backend.md)
 	// @schema {example: "ocean-blue"}
 	ThemeRef      string         `yaml:"theme_ref,omitempty" json:"theme_ref,omitempty"`             // per-App Theme resolution (platform/02 §3)
 	AuthConfigRef string         `yaml:"auth_config_ref,omitempty" json:"auth_config_ref,omitempty"` // per-App auth strategy config
@@ -218,6 +226,22 @@ type MigrationSpec struct {
 	DDL string `yaml:"ddl" json:"ddl"`
 	// @schema {example: "billing"}
 	Module string `yaml:"module,omitempty" json:"module,omitempty"` // owning module for table-level DDL
+}
+
+// ─── 4.2.5 DataMigrationSpec ───
+
+// DataMigrationSpec defines a versioned data migration (backfill) with a run
+// script and an optional rollback script (01-core-basic.md §4, type 3).
+// Distinct from structural diff (automatic) and custom DDL (kind: Migration).
+type DataMigrationSpec struct {
+	// Version is the migration version (increments per migration).
+	Version int `yaml:"version" json:"version"`
+	// Run is the Starlark script ref that performs the backfill.
+	Run string `yaml:"run" json:"run"`
+	// Rollback is an optional Starlark script ref that reverses the backfill.
+	Rollback string `yaml:"rollback,omitempty" json:"rollback,omitempty"`
+	// Module is the owning module.
+	Module string `yaml:"module,omitempty" json:"module,omitempty"`
 }
 
 // ─── 1.1.2 WorkflowSpec ───
@@ -388,4 +412,70 @@ type KindDefinitionSpec struct {
 	Handler *ImplDecl `yaml:"handler" json:"handler"`
 	// @schema {example: "module", enum: ["module", "app"]}
 	Scope string `yaml:"scope,omitempty" json:"scope,omitempty"` // module | app
+}
+
+// AppRendererNames is the closed set of App renderer archetypes
+// (frontend/05-app-kinds.md §1). `sidebar-nav` is the default when
+// App.spec.app_renderer is omitted. An archetype describes the chrome shape
+// only — public/private auth is a separate axis (AppSpec.Access).
+var AppRendererNames = map[string]bool{
+	"sidebar-nav": true,
+	"topnav":      true,
+	"no-nav":      true,
+}
+
+// DefaultAppRenderer is applied when App.spec.app_renderer is empty.
+const DefaultAppRenderer = "sidebar-nav"
+
+// AppAccess controls whether an App's surface is publicly reachable without
+// authentication (frontend/05-app-kinds.md §1). `private` is the
+// secure-by-default. Orthogonal to the App renderer archetype: any of
+// sidebar-nav/topnav/no-nav may be public or private.
+type AppAccess string
+
+const (
+	AppAccessPrivate AppAccess = "private"
+	AppAccessPublic  AppAccess = "public"
+)
+
+// DefaultStackFamily is the only installed shell implementation today
+// (frontend/03-renderer-kind.md). More shells (flutter, react-mui) register
+// later; full renderer resolution is tracked in todo 5.16.
+const DefaultStackFamily = "react-shadcn"
+
+// DefaultPersistBackend is the official entity persist backend
+// (backend/04-persist-backend.md). It implements EntityPersistContract.
+const DefaultPersistBackend = "jsonb-persist"
+
+// EntityPersistContract is the storage contract every entity persist backend
+// must implement (backend/04-persist-backend.md).
+const EntityPersistContract = "formspec/storage.entity-persist"
+
+// InstalledPersistBackends is the set of entity persist backends wired into
+// this engine build (backend/04-persist-backend.md). Adding a backend means
+// registering it here AND wiring its driver; ValidateAppSpec rejects any
+// name outside this set — swapping to a backend that isn't installed or
+// doesn't implement the storage contract is a hard error.
+var InstalledPersistBackends = map[string]bool{
+	DefaultPersistBackend: true,
+}
+
+// ValidateAppSpec validates an AppSpec, returning an error if any constraint
+// is violated. Enforces:
+//   - app_renderer, when set, must be a known App renderer (closed set).
+//   - access, when set, must be private|public.
+//   - persist_backend, when set, must be an installed backend — swapping to a
+//     backend that doesn't exist / isn't compatible with the storage contract
+//     is a hard error (not a warning).
+func ValidateAppSpec(a *AppSpec) error {
+	if a.AppRenderer != "" && !AppRendererNames[a.AppRenderer] {
+		return fmt.Errorf("app_renderer %q is not a known App renderer (closed set: sidebar-nav, topnav, no-nav)", a.AppRenderer)
+	}
+	if a.Access != "" && a.Access != AppAccessPrivate && a.Access != AppAccessPublic {
+		return fmt.Errorf("access %q is invalid (enum: private, public)", a.Access)
+	}
+	if a.PersistBackend != "" && !InstalledPersistBackends[a.PersistBackend] {
+		return fmt.Errorf("persist_backend %q is not installed (installed: %s — implements %s)", a.PersistBackend, DefaultPersistBackend, EntityPersistContract)
+	}
+	return nil
 }

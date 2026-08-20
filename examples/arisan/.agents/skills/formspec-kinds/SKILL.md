@@ -17,11 +17,11 @@ All kinds share the same top-level structure:
 
 ```yaml
 apiVersion: formspec.dev/v1
-kind: Entity               # PascalCase
+kind: Entity # PascalCase
 metadata:
-  name: invoice            # kebab-case, unique per (kind, module)
-  module: billing          # owning module
-  description: "..."       # recommended for AI readability
+  name: invoice # kebab-case, unique per (kind, module)
+  module: billing # owning module
+  description: "..." # recommended for AI readability
   labels: {}
   annotations: {}
 spec:
@@ -29,6 +29,7 @@ spec:
 ```
 
 Key rules:
+
 - `metadata.name` — kebab-case, unique per (kind, module)
 - `metadata.module` — owning module name
 - `metadata.description` — **always include** for AI readability
@@ -36,22 +37,22 @@ Key rules:
 
 ## Quick Reference: Concern → Kind
 
-| Concern | Kind(s) | Spec File |
-|---------|---------|-----------|
-| Domain model | `Entity`, `Service` | `backend/01-core-basic.md` |
-| Curation | `App`, `Module` | `platform/02-workspace-app-module.md` |
-| Configuration | `Config` | `backend/01-core-basic.md` §10 |
-| Custom DDL | `Migration` | `backend/01-core-basic.md` §4 |
-| Cross-module events | `Subscription` | `backend/01-core-basic.md` §7 |
-| Business process | `Workflow` | `backend/02-core-extended.md` §2 |
-| API surface | `Api`, `Webhook`, `Mockup` | `backend/02-core-extended.md` |
-| Extension | `KindDefinition` | `platform/03-kind-system.md` §2 |
-| Reactive bridge | `Integrator` | `backend/02-core-extended.md` §5 |
-| Visual renderer | `Renderer` | `frontend/03-renderer-kind.md` |
-| Storage renderer | `PersistBackend` | `backend/04-persist-backend.md` |
-| Visual — page tier | `Page`, `Form`, `Table`, `Dashboard`, `Widget`, `Report`, `Wizard`, `Kanban`, `Timeline`, `Calendar`, `Listing`, `ApprovalInbox`, `NotificationCenter`, `Print`, `Theme` | `frontend/05,06,07` |
-| Governance | `Environment`, `Policy` | `platform/04-control-plane.md` |
-| Infrastructure | `Datastore` | `platform/06-datastore.md` |
+| Concern             | Kind(s)                                                                                                                                                                  | Spec File                             |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------- |
+| Domain model        | `Entity`, `Service`                                                                                                                                                      | `backend/01-core-basic.md`            |
+| Curation            | `App`, `Module`                                                                                                                                                          | `platform/02-workspace-app-module.md` |
+| Configuration       | `Config`                                                                                                                                                                 | `backend/01-core-basic.md` §10        |
+| Custom DDL          | `Migration`                                                                                                                                                              | `backend/01-core-basic.md` §4         |
+| Cross-module events | `Subscription`                                                                                                                                                           | `backend/01-core-basic.md` §7         |
+| Business process    | `Workflow`                                                                                                                                                               | `backend/02-core-extended.md` §2      |
+| API surface         | `Api`, `Webhook`, `Mockup`                                                                                                                                               | `backend/02-core-extended.md`         |
+| Extension           | `KindDefinition`                                                                                                                                                         | `platform/03-kind-system.md` §2       |
+| Reactive bridge     | `Integrator`                                                                                                                                                             | `backend/02-core-extended.md` §5      |
+| Visual renderer     | `Renderer`                                                                                                                                                               | `frontend/03-renderer-kind.md`        |
+| Storage renderer    | `PersistBackend`                                                                                                                                                         | `backend/04-persist-backend.md`       |
+| Visual — page tier  | `Page`, `Form`, `Table`, `Dashboard`, `Widget`, `Report`, `Wizard`, `Kanban`, `Timeline`, `Calendar`, `Listing`, `ApprovalInbox`, `NotificationCenter`, `Print`, `Theme` | `frontend/05,06,07`                   |
+| Governance          | `Environment`, `Policy`                                                                                                                                                  | `platform/04-control-plane.md`        |
+| Infrastructure      | `Datastore`                                                                                                                                                              | `platform/06-datastore.md`            |
 
 ---
 
@@ -60,6 +61,7 @@ Key rules:
 ### Entity — Stateful Business Data
 
 The most important kind. Represents persistent business data with:
+
 - **Characteristic** (mutually exclusive):
   - `master` — stable reference data (Customer, Product). May have lifecycle.
   - `transaction` — append-heavy, time-partitioned (Invoice, Journal Entry). **Requires** explicit `transaction_date` field.
@@ -112,7 +114,7 @@ fields:
     required: true
 ```
 
-**`child`** declares an *embedded* collection (inline fields, storage
+**`child`** declares an _embedded_ collection (inline fields, storage
 jsonb|table) — it is NOT a reference to another entity:
 
 ```yaml
@@ -132,11 +134,11 @@ If the child must be a separately CRUD-able entity, use `relation`
 
 **`expose`** canonical list form (`docs/spec/backend/01-core-basic.md` §8.4):
 
-| Value | Meaning |
-|---|---|
-| `expose: []` / omitted | UI + internal callers only; external API → 404 |
-| `expose: [{ type: rest, actions: [list, find] }]` | read-only external API |
-| `expose: [{ type: rest, actions: [list, find, create, update, delete] }]` | full CRUD external API |
+| Value                                                                     | Meaning                                        |
+| ------------------------------------------------------------------------- | ---------------------------------------------- |
+| `expose: []` / omitted                                                    | UI + internal callers only; external API → 404 |
+| `expose: [{ type: rest, actions: [list, find] }]`                         | read-only external API                         |
+| `expose: [{ type: rest, actions: [list, find, create, update, delete] }]` | full CRUD external API                         |
 
 `expose` only controls the external surface; UI is always available and gated
 by permissions. `kind: Api` overrides how the external surface is published.
@@ -223,11 +225,11 @@ that catalog.**
 The menu is defined in `spec.menu` as a list of `MenuItem` nodes. Three
 node types (validated at load):
 
-| Node | `type` | level | Required | Forbidden |
-|------|--------|-------|----------|-----------|
-| **Adopt** | `module` | 1 only | `module` | `label`, `icon`, `view`, `route`, `children` |
-| **Group** | (empty) | 1–2 | `label`, `children` | `module`, `view`, `route` |
-| **Leaf** | (empty) | 2–3 | `label`, `module`, exactly one of `view`/`route` | `children` |
+| Node      | `type`   | level  | Required                                         | Forbidden                                    |
+| --------- | -------- | ------ | ------------------------------------------------ | -------------------------------------------- |
+| **Adopt** | `module` | 1 only | `module`                                         | `label`, `icon`, `view`, `route`, `children` |
+| **Group** | (empty)  | 1–2    | `label`, `children`                              | `module`, `view`, `route`                    |
+| **Leaf**  | (empty)  | 2–3    | `label`, `module`, exactly one of `view`/`route` | `children`                                   |
 
 - **Adopt node** splices the entire `Module.spec.menu` default suggestion at
   this position. Module must be in `spec.modules`.
@@ -252,9 +254,18 @@ spec:
       icon: "pill"
       children:
         - { label: "Antrian Resep", view: pharmacy-queue, module: pharmacy }
-        - { label: "Semua Resep", route: /pharmacy/prescriptions, module: pharmacy }
+        - {
+            label: "Semua Resep",
+            route: /pharmacy/prescriptions,
+            module: pharmacy,
+          }
     # Leaf: direct view (resolved server-side to /wizard/checklist-fill)
-    - { label: "Isi Checklist", icon: "edit", view: checklist-fill-wizard, module: crc-field }
+    - {
+        label: "Isi Checklist",
+        icon: "edit",
+        view: checklist-fill-wizard,
+        module: crc-field,
+      }
 ```
 
 ### Module — Bounded Context
@@ -285,7 +296,11 @@ spec:
     - label: "Klinik"
       icon: "stethoscope"
       children:
-        - { label: "Dashboard", icon: "layout-dashboard", view: clinic-dashboard }
+        - {
+            label: "Dashboard",
+            icon: "layout-dashboard",
+            view: clinic-dashboard,
+          }
         - { label: "Daftar Kunjungan", icon: "list", view: visits-page }
         - label: "Kasir"
           icon: "wallet"
@@ -318,26 +333,38 @@ spec:
   version: 1.0.0
   vendor: trakindo
   menu:
-    - label: "Eksekusi"          # level 1 — category (Group node)
+    - label: "Eksekusi" # level 1 — category (Group node)
       icon: "clipboard-check"
       children:
-        - { label: "Dokumen Checklist", icon: "clipboard-check", route: /crc-field/checklist-documents }  # level 2 — leaf
+        - {
+            label: "Dokumen Checklist",
+            icon: "clipboard-check",
+            route: /crc-field/checklist-documents,
+          } # level 2 — leaf
         - { label: "Isi Checklist", icon: "edit", view: checklist-fill-wizard }
 ```
 
 A module with several concerns uses several categories (each a Group node):
 
 ```yaml
-  menu:
-    - label: "Laporan"
-      icon: "bar-chart-3"
-      children:
-        - { label: "CRC Summary", icon: "layout-dashboard", view: crc-summary-dashboard }
-        - { label: "Laporan Ringkasan", icon: "bar-chart-3", view: checklist-summary-report }
-    - label: "Portal"
-      icon: "globe"
-      children:
-        - { label: "Portal Customer", icon: "globe", view: customer-portal }
+menu:
+  - label: "Laporan"
+    icon: "bar-chart-3"
+    children:
+      - {
+          label: "CRC Summary",
+          icon: "layout-dashboard",
+          view: crc-summary-dashboard,
+        }
+      - {
+          label: "Laporan Ringkasan",
+          icon: "bar-chart-3",
+          view: checklist-summary-report,
+        }
+  - label: "Portal"
+    icon: "globe"
+    children:
+      - { label: "Portal Customer", icon: "globe", view: customer-portal }
 ```
 
 **view resolves ALL visual kinds** (via server-side registration):
@@ -358,12 +385,13 @@ metadata:
   name: quick-create-invoice
   module: billing
 spec:
-  public: true   # default — auto-Page route /billing/form/quick-create-invoice
+  public: true # default — auto-Page route /billing/form/quick-create-invoice
   entity: billing.invoice
   mode: create
 ```
 
 **Menu resolution flow:**
+
 1. `App.spec.menu` defines the tree (authoritative).
 2. `type: module` adopt nodes expand to `Module.spec.menu` (default
    suggestion) — App can freely override/restrict/rearrange.
@@ -452,8 +480,11 @@ spec:
   on: { transition: { from: draft, to: posted } }
   steps:
     - { roles: [gl.supervisor], approvers: 1 }
-    - { roles: [gl.controller], approvers: 1,
-        when: "resource.amount > 100000000" }
+    - {
+        roles: [gl.controller],
+        approvers: 1,
+        when: "resource.amount > 100000000",
+      }
   on_reject: { to: rejected }
   escalation: { after: 48h, notify_roles: [gl.manager] }
 ```
@@ -500,6 +531,7 @@ They exist only to **override** the auto-derived defaults from Entity.
 ### Derived by Default
 
 Every Entity automatically generates:
+
 - CRUD REST API endpoints
 - A `Table` (list/browse view)
 - Two `Form`s (create, edit)
@@ -553,7 +585,8 @@ Calendar view for Entity data with date fields (e.g., appointments, deadlines).
 
 ### Listing — Public Catalog
 
-Public-facing listing, paired with `landing-page` App kind.
+Public-facing listing, paired with an App `access: public` (usually
+`app_renderer: no-nav`).
 
 ### ApprovalInbox — Pending Approval Task Queue
 
@@ -618,37 +651,37 @@ spec:
 
 ## Choosing the Right Kind
 
-| What you need | Kind to use |
-|---------------|-------------|
-| Store & manage transactional data | `Entity` (`characteristic: transaction`) |
-| Stable reference data | `Entity` (`characteristic: master`) |
-| Read-only seed data | `Entity` (`characteristic: reference`) |
-| System-managed aggregates | `Entity` (`characteristic: summary`) |
-| Computation without state | `Service` |
-| Approval-based state transitions | `Workflow` |
-| Inbound webhook endpoint | `Webhook` |
-| Mock third-party integration | `Mockup` |
-| Cross-module reactive bridge | `Integrator` |
-| React to another resource's events | `Subscription` |
-| Override external API surface | `Api` |
-| Custom DDL (index, trigger) | `Migration` |
-| Screen / route | `Page` |
-| Data entry form | `Form` |
-| List / browse table | `Table` |
-| Multi-step process | `Wizard` |
-| Drag-drop status board | `Kanban` |
-| Chronological event feed | `Timeline` |
-| Dashboard with widgets | `Dashboard` + `Widget` |
-| Parameterized report | `Report` |
-| Printable document | `Print` |
-| Look & feel | `Theme` |
-| Calendar view | `Calendar` |
-| Public catalog | `Listing` |
-| Approval task queue | `ApprovalInbox` |
-| Notification center | `NotificationCenter` |
-| Named DB/storage connection | `Datastore` |
-| Deployment target | `Environment` |
-| Governance rule | `Policy` |
+| What you need                      | Kind to use                              |
+| ---------------------------------- | ---------------------------------------- |
+| Store & manage transactional data  | `Entity` (`characteristic: transaction`) |
+| Stable reference data              | `Entity` (`characteristic: master`)      |
+| Read-only seed data                | `Entity` (`characteristic: reference`)   |
+| System-managed aggregates          | `Entity` (`characteristic: summary`)     |
+| Computation without state          | `Service`                                |
+| Approval-based state transitions   | `Workflow`                               |
+| Inbound webhook endpoint           | `Webhook`                                |
+| Mock third-party integration       | `Mockup`                                 |
+| Cross-module reactive bridge       | `Integrator`                             |
+| React to another resource's events | `Subscription`                           |
+| Override external API surface      | `Api`                                    |
+| Custom DDL (index, trigger)        | `Migration`                              |
+| Screen / route                     | `Page`                                   |
+| Data entry form                    | `Form`                                   |
+| List / browse table                | `Table`                                  |
+| Multi-step process                 | `Wizard`                                 |
+| Drag-drop status board             | `Kanban`                                 |
+| Chronological event feed           | `Timeline`                               |
+| Dashboard with widgets             | `Dashboard` + `Widget`                   |
+| Parameterized report               | `Report`                                 |
+| Printable document                 | `Print`                                  |
+| Look & feel                        | `Theme`                                  |
+| Calendar view                      | `Calendar`                               |
+| Public catalog                     | `Listing`                                |
+| Approval task queue                | `ApprovalInbox`                          |
+| Notification center                | `NotificationCenter`                     |
+| Named DB/storage connection        | `Datastore`                              |
+| Deployment target                  | `Environment`                            |
+| Governance rule                    | `Policy`                                 |
 
 ---
 
