@@ -15,6 +15,7 @@ import {
   useParams,
   useNavigate,
   useSearchParams,
+  useLocation,
 } from "react-router-dom"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Toaster } from "sonner"
@@ -148,8 +149,11 @@ function SurfaceShell({
   public?: boolean
 }) {
   const { workspace = "default" } = useParams<{ workspace: string }>()
+  const location = useLocation()
   const sessionLoaded = useSessionStore((s) => s.loaded)
   const sessionError = useSessionStore((s) => s.error)
+  const unauthenticated = useSessionStore((s) => s.unauthenticated)
+  const token = useSessionStore((s) => s.token)
   const boot = useSessionStore((s) => s.boot)
   const bundle = useMetaStore((s) => s.bundle)
   const metaLoading = useMetaStore((s) => s.loading)
@@ -203,20 +207,37 @@ function SurfaceShell({
       }
       return
     }
-    if (!sessionLoaded) {
+    if (!sessionLoaded && !token) {
+      // Boot only when there is no session AND no token in flight. The `!token`
+      // guard prevents a re-boot (without a token) when LoginPage's
+      // boot(token) briefly resets loaded=false — that would overwrite the
+      // authenticated session with an anonymous one.
       boot(workspace).then(() => {
+        // Always load the meta bundle — even when unauthenticated — so the
+        // resolved App's root_url is known and the auth guard can redirect to
+        // the correct in-app login path ({surfacePath}/login).
         const { token } = useSessionStore.getState()
         loadMeta(workspace, surface, token)
       })
+    } else if (!bundle && !metaLoading && !metaError && !metaForbidden) {
+      // Session already loaded (e.g. navigated here after a login redirect) —
+      // boot() ran in LoginPage, so just load the bundle if it's missing.
+      // Skip when the bundle was rejected (error/forbidden) to avoid a reload
+      // loop (403 → forbidden → effect re-run → reload → 403).
+      const { token } = useSessionStore.getState()
+      loadMeta(workspace, surface, token)
     }
   }, [
     workspace,
     sessionLoaded,
+    token,
     boot,
     loadMeta,
     surface,
     bundle,
     metaLoading,
+    metaError,
+    metaForbidden,
     isPublic,
   ])
 
@@ -241,7 +262,15 @@ function SurfaceShell({
   }, [workspace, surface])
 
   // While loading
-  if (!sessionLoaded || metaLoading) {
+  // While loading (session or meta bundle). Non-public surfaces also wait for
+  // the bundle — the auth guard needs the resolved App's root_url to build the
+  // correct in-app login path ({surfacePath}/login). Escape when the bundle
+  // was rejected (403 → forbidden) so the auth guard can redirect to login.
+  if (
+    !sessionLoaded ||
+    metaLoading ||
+    (!isPublic && !bundle && !metaError && !metaForbidden)
+  ) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="space-y-4 w-full max-w-sm px-4">
@@ -256,19 +285,8 @@ function SurfaceShell({
     )
   }
 
-  // Forbidden: authenticated, but lacks _admin.access (or equivalent gate)
-  if (metaForbidden) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4">
-        <h1 className="text-2xl font-bold">Access Denied</h1>
-        <p className="text-sm text-muted-foreground">
-          You don&apos;t have permission to access this area.
-        </p>
-      </div>
-    )
-  }
-
-  // Error state
+  // Error state — before the auth guard so a failed bundle shows the error
+  // rather than redirecting to a login path built from a missing root_url.
   if (sessionError || metaError) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4">
@@ -278,6 +296,44 @@ function SurfaceShell({
         </p>
         <p className="text-xs text-muted-foreground">
           Make sure the FormSpec server is running.
+        </p>
+      </div>
+    )
+  }
+
+  // In-app login lives at {surfacePath}/login (e.g. /{ws}/app/kafe/login for
+  // the app surface, /{ws}/_admin/login for admin). On that route: show the
+  // form when unauthenticated, otherwise bounce to the surface root.
+  const loginPath = `${surfacePath}/login`
+  const isLoginRoute = location.pathname === loginPath
+
+  if (isLoginRoute) {
+    if (unauthenticated) {
+      return <LoginPage />
+    }
+    return <Navigate to={surfacePath} replace />
+  }
+
+  // Not logged in — redirect to the in-app login page with a returnTo so the
+  // user lands back here after authenticating. Public surfaces boot
+  // anonymously and never reach this state.
+  if (!isPublic && unauthenticated) {
+    const returnTo = location.pathname + location.search
+    return (
+      <Navigate
+        to={`${loginPath}?returnTo=${encodeURIComponent(returnTo)}`}
+        replace
+      />
+    )
+  }
+
+  // Forbidden: authenticated, but lacks _admin.access (or equivalent gate)
+  if (metaForbidden) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4">
+        <h1 className="text-2xl font-bold">Access Denied</h1>
+        <p className="text-sm text-muted-foreground">
+          You don&apos;t have permission to access this area.
         </p>
       </div>
     )
@@ -415,11 +471,19 @@ function DefaultRedirect({
 
 function LoginPage() {
   const navigate = useNavigate()
+  // In-app login (rendered inside a /:workspace/... surface) derives the
+  // workspace from the URL; the top-level /login route has no param and asks
+  // the user for it.
+  const { workspace: workspaceParam } = useParams<{ workspace?: string }>()
   const [searchParams] = useSearchParams()
   const boot = useSessionStore((s) => s.boot)
 
   const handleLogin = async (workspace: string, token: string) => {
     await boot(workspace, token)
+    // The bundle may have been loaded anonymously (empty entities) while on
+    // the login route — reset it so it reloads with the authenticated
+    // identity's permissions after the redirect.
+    useMetaStore.getState().reset()
     const returnTo = searchParams.get("returnTo")
     // Same-origin guard: only accept a path starting with "/" that is not
     // "//" (protocol-relative) and not a bare "/" (which would loop).
@@ -435,7 +499,7 @@ function LoginPage() {
     navigate(`/${workspace}/_admin`, { replace: true })
   }
 
-  return <LoginScreen onLogin={handleLogin} />
+  return <LoginScreen workspace={workspaceParam} onLogin={handleLogin} />
 }
 
 // ── 404 ──

@@ -31,6 +31,15 @@ type SessionStore interface {
 	Get(ctx context.Context, jti string) (*Session, bool)
 	Delete(ctx context.Context, jti string) error
 	DeleteForUser(ctx context.Context, userID string) error
+	// CountForUser returns the number of active sessions for a user
+	// (concurrent session limit, todo 6.5.3).
+	CountForUser(ctx context.Context, userID string) (int, error)
+	// ListForUser returns the active sessions for a user, oldest first
+	// (used to evict the oldest when the concurrent limit is exceeded).
+	ListForUser(ctx context.Context, userID string) ([]Session, error)
+	// PurgeExpired deletes all sessions whose expires_at is in the past
+	// (cleanup job, todo 6.5.5). Returns the number purged.
+	PurgeExpired(ctx context.Context) (int, error)
 }
 
 // EntitySessionStore reads/writes sessions from a FormSpec entity via the
@@ -109,6 +118,75 @@ func (s *EntitySessionStore) DeleteForUser(ctx context.Context, userID string) e
 		_ = s.store.SoftDelete(ctx, rec.WorkspaceID, rec.ID)
 	}
 	return nil
+}
+
+// CountForUser returns the number of active sessions for a user.
+func (s *EntitySessionStore) CountForUser(ctx context.Context, userID string) (int, error) {
+	res, err := s.listForUser(ctx, userID)
+	if err != nil {
+		return 0, err
+	}
+	return len(res), nil
+}
+
+// ListForUser returns the active sessions for a user, oldest first.
+func (s *EntitySessionStore) ListForUser(ctx context.Context, userID string) ([]Session, error) {
+	recs, err := s.listForUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Session, 0, len(recs))
+	for _, rec := range recs {
+		expiresAt, _ := time.Parse(time.RFC3339, stringField(rec.Data, "expires_at"))
+		out = append(out, Session{
+			JTI:         stringField(rec.Data, "refresh_jti"),
+			UserID:      userID,
+			WorkspaceID: rec.WorkspaceID,
+			ExpiresAt:   expiresAt,
+		})
+	}
+	return out, nil
+}
+
+// listForUser returns the raw session records for a user, oldest first.
+func (s *EntitySessionStore) listForUser(ctx context.Context, userID string) ([]db.EntityRecord, error) {
+	res, err := s.store.List(ctx, db.ListParams{
+		WorkspaceID: sessWorkspaceForJTI(""),
+		PerPage:     100,
+		Sort:        "created_at",
+		Filters: map[string]db.FilterOp{
+			"user_id": {Op: "eq", Value: userID},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return res.Data, nil
+}
+
+// PurgeExpired deletes all sessions whose expires_at is in the past.
+func (s *EntitySessionStore) PurgeExpired(ctx context.Context) (int, error) {
+	res, err := s.store.List(ctx, db.ListParams{
+		WorkspaceID: sessWorkspaceForJTI(""),
+		PerPage:     100,
+	})
+	if err != nil {
+		return 0, err
+	}
+	now := time.Now()
+	purged := 0
+	for _, rec := range res.Data {
+		expiresAt, err := time.Parse(time.RFC3339, stringField(rec.Data, "expires_at"))
+		if err != nil {
+			continue
+		}
+		if now.After(expiresAt) {
+			if err := s.store.SoftDelete(ctx, rec.WorkspaceID, rec.ID); err == nil {
+				purged++
+			}
+		}
+	}
+	return purged, nil
 }
 
 // sessWorkspaceForJTI returns the workspace to search for a jti. Since jti is

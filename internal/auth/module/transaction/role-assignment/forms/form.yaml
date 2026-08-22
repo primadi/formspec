@@ -1,0 +1,31 @@
+apiVersion: formspec.dev/v1
+kind: Form
+metadata:
+  name: role-assignment-form
+  module: formspec.core
+  description: "Form penetapan role ke user dalam konteks App"
+spec:
+  entity: role-assignment
+  render:
+    mode: separate_page
+  sections:
+    - title: "Penetapan Role"
+      description: "Hubungkan user dengan role"
+      fields:
+        - field: user_id
+          label: "User"
+          widget: relation-picker
+          help: "Pilih user"
+        - field: role_id
+          label: "Role"
+          widget: relation-picker
+          help: "Pilih role"
+        - field: app
+          label: "App"
+          placeholder: "mis. cafe"
+          help: "Konteks App penetapan (kosongkan untuk semua)"
+        - field: active
+          label: "Aktif"
+  submit:
+    label: "Simpan Penetapan"
+    message: "Role assignment berhasil disimpan"

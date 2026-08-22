@@ -19,6 +19,7 @@ import type { MenuItem } from "@/types/manifest"
 import { ErrorBoundary } from "@/components/ErrorBoundary"
 import { ThemeSwitcher } from "@/components/ThemeSwitcher"
 import { OverlayHost } from "./OverlayHost"
+import { LogoutButton } from "./LogoutButton"
 import { Button } from "@/components/ui/button"
 import {
   Breadcrumb,
@@ -179,6 +180,7 @@ export function TopNavShell() {
 
             <div className="flex-1" />
             <ThemeSwitcher />
+            <LogoutButton />
             <Avatar className="size-8">
               <AvatarFallback className="text-xs">
                 {workspace?.charAt(0).toUpperCase() ?? "F"}

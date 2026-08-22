@@ -302,7 +302,7 @@ func (f *HandlerFactory) HandleList(module, entity string) http.HandlerFunc {
 		}
 
 		writeJSON(w, http.StatusOK, ListResponse{
-			Data: result.Data,
+			Data: f.sanitizeList(r, module, entity, result.Data),
 			Meta: MetaList{
 				Page:       result.Page,
 				PerPage:    result.PerPage,
@@ -475,6 +475,7 @@ func (f *HandlerFactory) HandleFind(module, entity string) http.HandlerFunc {
 			}
 		}
 
+		rec.Data = f.sanitize(r, module, entity, rec.Data)
 		writeJSON(w, http.StatusOK, SingleResponse{
 			Data: rec,
 			Meta: MetaSingle{RequestID: requestIDFromContext(ctx), Timestamp: time.Now().UTC().Format(time.RFC3339)},
@@ -599,6 +600,7 @@ func (f *HandlerFactory) HandleCreate(module, entity string) http.HandlerFunc {
 		// to live listeners — listener-gated, no-op when nobody is connected.
 		action.NotifyMutation(f.deliveryDeps, workspaceID, module+"/"+entity, "created")
 
+		rec.Data = f.sanitize(r, module, entity, rec.Data)
 		resp := SingleResponse{
 			Data: rec,
 			Meta: MetaSingle{RequestID: requestIDFromContext(ctx), Timestamp: time.Now().UTC().Format(time.RFC3339)},
@@ -752,6 +754,7 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 		// to live listeners — listener-gated, no-op when nobody is connected.
 		action.NotifyMutation(f.deliveryDeps, workspaceID, module+"/"+entity, "updated")
 
+		rec.Data = f.sanitize(r, module, entity, rec.Data)
 		writeJSON(w, http.StatusOK, SingleResponse{
 			Data: rec,
 			Meta: MetaSingle{RequestID: requestIDFromContext(ctx), Timestamp: time.Now().UTC().Format(time.RFC3339)},
@@ -944,6 +947,7 @@ func (f *HandlerFactory) HandleCancel(module, entity string) http.HandlerFunc {
 		// to live listeners — listener-gated, no-op when nobody is connected.
 		action.NotifyMutation(f.deliveryDeps, workspaceID, module+"/"+entity, "updated")
 
+		rec.Data = f.sanitize(r, module, entity, rec.Data)
 		writeJSON(w, http.StatusOK, SingleResponse{
 			Data: rec,
 			Meta: MetaSingle{RequestID: requestIDFromContext(ctx), Timestamp: time.Now().UTC().Format(time.RFC3339)},
@@ -1037,6 +1041,7 @@ func (f *HandlerFactory) HandleAmend(module, entity string) http.HandlerFunc {
 		// to live listeners — listener-gated, no-op when nobody is connected.
 		action.NotifyMutation(f.deliveryDeps, workspaceID, module+"/"+entity, "updated")
 
+		newRec.Data = f.sanitize(r, module, entity, newRec.Data)
 		writeJSON(w, http.StatusCreated, SingleResponse{
 			Data: newRec,
 			Meta: MetaSingle{RequestID: requestIDFromContext(ctx), Timestamp: time.Now().UTC().Format(time.RFC3339)},
@@ -1121,6 +1126,7 @@ func (f *HandlerFactory) handleSetActive(module, entity, actionName string, acti
 
 		action.NotifyMutation(f.deliveryDeps, workspaceID, module+"/"+entity, "updated")
 
+		rec.Data = f.sanitize(r, module, entity, rec.Data)
 		writeJSON(w, http.StatusOK, SingleResponse{
 			Data: rec,
 			Meta: MetaSingle{RequestID: requestIDFromContext(ctx), Timestamp: time.Now().UTC().Format(time.RFC3339)},

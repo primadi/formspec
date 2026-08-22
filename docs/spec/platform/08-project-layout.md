@@ -480,6 +480,16 @@ meng-scaffold auth module ke `external/auth` untuk dikustomisasi. Konsep
 `external/` ini diharapkan menjadi fondasi `overrides/` §6.4 yang lebih
 luas (shadow copy per-kind) di fase berikutnya.
 
+**Catatan 2026-08-21 — `formspec.core` sebagai bundled module (dogfooding):**
+`formspec.core` kini didefinisikan sebagai **bundled module YAML** yang
+di-embed ke binary (`internal/auth/module/`, `//go:embed module`) dan dimuat
+lewat manifest loader — jalur yang sama dengan modul user (dogfooding).
+Entity auth (`user`, `session`, `role`, `role-assignment`, `api-key`,
+`app-membership`, `workspace`) diekspresikan sebagai YAML manifests, bukan
+registrasi programatik Go. `formspec generate auth` menyalin module ini ke
+`external/auth` untuk dikustomisasi (selalu sinkron dengan bundled). Detail:
+`docs/plan/fase6-dogfooding-auth-module.md`.
+
 - Apakah shadow-copy (§6.4) perlu dilacak versinya sendiri secara
   eksplisit di `formspec.lock` (bukan cuma checksum "asal fork"), supaya
   `formspec override diff` bisa tunjukkan riwayat?

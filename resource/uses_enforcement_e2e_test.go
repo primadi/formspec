@@ -238,7 +238,7 @@ func TestUsesEnforcement_SameModuleAllowed(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	status, out := doJSON(t, app, "POST", "/demo/_ui/entity/alpha/order", map[string]any{"number": "ORD-1", "transaction_date": "2026-08-17"})
+	status, out := doJSON(t, app, "POST", "/demo/_ui/entity/alpha/order", map[string]any{"number": "ORD-1", "transaction_date": recentDate()})
 	if status != http.StatusCreated {
 		t.Fatalf("create order: status %d, body %v", status, out)
 	}

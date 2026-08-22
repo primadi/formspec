@@ -41,8 +41,15 @@ export async function fetchMetaBundle(
   opts?: { appName?: string; admin?: boolean; token?: string },
 ): Promise<MetaBundle> {
   const client = createMetaClient(workspace, opts?.token)
-  const searchParams = opts?.admin ? { admin: "true" } : opts?.appName ? { app: opts.appName } : undefined
-  const response = await client.get("_meta/ui", searchParams ? { searchParams } : undefined)
+  const searchParams = opts?.admin
+    ? { admin: "true" }
+    : opts?.appName
+      ? { app: opts.appName }
+      : undefined
+  const response = await client.get(
+    "_meta/ui",
+    searchParams ? { searchParams } : undefined,
+  )
   const body = (await response.json()) as { data: MetaBundle }
   return body.data
 }
@@ -51,7 +58,10 @@ export async function fetchMetaBundle(
  * List every resolved App in this workspace (name + root_url) — Core §4.4.
  * Fetched once at boot to figure out which App the current URL belongs to.
  */
-export async function fetchMetaApps(workspace: string, token?: string): Promise<AppSummary[]> {
+export async function fetchMetaApps(
+  workspace: string,
+  token?: string,
+): Promise<AppSummary[]> {
   const client = createMetaClient(workspace, token)
   const response = await client.get("_meta/apps")
   const body = (await response.json()) as { data: AppSummary[] }
@@ -76,9 +86,14 @@ export async function fetchEntitySchema(
 
 /**
  * Fetch the caller's identity, roles, and effective permissions.
- * Returns null if the request fails (e.g. 401 in dev mode).
+ * Returns null if the request fails (e.g. server unreachable). When not
+ * authenticated the server returns an identity with user_id "anonymous" and
+ * empty permissions — the session store turns that into a login redirect.
  */
-export async function fetchMe(workspace: string, token?: string): Promise<MeResponse | null> {
+export async function fetchMe(
+  workspace: string,
+  token?: string,
+): Promise<MeResponse | null> {
   try {
     const client = createMetaClient(workspace, token)
     const response = await client.get("_meta/me")

@@ -1,0 +1,30 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: session
+  module: formspec.core
+  description: "Login session (auth) — role contract: refresh_jti (unique) + user_id + expires_at."
+spec:
+  version: v1
+  plural: sessions
+  characteristic: transaction
+  fields:
+    - name: transaction_date
+      type: date
+      required: true
+    - name: refresh_jti
+      type: string
+      required: true
+      unique: true
+      index: true
+    - name: user_id
+      type: string
+      required: true
+      index: true
+    - name: expires_at
+      type: datetime
+      required: true
+    - name: ip
+      type: string
+    - name: user_agent
+      type: string

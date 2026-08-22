@@ -11,6 +11,7 @@ package manifest
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -138,6 +139,52 @@ func (l *Loader) LoadAll() (*LoadResult, error) {
 		docs, errs := l.parseFile(file)
 		result.Manifests = append(result.Manifests, docs...)
 		result.Errors = append(result.Errors, errs...)
+	}
+
+	return result, nil
+}
+
+// LoadEmbedded discovers and parses all manifest files under an embedded
+// filesystem (e.g. `//go:embed module`). It applies the same directory-skip
+// rules as Discover (hidden dirs, node_modules, impl/) and parses each file
+// through ParseBytes — so framework-bundled modules (e.g. the auth module)
+// go through the exact same loader path as user manifests.
+func (l *Loader) LoadEmbedded(fsys fs.FS) (*LoadResult, error) {
+	result := &LoadResult{}
+
+	err := fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if path == "." {
+				return nil // don't skip the root
+			}
+			base := d.Name()
+			if strings.HasPrefix(base, ".") || base == "node_modules" || base == "impl" {
+				return fs.SkipDir
+			}
+			return nil
+		}
+
+		ext := strings.ToLower(filepath.Ext(path))
+		if ext != ".yaml" && ext != ".yml" {
+			return nil
+		}
+
+		data, err := fs.ReadFile(fsys, path)
+		if err != nil {
+			result.Errors = append(result.Errors, ParseError{File: path, Message: fmt.Sprintf("read error: %v", err)})
+			return nil
+		}
+
+		docs, errs := l.ParseBytes(data, "embed:"+path)
+		result.Manifests = append(result.Manifests, docs...)
+		result.Errors = append(result.Errors, errs...)
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("embedded manifest walk: %w", err)
 	}
 
 	return result, nil

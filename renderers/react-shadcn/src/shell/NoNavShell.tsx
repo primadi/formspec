@@ -10,6 +10,7 @@
 
 import { Link, Outlet, useParams } from "react-router-dom"
 import { useMetaStore } from "@/stores/meta"
+import { LogoutButton } from "./LogoutButton"
 import type { MenuItem } from "@/types/manifest"
 
 // ── Nav derivation ──
@@ -51,19 +52,22 @@ export function NoNavShell() {
               {bundle?.app.name ?? "FormSpec"}
             </span>
           </Link>
-          {links.length > 0 && (
-            <nav className="hidden items-center gap-6 text-sm md:flex">
-              {links.map((link) => (
-                <Link
-                  key={link.route}
-                  to={`${base}${link.route}`}
-                  className="text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  {link.label}
-                </Link>
-              ))}
-            </nav>
-          )}
+          <div className="flex items-center gap-2">
+            {links.length > 0 && (
+              <nav className="hidden items-center gap-6 text-sm md:flex">
+                {links.map((link) => (
+                  <Link
+                    key={link.route}
+                    to={`${base}${link.route}`}
+                    className="text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+              </nav>
+            )}
+            <LogoutButton />
+          </div>
         </div>
       </header>
 

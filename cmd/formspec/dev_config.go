@@ -27,6 +27,8 @@ type configFile struct {
 	StateDir         *string  `yaml:"state-dir"`
 	Dev              *bool    `yaml:"dev"`
 	DevUI            *bool    `yaml:"dev-ui"`
+	DevAuth          *bool    `yaml:"dev-auth"`
+	JWTSecret        *string  `yaml:"jwt-secret"`
 	Force            *bool    `yaml:"force"`
 	WebDir           *string  `yaml:"web-dir"`
 	InvokeTimeoutStr *string  `yaml:"invoke-timeout"`
@@ -100,6 +102,12 @@ func mergeConfigFile(cfg DevConfig) DevConfig {
 		if cfg.DevUI {
 			cfg.DevMode = true
 		}
+	}
+	if cf.DevAuth != nil && !cfg.DevAuth {
+		cfg.DevAuth = *cf.DevAuth
+	}
+	if cf.JWTSecret != nil && cfg.JWTSecret == "" {
+		cfg.JWTSecret = *cf.JWTSecret
 	}
 	if cf.Force != nil && !cfg.Force {
 		cfg.Force = *cf.Force

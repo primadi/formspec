@@ -1,0 +1,49 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: user
+  module: formspec.core
+  description: "User account (auth) — role contract: username (unique) + password_hash. Extra fields (display_name, email, roles, permissions, active) adalah default shape; override user hanya perlu field kontrak."
+  annotations:
+    formspec.dev/ui-exposed: "true"
+spec:
+  version: v1
+  plural: users
+  characteristic: master
+  display_field: username
+  fields:
+    - name: username
+      type: string
+      required: true
+      unique: true
+      index: true
+    - name: password
+      type: string
+      masked: true
+      description: "Plaintext password (create) — di-hash ke password_hash oleh hook before create/update"
+    - name: password_hash
+      type: string
+      required: true
+      masked: true
+    - name: display_name
+      type: string
+    - name: email
+      type: string
+    - name: roles
+      type: json
+    - name: permissions
+      type: json
+    - name: active
+      type: boolean
+      default: true
+  hooks:
+    - on: before
+      action: create
+      impl:
+        type: native
+        ref: formspec.core.user.hash-password
+    - on: before
+      action: update
+      impl:
+        type: native
+        ref: formspec.core.user.hash-password

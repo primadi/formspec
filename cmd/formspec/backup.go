@@ -568,6 +568,11 @@ func restoreFrom(ctx context.Context, reg *entity.Registry, from, conflict strin
 			report.Restored++
 			entityReport.Restored++
 		}
+		if err := sc.Err(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: read %s: %v\n", hdr.Name, err)
+			report.Failed++
+			entityReport.Failed++
+		}
 		report.Entities = append(report.Entities, *entityReport)
 	}
 	return report

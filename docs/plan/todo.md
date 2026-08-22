@@ -1,7 +1,7 @@
 # Master Plan: FormSpec Implementation
 
 **Last Updated**: 2026-08-20  
-**Status**: ✅ Fase 0 complete · ✅ Fase 1 (1.1–1.5) · ✅ Fase 2.1 · ✅ Fase 2.2 · ✅ Fase 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6) · ✅ Fase 2.7 (idempotency prepare flow) · ✅ Fase 2.8 (spec.expose) · ✅ Fase 2.9 (2.9.1–2.9.3: ctx.\* primitives + dev auto-provision) · ✅ Fase 5 (5.1–5.4) · ✅ Spec hot-reload · ✅ Fase 11 (review schema↔docs) · ✅ Audit spec↔schema + tambah TODO item · ✅ `formspec validate` (3.1.1, engine+schema) · ✅ Rename forma→formspec (docs/plan/rename-formspec.md) · 🚧 Fase 12 Domain Infrastruktur (docs/architecture/09-domain-map.md) · ✅ Schema registry online (docs/plan/schema-registry-online.md) · ✅ CLI repl/seed/diff (3.4.1, 3.6.2, 3.6.3) · ✅ **Fase 4 (4.1–4.10) complete** (incl. 4.3.1–4.3.5 entity extension, 4.8.3 restore remap) · ✅ Landing page (5.1.3 + 5.13.5, docs/plan/landing-page.md) · ✅ App renderer archetypes (5.1.1–5.1.3: sidebar-nav/topnav/no-nav + access + persist_backend, docs/plan/landing-page.md) · ✅ **Fase 6.1 (6.1.1–6.1.3: login + token, entity-backed auth, external/ merge, generate-auth)** (docs/plan/auth-login-token.md) · ✅ **6.3.1 + 6.3.2 + 5.12.5 (role + role-assignment Entity, materialisasi grant page → permission)** (docs/changelog/2026-08-20-001) · ✅ **6.2.3 (wire permission check semua handler, surface-aware 404)** (docs/changelog/2026-08-20-002)
+**Status**: ✅ Fase 0 complete · ✅ Fase 1 (1.1–1.5) · ✅ Fase 2.1 · ✅ Fase 2.2 · ✅ Fase 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6) · ✅ Fase 2.7 (idempotency prepare flow) · ✅ Fase 2.8 (spec.expose) · ✅ Fase 2.9 (2.9.1–2.9.3: ctx.\* primitives + dev auto-provision) · ✅ Fase 5 (5.1–5.4) · ✅ Spec hot-reload · ✅ Fase 11 (review schema↔docs) · ✅ Audit spec↔schema + tambah TODO item · ✅ `formspec validate` (3.1.1, engine+schema) · ✅ Rename forma→formspec (docs/plan/rename-formspec.md) · 🚧 Fase 12 Domain Infrastruktur (docs/architecture/09-domain-map.md) · ✅ Schema registry online (docs/plan/schema-registry-online.md) · ✅ CLI repl/seed/diff (3.4.1, 3.6.2, 3.6.3) · ✅ **Fase 4 (4.1–4.10) complete** (incl. 4.3.1–4.3.5 entity extension, 4.8.3 restore remap) · ✅ Landing page (5.1.3 + 5.13.5, docs/plan/landing-page.md) · ✅ App renderer archetypes (5.1.1–5.1.3: sidebar-nav/topnav/no-nav + access + persist_backend, docs/plan/landing-page.md) · ✅ **Fase 6.1 (6.1.1–6.1.3: login + token, entity-backed auth, external/ merge, generate-auth)** (docs/plan/auth-login-token.md) · ✅ **6.3.1 + 6.3.2 + 5.12.5 (role + role-assignment Entity, materialisasi grant page → permission)** (docs/changelog/2026-08-20-001) · ✅ **6.2.3 (wire permission check semua handler, surface-aware 404)** (docs/changelog/2026-08-20-002) · ✅ **Fase 6 COMPLETE (6.1–6.9, dogfooding auth module)** (docs/plan/fase6-dogfooding-auth-module.md, changelog 2026-08-20-003 s/d 2026-08-21-014)
 
 > `⬜` not started · `✅` complete · `⏸️` deferred
 
@@ -46,6 +46,13 @@ registry server sebagai **FormSpec app (dogfooding)** untuk
 `docs/spec/platform/08-project-layout.md` §6). Dependensi: Fase 6 (auth —
 6.2 permission model + 6.4 API keys) untuk bagian auth-dependent; Fase 8
 (production serve) untuk deploy nyata. Lihat section **Fase 13** di bawah.
+
+**Catatan 2026-08-20**: **Fase 6 dikerjakan sebagai dogfooding** — auth dibangun
+ulang sebagai **1 modul FormSpec** (`internal/auth/module/`, bundled + embed,
+namespace `formspec.core`) yang bisa di-merge ke project lain via `external/`
+atau `spec/modules/`. `formspec.core` dipindah dari registrasi programatik Go ke
+YAML manifests; middleware tetap Go. Plan: `docs/plan/fase6-dogfooding-auth-module.md`.
+Demo merge: `verticals/reference-app` + `examples/Clinic-UI-Showcase`.
 
 ---
 
@@ -480,74 +487,80 @@ registry server sebagai **FormSpec app (dogfooding)** untuk
 
 ---
 
-## Fase 6: Auth & Authorization
+## Fase 6: Auth & Authorization ✅ COMPLETE (inti) — sebagian item ⏸️ deferred (dogfooding — `docs/plan/fase6-dogfooding-auth-module.md`)
 
 **Goal**: Login, JWT, permission model, roles, API keys, sessions, field security. Prod requirement.
+**Pendekatan**: `formspec.core` = bundled module YAML (`internal/auth/module/`, embed + loader),
+mergeable ke project lain via `external/`/`spec/modules/`; middleware tetap Go.
+**Progress**: ✅ Fase A–L selesai (2026-08-20/21). Changelog `2026-08-20-003` s/d `2026-08-21-014`.
+**Deferred/partial** (lihat item ⏸️ di bawah): 6.2.5 consent-flow penuh, 6.2.6 ABAC enforcement,
+6.3.3 delegation-chain enforcement, 6.3.5 job/audit-log/setting, 6.7.1 classification-tag,
+6.7.4 encrypted at-rest, 6.8 store populasi (Config runtime 7.2).
 
 ### 6.1 Login & token
 
 - [x] 6.1.1 Login endpoint — `POST /api/v1/auth/login`, credential verification (password hash), JWT issuance (access + refresh) — `POST /{ws}/api/v1/auth/login`; bcrypt verify; access + refresh JWT. Backed by `formspec.core.user`/`session` entities (internal, tanpa route). Dev seed `admin/admin`. Lihat `docs/plan/auth-login-token.md`. ✅ 2026-08-19
 - [x] 6.1.2 Token claims — `sub`, `workspace`, `roles`, `permissions`, `exp`, `iat` — access claims: `sub`, `ws`, `roles`, `perms`, `typ=access`, `iat`, `exp`, `iss`, `aud`; refresh claims: `sub`, `ws`, `typ=refresh`, `jti`, `iat`, `exp`. ✅ 2026-08-19
 - [x] 6.1.3 Token refresh — rotate (invalidate old, issue new) — `POST /{ws}/api/v1/auth/refresh`; session (jti) di-rotate: hapus jti lama + issue baru; replay token lama → 401. ✅ 2026-08-19
-- [ ] 6.1.4 Auth per-App via `auth_config_ref` — App me-resolve strategy autentikasi dari yang terpasang (`basic-auth` minimum untuk single-server; `sso` OIDC/SAML, `social-sso`, `passwordless`, `passkey` = set terbuka) (`platform/02-workspace-app-module.md` §3) — seam `RoleResolver.SetOverride` siap; wiring `auth_config_ref` ke resolver belum.
+- [x] 6.1.4 Auth per-App via `auth_config_ref` — App me-resolve strategy autentikasi dari yang terpasang (`basic-auth` minimum untuk single-server; `sso` OIDC/SAML, `social-sso`, `passwordless`, `passkey` = set terbuka) (`platform/02-workspace-app-module.md` §3) — `ResolveAppAuth` + `RoleResolver.SetOverride`. ✅ 2026-08-20 (Fase F, changelog 008)
 
 ### 6.2 Permission model
 
-- [ ] 6.2.1 Resource + action permission — format `{module}.{entity}.{action}`
-- [ ] 6.2.2 Wildcard support — `{module}.{entity}.*`, `*` (super-wildcard), `public`
-- [ ] 6.2.3 Wire permission check to every API handler — both surfaces — **sebagian**: enforcement inti sudah ter-wire di semua route (`RequirePermission` + `RequiredPermission` per route, kedua surface); kini surface-aware — UI surface entity list/view tanpa izin → 404 (spec §4, tidak bocor keberadaan entity), selain itu → 403. Test `internal/api/permission_enforcement_test.go`. ✅ 2026-08-20 (surface-aware 404)
-- [ ] 6.2.4 Permission resolution — role → permissions list; cache per session
-- [ ] 6.2.5 Consent footprint — aggregate `required_permission` + `uses` presented to workspace owner at install; cross-module write = high-risk consent
-- [ ] 6.2.6 Attribute-based authorization — pemeriksaan atribut App/user/membership melengkapi RBAC; pola multi-cabang = `scope_field` pada natural key + atribut membership (mis. kode cabang) (`platform/02-workspace-app-module.md` §3)
+- [x] 6.2.1 Resource + action permission — format `{module}.{entity}.{action}` — `ValidatePermissionFormat`/`ParseResourceTarget`/`AutoPrefixPermission`. ✅ (sudah ada, diverifikasi Fase C)
+- [x] 6.2.2 Wildcard support — `{module}.{entity}.*`, `*` (super-wildcard), `public` — `Identity.HasPermission` (+ module-level `{module}.*` Fase G). ✅ (sudah ada, diverifikasi Fase C/G)
+- [x] 6.2.3 Wire permission check to every API handler — both surfaces — enforcement inti sudah ter-wire di semua route (`RequirePermission` + `RequiredPermission` per route, kedua surface); surface-aware — UI surface entity list/view tanpa izin → 404 (spec §4, tidak bocor keberadaan entity), selain itu → 403. Test `internal/api/permission_enforcement_test.go`. ✅ 2026-08-20 (surface-aware 404)
+- [x] 6.2.4 Permission resolution — role → permissions list; cache per session — `PermissionResolver` + cache per-session. ✅ 2026-08-20 (Fase C, changelog 005)
+- [ ] ⏸️ 6.2.5 Consent footprint — aggregate `required_permission` + `uses` presented to workspace owner at install; cross-module write = high-risk consent — **sebagian**: `formspec check --footprint` (Fase K, changelog 013); alur consent penuh saat install di-defer.
+- [ ] ⏸️ 6.2.6 Attribute-based authorization — pemeriksaan atribut App/user/membership melengkapi RBAC; pola multi-cabang = `scope_field` pada natural key + atribut membership (mis. kode cabang) (`platform/02-workspace-app-module.md` §3) — **sebagian**: `EvaluateGrantConditions` evaluator (Fase K, changelog 013); enforcement penuh di request di-defer.
 
 ### 6.3 Roles & membership
 
 - [x] 6.3.1 `role` Entity — collection of grants (page → tab → action + conditions) — `formspec.core.role` (internal), tipe `Grant`/`TabGrant`/`ActionGrant`/`ConditionGrant` di `internal/auth/grant.go`; `RoleStore` baca role. ✅ 2026-08-20
-- [ ] 6.3.2 `app-membership` Entity — populasi user per App + atribut membership (mis. kode cabang); TERPISAH dari `role-assignment` (penetapan role ke user dalam konteks App) (`platform/02` §9) — **`role-assignment` sudah ada** (6.3.2a, `formspec.core.role-assignment`: user_id, role_id, app, active); `app-membership` menyusul.
-- [ ] 6.3.3 Admin delegation chain — workspace owner → app admin → module staff
-- [ ] 6.3.4 4 symmetric owner roles — Workspace Owner, App Owner, Module Owner, Cloud Owner
-- [ ] 6.3.5 `formspec.core` resource set lengkap — `workspace`, `user`, `app-membership`, `role`, `role-assignment`, `api-key`, `session`, `job`, `audit-log`, `setting`; namespace selalu ada, dapat direferensikan tanpa `depends_on` (`platform/02` §9) — **`user` + `session` + `role` + `role-assignment` sudah ada** (6.1/6.3, internal entity, `RegisterCoreEntities`); sisanya menyusul. `formspec.core` adalah namespace reserved — app tidak bisa deklarasi, tapi `external/` bisa menyediakan pengganti per peran (merge eksplisit, user override menang).
+- [x] 6.3.2 `app-membership` Entity — populasi user per App + atribut membership (mis. kode cabang); TERPISAH dari `role-assignment` (`platform/02` §9) — `formspec.core.app-membership` (user_id, app, attributes, active). ✅ 2026-08-20 (Fase B, changelog 004)
+- [ ] ⏸️ 6.3.3 Admin delegation chain — workspace owner → app admin → module staff — **sebagian**: 4 owner roles di-seed + di-recognize (Fase G); enforcement rantai delegasi (siapa assign role apa) di-defer.
+- [x] 6.3.4 4 symmetric owner roles — Workspace Owner, App Owner, Module Owner, Cloud Owner — `SeedOwnerRoles` + `ownerRolePermission`. ✅ 2026-08-20 (Fase G, changelog 009)
+- [ ] ⏸️ 6.3.5 `formspec.core` resource set lengkap — `workspace`, `user`, `app-membership`, `role`, `role-assignment`, `api-key`, `session`, `job`, `audit-log`, `setting` — **sebagian**: user/session/role/role-assignment/api-key/app-membership/workspace ada (bundled module); `job`/`audit-log`/`setting` milik sistem lain (7.13/4.7/7.2).
 
 ### 6.4 API keys
 
-- [ ] 6.4.1 `api_key` Entity — create (return key once), list (masked), revoke, expiry
-- [ ] 6.4.2 Scope — per workspace or per app
-- [ ] 6.4.3 API key auth middleware — header `X-FormSpec-Key` (`01-core-basic.md` §8.2; surface external TIDAK menerima session cookie)
+- [x] 6.4.1 `api_key` Entity — create (return key once), list (masked), revoke, expiry — `ApiKeyStore`. ✅ 2026-08-20 (Fase B, changelog 004)
+- [x] 6.4.2 Scope — per workspace or per app — field `scope` (workspace|app). ✅ 2026-08-20 (Fase B)
+- [x] 6.4.3 API key auth middleware — header `X-FormSpec-Key` (`01-core-basic.md` §8.2; surface external TIDAK menerima session cookie) — `AuthMiddleware` resolve key hanya di `/api/v1/`. ✅ 2026-08-20 (Fase B)
 
 ### 6.5 Session management
 
-- [ ] 6.5.1 `session` Entity — session_id, user, workspace, IP, user-agent, created/expires/last_active
-- [ ] 6.5.2 Refresh token rotation — invalidate old, issue new
-- [ ] 6.5.3 Concurrent session limit — configurable per user
-- [ ] 6.5.4 Global revoke — logout all devices
-- [ ] 6.5.5 Session expiry + cleanup job
+- [x] 6.5.1 `session` Entity — session_id, user, workspace, IP, user-agent, created/expires/last_active — `formspec.core.session`. ✅ (sudah ada)
+- [x] 6.5.2 Refresh token rotation — invalidate old, issue new — `POST /auth/refresh`. ✅ (sudah ada)
+- [x] 6.5.3 Concurrent session limit — configurable per user — `SetMaxSessionsPerUser` + evict oldest. ✅ 2026-08-20 (Fase D, changelog 006)
+- [x] 6.5.4 Global revoke — logout all devices — `LogoutAll`. ✅ 2026-08-20 (Fase D)
+- [x] 6.5.5 Session expiry + cleanup job — `PurgeExpired` + `StartSessionCleanup`. ✅ 2026-08-20 (Fase D)
 
 ### 6.6 Auth middleware pipeline
 
-- [ ] 6.6.1 Auth method detection — Bearer JWT vs `X-FormSpec-Key` API key vs session cookie (session cookie hanya surface `/_ui`)
-- [ ] 6.6.2 Token validation → identity extraction → permission loading → workspace context
-- [ ] 6.6.3 Rate limiting per auth method
-- [ ] 6.6.4 Audit log every auth attempt (success + failure)
+- [x] 6.6.1 Auth method detection — Bearer JWT vs `X-FormSpec-Key` API key vs session cookie (session cookie hanya surface `/_ui`) — `AuthMiddleware` (JWT + API key; cookie belum ada mekanisme). ✅ 2026-08-20 (Fase E, changelog 007)
+- [x] 6.6.2 Token validation → identity extraction → permission loading → workspace context — pipeline di `AuthMiddleware`. ✅ 2026-08-20 (Fase E)
+- [x] 6.6.3 Rate limiting per auth method — token bucket per IP (login/refresh). ✅ 2026-08-20 (Fase E)
+- [x] 6.6.4 Audit log every auth attempt (success + failure) — `authAudit`. ✅ 2026-08-20 (Fase E)
 
 ### 6.7 Field-level security
 
-- [ ] 6.7.1 `classification` label — tag field `pii|financial|internal`; log/export auto-tag
-- [ ] 6.7.2 `required_permission` (field-level) — user without permission → field excluded from response
-- [ ] 6.7.3 `exclude` — per-surface field exclusion (`public_api`, `audit_log`, `webhook`, `ui` — `05-field-types.md` §5.3)
-- [ ] 6.7.4 `encrypted: true` — AES-256-GCM at-rest encryption for field
-- [ ] 6.7.5 `masked: true` — auto-mask in JSON response and structured log (`***`)
-- [ ] 6.7.6 `computed` — server-derived, never client-writable; recompute on every create/update
+- [ ] ⏸️ 6.7.1 `classification` label — tag field `pii|financial|internal`; log/export auto-tag — struct ada (1.4.3); tagging di log/export di-defer (butuh kebijakan log/export terpusat).
+- [x] 6.7.2 `required_permission` (field-level) — user without permission → field excluded from response — `sanitizeData`. ✅ 2026-08-20 (Fase H, changelog 010)
+- [x] 6.7.3 `exclude` — per-surface field exclusion (`public_api`, `audit_log`, `webhook`, `ui` — `05-field-types.md` §5.3) — `sanitizeData` (public_api vs ui). ✅ 2026-08-20 (Fase H)
+- [ ] ⏸️ 6.7.4 `encrypted: true` — AES-256-GCM at-rest encryption for field — struct ada (1.4.6); enforcement di-defer (butuh master key/keystore).
+- [x] 6.7.5 `masked: true` — auto-mask in JSON response and structured log (`***`) — `sanitizeData`/`maskValue`. ✅ 2026-08-20 (Fase H)
+- [x] 6.7.6 `computed` — server-derived, never client-writable; recompute on every create/update — `evaluateComputed`. ✅ (sudah ada)
 
 ### 6.8 `ctx.secrets`
 
-- [ ] 6.8.1 `ctx.secrets.get("key")` — only path for `secret: true` Config keys
-- [ ] 6.8.2 `uses: { secrets: [key, ...] }` — must declare access; undeclared → blocked
-- [ ] 6.8.3 Secret never appears in logs at any level
-- [ ] 6.8.4 Every secret read audited — who read what secret, when
+- [x] 6.8.1 `ctx.secrets.get("key")` — only path for `secret: true` Config keys — `secretsAPI`; populasi store menunggu Config runtime 7.2. ✅ 2026-08-21 (Fase I, changelog 011)
+- [x] 6.8.2 `uses: { secrets: [key, ...] }` — must declare access; undeclared → blocked — `declaredUsesSecrets`. ✅ 2026-08-21 (Fase I)
+- [x] 6.8.3 Secret never appears in logs at any level — `secretsAPI` tidak log nilai. ✅ 2026-08-21 (Fase I)
+- [x] 6.8.4 Every secret read audited — who read what secret, when — `SecretsAudit` hook. ✅ 2026-08-21 (Fase I)
 
 ### 6.9 RichText sanitization
 
-- [ ] 6.9.1 Server-side HTML sanitize — strip script/markup before persist; client HTML never trusted raw
+- [x] 6.9.1 Server-side HTML sanitize — strip script/markup before persist; client HTML never trusted raw — `sanitizeRichText`/`sanitizeHTML` di Insert/Update. ✅ 2026-08-21 (Fase J, changelog 012)
 
 ---
 
@@ -819,7 +832,7 @@ di tabel Deferred di bawah, jadi Fase ini realistis baru mulai setelah salah sat
 
 ### 10.6 FormSpec Skill
 
-- [ ] 10.6.1 Format YAML frontmatter + Markdown body — `name`, `description`, `applies_to_kind`, `min_core_spec_version` (`docs/ai/06-formspec-skill.md` §2)
+- [ ] 10.6.1 Format YAML frontmatter + Markdown bodPy — `name`, `description`, `applies_to_kind`, `min_core_spec_version` (`docs/ai/06-formspec-skill.md` §2)
 - [ ] 10.6.2 Skill pertama: entity-authoring, form-layout, entity-extension-authoring, module-vendoring (06 §2, §4)
 - [ ] 10.6.3 Bundling bersama instalasi `formspec` (ikut siklus rilis, dicek vs Core Spec lokal), dibaca lewat `list_skills()`/`read_skill()` (06 §2–§3)
 - [ ] 10.6.4 Re-cek skill relevan sebagai bagian composite `propose_spec_file` — pemicu deterministik, bukan inisiatif LLM (06 §3)

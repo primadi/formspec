@@ -6,6 +6,10 @@
 
 spec: spec
 dsn: sqlite:.formspec/cafe.db
+dev-auth: true         # enable real JWT auth in dev mode (login + authorization enforced)
+jwt-secret: change-me  # HMAC secret for JWT signing — set a fixed value so
+#                        # issued tokens survive server restarts. Keep it secret;
+#                        # for production prefer env/secret manager over this file.
 # runtime: node          # uncomment if you have an app/ sidecar
 # app-dir: app
 # app-entrypoint: src/app.ts

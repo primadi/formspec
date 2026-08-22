@@ -1,0 +1,45 @@
+apiVersion: formspec.dev/v1
+kind: Form
+metadata:
+  name: user-create
+  module: formspec.core
+  description: "Form buat user — username + password (di-hash) + profil + role"
+spec:
+  entity: user
+  render:
+    mode: separate_page
+  sections:
+    - title: "Akun"
+      description: "Kredensial login"
+      fields:
+        - field: username
+          label: "Username"
+          placeholder: "mis. budi"
+        - field: password
+          label: "Password"
+          placeholder: "Minimal 8 karakter"
+          help: "Di-hash otomatis (bcrypt) — tidak pernah disimpan plaintext"
+    - title: "Profil"
+      description: "Informasi tambahan"
+      fields:
+        - field: display_name
+          label: "Nama Tampilan"
+          placeholder: "Nama lengkap user"
+        - field: email
+          label: "Email"
+          placeholder: "contoh@email.com"
+    - title: "Akses"
+      description: "Role & permission langsung (opsional — bisa juga via Role Assignment)"
+      fields:
+        - field: roles
+          label: "Roles"
+          help: "Daftar nama role (JSON array), mis. [\"admin\"]"
+        - field: permissions
+          label: "Permissions"
+          help: "Permission string (JSON array), mis. [\"*\"]"
+        - field: active
+          label: "Aktif"
+          help: "Nonaktifkan untuk memblokir login"
+  submit:
+    label: "Buat User"
+    message: "User berhasil dibuat"

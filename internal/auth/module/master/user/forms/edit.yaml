@@ -1,0 +1,43 @@
+apiVersion: formspec.dev/v1
+kind: Form
+metadata:
+  name: user-edit
+  module: formspec.core
+  description: "Form edit user — profil + role; password opsional (kosongkan jika tidak diubah)"
+spec:
+  entity: user
+  render:
+    mode: separate_page
+  sections:
+    - title: "Akun"
+      description: "Kredensial login"
+      fields:
+        - field: username
+          label: "Username"
+          read_only: true
+          help: "Username tidak bisa diubah"
+        - field: password
+          label: "Password Baru"
+          placeholder: "Kosongkan jika tidak diubah"
+          help: "Di-hash otomatis (bcrypt) — kosongkan untuk mempertahankan password lama"
+    - title: "Profil"
+      description: "Informasi tambahan"
+      fields:
+        - field: display_name
+          label: "Nama Tampilan"
+        - field: email
+          label: "Email"
+    - title: "Akses"
+      description: "Role & permission langsung"
+      fields:
+        - field: roles
+          label: "Roles"
+          help: "Daftar nama role (JSON array), mis. [\"admin\"]"
+        - field: permissions
+          label: "Permissions"
+          help: "Permission string (JSON array), mis. [\"*\"]"
+        - field: active
+          label: "Aktif"
+  submit:
+    label: "Simpan Perubahan"
+    message: "User berhasil diperbarui"

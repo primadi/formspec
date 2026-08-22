@@ -13,7 +13,12 @@ spec:
     - cafe-master
     - cafe-order
     - cafe-report
+    - formspec.core
   menu:
+    - label: "Access Management"
+      icon: "shield"
+      module: formspec.core
+      route: /access-management
     - label: "Dashboard"
       icon: "layout-dashboard"
       module: cafe-report

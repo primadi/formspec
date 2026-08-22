@@ -31,6 +31,7 @@ type CtxAPI struct {
 	Log       *logAPI
 	NextKey   func(fieldName string) (string, error)
 	Config    *configAPI
+	Secrets   *secretsAPI
 
 	// uses is the caller action's declared uses block (todo 2.6.4). When
 	// strictPrimitives is true, accessing a ctx.* primitive not listed in
@@ -462,5 +463,75 @@ func (c *configAPI) builtinGet() *starlark.Builtin {
 			return defaultVal, nil
 		}
 		return toStarlark(val)
+	})
+}
+
+// ─── ctx.secrets ───
+
+// secretsAPI serves ctx.secrets().get(key) — the ONLY path for reading
+// `secret: true` Config keys (todo 6.8.1). It enforces that the key is
+// declared in the caller action's uses.secrets (todo 6.8.2), never logs the
+// value (todo 6.8.3), and audits every read (todo 6.8.4).
+type secretsAPI struct {
+	store   map[string]string // key → secret value
+	allowed map[string]bool   // declared uses.secrets keys
+	audit   func(key string)  // audit hook (todo 6.8.4)
+}
+
+// NewSecretsAPI creates a secrets context backed by the given store, allowing
+// only the declared keys, and calling audit on each successful read.
+func NewSecretsAPI(store map[string]string, allowed []string, audit func(key string)) *secretsAPI {
+	allowedSet := map[string]bool{}
+	for _, k := range allowed {
+		allowedSet[k] = true
+	}
+	return &secretsAPI{store: store, allowed: allowedSet, audit: audit}
+}
+
+var _ starlark.Value = (*secretsAPI)(nil)
+
+func (s *secretsAPI) String() string        { return "<secrets>" }
+func (s *secretsAPI) Type() string          { return "secrets" }
+func (s *secretsAPI) Freeze()               {}
+func (s *secretsAPI) Truth() starlark.Bool  { return starlark.True }
+func (s *secretsAPI) Hash() (uint32, error) { return 0, fmt.Errorf("secrets is not hashable") }
+
+func (s *secretsAPI) Attr(name string) (starlark.Value, error) {
+	if name == "get" {
+		return s.builtinGet(), nil
+	}
+	return nil, starlark.NoSuchAttrError(fmt.Sprintf("secrets has no .%s", name))
+}
+
+func (s *secretsAPI) AttrNames() []string { return []string{"get"} }
+
+func (s *secretsAPI) builtinGet() *starlark.Builtin {
+	return starlark.NewBuiltin("secrets.get", func(
+		thread *starlark.Thread,
+		fn *starlark.Builtin,
+		args starlark.Tuple,
+		kwargs []starlark.Tuple,
+	) (starlark.Value, error) {
+		var key string
+		if err := starlark.UnpackArgs("get", args, kwargs, "key", &key); err != nil {
+			return nil, err
+		}
+
+		// todo 6.8.2: only declared secrets are accessible.
+		if !s.allowed[key] {
+			return nil, fmt.Errorf("ctx.secrets: key %q not declared in uses.secrets", key)
+		}
+
+		val, ok := s.store[key]
+		if !ok {
+			return starlark.None, nil
+		}
+
+		// todo 6.8.4: audit every secret read. The value itself is never
+		// logged (todo 6.8.3).
+		if s.audit != nil {
+			s.audit(key)
+		}
+		return starlark.String(val), nil
 	})
 }

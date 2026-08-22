@@ -8,6 +8,7 @@ package ui
 
 import (
 	"fmt"
+	"io/fs"
 	"sort"
 	"strings"
 	"sync"
@@ -70,6 +71,25 @@ func (r *Registry) LoadDir(basePath string) []error {
 	result, err := loader.LoadAll()
 	if err != nil {
 		return []error{fmt.Errorf("ui manifest load: %w", err)}
+	}
+	var errs []error
+	for _, pe := range result.Errors {
+		pe := pe
+		errs = append(errs, &pe)
+	}
+	errs = append(errs, r.Load(result.Manifests)...)
+	return errs
+}
+
+// LoadEmbedded discovers and loads all frontend-kind manifests from an
+// embedded filesystem (e.g. `//go:embed module`). Non-frontend kinds are
+// ignored. Parse errors are collected best-effort. Used to load UI manifests
+// shipped inside a framework-bundled module (e.g. the auth module).
+func (r *Registry) LoadEmbedded(fsys fs.FS) []error {
+	loader := manifest.NewLoader("")
+	result, err := loader.LoadEmbedded(fsys)
+	if err != nil {
+		return []error{fmt.Errorf("ui embedded manifest load: %w", err)}
 	}
 	var errs []error
 	for _, pe := range result.Errors {
@@ -209,7 +229,10 @@ type EntityResolver func(module, name string) (*spec.EntitySpec, bool)
 // (cross-module) relative to the referencing manifest's module.
 func resolveEntityRef(resolve EntityResolver, defaultModule, ref string) (*spec.EntitySpec, string, string, bool) {
 	module, name := defaultModule, ref
-	if i := strings.IndexByte(ref, '.'); i > 0 {
+	// Split at the LAST dot so dotted module names (e.g. "formspec.core.role"
+	// → module "formspec.core", entity "role") resolve correctly. Entity
+	// names don't contain dots; module names may (namespaced modules).
+	if i := strings.LastIndexByte(ref, '.'); i > 0 {
 		module, name = ref[:i], ref[i+1:]
 	}
 	es, ok := resolve(module, name)

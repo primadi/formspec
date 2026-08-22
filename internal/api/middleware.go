@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/primadi/formspec/internal/auth"
 	"github.com/primadi/formspec/pkg/spec"
@@ -28,6 +29,17 @@ func SetAuthValidator(v auth.TokenValidator) {
 func GetAuthValidator() auth.TokenValidator {
 	return authValidator
 }
+
+// apiKeyStore resolves X-FormSpec-Key credentials on the external surface
+// (/api/v1/). Configured at startup when API key auth is enabled; nil disables
+// API key auth.
+var apiKeyStore *auth.ApiKeyStore
+
+// SetApiKeyStore configures the global API key store (nil disables API key auth).
+func SetApiKeyStore(s *auth.ApiKeyStore) { apiKeyStore = s }
+
+// GetApiKeyStore returns the current global API key store (may be nil).
+func GetApiKeyStore() *auth.ApiKeyStore { return apiKeyStore }
 
 // WorkspaceMiddleware extracts the workspace slug from the URL, resolves it,
 // and injects the workspace ID into the request context.
@@ -72,6 +84,29 @@ func WorkspaceMiddleware(next http.Handler) http.Handler {
 func AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
+
+		// API key auth (external surface only — /api/v1/). The UI surface
+		// (/_ui/) never accepts X-FormSpec-Key; it uses session cookie / OAuth.
+		if apiKeyStore != nil && !isUISurface(r.URL.Path) {
+			if apiKey := r.Header.Get("X-FormSpec-Key"); apiKey != "" {
+				ws := workspaceFromContext(ctx)
+				if ws == "" {
+					ws = "demo"
+				}
+				k, err := apiKeyStore.GetByKey(ctx, ws, apiKey)
+				if err != nil || !k.IsValid(time.Now()) {
+					writeError(w, http.StatusUnauthorized, "UNAUTHORIZED",
+						"invalid api key")
+					return
+				}
+				identity := k.Identity(ws)
+				ctx = WithIdentity(ctx, identity)
+				ctx = WithUser(ctx, identity.UserID)
+				ctx = WithWorkspace(ctx, ws)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+		}
 
 		// Extract token from Authorization header, falling back to the
 		// `token` query param — browsers cannot set custom headers on a

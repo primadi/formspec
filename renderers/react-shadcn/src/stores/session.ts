@@ -22,6 +22,8 @@ export interface SessionState {
   me: MeResponse | null
   /** Whether the session is fully loaded */
   loaded: boolean
+  /** True when the server rejected the session with 401 (not logged in) */
+  unauthenticated: boolean
   /** Optional error from boot */
   error: string | null
 
@@ -39,10 +41,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   token: "",
   me: null,
   loaded: false,
+  unauthenticated: false,
   error: null,
 
   setSession: (workspace: string, token: string) => {
-    set({ workspace, token, loaded: true, error: null })
+    set({ workspace, token, loaded: true, error: null, unauthenticated: false })
   },
 
   clearSession: () => {
@@ -51,29 +54,39 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       token: "",
       me: null,
       loaded: false,
+      unauthenticated: false,
       error: null,
     })
   },
 
   boot: async (workspace: string, token?: string) => {
-    set({ workspace, token: token ?? "", loaded: false, error: null })
+    set({
+      workspace,
+      token: token ?? "",
+      loaded: false,
+      error: null,
+      unauthenticated: false,
+    })
 
-    try {
-      const me = await fetchMe(workspace, token)
-
-      // Dev mode: if _meta/me returns null, create a synthetic identity
-      const identity: MeResponse = me ?? {
-        user_id: "developer",
-        workspace,
-        roles: ["admin"],
-        permissions: ["*"],
-      }
-
-      set({ me: identity, loaded: true, error: null })
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to boot session"
-      set({ loaded: true, error: message })
+    const me = await fetchMe(workspace, token)
+    if (!me) {
+      // Server unreachable / error — connection error screen.
+      set({
+        me: null,
+        loaded: true,
+        error: "Failed to load session",
+        unauthenticated: false,
+      })
+      return
     }
+    // _meta/me returns user_id "anonymous" when not authenticated. Treat that
+    // as unauthenticated so the auth guard redirects to /login — do NOT
+    // fabricate a synthetic identity (that would bypass authorization).
+    if (me.user_id === "anonymous") {
+      set({ me: null, loaded: true, error: null, unauthenticated: true })
+      return
+    }
+    set({ me, loaded: true, error: null, unauthenticated: false })
   },
 
   getClient: () => {

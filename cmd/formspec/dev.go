@@ -59,6 +59,8 @@ type DevConfig struct {
 	StateDir       string
 	DevMode        bool
 	DevUI          bool
+	DevAuth        bool   // Enable real JWT auth in dev mode (for testing authorization)
+	JWTSecret      string // HMAC secret for JWT signing (persist across restarts)
 	Force          bool
 	WebDir         string
 	InvokeTimeout  time.Duration
@@ -171,6 +173,8 @@ func runDev(args []string) {
 		DSN:                  cfg.DSN,
 		Addr:                 cfg.Addr,
 		ProdMode:             !cfg.DevMode && cfg.ControlURL != "",
+		DevAuth:              cfg.DevAuth,
+		JWTSecret:            cfg.JWTSecret,
 		SidecarEndpoint:      appEndpointURL,
 		SidecarInvokeTimeout: cfg.InvokeTimeout,
 		WorkspaceID:          cfg.WorkspaceID,
@@ -487,6 +491,8 @@ func parseDevFlags(args []string) DevConfig {
 	stateDir := fs.String("state-dir", "", "State directory (default: .formspec)")
 	devMode := fs.Bool("dev", false, "Development mode (implied by --dev-ui)")
 	devUI := fs.Bool("dev-ui", false, "Development UI: start Vite HMR (implies --dev)")
+	devAuth := fs.Bool("dev-auth", false, "Enable real JWT auth in dev mode (login + authorization enforced)")
+	jwtSecret := fs.String("jwt-secret", "", "HMAC secret for JWT signing (persists tokens across restarts)")
 	force := fs.Bool("force", false, "Force kill previous instance on same ports")
 	webDir := fs.String("web-dir", "", "Override SPA directory. Auto-detect if empty")
 	invokeTimeout := fs.Duration("invoke-timeout", 30*time.Second, "Timeout for sidecar action invocation")
@@ -511,6 +517,8 @@ func parseDevFlags(args []string) DevConfig {
 		StateDir:       orDefault(*stateDir, defaultStateDir),
 		DevMode:        *devMode || *devUI,
 		DevUI:          *devUI,
+		DevAuth:        *devAuth,
+		JWTSecret:      *jwtSecret,
 		Force:          *force,
 		WebDir:         *webDir,
 		InvokeTimeout:  *invokeTimeout,

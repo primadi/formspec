@@ -43,9 +43,15 @@ import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
 import { can as checkPermission } from "@/engine/permissions"
 import { deriveTable, deriveForm } from "@/engine/derive"
+import { resolveEntityRef } from "@/engine/entityRef"
 import { getLifecycle } from "@/engine/lifecycle"
 import { buildListParams, apiList, apiDelete } from "@/lib/api"
-import { buildFixedFilterParams, resolveFilterValue, shouldShowAll, allLabel } from "@/lib/filters"
+import {
+  buildFixedFilterParams,
+  resolveFilterValue,
+  shouldShowAll,
+  allLabel,
+} from "@/lib/filters"
 import { useSelectFilterOptions } from "@/hooks/useSelectFilterOptions"
 import { useRealtime } from "@/hooks/useRealtime"
 import { Button } from "@/components/ui/button"
@@ -74,7 +80,11 @@ interface RowData {
   [key: string]: unknown
 }
 
-export default function TableRenderer({ entity, hideTitle, fixedFilters }: TableRendererProps) {
+export default function TableRenderer({
+  entity,
+  hideTitle,
+  fixedFilters,
+}: TableRendererProps) {
   const navigate = useNavigate()
   const { surfacePath } = useSurface()
   const [, setSearchParams] = useSearchParams()
@@ -85,17 +95,20 @@ export default function TableRenderer({ entity, hideTitle, fixedFilters }: Table
   // Find an authored form for this entity + mode to check render mode.
   const authoredForm = useMemo(() => {
     if (!metaBundle) return undefined
-    const entityRef = `${entity.module}.${entity.name}`
-    return metaBundle.forms.find((f) => f.spec.entity === entityRef)
+    return metaBundle.forms.find((f) => {
+      const [m, n] = resolveEntityRef(f.spec.entity, f.module)
+      return m === entity.module && n === entity.name
+    })
   }, [metaBundle, entity])
 
   // Render mode (§1.6 heuristic: ≤5 fields → modal, 6–12 → drawer, else
   // separate_page) — authored form wins if it sets one explicitly, otherwise
   // fall back to the same heuristic deriveForm() applies to fully-derived
   // entities (most entities in this showcase have no authored Form at all).
-  const formRenderMode = authoredForm?.spec.render?.mode
-    ?? deriveForm(entity, "create").render?.mode
-    ?? "separate_page"
+  const formRenderMode =
+    authoredForm?.spec.render?.mode ??
+    deriveForm(entity, "create").render?.mode ??
+    "separate_page"
 
   // Resolve table spec: authored > derived, with fallback for missing fields
   const tableSpec = useMemo(() => {
@@ -112,8 +125,12 @@ export default function TableRenderer({ entity, hideTitle, fixedFilters }: Table
       ...derived,
       ...authored.spec,
       // columns, row_actions: authored if non-empty, else derived
-      columns: authored.spec.columns?.length ? authored.spec.columns : derived.columns,
-      row_actions: authored.spec.row_actions?.length ? authored.spec.row_actions : derived.row_actions,
+      columns: authored.spec.columns?.length
+        ? authored.spec.columns
+        : derived.columns,
+      row_actions: authored.spec.row_actions?.length
+        ? authored.spec.row_actions
+        : derived.row_actions,
     }
   }, [entity, metaBundle])
 
@@ -172,7 +189,9 @@ export default function TableRenderer({ entity, hideTitle, fixedFilters }: Table
           search: search || undefined,
         }
         if (sorting.length > 0) {
-          params.sort = sorting.map((s) => `${s.desc ? "-" : ""}${s.id}`).join(",")
+          params.sort = sorting
+            .map((s) => `${s.desc ? "-" : ""}${s.id}`)
+            .join(",")
         }
         // Add filter values to params — user picks first, then the page's
         // runtime fixedFilters, then the manifest's fixed_filters (operator
@@ -206,8 +225,20 @@ export default function TableRenderer({ entity, hideTitle, fixedFilters }: Table
       }
     }
     load()
-    return () => { cancelled = true }
-  }, [entity, page, search, sorting, filterValues, tableSpec.page_size, getClient, reloadKey, fixedFilters])
+    return () => {
+      cancelled = true
+    }
+  }, [
+    entity,
+    page,
+    search,
+    sorting,
+    filterValues,
+    tableSpec.page_size,
+    getClient,
+    reloadKey,
+    fixedFilters,
+  ])
 
   // ── Realtime (spec §5): matching entity event → silent refetch ──
   const realtimeTick = useRealtime(
@@ -234,52 +265,49 @@ export default function TableRenderer({ entity, hideTitle, fixedFilters }: Table
   // Columns
   const hasBulkActions =
     tableSpec.bulk_actions && tableSpec.bulk_actions.length > 0
-  const columns = useMemo<ColumnDef<RowData>[]>(
-    () => {
-      const cols: ColumnDef<RowData>[] = []
+  const columns = useMemo<ColumnDef<RowData>[]>(() => {
+    const cols: ColumnDef<RowData>[] = []
 
-      // Selection checkbox column for bulk actions
-      if (hasBulkActions) {
-        cols.push({
-          id: "__select",
-          header: ({ table }) => (
-            <input
-              type="checkbox"
-              className="size-4 cursor-pointer"
-              checked={table.getIsAllRowsSelected()}
-              onChange={table.getToggleAllRowsSelectedHandler()}
-            />
-          ),
-          cell: ({ row }) => (
-            <input
-              type="checkbox"
-              className="size-4 cursor-pointer"
-              checked={row.getIsSelected()}
-              onChange={row.getToggleSelectedHandler()}
-            />
-          ),
-          enableSorting: false,
-          size: 40,
-        })
-      }
+    // Selection checkbox column for bulk actions
+    if (hasBulkActions) {
+      cols.push({
+        id: "__select",
+        header: ({ table }) => (
+          <input
+            type="checkbox"
+            className="size-4 cursor-pointer"
+            checked={table.getIsAllRowsSelected()}
+            onChange={table.getToggleAllRowsSelectedHandler()}
+          />
+        ),
+        cell: ({ row }) => (
+          <input
+            type="checkbox"
+            className="size-4 cursor-pointer"
+            checked={row.getIsSelected()}
+            onChange={row.getToggleSelectedHandler()}
+          />
+        ),
+        enableSorting: false,
+        size: 40,
+      })
+    }
 
-      for (const col of tableSpec.columns) {
-        cols.push({
-          id: col.field,
-          accessorKey: col.field,
-          header: col.label ?? col.field,
-          enableSorting: col.sortable ?? true,
-          cell: ({ getValue }) => {
-            const value = getValue()
-            return renderCellValue(value, col.widget, col.format)
-          },
-        })
-      }
+    for (const col of tableSpec.columns) {
+      cols.push({
+        id: col.field,
+        accessorKey: col.field,
+        header: col.label ?? col.field,
+        enableSorting: col.sortable ?? true,
+        cell: ({ getValue }) => {
+          const value = getValue()
+          return renderCellValue(value, col.widget, col.format)
+        },
+      })
+    }
 
-      return cols
-    },
-    [tableSpec.columns, hasBulkActions],
-  )
+    return cols
+  }, [tableSpec.columns, hasBulkActions])
 
   // TanStack table
   const table = useReactTable({
@@ -334,7 +362,9 @@ export default function TableRenderer({ entity, hideTitle, fixedFilters }: Table
         if (formRenderMode !== "separate_page") {
           setSearchParams({
             action: "edit",
-            ...(authoredForm ? { form: authoredForm.name } : { entity: `${entity.module}.${entity.name}` }),
+            ...(authoredForm
+              ? { form: authoredForm.name }
+              : { entity: `${entity.module}.${entity.name}` }),
             id: row.id,
             mode: formRenderMode,
           })
@@ -400,7 +430,9 @@ export default function TableRenderer({ entity, hideTitle, fixedFilters }: Table
               if (formRenderMode !== "separate_page") {
                 setSearchParams({
                   action: "create",
-                  ...(authoredForm ? { form: authoredForm.name } : { entity: `${entity.module}.${entity.name}` }),
+                  ...(authoredForm
+                    ? { form: authoredForm.name }
+                    : { entity: `${entity.module}.${entity.name}` }),
                   mode: formRenderMode,
                 })
               } else {
@@ -446,13 +478,15 @@ export default function TableRenderer({ entity, hideTitle, fixedFilters }: Table
       )}
 
       {/* Bulk Actions */}
-      {tableSpec.bulk_actions && tableSpec.bulk_actions.length > 0 && selectedRows.size > 0 && (
-        <BulkActionsBar
-          bulkActions={tableSpec.bulk_actions}
-          selectedCount={selectedRows.size}
-          onClear={() => setSelectedRows(new Set())}
-        />
-      )}
+      {tableSpec.bulk_actions &&
+        tableSpec.bulk_actions.length > 0 &&
+        selectedRows.size > 0 && (
+          <BulkActionsBar
+            bulkActions={tableSpec.bulk_actions}
+            selectedCount={selectedRows.size}
+            onClear={() => setSelectedRows(new Set())}
+          />
+        )}
 
       {/* Error */}
       {error && (
@@ -473,7 +507,8 @@ export default function TableRenderer({ entity, hideTitle, fixedFilters }: Table
                       key={header.id}
                       className={cn(
                         "h-10 px-3 text-left align-middle font-medium text-muted-foreground",
-                        header.column.getCanSort() && "cursor-pointer select-none hover:bg-muted",
+                        header.column.getCanSort() &&
+                          "cursor-pointer select-none hover:bg-muted",
                       )}
                       onClick={header.column.getToggleSortingHandler()}
                     >
@@ -504,7 +539,9 @@ export default function TableRenderer({ entity, hideTitle, fixedFilters }: Table
               {loading ? (
                 <tr>
                   <td
-                    colSpan={columns.length + (tableSpec.row_actions?.length ? 1 : 0)}
+                    colSpan={
+                      columns.length + (tableSpec.row_actions?.length ? 1 : 0)
+                    }
                     className="h-24 text-center text-muted-foreground"
                   >
                     Loading...
@@ -513,7 +550,9 @@ export default function TableRenderer({ entity, hideTitle, fixedFilters }: Table
               ) : data.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={columns.length + (tableSpec.row_actions?.length ? 1 : 0)}
+                    colSpan={
+                      columns.length + (tableSpec.row_actions?.length ? 1 : 0)
+                    }
                     className="h-24 text-center text-muted-foreground"
                   >
                     No records found.
@@ -543,7 +582,11 @@ export default function TableRenderer({ entity, hideTitle, fixedFilters }: Table
                               return checkPermission(perm, me.permissions)
                             })
                             .filter((action) =>
-                              isActionAllowedForRow(action, row.original, entity),
+                              isActionAllowedForRow(
+                                action,
+                                row.original,
+                                entity,
+                              ),
                             )
                             .map((action) => (
                               <Button
@@ -551,10 +594,14 @@ export default function TableRenderer({ entity, hideTitle, fixedFilters }: Table
                                 variant="ghost"
                                 size="icon"
                                 className="size-8"
-                                onClick={() => handleRowAction(action, row.original)}
+                                onClick={() =>
+                                  handleRowAction(action, row.original)
+                                }
                                 title={action.label}
                               >
-                                <ActionIcon iconName={action.icon ?? action.action} />
+                                <ActionIcon
+                                  iconName={action.icon ?? action.action}
+                                />
                               </Button>
                             ))}
                         </div>
@@ -748,7 +795,12 @@ function FilterBar({
         />
       ))}
       {hasActiveFilters && (
-        <Button variant="ghost" size="sm" onClick={onClear} className="h-8 px-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onClear}
+          className="h-8 px-2"
+        >
           <RotateCcw className="size-3 mr-1" />
           Reset
         </Button>
@@ -777,7 +829,12 @@ function FilterControl({
       // Options come from the entity field definition (enum_values / related
       // entity master data), independent of the current rows — so a table or
       // board scoped to an empty date range still shows valid filter options.
-      const options = useSelectFilterOptions(filter, entity, metaBundle, getClient)
+      const options = useSelectFilterOptions(
+        filter,
+        entity,
+        metaBundle,
+        getClient,
+      )
       const showAll = shouldShowAll(filter)
       const optionsWithAll = [
         ...(showAll ? [{ value: "__all__", label: allLabel(filter) }] : []),

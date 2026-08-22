@@ -1,0 +1,10 @@
+apiVersion: formspec.dev/v1
+kind: Table
+metadata:
+  name: user-table
+  module: formspec.core
+  description: "Tabel user — derived columns"
+spec:
+  entity: user
+  page_size: 15
+  default_sort: "username"

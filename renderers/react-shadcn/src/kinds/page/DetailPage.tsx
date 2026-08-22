@@ -15,6 +15,7 @@ import type { EntitySchema } from "@/types/manifest"
 import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
 import { can as checkPermission } from "@/engine/permissions"
+import { resolveEntityRef } from "@/engine/entityRef"
 import { deriveDetailFields } from "@/engine/derive"
 import { getLifecycle, getAvailableTransitions } from "@/engine/lifecycle"
 import { apiGet } from "@/lib/api"
@@ -29,12 +30,18 @@ interface DetailPageProps {
 
 export default function DetailPage({ entity }: DetailPageProps) {
   const navigate = useNavigate()
-  const { workspace = "default", id } = useParams<{ workspace: string; id: string }>()
+  const { workspace = "default", id } = useParams<{
+    workspace: string
+    id: string
+  }>()
   const { surfacePath } = useSurface()
   const me = useSessionStore((s) => s.me)
   const getClient = useSessionStore((s) => s.getClient)
 
-  const { mainFields, childFields } = useMemo(() => deriveDetailFields(entity), [entity])
+  const { mainFields, childFields } = useMemo(
+    () => deriveDetailFields(entity),
+    [entity],
+  )
   const lifecycle = useMemo(() => getLifecycle(entity), [entity])
 
   const [record, setRecord] = useState<Record<string, unknown> | null>(null)
@@ -68,16 +75,15 @@ export default function DetailPage({ entity }: DetailPageProps) {
   // All entity schemas from the meta bundle — used to resolve relation display fields
   const entities = useMetaStore((s) => s.bundle?.entities ?? [])
 
-  const currentState = record?.[entity.state_machine?.field ?? ""] as string | undefined
+  const currentState = record?.[entity.state_machine?.field ?? ""] as
+    | string
+    | undefined
   const transitions = useMemo(
     () => (currentState ? getAvailableTransitions(entity, currentState) : []),
     [entity, currentState],
   )
 
-  const handleTransition = async (
-    action: string,
-    skipConfirm = false,
-  ) => {
+  const handleTransition = async (action: string, skipConfirm = false) => {
     if (!me) return
     const perm = `${entity.module}.${entity.plural}.${action}`
     if (!checkPermission(perm, me.permissions)) {
@@ -144,9 +150,7 @@ export default function DetailPage({ entity }: DetailPageProps) {
           <Button
             variant="outline"
             onClick={() =>
-              navigate(
-                surfacePath(entity.module, entity.plural, id, "edit"),
-              )
+              navigate(surfacePath(entity.module, entity.plural, id, "edit"))
             }
           >
             <Edit className="size-4 mr-1" />
@@ -173,16 +177,22 @@ export default function DetailPage({ entity }: DetailPageProps) {
             ) {
               const alias = field.name.endsWith("_id")
                 ? field.name.slice(0, -3)
-                : field.relation?.resource ?? field.name
+                : (field.relation?.resource ?? field.name)
               const resolved = record[alias]
-              if (resolved && typeof resolved === "object" && !Array.isArray(resolved)) {
+              if (
+                resolved &&
+                typeof resolved === "object" &&
+                !Array.isArray(resolved)
+              ) {
                 // Determine the related entity's label_field.
                 // relation.resource can be "entity" or "module.entity" (cross-module).
                 const resourceName = field.relation?.resource ?? alias
-                const parts = resourceName.split(".")
-                const relatedEntity = parts.length === 2
-                  ? entities.find((e) => e.module === parts[0] && e.name === parts[1])
-                  : entities.find((e) => e.name === parts[0])
+                const [relModule, relName] = resolveEntityRef(resourceName, "")
+                const relatedEntity = relModule
+                  ? entities.find(
+                      (e) => e.module === relModule && e.name === relName,
+                    )
+                  : entities.find((e) => e.name === relName)
                 const displayField = relatedEntity?.label_field ?? "name"
                 const displayName =
                   (resolved as Record<string, unknown>)[displayField] ??
@@ -276,10 +286,14 @@ export default function DetailPage({ entity }: DetailPageProps) {
       {/* Audit Info */}
       <div className="text-xs text-muted-foreground space-y-0.5">
         {record.created_at ? (
-          <div>Created: {new Date(record.created_at as string).toLocaleString()}</div>
+          <div>
+            Created: {new Date(record.created_at as string).toLocaleString()}
+          </div>
         ) : null}
         {record.modified ? (
-          <div>Modified: {new Date(record.modified as string).toLocaleString()}</div>
+          <div>
+            Modified: {new Date(record.modified as string).toLocaleString()}
+          </div>
         ) : null}
         {typeof record.version === "number" ? (
           <div>Version: {record.version}</div>
@@ -298,9 +312,14 @@ function DetailFieldValue({
   field: import("@/types/manifest").Field
   value: unknown
 }) {
-  if (value == null) return <span className="text-muted-foreground italic">-</span>
+  if (value == null)
+    return <span className="text-muted-foreground italic">-</span>
 
-  if (field.type === "enum" || field.name === "doc_status" || field.name === "status") {
+  if (
+    field.type === "enum" ||
+    field.name === "doc_status" ||
+    field.name === "status"
+  ) {
     return <Badge value={String(value)} />
   }
 
@@ -333,4 +352,3 @@ function DetailFieldValue({
 
   return String(value)
 }
-

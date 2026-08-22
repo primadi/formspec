@@ -32,6 +32,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/primadi/formspec/internal/manifest"
+	"github.com/primadi/formspec/internal/permission"
 	"github.com/primadi/formspec/pkg/spec"
 )
 
@@ -121,6 +122,7 @@ func runCheck(args []string) {
 	fs.SetOutput(os.Stderr)
 	specPath := fs.String("f", "spec", "path to the spec directory (default: spec)")
 	fix := fs.Bool("fix", false, "remove unused cross-module declarations")
+	footprint := fs.Bool("footprint", false, "print the consent footprint (required_permission + uses) per module")
 	if err := fs.Parse(args); err != nil {
 		os.Exit(2)
 	}
@@ -164,6 +166,14 @@ func runCheck(args []string) {
 		}
 	}
 
+	// ── Consent footprint (todo 6.2.5) ──
+	// Aggregate required_permission + uses per module, presented to the
+	// workspace owner at install time. Cross-module writes are flagged as
+	// high-risk consent (D46).
+	if *footprint {
+		printConsentFootprint(res.Manifests)
+	}
+
 	// ── Report ──
 	sort.SliceStable(result.Issues, func(i, j int) bool {
 		if result.Issues[i].Source != result.Issues[j].Source {
@@ -191,6 +201,47 @@ func runCheck(args []string) {
 	fmt.Printf("\n%d error(s), %d warning(s)\n", errCount, warnCount)
 	if errCount > 0 {
 		os.Exit(1)
+	}
+}
+
+// printConsentFootprint builds a permission registry from the manifests and
+// prints each module's consent footprint (todo 6.2.5): required permissions,
+// uses declarations, and cross-module writes (high-risk consent, D46).
+func printConsentFootprint(manifests []manifest.RawManifest) {
+	reg := permission.NewRegistry()
+	for _, m := range manifests {
+		if !spec.IsEntityKind(spec.Kind(m.Kind)) {
+			continue
+		}
+		sm, ok := m.Spec.(map[string]any)
+		if !ok {
+			continue
+		}
+		es, err := manifest.RawSpecToEntitySpec(sm)
+		if err != nil {
+			continue
+		}
+		module := m.Metadata.Module
+		entity := m.Metadata.Name
+		for _, a := range es.Actions {
+			usesEntry := permission.BuildUsesEntry(module, entity, a.Name, a.Uses)
+			_ = reg.RegisterAction(module, entity, a.Name, a.RequiredPermission, usesEntry, m.Source, a.Audit)
+		}
+		if len(es.Expose) > 0 {
+			plural := es.Plural
+			if plural == "" {
+				plural = entity + "s"
+			}
+			for _, act := range []string{"list", "view", "create", "update", "delete"} {
+				_ = reg.RegisterAction(module, entity, act, module+"."+plural+"."+act, &permission.UsesEntry{}, m.Source, false)
+			}
+		}
+	}
+
+	footprints := reg.AllFootprints()
+	sort.Slice(footprints, func(i, j int) bool { return footprints[i].Module < footprints[j].Module })
+	for _, fp := range footprints {
+		fmt.Println(fp.String())
 	}
 }
 

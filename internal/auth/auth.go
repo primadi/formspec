@@ -66,11 +66,21 @@ func (id *Identity) HasPermission(required string) bool {
 		}
 		// Wildcard match: "billing.invoices.*" → prefix before "*"
 		if before, ok := strings.CutSuffix(p, ".*"); ok {
-			// Required must be under the same prefix AND have exactly one more segment
+			// Required must be under the same prefix AND have at least one
+			// more segment after the wildcard.
 			if strings.HasPrefix(required, before) {
 				rest := strings.TrimPrefix(required, before)
-				if strings.HasPrefix(rest, ".") && !strings.Contains(rest[1:], ".") {
-					return true
+				if strings.HasPrefix(rest, ".") {
+					// Module-level wildcard "billing.*" → any entity.action
+					// under the module (1+ segments).
+					if !strings.Contains(before, ".") {
+						return true
+					}
+					// Entity-level wildcard "billing.invoices.*" → exactly
+					// one more segment (the action).
+					if !strings.Contains(rest[1:], ".") {
+						return true
+					}
 				}
 			}
 		}

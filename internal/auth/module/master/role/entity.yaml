@@ -1,0 +1,29 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: role
+  module: formspec.core
+  description: "Role (auth) — named collection of grants (page → tab → action + conditions), scoped per-App. grants di-materialisasi jadi permission string saat enforcement."
+  annotations:
+    formspec.dev/ui-exposed: "true"
+spec:
+  version: v1
+  plural: roles
+  characteristic: master
+  display_field: name
+  fields:
+    - name: name
+      type: string
+      required: true
+      unique: true
+      index: true
+    - name: app
+      type: string
+      index: true
+    - name: module
+      type: string
+      index: true
+    - name: description
+      type: string
+    - name: grants
+      type: json

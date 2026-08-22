@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { Search } from "lucide-react"
+import { resolveEntityRef } from "@/engine/entityRef"
 import type {
   Entry,
   ListingSpec,
@@ -72,7 +73,7 @@ export default function ListingRenderer({
 
   const entity = useMemo(() => {
     const ref = spec.entity
-    const [mod, name] = ref.includes(".") ? ref.split(".") : [entry.module, ref]
+    const [mod, name] = resolveEntityRef(ref, entry.module)
     return getEntity(mod, name)
   }, [spec.entity, entry.module, getEntity])
 

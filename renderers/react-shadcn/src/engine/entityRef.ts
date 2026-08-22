@@ -10,7 +10,13 @@
 // getEntity("", name) can never match anything and silently resolves to no
 // entity — the exact bug this helper exists to prevent from recurring.
 
-export function resolveEntityRef(ref: string, defaultModule: string): [string, string] {
-  const i = ref.indexOf(".")
+export function resolveEntityRef(
+  ref: string,
+  defaultModule: string,
+): [string, string] {
+  // Split at the LAST dot so dotted module names (e.g. "formspec.core.role"
+  // → module "formspec.core", entity "role") resolve correctly. Entity
+  // names don't contain dots; module names may (namespaced modules).
+  const i = ref.lastIndexOf(".")
   return i > 0 ? [ref.slice(0, i), ref.slice(i + 1)] : [defaultModule, ref]
 }

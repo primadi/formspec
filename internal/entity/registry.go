@@ -11,6 +11,7 @@ package entity
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"sort"
 	"strings"
 	"sync"
@@ -44,6 +45,12 @@ type SpecInfo struct {
 	// must never be exposed via API routes or the meta bundle. They are only
 	// reachable by framework code through GetEntityStore directly.
 	Internal bool
+	// UIExposed marks an Internal entity that is still manageable on the
+	// admin/UI surface (e.g. formspec.core.user/role). It appears in the
+	// meta bundle and gets UI routes + standard permissions, but never
+	// external API routes (spec.expose still gates those). Declared by the
+	// module manifest via annotation `formspec.dev/ui-exposed: "true"`.
+	UIExposed bool
 }
 
 // EntityInfo is a lightweight summary of a registered entity.
@@ -322,6 +329,80 @@ func (r *Registry) RegisterCoreEntity(module, name, description string, entitySp
 	return nil
 }
 
+// RegisterEmbeddedCoreModule registers framework-owned entities from an
+// embedded module (e.g. `//go:embed module` in internal/auth/module) through
+// the manifest loader — the same path user manifests take (dogfooding).
+// Entities are marked Internal (no API routes, no meta-bundle exposure) and
+// are only reachable via GetEntityStore.
+//
+// User-provided overrides (external/) win: if an entity with the same key is
+// already registered, the embedded default is skipped. Errors are collected
+// best-effort (like LoadEntities) and returned as a slice.
+func (r *Registry) RegisterEmbeddedCoreModule(fsys fs.FS) []error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	result, err := r.loader.LoadEmbedded(fsys)
+	if err != nil {
+		return []error{fmt.Errorf("embedded core module load: %w", err)}
+	}
+
+	var allErrors []error
+	for _, pe := range result.Errors {
+		pe := pe
+		allErrors = append(allErrors, &pe)
+	}
+
+	for _, raw := range result.Manifests {
+		if !spec.IsEntityKind(spec.Kind(raw.Kind)) {
+			continue
+		}
+
+		key := entityKey(raw.Metadata.Module, raw.Metadata.Name)
+		if _, exists := r.specs[key]; exists {
+			continue // user override wins
+		}
+
+		entitySpec, err := manifest.RawSpecToEntitySpec(raw.Spec.(map[string]any))
+		if err != nil {
+			allErrors = append(allErrors, fmt.Errorf("%s: parse spec: %w", raw.Source, err))
+			continue
+		}
+		if err := spec.ValidateEntitySpec(entitySpec); err != nil {
+			allErrors = append(allErrors, fmt.Errorf("%s: validate: %w", raw.Source, err))
+			continue
+		}
+
+		// An Internal entity that opts into the admin/UI surface via the
+		// `formspec.dev/ui-exposed` annotation is still manageable on the UI
+		// surface (meta bundle + UI routes + standard permissions), but never
+		// gets external API routes.
+		uiExposed := raw.Metadata.Annotations["formspec.dev/ui-exposed"] == "true"
+
+		r.specs[key] = &SpecInfo{
+			Metadata: spec.Metadata{
+				Name:        raw.Metadata.Name,
+				Module:      raw.Metadata.Module,
+				Description: raw.Metadata.Description,
+				Labels:      raw.Metadata.Labels,
+				Annotations: raw.Metadata.Annotations,
+			},
+			EntitySpec: entitySpec,
+			Source:     raw.Source,
+			Internal:   true,
+			UIExposed:  uiExposed,
+		}
+
+		// Register standard CRUD + lifecycle permissions for UI-exposed core
+		// entities so they are grantable to non-admin roles (RBAC, 6.2/6.3).
+		if uiExposed {
+			r.registerStandardPermissions(raw.Metadata.Module, raw.Metadata.Name, entitySpec, raw.Source)
+		}
+	}
+
+	return allErrors
+}
+
 // SyncSchema applies all registered entity schemas to the database.
 // It returns the number of migrations applied and any errors.
 func (r *Registry) SyncSchema(ctx context.Context) (int, error) {
@@ -572,9 +653,10 @@ func (r *Registry) ListEntities() []EntityInfo {
 
 	result := make([]EntityInfo, 0, len(r.specs))
 	for _, info := range r.specs {
-		// Skip framework-owned internal entities (formspec.core.*) — they
-		// must never surface in routes or the meta bundle.
-		if info.Internal {
+		// Skip framework-owned internal entities (formspec.core.*) unless
+		// they opted into the admin/UI surface (UIExposed) — those appear in
+		// routes + meta bundle but never on the external API surface.
+		if info.Internal && !info.UIExposed {
 			continue
 		}
 		char := string(info.EntitySpec.Characteristic)

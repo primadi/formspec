@@ -1,0 +1,23 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: workspace
+  module: formspec.core
+  description: "Workspace (auth) — identitas dan metadata tenant (unit multi-tenancy tunggal FormSpec)."
+spec:
+  version: v1
+  plural: workspaces
+  characteristic: master
+  display_field: name
+  fields:
+    - name: name
+      type: string
+      required: true
+    - name: slug
+      type: string
+      unique: true
+      index: true
+    - name: owner_user_id
+      type: string
+    - name: settings
+      type: json

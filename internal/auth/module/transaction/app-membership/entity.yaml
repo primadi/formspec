@@ -1,0 +1,26 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: app-membership
+  module: formspec.core
+  description: "App membership (auth) — populasi user per App + atribut membership (mis. kode cabang) untuk authorization attribute-based. Terpisah dari role-assignment."
+  annotations:
+    formspec.dev/ui-exposed: "true"
+spec:
+  version: v1
+  plural: app-memberships
+  characteristic: master
+  fields:
+    - name: user_id
+      type: string
+      required: true
+      index: true
+    - name: app
+      type: string
+      required: true
+      index: true
+    - name: attributes
+      type: json
+    - name: active
+      type: boolean
+      default: true

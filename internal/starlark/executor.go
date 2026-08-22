@@ -27,6 +27,15 @@ func declaredUsesResources(uses *spec.UsesDecl) []string {
 	return uses.Resources
 }
 
+// declaredUsesSecrets returns the caller action's declared uses.secrets keys
+// as a []string, or nil when the action declares no uses block (todo 6.8.2).
+func declaredUsesSecrets(uses *spec.UsesDecl) []string {
+	if uses == nil {
+		return nil
+	}
+	return uses.Secrets
+}
+
 // ScriptResult is the outcome of a script execution.
 type ScriptResult struct {
 	// OK is true if the script returned ok().
@@ -251,6 +260,15 @@ type ScriptExecutor struct {
 	// against the caller action's uses.primitives (todo 2.6.4). Off by
 	// default (dev mode); enabled in ProdMode/StrictMode.
 	StrictPrimitives bool
+
+	// SecretsStore holds `secret: true` Config key values, keyed by name.
+	// It backs ctx.secrets().get(key) (todo 6.8.1). A nil store means no
+	// secrets are available.
+	SecretsStore map[string]string
+
+	// SecretsAudit is called on every successful ctx.secrets().get(key)
+	// (todo 6.8.4). May be nil.
+	SecretsAudit func(key string)
 }
 
 // SetDatastoreResolver sets the resolver used to wire ctx.* primitives to
@@ -262,6 +280,16 @@ func (e *ScriptExecutor) SetDatastoreResolver(resolver func(primitiveType, name 
 // SetStrictPrimitives toggles strict ctx.* primitive enforcement (todo 2.6.4).
 func (e *ScriptExecutor) SetStrictPrimitives(strict bool) {
 	e.StrictPrimitives = strict
+}
+
+// SetSecretsStore wires the secret Config values backing ctx.secrets (todo 6.8.1).
+func (e *ScriptExecutor) SetSecretsStore(store map[string]string) {
+	e.SecretsStore = store
+}
+
+// SetSecretsAudit wires the audit hook called on each secret read (todo 6.8.4).
+func (e *ScriptExecutor) SetSecretsAudit(audit func(key string)) {
+	e.SecretsAudit = audit
 }
 
 // NewScriptExecutor creates a ScriptExecutor with the given resolution function.
@@ -317,6 +345,10 @@ func (e *ScriptExecutor) Execute(ctx context.Context, scriptPath string, module,
 		ctxObj.NextKey = func(fieldName string) (string, error) {
 			return e.NextKeyHandler(ctx, workspaceID, module, entity, fieldName)
 		}
+	}
+	// ctx.secrets (todo 6.8): only keys declared in uses.secrets are readable.
+	if e.SecretsStore != nil {
+		ctxObj.Secrets = NewSecretsAPI(e.SecretsStore, declaredUsesSecrets(uses), e.SecretsAudit)
 	}
 	ctxObj.Now = now
 

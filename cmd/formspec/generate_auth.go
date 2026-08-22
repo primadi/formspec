@@ -3,15 +3,23 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
+
+	"github.com/primadi/formspec/internal/auth"
 )
 
-// runGenerateAuth scaffolds the auth module (formspec.core user/session
-// entities) into the target directory so the user can customize it. The
-// default target is external/auth — a user-customized module that is
-// committed to git and wins over the built-in formspec.core defaults
-// (todo 6.1 merge strategy).
+// runGenerateAuth scaffolds the bundled auth module (formspec.core entities)
+// into the target directory so the user can customize it. The default target
+// is external/auth — a user-customized module that is committed to git and
+// wins over the built-in formspec.core defaults (todo 6.1 merge strategy).
+//
+// The scaffold is copied from the embedded module (internal/auth/module), so
+// it stays in sync with the bundled entities — including any added later
+// (app-membership, api-key, workspace).
 //
 // Usage:
 //
@@ -30,94 +38,44 @@ func runGenerateAuth(args []string) {
 	fmt.Fprintf(os.Stderr, "  - customize the entities there, then set Config.ExternalDir (or auth_config_ref) to use them\n")
 }
 
-// generateAuthModule writes the auth module manifests into dir.
+// generateAuthModule copies the bundled auth module (embedded in the auth
+// package) into dir. It fails if a target file already exists unless force
+// is set.
 func generateAuthModule(dir string, force bool) error {
-	files := map[string]string{
-		"module.yaml": `apiVersion: formspec.dev/v1
-kind: Module
-metadata:
-  name: auth
-  description: "User-customized auth module (cloned from formspec.core)"
-spec:
-  version: 1.0.0
-`,
-		"master/user/entity.yaml": `apiVersion: formspec.dev/v1
-kind: Entity
-metadata:
-  name: user
-  module: formspec.core
-  description: "User account (auth) — customized copy of the built-in"
-spec:
-  version: v1
-  plural: users
-  characteristic: master
-  display_field: username
-  fields:
-    - name: username
-      type: string
-      required: true
-      unique: true
-      index: true
-    - name: password_hash
-      type: string
-      required: true
-      masked: true
-    - name: display_name
-      type: string
-    - name: email
-      type: string
-    - name: roles
-      type: json
-    - name: permissions
-      type: json
-    - name: active
-      type: boolean
-      default: true
-`,
-		"transaction/session/entity.yaml": `apiVersion: formspec.dev/v1
-kind: Entity
-metadata:
-  name: session
-  module: formspec.core
-  description: "Login session (auth) — customized copy of the built-in"
-spec:
-  version: v1
-  plural: sessions
-  characteristic: transaction
-  fields:
-    - name: transaction_date
-      type: date
-      required: true
-    - name: refresh_jti
-      type: string
-      required: true
-      unique: true
-      index: true
-    - name: user_id
-      type: string
-      required: true
-      index: true
-    - name: expires_at
-      type: datetime
-      required: true
-    - name: ip
-      type: string
-    - name: user_agent
-      type: string
-`,
-	}
+	moduleFS := auth.ModuleFS()
+	return fs.WalkDir(moduleFS, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
 
-	for rel, content := range files {
-		path := filepath.Join(dir, rel)
-		if _, err := os.Stat(path); err == nil && !force {
-			return fmt.Errorf("%s already exists (use --force to overwrite)", path)
+		dst := filepath.Join(dir, filepath.FromSlash(strings.TrimPrefix(path, "module/")))
+		if _, err := os.Stat(dst); err == nil && !force {
+			return fmt.Errorf("%s already exists (use --force to overwrite)", dst)
 		}
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			return fmt.Errorf("mkdir %s: %w", filepath.Dir(path), err)
+
+		src, err := moduleFS.Open(path)
+		if err != nil {
+			return fmt.Errorf("open embedded %s: %w", path, err)
 		}
-		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-			return fmt.Errorf("write %s: %w", path, err)
+		defer src.Close()
+
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			return fmt.Errorf("mkdir %s: %w", filepath.Dir(dst), err)
 		}
-	}
-	return nil
+		out, err := os.Create(dst)
+		if err != nil {
+			return fmt.Errorf("create %s: %w", dst, err)
+		}
+		if _, err := io.Copy(out, src); err != nil {
+			out.Close()
+			return fmt.Errorf("copy %s: %w", dst, err)
+		}
+		if err := out.Close(); err != nil {
+			return fmt.Errorf("close %s: %w", dst, err)
+		}
+		return nil
+	})
 }

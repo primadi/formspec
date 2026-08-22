@@ -5,6 +5,7 @@
 // lookup by entity name, form name, table name, etc.
 
 import { create } from "zustand"
+import { HTTPError } from "ky"
 
 import {
   type MetaBundle,
@@ -179,7 +180,17 @@ export const useMetaStore = create<MetaState>((set, get) => ({
       }
       set({ bundle, loading: false, error: null, forbidden: false })
     } catch (err) {
-      if (err instanceof FormaApiError && err.status === 403) {
+      // 403 → forbidden (distinct from a connection error): the `_admin`
+      // surface without `_admin.access`, or an app the caller can't see.
+      // fetchMetaBundle throws a ky HTTPError (not FormaApiError), so check
+      // both.
+      const status =
+        err instanceof FormaApiError
+          ? err.status
+          : err instanceof HTTPError
+            ? err.response.status
+            : undefined
+      if (status === 403) {
         set({ loading: false, error: null, forbidden: true })
         return
       }

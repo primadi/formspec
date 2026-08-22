@@ -18,6 +18,7 @@ import (
 // service wired, backed by an in-memory SQLite database.
 func setupAuthAPIEnv(t *testing.T) http.Handler {
 	t.Helper()
+	ResetAuthRateLimiters()
 	dir := t.TempDir()
 	d, err := db.OpenSQLite(filepath.Join(dir, "auth_api_test.db"), nil)
 	if err != nil {

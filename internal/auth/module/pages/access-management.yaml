@@ -1,0 +1,17 @@
+apiVersion: formspec.dev/v1
+kind: Page
+metadata:
+  name: access-management
+  module: formspec.core
+  description: "Access Management — kelola user, role, dan role assignment dalam satu halaman"
+spec:
+  route: /access-management
+  title: "Access Management"
+  icon: "shield"
+  tabs:
+    - label: "Users"
+      table: { ref: user-table }
+    - label: "Roles"
+      table: { ref: role-table }
+    - label: "Assignments"
+      table: { ref: role-assignment-table }

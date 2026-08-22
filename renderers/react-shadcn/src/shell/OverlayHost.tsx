@@ -31,6 +31,7 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet"
 import { useMetaStore } from "@/stores/meta"
+import { resolveEntityRef } from "@/engine/entityRef"
 import { titleCase } from "@/lib/utils"
 import { Skeleton } from "@/components/ui/skeleton"
 
@@ -72,9 +73,10 @@ export function OverlayHost() {
 
   // Resolve entity: from the authored form's spec.entity ("module.entity"),
   // or directly from the `entity` param in the derived-form fallback.
-  const entityRef = (form ? form.spec.entity : entityParam!).split(".")
-  if (entityRef.length !== 2) return null
-  const [module, entityName] = entityRef
+  // resolveEntityRef splits at the last dot so dotted module names
+  // (e.g. "formspec.core.role") resolve correctly.
+  const entityRef = form ? form.spec.entity : entityParam!
+  const [module, entityName] = resolveEntityRef(entityRef, form?.module ?? "")
   const entity = getEntity(module, entityName)
   if (!entity) return null
 
@@ -84,7 +86,13 @@ export function OverlayHost() {
   const formMode = action === "edit" ? "edit" : "create"
 
   const overlayContent = (
-    <Suspense fallback={<div className="flex justify-center py-8"><Skeleton className="h-32 w-full max-w-md" /></div>}>
+    <Suspense
+      fallback={
+        <div className="flex justify-center py-8">
+          <Skeleton className="h-32 w-full max-w-md" />
+        </div>
+      }
+    >
       <FormRenderer
         entity={entity}
         mode={formMode}
@@ -98,19 +106,23 @@ export function OverlayHost() {
 
   if (overlayMode === "drawer") {
     return (
-      <Sheet open={isOpen} onOpenChange={(open: boolean) => { if (!open) close() }}>
+      <Sheet
+        open={isOpen}
+        onOpenChange={(open: boolean) => {
+          if (!open) close()
+        }}
+      >
         <SheetContent className="w-full sm:max-w-lg md:max-w-xl lg:max-w-2xl overflow-y-auto">
           <SheetHeader>
             <SheetTitle>
               {action === "create" ? "New" : "Edit"} {titleCase(entity.name)}
             </SheetTitle>
             <SheetDescription>
-              {form?.spec.sections?.[0]?.description ?? `Fill in the details for this ${entity.name}.`}
+              {form?.spec.sections?.[0]?.description ??
+                `Fill in the details for this ${entity.name}.`}
             </SheetDescription>
           </SheetHeader>
-          <div className="mt-6">
-            {overlayContent}
-          </div>
+          <div className="mt-6">{overlayContent}</div>
         </SheetContent>
       </Sheet>
     )
@@ -118,19 +130,23 @@ export function OverlayHost() {
 
   // Default: modal
   return (
-    <Dialog open={isOpen} onOpenChange={(open: boolean) => { if (!open) close() }}>
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open: boolean) => {
+        if (!open) close()
+      }}
+    >
       <DialogContent className="sm:max-w-lg md:max-w-xl overflow-y-auto max-h-[85vh]">
         <DialogHeader>
           <DialogTitle>
             {action === "create" ? "New" : "Edit"} {titleCase(entity.name)}
           </DialogTitle>
           <DialogDescription>
-            {form?.spec.sections?.[0]?.description ?? `Fill in the details for this ${entity.name}.`}
+            {form?.spec.sections?.[0]?.description ??
+              `Fill in the details for this ${entity.name}.`}
           </DialogDescription>
         </DialogHeader>
-        <div className="mt-4">
-          {overlayContent}
-        </div>
+        <div className="mt-4">{overlayContent}</div>
       </DialogContent>
     </Dialog>
   )

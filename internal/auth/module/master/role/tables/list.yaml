@@ -1,0 +1,10 @@
+apiVersion: formspec.dev/v1
+kind: Table
+metadata:
+  name: role-table
+  module: formspec.core
+  description: "Tabel role — derived columns"
+spec:
+  entity: role
+  page_size: 15
+  default_sort: "name"

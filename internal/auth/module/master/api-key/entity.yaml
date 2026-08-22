@@ -1,0 +1,40 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: api-key
+  module: formspec.core
+  description: "API key (auth) — kredensial akses non-interaktif untuk permukaan external /api/v1/ (header X-FormSpec-Key). Key disimpan sebagai hash; plaintext hanya tampil sekali saat create."
+  annotations:
+    formspec.dev/ui-exposed: "true"
+spec:
+  version: v1
+  plural: api-keys
+  characteristic: master
+  display_field: name
+  fields:
+    - name: name
+      type: string
+      required: true
+    - name: key_hash
+      type: string
+      required: true
+      masked: true
+      index: true
+    - name: key_prefix
+      type: string
+    - name: scope
+      type: string
+      required: true
+      default: workspace
+    - name: app
+      type: string
+      index: true
+    - name: permissions
+      type: json
+    - name: expires_at
+      type: datetime
+    - name: revoked_at
+      type: datetime
+    - name: active
+      type: boolean
+      default: true

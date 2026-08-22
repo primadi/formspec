@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/primadi/formspec/internal/entity"
@@ -92,6 +93,11 @@ type Service struct {
 	session     SessionStore
 	roleStore   *RoleStore
 	materialize *Materializer
+	resolver    *PermissionResolver
+	maxSessions int // 0 = unlimited (concurrent session limit, todo 6.5.3)
+
+	cleanupStop chan struct{}
+	cleanupOnce sync.Once
 }
 
 // NewService creates an auth service. The user/session stores are built from
@@ -121,37 +127,47 @@ func (s *Service) SetRoleStore(rs *RoleStore) { s.roleStore = rs }
 // concrete permission strings (todo 5.12.5).
 func (s *Service) SetMaterializer(m *Materializer) { s.materialize = m }
 
+// SetMaxSessionsPerUser sets the concurrent session limit per user
+// (todo 6.5.3). 0 (default) means unlimited. When exceeded, the oldest
+// sessions are evicted on the next login/refresh.
+func (s *Service) SetMaxSessionsPerUser(n int) { s.maxSessions = n }
+
+// SeedOwnerRoles creates the 4 symmetric owner roles idempotently
+// (todo 6.3.4). No-op when the role store is not wired.
+func (s *Service) SeedOwnerRoles(ctx context.Context, workspaceID string) error {
+	if s.roleStore == nil {
+		return nil
+	}
+	return s.roleStore.SeedOwnerRoles(ctx, workspaceID)
+}
+
+// ensureResolver lazily builds the permission resolver once both the role
+// store and materializer are wired (they are set after NewService).
+func (s *Service) ensureResolver() {
+	if s.resolver == nil && s.roleStore != nil && s.materialize != nil {
+		s.resolver = NewPermissionResolver(s.users, s.roleStore, s.materialize)
+	}
+}
+
+// InvalidatePermissions clears the per-session permission cache for a user.
+// Call this when a user's roles or role-assignments change (todo 6.2.4).
+func (s *Service) InvalidatePermissions(userID string) {
+	s.ensureResolver()
+	if s.resolver != nil {
+		s.resolver.Invalidate(userID)
+	}
+}
+
 // permissionsForUser resolves a user's effective permissions: their direct
-// permissions plus the materialized grants of every role they hold.
+// permissions plus the materialized grants of every role they hold. Uses the
+// per-session cache when available (todo 6.2.4).
 func (s *Service) permissionsForUser(ctx context.Context, workspaceID string, user *User) ([]string, error) {
-	seen := map[string]bool{}
-	var out []string
-	add := func(p string) {
-		if p != "" && !seen[p] {
-			seen[p] = true
-			out = append(out, p)
-		}
+	s.ensureResolver()
+	if s.resolver != nil {
+		return s.resolver.Resolve(ctx, workspaceID, user)
 	}
-	for _, p := range user.Permissions {
-		add(p)
-	}
-	if s.roleStore == nil || s.materialize == nil {
-		return out, nil
-	}
-	for _, roleName := range user.Roles {
-		role, err := s.roleStore.GetByName(ctx, workspaceID, roleName)
-		if err != nil {
-			continue // unknown role — skip
-		}
-		perms, err := s.materialize.Materialize(role.Grants)
-		if err != nil {
-			continue // malformed grant — skip role
-		}
-		for _, p := range perms {
-			add(p)
-		}
-	}
-	return out, nil
+	// Fallback (no role store/materializer wired): direct permissions only.
+	return user.Permissions, nil
 }
 
 // SeedDevUser creates a default user for development mode. It is idempotent —
@@ -261,10 +277,83 @@ func (s *Service) issuePair(ctx context.Context, user *User) (*TokenPair, error)
 	if err := s.session.Create(ctx, sess); err != nil {
 		return nil, fmt.Errorf("auth: record session: %w", err)
 	}
+	// Concurrent session limit (todo 6.5.3): evict oldest sessions beyond the cap.
+	if s.maxSessions > 0 {
+		if err := s.enforceSessionLimit(ctx, user.ID); err != nil {
+			return nil, err
+		}
+	}
 
 	return &TokenPair{
 		AccessToken:  access,
 		RefreshToken: refresh,
 		ExpiresIn:    int64(s.issuer.AccessTTL().Seconds()),
 	}, nil
+}
+
+// enforceSessionLimit evicts the oldest sessions when a user exceeds the
+// configured concurrent session limit (todo 6.5.3).
+func (s *Service) enforceSessionLimit(ctx context.Context, userID string) error {
+	count, err := s.session.CountForUser(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("auth: count sessions: %w", err)
+	}
+	if count <= s.maxSessions {
+		return nil
+	}
+	sessions, err := s.session.ListForUser(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("auth: list sessions: %w", err)
+	}
+	toEvict := count - s.maxSessions
+	for i := 0; i < toEvict && i < len(sessions); i++ {
+		if err := s.session.Delete(ctx, sessions[i].JTI); err != nil {
+			return fmt.Errorf("auth: evict session: %w", err)
+		}
+	}
+	return nil
+}
+
+// Logout revokes a single session (logout one device).
+func (s *Service) Logout(ctx context.Context, jti string) error {
+	return s.session.Delete(ctx, jti)
+}
+
+// LogoutAll revokes all sessions for a user (logout all devices, todo 6.5.4).
+func (s *Service) LogoutAll(ctx context.Context, userID string) error {
+	return s.session.DeleteForUser(ctx, userID)
+}
+
+// PurgeExpiredSessions deletes all expired sessions (todo 6.5.5).
+func (s *Service) PurgeExpiredSessions(ctx context.Context) (int, error) {
+	return s.session.PurgeExpired(ctx)
+}
+
+// StartSessionCleanup launches a background goroutine that purges expired
+// sessions every interval (todo 6.5.5). Idempotent — calling twice is a no-op.
+func (s *Service) StartSessionCleanup(interval time.Duration) {
+	s.cleanupOnce.Do(func() {
+		s.cleanupStop = make(chan struct{})
+		go func() {
+			ticker := time.NewTicker(interval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+					_, _ = s.session.PurgeExpired(ctx)
+					cancel()
+				case <-s.cleanupStop:
+					return
+				}
+			}
+		}()
+	})
+}
+
+// StopSessionCleanup stops the background session cleanup goroutine.
+func (s *Service) StopSessionCleanup() {
+	if s.cleanupStop != nil {
+		close(s.cleanupStop)
+	}
 }

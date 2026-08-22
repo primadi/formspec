@@ -55,16 +55,18 @@ import (
 
 // Config configures an App loaded from a manifest directory on disk.
 type Config struct {
-	DSN              string        // Database DSN, e.g. "sqlite:.formspec/data.db" (default: "sqlite:.formspec/data.db")
-	SpecPath         string        // Path to the manifest directory (default: "./spec")
-	Addr             string        // HTTP listen address for ListenAndServe (default: ":8080")
-	ProdMode         bool          // Enable JWT auth and strict `uses` enforcement
-	JWTSecret        string        // HMAC secret for JWT validation (ProdMode, symmetric)
-	JWTIssuer        string        // JWT issuer (default: "formspec")
-	JWTPublicKeyPath string        // PEM file for asymmetric JWT validation (ProdMode)
-	StrictMode       bool          // Force strict `uses` enforcement even outside ProdMode
-	IdempotencyTTL   time.Duration // TTL for idempotency keys (default: db.DefaultIdempotencyTTL)
-	WorkspaceID      string        // Tenant scope used by script save/load/call handlers (default: "demo")
+	DSN                string        // Database DSN, e.g. "sqlite:.formspec/data.db" (default: "sqlite:.formspec/data.db")
+	SpecPath           string        // Path to the manifest directory (default: "./spec")
+	Addr               string        // HTTP listen address for ListenAndServe (default: ":8080")
+	ProdMode           bool          // Enable JWT auth and strict `uses` enforcement
+	DevAuth            bool          // Enable real JWT auth even in dev mode (for testing authorization)
+	JWTSecret          string        // HMAC secret for JWT validation (ProdMode/DevAuth, symmetric)
+	JWTIssuer          string        // JWT issuer (default: "formspec")
+	JWTPublicKeyPath   string        // PEM file for asymmetric JWT validation (ProdMode)
+	StrictMode         bool          // Force strict `uses` enforcement even outside ProdMode
+	IdempotencyTTL     time.Duration // TTL for idempotency keys (default: db.DefaultIdempotencyTTL)
+	WorkspaceID        string        // Tenant scope used by script save/load/call handlers (default: "demo")
+	MaxSessionsPerUser int           // Concurrent session limit per user (todo 6.5.3); 0 = unlimited
 
 	// SidecarEndpoint is the app-process endpoint for impl: {type: sidecar}
 	// actions ("unix:///tmp/formspec/app.sock" or "http://localhost:9000").
@@ -248,6 +250,16 @@ func (a *App) RegisterNatives(handlers map[string]NativeHandler) {
 func New(cfg Config) (*App, error) {
 	cfg.applyDefaults()
 
+	// DevAuth: enable real JWT auth in dev mode. If no explicit secret is
+	// configured, generate one so the validator (configureAuth) and the token
+	// issuer (below) share the same key. When the user sets JWTSecret (e.g. via
+	// formspec-app.yaml `jwt-secret`), it is used as-is so issued tokens survive
+	// restarts. Config is passed by value, so set it on the local cfg before
+	// configureAuth and the TokenIssuer read it.
+	if cfg.DevAuth && cfg.JWTSecret == "" {
+		cfg.JWTSecret = randomDevSecret()
+	}
+
 	if err := configureAuth(cfg); err != nil {
 		return nil, err
 	}
@@ -289,6 +301,11 @@ func New(cfg Config) (*App, error) {
 	uiReg := ui.NewRegistry()
 	for _, loadErr := range uiReg.LoadDir(cfg.SpecPath) {
 		fmt.Fprintf(os.Stderr, "formspec: ui load warning: %v\n", loadErr)
+	}
+	// Load framework-bundled UI manifests (auth module forms/pages/tables) so
+	// the admin surface gets the friendlier access-management forms.
+	for _, loadErr := range uiReg.LoadEmbedded(auth.ModuleFS()) {
+		fmt.Fprintf(os.Stderr, "formspec: ui load warning (auth module): %v\n", loadErr)
 	}
 	// Load additional theme directories (Frontend Spec §10).
 	// These share the same registry, so theme names must be unique
@@ -348,6 +365,33 @@ func New(cfg Config) (*App, error) {
 	// uses the same secret/issuer as the JWT validator configured in
 	// configureAuth, so issued tokens validate against the middleware.
 	authRoles := auth.NewRoleResolver(reg)
+
+	// Resolve per-App auth strategy from App.spec.auth_config_ref (todo 6.1.4).
+	// The referenced Config may declare a strategy (basic-auth default) and
+	// entity overrides (user_entity/session_entity/role_entity) applied via
+	// RoleResolver.SetOverride. Single-server implements basic-auth; other
+	// strategies are declared but not yet implemented (warn + fall back).
+	configs := map[string]*spec.ConfigSpec{}
+	for _, raw := range specManifests.Manifests {
+		if spec.Kind(raw.Kind) == spec.KindConfig {
+			if cs, err := manifest.RawSpecToConfigSpec(raw.Spec.(map[string]any)); err == nil {
+				configs[raw.Metadata.Name] = cs
+			}
+		}
+	}
+	appAuths, authErrs := auth.ResolveAppAuth(resolvedApps, configs)
+	for _, e := range authErrs {
+		fmt.Fprintf(os.Stderr, "formspec: auth config warning: %v\n", e)
+	}
+	for _, ac := range appAuths {
+		if ac.Strategy != auth.StrategyBasicAuth {
+			fmt.Fprintf(os.Stderr, "formspec: app %q auth strategy %q — not implemented in single-server (basic-auth only); login falls back to basic-auth\n", ac.App, ac.Strategy)
+		}
+		for role, ref := range ac.Overrides {
+			authRoles.SetOverride(role, ref)
+		}
+	}
+
 	// In dev mode with no explicit secret, generate a random one so issued
 	// tokens are signed with a real secret (still dev-only; ProdMode
 	// requires an explicit JWTSecret or JWTPublicKeyPath).
@@ -368,13 +412,29 @@ func New(cfg Config) (*App, error) {
 		authSvc.SetRoleStore(auth.NewRoleStore(roleStore))
 	}
 	authSvc.SetMaterializer(auth.NewMaterializer(uiReg, reg))
+	// Concurrent session limit per user (todo 6.5.3); 0 = unlimited.
+	if cfg.MaxSessionsPerUser > 0 {
+		authSvc.SetMaxSessionsPerUser(cfg.MaxSessionsPerUser)
+	}
 	api.SetAuthService(authSvc)
+
+	// Wire API key auth (todo 6.4): the X-FormSpec-Key header on the external
+	// surface (/api/v1/) resolves against formspec.core.api-key. The store is
+	// resolved via RoleResolver so a user override (external/) wins.
+	if apiKeyStore, err := authRoles.Resolve(auth.RoleApiKey); err == nil {
+		api.SetApiKeyStore(auth.NewApiKeyStore(apiKeyStore))
+	}
 
 	// Seed a default dev user so login works out of the box in dev mode.
 	// Never seeds in ProdMode.
 	if !cfg.ProdMode {
 		if err := authSvc.SeedDevUser(context.Background(), cfg.WorkspaceID, "admin", "admin"); err != nil {
 			fmt.Fprintf(os.Stderr, "formspec: warning: seed dev user: %v\n", err)
+		}
+		// Seed the 4 symmetric owner roles (todo 6.3.4) so role-assignment
+		// has a baseline to grant from.
+		if err := authSvc.SeedOwnerRoles(context.Background(), cfg.WorkspaceID); err != nil {
+			fmt.Fprintf(os.Stderr, "formspec: warning: seed owner roles: %v\n", err)
 		}
 	}
 
@@ -435,6 +495,9 @@ func New(cfg Config) (*App, error) {
 		idempotency:    idempotencyStore,
 		nativeHandlers: make(map[string]action.NativeHandler),
 	}
+	// Register native handlers for auth entity hooks (password hashing on
+	// formspec.core.user create/update).
+	app.RegisterNative("formspec.core.user.hash-password", hashUserPassword)
 	// specVersionFn must be set before BuildHTTP() so HandleMetaVersion
 	// captures it. The closure reads from the live App's specVersion.
 	rb.SetSpecVersionFn(func() int64 { return app.specVersion.Load() })
@@ -535,6 +598,9 @@ func (a *App) ReloadSpec() error {
 	newUIReg := ui.NewRegistry()
 	for _, loadErr := range newUIReg.LoadDir(a.cfg.SpecPath) {
 		fmt.Fprintf(os.Stderr, "formspec: reload ui: %v\n", loadErr)
+	}
+	for _, loadErr := range newUIReg.LoadEmbedded(auth.ModuleFS()) {
+		fmt.Fprintf(os.Stderr, "formspec: reload ui (auth module): %v\n", loadErr)
 	}
 	for _, themeDir := range a.cfg.ThemeDirs {
 		resolved := themeDir
@@ -647,12 +713,15 @@ func (a *App) ReloadSpec() error {
 }
 
 func configureAuth(cfg Config) error {
-	if !cfg.ProdMode {
+	// Dev mode without DevAuth: bypass auth entirely (synthetic developer
+	// identity with wildcard permissions). DevAuth opts into real JWT auth so
+	// authorization behavior can be tested in dev.
+	if !cfg.ProdMode && !cfg.DevAuth {
 		api.SetAuthValidator(auth.NewDevValidator())
 		return nil
 	}
 	if cfg.JWTSecret == "" && cfg.JWTPublicKeyPath == "" {
-		return fmt.Errorf("ProdMode requires JWTSecret or JWTPublicKeyPath")
+		return fmt.Errorf("JWT auth requires JWTSecret or JWTPublicKeyPath")
 	}
 	if cfg.JWTPublicKeyPath != "" {
 		pemData, err := os.ReadFile(cfg.JWTPublicKeyPath)

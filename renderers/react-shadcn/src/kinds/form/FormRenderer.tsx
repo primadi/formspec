@@ -19,7 +19,12 @@ import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
 import { resolveForm } from "@/engine/derive"
 import { getLifecycle } from "@/engine/lifecycle"
-import { evalReadonlyWhen, evalVisibleWhen, evalRequiredWhen, evalCompute } from "@/lib/formspec-expr"
+import {
+  evalReadonlyWhen,
+  evalVisibleWhen,
+  evalRequiredWhen,
+  evalCompute,
+} from "@/lib/formspec-expr"
 import { apiGet, apiPost, apiPatch } from "@/lib/api"
 import { titleCase } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -31,6 +36,7 @@ import { RelationPicker } from "@/widgets/RelationPicker"
 import { DateInput } from "@/widgets/DateInput"
 import { JsonInput } from "@/widgets/JsonInput"
 import { ChildTable } from "@/widgets/ChildTable"
+import { GrantsEditor } from "@/widgets/GrantsEditor"
 
 interface FormRendererProps {
   entity: EntitySchema
@@ -52,9 +58,19 @@ interface FormRendererProps {
   onClose?: () => void
 }
 
-export default function FormRenderer({ entity, mode, id: fixedId, formRef, inOverlay, onClose }: FormRendererProps) {
+export default function FormRenderer({
+  entity,
+  mode,
+  id: fixedId,
+  formRef,
+  inOverlay,
+  onClose,
+}: FormRendererProps) {
   const navigate = useNavigate()
-  const { workspace = "default", id: routeId } = useParams<{ workspace: string; id?: string }>()
+  const { workspace = "default", id: routeId } = useParams<{
+    workspace: string
+    id?: string
+  }>()
   const { surfacePath } = useSurface()
   const id = fixedId ?? routeId
   const getClient = useSessionStore((s) => s.getClient)
@@ -98,7 +114,12 @@ export default function FormRenderer({ entity, mode, id: fixedId, formRef, inOve
     defaultValues: {},
   })
 
-  const { handleSubmit, formState: { errors, isSubmitting, isDirty }, reset, watch } = form
+  const {
+    handleSubmit,
+    formState: { errors, isSubmitting, isDirty },
+    reset,
+    watch,
+  } = form
   const formValues = watch()
 
   // Load existing record in edit/view mode
@@ -146,30 +167,42 @@ export default function FormRenderer({ entity, mode, id: fixedId, formRef, inOve
     } finally {
       if (loadTokenRef.current === token) setLoading(false)
     }
-  }, [id, entity, isEdit, isView, getClient, reset, navigate, workspace, fixedId])
+  }, [
+    id,
+    entity,
+    isEdit,
+    isView,
+    getClient,
+    reset,
+    navigate,
+    workspace,
+    fixedId,
+  ])
 
   useEffect(() => {
     loadRecord()
   }, [loadRecord])
 
   // Auto-save (debounced) for two_step_autosave lifecycle
-  const autoSave = useCallback(async (data: FormData) => {
-    if (!isEdit || !id) return
-    try {
-      const client = getClient()
-      await apiPatch(
-        client,
-        `${entity.module}/${entity.name}/${id}`,
-        data,
-        recordVersion,
-      )
-    } catch (err: unknown) {
-      autoSaveBlockedRef.current = true
-      const msg =
-        err instanceof Error ? err.message : "Auto-save gagal"
-      toast.error(`Auto-save gagal: ${msg}`, { duration: 5000 })
-    }
-  }, [isEdit, id, entity, getClient, recordVersion])
+  const autoSave = useCallback(
+    async (data: FormData) => {
+      if (!isEdit || !id) return
+      try {
+        const client = getClient()
+        await apiPatch(
+          client,
+          `${entity.module}/${entity.name}/${id}`,
+          data,
+          recordVersion,
+        )
+      } catch (err: unknown) {
+        autoSaveBlockedRef.current = true
+        const msg = err instanceof Error ? err.message : "Auto-save gagal"
+        toast.error(`Auto-save gagal: ${msg}`, { duration: 5000 })
+      }
+    },
+    [isEdit, id, entity, getClient, recordVersion],
+  )
 
   const debouncedAutoSave = useCallback(
     (data: FormData) => {
@@ -233,7 +266,9 @@ export default function FormRenderer({ entity, mode, id: fixedId, formRef, inOve
         toast.success("Updated successfully")
       } else if (lifecycle.quickSubmit) {
         // one-step create-submit: POST to create-submit endpoint
-        await client.post(`${entity.module}/${entity.name}/create-submit`, { json: data })
+        await client.post(`${entity.module}/${entity.name}/create-submit`, {
+          json: data,
+        })
         toast.success("Created and submitted successfully")
       } else {
         await apiPost(client, `${entity.module}/${entity.name}`, data)
@@ -279,70 +314,104 @@ export default function FormRenderer({ entity, mode, id: fixedId, formRef, inOve
       )}
 
       {/* Form */}
-      <form onSubmit={handleSubmit(onSubmit)} autoComplete="off" className="space-y-8">
+      <form
+        onSubmit={handleSubmit(onSubmit)}
+        autoComplete="off"
+        className="space-y-8"
+      >
         {formSpec.sections
           .filter((section) => {
             // Section-level visible_when: skip invisible sections
-            const ctx = { fields: formValues as Record<string, unknown>, user: me }
-            return !section.visible_when || evalVisibleWhen(section.visible_when, ctx as any)
+            const ctx = {
+              fields: formValues as Record<string, unknown>,
+              user: me,
+            }
+            return (
+              !section.visible_when ||
+              evalVisibleWhen(section.visible_when, ctx as any)
+            )
           })
           .map((section, sIdx) => (
-          <div key={sIdx} className="space-y-4">
-            {section.title && (
-              <div>
-                <h3 className="text-lg font-medium">{section.title}</h3>
-                {section.description && (
-                  <p className="text-sm text-muted-foreground">{section.description}</p>
-                )}
+            <div key={sIdx} className="space-y-4">
+              {section.title && (
+                <div>
+                  <h3 className="text-lg font-medium">{section.title}</h3>
+                  {section.description && (
+                    <p className="text-sm text-muted-foreground">
+                      {section.description}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <div
+                className="grid gap-4"
+                style={{
+                  gridTemplateColumns: `repeat(${section.columns || 1}, 1fr)`,
+                }}
+              >
+                {section.fields.map((field) => {
+                  const entityField = entity.fields.find(
+                    (f) => f.name === field.name,
+                  )
+                  if (!entityField) return null
+
+                  const fieldContext = {
+                    fields: formValues as Record<string, unknown>,
+                    user: me,
+                  }
+                  const isReadonly =
+                    field.read_only ??
+                    evalReadonlyWhen(field.readonly_when, fieldContext as any)
+                  const isRequired =
+                    entityField.required ||
+                    evalRequiredWhen(field.required_when, fieldContext as any)
+                  const isVisible = field.visible_when
+                    ? evalVisibleWhen(field.visible_when, fieldContext as any)
+                    : true
+
+                  if (!isVisible) return null
+
+                  return (
+                    <div key={field.name} className="space-y-2.5">
+                      <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                        {field.label ?? field.name}
+                        {isRequired && (
+                          <span className="text-destructive ml-0.5">*</span>
+                        )}
+                      </label>
+                      <FormFieldWidget
+                        field={field}
+                        entityField={entityField}
+                        value={formValues[field.name as keyof FormData]}
+                        error={
+                          errors[field.name]?.message as string | undefined
+                        }
+                        readonly={isReadonly || isView}
+                        currentModule={entity.module}
+                        onChange={(value) =>
+                          form.setValue(field.name as any, value, {
+                            shouldValidate: true,
+                            shouldDirty: true,
+                          })
+                        }
+                      />
+                      {field.help && !isView && (
+                        <p className="text-xs text-muted-foreground">
+                          {field.help}
+                        </p>
+                      )}
+                      {errors[field.name] && (
+                        <p className="text-xs text-destructive">
+                          {errors[field.name]?.message as string}
+                        </p>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
-            )}
-
-            <div
-              className="grid gap-4"
-              style={{
-                gridTemplateColumns: `repeat(${section.columns || 1}, 1fr)`,
-              }}
-            >
-              {section.fields.map((field) => {
-                const entityField = entity.fields.find((f) => f.name === field.name)
-                if (!entityField) return null
-
-                const fieldContext = { fields: formValues as Record<string, unknown>, user: me }
-                const isReadonly = field.read_only ?? evalReadonlyWhen(field.readonly_when, fieldContext as any)
-                const isRequired = entityField.required || evalRequiredWhen(field.required_when, fieldContext as any)
-                const isVisible = field.visible_when ? evalVisibleWhen(field.visible_when, fieldContext as any) : true
-
-                if (!isVisible) return null
-
-                return (
-                  <div key={field.name} className="space-y-2.5">
-                    <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                      {field.label ?? field.name}
-                      {isRequired && <span className="text-destructive ml-0.5">*</span>}
-                    </label>
-                    <FormFieldWidget
-                      field={field}
-                      entityField={entityField}
-                      value={formValues[field.name as keyof FormData]}
-                      error={errors[field.name]?.message as string | undefined}
-                      readonly={isReadonly || isView}
-                      currentModule={entity.module}
-                      onChange={(value) =>
-                        form.setValue(field.name as any, value, { shouldValidate: true, shouldDirty: true })
-                      }
-                    />
-                    {field.help && !isView && (
-                      <p className="text-xs text-muted-foreground">{field.help}</p>
-                    )}
-                    {errors[field.name] && (
-                      <p className="text-xs text-destructive">{errors[field.name]?.message as string}</p>
-                    )}
-                  </div>
-                )
-              })}
             </div>
-          </div>
-        ))}
+          ))}
 
         {/* Submit buttons — lifecycle-aware */}
         {!isView && (
@@ -355,7 +424,8 @@ export default function FormRenderer({ entity, mode, id: fixedId, formRef, inOve
                 ) : (
                   <Save className="size-4 mr-1" />
                 )}
-                {entity.actions.find((a) => a.name === "create-submit")?.ui?.button_label ?? "Create & Submit"}
+                {entity.actions.find((a) => a.name === "create-submit")?.ui
+                  ?.button_label ?? "Create & Submit"}
               </Button>
             ) : lifecycle.hasSave ? (
               /* Save / Save Draft button */
@@ -374,30 +444,37 @@ export default function FormRenderer({ entity, mode, id: fixedId, formRef, inOve
             ) : null}
 
             {/* Submit button for two_step_manual / two_step_autosave */}
-            {lifecycle.hasSubmit && (lifecycle.pattern === "two_step_manual" || lifecycle.pattern === "two_step_autosave") && (
-              <Button
-                type="button"
-                variant="default"
-                disabled={isSubmitting}
-                onClick={async () => {
-                  if (!id) return
-                  try {
-                    const client = getClient()
-                    await client.post(`${entity.module}/${entity.name}/${id}/submit`)
-                    toast.success("Submitted successfully")
-                    if (inOverlay) {
-                      onClose?.()
-                    } else if (!fixedId) {
-                      navigate(surfacePath(entity.module, entity.plural))
+            {lifecycle.hasSubmit &&
+              (lifecycle.pattern === "two_step_manual" ||
+                lifecycle.pattern === "two_step_autosave") && (
+                <Button
+                  type="button"
+                  variant="default"
+                  disabled={isSubmitting}
+                  onClick={async () => {
+                    if (!id) return
+                    try {
+                      const client = getClient()
+                      await client.post(
+                        `${entity.module}/${entity.name}/${id}/submit`,
+                      )
+                      toast.success("Submitted successfully")
+                      if (inOverlay) {
+                        onClose?.()
+                      } else if (!fixedId) {
+                        navigate(surfacePath(entity.module, entity.plural))
+                      }
+                    } catch (err) {
+                      toast.error(
+                        err instanceof Error ? err.message : "Submit failed",
+                      )
                     }
-                  } catch (err) {
-                    toast.error(err instanceof Error ? err.message : "Submit failed")
-                  }
-                }}
-              >
-                {entity.actions.find((a) => a.name === "submit")?.ui?.button_label ?? "Submit"}
-              </Button>
-            )}
+                  }}
+                >
+                  {entity.actions.find((a) => a.name === "submit")?.ui
+                    ?.button_label ?? "Submit"}
+                </Button>
+              )}
 
             <Button
               type="button"
@@ -447,12 +524,14 @@ function FormFieldWidget({
     case "textarea":
       return (
         <TextInput
-          value={value as string ?? ""}
+          value={(value as string) ?? ""}
           onChange={(v) => onChange(v)}
           placeholder={field.placeholder}
           readonly={readonly}
           maxLength={
-            entityField.rules?.find((r) => r.name === "max_length")?.value as number | undefined
+            entityField.rules?.find((r) => r.name === "max_length")?.value as
+              | number
+              | undefined
           }
           error={error}
         />
@@ -461,12 +540,20 @@ function FormFieldWidget({
     case "number":
       return (
         <NumberInput
-          value={value as number | null ?? null}
+          value={(value as number | null) ?? null}
           onChange={(v) => onChange(v)}
           placeholder={field.placeholder}
           readonly={readonly}
-          min={entityField.rules?.find((r) => r.name === "min")?.value as number | undefined}
-          max={entityField.rules?.find((r) => r.name === "max")?.value as number | undefined}
+          min={
+            entityField.rules?.find((r) => r.name === "min")?.value as
+              | number
+              | undefined
+          }
+          max={
+            entityField.rules?.find((r) => r.name === "max")?.value as
+              | number
+              | undefined
+          }
           step={entityField.type === "integer" ? 1 : undefined}
           error={error}
         />
@@ -476,7 +563,7 @@ function FormFieldWidget({
     case "select":
       return (
         <Select
-          value={value as string ?? ""}
+          value={(value as string) ?? ""}
           onChange={(v) => onChange(v)}
           options={entityField.enum_values ?? []}
           placeholder={field.placeholder}
@@ -489,7 +576,7 @@ function FormFieldWidget({
     case "switch":
       return (
         <Switch
-          value={value as boolean ?? false}
+          value={(value as boolean) ?? false}
           onChange={(v) => onChange(v)}
           readonly={readonly}
         />
@@ -498,7 +585,9 @@ function FormFieldWidget({
     case "uuid":
       return (
         <div className="py-1 text-sm font-mono text-muted-foreground">
-          {readonly ? (value as string) ?? "-" : (value as string) ?? "(auto-generated)"}
+          {readonly
+            ? ((value as string) ?? "-")
+            : ((value as string) ?? "(auto-generated)")}
         </div>
       )
 
@@ -506,7 +595,7 @@ function FormFieldWidget({
     case "relation":
       return (
         <RelationPicker
-          value={value as string ?? ""}
+          value={(value as string) ?? ""}
           onChange={(v) => onChange(v)}
           entityField={entityField}
           currentModule={currentModule ?? ""}
@@ -521,7 +610,7 @@ function FormFieldWidget({
     case "datetime":
       return (
         <DateInput
-          value={value as string ?? ""}
+          value={(value as string) ?? ""}
           onChange={(v) => onChange(v)}
           readonly={readonly}
           withTime={entityField.type === "datetime"}
@@ -535,6 +624,16 @@ function FormFieldWidget({
           value={value}
           onChange={(v) => onChange(v)}
           placeholder={field.placeholder}
+          readonly={readonly}
+          error={error}
+        />
+      )
+
+    case "grants-editor":
+      return (
+        <GrantsEditor
+          value={value}
+          onChange={(v) => onChange(v)}
           readonly={readonly}
           error={error}
         />
@@ -556,7 +655,7 @@ function FormFieldWidget({
     default:
       return (
         <TextInput
-          value={value as string ?? ""}
+          value={(value as string) ?? ""}
           onChange={(v) => onChange(v)}
           placeholder={field.placeholder}
           readonly={readonly}
@@ -577,7 +676,8 @@ function buildZodField(
   switch (entityField.type) {
     case "string":
       schema = z.string()
-      if (entityField.required) schema = (schema as z.ZodString).min(1, "Required")
+      if (entityField.required)
+        schema = (schema as z.ZodString).min(1, "Required")
       else schema = (schema as z.ZodString).optional().or(z.literal(""))
       break
     case "integer":
@@ -594,7 +694,8 @@ function buildZodField(
       break
     case "enum":
       schema = z.string()
-      if (entityField.required) schema = (schema as z.ZodString).min(1, "Required")
+      if (entityField.required)
+        schema = (schema as z.ZodString).min(1, "Required")
       else schema = (schema as z.ZodString).optional().or(z.literal(""))
       break
     case "date":
@@ -604,7 +705,8 @@ function buildZodField(
       break
     case "relation":
       schema = z.string()
-      if (entityField.required) schema = (schema as z.ZodString).min(1, "Required")
+      if (entityField.required)
+        schema = (schema as z.ZodString).min(1, "Required")
       else schema = (schema as z.ZodString).optional().or(z.literal(""))
       break
     default:
@@ -616,12 +718,18 @@ function buildZodField(
     switch (rule.name) {
       case "min_length":
         if (schema instanceof z.ZodString) {
-          schema = schema.min(rule.value as number, `Minimum ${rule.value} characters`)
+          schema = schema.min(
+            rule.value as number,
+            `Minimum ${rule.value} characters`,
+          )
         }
         break
       case "max_length":
         if (schema instanceof z.ZodString) {
-          schema = schema.max(rule.value as number, `Maximum ${rule.value} characters`)
+          schema = schema.max(
+            rule.value as number,
+            `Maximum ${rule.value} characters`,
+          )
         }
         break
       case "min":
@@ -649,4 +757,3 @@ function buildZodField(
 
   return schema
 }
-

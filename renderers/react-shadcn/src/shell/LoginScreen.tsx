@@ -1,34 +1,55 @@
 // ─── Login Screen ───
 //
-// Token/JWT input screen shown in prod mode when no session exists.
-// In dev mode, the boot sequence auto-creates a synthetic identity.
+// Login screen shown when no session exists (dev-auth / prod mode).
+// Username/password against the backend login endpoint. API tokens are used
+// when the app is accessed programmatically from another app (not via this
+// form). Navigation after login is the parent's responsibility (LoginPage
+// handles the `returnTo` redirect) — this screen only authenticates.
 
 import { useState, type FormEvent } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { loginWithPassword } from "@/lib/api"
 
 interface LoginScreenProps {
+  /** Pre-filled workspace from the URL (in-app login) — hides the workspace field */
+  workspace?: string
   onLogin: (workspace: string, token: string) => Promise<void>
 }
 
-export function LoginScreen({ onLogin }: LoginScreenProps) {
-  const [workspace, setWorkspace] = useState("")
-  const [token, setToken] = useState("")
+export function LoginScreen({
+  workspace: workspaceProp,
+  onLogin,
+}: LoginScreenProps) {
+  const [workspace, setWorkspace] = useState(workspaceProp ?? "")
+  const [username, setUsername] = useState("")
+  const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Workspace comes from the URL when provided (in-app login); otherwise the
+  // user types it (top-level /login).
+  const effectiveWorkspace = workspaceProp ?? workspace.trim()
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    if (!workspace.trim() || !token.trim()) {
-      setError("Workspace and token are required")
+    if (!effectiveWorkspace) {
+      setError("Workspace is required")
+      return
+    }
+    if (!username.trim() || !password) {
+      setError("Username and password are required")
       return
     }
     setLoading(true)
     setError(null)
     try {
-      // Navigation after login is the parent's responsibility (LoginPage
-      // handles the `returnTo` redirect) — this screen only authenticates.
-      await onLogin(workspace.trim(), token.trim())
+      const { accessToken } = await loginWithPassword(
+        effectiveWorkspace,
+        username.trim(),
+        password,
+      )
+      await onLogin(effectiveWorkspace, accessToken)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed")
     } finally {
@@ -47,37 +68,56 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2.5">
-            <label
-              htmlFor="workspace"
-              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-            >
-              Workspace
-            </label>
-            <Input
-              id="workspace"
-              placeholder="acme"
-              value={workspace}
-              onChange={(e) => setWorkspace(e.target.value)}
-              disabled={loading}
-              autoComplete="off"
-            />
-          </div>
+          {!workspaceProp && (
+            <div className="space-y-2.5">
+              <label
+                htmlFor="workspace"
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
+                Workspace
+              </label>
+              <Input
+                id="workspace"
+                placeholder="acme"
+                value={workspace}
+                onChange={(e) => setWorkspace(e.target.value)}
+                disabled={loading}
+                autoComplete="off"
+              />
+            </div>
+          )}
 
           <div className="space-y-2.5">
             <label
-              htmlFor="token"
+              htmlFor="username"
               className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
             >
-              API Token
+              Username
             </label>
             <Input
-              id="token"
-              type="password"
-              placeholder="Paste your JWT token"
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
+              id="username"
+              placeholder="admin"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               disabled={loading}
+              autoComplete="username"
+            />
+          </div>
+          <div className="space-y-2.5">
+            <label
+              htmlFor="password"
+              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+            >
+              Password
+            </label>
+            <Input
+              id="password"
+              type="password"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={loading}
+              autoComplete="current-password"
             />
           </div>
 
@@ -87,10 +127,6 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
             {loading ? "Signing in..." : "Sign In"}
           </Button>
         </form>
-
-        <p className="text-center text-xs text-muted-foreground">
-          In development mode, authentication is automatic.
-        </p>
       </div>
     </div>
   )

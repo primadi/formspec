@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"net"
 	"net/http"
 	"time"
 
@@ -16,6 +17,21 @@ var authService *auth.Service
 // Called once at server startup from main() / resource.New().
 func SetAuthService(svc *auth.Service) {
 	authService = svc
+}
+
+// Auth endpoint rate limiters (todo 6.6.3) — token bucket per client IP.
+var (
+	loginLimiter   = newRateLimiter(0.5, 5) // 5 burst, refill 0.5/s (5 per 10s)
+	refreshLimiter = newRateLimiter(1, 10)  // 10 burst, refill 1/s
+)
+
+// clientIP extracts the client IP from the request (RemoteAddr host part).
+func clientIP(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
 }
 
 // loginRequest is the POST /auth/login body.
@@ -41,6 +57,18 @@ func (b *RouterBuilder) HandleLogin() http.HandlerFunc {
 			return
 		}
 
+		// Rate limit per client IP (todo 6.6.3).
+		ip := clientIP(r)
+		if !loginLimiter.Allow("login:" + ip) {
+			authAuditLog.record(AuthAuditEntry{
+				Timestamp: time.Now().UTC(), Method: "login", IP: ip,
+				Result: "failure", Reason: "rate_limited",
+			})
+			writeError(w, http.StatusTooManyRequests, "RATE_LIMITED",
+				"too many login attempts, try again later")
+			return
+		}
+
 		var req loginRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeError(w, http.StatusBadRequest, "INVALID_REQUEST",
@@ -57,11 +85,19 @@ func (b *RouterBuilder) HandleLogin() http.HandlerFunc {
 		pair, err := authService.Login(r.Context(), workspaceID, req.Username, req.Password)
 		if err != nil {
 			// Do not leak whether the user exists — same 401 for both.
+			authAuditLog.record(AuthAuditEntry{
+				Timestamp: time.Now().UTC(), Method: "login", Username: req.Username,
+				IP: ip, Result: "failure", Reason: "invalid_credentials",
+			})
 			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED",
 				"invalid username or password")
 			return
 		}
 
+		authAuditLog.record(AuthAuditEntry{
+			Timestamp: time.Now().UTC(), Method: "login", Username: req.Username,
+			IP: ip, Result: "success",
+		})
 		writeJSON(w, http.StatusOK, SingleResponse{
 			Data: pair,
 			Meta: MetaSingle{
@@ -84,6 +120,18 @@ func (b *RouterBuilder) HandleRefresh() http.HandlerFunc {
 			return
 		}
 
+		// Rate limit per client IP (todo 6.6.3).
+		ip := clientIP(r)
+		if !refreshLimiter.Allow("refresh:" + ip) {
+			authAuditLog.record(AuthAuditEntry{
+				Timestamp: time.Now().UTC(), Method: "refresh", IP: ip,
+				Result: "failure", Reason: "rate_limited",
+			})
+			writeError(w, http.StatusTooManyRequests, "RATE_LIMITED",
+				"too many refresh attempts, try again later")
+			return
+		}
+
 		var req refreshRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeError(w, http.StatusBadRequest, "INVALID_REQUEST",
@@ -98,11 +146,18 @@ func (b *RouterBuilder) HandleRefresh() http.HandlerFunc {
 
 		pair, err := authService.Refresh(r.Context(), req.RefreshToken)
 		if err != nil {
+			authAuditLog.record(AuthAuditEntry{
+				Timestamp: time.Now().UTC(), Method: "refresh", IP: ip,
+				Result: "failure", Reason: "invalid_refresh_token",
+			})
 			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED",
 				"invalid or expired refresh token")
 			return
 		}
 
+		authAuditLog.record(AuthAuditEntry{
+			Timestamp: time.Now().UTC(), Method: "refresh", IP: ip, Result: "success",
+		})
 		writeJSON(w, http.StatusOK, SingleResponse{
 			Data: pair,
 			Meta: MetaSingle{

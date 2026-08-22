@@ -300,6 +300,53 @@ func (s *EntityStore) validateKnownFields(data map[string]any) error {
 	return nil
 }
 
+// sanitizeRichText strips dangerous HTML from richtext fields before persist
+// (todo 6.9.1). Client HTML is never trusted raw — script/style/iframe/object/
+// embed tags and event-handler attributes are removed.
+func (s *EntityStore) sanitizeRichText(data map[string]any) {
+	for _, f := range s.fields {
+		if f.Type != spec.FieldRichText {
+			continue
+		}
+		v, ok := data[f.Name]
+		if !ok {
+			continue
+		}
+		str, ok := v.(string)
+		if !ok {
+			continue
+		}
+		data[f.Name] = sanitizeHTML(str)
+	}
+}
+
+// sanitizeHTML removes dangerous tags and attributes from HTML. It is a
+// lightweight server-side sanitizer (whitelist/blacklist) — sufficient for
+// the common XSS vectors; a full policy engine (e.g. bluemonday) can replace
+// it later without changing the call site.
+func sanitizeHTML(html string) string {
+	// Remove script/style blocks (including their content).
+	reScript := regexp.MustCompile(`(?is)<script.*?</script>`)
+	reStyle := regexp.MustCompile(`(?is)<style.*?</style>`)
+	html = reScript.ReplaceAllString(html, "")
+	html = reStyle.ReplaceAllString(html, "")
+
+	// Remove dangerous tags entirely (iframe, object, embed, form, input,
+	// button, link, meta) — including their closing tags.
+	reDanger := regexp.MustCompile(`(?is)<\s*/?\s*(iframe|object|embed|form|input|button|link|meta)\b[^>]*>`)
+	html = reDanger.ReplaceAllString(html, "")
+
+	// Remove event-handler attributes (on*="...").
+	reEvent := regexp.MustCompile(`(?is)\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)`)
+	html = reEvent.ReplaceAllString(html, "")
+
+	// Remove javascript: URLs in href/src (the whole attribute).
+	reJS := regexp.MustCompile(`(?is)\s(href|src)\s*=\s*["']?\s*javascript:[^"'\s>]*["']?`)
+	html = reJS.ReplaceAllString(html, "")
+
+	return html
+}
+
 // stripEnrichedRelations removes nested relation objects that
 // resolveRelations injected into a record's Data map during a read
 // (e.g. Data["patient"] = {...} for field patient_id). These enriched
@@ -367,6 +414,10 @@ func (s *EntityStore) Insert(ctx context.Context, params InsertParams) (string, 
 	// resolveRelations) before validation — a script resource.create() may
 	// re-persist a fetched record that carries relation aliases.
 	s.stripEnrichedRelations(params.Data)
+
+	// Sanitize richtext fields server-side (todo 6.9.1) — client HTML is
+	// never trusted raw.
+	s.sanitizeRichText(params.Data)
 
 	// Reject unknown fields before entering the transaction
 	if err := s.validateKnownFields(params.Data); err != nil {
@@ -668,6 +719,10 @@ func (s *EntityStore) Update(ctx context.Context, params UpdateParams) (int, err
 	// Data and script resource.save() re-persists the whole loaded record,
 	// so both can carry relation aliases that are never legitimate writes.
 	s.stripEnrichedRelations(params.Data)
+
+	// Sanitize richtext fields server-side (todo 6.9.1) — client HTML is
+	// never trusted raw.
+	s.sanitizeRichText(params.Data)
 
 	// Reject unknown fields early
 	if err := s.validateKnownFields(params.Data); err != nil {

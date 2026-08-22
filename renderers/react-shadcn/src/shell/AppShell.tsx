@@ -7,21 +7,24 @@
 
 import { Outlet, useParams, useLocation, Link } from "react-router-dom"
 import { useSurface } from "@/hooks/useSurface"
-import {
-  ChevronLeft,
-  ChevronRight,
-  Menu,
-  Home,
-} from "lucide-react"
+import { ChevronLeft, ChevronRight, Menu, Home } from "lucide-react"
 import { usePrefsStore } from "@/stores/prefs"
 import { useMediaQuery } from "@/hooks/useMediaQuery"
 import { ErrorBoundary } from "@/components/ErrorBoundary"
 import { ThemeSwitcher } from "@/components/ThemeSwitcher"
 import { Sidebar } from "./Sidebar"
+import { LogoutButton } from "./LogoutButton"
 import { useState, useCallback, useEffect } from "react"
 import { OverlayHost } from "./OverlayHost"
 import { Button } from "@/components/ui/button"
-import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb"
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { TooltipProvider } from "@/components/ui/tooltip"
 
@@ -49,11 +52,7 @@ export function AppShell() {
   }, [])
 
   // Build breadcrumbs from current path
-  const pathParts = location.pathname
-    .split("/")
-    .filter(Boolean)
-    .slice(1) // remove workspace
-
+  const pathParts = location.pathname.split("/").filter(Boolean).slice(1) // remove workspace
 
   const breadcrumbs = pathParts.map((part, idx) => {
     const href = `/${workspace}/${pathParts.slice(0, idx + 1).join("/")}`
@@ -137,6 +136,9 @@ export function AppShell() {
 
             {/* Theme switcher */}
             <ThemeSwitcher />
+
+            {/* Log out (real authenticated session only) */}
+            <LogoutButton />
 
             {/* User avatar */}
             <Avatar className="size-8">

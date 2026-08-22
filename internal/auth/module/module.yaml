@@ -1,0 +1,7 @@
+apiVersion: formspec.dev/v1
+kind: Module
+metadata:
+  name: formspec.core
+  description: "Framework-owned auth module — formspec.core namespace (user, session, role, role-assignment, app-membership, api-key, workspace). Bundled + embedded; mergeable ke project lain via external/ atau spec/modules/."
+spec:
+  version: 1.0.0

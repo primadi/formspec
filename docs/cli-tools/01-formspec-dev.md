@@ -67,19 +67,21 @@ formspec dev
 
 ## 3. Flag Reference
 
-| Flag             | Default                    | Deskripsi                             |
-| ---------------- | -------------------------- | ------------------------------------- |
-| `--spec`         | `./spec`                   | Path direktori YAML manifests         |
-| `--dsn`          | `sqlite:.formspec/data.db` | Database DSN                          |
-| `--addr`         | `:8080`                    | REST API listen address               |
-| `--listen`       | `none`                     | Mode ctx listener (lihat §5)          |
-| `--app-endpoint` | `none`                     | Mode app endpoint (lihat §5)          |
-| `--runtime`      | auto-detect                | Runtime app process                   |
-| `--dev`          | `false`                    | Dev mode (auth bypass)                |
-| `--dev-ui`       | `false`                    | Dev mode + Vite HMR (implied `--dev`) |
-| `--state-dir`    | `.formspec`                | State directory (auto-create)         |
-| `--web-dir`      | auto-detect                | Override SPA directory                |
-| `--workspace-id` | `default`                  | Workspace/tenant ID                   |
+| Flag             | Default                    | Deskripsi                                                   |
+| ---------------- | -------------------------- | ----------------------------------------------------------- |
+| `--spec`         | `./spec`                   | Path direktori YAML manifests                               |
+| `--dsn`          | `sqlite:.formspec/data.db` | Database DSN                                                |
+| `--addr`         | `:8080`                    | REST API listen address                                     |
+| `--listen`       | `none`                     | Mode ctx listener (lihat §5)                                |
+| `--app-endpoint` | `none`                     | Mode app endpoint (lihat §5)                                |
+| `--runtime`      | auto-detect                | Runtime app process                                         |
+| `--dev`          | `false`                    | Dev mode (auth bypass)                                      |
+| `--dev-ui`       | `false`                    | Dev mode + Vite HMR (implied `--dev`)                       |
+| `--dev-auth`     | `false`                    | Dev mode + real JWT auth (login & authorization enforced)   |
+| `--jwt-secret`   | `""`                       | HMAC secret untuk JWT signing (persist token antar restart) |
+| `--state-dir`    | `.formspec`                | State directory (auto-create)                               |
+| `--web-dir`      | auto-detect                | Override SPA directory                                      |
+| `--workspace-id` | `default`                  | Workspace/tenant ID                                         |
 
 ---
 
@@ -157,6 +159,8 @@ workspace-id: default
 runtime: auto # auto | local | php | python | node
 state-dir: .formspec
 dev: false
+dev-auth: false # real JWT auth di dev mode (login & authorization enforced)
+jwt-secret: "" # HMAC secret untuk JWT signing (persist token antar restart)
 force: false
 web-dir: ""
 dev-ui: false

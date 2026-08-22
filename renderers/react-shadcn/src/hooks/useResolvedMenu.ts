@@ -69,6 +69,13 @@ export function useResolvedMenu(): ResolvedMenu {
     if (isAdmin) {
       const entitiesByModule = useMetaStore.getState().getEntitiesByModule()
       const derived: MenuItem[] = []
+      // Access Management shortcut — authored page in formspec.core
+      // (kelola user, role, dan role assignment dalam satu halaman).
+      derived.push({
+        label: "Access Management",
+        icon: "Shield",
+        route: "/access-management",
+      })
       for (const [module, entities] of entitiesByModule) {
         if (entities.length === 0) continue
         const children = entities.map((e) => ({

@@ -1,0 +1,38 @@
+apiVersion: formspec.dev/v1
+kind: Form
+metadata:
+  name: role-form
+  module: formspec.core
+  description: "Form role — nama, scope, dan grants (hak akses page → tab → action)"
+spec:
+  entity: role
+  render:
+    mode: separate_page
+  sections:
+    - title: "Identitas Role"
+      description: "Nama & scope role"
+      fields:
+        - field: name
+          label: "Nama Role"
+          placeholder: "mis. kasir"
+          help: "Unique — dipakai di user.roles dan role-assignment"
+        - field: app
+          label: "App"
+          placeholder: "mis. cafe"
+          help: "Scope per-App (kosongkan untuk semua app)"
+        - field: module
+          label: "Module"
+          placeholder: "mis. cafe-order"
+          help: "Scope per-module (kosongkan untuk semua module)"
+        - field: description
+          label: "Deskripsi"
+    - title: "Hak Akses (Grants)"
+      description: "Pilih page → tab → action yang diizinkan. Di-materialisasi otomatis jadi permission string."
+      fields:
+        - field: grants
+          label: "Grants"
+          widget: grants-editor
+          help: "Checklist page → tab → action"
+  submit:
+    label: "Simpan Role"
+    message: "Role berhasil disimpan"

@@ -70,6 +70,8 @@ Satu port `:8080` untuk API + SPA. Buka **http://localhost:8080/default/\_admin*
 | `--dsn`            | Database DSN (sqlite atau postgres)                                                  | `sqlite:.formspec/data.db` |
 | `--addr`           | REST API listen address                                                              | `:8080`                    |
 | `--dev`            | Dev mode (auth bypass, unsigned artifacts)                                           | `false`                    |
+| `--dev-auth`       | Dev mode + real JWT auth (login & authorization enforced)                            | `false`                    |
+| `--jwt-secret`     | HMAC secret untuk JWT signing (persist token antar restart)                          | `""`                       |
 | `--state-dir`      | Local state directory                                                                | `.formspec`                |
 | `--force`          | Kill previous `formspec` engine on same ports                                        | `false`                    |
 | `--web-dir`        | Built SPA directory (e.g. `renderers/react-shadcn/dist`)                             | `""`                       |
