@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/primadi/formspec/internal/entity"
+	"github.com/primadi/formspec/internal/permission"
 	"github.com/primadi/formspec/internal/ui"
 	"github.com/primadi/formspec/pkg/spec"
 )
@@ -48,11 +49,7 @@ func (m *Materializer) Materialize(grants []Grant) ([]string, error) {
 	}
 
 	for _, g := range grants {
-		page, ok := m.uiReg.Pages[g.Page]
-		if !ok {
-			return nil, fmt.Errorf("materialize: unknown page %q", g.Page)
-		}
-		footprint, err := m.pageFootprint(page)
+		footprint, err := m.resolveFootprint(g.Page)
 		if err != nil {
 			return nil, fmt.Errorf("materialize page %q: %w", g.Page, err)
 		}
@@ -84,6 +81,195 @@ func (m *Materializer) Materialize(grants []Grant) ([]string, error) {
 		}
 	}
 	return out, nil
+}
+
+// resolveFootprint returns the footprint for a grant page reference, resolving
+// three page kinds:
+//   - authored page (registered in the UI registry) — page/tab/action footprint
+//   - navigation kind ("{kind}:{name}", e.g. "dashboard:cafe-summary-dashboard")
+//   - derived entity page ("{entity}-page", e.g. "order-page")
+func (m *Materializer) resolveFootprint(pageRef string) ([]FootprintAction, error) {
+	// 1. Authored page.
+	if page, ok := m.uiReg.Pages[pageRef]; ok {
+		return m.pageFootprint(page)
+	}
+
+	// 2. Navigation kind: "{kind}:{name}".
+	if i := strings.IndexByte(pageRef, ':'); i > 0 {
+		return m.navigationFootprint(pageRef[:i], pageRef[i+1:])
+	}
+
+	// 3. Derived entity page: "{entity}-page".
+	if strings.HasSuffix(pageRef, "-page") {
+		if entityName := strings.TrimSuffix(pageRef, "-page"); entityName != "" {
+			if module, ok := m.findEntityModule(entityName); ok {
+				return m.entityFootprint(module, entityName)
+			}
+		}
+	}
+
+	return nil, fmt.Errorf("materialize: unknown page %q", pageRef)
+}
+
+// findEntityModule resolves an entity name to its owning module. Returns false
+// when the name is unknown or ambiguous (registered in more than one module).
+func (m *Materializer) findEntityModule(name string) (string, bool) {
+	var module string
+	count := 0
+	for _, e := range m.reg.ListEntities() {
+		if e.Name == name {
+			module = e.Module
+			count++
+		}
+	}
+	if count == 1 {
+		return module, true
+	}
+	return "", false
+}
+
+// entityFootprint derives the grantable actions of an entity's CRUD surface:
+// standard actions (list/view/create/update/delete + lifecycle) plus custom
+// actions. Mirrors entity.registerStandardPermissions so the admin-facing
+// grant tree and the materialized permission strings stay in sync.
+func (m *Materializer) entityFootprint(module, entityName string) ([]FootprintAction, error) {
+	info, ok := m.reg.GetEntity(module, entityName)
+	if !ok || info.EntitySpec == nil {
+		return nil, fmt.Errorf("unknown entity %q", module+"/"+entityName)
+	}
+	es := info.EntitySpec
+	plural := es.Plural
+	if plural == "" {
+		plural = entityName + "s"
+	}
+
+	disabled := map[string]bool{}
+	for _, a := range es.Actions {
+		if a.Disabled {
+			disabled[a.Name] = true
+		}
+	}
+	isSummary := es.Characteristic == spec.CharSummary
+
+	var out []FootprintAction
+	add := func(action string) {
+		if disabled[action] {
+			return
+		}
+		if isSummary && (action == "create" || action == "update" || action == "delete") {
+			return
+		}
+		out = append(out, FootprintAction{Action: action, Permission: module + "." + plural + "." + action})
+	}
+
+	for _, action := range []string{"list", "view", "create", "update", "delete", "submit", "cancel", "amend"} {
+		add(action)
+	}
+	if es.SoftDeactivate != nil && es.SoftDeactivate.Enabled {
+		add("deactivate")
+		add("reactivate")
+	}
+
+	// Custom actions (non-reserved) with their own permission strings.
+	for _, a := range es.Actions {
+		if a.Disabled || spec.IsReservedAction(a.Name) {
+			continue
+		}
+		perm := a.RequiredPermission
+		if perm == "" {
+			perm = module + "." + plural + "." + a.Name
+		} else {
+			perm = permission.AutoPrefixPermission(perm, module)
+		}
+		out = append(out, FootprintAction{Action: a.Name, Permission: perm})
+	}
+	return out, nil
+}
+
+// navigationFootprint derives the footprint for a navigation-only kind
+// (Dashboard/Report/Wizard/Kanban/Timeline/Print). These kinds expose a single
+// "view" action that materializes to the underlying entity/required permission.
+func (m *Materializer) navigationFootprint(kind, name string) ([]FootprintAction, error) {
+	switch kind {
+	case "dashboard":
+		d, ok := m.uiReg.Dashboards[name]
+		if !ok {
+			return nil, fmt.Errorf("materialize: unknown dashboard %q", name)
+		}
+		var out []FootprintAction
+		for _, w := range d.Spec.Widgets {
+			widget, ok := m.uiReg.Widgets[w.Ref]
+			if !ok || widget.Spec.Entity == "" {
+				continue
+			}
+			perm, err := m.entityPerm(d.Module, widget.Spec.Entity, "view")
+			if err != nil {
+				continue
+			}
+			out = append(out, FootprintAction{Action: "view", Permission: perm})
+		}
+		if len(out) == 0 {
+			return nil, fmt.Errorf("materialize: dashboard %q has no grantable widgets", name)
+		}
+		return out, nil
+
+	case "report":
+		r, ok := m.uiReg.Reports[name]
+		if !ok {
+			return nil, fmt.Errorf("materialize: unknown report %q", name)
+		}
+		if r.Spec.RequiredPermission != "" {
+			return []FootprintAction{{Action: "view", Permission: permission.AutoPrefixPermission(r.Spec.RequiredPermission, r.Module)}}, nil
+		}
+		perm, err := m.entityPerm(r.Module, r.Spec.Entity, "list")
+		if err != nil {
+			return nil, err
+		}
+		return []FootprintAction{{Action: "view", Permission: perm}}, nil
+
+	case "wizard":
+		w, ok := m.uiReg.Wizards[name]
+		if !ok {
+			return nil, fmt.Errorf("materialize: unknown wizard %q", name)
+		}
+		return m.entityViewFootprint(w.Module, w.Spec.Entity)
+
+	case "kanban":
+		k, ok := m.uiReg.Kanbans[name]
+		if !ok {
+			return nil, fmt.Errorf("materialize: unknown kanban %q", name)
+		}
+		return m.entityViewFootprint(k.Module, k.Spec.Entity)
+
+	case "timeline":
+		t, ok := m.uiReg.Timelines[name]
+		if !ok {
+			return nil, fmt.Errorf("materialize: unknown timeline %q", name)
+		}
+		return m.entityViewFootprint(t.Module, t.Spec.Entity)
+
+	case "print":
+		p, ok := m.uiReg.Prints[name]
+		if !ok {
+			return nil, fmt.Errorf("materialize: unknown print %q", name)
+		}
+		return m.entityViewFootprint(p.Module, p.Spec.Entity)
+
+	default:
+		return nil, fmt.Errorf("materialize: unknown navigation kind %q", kind)
+	}
+}
+
+// entityViewFootprint returns a single "view" footprint for an entity-backed kind.
+func (m *Materializer) entityViewFootprint(module, entityRef string) ([]FootprintAction, error) {
+	if entityRef == "" {
+		return nil, fmt.Errorf("materialize: kind has no entity")
+	}
+	perm, err := m.entityPerm(module, entityRef, "view")
+	if err != nil {
+		return nil, err
+	}
+	return []FootprintAction{{Action: "view", Permission: perm}}, nil
 }
 
 // pageFootprint derives the set of (tab, action, permission) for a page by
@@ -141,7 +327,7 @@ func (m *Materializer) blockFootprint(module, tab string, form, table, component
 		if !ok {
 			return nil, fmt.Errorf("unknown table %q", table.Ref)
 		}
-		for _, action := range []string{"list", "view"} {
+		for _, action := range []string{"list", "view", "create", "update", "delete"} {
 			p, err := m.entityPerm(module, t.Spec.Entity, action)
 			if err != nil {
 				return nil, err

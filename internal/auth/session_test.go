@@ -28,7 +28,7 @@ func TestService_ConcurrentSessionLimit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	count, err := svc.session.CountForUser(ctx, user.ID)
+	count, err := svc.session.CountForUser(ctx, "demo", user.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func TestService_UnlimitedSessionsByDefault(t *testing.T) {
 		}
 	}
 	user, _ := svc.users.GetByUsername(ctx, "demo", "admin")
-	count, _ := svc.session.CountForUser(ctx, user.ID)
+	count, _ := svc.session.CountForUser(ctx, "demo", user.ID)
 	if count != 3 {
 		t.Fatalf("expected 3 sessions (unlimited), got %d", count)
 	}
@@ -71,10 +71,10 @@ func TestService_LogoutAll(t *testing.T) {
 	}
 
 	user, _ := svc.users.GetByUsername(ctx, "demo", "admin")
-	if err := svc.LogoutAll(ctx, user.ID); err != nil {
+	if err := svc.LogoutAll(ctx, "demo", user.ID); err != nil {
 		t.Fatalf("LogoutAll: %v", err)
 	}
-	count, _ := svc.session.CountForUser(ctx, user.ID)
+	count, _ := svc.session.CountForUser(ctx, "demo", user.ID)
 	if count != 0 {
 		t.Fatalf("expected 0 sessions after LogoutAll, got %d", count)
 	}
@@ -111,7 +111,7 @@ func TestService_PurgeExpired(t *testing.T) {
 	if n < 1 {
 		t.Fatalf("expected at least 1 purged, got %d", n)
 	}
-	if _, ok := svc.session.Get(ctx, "expired-jti"); ok {
+	if _, ok := svc.session.Get(ctx, "demo", "expired-jti"); ok {
 		t.Error("expected expired session to be purged")
 	}
 }

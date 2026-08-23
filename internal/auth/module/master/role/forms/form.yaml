@@ -10,20 +10,12 @@ spec:
     mode: separate_page
   sections:
     - title: "Identitas Role"
-      description: "Nama & scope role"
+      description: "Nama & deskripsi role (scope otomatis per-App)"
       fields:
         - field: name
           label: "Nama Role"
           placeholder: "mis. kasir"
-          help: "Unique — dipakai di user.roles dan role-assignment"
-        - field: app
-          label: "App"
-          placeholder: "mis. cafe"
-          help: "Scope per-App (kosongkan untuk semua app)"
-        - field: module
-          label: "Module"
-          placeholder: "mis. cafe-order"
-          help: "Scope per-module (kosongkan untuk semua module)"
+          help: "Unique — dipakai di user.roles"
         - field: description
           label: "Deskripsi"
     - title: "Hak Akses (Grants)"

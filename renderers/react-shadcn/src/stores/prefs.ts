@@ -58,18 +58,24 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
   },
 }
 
+/** Default auto-logout idle timeout in minutes (0 = disabled). */
+export const DEFAULT_SESSION_TIMEOUT_MINUTES = 30
+
 export interface PrefsState {
   sidebarCollapsed: boolean
   theme: ThemeMode
   colorPreset: string
   /** Name of the active manifest theme, or null for no theme (use index.css defaults) */
   activeTheme: string | null
+  /** Auto-logout idle timeout in minutes (0 = disabled). Set on the login screen. */
+  sessionTimeoutMinutes: number
   // ── Actions ──
   toggleSidebar: () => void
   setSidebarCollapsed: (collapsed: boolean) => void
   setTheme: (theme: ThemeMode) => void
   setColorPreset: (name: string) => void
   setActiveTheme: (name: string | null) => void
+  setSessionTimeoutMinutes: (minutes: number) => void
 }
 
 export const usePrefsStore = create<PrefsState>()(
@@ -79,12 +85,16 @@ export const usePrefsStore = create<PrefsState>()(
       theme: "system",
       colorPreset: "neutral",
       activeTheme: null,
+      sessionTimeoutMinutes: DEFAULT_SESSION_TIMEOUT_MINUTES,
 
-      toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+      toggleSidebar: () =>
+        set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
       setTheme: (theme) => set({ theme }),
       setColorPreset: (name) => set({ colorPreset: name }),
       setActiveTheme: (name) => set({ activeTheme: name }),
+      setSessionTimeoutMinutes: (minutes) =>
+        set({ sessionTimeoutMinutes: minutes }),
     }),
     {
       name: "formspec-prefs",

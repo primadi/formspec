@@ -32,6 +32,7 @@ import {
 } from "@/shell"
 import ThemeRenderer from "@/kinds/theme/ThemeRenderer"
 import { useTheme } from "@/hooks/useTheme"
+import { useAutoLogout } from "@/hooks/useAutoLogout"
 import { preloadCommonRenderers } from "@/lib/preload"
 import { fetchMetaApps } from "@/lib/api"
 import type { AppSummary } from "@/types/manifest"
@@ -261,6 +262,14 @@ function SurfaceShell({
     }
   }, [workspace, surface])
 
+  // Auto-logout: expire the session after a configurable idle timeout. Only
+  // armed for a real authenticated session (non-public, not already
+  // unauthenticated, token present). On expiry the session store marks the
+  // session unauthenticated and the auth guard below redirects to login.
+  const autoLogoutEnabled =
+    !isPublic && !unauthenticated && sessionLoaded && !!token
+  useAutoLogout(autoLogoutEnabled)
+
   // While loading
   // While loading (session or meta bundle). Non-public surfaces also wait for
   // the bundle — the auth guard needs the resolved App's root_url to build the
@@ -478,8 +487,12 @@ function LoginPage() {
   const [searchParams] = useSearchParams()
   const boot = useSessionStore((s) => s.boot)
 
-  const handleLogin = async (workspace: string, token: string) => {
-    await boot(workspace, token)
+  const handleLogin = async (
+    workspace: string,
+    token: string,
+    refreshToken?: string,
+  ) => {
+    await boot(workspace, token, refreshToken)
     // The bundle may have been loaded anonymously (empty entities) while on
     // the login route — reset it so it reloads with the authenticated
     // identity's permissions after the redirect.

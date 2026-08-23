@@ -20,7 +20,6 @@ func TestGenerateAuthModule(t *testing.T) {
 		"master/user/entity.yaml",
 		"transaction/session/entity.yaml",
 		"master/role/entity.yaml",
-		"transaction/role-assignment/entity.yaml",
 		"master/api-key/entity.yaml",
 		"transaction/app-membership/entity.yaml",
 		"master/workspace/entity.yaml",
@@ -62,7 +61,7 @@ func TestGenerateAuthModule_ValidYAML(t *testing.T) {
 			t.Errorf("manifest error: %v", e)
 		}
 	}
-	if len(res.Manifests) != 16 {
-		t.Errorf("expected 16 manifests (module + 7 entities + 4 forms + 3 tables + 1 page), got %d", len(res.Manifests))
+	if len(res.Manifests) != 13 {
+		t.Errorf("expected 13 manifests (module + 6 entities + 3 forms + 2 tables + 1 page), got %d", len(res.Manifests))
 	}
 }

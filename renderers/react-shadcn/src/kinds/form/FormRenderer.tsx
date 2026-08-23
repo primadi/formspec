@@ -15,6 +15,7 @@ import { toast } from "sonner"
 import { ArrowLeft, Save, Loader2 } from "lucide-react"
 
 import type { EntitySchema, FormSpec } from "@/types/manifest"
+import { FormaApiError } from "@/types/manifest"
 import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
 import { resolveForm } from "@/engine/derive"
@@ -28,6 +29,7 @@ import {
 import { apiGet, apiPost, apiPatch } from "@/lib/api"
 import { titleCase } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import ConfirmDialog from "@/components/ui/confirm-dialog"
 import { TextInput } from "@/widgets/TextInput"
 import { NumberInput } from "@/widgets/NumberInput"
 import { Select } from "@/widgets/Select"
@@ -76,6 +78,7 @@ export default function FormRenderer({
   const getClient = useSessionStore((s) => s.getClient)
   const me = useSessionStore((s) => s.me)
   const bundleForms = useMetaStore((s) => s.bundle?.forms ?? [])
+  const appName = useMetaStore((s) => s.bundle?.app.name)
 
   const authoredForms = useMemo(() => {
     const map = new Map<string, import("@/types/manifest").Entry<FormSpec>>()
@@ -133,9 +136,14 @@ export default function FormRenderer({
   // manually clicks Save or the form is reset — prevents an infinite loop
   // of failed auto-save attempts (e.g. backdate policy violation).
   const autoSaveBlockedRef = useRef(false)
+  // 409 CAS conflict (someone else updated the record first): the pending
+  // save the user just attempted, stashed so it can be re-applied on top of
+  // the freshly-reloaded record once they confirm the reload prompt.
+  const [conflictOpen, setConflictOpen] = useState(false)
+  const pendingSaveRef = useRef<FormData | null>(null)
 
   const loadRecord = useCallback(async () => {
-    if (!id || (!isEdit && !isView)) return
+    if (!id || (!isEdit && !isView)) return undefined
     const token = ++loadTokenRef.current
     // Any autosave still pending from before this (re)load is now stale —
     // it would otherwise fire afterwards and silently overwrite the record
@@ -153,8 +161,9 @@ export default function FormRenderer({
       if (typeof record.version === "number") {
         setRecordVersion(record.version)
       }
+      return record
     } catch (err) {
-      if (loadTokenRef.current !== token) return
+      if (loadTokenRef.current !== token) return undefined
       toast.error("Failed to load record")
       // A fixed-id embed has no derived list to bounce back to — stay in
       // place (route-driven forms still redirect, since the :id there
@@ -164,6 +173,7 @@ export default function FormRenderer({
       } else if (!fixedId) {
         navigate(surfacePath(entity.module, entity.plural))
       }
+      return undefined
     } finally {
       if (loadTokenRef.current === token) setLoading(false)
     }
@@ -183,6 +193,28 @@ export default function FormRenderer({
     loadRecord()
   }, [loadRecord])
 
+  // 409 CAS conflict handler shared by auto-save and manual submit: the
+  // record was updated by someone else since it was loaded. Stash the data
+  // the user was trying to save and prompt them to reload + re-apply it.
+  const handleConflict = useCallback((data: FormData) => {
+    pendingSaveRef.current = data
+    autoSaveBlockedRef.current = true
+    setConflictOpen(true)
+  }, [])
+
+  const resolveConflict = useCallback(async () => {
+    setConflictOpen(false)
+    const pending = pendingSaveRef.current
+    pendingSaveRef.current = null
+    const record = await loadRecord()
+    if (pending && record) {
+      // loadRecord() already reset() the form to the fresh server record
+      // and updated recordVersion — now layer the user's pending edits back
+      // on top so they can review and re-save against the new version.
+      reset({ ...(record as FormData), ...pending })
+    }
+  }, [loadRecord, reset])
+
   // Auto-save (debounced) for two_step_autosave lifecycle
   const autoSave = useCallback(
     async (data: FormData) => {
@@ -196,12 +228,16 @@ export default function FormRenderer({
           recordVersion,
         )
       } catch (err: unknown) {
+        if (err instanceof FormaApiError && err.status === 409) {
+          handleConflict(data)
+          return
+        }
         autoSaveBlockedRef.current = true
         const msg = err instanceof Error ? err.message : "Auto-save gagal"
         toast.error(`Auto-save gagal: ${msg}`, { duration: 5000 })
       }
     },
-    [isEdit, id, entity, getClient, recordVersion],
+    [isEdit, id, entity, getClient, recordVersion, handleConflict],
   )
 
   const debouncedAutoSave = useCallback(
@@ -254,24 +290,36 @@ export default function FormRenderer({
   // Submit handler
   const onSubmit = async (data: FormData) => {
     autoSaveBlockedRef.current = false // unblock auto-save on manual save
+    // Roles are scoped per-App (security per-App) — the form no longer asks
+    // for `app`; auto-fill it from the current App context when empty.
+    const payload: Record<string, unknown> = {
+      ...(data as Record<string, unknown>),
+    }
+    if (
+      entity.module === "formspec.core" &&
+      entity.name === "role" &&
+      appName
+    ) {
+      payload.app = (payload.app as string) || appName
+    }
     try {
       const client = getClient()
       if (isEdit && id) {
         await apiPatch(
           client,
           `${entity.module}/${entity.name}/${id}`,
-          data,
+          payload,
           recordVersion,
         )
         toast.success("Updated successfully")
       } else if (lifecycle.quickSubmit) {
         // one-step create-submit: POST to create-submit endpoint
         await client.post(`${entity.module}/${entity.name}/create-submit`, {
-          json: data,
+          json: payload,
         })
         toast.success("Created and submitted successfully")
       } else {
-        await apiPost(client, `${entity.module}/${entity.name}`, data)
+        await apiPost(client, `${entity.module}/${entity.name}`, payload)
         toast.success("Created successfully")
       }
       // A fixed-id embed (Page/Tab block's `form.id`, e.g. a Configuration
@@ -282,6 +330,10 @@ export default function FormRenderer({
         navigate(surfacePath(entity.module, entity.plural))
       }
     } catch (err) {
+      if (isEdit && err instanceof FormaApiError && err.status === 409) {
+        handleConflict(data)
+        return
+      }
       toast.error(err instanceof Error ? err.message : "Save failed")
     }
   }
@@ -494,6 +546,17 @@ export default function FormRenderer({
           </div>
         )}
       </form>
+
+      <ConfirmDialog
+        open={conflictOpen}
+        onOpenChange={setConflictOpen}
+        title="Conflict Detected"
+        message="This record was changed by someone else since you loaded it. Reload the latest version and re-apply your changes?"
+        variant="warning"
+        confirmLabel="Reload & Reapply"
+        cancelLabel="Keep Editing"
+        onConfirm={resolveConflict}
+      />
     </div>
   )
 }

@@ -3,7 +3,7 @@ kind: Entity
 metadata:
   name: app-membership
   module: formspec.core
-  description: "App membership (auth) — populasi user per App + atribut membership (mis. kode cabang) untuk authorization attribute-based. Terpisah dari role-assignment."
+  description: "App membership (auth) — populasi user per App + atribut membership (mis. kode cabang) untuk authorization attribute-based."
   annotations:
     formspec.dev/ui-exposed: "true"
 spec:

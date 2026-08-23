@@ -9,12 +9,18 @@
 import { useState, type FormEvent } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Select } from "@/components/ui/select"
 import { loginWithPassword } from "@/lib/api"
+import { usePrefsStore } from "@/stores/prefs"
 
 interface LoginScreenProps {
   /** Pre-filled workspace from the URL (in-app login) — hides the workspace field */
   workspace?: string
-  onLogin: (workspace: string, token: string) => Promise<void>
+  onLogin: (
+    workspace: string,
+    token: string,
+    refreshToken?: string,
+  ) => Promise<void>
 }
 
 export function LoginScreen({
@@ -26,6 +32,12 @@ export function LoginScreen({
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Auto-logout idle timeout preference (persisted; 0 = never).
+  const sessionTimeoutMinutes = usePrefsStore((s) => s.sessionTimeoutMinutes)
+  const setSessionTimeoutMinutes = usePrefsStore(
+    (s) => s.setSessionTimeoutMinutes,
+  )
 
   // Workspace comes from the URL when provided (in-app login); otherwise the
   // user types it (top-level /login).
@@ -44,12 +56,12 @@ export function LoginScreen({
     setLoading(true)
     setError(null)
     try {
-      const { accessToken } = await loginWithPassword(
+      const { accessToken, refreshToken } = await loginWithPassword(
         effectiveWorkspace,
         username.trim(),
         password,
       )
-      await onLogin(effectiveWorkspace, accessToken)
+      await onLogin(effectiveWorkspace, accessToken, refreshToken)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed")
     } finally {
@@ -127,6 +139,31 @@ export function LoginScreen({
             {loading ? "Signing in..." : "Sign In"}
           </Button>
         </form>
+
+        <div className="space-y-2.5">
+          <label
+            htmlFor="session-timeout"
+            className="text-sm font-medium leading-none"
+          >
+            Auto logout after
+          </label>
+          <Select
+            value={String(sessionTimeoutMinutes)}
+            onChange={(v) => setSessionTimeoutMinutes(Number(v))}
+            options={[
+              { value: "5", label: "5 minutes" },
+              { value: "15", label: "15 minutes" },
+              { value: "30", label: "30 minutes" },
+              { value: "60", label: "60 minutes" },
+              { value: "0", label: "Never (stay signed in)" },
+            ]}
+            disabled={loading}
+          />
+          <p className="text-xs text-muted-foreground">
+            You&apos;ll be signed out automatically after this period of
+            inactivity.
+          </p>
+        </div>
       </div>
     </div>
   )

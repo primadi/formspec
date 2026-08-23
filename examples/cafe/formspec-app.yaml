@@ -6,6 +6,7 @@
 
 spec: spec
 dsn: sqlite:.formspec/cafe.db
+dev-ui: true          # enable dev UI (formspec.dev) in dev mode
 dev-auth: true         # enable real JWT auth in dev mode (login + authorization enforced)
 jwt-secret: change-me  # HMAC secret for JWT signing — set a fixed value so
 #                        # issued tokens survive server restarts. Keep it secret;

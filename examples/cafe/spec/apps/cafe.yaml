@@ -15,10 +15,6 @@ spec:
     - cafe-report
     - formspec.core
   menu:
-    - label: "Access Management"
-      icon: "shield"
-      module: formspec.core
-      route: /access-management
     - label: "Dashboard"
       icon: "layout-dashboard"
       module: cafe-report
@@ -34,3 +30,7 @@ spec:
           view: sales-recap-report
     - type: module
       module: cafe-master
+    - label: "Access Management"
+      icon: "shield"
+      module: formspec.core
+      route: /access-management

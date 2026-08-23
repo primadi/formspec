@@ -13,7 +13,7 @@ import { useLocation, useParams } from "react-router-dom"
 import { useMetaStore } from "@/stores/meta"
 import { useSessionStore } from "@/stores/session"
 import { can as checkPermission } from "@/engine/permissions"
-import { titleCase } from "@/lib/utils"
+import { deriveMenuItems } from "@/engine/derive"
 import type { MenuItem } from "@/types/manifest"
 
 /** Permission filter for an authored menu item (Core §4.4). */
@@ -67,25 +67,17 @@ export function useResolvedMenu(): ResolvedMenu {
     // authored menu and no per-entity permission filtering (the binary
     // `_admin.access` gate already covers "may see this at all").
     if (isAdmin) {
-      const entitiesByModule = useMetaStore.getState().getEntitiesByModule()
-      const derived: MenuItem[] = []
       // Access Management shortcut — authored page in formspec.core
-      // (kelola user, role, dan role assignment dalam satu halaman).
-      derived.push({
-        label: "Access Management",
-        icon: "Shield",
-        route: "/access-management",
-      })
-      for (const [module, entities] of entitiesByModule) {
-        if (entities.length === 0) continue
-        const children = entities.map((e) => ({
-          label: e.label_field ? titleCase(e.name) : e.name,
-          icon: "FileText" as string | undefined,
-          route: `/${module}/${e.plural}`,
-        }))
-        derived.push({ label: titleCase(module), icon: "Folder", children })
-      }
-      return derived
+      // (kelola user, role, dan role assignment dalam satu halaman) —
+      // followed by the mechanically-derived per-module entity groups.
+      return [
+        {
+          label: "Access Management",
+          icon: "Shield",
+          route: "/access-management",
+        },
+        ...deriveMenuItems(bundle.entities),
+      ]
     }
 
     // App surface: ONLY the authored, curated menu (Core §4.4 — App is a

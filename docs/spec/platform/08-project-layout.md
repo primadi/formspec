@@ -484,7 +484,7 @@ luas (shadow copy per-kind) di fase berikutnya.
 `formspec.core` kini didefinisikan sebagai **bundled module YAML** yang
 di-embed ke binary (`internal/auth/module/`, `//go:embed module`) dan dimuat
 lewat manifest loader — jalur yang sama dengan modul user (dogfooding).
-Entity auth (`user`, `session`, `role`, `role-assignment`, `api-key`,
+Entity auth (`user`, `session`, `role`, `api-key`,
 `app-membership`, `workspace`) diekspresikan sebagai YAML manifests, bukan
 registrasi programatik Go. `formspec generate auth` menyalin module ini ke
 `external/auth` untuk dikustomisasi (selalu sinkron dengan bundled). Detail:

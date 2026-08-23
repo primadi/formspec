@@ -1,9 +1,0 @@
-apiVersion: formspec.dev/v1
-kind: Table
-metadata:
-  name: role-assignment-table
-  module: formspec.core
-  description: "Tabel role assignment — derived columns"
-spec:
-  entity: role-assignment
-  page_size: 15

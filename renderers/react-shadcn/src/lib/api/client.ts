@@ -6,12 +6,11 @@
 
 import ky, { type KyInstance } from "ky"
 
+import { createAuthHooks } from "./authHooks"
 import {
   type SingleResponse,
   type ListResponse,
   type ListParams,
-  type ErrorResponse,
-  FormaApiError,
 } from "@/types/manifest"
 
 // ── Factory ──
@@ -20,45 +19,31 @@ export interface ApiClientConfig {
   workspace: string
   token?: string
   baseUrl?: string // defaults to window.location.origin
+  /** Live access-token getter (from the session store) — used on refresh retries. */
+  getToken?: () => string
+  /** Refresh the access token; resolves true when a fresh token is available. */
+  onUnauthorized?: () => Promise<boolean>
 }
 
 /**
  * Creates a ky-based API client for entity CRUD operations on the UI surface.
  *
  * - Prefixes all URLs with `/{workspace}/_ui/entity`
- * - Injects `Authorization: Bearer` from stored token
+ * - Injects `Authorization: Bearer` from the live token (getToken)
+ * - On a 401, refreshes the access token (onUnauthorized) and retries once;
+ *   if refresh fails the session is expired (login redirect)
  * - Unwraps envelope responses (data from SingleResponse/ListResponse)
  * - Maps ErrorResponse into a typed FormaApiError
  */
 export function createApiClient(config: ApiClientConfig): KyInstance {
   const prefix = `/${config.workspace}/_ui/entity`
-
+  const auth = createAuthHooks({
+    getToken: config.getToken ?? (() => config.token ?? ""),
+    onUnauthorized: config.onUnauthorized ?? (async () => false),
+  })
   const api = ky.create({
     prefix,
-    hooks: {
-      beforeRequest: [
-        ({ request }: { request: Request }) => {
-          if (config.token) {
-            request.headers.set("Authorization", `Bearer ${config.token}`)
-          }
-        },
-      ],
-      afterResponse: [
-        async ({ response }: { response: Response }) => {
-          if (!response.ok) {
-            const body = (await response.clone().json().catch(() => ({}))) as ErrorResponse
-            const err = body?.error
-            throw new FormaApiError(
-              response.status,
-              err?.code ?? "UNKNOWN",
-              err?.message ?? response.statusText,
-              err?.details,
-            )
-          }
-        },
-      ],
-    },
-    retry: 0,
+    ...auth,
   })
   return api
 }
@@ -69,9 +54,7 @@ export function createApiClient(config: ApiClientConfig): KyInstance {
  * Unwrap a single-resource response envelope.
  * Returns `response.data`.
  */
-export async function unwrapSingle<T>(
-  response: Response,
-): Promise<T> {
+export async function unwrapSingle<T>(response: Response): Promise<T> {
   const body = (await response.json()) as SingleResponse<T>
   return body.data
 }
@@ -104,7 +87,8 @@ export function buildListParams(params: ListParams): Record<string, string> {
   const q: Record<string, string> = {}
 
   if (params.page != null && params.page > 0) q.page = String(params.page)
-  if (params.per_page != null && params.per_page > 0) q.per_page = String(params.per_page)
+  if (params.per_page != null && params.per_page > 0)
+    q.per_page = String(params.per_page)
   if (params.search) q.search = params.search
   if (params.sort) q.sort = params.sort
 
@@ -163,8 +147,10 @@ export async function apiPost<T>(
   options?: { version?: number; idempotencyKey?: string },
 ): Promise<T> {
   const headers: Record<string, string> = {}
-  if (options?.version != null) headers["If-Match"] = `version=${options.version}`
-  if (options?.idempotencyKey) headers["Idempotency-Key"] = options.idempotencyKey
+  if (options?.version != null)
+    headers["If-Match"] = `version=${options.version}`
+  if (options?.idempotencyKey)
+    headers["Idempotency-Key"] = options.idempotencyKey
 
   const response = await client.post(path, { json, headers })
   const body = (await response.json()) as SingleResponse<T>

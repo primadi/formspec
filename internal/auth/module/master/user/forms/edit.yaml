@@ -6,6 +6,7 @@ metadata:
   description: "Form edit user — profil + role; password opsional (kosongkan jika tidak diubah)"
 spec:
   entity: user
+  mode: edit
   render:
     mode: separate_page
   sections:

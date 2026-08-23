@@ -431,8 +431,8 @@ func New(cfg Config) (*App, error) {
 		if err := authSvc.SeedDevUser(context.Background(), cfg.WorkspaceID, "admin", "admin"); err != nil {
 			fmt.Fprintf(os.Stderr, "formspec: warning: seed dev user: %v\n", err)
 		}
-		// Seed the 4 symmetric owner roles (todo 6.3.4) so role-assignment
-		// has a baseline to grant from.
+		// Seed the 4 symmetric owner roles (todo 6.3.4) so there's a
+		// baseline to grant from.
 		if err := authSvc.SeedOwnerRoles(context.Background(), cfg.WorkspaceID); err != nil {
 			fmt.Fprintf(os.Stderr, "formspec: warning: seed owner roles: %v\n", err)
 		}
@@ -583,6 +583,18 @@ func (a *App) Close(ctx context.Context) error {
 func (a *App) ReloadSpec() error {
 	// ── 1. Build fresh entity registry ──
 	newReg := entity.NewRegistry(a.database, a.driver, a.cfg.SpecPath)
+	// Mirror startup ordering (NewApp): external/ overrides + embedded
+	// framework-owned auth entities (formspec.core.user/session/role/...) are
+	// registered BEFORE loading user manifests, so external/ overrides can
+	// replace them and the embedded entities survive a hot-reload. Without
+	// this, reload drops formspec.core entities while the UI registry still
+	// references them (user-table/role-table/role-form) → "entity not found".
+	if a.cfg.ExternalDir != "" {
+		newReg.AddManifestRoot(a.cfg.ExternalDir)
+	}
+	if err := auth.RegisterCoreEntities(newReg); err != nil {
+		fmt.Fprintf(os.Stderr, "formspec: reload register core entities: %v\n", err)
+	}
 	for _, loadErr := range newReg.LoadEntities() {
 		fmt.Fprintf(os.Stderr, "formspec: reload: %v\n", loadErr)
 	}

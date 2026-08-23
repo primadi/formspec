@@ -1,6 +1,6 @@
 # Master Plan: FormSpec Implementation
 
-**Last Updated**: 2026-08-20  
+**Last Updated**: 2026-08-22  
 **Status**: ✅ Fase 0 complete · ✅ Fase 1 (1.1–1.5) · ✅ Fase 2.1 · ✅ Fase 2.2 · ✅ Fase 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6) · ✅ Fase 2.7 (idempotency prepare flow) · ✅ Fase 2.8 (spec.expose) · ✅ Fase 2.9 (2.9.1–2.9.3: ctx.\* primitives + dev auto-provision) · ✅ Fase 5 (5.1–5.4) · ✅ Spec hot-reload · ✅ Fase 11 (review schema↔docs) · ✅ Audit spec↔schema + tambah TODO item · ✅ `formspec validate` (3.1.1, engine+schema) · ✅ Rename forma→formspec (docs/plan/rename-formspec.md) · 🚧 Fase 12 Domain Infrastruktur (docs/architecture/09-domain-map.md) · ✅ Schema registry online (docs/plan/schema-registry-online.md) · ✅ CLI repl/seed/diff (3.4.1, 3.6.2, 3.6.3) · ✅ **Fase 4 (4.1–4.10) complete** (incl. 4.3.1–4.3.5 entity extension, 4.8.3 restore remap) · ✅ Landing page (5.1.3 + 5.13.5, docs/plan/landing-page.md) · ✅ App renderer archetypes (5.1.1–5.1.3: sidebar-nav/topnav/no-nav + access + persist_backend, docs/plan/landing-page.md) · ✅ **Fase 6.1 (6.1.1–6.1.3: login + token, entity-backed auth, external/ merge, generate-auth)** (docs/plan/auth-login-token.md) · ✅ **6.3.1 + 6.3.2 + 5.12.5 (role + role-assignment Entity, materialisasi grant page → permission)** (docs/changelog/2026-08-20-001) · ✅ **6.2.3 (wire permission check semua handler, surface-aware 404)** (docs/changelog/2026-08-20-002) · ✅ **Fase 6 COMPLETE (6.1–6.9, dogfooding auth module)** (docs/plan/fase6-dogfooding-auth-module.md, changelog 2026-08-20-003 s/d 2026-08-21-014)
 
 > `⬜` not started · `✅` complete · `⏸️` deferred
@@ -372,7 +372,7 @@ Demo merge: `verticals/reference-app` + `examples/Clinic-UI-Showcase`.
 
 - [x] 5.3.1 `render` mode enforcement — `modal` (dialog overlay), `drawer` (slide-in panel), `separate_page` (own route); design-time, no runtime switch
 - [x] 5.3.2 Wire `OverlayHost` — connected to Form.render modal/drawer
-- [ ] 5.3.3 409 conflict handling — CAS version mismatch → "Data telah diubah oleh pengguna lain", offer reload + re-apply changes
+- [x] 5.3.3 409 conflict handling — CAS version mismatch → "Data telah diubah oleh pengguna lain", offer reload + re-apply changes — `FormRenderer` catches `FormaApiError` with `status === 409` from both auto-save and manual submit, stashes the pending edits, and shows `ConfirmDialog` ("Reload & Reapply"); confirming re-fetches the record (fresh `recordVersion`) then layers the stashed edits back on top via `reset()`. ✅ 2026-08-22
 - [x] 5.3.4 Lifecycle UI patterns — plain_crud (no submit), 2-step+auto-save (default), 2-step manual (Save Draft + Submit buttons), 1-step create-submit (single button, no draft)
 - [x] 5.3.5 FormSpecExpr — `visible_when`, `readonly_when`, `required_when`, `compute` per field
 
@@ -456,7 +456,7 @@ Demo merge: `verticals/reference-app` + `examples/Clinic-UI-Showcase`.
 - [ ] 5.12.2 `label_field` fallback — `natural key` → `name` → `title` → `number` → `id` (`04-spec-resolution-api.md` §2)
 - [ ] 5.12.3 Entity schema shape — `label_field`, `lifecycle`, `actions` with embedded `permission`
 - [ ] 5.12.4 Permission filtering — entity (404 if no list/view), page (hidden if missing permission), action (permission string sent, not filtered)
-- [ ] 5.12.5 Task-based admin granting → materialized permission strings — **sebagian**: `Materializer` (`internal/auth/materialize.go`) menurunkan footprint page (blocks/tabs → entity-action) dan meng-expand grant role → permission strings; di-wire ke auth service (`permissionsForUser` saat login). Admin UI granting + role-assignment lookup belum. ✅ 2026-08-20 (materializer)
+- [x] 5.12.5 Task-based admin granting → materialized permission strings — `Materializer` (`internal/auth/materialize.go`) menurunkan footprint page (blocks/tabs → entity-action) + derived entity page (`{entity}-page`) + navigation kind (`{kind}:{name}`) dan meng-expand grant role → permission strings; di-wire ke auth service (`permissionsForUser` saat login). Admin UI granting: `GrantsEditor` menampilkan semua page app (authored + derived entity + navigation kinds) dengan label action + permission string inline + search + preview permission termaterialisasi. ✅ 2026-08-20 (materializer) · ✅ 2026-08-22 (GrantsEditor semua page, changelog 004)
 
 ### 5.13 Other UI kinds
 
@@ -470,13 +470,13 @@ Demo merge: `verticals/reference-app` + `examples/Clinic-UI-Showcase`.
 ### 5.14 Derivation engine
 
 - [ ] 5.14.1 Derivation fix — Table: N priority columns, overflow accessible via expand (never silently dropped)
-- [ ] 5.14.2 Wire `deriveMenuItems()` — currently dead code; `_admin` menu built inline in Sidebar
+- [x] 5.14.2 Wire `deriveMenuItems()` — currently dead code; `_admin` menu built inline in Sidebar — `useResolvedMenu()` (`hooks/useResolvedMenu.ts`) now calls `deriveMenuItems(bundle.entities)` for the `_admin` branch instead of duplicating the grouping logic inline; "Access Management" shortcut still prepended. ✅ 2026-08-22
 - [ ] 5.14.3 Derivation: Form mode heuristic — >12 fields OR has child with `storage: table` → `separate_page`; >5 fields → `drawer`; else → `modal`
 - [ ] 5.14.4 Pola UI lifecycle tambahan — `two_step_manual` dan `one_step_create_submit` via hint `ui:` (`06-page-kinds.md` §2.1); catatan: enum `lifecycle` di EntitySchema tetap 2 nilai (`plain_crud|two_step_autosave`, `04-spec-resolution-api.md` §2) — ini pola UI, bukan nilai enum baru
 
 ### 5.15 Dead code cleanup
 
-- [ ] 5.15.1 Remove `engine/registry.tsx` — replaced by hardcoded `lazy()` map in router
+- [x] 5.15.1 Remove `engine/registry.tsx` — replaced by hardcoded `lazy()` map in router — deleted (zero remaining references; `shell/router.tsx`'s hardcoded `lazy()` map is the only path used). ✅ 2026-08-22
 - [ ] 5.15.2 Wire `OverlayHost` — connect to Form.render modal/drawer and other overlay needs
 
 ### 5.16 VisualSpecKind/Renderer registry & resolution
@@ -516,10 +516,10 @@ mergeable ke project lain via `external/`/`spec/modules/`; middleware tetap Go.
 ### 6.3 Roles & membership
 
 - [x] 6.3.1 `role` Entity — collection of grants (page → tab → action + conditions) — `formspec.core.role` (internal), tipe `Grant`/`TabGrant`/`ActionGrant`/`ConditionGrant` di `internal/auth/grant.go`; `RoleStore` baca role. ✅ 2026-08-20
-- [x] 6.3.2 `app-membership` Entity — populasi user per App + atribut membership (mis. kode cabang); TERPISAH dari `role-assignment` (`platform/02` §9) — `formspec.core.app-membership` (user_id, app, attributes, active). ✅ 2026-08-20 (Fase B, changelog 004)
+- [x] 6.3.2 `app-membership` Entity — populasi user per App + atribut membership (mis. kode cabang) — `formspec.core.app-membership` (user_id, app, attributes, active). ✅ 2026-08-20 (Fase B, changelog 004)
 - [ ] ⏸️ 6.3.3 Admin delegation chain — workspace owner → app admin → module staff — **sebagian**: 4 owner roles di-seed + di-recognize (Fase G); enforcement rantai delegasi (siapa assign role apa) di-defer.
 - [x] 6.3.4 4 symmetric owner roles — Workspace Owner, App Owner, Module Owner, Cloud Owner — `SeedOwnerRoles` + `ownerRolePermission`. ✅ 2026-08-20 (Fase G, changelog 009)
-- [ ] ⏸️ 6.3.5 `formspec.core` resource set lengkap — `workspace`, `user`, `app-membership`, `role`, `role-assignment`, `api-key`, `session`, `job`, `audit-log`, `setting` — **sebagian**: user/session/role/role-assignment/api-key/app-membership/workspace ada (bundled module); `job`/`audit-log`/`setting` milik sistem lain (7.13/4.7/7.2).
+- [ ] ⏸️ 6.3.5 `formspec.core` resource set lengkap — `workspace`, `user`, `app-membership`, `role`, `api-key`, `session`, `job`, `audit-log`, `setting` — **sebagian**: user/session/role/api-key/app-membership/workspace ada (bundled module); `job`/`audit-log`/`setting` milik sistem lain (7.13/4.7/7.2).
 
 ### 6.4 API keys
 
@@ -534,6 +534,9 @@ mergeable ke project lain via `external/`/`spec/modules/`; middleware tetap Go.
 - [x] 6.5.3 Concurrent session limit — configurable per user — `SetMaxSessionsPerUser` + evict oldest. ✅ 2026-08-20 (Fase D, changelog 006)
 - [x] 6.5.4 Global revoke — logout all devices — `LogoutAll`. ✅ 2026-08-20 (Fase D)
 - [x] 6.5.5 Session expiry + cleanup job — `PurgeExpired` + `StartSessionCleanup`. ✅ 2026-08-20 (Fase D)
+- [x] 6.5.6 Frontend session expiry → login redirect + auto-logout timer — 401 dari API client (entity + meta) menandai session unauthenticated → auth guard redirect ke `{surfacePath}/login?returnTo=...` (bukan error); boot `fetchMe` membedakan 401 (→ login) dari network error; auto-logout idle timer configurable (`prefs.sessionTimeoutMinutes`, default 30, 0=never) di-set dari LoginScreen, hook `useAutoLogout` di `SurfaceShell`. Changelog `2026-08-22-001`. ✅ 2026-08-22
+- [x] 6.5.7 Refresh token flow (frontend) + fix session workspace (backend) — frontend simpan `refreshToken`, auto-refresh access token saat 401 (`authHooks` shared: 401 → `ky.retry()` → `beforeRetry` refresh single-flight → retry); `refreshSession()` di session store; login meneruskan refresh token. Backend fix: `sessWorkspaceForJTI` hardcode "demo" → thread workspace melalui `SessionStore` (`Get`/`Delete`/`DeleteForUser`/`CountForUser`/`ListForUser`), `Refresh` pakai `claims.Workspace`. Changelog `2026-08-22-002`. ✅ 2026-08-22
+- [x] 6.5.8 Session persistence ke sessionStorage — access + refresh token dipersist ke `sessionStorage` (key `formspec-session`) sehingga browser refresh (F5) me-restore session tanpa login ulang; `boot` restore saat workspace cocok, `setSession`/`refreshSession` tulis, `clearSession`/`expireSession` clear. Changelog `2026-08-22-003`. ✅ 2026-08-22
 
 ### 6.6 Auth middleware pipeline
 

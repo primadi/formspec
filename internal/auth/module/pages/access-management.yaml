@@ -3,7 +3,7 @@ kind: Page
 metadata:
   name: access-management
   module: formspec.core
-  description: "Access Management — kelola user, role, dan role assignment dalam satu halaman"
+  description: "Access Management — kelola user dan role dalam satu halaman"
 spec:
   route: /access-management
   title: "Access Management"
@@ -13,5 +13,3 @@ spec:
       table: { ref: user-table }
     - label: "Roles"
       table: { ref: role-table }
-    - label: "Assignments"
-      table: { ref: role-assignment-table }

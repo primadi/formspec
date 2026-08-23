@@ -150,7 +150,7 @@ func (s *Service) ensureResolver() {
 }
 
 // InvalidatePermissions clears the per-session permission cache for a user.
-// Call this when a user's roles or role-assignments change (todo 6.2.4).
+// Call this when a user's roles change (todo 6.2.4).
 func (s *Service) InvalidatePermissions(userID string) {
 	s.ensureResolver()
 	if s.resolver != nil {
@@ -215,7 +215,7 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (*TokenPair,
 	}
 
 	// The session must still exist (not revoked/rotated) and be unexpired.
-	sess, ok := s.session.Get(ctx, claims.ID)
+	sess, ok := s.session.Get(ctx, claims.Workspace, claims.ID)
 	if !ok {
 		return nil, ErrSessionRevoked
 	}
@@ -235,7 +235,7 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (*TokenPair,
 	}
 
 	// Rotate: invalidate the old session, then issue a new pair.
-	if err := s.session.Delete(ctx, claims.ID); err != nil {
+	if err := s.session.Delete(ctx, claims.Workspace, claims.ID); err != nil {
 		return nil, fmt.Errorf("auth: rotate session: %w", err)
 	}
 	return s.issuePair(ctx, user)
@@ -279,7 +279,7 @@ func (s *Service) issuePair(ctx context.Context, user *User) (*TokenPair, error)
 	}
 	// Concurrent session limit (todo 6.5.3): evict oldest sessions beyond the cap.
 	if s.maxSessions > 0 {
-		if err := s.enforceSessionLimit(ctx, user.ID); err != nil {
+		if err := s.enforceSessionLimit(ctx, user.ID, user.WorkspaceID); err != nil {
 			return nil, err
 		}
 	}
@@ -293,21 +293,21 @@ func (s *Service) issuePair(ctx context.Context, user *User) (*TokenPair, error)
 
 // enforceSessionLimit evicts the oldest sessions when a user exceeds the
 // configured concurrent session limit (todo 6.5.3).
-func (s *Service) enforceSessionLimit(ctx context.Context, userID string) error {
-	count, err := s.session.CountForUser(ctx, userID)
+func (s *Service) enforceSessionLimit(ctx context.Context, userID, workspaceID string) error {
+	count, err := s.session.CountForUser(ctx, workspaceID, userID)
 	if err != nil {
 		return fmt.Errorf("auth: count sessions: %w", err)
 	}
 	if count <= s.maxSessions {
 		return nil
 	}
-	sessions, err := s.session.ListForUser(ctx, userID)
+	sessions, err := s.session.ListForUser(ctx, workspaceID, userID)
 	if err != nil {
 		return fmt.Errorf("auth: list sessions: %w", err)
 	}
 	toEvict := count - s.maxSessions
 	for i := 0; i < toEvict && i < len(sessions); i++ {
-		if err := s.session.Delete(ctx, sessions[i].JTI); err != nil {
+		if err := s.session.Delete(ctx, workspaceID, sessions[i].JTI); err != nil {
 			return fmt.Errorf("auth: evict session: %w", err)
 		}
 	}
@@ -315,13 +315,13 @@ func (s *Service) enforceSessionLimit(ctx context.Context, userID string) error 
 }
 
 // Logout revokes a single session (logout one device).
-func (s *Service) Logout(ctx context.Context, jti string) error {
-	return s.session.Delete(ctx, jti)
+func (s *Service) Logout(ctx context.Context, workspaceID, jti string) error {
+	return s.session.Delete(ctx, workspaceID, jti)
 }
 
 // LogoutAll revokes all sessions for a user (logout all devices, todo 6.5.4).
-func (s *Service) LogoutAll(ctx context.Context, userID string) error {
-	return s.session.DeleteForUser(ctx, userID)
+func (s *Service) LogoutAll(ctx context.Context, workspaceID, userID string) error {
+	return s.session.DeleteForUser(ctx, workspaceID, userID)
 }
 
 // PurgeExpiredSessions deletes all expired sessions (todo 6.5.5).

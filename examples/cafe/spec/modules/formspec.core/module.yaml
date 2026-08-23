@@ -2,6 +2,6 @@ apiVersion: formspec.dev/v1
 kind: Module
 metadata:
   name: formspec.core
-  description: "Auth module (formspec.core) — user, role, role-assignment, access management. Entities & UI disediakan framework (embedded); module ini mendeklarasikan kehadirannya agar bisa dimount ke App."
+  description: "Auth module (formspec.core) — user, role, access management. Entities & UI disediakan framework (embedded); module ini mendeklarasikan kehadirannya agar bisa dimount ke App."
 spec:
   version: 1.0.0

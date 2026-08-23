@@ -40,7 +40,7 @@ func ModuleFS() fs.FS { return moduleFS }
 
 // RegisterCoreEntities registers the framework-owned auth entities
 // (formspec.core.user, formspec.core.session, formspec.core.role,
-// formspec.core.role-assignment) from the bundled auth module
+// formspec.core.app-membership) from the bundled auth module
 // (internal/auth/module, embedded via //go:embed). The module is loaded
 // through the same manifest loader path as user manifests (dogfooding) —
 // entities are marked Internal (no API routes, no meta-bundle exposure) and

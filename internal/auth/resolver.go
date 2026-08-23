@@ -9,8 +9,7 @@ import (
 // PermissionResolver resolves a user's effective permissions — their direct
 // grants plus the materialized grants of every role they hold — with a
 // per-session cache (todo 6.2.4). The cache avoids re-materializing role
-// grants on every token issuance; it is invalidated when roles or
-// role-assignments change.
+// grants on every token issuance; it is invalidated when roles change.
 type PermissionResolver struct {
 	users       *EntityUserStore
 	roleStore   *RoleStore
@@ -54,7 +53,7 @@ func (r *PermissionResolver) Resolve(ctx context.Context, workspaceID string, us
 }
 
 // Invalidate clears the cached permissions for a user. Call this whenever a
-// user's roles or role-assignments change so the next resolution is fresh.
+// user's roles change so the next resolution is fresh.
 func (r *PermissionResolver) Invalidate(userID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

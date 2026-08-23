@@ -28,15 +28,18 @@ type Session struct {
 //     contract (refresh_jti + user_id + expires_at), via RoleResolver.
 type SessionStore interface {
 	Create(ctx context.Context, s Session) error
-	Get(ctx context.Context, jti string) (*Session, bool)
-	Delete(ctx context.Context, jti string) error
-	DeleteForUser(ctx context.Context, userID string) error
+	// Get returns the session for jti within the given workspace.
+	Get(ctx context.Context, workspace, jti string) (*Session, bool)
+	// Delete removes the session for jti within the given workspace.
+	Delete(ctx context.Context, workspace, jti string) error
+	// DeleteForUser revokes all sessions for a user within a workspace.
+	DeleteForUser(ctx context.Context, workspace, userID string) error
 	// CountForUser returns the number of active sessions for a user
 	// (concurrent session limit, todo 6.5.3).
-	CountForUser(ctx context.Context, userID string) (int, error)
+	CountForUser(ctx context.Context, workspace, userID string) (int, error)
 	// ListForUser returns the active sessions for a user, oldest first
 	// (used to evict the oldest when the concurrent limit is exceeded).
-	ListForUser(ctx context.Context, userID string) ([]Session, error)
+	ListForUser(ctx context.Context, workspace, userID string) ([]Session, error)
 	// PurgeExpired deletes all sessions whose expires_at is in the past
 	// (cleanup job, todo 6.5.5). Returns the number purged.
 	PurgeExpired(ctx context.Context) (int, error)
@@ -72,12 +75,10 @@ func (s *EntitySessionStore) Create(ctx context.Context, sess Session) error {
 	return err
 }
 
-// Get returns the session for jti, if present and not expired.
-func (s *EntitySessionStore) Get(ctx context.Context, jti string) (*Session, bool) {
-	// The session entity is tenant-scoped; the caller's workspace is threaded
-	// via the refresh token claims. For single-server the default workspace
-	// is "demo" — see sessWorkspaceForJTI.
-	rec, err := s.store.FindByField(ctx, sessWorkspaceForJTI(jti), "refresh_jti", jti)
+// Get returns the session for jti within the given workspace, if present and
+// not expired. The workspace comes from the refresh token claims (ws).
+func (s *EntitySessionStore) Get(ctx context.Context, workspace, jti string) (*Session, bool) {
+	rec, err := s.store.FindByField(ctx, workspace, "refresh_jti", jti)
 	if err != nil || rec == nil {
 		return nil, false
 	}
@@ -93,19 +94,20 @@ func (s *EntitySessionStore) Get(ctx context.Context, jti string) (*Session, boo
 	}, true
 }
 
-// Delete removes a session by jti.
-func (s *EntitySessionStore) Delete(ctx context.Context, jti string) error {
-	rec, err := s.store.FindByField(ctx, sessWorkspaceForJTI(jti), "refresh_jti", jti)
+// Delete removes a session by jti within the given workspace.
+func (s *EntitySessionStore) Delete(ctx context.Context, workspace, jti string) error {
+	rec, err := s.store.FindByField(ctx, workspace, "refresh_jti", jti)
 	if err != nil || rec == nil {
 		return nil // already gone
 	}
 	return s.store.SoftDelete(ctx, rec.WorkspaceID, rec.ID)
 }
 
-// DeleteForUser removes all sessions belonging to a user (global revoke).
-func (s *EntitySessionStore) DeleteForUser(ctx context.Context, userID string) error {
+// DeleteForUser removes all sessions belonging to a user within a workspace
+// (global revoke).
+func (s *EntitySessionStore) DeleteForUser(ctx context.Context, workspace, userID string) error {
 	res, err := s.store.List(ctx, db.ListParams{
-		WorkspaceID: sessWorkspaceForJTI(""),
+		WorkspaceID: workspace,
 		PerPage:     100,
 		Filters: map[string]db.FilterOp{
 			"user_id": {Op: "eq", Value: userID},
@@ -121,8 +123,8 @@ func (s *EntitySessionStore) DeleteForUser(ctx context.Context, userID string) e
 }
 
 // CountForUser returns the number of active sessions for a user.
-func (s *EntitySessionStore) CountForUser(ctx context.Context, userID string) (int, error) {
-	res, err := s.listForUser(ctx, userID)
+func (s *EntitySessionStore) CountForUser(ctx context.Context, workspace, userID string) (int, error) {
+	res, err := s.listForUser(ctx, workspace, userID)
 	if err != nil {
 		return 0, err
 	}
@@ -130,8 +132,8 @@ func (s *EntitySessionStore) CountForUser(ctx context.Context, userID string) (i
 }
 
 // ListForUser returns the active sessions for a user, oldest first.
-func (s *EntitySessionStore) ListForUser(ctx context.Context, userID string) ([]Session, error) {
-	recs, err := s.listForUser(ctx, userID)
+func (s *EntitySessionStore) ListForUser(ctx context.Context, workspace, userID string) ([]Session, error) {
+	recs, err := s.listForUser(ctx, workspace, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -149,9 +151,9 @@ func (s *EntitySessionStore) ListForUser(ctx context.Context, userID string) ([]
 }
 
 // listForUser returns the raw session records for a user, oldest first.
-func (s *EntitySessionStore) listForUser(ctx context.Context, userID string) ([]db.EntityRecord, error) {
+func (s *EntitySessionStore) listForUser(ctx context.Context, workspace, userID string) ([]db.EntityRecord, error) {
 	res, err := s.store.List(ctx, db.ListParams{
-		WorkspaceID: sessWorkspaceForJTI(""),
+		WorkspaceID: workspace,
 		PerPage:     100,
 		Sort:        "created_at",
 		Filters: map[string]db.FilterOp{
@@ -165,9 +167,14 @@ func (s *EntitySessionStore) listForUser(ctx context.Context, userID string) ([]
 }
 
 // PurgeExpired deletes all sessions whose expires_at is in the past.
+//
+// NOTE: only exercised by tests today — the running server relies on the
+// expiry check in Get() rather than a background purge. Scans the "demo"
+// workspace (single-server default); a multi-workspace purge would need to
+// iterate workspaces.
 func (s *EntitySessionStore) PurgeExpired(ctx context.Context) (int, error) {
 	res, err := s.store.List(ctx, db.ListParams{
-		WorkspaceID: sessWorkspaceForJTI(""),
+		WorkspaceID: "demo",
 		PerPage:     100,
 	})
 	if err != nil {
@@ -187,13 +194,4 @@ func (s *EntitySessionStore) PurgeExpired(ctx context.Context) (int, error) {
 		}
 	}
 	return purged, nil
-}
-
-// sessWorkspaceForJTI returns the workspace to search for a jti. Since jti is
-// a globally unique UUID and the session entity is tenant-scoped, we use the
-// default workspace ("demo") for single-server. The auth service passes the
-// workspace from the refresh token claims for Get/Delete; this helper keeps
-// the interface simple.
-func sessWorkspaceForJTI(jti string) string {
-	return "demo"
 }

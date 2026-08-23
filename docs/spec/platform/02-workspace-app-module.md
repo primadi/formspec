@@ -371,18 +371,17 @@ referensi "apa yang selalu tersedia" bagi developer yang perlu merujuk resource
 ini (mis. mengueri audit log, mengecek role assignment) tanpa harus memiliki
 Module sendiri yang mendeklarasikannya.
 
-| Resource          | Isi                                                                                                                           | Kaitan                                                                                      |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `workspace`       | Identitas dan metadata tenant — unit multi-tenancy tunggal FormSpec                                                           | §1 Model Kepemilikan                                                                        |
-| `user`            | Akun manusia di level workspace — satu akun per manusia                                                                       | §8 Identitas User & Membership                                                              |
-| `app-membership`  | Record membership per-App (populasi user + atribut mis. kode cabang, ter-scope per App)                                       | §8 Identitas User & Membership                                                              |
-| `role`            | Definisi role — dimiliki Module, otomatis ter-scope per-App saat Module di-mount                                              | §8                                                                                          |
-| `role-assignment` | Penetapan role ke user dalam konteks App tertentu                                                                             | §8                                                                                          |
-| `api-key`         | Kredensial akses non-interaktif (service/integrasi)                                                                           | [`04-control-plane.md`](04-control-plane.md) §5                                             |
-| `session`         | Sesi login aktif user                                                                                                         | §3 (auth per-App)                                                                           |
-| `job`             | Pelacakan async job — mengikat kontrak wire async action ([`../backend/02-core-extended.md`](../backend/02-core-extended.md)) | —                                                                                           |
-| `audit-log`       | Jejak audit bisnis append-only, immutable                                                                                     | [`../backend/02-core-extended.md`](../backend/02-core-extended.md) §11 Business Audit Trail |
-| `setting`         | Namespace global-settings `settings.*` (workspace/App Config)                                                                 | [`../backend/01-core-basic.md`](../backend/01-core-basic.md) §10 Config & Global Settings   |
+| Resource         | Isi                                                                                                                           | Kaitan                                                                                      |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `workspace`      | Identitas dan metadata tenant — unit multi-tenancy tunggal FormSpec                                                           | §1 Model Kepemilikan                                                                        |
+| `user`           | Akun manusia di level workspace — satu akun per manusia                                                                       | §8 Identitas User & Membership                                                              |
+| `app-membership` | Record membership per-App (populasi user + atribut mis. kode cabang, ter-scope per App)                                       | §8 Identitas User & Membership                                                              |
+| `role`           | Definisi role — dimiliki Module, otomatis ter-scope per-App saat Module di-mount                                              | §8                                                                                          |
+| `api-key`        | Kredensial akses non-interaktif (service/integrasi)                                                                           | [`04-control-plane.md`](04-control-plane.md) §5                                             |
+| `session`        | Sesi login aktif user                                                                                                         | §3 (auth per-App)                                                                           |
+| `job`            | Pelacakan async job — mengikat kontrak wire async action ([`../backend/02-core-extended.md`](../backend/02-core-extended.md)) | —                                                                                           |
+| `audit-log`      | Jejak audit bisnis append-only, immutable                                                                                     | [`../backend/02-core-extended.md`](../backend/02-core-extended.md) §11 Business Audit Trail |
+| `setting`        | Namespace global-settings `settings.*` (workspace/App Config)                                                                 | [`../backend/01-core-basic.md`](../backend/01-core-basic.md) §10 Config & Global Settings   |
 
 Selain resource di atas, `formspec.core` juga meng-expose **service endpoint
 bawaan** `health` dan `metrics` untuk observability — kosakata health

@@ -26,6 +26,8 @@ import {
   type AppSummary,
 } from "@/types/manifest"
 import { fetchMetaBundle, fetchMetaApps } from "@/lib/api"
+import { notifySessionExpired } from "@/lib/api/sessionEvents"
+import { useSessionStore } from "@/stores/session"
 import { FormaApiError } from "@/types/manifest"
 
 // Picks which resolved App (Core §4.4) the current URL belongs to: the
@@ -168,15 +170,31 @@ export const useMetaStore = create<MetaState>((set, get) => ({
   load: async (workspace: string, surface: "admin" | "app", token?: string) => {
     set({ loading: true, error: null, forbidden: false })
     try {
+      // Live auth callbacks so a 401 during meta load can refresh the token.
+      const getToken = () => useSessionStore.getState().token
+      const onUnauthorized = () => useSessionStore.getState().refreshSession()
       // `_admin` isn't scoped to any App (Core §4.4) — skip App detection
       // entirely and fetch the unscoped, binary-gated bundle.
       let bundle: MetaBundle
       if (surface === "admin") {
-        bundle = await fetchMetaBundle(workspace, { admin: true, token })
+        bundle = await fetchMetaBundle(workspace, {
+          admin: true,
+          token,
+          getToken,
+          onUnauthorized,
+        })
       } else {
-        const apps = await fetchMetaApps(workspace, token)
+        const apps = await fetchMetaApps(workspace, token, {
+          getToken,
+          onUnauthorized,
+        })
         const appName = detectAppName(window.location.pathname, apps)
-        bundle = await fetchMetaBundle(workspace, { appName, token })
+        bundle = await fetchMetaBundle(workspace, {
+          appName,
+          token,
+          getToken,
+          onUnauthorized,
+        })
       }
       set({ bundle, loading: false, error: null, forbidden: false })
     } catch (err) {
@@ -194,6 +212,14 @@ export const useMetaStore = create<MetaState>((set, get) => ({
         set({ loading: false, error: null, forbidden: true })
         return
       }
+      if (status === 401) {
+        // Invalid / expired token — mark the session unauthenticated so the
+        // auth guard redirects to login instead of showing a connection
+        // error. Keep the meta state clear so the loading gate exits.
+        notifySessionExpired()
+        set({ loading: false, error: null, forbidden: false })
+        return
+      }
       const message =
         err instanceof Error ? err.message : "Failed to load meta bundle"
       set({ loading: false, error: message })
@@ -206,17 +232,42 @@ export const useMetaStore = create<MetaState>((set, get) => ({
     token?: string,
   ) => {
     try {
+      const getToken = () => useSessionStore.getState().token
+      const onUnauthorized = () => useSessionStore.getState().refreshSession()
       let bundle: MetaBundle
       if (surface === "admin") {
-        bundle = await fetchMetaBundle(workspace, { admin: true, token })
+        bundle = await fetchMetaBundle(workspace, {
+          admin: true,
+          token,
+          getToken,
+          onUnauthorized,
+        })
       } else {
-        const apps = await fetchMetaApps(workspace, token)
+        const apps = await fetchMetaApps(workspace, token, {
+          getToken,
+          onUnauthorized,
+        })
         const appName = detectAppName(window.location.pathname, apps)
-        bundle = await fetchMetaBundle(workspace, { appName, token })
+        bundle = await fetchMetaBundle(workspace, {
+          appName,
+          token,
+          getToken,
+          onUnauthorized,
+        })
       }
       set({ bundle, error: null })
-    } catch {
-      // Silently ignore refresh errors — keep the old bundle.
+    } catch (err) {
+      // A 401 means the token expired — expire the session (login redirect).
+      // Other refresh errors are silently ignored — keep the old bundle.
+      const status =
+        err instanceof FormaApiError
+          ? err.status
+          : err instanceof HTTPError
+            ? err.response.status
+            : undefined
+      if (status === 401) {
+        notifySessionExpired()
+      }
     }
   },
 
