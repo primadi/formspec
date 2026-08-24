@@ -36,24 +36,49 @@ spec:
         storage: jsonb
         sequence_field: line_number
         fields:
-          - { name: line_number, type: integer, immutable: true }
+          - { name: line_number, type: integer, immutable: true, title: "No." }
           - name: menu_item_id
             type: relation
             relation: { type: belongs_to, resource: cafe-master.menu-item }
+            title: "Menu Item"
             rules: [required]
-          - { name: quantity, type: integer, rules: [required, positive] }
-          - { name: unit_price, type: money, rules: [required, positive] }
-          - { name: line_total, type: money, rules: [required, positive] }
+          - { name: quantity, type: integer, title: "Qty", rules: [required, positive] }
+          - name: unit_price
+            type: money
+            title: "Harga Satuan"
+            rules: [required, positive]
+            # Selalu read-only — harga diisi otomatis dari menu item yang
+            # dipilih (auto_fill client-side) dan diverifikasi ulang oleh hook
+            # before create/update (fill_order_unit_price.star).
+            read_only: true
+            auto_fill:
+              from: menu_item_id
+              field: price
+          - name: line_total
+            type: money
+            title: "Subtotal"
+            # Diturunkan server-side per baris child — "get function" sederhana.
+            # unit_price diisi otomatis oleh hook before create/update dari
+            # menu_item_id (lihat spec.hooks di bawah).
+            computed:
+              formula: "quantity * unit_price"
     - name: total_amount
       type: money
-      required: true
       title: "Total"
+      # Diturunkan server-side dari child items — tidak pernah ditulis klien.
+      # Catatan: server-side computed memakai bracket syntax (spec §5.1);
+      # client-side Form manifest memakai dot syntax (FormSpecExpr).
+      computed:
+        formula: 'sum([i["line_total"] for i in items])'
     - name: status
       type: enum
       enum_values: [open, paid, cancelled]
       default: open
       index: true
       title: "Status"
+      # Sembunyikan dari UI turunan (form/list) — status selalu dimulai "open"
+      # via default + state_machine.initial; diubah lewat action settle/cancel.
+      exclude: [ui]
     - name: note
       type: text
       title: "Catatan"
@@ -70,6 +95,15 @@ spec:
   actions:
     - name: submit
       disabled: true
+    - name: create
+      # Hook before create/update butuh akses baca lintas-module ke menu-item
+      # untuk auto-fill unit_price — dideklarasikan via uses.resources
+      # (format {module}.{entity}, bukan {module}.{entity}.{action}).
+      uses:
+        resources: [cafe-master.menu-item]
+    - name: update
+      uses:
+        resources: [cafe-master.menu-item]
     - name: settle
       description: "Tandai pesanan lunas setelah pembayaran tercatat"
       required_permission: cafe-order.order.settle
@@ -78,6 +112,13 @@ spec:
       description: "Batalkan pesanan yang masih terbuka"
       required_permission: cafe-order.order.cancel
       audit: true
+  hooks:
+    - on: before
+      action: create
+      impl: { type: script_ref, ref: fill_order_unit_price }
+    - on: before
+      action: update
+      impl: { type: script_ref, ref: fill_order_unit_price }
   expose:
     - type: rest
       actions: [list, find, create, update, delete]

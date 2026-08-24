@@ -12,6 +12,7 @@
 //   - Readonly mode: display label_field value (fetched by ID if needed)
 
 import { useState, useEffect, useRef, useMemo, useCallback } from "react"
+import { createPortal } from "react-dom"
 import { Search, Loader2, X, Check } from "lucide-react"
 
 import type { EntitySchema, Field } from "@/types/manifest"
@@ -27,6 +28,9 @@ interface RelationPickerProps {
   /** Currently selected record ID */
   value?: string
   onChange?: (value: string) => void
+  /** Called with the full selected record instead of onChange when provided
+   *  (used by ChildTable auto-fill — the record carries the related fields). */
+  onSelectRecord?: (record: SearchResult) => void
   /** The entity field spec — must have relation.resource */
   entityField: Field
   /** Module of the entity that owns this field (for entity lookup) */
@@ -46,9 +50,10 @@ interface SearchResult {
 /**
  * Resolve a relation resource reference to an EntitySchema.
  *
- * Supports two formats:
+ * Supports three formats:
  *   - "patient"           → same-module reference
- *   - "clinic/visit"      → cross-module reference (module/name)
+ *   - "clinic/visit"      → cross-module reference (module/name, spec notation)
+ *   - "clinic.visit"      → cross-module reference (module.name, backend/examples notation)
  */
 function resolveRelatedEntity(
   bundle: { entities: EntitySchema[] } | null,
@@ -57,9 +62,10 @@ function resolveRelatedEntity(
 ): EntitySchema | undefined {
   if (!bundle || !resource) return undefined
 
-  // Cross-module: "module/name"
-  if (resource.includes("/")) {
-    const [mod, name] = resource.split("/", 2)
+  // Cross-module: "module/name" or "module.name"
+  const sep = resource.includes("/") ? "/" : resource.includes(".") ? "." : null
+  if (sep) {
+    const [mod, name] = resource.split(sep, 2)
     return bundle.entities.find((e) => e.module === mod && e.name === name)
   }
 
@@ -78,6 +84,7 @@ function resolveRelatedEntity(
 export function RelationPicker({
   value,
   onChange,
+  onSelectRecord,
   entityField,
   currentModule,
   placeholder,
@@ -91,13 +98,25 @@ export function RelationPicker({
   const [results, setResults] = useState<SearchResult[]>([])
   const [loading, setLoading] = useState(false)
   const [selectedLabel, setSelectedLabel] = useState<string>("")
+  const [dropdownPos, setDropdownPos] = useState<{
+    top?: number
+    bottom?: number
+    left: number
+    width: number
+  } | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const inputRef = useRef<HTMLInputElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const anchorRef = useRef<HTMLDivElement>(null)
 
   // Resolve the related entity schema
   const relatedEntity = useMemo(
-    () => resolveRelatedEntity(bundle, entityField.relation?.resource, currentModule),
+    () =>
+      resolveRelatedEntity(
+        bundle,
+        entityField.relation?.resource,
+        currentModule,
+      ),
     [bundle, entityField.relation?.resource, currentModule],
   )
 
@@ -110,7 +129,14 @@ export function RelationPicker({
   // Uses the first unique non-label_field, or common identifier field names.
   const secondaryField = useMemo(() => {
     if (!relatedEntity) return undefined
-    const candidates = ["nik", "code", "phone", "email", "number", "license_number"]
+    const candidates = [
+      "nik",
+      "code",
+      "phone",
+      "email",
+      "number",
+      "license_number",
+    ]
     // Prefer the first unique field that isn't the label_field
     const uniqueField = relatedEntity.fields.find(
       (f) => f.unique && f.name !== labelField && f.name !== "id",
@@ -166,8 +192,20 @@ export function RelationPicker({
       }
     }
     fetchLabel()
-    return () => { cancelled = true }
-  }, [value, relatedEntity, moduleName, entityName, labelField, secondaryField, getClient, results, formatLabel])
+    return () => {
+      cancelled = true
+    }
+  }, [
+    value,
+    relatedEntity,
+    moduleName,
+    entityName,
+    labelField,
+    secondaryField,
+    getClient,
+    results,
+    formatLabel,
+  ])
 
   // ── Search ──
   const doSearch = useCallback(
@@ -180,10 +218,14 @@ export function RelationPicker({
       setLoading(true)
       try {
         const client = getClient()
-        const { items } = await apiList<SearchResult>(client, `${moduleName}/${entityName}`, {
-          search: q.trim(),
-          per_page: "10",
-        })
+        const { items } = await apiList<SearchResult>(
+          client,
+          `${moduleName}/${entityName}`,
+          {
+            search: q.trim(),
+            per_page: "10",
+          },
+        )
         setResults(items ?? [])
       } catch {
         setResults([])
@@ -213,18 +255,60 @@ export function RelationPicker({
     }
   }, [isOpen])
 
+  // ── Dropdown positioning ──
+  // The dropdown is portaled to <body> so it is never clipped by an ancestor
+  // scroll container (e.g. the ChildTable's overflow-x-auto). It is anchored
+  // to the picker's bounding rect with position:fixed, and flips to open
+  // upward when there is not enough room below (e.g. the last row of a table).
+  const computeDropdownPos = useCallback(() => {
+    const el = anchorRef.current
+    if (!el) return null
+    const rect = el.getBoundingClientRect()
+    const dropdownHeight = 240 // max-h-60 = 15rem
+    const spaceBelow = window.innerHeight - rect.bottom
+    const spaceAbove = rect.top
+    const openUp = spaceBelow < dropdownHeight && spaceAbove > spaceBelow
+    const left = Math.max(
+      8,
+      Math.min(rect.left, window.innerWidth - rect.width - 8),
+    )
+    return {
+      top: openUp ? undefined : rect.bottom + 4,
+      bottom: openUp ? window.innerHeight - rect.top + 4 : undefined,
+      left,
+      width: rect.width,
+    }
+  }, [])
+
+  useEffect(() => {
+    if (isOpen) setDropdownPos(computeDropdownPos())
+  }, [isOpen, computeDropdownPos])
+
+  // Reposition on scroll/resize while open so the dropdown stays glued to
+  // its anchor (the anchor may move as the table scrolls).
+  useEffect(() => {
+    if (!isOpen) return
+    const update = () => setDropdownPos(computeDropdownPos())
+    window.addEventListener("scroll", update, true)
+    window.addEventListener("resize", update)
+    return () => {
+      window.removeEventListener("scroll", update, true)
+      window.removeEventListener("resize", update)
+    }
+  }, [isOpen, computeDropdownPos])
+
   // ── Click outside to close ──
   useEffect(() => {
     if (!isOpen) return
     const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node
       if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(e.target as Node) &&
-        inputRef.current &&
-        !inputRef.current.contains(e.target as Node)
+        dropdownRef.current?.contains(target) ||
+        anchorRef.current?.contains(target)
       ) {
-        setIsOpen(false)
+        return
       }
+      setIsOpen(false)
     }
     document.addEventListener("mousedown", handleClickOutside)
     return () => document.removeEventListener("mousedown", handleClickOutside)
@@ -236,7 +320,14 @@ export function RelationPicker({
     setQuery("")
     setResults([])
     setIsOpen(false)
-    onChange?.(item.id)
+    // When onSelectRecord is provided (ChildTable auto-fill), the parent
+    // needs the full record — it sets the id itself. Otherwise fall back to
+    // the plain id-only onChange contract.
+    if (onSelectRecord) {
+      onSelectRecord(item)
+    } else {
+      onChange?.(item.id)
+    }
   }
 
   // ── Clear ──
@@ -250,15 +341,11 @@ export function RelationPicker({
 
   // ── Render: readonly mode ──
   if (readonly) {
-    return (
-      <div className="py-1 text-sm">
-        {selectedLabel || "-"}
-      </div>
-    )
+    return <div className="py-1 text-sm">{selectedLabel || "-"}</div>
   }
 
   return (
-    <div className="relative">
+    <div ref={anchorRef} className="relative">
       {/* Input area: show label if selected, otherwise show search input */}
       <div className="relative">
         {selectedLabel && !isOpen ? (
@@ -326,68 +413,80 @@ export function RelationPicker({
         )}
       </div>
 
-      {/* Dropdown */}
-      {isOpen && (
-        <div
-          ref={dropdownRef}
-          className={cn(
-            "absolute z-50 mt-1 w-full rounded-lg border border-border bg-popover shadow-md",
-            "max-h-60 overflow-auto",
-          )}
-        >
-          {loading && results.length === 0 && (
-            <div className="flex items-center justify-center gap-2 px-3 py-6 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" />
-              Mencari...
-            </div>
-          )}
+      {/* Dropdown — portaled to <body> with position:fixed so it is never
+          clipped by ancestor scroll containers, and flips upward when there
+          is not enough room below (e.g. the last row of a ChildTable). */}
+      {isOpen &&
+        dropdownPos &&
+        createPortal(
+          <div
+            ref={dropdownRef}
+            style={{
+              position: "fixed",
+              top: dropdownPos.top,
+              bottom: dropdownPos.bottom,
+              left: dropdownPos.left,
+              width: dropdownPos.width,
+            }}
+            className={cn(
+              "z-50 rounded-lg border border-border bg-popover shadow-md",
+              "max-h-60 overflow-auto",
+            )}
+          >
+            {loading && results.length === 0 && (
+              <div className="flex items-center justify-center gap-2 px-3 py-6 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" />
+                Mencari...
+              </div>
+            )}
 
-          {!loading && query.trim() && results.length === 0 && (
-            <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-              Tidak ditemukan
-            </div>
-          )}
+            {!loading && query.trim() && results.length === 0 && (
+              <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+                Tidak ditemukan
+              </div>
+            )}
 
-          {!query.trim() && results.length === 0 && !loading && (
-            <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-              Ketik untuk mencari
-            </div>
-          )}
+            {!query.trim() && results.length === 0 && !loading && (
+              <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+                Ketik untuk mencari
+              </div>
+            )}
 
-          {results.map((item) => {
-            const primaryLabel = String(item[labelField] ?? item.id)
-            const secondaryLabel =
-              secondaryField && item[secondaryField]
-                ? String(item[secondaryField])
-                : undefined
+            {results.map((item) => {
+              const primaryLabel = String(item[labelField] ?? item.id)
+              const secondaryLabel =
+                secondaryField && item[secondaryField]
+                  ? String(item[secondaryField])
+                  : undefined
 
-            return (
-              <button
-                key={item.id}
-                type="button"
-                className={cn(
-                  "flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors",
-                  "hover:bg-accent hover:text-accent-foreground",
-                  item.id === value && "bg-accent/50 font-medium",
-                )}
-                onClick={() => handleSelect(item)}
-              >
-                <span className="flex-1 truncate">
-                  <span>{primaryLabel}</span>
-                  {secondaryLabel && (
-                    <span className="ml-2 text-xs text-muted-foreground">
-                      {secondaryLabel}
-                    </span>
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={cn(
+                    "flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors",
+                    "hover:bg-accent hover:text-accent-foreground",
+                    item.id === value && "bg-accent/50 font-medium",
                   )}
-                </span>
-                {item.id === value && (
-                  <Check className="size-3.5 shrink-0 text-primary" />
-                )}
-              </button>
-            )
-          })}
-        </div>
-      )}
+                  onClick={() => handleSelect(item)}
+                >
+                  <span className="flex-1 truncate">
+                    <span>{primaryLabel}</span>
+                    {secondaryLabel && (
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        {secondaryLabel}
+                      </span>
+                    )}
+                  </span>
+                  {item.id === value && (
+                    <Check className="size-3.5 shrink-0 text-primary" />
+                  )}
+                </button>
+              )
+            })}
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }

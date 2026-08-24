@@ -10,6 +10,7 @@ package starlark
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"time"
 
 	"go.starlark.net/starlark"
@@ -86,6 +87,31 @@ func EvalExpr(expr string, env map[string]any) (any, error) {
 			return starlark.Bool(x.Len() == 0), nil
 		}
 		return starlark.False, nil
+	})
+	predeclared["sum"] = starlark.NewBuiltin("sum", func(
+		thread *starlark.Thread,
+		fn *starlark.Builtin,
+		args starlark.Tuple,
+		kwargs []starlark.Tuple,
+	) (starlark.Value, error) {
+		var iterable starlark.Value
+		if err := starlark.UnpackArgs("sum", args, kwargs, "iterable", &iterable); err != nil {
+			return nil, err
+		}
+		var total float64
+		switch x := iterable.(type) {
+		case *starlark.List:
+			for i := 0; i < x.Len(); i++ {
+				total += starlarkNumber(x.Index(i))
+			}
+		case *starlark.Tuple:
+			for i := 0; i < x.Len(); i++ {
+				total += starlarkNumber(x.Index(i))
+			}
+		default:
+			return nil, fmt.Errorf("sum: expected list or tuple, got %s", iterable.Type())
+		}
+		return starlark.Float(total), nil
 	})
 
 	// Create a sandboxed thread
@@ -205,4 +231,19 @@ func fromStarlark(v starlark.Value) any {
 	default:
 		return x.String()
 	}
+}
+
+// starlarkNumber coerces a Starlark value to a float64 for arithmetic
+// (used by the sum builtin). Non-numeric values coerce to 0.
+func starlarkNumber(v starlark.Value) float64 {
+	switch x := v.(type) {
+	case starlark.Int:
+		return float64(x.Float())
+	case starlark.Float:
+		return float64(x)
+	case starlark.String:
+		f, _ := strconv.ParseFloat(string(x), 64)
+		return f
+	}
+	return 0
 }

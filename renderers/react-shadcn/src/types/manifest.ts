@@ -279,6 +279,7 @@ export interface Field {
   default?: unknown
   required?: boolean
   immutable?: boolean
+  read_only?: boolean
   unique?: boolean
   index?: boolean
   natural_key?: boolean
@@ -289,6 +290,27 @@ export interface Field {
   relation?: RelationDecl
   child?: ChildDecl
   computed?: ComputedDecl
+  /** Decimal precision/scale (backend 05-field-types.md §1.2) — only for
+   *  type: decimal. precision = total significant digits; scale = digits
+   *  after the decimal point (drives client-side input limiting). */
+  precision?: number
+  scale?: number
+  /** Client-side behavior vocabulary (FormSpecExpr) — on entity fields these
+   *  act as defaults, and are the only way to configure per-column behavior
+   *  on child fields (ChildTable reads child.fields from the entity). */
+  visible_when?: string
+  readonly_when?: string
+  required_when?: string
+  /** Client-side lookup: when the relation field named in `from` (same child
+   *  row) changes, copy the related record's `field` into this field. */
+  auto_fill?: AutoFillDecl
+}
+
+export interface AutoFillDecl {
+  /** Name of the relation field in the same row that triggers the fill. */
+  from: string
+  /** Name of the field on the related entity to copy from. */
+  field: string
 }
 
 export interface ValidationRule {
@@ -1003,6 +1025,30 @@ export interface AppSummary {
   persist_backend?: string
 }
 
+/**
+ * Global presentation/config namespace (spec §10 — "jangan pernah menebak").
+ * Resolved with standard defaults by the backend and shipped on every
+ * /_meta/ui bundle. Renderers read these instead of guessing per component.
+ */
+export interface Settings {
+  /** Default money currency (ISO-4217 code, minor-unit scale, display symbol). */
+  currency?: {
+    code: string
+    decimal_places: number
+    symbol?: string
+  }
+  /** IETF BCP-47 locale for number/date formatting (e.g. "en-US", "id-ID"). */
+  locale?: string
+  /** IANA timezone name (e.g. "UTC", "Asia/Jakarta"). */
+  timezone?: string
+  /** Display date format (e.g. "YYYY-MM-DD", "DD/MM/YYYY"). */
+  date_format?: string
+  /** Default digits after the decimal point for `decimal` fields without their own `scale`. */
+  decimal_scale?: number
+  /** Default rounding mode: half_even | half_up | half_down | up | down. */
+  rounding?: string
+}
+
 export interface MetaBundle {
   app: AppSummary
   entities: EntitySchema[]
@@ -1019,6 +1065,8 @@ export interface MetaBundle {
   prints: Entry<PrintSpec>[]
   themes: Entry<ThemeSpec>[]
   listings: Entry<ListingSpec>[]
+  /** Resolved global settings namespace (spec §10). Always present. */
+  settings: Settings
 }
 
 export interface MeResponse {

@@ -120,6 +120,69 @@ func TestHandleMetaUI_AppScoped_UnaffectedByAdminChange(t *testing.T) {
 	}
 }
 
+func TestHandleMetaUI_SettingsInBundle(t *testing.T) {
+	b := setupMetaTestRouter(t)
+	// Declare global settings (spec §10) — resolved with defaults by the
+	// caller (resource/formspec.go) and shipped on the bundle.
+	b.SetSettings(spec.ResolveSettings(&spec.Settings{
+		Currency: &spec.CurrencySettings{Code: "IDR", DecimalPlaces: intPtr(0), Symbol: "Rp"},
+		Locale:   "id-ID",
+	}))
+	handler := b.HandleMetaUI()
+
+	identity := &auth.Identity{UserID: "user-1", WorkspaceID: "demo", Permissions: []string{}}
+	req := httptest.NewRequest("GET", "/demo/_ui/_meta/ui?app=storefront", nil)
+	req = req.WithContext(WithIdentity(context.Background(), identity))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp SingleResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	data, _ := json.Marshal(resp.Data)
+	var bundle ui.Bundle
+	if err := json.Unmarshal(data, &bundle); err != nil {
+		t.Fatalf("decode bundle: %v", err)
+	}
+	if bundle.Settings == nil {
+		t.Fatal("expected settings in bundle, got nil")
+	}
+	if bundle.Settings.Currency == nil || bundle.Settings.Currency.Code != "IDR" {
+		t.Errorf("expected currency IDR, got %+v", bundle.Settings.Currency)
+	}
+	if bundle.Settings.Locale != "id-ID" {
+		t.Errorf("expected locale id-ID, got %q", bundle.Settings.Locale)
+	}
+	// Unset fields fall back to standard defaults.
+	if bundle.Settings.DateFormat != "YYYY-MM-DD" {
+		t.Errorf("expected default date_format YYYY-MM-DD, got %q", bundle.Settings.DateFormat)
+	}
+}
+
+func TestResolveSettings_Defaults(t *testing.T) {
+	d := spec.ResolveSettings(nil)
+	if d.Currency == nil || d.Currency.Code != "USD" {
+		t.Errorf("expected default currency USD, got %+v", d.Currency)
+	}
+	if d.Locale != "en-US" {
+		t.Errorf("expected default locale en-US, got %q", d.Locale)
+	}
+	if d.DateFormat != "YYYY-MM-DD" {
+		t.Errorf("expected default date_format YYYY-MM-DD, got %q", d.DateFormat)
+	}
+	if d.DecimalScale != 2 {
+		t.Errorf("expected default decimal_scale 2, got %d", d.DecimalScale)
+	}
+	if d.Rounding != "half_even" {
+		t.Errorf("expected default rounding half_even, got %q", d.Rounding)
+	}
+}
+
 func TestHandleMetaUI_PublicApp_AnonymousAllowed(t *testing.T) {
 	b := setupMetaTestRouter(t)
 	// Reconfigure the app as `access: public` (entirely public, no-nav).
@@ -196,3 +259,6 @@ func TestPublicEntities_NoPublicApp(t *testing.T) {
 		t.Error("expected sales/product to NOT be public with only private Apps")
 	}
 }
+
+// intPtr returns a pointer to the given int (for *int fields).
+func intPtr(v int) *int { return &v }

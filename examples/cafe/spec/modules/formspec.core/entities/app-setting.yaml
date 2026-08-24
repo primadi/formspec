@@ -1,0 +1,64 @@
+# Configuration Page pattern (spec frontend §1, backend 01-core-basic §10).
+# characteristic: reference → renderer TIDAK render tombol "New"/"Delete";
+# hanya Update. Satu row (natural key "global") di-edit lewat halaman
+# Pengaturan (Page + Form mode: edit). Manifest `settings:` (kind: Config)
+# adalah default; record ini adalah running value yang bisa diubah admin.
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: app-setting
+  module: formspec.core
+  description: "Pengaturan global — running value (spec §10). Struktur dikunci developer, nilai diubah admin."
+spec:
+  version: v1
+  characteristic: reference
+  lifecycle: plain_crud
+  display_field: name
+
+  fields:
+    - name: name
+      type: string
+      required: true
+      natural_key: true
+      natural_key_rule:
+        strategy: custom
+      description: "Natural key — 'global' untuk satu grup setting"
+      exclude: [ui]
+    - name: currency_code
+      type: string
+      title: "Kode Mata Uang"
+      description: "ISO-4217, mis. IDR, USD"
+    - name: currency_decimal_places
+      type: integer
+      title: "Desimal Mata Uang"
+      description: "Skala minor-unit mata uang (IDR=0, USD=2)"
+    - name: currency_symbol
+      type: string
+      title: "Simbol Mata Uang"
+      description: "Opsional, mis. Rp, $"
+    - name: locale
+      type: string
+      title: "Lokale"
+      description: "BCP-47, mis. id-ID, en-US"
+    - name: timezone
+      type: string
+      title: "Zona Waktu"
+      description: "IANA, mis. Asia/Jakarta, UTC"
+    - name: date_format
+      type: string
+      title: "Format Tanggal"
+      description: "mis. DD/MM/YYYY, YYYY-MM-DD"
+    - name: decimal_scale
+      type: integer
+      title: "Skala Desimal"
+      description: "Digit di belakang koma untuk decimal"
+    - name: rounding
+      type: string
+      title: "Pembulatan"
+      description: "half_even | half_up | half_down | up | down"
+
+  actions:
+    # Reference/config data tanpa lifecycle → plain CRUD: tombol "Simpan
+    # Pengaturan" saja, tanpa Submit/draft.
+    - name: submit
+      disabled: true

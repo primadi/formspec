@@ -1,0 +1,16 @@
+# Configuration Page pattern (spec frontend §1): halaman Pengaturan global.
+# Satu Form mode edit atas entity `app-setting` (characteristic: reference)
+# dengan id = natural key "global". Backend find-or-create otomatis membuat
+# record saat pertama diakses; nilai default dari manifest `settings:`.
+apiVersion: formspec.dev/v1
+kind: Page
+metadata:
+  name: settings
+  module: formspec.core
+  description: "Pengaturan global — format tampilan default (spec §10: jangan pernah menebak)"
+spec:
+  route: /settings
+  title: "Pengaturan"
+  icon: "settings"
+  blocks:
+    - form: { ref: settings-edit, id: "global", mode: edit }

@@ -237,6 +237,25 @@
       ],
       "additionalProperties": false
     },
+    "AutoFillDecl": {
+      "description": "AutoFillDecl defines a client-side lookup/auto-fill on a field.\nWhen the relation field named in `from` (same child row) changes, the\nrelated record is fetched and its `field` value is copied into the field\nthat declares this AutoFillDecl.\n",
+      "type": "object",
+      "properties": {
+        "field": {
+          "description": "Field — name of the field on the related entity to copy from.",
+          "type": "string"
+        },
+        "from": {
+          "description": "From — name of the relation field in the same row that triggers the fill.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from",
+        "field"
+      ],
+      "additionalProperties": false
+    },
     "BackdatePolicy": {
       "description": "BackdatePolicy controls how far back a transaction_date can be set (§14a).\n",
       "type": "object",
@@ -368,6 +387,26 @@
       "required": [
         "type"
       ],
+      "additionalProperties": false
+    },
+    "CurrencySettings": {
+      "description": "CurrencySettings configures the default money currency (05-field-types.md §2).\n",
+      "type": "object",
+      "properties": {
+        "code": {
+          "description": "Code is the ISO-4217 currency code (e.g. \"IDR\", \"USD\").",
+          "type": "string"
+        },
+        "decimal_places": {
+          "description": "DecimalPlaces is the minor-unit scale of this currency (e.g. IDR=0, USD=2).",
+          "type": "integer",
+          "nullable": true
+        },
+        "symbol": {
+          "description": "Symbol is the optional display symbol (e.g. \"Rp\", \"$\"). When empty, the",
+          "type": "string"
+        }
+      },
       "additionalProperties": false
     },
     "DashboardWidget": {
@@ -784,6 +823,11 @@
         "audited": {
           "type": "boolean"
         },
+        "auto_fill": {
+          "$ref": "#/$defs/AutoFillDecl",
+          "description": "AutoFill — client-side lookup: when the relation field named in `from`",
+          "nullable": true
+        },
         "child": {
           "$ref": "#/$defs/ChildDecl",
           "nullable": true
@@ -841,6 +885,17 @@
           "$ref": "#/$defs/NaturalKeyRuleDecl",
           "nullable": true
         },
+        "precision": {
+          "description": "Decimal precision/scale (05-field-types.md §1.2) — only meaningful for",
+          "type": "integer",
+          "nullable": true
+        },
+        "read_only": {
+          "type": "boolean"
+        },
+        "readonly_when": {
+          "type": "string"
+        },
         "relation": {
           "$ref": "#/$defs/RelationDecl",
           "nullable": true
@@ -856,11 +911,18 @@
           "description": "1.4.4 FieldPermission — field-level required_permission (05-field-types.md §5.3).",
           "type": "string"
         },
+        "required_when": {
+          "type": "string"
+        },
         "rules": {
           "type": "array",
           "items": {
             "$ref": "#/$defs/ValidationRule"
           }
+        },
+        "scale": {
+          "type": "integer",
+          "nullable": true
         },
         "storage": {
           "$ref": "#/$defs/StorageSpec",
@@ -880,6 +942,10 @@
         },
         "unique": {
           "type": "boolean"
+        },
+        "visible_when": {
+          "description": "Client-behavior vocabulary (FormSpecExpr, frontend 08-formspec-expr.md).",
+          "type": "string"
         }
       },
       "required": [
@@ -2156,6 +2222,38 @@
           "type": "string"
         },
         "title": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Settings": {
+      "description": "Settings is the typed global presentation/config namespace. It is declared\nonce on a workspace/App `kind: Config` manifest under `settings:` and\nresolved with standard defaults so behavior is consistent across every\ncomponent even when unset. Renderers/backends read these values instead of\nguessing per component (01-core-basic.md §10, 05-field-types.md §2).\n",
+      "type": "object",
+      "properties": {
+        "currency": {
+          "$ref": "#/$defs/CurrencySettings",
+          "description": "Currency is the default money currency for the workspace (ISO-4217 code,",
+          "nullable": true
+        },
+        "date_format": {
+          "description": "DateFormat is the display date format (e.g. \"YYYY-MM-DD\", \"DD/MM/YYYY\").",
+          "type": "string"
+        },
+        "decimal_scale": {
+          "description": "DecimalScale is the default number of digits after the decimal point for",
+          "type": "integer"
+        },
+        "locale": {
+          "description": "Locale is the IETF BCP-47 locale used for number/date formatting",
+          "type": "string"
+        },
+        "rounding": {
+          "description": "Rounding is the default rounding mode for money/decimal arithmetic:",
+          "type": "string"
+        },
+        "timezone": {
+          "description": "Timezone is the IANA timezone name (e.g. \"UTC\", \"Asia/Jakarta\").",
           "type": "string"
         }
       },
@@ -3136,6 +3234,25 @@
       ],
       "additionalProperties": false
     },
+    "AutoFillDecl": {
+      "description": "AutoFillDecl defines a client-side lookup/auto-fill on a field.\nWhen the relation field named in `from` (same child row) changes, the\nrelated record is fetched and its `field` value is copied into the field\nthat declares this AutoFillDecl.\n",
+      "type": "object",
+      "properties": {
+        "field": {
+          "description": "Field — name of the field on the related entity to copy from.",
+          "type": "string"
+        },
+        "from": {
+          "description": "From — name of the relation field in the same row that triggers the fill.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from",
+        "field"
+      ],
+      "additionalProperties": false
+    },
     "BackdatePolicy": {
       "description": "BackdatePolicy controls how far back a transaction_date can be set (§14a).\n",
       "type": "object",
@@ -3267,6 +3384,26 @@
       "required": [
         "type"
       ],
+      "additionalProperties": false
+    },
+    "CurrencySettings": {
+      "description": "CurrencySettings configures the default money currency (05-field-types.md §2).\n",
+      "type": "object",
+      "properties": {
+        "code": {
+          "description": "Code is the ISO-4217 currency code (e.g. \"IDR\", \"USD\").",
+          "type": "string"
+        },
+        "decimal_places": {
+          "description": "DecimalPlaces is the minor-unit scale of this currency (e.g. IDR=0, USD=2).",
+          "type": "integer",
+          "nullable": true
+        },
+        "symbol": {
+          "description": "Symbol is the optional display symbol (e.g. \"Rp\", \"$\"). When empty, the",
+          "type": "string"
+        }
+      },
       "additionalProperties": false
     },
     "DashboardWidget": {
@@ -3683,6 +3820,11 @@
         "audited": {
           "type": "boolean"
         },
+        "auto_fill": {
+          "$ref": "#/$defs/AutoFillDecl",
+          "description": "AutoFill — client-side lookup: when the relation field named in `from`",
+          "nullable": true
+        },
         "child": {
           "$ref": "#/$defs/ChildDecl",
           "nullable": true
@@ -3740,6 +3882,17 @@
           "$ref": "#/$defs/NaturalKeyRuleDecl",
           "nullable": true
         },
+        "precision": {
+          "description": "Decimal precision/scale (05-field-types.md §1.2) — only meaningful for",
+          "type": "integer",
+          "nullable": true
+        },
+        "read_only": {
+          "type": "boolean"
+        },
+        "readonly_when": {
+          "type": "string"
+        },
         "relation": {
           "$ref": "#/$defs/RelationDecl",
           "nullable": true
@@ -3755,11 +3908,18 @@
           "description": "1.4.4 FieldPermission — field-level required_permission (05-field-types.md §5.3).",
           "type": "string"
         },
+        "required_when": {
+          "type": "string"
+        },
         "rules": {
           "type": "array",
           "items": {
             "$ref": "#/$defs/ValidationRule"
           }
+        },
+        "scale": {
+          "type": "integer",
+          "nullable": true
         },
         "storage": {
           "$ref": "#/$defs/StorageSpec",
@@ -3779,6 +3939,10 @@
         },
         "unique": {
           "type": "boolean"
+        },
+        "visible_when": {
+          "description": "Client-behavior vocabulary (FormSpecExpr, frontend 08-formspec-expr.md).",
+          "type": "string"
         }
       },
       "required": [
@@ -5055,6 +5219,38 @@
           "type": "string"
         },
         "title": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Settings": {
+      "description": "Settings is the typed global presentation/config namespace. It is declared\nonce on a workspace/App `kind: Config` manifest under `settings:` and\nresolved with standard defaults so behavior is consistent across every\ncomponent even when unset. Renderers/backends read these values instead of\nguessing per component (01-core-basic.md §10, 05-field-types.md §2).\n",
+      "type": "object",
+      "properties": {
+        "currency": {
+          "$ref": "#/$defs/CurrencySettings",
+          "description": "Currency is the default money currency for the workspace (ISO-4217 code,",
+          "nullable": true
+        },
+        "date_format": {
+          "description": "DateFormat is the display date format (e.g. \"YYYY-MM-DD\", \"DD/MM/YYYY\").",
+          "type": "string"
+        },
+        "decimal_scale": {
+          "description": "DecimalScale is the default number of digits after the decimal point for",
+          "type": "integer"
+        },
+        "locale": {
+          "description": "Locale is the IETF BCP-47 locale used for number/date formatting",
+          "type": "string"
+        },
+        "rounding": {
+          "description": "Rounding is the default rounding mode for money/decimal arithmetic:",
+          "type": "string"
+        },
+        "timezone": {
+          "description": "Timezone is the IANA timezone name (e.g. \"UTC\", \"Asia/Jakarta\").",
           "type": "string"
         }
       },
@@ -6396,7 +6592,7 @@
         },
         "spec": {
           "title": "Config Spec",
-          "description": "ConfigSpec defines runtime configuration values (Core §4.5, §10).\nKeys are structured — each key declares its type, default value, and\nwhether it is a secret (never inlined in YAML, resolved per environment).\nScripts read values via ctx.config.get(\"key\").\nConfigSpec declares module-level configuration keys (01-core-basic.md §10).\n",
+          "description": "ConfigSpec defines runtime configuration values (Core §4.5, §10).\nKeys are structured — each key declares its type, default value, and\nwhether it is a secret (never inlined in YAML, resolved per environment).\nScripts read values via ctx.config.get(\"key\").\nConfigSpec declares module-level configuration keys (01-core-basic.md §10).\n\n`settings` is the typed, global presentation/config namespace (spec §10 —\n\"jangan pernah menebak\"). It lives in ONE place (workspace/App Config) and\ndrives cross-component interpretation/display: currency, locale, timezone,\ndate format, decimal scale, rounding. Renderers read it instead of guessing.\n",
           "type": "object",
           "properties": {
             "keys": {
@@ -6408,11 +6604,13 @@
               "examples": [
                 "{invoice_due_days: {type: int, default: 30}, smtp_host: {type: string, secret: true}}"
               ]
+            },
+            "settings": {
+              "$ref": "#/$defs/Settings",
+              "description": "Settings is the typed global presentation/config namespace (spec §10).",
+              "nullable": true
             }
           },
-          "required": [
-            "keys"
-          ],
           "additionalProperties": false
         }
       },

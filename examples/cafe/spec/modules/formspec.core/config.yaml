@@ -1,0 +1,17 @@
+apiVersion: formspec.dev/v1
+kind: Config
+metadata:
+  name: workspace
+  module: formspec.core
+  description: "Global settings workspace — format tampilan default (spec §10: jangan pernah menebak)"
+spec:
+  settings:
+    currency:
+      code: IDR
+      decimal_places: 0
+      symbol: "Rp"
+    locale: id-ID
+    timezone: Asia/Jakarta
+    date_format: DD/MM/YYYY
+    decimal_scale: 2
+    rounding: half_even

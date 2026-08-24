@@ -1021,6 +1021,99 @@ func TestEntityStore_ComputedField(t *testing.T) {
 	}
 }
 
+func TestEntityStore_ChildComputedField(t *testing.T) {
+	dir := t.TempDir()
+	d, err := OpenSQLite(filepath.Join(dir, "crud_child_computed.db"), nil)
+	if err != nil {
+		t.Fatalf("OpenSQLite failed: %v", err)
+	}
+	defer d.Close()
+
+	meta := spec.Metadata{Name: "order", Module: "cafe"}
+	entity := &spec.EntitySpec{
+		Version: "v1",
+		Fields: []spec.Field{
+			{
+				Name: "items",
+				Type: spec.FieldChild,
+				Child: &spec.ChildDecl{
+					Storage: "jsonb",
+					Fields: []spec.Field{
+						{Name: "quantity", Type: spec.FieldNumber},
+						{Name: "unit_price", Type: spec.FieldNumber},
+						{
+							Name: "line_total",
+							Type: spec.FieldNumber,
+							Computed: &spec.ComputedDecl{
+								Formula: "quantity * unit_price",
+							},
+						},
+					},
+				},
+			},
+			{
+				Name: "total_amount",
+				Type: spec.FieldNumber,
+				Computed: &spec.ComputedDecl{
+					Formula: `sum([i["line_total"] for i in items])`,
+				},
+			},
+		},
+	}
+
+	r := NewMigrationRunner(d, DriverSQLite)
+	ctx := context.Background()
+	if _, err := r.ApplyMigrations(ctx, []EntityMigration{{Metadata: meta, EntitySpec: *entity}}); err != nil {
+		t.Fatalf("ApplyMigrations failed: %v", err)
+	}
+
+	store := NewEntityStore(d, DriverSQLite, meta, entity)
+
+	id, err := store.Insert(ctx, InsertParams{
+		WorkspaceID: "t1", CreatedBy: "u1",
+		Data: map[string]any{
+			"items": []any{
+				map[string]any{"quantity": float64(2), "unit_price": float64(15000)},
+				map[string]any{"quantity": float64(1), "unit_price": float64(5000)},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Insert failed: %v", err)
+	}
+
+	// GetByID should evaluate child-level computed (line_total) and the
+	// parent computed that aggregates over it (total_amount).
+	rec, err := store.GetByID(ctx, GetByIDParams{WorkspaceID: "t1", ID: id})
+	if err != nil {
+		t.Fatalf("GetByID failed: %v", err)
+	}
+
+	items, ok := rec.Data["items"].([]any)
+	if !ok {
+		t.Fatalf("expected items []any, got %T", rec.Data["items"])
+	}
+	first, ok := items[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected item map, got %T", items[0])
+	}
+	lt, ok := first["line_total"].(float64)
+	if !ok {
+		t.Fatalf("expected line_total float64, got %T", first["line_total"])
+	}
+	if lt != 30000 {
+		t.Errorf("expected line_total 30000, got %v", lt)
+	}
+
+	total, ok := rec.Data["total_amount"].(float64)
+	if !ok {
+		t.Fatalf("expected total_amount float64, got %T", rec.Data["total_amount"])
+	}
+	if total != 35000 {
+		t.Errorf("expected total_amount 35000, got %v", total)
+	}
+}
+
 // ============================================================================
 // 1.6 New Validator Tests
 // ============================================================================

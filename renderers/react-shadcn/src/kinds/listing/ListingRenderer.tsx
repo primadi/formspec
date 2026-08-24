@@ -22,6 +22,8 @@ import type {
 import { useMetaStore } from "@/stores/meta"
 import { useSessionStore } from "@/stores/session"
 import { apiList } from "@/lib/api"
+import { renderCellValue } from "@/lib/renderCell"
+import { createFormatter } from "@/lib/format"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Select } from "@/components/ui/select"
@@ -30,24 +32,6 @@ import { Skeleton } from "@/components/ui/skeleton"
 interface RowData {
   id: string
   [key: string]: unknown
-}
-
-// ── Field formatting (mirrors Table renderer conventions) ──
-
-function renderCellValue(value: unknown, widget?: string, format?: string) {
-  if (value == null) return <span className="text-muted-foreground">-</span>
-  if (widget === "boolean") return value ? "Yes" : "No"
-  if (format === "currency" && typeof value === "number") {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(value)
-  }
-  if (format === "date" && typeof value === "string") {
-    return new Date(value).toLocaleDateString()
-  }
-  if (typeof value === "object") return JSON.stringify(value)
-  return String(value)
 }
 
 // ── Resolve filter options from a field's enum values ──
@@ -70,6 +54,8 @@ export default function ListingRenderer({
   const spec = entry.spec
   const getEntity = useMetaStore((s) => s.getEntity)
   const getClient = useSessionStore((s) => s.getClient)
+  const settings = useMetaStore((s) => s.bundle?.settings)
+  const formatter = useMemo(() => createFormatter(settings), [settings])
 
   const entity = useMemo(() => {
     const ref = spec.entity
@@ -199,7 +185,12 @@ export default function ListingRenderer({
                 >
                   {columns.map((col) => (
                     <td key={col.field} className="border-t px-4 py-3">
-                      {renderCellValue(row[col.field], col.widget, col.format)}
+                      {renderCellValue(
+                        row[col.field],
+                        col.widget,
+                        col.format,
+                        formatter,
+                      )}
                     </td>
                   ))}
                 </tr>

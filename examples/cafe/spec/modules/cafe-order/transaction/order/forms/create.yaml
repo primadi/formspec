@@ -1,0 +1,39 @@
+# Form create untuk order — meng-override derived form:
+# - status disembunyikan (default open via entity, diubah lewat action settle/cancel)
+# - total_amount dihitung live client-side dari child items (FormSpecExpr)
+# - label eksplisit per field
+apiVersion: formspec.dev/v1
+kind: Form
+metadata:
+  name: order-create
+  module: cafe-order
+  description: "Form create pesanan kafe — drawer, child grid, total otomatis"
+spec:
+  entity: order
+  mode: create
+  render: { mode: drawer }
+  sections:
+    - title: "Pesanan"
+      fields:
+        - field: transaction_date
+          label: "Tanggal Pesanan"
+        - field: order_number
+          label: "No. Pesanan"
+          help: "Kode unik pesanan, contoh ORD-20260811-001"
+        - field: table_id
+          label: "Meja"
+        - field: member_id
+          label: "Anggota"
+        - field: items
+          label: "Item Pesanan"
+          widget: child-grid
+        - field: total_amount
+          label: "Total"
+          read_only: true
+          compute: "sum([i.quantity * i.unit_price for i in fields.items])"
+          visible_when: "fields.items != None and len(fields.items) > 0"
+        - field: note
+          label: "Catatan"
+  submit:
+    label: "Simpan Pesanan"
+    message: "Pesanan tersimpan"

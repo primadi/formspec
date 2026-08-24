@@ -329,6 +329,11 @@ export default function FormRenderer({
       } else if (!fixedId) {
         navigate(surfacePath(entity.module, entity.plural))
       }
+      // Global settings changed — refresh the meta bundle so `bundle.settings`
+      // reflects the new running value (auto-apply across the whole UI).
+      if (entity.module === "formspec.core" && entity.name === "app-setting") {
+        useMetaStore.getState().refresh(workspace, "app")
+      }
     } catch (err) {
       if (isEdit && err instanceof FormaApiError && err.status === 409) {
         handleConflict(data)
@@ -425,8 +430,8 @@ export default function FormRenderer({
                   if (!isVisible) return null
 
                   return (
-                    <div key={field.name} className="space-y-2.5">
-                      <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                    <div key={field.name} className="flex flex-col gap-2">
+                      <label className="text-sm font-medium leading-snug peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
                         {field.label ?? field.name}
                         {isRequired && (
                           <span className="text-destructive ml-0.5">*</span>
@@ -601,12 +606,16 @@ function FormFieldWidget({
       )
 
     case "number":
+    case "integer":
+    case "decimal":
       return (
         <NumberInput
           value={(value as number | null) ?? null}
           onChange={(v) => onChange(v)}
           placeholder={field.placeholder}
           readonly={readonly}
+          integer={entityField.type === "integer"}
+          scale={entityField.scale}
           min={
             entityField.rules?.find((r) => r.name === "min")?.value as
               | number
@@ -617,7 +626,6 @@ function FormFieldWidget({
               | number
               | undefined
           }
-          step={entityField.type === "integer" ? 1 : undefined}
           error={error}
         />
       )

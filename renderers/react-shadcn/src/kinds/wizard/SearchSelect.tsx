@@ -16,6 +16,7 @@ import { resolveEntityRef } from "@/engine/entityRef"
 import { apiList, apiPost } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { DateInput } from "@/widgets/DateInput"
 import { Select as ThemedSelect } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { toast } from "sonner"
@@ -33,14 +34,21 @@ interface SearchResult {
   [key: string]: unknown
 }
 
-export default function SearchSelect({ step, module, stepData, onSelect, getClient }: SearchSelectProps) {
+export default function SearchSelect({
+  step,
+  module,
+  stepData,
+  onSelect,
+  getClient,
+}: SearchSelectProps) {
   const [query, setQuery] = useState("")
   const [results, setResults] = useState<SearchResult[]>([])
   const [loading, setLoading] = useState(false)
   // Rehydrate from stepData on mount — covers both page refresh (autosaved
   // stepData restored from localStorage) and navigating back to this step.
   const [selected, setSelected] = useState<SearchResult | null>(
-    () => (stepData[step.entity ?? "selected"] as SearchResult | undefined) ?? null,
+    () =>
+      (stepData[step.entity ?? "selected"] as SearchResult | undefined) ?? null,
   )
   const [createOpen, setCreateOpen] = useState(false)
   const [formData, setFormData] = useState<Record<string, string>>({})
@@ -49,7 +57,9 @@ export default function SearchSelect({ step, module, stepData, onSelect, getClie
 
   // Look up the quick-create form spec from meta store
   const getForm = useMetaStore((s) => s.getForm)
-  const createForm: Entry<FormSpec> | undefined = step.form ? getForm(step.form) : undefined
+  const createForm: Entry<FormSpec> | undefined = step.form
+    ? getForm(step.form)
+    : undefined
 
   // Look up the entity schema from the meta store. step.entity is inline on
   // the wizard step, so it resolves relative to the wizard's own module.
@@ -57,34 +67,39 @@ export default function SearchSelect({ step, module, stepData, onSelect, getClie
   const [stepEntityModule, stepEntityName] = step.entity
     ? resolveEntityRef(step.entity, module)
     : ["", ""]
-  const entity = stepEntityName ? getEntity(stepEntityModule, stepEntityName) : undefined
+  const entity = stepEntityName
+    ? getEntity(stepEntityModule, stepEntityName)
+    : undefined
 
   // Derived: module for API path
   const moduleName = entity?.module ?? stepEntityModule
 
   // ── Search ──
 
-  const doSearch = useCallback(async (q: string) => {
-    if (!q.trim() || !step.search_fields?.length) {
-      setResults([])
-      return
-    }
+  const doSearch = useCallback(
+    async (q: string) => {
+      if (!q.trim() || !step.search_fields?.length) {
+        setResults([])
+        return
+      }
 
-    setLoading(true)
-    try {
-      const client = getClient()
-      const path = `${moduleName}/${stepEntityName}`
-      const { items } = await apiList<SearchResult>(client, path, {
-        search: q.trim(),
-        per_page: "10",
-      })
-      setResults(items ?? [])
-    } catch {
-      setResults([])
-    } finally {
-      setLoading(false)
-    }
-  }, [moduleName, stepEntityName, step.search_fields, getClient])
+      setLoading(true)
+      try {
+        const client = getClient()
+        const path = `${moduleName}/${stepEntityName}`
+        const { items } = await apiList<SearchResult>(client, path, {
+          search: q.trim(),
+          per_page: "10",
+        })
+        setResults(items ?? [])
+      } catch {
+        setResults([])
+      } finally {
+        setLoading(false)
+      }
+    },
+    [moduleName, stepEntityName, step.search_fields, getClient],
+  )
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
@@ -165,10 +180,9 @@ export default function SearchSelect({ step, module, stepData, onSelect, getClie
         return (
           <div key={field.name} className="space-y-2.5">
             <label className="text-sm font-medium">{label}</label>
-            <Input
-              type="date"
+            <DateInput
               value={value}
-              onChange={(e) => setFormData((d) => ({ ...d, [field.name]: e.target.value }))}
+              onChange={(v) => setFormData((d) => ({ ...d, [field.name]: v }))}
             />
           </div>
         )
@@ -194,11 +208,17 @@ export default function SearchSelect({ step, module, stepData, onSelect, getClie
               id={`field-${field.name}`}
               checked={value === "true"}
               onChange={(e) =>
-                setFormData((d) => ({ ...d, [field.name]: e.target.checked ? "true" : "false" }))
+                setFormData((d) => ({
+                  ...d,
+                  [field.name]: e.target.checked ? "true" : "false",
+                }))
               }
               className="size-4 rounded border border-input"
             />
-            <label htmlFor={`field-${field.name}`} className="text-sm font-medium">
+            <label
+              htmlFor={`field-${field.name}`}
+              className="text-sm font-medium"
+            >
               {label}
             </label>
           </div>
@@ -213,7 +233,9 @@ export default function SearchSelect({ step, module, stepData, onSelect, getClie
               type="number"
               step={fieldType === "decimal" ? "0.01" : "1"}
               value={value}
-              onChange={(e) => setFormData((d) => ({ ...d, [field.name]: e.target.value }))}
+              onChange={(e) =>
+                setFormData((d) => ({ ...d, [field.name]: e.target.value }))
+              }
             />
           </div>
         )
@@ -224,7 +246,9 @@ export default function SearchSelect({ step, module, stepData, onSelect, getClie
             <Input
               placeholder={field.placeholder}
               value={value}
-              onChange={(e) => setFormData((d) => ({ ...d, [field.name]: e.target.value }))}
+              onChange={(e) =>
+                setFormData((d) => ({ ...d, [field.name]: e.target.value }))
+              }
             />
           </div>
         )
@@ -238,13 +262,22 @@ export default function SearchSelect({ step, module, stepData, onSelect, getClie
         <div className="flex items-center gap-3 rounded-md border border-primary/30 bg-primary/5 p-3">
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium truncate">
-              {selected[step.search_fields?.[0] ?? "name"] as string ?? "Selected"}
+              {(selected[step.search_fields?.[0] ?? "name"] as string) ??
+                "Selected"}
             </p>
             <p className="text-xs text-muted-foreground truncate">
-              {step.search_fields?.slice(1).map((f) => `${f}: ${selected[f] ?? "-"}`).join(" · ")}
+              {step.search_fields
+                ?.slice(1)
+                .map((f) => `${f}: ${selected[f] ?? "-"}`)
+                .join(" · ")}
             </p>
           </div>
-          <Button variant="ghost" size="sm" onClick={handleClear} className="shrink-0">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleClear}
+            className="shrink-0"
+          >
             <span className="text-xs">Change</span>
           </Button>
           <Check className="size-4 text-primary shrink-0" />
@@ -275,7 +308,9 @@ export default function SearchSelect({ step, module, stepData, onSelect, getClie
             <div className="rounded-md border divide-y max-h-60 overflow-y-auto">
               {results.map((item) => (
                 <button
-                  key={item.id ?? String(item[step.search_fields?.[0] ?? "name"])}
+                  key={
+                    item.id ?? String(item[step.search_fields?.[0] ?? "name"])
+                  }
                   type="button"
                   onClick={() => handleSelect(item)}
                   className="w-full text-left px-3 py-2.5 text-sm hover:bg-muted transition-colors cursor-pointer"
@@ -283,13 +318,17 @@ export default function SearchSelect({ step, module, stepData, onSelect, getClie
                   <p className="font-medium">
                     {step.search_fields?.map((f, i) => (
                       <span key={f}>
-                        {i > 0 && <span className="text-muted-foreground mx-1">·</span>}
+                        {i > 0 && (
+                          <span className="text-muted-foreground mx-1">·</span>
+                        )}
                         {highlightField(item, f)}
                       </span>
                     ))}
                   </p>
                   {item.description ? (
-                    <p className="text-xs text-muted-foreground mt-0.5">{String(item.description)}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {String(item.description)}
+                    </p>
                   ) : null}
                 </button>
               ))}
@@ -317,7 +356,8 @@ export default function SearchSelect({ step, module, stepData, onSelect, getClie
               <Dialog open={createOpen} onOpenChange={setCreateOpen}>
                 <DialogContent className="sm:max-w-lg">
                   <DialogTitle className="text-lg font-semibold">
-                    {createForm?.spec.sections[0]?.title ?? "Daftarkan Pasien Baru"}
+                    {createForm?.spec.sections[0]?.title ??
+                      "Daftarkan Pasien Baru"}
                   </DialogTitle>
 
                   {createForm ? (
@@ -344,7 +384,9 @@ export default function SearchSelect({ step, module, stepData, onSelect, getClie
                           Batal
                         </Button>
                         <Button type="submit" disabled={creating}>
-                          {creating && <Loader2 className="size-4 animate-spin" />}
+                          {creating && (
+                            <Loader2 className="size-4 animate-spin" />
+                          )}
                           {createForm.spec.submit?.label ?? "Simpan"}
                         </Button>
                       </div>

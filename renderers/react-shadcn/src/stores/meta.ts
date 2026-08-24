@@ -24,6 +24,7 @@ import {
   type ThemeSpec,
   type ListingSpec,
   type AppSummary,
+  type Settings,
 } from "@/types/manifest"
 import { fetchMetaBundle, fetchMetaApps } from "@/lib/api"
 import { notifySessionExpired } from "@/lib/api/sessionEvents"
@@ -101,6 +102,8 @@ export interface MetaState {
   getDerivedEntities: () => EntitySchema[]
   /** Get all entities grouped by module */
   getEntitiesByModule: () => Map<string, EntitySchema[]>
+  /** Get the resolved global settings namespace (spec §10). Never null once loaded. */
+  getSettings: () => Settings | undefined
 }
 
 function createLookups(bundle: MetaBundle) {
@@ -304,6 +307,8 @@ export const useMetaStore = create<MetaState>((set, get) => ({
   getTheme: (name: string) => getOrBuildLookups(get().bundle)?.themes.get(name),
   getListing: (name: string) =>
     getOrBuildLookups(get().bundle)?.listings.get(name),
+
+  getSettings: () => get().bundle?.settings,
 
   getDerivedEntities: () => {
     const bundle = get().bundle

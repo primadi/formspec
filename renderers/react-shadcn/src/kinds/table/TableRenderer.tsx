@@ -54,10 +54,12 @@ import {
 } from "@/lib/filters"
 import { useSelectFilterOptions } from "@/hooks/useSelectFilterOptions"
 import { useRealtime } from "@/hooks/useRealtime"
+import { renderCellValue } from "@/lib/renderCell"
+import { createFormatter } from "@/lib/format"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { DateInput } from "@/widgets/DateInput"
 import { Select } from "@/components/ui/select"
-import { Badge } from "@/widgets/Badge"
 import { cn, titleCase } from "@/lib/utils"
 import { resolveIcon } from "@/lib/icon-resolver"
 import ConfirmDialog from "@/components/ui/confirm-dialog"
@@ -91,6 +93,12 @@ export default function TableRenderer({
   const me = useSessionStore((s) => s.me)
   const getClient = useSessionStore((s) => s.getClient)
   const metaBundle = useMetaStore((s) => s.bundle)
+
+  // Resolved global settings → centralized formatter (spec §10).
+  const formatter = useMemo(
+    () => createFormatter(metaBundle?.settings),
+    [metaBundle?.settings],
+  )
 
   // Find an authored form for this entity + mode to check render mode.
   const authoredForm = useMemo(() => {
@@ -301,13 +309,13 @@ export default function TableRenderer({
         enableSorting: col.sortable ?? true,
         cell: ({ getValue }) => {
           const value = getValue()
-          return renderCellValue(value, col.widget, col.format)
+          return renderCellValue(value, col.widget, col.format, formatter)
         },
       })
     }
 
     return cols
-  }, [tableSpec.columns, hasBulkActions])
+  }, [tableSpec.columns, hasBulkActions, formatter])
 
   // TanStack table
   const table = useReactTable({
@@ -688,47 +696,6 @@ export default function TableRenderer({
 
 // ── Helpers ──
 
-function renderCellValue(value: unknown, widget?: string, format?: string) {
-  if (value == null) return <span className="text-muted-foreground">-</span>
-
-  if (widget === "badge") {
-    return <Badge value={String(value)} />
-  }
-
-  if (widget === "boolean") {
-    return value ? "Yes" : "No"
-  }
-
-  if (format === "currency" && typeof value === "number") {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(value)
-  }
-
-  if (format === "date" && typeof value === "string") {
-    return new Date(value).toLocaleDateString()
-  }
-
-  if (format === "relative" && typeof value === "string") {
-    const d = new Date(value)
-    const now = new Date()
-    const diff = now.getTime() - d.getTime()
-    const mins = Math.floor(diff / 60000)
-    if (mins < 1) return "Just now"
-    if (mins < 60) return `${mins}m ago`
-    const hours = Math.floor(mins / 60)
-    if (hours < 24) return `${hours}h ago`
-    const days = Math.floor(hours / 24)
-    if (days < 7) return `${days}d ago`
-    return d.toLocaleDateString()
-  }
-
-  if (typeof value === "object") return JSON.stringify(value)
-
-  return String(value)
-}
-
 /**
  * Check if a table action can be performed on a given row based on the
  * entity's state machine. Actions not declared in any transition (e.g.
@@ -853,11 +820,9 @@ function FilterControl({
     case "date":
     case "date_range": {
       return (
-        <Input
-          type="date"
-          placeholder={filter.label}
+        <DateInput
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={onChange}
           className="h-8 w-40 text-xs"
         />
       )

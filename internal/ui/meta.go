@@ -70,6 +70,9 @@ type AppContext struct {
 	PersistBackend string
 	Modules        map[string]bool
 	Menu           []spec.MenuItem
+	// Settings is the resolved global presentation/config namespace (spec §10).
+	// Always non-nil — resolved with standard defaults by the caller.
+	Settings *spec.Settings
 }
 
 // allows reports whether a manifest belonging to module may ship in this
@@ -101,6 +104,9 @@ type Bundle struct {
 	Prints     []*Entry[spec.PrintSpec]     `json:"prints"`
 	Themes     []*Entry[spec.ThemeSpec]     `json:"themes"`
 	Listings   []*Entry[spec.ListingSpec]   `json:"listings"`
+	// Settings is the resolved global presentation/config namespace (spec §10).
+	// Always present (resolved with standard defaults) so renderers never guess.
+	Settings *spec.Settings `json:"settings"`
 }
 
 // PermissionChecker reports whether the caller holds a permission
@@ -161,6 +167,7 @@ func (r *Registry) BuildBundle(entities EntityLister, can PermissionChecker, app
 		Prints:     []*Entry[spec.PrintSpec]{},
 		Themes:     []*Entry[spec.ThemeSpec]{},
 		Listings:   []*Entry[spec.ListingSpec]{},
+		Settings:   appCtx.Settings,
 	}
 
 	visible := map[string]bool{} // "module/name" → caller can see entity

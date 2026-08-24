@@ -29,6 +29,7 @@ type RouterBuilder struct {
 	webFS         fs.FS  // embedded SPA (embed.FS); empty = no static serving
 	hub           *WSHub
 	apps          map[string]*formspec_app.ResolvedApp // resolved kind: App manifests, keyed by name (Core §4.4)
+	settings      *spec.Settings                       // resolved global settings namespace (spec §10)
 	specVersionFn func() int64                         // returns the current spec version (for Meta API polling)
 }
 
@@ -92,6 +93,13 @@ func (b *RouterBuilder) SetUIRegistry(r *ui.Registry) {
 // by the `app` query param / their own root_url (Core §4.4).
 func (b *RouterBuilder) SetApps(apps map[string]*formspec_app.ResolvedApp) {
 	b.apps = apps
+}
+
+// SetSettings wires the resolved global settings namespace (spec §10). It is
+// exposed on every /_meta/ui bundle so renderers read formatting/presentation
+// defaults instead of guessing per component.
+func (b *RouterBuilder) SetSettings(s *spec.Settings) {
+	b.settings = s
 }
 
 // publicEntities returns the set of "module/entity" keys mounted by any

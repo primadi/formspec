@@ -1,6 +1,6 @@
 # Master Plan: FormSpec Implementation
 
-**Last Updated**: 2026-08-22  
+**Last Updated**: 2026-08-24  
 **Status**: ✅ Fase 0 complete · ✅ Fase 1 (1.1–1.5) · ✅ Fase 2.1 · ✅ Fase 2.2 · ✅ Fase 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6) · ✅ Fase 2.7 (idempotency prepare flow) · ✅ Fase 2.8 (spec.expose) · ✅ Fase 2.9 (2.9.1–2.9.3: ctx.\* primitives + dev auto-provision) · ✅ Fase 5 (5.1–5.4) · ✅ Spec hot-reload · ✅ Fase 11 (review schema↔docs) · ✅ Audit spec↔schema + tambah TODO item · ✅ `formspec validate` (3.1.1, engine+schema) · ✅ Rename forma→formspec (docs/plan/rename-formspec.md) · 🚧 Fase 12 Domain Infrastruktur (docs/architecture/09-domain-map.md) · ✅ Schema registry online (docs/plan/schema-registry-online.md) · ✅ CLI repl/seed/diff (3.4.1, 3.6.2, 3.6.3) · ✅ **Fase 4 (4.1–4.10) complete** (incl. 4.3.1–4.3.5 entity extension, 4.8.3 restore remap) · ✅ Landing page (5.1.3 + 5.13.5, docs/plan/landing-page.md) · ✅ App renderer archetypes (5.1.1–5.1.3: sidebar-nav/topnav/no-nav + access + persist_backend, docs/plan/landing-page.md) · ✅ **Fase 6.1 (6.1.1–6.1.3: login + token, entity-backed auth, external/ merge, generate-auth)** (docs/plan/auth-login-token.md) · ✅ **6.3.1 + 6.3.2 + 5.12.5 (role + role-assignment Entity, materialisasi grant page → permission)** (docs/changelog/2026-08-20-001) · ✅ **6.2.3 (wire permission check semua handler, surface-aware 404)** (docs/changelog/2026-08-20-002) · ✅ **Fase 6 COMPLETE (6.1–6.9, dogfooding auth module)** (docs/plan/fase6-dogfooding-auth-module.md, changelog 2026-08-20-003 s/d 2026-08-21-014)
 
 > `⬜` not started · `✅` complete · `⏸️` deferred
@@ -53,6 +53,29 @@ namespace `formspec.core`) yang bisa di-merge ke project lain via `external/`
 atau `spec/modules/`. `formspec.core` dipindah dari registrasi programatik Go ke
 YAML manifests; middleware tetap Go. Plan: `docs/plan/fase6-dogfooding-auth-module.md`.
 Demo merge: `verticals/reference-app` + `examples/Clinic-UI-Showcase`.
+
+**Catatan 2026-08-24**: **Global Settings Config** selesai — namespace
+`settings.*` (spec §10 "jangan pernah menebak") diimplementasikan sebagai
+kontrak berlaku: `Settings`/`CurrencySettings` di `pkg/spec`, di-resolve dari
+`kind: Config` manifest, dikirim via `/meta/ui` bundle, dan dipakai util
+format terpusat `lib/format.ts` di frontend (money/date/number/relative).
+Semua hard-code format per komponen (`en-US`/`USD` vs `id-ID`/`IDR`) di-refactor
+ke formatter. Contoh: `examples/cafe/spec/modules/formspec.core/config.yaml`.
+Plan: `docs/plan/global-settings-config.md` · changelog: `2026-08-24-008`.
+Follow-up: menu sidebar kategori **"Global"** (Akses User dan Peran +
+Pengaturan) + halaman settings (`examples/cafe/spec/modules/formspec.core/
+pages/settings.yaml`) — changelog `2026-08-24-009`.
+
+**Catatan 2026-08-24**: **Date input global format + runtime settings** selesai —
+`DateInput` di-rewrite (overlay native picker) agar tampil sesuai global
+`date_format`; 3 input tanggal mentah (Kanban/Table filter, Wizard) diganti
+`DateInput`. Global settings kini **runtime-editable**: Entity `app-setting`
+(characteristic: reference, natural key "global") menyimpan running value di
+DB; backend merge ke `bundle.settings`; halaman Pengaturan = Configuration
+Page (Form edit); auto-apply via refresh meta setelah save. Fix bug widget
+resolution integer/decimal di FormRenderer. Plan:
+`docs/plan/date-input-global-format-runtime-settings.md` · changelog:
+`2026-08-24-010`.
 
 ---
 
@@ -794,10 +817,45 @@ di tabel Deferred di bawah, jadi Fase ini realistis baru mulai setelah salah sat
 - [x] 10.0.3 Guide `docs/guides/agent-assisted-app-development.md` + index
 - [x] 10.0.4 Contoh `examples/cafe/` (16 manifest, 0 problem) — dibangun lewat alur ini
 
-### 10.1 `formspec mcp-serve` — subcommand Go baru
+### 10.0.5 Cafe Order — child items UX (auto-fill, read_only, dropdown) ✅
 
-- [ ] 10.1.1 Subcommand `formspec mcp-serve` — expose `formspec-local-mcp` lewat stdio, pembungkus tipis `formspec-core` (`docs/ai/03-formspec-local-mcp.md`)
-- [ ] 10.1.2 Tool read-only: `list_kind_schemas(kind)`, `read_workspace_manifest()`, `list_installed_modules()`, `read_module_spec(module,kind,name)` (03 §1); untuk modul `vendors/` hanya ekstraksi field metadata, bukan dump mentah spec (02 §2, 04 §3.1)
+> Lanjutan `examples/cafe` order form (`order-create`, widget `child-grid`).
+> Plan: `docs/plan/cafe-order-child-autofill-readonly-dropdown.md`; changelog
+> `docs/changelog/2026-08-24-001`.
+
+- [x] 10.0.5.1 `auto_fill` client-side — child field `unit_price` auto-fill dari
+      `menu_item_id → price` (record lengkap dari RelationPicker via `onSelectRecord`);
+      clear relation → target ikut kosong. `pkg/spec` `AutoFillDecl` + `Field.AutoFill`.
+- [x] 10.0.5.2 `read_only` pada child field — `Field.ReadOnly` (Go+TS),
+      `ChildTable.isCellReadonly` menghormatinya; `unit_price` selalu read-only
+      (tanpa `readonly_when`).
+- [x] 10.0.5.3 Dropdown RelationPicker tidak terpotong — portal ke `<body>`
+      (`position: fixed`, anchor bounding rect) + flip ke atas saat ruang bawah
+      kurang; reposisi pada scroll/resize.
+- [x] 10.0.5.4 Schema — `AutoFillDecl` masuk `sharedTypes` generator;
+      `make generate-schema` (125 shared defs); `formspec validate` tetap hijau.
+- [x] 10.0.5.5 Fix integer input menerima pecahan — `ChildTable` + `NumberInput`
+      blokir `.`/`,`/`e`/`E` (keydown) + `step={1}` + strip desimal saat paste;
+      `quantity` (integer) tidak bisa diisi pecahan lagi.
+- [x] 10.0.5.6 `NumberInput` bedakan integer vs decimal via prop eksplisit
+      `integer` (bukan inferensi dari `step` yang tidak konsisten) — fix decimal
+      ter-truncate ke integer; `precision` kini dipakai untuk step decimal.
+- [x] 10.0.5.7 Decimal `scale` membatasi input pecahan — `Field.Scale`/`Precision`
+      (Go+TS+schema, 05-field-types.md §1.2); `NumberInput` prop `precision`→`scale`,
+      round ke `scale` desimal saat change/paste + blokir digit berlebih di keydown;
+      `FormRenderer` kirim `scale={entityField.scale}`.
+- [x] 10.0.5.8 `ChildTable` pakai `NumberInput` untuk child integer/decimal —
+      `scale` kini berlaku di child field (mis. `quantity: decimal, scale: 2` →
+      step 0.01, input dibatasi 2 desimal); logika duplikat dihapus.
+- [x] 10.0.5.9 Fix select-all + ketik di `NumberInput` (scale) terblokir —
+      `type="number"` tidak expose `selectionStart` (null), jadi blokir keydown
+      berbasis scale salah memblokir replace; blokir scale dihapus, pembatasan
+      ditangani sanitize-on-change (`toFixed`).
+- [x] 10.0.5.10 `NumberInput` spinner hormati `min`/`max` + flag merah
+      out-of-range — prop `positive` (rule spec `> 0`); boundary spinner =
+      langkah positif terkecil; nilai di luar range di-flag merah (border+teks+
+      tooltip), bukan di-ignore/clamp; `ChildTable` kirim `min`/`max`/`positive`
+      dari rules.
 - [ ] 10.1.3 Tool `propose_spec_file(path,content)` — tulis draft ke sesi + jalankan `validate_spec` otomatis (03 §2)
 - [ ] 10.1.4 Tool `apply_draft(session,file)` — pindahkan draft ke lokasi asli, guard read-only `vendors/` (03 §4)
 - [ ] 10.1.5 Tool `validate_spec(yaml)` / `check_naming_conflict(name)` — reuse package sama dengan `formspec apply --dry-run`/boot `formspec-server`, bukan reimplementasi (03 §3)

@@ -9,15 +9,21 @@ import { useState, useMemo, useCallback } from "react"
 import { Download, Loader2, FileSpreadsheet } from "lucide-react"
 import { toast } from "sonner"
 
-import type { Entry, ReportSpec, ReportParam, Field, ListResponseMeta } from "@/types/manifest"
+import type {
+  Entry,
+  ReportSpec,
+  ReportParam,
+  Field,
+  ListResponseMeta,
+} from "@/types/manifest"
 import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
 import { resolveEntityRef } from "@/engine/entityRef"
 import { apiList, buildListParams } from "@/lib/api"
+import { createFormatter, type Formatter } from "@/lib/format"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { RelationPicker } from "@/widgets/RelationPicker"
-
 
 interface ReportRendererProps {
   entry: Entry<ReportSpec>
@@ -26,6 +32,8 @@ interface ReportRendererProps {
 export default function ReportRenderer({ entry }: ReportRendererProps) {
   const getClient = useSessionStore((s) => s.getClient)
   const getEntity = useMetaStore((s) => s.getEntity)
+  const settings = useMetaStore((s) => s.bundle?.settings)
+  const formatter = useMemo(() => createFormatter(settings), [settings])
 
   const [data, setData] = useState<Record<string, unknown>[]>([])
   const [loading, setLoading] = useState(false)
@@ -76,7 +84,9 @@ export default function ReportRenderer({ entry }: ReportRendererProps) {
     if (!entry.spec.groups?.length) return null
     const grouped = new Map<string, Record<string, unknown>[]>()
     for (const item of data) {
-      const key = entry.spec.groups!.map((g) => String(item[g.field] ?? "")).join(" · ")
+      const key = entry.spec
+        .groups!.map((g) => String(item[g.field] ?? ""))
+        .join(" · ")
       const list = grouped.get(key) ?? []
       list.push(item)
       grouped.set(key, list)
@@ -99,9 +109,15 @@ export default function ReportRenderer({ entry }: ReportRendererProps) {
         }
       }
       switch (total.fn) {
-        case "sum": result[total.field] = sum; break
-        case "avg": result[total.field] = count > 0 ? sum / count : 0; break
-        case "count": result[total.field] = count; break
+        case "sum":
+          result[total.field] = sum
+          break
+        case "avg":
+          result[total.field] = count > 0 ? sum / count : 0
+          break
+        case "count":
+          result[total.field] = count
+          break
         case "min": {
           let min = Infinity
           for (const item of data) {
@@ -130,7 +146,9 @@ export default function ReportRenderer({ entry }: ReportRendererProps) {
     const cols = entry.spec.columns
     const header = cols.map((c) => `"${c.label || c.field}"`).join(",")
     const rows = data.map((item) =>
-      cols.map((c) => `"${String(item[c.field] ?? "").replace(/"/g, '""')}"`).join(","),
+      cols
+        .map((c) => `"${String(item[c.field] ?? "").replace(/"/g, '""')}"`)
+        .join(","),
     )
     const csv = [header, ...rows].join("\n")
 
@@ -149,7 +167,9 @@ export default function ReportRenderer({ entry }: ReportRendererProps) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">{entry.spec.title}</h1>
+          <h1 className="text-2xl font-bold tracking-tight">
+            {entry.spec.title}
+          </h1>
           {meta && (
             <p className="text-sm text-muted-foreground">{meta.total} rows</p>
           )}
@@ -188,9 +208,7 @@ export default function ReportRenderer({ entry }: ReportRendererProps) {
             ))}
           </div>
           <Button onClick={fetchReport} disabled={loading}>
-            {loading ? (
-              <Loader2 className="size-4 mr-1 animate-spin" />
-            ) : null}
+            {loading ? <Loader2 className="size-4 mr-1 animate-spin" /> : null}
             {executed ? "Refresh" : "Generate Report"}
           </Button>
         </div>
@@ -249,7 +267,12 @@ export default function ReportRenderer({ entry }: ReportRendererProps) {
                           >
                             {entry.spec.columns.map((col) => (
                               <td key={col.field} className="p-3 align-middle">
-                                {formatReportValue(item[col.field], col.format, col.aggregate)}
+                                {formatReportValue(
+                                  item[col.field],
+                                  col.format,
+                                  col.aggregate,
+                                  formatter,
+                                )}
                               </td>
                             ))}
                           </tr>
@@ -265,7 +288,12 @@ export default function ReportRenderer({ entry }: ReportRendererProps) {
                     >
                       {entry.spec.columns.map((col) => (
                         <td key={col.field} className="p-3 align-middle">
-                          {formatReportValue(item[col.field], col.format, col.aggregate)}
+                          {formatReportValue(
+                            item[col.field],
+                            col.format,
+                            col.aggregate,
+                            formatter,
+                          )}
                         </td>
                       ))}
                     </tr>
@@ -275,7 +303,10 @@ export default function ReportRenderer({ entry }: ReportRendererProps) {
                 {/* Totals row */}
                 {totals && (
                   <tr className="border-t-2 font-medium bg-muted/30">
-                    <td className="p-3 text-sm" colSpan={entry.spec.columns.length}>
+                    <td
+                      className="p-3 text-sm"
+                      colSpan={entry.spec.columns.length}
+                    >
                       {/* Place totals in matching columns */}
                     </td>
                   </tr>
@@ -344,22 +375,26 @@ function ReportParamInput({
   )
 }
 
-function formatReportValue(value: unknown, format?: string, _aggregate?: string) {
+function formatReportValue(
+  value: unknown,
+  format?: string,
+  _aggregate?: string,
+  fmt?: Formatter,
+) {
   if (value == null) return <span className="text-muted-foreground">-</span>
 
+  const formatter = fmt ?? createFormatter()
+
   if (format === "currency" && typeof value === "number") {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(value)
+    return formatter.money(value)
   }
 
   if (format === "date" && typeof value === "string") {
-    return new Date(value).toLocaleDateString()
+    return formatter.date(value)
   }
 
   if (format === "datetime" && typeof value === "string") {
-    return new Date(value).toLocaleString()
+    return formatter.dateTime(value)
   }
 
   if (format === "percentage" && typeof value === "number") {

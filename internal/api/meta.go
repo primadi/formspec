@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/primadi/formspec/internal/ui"
 	"github.com/primadi/formspec/pkg/spec"
+	db "github.com/primadi/formspec/renderers/jsonb-persist"
 )
 
 // ─── Meta API (Frontend Spec §1.1, design doc §4.2) ───
@@ -116,7 +118,70 @@ func (b *RouterBuilder) resolveAppContext(r *http.Request) (ui.AppContext, strin
 		PersistBackend: resolved.Spec.PersistBackend,
 		Modules:        resolved.Modules,
 		Menu:           resolved.Menu,
+		Settings:       b.mergeRunningSettings(r.Context(), b.settings),
 	}, ""
+}
+
+// mergeRunningSettings overlays the `app-setting` entity's running value over
+// the manifest-declared settings (spec §10 Configuration Page pattern). The
+// manifest `settings:` (kind: Config) is the default; the DB record is the
+// admin-editable running value. Empty entity fields fall back to the manifest
+// value, so the record only needs to store what the admin actually changed.
+//
+// The record is auto-created on first access via HandleFind's find-or-create
+// (natural key "global"); until then (or if the entity isn't mounted) the
+// manifest settings apply unchanged.
+func (b *RouterBuilder) mergeRunningSettings(ctx context.Context, base *spec.Settings) *spec.Settings {
+	if base == nil {
+		base = spec.DefaultSettings()
+	}
+	store, err := b.registry.GetEntityStore("formspec.core", "app-setting")
+	if err != nil {
+		return base
+	}
+	rec, err := store.GetByID(ctx, db.GetByIDParams{
+		WorkspaceID: workspaceFromContext(ctx),
+		ID:          "global",
+	})
+	if err != nil || rec == nil {
+		return base
+	}
+
+	out := spec.ResolveSettings(base)
+	data := rec.Data
+	if out.Currency == nil {
+		out.Currency = &spec.CurrencySettings{}
+	}
+	if v, ok := data["currency_code"].(string); ok && v != "" {
+		out.Currency.Code = v
+	}
+	if v, ok := data["currency_decimal_places"]; ok {
+		if f, isNum := v.(float64); isNum {
+			iv := int(f)
+			out.Currency.DecimalPlaces = &iv
+		}
+	}
+	if v, ok := data["currency_symbol"].(string); ok && v != "" {
+		out.Currency.Symbol = v
+	}
+	if v, ok := data["locale"].(string); ok && v != "" {
+		out.Locale = v
+	}
+	if v, ok := data["timezone"].(string); ok && v != "" {
+		out.Timezone = v
+	}
+	if v, ok := data["date_format"].(string); ok && v != "" {
+		out.DateFormat = v
+	}
+	if v, ok := data["decimal_scale"]; ok {
+		if f, isNum := v.(float64); isNum {
+			out.DecimalScale = int(f)
+		}
+	}
+	if v, ok := data["rounding"].(string); ok && v != "" {
+		out.Rounding = v
+	}
+	return out
 }
 
 // adminAccessPermission gates the `_admin` surface (Core §4.4 discussion):

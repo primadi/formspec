@@ -30,7 +30,14 @@ spec:
           view: sales-recap-report
     - type: module
       module: cafe-master
-    - label: "Access Management"
-      icon: "shield"
-      module: formspec.core
-      route: /access-management
+    - label: "Global"
+      icon: "globe"
+      children:
+        - label: "Akses User dan Peran"
+          icon: "shield"
+          module: formspec.core
+          route: /access-management
+        - label: "Pengaturan"
+          icon: "settings"
+          module: formspec.core
+          route: /settings

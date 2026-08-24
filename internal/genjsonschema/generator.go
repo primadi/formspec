@@ -26,7 +26,7 @@ func (c *Converter) Generate(collect *CollectResult) *GenerateResult {
 		"Metadata", "Field", "Action", "ImplDecl", "StateMachine",
 		"EventDecl", "TransitionDecl", "GuardDecl", "StateDecl",
 		"MenuDecl", "MenuItem", "ValidationRule", "RelationDecl",
-		"ChildDecl", "ComputedDecl", "IndexDecl", "UsesDecl",
+		"ChildDecl", "ComputedDecl", "AutoFillDecl", "IndexDecl", "UsesDecl",
 		"ParamsDecl", "ConditionDecl", "HookDecl", "IdempotencyDecl",
 		"EntityAuth", "ExposeConfig", "RateLimitSpec",
 		"ActionUIHint", "FilterSpec", "FormSection", "FormField", "FormAction", "FormSubmit", "FormRenderDecl",
@@ -44,7 +44,8 @@ func (c *Converter) Generate(collect *CollectResult) *GenerateResult {
 		// Kind-specific sub-types referenced via $ref from kind specs
 		"ApiGRPCConfig", "ApiRESTConfig",
 		"DatastoreAccess", "DatastoreConnection", "DatastoreAccessFilter", "DatastorePermission", "DatastorePool", "DatastorePermissionRule",
-		"ConfigKey", // map value type for ConfigSpec.Keys
+		"ConfigKey",                    // map value type for ConfigSpec.Keys
+		"Settings", "CurrencySettings", // global settings namespace (spec §10)
 		"Dependency",
 		"AiIndexDecl", "AppInterface", "AppConsume",
 		"EnvironmentPlane", "PolicyApproval",

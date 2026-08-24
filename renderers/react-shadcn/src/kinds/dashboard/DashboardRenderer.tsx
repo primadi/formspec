@@ -7,13 +7,20 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { Loader2 } from "lucide-react"
-import type { Entry, DashboardSpec, WidgetLayout, WidgetSpec, FilterOpValue } from "@/types/manifest"
+import type {
+  Entry,
+  DashboardSpec,
+  WidgetLayout,
+  WidgetSpec,
+  FilterOpValue,
+} from "@/types/manifest"
 import { useMetaStore } from "@/stores/meta"
 import { useSessionStore } from "@/stores/session"
 import { can as checkPermission } from "@/engine/permissions"
 import { resolveEntityRef } from "@/engine/entityRef"
 import { apiList, buildListParams } from "@/lib/api"
 import { useRealtime } from "@/hooks/useRealtime"
+import { createFormatter, type Formatter } from "@/lib/format"
 import { Badge } from "@/widgets/Badge"
 
 interface DashboardRendererProps {
@@ -35,7 +42,10 @@ export default function DashboardRenderer({ entry }: DashboardRendererProps) {
         .filter((w) => {
           if (!w.meta?.spec.entity) return true
           if (!me) return false
-          const [module, name] = resolveEntityRef(w.meta.spec.entity, w.meta.module)
+          const [module, name] = resolveEntityRef(
+            w.meta.spec.entity,
+            w.meta.module,
+          )
           const perm = `${module}.${getEntity(module, name)?.plural ?? "list"}`
           return checkPermission(perm, me.permissions)
         }),
@@ -45,9 +55,13 @@ export default function DashboardRenderer({ entry }: DashboardRendererProps) {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">{entry.spec.title}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">
+          {entry.spec.title}
+        </h1>
         {entry.spec.description && (
-          <p className="text-sm text-muted-foreground">{entry.spec.description}</p>
+          <p className="text-sm text-muted-foreground">
+            {entry.spec.description}
+          </p>
         )}
       </div>
 
@@ -76,7 +90,11 @@ function DashboardWidgetCard({
   meta,
   realtime,
 }: {
-  placement: { ref: string; layout: WidgetLayout; config?: Record<string, unknown> }
+  placement: {
+    ref: string
+    layout: WidgetLayout
+    config?: Record<string, unknown>
+  }
   meta?: import("@/types/manifest").Entry<import("@/types/manifest").WidgetSpec>
   realtime?: boolean
 }) {
@@ -91,9 +109,7 @@ function DashboardWidgetCard({
     >
       <div className="border-b px-4 py-2 flex items-center justify-between">
         <h3 className="text-sm font-medium">{spec?.title ?? placement.ref}</h3>
-        {spec?.type && (
-          <Badge value={spec.type} />
-        )}
+        {spec?.type && <Badge value={spec.type} />}
       </div>
       <div className="p-4">
         <WidgetBody spec={spec} module={meta?.module} realtime={realtime} />
@@ -121,15 +137,27 @@ function WidgetBody({
 
   switch (spec.type) {
     case "metric":
-      return <MetricWidget spec={spec} module={module ?? ""} realtime={realtime} />
+      return (
+        <MetricWidget spec={spec} module={module ?? ""} realtime={realtime} />
+      )
     case "chart":
-      return <ChartWidget spec={spec} module={module ?? ""} realtime={realtime} />
+      return (
+        <ChartWidget spec={spec} module={module ?? ""} realtime={realtime} />
+      )
     case "list":
       return <ListWidget spec={spec} />
     case "table":
-      return <p className="text-sm text-muted-foreground">Table widget (Fase 4.F6)</p>
+      return (
+        <p className="text-sm text-muted-foreground">
+          Table widget (Fase 4.F6)
+        </p>
+      )
     default:
-      return <p className="text-sm text-muted-foreground">Unknown widget type: {spec.type}</p>
+      return (
+        <p className="text-sm text-muted-foreground">
+          Unknown widget type: {spec.type}
+        </p>
+      )
   }
 }
 
@@ -138,14 +166,26 @@ function WidgetBody({
 // Fetches spec.entity's records, applies spec.query (a small subset of
 // FormSpecExpr — see applySimpleQuery below), and aggregates spec.config.field
 // per spec.config.aggregate. Re-fetches every spec.refresh_secs.
-function MetricWidget({ spec, module, realtime }: { spec: WidgetSpec; module: string; realtime?: boolean }) {
+function MetricWidget({
+  spec,
+  module,
+  realtime,
+}: {
+  spec: WidgetSpec
+  module: string
+  realtime?: boolean
+}) {
   const getClient = useSessionStore((s) => s.getClient)
+  const settings = useMetaStore((s) => s.bundle?.settings)
+  const formatter = useMemo(() => createFormatter(settings), [settings])
   const [value, setValue] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
 
   // Realtime: refetch on matching entity events / reconnect (non-durable).
   const realtimeTick = useRealtime(
-    realtime && spec.entity ? resolveEntityRef(spec.entity, module).join("/") : "",
+    realtime && spec.entity
+      ? resolveEntityRef(spec.entity, module).join("/")
+      : "",
   )
 
   useEffect(() => {
@@ -164,7 +204,11 @@ function MetricWidget({ spec, module, realtime }: { spec: WidgetSpec; module: st
         const filters = translateWidgetQuery(spec.query)
         const search: Record<string, string> = { per_page: "1000" }
         if (filters) Object.assign(search, buildListParams({ filters }))
-        const { items } = await apiList<Record<string, unknown>>(client, `${mod}/${name}`, search)
+        const { items } = await apiList<Record<string, unknown>>(
+          client,
+          `${mod}/${name}`,
+          search,
+        )
         if (cancelled) return
         setValue(aggregate(applySimpleQuery(items, spec.query), spec.config))
       } catch {
@@ -181,13 +225,26 @@ function MetricWidget({ spec, module, realtime }: { spec: WidgetSpec; module: st
       clearInterval(interval)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [spec.entity, spec.query, spec.refresh_secs, JSON.stringify(spec.config ?? {}), module, getClient, realtimeTick])
+  }, [
+    spec.entity,
+    spec.query,
+    spec.refresh_secs,
+    JSON.stringify(spec.config ?? {}),
+    module,
+    getClient,
+    realtimeTick,
+  ])
 
-  const formatted = useMemo(() => formatMetric(value, spec.config), [value, spec.config])
+  const formatted = useMemo(
+    () => formatMetric(value, spec.config, formatter),
+    [value, spec.config, formatter],
+  )
 
   return (
     <div className="text-center">
-      <p className="text-3xl font-bold tabular-nums">{loading ? "…" : formatted}</p>
+      <p className="text-3xl font-bold tabular-nums">
+        {loading ? "…" : formatted}
+      </p>
       <p className="text-xs text-muted-foreground mt-1">
         {spec.entity ? `${spec.entity}` : "No data source"}
       </p>
@@ -195,35 +252,46 @@ function MetricWidget({ spec, module, realtime }: { spec: WidgetSpec; module: st
   )
 }
 
-function aggregate(items: Record<string, unknown>[], config?: Record<string, unknown>): number {
+function aggregate(
+  items: Record<string, unknown>[],
+  config?: Record<string, unknown>,
+): number {
   const fn = String(config?.aggregate ?? "count")
   if (fn === "count") return items.length
 
   const field = config?.field ? String(config.field) : undefined
   if (!field) return items.length
-  const nums = items.map((it) => Number(it[field])).filter((n) => !Number.isNaN(n))
+  const nums = items
+    .map((it) => Number(it[field]))
+    .filter((n) => !Number.isNaN(n))
 
   switch (fn) {
-    case "sum": return nums.reduce((a, b) => a + b, 0)
-    case "avg": return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : 0
-    case "min": return nums.length ? Math.min(...nums) : 0
-    case "max": return nums.length ? Math.max(...nums) : 0
-    default: return items.length
+    case "sum":
+      return nums.reduce((a, b) => a + b, 0)
+    case "avg":
+      return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : 0
+    case "min":
+      return nums.length ? Math.min(...nums) : 0
+    case "max":
+      return nums.length ? Math.max(...nums) : 0
+    default:
+      return items.length
   }
 }
 
-function formatMetric(value: number | null, config?: Record<string, unknown>): string {
+function formatMetric(
+  value: number | null,
+  config?: Record<string, unknown>,
+  fmt?: Formatter,
+): string {
   if (value == null) return "--"
   const format = config?.format ? String(config.format) : undefined
+  const formatter = fmt ?? createFormatter()
   if (format === "currency") {
-    return new Intl.NumberFormat("id-ID", {
-      style: "currency",
-      currency: String(config?.currency ?? "IDR"),
-      maximumFractionDigits: 0,
-    }).format(value)
+    return formatter.money(value)
   }
   if (format === "percentage") return `${(value * 100).toFixed(1)}%`
-  return new Intl.NumberFormat("id-ID").format(value)
+  return formatter.number(value)
 }
 
 /**
@@ -235,12 +303,18 @@ function formatMetric(value: number | null, config?: Record<string, unknown>): s
  * this are expected to be pre-filtered by the entity's own list endpoint via
  * spec.entity semantics — see translateWidgetQuery below).
  */
-function applySimpleQuery(items: Record<string, unknown>[], query?: string): Record<string, unknown>[] {
+function applySimpleQuery(
+  items: Record<string, unknown>[],
+  query?: string,
+): Record<string, unknown>[] {
   if (!query) return items
 
   // Support compound queries like `transaction_date = today() and status != 'cancelled'`
   // by splitting on ` and ` and applying each predicate in sequence.
-  const clauses = query.split(/\s+and\s+/i).map((s) => s.trim()).filter(Boolean)
+  const clauses = query
+    .split(/\s+and\s+/i)
+    .map((s) => s.trim())
+    .filter(Boolean)
   if (clauses.length > 1) {
     return clauses.reduce((acc, clause) => applySimpleQuery(acc, clause), items)
   }
@@ -249,13 +323,17 @@ function applySimpleQuery(items: Record<string, unknown>[], query?: string): Rec
   const todayMatch = q.match(/^(\w+)\s*=\s*today\(\)$/)
   if (todayMatch) {
     const [, field] = todayMatch
-    return items.filter((it) => String(it[field] ?? "").slice(0, 10) === serverToday())
+    return items.filter(
+      (it) => String(it[field] ?? "").slice(0, 10) === serverToday(),
+    )
   }
 
   const inMatch = q.match(/^(\w+)\s+in\s+\[(.+)\]$/)
   if (inMatch) {
     const [, field, list] = inMatch
-    const values = list.split(",").map((s) => s.trim().replace(/^['"]|['"]$/g, ""))
+    const values = list
+      .split(",")
+      .map((s) => s.trim().replace(/^['"]|['"]$/g, ""))
     return items.filter((it) => values.includes(String(it[field] ?? "")))
   }
 
@@ -300,10 +378,15 @@ function serverToday(): string {
  * translatable — the caller then falls back to fetching all rows and relying
  * on applySimpleQuery client-side.
  */
-function translateWidgetQuery(query?: string): Record<string, string | FilterOpValue> | undefined {
+function translateWidgetQuery(
+  query?: string,
+): Record<string, string | FilterOpValue> | undefined {
   if (!query) return undefined
 
-  const clauses = query.split(/\s+and\s+/i).map((s) => s.trim()).filter(Boolean)
+  const clauses = query
+    .split(/\s+and\s+/i)
+    .map((s) => s.trim())
+    .filter(Boolean)
   const filters: Record<string, string | FilterOpValue> = {}
   for (const clause of clauses) {
     const todayMatch = clause.match(/^(\w+)\s*=\s*today\(\)$/)
@@ -315,7 +398,13 @@ function translateWidgetQuery(query?: string): Record<string, string | FilterOpV
     const inMatch = clause.match(/^(\w+)\s+in\s+\[(.+)\]$/)
     if (inMatch) {
       const [, field, list] = inMatch
-      filters[field] = { op: "in", value: list.split(",").map((s) => s.trim().replace(/^['"]|['"]$/g, "")).join(",") }
+      filters[field] = {
+        op: "in",
+        value: list
+          .split(",")
+          .map((s) => s.trim().replace(/^['"]|['"]$/g, ""))
+          .join(","),
+      }
       continue
     }
     const neMatch = clause.match(/^(\w+)\s*!=\s*['"]?([\w.-]+)['"]?$/)
@@ -340,14 +429,24 @@ function translateWidgetQuery(query?: string): Record<string, string | FilterOpV
 // Fetches spec.entity's records and renders a lightweight inline-SVG line
 // chart (no charting library dependency) — one series per config.group_by
 // value, x = config.x field, y = config.y field.
-function ChartWidget({ spec, module, realtime }: { spec: WidgetSpec; module: string; realtime?: boolean }) {
+function ChartWidget({
+  spec,
+  module,
+  realtime,
+}: {
+  spec: WidgetSpec
+  module: string
+  realtime?: boolean
+}) {
   const getClient = useSessionStore((s) => s.getClient)
   const [rows, setRows] = useState<Record<string, unknown>[]>([])
   const [loading, setLoading] = useState(true)
 
   // Realtime: refetch on matching entity events / reconnect (non-durable).
   const realtimeTick = useRealtime(
-    realtime && spec.entity ? resolveEntityRef(spec.entity, module).join("/") : "",
+    realtime && spec.entity
+      ? resolveEntityRef(spec.entity, module).join("/")
+      : "",
   )
 
   useEffect(() => {
@@ -365,7 +464,11 @@ function ChartWidget({ spec, module, realtime }: { spec: WidgetSpec; module: str
         const filters = translateWidgetQuery(spec.query)
         const search: Record<string, string> = { per_page: "1000" }
         if (filters) Object.assign(search, buildListParams({ filters }))
-        const { items } = await apiList<Record<string, unknown>>(client, `${mod}/${name}`, search)
+        const { items } = await apiList<Record<string, unknown>>(
+          client,
+          `${mod}/${name}`,
+          search,
+        )
         if (!cancelled) setRows(applySimpleQuery(items, spec.query))
       } catch {
         if (!cancelled) setRows([])
@@ -381,7 +484,14 @@ function ChartWidget({ spec, module, realtime }: { spec: WidgetSpec; module: str
       clearInterval(interval)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [spec.entity, spec.query, spec.refresh_secs, module, getClient, realtimeTick])
+  }, [
+    spec.entity,
+    spec.query,
+    spec.refresh_secs,
+    module,
+    getClient,
+    realtimeTick,
+  ])
 
   const config = spec.config ?? {}
   const xField = config.x ? String(config.x) : undefined
@@ -396,13 +506,20 @@ function ChartWidget({ spec, module, realtime }: { spec: WidgetSpec; module: str
     // sums the `y` field value per bucket. Aggregating per-x collapses multiple
     // rows sharing the same x for a series into one point — required when
     // charting a live transaction entity (e.g. counting visits per day).
-    const byKey = new Map<string, { label: string; points: Map<string, number> }>()
+    const byKey = new Map<
+      string,
+      { label: string; points: Map<string, number> }
+    >()
     for (const row of rows) {
       const key = groupBy ? String(row[groupBy] ?? "-") : "all"
       // Relation fields ("polyclinic_id") are expanded by the backend under
       // the base name ("polyclinic") alongside the raw id — prefer its
       // display name for the legend when available.
-      const expanded = groupBy ? (row[groupBy.replace(/_id$/, "")] as Record<string, unknown> | undefined) : undefined
+      const expanded = groupBy
+        ? (row[groupBy.replace(/_id$/, "")] as
+            | Record<string, unknown>
+            | undefined)
+        : undefined
       const label = groupBy ? String(expanded?.name ?? key) : spec.title
       if (!byKey.has(key)) byKey.set(key, { label, points: new Map() })
       const pts = byKey.get(key)!.points
@@ -437,40 +554,73 @@ function ChartWidget({ spec, module, realtime }: { spec: WidgetSpec; module: str
   return <LineChart series={series} />
 }
 
-const CHART_COLORS = ["#2563eb", "#16a34a", "#d97706", "#dc2626", "#7c3aed", "#0891b2"]
+const CHART_COLORS = [
+  "#2563eb",
+  "#16a34a",
+  "#d97706",
+  "#dc2626",
+  "#7c3aed",
+  "#0891b2",
+]
 
-function LineChart({ series }: { series: { label: string; points: { x: string; y: number }[] }[] }) {
+function LineChart({
+  series,
+}: {
+  series: { label: string; points: { x: string; y: number }[] }[]
+}) {
   const width = 400
   const height = 160
   const padding = 20
 
-  const allXs = Array.from(new Set(series.flatMap((s) => s.points.map((p) => p.x)))).sort()
+  const allXs = Array.from(
+    new Set(series.flatMap((s) => s.points.map((p) => p.x))),
+  ).sort()
   const maxY = Math.max(1, ...series.flatMap((s) => s.points.map((p) => p.y)))
 
   const xScale = (x: string) => {
     const idx = allXs.indexOf(x)
-    return allXs.length > 1 ? padding + (idx / (allXs.length - 1)) * (width - padding * 2) : width / 2
+    return allXs.length > 1
+      ? padding + (idx / (allXs.length - 1)) * (width - padding * 2)
+      : width / 2
   }
-  const yScale = (y: number) => height - padding - (y / maxY) * (height - padding * 2)
+  const yScale = (y: number) =>
+    height - padding - (y / maxY) * (height - padding * 2)
 
   return (
     <div>
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-32 text-border">
-        <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="currentColor" />
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        className="w-full h-32 text-border"
+      >
+        <line
+          x1={padding}
+          y1={height - padding}
+          x2={width - padding}
+          y2={height - padding}
+          stroke="currentColor"
+        />
         {series.map((s, i) => (
           <polyline
             key={s.label}
             fill="none"
             stroke={CHART_COLORS[i % CHART_COLORS.length]}
             strokeWidth={2}
-            points={s.points.map((p) => `${xScale(p.x)},${yScale(p.y)}`).join(" ")}
+            points={s.points
+              .map((p) => `${xScale(p.x)},${yScale(p.y)}`)
+              .join(" ")}
           />
         ))}
       </svg>
       <div className="flex flex-wrap gap-3 mt-2">
         {series.map((s, i) => (
-          <div key={s.label} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span className="size-2 rounded-full" style={{ background: CHART_COLORS[i % CHART_COLORS.length] }} />
+          <div
+            key={s.label}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground"
+          >
+            <span
+              className="size-2 rounded-full"
+              style={{ background: CHART_COLORS[i % CHART_COLORS.length] }}
+            />
             {s.label}
           </div>
         ))}

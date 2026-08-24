@@ -52,15 +52,27 @@ describe("FormSpecExpr Lexer", () => {
   it("tokenizes keywords", () => {
     const tokens = tokenize("true false null and or not in len sum")
     expect(tokens.map((t) => t.type)).toEqual([
-      "TRUE", "FALSE", "NULL", "AND", "OR", "NOT", "IN", "LEN", "SUM",
+      "TRUE",
+      "FALSE",
+      "NULL",
+      "AND",
+      "OR",
+      "NOT",
+      "IN",
+      "LEN",
+      "SUM",
     ])
   })
 
   it("tokenizes identifiers with dots", () => {
     const tokens = tokenize("fields.status user.role my_var")
     expect(tokens.map((t) => t.type)).toEqual([
-      "IDENTIFIER", "DOT", "IDENTIFIER",
-      "IDENTIFIER", "DOT", "IDENTIFIER",
+      "IDENTIFIER",
+      "DOT",
+      "IDENTIFIER",
+      "IDENTIFIER",
+      "DOT",
+      "IDENTIFIER",
       "IDENTIFIER",
     ])
   })
@@ -73,14 +85,20 @@ describe("FormSpecExpr Parser", () => {
     const p = new Parser("42")
     const prog = p.parseProgram()
     expect(prog.body).toHaveLength(1)
-    expect(prog.body[0].expression).toMatchObject({ type: "NumberLiteral", value: 42 })
+    expect(prog.body[0].expression).toMatchObject({
+      type: "NumberLiteral",
+      value: 42,
+    })
   })
 
   it("parses a string literal", () => {
     const p = new Parser('"hello"')
     const prog = p.parseProgram()
     expect(prog.body).toHaveLength(1)
-    expect(prog.body[0].expression).toMatchObject({ type: "StringLiteral", value: "hello" })
+    expect(prog.body[0].expression).toMatchObject({
+      type: "StringLiteral",
+      value: "hello",
+    })
   })
 
   it("parses a binary expression", () => {
@@ -281,6 +299,37 @@ describe("FormSpecExpr Evaluator", () => {
       expected: ["a", "b", "c"],
     },
 
+    // ── List Comprehensions ──
+    {
+      name: "comprehension over fields",
+      expr: "sum([i.quantity * i.unit_price for i in fields.items])",
+      context: {
+        fields: {
+          items: [
+            { quantity: 2, unit_price: 15000 },
+            { quantity: 1, unit_price: 5000 },
+          ],
+        },
+      },
+      expected: 35000,
+    },
+    {
+      name: "comprehension empty iterable",
+      expr: "sum([i.quantity for i in fields.items])",
+      context: { fields: { items: [] } },
+      expected: 0,
+    },
+    {
+      name: "comprehension member access",
+      expr: "[t.name for t in fields.treatments]",
+      context: {
+        fields: {
+          treatments: [{ name: "A" }, { name: "B" }],
+        },
+      },
+      expected: ["A", "B"],
+    },
+
     // ── Combined Expressions ──
     {
       name: "complex condition",
@@ -352,7 +401,9 @@ describe("validateFormSpecExpr", () => {
   })
 
   it("validates expression with field access", () => {
-    expect(validateFormSpecExpr('fields.status == "paid"')).toEqual({ valid: true })
+    expect(validateFormSpecExpr('fields.status == "paid"')).toEqual({
+      valid: true,
+    })
   })
 
   it("rejects invalid expression", () => {
@@ -433,7 +484,7 @@ describe("FormSpecExpr Edge Cases", () => {
   })
 
   it("handles in operator with array", () => {
-    const result = evalFormSpecExpr('1 in [1, 2, 3]')
+    const result = evalFormSpecExpr("1 in [1, 2, 3]")
     expect(result.value).toBe(true)
   })
 
@@ -443,7 +494,7 @@ describe("FormSpecExpr Edge Cases", () => {
   })
 
   it("handles in operator false case", () => {
-    const result = evalFormSpecExpr('4 in [1, 2, 3]')
+    const result = evalFormSpecExpr("4 in [1, 2, 3]")
     expect(result.value).toBe(false)
   })
 

@@ -1,0 +1,30 @@
+# Form edit untuk Configuration Page (halaman Pengaturan).
+# Mode edit atas row tetap id="global". Tanpa create — struktur di-seed dari
+# manifest `settings:` (kind: Config) sebagai default.
+apiVersion: formspec.dev/v1
+kind: Form
+metadata:
+  name: settings-edit
+  module: formspec.core
+  description: "Form edit pengaturan global — format tampilan default"
+spec:
+  entity: app-setting
+  render: { mode: separate_page }
+  sections:
+    - title: "Mata Uang"
+      fields:
+        - { field: currency_code, label: "Kode Mata Uang", help: "ISO-4217, mis. IDR, USD" }
+        - { field: currency_decimal_places, label: "Desimal Mata Uang", help: "IDR=0, USD=2" }
+        - { field: currency_symbol, label: "Simbol Mata Uang", help: "Opsional, mis. Rp, $" }
+    - title: "Lokale & Waktu"
+      fields:
+        - { field: locale, label: "Lokale", help: "BCP-47, mis. id-ID, en-US" }
+        - { field: timezone, label: "Zona Waktu", help: "IANA, mis. Asia/Jakarta, UTC" }
+    - title: "Tanggal & Angka"
+      fields:
+        - { field: date_format, label: "Format Tanggal", help: "mis. DD/MM/YYYY, YYYY-MM-DD" }
+        - { field: decimal_scale, label: "Skala Desimal", help: "Digit di belakang koma" }
+        - { field: rounding, label: "Pembulatan", help: "half_even | half_up | half_down | up | down" }
+  submit:
+    label: "Simpan Pengaturan"
+    message: "Pengaturan tersimpan — berlaku otomatis"

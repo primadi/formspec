@@ -20,6 +20,7 @@ import type {
   MemberExpr,
   CallExpr,
   ListLiteral,
+  ListComprehension,
 } from "./parser"
 
 // ── Runtime Values ──
@@ -91,6 +92,8 @@ function evalExpression(node: Expression, context: EvalContext): RuntimeValue {
       return evalCall(node as CallExpr, context)
     case "ListLiteral":
       return evalList(node as ListLiteral, context)
+    case "ListComprehension":
+      return evalListComprehension(node as ListComprehension, context)
     default:
       evalWarnings.push(`unknown node type: ${(node as any).type}`)
       return null
@@ -224,7 +227,9 @@ function evalCall(node: CallExpr, context: EvalContext): RuntimeValue {
   switch (calleeName) {
     case "len": {
       if (node.args.length !== 1) {
-        evalWarnings.push(`len() expects exactly 1 argument, got ${node.args.length}`)
+        evalWarnings.push(
+          `len() expects exactly 1 argument, got ${node.args.length}`,
+        )
         return 0
       }
       const arg = evalExpression(node.args[0], context)
@@ -235,7 +240,9 @@ function evalCall(node: CallExpr, context: EvalContext): RuntimeValue {
 
     case "sum": {
       if (node.args.length !== 1) {
-        evalWarnings.push(`sum() expects exactly 1 argument, got ${node.args.length}`)
+        evalWarnings.push(
+          `sum() expects exactly 1 argument, got ${node.args.length}`,
+        )
         return 0
       }
       const arg = evalExpression(node.args[0], context)
@@ -254,6 +261,31 @@ function evalCall(node: CallExpr, context: EvalContext): RuntimeValue {
 
 function evalList(node: ListLiteral, context: EvalContext): RuntimeValue {
   return node.elements.map((el) => evalExpression(el, context))
+}
+
+/**
+ * Evaluate a list comprehension: [element for var in iterable].
+ * The comprehension variable is bound in a child scope so it shadows any
+ * same-named field — matching Starlark semantics for the subset.
+ */
+function evalListComprehension(
+  node: ListComprehension,
+  context: EvalContext,
+): RuntimeValue {
+  const iterable = evalExpression(node.iterable, context)
+  if (!Array.isArray(iterable)) {
+    evalWarnings.push("list comprehension: iterable is not an array")
+    return []
+  }
+  const results: RuntimeValue[] = []
+  for (const item of iterable) {
+    const childContext: EvalContext = {
+      ...context,
+      [node.varName]: item,
+    }
+    results.push(evalExpression(node.element, childContext))
+  }
+  return results
 }
 
 // ── Type Coercion Helpers ──
@@ -285,14 +317,18 @@ function deepEqual(a: RuntimeValue, b: RuntimeValue): boolean {
     if (a.length !== b.length) return false
     return a.every((item, idx) => deepEqual(item, b[idx]))
   }
-  if (typeof a === "object" && typeof b === "object" && !Array.isArray(a) && !Array.isArray(b)) {
+  if (
+    typeof a === "object" &&
+    typeof b === "object" &&
+    !Array.isArray(a) &&
+    !Array.isArray(b)
+  ) {
     const aKeys = Object.keys(a as RuntimeObject)
     const bKeys = Object.keys(b as RuntimeObject)
     if (aKeys.length !== bKeys.length) return false
-    return aKeys.every((key) => deepEqual(
-      (a as RuntimeObject)[key],
-      (b as RuntimeObject)[key],
-    ))
+    return aKeys.every((key) =>
+      deepEqual((a as RuntimeObject)[key], (b as RuntimeObject)[key]),
+    )
   }
   return a === b
 }

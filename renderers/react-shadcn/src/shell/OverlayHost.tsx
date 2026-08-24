@@ -112,7 +112,7 @@ export function OverlayHost() {
           if (!open) close()
         }}
       >
-        <SheetContent className="w-full sm:max-w-lg md:max-w-xl lg:max-w-2xl overflow-y-auto">
+        <SheetContent className="w-full sm:max-w-lg md:max-w-xl lg:max-w-2xl overflow-y-auto overflow-x-hidden">
           <SheetHeader>
             <SheetTitle>
               {action === "create" ? "New" : "Edit"} {titleCase(entity.name)}
@@ -122,7 +122,7 @@ export function OverlayHost() {
                 `Fill in the details for this ${entity.name}.`}
             </SheetDescription>
           </SheetHeader>
-          <div className="mt-6">{overlayContent}</div>
+          <div className="mt-6 px-4 pb-4">{overlayContent}</div>
         </SheetContent>
       </Sheet>
     )

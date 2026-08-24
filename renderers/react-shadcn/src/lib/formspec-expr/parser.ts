@@ -29,6 +29,7 @@ export type NodeType =
   | "MemberExpr"
   | "CallExpr"
   | "ListLiteral"
+  | "ListComprehension"
 
 export interface Node {
   type: NodeType
@@ -56,6 +57,7 @@ export type Expression =
   | MemberExpr
   | CallExpr
   | ListLiteral
+  | ListComprehension
 
 export interface BinaryExpr extends Node {
   type: "BinaryExpr"
@@ -111,6 +113,13 @@ export interface ListLiteral extends Node {
   elements: Expression[]
 }
 
+export interface ListComprehension extends Node {
+  type: "ListComprehension"
+  element: Expression
+  varName: string
+  iterable: Expression
+}
+
 // ── Precedence ──
 
 const PRECEDENCE: Record<TokenType, number> = {
@@ -129,8 +138,8 @@ const PRECEDENCE: Record<TokenType, number> = {
   MINUS: 4,
   STAR: 5,
   SLASH: 5,
-  LPAREN: 7,  // function call
-  DOT: 7,     // member access
+  LPAREN: 7, // function call
+  DOT: 7, // member access
   // Default
   ILLEGAL: 0,
   EOF: 0,
@@ -179,8 +188,8 @@ export class Parser {
     this.prefixFns.set("MINUS", this.parseUnaryExpr.bind(this))
     this.prefixFns.set("BANG", this.parseUnaryExpr.bind(this))
     this.prefixFns.set("NOT", this.parseUnaryExpr.bind(this))
-    this.prefixFns.set("LEN", this.parseIdentifier.bind(this))   // treated as identifier, resolved at call time
-    this.prefixFns.set("SUM", this.parseIdentifier.bind(this))   // same
+    this.prefixFns.set("LEN", this.parseIdentifier.bind(this)) // treated as identifier, resolved at call time
+    this.prefixFns.set("SUM", this.parseIdentifier.bind(this)) // same
     this.prefixFns.set("LPAREN", this.parseGroupedExpr.bind(this))
     this.prefixFns.set("LBRACKET", this.parseListLiteral.bind(this))
     this.prefixFns.set("PLUS", this.parseUnaryExpr.bind(this))
@@ -242,7 +251,9 @@ export class Parser {
   private parseExpression(precedence: number): Expression | null {
     const prefixFn = this.prefixFns.get(this.curToken.type)
     if (!prefixFn) {
-      this.errors.push(`unexpected token: ${this.curToken.literal} at line ${this.curToken.line}:${this.curToken.col}`)
+      this.errors.push(
+        `unexpected token: ${this.curToken.literal} at line ${this.curToken.line}:${this.curToken.col}`,
+      )
       return null
     }
 
@@ -284,7 +295,9 @@ export class Parser {
       this.nextToken()
       return true
     }
-    this.errors.push(`expected ${type} but got ${this.peekToken.literal} at line ${this.peekToken.line}:${this.peekToken.col}`)
+    this.errors.push(
+      `expected ${type} but got ${this.peekToken.literal} at line ${this.peekToken.line}:${this.peekToken.col}`,
+    )
     return false
   }
 
@@ -367,6 +380,37 @@ export class Parser {
     const first = this.parseExpression(0)
     if (first) list.elements.push(first)
 
+    // List comprehension: [expr for var in iterable]
+    // `for` is lexed as an IDENTIFIER (not a keyword); `in` is the IN token.
+    if (this.peekTokenIs("IDENTIFIER") && this.peekToken.literal === "for") {
+      this.nextToken() // consume 'for'
+      this.nextToken() // move to the comprehension variable
+      if (!this.curTokenIs("IDENTIFIER")) {
+        this.errors.push(
+          `expected comprehension variable after 'for' at line ${this.curToken.line}:${this.curToken.col}`,
+        )
+        return list
+      }
+      const varName = this.curToken.literal
+      this.nextToken()
+      if (!this.curTokenIs("IN")) {
+        this.errors.push(
+          `expected 'in' in list comprehension at line ${this.curToken.line}:${this.curToken.col}`,
+        )
+        return list
+      }
+      this.nextToken()
+      const iterable = this.parseExpression(0)
+      this.expectPeek("RBRACKET")
+      return {
+        type: "ListComprehension",
+        element: first!,
+        varName,
+        iterable: iterable!,
+        loc: list.loc,
+      } as ListComprehension
+    }
+
     while (this.peekTokenIs("COMMA")) {
       this.nextToken() // consume COMMA
       this.nextToken() // move to next element
@@ -397,8 +441,14 @@ export class Parser {
   private parseMemberExpr(left: Expression): Expression {
     // After DOT, expect an identifier
     this.nextToken()
-    if (!this.curTokenIs("IDENTIFIER") && !this.curTokenIs("LEN") && !this.curTokenIs("SUM")) {
-      this.errors.push(`expected identifier after '.' but got ${this.curToken.literal}`)
+    if (
+      !this.curTokenIs("IDENTIFIER") &&
+      !this.curTokenIs("LEN") &&
+      !this.curTokenIs("SUM")
+    ) {
+      this.errors.push(
+        `expected identifier after '.' but got ${this.curToken.literal}`,
+      )
       return left
     }
 

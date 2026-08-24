@@ -379,6 +379,20 @@ func New(cfg Config) (*App, error) {
 			}
 		}
 	}
+
+	// Resolve the global settings namespace (spec §10 — "jangan pernah
+	// menebak"). The first Config manifest that declares `settings:` wins;
+	// otherwise standard defaults apply. Exposed on every /_meta/ui bundle so
+	// renderers read formatting/presentation defaults instead of guessing.
+	var declaredSettings *spec.Settings
+	for _, cs := range configs {
+		if cs.Settings != nil {
+			declaredSettings = cs.Settings
+			break
+		}
+	}
+	rb.SetSettings(spec.ResolveSettings(declaredSettings))
+
 	appAuths, authErrs := auth.ResolveAppAuth(resolvedApps, configs)
 	for _, e := range authErrs {
 		fmt.Fprintf(os.Stderr, "formspec: auth config warning: %v\n", e)
@@ -676,6 +690,18 @@ func (a *App) ReloadSpec() error {
 	newRB.SetDispatcher(newDisp)
 	newRB.SetUIRegistry(newUIReg)
 	newRB.SetApps(resolvedApps)
+	// Re-resolve the global settings namespace on reload so a changed
+	// `settings:` in a Config manifest takes effect without a full restart.
+	var declaredSettings *spec.Settings
+	for _, raw := range specManifests.Manifests {
+		if spec.Kind(raw.Kind) == spec.KindConfig {
+			if cs, err := manifest.RawSpecToConfigSpec(raw.Spec.(map[string]any)); err == nil && cs.Settings != nil {
+				declaredSettings = cs.Settings
+				break
+			}
+		}
+	}
+	newRB.SetSettings(spec.ResolveSettings(declaredSettings))
 	if a.cfg.WebDir != "" {
 		newRB.SetWebDir(a.cfg.WebDir)
 	}

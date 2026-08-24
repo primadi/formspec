@@ -5,7 +5,7 @@
 //
 // Design doc §5.5 Timeline kind (F4)
 
-import { useEffect, useState, useCallback, useRef } from "react"
+import { useEffect, useState, useCallback, useRef, useMemo } from "react"
 import { toast } from "sonner"
 import { Clock, Loader2 } from "lucide-react"
 
@@ -14,6 +14,7 @@ import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
 import { resolveEntityRef } from "@/engine/entityRef"
 import { apiList } from "@/lib/api"
+import { createFormatter } from "@/lib/format"
 import { titleCase } from "@/lib/utils"
 import { Badge } from "@/widgets/Badge"
 
@@ -24,8 +25,13 @@ interface TimelineRendererProps {
 export default function TimelineRenderer({ entry }: TimelineRendererProps) {
   const getClient = useSessionStore((s) => s.getClient)
   const getEntity = useMetaStore((s) => s.getEntity)
+  const settings = useMetaStore((s) => s.bundle?.settings)
+  const formatter = useMemo(() => createFormatter(settings), [settings])
 
-  const [entityModule, entityName] = resolveEntityRef(entry.spec.entity, entry.module)
+  const [entityModule, entityName] = resolveEntityRef(
+    entry.spec.entity,
+    entry.module,
+  )
   const entity = getEntity(entityModule, entityName)
   const dateField = entry.spec.date_field ?? "created_at"
   const groupBy = entry.spec.group_by ?? "date"
@@ -95,7 +101,9 @@ export default function TimelineRenderer({ entry }: TimelineRendererProps) {
           {titleCase(entry.name)}
         </h1>
         {entry.spec.empty_state && items.length === 0 && !loading && (
-          <p className="text-sm text-muted-foreground">{entry.spec.empty_state}</p>
+          <p className="text-sm text-muted-foreground">
+            {entry.spec.empty_state}
+          </p>
         )}
       </div>
 
@@ -112,10 +120,12 @@ export default function TimelineRenderer({ entry }: TimelineRendererProps) {
             {/* Timeline items */}
             <div className="space-y-3 ml-6 border-l pl-4">
               {groupItems.map((item, idx) => {
-                const isLastItem = groupIdx === grouped.length - 1 && idx === groupItems.length - 1
+                const isLastItem =
+                  groupIdx === grouped.length - 1 &&
+                  idx === groupItems.length - 1
                 return (
                   <div
-                    key={item.id as string ?? idx}
+                    key={(item.id as string) ?? idx}
                     ref={isLastItem ? lastItemRef : undefined}
                     className="relative"
                   >
@@ -125,8 +135,9 @@ export default function TimelineRenderer({ entry }: TimelineRendererProps) {
                     {/* Card */}
                     <div className="rounded-md border p-3">
                       <p className="text-sm font-medium">
-                        {(item[entry.spec.display?.title_field ?? "name"] as string) ??
-                          item.id as string}
+                        {(item[
+                          entry.spec.display?.title_field ?? "name"
+                        ] as string) ?? (item.id as string)}
                       </p>
                       {entry.spec.display?.subtitle_field && (
                         <p className="text-xs text-muted-foreground mt-0.5">
@@ -139,9 +150,7 @@ export default function TimelineRenderer({ entry }: TimelineRendererProps) {
                         </p>
                       )}
                       <p className="text-xs text-muted-foreground mt-1">
-                        {new Date(
-                          (item[dateField] as string) ?? "",
-                        ).toLocaleString()}
+                        {formatter.dateTime((item[dateField] as string) ?? "")}
                       </p>
                     </div>
                   </div>

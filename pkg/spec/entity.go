@@ -139,6 +139,7 @@ type Field struct {
 	Default        any                 `yaml:"default,omitempty" json:"default,omitempty"`
 	Required       bool                `yaml:"required,omitempty" json:"required,omitempty"`
 	Immutable      bool                `yaml:"immutable,omitempty" json:"immutable,omitempty"`
+	ReadOnly       bool                `yaml:"read_only,omitempty" json:"read_only,omitempty"`
 	Unique         bool                `yaml:"unique,omitempty" json:"unique,omitempty"`
 	Index          bool                `yaml:"index,omitempty" json:"index,omitempty"`
 	NaturalKey     bool                `yaml:"natural_key,omitempty" json:"natural_key,omitempty"`
@@ -149,6 +150,27 @@ type Field struct {
 	Relation       *RelationDecl       `yaml:"relation,omitempty" json:"relation,omitempty"`
 	Child          *ChildDecl          `yaml:"child,omitempty" json:"child,omitempty"`
 	Computed       *ComputedDecl       `yaml:"computed,omitempty" json:"computed,omitempty"`
+
+	// Decimal precision/scale (05-field-types.md §1.2) — only meaningful for
+	// type: decimal. Precision = total significant digits (left + right of the
+	// point); Scale = digits after the decimal point (drives client-side input
+	// limiting and server-side rounding/validation).
+	Precision *int `yaml:"precision,omitempty" json:"precision,omitempty"`
+	Scale     *int `yaml:"scale,omitempty" json:"scale,omitempty"`
+
+	// Client-behavior vocabulary (FormSpecExpr, frontend 08-formspec-expr.md).
+	// Normally declared in Form manifests; on entity fields they act as
+	// defaults — and are the ONLY way to configure per-column behavior on
+	// child fields (ChildTable reads child.fields from the entity).
+	VisibleWhen  string `yaml:"visible_when,omitempty" json:"visible_when,omitempty"`
+	ReadonlyWhen string `yaml:"readonly_when,omitempty" json:"readonly_when,omitempty"`
+	RequiredWhen string `yaml:"required_when,omitempty" json:"required_when,omitempty"`
+
+	// AutoFill — client-side lookup: when the relation field named in `from`
+	// (same child row) changes, copy the related record's `field` into this
+	// field. Declared on the target field (e.g. unit_price auto-filled from
+	// menu_item_id → price). Server-side hooks remain the authority on write.
+	AutoFill *AutoFillDecl `yaml:"auto_fill,omitempty" json:"auto_fill,omitempty"`
 
 	// Extended field type structs (05-field-types.md §4–§5)
 
@@ -280,6 +302,17 @@ type ChildDecl struct {
 // ComputedDecl defines a computed/derived field.
 type ComputedDecl struct {
 	Formula string `yaml:"formula" json:"formula"`
+}
+
+// AutoFillDecl defines a client-side lookup/auto-fill on a field.
+// When the relation field named in `from` (same child row) changes, the
+// related record is fetched and its `field` value is copied into the field
+// that declares this AutoFillDecl.
+type AutoFillDecl struct {
+	// From — name of the relation field in the same row that triggers the fill.
+	From string `yaml:"from" json:"from"`
+	// Field — name of the field on the related entity to copy from.
+	Field string `yaml:"field" json:"field"`
 }
 
 // ValidateEvents validates event naming conventions per Core §12:

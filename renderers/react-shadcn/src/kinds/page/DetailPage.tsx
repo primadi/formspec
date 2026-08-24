@@ -20,6 +20,7 @@ import { deriveDetailFields } from "@/engine/derive"
 import { getLifecycle, getAvailableTransitions } from "@/engine/lifecycle"
 import { apiGet } from "@/lib/api"
 import { titleCase } from "@/lib/utils"
+import { createFormatter, type Formatter } from "@/lib/format"
 import { Badge } from "@/widgets/Badge"
 import { Button } from "@/components/ui/button"
 import ConfirmDialog from "@/components/ui/confirm-dialog"
@@ -74,6 +75,8 @@ export default function DetailPage({ entity }: DetailPageProps) {
 
   // All entity schemas from the meta bundle — used to resolve relation display fields
   const entities = useMetaStore((s) => s.bundle?.entities ?? [])
+  const settings = useMetaStore((s) => s.bundle?.settings)
+  const formatter = useMemo(() => createFormatter(settings), [settings])
 
   const currentState = record?.[entity.state_machine?.field ?? ""] as
     | string
@@ -211,7 +214,11 @@ export default function DetailPage({ entity }: DetailPageProps) {
                   {fieldLabel}
                 </label>
                 <div className="text-sm">
-                  <DetailFieldValue field={field} value={value} />
+                  <DetailFieldValue
+                    field={field}
+                    value={value}
+                    fmt={formatter}
+                  />
                 </div>
               </div>
             )
@@ -286,14 +293,10 @@ export default function DetailPage({ entity }: DetailPageProps) {
       {/* Audit Info */}
       <div className="text-xs text-muted-foreground space-y-0.5">
         {record.created_at ? (
-          <div>
-            Created: {new Date(record.created_at as string).toLocaleString()}
-          </div>
+          <div>Created: {formatter.dateTime(record.created_at as string)}</div>
         ) : null}
         {record.modified ? (
-          <div>
-            Modified: {new Date(record.modified as string).toLocaleString()}
-          </div>
+          <div>Modified: {formatter.dateTime(record.modified as string)}</div>
         ) : null}
         {typeof record.version === "number" ? (
           <div>Version: {record.version}</div>
@@ -308,9 +311,11 @@ export default function DetailPage({ entity }: DetailPageProps) {
 function DetailFieldValue({
   field,
   value,
+  fmt,
 }: {
   field: import("@/types/manifest").Field
   value: unknown
+  fmt?: Formatter
 }) {
   if (value == null)
     return <span className="text-muted-foreground italic">-</span>
@@ -328,18 +333,15 @@ function DetailFieldValue({
   }
 
   if (field.type === "datetime") {
-    return new Date(value as string).toLocaleString()
+    return (fmt ?? createFormatter()).dateTime(value as string)
   }
 
   if (field.type === "date") {
-    return new Date(value as string).toLocaleDateString()
+    return (fmt ?? createFormatter()).date(value as string)
   }
 
   if (field.type === "decimal" && typeof value === "number") {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(value)
+    return (fmt ?? createFormatter()).money(value)
   }
 
   if (field.type === "json" || typeof value === "object") {

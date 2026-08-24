@@ -2406,6 +2406,12 @@ func parseJSON(s string) (map[string]any, error) {
 
 // evaluateComputed evaluates all computed fields for a record's data.
 // It modifies the data map in place by injecting computed values.
+//
+// Two levels are evaluated:
+//  1. Child-level computed fields first (e.g. line_total = quantity * unit_price
+//     on a child record) — so parent formulas that aggregate over children
+//     (e.g. total = sum([i.line_total for i in items])) see fresh values.
+//  2. Top-level computed fields (e.g. total_amount, is_stale).
 func (s *EntityStore) evaluateComputed(data map[string]any) {
 	// Inject the entity's backdate limit so computed fields (e.g. is_stale)
 	// can reference it without hardcoding — follows config changes (3 ↔ 4 days).
@@ -2413,6 +2419,50 @@ func (s *EntityStore) evaluateComputed(data map[string]any) {
 	if s.backdatePolicy != nil && s.backdatePolicy.MaxDaysBack > 0 {
 		backdateLimit = s.backdatePolicy.MaxDaysBack
 	}
+
+	// 1. Child-level computed fields — evaluate per child record.
+	for _, f := range s.fields {
+		if f.Type != spec.FieldChild || f.Child == nil {
+			continue
+		}
+		raw, ok := data[f.Name]
+		if !ok {
+			continue
+		}
+		// jsonb children come back as []any of map[string]any; table children
+		// are hydrated as []map[string]any.
+		var records []map[string]any
+		switch arr := raw.(type) {
+		case []any:
+			for _, item := range arr {
+				if m, ok := item.(map[string]any); ok {
+					records = append(records, m)
+				}
+			}
+		case []map[string]any:
+			records = arr
+		}
+		for _, rec := range records {
+			for _, cf := range f.Child.Fields {
+				if cf.Computed == nil || cf.Computed.Formula == "" {
+					continue
+				}
+				env := make(map[string]any, len(rec)+1)
+				for k, v := range rec {
+					env[k] = v
+				}
+				env["backdate_limit_days"] = backdateLimit
+				val, err := starlark.EvalExpr(cf.Computed.Formula, env)
+				if err != nil {
+					// If evaluation fails, don't set the field — leave it absent
+					continue
+				}
+				rec[cf.Name] = val
+			}
+		}
+	}
+
+	// 2. Top-level computed fields.
 	for _, f := range s.computedFields {
 		if f.Computed == nil || f.Computed.Formula == "" {
 			continue

@@ -193,3 +193,32 @@ func TestEvalExpr_IsStaleFormula(t *testing.T) {
 		t.Errorf("expected stale=false for cancelled visit, got %v", result)
 	}
 }
+
+func TestEvalExpr_SumOverChildItems(t *testing.T) {
+	env := map[string]any{
+		"items": []any{
+			map[string]any{"quantity": float64(2), "unit_price": float64(15000), "line_total": float64(30000)},
+			map[string]any{"quantity": float64(1), "unit_price": float64(5000), "line_total": float64(5000)},
+		},
+	}
+	result, err := EvalExpr(`sum([i["line_total"] for i in items])`, env)
+	if err != nil {
+		t.Fatalf("EvalExpr failed: %v", err)
+	}
+	got, ok := result.(float64)
+	if !ok {
+		t.Fatalf("expected float64, got %T: %v", result, result)
+	}
+	if got != 35000 {
+		t.Errorf("expected 35000, got %v", got)
+	}
+
+	// Empty items → sum 0
+	result, err = EvalExpr(`sum([i["line_total"] for i in items])`, map[string]any{"items": []any{}})
+	if err != nil {
+		t.Fatalf("EvalExpr empty failed: %v", err)
+	}
+	if got, _ := result.(float64); got != 0 {
+		t.Errorf("expected 0 for empty items, got %v", result)
+	}
+}

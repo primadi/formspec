@@ -12,6 +12,7 @@
 
 import { useEffect, useState } from "react"
 import type { EntitySchema, FilterSpec, MetaBundle } from "@/types/manifest"
+import { resolveEntityRef } from "@/engine/entityRef"
 
 export interface SelectOption {
   value: string
@@ -32,12 +33,20 @@ export function useSelectFilterOptions(
   useEffect(() => {
     if (!isRelation || !metaBundle || !fieldDef?.relation) return
     const resource = fieldDef.relation.resource
-    const relatedEntity = metaBundle.entities.find((e) => e.name === resource)
+    // relation.resource can be "entity" (same module) or "module.entity"
+    // (cross-module) — resolve relative to the owning entity's module.
+    const [relModule, relName] = resolveEntityRef(
+      resource,
+      entity?.module ?? "",
+    )
+    const relatedEntity = metaBundle.entities.find(
+      (e) => e.module === relModule && e.name === relName,
+    )
     if (!relatedEntity) return
     const client = getClient()
     const labelField = relatedEntity.label_field || "name"
     client
-      .get(`${relatedEntity.module}/${resource}`, {
+      .get(`${relatedEntity.module}/${relatedEntity.name}`, {
         searchParams: { per_page: "500" },
       })
       .json<{ data: Record<string, unknown>[] }>()

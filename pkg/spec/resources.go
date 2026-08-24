@@ -171,9 +171,17 @@ type MenuItem struct {
 // whether it is a secret (never inlined in YAML, resolved per environment).
 // Scripts read values via ctx.config.get("key").
 // ConfigSpec declares module-level configuration keys (01-core-basic.md §10).
+//
+// `settings` is the typed, global presentation/config namespace (spec §10 —
+// "jangan pernah menebak"). It lives in ONE place (workspace/App Config) and
+// drives cross-component interpretation/display: currency, locale, timezone,
+// date format, decimal scale, rounding. Renderers read it instead of guessing.
 type ConfigSpec struct {
 	// @schema {example: "{invoice_due_days: {type: int, default: 30}, smtp_host: {type: string, secret: true}}"}
-	Keys map[string]ConfigKey `yaml:"keys" json:"keys"`
+	Keys map[string]ConfigKey `yaml:"keys,omitempty" json:"keys,omitempty"`
+	// Settings is the typed global presentation/config namespace (spec §10).
+	// Declared as `settings:` on a workspace/App Config manifest.
+	Settings *Settings `yaml:"settings,omitempty" json:"settings,omitempty"`
 }
 
 // ConfigKey declares one configuration entry (01-core-basic.md §10).
@@ -181,6 +189,101 @@ type ConfigKey struct {
 	Type    string `yaml:"type" json:"type"` // int | string | bool | decimal | json
 	Default any    `yaml:"default,omitempty" json:"default,omitempty"`
 	Secret  bool   `yaml:"secret,omitempty" json:"secret,omitempty"`
+}
+
+// ─── Global Settings (spec §10 — "jangan pernah menebak") ───
+
+// Settings is the typed global presentation/config namespace. It is declared
+// once on a workspace/App `kind: Config` manifest under `settings:` and
+// resolved with standard defaults so behavior is consistent across every
+// component even when unset. Renderers/backends read these values instead of
+// guessing per component (01-core-basic.md §10, 05-field-types.md §2).
+type Settings struct {
+	// Currency is the default money currency for the workspace (ISO-4217 code,
+	// minor-unit scale, and optional display symbol). Money fields inherit it
+	// unless they override `currency` explicitly (05-field-types.md §2).
+	Currency *CurrencySettings `yaml:"currency,omitempty" json:"currency,omitempty"`
+	// Locale is the IETF BCP-47 locale used for number/date formatting
+	// (e.g. "en-US", "id-ID"). Default "en-US".
+	Locale string `yaml:"locale,omitempty" json:"locale,omitempty"`
+	// Timezone is the IANA timezone name (e.g. "UTC", "Asia/Jakarta").
+	// Default "UTC".
+	Timezone string `yaml:"timezone,omitempty" json:"timezone,omitempty"`
+	// DateFormat is the display date format (e.g. "YYYY-MM-DD", "DD/MM/YYYY").
+	// Default "YYYY-MM-DD" (ISO-8601).
+	DateFormat string `yaml:"date_format,omitempty" json:"date_format,omitempty"`
+	// DecimalScale is the default number of digits after the decimal point for
+	// `decimal` fields that don't declare their own `scale`. Default 2.
+	DecimalScale int `yaml:"decimal_scale,omitempty" json:"decimal_scale,omitempty"`
+	// Rounding is the default rounding mode for money/decimal arithmetic:
+	// "half_even" (banker's, default) | "half_up" | "half_down" | "up" | "down".
+	Rounding string `yaml:"rounding,omitempty" json:"rounding,omitempty"`
+}
+
+// CurrencySettings configures the default money currency (05-field-types.md §2).
+type CurrencySettings struct {
+	// Code is the ISO-4217 currency code (e.g. "IDR", "USD").
+	Code string `yaml:"code,omitempty" json:"code,omitempty"`
+	// DecimalPlaces is the minor-unit scale of this currency (e.g. IDR=0, USD=2).
+	// Pointer so `0` (no minor units) is distinguishable from "unset".
+	DecimalPlaces *int `yaml:"decimal_places,omitempty" json:"decimal_places,omitempty"`
+	// Symbol is the optional display symbol (e.g. "Rp", "$"). When empty, the
+	// renderer derives it from the locale/currency via Intl.
+	Symbol string `yaml:"symbol,omitempty" json:"symbol,omitempty"`
+}
+
+// DefaultSettings returns the standard defaults for the global settings
+// namespace (spec §10 — every setting has a widely-accepted default so
+// behavior is consistent even when unset).
+func DefaultSettings() *Settings {
+	two := 2
+	return &Settings{
+		Currency: &CurrencySettings{
+			Code:          "USD",
+			DecimalPlaces: &two,
+		},
+		Locale:       "en-US",
+		Timezone:     "UTC",
+		DateFormat:   "YYYY-MM-DD",
+		DecimalScale: 2,
+		Rounding:     "half_even",
+	}
+}
+
+// ResolveSettings overlays the declared settings onto the standard defaults,
+// returning a fully-populated Settings with no empty fields.
+func ResolveSettings(declared *Settings) *Settings {
+	d := DefaultSettings()
+	if declared == nil {
+		return d
+	}
+	if declared.Currency != nil {
+		if declared.Currency.Code != "" {
+			d.Currency.Code = declared.Currency.Code
+		}
+		if declared.Currency.DecimalPlaces != nil {
+			d.Currency.DecimalPlaces = declared.Currency.DecimalPlaces
+		}
+		if declared.Currency.Symbol != "" {
+			d.Currency.Symbol = declared.Currency.Symbol
+		}
+	}
+	if declared.Locale != "" {
+		d.Locale = declared.Locale
+	}
+	if declared.Timezone != "" {
+		d.Timezone = declared.Timezone
+	}
+	if declared.DateFormat != "" {
+		d.DateFormat = declared.DateFormat
+	}
+	if declared.DecimalScale != 0 {
+		d.DecimalScale = declared.DecimalScale
+	}
+	if declared.Rounding != "" {
+		d.Rounding = declared.Rounding
+	}
+	return d
 }
 
 // ─── 1.1.8 SubscriptionSpec — Tier 2 fields ───

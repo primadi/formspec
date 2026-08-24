@@ -26,7 +26,17 @@ import {
   verticalListSortingStrategy,
   useSortable,
 } from "@dnd-kit/sortable"
-import { Eye, Edit2, Trash2, GripVertical, MoreHorizontal, AlertTriangle, Check, Play, X } from "lucide-react"
+import {
+  Eye,
+  Edit2,
+  Trash2,
+  GripVertical,
+  MoreHorizontal,
+  AlertTriangle,
+  Check,
+  Play,
+  X,
+} from "lucide-react"
 
 import type {
   Entry,
@@ -56,6 +66,7 @@ import {
 import { titleCase } from "@/lib/utils"
 import { Badge } from "@/widgets/Badge"
 import { Input } from "@/components/ui/input"
+import { DateInput } from "@/widgets/DateInput"
 import { Search } from "lucide-react"
 import { Select } from "@/components/ui/select"
 import ConfirmDialog from "@/components/ui/confirm-dialog"
@@ -96,15 +107,18 @@ function KanbanFilterControl({
   onChange: (value: string) => void
 }) {
   const type = filter.type ?? "select"
-  const selectOptions = useSelectFilterOptions(filter, entity, metaBundle, getClient)
+  const selectOptions = useSelectFilterOptions(
+    filter,
+    entity,
+    metaBundle,
+    getClient,
+  )
 
   if (type === "date") {
     return (
-      <Input
-        type="date"
+      <DateInput
         value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={filter.label || filter.field}
+        onChange={onChange}
         className="h-9 w-40 text-xs"
       />
     )
@@ -163,7 +177,10 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
   const metaBundle = useMetaStore((s) => s.bundle)
   const me = useSessionStore((s) => s.me)
 
-  const [entityModule, entityName] = resolveEntityRef(entry.spec.entity, entry.module)
+  const [entityModule, entityName] = resolveEntityRef(
+    entry.spec.entity,
+    entry.module,
+  )
   const entity = getEntity(entityModule, entityName)
   const columns = entry.spec.columns
   const statusField = entry.spec.status_field
@@ -197,41 +214,54 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
   )
 
   // ── Data fetching ──
-  const fetchRecords = useCallback(async (silent = false) => {
-    if (!entity) {
-      toast.error(`entity "${entry.spec.entity}" not found`)
-      setLoading(false)
-      return
-    }
-    // Realtime refetch is silent — don't flash the loading spinner on events.
-    if (!silent) setLoading(true)
-    try {
-      const client = getClient()
-      // Auto-default sort to position_field when sortable is enabled
-      const sortField = entry.spec.sortable && entry.spec.position_field
-        ? entry.spec.position_field
-        : undefined
-      // Merge immutable fixed_filters + the user's active filter values
-      // (operator syntax `field[op]=value`) so the DB pre-filters rows
-      // before they hit the wire — e.g. a board scoped to one date via a
-      // filter with `default: today()`.
-      const searchParams: Record<string, string> = {
-        ...buildFixedFilterParams(entry.spec.fixed_filters),
-        ...buildUserFilterParams(entry.spec.filters ?? [], filterValues),
+  const fetchRecords = useCallback(
+    async (silent = false) => {
+      if (!entity) {
+        toast.error(`entity "${entry.spec.entity}" not found`)
+        setLoading(false)
+        return
       }
-      if (sortField) searchParams.sort = sortField
-      const result = await apiList<Record<string, unknown>>(
-        client,
-        `${entity.module}/${entity.name}`,
-        Object.keys(searchParams).length > 0 ? searchParams : undefined,
-      )
-      setRecords(result.items)
-    } catch {
-      toast.error("Failed to load kanban data")
-    } finally {
-      if (!silent) setLoading(false)
-    }
-  }, [entity, entry.spec.entity, entry.spec.sortable, entry.spec.position_field, entry.spec.filters, entry.spec.fixed_filters, filterValues, getClient])
+      // Realtime refetch is silent — don't flash the loading spinner on events.
+      if (!silent) setLoading(true)
+      try {
+        const client = getClient()
+        // Auto-default sort to position_field when sortable is enabled
+        const sortField =
+          entry.spec.sortable && entry.spec.position_field
+            ? entry.spec.position_field
+            : undefined
+        // Merge immutable fixed_filters + the user's active filter values
+        // (operator syntax `field[op]=value`) so the DB pre-filters rows
+        // before they hit the wire — e.g. a board scoped to one date via a
+        // filter with `default: today()`.
+        const searchParams: Record<string, string> = {
+          ...buildFixedFilterParams(entry.spec.fixed_filters),
+          ...buildUserFilterParams(entry.spec.filters ?? [], filterValues),
+        }
+        if (sortField) searchParams.sort = sortField
+        const result = await apiList<Record<string, unknown>>(
+          client,
+          `${entity.module}/${entity.name}`,
+          Object.keys(searchParams).length > 0 ? searchParams : undefined,
+        )
+        setRecords(result.items)
+      } catch {
+        toast.error("Failed to load kanban data")
+      } finally {
+        if (!silent) setLoading(false)
+      }
+    },
+    [
+      entity,
+      entry.spec.entity,
+      entry.spec.sortable,
+      entry.spec.position_field,
+      entry.spec.filters,
+      entry.spec.fixed_filters,
+      filterValues,
+      getClient,
+    ],
+  )
 
   useEffect(() => {
     fetchRecords()
@@ -241,7 +271,9 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
   // Non-durable: reconnect also bumps the tick, so a dropped connection
   // triggers a refetch too. Event-driven when the Kanban has realtime: true.
   const realtimeTick = useRealtime(
-    entry.spec.realtime && entityModule && entityName ? `${entityModule}/${entityName}` : "",
+    entry.spec.realtime && entityModule && entityName
+      ? `${entityModule}/${entityName}`
+      : "",
   )
   useEffect(() => {
     if (realtimeTick === 0) return
@@ -259,7 +291,9 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
         // Apply search
         if (search) {
           const searchMatch = Object.values(r).some((v) =>
-            String(v ?? "").toLowerCase().includes(search.toLowerCase()),
+            String(v ?? "")
+              .toLowerCase()
+              .includes(search.toLowerCase()),
           )
           if (!searchMatch) return false
         }
@@ -291,9 +325,9 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
 
       if (!over || active.id === over.id) return
 
-      const activeRecord = records.find(
-        (r) => r.id === active.id,
-      ) as Record<string, unknown> | undefined
+      const activeRecord = records.find((r) => r.id === active.id) as
+        | Record<string, unknown>
+        | undefined
       if (!activeRecord) return
 
       const positionField = entry.spec.position_field || null
@@ -301,7 +335,9 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
       // Determine drop target: column status or card ID
       const targetColumn = columns.find((c) => c.status === over.id)
       const overRecord = !targetColumn
-        ? (records.find((r) => r.id === over.id) as Record<string, unknown> | undefined)
+        ? (records.find((r) => r.id === over.id) as
+            | Record<string, unknown>
+            | undefined)
         : undefined
 
       let targetStatus: string
@@ -316,8 +352,13 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
         // WIP limit check — only for cross-column drops
         if (!isSameColumn) {
           const currentCount = getColumnRecords(targetStatus).length
-          if (entry.spec.max_cards_per_column && currentCount >= entry.spec.max_cards_per_column) {
-            toast.error(`Column "${targetColumn.label}" is full (max ${entry.spec.max_cards_per_column})`)
+          if (
+            entry.spec.max_cards_per_column &&
+            currentCount >= entry.spec.max_cards_per_column
+          ) {
+            toast.error(
+              `Column "${targetColumn.label}" is full (max ${entry.spec.max_cards_per_column})`,
+            )
             return
           }
         }
@@ -339,25 +380,34 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
         // ── Drop onto a card ──
         targetStatus = overRecord[statusField] as string
         const activeStatus = activeRecord[statusField] as string
-        const activePosition = positionField ? (activeRecord[positionField] as number | null) ?? null : null
+        const activePosition = positionField
+          ? ((activeRecord[positionField] as number | null) ?? null)
+          : null
 
         if (activeStatus === targetStatus && positionField) {
           // ── Within-column reorder ──
           // Sort by position to match visual order
-          const columnRecords = [...getColumnRecords(targetStatus)].sort((a, b) => {
-            const pa = (a[positionField] as number) ?? POS_NULL_SENTINEL
-            const pb = (b[positionField] as number) ?? POS_NULL_SENTINEL
-            if (pa !== pb) return pa - pb
-            // FIFO fallback: null positions sort by created_at ascending
-            const ca = a.created_at ? new Date(String(a.created_at)).getTime() : 0
-            const cb = b.created_at ? new Date(String(b.created_at)).getTime() : 0
-            return ca - cb
-          })
+          const columnRecords = [...getColumnRecords(targetStatus)].sort(
+            (a, b) => {
+              const pa = (a[positionField] as number) ?? POS_NULL_SENTINEL
+              const pb = (b[positionField] as number) ?? POS_NULL_SENTINEL
+              if (pa !== pb) return pa - pb
+              // FIFO fallback: null positions sort by created_at ascending
+              const ca = a.created_at
+                ? new Date(String(a.created_at)).getTime()
+                : 0
+              const cb = b.created_at
+                ? new Date(String(b.created_at)).getTime()
+                : 0
+              return ca - cb
+            },
+          )
           const activeIdx = columnRecords.findIndex((r) => r.id === active.id)
           const overIdx = columnRecords.findIndex((r) => r.id === over.id)
           if (activeIdx === -1 || overIdx === -1) return
 
-          const overPos = (overRecord[positionField] as number) ?? (overIdx + 1) * 1000
+          const overPos =
+            (overRecord[positionField] as number) ?? (overIdx + 1) * 1000
           const isDraggingDown = activeIdx < overIdx
           const MIN_GAP = 10 // minimum gap before triggering renumber
 
@@ -365,34 +415,69 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
             // Moving DOWN → card goes AFTER overRecord (between over and next)
             const nextRecord = columnRecords[overIdx + 1]
             const nextPos = nextRecord
-              ? (nextRecord[positionField] as number) ?? (overIdx + 2) * 1000
+              ? ((nextRecord[positionField] as number) ?? (overIdx + 2) * 1000)
               : overPos + 1000
 
             const rawGap = (nextPos as number) - overPos
             if (rawGap <= MIN_GAP) {
               // Gap too small — renumber column with fresh gaps
-              return renumberColumn(columnRecords, activeIdx, overIdx, isDraggingDown, activeRecord, getClient, entity, entityModule, entityName, positionField, statusField, setRecords, toast)
+              return renumberColumn(
+                columnRecords,
+                activeIdx,
+                overIdx,
+                isDraggingDown,
+                activeRecord,
+                getClient,
+                entity,
+                entityModule,
+                entityName,
+                positionField,
+                statusField,
+                setRecords,
+                toast,
+              )
             }
-            targetPosition = overPos === nextPos ? overPos + 1000 : Math.floor((overPos + nextPos) / 2)
+            targetPosition =
+              overPos === nextPos
+                ? overPos + 1000
+                : Math.floor((overPos + nextPos) / 2)
             if (targetPosition <= overPos) targetPosition = overPos + 1
           } else {
             // Moving UP → card goes BEFORE overRecord (between prev and over)
             const prevRecord = columnRecords[overIdx - 1]
             const prevPos = prevRecord
-              ? (prevRecord[positionField] as number) ?? overIdx * 1000
+              ? ((prevRecord[positionField] as number) ?? overIdx * 1000)
               : overPos - 1000
 
             const rawGap = overPos - (prevPos as number)
             if (rawGap <= MIN_GAP) {
               // Gap too small — renumber column with fresh gaps
-              return renumberColumn(columnRecords, activeIdx, overIdx, isDraggingDown, activeRecord, getClient, entity, entityModule, entityName, positionField, statusField, setRecords, toast)
+              return renumberColumn(
+                columnRecords,
+                activeIdx,
+                overIdx,
+                isDraggingDown,
+                activeRecord,
+                getClient,
+                entity,
+                entityModule,
+                entityName,
+                positionField,
+                statusField,
+                setRecords,
+                toast,
+              )
             }
-            targetPosition = overPos === prevPos ? overPos + 1 : Math.floor((prevPos + overPos) / 2)
+            targetPosition =
+              overPos === prevPos
+                ? overPos + 1
+                : Math.floor((prevPos + overPos) / 2)
             if (targetPosition <= (prevPos ?? 0)) targetPosition = overPos + 1
           }
 
           // Only exit early when active has a non-null position that matches
-          if (activePosition != null && activePosition === targetPosition) return
+          if (activePosition != null && activePosition === targetPosition)
+            return
         } else {
           // ── Cross-column drop onto specific card ──
           const currentStatus = activeRecord[statusField] as string
@@ -400,23 +485,33 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
 
           // Insert before overRecord
           if (positionField) {
-            const targetRecords = [...getColumnRecords(targetStatus)].sort((a, b) => {
-              const pa = (a[positionField] as number) ?? POS_NULL_SENTINEL
-              const pb = (b[positionField] as number) ?? POS_NULL_SENTINEL
-              if (pa !== pb) return pa - pb
-              const ca = a.created_at ? new Date(String(a.created_at)).getTime() : 0
-              const cb = b.created_at ? new Date(String(b.created_at)).getTime() : 0
-              return ca - cb
-            })
+            const targetRecords = [...getColumnRecords(targetStatus)].sort(
+              (a, b) => {
+                const pa = (a[positionField] as number) ?? POS_NULL_SENTINEL
+                const pb = (b[positionField] as number) ?? POS_NULL_SENTINEL
+                if (pa !== pb) return pa - pb
+                const ca = a.created_at
+                  ? new Date(String(a.created_at)).getTime()
+                  : 0
+                const cb = b.created_at
+                  ? new Date(String(b.created_at)).getTime()
+                  : 0
+                return ca - cb
+              },
+            )
             const overIdx = targetRecords.findIndex((r) => r.id === over.id)
             if (overIdx === -1) return
 
-            const overPos = (overRecord[positionField] as number) ?? (overIdx + 1) * 1000
+            const overPos =
+              (overRecord[positionField] as number) ?? (overIdx + 1) * 1000
             const prevRecord = targetRecords[overIdx - 1]
             const prevPos = prevRecord
-              ? (prevRecord[positionField] as number) ?? overIdx * 1000
+              ? ((prevRecord[positionField] as number) ?? overIdx * 1000)
               : overPos - 1000
-            targetPosition = overPos === prevPos ? overPos + 1 : Math.floor((prevPos + overPos) / 2)
+            targetPosition =
+              overPos === prevPos
+                ? overPos + 1
+                : Math.floor((prevPos + overPos) / 2)
             // Collision safety
             if (targetPosition <= (prevPos ?? 0)) targetPosition = overPos + 1
           }
@@ -443,9 +538,7 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
 
       // ── Optimistic update ──
       setRecords((prev) =>
-        prev.map((r) =>
-          r.id === active.id ? { ...r, ...patchBody } : r,
-        ),
+        prev.map((r) => (r.id === active.id ? { ...r, ...patchBody } : r)),
       )
 
       // ── Server PATCH ──
@@ -455,7 +548,9 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
           client,
           `${entity?.module ?? entityModule}/${entity?.name ?? entityName}/${active.id}`,
           patchBody,
-          (activeRecord as Record<string, unknown>).version as number | undefined,
+          (activeRecord as Record<string, unknown>).version as
+            | number
+            | undefined,
         )
         if (targetColumn) {
           toast.success(`Moved to ${targetColumn.label}`)
@@ -466,7 +561,9 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
         // Rollback on error
         setRecords(snapshot)
         const msg =
-          err instanceof Error ? err.message : "Failed to move card — server rejected the transition"
+          err instanceof Error
+            ? err.message
+            : "Failed to move card — server rejected the transition"
         toast.error(msg)
       }
     },
@@ -488,7 +585,11 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
   // ── Row action handler ──
 
   const handleRowAction = useCallback(
-    async (action: TableAction, record: Record<string, unknown>, skipConfirm = false) => {
+    async (
+      action: TableAction,
+      record: Record<string, unknown>,
+      skipConfirm = false,
+    ) => {
       if (!me || !entity) return
 
       // Permission check
@@ -692,7 +793,11 @@ async function renumberColumn(
   newOrder.splice(insertAt, 0, moved)
 
   // Assign fresh positions with 1000 gap
-  const repositions: { id: string; newPos: number; record: Record<string, unknown> }[] = []
+  const repositions: {
+    id: string
+    newPos: number
+    record: Record<string, unknown>
+  }[] = []
   let versionMap = new Map<string, number>()
   for (const rec of columnRecords) {
     if (rec.id != null) {
@@ -728,7 +833,9 @@ async function renumberColumn(
 
   const failures = results.filter((r) => r.status === "rejected")
   if (failures.length > 0) {
-    toast.error(`${failures.length} card(s) failed to renumber — refresh to sync`)
+    toast.error(
+      `${failures.length} card(s) failed to renumber — refresh to sync`,
+    )
   } else {
     toast.success("Column reordered")
   }
@@ -782,7 +889,10 @@ function KanbanColumn({
   }, [cards, positionField])
 
   const visibleCards = sortedCards.slice(0, maxCards)
-  const cardIds = useMemo(() => visibleCards.map((c) => (c.id as string) ?? ""), [visibleCards])
+  const cardIds = useMemo(
+    () => visibleCards.map((c) => (c.id as string) ?? ""),
+    [visibleCards],
+  )
 
   return (
     <div
@@ -796,7 +906,9 @@ function KanbanColumn({
         <div className="flex items-center gap-2">
           <div
             className="size-2 rounded-full"
-            style={{ backgroundColor: column.color ?? "var(--muted-foreground)" }}
+            style={{
+              backgroundColor: column.color ?? "var(--muted-foreground)",
+            }}
           />
           <span className="text-sm font-medium">{column.label}</span>
           {isFull && (
@@ -817,7 +929,10 @@ function KanbanColumn({
             No items
           </div>
         ) : (
-          <SortableContext items={cardIds} strategy={verticalListSortingStrategy}>
+          <SortableContext
+            items={cardIds}
+            strategy={verticalListSortingStrategy}
+          >
             {visibleCards.map((card) => {
               const id = (card.id as string) ?? ""
               return (
@@ -870,13 +985,8 @@ function SortableCard({
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
 
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-  } = useSortable({ id })
+  const { attributes, listeners, setNodeRef, transform, transition } =
+    useSortable({ id })
 
   const style = transform
     ? {
@@ -948,7 +1058,8 @@ function SortableCard({
                         <Eye className="size-3" />
                       ) : action.icon === "edit" || action.action === "edit" ? (
                         <Edit2 className="size-3" />
-                      ) : action.icon === "trash" || action.action === "delete" ? (
+                      ) : action.icon === "trash" ||
+                        action.action === "delete" ? (
                         <Trash2 className="size-3" />
                       ) : action.icon === "check" ? (
                         <Check className="size-3" />
