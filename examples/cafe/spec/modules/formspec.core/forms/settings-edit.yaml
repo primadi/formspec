@@ -24,7 +24,7 @@ spec:
       fields:
         - { field: date_format, label: "Format Tanggal", help: "mis. DD/MM/YYYY, YYYY-MM-DD" }
         - { field: decimal_scale, label: "Skala Desimal", help: "Digit di belakang koma" }
-        - { field: rounding, label: "Pembulatan", help: "half_even | half_up | half_down | up | down" }
+        - { field: rounding, label: "Pembulatan", widget: select, help: "half_even | half_up | half_down | up | down" }
   submit:
     label: "Simpan Pengaturan"
     message: "Pengaturan tersimpan — berlaku otomatis"

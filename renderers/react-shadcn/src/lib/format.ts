@@ -30,11 +30,63 @@ export interface Formatter {
   relative: (value: string | Date) => string
 }
 
+/** Rounding modes for money/decimal arithmetic (spec §10). */
+export type RoundingMode = "half_even" | "half_up" | "half_down" | "up" | "down"
+
 // ── Standard defaults (spec §10) ──
 const DEFAULT_LOCALE = "en-US"
 const DEFAULT_CURRENCY = "USD"
 const DEFAULT_DECIMAL_PLACES = 2
 const DEFAULT_DATE_FORMAT = "YYYY-MM-DD"
+const DEFAULT_ROUNDING: RoundingMode = "half_even"
+
+/**
+ * Round a value to `places` decimals using the given mode (BigDecimal-style
+ * semantics, spec §10):
+ *   - half_even: ties to the nearest even digit (banker's, default)
+ *   - half_up:   ties away from zero
+ *   - half_down: ties toward zero
+ *   - up:        always away from zero
+ *   - down:      always toward zero
+ * A small epsilon guards against binary floating-point drift (e.g. 1.005*100
+ * = 100.49999…), so ties resolve to the intended digit.
+ */
+export function roundTo(
+  value: number,
+  places: number,
+  mode: RoundingMode = DEFAULT_ROUNDING,
+): number {
+  if (!Number.isFinite(value)) return value
+  const factor = Math.pow(10, places)
+  // Snap the scaled value to a high precision to cancel binary floating-point
+  // drift (e.g. 1.005*100 = 100.49999999999999 → 100.5) so ties resolve to
+  // the intended digit instead of the nearest representable neighbor.
+  const scaled = Math.round(value * factor * 1e12) / 1e12
+  let r: number
+  switch (mode) {
+    case "up":
+      r = scaled >= 0 ? Math.ceil(scaled) : Math.floor(scaled)
+      break
+    case "down":
+      r = scaled >= 0 ? Math.floor(scaled) : Math.ceil(scaled)
+      break
+    case "half_up":
+      r = scaled >= 0 ? Math.floor(scaled + 0.5) : Math.ceil(scaled - 0.5)
+      break
+    case "half_down":
+      r = scaled >= 0 ? Math.ceil(scaled - 0.5) : Math.floor(scaled + 0.5)
+      break
+    case "half_even":
+    default: {
+      const floor = Math.floor(scaled)
+      const diff = scaled - floor
+      if (diff < 0.5) r = floor
+      else if (diff > 0.5) r = floor + 1
+      else r = floor % 2 === 0 ? floor : floor + 1
+    }
+  }
+  return r / factor
+}
 
 /**
  * Build a Formatter from the resolved global settings. Falls back to the
@@ -49,28 +101,30 @@ export function createFormatter(settings?: Settings): Formatter {
   const currencySymbol = settings?.currency?.symbol
   const dateFormat = settings?.date_format || DEFAULT_DATE_FORMAT
   const decimalScale = settings?.decimal_scale ?? DEFAULT_DECIMAL_PLACES
+  const rounding = settings?.rounding || DEFAULT_ROUNDING
 
   const money = (value: number): string => {
+    const rounded = roundTo(value, currencyPlaces, rounding)
     if (currencySymbol) {
       // Explicit symbol from settings — format with the symbol + locale
       // grouping, honoring the currency's minor-unit scale.
       const grouped = new Intl.NumberFormat(locale, {
         minimumFractionDigits: currencyPlaces,
         maximumFractionDigits: currencyPlaces,
-      }).format(value)
+      }).format(rounded)
       return `${currencySymbol}${grouped}`
     }
     return new Intl.NumberFormat(locale, {
       style: "currency",
       currency: currencyCode,
-    }).format(value)
+    }).format(rounded)
   }
 
   const number = (value: number): string =>
     new Intl.NumberFormat(locale, {
       minimumFractionDigits: 0,
       maximumFractionDigits: decimalScale,
-    }).format(value)
+    }).format(roundTo(value, decimalScale, rounding))
 
   const date = (value: string | Date): string => {
     const d = typeof value === "string" ? new Date(value) : value

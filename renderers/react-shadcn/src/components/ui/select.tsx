@@ -26,9 +26,7 @@ interface SelectProps {
   error?: boolean
 }
 
-function normalizeOption(
-  opt: string | SelectOption,
-): SelectOption {
+function normalizeOption(opt: string | SelectOption): SelectOption {
   if (typeof opt === "string") {
     return {
       value: opt,
@@ -51,6 +49,10 @@ export function Select({
   const [focusedIndex, setFocusedIndex] = useState(-1)
   const containerRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
+  // Type-ahead search buffer (native <select> style): typing letters jumps to
+  // the matching option. Reset after a short pause.
+  const typeaheadRef = useRef("")
+  const typeaheadTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   const normalizedOptions = options.map(normalizeOption)
   const selectedOption = normalizedOptions.find((o) => o.value === value)
@@ -73,7 +75,9 @@ export function Select({
   // Scroll focused item into view
   useEffect(() => {
     if (!isOpen || focusedIndex < 0 || !listRef.current) return
-    const item = listRef.current.children[focusedIndex] as HTMLElement | undefined
+    const item = listRef.current.children[focusedIndex] as
+      | HTMLElement
+      | undefined
     item?.scrollIntoView({ block: "nearest" })
   }, [focusedIndex, isOpen])
 
@@ -82,12 +86,53 @@ export function Select({
       onChange?.(opt.value)
       setIsOpen(false)
       setFocusedIndex(-1)
+      typeaheadRef.current = ""
     },
     [onChange],
   )
 
+  const clearTypeahead = useCallback(() => {
+    typeaheadRef.current = ""
+    if (typeaheadTimerRef.current) {
+      clearTimeout(typeaheadTimerRef.current)
+      typeaheadTimerRef.current = undefined
+    }
+  }, [])
+
+  const isPrintableKey = useCallback(
+    (key: string) => key.length === 1 && /[a-zA-Z0-9]/.test(key),
+    [],
+  )
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      // Type-ahead search — typing letters jumps to the matching option,
+      // whether the dropdown is open or closed.
+      if (isPrintableKey(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault()
+        if (!isOpen) {
+          setIsOpen(true)
+        }
+        typeaheadRef.current = (typeaheadRef.current + e.key).toLowerCase()
+        if (typeaheadTimerRef.current) {
+          clearTimeout(typeaheadTimerRef.current)
+        }
+        typeaheadTimerRef.current = setTimeout(() => {
+          typeaheadRef.current = ""
+        }, 600)
+
+        const buf = typeaheadRef.current
+        const start = focusedIndex + 1
+        for (let i = 0; i < normalizedOptions.length; i++) {
+          const idx = (start + i) % normalizedOptions.length
+          if (normalizedOptions[idx].label.toLowerCase().startsWith(buf)) {
+            setFocusedIndex(idx)
+            break
+          }
+        }
+        return
+      }
+
       if (!isOpen) {
         if (e.key === "Enter" || e.key === " " || e.key === "ArrowDown") {
           e.preventDefault()
@@ -102,6 +147,7 @@ export function Select({
           e.preventDefault()
           setIsOpen(false)
           setFocusedIndex(-1)
+          clearTypeahead()
           break
         case "ArrowDown":
           e.preventDefault()
@@ -124,7 +170,14 @@ export function Select({
           break
       }
     },
-    [isOpen, focusedIndex, normalizedOptions, handleSelect],
+    [
+      isOpen,
+      focusedIndex,
+      normalizedOptions,
+      handleSelect,
+      isPrintableKey,
+      clearTypeahead,
+    ],
   )
 
   return (
@@ -146,8 +199,13 @@ export function Select({
           className,
         )}
       >
-        <span className={cn("flex-1 truncate text-left", !selectedOption && "text-muted-foreground")}>
-          {selectedOption ? selectedOption.label : placeholder ?? "Pilih..."}
+        <span
+          className={cn(
+            "flex-1 truncate text-left",
+            !selectedOption && "text-muted-foreground",
+          )}
+        >
+          {selectedOption ? selectedOption.label : (placeholder ?? "Pilih...")}
         </span>
         <ChevronDown
           className={cn(

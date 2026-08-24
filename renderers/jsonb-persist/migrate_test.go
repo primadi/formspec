@@ -527,6 +527,63 @@ func TestMigrationRunner_FieldAddDiff(t *testing.T) {
 	}
 }
 
+func TestMigrationRunner_EnumChangeNoDuplicateColumn(t *testing.T) {
+	// Regression: changing an enum value list changes the DDL checksum (the
+	// CHECK constraint), which triggers diffExistingTable. The indexed enum
+	// field's generated column (_status) must be detected as already present
+	// via table_xinfo; otherwise the diff tries to ADD COLUMN it again and
+	// SQLite fails with "duplicate column name".
+	dir := t.TempDir()
+	d, err := OpenSQLite(filepath.Join(dir, "migrate_enum.db"), nil)
+	if err != nil {
+		t.Fatalf("OpenSQLite failed: %v", err)
+	}
+	defer d.Close()
+
+	r := NewMigrationRunner(d, DriverSQLite)
+	ctx := context.Background()
+
+	mk := func(vals []string) []EntityMigration {
+		return []EntityMigration{
+			{
+				Metadata: spec.Metadata{Name: "table", Module: "cafe-master"},
+				EntitySpec: spec.EntitySpec{
+					Version: "v1",
+					Fields: []spec.Field{
+						{Name: "code", Type: spec.FieldString, Unique: true},
+						{Name: "status", Type: spec.FieldEnum, Index: true, EnumValues: vals},
+					},
+				},
+			},
+		}
+	}
+
+	// Initial apply with generated columns for code + status.
+	if _, err := r.ApplyMigrations(ctx, mk([]string{"available", "occupied", "reserved"})); err != nil {
+		t.Fatalf("initial apply: %v", err)
+	}
+
+	// Add an enum value → checksum changes → diff path runs.
+	entities2 := mk([]string{"available", "occupied", "reserved", "not_available"})
+	results, err := r.PlanMigrations(ctx, entities2)
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	if len(results) != 0 {
+		t.Fatalf("expected 0 diff migrations (generated columns already exist), got %d: %q",
+			len(results), results[0].DDL)
+	}
+
+	// Applying must not error with duplicate column.
+	applied, err := r.ApplyMigrations(ctx, entities2)
+	if err != nil {
+		t.Fatalf("apply after enum change: %v", err)
+	}
+	if applied != 0 {
+		t.Fatalf("expected 0 applied, got %d", applied)
+	}
+}
+
 func TestMigrationRunner_OutputDDL(t *testing.T) {
 	// Verify generated DDL is valid SQL by checking structure
 	meta := spec.Metadata{Name: "invoice", Module: "billing"}

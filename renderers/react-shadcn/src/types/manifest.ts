@@ -1046,7 +1046,7 @@ export interface Settings {
   /** Default digits after the decimal point for `decimal` fields without their own `scale`. */
   decimal_scale?: number
   /** Default rounding mode: half_even | half_up | half_down | up | down. */
-  rounding?: string
+  rounding?: "half_even" | "half_up" | "half_down" | "up" | "down"
 }
 
 export interface MetaBundle {

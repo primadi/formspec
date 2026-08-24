@@ -7,7 +7,12 @@
 // Run with: npx vitest run src/lib/format.test.ts
 
 import { describe, it, expect } from "vitest"
-import { createFormatter, parseDateByPattern, formatDateInput } from "./format"
+import {
+  createFormatter,
+  parseDateByPattern,
+  formatDateInput,
+  roundTo,
+} from "./format"
 
 describe("createFormatter — defaults (no settings)", () => {
   const fmt = createFormatter()
@@ -72,6 +77,77 @@ describe("createFormatter — partial settings overlay", () => {
     expect(fmt.money(10)).toBe("US$10,00")
     // date_format not set → default ISO
     expect(fmt.date("2026-08-24T00:00:00Z")).toBe("2026-08-24")
+  })
+})
+
+describe("roundTo — rounding modes (spec §10)", () => {
+  it("half_even rounds ties to the nearest even digit (banker's)", () => {
+    expect(roundTo(2.5, 0, "half_even")).toBe(2)
+    expect(roundTo(3.5, 0, "half_even")).toBe(4)
+    expect(roundTo(2.4, 0, "half_even")).toBe(2)
+    expect(roundTo(2.6, 0, "half_even")).toBe(3)
+  })
+
+  it("half_up rounds ties away from zero", () => {
+    expect(roundTo(2.5, 0, "half_up")).toBe(3)
+    expect(roundTo(-2.5, 0, "half_up")).toBe(-3)
+  })
+
+  it("half_down rounds ties toward zero", () => {
+    expect(roundTo(2.5, 0, "half_down")).toBe(2)
+    expect(roundTo(-2.5, 0, "half_down")).toBe(-2)
+  })
+
+  it("up always rounds away from zero", () => {
+    expect(roundTo(2.1, 0, "up")).toBe(3)
+    expect(roundTo(-2.1, 0, "up")).toBe(-3)
+  })
+
+  it("down always rounds toward zero", () => {
+    expect(roundTo(2.9, 0, "down")).toBe(2)
+    expect(roundTo(-2.9, 0, "down")).toBe(-2)
+  })
+
+  it("rounds to decimal places", () => {
+    expect(roundTo(1.005, 2, "half_up")).toBe(1.01)
+    expect(roundTo(1.004, 2, "half_even")).toBe(1.0)
+  })
+
+  it("defaults to half_even", () => {
+    expect(roundTo(2.5, 0)).toBe(2)
+  })
+
+  it("passes through non-finite values", () => {
+    expect(roundTo(NaN, 2)).toBeNaN()
+    expect(roundTo(Infinity, 2)).toBe(Infinity)
+  })
+})
+
+describe("createFormatter — rounding mode applied", () => {
+  const fmt = (
+    rounding: "half_even" | "half_up" | "half_down" | "up" | "down",
+  ) =>
+    createFormatter({
+      currency: { code: "IDR", decimal_places: 2, symbol: "Rp" },
+      locale: "id-ID",
+      rounding,
+    })
+
+  it("half_even (default) rounds money ties to even", () => {
+    expect(fmt("half_even").money(1.005)).toBe("Rp1,00")
+    expect(fmt("half_even").money(1.015)).toBe("Rp1,02")
+  })
+
+  it("half_up rounds money ties away from zero", () => {
+    expect(fmt("half_up").money(1.005)).toBe("Rp1,01")
+  })
+
+  it("down truncates money", () => {
+    expect(fmt("down").money(1.999)).toBe("Rp1,99")
+  })
+
+  it("up rounds money up", () => {
+    expect(fmt("up").money(1.001)).toBe("Rp1,01")
   })
 })
 

@@ -77,6 +77,35 @@ resolution integer/decimal di FormRenderer. Plan:
 `docs/plan/date-input-global-format-runtime-settings.md` · changelog:
 `2026-08-24-010`.
 
+**Catatan 2026-08-24**: **Fix: seed `app-setting` default dari manifest** —
+halaman Pengaturan menampilkan form kosong pada akses pertama karena
+find-or-create reference entity hanya meng-seed natural key, tidak menyalin
+nilai default dari manifest `settings:`. Kini `HandleFind` men-seed record
+`formspec.core/app-setting` dengan resolved settings (`seedSettingsData`) saat
+find-or-create; `HandlerFactory.SetSettings` di-wire dari
+`RouterBuilder.SetSettings`. Changelog: `2026-08-24-012`.
+
+**Catatan 2026-08-24**: **Rounding: enum dropdown + diterapkan di formatting** —
+(1) field `rounding` di halaman Pengaturan kini dropdown (Select) via
+`enum_values` di entity + `widget: select` di form (tetap `type: string` untuk
+hindari migrasi enum yang rapuh). (2) `rounding` yang tadinya "declared but
+unused" kini benar-benar dipakai: `lib/format.ts` ekspor `RoundingMode` +
+`roundTo(value, places, mode)` (semantik BigDecimal, snap presisi tinggi untuk
+atasi drift biner), dan `createFormatter` menerapkannya di `money`/`number`.
+Changelog: `2026-08-24-013`.
+
+**Catatan 2026-08-24**: **Dokumentasi `formspec.core` sebagai special module** —
+`docs/spec/platform/02-workspace-app-module.md` §9 diperkaya: intro menegaskan
+`formspec.core` adalah special/reserved module (selalu ada, tidak perlu
+`depends_on`, tidak boleh dideklarasikan user); subsection baru §9.1
+"Karakteristik khusus" (reserved namespace, bundled module dogfooding,
+special-casing framework untuk global settings `app-setting` + auth core,
+selalu tersedia); tabel resource ditambah `app-setting`. Ditambah §9.2
+"Route & Page yang disediakan" (page eksplisit + derived CRUD route entity
+ui-exposed), §9.3 "Akses dari script" (`resource.fetch`, `ctx.config().get`,
+`ctx.db`), §9.4 "Override default value" (runtime settings, `external/`,
+`overrides/`, `auth_config_ref`). Changelog: `2026-08-24-014`.
+
 ---
 
 ## Fase 0: Documentation & Repo Foundation ✅ COMPLETE
@@ -406,6 +435,7 @@ resolution integer/decimal di FormRenderer. Plan:
 - [ ] 5.4.3 Batch editing — `batch_edit: [field, ...]`, update per baris, partial failure reported (not all-or-nothing)
 - [ ] 5.4.4 Column derivation fix — N priority columns (natural key → label_field → status → transaction_date → rest), overflow accessible via row expand/detail; NEVER silently dropped
 - [ ] 5.4.5 `realtime: true` — auto-subscribe + patch rows in-place (depends on 5.8)
+- [x] 5.4.6 Fix table auto-refresh setelah overlay (modal/drawer) close — `TableRenderer` mendeteksi transisi URL `action` ada → hilang (overlay `OverlayHost` ditutup setelah save/cancel) lalu silent refetch; mencakup create & edit, dan berlaku untuk table derived maupun table block/tab di Page. Changelog `2026-08-24-011`. ✅ 2026-08-24
 
 ### 5.5 `kind: Kanban`
 

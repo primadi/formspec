@@ -100,6 +100,7 @@ func (b *RouterBuilder) SetApps(apps map[string]*formspec_app.ResolvedApp) {
 // defaults instead of guessing per component.
 func (b *RouterBuilder) SetSettings(s *spec.Settings) {
 	b.settings = s
+	b.factory.SetSettings(s)
 }
 
 // publicEntities returns the set of "module/entity" keys mounted by any

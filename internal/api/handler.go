@@ -27,6 +27,7 @@ type HandlerFactory struct {
 	specDirLookup func(module, name string) (string, bool)           // optional — resolves the entity's spec directory for hook/custom script refs
 	deliveryDeps  action.DeliveryDeps
 	idempotency   *db.IdempotencyStore // wired when idempotency enforcement is enabled (todo 2.7)
+	settings      *spec.Settings       // resolved global settings namespace (spec §10) — seeds app-setting find-or-create
 }
 
 // EntityStoreProvider abstracts the entity registry for handler use.
@@ -69,6 +70,13 @@ func (f *HandlerFactory) entitySpecDir(module, name string) string {
 	}
 	dir, _ := f.specDirLookup(module, name)
 	return dir
+}
+
+// SetSettings wires the resolved global settings namespace (spec §10). It
+// seeds the `app-setting` record on find-or-create so the Configuration Page
+// form shows the manifest-declared defaults instead of empty fields.
+func (f *HandlerFactory) SetSettings(s *spec.Settings) {
+	f.settings = s
 }
 
 // SetDeliveryDeps wires the event-delivery dependencies (hub, outbox, event
@@ -456,6 +464,13 @@ func (f *HandlerFactory) HandleFind(module, entity string) http.HandlerFunc {
 				if es, ok := f.specLookup(module, entity); ok &&
 					es.Characteristic == spec.CharReference && es.NaturalKeyField != "" {
 					defaultData := map[string]any{es.NaturalKeyField: id}
+					// Seed the `app-setting` record with the manifest-declared
+					// settings (spec §10 Configuration Page pattern) so the
+					// form shows defaults instead of empty fields on first
+					// access. Other reference entities seed only the key.
+					if module == "formspec.core" && entity == "app-setting" {
+						seedSettingsData(defaultData, f.settings)
+					}
 					newID, insertErr := store.Insert(ctx, db.InsertParams{
 						WorkspaceID: workspaceID,
 						CreatedBy:   userFromContext(ctx),
@@ -480,6 +495,43 @@ func (f *HandlerFactory) HandleFind(module, entity string) http.HandlerFunc {
 			Data: rec,
 			Meta: MetaSingle{RequestID: requestIDFromContext(ctx), Timestamp: time.Now().UTC().Format(time.RFC3339)},
 		})
+	}
+}
+
+// seedSettingsData overlays the resolved global settings namespace onto an
+// `app-setting` record's data map (spec §10 Configuration Page pattern). It
+// maps each Settings field to the matching app-setting entity field so the
+// Configuration Page form shows the manifest-declared defaults on first
+// access. Only non-empty values are written; the record stays minimal.
+func seedSettingsData(data map[string]any, s *spec.Settings) {
+	if s == nil {
+		return
+	}
+	if s.Currency != nil {
+		if s.Currency.Code != "" {
+			data["currency_code"] = s.Currency.Code
+		}
+		if s.Currency.DecimalPlaces != nil {
+			data["currency_decimal_places"] = *s.Currency.DecimalPlaces
+		}
+		if s.Currency.Symbol != "" {
+			data["currency_symbol"] = s.Currency.Symbol
+		}
+	}
+	if s.Locale != "" {
+		data["locale"] = s.Locale
+	}
+	if s.Timezone != "" {
+		data["timezone"] = s.Timezone
+	}
+	if s.DateFormat != "" {
+		data["date_format"] = s.DateFormat
+	}
+	if s.DecimalScale != 0 {
+		data["decimal_scale"] = s.DecimalScale
+	}
+	if s.Rounding != "" {
+		data["rounding"] = s.Rounding
 	}
 }
 

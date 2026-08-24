@@ -28,7 +28,7 @@ spec:
       description: "Jumlah orang maksimal"
     - name: status
       type: enum
-      enum_values: [available, occupied, reserved]
+      enum_values: [available, occupied, reserved, not_available]
       default: available
       index: true
       title: "Status"

@@ -364,24 +364,51 @@ Protocol ([`04-control-plane.md`](04-control-plane.md) §1,
 
 ## 9. Resource Bawaan `formspec.core`
 
-`formspec.core` adalah namespace resource **yang selalu ada di setiap workspace**,
-terlepas dari Module apa pun yang terpasang — tidak perlu di-`depends_on`, tidak
-perlu diinstal, tidak dideklarasikan oleh Module mana pun. Enumerasi ini adalah
-referensi "apa yang selalu tersedia" bagi developer yang perlu merujuk resource
-ini (mis. mengueri audit log, mengecek role assignment) tanpa harus memiliki
-Module sendiri yang mendeklarasikannya.
+`formspec.core` adalah **module khusus (special/reserved module)** framework —
+namespace resource yang **selalu ada di setiap workspace**, terlepas dari Module
+apa pun yang terpasang. Ia tidak perlu di-`depends_on`, tidak perlu diinstal, dan
+**tidak boleh dideklarasikan oleh Module user** (namespace-nya reserved milik
+framework). Enumerasi di bawah adalah referensi "apa yang selalu tersedia" bagi
+developer yang perlu merujuk resource ini (mis. mengueri audit log, mengecek role
+assignment) tanpa harus memiliki Module sendiri yang mendeklarasikannya.
 
-| Resource         | Isi                                                                                                                           | Kaitan                                                                                      |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `workspace`      | Identitas dan metadata tenant — unit multi-tenancy tunggal FormSpec                                                           | §1 Model Kepemilikan                                                                        |
-| `user`           | Akun manusia di level workspace — satu akun per manusia                                                                       | §8 Identitas User & Membership                                                              |
-| `app-membership` | Record membership per-App (populasi user + atribut mis. kode cabang, ter-scope per App)                                       | §8 Identitas User & Membership                                                              |
-| `role`           | Definisi role — dimiliki Module, otomatis ter-scope per-App saat Module di-mount                                              | §8                                                                                          |
-| `api-key`        | Kredensial akses non-interaktif (service/integrasi)                                                                           | [`04-control-plane.md`](04-control-plane.md) §5                                             |
-| `session`        | Sesi login aktif user                                                                                                         | §3 (auth per-App)                                                                           |
-| `job`            | Pelacakan async job — mengikat kontrak wire async action ([`../backend/02-core-extended.md`](../backend/02-core-extended.md)) | —                                                                                           |
-| `audit-log`      | Jejak audit bisnis append-only, immutable                                                                                     | [`../backend/02-core-extended.md`](../backend/02-core-extended.md) §11 Business Audit Trail |
-| `setting`        | Namespace global-settings `settings.*` (workspace/App Config)                                                                 | [`../backend/01-core-basic.md`](../backend/01-core-basic.md) §10 Config & Global Settings   |
+### 9.1 Karakteristik khusus
+
+`formspec.core` berbeda dari Module biasa karena:
+
+- **Reserved namespace** — user tidak bisa mendeklarasikan module bernama
+  `formspec.core`; namespace ini milik framework.
+- **Bundled module (dogfooding)** — didefinisikan sebagai bundled module YAML
+  yang di-embed ke binary (`internal/auth/module/`, `//go:embed`) dan dimuat
+  lewat manifest loader — jalur yang sama dengan module user. Entity auth
+  (`user`, `session`, `role`, `api-key`, `app-membership`, `workspace`)
+  diekspresikan sebagai YAML manifests, bukan registrasi programatik Go.
+  `formspec generate auth` menyalin module ini ke `external/auth` untuk
+  dikustomisasi (user override menang).
+- **Special-casing framework** — beberapa fitur framework meng-hardcode
+  `formspec.core`:
+  - **Global settings** (`settings.*`, spec §10): entity `app-setting`
+    (characteristic `reference`, natural key `"global"`) adalah Configuration
+    Page pattern — backend membaca/men-seed record ini saat find-or-create
+    (`mergeRunningSettings` + `seedSettingsData`) dan meng-overlay-nya ke
+    `bundle.settings`.
+  - **Auth core** — `user`, `session`, `role`, `api-key`, `app-membership`,
+    `workspace` di-backing oleh entity di namespace ini.
+- **Selalu tersedia** — tidak perlu deklarasi `depends_on`; setiap module
+  otomatis bisa merujuk resource `formspec.core`.
+
+| Resource         | Isi                                                                                                                                 | Kaitan                                                                                      |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `workspace`      | Identitas dan metadata tenant — unit multi-tenancy tunggal FormSpec                                                                 | §1 Model Kepemilikan                                                                        |
+| `user`           | Akun manusia di level workspace — satu akun per manusia                                                                             | §8 Identitas User & Membership                                                              |
+| `app-membership` | Record membership per-App (populasi user + atribut mis. kode cabang, ter-scope per App)                                             | §8 Identitas User & Membership                                                              |
+| `role`           | Definisi role — dimiliki Module, otomatis ter-scope per-App saat Module di-mount                                                    | §8                                                                                          |
+| `api-key`        | Kredensial akses non-interaktif (service/integrasi)                                                                                 | [`04-control-plane.md`](04-control-plane.md) §5                                             |
+| `session`        | Sesi login aktif user                                                                                                               | §3 (auth per-App)                                                                           |
+| `job`            | Pelacakan async job — mengikat kontrak wire async action ([`../backend/02-core-extended.md`](../backend/02-core-extended.md))       | —                                                                                           |
+| `audit-log`      | Jejak audit bisnis append-only, immutable                                                                                           | [`../backend/02-core-extended.md`](../backend/02-core-extended.md) §11 Business Audit Trail |
+| `setting`        | Namespace global-settings `settings.*` (workspace/App Config)                                                                       | [`../backend/01-core-basic.md`](../backend/01-core-basic.md) §10 Config & Global Settings   |
+| `app-setting`    | Record runtime global-settings (Configuration Page pattern, natural key `"global"`) — running value yang di-overlay ke `settings.*` | [`../backend/01-core-basic.md`](../backend/01-core-basic.md) §10 Config & Global Settings   |
 
 Selain resource di atas, `formspec.core` juga meng-expose **service endpoint
 bawaan** `health` dan `metrics` untuk observability — kosakata health
@@ -391,3 +418,66 @@ machine-readable dan set metric Prometheus didefinisikan di
 Resource `formspec.core` mengikuti model kepemilikan data workspace yang sama
 (§1): data ini milik workspace, bukan milik Module Owner mana pun. Akses tetap
 tunduk pada permission — merujuk resource ini bukan berarti bebas otorisasi.
+
+### 9.2 Route & Page yang disediakan
+
+`formspec.core` menyediakan halaman (Page) eksplisit dan route CRUD derived
+untuk entity yang di-`ui-exposed`. Route di-mount ke App yang me-deklarasikan
+`formspec.core` di `spec.modules` (§3).
+
+**Page eksplisit:**
+
+| Page                | Route                | Isi                                                                               |
+| ------------------- | -------------------- | --------------------------------------------------------------------------------- |
+| `access-management` | `/access-management` | Kelola user & role dalam satu halaman — tabs **Users** dan **Roles**              |
+| `settings`          | `/settings`          | Configuration Page — edit global settings (`app-setting`, natural key `"global"`) |
+
+**Entity + derived CRUD route** (yang `formspec.dev/ui-exposed: "true"`):
+
+| Entity           | Karakteristik | Derived route (list) |
+| ---------------- | ------------- | -------------------- |
+| `user`           | master        | `/users`             |
+| `role`           | master        | `/roles`             |
+| `api-key`        | master        | `/api-keys`          |
+| `app-membership` | transaction   | `/app-memberships`   |
+
+Entity `workspace` dan `session` bersifat **internal** (tidak `ui-exposed`) —
+dipakai framework, tidak punya route UI.
+
+### 9.3 Akses dari script
+
+Script (Starlark) mengakses resource `formspec.core` lewat:
+
+- **`resource.fetch("formspec.core.<entity>", id)`** — membaca record entity
+  (notasi titik `module.entity`). Contoh:
+  `resource.fetch("formspec.core.user", user_id)`. Akses lintas-module dari
+  hook **wajib** dideklarasikan di `uses.resources` action yang menaunginya
+  ([`../backend/02-core-extended.md`](../backend/02-core-extended.md) §7).
+- **`ctx.config().get("settings.*")`** — membaca global settings (currency,
+  locale, timezone, date_format, decimal_scale, rounding) — namespace
+  `settings.*` di Config (spec §10,
+  [`../backend/01-core-basic.md`](../backend/01-core-basic.md) §10). Contoh:
+  `ctx.config().get("settings.default_currency")`.
+- **`ctx.db()`** — query langsung ke datastore module; akses lintas-module
+  wajib deklarasi `uses`
+  ([`../backend/01-core-basic.md`](../backend/01-core-basic.md) §3).
+
+### 9.4 Override default value
+
+Nilai default `formspec.core` bisa di-override di beberapa level:
+
+1. **Runtime settings (global settings)** — record `app-setting` (natural key
+   `"global"`) adalah running value yang di-overlay ke `settings.*` saat
+   `/meta/ui` bundle di-serve. Admin mengubah lewat halaman **Pengaturan**
+   (`/settings`); field kosong di record fallback ke manifest `settings:`
+   (kind: Config). Backend men-seed record dari manifest saat find-or-create
+   pertama kali.
+2. **Override module auth (`external/`)** — `formspec generate auth` menyalin
+   bundled module `formspec.core` ke `external/auth` untuk dikustomisasi.
+   Entity di `external/` **menang** atas default bawaan (user override menang).
+   Lihat [`08-project-layout.md`](08-project-layout.md) §6.
+3. **Shadow copy (`overrides/`)** — `formspec override` membuat shadow copy
+   per-kind; module+kind+name yang sama di `overrides/` menggantikan total.
+   Lihat [`08-project-layout.md`](08-project-layout.md) §6.4.
+4. **`auth_config_ref`** — App bisa mereferensikan Config auth sendiri untuk
+   mengganti strategy/konfigurasi auth default `formspec.core`. Lihat §3.

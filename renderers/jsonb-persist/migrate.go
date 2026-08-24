@@ -570,8 +570,12 @@ func (r *MigrationRunner) existingColumns(ctx context.Context, schema, table str
 			"SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2",
 			schema, table)
 	} else {
+		// Use table_xinfo, not table_info: SQLite's table_info hides generated
+		// columns (GENERATED ALWAYS AS ... STORED), which would make the diff
+		// think indexed/unique generated columns are missing and try to ADD
+		// them again → "duplicate column name" error. table_xinfo includes them.
 		rows, err = r.db.QueryContext(ctx,
-			"SELECT name FROM pragma_table_info(?)", table)
+			"SELECT name FROM pragma_table_xinfo(?)", table)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("list columns %s: %w", table, err)

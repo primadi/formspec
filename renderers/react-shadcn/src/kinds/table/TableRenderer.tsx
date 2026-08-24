@@ -89,7 +89,7 @@ export default function TableRenderer({
 }: TableRendererProps) {
   const navigate = useNavigate()
   const { surfacePath } = useSurface()
-  const [, setSearchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const me = useSessionStore((s) => s.me)
   const getClient = useSessionStore((s) => s.getClient)
   const metaBundle = useMetaStore((s) => s.bundle)
@@ -257,6 +257,23 @@ export default function TableRenderer({
     silentRefetch.current = true
     setReloadKey((k) => k + 1)
   }, [realtimeTick])
+
+  // ── Overlay close → refresh ──
+  // The create/edit modal or drawer is URL-driven (?action=create&...). The
+  // table itself never unmounts while the overlay is open, so when the
+  // overlay closes (URL params removed after save/cancel) the list would
+  // otherwise keep showing stale data. Detect the open→closed transition
+  // and silently refetch — this also covers derived tables that have no
+  // realtime subscription.
+  const overlayWasOpen = useRef(false)
+  useEffect(() => {
+    const isOpen = !!searchParams.get("action")
+    if (overlayWasOpen.current && !isOpen) {
+      silentRefetch.current = true
+      setReloadKey((k) => k + 1)
+    }
+    overlayWasOpen.current = isOpen
+  }, [searchParams])
 
   // Row selection state for bulk actions
   const [rowSelection, setRowSelection] = useState({})

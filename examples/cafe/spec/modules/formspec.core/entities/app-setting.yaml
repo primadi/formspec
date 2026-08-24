@@ -55,7 +55,8 @@ spec:
     - name: rounding
       type: string
       title: "Pembulatan"
-      description: "half_even | half_up | half_down | up | down"
+      description: "Mode pembulatan untuk money/decimal"
+      enum_values: [half_even, half_up, half_down, up, down]
 
   actions:
     # Reference/config data tanpa lifecycle → plain CRUD: tombol "Simpan
