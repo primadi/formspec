@@ -309,6 +309,10 @@ func runDev(args []string) {
 	}
 
 	// ── 15. Serve ──
+	// Start the outbox worker (durable event delivery, todo 7.3.1) before
+	// serving — the dev command serves on its own http.Server rather than
+	// app.ListenAndServe(), so the worker must be started explicitly.
+	app.StartBackgroundWorkers()
 	restSrv := &http.Server{Addr: cfg.Addr, Handler: handler}
 	errCh := make(chan error, 2)
 	if socketSrv != nil {

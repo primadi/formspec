@@ -1,0 +1,12 @@
+apiVersion: formspec.dev/v1
+kind: Subscription
+metadata:
+  name: product-created-audit
+  module: demo
+  description: "Reaksi terhadap event on_create product — catat ke audit trail (demo 7.3)"
+spec:
+  events:
+    - demo.product.on_create
+  handler:
+    type: script_ref
+    ref: demo/handle_product_created

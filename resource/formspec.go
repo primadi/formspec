@@ -47,6 +47,7 @@ import (
 	"github.com/primadi/formspec/internal/manifest"
 	"github.com/primadi/formspec/internal/permission"
 	"github.com/primadi/formspec/internal/service"
+	"github.com/primadi/formspec/internal/subscription"
 	"github.com/primadi/formspec/internal/ui"
 	"github.com/primadi/formspec/internal/validation"
 	"github.com/primadi/formspec/internal/webhook"
@@ -166,7 +167,12 @@ type App struct {
 	disp         *action.Dispatcher
 	nativeEx     *action.NativeExecutor
 	outboxWorker *db.OutboxWorker
-	idempotency  *db.IdempotencyStore
+	// deliveryHandler is the outbox worker's DeliveryEventHandler. Held so a
+	// ReloadSpec() can re-point its Subscriptions field to a freshly built
+	// subscription dispatcher without recreating the worker (which would
+	// interrupt in-flight outbox draining).
+	deliveryHandler *db.DeliveryEventHandler
+	idempotency     *db.IdempotencyStore
 	httpServer   *http.Server
 
 	// nativeHandlers preserves user-registered native Go handlers across
@@ -360,6 +366,9 @@ func New(cfg Config) (*App, error) {
 	// Webhook registry (todo 7.6.1): load kind: Webhook manifests for
 	// verified inbound endpoints.
 	whReg := buildWebhookRegistry(specManifests.Manifests)
+	// Subscription registry (todo 7.3.1): load kind: Subscription manifests
+	// for event → handler dispatch.
+	subReg := buildSubscriptionRegistry(specManifests.Manifests)
 
 	rb := api.NewRouterBuilder(reg)
 	// Set the service registry BEFORE BuildRoutes so GenerateServiceRoutes
@@ -561,11 +570,17 @@ func New(cfg Config) (*App, error) {
 		}
 		return nil, false
 	}
-	outboxWorker := db.NewOutboxWorker(outboxStore, &db.DeliveryEventHandler{
-		Hub:      hub,
-		EventLog: eventLogStore,
-		Lookup:   eventChannelLookup,
-	})
+	// Subscription dispatch (todo 7.3.1): deliver emitted events to matching
+	// kind: Subscription handlers via the action dispatcher.
+	subDispatch := subscription.NewDispatcher(subReg, disp)
+
+	deliveryHandler := &db.DeliveryEventHandler{
+		Hub:           hub,
+		EventLog:      eventLogStore,
+		Lookup:        eventChannelLookup,
+		Subscriptions: subDispatch.Dispatch,
+	}
+	outboxWorker := db.NewOutboxWorker(outboxStore, deliveryHandler)
 
 	idempotencyStore := db.NewIdempotencyStore(database, driver).WithTTL(cfg.IdempotencyTTL)
 	// Wire the idempotency store into the router so idempotent actions are
@@ -575,9 +590,10 @@ func New(cfg Config) (*App, error) {
 	app := &App{
 		cfg: cfg, database: database, driver: driver,
 		reg: reg, rb: rb, disp: disp, nativeEx: nativeEx,
-		outboxWorker:   outboxWorker,
-		idempotency:    idempotencyStore,
-		nativeHandlers: make(map[string]action.NativeHandler),
+		outboxWorker:    outboxWorker,
+		deliveryHandler: deliveryHandler,
+		idempotency:     idempotencyStore,
+		nativeHandlers:  make(map[string]action.NativeHandler),
 	}
 	// Register native handlers for auth entity hooks (password hashing on
 	// formspec.core.user create/update).
@@ -630,12 +646,21 @@ func (a *App) Registry() *entity.Registry {
 // to detect when the meta bundle needs re-fetching.
 func (a *App) SpecVersion() int64 { return a.specVersion.Load() }
 
+// StartBackgroundWorkers starts the outbox worker (background delivery of
+// durable events, todo 7.3.1). Started explicitly rather than in New() so
+// building an App for tests (which typically only call Handler()) never
+// spins up a background poller. ListenAndServe calls it automatically; the
+// dev/serve CLI commands call it before serving on their own http.Server.
+func (a *App) StartBackgroundWorkers() {
+	a.outboxWorker.Start(context.Background())
+}
+
 // ListenAndServe starts the HTTP server on cfg.Addr. It also starts the
 // outbox worker (background delivery of durable events) — started here
 // rather than in New() so building an App for tests (which typically only
 // call Handler()) never spins up a background poller.
 func (a *App) ListenAndServe() error {
-	a.outboxWorker.Start(context.Background())
+	a.StartBackgroundWorkers()
 	a.httpServer = &http.Server{Addr: a.cfg.Addr, Handler: a.handler}
 	return a.httpServer.ListenAndServe()
 }
@@ -755,6 +780,8 @@ func (a *App) ReloadSpec() error {
 	newSvcReg := buildServiceRegistry(specManifests.Manifests)
 	// Webhook registry (todo 7.6.1): re-resolve on reload.
 	newWhReg := buildWebhookRegistry(specManifests.Manifests)
+	// Subscription registry (todo 7.3.1): re-resolve on reload.
+	newSubReg := buildSubscriptionRegistry(specManifests.Manifests)
 
 	newDisp := newDispatcher(newReg, newSvcReg, a.database, a.cfg, newCfgReg)
 
@@ -801,6 +828,13 @@ func (a *App) ReloadSpec() error {
 	outboxStore := db.NewOutboxStore(a.database, a.driver)
 	eventLogStore := db.NewEventLogStore(a.database, a.driver)
 	newRB.SetDeliveryDeps(action.DeliveryDeps{Hub: oldHub, Outbox: outboxStore, EventLog: eventLogStore})
+
+	// Re-point the outbox worker's subscription dispatch (todo 7.3.1) to a
+	// dispatcher built from the freshly reloaded registries — without
+	// recreating the worker, so in-flight outbox draining is uninterrupted.
+	if a.deliveryHandler != nil {
+		a.deliveryHandler.Subscriptions = subscription.NewDispatcher(newSubReg, newDisp).Dispatch
+	}
 
 	// Wire the idempotency store (todo 2.7) — same store instance, so
 	// in-flight keys survive a spec reload.
@@ -944,6 +978,29 @@ func buildWebhookRegistry(manifests []manifest.RawManifest) *webhook.Registry {
 			continue
 		}
 		reg.Add(raw.Metadata.Module, raw.Metadata.Name, wh)
+	}
+	return reg
+}
+
+// buildSubscriptionRegistry loads kind: Subscription manifests into a
+// subscription.Registry keyed by {module}.{name} and indexed by event name
+// (todo 7.3.1). Subscriptions make one module react to another resource's
+// events by dispatching to a referenced Service action.
+func buildSubscriptionRegistry(manifests []manifest.RawManifest) *subscription.Registry {
+	reg := subscription.NewRegistry()
+	for _, raw := range manifests {
+		if spec.Kind(raw.Kind) != spec.KindSubscription {
+			continue
+		}
+		specMap, ok := raw.Spec.(map[string]any)
+		if !ok {
+			continue
+		}
+		sub, err := manifest.RawSpecToSubscriptionSpec(specMap)
+		if err != nil {
+			continue
+		}
+		reg.Add(raw.Metadata.Module, raw.Metadata.Name, sub)
 	}
 	return reg
 }

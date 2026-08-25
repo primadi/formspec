@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/primadi/formspec/internal/events"
 	"github.com/primadi/formspec/pkg/spec"
@@ -16,12 +17,24 @@ import (
 // automatically. resource is "module/entity" (e.g. "clinic/visit").
 type SpecLookup func(resource, eventName string) (channels []spec.EventDeliveryDecl, ok bool)
 
+// SubscriptionDispatch delivers an emitted event to matching kind: Subscription
+// handlers (todo 7.3). eventName is the fully-qualified resource event
+// (e.g. "billing.invoice.on_submit"); resource is "module/entity". payload is
+// the event's wire payload. A non-nil error is treated by the outbox worker
+// as a delivery failure (retryable).
+type SubscriptionDispatch func(ctx context.Context, workspaceID, eventName, resource string, payload map[string]any) error
+
 // DeliveryEventHandler implements OutboxWorker's EventHandler, delivering
 // durable events enqueued by internal/action.DeliverEvents.
 type DeliveryEventHandler struct {
 	Hub      events.Hub
 	EventLog *EventLogStore
 	Lookup   SpecLookup
+	// Subscriptions, when non-nil, is invoked after channel fan-out to
+	// dispatch the event to matching kind: Subscription handlers. Wired from
+	// resource/formspec.go (which owns the subscription registry + action
+	// dispatcher) to avoid a renderer → internal/action import cycle.
+	Subscriptions SubscriptionDispatch
 }
 
 // HandleEvent implements EventHandler. payload is the JSON-marshaled
@@ -58,5 +71,28 @@ func (h *DeliveryEventHandler) HandleEvent(ctx context.Context, workspaceID, eve
 			// to support.
 		}
 	}
+
+	// Dispatch to kind: Subscription handlers (todo 7.3.1). The fully-qualified
+	// event name is "{module}.{entity}.{event}" — derived from the resource
+	// ("module/entity") and the short event name. A subscription handler
+	// failure is returned so the outbox worker retries (at-least-once).
+	if h.Subscriptions != nil {
+		fqEvent := fullyQualifiedEvent(resource, eventName)
+		if err := h.Subscriptions(ctx, workspaceID, fqEvent, resource, msg.Payload); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// fullyQualifiedEvent builds the fully-qualified resource event name
+// ("{module}.{entity}.{event}") from a resource ("module/entity") and a short
+// event name ("on_submit") — the form kind: Subscription declares in
+// SubscriptionSpec.Events.
+func fullyQualifiedEvent(resource, eventName string) string {
+	module, entity, ok := strings.Cut(resource, "/")
+	if !ok {
+		return eventName
+	}
+	return module + "." + entity + "." + eventName
 }

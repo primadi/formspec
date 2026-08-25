@@ -479,3 +479,16 @@ func RawSpecToWebhookSpec(specMap map[string]any) (*spec.WebhookSpec, error) {
 	}
 	return &wh, nil
 }
+
+// RawSpecToSubscriptionSpec converts a raw spec map to a typed SubscriptionSpec.
+func RawSpecToSubscriptionSpec(specMap map[string]any) (*spec.SubscriptionSpec, error) {
+	b, err := yaml.Marshal(specMap)
+	if err != nil {
+		return nil, fmt.Errorf("re-marshal spec: %w", err)
+	}
+	var sub spec.SubscriptionSpec
+	if err := yaml.Unmarshal(b, &sub); err != nil {
+		return nil, fmt.Errorf("unmarshal subscription spec: %w", err)
+	}
+	return &sub, nil
+}

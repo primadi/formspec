@@ -13,6 +13,17 @@ spec:
   expose:
     - type: rest
       actions: [list, find, create, update, delete]
+  actions:
+    - name: create
+      emits: on_create
+  events:
+    - name: on_create
+      type: async
+      description: "Produk baru dibuat — dipakai demo subscription engine (7.3)"
+      publish:
+        durable: true
+      deliver:
+        - channel: audit_log
   fields:
     - name: name
       type: string
