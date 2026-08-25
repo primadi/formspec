@@ -1928,6 +1928,14 @@ func (f *HandlerFactory) handleWorkflowApproval(
 			requesterID = fmt.Sprintf("%v", cb)
 		}
 		approval = workflow.NewApproval(wf, module, module+"."+entity, resourceID, fromState, toState, requesterID)
+		// Persist the workflow's manifest name (not a pointer address) so the
+		// escalation worker can resolve it back (todo 7.4.4).
+		if wfKey := f.wfRegistry.NameFor(wf); wfKey != "" {
+			if wfModule, wfName, ok := strings.Cut(wfKey, "/"); ok {
+				approval.WorkflowModule = wfModule
+				approval.WorkflowName = wfName
+			}
+		}
 		row := workflowApprovalToRow(approval)
 		row.TenantID = workspaceID
 		row.RejectStep = -1
@@ -1965,7 +1973,7 @@ func (f *HandlerFactory) handleWorkflowApproval(
 	switch decision {
 	case "approve":
 		// Requester can never approve their own request (7.4.5).
-		ok, reason := wfEngine.CanApprove(wf, approval.ActiveStep, userID, userRoles, approval.RequesterID, resourceData)
+		ok, reason := wfEngine.CanApprove(wf, approval.ActiveStep, userID, userRoles, approval.RequesterID, approval.EscalatedSteps[approval.ActiveStep], resourceData)
 		if !ok {
 			writeError(w, http.StatusForbidden, "WORKFLOW_DENIED", reason)
 			return
@@ -2018,7 +2026,7 @@ func (f *HandlerFactory) handleWorkflowApproval(
 
 	case "reject":
 		// Requester can never reject their own request either.
-		ok, reason := wfEngine.CanApprove(wf, approval.ActiveStep, userID, userRoles, approval.RequesterID, resourceData)
+		ok, reason := wfEngine.CanApprove(wf, approval.ActiveStep, userID, userRoles, approval.RequesterID, approval.EscalatedSteps[approval.ActiveStep], resourceData)
 		if !ok {
 			writeError(w, http.StatusForbidden, "WORKFLOW_DENIED", reason)
 			return
@@ -2130,6 +2138,7 @@ func workflowApprovalFromRow(row *db.WorkflowApprovalRow) *workflow.Approval {
 		Approvals:      row.Approvals,
 		RejectedBy:     row.RejectedBy,
 		RejectStep:     row.RejectStep,
+		EscalatedSteps: row.EscalatedSteps,
 	}
 }
 
@@ -2153,6 +2162,7 @@ func workflowApprovalToRow(a *workflow.Approval) *db.WorkflowApprovalRow {
 		Approvals:      a.Approvals,
 		RejectedBy:     a.RejectedBy,
 		RejectStep:     a.RejectStep,
+		EscalatedSteps: a.EscalatedSteps,
 	}
 }
 

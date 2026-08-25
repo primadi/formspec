@@ -136,11 +136,11 @@ func TestEngine_CanApprove_RoleEligibility(t *testing.T) {
 	e := NewEngine(reg)
 
 	// User with the required role can approve.
-	if ok, reason := e.CanApprove(wf, 0, "approver-1", []string{"gl.supervisor"}, "", nil); !ok {
+	if ok, reason := e.CanApprove(wf, 0, "approver-1", []string{"gl.supervisor"}, "", nil, nil); !ok {
 		t.Fatalf("expected approval allowed, got: %s", reason)
 	}
 	// User without the role cannot.
-	if ok, _ := e.CanApprove(wf, 0, "approver-1", []string{"gl.other"}, "", nil); ok {
+	if ok, _ := e.CanApprove(wf, 0, "approver-1", []string{"gl.other"}, "", nil, nil); ok {
 		t.Fatal("expected approval denied for wrong role")
 	}
 }
@@ -156,11 +156,11 @@ func TestEngine_CanApprove_RequesterExcluded(t *testing.T) {
 
 	// The requester (created_by) holds the role but must NOT be able to
 	// approve their own request (7.4.5).
-	if ok, reason := e.CanApprove(wf, 0, "user-1", []string{"gl.supervisor"}, "user-1", nil); ok {
+	if ok, reason := e.CanApprove(wf, 0, "user-1", []string{"gl.supervisor"}, "user-1", nil, nil); ok {
 		t.Fatalf("expected requester to be excluded, got allowed: %s", reason)
 	}
 	// A different user with the role CAN approve.
-	if ok, reason := e.CanApprove(wf, 0, "approver-1", []string{"gl.supervisor"}, "user-1", nil); !ok {
+	if ok, reason := e.CanApprove(wf, 0, "approver-1", []string{"gl.supervisor"}, "user-1", nil, nil); !ok {
 		t.Fatalf("expected non-requester to be allowed, got: %s", reason)
 	}
 }

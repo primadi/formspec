@@ -184,6 +184,7 @@ func SystemTableDDLs(driver DriverType) []string {
 			"approvals       text    NOT NULL DEFAULT '{}'",
 			"rejected_by     text    NOT NULL DEFAULT ''",
 			"reject_step     integer NOT NULL DEFAULT -1",
+			"escalated_steps text    NOT NULL DEFAULT '{}'", // stepIdx -> reassign_roles (7.4.4)
 			fmt.Sprintf("created_at      %s NOT NULL DEFAULT %s", ts, ts),
 			fmt.Sprintf("updated_at      %s NOT NULL DEFAULT %s", ts, ts),
 		),
@@ -228,6 +229,30 @@ func (r *MigrationRunner) EnsureSystemTables(ctx context.Context) error {
 			}
 			return fmt.Errorf("create system table %s: %w", name, err)
 		}
+	}
+
+	// Ensure the escalated_steps column exists on formspec_workflow_approval
+	// (todo 7.4.4) — added after the table's initial creation, so existing
+	// databases need an ALTER TABLE ADD COLUMN.
+	if err := r.ensureWorkflowApprovalColumn(ctx); err != nil {
+		return err
+	}
+	return nil
+}
+
+// ensureWorkflowApprovalColumn adds the escalated_steps column to
+// formspec_workflow_approval if it is missing (todo 7.4.4).
+func (r *MigrationRunner) ensureWorkflowApprovalColumn(ctx context.Context) error {
+	existing, err := r.existingColumns(ctx, "", "formspec_workflow_approval")
+	if err != nil {
+		return fmt.Errorf("ensure escalated_steps: list columns: %w", err)
+	}
+	if existing["escalated_steps"] {
+		return nil
+	}
+	if _, err := r.db.ExecContext(ctx,
+		"ALTER TABLE formspec_workflow_approval ADD COLUMN escalated_steps text NOT NULL DEFAULT '{}'"); err != nil {
+		return fmt.Errorf("ensure escalated_steps: add column: %w", err)
 	}
 	return nil
 }

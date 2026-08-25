@@ -93,6 +93,21 @@ func (r *Registry) ForTransition(entity, from, to string) []*spec.WorkflowSpec {
 	return out
 }
 
+// NameFor returns the {module}.{name} key for a registered workflow spec
+// pointer, or "" if the spec is not registered. Used to persist the workflow's
+// manifest name (not a pointer address) in approval rows so the escalation
+// worker can resolve it back.
+func (r *Registry) NameFor(wf *spec.WorkflowSpec) string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for key, registered := range r.workflows {
+		if registered == wf {
+			return key
+		}
+	}
+	return ""
+}
+
 // WorkflowInfo is a lightweight summary of a registered Workflow.
 type WorkflowInfo struct {
 	Name   string `json:"name"`

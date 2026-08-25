@@ -94,10 +94,14 @@ func Quorum(step spec.WorkflowStep, eligibleCount int) int {
 // step of a workflow for a record. It enforces:
 //   - requester exclusion (7.4.5): the requester (record created_by) can
 //     never approve their own request
-//   - role eligibility: the user must hold at least one of the step's roles
+//   - role eligibility: the user must hold at least one of the step's roles,
+//     OR one of the escalated reassign_roles (7.4.4) when the step has been
+//     escalated
 //
 // stepIdx is the 0-based index of the step within the workflow's steps.
-func (e *Engine) CanApprove(wf *spec.WorkflowSpec, stepIdx int, userID string, userRoles []string, requesterID string, resourceData map[string]any) (bool, string) {
+// escalatedRoles are the reassign_roles granted by escalation for this step
+// (empty when the step has not been escalated).
+func (e *Engine) CanApprove(wf *spec.WorkflowSpec, stepIdx int, userID string, userRoles []string, requesterID string, escalatedRoles []string, resourceData map[string]any) (bool, string) {
 	if wf == nil || stepIdx < 0 || stepIdx >= len(wf.Steps) {
 		return false, "workflow step out of range"
 	}
@@ -109,8 +113,10 @@ func (e *Engine) CanApprove(wf *spec.WorkflowSpec, stepIdx int, userID string, u
 		return false, "requester cannot approve their own request"
 	}
 
-	// Role eligibility: user must hold at least one of the step's roles.
-	if !hasAnyRole(userRoles, step.Roles) {
+	// Role eligibility: user must hold at least one of the step's roles, or
+	// one of the escalated reassign_roles (7.4.4).
+	eligible := append(append([]string{}, step.Roles...), escalatedRoles...)
+	if !hasAnyRole(userRoles, eligible) {
 		return false, "user does not hold any of the step's required roles"
 	}
 
@@ -156,6 +162,9 @@ type Approval struct {
 	// RejectedBy records who rejected (and at which step).
 	RejectedBy string `json:"rejected_by,omitempty"`
 	RejectStep int    `json:"reject_step,omitempty"`
+	// EscalatedSteps records which steps were escalated (7.4.4) and the
+	// reassign_roles that gained approval rights: stepIdx -> reassign_roles.
+	EscalatedSteps map[int][]string `json:"escalated_steps,omitempty"`
 }
 
 // NewApproval creates a pending approval for a record.
@@ -171,6 +180,7 @@ func NewApproval(wf *spec.WorkflowSpec, module, entity, recordID, from, to, requ
 		Status:         ApprovalPending,
 		ActiveStep:     0,
 		Approvals:      make(map[int][]string),
+		EscalatedSteps: make(map[int][]string),
 	}
 }
 
@@ -246,6 +256,7 @@ func (a *Approval) ToRow() *ApprovalRow {
 		Approvals:      a.Approvals,
 		RejectedBy:     a.RejectedBy,
 		RejectStep:     a.RejectStep,
+		EscalatedSteps: a.EscalatedSteps,
 	}
 }
 
@@ -268,6 +279,7 @@ func FromRow(row *ApprovalRow) *Approval {
 		Approvals:      row.Approvals,
 		RejectedBy:     row.RejectedBy,
 		RejectStep:     row.RejectStep,
+		EscalatedSteps: row.EscalatedSteps,
 	}
 }
 
@@ -275,6 +287,7 @@ func FromRow(row *ApprovalRow) *Approval {
 // package (avoids an internal → renderer dependency for the workflow engine).
 type ApprovalRow struct {
 	ID             string
+	TenantID       string
 	Entity         string
 	RecordID       string
 	WorkflowModule string
@@ -287,4 +300,7 @@ type ApprovalRow struct {
 	Approvals      map[int][]string
 	RejectedBy     string
 	RejectStep     int
+	EscalatedSteps map[int][]string
+	CreatedAt      string
+	UpdatedAt      string
 }

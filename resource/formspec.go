@@ -176,6 +176,8 @@ type App struct {
 	deliveryHandler *db.DeliveryEventHandler
 	idempotency     *db.IdempotencyStore
 	httpServer      *http.Server
+	// escalationWorker escalates stale workflow approvals (todo 7.4.4).
+	escalationWorker *workflow.EscalationWorker
 
 	// nativeHandlers preserves user-registered native Go handlers across
 	// ReloadSpec() calls so they are re-registered on the new dispatcher.
@@ -568,6 +570,10 @@ func New(cfg Config) (*App, error) {
 	rb.SetAuditWriter(func(ctx context.Context, workspaceID, entity, entityID, action, actor, changes, requestID string) error {
 		return db.WriteAuditLog(ctx, database, driver, workspaceID, entity, entityID, action, actor, changes, requestID)
 	})
+	// Escalation worker (todo 7.4.4): escalates stale workflow approvals.
+	escalationWorker := workflow.NewEscalationWorker(wfApprovalStore, wfReg, func(ctx context.Context, workspaceID, entity, entityID, action, actor, changes, requestID string) error {
+		return db.WriteAuditLog(ctx, database, driver, workspaceID, entity, entityID, action, actor, changes, requestID)
+	})
 
 	// eventChannelLookup re-resolves an event's declared deliver: channels
 	// from the live registry at delivery time (not a snapshot taken at
@@ -628,10 +634,11 @@ func New(cfg Config) (*App, error) {
 	app := &App{
 		cfg: cfg, database: database, driver: driver,
 		reg: reg, rb: rb, disp: disp, nativeEx: nativeEx,
-		outboxWorker:    outboxWorker,
-		deliveryHandler: deliveryHandler,
-		idempotency:     idempotencyStore,
-		nativeHandlers:  make(map[string]action.NativeHandler),
+		outboxWorker:     outboxWorker,
+		deliveryHandler:  deliveryHandler,
+		escalationWorker: escalationWorker,
+		idempotency:      idempotencyStore,
+		nativeHandlers:   make(map[string]action.NativeHandler),
 	}
 	// Register native handlers for auth entity hooks (password hashing on
 	// formspec.core.user create/update).
@@ -685,12 +692,16 @@ func (a *App) Registry() *entity.Registry {
 func (a *App) SpecVersion() int64 { return a.specVersion.Load() }
 
 // StartBackgroundWorkers starts the outbox worker (background delivery of
-// durable events, todo 7.3.1). Started explicitly rather than in New() so
-// building an App for tests (which typically only call Handler()) never
-// spins up a background poller. ListenAndServe calls it automatically; the
-// dev/serve CLI commands call it before serving on their own http.Server.
+// durable events, todo 7.3.1) and the workflow escalation worker (todo
+// 7.4.4). Started explicitly rather than in New() so building an App for
+// tests (which typically only call Handler()) never spins up a background
+// poller. ListenAndServe calls it automatically; the dev/serve CLI commands
+// call it before serving on their own http.Server.
 func (a *App) StartBackgroundWorkers() {
 	a.outboxWorker.Start(context.Background())
+	if a.escalationWorker != nil {
+		a.escalationWorker.Start(context.Background())
+	}
 }
 
 // ListenAndServe starts the HTTP server on cfg.Addr. It also starts the
@@ -703,12 +714,15 @@ func (a *App) ListenAndServe() error {
 	return a.httpServer.ListenAndServe()
 }
 
-// Close gracefully stops the outbox worker and, if ListenAndServe started
-// one, the HTTP server. Safe to call even when ListenAndServe was never
-// used — OutboxWorker.Stop() is a no-op if never started, and httpServer
-// is nil.
+// Close gracefully stops the outbox worker, the escalation worker, and, if
+// ListenAndServe started one, the HTTP server. Safe to call even when
+// ListenAndServe was never used — OutboxWorker.Stop()/EscalationWorker.Stop()
+// are no-ops if never started, and httpServer is nil.
 func (a *App) Close(ctx context.Context) error {
 	a.outboxWorker.Stop()
+	if a.escalationWorker != nil {
+		a.escalationWorker.Stop()
+	}
 	if a.httpServer != nil {
 		return a.httpServer.Shutdown(ctx)
 	}

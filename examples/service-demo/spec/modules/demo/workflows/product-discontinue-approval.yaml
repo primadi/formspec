@@ -11,5 +11,8 @@ spec:
   steps:
     - roles: [demo.manager]
       approvers: 1
+      escalation:
+        after: 10s
+        reassign_roles: [demo.head]
   on_reject:
     to: active
