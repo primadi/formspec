@@ -130,91 +130,23 @@ func (e *StateMachineEngine) findTransition(sm *spec.StateMachine, currentState,
 	return nil
 }
 
-// evaluateGuard evaluates a guard condition using Starlark.
-// The guard expression has access to resource data fields directly.
-// For GL-style guards like "sum_line('debit') == sum_line('credit')",
-// the sum_line values are pre-computed and injected as env vars.
+// evaluateGuard evaluates a guard condition using the shared guard evaluator
+// (internal/starlark.EvaluateGuard — todo 7.5.4). The guard expression has
+// access to resource data fields directly, plus pre-computed sum_line_* /
+// item_count / line_count helpers.
 func (e *StateMachineEngine) evaluateGuard(guard *spec.GuardDecl, resourceData map[string]any) (bool, string, error) {
 	if guard == nil || guard.Expression == "" {
 		return true, "", nil
 	}
-
-	// Build evaluation environment with pre-computed helpers
-	env := make(map[string]any, len(resourceData)+5)
-	for k, v := range resourceData {
-		env[k] = v
-	}
-	env["resource"] = resourceData
-
-	// Pre-compute sum_line helpers for GL-style guards
-	// Injects sum_line_debit, sum_line_credit, etc. for all child data
-	if lines, ok := resourceData["lines"]; ok {
-		lineList, _ := lines.([]any)
-		sums := computeSums(lineList)
-		for field, total := range sums {
-			env["sum_line_"+field] = total
-		}
-	}
-
-	// Pre-compute len() helpers
-	if v, ok := resourceData["items"]; ok {
-		if items, ok := v.([]any); ok {
-			env["item_count"] = int64(len(items))
-		}
-	}
-	if v, ok := resourceData["lines"]; ok {
-		if lines, ok := v.([]any); ok {
-			env["line_count"] = int64(len(lines))
-		}
-	}
-
-	// Pre-compute data-level field aggregates
-	env["data"] = resourceData
-
-	result, err := starlark.EvalExpr(guard.Expression, env)
+	passed, _, err := starlark.EvaluateGuard(guard.Expression, resourceData)
 	if err != nil {
-		return false, "", fmt.Errorf("guard expression %q: %w", guard.Expression, err)
+		return false, "", err
 	}
-
-	passed := false
-	switch v := result.(type) {
-	case bool:
-		passed = v
-	case int64:
-		passed = v != 0
-	case float64:
-		passed = v != 0.0
-	default:
-		passed = result != nil
-	}
-
 	msg := ""
 	if !passed {
 		msg = guard.Message
 	}
 	return passed, msg, nil
-}
-
-// computeSums pre-computes field sums for child arrays (used by GL-style guards).
-func computeSums(lineList []any) map[string]float64 {
-	sums := make(map[string]float64)
-	for _, l := range lineList {
-		line, ok := l.(map[string]any)
-		if !ok {
-			continue
-		}
-		for field, v := range line {
-			switch n := v.(type) {
-			case float64:
-				sums[field] += n
-			case int:
-				sums[field] += float64(n)
-			case int64:
-				sums[field] += float64(n)
-			}
-		}
-	}
-	return sums
 }
 
 // StateTransitionError is returned when a state transition is invalid.

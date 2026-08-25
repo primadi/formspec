@@ -2517,9 +2517,12 @@ func (s *EntityStore) validateStateTransition(oldData, newData map[string]any) e
 	// Look for a matching transition
 	for _, t := range s.stateMachine.Transitions {
 		if t.From.Matches(oldState) && t.To == newState {
-			// Evaluate guard if present
+			// Evaluate guard if present, against the COMBINED old+new data so
+			// the guard sees the new state values (new values take precedence).
+			// Uses the shared guard evaluator (internal/starlark.EvaluateGuard,
+			// todo 7.5.4) — same env-building + sum_line/len helpers as the
+			// StateMachineEngine used by HandleCustomAction.
 			if t.Guard != nil && t.Guard.Expression != "" {
-				// Build combined data from old+new (new values take precedence)
 				combined := make(map[string]any, len(oldData)+len(newData))
 				for k, v := range oldData {
 					combined[k] = v
@@ -2527,29 +2530,14 @@ func (s *EntityStore) validateStateTransition(oldData, newData map[string]any) e
 				for k, v := range newData {
 					combined[k] = v
 				}
-				// Build env from combined data, then inject resource/data
-				// aliases pointing TO combined, NOT to env itself — otherwise
-				// toStarlark hits infinite recursion on the circular map.
-				// Matches evaluateGuard in internal/entity/state_machine.go.
-				env := make(map[string]any, len(combined)+2)
-				for k, v := range combined {
-					env[k] = v
-				}
-				env["resource"] = combined
-				env["data"] = combined
 
-				result, err := starlark.EvalExpr(t.Guard.Expression, env)
+				guardPassed, _, err := starlark.EvaluateGuard(t.Guard.Expression, combined)
 				if err != nil {
 					msg := t.Guard.Message
 					if msg == "" {
 						msg = fmt.Sprintf("guard %q evaluation error", t.Guard.Expression)
 					}
 					return fmt.Errorf("%w: %s (from %s -> %s): %v", ErrValidationRule, msg, oldState, newState, err)
-				}
-
-				guardPassed, ok := result.(bool)
-				if !ok {
-					return fmt.Errorf("%w: guard %q must return bool, got %T", ErrValidationRule, t.Guard.Expression, result)
 				}
 
 				if !guardPassed {
