@@ -31,6 +31,7 @@ type HandlerFactory struct {
 	whKeys        webhook.KeyResolver                                // resolves webhook secret/token keys from config (todo 7.6)
 	wfRegistry    *workflow.Registry                                 // kind: Workflow manifests (todo 7.4)
 	wfApprovals   *db.WorkflowApprovalStore                          // persists approval requests (todo 7.4)
+	auditWriter   AuditWriter                                        // writes framework-owned audit records (todo 7.4.6)
 	specLookup    func(module, name string) (*spec.EntitySpec, bool) // optional — enables sort/filter validation, hooks, and event resolution
 	specDirLookup func(module, name string) (string, bool)           // optional — resolves the entity's spec directory for hook/custom script refs
 	deliveryDeps  action.DeliveryDeps
@@ -84,6 +85,16 @@ func (f *HandlerFactory) SetWorkflowRegistry(w *workflow.Registry) {
 // in-flight approval requests (todo 7.4).
 func (f *HandlerFactory) SetWorkflowApprovalStore(s *db.WorkflowApprovalStore) {
 	f.wfApprovals = s
+}
+
+// AuditWriter writes a framework-owned audit record (todo 7.4.6). Wired from
+// resource/formspec.go with the app's database handle.
+type AuditWriter func(ctx context.Context, workspaceID, entity, entityID, action, actor, changes, requestID string) error
+
+// SetAuditWriter wires the audit writer used to record workflow approval
+// decisions as signed statements in the audit trail (todo 7.4.6).
+func (f *HandlerFactory) SetAuditWriter(w AuditWriter) {
+	f.auditWriter = w
 }
 
 // SetSpecLookup wires entity-spec resolution, enabling `sort` and field
@@ -1964,6 +1975,15 @@ func (f *HandlerFactory) handleWorkflowApproval(
 			return
 		}
 
+		// Record the signed approval statement in the audit trail (7.4.6).
+		f.recordWorkflowAudit(ctx, workspaceID, module, entity, resourceID, "workflow.approve", userID, map[string]any{
+			"workflow": approval.WorkflowName,
+			"step":     approval.ActiveStep,
+			"from":     fromState,
+			"to":       toState,
+			"decision": "approve",
+		})
+
 		// Check if the active step reached quorum.
 		step := steps[approval.ActiveStep]
 		eligibleCount := len(step.Roles)
@@ -2004,6 +2024,16 @@ func (f *HandlerFactory) handleWorkflowApproval(
 			return
 		}
 		approval.Reject(userID)
+
+		// Record the signed rejection statement in the audit trail (7.4.6).
+		f.recordWorkflowAudit(ctx, workspaceID, module, entity, resourceID, "workflow.reject", userID, map[string]any{
+			"workflow": approval.WorkflowName,
+			"step":     approval.ActiveStep,
+			"from":     fromState,
+			"to":       toState,
+			"decision": "reject",
+		})
+
 		row := workflowApprovalToRow(approval)
 		row.ID = approval.ID
 		if err := f.wfApprovals.Update(ctx, *row); err != nil {
@@ -2063,6 +2093,11 @@ func (f *HandlerFactory) executeWorkflowTransition(
 		return
 	}
 
+	// Record the completed transition in the audit trail (7.4.6).
+	f.recordWorkflowAudit(ctx, workspaceID, module, entity, resourceID, "workflow.transition", "system", map[string]any{
+		"to": toState,
+	})
+
 	// Realtime channel: the transition completed.
 	action.NotifyMutation(f.deliveryDeps, workspaceID, module+"/"+entity, "updated")
 
@@ -2119,6 +2154,20 @@ func workflowApprovalToRow(a *workflow.Approval) *db.WorkflowApprovalRow {
 		RejectedBy:     a.RejectedBy,
 		RejectStep:     a.RejectStep,
 	}
+}
+
+// recordWorkflowAudit writes a signed workflow decision (approve/reject/
+// transition) to the audit trail (todo 7.4.6). Best-effort — a failure to
+// write the audit record does not fail the workflow decision itself.
+func (f *HandlerFactory) recordWorkflowAudit(ctx context.Context, workspaceID, module, entity, recordID, action, actor string, changes map[string]any) {
+	if f.auditWriter == nil {
+		return
+	}
+	changesJSON, err := json.Marshal(changes)
+	if err != nil {
+		return
+	}
+	_ = f.auditWriter(ctx, workspaceID, module+"/"+entity, recordID, action, actor, string(changesJSON), requestIDFromContext(ctx))
 }
 
 // HandleServiceAction returns a handler for a stateless Service action

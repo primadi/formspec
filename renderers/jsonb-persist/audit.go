@@ -143,3 +143,11 @@ func writeAuditLog(ctx context.Context, db DB, driver DriverType, workspaceID, e
 	}
 	return nil
 }
+
+// WriteAuditLog inserts an audit record — the exported entry point for
+// framework-owned audit writes outside the CRUD layer (e.g. workflow approval
+// decisions, todo 7.4.6). action is the audit action (e.g. "workflow.approve");
+// changes is a JSON string describing the change.
+func WriteAuditLog(ctx context.Context, db DB, driver DriverType, workspaceID, entity, entityID, action, actor, changes, requestID string) error {
+	return writeAuditLog(ctx, db, driver, workspaceID, entity, entityID, action, actor, changes, requestID)
+}

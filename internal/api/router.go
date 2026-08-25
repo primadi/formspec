@@ -107,6 +107,12 @@ func (b *RouterBuilder) SetWorkflowApprovalStore(s *db.WorkflowApprovalStore) {
 	b.factory.SetWorkflowApprovalStore(s)
 }
 
+// SetAuditWriter wires the audit writer used to record workflow approval
+// decisions as signed statements in the audit trail (todo 7.4.6).
+func (b *RouterBuilder) SetAuditWriter(w AuditWriter) {
+	b.factory.SetAuditWriter(w)
+}
+
 // SetDeliveryDeps wires the event-delivery dependencies (hub, outbox, event
 // log) used by HandleCreate/HandleUpdate/HandleCustomAction to fan out
 // declared events after a successful action.

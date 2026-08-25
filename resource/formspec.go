@@ -563,6 +563,11 @@ func New(cfg Config) (*App, error) {
 	wfApprovalStore := db.NewWorkflowApprovalStore(database, driver)
 	rb.SetWorkflowRegistry(wfReg)
 	rb.SetWorkflowApprovalStore(wfApprovalStore)
+	// Audit writer (todo 7.4.6): records workflow approval decisions as
+	// signed statements in the audit trail.
+	rb.SetAuditWriter(func(ctx context.Context, workspaceID, entity, entityID, action, actor, changes, requestID string) error {
+		return db.WriteAuditLog(ctx, database, driver, workspaceID, entity, entityID, action, actor, changes, requestID)
+	})
 
 	// eventChannelLookup re-resolves an event's declared deliver: channels
 	// from the live registry at delivery time (not a snapshot taken at
@@ -838,6 +843,10 @@ func (a *App) ReloadSpec() error {
 	// Set the workflow registry + approval store BEFORE BuildRoutes (todo 7.4).
 	newRB.SetWorkflowRegistry(newWfReg)
 	newRB.SetWorkflowApprovalStore(db.NewWorkflowApprovalStore(a.database, a.driver))
+	// Audit writer (todo 7.4.6): records workflow approval decisions.
+	newRB.SetAuditWriter(func(ctx context.Context, workspaceID, entity, entityID, action, actor, changes, requestID string) error {
+		return db.WriteAuditLog(ctx, a.database, a.driver, workspaceID, entity, entityID, action, actor, changes, requestID)
+	})
 	newRB.BuildRoutes()
 
 	newRB.SetDispatcher(newDisp)
