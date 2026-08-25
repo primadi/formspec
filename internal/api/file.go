@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/primadi/formspec/pkg/spec"
@@ -127,11 +128,44 @@ func (f *HandlerFactory) HandleFileUpload() http.HandlerFunc {
 			return
 		}
 
-		// Attach the object key to the record's file field.
-		if err := store.UpdateFields(ctx, workspaceID, id, map[string]any{fieldName: key}); err != nil {
-			writeError(w, http.StatusInternalServerError, "UPDATE_FAILED",
-				err.Error())
-			return
+		// Attach the object key to the record's file field. When the field
+		// declares max_count > 1, the field stores an ARRAY of keys (multi-file);
+		// otherwise a single key string. max_count caps the array length
+		// (todo 7.17.2).
+		if field.Storage != nil && field.Storage.MaxCount > 1 {
+			rec, getErr := store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: id})
+			if getErr != nil {
+				writeError(w, http.StatusNotFound, "NOT_FOUND",
+					"record not found: "+getErr.Error())
+				return
+			}
+			var keys []string
+			if existing, ok := rec.Data[fieldName].([]any); ok {
+				for _, k := range existing {
+					if s, ok := k.(string); ok {
+						keys = append(keys, s)
+					}
+				}
+			} else if s, ok := rec.Data[fieldName].(string); ok && s != "" {
+				keys = append(keys, s)
+			}
+			if len(keys) >= field.Storage.MaxCount {
+				writeError(w, http.StatusBadRequest, "FILE_COUNT_EXCEEDED",
+					fmt.Sprintf("field %s already has max_count=%d files", fieldName, field.Storage.MaxCount))
+				return
+			}
+			keys = append(keys, key)
+			if err := store.UpdateFields(ctx, workspaceID, id, map[string]any{fieldName: keys}); err != nil {
+				writeError(w, http.StatusInternalServerError, "UPDATE_FAILED",
+					err.Error())
+				return
+			}
+		} else {
+			if err := store.UpdateFields(ctx, workspaceID, id, map[string]any{fieldName: key}); err != nil {
+				writeError(w, http.StatusInternalServerError, "UPDATE_FAILED",
+					err.Error())
+				return
+			}
 		}
 
 		writeJSON(w, http.StatusOK, map[string]any{
@@ -144,7 +178,9 @@ func (f *HandlerFactory) HandleFileUpload() http.HandlerFunc {
 
 // HandleFileDownload returns a GET /{module}/{entity}/{id}/{field} handler
 // (todo 7.17.1). It streams the stored object back with a content type
-// derived from the object key. Permission = view on the entity.
+// derived from the object key. Permission = view on the entity, unless the
+// field's StorageSpec declares `visibility: public` (anonymous read allowed,
+// todo 7.17.2). `visibility: signed` requires URL-signing infra (deferred).
 func (f *HandlerFactory) HandleFileDownload() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
@@ -154,10 +190,33 @@ func (f *HandlerFactory) HandleFileDownload() http.HandlerFunc {
 		id := r.PathValue("id")
 		fieldName := r.PathValue("field")
 
-		if !f.can(ctx, module, entity, "view") {
-			writeError(w, http.StatusForbidden, "FORBIDDEN",
-				"missing permission: "+module+"."+entity+".view")
+		// Resolve the field's StorageSpec to determine visibility (todo 7.17.2).
+		visibility := "private" // default
+		if es, ok := f.entitySpec(module, entity); ok {
+			for i := range es.Fields {
+				if es.Fields[i].Name == fieldName && es.Fields[i].Storage != nil {
+					if v := es.Fields[i].Storage.Visibility; v != "" {
+						visibility = v
+					}
+					break
+				}
+			}
+		}
+
+		switch visibility {
+		case "public":
+			// Anonymous read allowed — no permission check.
+		case "signed":
+			// Signed URLs require URL-signing infra (deferred, todo 7.17.2).
+			writeError(w, http.StatusNotImplemented, "SIGNED_URL_NOT_IMPLEMENTED",
+				"visibility: signed is not yet implemented")
 			return
+		default: // "private" or unset
+			if !f.can(ctx, module, entity, "view") {
+				writeError(w, http.StatusForbidden, "FORBIDDEN",
+					"missing permission: "+module+"."+entity+".view")
+				return
+			}
 		}
 
 		store, err := f.registry.GetEntityStore(module, entity)
@@ -174,7 +233,25 @@ func (f *HandlerFactory) HandleFileDownload() http.HandlerFunc {
 			return
 		}
 
-		key, _ := rec.Data[fieldName].(string)
+		// Resolve the object key. A multi-file field (max_count > 1) stores an
+		// array of keys; the client selects one via ?index=N (default 0).
+		key := ""
+		switch v := rec.Data[fieldName].(type) {
+		case string:
+			key = v
+		case []any:
+			idx := 0
+			if s := r.URL.Query().Get("index"); s != "" {
+				if n, err := strconv.Atoi(s); err == nil {
+					idx = n
+				}
+			}
+			if idx >= 0 && idx < len(v) {
+				if s, ok := v[idx].(string); ok {
+					key = s
+				}
+			}
+		}
 		if key == "" {
 			writeError(w, http.StatusNotFound, "NOT_FOUND",
 				"no file on field "+fieldName)
