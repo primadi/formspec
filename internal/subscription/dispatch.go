@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/primadi/formspec/internal/action"
+	"github.com/primadi/formspec/internal/stream"
 	"github.com/primadi/formspec/pkg/spec"
 )
 
@@ -16,15 +18,29 @@ import (
 // the action dispatcher exactly like an action impl or hook impl. The event
 // payload is passed as the handler's params, with the originating event
 // metadata under the reserved `_event` key.
+//
+// Tier 2 (todo 7.3.2): when a Stream backend is wired via SetStream,
+// subscriptions with `durability: durable` append the event to the stream
+// (named by the fully-qualified event) instead of dispatching directly — the
+// StreamingWorker consumes it with at-least-once, positioned replay,
+// filter/transform, retry and dead-letter.
 type Dispatcher struct {
 	reg        *Registry
 	dispatcher *action.Dispatcher
+	stream     stream.Stream
 }
 
 // NewDispatcher creates a subscription dispatcher bound to the given
 // subscription registry and action dispatcher.
 func NewDispatcher(reg *Registry, dispatcher *action.Dispatcher) *Dispatcher {
 	return &Dispatcher{reg: reg, dispatcher: dispatcher}
+}
+
+// SetStream wires the Tier 2 stream backend (todo 7.3.2). When set,
+// subscriptions with durability: durable append events to the stream instead
+// of dispatching directly.
+func (d *Dispatcher) SetStream(s stream.Stream) {
+	d.stream = s
 }
 
 // Dispatch delivers an emitted event to every subscription that subscribes to
@@ -46,12 +62,42 @@ func (d *Dispatcher) Dispatch(ctx context.Context, workspaceID, eventName, resou
 
 	var errs []string
 	for _, sub := range subs {
+		// Tier 2 (durable): append to the stream; the StreamingWorker
+		// consumes it. Tier 1: dispatch directly.
+		if d.stream != nil && sub.Durable == "durable" {
+			if err := d.appendToStream(ctx, workspaceID, eventName, resource, payload, sub); err != nil {
+				errs = append(errs, fmt.Sprintf("%s: %v", sub.Handler.Ref, err))
+			}
+			continue
+		}
 		if err := d.dispatchOne(ctx, workspaceID, eventName, resource, payload, sub); err != nil {
 			errs = append(errs, fmt.Sprintf("%s: %v", sub.Handler.Ref, err))
 		}
 	}
 	if len(errs) > 0 {
 		return fmt.Errorf("subscription dispatch: %s", strings.Join(errs, "; "))
+	}
+	return nil
+}
+
+// appendToStream appends an event to the durable subscription's stream. The
+// entry carries the delivery metadata (workspace, resource, event, occurred_at)
+// plus the wire payload so the StreamingWorker can rebuild the dispatch
+// context and the filter/transform environment.
+func (d *Dispatcher) appendToStream(ctx context.Context, workspaceID, eventName, resource string, payload map[string]any, sub *spec.SubscriptionSpec) error {
+	if d.stream == nil {
+		return fmt.Errorf("durable subscription %s has no stream backend configured", sub.Handler.Ref)
+	}
+	streamName := stream.NormalizeStreamName(eventName)
+	data := map[string]any{
+		"workspace_id": workspaceID,
+		"resource":     resource,
+		"event":        eventName,
+		"payload":      payload,
+		"occurred_at":  time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	if _, err := d.stream.Append(ctx, streamName, data); err != nil {
+		return fmt.Errorf("append to stream %s: %w", streamName, err)
 	}
 	return nil
 }

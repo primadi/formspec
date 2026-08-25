@@ -305,7 +305,7 @@ type SubscriptionSpec struct {
 	Handler ImplDecl `yaml:"handler" json:"handler"`
 	// @schema {example: "redis"}
 	Store   string     `yaml:"store,omitempty" json:"store,omitempty"`     // Tier 2: stream backend (redis, kafka)
-	Durable string     `yaml:"durable,omitempty" json:"durable,omitempty"` // Tier 2: durability mode
+	Durable string     `yaml:"durability,omitempty" json:"durability,omitempty"` // Tier 2: durability mode ("durable" = streaming)
 	Retry   *RetryDecl `yaml:"retry,omitempty" json:"retry,omitempty"`     // Tier 2
 	// @schema {example: "latest", enum: ["latest", "earliest"]}
 	Position   string           `yaml:"position,omitempty" json:"position,omitempty"`       // Tier 2: latest | earliest | <id>

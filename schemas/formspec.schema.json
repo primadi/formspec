@@ -277,6 +277,11 @@
           "description": "component blocks (§7)",
           "type": "string"
         },
+        "binds": {
+          "$ref": "#/$defs/BlockBinds",
+          "description": "Binds links a detail block to a master list block in a split layout",
+          "nullable": true
+        },
         "id": {
           "type": "string"
         },
@@ -838,6 +843,14 @@
         },
         "computed": {
           "$ref": "#/$defs/ComputedDecl",
+          "nullable": true
+        },
+        "currency": {
+          "description": "Money (05-field-types.md §2) — only meaningful for type: money.",
+          "type": "string"
+        },
+        "decimal_places": {
+          "type": "integer",
           "nullable": true
         },
         "default": {},
@@ -1449,6 +1462,9 @@
         "Environment",
         "Policy",
         "Datastore",
+        "Renderer",
+        "VisualSpecKind",
+        "PersistBackend",
         "Page",
         "Form",
         "Table",
@@ -1460,7 +1476,10 @@
         "Timeline",
         "Print",
         "Theme",
-        "Listing"
+        "Listing",
+        "Calendar",
+        "ApprovalInbox",
+        "NotificationCenter"
       ]
     },
     "KvstoreUseDecl": {
@@ -1635,6 +1654,14 @@
       "properties": {
         "columns": {
           "type": "integer"
+        },
+        "mode": {
+          "description": "Layout mode. `split` = master-detail (master list left, detail right).",
+          "type": "string",
+          "enum": [
+            "",
+            "split"
+          ]
         }
       },
       "additionalProperties": false
@@ -2094,6 +2121,17 @@
         }
       },
       "additionalProperties": false
+    },
+    "RoundingMode": {
+      "description": "RoundingMode is the rounding strategy for money/decimal arithmetic.\n",
+      "type": "string",
+      "enum": [
+        "half_even",
+        "half_up",
+        "half_down",
+        "up",
+        "down"
+      ]
     },
     "SectionBlock": {
       "description": "SectionBlock is a declarative presentation section inside a Page\n(frontend/06-page-kinds.md §1). Sections are generic — reusable in any App\n(marketing/hero, no-nav, sidebar-nav, ...): pure presentation, no data\nbinding, no auth, and zero styling fields — every visual token lives in\nkind: Theme (frontend/05-app-kinds.md §5), never inline.\n",
@@ -2710,6 +2748,11 @@
         "strategy": {
           "description": "signature | token",
           "type": "string"
+        },
+        "token": {
+          "$ref": "#/$defs/WebhookTokenConfig",
+          "description": "Token configures static-token verification (strategy: token). The token",
+          "nullable": true
         }
       },
       "required": [
@@ -3274,6 +3317,11 @@
           "description": "component blocks (§7)",
           "type": "string"
         },
+        "binds": {
+          "$ref": "#/$defs/BlockBinds",
+          "description": "Binds links a detail block to a master list block in a split layout",
+          "nullable": true
+        },
         "id": {
           "type": "string"
         },
@@ -3835,6 +3883,14 @@
         },
         "computed": {
           "$ref": "#/$defs/ComputedDecl",
+          "nullable": true
+        },
+        "currency": {
+          "description": "Money (05-field-types.md §2) — only meaningful for type: money.",
+          "type": "string"
+        },
+        "decimal_places": {
+          "type": "integer",
           "nullable": true
         },
         "default": {},
@@ -4446,6 +4502,9 @@
         "Environment",
         "Policy",
         "Datastore",
+        "Renderer",
+        "VisualSpecKind",
+        "PersistBackend",
         "Page",
         "Form",
         "Table",
@@ -4457,7 +4516,10 @@
         "Timeline",
         "Print",
         "Theme",
-        "Listing"
+        "Listing",
+        "Calendar",
+        "ApprovalInbox",
+        "NotificationCenter"
       ]
     },
     "KvstoreUseDecl": {
@@ -4632,6 +4694,14 @@
       "properties": {
         "columns": {
           "type": "integer"
+        },
+        "mode": {
+          "description": "Layout mode. `split` = master-detail (master list left, detail right).",
+          "type": "string",
+          "enum": [
+            "",
+            "split"
+          ]
         }
       },
       "additionalProperties": false
@@ -5091,6 +5161,17 @@
         }
       },
       "additionalProperties": false
+    },
+    "RoundingMode": {
+      "description": "RoundingMode is the rounding strategy for money/decimal arithmetic.\n",
+      "type": "string",
+      "enum": [
+        "half_even",
+        "half_up",
+        "half_down",
+        "up",
+        "down"
+      ]
     },
     "SectionBlock": {
       "description": "SectionBlock is a declarative presentation section inside a Page\n(frontend/06-page-kinds.md §1). Sections are generic — reusable in any App\n(marketing/hero, no-nav, sidebar-nav, ...): pure presentation, no data\nbinding, no auth, and zero styling fields — every visual token lives in\nkind: Theme (frontend/05-app-kinds.md §5), never inline.\n",
@@ -5707,6 +5788,11 @@
         "strategy": {
           "description": "signature | token",
           "type": "string"
+        },
+        "token": {
+          "$ref": "#/$defs/WebhookTokenConfig",
+          "description": "Token configures static-token verification (strategy: token). The token",
+          "nullable": true
         }
       },
       "required": [
@@ -6155,6 +6241,11 @@
               "items": {
                 "$ref": "#/$defs/AppInterface"
               }
+            },
+            "renderers": {
+              "description": "Renderers maps a VisualSpecKind name → renderer for the whole App",
+              "type": "object",
+              "additionalProperties": {}
             },
             "root_url": {
               "description": "@schema {example: \"/app/klinik\", pattern: \"^(/|/app(/.*)?)$\"}",
@@ -6743,8 +6834,8 @@
               "description": "Tier 2: delivery channel",
               "nullable": true
             },
-            "durable": {
-              "description": "Tier 2: durability mode",
+            "durability": {
+              "description": "Tier 2: durability mode (\"durable\" = streaming)",
               "type": "string"
             },
             "events": {
@@ -7750,9 +7841,18 @@
         },
         "spec": {
           "title": "Page Spec",
-          "description": "PageSpec defines a routed screen composing blocks (Frontend §3).\n`blocks` and `tabs` are mutually exclusive.\n",
+          "description": "PageSpec defines a routed screen composing blocks (Frontend §3).\n`blocks` and `tabs` are mutually exclusive; `mode: custom` excludes both.\n",
           "type": "object",
           "properties": {
+            "asset": {
+              "description": "Asset is the module-relative asset path for `mode: custom`",
+              "type": "string"
+            },
+            "binds": {
+              "$ref": "#/$defs/PageBinds",
+              "description": "Binds is the backend footprint (entities/actions/subscribe) a custom",
+              "nullable": true
+            },
             "blocks": {
               "type": "array",
               "items": {
@@ -7769,6 +7869,14 @@
               "$ref": "#/$defs/PageLayout",
               "nullable": true
             },
+            "mode": {
+              "description": "Page mode. `custom` hands all rendering to an asset component; empty means blocks/tabs composition.",
+              "type": "string",
+              "enum": [
+                "",
+                "custom"
+              ]
+            },
             "permissions": {
               "type": "array",
               "items": {
@@ -7782,6 +7890,10 @@
                 "true"
               ],
               "nullable": true
+            },
+            "renderer": {
+              "description": "Renderer is the per-instance renderer override (frontend/03-renderer-",
+              "type": "string"
             },
             "route": {
               "description": "@schema {example: \"/orders/:id\"}",
@@ -7963,6 +8075,13 @@
           "description": "TableSpec defines a list/browse view (Frontend §5).\n",
           "type": "object",
           "properties": {
+            "batch_edit": {
+              "description": "Batch editing: fields editable across a multi-row selection. Framework runs update per row, partial failure reported per row.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
             "bulk_actions": {
               "type": "array",
               "items": {
@@ -8320,6 +8439,11 @@
             "required_permission": {
               "type": "string"
             },
+            "source": {
+              "$ref": "#/$defs/ReportSource",
+              "description": "Source is the declarative parameterized filter (06-page-kinds.md §8",
+              "nullable": true
+            },
             "title": {
               "description": "@schema {example: \"Sales by Category\"}",
               "type": "string",
@@ -8487,6 +8611,10 @@
               "items": {
                 "$ref": "#/$defs/KanbanColumn"
               }
+            },
+            "drag_guard": {
+              "description": "FormSpecExpr pre-check UX before drop: evaluated against the record + target column; drop blocked when false. Server state-machine guard remains authority.",
+              "type": "string"
             },
             "entity": {
               "description": "@schema {example: \"helpdesk.ticket\"}",

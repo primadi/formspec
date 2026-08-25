@@ -1,8 +1,17 @@
 {
   "title": "Page Spec",
-  "description": "PageSpec defines a routed screen composing blocks (Frontend §3).\n`blocks` and `tabs` are mutually exclusive.\n",
+  "description": "PageSpec defines a routed screen composing blocks (Frontend §3).\n`blocks` and `tabs` are mutually exclusive; `mode: custom` excludes both.\n",
   "type": "object",
   "properties": {
+    "asset": {
+      "description": "Asset is the module-relative asset path for `mode: custom`",
+      "type": "string"
+    },
+    "binds": {
+      "$ref": "#/$defs/PageBinds",
+      "description": "Binds is the backend footprint (entities/actions/subscribe) a custom",
+      "nullable": true
+    },
     "blocks": {
       "type": "array",
       "items": {
@@ -19,6 +28,14 @@
       "$ref": "#/$defs/PageLayout",
       "nullable": true
     },
+    "mode": {
+      "description": "Page mode. `custom` hands all rendering to an asset component; empty means blocks/tabs composition.",
+      "type": "string",
+      "enum": [
+        "",
+        "custom"
+      ]
+    },
     "permissions": {
       "type": "array",
       "items": {
@@ -32,6 +49,10 @@
         "true"
       ],
       "nullable": true
+    },
+    "renderer": {
+      "description": "Renderer is the per-instance renderer override (frontend/03-renderer-",
+      "type": "string"
     },
     "route": {
       "description": "@schema {example: \"/orders/:id\"}",

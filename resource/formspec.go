@@ -48,6 +48,7 @@ import (
 	"github.com/primadi/formspec/internal/manifest"
 	"github.com/primadi/formspec/internal/permission"
 	"github.com/primadi/formspec/internal/service"
+	"github.com/primadi/formspec/internal/stream"
 	"github.com/primadi/formspec/internal/subscription"
 	"github.com/primadi/formspec/internal/ui"
 	"github.com/primadi/formspec/internal/validation"
@@ -182,6 +183,13 @@ type App struct {
 	// and the `pubsub` event delivery channel (todo 7.3.5). Held so a
 	// ReloadSpec() reuses the same instance.
 	pubsub *memory.PubSub
+	// stream is the Tier 2 durable event-stream backend (todo 7.3.2). Held so
+	// a ReloadSpec() reuses the same backend (and its consumer groups) while
+	// rebuilding the streaming worker.
+	stream stream.Stream
+	// streamingWorker consumes durable (Tier 2) subscriptions from the stream
+	// backend (todo 7.3.2).
+	streamingWorker *subscription.StreamingWorker
 
 	// nativeHandlers preserves user-registered native Go handlers across
 	// ReloadSpec() calls so they are re-registered on the new dispatcher.
@@ -397,6 +405,15 @@ func New(cfg Config) (*App, error) {
 	// scripts and the `pubsub` event delivery channel, so subscribers receive
 	// published events.
 	sharedPubSub := memory.NewPubSub()
+	// Tier 2 stream backend (todo 7.3.2): durable subscriptions append events
+	// to a stream consumed by the StreamingWorker. Backend selected by
+	// FORMSPEC_STREAM (memory default | redis); redis addr via
+	// FORMSPEC_REDIS_ADDR (default "valkey:6379" — the Redis-compatible
+	// service in the dev container). Accessed only through stream.Stream.
+	streamBackend, err := buildStreamBackend()
+	if err != nil {
+		return nil, err
+	}
 	disp := newDispatcher(reg, svcReg, database, cfg, cfgReg, sharedPubSub)
 	nativeEx := disp.NativeExecutor() // get the native executor from dispatcher
 	rb.SetDispatcher(disp)
@@ -604,8 +621,14 @@ func New(cfg Config) (*App, error) {
 		return nil, false
 	}
 	// Subscription dispatch (todo 7.3.1): deliver emitted events to matching
-	// kind: Subscription handlers via the action dispatcher.
+	// kind: Subscription handlers via the action dispatcher. Tier 2 durable
+	// subscriptions (todo 7.3.2) append to the stream backend instead.
 	subDispatch := subscription.NewDispatcher(subReg, disp)
+	subDispatch.SetStream(streamBackend)
+	// Streaming worker (todo 7.3.2): consumes durable subscriptions from the
+	// stream backend with at-least-once, positioned replay, filter/transform,
+	// retry and dead-letter.
+	streamingWorker := subscription.NewStreamingWorker(subReg, streamBackend, subDispatch)
 	// Integrator dispatch (todo 7.7.1): bridge emitted events to matching
 	// kind: Integrator target actions. Saga store (todo 7.7.4) records
 	// cross-boundary calls with a declared compensate.
@@ -649,6 +672,8 @@ func New(cfg Config) (*App, error) {
 		deliveryHandler:  deliveryHandler,
 		escalationWorker: escalationWorker,
 		pubsub:           sharedPubSub,
+		stream:           streamBackend,
+		streamingWorker:  streamingWorker,
 		idempotency:      idempotencyStore,
 		nativeHandlers:   make(map[string]action.NativeHandler),
 	}
@@ -704,15 +729,19 @@ func (a *App) Registry() *entity.Registry {
 func (a *App) SpecVersion() int64 { return a.specVersion.Load() }
 
 // StartBackgroundWorkers starts the outbox worker (background delivery of
-// durable events, todo 7.3.1) and the workflow escalation worker (todo
-// 7.4.4). Started explicitly rather than in New() so building an App for
-// tests (which typically only call Handler()) never spins up a background
-// poller. ListenAndServe calls it automatically; the dev/serve CLI commands
-// call it before serving on their own http.Server.
+// durable events, todo 7.3.1), the workflow escalation worker (todo 7.4.4),
+// and the subscription streaming worker (todo 7.3.2). Started explicitly
+// rather than in New() so building an App for tests (which typically only
+// call Handler()) never spins up a background poller. ListenAndServe calls
+// it automatically; the dev/serve CLI commands call it before serving on
+// their own http.Server.
 func (a *App) StartBackgroundWorkers() {
 	a.outboxWorker.Start(context.Background())
 	if a.escalationWorker != nil {
 		a.escalationWorker.Start(context.Background())
+	}
+	if a.streamingWorker != nil {
+		a.streamingWorker.Start(context.Background())
 	}
 }
 
@@ -726,14 +755,21 @@ func (a *App) ListenAndServe() error {
 	return a.httpServer.ListenAndServe()
 }
 
-// Close gracefully stops the outbox worker, the escalation worker, and, if
-// ListenAndServe started one, the HTTP server. Safe to call even when
-// ListenAndServe was never used — OutboxWorker.Stop()/EscalationWorker.Stop()
-// are no-ops if never started, and httpServer is nil.
+// Close gracefully stops the outbox worker, the escalation worker, the
+// streaming worker, and, if ListenAndServe started one, the HTTP server.
+// Safe to call even when ListenAndServe was never used —
+// OutboxWorker.Stop()/EscalationWorker.Stop()/StreamingWorker.Stop() are
+// no-ops if never started, and httpServer is nil.
 func (a *App) Close(ctx context.Context) error {
 	a.outboxWorker.Stop()
 	if a.escalationWorker != nil {
 		a.escalationWorker.Stop()
+	}
+	if a.streamingWorker != nil {
+		a.streamingWorker.Stop()
+	}
+	if a.stream != nil {
+		_ = a.stream.Close()
 	}
 	if a.httpServer != nil {
 		return a.httpServer.Shutdown(ctx)
@@ -908,8 +944,10 @@ func (a *App) ReloadSpec() error {
 	// 7.3.1/7.7.1) to dispatchers built from the freshly reloaded registries —
 	// without recreating the worker, so in-flight outbox draining is
 	// uninterrupted.
+	var newStreamingWorker *subscription.StreamingWorker
 	if a.deliveryHandler != nil {
 		newSubDispatch := subscription.NewDispatcher(newSubReg, newDisp)
+		newSubDispatch.SetStream(a.stream)
 		newItDispatch := integrator.NewDispatcher(newItReg, newReg, newSvcReg, newDisp, db.NewSagaStore(a.database, a.driver))
 		a.deliveryHandler.Subscriptions = func(ctx context.Context, workspaceID, eventName, resource string, payload map[string]any) error {
 			var errs []string
@@ -923,6 +961,19 @@ func (a *App) ReloadSpec() error {
 				return fmt.Errorf("%s", strings.Join(errs, "; "))
 			}
 			return nil
+		}
+		// Rebuild the streaming worker (todo 7.3.2) so new durable
+		// subscriptions take effect. The stream backend is reused — its
+		// consumer groups and pending entries persist across reloads.
+		if a.stream != nil {
+			wasRunning := a.streamingWorker != nil && a.streamingWorker.IsRunning()
+			if a.streamingWorker != nil {
+				a.streamingWorker.Stop()
+			}
+			newStreamingWorker = subscription.NewStreamingWorker(newSubReg, a.stream, newSubDispatch)
+			if wasRunning {
+				newStreamingWorker.Start(context.Background())
+			}
 		}
 	}
 
@@ -951,6 +1002,7 @@ func (a *App) ReloadSpec() error {
 	a.handler = newHandler
 	a.disp = newDisp
 	a.nativeEx = newDisp.NativeExecutor()
+	a.streamingWorker = newStreamingWorker
 	a.mu.Unlock()
 
 	a.specVersion.Add(1)
@@ -1093,6 +1145,37 @@ func buildSubscriptionRegistry(manifests []manifest.RawManifest) *subscription.R
 		reg.Add(raw.Metadata.Module, raw.Metadata.Name, sub)
 	}
 	return reg
+}
+
+// buildStreamBackend constructs the Tier 2 durable event-stream backend (todo
+// 7.3.2). Selected by FORMSPEC_STREAM:
+//
+//	memory (default) — in-memory, auto-provisioned like the other ctx.*
+//	                   primitives in dev
+//	redis            — Redis Streams / Valkey; address from
+//	                   FORMSPEC_REDIS_ADDR (default "valkey:6379", the
+//	                   Redis-compatible service in the dev container)
+//
+// The backend is accessed only through the stream.Stream abstraction — never
+// directly — so the implementation can be swapped (memory, redis, kafka, ...)
+// without touching subscription code.
+func buildStreamBackend() (stream.Stream, error) {
+	backend := os.Getenv("FORMSPEC_STREAM")
+	if backend == "" {
+		backend = "memory"
+	}
+	switch backend {
+	case "redis":
+		addr := os.Getenv("FORMSPEC_REDIS_ADDR")
+		if addr == "" {
+			addr = "valkey:6379"
+		}
+		return stream.NewRedis(addr)
+	case "memory":
+		return stream.NewMemory(), nil
+	default:
+		return nil, fmt.Errorf("unknown FORMSPEC_STREAM backend %q (supported: memory, redis)", backend)
+	}
 }
 
 // buildWorkflowRegistry loads kind: Workflow manifests into a workflow.Registry

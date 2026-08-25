@@ -60,6 +60,11 @@
         "$ref": "#/$defs/AppInterface"
       }
     },
+    "renderers": {
+      "description": "Renderers maps a VisualSpecKind name → renderer for the whole App",
+      "type": "object",
+      "additionalProperties": {}
+    },
     "root_url": {
       "description": "@schema {example: \"/app/klinik\", pattern: \"^(/|/app(/.*)?)$\"}",
       "type": "string",

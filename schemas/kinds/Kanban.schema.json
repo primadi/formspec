@@ -13,6 +13,10 @@
         "$ref": "#/$defs/KanbanColumn"
       }
     },
+    "drag_guard": {
+      "description": "FormSpecExpr pre-check UX before drop: evaluated against the record + target column; drop blocked when false. Server state-machine guard remains authority.",
+      "type": "string"
+    },
     "entity": {
       "description": "@schema {example: \"helpdesk.ticket\"}",
       "type": "string",

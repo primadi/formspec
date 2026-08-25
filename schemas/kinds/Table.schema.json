@@ -3,6 +3,13 @@
   "description": "TableSpec defines a list/browse view (Frontend §5).\n",
   "type": "object",
   "properties": {
+    "batch_edit": {
+      "description": "Batch editing: fields editable across a multi-row selection. Framework runs update per row, partial failure reported per row.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "bulk_actions": {
       "type": "array",
       "items": {

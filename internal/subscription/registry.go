@@ -86,6 +86,31 @@ func (r *Registry) ForEvent(eventName string) []*spec.SubscriptionSpec {
 	return out
 }
 
+// DurableSub is a subscription with durability: durable (Tier 2 streaming),
+// paired with its module/name key so the StreamingWorker can name its
+// consumer group.
+type DurableSub struct {
+	Module string
+	Name   string
+	Spec   *spec.SubscriptionSpec
+}
+
+// Durable returns all subscriptions with durability: durable (Tier 2
+// streaming, todo 7.3.2). Used by the StreamingWorker to know which
+// subscriptions to consume from streams.
+func (r *Registry) Durable() []DurableSub {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	var out []DurableSub
+	for key, sub := range r.subscriptions {
+		if sub.Durable == "durable" {
+			module, name := splitKey(key)
+			out = append(out, DurableSub{Module: module, Name: name, Spec: sub})
+		}
+	}
+	return out
+}
+
 // SubscriptionInfo is a lightweight summary of a registered Subscription.
 type SubscriptionInfo struct {
 	Name   string   `json:"name"`

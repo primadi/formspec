@@ -1,0 +1,22 @@
+apiVersion: formspec.dev/v1
+kind: Subscription
+metadata:
+  name: product-created-stream
+  module: demo
+  description: "Tier 2 streaming — reaksi durable terhadap on_create product via stream backend (demo 7.3.2)"
+spec:
+  events:
+    - demo.product.on_create
+  # Tier 2 (Streaming): event di-append ke stream (bukan dispatch langsung),
+  # dikonsumsi StreamingWorker dengan at-least-once, positioned replay,
+  # filter/transform Starlark, retry, dan dead-letter.
+  durability: durable
+  store: redis
+  position: earliest
+  filter: "min_stock >= 0"
+  transform: '{"name": name, "sku": sku, "min_stock": min_stock, "source": "stream"}'
+  max_retry: 3
+  retention: 7d
+  handler:
+    type: script_ref
+    ref: demo/handle_product_stream
