@@ -1,0 +1,70 @@
+# Dynamic subscription (todo 7.3.4) — dibuat runtime lewat admin panel, BUKAN
+# manifest. Data, bukan manifest: manifest Subscription mendefinisikan apa yang
+# ikut ter-ship bersama module; record ini mencatat pilihan operator dan hidup
+# di formspec.core. Field memetakan SubscriptionSpec (pkg/spec/resources.go).
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: subscription
+  module: formspec.core
+  description: "Subscription dinamis — dibuat runtime lewat admin panel (data, bukan manifest). Di-merge ke subscription registry oleh DynamicRefresher."
+  annotations:
+    formspec.dev/ui-exposed: "true"
+spec:
+  version: v1
+  plural: subscriptions
+  characteristic: master
+  display_field: name
+  fields:
+    - name: name
+      type: string
+      required: true
+      natural_key: true
+      title: "Nama"
+      description: "Natural key — unik per workspace"
+    - name: events
+      type: json
+      required: true
+      title: "Events"
+      description: "Daftar event name (mis. [\"demo.product.on_create\"])"
+    - name: handler_type
+      type: string
+      title: "Tipe Handler"
+      description: "script_ref | native | compiled | sidecar"
+    - name: handler_ref
+      type: string
+      title: "Ref Handler"
+      description: "mis. demo/handle_product_created"
+    - name: durability
+      type: string
+      title: "Durability"
+      description: "kosong (Tier 1 outbox) atau durable (Tier 2 streaming)"
+    - name: store
+      type: string
+      title: "Store"
+      description: "Tier 2: stream backend (redis, kafka)"
+    - name: position
+      type: string
+      title: "Position"
+      description: "Tier 2: latest | earliest | <id>"
+    - name: filter
+      type: string
+      title: "Filter"
+      description: "Tier 2: Starlark filter atas payload event"
+    - name: transform
+      type: string
+      title: "Transform"
+      description: "Tier 2: Starlark transform atas payload event"
+    - name: max_retry
+      type: integer
+      title: "Max Retry"
+      description: "Tier 2: batas retry sebelum dead-letter"
+    - name: retention
+      type: string
+      title: "Retention"
+      description: "Tier 2: retensi stream (mis. 7d, 24h, 1000)"
+    - name: active
+      type: boolean
+      default: true
+      title: "Aktif"
+      description: "false = nonaktif (tidak di-merge ke registry)"

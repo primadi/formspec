@@ -190,6 +190,10 @@ type App struct {
 	// streamingWorker consumes durable (Tier 2) subscriptions from the stream
 	// backend (todo 7.3.2).
 	streamingWorker *subscription.StreamingWorker
+	// dynamicRefresher periodically reloads dynamic subscriptions
+	// (formspec.core.subscription, todo 7.3.4) into the subscription registry
+	// so admin-panel CRUD changes take effect without a restart.
+	dynamicRefresher *subscription.DynamicRefresher
 
 	// nativeHandlers preserves user-registered native Go handlers across
 	// ReloadSpec() calls so they are re-registered on the new dispatcher.
@@ -312,6 +316,11 @@ func New(cfg Config) (*App, error) {
 	// before loading user manifests, so external/ overrides can replace them.
 	if err := auth.RegisterCoreEntities(reg); err != nil {
 		return nil, fmt.Errorf("register core entities: %w", err)
+	}
+	// Register the framework-owned dynamic-subscription entity
+	// (formspec.core.subscription, todo 7.3.4) — data, not manifest.
+	if err := subscription.RegisterCoreEntities(reg); err != nil {
+		return nil, fmt.Errorf("register subscription core entities: %w", err)
 	}
 	for _, loadErr := range reg.LoadEntities() {
 		fmt.Fprintf(os.Stderr, "formspec: load warning: %v\n", loadErr)
@@ -629,6 +638,33 @@ func New(cfg Config) (*App, error) {
 	// stream backend with at-least-once, positioned replay, filter/transform,
 	// retry and dead-letter.
 	streamingWorker := subscription.NewStreamingWorker(subReg, streamBackend, subDispatch)
+	// Dynamic subscriptions (todo 7.3.4): runtime-created subscriptions as
+	// data in formspec.core.subscription (not manifests). The DynamicSource
+	// reads the entity store; the DynamicRefresher merges them into the
+	// registry at boot + periodically so admin-panel CRUD takes effect
+	// without a restart.
+	dynamicSource := func(ctx context.Context, workspaceID string) ([]subscription.DynamicSubscription, error) {
+		store, err := reg.GetEntityStore(subscription.CoreModule, "subscription")
+		if err != nil {
+			return nil, err
+		}
+		result, err := store.List(ctx, db.ListParams{WorkspaceID: workspaceID, PerPage: 100})
+		if err != nil {
+			return nil, err
+		}
+		var out []subscription.DynamicSubscription
+		for _, rec := range result.Data {
+			if ds, ok := subscription.RecordToSubscription(rec.Data); ok {
+				out = append(out, ds)
+			}
+		}
+		return out, nil
+	}
+	dynamicRefresher := subscription.NewDynamicRefresher(subReg, dynamicSource, cfg.WorkspaceID)
+	// Load dynamic subscriptions once at boot (before the first poll).
+	if err := dynamicRefresher.Refresh(context.Background()); err != nil {
+		fmt.Fprintf(os.Stderr, "formspec: warning: load dynamic subscriptions: %v\n", err)
+	}
 	// Integrator dispatch (todo 7.7.1): bridge emitted events to matching
 	// kind: Integrator target actions. Saga store (todo 7.7.4) records
 	// cross-boundary calls with a declared compensate.
@@ -674,6 +710,7 @@ func New(cfg Config) (*App, error) {
 		pubsub:           sharedPubSub,
 		stream:           streamBackend,
 		streamingWorker:  streamingWorker,
+		dynamicRefresher: dynamicRefresher,
 		idempotency:      idempotencyStore,
 		nativeHandlers:   make(map[string]action.NativeHandler),
 	}
@@ -730,11 +767,11 @@ func (a *App) SpecVersion() int64 { return a.specVersion.Load() }
 
 // StartBackgroundWorkers starts the outbox worker (background delivery of
 // durable events, todo 7.3.1), the workflow escalation worker (todo 7.4.4),
-// and the subscription streaming worker (todo 7.3.2). Started explicitly
-// rather than in New() so building an App for tests (which typically only
-// call Handler()) never spins up a background poller. ListenAndServe calls
-// it automatically; the dev/serve CLI commands call it before serving on
-// their own http.Server.
+// the subscription streaming worker (todo 7.3.2), and the dynamic-subscription
+// refresher (todo 7.3.4). Started explicitly rather than in New() so building
+// an App for tests (which typically only call Handler()) never spins up a
+// background poller. ListenAndServe calls it automatically; the dev/serve CLI
+// commands call it before serving on their own http.Server.
 func (a *App) StartBackgroundWorkers() {
 	a.outboxWorker.Start(context.Background())
 	if a.escalationWorker != nil {
@@ -742,6 +779,9 @@ func (a *App) StartBackgroundWorkers() {
 	}
 	if a.streamingWorker != nil {
 		a.streamingWorker.Start(context.Background())
+	}
+	if a.dynamicRefresher != nil {
+		a.dynamicRefresher.Start(context.Background())
 	}
 }
 
@@ -756,10 +796,11 @@ func (a *App) ListenAndServe() error {
 }
 
 // Close gracefully stops the outbox worker, the escalation worker, the
-// streaming worker, and, if ListenAndServe started one, the HTTP server.
-// Safe to call even when ListenAndServe was never used —
-// OutboxWorker.Stop()/EscalationWorker.Stop()/StreamingWorker.Stop() are
-// no-ops if never started, and httpServer is nil.
+// streaming worker, the dynamic-subscription refresher, and, if ListenAndServe
+// started one, the HTTP server. Safe to call even when ListenAndServe was
+// never used — OutboxWorker.Stop()/EscalationWorker.Stop()/
+// StreamingWorker.Stop()/DynamicRefresher.Stop() are no-ops if never started,
+// and httpServer is nil.
 func (a *App) Close(ctx context.Context) error {
 	a.outboxWorker.Stop()
 	if a.escalationWorker != nil {
@@ -767,6 +808,9 @@ func (a *App) Close(ctx context.Context) error {
 	}
 	if a.streamingWorker != nil {
 		a.streamingWorker.Stop()
+	}
+	if a.dynamicRefresher != nil {
+		a.dynamicRefresher.Stop()
 	}
 	if a.stream != nil {
 		_ = a.stream.Close()
@@ -803,6 +847,9 @@ func (a *App) ReloadSpec() error {
 	}
 	if err := auth.RegisterCoreEntities(newReg); err != nil {
 		fmt.Fprintf(os.Stderr, "formspec: reload register core entities: %v\n", err)
+	}
+	if err := subscription.RegisterCoreEntities(newReg); err != nil {
+		fmt.Fprintf(os.Stderr, "formspec: reload register subscription core entities: %v\n", err)
 	}
 	for _, loadErr := range newReg.LoadEntities() {
 		fmt.Fprintf(os.Stderr, "formspec: reload: %v\n", loadErr)
@@ -945,6 +992,7 @@ func (a *App) ReloadSpec() error {
 	// without recreating the worker, so in-flight outbox draining is
 	// uninterrupted.
 	var newStreamingWorker *subscription.StreamingWorker
+	var newDynamicRefresher *subscription.DynamicRefresher
 	if a.deliveryHandler != nil {
 		newSubDispatch := subscription.NewDispatcher(newSubReg, newDisp)
 		newSubDispatch.SetStream(a.stream)
@@ -975,6 +1023,37 @@ func (a *App) ReloadSpec() error {
 				newStreamingWorker.Start(context.Background())
 			}
 		}
+		// Rebuild the dynamic-subscription refresher (todo 7.3.4) so new
+		// dynamic subscriptions take effect. The source reads the freshly
+		// reloaded entity registry.
+		if a.dynamicRefresher != nil {
+			newDynamicSource := func(ctx context.Context, workspaceID string) ([]subscription.DynamicSubscription, error) {
+				store, err := newReg.GetEntityStore(subscription.CoreModule, "subscription")
+				if err != nil {
+					return nil, err
+				}
+				result, err := store.List(ctx, db.ListParams{WorkspaceID: workspaceID, PerPage: 100})
+				if err != nil {
+					return nil, err
+				}
+				var out []subscription.DynamicSubscription
+				for _, rec := range result.Data {
+					if ds, ok := subscription.RecordToSubscription(rec.Data); ok {
+						out = append(out, ds)
+					}
+				}
+				return out, nil
+			}
+			wasRunning := a.dynamicRefresher.IsRunning()
+			a.dynamicRefresher.Stop()
+			newDynamicRefresher = subscription.NewDynamicRefresher(newSubReg, newDynamicSource, a.cfg.WorkspaceID)
+			if err := newDynamicRefresher.Refresh(context.Background()); err != nil {
+				fmt.Fprintf(os.Stderr, "formspec: warning: reload dynamic subscriptions: %v\n", err)
+			}
+			if wasRunning {
+				newDynamicRefresher.Start(context.Background())
+			}
+		}
 	}
 
 	// Wire the idempotency store (todo 2.7) — same store instance, so
@@ -1003,6 +1082,7 @@ func (a *App) ReloadSpec() error {
 	a.disp = newDisp
 	a.nativeEx = newDisp.NativeExecutor()
 	a.streamingWorker = newStreamingWorker
+	a.dynamicRefresher = newDynamicRefresher
 	a.mu.Unlock()
 
 	a.specVersion.Add(1)

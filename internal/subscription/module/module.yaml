@@ -1,0 +1,7 @@
+apiVersion: formspec.dev/v1
+kind: Module
+metadata:
+  name: formspec.core
+  description: "Framework-owned subscription module — formspec.core namespace (dynamic subscriptions, todo 7.3.4). Bundled + embedded; mergeable ke project lain via external/ atau spec/modules/."
+spec:
+  version: 1.0.0
