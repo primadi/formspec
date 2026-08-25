@@ -1,0 +1,13 @@
+apiVersion: formspec.dev/v1
+kind: Integrator
+metadata:
+  name: product-cancelled-to-tax
+  module: demo
+  description: "Handler simetris untuk on_cancel product — pasangan product-created-to-tax (7.7.2)"
+spec:
+  listen:
+    resource: demo.product
+    event: on_cancel
+  call:
+    resource: demo.tax-calculator
+    action: calculate

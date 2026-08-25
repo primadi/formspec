@@ -180,3 +180,129 @@ spec:
 		t.Fatal("expected App without version/vendor/root_url to be rejected")
 	}
 }
+
+// ─── Integrator cross-manifest validation (7.7.2, 7.7.3) ───
+
+func TestValidateIntegrators_SymmetricCancel(t *testing.T) {
+	manifests := []manifest.RawManifest{
+		{
+			Kind:     "Integrator",
+			Metadata: manifest.RawMetadata{Name: "invoice-to-gl", Module: "billing"},
+			Spec: map[string]any{
+				"listen": map[string]any{"resource": "billing.invoice", "event": "on_submit"},
+				"call":   map[string]any{"resource": "gl.journal-entry", "action": "create"},
+			},
+		},
+	}
+
+	rejects := validateIntegrators(manifests)
+	if len(rejects) == 0 {
+		t.Fatal("expected integrator without symmetric cancel handler to be rejected (7.7.2)")
+	}
+}
+
+func TestValidateIntegrators_SymmetricCancel_OK(t *testing.T) {
+	manifests := []manifest.RawManifest{
+		{
+			Kind:     "Integrator",
+			Metadata: manifest.RawMetadata{Name: "invoice-to-gl", Module: "billing"},
+			Spec: map[string]any{
+				"listen": map[string]any{"resource": "billing.invoice", "event": "on_submit"},
+				"call":   map[string]any{"resource": "gl.journal-entry", "action": "create"},
+			},
+		},
+		{
+			Kind:     "Integrator",
+			Metadata: manifest.RawMetadata{Name: "invoice-cancel-to-gl", Module: "billing"},
+			Spec: map[string]any{
+				"listen": map[string]any{"resource": "billing.invoice", "event": "on_cancel"},
+				"call":   map[string]any{"resource": "gl.journal-entry", "action": "cancel"},
+			},
+		},
+	}
+
+	rejects := validateIntegrators(manifests)
+	if len(rejects) != 0 {
+		t.Fatalf("expected no rejects with symmetric cancel handler, got %v", rejects)
+	}
+}
+
+func TestValidateIntegrators_IdempotentTarget(t *testing.T) {
+	manifests := []manifest.RawManifest{
+		{
+			Kind:     "Integrator",
+			Metadata: manifest.RawMetadata{Name: "invoice-to-gl", Module: "billing"},
+			Spec: map[string]any{
+				"listen": map[string]any{"resource": "billing.invoice", "event": "on_submit"},
+				"call":   map[string]any{"resource": "gl.journal-entry", "action": "create"},
+			},
+		},
+		{
+			Kind:     "Integrator",
+			Metadata: manifest.RawMetadata{Name: "invoice-cancel-to-gl", Module: "billing"},
+			Spec: map[string]any{
+				"listen": map[string]any{"resource": "billing.invoice", "event": "on_cancel"},
+				"call":   map[string]any{"resource": "gl.journal-entry", "action": "cancel"},
+			},
+		},
+		{
+			Kind:     "Entity",
+			Metadata: manifest.RawMetadata{Name: "journal-entry", Module: "gl"},
+			Spec: map[string]any{
+				"actions": []any{
+					map[string]any{"name": "create"}, // NOT idempotent
+					map[string]any{"name": "cancel", "idempotent": true},
+				},
+			},
+		},
+	}
+
+	rejects := validateIntegrators(manifests)
+	// The on_submit integrator targets gl.journal-entry.create (not idempotent)
+	// → must be rejected (7.7.3).
+	found := false
+	for _, msg := range rejects {
+		if strings.Contains(msg, "idempotent") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected idempotent-target rejection, got %v", rejects)
+	}
+}
+
+func TestValidateIntegrators_IdempotentTarget_OK(t *testing.T) {
+	manifests := []manifest.RawManifest{
+		{
+			Kind:     "Integrator",
+			Metadata: manifest.RawMetadata{Name: "invoice-to-gl", Module: "billing"},
+			Spec: map[string]any{
+				"listen": map[string]any{"resource": "billing.invoice", "event": "on_submit"},
+				"call":   map[string]any{"resource": "gl.journal-entry", "action": "create"},
+			},
+		},
+		{
+			Kind:     "Integrator",
+			Metadata: manifest.RawMetadata{Name: "invoice-cancel-to-gl", Module: "billing"},
+			Spec: map[string]any{
+				"listen": map[string]any{"resource": "billing.invoice", "event": "on_cancel"},
+				"call":   map[string]any{"resource": "gl.journal-entry", "action": "cancel"},
+			},
+		},
+		{
+			Kind:     "Entity",
+			Metadata: manifest.RawMetadata{Name: "journal-entry", Module: "gl"},
+			Spec: map[string]any{
+				"actions": []any{
+					map[string]any{"name": "create", "idempotent": true},
+					map[string]any{"name": "cancel", "idempotent": true},
+				},
+			},
+		},
+	}
+
+	rejects := validateIntegrators(manifests)
+	if len(rejects) != 0 {
+		t.Fatalf("expected no rejects with idempotent targets, got %v", rejects)
+	}
+}

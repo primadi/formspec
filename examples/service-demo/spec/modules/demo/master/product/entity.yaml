@@ -36,6 +36,13 @@ spec:
         durable: true
       deliver:
         - channel: audit_log
+    - name: on_cancel
+      type: async
+      description: "Produk dibatalkan — pasangan simetris untuk integrator (7.7.2)"
+      publish:
+        durable: true
+      deliver:
+        - channel: audit_log
   fields:
     - name: name
       type: string

@@ -40,6 +40,7 @@ import (
 
 	"github.com/primadi/formspec/internal/manifest"
 	"github.com/primadi/formspec/internal/schemaregistry"
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 func runValidate(args []string) {
@@ -77,6 +78,11 @@ func runValidate(args []string) {
 			engineRejects[m.Source] = err.Error()
 		}
 	}
+
+	// ── Layer 1.5: cross-manifest integrator validation (todo 7.7.2/7.7.3) ──
+	// Every Integrator that makes a side effect from one event must provide a
+	// symmetric cancel handler; the target action must be idempotent.
+	integratorRejects := validateIntegrators(res.Manifests)
 
 	// ── Layer 2: JSON Schema validation, version-routed ──
 	//   * --schema <dir>: one local compiler for every manifest (no versioning).
@@ -152,6 +158,9 @@ func runValidate(args []string) {
 		if errMsg, ok := engineRejects[m.Source]; ok {
 			msgs = append(msgs, "engine: "+errMsg)
 		}
+		if errMsg, ok := integratorRejects[m.Source]; ok {
+			msgs = append(msgs, "integrator: "+errMsg)
+		}
 		if compilers != nil {
 			if verErr, ok := versionErrs[m.Source]; ok {
 				msgs = append(msgs, "schema: "+verErr)
@@ -176,6 +185,119 @@ func runValidate(args []string) {
 	if fails > 0 {
 		os.Exit(1)
 	}
+}
+
+// validateIntegrators enforces the cross-manifest Integrator rules
+// (02-core-extended.md §5, todo 7.7.2/7.7.3):
+//
+//   - 7.7.2: every Integrator that makes a side effect from one event must
+//     provide a symmetric handler for the cancel event of the same resource —
+//     otherwise cancel on the source side would be permanently blocked.
+//   - 7.7.3: the target action (call.resource + call.action) must be
+//     `idempotent: true` for cross-boundary calls.
+//
+// Returns a map of manifest source → error message.
+func validateIntegrators(manifests []manifest.RawManifest) map[string]string {
+	rejects := map[string]string{}
+
+	// Collect all integrators by source.
+	type itInfo struct {
+		source string
+		spec   *spec.IntegratorSpec
+	}
+	var its []itInfo
+	for _, m := range manifests {
+		if spec.Kind(m.Kind) != spec.KindIntegrator || m.Spec == nil {
+			continue
+		}
+		specMap, ok := m.Spec.(map[string]any)
+		if !ok {
+			continue
+		}
+		it, err := manifest.RawSpecToIntegratorSpec(specMap)
+		if err != nil {
+			rejects[m.Source] = "invalid integrator spec: " + err.Error()
+			continue
+		}
+		its = append(its, itInfo{source: m.Source, spec: it})
+	}
+	if len(its) == 0 {
+		return rejects
+	}
+
+	// 7.7.2 — symmetric cancel handler. For each integrator listening to a
+	// non-cancel event, there must be another integrator listening to the
+	// cancel event of the same resource.
+	cancelEvents := map[string]bool{"on_cancel": true, "before_cancel": true}
+	hasCancel := map[string]bool{} // "resource" -> has a cancel-listening integrator
+	for _, it := range its {
+		if it.spec.Listen == nil {
+			continue
+		}
+		if cancelEvents[it.spec.Listen.Event] {
+			hasCancel[it.spec.Listen.Resource] = true
+		}
+	}
+	for _, it := range its {
+		if it.spec.Listen == nil {
+			continue
+		}
+		if cancelEvents[it.spec.Listen.Event] {
+			continue
+		}
+		if !hasCancel[it.spec.Listen.Resource] {
+			rejects[it.source] = fmt.Sprintf(
+				"integrator listens to %s.%s but has no symmetric cancel handler for %s (on_cancel/before_cancel) — cancel on the source would be permanently blocked (7.7.2)",
+				it.spec.Listen.Resource, it.spec.Listen.Event, it.spec.Listen.Resource)
+		}
+	}
+
+	// 7.7.3 — target action must be idempotent. Resolve the target entity's
+	// action from the manifest set.
+	entityActions := map[string]map[string]bool{} // "module.entity" -> action -> idempotent
+	for _, m := range manifests {
+		if spec.Kind(m.Kind) != spec.KindEntity || m.Spec == nil {
+			continue
+		}
+		specMap, ok := m.Spec.(map[string]any)
+		if !ok {
+			continue
+		}
+		es, err := manifest.RawSpecToEntitySpec(specMap)
+		if err != nil {
+			continue
+		}
+		key := m.Metadata.Module + "." + m.Metadata.Name
+		actions := map[string]bool{}
+		for _, a := range es.Actions {
+			actions[a.Name] = a.Idempotent
+		}
+		entityActions[key] = actions
+	}
+	for _, it := range its {
+		if it.spec.Call == nil {
+			continue
+		}
+		actions, ok := entityActions[it.spec.Call.Resource]
+		if !ok {
+			// Target entity not in this manifest set — can't verify; skip.
+			continue
+		}
+		idempotent, ok := actions[it.spec.Call.Action]
+		if !ok {
+			rejects[it.source] = fmt.Sprintf(
+				"integrator target action %s.%s not found in entity (7.7.3)",
+				it.spec.Call.Resource, it.spec.Call.Action)
+			continue
+		}
+		if !idempotent {
+			rejects[it.source] = fmt.Sprintf(
+				"integrator target action %s.%s must be idempotent: true for cross-boundary calls (7.7.3)",
+				it.spec.Call.Resource, it.spec.Call.Action)
+		}
+	}
+
+	return rejects
 }
 
 // kindSchemaCompiler compiles and caches one document schema per kind.
