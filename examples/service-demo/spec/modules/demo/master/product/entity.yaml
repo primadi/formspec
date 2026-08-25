@@ -1,0 +1,46 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: product
+  module: demo
+  description: "Produk demo — mendemonstrasikan validation rules L1–L3 lengkap"
+spec:
+  version: v1
+  characteristic: master
+  lifecycle: plain_crud
+  display_field: name
+  plural: products
+  expose:
+    - type: rest
+      actions: [list, find, create, update, delete]
+  fields:
+    - name: name
+      type: string
+      required: true
+      title: "Nama Produk"
+    - name: sku
+      type: string
+      required: true
+      title: "SKU"
+      description: "Kode unik per tenant (rule unique) — panjang persis 8 (rule length)"
+      rules:
+        - name: length
+          value: 8
+        - name: unique
+          value: true
+    - name: status
+      type: string
+      default: active
+      title: "Status"
+      description: "Harus salah satu dari himpunan (rule in)"
+      rules:
+        - name: in
+          value: [active, inactive, discontinued]
+    - name: min_stock
+      type: integer
+      default: 0
+      title: "Stok Minimum"
+      description: "Harus non-negatif (rule script: value >= 0)"
+      rules:
+        - name: script
+          value: "value >= 0"

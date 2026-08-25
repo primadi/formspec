@@ -1,0 +1,12 @@
+# ── FormSpec Dev Config ──
+# Contoh project yang mendemonstrasikan:
+#   - kind: Service runtime (7.1) — stateless computation via script
+#   - Validation rules L1–L3 lengkap (7.9.6) — length/in/script/unique
+#
+# Jalankan: cd examples/service-demo && formspec dev --dev-ui
+
+spec: spec
+dsn: sqlite:.formspec/service-demo.db
+dev-ui: true
+dev-auth: true
+jwt-secret: change-me

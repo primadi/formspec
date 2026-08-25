@@ -1,0 +1,28 @@
+apiVersion: formspec.dev/v1
+kind: Service
+metadata:
+  name: tax-calculator
+  module: demo
+  description: "Kalkulator pajak stateless — komputasi murni tanpa state"
+spec:
+  version: v1
+  actions:
+    - name: calculate
+      description: "Hitung pajak dari amount dan rate"
+      required_permission: demo.tax-calculator.calculate
+      params:
+        validate:
+          - field: amount
+            rules: [required, positive]
+          - field: rate
+            rules: [required, positive]
+      impl:
+        type: script_ref
+        ref: demo/calculate_tax
+    - name: notify
+      description: "Fire-and-forget notifikasi (call: async)"
+      required_permission: demo.tax-calculator.notify
+      call: async
+      impl:
+        type: script_ref
+        ref: demo/notify_async

@@ -1,0 +1,21 @@
+apiVersion: formspec.dev/v1
+kind: App
+metadata:
+  name: service-demo
+  description: "Demo Service runtime + validation rules"
+  labels:
+    domain: demo
+spec:
+  version: 1.0.0
+  vendor: formspec
+  root_url: /app/service-demo
+  modules:
+    - demo
+  menu:
+    - label: "Demo"
+      icon: "flask-conical"
+      children:
+        - label: "Produk"
+          icon: "package"
+          module: demo
+          route: /demo/products

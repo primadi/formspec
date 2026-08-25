@@ -358,11 +358,13 @@ func New(cfg Config) (*App, error) {
 	svcReg := buildServiceRegistry(specManifests.Manifests)
 
 	rb := api.NewRouterBuilder(reg)
+	// Set the service registry BEFORE BuildRoutes so GenerateServiceRoutes
+	// sees it (todo 7.1).
+	rb.SetServiceRegistry(svcReg)
 	rb.BuildRoutes()
 	disp := newDispatcher(reg, svcReg, database, cfg, cfgReg)
 	nativeEx := disp.NativeExecutor() // get the native executor from dispatcher
 	rb.SetDispatcher(disp)
-	rb.SetServiceRegistry(svcReg)
 	rb.SetUIRegistry(uiReg)
 	rb.SetApps(resolvedApps)
 	if cfg.WebDir != "" {
@@ -737,7 +739,6 @@ func (a *App) ReloadSpec() error {
 	// Wire spec version function BEFORE BuildHTTP() so HandleMetaVersion
 	// captures it. Reads from the live App's atomic counter.
 	newRB.SetSpecVersionFn(func() int64 { return a.specVersion.Load() })
-	newRB.BuildRoutes()
 
 	// Config registry (todo 7.2.1): re-resolve on reload so a changed Config
 	// manifest's keys take effect without a full restart.
@@ -754,8 +755,12 @@ func (a *App) ReloadSpec() error {
 	}
 	a.mu.RUnlock()
 
-	newRB.SetDispatcher(newDisp)
+	// Set the service registry BEFORE BuildRoutes so GenerateServiceRoutes
+	// sees it (todo 7.1).
 	newRB.SetServiceRegistry(newSvcReg)
+	newRB.BuildRoutes()
+
+	newRB.SetDispatcher(newDisp)
 	newRB.SetUIRegistry(newUIReg)
 	newRB.SetApps(resolvedApps)
 	// Re-resolve the global settings namespace on reload so a changed
