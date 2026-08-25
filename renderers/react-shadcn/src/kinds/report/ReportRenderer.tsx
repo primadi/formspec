@@ -5,14 +5,16 @@
 //
 // Design doc §5.5 Report kind (F5)
 
-import { useState, useMemo, useCallback } from "react"
+import { useState, useMemo, useCallback, Fragment } from "react"
 import { Download, Loader2, FileSpreadsheet } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/lib/ui"
 
 import type {
   Entry,
   ReportSpec,
   ReportParam,
+  ReportColumn,
+  ReportTotal,
   Field,
   ListResponseMeta,
 } from "@/types/manifest"
@@ -54,7 +56,22 @@ export default function ReportRenderer({ entry }: ReportRendererProps) {
         if (value) listParams[key] = value
       }
 
-      const [module, name] = resolveEntityRef(entry.spec.entity, entry.module)
+      // Declarative source.filter (5.13.1a): `":param"` placeholders resolve
+      // from the report's parameters; literal values pass through unchanged.
+      const source = entry.spec.source
+      const entityRef = source?.entity || entry.spec.entity
+      if (source?.filter) {
+        for (const [field, raw] of Object.entries(source.filter)) {
+          if (raw.startsWith(":")) {
+            const paramValue = params[raw.slice(1)]
+            if (paramValue) listParams[field] = paramValue
+          } else {
+            listParams[field] = raw
+          }
+        }
+      }
+
+      const [module, name] = resolveEntityRef(entityRef, entry.module)
       const schema = getEntity(module, name)
       if (!schema) {
         throw new Error(`entity ${module}.${name} not found`)
@@ -77,7 +94,14 @@ export default function ReportRenderer({ entry }: ReportRendererProps) {
       setLoading(false)
       setExecuted(true)
     }
-  }, [entry.spec.entity, entry.module, params, getClient, getEntity])
+  }, [
+    entry.spec.entity,
+    entry.spec.source,
+    entry.module,
+    params,
+    getClient,
+    getEntity,
+  ])
 
   // Group data
   const groups = useMemo(() => {
@@ -94,51 +118,11 @@ export default function ReportRenderer({ entry }: ReportRendererProps) {
     return grouped
   }, [data, entry.spec.groups])
 
-  // Calculate totals
+  // Calculate totals for a set of items — shared by the overall totals row
+  // and per-group subtotal rows (5.13.1).
   const totals = useMemo(() => {
     if (!entry.spec.totals?.length) return null
-    const result: Record<string, number> = {}
-    for (const total of entry.spec.totals!) {
-      let sum = 0
-      let count = 0
-      for (const item of data) {
-        const val = Number(item[total.field])
-        if (!isNaN(val)) {
-          sum += val
-          count++
-        }
-      }
-      switch (total.fn) {
-        case "sum":
-          result[total.field] = sum
-          break
-        case "avg":
-          result[total.field] = count > 0 ? sum / count : 0
-          break
-        case "count":
-          result[total.field] = count
-          break
-        case "min": {
-          let min = Infinity
-          for (const item of data) {
-            const val = Number(item[total.field])
-            if (!isNaN(val) && val < min) min = val
-          }
-          result[total.field] = min === Infinity ? 0 : min
-          break
-        }
-        case "max": {
-          let max = -Infinity
-          for (const item of data) {
-            const val = Number(item[total.field])
-            if (!isNaN(val) && val > max) max = val
-          }
-          result[total.field] = max === -Infinity ? 0 : max
-          break
-        }
-      }
-    }
-    return result
+    return computeTotals(data, entry.spec.totals)
   }, [data, entry.spec.totals])
 
   // CSV export
@@ -251,7 +235,7 @@ export default function ReportRenderer({ entry }: ReportRendererProps) {
                 {groups ? (
                   <>
                     {Array.from(groups.entries()).map(([group, items]) => (
-                      <>
+                      <Fragment key={group}>
                         <tr className="bg-muted/30">
                           <td
                             colSpan={entry.spec.columns.length}
@@ -277,7 +261,17 @@ export default function ReportRenderer({ entry }: ReportRendererProps) {
                             ))}
                           </tr>
                         ))}
-                      </>
+                        {/* Per-group subtotal row (5.13.1) */}
+                        {totals && (
+                          <TotalsRow
+                            totals={computeTotals(items, entry.spec.totals!)}
+                            columns={entry.spec.columns}
+                            totalsDef={entry.spec.totals!}
+                            formatter={formatter}
+                            label="Subtotal"
+                          />
+                        )}
+                      </Fragment>
                     ))}
                   </>
                 ) : (
@@ -300,16 +294,16 @@ export default function ReportRenderer({ entry }: ReportRendererProps) {
                   ))
                 )}
 
-                {/* Totals row */}
+                {/* Overall totals row (5.13.1) — values placed in the
+                    matching columns, not an empty cell */}
                 {totals && (
-                  <tr className="border-t-2 font-medium bg-muted/30">
-                    <td
-                      className="p-3 text-sm"
-                      colSpan={entry.spec.columns.length}
-                    >
-                      {/* Place totals in matching columns */}
-                    </td>
-                  </tr>
+                  <TotalsRow
+                    totals={totals}
+                    columns={entry.spec.columns}
+                    totalsDef={entry.spec.totals!}
+                    formatter={formatter}
+                    label="Total"
+                  />
                 )}
               </tbody>
             </table>
@@ -402,4 +396,102 @@ function formatReportValue(
   }
 
   return String(value)
+}
+
+// ── Totals / subtotals (5.13.1) ──
+
+/**
+ * Compute aggregate values over a set of rows for the declared `totals`.
+ * Shared by the overall totals row and per-group subtotal rows.
+ */
+function computeTotals(
+  items: Record<string, unknown>[],
+  totals: ReportTotal[],
+): Record<string, number> {
+  const result: Record<string, number> = {}
+  for (const total of totals) {
+    let sum = 0
+    let count = 0
+    for (const item of items) {
+      const val = Number(item[total.field])
+      if (!isNaN(val)) {
+        sum += val
+        count++
+      }
+    }
+    switch (total.fn) {
+      case "sum":
+        result[total.field] = sum
+        break
+      case "avg":
+        result[total.field] = count > 0 ? sum / count : 0
+        break
+      case "count":
+        result[total.field] = count
+        break
+      case "min": {
+        let min = Infinity
+        for (const item of items) {
+          const val = Number(item[total.field])
+          if (!isNaN(val) && val < min) min = val
+        }
+        result[total.field] = min === Infinity ? 0 : min
+        break
+      }
+      case "max": {
+        let max = -Infinity
+        for (const item of items) {
+          const val = Number(item[total.field])
+          if (!isNaN(val) && val > max) max = val
+        }
+        result[total.field] = max === -Infinity ? 0 : max
+        break
+      }
+    }
+  }
+  return result
+}
+
+/**
+ * Render one totals/subtotal row. The first column carries the label; each
+ * subsequent column whose field has a computed aggregate shows its value
+ * (formatted like the data column), the rest stay empty. Fixes the previous
+ * bug where the row computed values but rendered an empty `<td>`.
+ */
+function TotalsRow({
+  totals,
+  columns,
+  totalsDef,
+  formatter,
+  label,
+}: {
+  totals: Record<string, number>
+  columns: ReportColumn[]
+  totalsDef: ReportTotal[]
+  formatter: Formatter
+  label: string
+}) {
+  return (
+    <tr className="border-t-2 font-medium bg-muted/30">
+      {columns.map((col, idx) => {
+        const totalDef = totalsDef.find((t) => t.field === col.field)
+        const value = totals[col.field]
+        if (idx === 0) {
+          return (
+            <td key={col.field} className="p-3 text-sm">
+              {label}
+            </td>
+          )
+        }
+        if (totalDef && value !== undefined) {
+          return (
+            <td key={col.field} className="p-3 text-sm">
+              {formatReportValue(value, col.format, col.aggregate, formatter)}
+            </td>
+          )
+        }
+        return <td key={col.field} className="p-3 text-sm" />
+      })}
+    </tr>
+  )
 }

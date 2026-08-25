@@ -19,6 +19,8 @@ import {
 } from "react-router-dom"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Toaster } from "sonner"
+import { UiHost } from "@/shell/UiHost"
+import { DownloadTray } from "@/shell/DownloadTray"
 
 import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
@@ -71,6 +73,8 @@ function Root() {
         <Route path="*" element={<NotFound />} />
       </Routes>
       <Toaster position="top-right" richColors />
+      <UiHost />
+      <DownloadTray />
     </BrowserRouter>
   )
 }

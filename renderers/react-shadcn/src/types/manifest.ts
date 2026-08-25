@@ -92,6 +92,8 @@ export const FIELD_NUMBER = "number" // deprecated, backward compat
 
 export type FieldType =
   | "string"
+  | "text"
+  | "richtext"
   | "integer"
   | "decimal"
   | "boolean"
@@ -100,6 +102,7 @@ export type FieldType =
   | "datetime"
   | "json"
   | "uuid"
+  | "file"
   | "relation"
   | "child"
   | "number"
@@ -304,6 +307,24 @@ export interface Field {
   /** Client-side lookup: when the relation field named in `from` (same child
    *  row) changes, copy the related record's `field` into this field. */
   auto_fill?: AutoFillDecl
+  /** File field configuration (backend 05-field-types.md §1.3) — only for
+   *  type: file. Drives upload size/type enforcement + preview. */
+  storage?: StorageSpec
+}
+
+export interface StorageSpec {
+  allowed_types?: string[]
+  max_size_mb?: number
+  max_count?: number
+  visibility?: string
+  transform?: StorageTransform[]
+}
+
+export interface StorageTransform {
+  name: string
+  width?: number
+  height?: number
+  format?: string
 }
 
 export interface AutoFillDecl {
@@ -552,10 +573,27 @@ export interface PageSpec {
   blocks?: PageBlock[]
   tabs?: PageTab[]
   layout?: PageLayout
+  /** "custom" = full-code page handing all rendering to an asset
+   *  (frontend/06-page-kinds.md §13). Empty means blocks/tabs. */
+  mode?: string
+  /** Module-relative asset path for `mode: custom`. */
+  asset?: string
+  /** Backend footprint (entities/actions/subscribe) a custom page may touch —
+   *  enforced client-side like a component's `needs`. */
+  binds?: PageBinds
+}
+
+/** Backend footprint of a `mode: custom` page (06-page-kinds.md §13). */
+export interface PageBinds {
+  entities?: string[] // "module.entity"
+  actions?: string[] // "module.entity.action" or wildcard
+  subscribe?: string[] // "module.entity"
 }
 
 export interface PageLayout {
   columns?: number
+  /** "split" = master-detail (master list left, detail right). */
+  mode?: string
 }
 
 export interface PageBlock {
@@ -569,7 +607,7 @@ export interface PageBlock {
 
 /** Declarative presentation section inside a Page (frontend/06-page-kinds.md §1). */
 export interface SectionBlock {
-  /** Closed set: hero | feature_grid | card | carousel | cta */
+  /** Closed set: hero | feature_grid | card | carousel | cta | banner | alert | notice */
   type: string
   title?: string
   subtitle?: string
@@ -610,6 +648,26 @@ export interface BlockRef {
   mode?: "view" | "edit" | "create"
   param?: Record<string, unknown>
   props?: Record<string, unknown>
+  /** Frontend `uses` equivalent (07-component-kinds.md §4) — what the asset
+   *  touches via formspec.api / formspec.subscribe. Calls outside `needs`
+   *  fail client-side. */
+  needs?: AssetNeeds
+  /** Master-detail link (06-page-kinds.md §1.1) — this detail block follows
+   *  the row selection of the master Table block named by `source`. */
+  binds?: BlockBinds
+}
+
+/** Master-detail link on a detail block (06-page-kinds.md §1.1). */
+export interface BlockBinds {
+  /** `ref` of the master Table block whose row selection drives this block. */
+  source: string
+  /** Field of the selected master record injected as this block's record id. */
+  param: string
+}
+
+export interface AssetNeeds {
+  actions?: string[] // "module.entity.action" or "module.entity.*"
+  subscribe?: string[] // "module.entity"
 }
 
 // ── Form (Frontend §4) ──
@@ -674,6 +732,13 @@ export interface TableSpec {
   bulk_actions?: TableAction[]
   filters?: FilterSpec[]
   fixed_filters?: FilterSpec[]
+  /** Inline editing: cells editable in place for fields whose rules allow it
+   *  (not readonly/computed/immutable, within update permission). Commit =
+   *  per-row update with CAS version. */
+  inline_edit?: boolean
+  /** Batch editing: fields editable across a multi-row selection. Framework
+   *  runs update per row, partial failure reported per row. */
+  batch_edit?: string[]
 }
 
 export interface TableColumn {
@@ -770,6 +835,15 @@ export interface ReportSpec {
   groups?: ReportGroup[]
   totals?: ReportTotal[]
   export?: ExportFormat[]
+  /** Declarative parameterized filter (06-page-kinds.md §8). */
+  source?: ReportSource
+}
+
+export interface ReportSource {
+  entity: string
+  /** Maps a list-API filter field to a literal value or a `":param"`
+   *  placeholder resolved from `parameters[]` at execution time. */
+  filter?: Record<string, string>
 }
 
 export interface ReportParam {
@@ -852,6 +926,10 @@ export interface KanbanSpec {
   max_cards_per_column?: number
   sortable?: boolean
   position_field?: string
+  /** FormSpecExpr pre-check UX before drop: evaluated against the record +
+   *  target column; drop blocked when false. Server state-machine guard
+   *  remains authority. */
+  drag_guard?: string
 }
 
 export interface KanbanColumn {
@@ -867,6 +945,34 @@ export interface KanbanCard {
   assignee?: string
   fields?: string[]
   component?: string
+}
+
+// ── Calendar (Frontend §5) ──
+
+export interface CalendarSpec {
+  entity: string
+  date_field: string
+  end_field?: string
+  title_field?: string
+  resource_field?: string
+  color_field?: string
+  /** month | week | day | resource (default month). */
+  views?: string[]
+  realtime?: boolean
+}
+
+// ── ApprovalInbox (Frontend §11) ──
+
+export interface ApprovalInboxSpec {
+  realtime?: boolean
+  filters?: FilterSpec[]
+  search?: boolean
+}
+
+// ── NotificationCenter (Frontend §12) ──
+
+export interface NotificationCenterSpec {
+  realtime?: boolean
 }
 
 // ── Menu (Core Basic §4.4/§4.5) ──
@@ -1065,6 +1171,9 @@ export interface MetaBundle {
   prints: Entry<PrintSpec>[]
   themes: Entry<ThemeSpec>[]
   listings: Entry<ListingSpec>[]
+  calendars: Entry<CalendarSpec>[]
+  approval_inboxes: Entry<ApprovalInboxSpec>[]
+  notification_centers: Entry<NotificationCenterSpec>[]
   /** Resolved global settings namespace (spec §10). Always present. */
   settings: Settings
 }

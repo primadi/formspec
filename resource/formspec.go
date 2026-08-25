@@ -42,6 +42,7 @@ import (
 	"github.com/primadi/formspec/internal/api"
 	formspec_app "github.com/primadi/formspec/internal/app"
 	"github.com/primadi/formspec/internal/auth"
+	"github.com/primadi/formspec/internal/config"
 	"github.com/primadi/formspec/internal/entity"
 	"github.com/primadi/formspec/internal/manifest"
 	"github.com/primadi/formspec/internal/permission"
@@ -49,6 +50,8 @@ import (
 	"github.com/primadi/formspec/internal/validation"
 	"github.com/primadi/formspec/pkg/spec"
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
+	"github.com/primadi/formspec/renderers/jsonb-persist/datastore/memory"
+	"github.com/primadi/formspec/renderers/jsonb-persist/datastore/minio"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -346,9 +349,13 @@ func New(cfg Config) (*App, error) {
 		fmt.Fprintf(os.Stderr, "formspec: warning: no kind: App manifest found under %s — /_meta/ui will 400 until one is added\n", cfg.SpecPath)
 	}
 
+	// Config registry (todo 7.2.1): load kind: Config manifests and resolve
+	// their keys into ctx.config (non-secret) / ctx.secrets (secret) stores.
+	cfgReg := buildConfigRegistry(specManifests.Manifests)
+
 	rb := api.NewRouterBuilder(reg)
 	rb.BuildRoutes()
-	disp := newDispatcher(reg, database, cfg)
+	disp := newDispatcher(reg, database, cfg, cfgReg)
 	nativeEx := disp.NativeExecutor() // get the native executor from dispatcher
 	rb.SetDispatcher(disp)
 	rb.SetUIRegistry(uiReg)
@@ -392,6 +399,54 @@ func New(cfg Config) (*App, error) {
 		}
 	}
 	rb.SetSettings(spec.ResolveSettings(declaredSettings))
+
+	// Module asset roots (todo 5.9.1) — serve custom UI components from
+	// {root}/modules/{module}/assets/{path}.
+	assetRoots := []string{cfg.SpecPath}
+	if cfg.ExternalDir != "" {
+		assetRoots = append(assetRoots, cfg.ExternalDir)
+	}
+	rb.SetAssetRoots(assetRoots)
+
+	// Object store for file fields (todo 7.17.1). Two backends, selected by
+	// FORMSPEC_STORAGE:
+	//   file  (default) → filesystem under the state dir (.formspec/storage)
+	//   minio → MinIO/S3 (endpoint/creds/bucket via FORMSPEC_MINIO_* env)
+	storageBackend := os.Getenv("FORMSPEC_STORAGE")
+	if storageBackend == "" {
+		storageBackend = "file"
+	}
+	switch storageBackend {
+	case "minio":
+		endpoint := os.Getenv("FORMSPEC_MINIO_ENDPOINT")
+		if endpoint == "" {
+			endpoint = "minio:9000"
+		}
+		accessKey := os.Getenv("FORMSPEC_MINIO_ACCESS_KEY")
+		if accessKey == "" {
+			accessKey = "minioadmin"
+		}
+		secretKey := os.Getenv("FORMSPEC_MINIO_SECRET_KEY")
+		if secretKey == "" {
+			secretKey = "minioadmin"
+		}
+		bucket := os.Getenv("FORMSPEC_MINIO_BUCKET")
+		if bucket == "" {
+			bucket = "formspec"
+		}
+		mc, err := minio.NewStorage(endpoint, accessKey, secretKey, bucket,
+			os.Getenv("FORMSPEC_MINIO_USE_SSL") == "true")
+		if err != nil {
+			return nil, fmt.Errorf("init minio storage: %w", err)
+		}
+		rb.SetStorageResolver(func() (api.Storage, error) { return mc, nil })
+	default:
+		fsStore, err := memory.NewStorage(filepath.Join(StateDirFromDSN(cfg.DSN), "storage"))
+		if err != nil {
+			return nil, fmt.Errorf("init storage: %w", err)
+		}
+		rb.SetStorageResolver(func() (api.Storage, error) { return fsStore, nil })
+	}
 
 	appAuths, authErrs := auth.ResolveAppAuth(resolvedApps, configs)
 	for _, e := range authErrs {
@@ -678,7 +733,7 @@ func (a *App) ReloadSpec() error {
 	// captures it. Reads from the live App's atomic counter.
 	newRB.SetSpecVersionFn(func() int64 { return a.specVersion.Load() })
 	newRB.BuildRoutes()
-	newDisp := newDispatcher(newReg, a.database, a.cfg)
+	newDisp := newDispatcher(newReg, a.database, a.cfg, newCfgReg)
 
 	// Re-register native Go handlers on the new dispatcher.
 	a.mu.RLock()
@@ -686,6 +741,10 @@ func (a *App) ReloadSpec() error {
 		newDisp.NativeExecutor().Register(ref, h)
 	}
 	a.mu.RUnlock()
+
+	// Config registry (todo 7.2.1): re-resolve on reload so a changed Config
+	// manifest's keys take effect without a full restart.
+	newCfgReg := buildConfigRegistry(specManifests.Manifests)
 
 	newRB.SetDispatcher(newDisp)
 	newRB.SetUIRegistry(newUIReg)

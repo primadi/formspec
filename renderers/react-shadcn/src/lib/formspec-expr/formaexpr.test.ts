@@ -16,6 +16,7 @@ import {
   evalReadonlyWhen,
   evalRequiredWhen,
   evalCompute,
+  strictEvalFormSpecExpr,
 } from "./index"
 import { Lexer } from "./lexer"
 
@@ -390,6 +391,57 @@ describe("FormSpecExpr Error Handling", () => {
     const result = evalFormSpecExpr("1 / 0")
     expect(result.value).toBe(0)
     expect(result.warnings).toContain("division by zero")
+  })
+})
+
+// ── Strict Evaluation (5.11.3 — runtime defensive layer) ──
+
+describe("strictEvalFormSpecExpr", () => {
+  it("returns no error for a valid expression", () => {
+    const result = strictEvalFormSpecExpr('fields.status == "paid"', {
+      fields: { status: "paid" },
+    })
+    expect(result.error).toBeUndefined()
+    expect(result.value).toBe(true)
+  })
+
+  it("returns no error for empty expression", () => {
+    const result = strictEvalFormSpecExpr(undefined)
+    expect(result.error).toBeUndefined()
+    expect(result.value).toBeNull()
+  })
+
+  it("surfaces a parse error", () => {
+    const result = strictEvalFormSpecExpr("1 + + 2")
+    expect(result.error).toBeTruthy()
+  })
+
+  it("surfaces an unknown function as an error", () => {
+    const result = strictEvalFormSpecExpr("foo(1)")
+    expect(result.error).toContain("unknown function")
+  })
+
+  it("surfaces member access on a non-object as an error", () => {
+    const result = strictEvalFormSpecExpr("fields.total.amount", {
+      fields: { total: 100 },
+    })
+    expect(result.error).toContain("non-object")
+  })
+
+  it("surfaces division by zero as an error", () => {
+    const result = strictEvalFormSpecExpr("1 / 0")
+    expect(result.error).toContain("division by zero")
+  })
+
+  it("does not error on an unset field (normal null)", () => {
+    // `fields.status` where status is not set yet is the normal "field exists
+    // but not set" case — null, not an error. Schema-level references are
+    // validated at deploy time (5.11.2).
+    const result = strictEvalFormSpecExpr('fields.status == "paid"', {
+      fields: {},
+    })
+    expect(result.error).toBeUndefined()
+    expect(result.value).toBe(false)
   })
 })
 

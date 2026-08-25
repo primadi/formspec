@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/primadi/formspec/internal/events"
+	"github.com/primadi/formspec/pkg/spec"
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
 )
 
@@ -17,6 +18,13 @@ type DeliveryDeps struct {
 	Outbox   *db.OutboxStore
 	EventLog *db.EventLogStore
 	Logger   RuntimeLogger
+	// Dispatcher executes before_deliver/after_deliver hooks (todo 7.8.5).
+	// When nil, delivery hooks are skipped.
+	Dispatcher *Dispatcher
+	// Hooks are the entity's declared hooks, used for before_deliver /
+	// after_deliver event hooks. Set per-call by the handler (the entity
+	// owning the emission).
+	Hooks []spec.HookDecl
 }
 
 func (d DeliveryDeps) logger() RuntimeLogger {
@@ -84,12 +92,29 @@ func NotifyMutation(deps DeliveryDeps, workspaceID, resource, event string) {
 // behavior for that path (a documented gap — see 01-architecture.md §3).
 func DeliverEvents(ctx context.Context, deps DeliveryDeps, workspaceID, resource string, emissions []EventEmission, outboxAlreadyEnqueued bool) {
 	for _, ev := range emissions {
+		// before_deliver hooks (todo 7.8.5): may suppress delivery (fail) or
+		// enrich the payload (ok(data)). Runs before any channel fan-out.
+		payload := ev.Payload
+		if deps.Dispatcher != nil {
+			suppressed, enriched, err := runBeforeDeliver(ctx, deps, workspaceID, resource, ev, payload)
+			if err != nil {
+				deps.logger().Error("event.before_deliver_failed", map[string]any{"event": ev.Name, "resource": resource, "error": err.Error()})
+			}
+			if suppressed {
+				deps.logger().Warn("event.delivery_suppressed", map[string]any{"event": ev.Name, "resource": resource})
+				continue
+			}
+			if enriched != nil {
+				payload = enriched
+			}
+		}
+
 		payloadJSON, err := BuildEventMessage(resource, ev)
 		if err != nil {
 			deps.logger().Error("event.marshal_failed", map[string]any{"event": ev.Name, "resource": resource, "error": err.Error()})
 			continue
 		}
-		msg := events.EventMessage{Event: ev.Name, Resource: resource, Payload: ev.Payload}
+		msg := events.EventMessage{Event: ev.Name, Resource: resource, Payload: payload}
 
 		for _, ch := range ev.DeliverTo {
 			switch ch.Channel {
@@ -125,6 +150,66 @@ func DeliverEvents(ctx context.Context, deps DeliveryDeps, workspaceID, resource
 				// explicitly out of scope for this pass (see plan notes).
 				deps.logger().Warn("event.channel_not_implemented", map[string]any{"event": ev.Name, "channel": ch.Channel})
 			}
+		}
+
+		// after_deliver hooks (todo 7.8.5): post-delivery side effects,
+		// best-effort — never fail the action.
+		if deps.Dispatcher != nil {
+			runAfterDeliver(ctx, deps, workspaceID, resource, ev, payload)
+		}
+	}
+}
+
+// runBeforeDeliver runs (on: before_deliver, event: ev.Name|"*") hooks in
+// priority order. Returns (suppressed, enrichedPayload, err). A hook that
+// returns fail() (surfaced as a Dispatch error) suppresses delivery — the
+// hook is a gate; if it doesn't pass, the event is not delivered. A hook
+// that returns ok(data) enriches the payload (last writer wins).
+func runBeforeDeliver(ctx context.Context, deps DeliveryDeps, workspaceID, resource string, ev EventEmission, payload map[string]any) (bool, map[string]any, error) {
+	matches := SelectEventHooks(deps.Hooks, spec.HookOnBeforeDeliver, ev.Name)
+	if len(matches) == 0 {
+		return false, nil, nil
+	}
+	params := ExecuteParams{
+		WorkspaceID: workspaceID,
+		Params: map[string]any{
+			"event":   ev.Name,
+			"payload": payload,
+		},
+	}
+	for _, h := range matches {
+		res, err := deps.Dispatcher.Dispatch(ctx, spec.Action{Name: ev.Name, Impl: h.Impl}, params)
+		if err != nil {
+			// fail() or crash → suppress delivery (gate semantics).
+			return true, nil, err
+		}
+		if res != nil && res.Data != nil {
+			// ok(data) → enrich payload.
+			if m, ok := res.Data.(map[string]any); ok {
+				payload = m
+			}
+		}
+	}
+	return false, payload, nil
+}
+
+// runAfterDeliver runs (on: after_deliver, event: ev.Name|"*") hooks
+// best-effort after delivery. Errors are logged only.
+func runAfterDeliver(ctx context.Context, deps DeliveryDeps, workspaceID, resource string, ev EventEmission, payload map[string]any) {
+	matches := SelectEventHooks(deps.Hooks, spec.HookOnAfterDeliver, ev.Name)
+	if len(matches) == 0 {
+		return
+	}
+	params := ExecuteParams{
+		WorkspaceID: workspaceID,
+		Params: map[string]any{
+			"event":   ev.Name,
+			"payload": payload,
+		},
+	}
+	for _, h := range matches {
+		if _, err := deps.Dispatcher.Dispatch(ctx, spec.Action{Name: ev.Name, Impl: h.Impl}, params); err != nil {
+			deps.logger().Error("event.after_deliver_failed", map[string]any{"event": ev.Name, "resource": resource, "error": err.Error()})
 		}
 	}
 }

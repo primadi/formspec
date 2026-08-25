@@ -8,7 +8,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react"
 import { useNavigate } from "react-router-dom"
-import { toast } from "sonner"
+import { toast } from "@/lib/ui"
 import {
   DndContext,
   DragOverlay,
@@ -52,6 +52,8 @@ import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
 import { resolveEntityRef } from "@/engine/entityRef"
 import { can as checkPermission } from "@/engine/permissions"
+import { deriveKanbanColumns } from "@/engine/derive"
+import { evalFormSpecExpr } from "@/lib/formspec-expr"
 import { useSurface } from "@/hooks/useSurface"
 import { useRealtime } from "@/hooks/useRealtime"
 import { useSelectFilterOptions } from "@/hooks/useSelectFilterOptions"
@@ -182,7 +184,13 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
     entry.module,
   )
   const entity = getEntity(entityModule, entityName)
-  const columns = entry.spec.columns
+  // Zero-config (5.5.5): explicit `columns:` wins; otherwise derive from the
+  // entity's state machine states or the status field's enum declaration
+  // order. When neither exists, the board shows an empty-state hint.
+  const columns =
+    entry.spec.columns.length > 0
+      ? entry.spec.columns
+      : deriveKanbanColumns(entity, entry.spec.status_field)
   const statusField = entry.spec.status_field
   const cardTemplate = entry.spec.card_template
   const rowActions = entry.spec.row_actions
@@ -527,6 +535,21 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
         return
       }
 
+      // ── drag_guard (5.5.3) — FormSpecExpr pre-check UX ──
+      // Evaluated against the record being dragged (`fields`) + the target
+      // column status (`target`). Drop is blocked client-side when the guard
+      // is false; the server state-machine guard remains the authority.
+      if (entry.spec.drag_guard) {
+        const guard = evalFormSpecExpr(entry.spec.drag_guard, {
+          fields: activeRecord as Record<string, unknown>,
+          target: targetStatus,
+        })
+        if (!guard.valid || !guard.value) {
+          toast.error(`Cannot move to "${targetColumn?.label ?? targetStatus}"`)
+          return
+        }
+      }
+
       // ── Build PATCH body ──
       const patchBody: Record<string, unknown> = { [statusField]: targetStatus }
       if (positionField && targetPosition != null) {
@@ -579,6 +602,7 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
       getColumnRecords,
       entry.spec.max_cards_per_column,
       entry.spec.position_field,
+      entry.spec.drag_guard,
     ],
   )
 
@@ -700,45 +724,53 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
       </div>
 
       {/* Board */}
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCorners}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-      >
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {columns.map((col) => (
-            <KanbanColumn
-              key={col.status}
-              column={col}
-              cards={getColumnRecords(col.status)}
-              loading={loading}
-              maxCards={entry.spec.max_cards_per_column}
-              cardTemplate={cardTemplate}
-              rowActions={rowActions}
-              activeId={activeId}
-              onRowAction={handleRowAction}
-              entityModule={entity?.module ?? entityModule}
-              entityPlural={entity?.plural ?? entityName}
-              positionField={entry.spec.position_field}
-            />
-          ))}
+      {columns.length === 0 ? (
+        <div className="rounded-md border border-dashed p-10 text-center text-sm text-muted-foreground">
+          No columns to display. Author `columns:` in the Kanban manifest, or
+          give the entity a state machine / enum on `{statusField}` so columns
+          can be derived (zero-config).
         </div>
-
-        {/* Drag overlay — rendered when dragging */}
-        <DragOverlay>
-          {activeRecord ? (
-            <div className="rounded-md border bg-card p-3 shadow-xl rotate-3 w-64">
-              <KanbanCardContent
-                record={activeRecord}
-                template={cardTemplate}
+      ) : (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCorners}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {columns.map((col) => (
+              <KanbanColumn
+                key={col.status}
+                column={col}
+                cards={getColumnRecords(col.status)}
+                loading={loading}
+                maxCards={entry.spec.max_cards_per_column}
+                cardTemplate={cardTemplate}
+                rowActions={rowActions}
+                activeId={activeId}
+                onRowAction={handleRowAction}
                 entityModule={entity?.module ?? entityModule}
                 entityPlural={entity?.plural ?? entityName}
+                positionField={entry.spec.position_field}
               />
-            </div>
-          ) : null}
-        </DragOverlay>
-      </DndContext>
+            ))}
+          </div>
+
+          {/* Drag overlay — rendered when dragging */}
+          <DragOverlay>
+            {activeRecord ? (
+              <div className="rounded-md border bg-card p-3 shadow-xl rotate-3 w-64">
+                <KanbanCardContent
+                  record={activeRecord}
+                  template={cardTemplate}
+                  entityModule={entity?.module ?? entityModule}
+                  entityPlural={entity?.plural ?? entityName}
+                />
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
+      )}
 
       {/* Confirm dialog for row actions */}
       <ConfirmDialog

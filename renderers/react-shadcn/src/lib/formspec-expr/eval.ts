@@ -126,7 +126,10 @@ function evalIdentifier(node: Identifier, context: EvalContext): RuntimeValue {
 
   // Unknown identifiers default to null without warning.
   // In FormSpecExpr, accessing an undefined field/property is a normal operation
-  // that produces null, not an error.
+  // that produces null, not an error. Schema-level field references are
+  // validated at deploy time (5.11.2); the runtime defensive layer (5.11.3)
+  // surfaces genuine evaluation failures (parse errors, unknown operators/
+  // functions, member access on non-objects) via strictEvalFormSpecExpr.
   return null
 }
 

@@ -282,10 +282,13 @@ var KnownKinds = KindSet{
 	"Config": true, "Migration": true, "Subscription": true,
 	// Core Extended
 	"Workflow": true, "Api": true, "Webhook": true, "Mockup": true, "KindDefinition": true, "Integrator": true,
+	// Renderer / meta-kinds
+	"Renderer": true, "VisualSpecKind": true, "PersistBackend": true,
 	// Frontend — no "Menu": navigation lives in App.spec.menu / Module.spec.menu.
 	"Page": true, "Form": true, "Table": true, "Dashboard": true, "Widget": true,
 	"Report": true, "Wizard": true, "Kanban": true, "Timeline": true,
-	"Print": true, "Theme": true, "Listing": true,
+	"Print": true, "Theme": true, "Listing": true, "Calendar": true,
+	"ApprovalInbox": true, "NotificationCenter": true,
 	// Control Plane
 	"Environment": true, "Policy": true, "Datastore": true,
 }

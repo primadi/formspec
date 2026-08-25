@@ -527,3 +527,96 @@ spec:
 		t.Fatalf("expected no listing when entity hidden, got %+v", b2.Listings)
 	}
 }
+
+// TestCalendarApprovalNotificationKinds verifies `kind: Calendar`,
+// `kind: ApprovalInbox`, and `kind: NotificationCenter` register in the UI
+// registry and ship in the meta bundle (06-page-kinds.md §5, §11, §12).
+func TestCalendarApprovalNotificationKinds(t *testing.T) {
+	loader := manifest.NewLoader("")
+	calendar := `
+apiVersion: formspec.dev/v1alpha1
+kind: Calendar
+metadata: { name: appointment-calendar, module: clinic }
+spec:
+  entity: appointment
+  date_field: scheduled_at
+  views: [month, week, day, resource]
+`
+	approval := `
+apiVersion: formspec.dev/v1alpha1
+kind: ApprovalInbox
+metadata: { name: my-approvals, module: core }
+spec:
+  realtime: true
+`
+	notification := `
+apiVersion: formspec.dev/v1alpha1
+kind: NotificationCenter
+metadata: { name: my-notifications, module: core }
+spec:
+  realtime: true
+`
+	raws, errs := loader.ParseBytes([]byte(calendar), "calendar.yaml")
+	if len(errs) > 0 {
+		t.Fatalf("parse calendar: %v", errs)
+	}
+	raws2, errs := loader.ParseBytes([]byte(approval), "approval.yaml")
+	if len(errs) > 0 {
+		t.Fatalf("parse approval: %v", errs)
+	}
+	raws3, errs := loader.ParseBytes([]byte(notification), "notification.yaml")
+	if len(errs) > 0 {
+		t.Fatalf("parse notification: %v", errs)
+	}
+	raws = append(raws, raws2...)
+	raws = append(raws, raws3...)
+
+	r := NewRegistry()
+	if loadErrs := r.Load(raws); len(loadErrs) > 0 {
+		t.Fatalf("load kinds: %v", loadErrs)
+	}
+	if r.Calendars["appointment-calendar"] == nil {
+		t.Fatal("calendar not registered in registry")
+	}
+	if r.ApprovalInboxes["my-approvals"] == nil {
+		t.Fatal("approval inbox not registered in registry")
+	}
+	if r.NotificationCenters["my-notifications"] == nil {
+		t.Fatal("notification center not registered in registry")
+	}
+
+	entities := func() []EntityDescriptor {
+		return []EntityDescriptor{{
+			Module: "clinic",
+			Name:   "appointment",
+			Spec: &spec.EntitySpec{
+				Fields: []spec.Field{{Name: "scheduled_at", Type: spec.FieldDateTime}},
+			},
+		}}
+	}
+	canAll := func(string) bool { return true }
+	b := r.BuildBundle(entities, canAll, AppContext{})
+	if len(b.Calendars) != 1 || b.Calendars[0].Name != "appointment-calendar" {
+		t.Fatalf("expected calendar in bundle, got %+v", b.Calendars)
+	}
+	if len(b.ApprovalInboxes) != 1 || b.ApprovalInboxes[0].Name != "my-approvals" {
+		t.Fatalf("expected approval inbox in bundle, got %+v", b.ApprovalInboxes)
+	}
+	if len(b.NotificationCenters) != 1 || b.NotificationCenters[0].Name != "my-notifications" {
+		t.Fatalf("expected notification center in bundle, got %+v", b.NotificationCenters)
+	}
+
+	// Calendar is entity-gated: hidden entity → omitted.
+	canNone := func(string) bool { return false }
+	b2 := r.BuildBundle(entities, canNone, AppContext{})
+	if len(b2.Calendars) != 0 {
+		t.Fatalf("expected no calendar when entity hidden, got %+v", b2.Calendars)
+	}
+	// ApprovalInbox / NotificationCenter are zero-config — always ship.
+	if len(b2.ApprovalInboxes) != 1 {
+		t.Fatalf("expected approval inbox regardless of permissions, got %+v", b2.ApprovalInboxes)
+	}
+	if len(b2.NotificationCenters) != 1 {
+		t.Fatalf("expected notification center regardless of permissions, got %+v", b2.NotificationCenters)
+	}
+}

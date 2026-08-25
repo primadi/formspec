@@ -152,6 +152,14 @@ func runCheck(args []string) {
 	// Check 1+2: Form field + FormSpecExpr references against the target Entity.
 	checkForms(result, idx, res.Manifests)
 
+	// Check 2 (extended): FormSpecExpr in Kanban drag_guard + Wizard steps.
+	checkKanban(result, idx, res.Manifests)
+	checkWizard(result, idx, res.Manifests)
+
+	// Check 5.16: renderer registry & resolution (5.16.1), slot-tier
+	// validation (5.16.2), stack_family compatibility (5.16.3).
+	checkRenderers(result, res.Manifests)
+
 	// Check 3+4: cross-module uses.resources existence + unused.
 	brokenRefs := checkUses(result, idx, res.Manifests)
 
@@ -288,7 +296,9 @@ func checkForms(result *checkResult, idx *entityIndex, manifests []manifest.RawM
 }
 
 // checkExpr extracts fields.<name> references from a FormSpecExpr and reports
-// any that are missing from the entity schema.
+// any that are missing from the entity schema. It also validates the grammar
+// (5.11.2): constructs outside the expression subset (§2) are rejected at
+// deploy time, never silently accepted and left to fail at runtime.
 func checkExpr(result *checkResult, source, owner, where, expr string, fields map[string]bool) {
 	if expr == "" {
 		return
@@ -298,6 +308,143 @@ func checkExpr(result *checkResult, source, owner, where, expr string, fields ma
 		if !fields[ref] {
 			result.add(source, "error", "%s: FormSpecExpr %q references field %q missing from entity schema", where, expr, ref)
 		}
+	}
+	if err := validateExprGrammar(expr); err != "" {
+		result.add(source, "error", "%s: FormSpecExpr %q invalid: %s", where, expr, err)
+	}
+}
+
+// validateExprGrammar rejects constructs outside the FormSpecExpr subset
+// (docs/spec/frontend/08-formspec-expr.md §2): literals, `fields.x`
+// references, comparisons, and/or/not, arithmetic, len/sum, list
+// comprehension, `in`. Explicitly forbidden: `ctx` access, function
+// definitions, imports, loops, and unbalanced delimiters.
+func validateExprGrammar(expr string) string {
+	// No ctx access — the closed ctx.* primitives are server-side only.
+	if strings.Contains(expr, "ctx.") {
+		return "ctx access is not allowed in FormSpecExpr"
+	}
+	// No function definitions / imports / return statements.
+	for _, kw := range []string{"def ", "import ", "return ", "lambda"} {
+		if strings.Contains(expr, kw) {
+			return "construct outside the expression subset (function defs, imports, statements)"
+		}
+	}
+	// Balanced delimiters.
+	stack := []rune{}
+	for _, ch := range expr {
+		switch ch {
+		case '(', '[', '{':
+			stack = append(stack, ch)
+		case ')', ']', '}':
+			if len(stack) == 0 {
+				return "unbalanced delimiter"
+			}
+			open := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			if (ch == ')' && open != '(') || (ch == ']' && open != '[') || (ch == '}' && open != '{') {
+				return "mismatched delimiter"
+			}
+		}
+	}
+	if len(stack) > 0 {
+		return "unbalanced delimiter"
+	}
+	return ""
+}
+
+// checkKanban validates Kanban manifests: the `drag_guard` FormSpecExpr is
+// checked against the board's entity schema (5.11.2).
+func checkKanban(result *checkResult, idx *entityIndex, manifests []manifest.RawManifest) {
+	for _, m := range manifests {
+		if m.Kind != "Kanban" {
+			continue
+		}
+		sm, ok := m.Spec.(map[string]any)
+		if !ok {
+			continue
+		}
+		kb, err := manifest.RawSpecTo[spec.KanbanSpec](sm)
+		if err != nil {
+			continue
+		}
+		if kb.DragGuard == "" {
+			continue
+		}
+		module, entity := splitEntityRef(kb.Entity, m.Metadata.Module)
+		fields := idx.fieldNames(module, entity)
+		if fields == nil {
+			result.add(m.Source, "error", "Kanban %q references unknown entity %q", m.Metadata.Name, kb.Entity)
+			continue
+		}
+		checkExpr(result, m.Source, m.Metadata.Name, "drag_guard", kb.DragGuard, fields)
+	}
+}
+
+// checkWizard validates Wizard manifests: step field expressions are checked
+// against the wizard's entity schema (5.11.2).
+func checkWizard(result *checkResult, idx *entityIndex, manifests []manifest.RawManifest) {
+	for _, m := range manifests {
+		if m.Kind != "Wizard" {
+			continue
+		}
+		sm, ok := m.Spec.(map[string]any)
+		if !ok {
+			continue
+		}
+		wz, err := manifest.RawSpecTo[spec.WizardSpec](sm)
+		if err != nil {
+			continue
+		}
+		// A wizard may target an entity (spec.entity) or commit via an action
+		// (spec.action) — only validate when an entity is declared.
+		if wz.Entity == "" {
+			continue
+		}
+		module, entity := splitEntityRef(wz.Entity, m.Metadata.Module)
+		fields := idx.fieldNames(module, entity)
+		if fields == nil {
+			result.add(m.Source, "error", "Wizard %q references unknown entity %q", m.Metadata.Name, wz.Entity)
+			continue
+		}
+		for _, step := range wz.Steps {
+			for _, f := range step.Fields {
+				checkExpr(result, m.Source, m.Metadata.Name, "step "+step.Title+" field "+f.Field+".visible_when", f.VisibleWhen, fields)
+				checkExpr(result, m.Source, m.Metadata.Name, "step "+step.Title+" field "+f.Field+".readonly_when", f.ReadonlyWhen, fields)
+				checkExpr(result, m.Source, m.Metadata.Name, "step "+step.Title+" field "+f.Field+".required_when", f.RequiredWhen, fields)
+				checkExpr(result, m.Source, m.Metadata.Name, "step "+step.Title+" field "+f.Field+".compute", f.Compute, fields)
+			}
+		}
+	}
+}
+
+// checkRenderers validates the renderer registry & resolution (todo 5.16):
+//   - 5.16.1: App `renderers:` map + Page `renderer:` field resolve to
+//     registered renderers.
+//   - 5.16.2: slot-tier rules — accepts_slots only on tier page|app,
+//     implements_slot only on tier component.
+//   - 5.16.3: App shell + shell-integrated Page share one stack_family.
+func checkRenderers(result *checkResult, manifests []manifest.RawManifest) {
+	reg := manifest.NewRendererRegistry(manifests)
+
+	for _, msg := range reg.ValidateSlotTiers() {
+		result.add("", "error", "%s", msg)
+	}
+
+	var apps, pages []manifest.RawManifest
+	for _, m := range manifests {
+		switch spec.Kind(m.Kind) {
+		case spec.KindApp:
+			apps = append(apps, m)
+		case spec.KindPage:
+			pages = append(pages, m)
+		}
+	}
+	for _, msg := range reg.ValidateRendererResolution(apps, pages) {
+		result.add("", "error", "%s", msg)
+	}
+	for _, msg := range reg.ValidateStackFamily(apps, pages) {
+		result.add("", "error", "%s", msg)
 	}
 }
 

@@ -233,6 +233,10 @@ func (r *primitiveRunner) builtinQuery() *starlark.Builtin {
 		if err := starlark.UnpackArgs("query", args, kwargs, "sql", &sql); err != nil {
 			return nil, err
 		}
+		// Sandbox limit (7.14.1): max DB queries per script.
+		if err := threadLimits(thread).CheckQuery(); err != nil {
+			return nil, err
+		}
 		q, ok := r.conn.(Querier)
 		if !ok {
 			return starlark.None, fmt.Errorf("ctx.%s.query: not yet implemented for this backend (connection=%q)", r.primType, r.name)
@@ -240,6 +244,10 @@ func (r *primitiveRunner) builtinQuery() *starlark.Builtin {
 		rows, err := q.Query(threadContext(thread), sql)
 		if err != nil {
 			return nil, fmt.Errorf("ctx.%s.query: %w", r.primType, err)
+		}
+		// Sandbox limit (7.14.1): max records read.
+		if err := threadLimits(thread).AddRecordsRead(len(rows)); err != nil {
+			return nil, err
 		}
 		return toStarlark(rows)
 	})

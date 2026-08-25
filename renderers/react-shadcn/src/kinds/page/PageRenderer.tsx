@@ -10,7 +10,14 @@
 
 import { lazy, Suspense, useEffect, useMemo, useState } from "react"
 import { useParams, useSearchParams } from "react-router-dom"
-import type { Entry, PageSpec, PageBlock, PageTab } from "@/types/manifest"
+import type {
+  Entry,
+  PageSpec,
+  PageBlock,
+  PageTab,
+  PageBinds,
+  AssetNeeds,
+} from "@/types/manifest"
 import { useMetaStore } from "@/stores/meta"
 import { useSessionStore } from "@/stores/session"
 import { can as checkPermission } from "@/engine/permissions"
@@ -18,8 +25,10 @@ import { resolveEntityRef } from "@/engine/entityRef"
 import { apiGet } from "@/lib/api"
 import { interpolate } from "@/lib/interpolate"
 import { Skeleton } from "@/components/ui/skeleton"
+import { EmptyState } from "@/components/ui/empty-state"
 import { cn } from "@/lib/utils"
 import { SectionBlockRenderer } from "@/components/sections/SectionBlocks"
+import { AssetRenderer } from "@/shell/AssetRenderer"
 
 /**
  * Resolve a `:param`-style placeholder (the only kind Page blocks author,
@@ -83,6 +92,13 @@ export default function PageRenderer({ entry }: PageRendererProps) {
     )
   }
 
+  // Custom page — full-code page owned by an asset (06-page-kinds.md §13).
+  // No blocks/tabs; the asset renders 100% of the markup and declares its
+  // backend footprint via `binds`.
+  if (entry.spec.mode === "custom") {
+    return <CustomPage entry={entry} />
+  }
+
   // Tabs variant
   if (entry.spec.tabs?.length) {
     return <PageTabs entry={entry} />
@@ -90,6 +106,53 @@ export default function PageRenderer({ entry }: PageRendererProps) {
 
   // Default: blocks variant
   return <PageBlocks entry={entry} />
+}
+
+// ── Custom Page Variant (mode: custom) ──
+
+// Convert a custom page's `binds` footprint into the AssetNeeds shape the
+// formspec client enforces client-side (07-component-kinds.md §4). Each bound
+// entity becomes a `module.entity.*` action grant so the asset may touch any
+// action on it; explicit actions and subscribe channels pass through.
+function bindsToNeeds(binds?: PageBinds): AssetNeeds | undefined {
+  if (!binds) return undefined
+  const actions = [...(binds.actions ?? [])]
+  for (const e of binds.entities ?? []) {
+    actions.push(`${e}.*`)
+  }
+  return { actions, subscribe: binds.subscribe }
+}
+
+function CustomPage({ entry }: { entry: Entry<PageSpec> }) {
+  const asset = entry.spec.asset
+  const needs = useMemo(
+    () => bindsToNeeds(entry.spec.binds),
+    [entry.spec.binds],
+  )
+
+  if (!asset) {
+    return (
+      <div className="rounded-md border border-destructive/50 p-4 text-sm text-destructive">
+        Custom page requires an `asset` (module-relative asset path).
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">
+          {entry.spec.title}
+        </h1>
+        {entry.spec.description && (
+          <p className="text-sm text-muted-foreground">
+            {entry.spec.description}
+          </p>
+        )}
+      </div>
+      <AssetRenderer asset={asset} needs={needs} />
+    </div>
+  )
 }
 
 // ── Blocks Variant ──
@@ -156,6 +219,37 @@ function PageBlocks({ entry }: { entry: Entry<PageSpec> }) {
     ? interpolate(entry.spec.title, titleCtx)
     : entry.spec.title
 
+  // Full-custom page (06-page-kinds.md §1) — a single `component:` block
+  // (no blocks/tabs) renders full-bleed: no grid wrapper, no border.
+  if (blocks.length === 1 && blocks[0].component) {
+    return (
+      <div className="space-y-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
+          {entry.spec.description && (
+            <p className="text-sm text-muted-foreground">
+              {entry.spec.description}
+            </p>
+          )}
+        </div>
+        <PageBlockRenderer
+          block={blocks[0]}
+          module={entry.module}
+          routeParams={routeParams}
+          workspace={workspace}
+          rootUrl={rootUrl}
+          bare
+        />
+      </div>
+    )
+  }
+
+  // Master-detail split layout (06-page-kinds.md §1.1) — a master list block
+  // on the left drives a detail block on the right via `binds`.
+  if (entry.spec.layout?.mode === "split") {
+    return <PageSplit entry={entry} title={title} />
+  }
+
   return (
     <div className="space-y-4">
       <div>
@@ -186,22 +280,146 @@ function PageBlocks({ entry }: { entry: Entry<PageSpec> }) {
   )
 }
 
+// ── Split Variant (layout.mode: split) ──
+
+// Master-detail: a master Table block's row selection drives a detail block
+// (Form or Table) via `binds: { source, param }` — no route navigation
+// (06-page-kinds.md §1.1). The detail refetches on selection change; without a
+// selection it shows an empty-state.
+function PageSplit({
+  entry,
+  title,
+}: {
+  entry: Entry<PageSpec>
+  title: string
+}) {
+  const blocks = entry.spec.blocks ?? []
+  const routeParams = useParams()
+  const { workspace = "default" } = useParams<{ workspace: string }>()
+  const rootUrl = useMetaStore((s) => s.bundle?.app.root_url ?? "/")
+
+  // The detail block is the one carrying `binds`; its `source` names the
+  // master Table block's `ref`.
+  const detailBlock = blocks.find(
+    (b) => b.form?.binds || b.table?.binds || b.component?.binds,
+  )
+  const binds = detailBlock?.form?.binds ?? detailBlock?.table?.binds
+  const masterBlock = blocks.find((b) => b.table?.ref === binds?.source)
+
+  const [selectedRecord, setSelectedRecord] = useState<Record<
+    string,
+    unknown
+  > | null>(null)
+
+  // Detail id = the selected master record's `binds.param` field (usually id).
+  const detailId =
+    selectedRecord && binds?.param
+      ? String(selectedRecord[binds.param] ?? "")
+      : undefined
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
+        {entry.spec.description && (
+          <p className="text-sm text-muted-foreground">
+            {entry.spec.description}
+          </p>
+        )}
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+        {/* Master — narrow left */}
+        <div className="rounded-md border p-4">
+          {masterBlock ? (
+            <Suspense fallback={<Skeleton className="h-48" />}>
+              <PageBlockRenderer
+                block={masterBlock}
+                module={entry.module}
+                routeParams={routeParams}
+                workspace={workspace}
+                rootUrl={rootUrl}
+                bare
+                onSelect={setSelectedRecord}
+              />
+            </Suspense>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Master block not found (binds.source: {binds?.source})
+            </p>
+          )}
+        </div>
+
+        {/* Detail — wide right */}
+        <div className="rounded-md border p-4">
+          {detailBlock ? (
+            detailId ? (
+              <Suspense fallback={<Skeleton className="h-48" />}>
+                <PageBlockRenderer
+                  block={detailBlock}
+                  module={entry.module}
+                  routeParams={routeParams}
+                  workspace={workspace}
+                  rootUrl={rootUrl}
+                  bare
+                  overrideId={detailId}
+                  overrideFilters={
+                    selectedRecord && binds?.param
+                      ? { [binds.param]: detailId }
+                      : undefined
+                  }
+                />
+              </Suspense>
+            ) : (
+              <EmptyState
+                title="Pilih baris di panel kiri"
+                description="Detail akan muncul setelah Anda memilih satu baris pada daftar master."
+              />
+            )
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Detail block not found (no block declares `binds`).
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function PageBlockRenderer({
   block,
   module,
   routeParams,
   workspace,
   rootUrl,
+  bare,
+  onSelect,
+  overrideId,
+  overrideFilters,
 }: {
   block: PageBlock
   module: string
   routeParams: Readonly<Record<string, string | undefined>>
   workspace: string
   rootUrl: string
+  /** Skip the outer border wrapper — used by the split layout whose panels
+   *  already provide the border, and by full-custom pages. */
+  bare?: boolean
+  /** Master-detail: fired with the clicked row's record (Table blocks). */
+  onSelect?: (record: Record<string, unknown>) => void
+  /** Master-detail: record id injected into a Form block, taking precedence
+   *  over the `:id` route param (06-page-kinds.md §1.1). */
+  overrideId?: string
+  /** Master-detail: extra fixed filters merged into a Table block's fetch. */
+  overrideFilters?: Record<string, string>
 }) {
   const getEntity = useMetaStore((s) => s.getEntity)
   const getForm = useMetaStore((s) => s.getForm)
   const getTable = useMetaStore((s) => s.getTable)
+
+  const wrap = (inner: React.ReactNode) =>
+    bare ? inner : <div className="rounded-md border p-4">{inner}</div>
 
   // Form block — entity resolved from the referenced Form manifest's spec.entity
   if (block.form) {
@@ -212,17 +430,15 @@ function PageBlockRenderer({
       : undefined
 
     if (entity) {
-      return (
-        <div className="rounded-md border p-4">
-          <Suspense fallback={<Skeleton className="h-32" />}>
-            <FormRenderer
-              entity={entity}
-              mode={(block.form?.mode as "create" | "edit" | "view") ?? "view"}
-              id={resolveRouteParam(block.form?.id, routeParams)}
-              formRef={block.form?.ref}
-            />
-          </Suspense>
-        </div>
+      return wrap(
+        <Suspense fallback={<Skeleton className="h-32" />}>
+          <FormRenderer
+            entity={entity}
+            mode={(block.form?.mode as "create" | "edit" | "view") ?? "view"}
+            id={overrideId ?? resolveRouteParam(block.form?.id, routeParams)}
+            formRef={block.form?.ref}
+          />
+        </Suspense>,
       )
     }
     return (
@@ -241,21 +457,23 @@ function PageBlockRenderer({
       : undefined
     // eslint-disable-next-line react-hooks/rules-of-hooks -- block.table is stable per element (keyed list), so this hook order is consistent across renders
     const fixedFilters = useMemo(
-      () => resolveRouteParams(block.table?.param, routeParams),
-      [block.table?.param, routeParams],
+      () => ({
+        ...resolveRouteParams(block.table?.param, routeParams),
+        ...overrideFilters,
+      }),
+      [block.table?.param, routeParams, overrideFilters],
     )
 
     if (entity) {
-      return (
-        <div className="rounded-md border p-4">
-          <Suspense fallback={<Skeleton className="h-48" />}>
-            <TableRenderer
-              entity={entity}
-              hideTitle
-              fixedFilters={fixedFilters}
-            />
-          </Suspense>
-        </div>
+      return wrap(
+        <Suspense fallback={<Skeleton className="h-48" />}>
+          <TableRenderer
+            entity={entity}
+            hideTitle
+            fixedFilters={fixedFilters}
+            onSelect={onSelect}
+          />
+        </Suspense>,
       )
     }
     return (
@@ -275,17 +493,20 @@ function PageBlockRenderer({
     )
   }
 
-  // Component block (custom component placeholder)
+  // Component block (custom asset component, todo 5.9.1)
   if (block.component) {
+    if (block.component.asset) {
+      return (
+        <AssetRenderer
+          asset={block.component.asset}
+          props={block.component.props}
+          needs={block.component.needs}
+        />
+      )
+    }
     return (
-      <div className="rounded-md border border-dashed p-4">
-        <p className="text-sm text-muted-foreground text-center">
-          Custom component:{" "}
-          {block.component.asset || block.component.ref || "unknown"}
-        </p>
-        <p className="text-xs text-muted-foreground text-center mt-1">
-          Component blocks supported in Fase 4.F6
-        </p>
+      <div className="rounded-md border p-4 text-sm text-muted-foreground">
+        Component: {block.component.ref || "unknown"}
       </div>
     )
   }

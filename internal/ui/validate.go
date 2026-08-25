@@ -236,6 +236,48 @@ func (r *Registry) Validate(resolve EntityResolver) []error {
 		}
 	}
 
+	// ── Calendars ──
+	for _, name := range sortedKeys(r.Calendars) {
+		e := r.Calendars[name]
+		es, _, _, ok := resolveEntityRef(resolve, e.Module, e.Spec.Entity)
+		if !ok {
+			addf("%s: Calendar %q: entity %q not found", e.Source, name, e.Spec.Entity)
+			continue
+		}
+		if e.Spec.DateField == "" {
+			addf("%s: Calendar %q: date_field is required", e.Source, name)
+		} else if !fieldPathExists(resolve, e.Module, es, e.Spec.DateField) {
+			addf("%s: Calendar %q: date_field %q not on entity %q", e.Source, name, e.Spec.DateField, e.Spec.Entity)
+		}
+		if e.Spec.EndField != "" && !fieldPathExists(resolve, e.Module, es, e.Spec.EndField) {
+			addf("%s: Calendar %q: end_field %q not on entity %q", e.Source, name, e.Spec.EndField, e.Spec.Entity)
+		}
+		if e.Spec.TitleField != "" && !fieldPathExists(resolve, e.Module, es, e.Spec.TitleField) {
+			addf("%s: Calendar %q: title_field %q not on entity %q", e.Source, name, e.Spec.TitleField, e.Spec.Entity)
+		}
+		if e.Spec.ResourceField != "" && !fieldPathExists(resolve, e.Module, es, e.Spec.ResourceField) {
+			addf("%s: Calendar %q: resource_field %q not on entity %q", e.Source, name, e.Spec.ResourceField, e.Spec.Entity)
+		}
+		if e.Spec.ColorField != "" && !fieldPathExists(resolve, e.Module, es, e.Spec.ColorField) {
+			addf("%s: Calendar %q: color_field %q not on entity %q", e.Source, name, e.Spec.ColorField, e.Spec.Entity)
+		}
+	}
+
+	// ── ApprovalInbox / NotificationCenter: zero-config, no entity refs ──
+	for _, name := range sortedKeys(r.ApprovalInboxes) {
+		e := r.ApprovalInboxes[name]
+		for _, f := range e.Spec.Filters {
+			// Filters reference the caller's pending-approval entity — no
+			// static entity to resolve against; only structural checks apply.
+			if f.Field == "" {
+				addf("%s: ApprovalInbox %q: filter field is empty", e.Source, name)
+			}
+		}
+	}
+	for _, name := range sortedKeys(r.NotificationCenters) {
+		_ = name // zero-config — nothing to validate statically
+	}
+
 	// ── Wizards ──
 	for _, name := range sortedKeys(r.Wizards) {
 		e := r.Wizards[name]

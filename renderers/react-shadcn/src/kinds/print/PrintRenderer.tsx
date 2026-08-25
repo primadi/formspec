@@ -8,7 +8,7 @@
 import { useEffect, useState, useCallback } from "react"
 import { useParams } from "react-router-dom"
 import { Printer, Loader2 } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/lib/ui"
 
 import type { Entry, PrintSpec } from "@/types/manifest"
 import { useSessionStore } from "@/stores/session"
@@ -29,7 +29,10 @@ export default function PrintRenderer({ entry }: PrintRendererProps) {
   const getClient = useSessionStore((s) => s.getClient)
   const getEntity = useMetaStore((s) => s.getEntity)
 
-  const [entityModule, entityName] = resolveEntityRef(entry.spec.entity, entry.module)
+  const [entityModule, entityName] = resolveEntityRef(
+    entry.spec.entity,
+    entry.module,
+  )
   const entity = getEntity(entityModule, entityName)
   const [record, setRecord] = useState<Record<string, unknown> | null>(null)
   const [loading, setLoading] = useState(!!id)
@@ -135,7 +138,10 @@ export default function PrintRenderer({ entry }: PrintRendererProps) {
                 return (
                   <div key={idx} className="grid grid-cols-2 gap-2 text-sm">
                     {item.fields.map((field) => (
-                      <div key={field} className="flex justify-between border-b py-1">
+                      <div
+                        key={field}
+                        className="flex justify-between border-b py-1"
+                      >
                         <span className="text-muted-foreground">{field}</span>
                         <span className="font-medium">
                           {ctx ? resolveCellValue(ctx, field) : `{${field}}`}
@@ -146,12 +152,13 @@ export default function PrintRenderer({ entry }: PrintRendererProps) {
                 )
               }
               if (item.separator) {
-                return (
-                  <hr key={idx} className="my-2" />
-                )
+                return <hr key={idx} className="my-2" />
               }
               if (item.child_table && record) {
-                const children = record[item.child_table.field] as Record<string, unknown>[]
+                const children = record[item.child_table.field] as Record<
+                  string,
+                  unknown
+                >[]
                 if (children?.length) {
                   return (
                     <div key={idx} className="space-y-1">
@@ -162,7 +169,10 @@ export default function PrintRenderer({ entry }: PrintRendererProps) {
                         <thead>
                           <tr className="bg-muted/50">
                             {item.child_table.columns.map((col) => (
-                              <th key={col} className="border px-2 py-1 text-left text-xs">
+                              <th
+                                key={col}
+                                className="border px-2 py-1 text-left text-xs"
+                              >
                                 {col}
                               </th>
                             ))}
@@ -172,7 +182,10 @@ export default function PrintRenderer({ entry }: PrintRendererProps) {
                           {children.map((child, ci) => (
                             <tr key={ci}>
                               {item.child_table!.columns.map((col) => (
-                                <td key={col} className="border px-2 py-1 text-xs">
+                                <td
+                                  key={col}
+                                  className="border px-2 py-1 text-xs"
+                                >
                                   {String(child[col] ?? "")}
                                 </td>
                               ))}
@@ -186,8 +199,12 @@ export default function PrintRenderer({ entry }: PrintRendererProps) {
               }
               if (item.totals && ctx) {
                 return (
-                  <div key={idx} className="text-right text-sm font-medium border-t pt-2">
-                    {item.totals.field}: {resolveCellValue(ctx, item.totals.field)}
+                  <div
+                    key={idx}
+                    className="text-right text-sm font-medium border-t pt-2"
+                  >
+                    {item.totals.field}:{" "}
+                    {resolveCellValue(ctx, item.totals.field)}
                   </div>
                 )
               }

@@ -6,7 +6,7 @@
 // Design doc §5.5 Timeline kind (F4)
 
 import { useEffect, useState, useCallback, useRef, useMemo } from "react"
-import { toast } from "sonner"
+import { toast } from "@/lib/ui"
 import { Clock, Loader2 } from "lucide-react"
 
 import type { Entry, TimelineSpec } from "@/types/manifest"

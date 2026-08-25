@@ -63,6 +63,14 @@ const (
 	KindDatastore   Kind = "Datastore"
 )
 
+// Renderer / meta-kind kinds (frontend/02-visual-spec-kind.md,
+// frontend/03-renderer-kind.md, backend/04-persist-backend.md).
+const (
+	KindRenderer       Kind = "Renderer"
+	KindVisualSpecKind Kind = "VisualSpecKind"
+	KindPersistBackend Kind = "PersistBackend"
+)
+
 // Frontend kinds (Frontend §2).
 //
 // There is no KindMenu — navigation is not a standalone kind. It lives as
@@ -81,6 +89,12 @@ const (
 	KindPrint     Kind = "Print"
 	KindTheme     Kind = "Theme"
 	KindListing   Kind = "Listing"
+	KindCalendar  Kind = "Calendar"
+	// ApprovalInbox and NotificationCenter are zero-config pages (no entity
+	// binding) — their data sources are the caller's pending approvals /
+	// notifications (06-page-kinds.md §11–§12).
+	KindApprovalInbox      Kind = "ApprovalInbox"
+	KindNotificationCenter Kind = "NotificationCenter"
 )
 
 // Characteristic classifies the data nature of an Entity (Core §4.1).
@@ -121,8 +135,10 @@ func IsValidKind(k Kind) bool {
 	case KindApp, KindModule, KindDocument, KindEntity, KindService, KindConfig, KindMigration, KindSubscription,
 		KindWorkflow, KindApi, KindKindDefinition, KindWebhook, KindMockup, KindIntegrator,
 		KindEnvironment, KindPolicy, KindDatastore,
+		KindRenderer, KindVisualSpecKind, KindPersistBackend,
 		KindPage, KindForm, KindTable, KindDashboard, KindWidget, KindReport,
-		KindWizard, KindKanban, KindTimeline, KindPrint, KindTheme:
+		KindWizard, KindKanban, KindTimeline, KindPrint, KindTheme,
+		KindListing, KindCalendar, KindApprovalInbox, KindNotificationCenter:
 		return true
 	default:
 		return false

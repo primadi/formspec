@@ -44,23 +44,31 @@ type Registry struct {
 	Prints     map[string]*Entry[spec.PrintSpec]
 	Themes     map[string]*Entry[spec.ThemeSpec]
 	Listings   map[string]*Entry[spec.ListingSpec]
+	Calendars  map[string]*Entry[spec.CalendarSpec]
+	// ApprovalInboxes / NotificationCenters are zero-config pages — keyed by
+	// metadata.name like every other kind.
+	ApprovalInboxes     map[string]*Entry[spec.ApprovalInboxSpec]
+	NotificationCenters map[string]*Entry[spec.NotificationCenterSpec]
 }
 
 // NewRegistry creates an empty UI registry.
 func NewRegistry() *Registry {
 	return &Registry{
-		Pages:      map[string]*Entry[spec.PageSpec]{},
-		Forms:      map[string]*Entry[spec.FormSpec]{},
-		Tables:     map[string]*Entry[spec.TableSpec]{},
-		Dashboards: map[string]*Entry[spec.DashboardSpec]{},
-		Widgets:    map[string]*Entry[spec.WidgetSpec]{},
-		Reports:    map[string]*Entry[spec.ReportSpec]{},
-		Wizards:    map[string]*Entry[spec.WizardSpec]{},
-		Kanbans:    map[string]*Entry[spec.KanbanSpec]{},
-		Timelines:  map[string]*Entry[spec.TimelineSpec]{},
-		Prints:     map[string]*Entry[spec.PrintSpec]{},
-		Themes:     map[string]*Entry[spec.ThemeSpec]{},
-		Listings:   map[string]*Entry[spec.ListingSpec]{},
+		Pages:               map[string]*Entry[spec.PageSpec]{},
+		Forms:               map[string]*Entry[spec.FormSpec]{},
+		Tables:              map[string]*Entry[spec.TableSpec]{},
+		Dashboards:          map[string]*Entry[spec.DashboardSpec]{},
+		Widgets:             map[string]*Entry[spec.WidgetSpec]{},
+		Reports:             map[string]*Entry[spec.ReportSpec]{},
+		Wizards:             map[string]*Entry[spec.WizardSpec]{},
+		Kanbans:             map[string]*Entry[spec.KanbanSpec]{},
+		Timelines:           map[string]*Entry[spec.TimelineSpec]{},
+		Prints:              map[string]*Entry[spec.PrintSpec]{},
+		Themes:              map[string]*Entry[spec.ThemeSpec]{},
+		Listings:            map[string]*Entry[spec.ListingSpec]{},
+		Calendars:           map[string]*Entry[spec.CalendarSpec]{},
+		ApprovalInboxes:     map[string]*Entry[spec.ApprovalInboxSpec]{},
+		NotificationCenters: map[string]*Entry[spec.NotificationCenterSpec]{},
 	}
 }
 
@@ -141,6 +149,12 @@ func (r *Registry) register(raw manifest.RawManifest) error {
 		return registerInto(r.Themes, raw)
 	case spec.KindListing:
 		return registerInto(r.Listings, raw)
+	case spec.KindCalendar:
+		return registerInto(r.Calendars, raw)
+	case spec.KindApprovalInbox:
+		return registerInto(r.ApprovalInboxes, raw)
+	case spec.KindNotificationCenter:
+		return registerInto(r.NotificationCenters, raw)
 	default:
 		return nil // not a frontend kind
 	}
@@ -208,6 +222,15 @@ func (r *Registry) ResolveViewRoute(module, name string) (string, error) {
 	}
 	if e, ok := r.Timelines[name]; ok && e.Module == module {
 		return "/timeline/" + name, nil
+	}
+	if e, ok := r.Calendars[name]; ok && e.Module == module {
+		return "/calendar/" + name, nil
+	}
+	if e, ok := r.ApprovalInboxes[name]; ok && e.Module == module {
+		return "/approval-inbox/" + name, nil
+	}
+	if e, ok := r.NotificationCenters[name]; ok && e.Module == module {
+		return "/notification-center/" + name, nil
 	}
 	if e, ok := r.Prints[name]; ok && e.Module == module {
 		return "/print/" + name, nil

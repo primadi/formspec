@@ -11,12 +11,16 @@
 import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 import {
+  AlertOctagon,
+  AlertTriangle,
   ArrowRight,
   Check,
+  CheckCircle2,
   Circle,
   Clock,
   Globe,
   Heart,
+  Info,
   Lock,
   Rocket,
   Settings,
@@ -28,6 +32,7 @@ import {
   type LucideIcon,
 } from "lucide-react"
 import { buttonVariants } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import type { SectionBlock, SectionCTA } from "@/types/manifest"
 
 // ── Icon map (lucide) ──
@@ -346,6 +351,49 @@ function CtaBlock({
   )
 }
 
+// ── Alert / Banner / Notice ──
+//
+// Declarative alert-style block (5.2.7). Variant drives the icon + color:
+// info | success | warning | destructive.
+
+const ALERT_STYLES: Record<string, string> = {
+  info: "border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300",
+  success:
+    "border-green-200 bg-green-50 text-green-800 dark:border-green-900/40 dark:bg-green-950/30 dark:text-green-300",
+  warning:
+    "border-yellow-200 bg-yellow-50 text-yellow-800 dark:border-yellow-900/40 dark:bg-yellow-950/30 dark:text-yellow-300",
+  destructive:
+    "border-red-200 bg-red-50 text-red-800 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300",
+}
+
+const ALERT_ICONS: Record<string, LucideIcon> = {
+  info: Info,
+  success: CheckCircle2,
+  warning: AlertTriangle,
+  destructive: AlertOctagon,
+}
+
+function AlertBlock({ block }: { block: SectionBlock }) {
+  const variant = block.variant ?? "info"
+  const IconCmp = ALERT_ICONS[variant] ?? Info
+  return (
+    <div
+      className={cn(
+        "flex items-start gap-3 rounded-lg border p-4",
+        ALERT_STYLES[variant] ?? ALERT_STYLES.info,
+      )}
+    >
+      <IconCmp className="mt-0.5 size-5 shrink-0" />
+      <div className="space-y-1">
+        {block.title && (
+          <div className="text-sm font-semibold">{block.title}</div>
+        )}
+        {block.subtitle && <div className="text-sm">{block.subtitle}</div>}
+      </div>
+    </div>
+  )
+}
+
 // ── Root dispatcher ──
 
 export function SectionBlockRenderer({
@@ -370,6 +418,10 @@ export function SectionBlockRenderer({
       )
     case "cta":
       return <CtaBlock block={block} workspace={workspace} rootUrl={rootUrl} />
+    case "banner":
+    case "alert":
+    case "notice":
+      return <AlertBlock block={block} />
     default:
       return null
   }

@@ -37,6 +37,26 @@ func effectivePriority(h spec.HookDecl) int {
 	return h.Priority
 }
 
+// SelectEventHooks returns hooks matching timing and eventName ("*" matches
+// any event), sorted ascending by effective priority — the event-side
+// counterpart of SelectHooks for before_deliver/after_deliver (todo 7.8.5).
+func SelectEventHooks(hooks []spec.HookDecl, timing spec.HookTiming, eventName string) []spec.HookDecl {
+	var matched []spec.HookDecl
+	for _, h := range hooks {
+		if h.On != timing {
+			continue
+		}
+		if h.Event != eventName && h.Event != "*" {
+			continue
+		}
+		matched = append(matched, h)
+	}
+	sort.SliceStable(matched, func(i, j int) bool {
+		return effectivePriority(matched[i]) < effectivePriority(matched[j])
+	})
+	return matched
+}
+
 // RunBeforePhase runs, in priority order, every hook matching (on: before,
 // action: actionName|"*"), then — if actionSpec has its own Impl (a reserved
 // action's own script override, e.g. create/update) — runs that impl last,

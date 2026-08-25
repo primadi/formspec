@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input"
 import { DateInput } from "@/widgets/DateInput"
 import { Select as ThemedSelect } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
-import { toast } from "sonner"
+import { toast } from "@/lib/ui"
 
 interface SearchSelectProps {
   step: WizardStep

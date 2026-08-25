@@ -24,18 +24,41 @@ import { titleCase } from "@/lib/utils"
 // ── Main derive functions ──
 
 /**
- * Derive a default TableSpec from an entity schema.
+ * Number of columns shown by default in a derived table. Columns beyond this
+ * are NOT dropped — they stay in `spec.columns` and are revealed by the
+ * Table renderer's row-expand (5.4.4 / 5.14.1).
  */
-export function deriveTable(entity: EntitySchema): TableSpec {
-  const columns: TableColumn[] = []
-  const rowActions: TableAction[] = []
+export const DERIVED_TABLE_VISIBLE_COLUMNS = 8
 
-  // Columns: non-child fields, declaration order, max ~8
-  const visibleFields = entity.fields
-    .filter((f) => f.type !== "child" && !f.computed)
-    .slice(0, 8)
+/**
+ * Build the derived column list in priority order (5.4.4 / 5.14.1):
+ *   1. natural key field
+ *   2. label_field
+ *   3. state_machine status field
+ *   4. transaction_date (or any date/datetime field)
+ *   5. remaining non-child, non-computed fields in declaration order
+ *
+ * Every eligible field is included — nothing is silently dropped. The
+ * renderer decides how many to show by default and exposes the rest via
+ * row expand/detail.
+ */
+export function deriveTableColumns(entity: EntitySchema): TableColumn[] {
+  const eligible = entity.fields.filter(
+    (f) => f.type !== "child" && !f.computed,
+  )
 
-  for (const field of visibleFields) {
+  const priority = (f: Field): number => {
+    if (f.natural_key) return 0
+    if (f.name === entity.label_field) return 1
+    if (entity.state_machine && f.name === entity.state_machine.field) return 2
+    if (f.name === "transaction_date") return 3
+    return 4
+  }
+
+  // Stable sort by priority (declaration order preserved within a tier).
+  const ordered = [...eligible].sort((a, b) => priority(a) - priority(b))
+
+  return ordered.map((field) => {
     // For belongs_to relation fields, use dot-path notation to resolve the
     // related entity's display name instead of showing the raw foreign key.
     // Example: polyclinic_id → polyclinic.name
@@ -46,14 +69,22 @@ export function deriveTable(entity: EntitySchema): TableSpec {
         : field.relation.resource
       colField = `${alias}.name`
     }
-    columns.push({
+    return {
       field: colField,
       label: fieldLabel(field),
       sortable: isSortable(field),
       widget: tableWidget(field),
       format: tableFormat(field),
-    })
-  }
+    }
+  })
+}
+
+/**
+ * Derive a default TableSpec from an entity schema.
+ */
+export function deriveTable(entity: EntitySchema): TableSpec {
+  const columns = deriveTableColumns(entity)
+  const rowActions: TableAction[] = []
 
   // Row actions: view, edit, delete + custom actions
   // Summary entities are read-only projections — view only.
@@ -72,12 +103,17 @@ export function deriveTable(entity: EntitySchema): TableSpec {
     rowActions.push(
       { action: "view", label: "View", icon: "Eye" },
       { action: "edit", label: "Edit", icon: "Pencil" },
-      { action: "delete", label: "Delete", icon: "Trash2", confirm_msg: "Are you sure you want to delete this item?" },
+      {
+        action: "delete",
+        label: "Delete",
+        icon: "Trash2",
+        confirm_msg: "Are you sure you want to delete this item?",
+      },
     )
   }
 
   // Add custom actions that have UI hints
-  for (const action of (entity.actions ?? [])) {
+  for (const action of entity.actions ?? []) {
     if (isBuiltinAction(action.name)) continue
     if (action.ui) {
       rowActions.push({
@@ -106,14 +142,22 @@ export function deriveTable(entity: EntitySchema): TableSpec {
 /**
  * Derive a default FormSpec from an entity schema for a given mode.
  */
-export function deriveForm(entity: EntitySchema, mode: "create" | "edit" | "view" = "create"): FormSpec {
+export function deriveForm(
+  entity: EntitySchema,
+  mode: "create" | "edit" | "view" = "create",
+): FormSpec {
   const sections: FormSection[] = []
   const editableFields = entity.fields.filter(
     (f) => mode !== "create" || !f.computed,
   )
 
   const section: FormSection = {
-    title: mode === "create" ? "New Entry" : mode === "edit" ? "Edit Entry" : "Details",
+    title:
+      mode === "create"
+        ? "New Entry"
+        : mode === "edit"
+          ? "Edit Entry"
+          : "Details",
     fields: editableFields.map((f) => formField(f, mode)),
   }
 
@@ -141,8 +185,12 @@ export function deriveForm(entity: EntitySchema, mode: "create" | "edit" | "view
  * - drawer: 6-12 fields
  * - separate_page: >12 fields or has child tables
  */
-function deriveFormRenderMode(fields: Field[]): "modal" | "drawer" | "separate_page" {
-  const hasChildTable = fields.some((f) => f.type === "child" && f.child?.storage === "table")
+function deriveFormRenderMode(
+  fields: Field[],
+): "modal" | "drawer" | "separate_page" {
+  const hasChildTable = fields.some(
+    (f) => f.type === "child" && f.child?.storage === "table",
+  )
   const fieldCount = fields.length
 
   if (fieldCount > 12 || hasChildTable) return "separate_page"
@@ -153,9 +201,7 @@ function deriveFormRenderMode(fields: Field[]): "modal" | "drawer" | "separate_p
 /**
  * Derive default menu entries for an entity.
  */
-export function deriveMenuItems(
-  entities: EntitySchema[],
-): MenuItem[] {
+export function deriveMenuItems(entities: EntitySchema[]): MenuItem[] {
   const byModule = new Map<string, EntitySchema[]>()
   for (const e of entities) {
     const list = byModule.get(e.module) ?? []
@@ -186,6 +232,38 @@ export function deriveMenuItems(
 }
 
 /**
+ * Derive Kanban columns when the manifest declares none (5.5.5 zero-config).
+ * Order follows the state machine's declared states (transition order), or
+ * falls back to the `status_field` enum's declaration order. When neither
+ * exists, returns an empty list (renderer shows a hint).
+ */
+export function deriveKanbanColumns(
+  entity: EntitySchema | undefined,
+  statusField: string,
+): import("@/types/manifest").KanbanColumn[] {
+  if (!entity) return []
+
+  // 1. State machine states — declared order is authoritative.
+  if (entity.state_machine && entity.state_machine.field === statusField) {
+    return entity.state_machine.states.map((s) => ({
+      status: s.name,
+      label: s.label || titleCase(s.name),
+    }))
+  }
+
+  // 2. Enum values on the status field — declaration order.
+  const statusFieldDef = entity.fields.find((f) => f.name === statusField)
+  if (statusFieldDef?.enum_values?.length) {
+    return statusFieldDef.enum_values.map((v) => ({
+      status: v,
+      label: titleCase(v),
+    }))
+  }
+
+  return []
+}
+
+/**
  * Derive a default detail page field list (readonly).
  * Returns fields grouped for display: main fields, then child tables.
  */
@@ -205,7 +283,10 @@ export function deriveDetailFields(entity: EntitySchema): {
  */
 export function resolveTable(
   entity: EntitySchema,
-  authoredTables: ReadonlyMap<string, import("@/types/manifest").Entry<TableSpec>>,
+  authoredTables: ReadonlyMap<
+    string,
+    import("@/types/manifest").Entry<TableSpec>
+  >,
 ): TableSpec {
   const authored = authoredTables.get(entity.name)
   if (authored) return authored.spec
@@ -233,7 +314,10 @@ export function resolveTable(
 export function resolveForm(
   entity: EntitySchema,
   mode: "create" | "edit" | "view",
-  authoredForms: ReadonlyMap<string, import("@/types/manifest").Entry<FormSpec>>,
+  authoredForms: ReadonlyMap<
+    string,
+    import("@/types/manifest").Entry<FormSpec>
+  >,
   // Explicit override — a Page/Tab block's `form.ref` names a specific
   // authored Form by name, bypassing the naming-convention guess below.
   // Needed whenever more than one Form targets the same entity (e.g. a
@@ -245,7 +329,8 @@ export function resolveForm(
     if (named) return named.spec
   }
 
-  const modeSuffix = mode === "create" ? "create" : mode === "edit" ? "edit" : "view"
+  const modeSuffix =
+    mode === "create" ? "create" : mode === "edit" ? "edit" : "view"
 
   // 1. Mode-specific: entity-create, entity-edit, entity-view
   const modeForm = authoredForms.get(`${entity.name}-${modeSuffix}`)
@@ -270,7 +355,15 @@ function fieldLabel(field: Field): string {
 }
 
 function isSortable(field: Field): boolean {
-  return ["string", "integer", "decimal", "date", "datetime", "enum", "boolean"].includes(field.type)
+  return [
+    "string",
+    "integer",
+    "decimal",
+    "date",
+    "datetime",
+    "enum",
+    "boolean",
+  ].includes(field.type)
 }
 
 function tableWidget(field: Field): string | undefined {
@@ -284,7 +377,12 @@ function tableFormat(field: Field): string | undefined {
   if (field.type === "date") return "date"
   if (field.type === "decimal") {
     // Check if the field has currency-like rules
-    if (field.rules?.some((r) => r.name === "min" && typeof (r.value as number) === "number")) return "currency"
+    if (
+      field.rules?.some(
+        (r) => r.name === "min" && typeof (r.value as number) === "number",
+      )
+    )
+      return "currency"
   }
   return undefined
 }
@@ -318,24 +416,39 @@ function formField(field: Field, mode: "create" | "edit" | "view"): FormField {
 function formWidget(field: Field): string {
   switch (field.type) {
     case "string":
-      if (field.rules?.some((r) => r.name === "max_length" && typeof r.value === "number" && (r.value as number) > 120)) {
+      if (
+        field.rules?.some(
+          (r) =>
+            r.name === "max_length" &&
+            typeof r.value === "number" &&
+            (r.value as number) > 120,
+        )
+      ) {
         return "textarea"
       }
       return "input"
+    case "text":
+      return "textarea"
+    case "richtext":
+      return "richtext"
     case "integer":
-    case "decimal":
       return "number"
+    case "decimal":
+      return "decimalinput"
     case "boolean":
       return "switch"
     case "enum":
       return "select"
     case "date":
-    case "datetime":
       return "datepicker"
+    case "datetime":
+      return "datetimeinput"
     case "uuid":
       return "uuid"
     case "json":
       return "json"
+    case "file":
+      return "fileinput"
     case "relation":
       return "relation-picker"
     case "child":
@@ -350,7 +463,18 @@ function hasField(entity: EntitySchema, name: string): boolean {
 }
 
 function isBuiltinAction(name: string): boolean {
-  return ["create", "update", "submit", "cancel", "delete", "amend", "create-submit", "amend-submit", "view", "edit"].includes(name)
+  return [
+    "create",
+    "update",
+    "submit",
+    "cancel",
+    "delete",
+    "amend",
+    "create-submit",
+    "amend-submit",
+    "view",
+    "edit",
+  ].includes(name)
 }
 
 function entityDisplayName(entity: EntitySchema): string {

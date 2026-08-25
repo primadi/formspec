@@ -35,7 +35,7 @@ export function JsonInput({
 
   if (readonly) {
     return (
-      <pre className="py-1 text-xs font-mono whitespace-pre-wrap break-words text-muted-foreground">
+      <pre className="py-1 text-xs font-mono whitespace-pre-wrap wrap-break-word text-muted-foreground">
         {text || "-"}
       </pre>
     )
@@ -65,7 +65,9 @@ export function JsonInput({
         rows={4}
         className={`font-mono text-xs ${error || parseError ? "border-destructive" : ""}`}
       />
-      {parseError && <p className="text-xs text-destructive mt-1">{parseError}</p>}
+      {parseError && (
+        <p className="text-xs text-destructive mt-1">{parseError}</p>
+      )}
     </div>
   )
 }

@@ -71,11 +71,16 @@ type AppSpec struct {
 	// @schema {example: "jsonb-persist"}
 	PersistBackend string `yaml:"persist_backend,omitempty" json:"persist_backend,omitempty"` // entity persist backend (backend/04-persist-backend.md)
 	// @schema {example: "ocean-blue"}
-	ThemeRef      string         `yaml:"theme_ref,omitempty" json:"theme_ref,omitempty"`             // per-App Theme resolution (platform/02 §3)
-	AuthConfigRef string         `yaml:"auth_config_ref,omitempty" json:"auth_config_ref,omitempty"` // per-App auth strategy config
-	Menu          []MenuItem     `yaml:"menu,omitempty" json:"menu,omitempty"`
-	Publishes     []AppInterface `yaml:"publishes,omitempty" json:"publishes,omitempty"` // cross-app interfaces offered
-	Consumes      []AppConsume   `yaml:"consumes,omitempty" json:"consumes,omitempty"`   // cross-app interfaces needed → grant request
+	ThemeRef      string `yaml:"theme_ref,omitempty" json:"theme_ref,omitempty"`             // per-App Theme resolution (platform/02 §3)
+	AuthConfigRef string `yaml:"auth_config_ref,omitempty" json:"auth_config_ref,omitempty"` // per-App auth strategy config
+	// Renderers maps a VisualSpecKind name → renderer for the whole App
+	// (frontend/03-renderer-kind.md §3): e.g. `{kanban: community/super-kanban}`.
+	// Applies to every instance of that kind in the App; individual instances
+	// may override via their own `renderer:` field.
+	Renderers map[string]string `yaml:"renderers,omitempty" json:"renderers,omitempty"`
+	Menu      []MenuItem        `yaml:"menu,omitempty" json:"menu,omitempty"`
+	Publishes []AppInterface    `yaml:"publishes,omitempty" json:"publishes,omitempty"` // cross-app interfaces offered
+	Consumes  []AppConsume      `yaml:"consumes,omitempty" json:"consumes,omitempty"`   // cross-app interfaces needed → grant request
 }
 
 // AppInterface is one cross-app service interface offered by an App

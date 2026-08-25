@@ -142,7 +142,8 @@ class RealtimeClient {
             }
           }
           for (const e of want) {
-            if (!prev.has(e)) this.sendFrame({ op: "subscribe", resource: res, event: e })
+            if (!prev.has(e))
+              this.sendFrame({ op: "subscribe", resource: res, event: e })
           }
           for (const e of want) prev.add(e)
         }
@@ -154,7 +155,8 @@ class RealtimeClient {
       } else {
         // Was all-events, now event-scoped: resubscribe at event granularity.
         this.sendFrame({ op: "unsubscribe", resource: res })
-        for (const e of want) this.sendFrame({ op: "subscribe", resource: res, event: e })
+        for (const e of want)
+          this.sendFrame({ op: "subscribe", resource: res, event: e })
         this.subscribed.set(res, new Set(want))
       }
     }
@@ -164,7 +166,8 @@ class RealtimeClient {
     if (evs.has("")) {
       this.sendFrame({ op: "subscribe", resource: res })
     } else {
-      for (const e of evs) this.sendFrame({ op: "subscribe", resource: res, event: e })
+      for (const e of evs)
+        this.sendFrame({ op: "subscribe", resource: res, event: e })
     }
   }
 
@@ -248,7 +251,9 @@ export function useRealtime(
 
     const proto = window.location.protocol === "https:" ? "wss:" : "ws:"
     const q = token ? `?token=${encodeURIComponent(token)}` : ""
-    getClient().configure(`${proto}//${window.location.host}/${workspace}/_ui/_ws${q}`)
+    getClient().configure(
+      `${proto}//${window.location.host}/${workspace}/_ui/_ws${q}`,
+    )
 
     const bump = () => {
       tickRef.current += 1
@@ -264,4 +269,23 @@ export function useRealtime(
   }, [resource, workspace, token])
 
   return tick
+}
+
+/**
+ * Imperative realtime subscription (for asset components' formspec.subscribe).
+ * Configures the shared WebSocket and subscribes to a resource.
+ */
+export function subscribeRealtime(
+  resource: string,
+  onEvent: (msg: RealtimeMessage) => void,
+): () => void {
+  const workspace = useSessionStore.getState().workspace
+  const token = useSessionStore.getState().token
+  if (!resource || !workspace) return () => {}
+  const proto = window.location.protocol === "https:" ? "wss:" : "ws:"
+  const q = token ? `?token=${encodeURIComponent(token)}` : ""
+  getClient().configure(
+    `${proto}//${window.location.host}/${workspace}/_ui/_ws${q}`,
+  )
+  return getClient().subscribe({ resource, onEvent })
 }

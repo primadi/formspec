@@ -27,9 +27,11 @@ import {
   X,
   ListFilter,
   RotateCcw,
+  AlertTriangle,
+  Check,
 } from "lucide-react"
 import { ActionIcon } from "@/components/ui/action-icon"
-import { toast } from "sonner"
+import { toast } from "@/lib/ui"
 
 import type {
   EntitySchema,
@@ -38,14 +40,20 @@ import type {
   FilterSpec,
   FilterOpValue,
   MetaBundle,
+  Field,
 } from "@/types/manifest"
+import { FormaApiError } from "@/types/manifest"
 import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
 import { can as checkPermission } from "@/engine/permissions"
-import { deriveTable, deriveForm } from "@/engine/derive"
+import {
+  deriveTable,
+  deriveForm,
+  DERIVED_TABLE_VISIBLE_COLUMNS,
+} from "@/engine/derive"
 import { resolveEntityRef } from "@/engine/entityRef"
 import { getLifecycle } from "@/engine/lifecycle"
-import { buildListParams, apiList, apiDelete } from "@/lib/api"
+import { buildListParams, apiList, apiPatch, apiDelete } from "@/lib/api"
 import {
   buildFixedFilterParams,
   resolveFilterValue,
@@ -75,6 +83,10 @@ interface TableRendererProps {
    *  block `param` (e.g. `{ patient_id: ":id" }` scoping the table to the
    *  page's own record). Always applied; not user-clearable. */
   fixedFilters?: Record<string, string>
+  /** Master-detail hook (06-page-kinds.md §1.1): fired with the clicked row's
+   *  record so a Page can drive a detail block from the selection. When set,
+   *  the selected row is highlighted. */
+  onSelect?: (record: RowData) => void
 }
 
 interface RowData {
@@ -86,6 +98,7 @@ export default function TableRenderer({
   entity,
   hideTitle,
   fixedFilters,
+  onSelect,
 }: TableRendererProps) {
   const navigate = useNavigate()
   const { surfacePath } = useSurface()
@@ -169,6 +182,33 @@ export default function TableRenderer({
     ),
   )
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set())
+
+  // Master-detail selection (06-page-kinds.md §1.1) — the row id currently
+  // highlighted as the master selection driving a detail block.
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+
+  // Row-expand (5.4.4 / 5.14.1): rows whose overflow columns (beyond the
+  // first DERIVED_TABLE_VISIBLE_COLUMNS) are revealed inline. Overflow is
+  // never silently dropped — it is always reachable via this expand toggle.
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
+
+  // Inline editing (5.4.2) — the cell currently being edited + its draft
+  // value. Commit = per-row update with CAS version; a 409 marks the row
+  // stale (never silently overwritten).
+  const [editingCell, setEditingCell] = useState<{
+    rowId: string
+    field: string
+  } | null>(null)
+  const [editValue, setEditValue] = useState<string>("")
+  // Rows marked stale after a 409 CAS conflict — shown with a stale badge.
+  const [staleRows, setStaleRows] = useState<Set<string>>(new Set())
+
+  // Batch editing (5.4.3) — draft values for the batch_edit fields, applied
+  // per row (loop PATCH) with partial failure reported per row.
+  const [batchDraft, setBatchDraft] = useState<Record<string, string>>({})
+  const [batchResults, setBatchResults] = useState<
+    { id: string; ok: boolean; message?: string }[] | null
+  >(null)
 
   // Pending confirm action
   const [pendingAction, setPendingAction] = useState<{
@@ -290,8 +330,146 @@ export default function TableRenderer({
   // Columns
   const hasBulkActions =
     tableSpec.bulk_actions && tableSpec.bulk_actions.length > 0
+
+  // 5.4.4 / 5.14.1 — the derived table lists every eligible field in priority
+  // order; the renderer shows the first N by default and exposes the rest via
+  // row expand. Authored tables are shown in full (author is in control).
+  const hasOverflow = tableSpec.columns.length > DERIVED_TABLE_VISIBLE_COLUMNS
+  const visibleColumns = hasOverflow
+    ? tableSpec.columns.slice(0, DERIVED_TABLE_VISIBLE_COLUMNS)
+    : tableSpec.columns
+  const overflowColumns = hasOverflow
+    ? tableSpec.columns.slice(DERIVED_TABLE_VISIBLE_COLUMNS)
+    : []
+
+  const toggleExpand = (id: string) => {
+    setExpandedRows((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  // ── Inline editing (5.4.2) ──
+  // Commit a single cell = per-row update with CAS version. A 409 marks the
+  // row stale (never silently overwritten); the user can reload to get the
+  // fresh record. Submitted rows reject inline-edit (server also enforces).
+  const commitInlineEdit = async (
+    row: RowData,
+    field: string,
+    value: string,
+  ) => {
+    const version = typeof row.version === "number" ? row.version : undefined
+    try {
+      await apiPatch(
+        getClient(),
+        `${entity.module}/${entity.name}/${row.id}`,
+        { [field]: value },
+        version,
+      )
+      toast.success("Saved")
+      setEditingCell(null)
+      setReloadKey((k) => k + 1)
+    } catch (err) {
+      if (err instanceof FormaApiError && err.status === 409) {
+        setStaleRows((prev) => new Set(prev).add(row.id))
+        toast.error(
+          "Data telah diubah oleh pengguna lain — reload untuk versi terbaru",
+        )
+      } else {
+        toast.error(err instanceof Error ? err.message : "Save failed")
+      }
+      setEditingCell(null)
+    }
+  }
+
+  // ── Batch editing (5.4.3) ──
+  // Apply the batch_edit draft values to every selected row via a per-row
+  // PATCH loop. Partial failure is reported per row — never all-or-nothing.
+  const applyBatchEdit = async () => {
+    const fields = Object.keys(batchDraft).filter(
+      (f) => batchDraft[f] !== "" && batchDraft[f] != null,
+    )
+    if (fields.length === 0) {
+      toast.error("Set at least one field value")
+      return
+    }
+    const rows = data.filter((r) => selectedRows.has(r.id as string))
+    if (rows.length === 0) return
+
+    const results: { id: string; ok: boolean; message?: string }[] = []
+    for (const row of rows) {
+      const version = typeof row.version === "number" ? row.version : undefined
+      const patch: Record<string, unknown> = {}
+      for (const f of fields) patch[f] = batchDraft[f]
+      try {
+        await apiPatch(
+          getClient(),
+          `${entity.module}/${entity.name}/${row.id}`,
+          patch,
+          version,
+        )
+        results.push({ id: row.id as string, ok: true })
+      } catch (err) {
+        if (err instanceof FormaApiError && err.status === 409) {
+          setStaleRows((prev) => new Set(prev).add(row.id as string))
+        }
+        results.push({
+          id: row.id as string,
+          ok: false,
+          message: err instanceof Error ? err.message : "Failed",
+        })
+      }
+    }
+    setBatchResults(results)
+    const okCount = results.filter((r) => r.ok).length
+    const failCount = results.length - okCount
+    if (failCount === 0) {
+      toast.success(`Updated ${okCount} row${okCount !== 1 ? "s" : ""}`)
+    } else {
+      toast.error(
+        `${okCount} updated, ${failCount} failed — see per-row report`,
+      )
+    }
+    setBatchDraft({})
+    setSelectedRows(new Set())
+    setReloadKey((k) => k + 1)
+  }
+
   const columns = useMemo<ColumnDef<RowData>[]>(() => {
     const cols: ColumnDef<RowData>[] = []
+
+    // Row-expand toggle column (5.4.4 / 5.14.1) — reveals overflow columns.
+    if (hasOverflow) {
+      cols.push({
+        id: "__expand",
+        header: () => null,
+        enableSorting: false,
+        size: 36,
+        cell: ({ row }) => (
+          <button
+            type="button"
+            className="text-muted-foreground hover:text-foreground p-0.5 rounded"
+            onClick={(e) => {
+              e.stopPropagation()
+              toggleExpand(row.original.id as string)
+            }}
+            title={
+              expandedRows.has(row.original.id as string)
+                ? "Collapse"
+                : "Show more fields"
+            }
+          >
+            {expandedRows.has(row.original.id as string) ? (
+              <ChevronUp className="size-4" />
+            ) : (
+              <ChevronDown className="size-4" />
+            )}
+          </button>
+        ),
+      })
+    }
 
     // Selection checkbox column for bulk actions
     if (hasBulkActions) {
@@ -318,21 +496,79 @@ export default function TableRenderer({
       })
     }
 
-    for (const col of tableSpec.columns) {
+    for (const col of visibleColumns) {
       cols.push({
         id: col.field,
         accessorKey: col.field,
         header: col.label ?? col.field,
         enableSorting: col.sortable ?? true,
-        cell: ({ getValue }) => {
+        cell: ({ getValue, row }) => {
           const value = getValue()
+          // Inline editing (5.4.2): editable cells render an in-place input.
+          const editable =
+            !!tableSpec.inline_edit &&
+            isFieldInlineEditable(entity, col.field, row.original, me)
+          const isEditing =
+            editingCell?.rowId === row.original.id &&
+            editingCell?.field === col.field
+          if (editable && isEditing) {
+            return (
+              <input
+                autoFocus
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                onBlur={() =>
+                  commitInlineEdit(row.original, col.field, editValue)
+                }
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    commitInlineEdit(row.original, col.field, editValue)
+                  } else if (e.key === "Escape") {
+                    setEditingCell(null)
+                  }
+                }}
+                className="w-full rounded border border-primary px-2 py-1 text-sm"
+              />
+            )
+          }
+          if (editable) {
+            return (
+              <button
+                type="button"
+                className="w-full text-left rounded px-1 py-0.5 hover:bg-muted/60"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setEditingCell({
+                    rowId: row.original.id as string,
+                    field: col.field,
+                  })
+                  setEditValue(value == null ? "" : String(value))
+                }}
+                title="Click to edit"
+              >
+                {renderCellValue(value, col.widget, col.format, formatter)}
+              </button>
+            )
+          }
           return renderCellValue(value, col.widget, col.format, formatter)
         },
       })
     }
 
     return cols
-  }, [tableSpec.columns, hasBulkActions, formatter])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    tableSpec.columns,
+    visibleColumns,
+    hasBulkActions,
+    formatter,
+    expandedRows,
+    tableSpec.inline_edit,
+    editingCell,
+    editValue,
+    me,
+    entity,
+  ])
 
   // TanStack table
   const table = useReactTable({
@@ -513,6 +749,27 @@ export default function TableRenderer({
           />
         )}
 
+      {/* Batch editing (5.4.3) — set values for batch_edit fields across the
+          selected rows; applied per row with partial failure reported. */}
+      {tableSpec.batch_edit && tableSpec.batch_edit.length > 0 && (
+        <BatchEditBar
+          fields={tableSpec.batch_edit}
+          entity={entity}
+          selectedCount={selectedRows.size}
+          draft={batchDraft}
+          results={batchResults}
+          onDraftChange={(field, value) =>
+            setBatchDraft((prev) => ({ ...prev, [field]: value }))
+          }
+          onApply={applyBatchEdit}
+          onClear={() => {
+            setBatchDraft({})
+            setBatchResults(null)
+            setSelectedRows(new Set())
+          }}
+        />
+      )}
+
       {/* Error */}
       {error && (
         <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
@@ -585,54 +842,112 @@ export default function TableRenderer({
                 </tr>
               ) : (
                 table.getRowModel().rows.map((row) => (
-                  <tr
-                    key={row.id}
-                    className="border-b transition-colors hover:bg-muted/50"
-                  >
-                    {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className="p-3 align-middle">
-                        {flexRender(
-                          cell.column.columnDef.cell,
-                          cell.getContext(),
-                        )}
-                      </td>
-                    ))}
-                    {tableSpec.row_actions?.length ? (
-                      <td className="p-3 align-middle text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          {tableSpec.row_actions
-                            .filter((a) => {
-                              if (!me) return false
-                              const perm = `${entity.module}.${entity.plural}.${a.action}`
-                              return checkPermission(perm, me.permissions)
-                            })
-                            .filter((action) =>
-                              isActionAllowedForRow(
-                                action,
-                                row.original,
-                                entity,
-                              ),
-                            )
-                            .map((action) => (
-                              <Button
-                                key={action.action}
-                                variant="ghost"
-                                size="icon"
-                                className="size-8"
-                                onClick={() =>
-                                  handleRowAction(action, row.original)
-                                }
-                                title={action.label}
-                              >
-                                <ActionIcon
-                                  iconName={action.icon ?? action.action}
-                                />
-                              </Button>
-                            ))}
-                        </div>
-                      </td>
-                    ) : null}
-                  </tr>
+                  <React.Fragment key={row.id}>
+                    <tr
+                      onClick={
+                        onSelect
+                          ? () => {
+                              setSelectedId(row.id)
+                              onSelect(row.original)
+                            }
+                          : undefined
+                      }
+                      className={cn(
+                        "border-b transition-colors hover:bg-muted/50",
+                        onSelect && "cursor-pointer",
+                        onSelect && selectedId === row.id && "bg-primary/5",
+                        staleRows.has(row.original.id as string) &&
+                          "bg-destructive/5",
+                      )}
+                    >
+                      {staleRows.has(row.original.id as string) && (
+                        <td className="p-3 align-middle">
+                          <span className="inline-flex items-center gap-1 rounded bg-destructive/10 px-2 py-0.5 text-xs text-destructive">
+                            <AlertTriangle className="size-3" />
+                            Stale — reload
+                          </span>
+                        </td>
+                      )}
+                      {row.getVisibleCells().map((cell) => (
+                        <td key={cell.id} className="p-3 align-middle">
+                          {flexRender(
+                            cell.column.columnDef.cell,
+                            cell.getContext(),
+                          )}
+                        </td>
+                      ))}
+                      {tableSpec.row_actions?.length ? (
+                        <td className="p-3 align-middle text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            {tableSpec.row_actions
+                              .filter((a) => {
+                                if (!me) return false
+                                const perm = `${entity.module}.${entity.plural}.${a.action}`
+                                return checkPermission(perm, me.permissions)
+                              })
+                              .filter((action) =>
+                                isActionAllowedForRow(
+                                  action,
+                                  row.original,
+                                  entity,
+                                ),
+                              )
+                              .map((action) => (
+                                <Button
+                                  key={action.action}
+                                  variant="ghost"
+                                  size="icon"
+                                  className="size-8"
+                                  onClick={() =>
+                                    handleRowAction(action, row.original)
+                                  }
+                                  title={action.label}
+                                >
+                                  <ActionIcon
+                                    iconName={action.icon ?? action.action}
+                                  />
+                                </Button>
+                              ))}
+                          </div>
+                        </td>
+                      ) : null}
+                    </tr>
+                    {/* Row-expand: overflow columns (5.4.4 / 5.14.1) — never
+                        silently dropped, always reachable via expand. */}
+                    {expandedRows.has(row.original.id as string) &&
+                      overflowColumns.length > 0 && (
+                        <tr className="border-b bg-muted/20">
+                          <td
+                            colSpan={
+                              columns.length +
+                              (tableSpec.row_actions?.length ? 1 : 0)
+                            }
+                            className="px-6 py-3"
+                          >
+                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-2">
+                              {overflowColumns.map((col) => (
+                                <div
+                                  key={col.field}
+                                  className="flex flex-col gap-0.5"
+                                >
+                                  <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                                    {col.label ?? col.field}
+                                  </span>
+                                  <span className="text-sm">
+                                    {renderCellValue(
+                                      getNestedValue(row.original, col.field),
+                                      col.widget,
+                                      col.format,
+                                      formatter,
+                                    )}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                  </React.Fragment>
                 ))
               )}
             </tbody>
@@ -714,6 +1029,24 @@ export default function TableRenderer({
 // ── Helpers ──
 
 /**
+ * Resolve a dot-path field ("patient.name") from a record object, falling
+ * back to the raw value for flat fields. Used by the row-expand overflow
+ * columns (5.4.4 / 5.14.1) which may reference relation dot-paths.
+ */
+function getNestedValue(
+  record: Record<string, unknown>,
+  path: string,
+): unknown {
+  const parts = path.split(".")
+  let value: unknown = record
+  for (const part of parts) {
+    if (value == null || typeof value !== "object") return undefined
+    value = (value as Record<string, unknown>)[part]
+  }
+  return value
+}
+
+/**
  * Check if a table action can be performed on a given row based on the
  * entity's state machine. Actions not declared in any transition (e.g.
  * "view", "edit", "delete") are always allowed. Actions whose current
@@ -741,6 +1074,44 @@ function isActionAllowedForRow(
 
   const currentState = String(row[sm.field] ?? sm.initial)
   return matchingTransitions.some((t) => t.from.includes(currentState))
+}
+
+/**
+ * Inline-edit eligibility (5.4.2): a cell is editable only when the field's
+ * rules allow it — not readonly/computed/immutable, not a relation dot-path,
+ * within the caller's `update` permission, and the row is not submitted
+ * (lifecycle guard; the server enforces this authoritatively).
+ */
+function isFieldInlineEditable(
+  entity: EntitySchema,
+  fieldName: string,
+  row: RowData,
+  me: { permissions: string[] } | null,
+): boolean {
+  if (!me) return false
+  // Relation dot-paths (e.g. patient.name) are read-only display — never
+  // inline-editable.
+  if (fieldName.includes(".")) return false
+
+  const field: Field | undefined = entity.fields.find(
+    (f) => f.name === fieldName,
+  )
+  if (!field) return false
+  if (field.computed || field.read_only || field.immutable) return false
+  if (field.type === "child") return false
+
+  // update permission on the entity
+  const perm = `${entity.module}.${entity.plural}.update`
+  if (!checkPermission(perm, me.permissions)) return false
+
+  // Submitted rows reject inline-edit (doc_status lifecycle).
+  if (
+    entity.fields.some((f) => f.name === "doc_status") &&
+    row.doc_status === "submitted"
+  ) {
+    return false
+  }
+  return true
 }
 
 // ── FilterBar ──
@@ -884,6 +1255,136 @@ function BulkActionsBar({
         <X className="size-3 mr-1" />
         Clear
       </Button>
+    </div>
+  )
+}
+
+// ── BatchEditBar (5.4.3) ──
+// Set values for the batch_edit fields across the selected rows. Applied per
+// row (loop PATCH) with partial failure reported per row — never
+// all-or-nothing. Only fields the caller may update are offered.
+
+function BatchEditBar({
+  fields,
+  entity,
+  selectedCount,
+  draft,
+  results,
+  onDraftChange,
+  onApply,
+  onClear,
+}: {
+  fields: string[]
+  entity: EntitySchema
+  selectedCount: number
+  draft: Record<string, string>
+  results: { id: string; ok: boolean; message?: string }[] | null
+  onDraftChange: (field: string, value: string) => void
+  onApply: () => void
+  onClear: () => void
+}) {
+  const me = useSessionStore((s) => s.me)
+  const editableFields = fields.filter((f) => {
+    if (!me) return false
+    const perm = `${entity.module}.${entity.plural}.update`
+    if (!checkPermission(perm, me.permissions)) return false
+    const field = entity.fields.find((ef) => ef.name === f)
+    if (!field) return false
+    return !field.computed && !field.read_only && !field.immutable
+  })
+
+  const hasDraft = Object.values(draft).some((v) => v !== "" && v != null)
+
+  return (
+    <div className="rounded-md border bg-muted/30 p-3 space-y-2">
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-medium">
+          Batch edit — {selectedCount} selected
+        </span>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onClear}
+          className="ml-auto h-7 px-2"
+        >
+          <X className="size-3 mr-1" />
+          Clear
+        </Button>
+      </div>
+      {editableFields.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          No editable fields for your permissions.
+        </p>
+      ) : (
+        <div className="flex flex-wrap items-end gap-2">
+          {editableFields.map((f) => {
+            const field = entity.fields.find((ef) => ef.name === f)
+            const isEnum = !!field?.enum_values?.length
+            return (
+              <div key={f} className="flex flex-col gap-1">
+                <label className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                  {field?.title ?? f}
+                </label>
+                {isEnum ? (
+                  <Select
+                    value={draft[f] ?? ""}
+                    onChange={(v) => onDraftChange(f, v)}
+                    options={[
+                      { value: "", label: "(unchanged)" },
+                      ...(field?.enum_values ?? []).map((v) => ({
+                        value: v,
+                        label: v,
+                      })),
+                    ]}
+                    className="h-8 w-44 text-xs"
+                  />
+                ) : (
+                  <Input
+                    value={draft[f] ?? ""}
+                    onChange={(e) => onDraftChange(f, e.target.value)}
+                    placeholder="(unchanged)"
+                    className="h-8 w-44 text-xs"
+                  />
+                )}
+              </div>
+            )
+          })}
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={!hasDraft || selectedCount === 0}
+            onClick={onApply}
+          >
+            <Check className="size-3 mr-1" />
+            Apply to {selectedCount} row{selectedCount !== 1 ? "s" : ""}
+          </Button>
+        </div>
+      )}
+      {results && results.length > 0 && (
+        <div className="max-h-40 overflow-y-auto rounded border bg-background p-2 text-xs">
+          {results.map((r) => (
+            <div
+              key={r.id}
+              className={cn(
+                "flex items-center gap-2 py-0.5",
+                r.ok ? "text-emerald-600" : "text-destructive",
+              )}
+            >
+              {r.ok ? (
+                <Check className="size-3 shrink-0" />
+              ) : (
+                <AlertTriangle className="size-3 shrink-0" />
+              )}
+              <span className="truncate">{r.id}</span>
+              {!r.ok && r.message && (
+                <span className="truncate text-muted-foreground">
+                  — {r.message}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

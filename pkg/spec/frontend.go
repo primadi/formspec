@@ -13,7 +13,7 @@ import (
 func IsPublic(p *bool) bool { return p == nil || *p }
 
 // PageSpec defines a routed screen composing blocks (Frontend §3).
-// `blocks` and `tabs` are mutually exclusive.
+// `blocks` and `tabs` are mutually exclusive; `mode: custom` excludes both.
 type PageSpec struct {
 	// @schema {description: "If true (default), a route is generated for this page. Set false to restrict to embedding only.", example: "true"}
 	Public *bool `yaml:"public,omitempty" json:"public,omitempty"`
@@ -27,11 +27,42 @@ type PageSpec struct {
 	Blocks      []PageBlock `yaml:"blocks,omitempty" json:"blocks,omitempty"`
 	Tabs        []PageTab   `yaml:"tabs,omitempty" json:"tabs,omitempty"`
 	Layout      *PageLayout `yaml:"layout,omitempty" json:"layout,omitempty"`
+	// Mode is "custom" for a full-code page that hands all rendering to an
+	// asset (frontend/06-page-kinds.md §13). Empty means blocks/tabs.
+	// @schema {description: "Page mode. `custom` hands all rendering to an asset component; empty means blocks/tabs composition.", enum: ["", "custom"]}
+	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`
+	// Asset is the module-relative asset path for `mode: custom`
+	// (e.g. "logistics/assets/dispatch-console.js").
+	Asset string `yaml:"asset,omitempty" json:"asset,omitempty"`
+	// Binds is the backend footprint (entities/actions/subscribe) a custom
+	// page may touch — enforced client-side like a component's `needs`.
+	Binds *PageBinds `yaml:"binds,omitempty" json:"binds,omitempty"`
+	// Renderer is the per-instance renderer override (frontend/03-renderer-
+	// kind.md §3), e.g. "community/super-kanban". Overrides the App-level
+	// `renderers:` map for this instance.
+	Renderer string `yaml:"renderer,omitempty" json:"renderer,omitempty"`
+}
+
+// PageBinds declares the backend footprint of a `mode: custom` page
+// (frontend/06-page-kinds.md §13) — the same role as `needs:` on a component
+// block (frontend/07-component-kinds.md §4). Calls outside `binds` fail
+// client-side and are never authorized server-side either.
+type PageBinds struct {
+	// Entities the page may read/write, as "module.entity" refs.
+	Entities []string `yaml:"entities,omitempty" json:"entities,omitempty"`
+	// Actions the page may invoke, as "module.entity.action" (or wildcard).
+	Actions []string `yaml:"actions,omitempty" json:"actions,omitempty"`
+	// Subscribe channels (entity refs) the page may subscribe to.
+	Subscribe []string `yaml:"subscribe,omitempty" json:"subscribe,omitempty"`
 }
 
 // PageLayout controls block arrangement on a page.
 type PageLayout struct {
 	Columns int `yaml:"columns,omitempty" json:"columns,omitempty"`
+	// Mode "split" arranges a master list block and a detail block side by
+	// side (frontend/06-page-kinds.md §1.1). Empty means normal vertical flow.
+	// @schema {description: "Layout mode. `split` = master-detail (master list left, detail right).", enum: ["", "split"]}
+	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`
 }
 
 // PageBlock is a compositional unit within a Page.
@@ -110,6 +141,21 @@ type BlockRef struct {
 	Mode  string         `yaml:"mode,omitempty" json:"mode,omitempty"` // view | edit
 	Param map[string]any `yaml:"param,omitempty" json:"param,omitempty"`
 	Props map[string]any `yaml:"props,omitempty" json:"props,omitempty"` // component blocks
+	// Binds links a detail block to a master list block in a split layout
+	// (frontend/06-page-kinds.md §1.1) — the detail follows the master's
+	// row selection instead of a `:id` route param.
+	Binds *BlockBinds `yaml:"binds,omitempty" json:"binds,omitempty"`
+}
+
+// BlockBinds ties a detail block to the master list block that drives it in a
+// `layout.mode: split` page (frontend/06-page-kinds.md §1.1).
+type BlockBinds struct {
+	// Source is the `ref` of the master Table block whose row selection
+	// drives this detail block.
+	Source string `yaml:"source" json:"source"`
+	// Param is the field of the selected master record injected into the
+	// detail block as its record id (usually "id").
+	Param string `yaml:"param" json:"param"`
 }
 
 // FormSpec defines an input/edit layout (Frontend §4).
@@ -207,6 +253,10 @@ type TableSpec struct {
 	BulkActions  []TableAction `yaml:"bulk_actions,omitempty" json:"bulk_actions,omitempty"`
 	Filters      []FilterSpec  `yaml:"filters,omitempty" json:"filters,omitempty"`
 	FixedFilters []FilterSpec  `yaml:"fixed_filters,omitempty" json:"fixed_filters,omitempty"`
+	// @schema {description: "Inline editing: cells editable in place for fields whose rules allow it (not readonly/computed/immutable, within update permission). Commit = per-row update with CAS version."}
+	InlineEdit bool `yaml:"inline_edit,omitempty" json:"inline_edit,omitempty"`
+	// @schema {description: "Batch editing: fields editable across a multi-row selection. Framework runs update per row, partial failure reported per row."}
+	BatchEdit []string `yaml:"batch_edit,omitempty" json:"batch_edit,omitempty"`
 }
 
 // TableColumn configures a table column.
@@ -313,6 +363,20 @@ type ReportSpec struct {
 	Groups             []ReportGroup  `yaml:"groups,omitempty" json:"groups,omitempty"`
 	Totals             []ReportTotal  `yaml:"totals,omitempty" json:"totals,omitempty"`
 	Export             []string       `yaml:"export,omitempty" json:"export,omitempty"` // pdf | csv | xlsx
+	// Source is the declarative parameterized filter (06-page-kinds.md §8
+	// "Open — source.filter"). `filter` maps a list-API filter field to a
+	// value that may be a `":param"` placeholder resolved from `parameters[]`
+	// at execution time (e.g. `{ "transaction_date": ":from" }`).
+	Source *ReportSource `yaml:"source,omitempty" json:"source,omitempty"`
+}
+
+// ReportSource declares the report's data source + parameterized filter.
+type ReportSource struct {
+	// @schema {example: "billing.order"}
+	Entity string `yaml:"entity" json:"entity"`
+	// Filter maps a list-API filter field to a literal value or a `":param"`
+	// placeholder resolved from ReportSpec.Parameters at execution time.
+	Filter map[string]string `yaml:"filter,omitempty" json:"filter,omitempty"`
 }
 
 // ReportParam is a filterable input for a report.
@@ -407,6 +471,8 @@ type KanbanSpec struct {
 	MaxCardsPerColumn int            `yaml:"max_cards_per_column,omitempty" json:"max_cards_per_column,omitempty"`
 	Sortable          bool           `yaml:"sortable,omitempty" json:"sortable,omitempty"`             // enable within-column drag-to-reorder
 	PositionField     string         `yaml:"position_field,omitempty" json:"position_field,omitempty"` // field storing user-adjustable position (e.g. "queue_position")
+	// @schema {description: "FormSpecExpr pre-check UX before drop: evaluated against the record + target column; drop blocked when false. Server state-machine guard remains authority."}
+	DragGuard string `yaml:"drag_guard,omitempty" json:"drag_guard,omitempty"`
 }
 
 // KanbanColumn is a status lane in a kanban board.
@@ -587,9 +653,18 @@ var SectionBlockTypes = map[string]bool{
 // is violated. Enforces:
 //   - `blocks` and `tabs` are mutually exclusive.
 //   - Section blocks use a known type (closed set).
+//   - `mode: custom` requires `asset` and forbids `blocks`/`tabs`.
 func ValidatePageSpec(p *PageSpec) error {
 	if len(p.Blocks) > 0 && len(p.Tabs) > 0 {
 		return fmt.Errorf("page: `blocks` and `tabs` are mutually exclusive")
+	}
+	if p.Mode == "custom" {
+		if p.Asset == "" {
+			return fmt.Errorf("page: `mode: custom` requires `asset` (module-relative asset path)")
+		}
+		if len(p.Blocks) > 0 || len(p.Tabs) > 0 {
+			return fmt.Errorf("page: `mode: custom` cannot declare `blocks` or `tabs` — the page is fully owned by the asset")
+		}
 	}
 	for i, blk := range p.Blocks {
 		if blk.Section == nil {

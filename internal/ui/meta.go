@@ -104,6 +104,11 @@ type Bundle struct {
 	Prints     []*Entry[spec.PrintSpec]     `json:"prints"`
 	Themes     []*Entry[spec.ThemeSpec]     `json:"themes"`
 	Listings   []*Entry[spec.ListingSpec]   `json:"listings"`
+	Calendars  []*Entry[spec.CalendarSpec]  `json:"calendars"`
+	// ApprovalInboxes / NotificationCenters are zero-config pages — always
+	// ship (their data is the caller's own pending approvals/notifications).
+	ApprovalInboxes     []*Entry[spec.ApprovalInboxSpec]      `json:"approval_inboxes"`
+	NotificationCenters []*Entry[spec.NotificationCenterSpec] `json:"notification_centers"`
 	// Settings is the resolved global presentation/config namespace (spec §10).
 	// Always present (resolved with standard defaults) so renderers never guess.
 	Settings *spec.Settings `json:"settings"`
@@ -154,20 +159,23 @@ func (r *Registry) BuildBundle(entities EntityLister, can PermissionChecker, app
 			StackFamily:    appCtx.StackFamily,
 			PersistBackend: appCtx.PersistBackend,
 		},
-		Menu:       menu,
-		Pages:      []*Entry[spec.PageSpec]{},
-		Forms:      []*Entry[spec.FormSpec]{},
-		Tables:     []*Entry[spec.TableSpec]{},
-		Dashboards: []*Entry[spec.DashboardSpec]{},
-		Widgets:    []*Entry[spec.WidgetSpec]{},
-		Reports:    []*Entry[spec.ReportSpec]{},
-		Wizards:    []*Entry[spec.WizardSpec]{},
-		Kanbans:    []*Entry[spec.KanbanSpec]{},
-		Timelines:  []*Entry[spec.TimelineSpec]{},
-		Prints:     []*Entry[spec.PrintSpec]{},
-		Themes:     []*Entry[spec.ThemeSpec]{},
-		Listings:   []*Entry[spec.ListingSpec]{},
-		Settings:   appCtx.Settings,
+		Menu:                menu,
+		Pages:               []*Entry[spec.PageSpec]{},
+		Forms:               []*Entry[spec.FormSpec]{},
+		Tables:              []*Entry[spec.TableSpec]{},
+		Dashboards:          []*Entry[spec.DashboardSpec]{},
+		Widgets:             []*Entry[spec.WidgetSpec]{},
+		Reports:             []*Entry[spec.ReportSpec]{},
+		Wizards:             []*Entry[spec.WizardSpec]{},
+		Kanbans:             []*Entry[spec.KanbanSpec]{},
+		Timelines:           []*Entry[spec.TimelineSpec]{},
+		Prints:              []*Entry[spec.PrintSpec]{},
+		Themes:              []*Entry[spec.ThemeSpec]{},
+		Listings:            []*Entry[spec.ListingSpec]{},
+		Calendars:           []*Entry[spec.CalendarSpec]{},
+		ApprovalInboxes:     []*Entry[spec.ApprovalInboxSpec]{},
+		NotificationCenters: []*Entry[spec.NotificationCenterSpec]{},
+		Settings:            appCtx.Settings,
 	}
 
 	visible := map[string]bool{} // "module/name" → caller can see entity
@@ -248,6 +256,21 @@ func (r *Registry) BuildBundle(entities EntityLister, can PermissionChecker, app
 	for _, k := range sortedKeys(r.Listings) {
 		if e := r.Listings[k]; appCtx.allows(e.Module) && entityVisible(e.Module, e.Spec.Entity) {
 			b.Listings = append(b.Listings, e)
+		}
+	}
+	for _, k := range sortedKeys(r.Calendars) {
+		if e := r.Calendars[k]; appCtx.allows(e.Module) && entityVisible(e.Module, e.Spec.Entity) {
+			b.Calendars = append(b.Calendars, e)
+		}
+	}
+	for _, k := range sortedKeys(r.ApprovalInboxes) {
+		if e := r.ApprovalInboxes[k]; appCtx.allows(e.Module) {
+			b.ApprovalInboxes = append(b.ApprovalInboxes, e)
+		}
+	}
+	for _, k := range sortedKeys(r.NotificationCenters) {
+		if e := r.NotificationCenters[k]; appCtx.allows(e.Module) {
+			b.NotificationCenters = append(b.NotificationCenters, e)
 		}
 	}
 	for _, k := range sortedKeys(r.Dashboards) {

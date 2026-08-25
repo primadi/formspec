@@ -40,6 +40,8 @@ func NewRouterBuilder(registry *entity.Registry) *RouterBuilder {
 		factory:  NewHandlerFactory(registry),
 		hub:      NewWSHub(registry),
 	}
+	// Per-resource/per-action rate limiting (todo 7.12).
+	b.factory.SetResourceRateLimiter(NewResourceRateLimiter())
 	// Entity-spec lookup enables sort/filter validation on list endpoints.
 	b.factory.SetSpecLookup(func(module, name string) (*spec.EntitySpec, bool) {
 		info, ok := registry.GetEntity(module, name)
@@ -79,6 +81,18 @@ func (b *RouterBuilder) SetDeliveryDeps(deps action.DeliveryDeps) {
 // idempotent actions and serve the prepare endpoint (todo 2.7).
 func (b *RouterBuilder) SetIdempotencyStore(store *db.IdempotencyStore) {
 	b.factory.SetIdempotencyStore(store)
+}
+
+// SetStorageResolver wires the object-store resolver used by the file
+// upload/download routes (todo 7.17.1). When nil, those routes return 503.
+func (b *RouterBuilder) SetStorageResolver(fn func() (Storage, error)) {
+	b.factory.SetStorageResolver(fn)
+}
+
+// SetAssetRoots wires the manifest roots used to resolve module asset files
+// (todo 5.9.1).
+func (b *RouterBuilder) SetAssetRoots(roots []string) {
+	b.factory.SetAssetRoots(roots)
 }
 
 // SetUIRegistry wires the frontend UI registry; enables the Meta API
@@ -210,6 +224,13 @@ func (b *RouterBuilder) BuildHTTP() http.Handler {
 			// Realtime event push (Frontend kanban/board realtime: true).
 			r.Get("/_ws", b.HandleWS())
 
+			// Module asset files (custom UI components, todo 5.9.1).
+			r.Get("/assets/{module}/{path*}", b.factory.HandleAsset())
+
+			// Server-side Print PDF generation (todo 5.13.2) — renders a
+			// kind: Print manifest + record to PDF without a browser.
+			r.Get("/print/{module}/{name}/{id}", b.HandlePrint())
+
 			// Entity CRUD — all entities, regardless of spec.expose.
 			// No SPA fallback here: /_ui/entity/* is a REST API surface that
 			// must return JSON errors, not HTML. Client-side routing for the
@@ -233,6 +254,11 @@ func (b *RouterBuilder) BuildHTTP() http.Handler {
 					}
 					b.registerRouteWithPattern(r, rd, pattern)
 				}
+				// File upload/download (todo 7.17.1) — generic per-entity routes;
+				// the handler resolves module/entity from the path and enforces
+				// permission dynamically.
+				r.Post("/{module}/{entity}/{id}/{field}", b.factory.HandleFileUpload())
+				r.Get("/{module}/{entity}/{id}/{field}", b.factory.HandleFileDownload())
 			})
 		})
 
@@ -252,6 +278,10 @@ func (b *RouterBuilder) BuildHTTP() http.Handler {
 				}
 				b.registerRoute(r, rd)
 			}
+
+			// File upload/download (todo 7.17.1).
+			r.Post("/{module}/{entity}/{id}/{field}", b.factory.HandleFileUpload())
+			r.Get("/{module}/{entity}/{id}/{field}", b.factory.HandleFileDownload())
 		})
 
 		// Static SPA (renderer) — /{ws}/_admin and /{ws}/app.

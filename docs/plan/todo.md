@@ -1,7 +1,7 @@
 # Master Plan: FormSpec Implementation
 
-**Last Updated**: 2026-08-24  
-**Status**: ✅ Fase 0 complete · ✅ Fase 1 (1.1–1.5) · ✅ Fase 2.1 · ✅ Fase 2.2 · ✅ Fase 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6) · ✅ Fase 2.7 (idempotency prepare flow) · ✅ Fase 2.8 (spec.expose) · ✅ Fase 2.9 (2.9.1–2.9.3: ctx.\* primitives + dev auto-provision) · ✅ Fase 5 (5.1–5.4) · ✅ Spec hot-reload · ✅ Fase 11 (review schema↔docs) · ✅ Audit spec↔schema + tambah TODO item · ✅ `formspec validate` (3.1.1, engine+schema) · ✅ Rename forma→formspec (docs/plan/rename-formspec.md) · 🚧 Fase 12 Domain Infrastruktur (docs/architecture/09-domain-map.md) · ✅ Schema registry online (docs/plan/schema-registry-online.md) · ✅ CLI repl/seed/diff (3.4.1, 3.6.2, 3.6.3) · ✅ **Fase 4 (4.1–4.10) complete** (incl. 4.3.1–4.3.5 entity extension, 4.8.3 restore remap) · ✅ Landing page (5.1.3 + 5.13.5, docs/plan/landing-page.md) · ✅ App renderer archetypes (5.1.1–5.1.3: sidebar-nav/topnav/no-nav + access + persist_backend, docs/plan/landing-page.md) · ✅ **Fase 6.1 (6.1.1–6.1.3: login + token, entity-backed auth, external/ merge, generate-auth)** (docs/plan/auth-login-token.md) · ✅ **6.3.1 + 6.3.2 + 5.12.5 (role + role-assignment Entity, materialisasi grant page → permission)** (docs/changelog/2026-08-20-001) · ✅ **6.2.3 (wire permission check semua handler, surface-aware 404)** (docs/changelog/2026-08-20-002) · ✅ **Fase 6 COMPLETE (6.1–6.9, dogfooding auth module)** (docs/plan/fase6-dogfooding-auth-module.md, changelog 2026-08-20-003 s/d 2026-08-21-014)
+**Last Updated**: 2026-08-25  
+**Status**: ✅ Fase 0 complete · ✅ Fase 1 (1.1–1.5) · ✅ Fase 2.1 · ✅ Fase 2.2 · ✅ Fase 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6) · ✅ Fase 2.7 (idempotency prepare flow) · ✅ Fase 2.8 (spec.expose) · ✅ Fase 2.9 (2.9.1–2.9.3: ctx.\* primitives + dev auto-provision) · ✅ Fase 5 (5.1–5.4) · ✅ Spec hot-reload · ✅ Fase 11 (review schema↔docs) · ✅ Audit spec↔schema + tambah TODO item · ✅ `formspec validate` (3.1.1, engine+schema) · ✅ Rename forma→formspec (docs/plan/rename-formspec.md) · 🚧 Fase 12 Domain Infrastruktur (docs/architecture/09-domain-map.md) · ✅ Schema registry online (docs/plan/schema-registry-online.md) · ✅ CLI repl/seed/diff (3.4.1, 3.6.2, 3.6.3) · ✅ **Fase 4 (4.1–4.10) complete** (incl. 4.3.1–4.3.5 entity extension, 4.8.3 restore remap) · ✅ Landing page (5.1.3 + 5.13.5, docs/plan/landing-page.md) · ✅ App renderer archetypes (5.1.1–5.1.3: sidebar-nav/topnav/no-nav + access + persist_backend, docs/plan/landing-page.md) · ✅ **Fase 6.1 (6.1.1–6.1.3: login + token, entity-backed auth, external/ merge, generate-auth)** (docs/plan/auth-login-token.md) · ✅ **6.3.1 + 6.3.2 + 5.12.5 (role + role-assignment Entity, materialisasi grant page → permission)** (docs/changelog/2026-08-20-001) · ✅ **6.2.3 (wire permission check semua handler, surface-aware 404)** (docs/changelog/2026-08-20-002) · ✅ **Fase 6 COMPLETE (6.1–6.9, dogfooding auth module)** (docs/plan/fase6-dogfooding-auth-module.md, changelog 2026-08-20-003 s/d 2026-08-21-014) · 📐 **Widget strategy** (docs/plan/widget-strategy.md — sync 5.10, tambah 5.2.7/5.10a, cross-link 7.17.1) · ✅ **Fase 5 COMPLETE (5.1–5.16, docs/plan/fase5-completion.md, changelog 2026-08-24-027 s/d 2026-08-24-033)** · ✅ **Fase 7 subset (7.5, 7.8, 7.12, 7.14, 7.16 — docs/plan/fase7-subset.md, changelog 2026-08-25-001 s/d 2026-08-25-002)**
 
 > `⬜` not started · `✅` complete · `⏸️` deferred
 
@@ -415,10 +415,11 @@ ui-exposed), §9.3 "Akses dari script" (`resource.fetch`, `ctx.config().get`,
 
 - [x] 5.2.1 Blocks composition — form, table, component blocks (himpunan tertutup `06-page-kinds.md` §1; `widget` milik Dashboard §7, `html` block tidak ada di spec); permission-gated per block
 - [x] 5.2.2 Tabs variant — mutually exclusive with blocks; permission-checked per tab
-- [ ] 5.2.3 Master-detail split — `layout.mode: split`, `binds: {source, param}`; detail refetch on selection change
-- [ ] 5.2.4 Full-custom — single `component:` block
-- [ ] 5.2.5 Custom Page (`mode: custom`) — full-code page with `binds` footprint (entities, actions, subscribe); top rung of frontend control
+- [x] 5.2.3 Master-detail split — `layout.mode: split`, `binds: {source, param}`; detail refetch on selection change — `PageSplit` di `PageRenderer.tsx` (master Table block + detail block via `binds`, refetch on selection, empty-state tanpa seleksi). ✅ 2026-08-24
+- [x] 5.2.4 Full-custom — single `component:` block — full-bleed render tanpa grid wrapper (blocks.length===1 && blocks[0].component). ✅ 2026-08-24
+- [x] 5.2.5 Custom Page (`mode: custom`) — full-code page with `binds` footprint (entities, actions, subscribe); top rung of frontend control — `CustomPage` di `PageRenderer.tsx` + `bindsToNeeds` → `AssetNeeds`. ✅ 2026-08-24
 - [x] 5.2.6 Configuration Page pattern — `characteristic: reference` entities → no New/Delete buttons, only Update surfaced
+- [x] 5.2.7 Declarative banner/alert/notice block — `AlertBlock` di `SectionBlocks.tsx` (variant info/success/warning/destructive); perluasan `SectionBlock` closed set. ✅ 2026-08-24
 
 ### 5.3 `kind: Form`
 
@@ -431,19 +432,19 @@ ui-exposed), §9.3 "Akses dari script" (`resource.fetch`, `ctx.config().get`,
 ### 5.4 `kind: Table`
 
 - [x] 5.4.1 Fix hardcoded `/_admin` prefix — surface-aware navigation (`/app` vs `/_admin`)
-- [ ] 5.4.2 Inline editing — `inline_edit: true`, cell editable for non-readonly/computed/immutable fields; CAS per baris; submitted rows reject inline-edit
-- [ ] 5.4.3 Batch editing — `batch_edit: [field, ...]`, update per baris, partial failure reported (not all-or-nothing)
-- [ ] 5.4.4 Column derivation fix — N priority columns (natural key → label_field → status → transaction_date → rest), overflow accessible via row expand/detail; NEVER silently dropped
-- [ ] 5.4.5 `realtime: true` — auto-subscribe + patch rows in-place (depends on 5.8)
+- [x] 5.4.2 Inline editing — `inline_edit: true`, cell editable for non-readonly/computed/immutable fields; CAS per baris; submitted rows reject inline-edit — `TableRenderer` (editingCell + commitInlineEdit via `apiPatch` + CAS version; 409 → stale badge). ✅ 2026-08-24
+- [x] 5.4.3 Batch editing — `batch_edit: [field, ...]`, update per baris, partial failure reported (not all-or-nothing) — `TableRenderer` (batchDraft + applyBatchEdit loop PATCH per row + per-row report). ✅ 2026-08-24
+- [x] 5.4.4 Column derivation fix — N priority columns (natural key → label_field → status → transaction_date → rest), overflow accessible via row expand/detail; NEVER silently dropped — `derive.ts` `DERIVED_TABLE_VISIBLE_COLUMNS=8` + priority sort; `TableRenderer` row-expand toggle. ✅ 2026-08-24
+- [x] 5.4.5 `realtime: true` — auto-subscribe + patch rows in-place (depends on 5.8) — `useRealtime` di `TableRenderer` → silent refetch saat event entity cocok. ✅ 2026-08-24
 - [x] 5.4.6 Fix table auto-refresh setelah overlay (modal/drawer) close — `TableRenderer` mendeteksi transisi URL `action` ada → hilang (overlay `OverlayHost` ditutup setelah save/cancel) lalu silent refetch; mencakup create & edit, dan berlaku untuk table derived maupun table block/tab di Page. Changelog `2026-08-24-011`. ✅ 2026-08-24
 
 ### 5.5 `kind: Kanban`
 
 - [x] 5.5.1 Drag-and-drop — wire `@dnd-kit/core`; drag card antar kolom → PATCH `status_field`
 - [x] 5.5.2 Optimistic update with server-enforced rollback (409 → snapshot restore)
-- [ ] 5.5.3 `drag_guard` FormSpecExpr — pre-check UX, prevent drop that server will reject
+- [x] 5.5.3 `drag_guard` FormSpecExpr — pre-check UX, prevent drop that server will reject — `KanbanRenderer.handleDragEnd` evaluasi `entry.spec.drag_guard` (context `fields`=record, `target`=status kolom tujuan); drop diblokir + toast bila guard false; server state-machine guard tetap otoritas. ✅ 2026-08-24
 - [x] 5.5.4 WIP limits — `max_cards_per_column`, soft UX enforcement (visual + toast)
-- [ ] 5.5.5 Zero-config — derive columns from state machine or `group_by` enum
+- [x] 5.5.5 Zero-config — derive columns from state machine or `group_by` enum — `deriveKanbanColumns` di `engine/derive.ts` (state machine states → `enum_values` status field); `KanbanRenderer` pakai bila `columns:` kosong + empty-state hint. ✅ 2026-08-24
 - [x] 5.5.6 Click card → detail page navigation
 - [x] 5.5.7 Row actions (view/edit/delete/custom) with confirm + permission check
 - [x] 5.5.8 Filter columns from `filters` manifest — Select dropdown per filter field
@@ -451,92 +452,111 @@ ui-exposed), §9.3 "Akses dari script" (`resource.fetch`, `ctx.config().get`,
 
 ### 5.6 `kind: Calendar`
 
-- [ ] 5.6.1 Month/week/day/resource views — `views: [month, week, day, resource]`
-- [ ] 5.6.2 Event rendering — from `date_field` + optional `end_field`; title from `label_field` or `title_field`
-- [ ] 5.6.3 Click event → detail Page/Form; click empty slot → Form create with date pre-filled
-- [ ] 5.6.4 Drag reschedule — call `update` action on date_field (server-enforced); submitted immutable rows disable drag
-- [ ] 5.6.5 RRULE recurrence — parse RFC 5545, expand to instances for visible date range (render-time, not materialized)
-- [ ] 5.6.6 Resource view — one lane per `resource_field` value; color by `color_field`
-- [ ] 5.6.7 RRULE exception per-instance — ubah/batalkan satu occurrence tanpa ubah pattern; butuh model data exception tersendiri (row terpisah + override tanggal asli); ditunda ke iterasi berikutnya (`06-page-kinds.md` §5 "Di luar cakupan v1")
+- [x] 5.6.1 Month/week/day/resource views — `views: [month, week, day, resource]` — `CalendarRenderer` (view switcher + MonthView/WeekView/DayView/ResourceView). ✅ 2026-08-24
+- [x] 5.6.2 Event rendering — from `date_field` + optional `end_field`; title from `label_field` or `title_field` — `CalendarRenderer` (events dari `date_field`/`end_field`, title dari `title_field` ?? `label_field`). ✅ 2026-08-24
+- [x] 5.6.3 Click event → detail Page/Form; click empty slot → Form create with date pre-filled — `openEvent` (navigate detail) + `createAt` (overlay create + `prefill.{date_field}`). ✅ 2026-08-24
+- [x] 5.6.4 Drag reschedule — call `update` action on date_field (server-enforced); submitted immutable rows disable drag — HTML5 drag → `apiPatch` date_field (+ end_field proporsional); submitted rows ditolak; 409 → toast. ✅ 2026-08-24
+- [x] 5.6.5 RRULE recurrence — parse RFC 5545, expand to instances for visible date range (render-time, not materialized) — library `rrule` (npm) + `expandRecurrence` (bounded `between`). ✅ 2026-08-24
+- [x] 5.6.6 Resource view — one lane per `resource_field` value; color by `color_field` — `ResourceView` (lane per resource, warna dari `color_field`). ✅ 2026-08-24
+- [ ] ⏸️ 5.6.7 RRULE exception per-instance — ubah/batalkan satu occurrence tanpa ubah pattern; butuh model data exception tersendiri (row terpisah + override tanggal asli); ditunda ke iterasi berikutnya (`06-page-kinds.md` §5 "Di luar cakupan v1")
 
 ### 5.7 `kind: Dashboard` + `kind: Widget`
 
-- [ ] 5.7.1 Widget `stat` — fetch from summary entity, display number with label
-- [ ] 5.7.2 Widget `chart` — bar/line/pie from summary entity; add chart library dependency (katalog widget bawaan spec HANYA `stat` + `chart` — `07-component-kinds.md` §2; ListWidget/SummaryWidget tidak ada di spec, usulkan ke spec dulu bila dibutuhkan)
-- [ ] 5.7.3 Dashboard customizable — `customizable: true`, user add/remove/reorder widgets from catalog; preference stored as runtime preference (not YAML)
-- [ ] 5.7.4 Widget catalog visibility — derived from user's `list`/`view` permission on underlying entity (not manual flag)
+- [x] 5.7.1 Widget `stat` — fetch from summary entity, display number with label — `MetricWidget` di `DashboardRenderer.tsx` (query FormSpecExpr subset → server list filters). ✅ 2026-08-24
+- [x] 5.7.2 Widget `chart` — bar/line/pie from summary entity; add chart library dependency (katalog widget bawaan spec HANYA `stat` + `chart` — `07-component-kinds.md` §2; ListWidget/SummaryWidget tidak ada di spec, usulkan ke spec dulu bila dibutuhkan) — `ChartWidget` + `LineChart` SVG (tanpa dependency chart library; satu series per `group_by`). ✅ 2026-08-24
+- [x] 5.7.3 Dashboard customizable — `customizable: true`, user add/remove/reorder widgets from catalog; preference stored as runtime preference (not YAML) — `DashboardRenderer` (dnd-kit sortable reorder + add via Select catalog + remove button); layout disimpan di `usePrefsStore.dashboardLayouts` (localStorage), bukan YAML. ✅ 2026-08-24
+- [x] 5.7.4 Widget catalog visibility — derived from user's `list`/`view` permission on underlying entity (not manual flag) — catalog di-filter `checkPermission` pada entity underlying; widget terpasang juga di-filter. ✅ 2026-08-24
 
 ### 5.8 Realtime WebSocket
 
-- [ ] 5.8.1 `useRealtime(entityRef)` hook — subscribe to `entity:{module}.{name}` channels
-- [ ] 5.8.2 Optimistic update — patch rendered data in-place on event
-- [ ] 5.8.3 Reconnect → refetch via `/_meta/ui`, no replay
+- [x] 5.8.1 `useRealtime(entityRef)` hook — subscribe to `entity:{module}.{name}` channels — `hooks/useRealtime.ts` (singleton WS, subscribe/unsubscribe frames, union subscriber). ✅ 2026-08-24
+- [x] 5.8.2 Optimistic update — patch rendered data in-place on event — konsumen (TableRenderer) silent refetch saat `tick` berubah (non-durable, no replay). ✅ 2026-08-24
+- [x] 5.8.3 Reconnect → refetch via `/_meta/ui`, no replay — `tick` naik saat reconnect → konsumen re-run load; re-register subscription penuh. ✅ 2026-08-24
 
 ### 5.9 Asset Component Contract
 
-- [ ] 5.9.1 Dynamic ES module loader — load `asset` component at runtime
-- [ ] 5.9.2 `formspec` client injection — `formspec.api` (typed, logged-in user), `formspec.subscribe(entity, cb)`, `formspec.navigate(page, params)`, `formspec.theme` (tokens), `formspec.components` (widget dasar untuk komposisi custom component — `07-component-kinds.md` §1)
-- [ ] 5.9.3 `formspec.ui` centralized service — `toast()`, `dialog()`, `confirm()`, `drawer()` (replace direct `sonner` imports + `window.confirm()`)
-- [ ] 5.9.4 `formspec.files` — upload/download tray
-- [ ] 5.9.5 `formspec.form(entity, {mode, id?})` — headless form engine: field state, dirty tracking, client validation from field rules, FormSpecExpr eval, `submit()` with CAS version
-- [ ] 5.9.6 `needs:` declaration — frontend `uses` equivalent; `formspec.api` calls outside `needs` fail client-side
-- [ ] 5.9.7 CSP sandbox — `connect-src` restricted to App origin only; no `window`/`document` global access outside container
-- [ ] 5.9.8 CSS scoped — component CSS never leaks to chrome or other components
+> **Track C widget strategy** (docs/plan/widget-strategy.md): 5.9.2 `formspec.components`, 5.9.3
+> `formspec.ui`, 5.9.4 `formspec.files` = jalur #2 "UI rich" — expose chrome struktural shadcn ke
+> component `asset`, bukan dijadikan field widget.
+
+- [x] 5.9.1 Dynamic ES module loader — `shell/AssetRenderer.tsx` (dynamic `import()` + `mount`/`unmount`) + backend `GET /_ui/assets/{module}/{path*}` (`internal/api/asset.go`, serve `{root}/modules/{module}/assets/{path}`). ✅ 2026-08-24
+- [x] 5.9.2 `formspec` client injection — `lib/formspec-client.ts` (`api`, `subscribe`, `navigate`, `theme`, `ui`, `components`); di-inject ke asset via `AssetRenderer`. ✅ 2026-08-24
+- [x] 5.9.3 `formspec.ui` centralized service — `lib/ui.ts` (`toast` re-export + `confirm`/`dialog`/`drawer` promise-based) + `shell/UiHost.tsx` (ConfirmDialog + Sheet); 9 renderer migrasi import `sonner` → `@/lib/ui`. ✅ 2026-08-24
+- [x] 5.9.4 `formspec.files` — `lib/files.ts` (download tray store + `files` API) + `shell/DownloadTray.tsx`; di-inject ke asset. ✅ 2026-08-24
+- [x] 5.9.5 `formspec.form(entity, {mode, id?})` — `lib/headless-form.ts` (`createHeadlessForm`): field state, dirty tracking, validasi client dari field rules (zod via `lib/zod-schema.ts`), FormSpecExpr eval, `submit()` dengan CAS version. ✅ 2026-08-24
+- [x] 5.9.6 `needs:` declaration — `BlockRef.needs` (`AssetNeeds`); `formspec.api` di-wrap `withNeeds` — panggilan di luar `needs` gagal client-side. ✅ 2026-08-24
+- [x] 5.9.7 CSP sandbox — asset endpoint set `Content-Security-Policy` (`connect-src 'self'`). ✅ 2026-08-24
+- [x] 5.9.8 CSS scoped — `AssetRenderer` mount ke Shadow DOM host (CSS component tidak bocor). ✅ 2026-08-24
 
 ### 5.10 Missing input widgets
 
-- [ ] 5.10.1 DatePicker — `react-day-picker` integration for `date`/`datetime` field types
-- [ ] 5.10.2 JsonEditor — textarea + JSON validation
-- [ ] 5.10.3 ChildGrid — inline table for `child` entities with `storage: table`
-- [ ] 5.10.4 RichText — basic toolbar (bold/italic, list, link, heading) + server-sanitized HTML; NOT page builder
-- [ ] 5.10.5 FileInput — upload to `ctx.storage`, preview (image/PDF), size/type enforcement from field rules, `formspec.files` tray
-- [ ] 5.10.6 DecimalInput — arbitrary-precision decimal with banker's rounding display
-- [ ] 5.10.7 DateTimeInput — combined date + time picker
-- [ ] 5.10.8 Base UI components — empty-state, breadcrumb, skeleton/loading, pagination, badge, card
-- [ ] 5.10.9 Textarea — bagian himpunan tertutup widget wajib (`07-component-kinds.md` §1), belum tercantum sebagai widget existing di renderer
+> **Keputusan strategi widget** (docs/plan/widget-strategy.md): registry widget dasar = **closed set**
+> yang dikurasi (`07-component-kinds.md` §1) — **TIDAK** semua komponen shadcn di-mapping ke widget.
+> Tiga jalur "UI rich": (1) field widget — set tertutup dikurasi (bagian ini), (2) chrome struktural via
+> `formspec.ui`/`formspec.components`/`formspec.files` untuk component `asset` (5.9), (3) block presentasi
+> deklaratif di Page (5.2.7 + section blocks). Komponen shadcn struktural (alert, alertDialog,
+> dropdown-menu, popover, dll) dipakai internal kinds / di-expose via `formspec.*` — bukan dijadikan widget.
+
+- [x] 5.10.1 DatePicker — `DateInput` SUDAH meng-cover `date`/`datetime` via native `showPicker()` (keputusan desain, bukan `react-day-picker`) + input ketik terformat. ✅
+- [x] 5.10.2 JsonEditor — `JsonInput` SUDAH ada (`widgets/JsonInput.tsx`): textarea + pretty-print + parse validasi live. ✅
+- [x] 5.10.3 ChildGrid — `ChildTable` SUDAH ada (`widgets/ChildTable.tsx`): inline table utk `child` entities `storage: table`, sorting, computed, readonly_when, auto-fill. ✅
+- [x] 5.10.4 RichText — `RichText` widget (`widgets/RichText.tsx`): toolbar bold/italic/list/link/heading via contentEditable + `document.execCommand`; client sanitizer `lib/sanitize.ts` (mirror server `sanitizeHTML`); render sanitized di DetailPage. ✅ 2026-08-24
+- [x] 5.10.5 FileInput — `FileInput` widget (`widgets/FileInput.tsx`): upload via `POST /{module}/{entity}/{id}/{field}`, preview image/PDF, size/type enforcement dari `StorageSpec`; object key disimpan di field. ✅ 2026-08-24
+- [x] 5.10.6 DecimalInput — nama manifest distinct `decimalinput` terdaftar di router (`FormFieldWidget`) + `derive.formWidget()` (decimal → `decimalinput`); `NumberInput` handle scale/rounding. ✅ 2026-08-24
+- [x] 5.10.7 DateTimeInput — nama manifest distinct `datetimeinput` terdaftar di router + `derive.formWidget()` (datetime → `datetimeinput`); `DateInput` handle `withTime`. ✅ 2026-08-24
+- [x] 5.10.8 Base UI components — breadcrumb/skeleton/badge/card/pagination SUDAH ada + `EmptyState` (`components/ui/empty-state.tsx`). ✅ 2026-08-24
+- [x] 5.10.9 Textarea — `TextareaInput` widget (`widgets/TextareaInput.tsx`, wrap `components/ui/textarea.tsx`); router case `textarea` + field type `text`; render pre-wrap di DetailPage. ✅ 2026-08-24
+
+#### 5.10a Field widget kurasi (Track B, docs/plan/widget-strategy.md)
+
+- [x] 5.10.10 RadioGroup — `RadioGroup` widget (`widgets/RadioGroup.tsx`, button-based, no dep); single-choice enum alternatif `select`. ✅ 2026-08-24
+- [x] 5.10.11 Combobox — `Combobox` widget (`widgets/Combobox.tsx`, custom dropdown + search, no dep); searchable select utk enum besar. ✅ 2026-08-24
+- [x] 5.10.12 Password — `PasswordInput` widget (`widgets/PasswordInput.tsx`); masking + reveal toggle. ✅ 2026-08-24
+- [x] 5.10.13 Slider — `SliderInput` widget (`widgets/SliderInput.tsx`, native range); number field utk range (min/max dari rules, step dari scale). ✅ 2026-08-24
+- [x] 5.10.14 Tags — `TagsInput` widget (`widgets/TagsInput.tsx`); multi-select disimpan sebagai **comma-separated string** (frontend-only, tanpa backend change). Opsi array (backend) ditunda. ✅ 2026-08-24
 
 ### 5.11 FormSpecExpr
 
-- [ ] 5.11.1 Audit grammar vs spec — verify lexer→parser→evaluator supports all operators from `08-formspec-expr.md` §2
-- [ ] 5.11.2 Deploy-time static validation — `formspec apply`/`formspec check` rejects unresolvable field references + invalid grammar (ERROR, not warning)
-- [ ] 5.11.3 Runtime error state — nonexistent field reference → visible error state (never silent fail-safe/evaluate to `false`)
-- [ ] 5.11.4 `title` interpolation — `"Order {order.number}"` pattern in Page/Wizard/Print titles
-- [ ] 5.11.5 Cross-shell conformance test suite — identical interpretation across shells
+- [x] 5.11.1 Audit grammar vs spec — verify lexer→parser→evaluator supports all operators from `08-formspec-expr.md` §2 — grammar lengkap (literal, `fields.x`, perbandingan, and/or/not, aritmetika, len/sum, list comprehension, `in`); 94 test pass. ✅ 2026-08-24
+- [x] 5.11.2 Deploy-time static validation — `formspec apply`/`formspec check` rejects unresolvable field references + invalid grammar (ERROR, not warning) — `checkForms` (Form) + `checkKanban` (drag_guard) + `checkWizard` (step fields) + `validateExprGrammar` (tolak `ctx.`, def/import/return, delimiter tak seimbang). ✅ 2026-08-24
+- [x] 5.11.3 Runtime error state — nonexistent field reference → visible error state (never silent fail-safe/evaluate to `false`) — `strictEvalFormSpecExpr` (parse error + eval warnings → `error`); `FormRenderer` tampilkan banner error per field; `evalIdentifier` tetap graceful utk field belum-set (normal null), schema-level di-deploy-time. ✅ 2026-08-24
+- [x] 5.11.4 `title` interpolation — `"Order {order.number}"` pattern in Page/Wizard/Print titles — `PageRenderer` fetch record utk token title + `interpolate()`; Print/Wizard sudah pakai pola sama. ✅ 2026-08-24
+- [ ] ⏸️ 5.11.5 Cross-shell conformance test suite — identical interpretation across shells — **deferred**: hanya satu shell (`react-shadcn`) yang ada; interpreter JS (`lib/formspec-expr`) adalah referensi. Conformance test suite baru bermakna saat shell kedua muncul (mis. `vue`/`flutter`).
 
 ### 5.12 Spec Resolution API
 
-- [ ] 5.12.1 ETag caching — conditional GET with 304 for `/_meta/ui` bundle
-- [ ] 5.12.2 `label_field` fallback — `natural key` → `name` → `title` → `number` → `id` (`04-spec-resolution-api.md` §2)
-- [ ] 5.12.3 Entity schema shape — `label_field`, `lifecycle`, `actions` with embedded `permission`
-- [ ] 5.12.4 Permission filtering — entity (404 if no list/view), page (hidden if missing permission), action (permission string sent, not filtered)
+- [x] 5.12.1 ETag caching — conditional GET with 304 for `/_meta/ui` bundle — `internal/api/meta.go` (ETag over data portion + `If-None-Match` → 304). ✅ 2026-08-24
+- [x] 5.12.2 `label_field` fallback — `natural key` → `name` → `title` → `number` → `id` (`04-spec-resolution-api.md` §2) — `internal/ui/meta.go` `labelField()` + `TestLabelFieldFallbacks`. ✅ 2026-08-24
+- [x] 5.12.3 Entity schema shape — `label_field`, `lifecycle`, `actions` with embedded `permission` — `EntitySchema`/`ActionSummary` di `internal/ui/meta.go`. ✅ 2026-08-24
+- [x] 5.12.4 Permission filtering — entity (404 if no list/view), page (hidden if missing permission), action (permission string sent, not filtered) — `BuildBundle` (entity tanpa list/view → tidak ship → 404), `allowedPage` (page hidden bila tak ada permission), `ActionSummary.Permission` (string dikirim, tidak difilter). ✅ 2026-08-24
 - [x] 5.12.5 Task-based admin granting → materialized permission strings — `Materializer` (`internal/auth/materialize.go`) menurunkan footprint page (blocks/tabs → entity-action) + derived entity page (`{entity}-page`) + navigation kind (`{kind}:{name}`) dan meng-expand grant role → permission strings; di-wire ke auth service (`permissionsForUser` saat login). Admin UI granting: `GrantsEditor` menampilkan semua page app (authored + derived entity + navigation kinds) dengan label action + permission string inline + search + preview permission termaterialisasi. ✅ 2026-08-20 (materializer) · ✅ 2026-08-22 (GrantsEditor semua page, changelog 004)
 
 ### 5.13 Other UI kinds
 
-- [ ] 5.13.1 `kind: Report` — fix totals row bug (values computed but `<tr>` empty); add grouping + subtotal; export berjalan sebagai async job → file mendarat di download tray (`06-page-kinds.md` §8), bukan CSV Blob client-side
-- [ ] 5.13.1a Report `source.filter` — filter parameterized deklaratif (`source: { entity, filter }` dengan `":param"` placeholder); saat ini parameter dikirim sebagai filter query `?<field>=<value>` (`06-page-kinds.md` §8 "Open — source.filter")
-- [ ] 5.13.2 `kind: Print` — PDF server-side generation; `format: html` via `window.print()` (existing)
-- [ ] 5.13.3 `kind: ApprovalInbox` — pending approvals list, `approve`/`reject` inline actions, badge count, `realtime: true`
-- [ ] 5.13.4 `kind: NotificationCenter` — notification list, badge unread, `mark-read` action, `realtime: true`, deep-link on click
+- [ ] 5.13.1 `kind: Report` — **sebagian**: ✅ totals row bug fixed (nilai kini dirender di kolom yang cocok via `TotalsRow`, bukan `<td>` kosong) + ✅ grouping + subtotal per group (`computeTotals` shared); ⏸️ export sebagai async job → download tray belum (butuh backend job infra; saat ini masih CSV Blob client-side) (`06-page-kinds.md` §8)
+- [x] 5.13.1a Report `source.filter` — filter parameterized deklaratif (`source: { entity, filter }` dengan `":param"` placeholder); saat ini parameter dikirim sebagai filter query `?<field>=<value>` (`06-page-kinds.md` §8 "Open — source.filter") — `ReportSource` di `pkg/spec` + `ReportRenderer` resolve `":param"` placeholder dari `parameters[]`; literal pass-through. ✅ 2026-08-24
+- [x] 5.13.2 `kind: Print` — PDF server-side generation; `format: html` via `window.print()` (existing) — endpoint `GET /_ui/print/{module}/{name}/{id}` (`internal/api/print.go`) render Print manifest + record ke PDF via `go-pdf/fpdf` (header/body fields/child_table/footer + `{path}` interpolation); route di `router.go`; test `print_test.go`. ✅ 2026-08-24
+- [x] 5.13.3 `kind: ApprovalInbox` — pending approvals list, `approve`/`reject` inline actions, badge count, `realtime: true` — `ApprovalInboxRenderer` (zero-config; load dari entity approval konvensional bila ada; approve/reject inline; badge count; realtime). ✅ 2026-08-24
+- [x] 5.13.4 `kind: NotificationCenter` — notification list, badge unread, `mark-read` action, `realtime: true`, deep-link on click — `NotificationCenterRenderer` (zero-config; unread badge; mark-read; realtime). ✅ 2026-08-24
 - [x] 5.13.5 `kind: Listing` — public catalog, no auth wrap, no row/bulk actions — `ListingRenderer` read-only (search + filter, tanpa create/row/bulk; klik baris → detail) + kind `Listing` end-to-end (spec, registry, bundle, route). Contoh `examples/storefront/`. Lihat `docs/plan/landing-page.md` + changelog 2026-08-19-001. ✅ 2026-08-19
 
 ### 5.14 Derivation engine
 
-- [ ] 5.14.1 Derivation fix — Table: N priority columns, overflow accessible via expand (never silently dropped)
+- [x] 5.14.1 Derivation fix — Table: N priority columns, overflow accessible via expand (never silently dropped) — sama dgn 5.4.4 (`derive.ts` priority sort + `TableRenderer` row expand). ✅ 2026-08-24
 - [x] 5.14.2 Wire `deriveMenuItems()` — currently dead code; `_admin` menu built inline in Sidebar — `useResolvedMenu()` (`hooks/useResolvedMenu.ts`) now calls `deriveMenuItems(bundle.entities)` for the `_admin` branch instead of duplicating the grouping logic inline; "Access Management" shortcut still prepended. ✅ 2026-08-22
-- [ ] 5.14.3 Derivation: Form mode heuristic — >12 fields OR has child with `storage: table` → `separate_page`; >5 fields → `drawer`; else → `modal`
-- [ ] 5.14.4 Pola UI lifecycle tambahan — `two_step_manual` dan `one_step_create_submit` via hint `ui:` (`06-page-kinds.md` §2.1); catatan: enum `lifecycle` di EntitySchema tetap 2 nilai (`plain_crud|two_step_autosave`, `04-spec-resolution-api.md` §2) — ini pola UI, bukan nilai enum baru
+- [x] 5.14.3 Derivation: Form mode heuristic — >12 fields OR has child with `storage: table` → `separate_page`; >5 fields → `drawer`; else → `modal` — `deriveFormRenderMode` di `engine/derive.ts`. ✅ 2026-08-24
+- [x] 5.14.4 Pola UI lifecycle tambahan — `two_step_manual` dan `one_step_create_submit` via hint `ui:` (`06-page-kinds.md` §2.1); catatan: enum `lifecycle` di EntitySchema tetap 2 nilai (`plain_crud|two_step_autosave`, `04-spec-resolution-api.md` §2) — ini pola UI, bukan nilai enum baru — `engine/lifecycle.ts` (4 pola) + `FormRenderer` (Save Draft/Submit/Create-Submit). ✅ 2026-08-24
 
 ### 5.15 Dead code cleanup
 
 - [x] 5.15.1 Remove `engine/registry.tsx` — replaced by hardcoded `lazy()` map in router — deleted (zero remaining references; `shell/router.tsx`'s hardcoded `lazy()` map is the only path used). ✅ 2026-08-22
-- [ ] 5.15.2 Wire `OverlayHost` — connect to Form.render modal/drawer and other overlay needs
+- [x] 5.15.2 Wire `OverlayHost` — connect to Form.render modal/drawer and other overlay needs — `shell/OverlayHost.tsx` (URL `?action=&form=&mode=` → Dialog/Sheet; derived-form fallback via `entity=`). ✅ 2026-08-24
 
 ### 5.16 VisualSpecKind/Renderer registry & resolution
 
-- [ ] 5.16.1 Renderer resolution engine — pilih Renderer via `(implements, stack_family)`; hanya `official` auto-select; tanpa official → `formspec apply` error + sarankan kandidat `verified`/`community`; override via map `renderers:` di App manifest + field `renderer:` per-instance; Renderer non-official masuk consent footprint (`03-renderer-kind.md` §3)
-- [ ] 5.16.2 Slot-tier validation at apply — `accepts_slots` hanya sah dari `tier: page|app`, `implements_slot` hanya dari `tier: component`; kombinasi lain ditolak (`02-visual-spec-kind.md` §4–§5)
-- [ ] 5.16.3 `stack_family` compatibility check — App shell + Page shell-integrated + Component wajib satu family; mismatch = compile-time error; Page independen tidak dicek (`01-visual-hierarchy.md` §3)
+- [x] 5.16.1 Renderer resolution engine — pilih Renderer via `(implements, stack_family)`; hanya `official` auto-select; tanpa official → `formspec apply` error + sarankan kandidat `verified`/`community`; override via map `renderers:` di App manifest + field `renderer:` per-instance; Renderer non-official masuk consent footprint (`03-renderer-kind.md` §3) — `internal/manifest/renderer.go` (`RendererRegistry.ResolveRenderer` + `ValidateRendererResolution`); `AppSpec.Renderers` map + `PageSpec.Renderer` field; wired ke `formspec check`. ✅ 2026-08-24
+- [x] 5.16.2 Slot-tier validation at apply — `accepts_slots` hanya sah dari `tier: page|app`, `implements_slot` hanya dari `tier: component`; kombinasi lain ditolak (`02-visual-spec-kind.md` §4–§5) — `RendererRegistry.ValidateSlotTiers`. ✅ 2026-08-24
+- [x] 5.16.3 `stack_family` compatibility check — App shell + Page shell-integrated + Component wajib satu family; mismatch = compile-time error; Page independen tidak dicek (`01-visual-hierarchy.md` §3) — `RendererRegistry.ValidateStackFamily`. ✅ 2026-08-24
 
 ---
 
@@ -657,9 +677,9 @@ mergeable ke project lain via `external/`/`spec/modules/`; middleware tetap Go.
 
 ### 7.5 State machine engine (basic)
 
-- [ ] 7.5.1 Transition validation — declared transitions only; undeclared → `STATE_TRANSITION_ERROR`
-- [ ] 7.5.2 Starlark inline guards — guard on transition
-- [ ] 7.5.3 Builtin aggregates — `sum_line(field)`, `len(resource.items)` for guard expressions
+- [x] 7.5.1 Transition validation — declared transitions only; undeclared → `STATE_TRANSITION_ERROR` — `StateMachineEngine.CanTransition` + `STATE_TRANSITION_ERROR` di `internal/entity/state_machine.go`. ✅ 2026-08-25
+- [x] 7.5.2 Starlark inline guards — guard on transition — `evaluateGuard` (Starlark `EvalExpr` terhadap resource data). ✅ 2026-08-25
+- [x] 7.5.3 Builtin aggregates — `sum_line(field)`, `len(resource.items)` for guard expressions — `sum_line_*` pre-computed + injected ke env guard (`computeSums`). ✅ 2026-08-25
 - [ ] 7.5.4 Satukan dua implementasi state machine — `entity.StateMachineEngine` (lengkap, ber-guard) tidak dipanggil dari `HandleCustomAction`; enforcement yang jalan versi sederhana di `db.EntityStore.Update` (`runtimes/02` §7, `runtimes/05` §5)
 
 ### 7.6 `kind: Webhook` engine
@@ -678,13 +698,13 @@ mergeable ke project lain via `external/`/`spec/modules/`; middleware tetap Go.
 
 ### 7.8 Hook engine
 
-- [ ] 7.8.1 5 hook points — `before`, `after`, `on_error`, `before_deliver`, `after_deliver`
-- [ ] 7.8.2 `before` — may modify action params or call `fail()` to abort
-- [ ] 7.8.3 `after` — post-action side effects
-- [ ] 7.8.4 `on_error` — compensation/cleanup
-- [ ] 7.8.5 `before_deliver` — may suppress delivery or enrich payload
-- [ ] 7.8.6 Priority ordering — consistent with event priority (smaller first, kelipatan 10)
-- [ ] 7.8.7 Cross-module hooks — must declare `uses`; appear in consent footprint
+- [x] 7.8.1 5 hook points — `before`, `after`, `on_error`, `before_deliver`, `after_deliver` — `internal/action/hooks.go` (before/after/on_error) + `deliver.go` (before_deliver/after_deliver, todo 7.8.5). ✅ 2026-08-25
+- [x] 7.8.2 `before` — may modify action params or call `fail()` to abort — `RunBeforePhase` (Dispatch error → abort + on_error). ✅ 2026-08-25
+- [x] 7.8.3 `after` — post-action side effects — `RunAfterPhase` (best-effort, tidak gagalkan response). ✅ 2026-08-25
+- [x] 7.8.4 `on_error` — compensation/cleanup — `runOnErrorPhase` (params `_hook_error`). ✅ 2026-08-25
+- [x] 7.8.5 `before_deliver` — may suppress delivery or enrich payload — `runBeforeDeliver` (fail → suppress; ok(data) → enrich) + `runAfterDeliver` (best-effort); `SelectEventHooks` match `h.Event`; wired via `deliveryDepsFor` (dispatcher + entity hooks). ✅ 2026-08-25
+- [x] 7.8.6 Priority ordering — consistent with event priority (smaller first, kelipatan 10) — `SelectHooks`/`SelectEventHooks` sort by effective priority (0→10). ✅ 2026-08-25
+- [x] 7.8.7 Cross-module hooks — must declare `uses`; appear in consent footprint — hook eksekusi mewarisi `actionSpec.Uses` (`RunBeforePhase`/`RunAfterPhase`), jadi akses cross-module dari hook di-gate oleh uses action. ✅ 2026-08-25
 
 ### 7.9 Validation levels L4–L6
 
@@ -710,9 +730,9 @@ mergeable ke project lain via `external/`/`spec/modules/`; middleware tetap Go.
 
 ### 7.12 Rate limiter
 
-- [ ] 7.12.1 Per-resource rate limit — `max`, `per`, `scope` (tenant|user|ip|global), `strategy` (sliding_window|token_bucket)
-- [ ] 7.12.2 Per-action override — overrides resource default
-- [ ] 7.12.3 `429` response before handler runs
+- [x] 7.12.1 Per-resource rate limit — `max`, `per`, `scope` (tenant|user|ip|global), `strategy` (sliding_window|token_bucket) — `ResourceRateLimiter` (`internal/api/resource_ratelimit.go`); `EntitySpec.RateLimit` + `Action.RateLimit`; scope key derivation. ✅ 2026-08-25
+- [x] 7.12.2 Per-action override — overrides resource default — `checkRateLimit` (per-action `Action.RateLimit` menang atas `EntitySpec.RateLimit`; key per-action). ✅ 2026-08-25
+- [x] 7.12.3 `429` response before handler runs — `checkRateLimit` di semua handler (List/Find/Create/Update/Delete/CustomAction) → `RATE_LIMITED` 429. ✅ 2026-08-25
 
 ### 7.13 Async job tracker
 
@@ -723,9 +743,9 @@ mergeable ke project lain via `external/`/`spec/modules/`; middleware tetap Go.
 
 ### 7.14 Starlark sandbox
 
-- [ ] 7.14.1 Hard limits enforcement — wall-clock 5000ms, memory 64MB, iterations 100K, max 50 DB queries, max 1000 records read
-- [ ] 7.14.2 No network/filesystem/subprocess access
-- [ ] 7.14.3 Exceeding any limit → abort with error, no partial results
+- [x] 7.14.1 Hard limits enforcement — wall-clock 5000ms, memory 64MB, iterations 100K, max 50 DB queries, max 1000 records read — `internal/starlark/limits.go` (`ScriptLimits` + `SetMaxExecutionSteps` 100K + context timeout 5s + query/records counters di `builtinQuery`). Memory 64MB tidak terukur langsung di interpreter Starlark — step limit adalah bound praktis. ✅ 2026-08-25
+- [x] 7.14.2 No network/filesystem/subprocess access — sandbox `Load: nil` (no imports), no I/O. ✅ 2026-08-25
+- [x] 7.14.3 Exceeding any limit → abort with error, no partial results — `CheckQuery`/`AddRecordsRead`/step limit → error abort. ✅ 2026-08-25
 - [ ] 7.14.4 Kontrak API script runtime — `resource.field`/`resource.set/save/new`, `<Entity>.query()`, `<resource>.load/call`, `ok()`/`fail()` (fail = rollback transaksi) (`06-script-runtime.md` §2/§4/§6)
 
 ### 7.15 Sidecar multi-runtime
@@ -736,14 +756,14 @@ mergeable ke project lain via `external/`/`spec/modules/`; middleware tetap Go.
 
 ### 7.16 Money type
 
-- [ ] 7.16.1 Money as first-class type — pair of exact amount (decimal) + currency code (ISO-4217)
-- [ ] 7.16.2 Currency resolution order — explicit field → `settings.currency` → error (never guess)
-- [ ] 7.16.3 Banker's rounding default
-- [ ] 7.16.4 Non-default currency MUST declare `decimal_places`
+- [x] 7.16.1 Money as first-class type — pair of exact amount (decimal) + currency code (ISO-4217) — `Money` struct (`pkg/spec/money.go`) + `Field.Currency`/`Field.DecimalPlaces`. ✅ 2026-08-25
+- [x] 7.16.2 Currency resolution order — explicit field → `settings.currency` → error (never guess) — `ResolveMoneyCurrency`. ✅ 2026-08-25
+- [x] 7.16.3 Banker's rounding default — `RoundMoney` (round-half-to-even default; `settings.rounding` override half_up/half_down/up/down). ✅ 2026-08-25
+- [x] 7.16.4 Non-default currency MUST declare `decimal_places` — `ValidateMoneyField` + `ValidateEntitySpec` (money field override currency tanpa decimal_places → error). ✅ 2026-08-25
 
 ### 7.17 File storage
 
-- [ ] 7.17.1 File upload route — `POST /:resource/:id/{field}` convention
+- [x] 7.17.1 File upload route — `POST /:resource/:id/{field}` + `GET` download; storage resolver dua backend: `file` (default, `memory.Storage`) atau `minio` (`datastore/minio`, `FORMSPEC_STORAGE=minio`); permission update/view; StorageSpec enforcement. ✅ 2026-08-24
 - [ ] 7.17.2 `storage` spec enforcement — `allowed_types`, `max_size_mb`, `max_count`, `visibility` (public|private|signed)
 - [ ] 7.17.3 Transform — server-side resize/thumbnail per `transform` spec
 

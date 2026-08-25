@@ -11,8 +11,9 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { useNavigate, useParams } from "react-router-dom"
 import { useSurface } from "@/hooks/useSurface"
 import { z } from "zod"
-import { toast } from "sonner"
-import { ArrowLeft, Save, Loader2 } from "lucide-react"
+import { buildZodField } from "@/lib/zod-schema"
+import { toast } from "@/lib/ui"
+import { ArrowLeft, Save, Loader2, AlertTriangle } from "lucide-react"
 
 import type { EntitySchema, FormSpec } from "@/types/manifest"
 import { FormaApiError } from "@/types/manifest"
@@ -25,12 +26,16 @@ import {
   evalVisibleWhen,
   evalRequiredWhen,
   evalCompute,
+  strictEvalFormSpecExpr,
 } from "@/lib/formspec-expr"
 import { apiGet, apiPost, apiPatch } from "@/lib/api"
 import { titleCase } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import ConfirmDialog from "@/components/ui/confirm-dialog"
 import { TextInput } from "@/widgets/TextInput"
+import { TextareaInput } from "@/widgets/TextareaInput"
+import { RichText } from "@/widgets/RichText"
+import { FileInput } from "@/widgets/FileInput"
 import { NumberInput } from "@/widgets/NumberInput"
 import { Select } from "@/widgets/Select"
 import { Switch } from "@/widgets/Switch"
@@ -39,6 +44,11 @@ import { DateInput } from "@/widgets/DateInput"
 import { JsonInput } from "@/widgets/JsonInput"
 import { ChildTable } from "@/widgets/ChildTable"
 import { GrantsEditor } from "@/widgets/GrantsEditor"
+import { RadioGroup } from "@/widgets/RadioGroup"
+import { Combobox } from "@/widgets/Combobox"
+import { PasswordInput } from "@/widgets/PasswordInput"
+import { SliderInput } from "@/widgets/SliderInput"
+import { TagsInput } from "@/widgets/TagsInput"
 
 interface FormRendererProps {
   entity: EntitySchema
@@ -58,6 +68,21 @@ interface FormRendererProps {
   inOverlay?: boolean
   // Called after successful save when inOverlay is true.
   onClose?: () => void
+}
+
+/**
+ * Strict field-expression evaluation (5.11.3). Returns the value plus an
+ * `error` when the expression failed to parse or produced eval warnings —
+ * the renderer surfaces that as a visible error state instead of silently
+ * failing safe.
+ */
+function evalFieldExpr(
+  expr: string | undefined,
+  context: Record<string, unknown>,
+): { value: unknown; error?: string } {
+  if (!expr) return { value: undefined }
+  const result = strictEvalFormSpecExpr(expr, context as any)
+  return { value: result.value, error: result.error }
 }
 
 export default function FormRenderer({
@@ -104,7 +129,7 @@ export default function FormRenderer({
       for (const field of section.fields) {
         const entityField = entity.fields.find((f) => f.name === field.name)
         if (!entityField) continue
-        shape[field.name] = buildZodField(entityField, field)
+        shape[field.name] = buildZodField(entityField)
       }
     }
     return z.object(shape)
@@ -417,20 +442,59 @@ export default function FormRenderer({
                     fields: formValues as Record<string, unknown>,
                     user: me,
                   }
+                  // Strict eval (5.11.3): surface expression failures as a
+                  // visible error state instead of silently failing safe.
+                  const readonlyExpr = evalFieldExpr(
+                    field.readonly_when,
+                    fieldContext,
+                  )
+                  const requiredExpr = evalFieldExpr(
+                    field.required_when,
+                    fieldContext,
+                  )
+                  const visibleExpr = evalFieldExpr(
+                    field.visible_when,
+                    fieldContext,
+                  )
+                  const exprError =
+                    readonlyExpr.error ??
+                    requiredExpr.error ??
+                    visibleExpr.error
                   const isReadonly =
                     field.read_only ??
-                    evalReadonlyWhen(field.readonly_when, fieldContext as any)
+                    (readonlyExpr.error
+                      ? false
+                      : evalReadonlyWhen(
+                          field.readonly_when,
+                          fieldContext as any,
+                        ))
                   const isRequired =
                     entityField.required ||
-                    evalRequiredWhen(field.required_when, fieldContext as any)
+                    (requiredExpr.error
+                      ? false
+                      : evalRequiredWhen(
+                          field.required_when,
+                          fieldContext as any,
+                        ))
                   const isVisible = field.visible_when
-                    ? evalVisibleWhen(field.visible_when, fieldContext as any)
+                    ? visibleExpr.error
+                      ? true // keep visible so the error state is shown
+                      : evalVisibleWhen(field.visible_when, fieldContext as any)
                     : true
 
                   if (!isVisible) return null
 
                   return (
                     <div key={field.name} className="flex flex-col gap-2">
+                      {exprError && (
+                        <div
+                          className="flex items-start gap-1.5 rounded-md border border-destructive/40 bg-destructive/5 px-2 py-1 text-xs text-destructive"
+                          title={`FormSpecExpr error: ${exprError}`}
+                        >
+                          <AlertTriangle className="size-3.5 mt-0.5 shrink-0" />
+                          <span>Expression error: {exprError}</span>
+                        </div>
+                      )}
                       <label className="text-sm font-medium leading-snug peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
                         {field.label ?? field.name}
                         {isRequired && (
@@ -446,6 +510,10 @@ export default function FormRenderer({
                         }
                         readonly={isReadonly || isView}
                         currentModule={entity.module}
+                        entityModule={entity.module}
+                        entityName={entity.name}
+                        recordId={id}
+                        fieldName={field.name}
                         onChange={(value) =>
                           form.setValue(field.name as any, value, {
                             shouldValidate: true,
@@ -575,6 +643,10 @@ function FormFieldWidget({
   error,
   readonly,
   currentModule,
+  entityModule,
+  entityName,
+  recordId,
+  fieldName,
   onChange,
 }: {
   field: import("@/types/manifest").FormField
@@ -583,13 +655,85 @@ function FormFieldWidget({
   error?: string
   readonly: boolean
   currentModule?: string
+  entityModule?: string
+  entityName?: string
+  recordId?: string
+  fieldName?: string
   onChange: (value: any) => void
 }) {
   const widget = field.widget ?? entityField.type
 
   switch (widget) {
+    case "radio-group":
+      return (
+        <RadioGroup
+          value={(value as string) ?? ""}
+          onChange={(v) => onChange(v)}
+          options={entityField.enum_values ?? []}
+          readonly={readonly}
+          error={error}
+        />
+      )
+
+    case "combobox":
+      return (
+        <Combobox
+          value={(value as string) ?? ""}
+          onChange={(v) => onChange(v)}
+          options={entityField.enum_values ?? []}
+          placeholder={field.placeholder}
+          readonly={readonly}
+          error={error}
+        />
+      )
+
+    case "password":
+      return (
+        <PasswordInput
+          value={(value as string) ?? ""}
+          onChange={(v) => onChange(v)}
+          placeholder={field.placeholder}
+          readonly={readonly}
+          error={error}
+        />
+      )
+
+    case "slider":
+      return (
+        <SliderInput
+          value={(value as number | null) ?? null}
+          onChange={(v) => onChange(v)}
+          min={
+            entityField.rules?.find((r) => r.name === "min")?.value as
+              | number
+              | undefined
+          }
+          max={
+            entityField.rules?.find((r) => r.name === "max")?.value as
+              | number
+              | undefined
+          }
+          step={
+            entityField.type === "decimal" && entityField.scale
+              ? 1 / Math.pow(10, entityField.scale)
+              : 1
+          }
+          readonly={readonly}
+          error={error}
+        />
+      )
+
+    case "tags":
+      return (
+        <TagsInput
+          value={(value as string) ?? ""}
+          onChange={(v) => onChange(v)}
+          placeholder={field.placeholder}
+          readonly={readonly}
+          error={error}
+        />
+      )
     case "input":
-    case "textarea":
       return (
         <TextInput
           value={(value as string) ?? ""}
@@ -605,9 +749,36 @@ function FormFieldWidget({
         />
       )
 
+    case "textarea":
+      return (
+        <TextareaInput
+          value={(value as string) ?? ""}
+          onChange={(v) => onChange(v)}
+          placeholder={field.placeholder}
+          readonly={readonly}
+          maxLength={
+            entityField.rules?.find((r) => r.name === "max_length")?.value as
+              | number
+              | undefined
+          }
+          error={error}
+        />
+      )
+
+    case "richtext":
+      return (
+        <RichText
+          value={(value as string) ?? ""}
+          onChange={(v) => onChange(v)}
+          readonly={readonly}
+          error={error}
+        />
+      )
+
     case "number":
     case "integer":
     case "decimal":
+    case "decimalinput":
       return (
         <NumberInput
           value={(value as number | null) ?? null}
@@ -679,6 +850,7 @@ function FormFieldWidget({
     case "datepicker":
     case "date":
     case "datetime":
+    case "datetimeinput":
       return (
         <DateInput
           value={(value as string) ?? ""}
@@ -697,6 +869,23 @@ function FormFieldWidget({
           placeholder={field.placeholder}
           readonly={readonly}
           error={error}
+        />
+      )
+
+    case "fileinput":
+    case "file":
+      return (
+        <FileInput
+          value={(value as string) ?? ""}
+          onChange={(v) => onChange(v)}
+          readonly={readonly}
+          error={error}
+          entityModule={entityModule}
+          entityName={entityName}
+          recordId={recordId}
+          fieldName={fieldName}
+          maxSizeMB={entityField.storage?.max_size_mb}
+          allowedTypes={entityField.storage?.allowed_types}
         />
       )
 
@@ -737,94 +926,5 @@ function FormFieldWidget({
 }
 
 // ── Zod schema builder ──
-
-function buildZodField(
-  entityField: import("@/types/manifest").Field,
-  _formField: import("@/types/manifest").FormField,
-): z.ZodTypeAny {
-  let schema: z.ZodTypeAny
-
-  switch (entityField.type) {
-    case "string":
-      schema = z.string()
-      if (entityField.required)
-        schema = (schema as z.ZodString).min(1, "Required")
-      else schema = (schema as z.ZodString).optional().or(z.literal(""))
-      break
-    case "integer":
-      schema = z.number({ message: "Must be a number" })
-      if (!entityField.required) schema = schema.nullable().optional()
-      break
-    case "decimal":
-      schema = z.number({ message: "Must be a number" })
-      if (!entityField.required) schema = schema.nullable().optional()
-      break
-    case "boolean":
-      schema = z.boolean()
-      if (!entityField.required) schema = schema.optional()
-      break
-    case "enum":
-      schema = z.string()
-      if (entityField.required)
-        schema = (schema as z.ZodString).min(1, "Required")
-      else schema = (schema as z.ZodString).optional().or(z.literal(""))
-      break
-    case "date":
-    case "datetime":
-      schema = z.string()
-      if (!entityField.required) schema = schema.optional().or(z.literal(""))
-      break
-    case "relation":
-      schema = z.string()
-      if (entityField.required)
-        schema = (schema as z.ZodString).min(1, "Required")
-      else schema = (schema as z.ZodString).optional().or(z.literal(""))
-      break
-    default:
-      schema = z.any().optional()
-  }
-
-  // Apply rules
-  for (const rule of entityField.rules ?? []) {
-    switch (rule.name) {
-      case "min_length":
-        if (schema instanceof z.ZodString) {
-          schema = schema.min(
-            rule.value as number,
-            `Minimum ${rule.value} characters`,
-          )
-        }
-        break
-      case "max_length":
-        if (schema instanceof z.ZodString) {
-          schema = schema.max(
-            rule.value as number,
-            `Maximum ${rule.value} characters`,
-          )
-        }
-        break
-      case "min":
-        if (schema instanceof z.ZodNumber) {
-          schema = (schema as any).min(rule.value as number)
-        }
-        break
-      case "max":
-        if (schema instanceof z.ZodNumber) {
-          schema = (schema as any).max(rule.value as number)
-        }
-        break
-      case "email":
-        if (schema instanceof z.ZodString) {
-          schema = schema.email("Invalid email")
-        }
-        break
-      case "pattern":
-        if (schema instanceof z.ZodString && typeof rule.value === "string") {
-          schema = schema.regex(new RegExp(rule.value), "Invalid format")
-        }
-        break
-    }
-  }
-
-  return schema
-}
+// buildZodField lives in @/lib/zod-schema (shared with the headless form
+// engine, todo 5.9.5).

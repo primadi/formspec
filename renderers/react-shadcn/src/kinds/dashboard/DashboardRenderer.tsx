@@ -1,12 +1,27 @@
 // ─── Dashboard Renderer ───
 //
 // Renders kind: Dashboard — a canvas of stat/chart/list widgets.
-// Supports customizable layouts (drag-and-drop, Fase 4.F6).
+// Supports customizable layouts (5.7.3): user add/remove/reorder widgets from
+// a permission-filtered catalog (5.7.4); the layout is stored as a runtime
+// preference (never written back to YAML).
 //
 // Design doc §5.5 Dashboard kind (F4)
 
 import { useEffect, useMemo, useState } from "react"
-import { Loader2 } from "lucide-react"
+import { Loader2, GripVertical, X } from "lucide-react"
+import {
+  DndContext,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  closestCorners,
+  type DragEndEvent,
+} from "@dnd-kit/core"
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable"
 import type {
   Entry,
   DashboardSpec,
@@ -16,12 +31,15 @@ import type {
 } from "@/types/manifest"
 import { useMetaStore } from "@/stores/meta"
 import { useSessionStore } from "@/stores/session"
+import { usePrefsStore, type DashboardLayoutPref } from "@/stores/prefs"
 import { can as checkPermission } from "@/engine/permissions"
 import { resolveEntityRef } from "@/engine/entityRef"
 import { apiList, buildListParams } from "@/lib/api"
 import { useRealtime } from "@/hooks/useRealtime"
 import { createFormatter, type Formatter } from "@/lib/format"
 import { Badge } from "@/widgets/Badge"
+import { Select } from "@/components/ui/select"
+import { cn } from "@/lib/utils"
 
 interface DashboardRendererProps {
   entry: Entry<DashboardSpec>
@@ -31,14 +49,22 @@ export default function DashboardRenderer({ entry }: DashboardRendererProps) {
   const me = useSessionStore((s) => s.me)
   const getWidget = useMetaStore((s) => s.getWidget)
   const getEntity = useMetaStore((s) => s.getEntity)
+  const allWidgets = useMetaStore((s) => s.bundle?.widgets ?? [])
+  const savedLayout = usePrefsStore((s) => s.dashboardLayouts[entry.spec.title])
+  const setDashboardLayout = usePrefsStore((s) => s.setDashboardLayout)
 
+  const customizable = !!entry.spec.customizable
+
+  // Effective widget list: saved runtime preference (customizable) wins over
+  // the YAML `widgets` list (5.7.3).
+  const effectiveWidgets: DashboardLayoutPref[] =
+    customizable && savedLayout ? savedLayout : entry.spec.widgets
+
+  // Resolve each placement to its widget meta + permission check (5.7.4).
   const widgets = useMemo(
     () =>
-      entry.spec.widgets
-        .map((w) => {
-          const meta = getWidget(w.ref)
-          return { placement: w, meta }
-        })
+      effectiveWidgets
+        .map((w) => ({ placement: w, meta: getWidget(w.ref) }))
         .filter((w) => {
           if (!w.meta?.spec.entity) return true
           if (!me) return false
@@ -49,8 +75,61 @@ export default function DashboardRenderer({ entry }: DashboardRendererProps) {
           const perm = `${module}.${getEntity(module, name)?.plural ?? "list"}`
           return checkPermission(perm, me.permissions)
         }),
-    [entry.spec.widgets, getWidget, me, getEntity],
+    [effectiveWidgets, getWidget, me, getEntity],
   )
+
+  // Catalog (5.7.4): every widget the user may add, permission-filtered on
+  // the underlying entity's list/view permission, minus ones already placed.
+  const catalog = useMemo(
+    () =>
+      allWidgets
+        .filter((w) => {
+          if (!w.spec.entity) return true
+          if (!me) return false
+          const [module, name] = resolveEntityRef(w.spec.entity, w.module)
+          const perm = `${module}.${getEntity(module, name)?.plural ?? "list"}`
+          return checkPermission(perm, me.permissions)
+        })
+        .filter((w) => !effectiveWidgets.some((ew) => ew.ref === w.name)),
+    [allWidgets, effectiveWidgets, me, getEntity],
+  )
+
+  // ── Customization actions (5.7.3) ──
+  const saveLayout = (widgets: DashboardLayoutPref[]) =>
+    setDashboardLayout(entry.spec.title, widgets)
+
+  const addWidget = (ref: string) => {
+    const meta = getWidget(ref)
+    const w = meta?.spec.size?.w ?? 1
+    saveLayout([
+      ...effectiveWidgets,
+      { ref, layout: { x: 0, y: effectiveWidgets.length, w, h: 1 } },
+    ])
+  }
+
+  const removeWidget = (ref: string) => {
+    saveLayout(effectiveWidgets.filter((w) => w.ref !== ref))
+  }
+
+  const moveWidget = (from: number, to: number) => {
+    const next = [...effectiveWidgets]
+    const [moved] = next.splice(from, 1)
+    next.splice(to, 0, moved)
+    saveLayout(next)
+  }
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+  )
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const from = effectiveWidgets.findIndex((w) => w.ref === active.id)
+    const to = effectiveWidgets.findIndex((w) => w.ref === over.id)
+    if (from === -1 || to === -1) return
+    moveWidget(from, to)
+  }
 
   return (
     <div className="space-y-4">
@@ -65,54 +144,122 @@ export default function DashboardRenderer({ entry }: DashboardRendererProps) {
         )}
       </div>
 
-      {entry.spec.customizable && (
-        <p className="text-xs text-muted-foreground">
-          This dashboard is customizable. Drag widgets to rearrange.
-        </p>
+      {customizable && (
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs text-muted-foreground">
+            Dashboard dapat dikustomisasi — seret kartu untuk menyusun ulang,
+            tambah/hapus widget dari katalog.
+          </p>
+          {catalog.length > 0 && (
+            <Select
+              value=""
+              onChange={(v) => v && addWidget(v)}
+              options={catalog.map((w) => ({
+                value: w.name,
+                label: w.spec.title,
+              }))}
+              placeholder="+ Tambah widget"
+              className="w-48"
+            />
+          )}
+        </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {widgets.map((w, idx) => (
-          <DashboardWidgetCard
-            key={`${w.placement.ref}-${idx}`}
-            placement={w.placement}
-            meta={w.meta}
-            realtime={!!entry.spec.realtime}
-          />
-        ))}
-      </div>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCorners}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext
+          items={widgets.map((w) => w.placement.ref)}
+          strategy={verticalListSortingStrategy}
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {widgets.map((w) => (
+              <SortableDashboardCard
+                key={w.placement.ref}
+                id={w.placement.ref}
+                placement={w.placement}
+                meta={w.meta}
+                realtime={!!entry.spec.realtime}
+                customizable={customizable}
+                onRemove={
+                  customizable ? () => removeWidget(w.placement.ref) : undefined
+                }
+              />
+            ))}
+          </div>
+        </SortableContext>
+      </DndContext>
     </div>
   )
 }
 
-function DashboardWidgetCard({
+function SortableDashboardCard({
+  id,
   placement,
   meta,
   realtime,
+  customizable,
+  onRemove,
 }: {
-  placement: {
-    ref: string
-    layout: WidgetLayout
-    config?: Record<string, unknown>
-  }
+  id: string
+  placement: DashboardLayoutPref
   meta?: import("@/types/manifest").Entry<import("@/types/manifest").WidgetSpec>
   realtime?: boolean
+  customizable?: boolean
+  onRemove?: () => void
 }) {
-  const spec = meta?.spec
+  const { attributes, listeners, setNodeRef, transform, transition } =
+    useSortable({ id })
 
   return (
     <div
-      className="rounded-md border bg-card"
+      ref={setNodeRef}
       style={{
+        transform: transform
+          ? `translate3d(${transform.x}px, ${transform.y}px, 0)`
+          : undefined,
+        transition,
         gridColumn: `span ${Math.min(placement.layout.w, 3)}`,
       }}
+      className={cn("rounded-md border bg-card", customizable && "group")}
     >
       <div className="border-b px-4 py-2 flex items-center justify-between">
-        <h3 className="text-sm font-medium">{spec?.title ?? placement.ref}</h3>
-        {spec?.type && <Badge value={spec.type} />}
+        <div className="flex items-center gap-2 min-w-0">
+          {customizable && (
+            <button
+              type="button"
+              {...attributes}
+              {...listeners}
+              className="cursor-grab text-muted-foreground hover:text-foreground shrink-0"
+              title="Seret untuk menyusun ulang"
+            >
+              <GripVertical className="size-4" />
+            </button>
+          )}
+          <h3 className="text-sm font-medium truncate">
+            {meta?.spec.title ?? placement.ref}
+          </h3>
+          {meta?.spec.type && <Badge value={meta.spec.type} />}
+        </div>
+        {customizable && onRemove && (
+          <button
+            type="button"
+            onClick={onRemove}
+            className="text-muted-foreground hover:text-destructive shrink-0"
+            title="Hapus widget"
+          >
+            <X className="size-4" />
+          </button>
+        )}
       </div>
       <div className="p-4">
-        <WidgetBody spec={spec} module={meta?.module} realtime={realtime} />
+        <WidgetBody
+          spec={meta?.spec}
+          module={meta?.module}
+          realtime={realtime}
+        />
       </div>
     </div>
   )

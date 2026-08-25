@@ -1,6 +1,9 @@
 // ─── Field Widget Barrel ───
 
 export { TextInput } from "./TextInput"
+export { TextareaInput } from "./TextareaInput"
+export { RichText } from "./RichText"
+export { FileInput } from "./FileInput"
 export { NumberInput } from "./NumberInput"
 export { Select } from "./Select"
 export { Switch } from "./Switch"
@@ -9,3 +12,8 @@ export { RelationPicker } from "./RelationPicker"
 export { DateInput } from "./DateInput"
 export { JsonInput } from "./JsonInput"
 export { ChildTable } from "./ChildTable"
+export { RadioGroup } from "./RadioGroup"
+export { Combobox } from "./Combobox"
+export { PasswordInput } from "./PasswordInput"
+export { SliderInput } from "./SliderInput"
+export { TagsInput } from "./TagsInput"

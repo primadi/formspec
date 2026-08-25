@@ -4,7 +4,12 @@
 // Components import this file, not the individual lexer/parser/eval modules.
 
 import { Parser } from "./parser"
-import { evaluate, getWarnings, type EvalContext, type RuntimeValue } from "./eval"
+import {
+  evaluate,
+  getWarnings,
+  type EvalContext,
+  type RuntimeValue,
+} from "./eval"
 
 export type { EvalContext, RuntimeValue }
 
@@ -16,6 +21,14 @@ export interface FormSpecExprResult {
 
 export interface ValidationResult {
   valid: boolean
+  error?: string
+}
+
+export interface StrictEvalResult {
+  value: RuntimeValue
+  /** Set when the expression failed to parse or produced eval warnings —
+   *  the runtime defensive layer (5.11.3). Callers should surface this as a
+   *  visible error state, never silently fail-safe. */
   error?: string
 }
 
@@ -60,6 +73,39 @@ export function evalFormSpecExpr(
     warnings,
     valid: warnings.length === 0,
   }
+}
+
+/**
+ * Strict evaluation (5.11.3 — runtime defensive layer). Like
+ * `evalFormSpecExpr` but surfaces any parse error or eval warning as an
+ * `error` string instead of letting the caller silently fail-safe. The spec
+ * requires renderers to show a visible error state when evaluation fails —
+ * never silently evaluate to `false`/empty.
+ */
+export function strictEvalFormSpecExpr(
+  expr: string | undefined,
+  context: EvalContext = {},
+): StrictEvalResult {
+  if (!expr || expr.trim() === "") {
+    return { value: null }
+  }
+
+  const parser = new Parser(expr)
+  const program = parser.parseProgram()
+  const parseErrors = parser.getErrors()
+
+  if (parseErrors.length > 0) {
+    return { value: null, error: parseErrors.join("; ") }
+  }
+
+  const value = evaluate(program, context)
+  const warnings = getWarnings()
+
+  if (warnings.length > 0) {
+    return { value, error: warnings.join("; ") }
+  }
+
+  return { value }
 }
 
 /**

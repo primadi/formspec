@@ -26,8 +26,11 @@ type HandlerFactory struct {
 	specLookup    func(module, name string) (*spec.EntitySpec, bool) // optional — enables sort/filter validation, hooks, and event resolution
 	specDirLookup func(module, name string) (string, bool)           // optional — resolves the entity's spec directory for hook/custom script refs
 	deliveryDeps  action.DeliveryDeps
-	idempotency   *db.IdempotencyStore // wired when idempotency enforcement is enabled (todo 2.7)
-	settings      *spec.Settings       // resolved global settings namespace (spec §10) — seeds app-setting find-or-create
+	idempotency   *db.IdempotencyStore    // wired when idempotency enforcement is enabled (todo 2.7)
+	settings      *spec.Settings          // resolved global settings namespace (spec §10) — seeds app-setting find-or-create
+	storage       func() (Storage, error) // optional — enables file upload/download routes (todo 7.17.1)
+	assetRoots    []string                // manifest roots for module asset serving (todo 5.9.1)
+	rateLimiter   *ResourceRateLimiter    // optional — per-resource/per-action rate limits (todo 7.12)
 }
 
 // EntityStoreProvider abstracts the entity registry for handler use.
@@ -85,11 +88,43 @@ func (f *HandlerFactory) SetDeliveryDeps(deps action.DeliveryDeps) {
 	f.deliveryDeps = deps
 }
 
+// deliveryDepsFor returns the delivery deps for one entity's event fan-out,
+// with the dispatcher (for before_deliver/after_deliver hooks, todo 7.8.5)
+// and the entity's declared hooks attached.
+func (f *HandlerFactory) deliveryDepsFor(module, entity string) action.DeliveryDeps {
+	deps := f.deliveryDeps
+	deps.Dispatcher = f.dispatcher
+	if f.specLookup != nil {
+		if es, ok := f.specLookup(module, entity); ok && es != nil {
+			deps.Hooks = es.Hooks
+		}
+	}
+	return deps
+}
+
 // SetIdempotencyStore wires the idempotency-key store used to enforce
 // idempotent actions (todo 2.7, 01-core-basic §5). When nil, idempotency
 // enforcement is a no-op (actions run exactly as before).
 func (f *HandlerFactory) SetIdempotencyStore(store *db.IdempotencyStore) {
 	f.idempotency = store
+}
+
+// SetStorageResolver wires the object-store resolver used by the file
+// upload/download routes (todo 7.17.1). When nil, those routes return 503.
+func (f *HandlerFactory) SetStorageResolver(fn func() (Storage, error)) {
+	f.storage = fn
+}
+
+// SetAssetRoots wires the manifest roots used to resolve module asset files
+// (todo 5.9.1). Assets live at {root}/modules/{module}/assets/{path}.
+func (f *HandlerFactory) SetAssetRoots(roots []string) {
+	f.assetRoots = roots
+}
+
+// SetResourceRateLimiter wires the per-resource/per-action rate limiter
+// (todo 7.12). When nil, rate limiting is a no-op.
+func (f *HandlerFactory) SetResourceRateLimiter(rl *ResourceRateLimiter) {
+	f.rateLimiter = rl
 }
 
 // resolveIdempotencyKey extracts the caller-supplied idempotency key for an
@@ -271,6 +306,17 @@ func emitsOf(a *spec.Action) string {
 	return a.Emits
 }
 
+// rateLimitFor resolves the entity spec and enforces the resource/per-action
+// rate limit (todo 7.12). Returns true when the request may proceed; when
+// false, a 429 has already been written.
+func (f *HandlerFactory) rateLimitFor(w http.ResponseWriter, r *http.Request, module, entity, action string) bool {
+	var es *spec.EntitySpec
+	if f.specLookup != nil {
+		es, _ = f.specLookup(module, entity)
+	}
+	return f.checkRateLimit(w, r, es, action)
+}
+
 // HandleList returns a GET / handler for the given entity.
 func (f *HandlerFactory) HandleList(module, entity string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -278,6 +324,9 @@ func (f *HandlerFactory) HandleList(module, entity string) http.HandlerFunc {
 		store, err := f.registry.GetEntityStore(module, entity)
 		if err != nil {
 			writeError(w, http.StatusNotFound, "NOT_FOUND", "entity not found: "+err.Error())
+			return
+		}
+		if !f.rateLimitFor(w, r, module, entity, "list") {
 			return
 		}
 
@@ -451,6 +500,9 @@ func (f *HandlerFactory) HandleFind(module, entity string) http.HandlerFunc {
 			writeError(w, http.StatusNotFound, "NOT_FOUND", "entity not found: "+err.Error())
 			return
 		}
+		if !f.rateLimitFor(w, r, module, entity, "find") {
+			return
+		}
 
 		workspaceID := workspaceFromContext(ctx)
 		id := r.PathValue("id")
@@ -550,6 +602,9 @@ func (f *HandlerFactory) HandleCreate(module, entity string) http.HandlerFunc {
 			writeError(w, http.StatusNotFound, "NOT_FOUND", "entity not found: "+err.Error())
 			return
 		}
+		if !f.rateLimitFor(w, r, module, entity, "create") {
+			return
+		}
 
 		var body map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -643,7 +698,7 @@ func (f *HandlerFactory) HandleCreate(module, entity string) http.HandlerFunc {
 					// already enqueued atomically above; this call only
 					// handles the immediate best-effort parts (websocket
 					// push, non-durable audit log write).
-					action.DeliverEvents(ctx, f.deliveryDeps, workspaceID, module+"/"+entity, []action.EventEmission{*emitted}, true)
+					action.DeliverEvents(ctx, f.deliveryDepsFor(module, entity), workspaceID, module+"/"+entity, []action.EventEmission{*emitted}, true)
 				}
 			}
 		}
@@ -676,6 +731,9 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 		store, err := f.registry.GetEntityStore(module, entity)
 		if err != nil {
 			writeError(w, http.StatusNotFound, "NOT_FOUND", "entity not found: "+err.Error())
+			return
+		}
+		if !f.rateLimitFor(w, r, module, entity, "update") {
 			return
 		}
 
@@ -797,7 +855,7 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 			if entitySpec != nil {
 				if emitted := action.ResolveEmission(entitySpec.Events, emitsOf(actionSpec), rec.Data); emitted != nil {
 					// outboxAlreadyEnqueued=true — see HandleCreate.
-					action.DeliverEvents(ctx, f.deliveryDeps, workspaceID, module+"/"+entity, []action.EventEmission{*emitted}, true)
+					action.DeliverEvents(ctx, f.deliveryDepsFor(module, entity), workspaceID, module+"/"+entity, []action.EventEmission{*emitted}, true)
 				}
 			}
 		}
@@ -821,6 +879,9 @@ func (f *HandlerFactory) HandleDelete(module, entity string) http.HandlerFunc {
 		store, err := f.registry.GetEntityStore(module, entity)
 		if err != nil {
 			writeError(w, http.StatusNotFound, "NOT_FOUND", "entity not found: "+err.Error())
+			return
+		}
+		if !f.rateLimitFor(w, r, module, entity, "delete") {
 			return
 		}
 
@@ -913,7 +974,7 @@ func (f *HandlerFactory) HandleSubmit(module, entity string) http.HandlerFunc {
 			if entitySpec != nil {
 				emitted := action.ResolveEmission(entitySpec.Events, emitsOf(actionSpec), rec.Data)
 				if emitted != nil {
-					action.DeliverEvents(ctx, f.deliveryDeps, workspaceID, module+"/"+entity, []action.EventEmission{*emitted}, false)
+					action.DeliverEvents(ctx, f.deliveryDepsFor(module, entity), workspaceID, module+"/"+entity, []action.EventEmission{*emitted}, false)
 				}
 			}
 		}
@@ -990,7 +1051,7 @@ func (f *HandlerFactory) HandleCancel(module, entity string) http.HandlerFunc {
 			if entitySpec != nil {
 				emitted := action.ResolveEmission(entitySpec.Events, emitsOf(actionSpec), rec.Data)
 				if emitted != nil {
-					action.DeliverEvents(ctx, f.deliveryDeps, workspaceID, module+"/"+entity, []action.EventEmission{*emitted}, false)
+					action.DeliverEvents(ctx, f.deliveryDepsFor(module, entity), workspaceID, module+"/"+entity, []action.EventEmission{*emitted}, false)
 				}
 			}
 		}
@@ -1084,7 +1145,7 @@ func (f *HandlerFactory) HandleAmend(module, entity string) http.HandlerFunc {
 			if entitySpec != nil {
 				emitted := action.ResolveEmission(entitySpec.Events, emitsOf(actionSpec), newRec.Data)
 				if emitted != nil {
-					action.DeliverEvents(ctx, f.deliveryDeps, workspaceID, module+"/"+entity, []action.EventEmission{*emitted}, false)
+					action.DeliverEvents(ctx, f.deliveryDepsFor(module, entity), workspaceID, module+"/"+entity, []action.EventEmission{*emitted}, false)
 				}
 			}
 		}
@@ -1520,6 +1581,11 @@ func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, a
 		userID := userFromContext(ctx)
 		resourceID := r.PathValue("id")
 
+		// Rate limit (todo 7.12): per-action override wins over resource default.
+		if !f.rateLimitFor(w, r, module, entity, actionName) {
+			return
+		}
+
 		// Idempotency gate (todo 2.7): custom actions declared idempotent
 		// claim the key up front. Completed keys replay the stored response;
 		// in-flight keys get 409; new/failed keys proceed.
@@ -1714,7 +1780,7 @@ func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, a
 			// best-effort delivery. When the action made no local mutation,
 			// outboxAlreadyEnqueued is false so DeliverEvents falls back to
 			// its own best-effort enqueue, same as before this change.
-			action.DeliverEvents(ctx, f.deliveryDeps, workspaceID, module+"/"+entity, []action.EventEmission{*emitted}, enqueuedAtomically || !emitted.Durable)
+			action.DeliverEvents(ctx, f.deliveryDepsFor(module, entity), workspaceID, module+"/"+entity, []action.EventEmission{*emitted}, enqueuedAtomically || !emitted.Durable)
 		}
 
 		// Realtime channel (Spec Resolution API §5): every custom action is

@@ -9,7 +9,7 @@ import { useState, useEffect } from "react"
 import { useSearchParams, useNavigate } from "react-router-dom"
 import { useSurface } from "@/hooks/useSurface"
 import { ArrowLeft, ArrowRight, Check, X } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/lib/ui"
 
 import type { Entry, WizardSpec } from "@/types/manifest"
 import { useSessionStore } from "@/stores/session"
@@ -38,7 +38,9 @@ export default function WizardRenderer({ entry }: WizardRendererProps) {
   // Each open wizard is identified by an instance id in the URL so that
   // ordinary multi-tab use (Ctrl+click) and page refresh don't clobber or
   // lose in-progress step data — no server-side draft row needed.
-  const [instance] = useState<string>(() => searchParams.get("instance") ?? crypto.randomUUID())
+  const [instance] = useState<string>(
+    () => searchParams.get("instance") ?? crypto.randomUUID(),
+  )
   const storageKey = `wizard:${entry.module}.${entry.name}:${instance}`
 
   useEffect(() => {
@@ -62,7 +64,9 @@ export default function WizardRenderer({ entry }: WizardRendererProps) {
   // Response of the most recent successful submit — kept around so
   // `on_complete.banner` can resolve `response.*` paths after a restart
   // clears `stepData` itself.
-  const [completion, setCompletion] = useState<Record<string, unknown> | null>(null)
+  const [completion, setCompletion] = useState<Record<string, unknown> | null>(
+    null,
+  )
 
   useEffect(() => {
     try {
@@ -78,10 +82,12 @@ export default function WizardRenderer({ entry }: WizardRendererProps) {
   const progress = ((currentStep + 1) / totalSteps) * 100
 
   const step = steps[currentStep]
-  const canProceed = !step.required?.length || step.required.every((f) => {
-    const v = stepData[f]
-    return v !== undefined && v !== null && v !== ""
-  })
+  const canProceed =
+    !step.required?.length ||
+    step.required.every((f) => {
+      const v = stepData[f]
+      return v !== undefined && v !== null && v !== ""
+    })
 
   // Summary items reference fields as dotted paths (e.g. "patient.name",
   // resolving into stepData.patient.name) since search_select steps store
@@ -94,7 +100,13 @@ export default function WizardRenderer({ entry }: WizardRendererProps) {
     const source: unknown = fromResponse ? completion : stepData
     const value = key
       .split(".")
-      .reduce<unknown>((acc, k) => (acc && typeof acc === "object" ? (acc as Record<string, unknown>)[k] : undefined), source)
+      .reduce<unknown>(
+        (acc, k) =>
+          acc && typeof acc === "object"
+            ? (acc as Record<string, unknown>)[k]
+            : undefined,
+        source,
+      )
     return value == null ? "-" : String(value)
   }
 
@@ -140,13 +152,20 @@ export default function WizardRenderer({ entry }: WizardRendererProps) {
         // A custom commit action — expected to be an entity-scoped action
         // (POST .../{id}/{action}), for wizards that finalize an existing
         // draft record rather than create one from scratch.
-        response = await apiPost<Record<string, unknown>>(client, entry.spec.action, stepData)
+        response = await apiPost<Record<string, unknown>>(
+          client,
+          entry.spec.action,
+          stepData,
+        )
       } else if (entry.spec.entity) {
         // No action declared: every field the target entity needs was
         // already resolved during the wizard's steps (e.g. patient_id from
         // an eager patient.create in step 1), so the final commit is just a
         // normal entity create — no custom script/action required.
-        const [entityModule, entityName] = resolveEntityRef(entry.spec.entity, entry.module)
+        const [entityModule, entityName] = resolveEntityRef(
+          entry.spec.entity,
+          entry.module,
+        )
         const entitySchema = getEntity(entityModule, entityName)
         if (!entitySchema) {
           throw new Error(`entity ${entityModule}.${entityName} not found`)
@@ -178,7 +197,9 @@ export default function WizardRenderer({ entry }: WizardRendererProps) {
         navigate(adminPath())
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Wizard submission failed")
+      toast.error(
+        err instanceof Error ? err.message : "Wizard submission failed",
+      )
     } finally {
       setSubmitting(false)
     }
@@ -200,7 +221,12 @@ export default function WizardRenderer({ entry }: WizardRendererProps) {
               ))}
             </dl>
           </div>
-          <Button variant="ghost" size="sm" onClick={() => setCompletion(null)} className="shrink-0">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setCompletion(null)}
+            className="shrink-0"
+          >
             <X className="size-4" />
           </Button>
         </div>
@@ -209,7 +235,9 @@ export default function WizardRenderer({ entry }: WizardRendererProps) {
       {/* Progress bar */}
       <div className="space-y-2">
         <div className="flex items-center justify-between text-sm">
-          <h1 className="text-2xl font-bold tracking-tight">{entry.spec.title}</h1>
+          <h1 className="text-2xl font-bold tracking-tight">
+            {entry.spec.title}
+          </h1>
           <span className="text-muted-foreground">
             Step {currentStep + 1} of {totalSteps}
           </span>
@@ -244,16 +272,16 @@ export default function WizardRenderer({ entry }: WizardRendererProps) {
               )}
               <span className="hidden sm:inline">{step.title}</span>
             </button>
-            {idx < totalSteps - 1 && (
-              <div className="h-px w-4 bg-border" />
-            )}
+            {idx < totalSteps - 1 && <div className="h-px w-4 bg-border" />}
           </div>
         ))}
       </div>
 
       {/* Current step content */}
       <div className="rounded-md border p-6">
-        <h2 className="text-lg font-semibold mb-1">{steps[currentStep].title}</h2>
+        <h2 className="text-lg font-semibold mb-1">
+          {steps[currentStep].title}
+        </h2>
         {steps[currentStep].description && (
           <p className="text-sm text-muted-foreground mb-4">
             {steps[currentStep].description}
@@ -275,7 +303,9 @@ export default function WizardRenderer({ entry }: WizardRendererProps) {
           <div className="space-y-3">
             {steps[currentStep].fields?.map((field) => (
               <div key={field.name} className="space-y-1">
-                <label className="text-sm font-medium">{field.label ?? field.name}</label>
+                <label className="text-sm font-medium">
+                  {field.label ?? field.name}
+                </label>
                 <input
                   autoComplete="nope"
                   className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
@@ -316,9 +346,7 @@ export default function WizardRenderer({ entry }: WizardRendererProps) {
               {steps[currentStep].summary.map((item) => (
                 <div key={item.field} className="flex justify-between">
                   <dt className="text-muted-foreground">{item.label}</dt>
-                  <dd className="font-medium">
-                    {resolveField(item.field)}
-                  </dd>
+                  <dd className="font-medium">{resolveField(item.field)}</dd>
                 </div>
               ))}
             </dl>
@@ -328,11 +356,7 @@ export default function WizardRenderer({ entry }: WizardRendererProps) {
 
       {/* Navigation buttons */}
       <div className="flex items-center justify-between">
-        <Button
-          variant="outline"
-          disabled={isFirst}
-          onClick={handlePrev}
-        >
+        <Button variant="outline" disabled={isFirst} onClick={handlePrev}>
           <ArrowLeft className="size-4 mr-1" />
           Previous
         </Button>

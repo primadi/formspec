@@ -61,6 +61,17 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
 /** Default auto-logout idle timeout in minutes (0 = disabled). */
 export const DEFAULT_SESSION_TIMEOUT_MINUTES = 30
 
+/**
+ * A user's saved widget layout for one customizable dashboard. Mirrors
+ * `DashboardWidget` from the manifest but is stored as a runtime preference
+ * (5.7.3) — never written back to YAML.
+ */
+export interface DashboardLayoutPref {
+  ref: string
+  layout: { x: number; y: number; w: number; h: number }
+  config?: Record<string, unknown>
+}
+
 export interface PrefsState {
   sidebarCollapsed: boolean
   theme: ThemeMode
@@ -69,6 +80,8 @@ export interface PrefsState {
   activeTheme: string | null
   /** Auto-logout idle timeout in minutes (0 = disabled). Set on the login screen. */
   sessionTimeoutMinutes: number
+  /** Per-dashboard saved widget layouts (5.7.3) — keyed by dashboard name. */
+  dashboardLayouts: Record<string, DashboardLayoutPref[]>
   // ── Actions ──
   toggleSidebar: () => void
   setSidebarCollapsed: (collapsed: boolean) => void
@@ -76,6 +89,7 @@ export interface PrefsState {
   setColorPreset: (name: string) => void
   setActiveTheme: (name: string | null) => void
   setSessionTimeoutMinutes: (minutes: number) => void
+  setDashboardLayout: (name: string, widgets: DashboardLayoutPref[]) => void
 }
 
 export const usePrefsStore = create<PrefsState>()(
@@ -86,6 +100,7 @@ export const usePrefsStore = create<PrefsState>()(
       colorPreset: "neutral",
       activeTheme: null,
       sessionTimeoutMinutes: DEFAULT_SESSION_TIMEOUT_MINUTES,
+      dashboardLayouts: {},
 
       toggleSidebar: () =>
         set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
@@ -95,6 +110,10 @@ export const usePrefsStore = create<PrefsState>()(
       setActiveTheme: (name) => set({ activeTheme: name }),
       setSessionTimeoutMinutes: (minutes) =>
         set({ sessionTimeoutMinutes: minutes }),
+      setDashboardLayout: (name, widgets) =>
+        set((s) => ({
+          dashboardLayouts: { ...s.dashboardLayouts, [name]: widgets },
+        })),
     }),
     {
       name: "formspec-prefs",

@@ -218,3 +218,89 @@ func TestDeliverEvents_UnimplementedChannel_DoesNotPanic(t *testing.T) {
 		t.Errorf("expected no broadcast for an unimplemented channel")
 	}
 }
+
+// TestDeliverEvents_BeforeDeliverSuppresses verifies a before_deliver hook
+// that returns fail() suppresses delivery (todo 7.8.5).
+func TestDeliverEvents_BeforeDeliverSuppresses(t *testing.T) {
+	hub := &fakeHub{}
+	deps := newDeliveryDeps(t, hub)
+	deps.Dispatcher = setupDispatcher(t, map[string]string{
+		"test/suppress": `def execute(resource, params, ctx):
+    return fail("do not deliver")
+`,
+	})
+	deps.Hooks = []spec.HookDecl{
+		{On: spec.HookOnBeforeDeliver, Event: "completed", Impl: &spec.ImplDecl{Type: spec.ImplScriptRef, Ref: "test/suppress"}},
+	}
+
+	emissions := []EventEmission{{
+		Name:      "completed",
+		Payload:   map[string]any{"id": "v1"},
+		DeliverTo: []spec.EventDeliveryDecl{{Channel: "websocket"}},
+	}}
+
+	DeliverEvents(context.Background(), deps, "demo", "clinic/visit", emissions, false)
+
+	if len(hub.broadcasts) != 0 {
+		t.Errorf("expected delivery suppressed, got %d broadcasts", len(hub.broadcasts))
+	}
+}
+
+// TestDeliverEvents_BeforeDeliverEnriches verifies a before_deliver hook
+// that returns ok(data) enriches the delivered payload (todo 7.8.5).
+func TestDeliverEvents_BeforeDeliverEnriches(t *testing.T) {
+	hub := &fakeHub{}
+	deps := newDeliveryDeps(t, hub)
+	deps.Dispatcher = setupDispatcher(t, map[string]string{
+		"test/enrich": `def execute(resource, params, ctx):
+    return ok({"id": "v1", "enriched": True})
+`,
+	})
+	deps.Hooks = []spec.HookDecl{
+		{On: spec.HookOnBeforeDeliver, Event: "completed", Impl: &spec.ImplDecl{Type: spec.ImplScriptRef, Ref: "test/enrich"}},
+	}
+
+	emissions := []EventEmission{{
+		Name:      "completed",
+		Payload:   map[string]any{"id": "v1"},
+		DeliverTo: []spec.EventDeliveryDecl{{Channel: "websocket"}},
+	}}
+
+	DeliverEvents(context.Background(), deps, "demo", "clinic/visit", emissions, false)
+
+	if len(hub.broadcasts) != 1 {
+		t.Fatalf("expected 1 broadcast, got %d", len(hub.broadcasts))
+	}
+	payload := hub.broadcasts[0].Payload
+	if payload["enriched"] != true {
+		t.Errorf("expected enriched payload, got %+v", payload)
+	}
+}
+
+// TestDeliverEvents_AfterDeliverRuns verifies an after_deliver hook runs
+// after delivery without failing the action (todo 7.8.5).
+func TestDeliverEvents_AfterDeliverRuns(t *testing.T) {
+	hub := &fakeHub{}
+	deps := newDeliveryDeps(t, hub)
+	deps.Dispatcher = setupDispatcher(t, map[string]string{
+		"test/after": `def execute(resource, params, ctx):
+    return ok()
+`,
+	})
+	deps.Hooks = []spec.HookDecl{
+		{On: spec.HookOnAfterDeliver, Event: "completed", Impl: &spec.ImplDecl{Type: spec.ImplScriptRef, Ref: "test/after"}},
+	}
+
+	emissions := []EventEmission{{
+		Name:      "completed",
+		Payload:   map[string]any{"id": "v1"},
+		DeliverTo: []spec.EventDeliveryDecl{{Channel: "websocket"}},
+	}}
+
+	// Must not panic or error — after_deliver is best-effort.
+	DeliverEvents(context.Background(), deps, "demo", "clinic/visit", emissions, false)
+
+	if len(hub.broadcasts) != 1 {
+		t.Errorf("expected 1 broadcast, got %d", len(hub.broadcasts))
+	}
+}

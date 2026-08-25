@@ -72,15 +72,25 @@ func ExecuteScript(ctx context.Context, scriptPath string, resource *ResourceAPI
 		return nil, fmt.Errorf("script not found: %s: %w", scriptPath, err)
 	}
 
+	// Sandbox hard limits (todo 7.14): wall-clock timeout + iteration cap.
+	// The timeout context is threaded into primitive operations so backend
+	// calls respect it; SetMaxExecutionSteps bounds CPU-bound loops.
+	execCtx, cancel := context.WithTimeout(ctx, DefaultWallClockTimeout*time.Millisecond)
+	defer cancel()
+
 	// Load and execute the Starlark module
 	thread := &starlark.Thread{
 		Name:  filepath.Base(scriptPath),
 		Print: func(_ *starlark.Thread, msg string) {},
 		Load:  nil, // no imports in sandbox
 	}
+	// Iteration cap (7.14.1): 100K bytecode steps — aborts runaway loops.
+	thread.SetMaxExecutionSteps(DefaultMaxExecutionSteps)
 	// Store the Go context on the thread so ctx.* primitive operations can
 	// retrieve it (see threadContext in primitive.go).
-	thread.SetLocal(ctxKey, ctx)
+	thread.SetLocal(ctxKey, execCtx)
+	// Store the resource-usage limits on the thread (see limits.go).
+	thread.SetLocal(limitsKey, NewScriptLimits())
 
 	// Predeclare the built-in result helpers: ok() and fail()
 	predeclared := starlark.StringDict{
@@ -269,6 +279,11 @@ type ScriptExecutor struct {
 	// SecretsAudit is called on every successful ctx.secrets().get(key)
 	// (todo 6.8.4). May be nil.
 	SecretsAudit func(key string)
+
+	// ConfigStore holds resolved non-secret Config key values, keyed by name
+	// (todo 7.2.1/7.2.2). It backs ctx.config.get(key). A nil store means no
+	// config values are available (ctx.config.get returns the default).
+	ConfigStore map[string]any
 }
 
 // SetDatastoreResolver sets the resolver used to wire ctx.* primitives to
@@ -290,6 +305,12 @@ func (e *ScriptExecutor) SetSecretsStore(store map[string]string) {
 // SetSecretsAudit wires the audit hook called on each secret read (todo 6.8.4).
 func (e *ScriptExecutor) SetSecretsAudit(audit func(key string)) {
 	e.SecretsAudit = audit
+}
+
+// SetConfigStore wires the resolved non-secret Config values backing
+// ctx.config (todo 7.2.2).
+func (e *ScriptExecutor) SetConfigStore(store map[string]any) {
+	e.ConfigStore = store
 }
 
 // NewScriptExecutor creates a ScriptExecutor with the given resolution function.
@@ -349,6 +370,11 @@ func (e *ScriptExecutor) Execute(ctx context.Context, scriptPath string, module,
 	// ctx.secrets (todo 6.8): only keys declared in uses.secrets are readable.
 	if e.SecretsStore != nil {
 		ctxObj.Secrets = NewSecretsAPI(e.SecretsStore, declaredUsesSecrets(uses), e.SecretsAudit)
+	}
+	// ctx.config (todo 7.2.2): non-secret Config keys. When no store is
+	// wired, ctx.config.get returns the caller's default (or None).
+	if e.ConfigStore != nil {
+		ctxObj.Config = NewConfigAPI(e.ConfigStore)
 	}
 	ctxObj.Now = now
 

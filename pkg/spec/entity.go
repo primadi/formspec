@@ -200,6 +200,14 @@ type Field struct {
 	// old field name, so the migration engine treats it as a rename (two-phase
 	// removal) instead of drop+add (01-core-basic.md §4).
 	RenamedFrom string `yaml:"renamed_from,omitempty" json:"renamed_from,omitempty"`
+
+	// Money (05-field-types.md §2) — only meaningful for type: money.
+	// Currency is the explicit ISO-4217 code for this field; when empty the
+	// field inherits settings.currency (never guessed). DecimalPlaces is the
+	// fixed minor-unit scale — REQUIRED when Currency overrides the global
+	// default (no currency catalog to look it up from).
+	Currency      string `yaml:"currency,omitempty" json:"currency,omitempty"`
+	DecimalPlaces *int   `yaml:"decimal_places,omitempty" json:"decimal_places,omitempty"`
 }
 
 // FieldType is the data type of a field (Core §10.1, 05-field-types.md §1.1).
@@ -431,6 +439,24 @@ func ValidateEntitySpec(d *EntitySpec) error {
 			}
 		}
 		d.NaturalKeyField = nkField
+	}
+
+	// Money fields (05-field-types.md §2, todo 7.16): a field that overrides
+	// `currency` to a code other than the global default MUST declare its own
+	// `decimal_places` — no currency catalog to look it up from. The global
+	// default comes from the workspace settings; at entity-apply time we
+	// validate the structural rule (explicit currency + missing scale) which
+	// is independent of the resolved settings value.
+	for _, f := range d.Fields {
+		if f.Type != FieldMoney {
+			continue
+		}
+		if f.Currency != "" && f.DecimalPlaces == nil {
+			return &MoneyFieldError{
+				Field:   f.Name,
+				Message: fmt.Sprintf("money field overrides currency to %q — must declare `decimal_places` (no currency catalog to look it up from)", f.Currency),
+			}
+		}
 	}
 
 	// Soft-deactivation pattern (1.4.10 / 4.10.2, 02-core-extended.md §19):

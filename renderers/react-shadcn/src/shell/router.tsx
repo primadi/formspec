@@ -28,6 +28,13 @@ const TimelineRenderer = lazy(() => import("@/kinds/timeline/TimelineRenderer"))
 const ReportRenderer = lazy(() => import("@/kinds/report/ReportRenderer"))
 const PrintRenderer = lazy(() => import("@/kinds/print/PrintRenderer"))
 const ListingRenderer = lazy(() => import("@/kinds/listing/ListingRenderer"))
+const CalendarRenderer = lazy(() => import("@/kinds/calendar/CalendarRenderer"))
+const ApprovalInboxRenderer = lazy(
+  () => import("@/kinds/approval-inbox/ApprovalInboxRenderer"),
+)
+const NotificationCenterRenderer = lazy(
+  () => import("@/kinds/notification-center/NotificationCenterRenderer"),
+)
 
 function Loading() {
   return (
@@ -216,6 +223,42 @@ export function buildRoutes(options: RouteBuilderOptions): RouteObject[] {
       Component: () => (
         <Suspense fallback={<Loading />}>
           <ListingRenderer entry={listing} />
+        </Suspense>
+      ),
+    })
+  }
+
+  // 11. Calendar routes (06-page-kinds.md §5)
+  for (const calendar of bundle.calendars ?? []) {
+    routes.push({
+      path: `${basePath}/calendar/${calendar.name}`,
+      Component: () => (
+        <Suspense fallback={<Loading />}>
+          <CalendarRenderer entry={calendar} />
+        </Suspense>
+      ),
+    })
+  }
+
+  // 12. ApprovalInbox routes (06-page-kinds.md §11) — zero-config
+  for (const inbox of bundle.approval_inboxes ?? []) {
+    routes.push({
+      path: `${basePath}/approval-inbox/${inbox.name}`,
+      Component: () => (
+        <Suspense fallback={<Loading />}>
+          <ApprovalInboxRenderer entry={inbox} />
+        </Suspense>
+      ),
+    })
+  }
+
+  // 13. NotificationCenter routes (06-page-kinds.md §12) — zero-config
+  for (const center of bundle.notification_centers ?? []) {
+    routes.push({
+      path: `${basePath}/notification-center/${center.name}`,
+      Component: () => (
+        <Suspense fallback={<Loading />}>
+          <NotificationCenterRenderer entry={center} />
         </Suspense>
       ),
     })

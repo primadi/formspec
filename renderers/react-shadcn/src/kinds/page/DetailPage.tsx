@@ -8,8 +8,8 @@
 import { useEffect, useState, useMemo } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { useSurface } from "@/hooks/useSurface"
-import { toast } from "sonner"
-import { ArrowLeft, Edit, Loader2 } from "lucide-react"
+import { toast } from "@/lib/ui"
+import { ArrowLeft, Edit, FileText, Loader2 } from "lucide-react"
 
 import type { EntitySchema } from "@/types/manifest"
 import { useSessionStore } from "@/stores/session"
@@ -21,6 +21,7 @@ import { getLifecycle, getAvailableTransitions } from "@/engine/lifecycle"
 import { apiGet } from "@/lib/api"
 import { titleCase } from "@/lib/utils"
 import { createFormatter, type Formatter } from "@/lib/format"
+import { sanitizeHTML } from "@/lib/sanitize"
 import { Badge } from "@/widgets/Badge"
 import { Button } from "@/components/ui/button"
 import ConfirmDialog from "@/components/ui/confirm-dialog"
@@ -218,6 +219,11 @@ export default function DetailPage({ entity }: DetailPageProps) {
                     field={field}
                     value={value}
                     fmt={formatter}
+                    fileUrl={
+                      field.type === "file"
+                        ? `/${workspace}/_ui/entity/${entity.module}/${entity.name}/${id}/${field.name}`
+                        : undefined
+                    }
                   />
                 </div>
               </div>
@@ -312,10 +318,12 @@ function DetailFieldValue({
   field,
   value,
   fmt,
+  fileUrl,
 }: {
   field: import("@/types/manifest").Field
   value: unknown
   fmt?: Formatter
+  fileUrl?: string
 }) {
   if (value == null)
     return <span className="text-muted-foreground italic">-</span>
@@ -330,6 +338,35 @@ function DetailFieldValue({
 
   if (field.type === "boolean") {
     return value ? "Yes" : "No"
+  }
+
+  if (field.type === "text") {
+    return <span className="whitespace-pre-wrap">{String(value)}</span>
+  }
+
+  if (field.type === "richtext") {
+    return (
+      <div
+        className="text-sm [&_a]:text-primary [&_a]:underline"
+        dangerouslySetInnerHTML={{ __html: sanitizeHTML(String(value)) }}
+      />
+    )
+  }
+
+  if (field.type === "file") {
+    const key = String(value)
+    const name = key.split("/").pop()
+    return (
+      <a
+        href={fileUrl ?? "#"}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex items-center gap-1.5 text-primary hover:underline"
+      >
+        <FileText className="size-4" />
+        {name}
+      </a>
+    )
   }
 
   if (field.type === "datetime") {
