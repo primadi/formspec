@@ -733,6 +733,11 @@ func (a *App) ReloadSpec() error {
 	// captures it. Reads from the live App's atomic counter.
 	newRB.SetSpecVersionFn(func() int64 { return a.specVersion.Load() })
 	newRB.BuildRoutes()
+
+	// Config registry (todo 7.2.1): re-resolve on reload so a changed Config
+	// manifest's keys take effect without a full restart.
+	newCfgReg := buildConfigRegistry(specManifests.Manifests)
+
 	newDisp := newDispatcher(newReg, a.database, a.cfg, newCfgReg)
 
 	// Re-register native Go handlers on the new dispatcher.
@@ -741,10 +746,6 @@ func (a *App) ReloadSpec() error {
 		newDisp.NativeExecutor().Register(ref, h)
 	}
 	a.mu.RUnlock()
-
-	// Config registry (todo 7.2.1): re-resolve on reload so a changed Config
-	// manifest's keys take effect without a full restart.
-	newCfgReg := buildConfigRegistry(specManifests.Manifests)
 
 	newRB.SetDispatcher(newDisp)
 	newRB.SetUIRegistry(newUIReg)
@@ -853,7 +854,31 @@ func randomDevSecret() string {
 	return hex.EncodeToString(b)
 }
 
-func newDispatcher(reg *entity.Registry, database db.DB, cfg Config) *action.Dispatcher {
+// buildConfigRegistry loads kind: Config manifests and resolves their typed
+// keys into a config.Registry backing ctx.config (non-secret) and ctx.secrets
+// (secret) in the script runtime (todo 7.2.1/7.2.2, 6.8.1). Single-server mode
+// has no Control Plane environment resolution, so each key resolves to its
+// declared default (spec §10: "spec wajib menetapkan default standar").
+func buildConfigRegistry(manifests []manifest.RawManifest) *config.Registry {
+	reg := config.NewRegistry()
+	for _, raw := range manifests {
+		if spec.Kind(raw.Kind) != spec.KindConfig {
+			continue
+		}
+		specMap, ok := raw.Spec.(map[string]any)
+		if !ok {
+			continue
+		}
+		cs, err := manifest.RawSpecToConfigSpec(specMap)
+		if err != nil {
+			continue
+		}
+		reg.Add(raw.Metadata.Name, cs)
+	}
+	return reg
+}
+
+func newDispatcher(reg *entity.Registry, database db.DB, cfg Config, cfgReg *config.Registry) *action.Dispatcher {
 	disp := action.NewDispatcher()
 
 	scriptEx := action.NewScriptExecutor(cfg.SpecPath)
@@ -868,6 +893,13 @@ func newDispatcher(reg *entity.Registry, database db.DB, cfg Config) *action.Dis
 	// Strict ctx.* primitive enforcement (todo 2.6.4): in ProdMode/StrictMode,
 	// a script may only use ctx.* primitives it declared in uses.primitives.
 	scriptEx.SetStrictPrimitives(cfg.StrictMode || cfg.ProdMode)
+	// ctx.config / ctx.secrets (todo 7.2.2, 6.8.1): resolve Config manifest
+	// keys into the script runtime. Non-secret keys back ctx.config.get;
+	// secret keys back ctx.secrets (gated by uses.secrets).
+	if cfgReg != nil {
+		scriptEx.SetConfigStore(cfgReg.NonSecret())
+		scriptEx.SetSecretsStore(cfgReg.Secrets())
+	}
 	scriptEx.SetSaveHandler(func(ctx context.Context, workspaceID, module, entityName, id string, version int, data map[string]any) error {
 		if id == "" {
 			return fmt.Errorf("resource.save: cannot save before the record exists — use resource.set() during a before-create hook/impl; the framework persists automatically")

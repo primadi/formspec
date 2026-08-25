@@ -1,6 +1,6 @@
 # Fase 7 — Config Runtime (7.2) + Script Runtime Contract (7.14.4)
 
-**Status:** 🚧 In progress · **Tanggal:** 2026-08-25
+**Status:** ✅ WS-1 selesai (Config registry + ctx.config/ctx.secrets wiring) · WS-2 (`resource.new()`) & WS-3 deferred · **Tanggal:** 2026-08-25
 **Referensi:** `docs/spec/backend/01-core-basic.md` §10 (Config & Global Settings),
 `docs/spec/backend/06-script-runtime.md` §2/§4/§6 (script runtime contract)
 **Todo:** `docs/plan/todo.md` §7.2, §7.14.4

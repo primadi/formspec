@@ -88,6 +88,18 @@ func (e *ScriptExecutor) SetStrictPrimitives(strict bool) {
 	e.engine.SetStrictPrimitives(strict)
 }
 
+// SetConfigStore wires the resolved non-secret Config values backing
+// ctx.config.get (todo 7.2.2).
+func (e *ScriptExecutor) SetConfigStore(store map[string]any) {
+	e.engine.SetConfigStore(store)
+}
+
+// SetSecretsStore wires the secret Config values backing ctx.secrets (todo
+// 6.8.1), gated by uses.secrets.
+func (e *ScriptExecutor) SetSecretsStore(store map[string]string) {
+	e.engine.SetSecretsStore(store)
+}
+
 // Execute runs the script for the given action. ctx is threaded through to
 // the engine (and from there to every resource.*/ctx.* handler) so a
 // request-scoped TxScope, if one is active, is honored by every mutation
