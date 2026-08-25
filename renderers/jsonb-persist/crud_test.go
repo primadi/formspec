@@ -2010,3 +2010,137 @@ func TestEntityStore_ReservedFieldRejected(t *testing.T) {
 	}
 	_ = id
 }
+
+// TestEntityStore_FieldRules_LengthInScript verifies the `length`, `in`, and
+// `script` field rules (05-field-types.md §3, todo 7.9.6).
+func TestEntityStore_FieldRules_LengthInScript(t *testing.T) {
+	dir := t.TempDir()
+	d, err := OpenSQLite(filepath.Join(dir, "crud_rules_lis.db"), nil)
+	if err != nil {
+		t.Fatalf("OpenSQLite failed: %v", err)
+	}
+	defer d.Close()
+
+	meta := spec.Metadata{Name: "product", Module: "inventory"}
+	entity := &spec.EntitySpec{
+		Version: "v1",
+		Fields: []spec.Field{
+			{Name: "name", Type: spec.FieldString},
+			{
+				Name: "code", Type: spec.FieldString,
+				Rules: []spec.ValidationRule{{Name: "length", Value: 5}},
+			},
+			{
+				Name: "status", Type: spec.FieldString,
+				Rules: []spec.ValidationRule{{Name: "in", Value: []any{"active", "inactive"}}},
+			},
+			{
+				Name: "qty", Type: spec.FieldNumber,
+				Rules: []spec.ValidationRule{{Name: "script", Value: "value > 0"}},
+			},
+		},
+	}
+
+	r := NewMigrationRunner(d, DriverSQLite)
+	ctx := context.Background()
+	if _, err := r.ApplyMigrations(ctx, []EntityMigration{{Metadata: meta, EntitySpec: *entity}}); err != nil {
+		t.Fatalf("ApplyMigrations failed: %v", err)
+	}
+
+	store := NewEntityStore(d, DriverSQLite, meta, entity)
+
+	// length mismatch → fail
+	if _, err := store.Insert(ctx, InsertParams{
+		WorkspaceID: "t1", CreatedBy: "u1",
+		Data: map[string]any{"name": "A", "code": "ABCD", "status": "active", "qty": float64(1)},
+	}); err == nil {
+		t.Fatal("expected error for length mismatch")
+	}
+
+	// in violation → fail
+	if _, err := store.Insert(ctx, InsertParams{
+		WorkspaceID: "t1", CreatedBy: "u1",
+		Data: map[string]any{"name": "A", "code": "ABCDE", "status": "banned", "qty": float64(1)},
+	}); err == nil {
+		t.Fatal("expected error for in violation")
+	}
+
+	// script rule fails (qty <= 0) → fail
+	if _, err := store.Insert(ctx, InsertParams{
+		WorkspaceID: "t1", CreatedBy: "u1",
+		Data: map[string]any{"name": "A", "code": "ABCDE", "status": "active", "qty": float64(-1)},
+	}); err == nil {
+		t.Fatal("expected error for script rule failure")
+	}
+
+	// All valid → pass
+	if _, err := store.Insert(ctx, InsertParams{
+		WorkspaceID: "t1", CreatedBy: "u1",
+		Data: map[string]any{"name": "A", "code": "ABCDE", "status": "active", "qty": float64(5)},
+	}); err != nil {
+		t.Fatalf("expected valid insert to pass, got: %v", err)
+	}
+}
+
+// TestEntityStore_FieldRules_Unique verifies the cross-record `unique` rule
+// (per-tenant, 05-field-types.md §3, todo 7.9.6).
+func TestEntityStore_FieldRules_Unique(t *testing.T) {
+	dir := t.TempDir()
+	d, err := OpenSQLite(filepath.Join(dir, "crud_rules_unique.db"), nil)
+	if err != nil {
+		t.Fatalf("OpenSQLite failed: %v", err)
+	}
+	defer d.Close()
+
+	meta := spec.Metadata{Name: "customer", Module: "crm"}
+	entity := &spec.EntitySpec{
+		Version: "v1",
+		Fields: []spec.Field{
+			{Name: "name", Type: spec.FieldString},
+			{
+				Name: "email", Type: spec.FieldString,
+				Rules: []spec.ValidationRule{{Name: "unique"}},
+			},
+		},
+	}
+
+	r := NewMigrationRunner(d, DriverSQLite)
+	ctx := context.Background()
+	if _, err := r.ApplyMigrations(ctx, []EntityMigration{{Metadata: meta, EntitySpec: *entity}}); err != nil {
+		t.Fatalf("ApplyMigrations failed: %v", err)
+	}
+
+	store := NewEntityStore(d, DriverSQLite, meta, entity)
+
+	id1, err := store.Insert(ctx, InsertParams{
+		WorkspaceID: "t1", CreatedBy: "u1",
+		Data: map[string]any{"name": "A", "email": "a@x.com"},
+	})
+	if err != nil {
+		t.Fatalf("first insert failed: %v", err)
+	}
+
+	// Duplicate email in same tenant → fail
+	if _, err := store.Insert(ctx, InsertParams{
+		WorkspaceID: "t1", CreatedBy: "u1",
+		Data: map[string]any{"name": "B", "email": "a@x.com"},
+	}); err == nil {
+		t.Fatal("expected error for duplicate unique value in same tenant")
+	}
+
+	// Same email in a DIFFERENT tenant → pass (per-tenant uniqueness)
+	if _, err := store.Insert(ctx, InsertParams{
+		WorkspaceID: "t2", CreatedBy: "u1",
+		Data: map[string]any{"name": "C", "email": "a@x.com"},
+	}); err != nil {
+		t.Fatalf("expected same value in different tenant to pass, got: %v", err)
+	}
+
+	// Update that keeps its own value → pass (excludeID)
+	if _, err := store.Update(ctx, UpdateParams{
+		WorkspaceID: "t1", ID: id1, Version: 1, UpdatedBy: "u1",
+		Data: map[string]any{"name": "A2", "email": "a@x.com"},
+	}); err != nil {
+		t.Fatalf("expected update keeping own unique value to pass, got: %v", err)
+	}
+}

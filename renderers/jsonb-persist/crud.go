@@ -443,8 +443,10 @@ func (s *EntityStore) Insert(ctx context.Context, params InsertParams) (string, 
 			return err
 		}
 
-		// Validate field rules
-		if err := s.validateFieldRules(params.Data); err != nil {
+		// Validate field rules — reads through this Insert's own transaction
+		// (txdb) so the cross-record `unique` rule doesn't deadlock on a
+		// single-connection SQLite driver.
+		if err := s.validateFieldRules(ctx, txdb, params.Data, params.WorkspaceID, ""); err != nil {
 			return err
 		}
 
@@ -733,8 +735,9 @@ func (s *EntityStore) Update(ctx context.Context, params UpdateParams) (int, err
 		return 0, fmt.Errorf("%s update: %w", s.entity, err)
 	}
 
-	// Validate field rules
-	if err := s.validateFieldRules(params.Data); err != nil {
+	// Validate field rules — no transaction is open yet at this point in
+	// Update, so read through txReadDB (falls back to s.db).
+	if err := s.validateFieldRules(ctx, txReadDB(ctx, s.db), params.Data, params.WorkspaceID, params.ID); err != nil {
 		return 0, fmt.Errorf("%s update: %w", s.entity, err)
 	}
 
@@ -2558,7 +2561,12 @@ func (s *EntityStore) validateStateTransition(oldData, newData map[string]any) e
 
 // validateFieldRules checks all field validation rules against the data.
 // Returns an error wrapping ErrValidationRule if any rule is violated.
-func (s *EntityStore) validateFieldRules(data map[string]any) error {
+// database is the DB the enclosing operation is using (the open transaction
+// during Insert, or s.db before Update opens one) — the cross-record `unique`
+// rule must read through it to avoid a SQLite single-connection deadlock.
+// workspaceID + excludeID scope the uniqueness check per tenant and skip the
+// record being updated.
+func (s *EntityStore) validateFieldRules(ctx context.Context, database DB, data map[string]any, workspaceID, excludeID string) error {
 	for _, f := range s.fields {
 		val, exists := data[f.Name]
 		if !exists || val == nil {
@@ -2577,9 +2585,47 @@ func (s *EntityStore) validateFieldRules(data map[string]any) error {
 					return err
 				}
 			}
+			// Cross-record `unique` (per-tenant, 05-field-types.md §3) — query
+			// the store for another record with the same value in this field.
+			if rule.Name == "unique" {
+				if err := s.validateUnique(ctx, database, f.Name, val, workspaceID, excludeID); err != nil {
+					return err
+				}
+			}
 		}
 	}
 	return nil
+}
+
+// validateUnique enforces the `unique` rule (05-field-types.md §3): the field
+// value must be unique per tenant. excludeID skips the record being updated so
+// an update that keeps its own value doesn't false-positive. It queries
+// directly through `database` (the open transaction during Insert) rather than
+// s.List, which would deadlock on a single-connection SQLite driver while the
+// enclosing transaction holds the only connection.
+func (s *EntityStore) validateUnique(ctx context.Context, database DB, fieldName string, val any, workspaceID, excludeID string) error {
+	if workspaceID == "" {
+		return nil // no tenant context — skip (shouldn't happen in practice)
+	}
+	col := s.columnRefExpr(fieldName)
+	query := fmt.Sprintf(
+		`SELECT id FROM %s WHERE tenant_id = ? AND deleted_at IS NULL AND %s = ? LIMIT 2`,
+		s.qualifiedTable(), col)
+	rows, err := database.QueryContext(ctx, query, workspaceID, val)
+	if err != nil {
+		return fmt.Errorf("%w: %q: unique check failed: %v", ErrValidationRule, fieldName, err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return fmt.Errorf("%w: %q: unique check scan failed: %v", ErrValidationRule, fieldName, err)
+		}
+		if id != excludeID {
+			return fmt.Errorf("%w: %q: value must be unique per tenant", ErrValidationRule, fieldName)
+		}
+	}
+	return rows.Err()
 }
 
 // validateSingleRule checks a single validation rule against a value.
@@ -2717,6 +2763,50 @@ func validateSingleRule(fieldName string, val any, rule spec.ValidationRule) err
 		maxLen := toInt(rule.Value)
 		if len(items) > maxLen {
 			return fmt.Errorf("%w: %q: maximum %d items allowed, got %d", ErrValidationRule, fieldName, maxLen, len(items))
+		}
+
+	case "length":
+		// Exact string length (05-field-types.md §3).
+		str, ok := val.(string)
+		if !ok {
+			return fmt.Errorf("%w: %q: length requires a string value", ErrValidationRule, fieldName)
+		}
+		want := toInt(rule.Value)
+		if len(str) != want {
+			return fmt.Errorf("%w: %q: length must be exactly %d, got %d", ErrValidationRule, fieldName, want, len(str))
+		}
+
+	case "in":
+		// Value must be in the given set (enum/set, 05-field-types.md §3).
+		allowed, ok := rule.Value.([]any)
+		if !ok {
+			return fmt.Errorf("%w: %q: in rule value must be an array", ErrValidationRule, fieldName)
+		}
+		found := false
+		for _, a := range allowed {
+			if fmt.Sprintf("%v", a) == fmt.Sprintf("%v", val) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("%w: %q: value must be one of %v", ErrValidationRule, fieldName, allowed)
+		}
+
+	case "script":
+		// Escape-hatch Starlark inline rule (05-field-types.md §3). The
+		// expression runs against the field value as `value` and must return
+		// a truthy result to pass. `message` (rule.Value) is the failure text.
+		expr, ok := rule.Value.(string)
+		if !ok || expr == "" {
+			return fmt.Errorf("%w: %q: script rule requires a Starlark expression", ErrValidationRule, fieldName)
+		}
+		passed, _, err := starlark.EvaluateGuard(expr, map[string]any{"value": val})
+		if err != nil {
+			return fmt.Errorf("%w: %q: script rule error: %v", ErrValidationRule, fieldName, err)
+		}
+		if !passed {
+			return fmt.Errorf("%w: %q: script rule failed", ErrValidationRule, fieldName)
 		}
 	}
 
