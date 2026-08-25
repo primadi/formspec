@@ -505,3 +505,16 @@ func RawSpecToWorkflowSpec(specMap map[string]any) (*spec.WorkflowSpec, error) {
 	}
 	return &wf, nil
 }
+
+// RawSpecToIntegratorSpec converts a raw spec map to a typed IntegratorSpec.
+func RawSpecToIntegratorSpec(specMap map[string]any) (*spec.IntegratorSpec, error) {
+	b, err := yaml.Marshal(specMap)
+	if err != nil {
+		return nil, fmt.Errorf("re-marshal spec: %w", err)
+	}
+	var it spec.IntegratorSpec
+	if err := yaml.Unmarshal(b, &it); err != nil {
+		return nil, fmt.Errorf("unmarshal integrator spec: %w", err)
+	}
+	return &it, nil
+}

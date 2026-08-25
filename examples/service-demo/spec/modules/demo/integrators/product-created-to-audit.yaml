@@ -1,0 +1,13 @@
+apiVersion: formspec.dev/v1
+kind: Integrator
+metadata:
+  name: product-created-to-tax
+  module: demo
+  description: "Bridge event on_create product ke service tax-calculator — demo integrator engine (7.7)"
+spec:
+  listen:
+    resource: demo.product
+    event: on_create
+  call:
+    resource: demo.tax-calculator
+    action: calculate

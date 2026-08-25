@@ -44,6 +44,7 @@ import (
 	"github.com/primadi/formspec/internal/auth"
 	"github.com/primadi/formspec/internal/config"
 	"github.com/primadi/formspec/internal/entity"
+	"github.com/primadi/formspec/internal/integrator"
 	"github.com/primadi/formspec/internal/manifest"
 	"github.com/primadi/formspec/internal/permission"
 	"github.com/primadi/formspec/internal/service"
@@ -373,6 +374,9 @@ func New(cfg Config) (*App, error) {
 	// Workflow registry (todo 7.4.1): load kind: Workflow manifests for
 	// state-machine transition interception.
 	wfReg := buildWorkflowRegistry(specManifests.Manifests)
+	// Integrator registry (todo 7.7.1): load kind: Integrator manifests for
+	// cross-module event → action bridging.
+	itReg := buildIntegratorRegistry(specManifests.Manifests)
 
 	rb := api.NewRouterBuilder(reg)
 	// Set the service registry BEFORE BuildRoutes so GenerateServiceRoutes
@@ -583,12 +587,31 @@ func New(cfg Config) (*App, error) {
 	// Subscription dispatch (todo 7.3.1): deliver emitted events to matching
 	// kind: Subscription handlers via the action dispatcher.
 	subDispatch := subscription.NewDispatcher(subReg, disp)
+	// Integrator dispatch (todo 7.7.1): bridge emitted events to matching
+	// kind: Integrator target actions.
+	itDispatch := integrator.NewDispatcher(itReg, reg, svcReg, disp)
+
+	// Compose subscription + integrator dispatch into the outbox worker's
+	// single Subscriptions callback.
+	composedDispatch := func(ctx context.Context, workspaceID, eventName, resource string, payload map[string]any) error {
+		var errs []string
+		if err := subDispatch.Dispatch(ctx, workspaceID, eventName, resource, payload); err != nil {
+			errs = append(errs, err.Error())
+		}
+		if err := itDispatch.Dispatch(ctx, workspaceID, eventName, resource, payload); err != nil {
+			errs = append(errs, err.Error())
+		}
+		if len(errs) > 0 {
+			return fmt.Errorf("%s", strings.Join(errs, "; "))
+		}
+		return nil
+	}
 
 	deliveryHandler := &db.DeliveryEventHandler{
 		Hub:           hub,
 		EventLog:      eventLogStore,
 		Lookup:        eventChannelLookup,
-		Subscriptions: subDispatch.Dispatch,
+		Subscriptions: composedDispatch,
 	}
 	outboxWorker := db.NewOutboxWorker(outboxStore, deliveryHandler)
 
@@ -794,6 +817,8 @@ func (a *App) ReloadSpec() error {
 	newSubReg := buildSubscriptionRegistry(specManifests.Manifests)
 	// Workflow registry (todo 7.4.1): re-resolve on reload.
 	newWfReg := buildWorkflowRegistry(specManifests.Manifests)
+	// Integrator registry (todo 7.7.1): re-resolve on reload.
+	newItReg := buildIntegratorRegistry(specManifests.Manifests)
 
 	newDisp := newDispatcher(newReg, newSvcReg, a.database, a.cfg, newCfgReg)
 
@@ -844,11 +869,26 @@ func (a *App) ReloadSpec() error {
 	eventLogStore := db.NewEventLogStore(a.database, a.driver)
 	newRB.SetDeliveryDeps(action.DeliveryDeps{Hub: oldHub, Outbox: outboxStore, EventLog: eventLogStore})
 
-	// Re-point the outbox worker's subscription dispatch (todo 7.3.1) to a
-	// dispatcher built from the freshly reloaded registries — without
-	// recreating the worker, so in-flight outbox draining is uninterrupted.
+	// Re-point the outbox worker's subscription + integrator dispatch (todo
+	// 7.3.1/7.7.1) to dispatchers built from the freshly reloaded registries —
+	// without recreating the worker, so in-flight outbox draining is
+	// uninterrupted.
 	if a.deliveryHandler != nil {
-		a.deliveryHandler.Subscriptions = subscription.NewDispatcher(newSubReg, newDisp).Dispatch
+		newSubDispatch := subscription.NewDispatcher(newSubReg, newDisp)
+		newItDispatch := integrator.NewDispatcher(newItReg, newReg, newSvcReg, newDisp)
+		a.deliveryHandler.Subscriptions = func(ctx context.Context, workspaceID, eventName, resource string, payload map[string]any) error {
+			var errs []string
+			if err := newSubDispatch.Dispatch(ctx, workspaceID, eventName, resource, payload); err != nil {
+				errs = append(errs, err.Error())
+			}
+			if err := newItDispatch.Dispatch(ctx, workspaceID, eventName, resource, payload); err != nil {
+				errs = append(errs, err.Error())
+			}
+			if len(errs) > 0 {
+				return fmt.Errorf("%s", strings.Join(errs, "; "))
+			}
+			return nil
+		}
 	}
 
 	// Wire the idempotency store (todo 2.7) — same store instance, so
@@ -1039,6 +1079,29 @@ func buildWorkflowRegistry(manifests []manifest.RawManifest) *workflow.Registry 
 			continue
 		}
 		reg.Add(raw.Metadata.Module, raw.Metadata.Name, wf)
+	}
+	return reg
+}
+
+// buildIntegratorRegistry loads kind: Integrator manifests into an
+// integrator.Registry keyed by {module}.{name} and indexed by listened event
+// (todo 7.7.1). Integrators bridge two entities/modules that do not know each
+// other directly: listen.resource+event triggers call.resource+action.
+func buildIntegratorRegistry(manifests []manifest.RawManifest) *integrator.Registry {
+	reg := integrator.NewRegistry()
+	for _, raw := range manifests {
+		if spec.Kind(raw.Kind) != spec.KindIntegrator {
+			continue
+		}
+		specMap, ok := raw.Spec.(map[string]any)
+		if !ok {
+			continue
+		}
+		it, err := manifest.RawSpecToIntegratorSpec(specMap)
+		if err != nil {
+			continue
+		}
+		reg.Add(raw.Metadata.Module, raw.Metadata.Name, it)
 	}
 	return reg
 }
