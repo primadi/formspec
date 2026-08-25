@@ -188,6 +188,22 @@ func SystemTableDDLs(driver DriverType) []string {
 			fmt.Sprintf("created_at      %s NOT NULL DEFAULT %s", ts, ts),
 			fmt.Sprintf("updated_at      %s NOT NULL DEFAULT %s", ts, ts),
 		),
+
+		// formspec_saga_log — records cross-boundary integrator calls and
+		// their compensate actions (02-core-extended.md §5, todo 7.7.4). A
+		// saga entry is registered when an integrator dispatches a
+		// cross-boundary call; on failure the compensate action is invoked.
+		createTableSQL(driver, "formspec_saga_log",
+			idColumn(driver),
+			"tenant_id    text    NOT NULL",
+			"source       text    NOT NULL", // originating event, e.g. "billing.invoice.on_submit"
+			"target       text    NOT NULL", // target action, e.g. "gl.journal-entry.create"
+			"compensate   text    NOT NULL DEFAULT ''", // compensate action ref
+			"status       text    NOT NULL DEFAULT 'pending'", // pending | compensated | completed
+			"error        text    NOT NULL DEFAULT ''",
+			fmt.Sprintf("created_at   %s NOT NULL DEFAULT %s", ts, ts),
+			fmt.Sprintf("updated_at   %s NOT NULL DEFAULT %s", ts, ts),
+		),
 	}
 }
 
@@ -219,7 +235,7 @@ func (r *MigrationRunner) EnsureSystemTables(ctx context.Context) error {
 		"formspec_schema_migrations", "formspec_natural_key_counters",
 		"formspec_idempotency_keys", "formspec_outbox",
 		"formspec_extensions", "formspec_audit_log", "formspec_event_log",
-		"formspec_workflow_approval",
+		"formspec_workflow_approval", "formspec_saga_log",
 	}
 	for i, ddl := range ddls {
 		if _, err := r.db.ExecContext(ctx, ddl); err != nil {

@@ -599,8 +599,10 @@ func New(cfg Config) (*App, error) {
 	// kind: Subscription handlers via the action dispatcher.
 	subDispatch := subscription.NewDispatcher(subReg, disp)
 	// Integrator dispatch (todo 7.7.1): bridge emitted events to matching
-	// kind: Integrator target actions.
-	itDispatch := integrator.NewDispatcher(itReg, reg, svcReg, disp)
+	// kind: Integrator target actions. Saga store (todo 7.7.4) records
+	// cross-boundary calls with a declared compensate.
+	sagaStore := db.NewSagaStore(database, driver)
+	itDispatch := integrator.NewDispatcher(itReg, reg, svcReg, disp, sagaStore)
 
 	// Compose subscription + integrator dispatch into the outbox worker's
 	// single Subscriptions callback.
@@ -898,7 +900,7 @@ func (a *App) ReloadSpec() error {
 	// uninterrupted.
 	if a.deliveryHandler != nil {
 		newSubDispatch := subscription.NewDispatcher(newSubReg, newDisp)
-		newItDispatch := integrator.NewDispatcher(newItReg, newReg, newSvcReg, newDisp)
+		newItDispatch := integrator.NewDispatcher(newItReg, newReg, newSvcReg, newDisp, db.NewSagaStore(a.database, a.driver))
 		a.deliveryHandler.Subscriptions = func(ctx context.Context, workspaceID, eventName, resource string, payload map[string]any) error {
 			var errs []string
 			if err := newSubDispatch.Dispatch(ctx, workspaceID, eventName, resource, payload); err != nil {
