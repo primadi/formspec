@@ -14,6 +14,7 @@ import (
 	"github.com/primadi/formspec/internal/action"
 	"github.com/primadi/formspec/internal/auth"
 	entityengine "github.com/primadi/formspec/internal/entity"
+	"github.com/primadi/formspec/internal/service"
 	"github.com/primadi/formspec/internal/validation"
 	"github.com/primadi/formspec/pkg/spec"
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
@@ -23,6 +24,7 @@ import (
 type HandlerFactory struct {
 	registry      EntityStoreProvider
 	dispatcher    *action.Dispatcher
+	svcRegistry   *service.Registry // kind: Service manifests (todo 7.1)
 	specLookup    func(module, name string) (*spec.EntitySpec, bool) // optional — enables sort/filter validation, hooks, and event resolution
 	specDirLookup func(module, name string) (string, bool)           // optional — resolves the entity's spec directory for hook/custom script refs
 	deliveryDeps  action.DeliveryDeps
@@ -46,6 +48,12 @@ func NewHandlerFactory(registry EntityStoreProvider) *HandlerFactory {
 // SetDispatcher sets the action dispatcher used for custom action execution.
 func (f *HandlerFactory) SetDispatcher(d *action.Dispatcher) {
 	f.dispatcher = d
+}
+
+// SetServiceRegistry sets the kind: Service registry used by
+// HandleServiceAction to resolve stateless Service actions (todo 7.1).
+func (f *HandlerFactory) SetServiceRegistry(s *service.Registry) {
+	f.svcRegistry = s
 }
 
 // SetSpecLookup wires entity-spec resolution, enabling `sort` and field
@@ -1796,6 +1804,103 @@ func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, a
 		// replays the same response (todo 2.7.2).
 		if bodyBytes, err := json.Marshal(resp); err == nil {
 			f.completeIdempotent(ctx, workspaceID, actionName, idemKey, http.StatusOK, bodyBytes)
+		}
+		writeJSON(w, http.StatusOK, resp)
+	}
+}
+
+// HandleServiceAction returns a handler for a stateless Service action
+// (todo 7.1). A Service has no persisted record, so there is no resourceID —
+// the action runs against the caller's params only. Impl types
+// (native/script/script_ref/compiled/sidecar) are resolved by the dispatcher
+// exactly as for entity custom actions, so permission/uses enforcement is
+// uniform across all five impl types.
+//
+//	POST /api/v1/{module}/{service}/{action}
+func (f *HandlerFactory) HandleServiceAction(module, serviceName, actionName string, actionSpec spec.Action) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		workspaceID := workspaceFromContext(ctx)
+		userID := userFromContext(ctx)
+
+		// Rate limit (todo 7.12): per-action override wins over resource default.
+		if !f.rateLimitFor(w, r, module, serviceName, actionName) {
+			return
+		}
+
+		// Parse request body as params.
+		var params map[string]any
+		if r.Body != nil && r.ContentLength > 0 {
+			if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
+				writeError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "invalid JSON: "+err.Error())
+				return
+			}
+		}
+		if params == nil {
+			params = make(map[string]any)
+		}
+
+		// Validate action params if declared.
+		if actionSpec.Params != nil && len(actionSpec.Params.Validate) > 0 {
+			if errs := validation.ValidateActionParams(params, actionSpec.Params.Validate); len(errs) > 0 {
+				writeValidationErrors(w, errs)
+				return
+			}
+		}
+
+		// Evaluate action conditions (state-level validation, spec §13).
+		if len(actionSpec.Conditions) > 0 {
+			if err := action.EvaluateConditions(actionSpec.Conditions, nil, params); err != nil {
+				writeError(w, http.StatusUnprocessableEntity, "CONDITION_FAILED", err.Error())
+				return
+			}
+		}
+
+		// Dispatch to the appropriate executor via the action dispatcher.
+		identity := IdentityFromContext(ctx)
+		var identityInfo *action.IdentityInfo
+		if identity != nil {
+			identityInfo = &action.IdentityInfo{
+				UserID:      identity.UserID,
+				WorkspaceID: identity.WorkspaceID,
+				Permissions: identity.Permissions,
+				Roles:       identity.Roles,
+			}
+		}
+
+		execParams := action.ExecuteParams{
+			Module:      module,
+			Entity:      serviceName,
+			ActionName:  actionName,
+			Params:      params,
+			WorkspaceID: workspaceID,
+			UserID:      userID,
+			Identity:    identityInfo,
+		}
+
+		// `call: async` (fire-and-forget, todo 7.1.4): dispatch in a
+		// goroutine and return 202 Accepted immediately — no job_id, no
+		// progress, no result (distinct from tracked async jobs §13).
+		if actionSpec.Call == "async" {
+			go func() {
+				_, _ = f.dispatcher.Dispatch(ctx, actionSpec, execParams)
+			}()
+			writeJSON(w, http.StatusAccepted, SingleResponse{
+				Data: map[string]any{"accepted": true},
+				Meta: MetaSingle{RequestID: requestIDFromContext(ctx), Timestamp: time.Now().UTC().Format(time.RFC3339)},
+			})
+			return
+		}
+
+		result, err := f.dispatcher.Dispatch(ctx, actionSpec, execParams)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "ACTION_ERROR", err.Error())
+			return
+		}
+
+		resp := SingleResponse{
+			Data: result.Data,
+			Meta: MetaSingle{RequestID: requestIDFromContext(ctx), Timestamp: time.Now().UTC().Format(time.RFC3339)},
 		}
 		writeJSON(w, http.StatusOK, resp)
 	}

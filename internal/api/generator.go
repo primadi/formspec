@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/primadi/formspec/internal/entity"
+	"github.com/primadi/formspec/internal/service"
 	"github.com/primadi/formspec/pkg/spec"
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
 )
@@ -404,4 +405,43 @@ func mergeRoutes(slices ...[]RouteDescriptor) []RouteDescriptor {
 		}
 	}
 	return result
+}
+
+// GenerateServiceRoutes creates route descriptors for stateless Service
+// actions (todo 7.1). A Service has no persisted record, so the path is
+// direct to the action:
+//
+//	POST /api/v1/{module}/{service}/{action}
+//
+// Only actions with an impl type are routed (no-impl actions are no-ops).
+// Permission defaults to {module}.{service}.{action} unless the action
+// declares required_permission.
+func GenerateServiceRoutes(svcReg *service.Registry) []RouteDescriptor {
+	var routes []RouteDescriptor
+	if svcReg == nil {
+		return routes
+	}
+	for _, info := range svcReg.List() {
+		for _, actionName := range info.Actions {
+			actionSpec, ok := svcReg.GetAction(info.Module, info.Name, actionName)
+			if !ok || actionSpec.Disabled || actionSpec.Impl == nil {
+				continue
+			}
+			perm := actionSpec.RequiredPermission
+			if perm == "" {
+				perm = info.Module + "." + info.Name + "." + actionName
+			}
+			routes = append(routes, RouteDescriptor{
+				Module:             info.Module,
+				Entity:             info.Name,
+				Action:             actionName,
+				Method:             "POST",
+				Path:               "/api/v1/" + info.Module + "/" + info.Name + "/" + actionName,
+				Protocol:           spec.ProtocolREST,
+				Handler:            "service",
+				RequiredPermission: perm,
+			})
+		}
+	}
+	return routes
 }

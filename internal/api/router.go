@@ -12,6 +12,7 @@ import (
 	"github.com/primadi/formspec/internal/action"
 	formspec_app "github.com/primadi/formspec/internal/app"
 	"github.com/primadi/formspec/internal/entity"
+	"github.com/primadi/formspec/internal/service"
 	"github.com/primadi/formspec/internal/ui"
 	"github.com/primadi/formspec/pkg/spec"
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
@@ -21,6 +22,7 @@ import (
 // It wires middleware, route generation, and handler dispatch together.
 type RouterBuilder struct {
 	registry      *entity.Registry
+	svcRegistry   *service.Registry // kind: Service manifests (todo 7.1)
 	routes        []RouteDescriptor
 	factory       *HandlerFactory
 	dispatcher    *action.Dispatcher
@@ -68,6 +70,13 @@ func NewRouterBuilder(registry *entity.Registry) *RouterBuilder {
 func (b *RouterBuilder) SetDispatcher(d *action.Dispatcher) {
 	b.dispatcher = d
 	b.factory.SetDispatcher(d)
+}
+
+// SetServiceRegistry sets the kind: Service registry used to generate
+// stateless Service action routes (todo 7.1).
+func (b *RouterBuilder) SetServiceRegistry(s *service.Registry) {
+	b.svcRegistry = s
+	b.factory.SetServiceRegistry(s)
 }
 
 // SetDeliveryDeps wires the event-delivery dependencies (hub, outbox, event
@@ -186,7 +195,8 @@ func (b *RouterBuilder) BuildRoutes() {
 	uiRoutes := GenerateUIRoutes(b.registry)
 	customRoutes := GenerateCustomActionRoutes(b.registry)
 	uiCustomRoutes := GenerateUICustomActionRoutes(b.registry)
-	b.routes = mergeRoutes(restRoutes, uiRoutes, customRoutes, uiCustomRoutes)
+	svcRoutes := GenerateServiceRoutes(b.svcRegistry)
+	b.routes = mergeRoutes(restRoutes, uiRoutes, customRoutes, uiCustomRoutes, svcRoutes)
 }
 
 // BuildHTTP constructs the chi router with all middleware and route registration.
@@ -424,6 +434,18 @@ func (b *RouterBuilder) registerRoute(r chi.Router, rd RouteDescriptor) {
 			break
 		}
 		handler = b.factory.HandlePrepare(rd.Module, rd.Entity, rd.Action, *actionSpec)
+	case "service":
+		// Stateless Service action (todo 7.1). Resolve the action spec from
+		// the service registry; no persisted record, so no resourceID.
+		actionSpec, ok := b.svcRegistry.GetAction(rd.Module, rd.Entity, rd.Action)
+		if !ok {
+			handler = func(w http.ResponseWriter, r *http.Request) {
+				writeError(w, http.StatusNotFound, "NOT_FOUND",
+					"service action not found: "+rd.Module+"/"+rd.Entity+"/"+rd.Action)
+			}
+			break
+		}
+		handler = b.factory.HandleServiceAction(rd.Module, rd.Entity, rd.Action, *actionSpec)
 	default:
 		return // unknown handler type, skip
 	}

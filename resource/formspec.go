@@ -46,6 +46,7 @@ import (
 	"github.com/primadi/formspec/internal/entity"
 	"github.com/primadi/formspec/internal/manifest"
 	"github.com/primadi/formspec/internal/permission"
+	"github.com/primadi/formspec/internal/service"
 	"github.com/primadi/formspec/internal/ui"
 	"github.com/primadi/formspec/internal/validation"
 	"github.com/primadi/formspec/pkg/spec"
@@ -352,12 +353,16 @@ func New(cfg Config) (*App, error) {
 	// Config registry (todo 7.2.1): load kind: Config manifests and resolve
 	// their keys into ctx.config (non-secret) / ctx.secrets (secret) stores.
 	cfgReg := buildConfigRegistry(specManifests.Manifests)
+	// Service registry (todo 7.1.1): load kind: Service manifests for
+	// stateless action dispatch.
+	svcReg := buildServiceRegistry(specManifests.Manifests)
 
 	rb := api.NewRouterBuilder(reg)
 	rb.BuildRoutes()
-	disp := newDispatcher(reg, database, cfg, cfgReg)
+	disp := newDispatcher(reg, svcReg, database, cfg, cfgReg)
 	nativeEx := disp.NativeExecutor() // get the native executor from dispatcher
 	rb.SetDispatcher(disp)
+	rb.SetServiceRegistry(svcReg)
 	rb.SetUIRegistry(uiReg)
 	rb.SetApps(resolvedApps)
 	if cfg.WebDir != "" {
@@ -737,8 +742,10 @@ func (a *App) ReloadSpec() error {
 	// Config registry (todo 7.2.1): re-resolve on reload so a changed Config
 	// manifest's keys take effect without a full restart.
 	newCfgReg := buildConfigRegistry(specManifests.Manifests)
+	// Service registry (todo 7.1.1): re-resolve on reload.
+	newSvcReg := buildServiceRegistry(specManifests.Manifests)
 
-	newDisp := newDispatcher(newReg, a.database, a.cfg, newCfgReg)
+	newDisp := newDispatcher(newReg, newSvcReg, a.database, a.cfg, newCfgReg)
 
 	// Re-register native Go handlers on the new dispatcher.
 	a.mu.RLock()
@@ -748,6 +755,7 @@ func (a *App) ReloadSpec() error {
 	a.mu.RUnlock()
 
 	newRB.SetDispatcher(newDisp)
+	newRB.SetServiceRegistry(newSvcReg)
 	newRB.SetUIRegistry(newUIReg)
 	newRB.SetApps(resolvedApps)
 	// Re-resolve the global settings namespace on reload so a changed
@@ -878,7 +886,29 @@ func buildConfigRegistry(manifests []manifest.RawManifest) *config.Registry {
 	return reg
 }
 
-func newDispatcher(reg *entity.Registry, database db.DB, cfg Config, cfgReg *config.Registry) *action.Dispatcher {
+// buildServiceRegistry loads kind: Service manifests into a service.Registry
+// keyed by {module}.{name} (todo 7.1.1). Services are stateless computation
+// resources dispatched through the same action dispatcher as entity actions.
+func buildServiceRegistry(manifests []manifest.RawManifest) *service.Registry {
+	reg := service.NewRegistry()
+	for _, raw := range manifests {
+		if spec.Kind(raw.Kind) != spec.KindService {
+			continue
+		}
+		specMap, ok := raw.Spec.(map[string]any)
+		if !ok {
+			continue
+		}
+		svc, err := manifest.RawSpecToServiceSpec(specMap)
+		if err != nil {
+			continue
+		}
+		reg.Add(raw.Metadata.Module, raw.Metadata.Name, svc)
+	}
+	return reg
+}
+
+func newDispatcher(reg *entity.Registry, svcReg *service.Registry, database db.DB, cfg Config, cfgReg *config.Registry) *action.Dispatcher {
 	disp := action.NewDispatcher()
 
 	scriptEx := action.NewScriptExecutor(cfg.SpecPath)
@@ -924,6 +954,13 @@ func newDispatcher(reg *entity.Registry, database db.DB, cfg Config, cfgReg *con
 		}
 		if err := checkCrossModuleUses(fromModule, targetModule, targetEntity, callerResources); err != nil {
 			return nil, err
+		}
+		// Service actions (todo 7.1): resolve {module}.{service} first, then
+		// fall back to entity actions. A Service is stateless — no resourceID.
+		if svcReg != nil {
+			if _, ok := svcReg.Get(targetModule, targetEntity); ok {
+				return invokeServiceAction(ctx, svcReg, disp, workspaceID, targetModule, targetEntity, actionName, params)
+			}
 		}
 		return invokeAction(ctx, reg, disp, workspaceID, targetModule, targetEntity, actionName, "", params)
 	})
@@ -1057,6 +1094,31 @@ func invokeAction(ctx context.Context, reg *entity.Registry, disp *action.Dispat
 		ResourceVersion: resourceVersion,
 		Params:          params,
 		WorkspaceID:     workspaceID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result.Data, nil
+}
+
+// invokeServiceAction dispatches a stateless Service action (todo 7.1.2/7.1.3).
+// A Service has no persisted record, so there is no resourceID/resourceData —
+// the action runs against the caller's params only. Impl types
+// (native/script/script_ref/compiled/sidecar) are resolved by the dispatcher
+// exactly as for entity custom actions, so permission/uses enforcement is
+// uniform across all five impl types.
+func invokeServiceAction(ctx context.Context, svcReg *service.Registry, disp *action.Dispatcher, workspaceID, module, serviceName, actionName string, params map[string]any) (any, error) {
+	actionSpec, ok := svcReg.GetAction(module, serviceName, actionName)
+	if !ok {
+		return nil, fmt.Errorf("resource.call: service action %s.%s.%s not found", module, serviceName, actionName)
+	}
+
+	result, err := disp.Dispatch(ctx, *actionSpec, action.ExecuteParams{
+		Module:      module,
+		Entity:      serviceName,
+		ActionName:  actionName,
+		Params:      params,
+		WorkspaceID: workspaceID,
 	})
 	if err != nil {
 		return nil, err
