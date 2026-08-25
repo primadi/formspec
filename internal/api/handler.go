@@ -2050,13 +2050,13 @@ func (f *HandlerFactory) executeWorkflowTransition(
 	// Update the record's state field.
 	resourceData[stateField] = toState
 	_, err = store.Update(ctx, db.UpdateParams{
-		WorkspaceID:   workspaceID,
-		ID:            resourceID,
-		Version:       resourceVersion,
-		Data:          resourceData,
-		UpdatedBy:     userID,
-		RequestID:     requestIDFromContext(ctx),
-		Permissions:   permissionsFromContext(ctx),
+		WorkspaceID: workspaceID,
+		ID:          resourceID,
+		Version:     resourceVersion,
+		Data:        resourceData,
+		UpdatedBy:   userID,
+		RequestID:   requestIDFromContext(ctx),
+		Permissions: permissionsFromContext(ctx),
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "WORKFLOW_ERROR", err.Error())

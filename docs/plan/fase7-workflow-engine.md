@@ -81,7 +81,7 @@ transisi, tidak ada tracking approval.
   `active`). ✅
 - Approve oleh requester (admin) → `403 WORKFLOW_DENIED`. ✅
 - Approve oleh manager (role `demo.manager` + permission) → `200
-  transition_completed`, status record → `discontinued`. ✅
+transition_completed`, status record → `discontinued`. ✅
 - `go test ./...` hijau (809 pass, termasuk unit test `internal/workflow`).
 
 ## File terdampak

@@ -175,7 +175,7 @@ type App struct {
 	// interrupt in-flight outbox draining).
 	deliveryHandler *db.DeliveryEventHandler
 	idempotency     *db.IdempotencyStore
-	httpServer   *http.Server
+	httpServer      *http.Server
 
 	// nativeHandlers preserves user-registered native Go handlers across
 	// ReloadSpec() calls so they are re-registered on the new dispatcher.

@@ -18,9 +18,9 @@ import (
 // Registry maps {module}.{name} → WorkflowSpec for the runtime, and indexes
 // workflows by the transition they intercept ({entity}.{from}.{to}).
 type Registry struct {
-	mu            sync.RWMutex
-	workflows     map[string]*spec.WorkflowSpec // key = "module/name"
-	byTransition  map[string][]*spec.WorkflowSpec
+	mu           sync.RWMutex
+	workflows    map[string]*spec.WorkflowSpec // key = "module/name"
+	byTransition map[string][]*spec.WorkflowSpec
 }
 
 // NewRegistry creates an empty Workflow registry.

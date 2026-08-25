@@ -23,7 +23,7 @@ transisi state machine **tanpa mengubah Entity** (02-core-extended.md §2):
   — tipe Starlark baru yang mendukung dot-notation `resource.amount` (bukan
   cuma `resource["amount"]`), dipakai di `EvaluateGuard` untuk `when`/guard.
 - **Requester exclusion (7.4.5)** — `CanApprove` menolak jika `userID ==
-  requesterID` (created_by record).
+requesterID` (created_by record).
 
 ## Verifikasi end-to-end (via `formspec dev` + curl)
 
@@ -33,7 +33,7 @@ transisi state machine **tanpa mengubah Entity** (02-core-extended.md §2):
   `active`). ✅
 - Approve oleh requester (admin) → `403 WORKFLOW_DENIED`. ✅
 - Approve oleh manager (role `demo.manager` + permission) → `200
-  transition_completed`, status record → `discontinued`. ✅
+transition_completed`, status record → `discontinued`. ✅
 - `go test ./...` hijau (809 pass, termasuk unit test `internal/workflow`).
 
 ## File terdampak

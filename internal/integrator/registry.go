@@ -18,9 +18,9 @@ import (
 // Registry maps {module}.{name} → IntegratorSpec for the runtime, and indexes
 // integrators by the event they listen to ({resource}.{event}).
 type Registry struct {
-	mu           sync.RWMutex
-	integrators  map[string]*spec.IntegratorSpec // key = "module/name"
-	byEvent      map[string][]*spec.IntegratorSpec
+	mu          sync.RWMutex
+	integrators map[string]*spec.IntegratorSpec // key = "module/name"
+	byEvent     map[string][]*spec.IntegratorSpec
 }
 
 // NewRegistry creates an empty Integrator registry.
@@ -95,10 +95,10 @@ func (r *Registry) ForEvent(eventName string) []*spec.IntegratorSpec {
 
 // IntegratorInfo is a lightweight summary of a registered Integrator.
 type IntegratorInfo struct {
-	Name     string `json:"name"`
-	Module   string `json:"module"`
-	Listen   string `json:"listen"`
-	Call     string `json:"call"`
+	Name       string `json:"name"`
+	Module     string `json:"module"`
+	Listen     string `json:"listen"`
+	Call       string `json:"call"`
 	Compensate string `json:"compensate,omitempty"`
 }
 
