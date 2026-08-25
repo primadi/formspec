@@ -13,9 +13,9 @@ bertanda tangan di audit trail bisnis** (02-core-extended.md §2, 01-core-basic.
 - **`recordWorkflowAudit`** (internal/api/handler.go) — helper best-effort yang
   mencatat keputusan workflow ke `formspec_audit_log`:
   - `workflow.approve` — actor = approver, changes = `{workflow, step, from,
-    to, decision: "approve"}`.
+to, decision: "approve"}`.
   - `workflow.reject` — actor = approver, changes = `{workflow, step, from,
-    to, decision: "reject"}`.
+to, decision: "reject"}`.
   - `workflow.transition` — actor = system, changes = `{to}` (saat transisi
     dieksekusi setelah semua step disetujui).
 - **`SetAuditWriter`** (internal/api/router.go + HandlerFactory) — wiring di

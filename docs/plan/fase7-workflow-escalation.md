@@ -33,7 +33,7 @@ tercatat di audit trail bisnis.
 - Untuk setiap pending approval: cek step aktif punya `escalation.after`; jika
   durasi sudah lewat sejak step aktif (updated_at), eskalasi:
   - catat audit `workflow.escalate` (actor = system, changes = `{workflow,
-    step, reassign_roles}`).
+step, reassign_roles}`).
   - tandai step sebagai escalated + simpan reassign_roles.
 - Step dieskalasi maksimal sekali (tracked di `EscalatedSteps`).
 - `Start`/`Stop` lifecycle; di-start dari `App.StartBackgroundWorkers`.
