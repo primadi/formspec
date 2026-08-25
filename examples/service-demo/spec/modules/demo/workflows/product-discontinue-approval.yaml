@@ -1,0 +1,15 @@
+apiVersion: formspec.dev/v1
+kind: Workflow
+metadata:
+  name: product-discontinue-approval
+  module: demo
+  description: "Approval untuk menonaktifkan produk — demo workflow engine (7.4)"
+spec:
+  entity: demo.product
+  on:
+    transition: { from: active, to: discontinued }
+  steps:
+    - roles: [demo.manager]
+      approvers: 1
+  on_reject:
+    to: active

@@ -51,6 +51,7 @@ import (
 	"github.com/primadi/formspec/internal/ui"
 	"github.com/primadi/formspec/internal/validation"
 	"github.com/primadi/formspec/internal/webhook"
+	"github.com/primadi/formspec/internal/workflow"
 	"github.com/primadi/formspec/pkg/spec"
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
 	"github.com/primadi/formspec/renderers/jsonb-persist/datastore/memory"
@@ -369,6 +370,9 @@ func New(cfg Config) (*App, error) {
 	// Subscription registry (todo 7.3.1): load kind: Subscription manifests
 	// for event → handler dispatch.
 	subReg := buildSubscriptionRegistry(specManifests.Manifests)
+	// Workflow registry (todo 7.4.1): load kind: Workflow manifests for
+	// state-machine transition interception.
+	wfReg := buildWorkflowRegistry(specManifests.Manifests)
 
 	rb := api.NewRouterBuilder(reg)
 	// Set the service registry BEFORE BuildRoutes so GenerateServiceRoutes
@@ -549,6 +553,12 @@ func New(cfg Config) (*App, error) {
 	eventLogStore := db.NewEventLogStore(database, driver)
 	hub := rb.Hub()
 	rb.SetDeliveryDeps(action.DeliveryDeps{Hub: hub, Outbox: outboxStore, EventLog: eventLogStore})
+
+	// Workflow approval store (todo 7.4): persists in-flight approval
+	// requests for intercepted state-machine transitions.
+	wfApprovalStore := db.NewWorkflowApprovalStore(database, driver)
+	rb.SetWorkflowRegistry(wfReg)
+	rb.SetWorkflowApprovalStore(wfApprovalStore)
 
 	// eventChannelLookup re-resolves an event's declared deliver: channels
 	// from the live registry at delivery time (not a snapshot taken at
@@ -782,6 +792,8 @@ func (a *App) ReloadSpec() error {
 	newWhReg := buildWebhookRegistry(specManifests.Manifests)
 	// Subscription registry (todo 7.3.1): re-resolve on reload.
 	newSubReg := buildSubscriptionRegistry(specManifests.Manifests)
+	// Workflow registry (todo 7.4.1): re-resolve on reload.
+	newWfReg := buildWorkflowRegistry(specManifests.Manifests)
 
 	newDisp := newDispatcher(newReg, newSvcReg, a.database, a.cfg, newCfgReg)
 
@@ -798,6 +810,9 @@ func (a *App) ReloadSpec() error {
 	// Set the webhook registry + key resolver BEFORE BuildRoutes (todo 7.6).
 	newRB.SetWebhookRegistry(newWhReg)
 	newRB.SetWebhookKeyResolver(newCfgReg)
+	// Set the workflow registry + approval store BEFORE BuildRoutes (todo 7.4).
+	newRB.SetWorkflowRegistry(newWfReg)
+	newRB.SetWorkflowApprovalStore(db.NewWorkflowApprovalStore(a.database, a.driver))
 	newRB.BuildRoutes()
 
 	newRB.SetDispatcher(newDisp)
@@ -1001,6 +1016,29 @@ func buildSubscriptionRegistry(manifests []manifest.RawManifest) *subscription.R
 			continue
 		}
 		reg.Add(raw.Metadata.Module, raw.Metadata.Name, sub)
+	}
+	return reg
+}
+
+// buildWorkflowRegistry loads kind: Workflow manifests into a workflow.Registry
+// keyed by {module}.{name} and indexed by intercepted transition (todo 7.4.1).
+// Workflows attach role-based approval to state-machine transitions without
+// modifying the Entity.
+func buildWorkflowRegistry(manifests []manifest.RawManifest) *workflow.Registry {
+	reg := workflow.NewRegistry()
+	for _, raw := range manifests {
+		if spec.Kind(raw.Kind) != spec.KindWorkflow {
+			continue
+		}
+		specMap, ok := raw.Spec.(map[string]any)
+		if !ok {
+			continue
+		}
+		wf, err := manifest.RawSpecToWorkflowSpec(specMap)
+		if err != nil {
+			continue
+		}
+		reg.Add(raw.Metadata.Module, raw.Metadata.Name, wf)
 	}
 	return reg
 }

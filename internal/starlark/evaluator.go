@@ -138,6 +138,10 @@ func toStarlark(v any) (starlark.Value, error) {
 	}
 
 	switch x := v.(type) {
+	case *FieldMap:
+		// Already a Starlark value — pass through so dot-notation field
+		// access (resource.amount) keeps working.
+		return x, nil
 	case bool:
 		return starlark.Bool(x), nil
 	case int:

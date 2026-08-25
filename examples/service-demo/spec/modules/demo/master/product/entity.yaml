@@ -16,6 +16,18 @@ spec:
   actions:
     - name: create
       emits: on_create
+    - name: discontinue
+      description: "Nonaktifkan produk — di-intercept workflow approval (demo 7.4)"
+      required_permission: demo.products.discontinue
+      impl: { type: script_ref, ref: demo/discontinue_product }
+  state_machine:
+    field: status
+    initial: active
+    states:
+      - { name: active, label: "Aktif" }
+      - { name: discontinued, label: "Dihentikan" }
+    transitions:
+      - { from: active, to: discontinued, via: discontinue }
   events:
     - name: on_create
       type: async

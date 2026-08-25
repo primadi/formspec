@@ -15,6 +15,7 @@ import (
 	"github.com/primadi/formspec/internal/service"
 	"github.com/primadi/formspec/internal/ui"
 	"github.com/primadi/formspec/internal/webhook"
+	"github.com/primadi/formspec/internal/workflow"
 	"github.com/primadi/formspec/pkg/spec"
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
 )
@@ -92,6 +93,18 @@ func (b *RouterBuilder) SetWebhookRegistry(w *webhook.Registry) {
 // webhook HMAC secrets / static tokens (todo 7.6).
 func (b *RouterBuilder) SetWebhookKeyResolver(k webhook.KeyResolver) {
 	b.factory.SetWebhookKeyResolver(k)
+}
+
+// SetWorkflowRegistry sets the kind: Workflow registry used to intercept
+// state-machine transitions for approval (todo 7.4).
+func (b *RouterBuilder) SetWorkflowRegistry(w *workflow.Registry) {
+	b.factory.SetWorkflowRegistry(w)
+}
+
+// SetWorkflowApprovalStore wires the approval store used to persist
+// in-flight approval requests (todo 7.4).
+func (b *RouterBuilder) SetWorkflowApprovalStore(s *db.WorkflowApprovalStore) {
+	b.factory.SetWorkflowApprovalStore(s)
 }
 
 // SetDeliveryDeps wires the event-delivery dependencies (hub, outbox, event

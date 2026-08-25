@@ -31,8 +31,11 @@ func EvaluateGuard(expression string, resourceData map[string]any) (bool, string
 	for k, v := range resourceData {
 		env[k] = v
 	}
-	env["resource"] = resourceData
-	env["data"] = resourceData
+	// `resource` / `data` are FieldMap values so BOTH dot notation
+	// (resource.amount) and bracket notation (resource["amount"]) work in
+	// guard/when expressions.
+	env["resource"] = NewFieldMap(resourceData)
+	env["data"] = NewFieldMap(resourceData)
 
 	// Pre-compute sum_line helpers for GL-style guards.
 	if lines, ok := resourceData["lines"]; ok {

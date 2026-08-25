@@ -17,6 +17,7 @@ import (
 	"github.com/primadi/formspec/internal/service"
 	"github.com/primadi/formspec/internal/validation"
 	"github.com/primadi/formspec/internal/webhook"
+	"github.com/primadi/formspec/internal/workflow"
 	"github.com/primadi/formspec/pkg/spec"
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
 )
@@ -28,6 +29,8 @@ type HandlerFactory struct {
 	svcRegistry   *service.Registry                                  // kind: Service manifests (todo 7.1)
 	whRegistry    *webhook.Registry                                  // kind: Webhook manifests (todo 7.6)
 	whKeys        webhook.KeyResolver                                // resolves webhook secret/token keys from config (todo 7.6)
+	wfRegistry    *workflow.Registry                                 // kind: Workflow manifests (todo 7.4)
+	wfApprovals   *db.WorkflowApprovalStore                          // persists approval requests (todo 7.4)
 	specLookup    func(module, name string) (*spec.EntitySpec, bool) // optional — enables sort/filter validation, hooks, and event resolution
 	specDirLookup func(module, name string) (string, bool)           // optional — resolves the entity's spec directory for hook/custom script refs
 	deliveryDeps  action.DeliveryDeps
@@ -69,6 +72,18 @@ func (f *HandlerFactory) SetWebhookRegistry(w *webhook.Registry) {
 // webhook HMAC secrets / static tokens (todo 7.6).
 func (f *HandlerFactory) SetWebhookKeyResolver(k webhook.KeyResolver) {
 	f.whKeys = k
+}
+
+// SetWorkflowRegistry sets the kind: Workflow registry used to intercept
+// state-machine transitions for approval (todo 7.4).
+func (f *HandlerFactory) SetWorkflowRegistry(w *workflow.Registry) {
+	f.wfRegistry = w
+}
+
+// SetWorkflowApprovalStore wires the approval store used to persist
+// in-flight approval requests (todo 7.4).
+func (f *HandlerFactory) SetWorkflowApprovalStore(s *db.WorkflowApprovalStore) {
+	f.wfApprovals = s
 }
 
 // SetSpecLookup wires entity-spec resolution, enabling `sort` and field
@@ -1689,6 +1704,26 @@ func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, a
 			}
 		}
 
+		// Workflow interception (todo 7.4): if this transition is intercepted
+		// by a kind: Workflow, the transition does NOT execute immediately —
+		// it enters the approval flow. The first call creates a pending
+		// approval; subsequent calls (approve/reject) advance it.
+		if f.wfRegistry != nil && entitySpec != nil && entitySpec.StateMachine != nil && resourceID != "" {
+			sm := entitySpec.StateMachine
+			currentState := ""
+			if cs, ok := resourceData[sm.Field]; ok && cs != nil {
+				currentState = fmt.Sprintf("%v", cs)
+			}
+			toState, _ := entityengine.NewStateMachineEngine().Transition(entitySpec, currentState, actionName)
+			wfEngine := workflow.NewEngine(f.wfRegistry)
+			if wfEngine.RequiresApproval(module+"."+entity, currentState, toState) {
+				// This transition requires approval. Route to the approval
+				// handler instead of executing the transition directly.
+				f.handleWorkflowApproval(w, r, ctx, module, entity, resourceID, actionName, currentState, toState, resourceData, resourceVersion, userID, workspaceID, params, wfEngine)
+				return
+			}
+		}
+
 		// Dispatch to the appropriate executor via the action dispatcher
 		identity := IdentityFromContext(ctx)
 		var identityInfo *action.IdentityInfo
@@ -1821,6 +1856,268 @@ func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, a
 			f.completeIdempotent(ctx, workspaceID, actionName, idemKey, http.StatusOK, bodyBytes)
 		}
 		writeJSON(w, http.StatusOK, resp)
+	}
+}
+
+// handleWorkflowApproval processes a state-machine transition that is
+// intercepted by a kind: Workflow (todo 7.4). The transition does NOT execute
+// immediately — it enters the approval flow:
+//
+//   - First call (no pending approval): creates a pending approval request and
+//     returns 202 with the approval state. The record's state is unchanged.
+//   - Subsequent calls with params {"decision": "approve"}: records the
+//     approver's signed approval for the active step; when the step reaches
+//     quorum, advances to the next step; when all steps are approved, executes
+//     the real transition (updates the record's state field).
+//   - Calls with params {"decision": "reject"}: records the rejection; the
+//     record moves to the workflow's on_reject.to state (or stays put if none
+//     declared).
+//
+// The requester can never approve their own request (7.4.5).
+func (f *HandlerFactory) handleWorkflowApproval(
+	w http.ResponseWriter, r *http.Request, ctx context.Context,
+	module, entity, resourceID, actionName, fromState, toState string,
+	resourceData map[string]any, resourceVersion int,
+	userID, workspaceID string, params map[string]any, wfEngine *workflow.Engine,
+) {
+	// Resolve the intercepting workflow(s). Use the first one for the
+	// approval flow (multiple workflows on the same transition are chained
+	// in a later iteration).
+	wfs := wfEngine.WorkflowsFor(module+"."+entity, fromState, toState)
+	if len(wfs) == 0 {
+		writeError(w, http.StatusInternalServerError, "WORKFLOW_ERROR", "no workflow for transition")
+		return
+	}
+	wf := wfs[0]
+
+	// Determine applicable steps (evaluate `when` conditions).
+	steps, err := wfEngine.ApplicableSteps(wf, resourceData)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "WORKFLOW_ERROR", err.Error())
+		return
+	}
+	if len(steps) == 0 {
+		// No applicable steps — the transition proceeds without approval.
+		f.executeWorkflowTransition(w, r, ctx, module, entity, resourceID, toState, resourceData, resourceVersion, workspaceID, userID)
+		return
+	}
+
+	// Load the current pending approval (if any).
+	dbRow, err := f.wfApprovals.GetByRecord(ctx, workspaceID, module+"."+entity, resourceID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "WORKFLOW_ERROR", err.Error())
+		return
+	}
+	approval := workflowApprovalFromRow(dbRow)
+
+	// No pending approval → this is the request to START the approval flow.
+	if approval == nil {
+		requesterID := ""
+		if cb, ok := resourceData["created_by"]; ok && cb != nil {
+			requesterID = fmt.Sprintf("%v", cb)
+		}
+		approval = workflow.NewApproval(wf, module, module+"."+entity, resourceID, fromState, toState, requesterID)
+		row := workflowApprovalToRow(approval)
+		row.TenantID = workspaceID
+		row.RejectStep = -1
+		if _, err := f.wfApprovals.Create(ctx, *row); err != nil {
+			writeError(w, http.StatusInternalServerError, "WORKFLOW_ERROR", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusAccepted, SingleResponse{
+			Data: map[string]any{
+				"status":       "approval_required",
+				"workflow":     approval.WorkflowName,
+				"from":         fromState,
+				"to":           toState,
+				"active_step":  0,
+				"total_steps":  len(steps),
+				"record_id":    resourceID,
+				"approve_with": `{"decision": "approve"}`,
+				"reject_with":  `{"decision": "reject"}`,
+			},
+			Meta: MetaSingle{RequestID: requestIDFromContext(ctx), Timestamp: time.Now().UTC().Format(time.RFC3339)},
+		})
+		return
+	}
+
+	// A pending approval exists → this call is an approve/reject decision.
+	// The decision comes from the action params: {"decision": "approve"} or
+	// {"decision": "reject"}.
+	identity := IdentityFromContext(ctx)
+	userRoles := []string{}
+	if identity != nil {
+		userRoles = identity.Roles
+	}
+
+	decision, _ := params["decision"].(string)
+	switch decision {
+	case "approve":
+		// Requester can never approve their own request (7.4.5).
+		ok, reason := wfEngine.CanApprove(wf, approval.ActiveStep, userID, userRoles, approval.RequesterID, resourceData)
+		if !ok {
+			writeError(w, http.StatusForbidden, "WORKFLOW_DENIED", reason)
+			return
+		}
+		if err := approval.Approve(userID); err != nil {
+			writeError(w, http.StatusConflict, "WORKFLOW_DENIED", err.Error())
+			return
+		}
+
+		// Check if the active step reached quorum.
+		step := steps[approval.ActiveStep]
+		eligibleCount := len(step.Roles)
+		if approval.StepApproved(step, eligibleCount) {
+			// Advance to the next step.
+			approval.ActiveStep++
+		}
+
+		// Persist the updated approval.
+		row := workflowApprovalToRow(approval)
+		row.ID = approval.ID
+		if err := f.wfApprovals.Update(ctx, *row); err != nil {
+			writeError(w, http.StatusInternalServerError, "WORKFLOW_ERROR", err.Error())
+			return
+		}
+
+		// If all steps are approved, execute the real transition.
+		if approval.AllStepsApproved(steps) {
+			f.executeWorkflowTransition(w, r, ctx, module, entity, resourceID, toState, resourceData, resourceVersion, workspaceID, userID)
+			return
+		}
+
+		writeJSON(w, http.StatusOK, SingleResponse{
+			Data: map[string]any{
+				"status":      "approved",
+				"active_step": approval.ActiveStep,
+				"total_steps": len(steps),
+				"record_id":   resourceID,
+			},
+			Meta: MetaSingle{RequestID: requestIDFromContext(ctx), Timestamp: time.Now().UTC().Format(time.RFC3339)},
+		})
+
+	case "reject":
+		// Requester can never reject their own request either.
+		ok, reason := wfEngine.CanApprove(wf, approval.ActiveStep, userID, userRoles, approval.RequesterID, resourceData)
+		if !ok {
+			writeError(w, http.StatusForbidden, "WORKFLOW_DENIED", reason)
+			return
+		}
+		approval.Reject(userID)
+		row := workflowApprovalToRow(approval)
+		row.ID = approval.ID
+		if err := f.wfApprovals.Update(ctx, *row); err != nil {
+			writeError(w, http.StatusInternalServerError, "WORKFLOW_ERROR", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, SingleResponse{
+			Data: map[string]any{
+				"status":    "rejected",
+				"record_id": resourceID,
+			},
+			Meta: MetaSingle{RequestID: requestIDFromContext(ctx), Timestamp: time.Now().UTC().Format(time.RFC3339)},
+		})
+
+	default:
+		writeError(w, http.StatusUnprocessableEntity, "WORKFLOW_ERROR",
+			"transition requires approval — call again with {\"decision\": \"approve\"} or {\"decision\": \"reject\"}")
+	}
+}
+
+// executeWorkflowTransition performs the actual state-machine transition once
+// a workflow's approval is complete (or no approval is needed). It updates the
+// record's state field to the target state.
+func (f *HandlerFactory) executeWorkflowTransition(
+	w http.ResponseWriter, r *http.Request, ctx context.Context,
+	module, entity, resourceID, toState string,
+	resourceData map[string]any, resourceVersion int,
+	workspaceID, userID string,
+) {
+	store, err := f.registry.GetEntityStore(module, entity)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "WORKFLOW_ERROR", err.Error())
+		return
+	}
+
+	// Determine the state field name from the entity spec.
+	stateField := "status"
+	if f.specLookup != nil {
+		if es, ok := f.specLookup(module, entity); ok && es.StateMachine != nil {
+			stateField = es.StateMachine.Field
+		}
+	}
+
+	// Update the record's state field.
+	resourceData[stateField] = toState
+	_, err = store.Update(ctx, db.UpdateParams{
+		WorkspaceID:   workspaceID,
+		ID:            resourceID,
+		Version:       resourceVersion,
+		Data:          resourceData,
+		UpdatedBy:     userID,
+		RequestID:     requestIDFromContext(ctx),
+		Permissions:   permissionsFromContext(ctx),
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "WORKFLOW_ERROR", err.Error())
+		return
+	}
+
+	// Realtime channel: the transition completed.
+	action.NotifyMutation(f.deliveryDeps, workspaceID, module+"/"+entity, "updated")
+
+	writeJSON(w, http.StatusOK, SingleResponse{
+		Data: map[string]any{
+			"status": "transition_completed",
+			"to":     toState,
+		},
+		Meta: MetaSingle{RequestID: requestIDFromContext(ctx), Timestamp: time.Now().UTC().Format(time.RFC3339)},
+	})
+}
+
+// workflowApprovalFromRow converts a persisted approval row into a
+// workflow.Approval (todo 7.4).
+func workflowApprovalFromRow(row *db.WorkflowApprovalRow) *workflow.Approval {
+	if row == nil {
+		return nil
+	}
+	return &workflow.Approval{
+		ID:             row.ID,
+		WorkflowModule: row.WorkflowModule,
+		WorkflowName:   row.WorkflowName,
+		Entity:         row.Entity,
+		RecordID:       row.RecordID,
+		From:           row.FromState,
+		To:             row.ToState,
+		RequesterID:    row.RequesterID,
+		Status:         workflow.ApprovalStatus(row.Status),
+		ActiveStep:     row.ActiveStep,
+		Approvals:      row.Approvals,
+		RejectedBy:     row.RejectedBy,
+		RejectStep:     row.RejectStep,
+	}
+}
+
+// workflowApprovalToRow converts a workflow.Approval into a persistence row
+// (todo 7.4).
+func workflowApprovalToRow(a *workflow.Approval) *db.WorkflowApprovalRow {
+	if a == nil {
+		return nil
+	}
+	return &db.WorkflowApprovalRow{
+		ID:             a.ID,
+		Entity:         a.Entity,
+		RecordID:       a.RecordID,
+		WorkflowModule: a.WorkflowModule,
+		WorkflowName:   a.WorkflowName,
+		FromState:      a.From,
+		ToState:        a.To,
+		RequesterID:    a.RequesterID,
+		Status:         string(a.Status),
+		ActiveStep:     a.ActiveStep,
+		Approvals:      a.Approvals,
+		RejectedBy:     a.RejectedBy,
+		RejectStep:     a.RejectStep,
 	}
 }
 

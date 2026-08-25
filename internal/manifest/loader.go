@@ -492,3 +492,16 @@ func RawSpecToSubscriptionSpec(specMap map[string]any) (*spec.SubscriptionSpec, 
 	}
 	return &sub, nil
 }
+
+// RawSpecToWorkflowSpec converts a raw spec map to a typed WorkflowSpec.
+func RawSpecToWorkflowSpec(specMap map[string]any) (*spec.WorkflowSpec, error) {
+	b, err := yaml.Marshal(specMap)
+	if err != nil {
+		return nil, fmt.Errorf("re-marshal spec: %w", err)
+	}
+	var wf spec.WorkflowSpec
+	if err := yaml.Unmarshal(b, &wf); err != nil {
+		return nil, fmt.Errorf("unmarshal workflow spec: %w", err)
+	}
+	return &wf, nil
+}

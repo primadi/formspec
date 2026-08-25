@@ -165,6 +165,28 @@ func SystemTableDDLs(driver DriverType) []string {
 			"payload      text    NOT NULL DEFAULT '{}'",
 			fmt.Sprintf("delivered_at %s NOT NULL DEFAULT %s", ts, ts),
 		),
+
+		// formspec_workflow_approval — pending/active approval requests for
+		// kind: Workflow interception (02-core-extended.md §2). One row per
+		// (tenant, entity, record, workflow) while approval is in flight.
+		createTableSQL(driver, "formspec_workflow_approval",
+			idColumn(driver),
+			"tenant_id       text    NOT NULL",
+			"entity          text    NOT NULL", // "module.entity"
+			"record_id       text    NOT NULL",
+			"workflow_module text    NOT NULL",
+			"workflow_name   text    NOT NULL",
+			"from_state      text    NOT NULL",
+			"to_state        text    NOT NULL",
+			"requester_id    text    NOT NULL DEFAULT ''",
+			"status          text    NOT NULL DEFAULT 'pending'",
+			"active_step     integer NOT NULL DEFAULT 0",
+			"approvals       text    NOT NULL DEFAULT '{}'",
+			"rejected_by     text    NOT NULL DEFAULT ''",
+			"reject_step     integer NOT NULL DEFAULT -1",
+			fmt.Sprintf("created_at      %s NOT NULL DEFAULT %s", ts, ts),
+			fmt.Sprintf("updated_at      %s NOT NULL DEFAULT %s", ts, ts),
+		),
 	}
 }
 
@@ -196,6 +218,7 @@ func (r *MigrationRunner) EnsureSystemTables(ctx context.Context) error {
 		"formspec_schema_migrations", "formspec_natural_key_counters",
 		"formspec_idempotency_keys", "formspec_outbox",
 		"formspec_extensions", "formspec_audit_log", "formspec_event_log",
+		"formspec_workflow_approval",
 	}
 	for i, ddl := range ddls {
 		if _, err := r.db.ExecContext(ctx, ddl); err != nil {
