@@ -17,7 +17,7 @@ layer.
   default yang dideklarasikan (spec §10).
 - **`internal/starlark/executor.go`** — `SetConfigStore` (sudah ada dari batch
   sebelumnya) kini benar-benar di-wire: `Execute` set `ctxObj.Config =
-  NewConfigAPI(e.ConfigStore)`.
+NewConfigAPI(e.ConfigStore)`.
 - **`internal/action/script.go`** — passthrough `SetConfigStore`/`SetSecretsStore`
   ke engine starlark.
 - **`resource/formspec.go`** — `buildConfigRegistry(specManifests.Manifests)`

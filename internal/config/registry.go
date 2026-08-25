@@ -81,6 +81,25 @@ func (r *Registry) Secrets() map[string]string {
 	return out
 }
 
+// ResolveKey resolves a single key from a named Config manifest, returning
+// its string value and whether it was found. Used by inbound Webhook
+// verification (02-core-extended.md §4) to look up the HMAC secret or static
+// token referenced via `key: { config: <name> }`. Secret and non-secret keys
+// are both resolvable here — the caller decides which it needs.
+func (r *Registry) ResolveKey(configName, keyName string) (string, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	cs, ok := r.configs[configName]
+	if !ok || cs == nil {
+		return "", false
+	}
+	ck, ok := cs.Keys[keyName]
+	if !ok {
+		return "", false
+	}
+	return fmt.Sprintf("%v", resolveValue(ck)), true
+}
+
 // resolveValue coerces a ConfigKey's default to the Go type matching its
 // declared Type (int|string|bool|decimal|json). Falls back to the raw default
 // when the type is unknown or the default is nil.

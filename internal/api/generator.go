@@ -5,6 +5,7 @@ import (
 
 	"github.com/primadi/formspec/internal/entity"
 	"github.com/primadi/formspec/internal/service"
+	"github.com/primadi/formspec/internal/webhook"
 	"github.com/primadi/formspec/pkg/spec"
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
 )
@@ -442,6 +443,51 @@ func GenerateServiceRoutes(svcReg *service.Registry) []RouteDescriptor {
 				RequiredPermission: perm,
 			})
 		}
+	}
+	return routes
+}
+
+// GenerateWebhookRoutes creates route descriptors for verified inbound
+// webhook endpoints (todo 7.6, 02-core-extended.md §4). Each Webhook declares
+// a path (auto-derived from its name when absent) and method; the handler
+// verifies auth then dispatches to the referenced Service action.
+//
+//	POST /api/v1/webhooks/{module}/{name}   (or spec.path when set)
+//
+// Webhook routes are mounted on the external surface and are NOT
+// permission-gated — verification is the auth mechanism (signature/token),
+// not the RBAC permission model.
+func GenerateWebhookRoutes(whReg *webhook.Registry) []RouteDescriptor {
+	var routes []RouteDescriptor
+	if whReg == nil {
+		return routes
+	}
+	for _, info := range whReg.List() {
+		wh, ok := whReg.Get(info.Module, info.Name)
+		if !ok {
+			continue
+		}
+		method := wh.Method
+		if method == "" {
+			method = "POST"
+		}
+		path := wh.Path
+		if path == "" {
+			// Auto-derive: /api/v1/webhooks/{module}/{name}
+			path = "/api/v1/webhooks/" + info.Module + "/" + info.Name
+		} else if !strings.HasPrefix(path, "/api/v1") {
+			// User-supplied path is relative to the external surface.
+			path = "/api/v1" + path
+		}
+		routes = append(routes, RouteDescriptor{
+			Module:   info.Module,
+			Entity:   info.Name,
+			Action:   "webhook",
+			Method:   method,
+			Path:     path,
+			Protocol: spec.ProtocolREST,
+			Handler:  "webhook",
+		})
 	}
 	return routes
 }

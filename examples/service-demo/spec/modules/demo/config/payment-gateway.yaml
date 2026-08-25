@@ -1,0 +1,12 @@
+apiVersion: formspec.dev/v1
+kind: Config
+metadata:
+  name: payment-gateway
+  module: demo
+  description: "Konfigurasi payment gateway — secret key untuk verifikasi webhook"
+spec:
+  keys:
+    server_key:
+      type: string
+      default: "demo-server-key-123"
+      secret: true

@@ -49,6 +49,7 @@ import (
 	"github.com/primadi/formspec/internal/service"
 	"github.com/primadi/formspec/internal/ui"
 	"github.com/primadi/formspec/internal/validation"
+	"github.com/primadi/formspec/internal/webhook"
 	"github.com/primadi/formspec/pkg/spec"
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
 	"github.com/primadi/formspec/renderers/jsonb-persist/datastore/memory"
@@ -356,11 +357,18 @@ func New(cfg Config) (*App, error) {
 	// Service registry (todo 7.1.1): load kind: Service manifests for
 	// stateless action dispatch.
 	svcReg := buildServiceRegistry(specManifests.Manifests)
+	// Webhook registry (todo 7.6.1): load kind: Webhook manifests for
+	// verified inbound endpoints.
+	whReg := buildWebhookRegistry(specManifests.Manifests)
 
 	rb := api.NewRouterBuilder(reg)
 	// Set the service registry BEFORE BuildRoutes so GenerateServiceRoutes
 	// sees it (todo 7.1).
 	rb.SetServiceRegistry(svcReg)
+	// Set the webhook registry + key resolver BEFORE BuildRoutes so
+	// GenerateWebhookRoutes sees it (todo 7.6).
+	rb.SetWebhookRegistry(whReg)
+	rb.SetWebhookKeyResolver(cfgReg)
 	rb.BuildRoutes()
 	disp := newDispatcher(reg, svcReg, database, cfg, cfgReg)
 	nativeEx := disp.NativeExecutor() // get the native executor from dispatcher
@@ -745,6 +753,8 @@ func (a *App) ReloadSpec() error {
 	newCfgReg := buildConfigRegistry(specManifests.Manifests)
 	// Service registry (todo 7.1.1): re-resolve on reload.
 	newSvcReg := buildServiceRegistry(specManifests.Manifests)
+	// Webhook registry (todo 7.6.1): re-resolve on reload.
+	newWhReg := buildWebhookRegistry(specManifests.Manifests)
 
 	newDisp := newDispatcher(newReg, newSvcReg, a.database, a.cfg, newCfgReg)
 
@@ -758,6 +768,9 @@ func (a *App) ReloadSpec() error {
 	// Set the service registry BEFORE BuildRoutes so GenerateServiceRoutes
 	// sees it (todo 7.1).
 	newRB.SetServiceRegistry(newSvcReg)
+	// Set the webhook registry + key resolver BEFORE BuildRoutes (todo 7.6).
+	newRB.SetWebhookRegistry(newWhReg)
+	newRB.SetWebhookKeyResolver(newCfgReg)
 	newRB.BuildRoutes()
 
 	newRB.SetDispatcher(newDisp)
@@ -909,6 +922,28 @@ func buildServiceRegistry(manifests []manifest.RawManifest) *service.Registry {
 			continue
 		}
 		reg.Add(raw.Metadata.Module, raw.Metadata.Name, svc)
+	}
+	return reg
+}
+
+// buildWebhookRegistry loads kind: Webhook manifests into a webhook.Registry
+// keyed by {module}.{name} (todo 7.6.1). Webhooks declare verified inbound
+// endpoints that dispatch to a referenced Service action.
+func buildWebhookRegistry(manifests []manifest.RawManifest) *webhook.Registry {
+	reg := webhook.NewRegistry()
+	for _, raw := range manifests {
+		if spec.Kind(raw.Kind) != spec.KindWebhook {
+			continue
+		}
+		specMap, ok := raw.Spec.(map[string]any)
+		if !ok {
+			continue
+		}
+		wh, err := manifest.RawSpecToWebhookSpec(specMap)
+		if err != nil {
+			continue
+		}
+		reg.Add(raw.Metadata.Module, raw.Metadata.Name, wh)
 	}
 	return reg
 }

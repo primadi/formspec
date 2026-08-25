@@ -1,0 +1,17 @@
+apiVersion: formspec.dev/v1
+kind: Webhook
+metadata:
+  name: payment-webhook
+  module: demo
+  description: "Endpoint masuk terverifikasi dari payment gateway"
+spec:
+  for: demo.payment-gateway   # Service action yang menangani payload
+  method: POST
+  path: /webhooks/payment
+  auth:
+    strategy: signature
+    signature:
+      algorithm: hmac-sha256
+      header: X-Payment-Signature
+      key: { config: payment-gateway.server_key, secret: true }
+      payload: raw_body

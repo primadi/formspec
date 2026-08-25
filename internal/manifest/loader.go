@@ -466,3 +466,16 @@ func RawSpecToConfigSpec(specMap map[string]any) (*spec.ConfigSpec, error) {
 	}
 	return &cfg, nil
 }
+
+// RawSpecToWebhookSpec converts a raw spec map to a typed WebhookSpec.
+func RawSpecToWebhookSpec(specMap map[string]any) (*spec.WebhookSpec, error) {
+	b, err := yaml.Marshal(specMap)
+	if err != nil {
+		return nil, fmt.Errorf("re-marshal spec: %w", err)
+	}
+	var wh spec.WebhookSpec
+	if err := yaml.Unmarshal(b, &wh); err != nil {
+		return nil, fmt.Errorf("unmarshal webhook spec: %w", err)
+	}
+	return &wh, nil
+}

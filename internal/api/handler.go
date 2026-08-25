@@ -16,6 +16,7 @@ import (
 	entityengine "github.com/primadi/formspec/internal/entity"
 	"github.com/primadi/formspec/internal/service"
 	"github.com/primadi/formspec/internal/validation"
+	"github.com/primadi/formspec/internal/webhook"
 	"github.com/primadi/formspec/pkg/spec"
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
 )
@@ -24,7 +25,9 @@ import (
 type HandlerFactory struct {
 	registry      EntityStoreProvider
 	dispatcher    *action.Dispatcher
-	svcRegistry   *service.Registry // kind: Service manifests (todo 7.1)
+	svcRegistry   *service.Registry                                  // kind: Service manifests (todo 7.1)
+	whRegistry    *webhook.Registry                                  // kind: Webhook manifests (todo 7.6)
+	whKeys        webhook.KeyResolver                                // resolves webhook secret/token keys from config (todo 7.6)
 	specLookup    func(module, name string) (*spec.EntitySpec, bool) // optional — enables sort/filter validation, hooks, and event resolution
 	specDirLookup func(module, name string) (string, bool)           // optional — resolves the entity's spec directory for hook/custom script refs
 	deliveryDeps  action.DeliveryDeps
@@ -54,6 +57,18 @@ func (f *HandlerFactory) SetDispatcher(d *action.Dispatcher) {
 // HandleServiceAction to resolve stateless Service actions (todo 7.1).
 func (f *HandlerFactory) SetServiceRegistry(s *service.Registry) {
 	f.svcRegistry = s
+}
+
+// SetWebhookRegistry sets the kind: Webhook registry used by HandleWebhook to
+// resolve inbound webhook endpoints (todo 7.6).
+func (f *HandlerFactory) SetWebhookRegistry(w *webhook.Registry) {
+	f.whRegistry = w
+}
+
+// SetWebhookKeyResolver wires the config-backed key resolver used to look up
+// webhook HMAC secrets / static tokens (todo 7.6).
+func (f *HandlerFactory) SetWebhookKeyResolver(k webhook.KeyResolver) {
+	f.whKeys = k
 }
 
 // SetSpecLookup wires entity-spec resolution, enabling `sort` and field
@@ -1904,6 +1919,108 @@ func (f *HandlerFactory) HandleServiceAction(module, serviceName, actionName str
 		}
 		writeJSON(w, http.StatusOK, resp)
 	}
+}
+
+// HandleWebhook returns a handler for a verified inbound webhook endpoint
+// (todo 7.6, 02-core-extended.md §4). The request is verified (signature or
+// token auth) BEFORE any handler logic runs; on failure it is rejected with
+// 401/403. On success the payload is dispatched to the Service action
+// referenced by `spec.for` ({module}.{service}).
+//
+//	POST {path}   (method from spec)
+func (f *HandlerFactory) HandleWebhook(module, name string, wh *spec.WebhookSpec) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		workspaceID := workspaceFromContext(ctx)
+
+		// Verify the request BEFORE the handler runs (todo 7.6.4). A failed
+		// verification is rejected with 401 (auth) — never reaches the action.
+		if err := webhook.Verify(r, wh, f.whKeys); err != nil {
+			code := "WEBHOOK_AUTH_FAILED"
+			status := http.StatusUnauthorized
+			if strings.Contains(err.Error(), "WEBHOOK_AUTH_ERROR") || strings.Contains(err.Error(), "WEBHOOK_AUTH_UNSUPPORTED") {
+				code = "WEBHOOK_AUTH_ERROR"
+				status = http.StatusInternalServerError
+			}
+			writeError(w, status, code, err.Error())
+			return
+		}
+
+		// Resolve the target Service action from spec.for ({module}.{service}).
+		if f.svcRegistry == nil {
+			writeError(w, http.StatusInternalServerError, "WEBHOOK_ERROR", "service registry not wired")
+			return
+		}
+		targetModule, targetService, ok := splitForRef(wh.For)
+		if !ok {
+			writeError(w, http.StatusInternalServerError, "WEBHOOK_ERROR", "invalid spec.for: "+wh.For)
+			return
+		}
+		actionSpec, ok := f.svcRegistry.GetAction(targetModule, targetService, "handle")
+		if !ok {
+			// Fall back to a single-action service (action name == service name).
+			actionSpec, ok = f.svcRegistry.GetAction(targetModule, targetService, targetService)
+			if !ok {
+				writeError(w, http.StatusInternalServerError, "WEBHOOK_ERROR",
+					"service action not found for webhook: "+wh.For)
+				return
+			}
+		}
+
+		// Parse the payload as params.
+		var params map[string]any
+		if r.Body != nil && r.ContentLength > 0 {
+			if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
+				writeError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "invalid JSON: "+err.Error())
+				return
+			}
+		}
+		if params == nil {
+			params = make(map[string]any)
+		}
+
+		identity := IdentityFromContext(ctx)
+		var identityInfo *action.IdentityInfo
+		if identity != nil {
+			identityInfo = &action.IdentityInfo{
+				UserID:      identity.UserID,
+				WorkspaceID: identity.WorkspaceID,
+				Permissions: identity.Permissions,
+				Roles:       identity.Roles,
+			}
+		}
+
+		execParams := action.ExecuteParams{
+			Module:      targetModule,
+			Entity:      targetService,
+			ActionName:  actionSpec.Name,
+			Params:      params,
+			WorkspaceID: workspaceID,
+			Identity:    identityInfo,
+		}
+
+		result, err := f.dispatcher.Dispatch(ctx, *actionSpec, execParams)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "ACTION_ERROR", err.Error())
+			return
+		}
+
+		resp := SingleResponse{
+			Data: result.Data,
+			Meta: MetaSingle{RequestID: requestIDFromContext(ctx), Timestamp: time.Now().UTC().Format(time.RFC3339)},
+		}
+		writeJSON(w, http.StatusOK, resp)
+	}
+}
+
+// splitForRef parses a `spec.for` reference of the form "{module}.{service}"
+// into its parts. Returns ok=false when the reference is malformed.
+func splitForRef(ref string) (module, service string, ok bool) {
+	parts := strings.Split(ref, ".")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", false
+	}
+	return parts[0], parts[1], true
 }
 
 // HandlePrepare returns a handler for the two-step idempotency prepare flow

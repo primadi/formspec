@@ -14,6 +14,7 @@ import (
 	"github.com/primadi/formspec/internal/entity"
 	"github.com/primadi/formspec/internal/service"
 	"github.com/primadi/formspec/internal/ui"
+	"github.com/primadi/formspec/internal/webhook"
 	"github.com/primadi/formspec/pkg/spec"
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
 )
@@ -23,6 +24,7 @@ import (
 type RouterBuilder struct {
 	registry      *entity.Registry
 	svcRegistry   *service.Registry // kind: Service manifests (todo 7.1)
+	whRegistry    *webhook.Registry // kind: Webhook manifests (todo 7.6)
 	routes        []RouteDescriptor
 	factory       *HandlerFactory
 	dispatcher    *action.Dispatcher
@@ -77,6 +79,19 @@ func (b *RouterBuilder) SetDispatcher(d *action.Dispatcher) {
 func (b *RouterBuilder) SetServiceRegistry(s *service.Registry) {
 	b.svcRegistry = s
 	b.factory.SetServiceRegistry(s)
+}
+
+// SetWebhookRegistry sets the kind: Webhook registry used to generate
+// verified inbound webhook routes (todo 7.6).
+func (b *RouterBuilder) SetWebhookRegistry(w *webhook.Registry) {
+	b.whRegistry = w
+	b.factory.SetWebhookRegistry(w)
+}
+
+// SetWebhookKeyResolver wires the config-backed key resolver used to look up
+// webhook HMAC secrets / static tokens (todo 7.6).
+func (b *RouterBuilder) SetWebhookKeyResolver(k webhook.KeyResolver) {
+	b.factory.SetWebhookKeyResolver(k)
 }
 
 // SetDeliveryDeps wires the event-delivery dependencies (hub, outbox, event
@@ -196,7 +211,8 @@ func (b *RouterBuilder) BuildRoutes() {
 	customRoutes := GenerateCustomActionRoutes(b.registry)
 	uiCustomRoutes := GenerateUICustomActionRoutes(b.registry)
 	svcRoutes := GenerateServiceRoutes(b.svcRegistry)
-	b.routes = mergeRoutes(restRoutes, uiRoutes, customRoutes, uiCustomRoutes, svcRoutes)
+	whRoutes := GenerateWebhookRoutes(b.whRegistry)
+	b.routes = mergeRoutes(restRoutes, uiRoutes, customRoutes, uiCustomRoutes, svcRoutes, whRoutes)
 }
 
 // BuildHTTP constructs the chi router with all middleware and route registration.
@@ -446,6 +462,19 @@ func (b *RouterBuilder) registerRoute(r chi.Router, rd RouteDescriptor) {
 			break
 		}
 		handler = b.factory.HandleServiceAction(rd.Module, rd.Entity, rd.Action, *actionSpec)
+	case "webhook":
+		// Verified inbound webhook (todo 7.6). Resolve the WebhookSpec from
+		// the webhook registry; verification happens inside the handler
+		// before dispatch.
+		wh, ok := b.whRegistry.Get(rd.Module, rd.Entity)
+		if !ok {
+			handler = func(w http.ResponseWriter, r *http.Request) {
+				writeError(w, http.StatusNotFound, "NOT_FOUND",
+					"webhook not found: "+rd.Module+"/"+rd.Entity)
+			}
+			break
+		}
+		handler = b.factory.HandleWebhook(rd.Module, rd.Entity, wh)
 	default:
 		return // unknown handler type, skip
 	}

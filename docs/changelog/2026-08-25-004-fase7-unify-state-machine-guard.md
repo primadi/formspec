@@ -13,7 +13,7 @@ terduplikasi dan tidak identik:
 2. `renderers/jsonb-persist/crud.go` — `EntityStore.validateStateTransition`
    (dipakai saat `Update`), yang **tidak** menyuntik helper `sum_line_*` /
    `item_count` / `line_count` — jadi guard GL-style (`sum_line('debit') ==
-   sum_line('credit')`) tidak berfungsi saat transisi lewat Update.
+sum_line('credit')`) tidak berfungsi saat transisi lewat Update.
 
 Keduanya juga membangun env dengan cara berbeda (satu pakai `resourceData`
 saja, satu pakai `combined` old+new).

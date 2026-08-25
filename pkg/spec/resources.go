@@ -454,6 +454,19 @@ type WebhookSpec struct {
 type WebhookAuth struct {
 	Strategy  string            `yaml:"strategy" json:"strategy"` // signature | token
 	Signature *WebhookSigConfig `yaml:"signature,omitempty" json:"signature,omitempty"`
+	// Token configures static-token verification (strategy: token). The token
+	// value is referenced via config (never inline in the manifest).
+	Token *WebhookTokenConfig `yaml:"token,omitempty" json:"token,omitempty"`
+}
+
+// WebhookTokenConfig configures static-token verification for simple internal
+// webhooks (02-core-extended.md §4). The token is referenced via config so it
+// never appears inline in the manifest.
+type WebhookTokenConfig struct {
+	// Header is the request header carrying the token (e.g. "Authorization").
+	Header string `yaml:"header" json:"header"`
+	// Key references the config key holding the expected token value.
+	Key *WebhookKeyRef `yaml:"key" json:"key"`
 }
 
 // WebhookSigConfig configures HMAC signature verification.

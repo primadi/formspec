@@ -1,0 +1,14 @@
+apiVersion: formspec.dev/v1
+kind: Service
+metadata:
+  name: payment-gateway
+  module: demo
+  description: "Service yang menangani payload webhook payment gateway (terverifikasi)"
+spec:
+  version: v1
+  actions:
+    - name: handle
+      description: "Proses notifikasi pembayaran dari payment gateway"
+      impl:
+        type: script_ref
+        ref: demo/handle_payment_webhook

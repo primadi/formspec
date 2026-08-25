@@ -1,9 +1,10 @@
-# Service Demo — Service Runtime + Validation Rules
+# Service Demo — Service Runtime + Validation Rules + Webhook
 
-Contoh project FormSpec yang mendemonstrasikan dua fitur backend:
+Contoh project FormSpec yang mendemonstrasikan tiga fitur backend:
 
 1. **`kind: Service` runtime (todo 7.1)** — komputasi stateless murni via script.
 2. **Validation rules L1–L3 lengkap (todo 7.9.6)** — `length`, `in`, `script`, `unique`.
+3. **`kind: Webhook` engine (todo 7.6)** — endpoint masuk terverifikasi (HMAC signature).
 
 ## Menjalankan
 
@@ -35,16 +36,42 @@ mencocokkan pola `{basePath}/modules/{module}/scripts/{name}.star`.
 
 Entity `product` mendemonstrasikan rule L1–L3 yang lengkap:
 
-| Field | Rule | Contoh gagal |
-|---|---|---|
-| `sku` | `length: 8` | `"TEH0001"` (7 char) → "length must be exactly 8" |
-| `sku` | `unique` | duplikat `"KOPI0001"` → "value must be unique per tenant" |
-| `status` | `in: [active, inactive, discontinued]` | `"banned"` → "value must be one of ..." |
-| `min_stock` | `script: "value >= 0"` | `-1` → "script rule failed" |
+| Field       | Rule                                   | Contoh gagal                                              |
+| ----------- | -------------------------------------- | --------------------------------------------------------- |
+| `sku`       | `length: 8`                            | `"TEH0001"` (7 char) → "length must be exactly 8"         |
+| `sku`       | `unique`                               | duplikat `"KOPI0001"` → "value must be unique per tenant" |
+| `status`    | `in: [active, inactive, discontinued]` | `"banned"` → "value must be one of ..."                   |
+| `min_stock` | `script: "value >= 0"`                 | `-1` → "script rule failed"                               |
 
 Catatan: rule `unique` memakai format objek `{name: unique, value: true}`
 (bukan `{name: unique}` tanpa value) — schema `ValidationRule` mewajibkan
 `value` untuk rule ini.
+
+### 3. Webhook engine (`spec/modules/demo/webhooks/payment-webhook.yaml`)
+
+`kind: Webhook` mendeklarasikan endpoint masuk yang **diverifikasi sebelum
+handler berjalan**. `spec.for` merujuk satu Service action yang menangani
+payload.
+
+- **`POST /api/v1/webhooks/payment`** — endpoint terverifikasi HMAC-SHA256.
+  Header `X-Payment-Signature` harus berisi HMAC-SHA256 dari raw body
+  menggunakan secret `demo-server-key-123` (dari Config
+  `payment-gateway.server_key`).
+- Verifikasi gagal → `401` **sebelum** handler manapun berjalan.
+- Verifikasi sukses → payload di-dispatch ke Service action
+  `demo.payment-gateway` (`spec/modules/demo/services/payment-gateway.yaml`).
+
+Contoh uji dengan curl:
+
+```bash
+BODY='{"transaction_id":"T-1001","amount":250000,"status":"settlement"}'
+SIG=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "demo-server-key-123" | awk '{print $2}')
+curl -X POST http://localhost:18080/default/api/v1/webhooks/payment \
+  -H "Content-Type: application/json" \
+  -H "X-Payment-Signature: $SIG" \
+  -d "$BODY"
+# → {"data":{"received":true,"status":"settlement","transaction_id":"T-1001"}}
+```
 
 ## Struktur
 
@@ -53,8 +80,12 @@ spec/
   apps/service-demo.yaml          # App manifest
   modules/demo/
     module.yaml                   # Module manifest
+    config/payment-gateway.yaml   # Config — secret key webhook
     services/tax-calculator.yaml  # kind: Service
+    services/payment-gateway.yaml # kind: Service (handler webhook)
     scripts/calculate_tax.star    # script service sync
     scripts/notify_async.star     # script service async
+    scripts/handle_payment_webhook.star  # script handler webhook
+    webhooks/payment-webhook.yaml # kind: Webhook (HMAC signature)
     master/product/entity.yaml    # Entity dengan validation rules
 ```
