@@ -931,12 +931,20 @@ func newDispatcher(reg *entity.Registry, svcReg *service.Registry, database db.D
 		scriptEx.SetSecretsStore(cfgReg.Secrets())
 	}
 	scriptEx.SetSaveHandler(func(ctx context.Context, workspaceID, module, entityName, id string, version int, data map[string]any) error {
-		if id == "" {
-			return fmt.Errorf("resource.save: cannot save before the record exists — use resource.set() during a before-create hook/impl; the framework persists automatically")
-		}
 		store, err := reg.GetEntityStore(module, entityName)
 		if err != nil {
 			return fmt.Errorf("get store: %w", err)
+		}
+		// resource.new() produces a handle with ID "" — save() on it performs
+		// an INSERT (todo 7.14.4). A non-empty ID updates the existing record.
+		if id == "" {
+			_, err = store.Insert(ctx, db.InsertParams{
+				WorkspaceID: workspaceID,
+				CreatedBy:   "script",
+				Data:        data,
+				Permissions: auth.PermissionsFromContext(ctx),
+			})
+			return err
 		}
 		_, err = store.Update(ctx, db.UpdateParams{
 			WorkspaceID: workspaceID,

@@ -182,6 +182,48 @@ func TestResourceAPI_Create_SameModule_Regression(t *testing.T) {
 	}
 }
 
+func TestResourceAPI_New_SameEntityUnsaved(t *testing.T) {
+	scriptPath := writeScript(t, ""+
+		"def execute(resource, params, ctx):\n"+
+		"    n = resource.new()\n"+
+		"    n.set(\"name\", \"New Item\")\n"+
+		"    n.save()\n"+
+		"    return ok({})\n")
+
+	var saveModule, saveEntity, saveID string
+	var saveData map[string]any
+
+	res := NewResourceAPI("clinic", "medicine", "med-1", 1, map[string]any{"name": "Old"})
+	res.SetSaveFunc(func(module, entity, id string, version int, data map[string]any) error {
+		saveModule, saveEntity, saveID = module, entity, id
+		saveData = data
+		return nil
+	})
+
+	ctxObj := NewCtxAPI("demo", "", "user", "", nil)
+	ctxObj.Now = now
+
+	result, err := ExecuteScript(context.Background(), scriptPath, res, nil, ctxObj)
+	if err != nil {
+		t.Fatalf("ExecuteScript error: %v", err)
+	}
+	if !result.OK {
+		t.Fatalf("script failed: %s", result.Error)
+	}
+
+	// resource.new() returns a handle for the SAME entity with ID "" (unsaved)
+	// so save() performs an INSERT (todo 7.14.4).
+	if saveModule != "clinic" || saveEntity != "medicine" {
+		t.Errorf("saveFn called with (%q, %q), want (\"clinic\", \"medicine\")", saveModule, saveEntity)
+	}
+	if saveID != "" {
+		t.Errorf("saveFn id = %q, want \"\" (unsaved new handle)", saveID)
+	}
+	if saveData["name"] != "New Item" {
+		t.Errorf("saveFn data name = %v, want \"New Item\"", saveData["name"])
+	}
+}
+
 func TestResourceAPI_Call_CrossModule(t *testing.T) {
 	scriptPath := writeScript(t, ""+
 		"def execute(resource, params, ctx):\n"+

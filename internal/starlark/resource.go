@@ -125,6 +125,8 @@ func (r *ResourceAPI) Attr(name string) (starlark.Value, error) {
 		return r.builtinLoad(), nil
 	case "create":
 		return r.builtinCreate(), nil
+	case "new":
+		return r.builtinNew(), nil
 	default:
 		// Allow dot-notation field access as a fallback (resource.field_name)
 		return nil, starlark.NoSuchAttrError(
@@ -135,7 +137,7 @@ func (r *ResourceAPI) Attr(name string) (starlark.Value, error) {
 
 // AttrNames lists the attribute names.
 func (r *ResourceAPI) AttrNames() []string {
-	return []string{"id", "field", "set", "save", "call", "fetch", "create"}
+	return []string{"id", "field", "set", "save", "call", "fetch", "create", "new"}
 }
 
 // ─── resource.field ───
@@ -323,6 +325,29 @@ func (r *ResourceAPI) builtinCreate() *starlark.Builtin {
 			created[k] = v
 		}
 		newRes := NewResourceAPI(module, entityName, id, 1, created)
+		newRes.saveFn = r.saveFn
+		newRes.callFn = r.callFn
+		newRes.loadFn = r.loadFn
+		newRes.createFn = r.createFn
+		return newRes, nil
+	})
+}
+
+// builtinNew returns a new, unsaved handle for the SAME entity as this
+// resource (todo 7.14.4, 06-script-runtime.md §2). The caller fills it via
+// .set(...) then .save() — because the handle has ID "", save() performs an
+// INSERT (not an update). This is distinct from resource.create(), which
+// immediately persists a record of another entity.
+func (r *ResourceAPI) builtinNew() *starlark.Builtin {
+	return starlark.NewBuiltin("resource.new", func(
+		thread *starlark.Thread,
+		fn *starlark.Builtin,
+		args starlark.Tuple,
+		kwargs []starlark.Tuple,
+	) (starlark.Value, error) {
+		newRes := NewResourceAPI(r.Module, r.Entity, "", 0, make(map[string]any))
+		// Propagate handlers so the new handle can .set()/.save()/.call()/
+		// .fetch()/.create()/.new() from — save() with ID "" inserts.
 		newRes.saveFn = r.saveFn
 		newRes.callFn = r.callFn
 		newRes.loadFn = r.loadFn
