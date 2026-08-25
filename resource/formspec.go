@@ -45,6 +45,7 @@ import (
 	"github.com/primadi/formspec/internal/config"
 	"github.com/primadi/formspec/internal/entity"
 	"github.com/primadi/formspec/internal/integrator"
+	"github.com/primadi/formspec/internal/job"
 	"github.com/primadi/formspec/internal/manifest"
 	"github.com/primadi/formspec/internal/permission"
 	"github.com/primadi/formspec/internal/service"
@@ -194,6 +195,9 @@ type App struct {
 	// (formspec.core.subscription, todo 7.3.4) into the subscription registry
 	// so admin-panel CRUD changes take effect without a restart.
 	dynamicRefresher *subscription.DynamicRefresher
+	// jobTracker tracks async jobs (todo 7.13). Held so a ReloadSpec() reuses
+	// the same store + hub while rebuilding the dispatcher.
+	jobTracker *job.Tracker
 
 	// nativeHandlers preserves user-registered native Go handlers across
 	// ReloadSpec() calls so they are re-registered on the new dispatcher.
@@ -423,7 +427,13 @@ func New(cfg Config) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	disp := newDispatcher(reg, svcReg, database, cfg, cfgReg, sharedPubSub)
+	// Async job tracker (todo 7.13): tracked async actions (`call: async` +
+	// `track: true`) create a job row, report progress via ctx.job.progress,
+	// and end completed/failed on the `jobs` websocket channel. The hub is
+	// wired once available (SetHub after rb.Hub()).
+	jobStore := db.NewJobStore(database, driver)
+	jobTracker := job.NewTracker(jobStore, nil, cfg.JWTSecret)
+	disp := newDispatcher(reg, svcReg, database, cfg, cfgReg, jobTracker, sharedPubSub)
 	nativeEx := disp.NativeExecutor() // get the native executor from dispatcher
 	rb.SetDispatcher(disp)
 	rb.SetUIRegistry(uiReg)
@@ -593,6 +603,11 @@ func New(cfg Config) (*App, error) {
 	eventLogStore := db.NewEventLogStore(database, driver)
 	hub := rb.Hub()
 	rb.SetDeliveryDeps(action.DeliveryDeps{Hub: hub, Outbox: outboxStore, EventLog: eventLogStore})
+	// Wire the async job tracker (todo 7.13): the hub is now available for
+	// the `jobs` websocket channel, and the router builder serves the job
+	// status polling route.
+	jobTracker.SetHub(hub)
+	rb.SetJobTracker(jobTracker)
 
 	// Workflow approval store (todo 7.4): persists in-flight approval
 	// requests for intercepted state-machine transitions.
@@ -711,6 +726,7 @@ func New(cfg Config) (*App, error) {
 		stream:           streamBackend,
 		streamingWorker:  streamingWorker,
 		dynamicRefresher: dynamicRefresher,
+		jobTracker:       jobTracker,
 		idempotency:      idempotencyStore,
 		nativeHandlers:   make(map[string]action.NativeHandler),
 	}
@@ -934,7 +950,7 @@ func (a *App) ReloadSpec() error {
 	// Integrator registry (todo 7.7.1): re-resolve on reload.
 	newItReg := buildIntegratorRegistry(specManifests.Manifests)
 
-	newDisp := newDispatcher(newReg, newSvcReg, a.database, a.cfg, newCfgReg, a.pubsub)
+	newDisp := newDispatcher(newReg, newSvcReg, a.database, a.cfg, newCfgReg, a.jobTracker, a.pubsub)
 
 	// Re-register native Go handlers on the new dispatcher.
 	a.mu.RLock()
@@ -1059,6 +1075,9 @@ func (a *App) ReloadSpec() error {
 	// Wire the idempotency store (todo 2.7) — same store instance, so
 	// in-flight keys survive a spec reload.
 	newRB.SetIdempotencyStore(a.idempotency)
+	// Wire the async job tracker (todo 7.13) — same store + hub, so in-flight
+	// jobs survive a spec reload.
+	newRB.SetJobTracker(a.jobTracker)
 
 	newHandler := newRB.BuildHTTP()
 
@@ -1304,7 +1323,7 @@ func buildIntegratorRegistry(manifests []manifest.RawManifest) *integrator.Regis
 	return reg
 }
 
-func newDispatcher(reg *entity.Registry, svcReg *service.Registry, database db.DB, cfg Config, cfgReg *config.Registry, sharedPubSub ...*memory.PubSub) *action.Dispatcher {
+func newDispatcher(reg *entity.Registry, svcReg *service.Registry, database db.DB, cfg Config, cfgReg *config.Registry, jobTracker *job.Tracker, sharedPubSub ...*memory.PubSub) *action.Dispatcher {
 	disp := action.NewDispatcher()
 
 	scriptEx := action.NewScriptExecutor(cfg.SpecPath)
@@ -1325,6 +1344,13 @@ func newDispatcher(reg *entity.Registry, svcReg *service.Registry, database db.D
 	if cfgReg != nil {
 		scriptEx.SetConfigStore(cfgReg.NonSecret())
 		scriptEx.SetSecretsStore(cfgReg.Secrets())
+	}
+	// ctx.job.progress (todo 7.13): tracked async jobs report progress to the
+	// job tracker, which updates the job row + `jobs` websocket channel.
+	if jobTracker != nil {
+		scriptEx.SetJobProgressReporter(func(ctx context.Context, workspaceID, jobID string, pct int, message string) error {
+			return jobTracker.Progress(ctx, workspaceID, jobID, pct, message)
+		})
 	}
 	scriptEx.SetSaveHandler(func(ctx context.Context, workspaceID, module, entityName, id string, version int, data map[string]any) error {
 		store, err := reg.GetEntityStore(module, entityName)

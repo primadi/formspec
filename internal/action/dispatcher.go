@@ -51,6 +51,11 @@ type ExecuteParams struct {
 	// Ctx carries runtime context primitives available to scripts.
 	RuntimeCtx *RuntimeContext
 
+	// JobID is set for tracked async jobs (call: async + track: true, todo
+	// 7.13). Threaded to the script executor so ctx.job.progress reports to
+	// the right job.
+	JobID string
+
 	// SpecDir is the directory of the entity's YAML spec file.
 	// Used by ScriptExecutor to resolve script refs relative to the
 	// entity's own directory rather than the spec root — no fixed

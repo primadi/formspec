@@ -22,6 +22,8 @@ type ScriptExecutor struct {
 	basePath string
 	// engine is the underlying Starlark execution engine.
 	engine *starlark.ScriptExecutor
+	// jobReporter reports ctx.job.progress for tracked async jobs (todo 7.13).
+	jobReporter JobProgressReporter
 }
 
 // NewScriptExecutor creates a ScriptExecutor for the given spec base path.
@@ -100,6 +102,16 @@ func (e *ScriptExecutor) SetSecretsStore(store map[string]string) {
 	e.engine.SetSecretsStore(store)
 }
 
+// JobProgressReporter reports progress for a tracked async job (todo 7.13).
+// Wired from resource/formspec.go with the job tracker; nil when no tracker.
+type JobProgressReporter func(ctx context.Context, workspaceID, jobID string, pct int, message string) error
+
+// SetJobProgressReporter wires the job tracker's progress reporter so
+// ctx.job.progress in a tracked async job updates the job row + jobs channel.
+func (e *ScriptExecutor) SetJobProgressReporter(fn JobProgressReporter) {
+	e.jobReporter = fn
+}
+
 // Execute runs the script for the given action. ctx is threaded through to
 // the engine (and from there to every resource.*/ctx.* handler) so a
 // request-scoped TxScope, if one is active, is honored by every mutation
@@ -115,6 +127,16 @@ func (e *ScriptExecutor) Execute(ctx context.Context, action spec.Action, params
 		return nil, fmt.Errorf("resolve script ref %q: %w", action.Impl.Ref, err)
 	}
 
+	// Build the ctx.job.progress reporter for tracked async jobs (todo 7.13).
+	var jobReporter starlark.JobReporter
+	if params.JobID != "" && e.jobReporter != nil {
+		jobID := params.JobID
+		ws := params.WorkspaceID
+		jobReporter = func(pct int, message string) error {
+			return e.jobReporter(ctx, ws, jobID, pct, message)
+		}
+	}
+
 	// Execute the script
 	result, err := e.engine.Execute(
 		ctx,
@@ -128,6 +150,7 @@ func (e *ScriptExecutor) Execute(ctx context.Context, action spec.Action, params
 		params.UserID,
 		params.ResourceVersion,
 		action.Uses,
+		jobReporter,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("script execution error: %w", err)

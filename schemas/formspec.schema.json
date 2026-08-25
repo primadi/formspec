@@ -21,6 +21,11 @@
           "description": "sync (default) | async (§11.4)",
           "type": "string"
         },
+        "callback": {
+          "$ref": "#/$defs/CallbackDecl",
+          "description": "§13.1: callback webhook delivery for tracked async jobs",
+          "nullable": true
+        },
         "conditions": {
           "type": "array",
           "items": {
@@ -70,6 +75,10 @@
         },
         "required_permission": {
           "type": "string"
+        },
+        "track": {
+          "description": "§13: call:async + track:true = tracked async job (job_id + progress)",
+          "type": "boolean"
         },
         "ui": {
           "$ref": "#/$defs/ActionUIHint",
@@ -3061,6 +3070,11 @@
           "description": "sync (default) | async (§11.4)",
           "type": "string"
         },
+        "callback": {
+          "$ref": "#/$defs/CallbackDecl",
+          "description": "§13.1: callback webhook delivery for tracked async jobs",
+          "nullable": true
+        },
         "conditions": {
           "type": "array",
           "items": {
@@ -3110,6 +3124,10 @@
         },
         "required_permission": {
           "type": "string"
+        },
+        "track": {
+          "description": "§13: call:async + track:true = tracked async job (job_id + progress)",
+          "type": "boolean"
         },
         "ui": {
           "$ref": "#/$defs/ActionUIHint",

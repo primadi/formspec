@@ -14,6 +14,7 @@ import (
 	"github.com/primadi/formspec/internal/action"
 	"github.com/primadi/formspec/internal/auth"
 	entityengine "github.com/primadi/formspec/internal/entity"
+	"github.com/primadi/formspec/internal/job"
 	"github.com/primadi/formspec/internal/service"
 	"github.com/primadi/formspec/internal/validation"
 	"github.com/primadi/formspec/internal/webhook"
@@ -40,6 +41,7 @@ type HandlerFactory struct {
 	storage       func() (Storage, error) // optional — enables file upload/download routes (todo 7.17.1)
 	assetRoots    []string                // manifest roots for module asset serving (todo 5.9.1)
 	rateLimiter   *ResourceRateLimiter    // optional — per-resource/per-action rate limits (todo 7.12)
+	jobTracker    *job.Tracker            // optional — tracked async jobs (call: async + track: true, todo 7.13)
 }
 
 // EntityStoreProvider abstracts the entity registry for handler use.
@@ -174,6 +176,12 @@ func (f *HandlerFactory) SetAssetRoots(roots []string) {
 // (todo 7.12). When nil, rate limiting is a no-op.
 func (f *HandlerFactory) SetResourceRateLimiter(rl *ResourceRateLimiter) {
 	f.rateLimiter = rl
+}
+
+// SetJobTracker wires the async job tracker (todo 7.13). When nil, tracked
+// async actions (`call: async` + `track: true`) fall back to fire-and-forget.
+func (f *HandlerFactory) SetJobTracker(t *job.Tracker) {
+	f.jobTracker = t
 }
 
 // resolveIdempotencyKey extracts the caller-supplied idempotency key for an
@@ -1339,6 +1347,15 @@ type SingleResponse struct {
 type MetaSingle struct {
 	RequestID string `json:"request_id,omitempty"`
 	Timestamp string `json:"timestamp"`
+	// Track carries async job tracking info (spec §13, todo 7.13) — the
+	// websocket channel for progress and the polling URL alternative.
+	Track *TrackMeta `json:"track,omitempty"`
+}
+
+// TrackMeta describes how to follow a tracked async job (spec §13).
+type TrackMeta struct {
+	WebsocketEvent string `json:"websocket_event,omitempty"`
+	PollURL        string `json:"poll_url,omitempty"`
 }
 
 // ListResponse wraps a paginated list.
@@ -2253,6 +2270,13 @@ func (f *HandlerFactory) HandleServiceAction(module, serviceName, actionName str
 		// goroutine and return 202 Accepted immediately — no job_id, no
 		// progress, no result (distinct from tracked async jobs §13).
 		if actionSpec.Call == "async" {
+			// Tracked async job (todo 7.13): `call: async` + `track: true`
+			// returns 202 with a job_id, reports progress via ctx.job.progress
+			// on the `jobs` websocket channel, and ends completed/failed.
+			if actionSpec.Track && f.jobTracker != nil {
+				f.dispatchTrackedAsync(w, r, ctx, module, serviceName, actionName, actionSpec, execParams)
+				return
+			}
 			go func() {
 				_, _ = f.dispatcher.Dispatch(ctx, actionSpec, execParams)
 			}()
@@ -2274,6 +2298,96 @@ func (f *HandlerFactory) HandleServiceAction(module, serviceName, actionName str
 			Meta: MetaSingle{RequestID: requestIDFromContext(ctx), Timestamp: time.Now().UTC().Format(time.RFC3339)},
 		}
 		writeJSON(w, http.StatusOK, resp)
+	}
+}
+
+// dispatchTrackedAsync runs a tracked async job (todo 7.13): creates a job
+// row, returns 202 with the job_id immediately, then dispatches the action in
+// a goroutine — reporting progress via ctx.job.progress and ending
+// completed/failed on the `jobs` websocket channel. The callback URL (7.13.4),
+// when the action declares a callback and the caller supplies the header, is
+// stored on the job for result delivery.
+func (f *HandlerFactory) dispatchTrackedAsync(w http.ResponseWriter, r *http.Request, ctx context.Context, module, serviceName, actionName string, actionSpec spec.Action, execParams action.ExecuteParams) {
+	workspaceID := execParams.WorkspaceID
+
+	// Callback URL (7.13.4): read from the declared request header.
+	callbackURL := ""
+	if actionSpec.Callback != nil && actionSpec.Callback.URLFrom == "header" && actionSpec.Callback.Header != "" {
+		callbackURL = r.Header.Get(actionSpec.Callback.Header)
+	}
+
+	jobRow, err := f.jobTracker.Create(ctx, workspaceID, module, serviceName, actionName, callbackURL)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "JOB_CREATE_ERROR", err.Error())
+		return
+	}
+	jobID := jobRow.ID
+
+	// Run the action in the background; report progress + completion.
+	go func() {
+		runCtx := context.WithoutCancel(ctx)
+		_ = f.jobTracker.Start(runCtx, jobID)
+		execParams.JobID = jobID
+		result, err := f.dispatcher.Dispatch(runCtx, actionSpec, execParams)
+		if err != nil {
+			_ = f.jobTracker.Fail(runCtx, workspaceID, jobID, err.Error())
+			return
+		}
+		data, _ := result.Data.(map[string]any)
+		_ = f.jobTracker.Complete(runCtx, workspaceID, jobID, data)
+	}()
+
+	// 202 with job_id + track meta (spec §13).
+	writeJSON(w, http.StatusAccepted, SingleResponse{
+		Data: map[string]any{"job_id": jobID, "status": "pending"},
+		Meta: MetaSingle{
+			RequestID: requestIDFromContext(ctx),
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
+			Track: &TrackMeta{
+				WebsocketEvent: "jobs",
+				PollURL:        "/api/v1/" + module + "/" + serviceName + "/jobs/" + jobID,
+			},
+		},
+	})
+}
+
+// HandleJobStatus returns the current status/result of a tracked async job
+// (todo 7.13) — the polling alternative to the `jobs` websocket channel.
+//
+//	GET /api/v1/{module}/{service}/jobs/{job_id}
+func (f *HandlerFactory) HandleJobStatus(module, serviceName string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		workspaceID := workspaceFromContext(ctx)
+		jobID := r.PathValue("job_id")
+		if jobID == "" {
+			writeError(w, http.StatusBadRequest, "JOB_ID_REQUIRED", "job_id path parameter required")
+			return
+		}
+		if f.jobTracker == nil {
+			writeError(w, http.StatusServiceUnavailable, "JOB_TRACKING_DISABLED", "job tracking is not enabled")
+			return
+		}
+		row, err := f.jobTracker.Get(ctx, jobID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "JOB_GET_ERROR", err.Error())
+			return
+		}
+		if row == nil || row.TenantID != workspaceID {
+			writeError(w, http.StatusNotFound, "JOB_NOT_FOUND", "job not found")
+			return
+		}
+		writeJSON(w, http.StatusOK, SingleResponse{
+			Data: map[string]any{
+				"job_id":   row.ID,
+				"status":   row.Status,
+				"progress": row.Progress,
+				"message":  row.Message,
+				"result":   row.Result,
+				"error":    row.Error,
+			},
+			Meta: MetaSingle{RequestID: requestIDFromContext(ctx), Timestamp: time.Now().UTC().Format(time.RFC3339)},
+		})
 	}
 }
 

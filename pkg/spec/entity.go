@@ -569,6 +569,8 @@ type Action struct {
 	Audit              bool             `yaml:"audit,omitempty" json:"audit,omitempty"`
 	Disabled           bool             `yaml:"disabled,omitempty" json:"disabled,omitempty"` // §11.1 — removes a standard action from every surface
 	Call               string           `yaml:"call,omitempty" json:"call,omitempty"`         // sync (default) | async (§11.4)
+	Track              bool             `yaml:"track,omitempty" json:"track,omitempty"`       // §13: call:async + track:true = tracked async job (job_id + progress)
+	Callback           *CallbackDecl    `yaml:"callback,omitempty" json:"callback,omitempty"` // §13.1: callback webhook delivery for tracked async jobs
 	Emits              string           `yaml:"emits,omitempty" json:"emits,omitempty"`       // event name linked per §12
 	Expose             []string         `yaml:"expose,omitempty" json:"expose,omitempty"`     // per-action protocol filter: rest | grpc | ws
 	Impl               *ImplDecl        `yaml:"impl,omitempty" json:"impl,omitempty"`
@@ -952,6 +954,17 @@ type RetryDecl struct {
 	Max            int    `yaml:"max,omitempty" json:"max,omitempty"`
 	Backoff        string `yaml:"backoff,omitempty" json:"backoff,omitempty"` // exponential | linear | fixed
 	InitialDelayMs int    `yaml:"initial_delay_ms,omitempty" json:"initial_delay_ms,omitempty"`
+}
+
+// CallbackDecl configures callback webhook delivery for a tracked async job
+// (02-core-extended.md §13.1, todo 7.13.4). The callback URL is supplied by
+// the caller via a request header; the result is delivered HMAC-signed.
+type CallbackDecl struct {
+	Channel string     `yaml:"channel" json:"channel"` // webhook
+	URLFrom string     `yaml:"url_from,omitempty" json:"url_from,omitempty"` // header
+	Header  string     `yaml:"header,omitempty" json:"header,omitempty"`     // header carrying the callback URL (e.g. X-Callback-URL)
+	Sign    bool       `yaml:"sign,omitempty" json:"sign,omitempty"`
+	Retry   *RetryDecl `yaml:"retry,omitempty" json:"retry,omitempty"`
 }
 
 // DeliveryDecl configures what happens when an event fires.

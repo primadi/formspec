@@ -1,0 +1,22 @@
+apiVersion: formspec.dev/v1
+kind: Service
+metadata:
+  name: report-generator
+  module: demo
+  description: "Generator laporan async yang di-track (todo 7.13) — call: async + track: true → 202 + job_id, progres via ctx.job.progress"
+spec:
+  version: v1
+  actions:
+    - name: generate
+      description: "Generate laporan — tracked async job (202 + job_id, progres di kanal jobs)"
+      required_permission: demo.report-generator.generate
+      call: async
+      track: true
+      callback:
+        channel: webhook
+        url_from: header
+        header: X-Callback-URL
+        sign: true
+      impl:
+        type: script_ref
+        ref: demo/generate_report

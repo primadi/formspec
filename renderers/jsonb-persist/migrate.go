@@ -196,13 +196,33 @@ func SystemTableDDLs(driver DriverType) []string {
 		createTableSQL(driver, "formspec_saga_log",
 			idColumn(driver),
 			"tenant_id    text    NOT NULL",
-			"source       text    NOT NULL", // originating event, e.g. "billing.invoice.on_submit"
-			"target       text    NOT NULL", // target action, e.g. "gl.journal-entry.create"
-			"compensate   text    NOT NULL DEFAULT ''", // compensate action ref
+			"source       text    NOT NULL",                   // originating event, e.g. "billing.invoice.on_submit"
+			"target       text    NOT NULL",                   // target action, e.g. "gl.journal-entry.create"
+			"compensate   text    NOT NULL DEFAULT ''",        // compensate action ref
 			"status       text    NOT NULL DEFAULT 'pending'", // pending | compensated | completed
 			"error        text    NOT NULL DEFAULT ''",
 			fmt.Sprintf("created_at   %s NOT NULL DEFAULT %s", ts, ts),
 			fmt.Sprintf("updated_at   %s NOT NULL DEFAULT %s", ts, ts),
+		),
+
+		// formspec_job — async job tracking (02-core-extended.md §13, todo
+		// 7.13). A tracked async action (`call: async` + `track: true`)
+		// creates a row, reports progress via ctx.job.progress, and ends
+		// completed/failed — pushed to the `jobs` websocket channel.
+		createTableSQL(driver, "formspec_job",
+			idColumn(driver),
+			"tenant_id     text    NOT NULL",
+			"module        text    NOT NULL",
+			"entity        text    NOT NULL",
+			"action        text    NOT NULL",
+			"status        text    NOT NULL DEFAULT 'pending'", // pending | running | completed | failed
+			"progress      integer NOT NULL DEFAULT 0",
+			"message       text    NOT NULL DEFAULT ''",
+			"result        text    NOT NULL DEFAULT '{}'",
+			"error         text    NOT NULL DEFAULT ''",
+			"callback_url  text    NOT NULL DEFAULT ''", // optional callback webhook (7.13.4)
+			fmt.Sprintf("created_at    %s NOT NULL DEFAULT %s", ts, ts),
+			fmt.Sprintf("updated_at    %s NOT NULL DEFAULT %s", ts, ts),
 		),
 	}
 }
@@ -235,7 +255,7 @@ func (r *MigrationRunner) EnsureSystemTables(ctx context.Context) error {
 		"formspec_schema_migrations", "formspec_natural_key_counters",
 		"formspec_idempotency_keys", "formspec_outbox",
 		"formspec_extensions", "formspec_audit_log", "formspec_event_log",
-		"formspec_workflow_approval", "formspec_saga_log",
+		"formspec_workflow_approval", "formspec_saga_log", "formspec_job",
 	}
 	for i, ddl := range ddls {
 		if _, err := r.db.ExecContext(ctx, ddl); err != nil {

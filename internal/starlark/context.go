@@ -32,6 +32,7 @@ type CtxAPI struct {
 	NextKey   func(fieldName string) (string, error)
 	Config    *configAPI
 	Secrets   *secretsAPI
+	Job       *jobAPI
 
 	// uses is the caller action's declared uses block (todo 2.6.4). When
 	// strictPrimitives is true, accessing a ctx.* primitive not listed in
@@ -135,6 +136,11 @@ func (c *CtxAPI) Attr(name string) (starlark.Value, error) {
 		return c.builtinNextKey(), nil
 	case "config":
 		return c.Config, nil
+	case "job":
+		if c.Job == nil {
+			return starlark.None, fmt.Errorf("ctx.job: not inside a tracked async job (call: async + track: true)")
+		}
+		return c.Job, nil
 	case "db":
 		if err := c.checkPrimitive("db"); err != nil {
 			return nil, err
@@ -197,7 +203,7 @@ func (c *CtxAPI) Attr(name string) (starlark.Value, error) {
 }
 
 func (c *CtxAPI) AttrNames() []string {
-	return []string{"workspace", "user", "auth", "now", "today", "log", "next_key", "config",
+	return []string{"workspace", "user", "auth", "now", "today", "log", "next_key", "config", "job",
 		"db", "cache", "lock", "queue", "pubsub", "storage", "kvstore"}
 }
 
@@ -409,6 +415,64 @@ func (l *logAPI) builtinLog(level string) *starlark.Builtin {
 
 // Entries returns all recorded log entries.
 func (l *logAPI) Entries() []LogEntry { return l.entries }
+
+// ─── ctx.job ───
+
+// JobReporter reports progress for the currently-executing tracked async job
+// (02-core-extended.md §13, todo 7.13). Wired by the runtime with the job's
+// workspace + id captured; nil when the action is not a tracked async job.
+type JobReporter func(pct int, message string) error
+
+// jobAPI exposes ctx.job.progress(pct, message) to scripts running inside a
+// tracked async job. When no reporter is wired (not a tracked job), progress
+// is a no-op.
+type jobAPI struct {
+	reporter JobReporter
+}
+
+// NewJobAPI creates a ctx.job handle backed by the given reporter.
+func NewJobAPI(reporter JobReporter) *jobAPI {
+	return &jobAPI{reporter: reporter}
+}
+
+var _ starlark.Value = (*jobAPI)(nil)
+
+func (j *jobAPI) String() string        { return "<job>" }
+func (j *jobAPI) Type() string          { return "job" }
+func (j *jobAPI) Freeze()               {}
+func (j *jobAPI) Truth() starlark.Bool  { return starlark.True }
+func (j *jobAPI) Hash() (uint32, error) { return 0, fmt.Errorf("job is not hashable") }
+
+func (j *jobAPI) Attr(name string) (starlark.Value, error) {
+	switch name {
+	case "progress":
+		return starlark.NewBuiltin("job.progress", func(
+			thread *starlark.Thread,
+			fn *starlark.Builtin,
+			args starlark.Tuple,
+			kwargs []starlark.Tuple,
+		) (starlark.Value, error) {
+			var pct int
+			var message string
+			if err := starlark.UnpackArgs("job.progress", args, kwargs,
+				"pct", &pct,
+				"message?", &message,
+			); err != nil {
+				return nil, err
+			}
+			if j.reporter != nil {
+				if err := j.reporter(pct, message); err != nil {
+					return nil, err
+				}
+			}
+			return starlark.None, nil
+		}), nil
+	default:
+		return nil, starlark.NoSuchAttrError(fmt.Sprintf("job has no .%s", name))
+	}
+}
+
+func (j *jobAPI) AttrNames() []string { return []string{"progress"} }
 
 // ─── ctx.config ───
 

@@ -423,10 +423,14 @@ func GenerateServiceRoutes(svcReg *service.Registry) []RouteDescriptor {
 		return routes
 	}
 	for _, info := range svcReg.List() {
+		hasTracked := false
 		for _, actionName := range info.Actions {
 			actionSpec, ok := svcReg.GetAction(info.Module, info.Name, actionName)
 			if !ok || actionSpec.Disabled || actionSpec.Impl == nil {
 				continue
+			}
+			if actionSpec.Track {
+				hasTracked = true
 			}
 			perm := actionSpec.RequiredPermission
 			if perm == "" {
@@ -441,6 +445,19 @@ func GenerateServiceRoutes(svcReg *service.Registry) []RouteDescriptor {
 				Protocol:           spec.ProtocolREST,
 				Handler:            "service",
 				RequiredPermission: perm,
+			})
+		}
+		// Tracked async jobs (todo 7.13): polling endpoint for job status.
+		if hasTracked {
+			routes = append(routes, RouteDescriptor{
+				Module:             info.Module,
+				Entity:             info.Name,
+				Action:             "jobs",
+				Method:             "GET",
+				Path:               "/api/v1/" + info.Module + "/" + info.Name + "/jobs/{job_id}",
+				Protocol:           spec.ProtocolREST,
+				Handler:            "job-status",
+				RequiredPermission: info.Module + "." + info.Name + ".jobs",
 			})
 		}
 	}

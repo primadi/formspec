@@ -12,6 +12,7 @@ import (
 	"github.com/primadi/formspec/internal/action"
 	formspec_app "github.com/primadi/formspec/internal/app"
 	"github.com/primadi/formspec/internal/entity"
+	"github.com/primadi/formspec/internal/job"
 	"github.com/primadi/formspec/internal/service"
 	"github.com/primadi/formspec/internal/ui"
 	"github.com/primadi/formspec/internal/webhook"
@@ -124,6 +125,13 @@ func (b *RouterBuilder) SetDeliveryDeps(deps action.DeliveryDeps) {
 // idempotent actions and serve the prepare endpoint (todo 2.7).
 func (b *RouterBuilder) SetIdempotencyStore(store *db.IdempotencyStore) {
 	b.factory.SetIdempotencyStore(store)
+}
+
+// SetJobTracker wires the async job tracker (todo 7.13) into the handler
+// factory so tracked async actions return 202 + job_id and the job status
+// polling route is served.
+func (b *RouterBuilder) SetJobTracker(t *job.Tracker) {
+	b.factory.SetJobTracker(t)
 }
 
 // SetStorageResolver wires the object-store resolver used by the file
@@ -481,6 +489,9 @@ func (b *RouterBuilder) registerRoute(r chi.Router, rd RouteDescriptor) {
 			break
 		}
 		handler = b.factory.HandleServiceAction(rd.Module, rd.Entity, rd.Action, *actionSpec)
+	case "job-status":
+		// Tracked async job status polling (todo 7.13).
+		handler = b.factory.HandleJobStatus(rd.Module, rd.Entity)
 	case "webhook":
 		// Verified inbound webhook (todo 7.6). Resolve the WebhookSpec from
 		// the webhook registry; verification happens inside the handler

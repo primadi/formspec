@@ -325,8 +325,9 @@ func NewScriptExecutor(resolver func(ref string) (string, error)) *ScriptExecuto
 // carries the request-scoped TxScope (if any, set by the caller) through
 // to every handler — so a script's resource.save()/create()/load()/call()
 // calls all join the same transaction as the rest of the action's
-// execution instead of each opening its own.
-func (e *ScriptExecutor) Execute(ctx context.Context, scriptPath string, module, entity, id string, resourceData map[string]any, params map[string]any, workspaceID, userID string, resourceVersion int, uses *spec.UsesDecl) (*ScriptResult, error) {
+// execution instead of each opening its own. jobReporter, when non-nil,
+// wires ctx.job.progress for a tracked async job (todo 7.13).
+func (e *ScriptExecutor) Execute(ctx context.Context, scriptPath string, module, entity, id string, resourceData map[string]any, params map[string]any, workspaceID, userID string, resourceVersion int, uses *spec.UsesDecl, jobReporter JobReporter) (*ScriptResult, error) {
 	// Build resource API
 	res := NewResourceAPI(module, entity, id, resourceVersion, resourceData)
 	callerResources := declaredUsesResources(uses)
@@ -375,6 +376,11 @@ func (e *ScriptExecutor) Execute(ctx context.Context, scriptPath string, module,
 	// wired, ctx.config.get returns the caller's default (or None).
 	if e.ConfigStore != nil {
 		ctxObj.Config = NewConfigAPI(e.ConfigStore)
+	}
+	// ctx.job (todo 7.13): progress reporting for tracked async jobs. When no
+	// reporter is wired (not a tracked job), ctx.job.progress is a no-op.
+	if jobReporter != nil {
+		ctxObj.Job = NewJobAPI(jobReporter)
 	}
 	ctxObj.Now = now
 
