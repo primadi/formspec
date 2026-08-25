@@ -166,10 +166,10 @@ func TestMemory_TrimByAge(t *testing.T) {
 
 func TestParseRetention(t *testing.T) {
 	cases := []struct {
-		in      string
-		maxAge  time.Duration
-		maxLen  int64
-		ok      bool
+		in     string
+		maxAge time.Duration
+		maxLen int64
+		ok     bool
 	}{
 		{"", 0, 0, false},
 		{"1000", 0, 1000, true},

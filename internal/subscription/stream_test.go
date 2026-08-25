@@ -178,9 +178,9 @@ func TestStreamingWorker_Transform(t *testing.T) {
 func TestStreamingWorker_RetryThenDeadLetter(t *testing.T) {
 	reg := NewRegistry()
 	reg.Add("billing", "audit", &spec.SubscriptionSpec{
-		Events:  []string{"billing.invoice.on_submit"},
-		Handler: spec.ImplDecl{Type: spec.ImplNative, Ref: "billing.audit-log"},
-		Durable: "durable",
+		Events:   []string{"billing.invoice.on_submit"},
+		Handler:  spec.ImplDecl{Type: spec.ImplNative, Ref: "billing.audit-log"},
+		Durable:  "durable",
 		MaxRetry: 2,
 	})
 

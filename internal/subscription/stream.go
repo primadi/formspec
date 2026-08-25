@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/primadi/formspec/internal/stream"
 	"github.com/primadi/formspec/internal/starlark"
+	"github.com/primadi/formspec/internal/stream"
 )
 
 // StreamingWorker consumes durable (Tier 2) subscriptions from a stream

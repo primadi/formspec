@@ -15,12 +15,12 @@ transaksional. Tier 2 (Streaming) menambah `durability: durable` dengan
 
 Kontrak (02-core-extended.md §3):
 
-| | Tier 1 — Core (outbox) | Tier 2 — Streaming |
-|---|---|---|
-| Storage | Outbox PersistBackend | Redis Stream / Kafka |
-| Konsistensi | Transaksional | At-least-once, positioned replay |
-| Fan-out | Satu target per entry | Banyak subscriber |
-| Pemakaian | GL, billing, inventory | Analytics, audit, monitoring |
+|             | Tier 1 — Core (outbox) | Tier 2 — Streaming               |
+| ----------- | ---------------------- | -------------------------------- |
+| Storage     | Outbox PersistBackend  | Redis Stream / Kafka             |
+| Konsistensi | Transaksional          | At-least-once, positioned replay |
+| Fan-out     | Satu target per entry  | Banyak subscriber                |
+| Pemakaian   | GL, billing, inventory | Analytics, audit, monitoring     |
 
 ## Prinsip desain
 
