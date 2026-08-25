@@ -178,6 +178,10 @@ type App struct {
 	httpServer      *http.Server
 	// escalationWorker escalates stale workflow approvals (todo 7.4.4).
 	escalationWorker *workflow.EscalationWorker
+	// pubsub is the shared in-memory pub/sub bus backing both ctx.pubsub()
+	// and the `pubsub` event delivery channel (todo 7.3.5). Held so a
+	// ReloadSpec() reuses the same instance.
+	pubsub *memory.PubSub
 
 	// nativeHandlers preserves user-registered native Go handlers across
 	// ReloadSpec() calls so they are re-registered on the new dispatcher.
@@ -389,7 +393,11 @@ func New(cfg Config) (*App, error) {
 	rb.SetWebhookRegistry(whReg)
 	rb.SetWebhookKeyResolver(cfgReg)
 	rb.BuildRoutes()
-	disp := newDispatcher(reg, svcReg, database, cfg, cfgReg)
+	// Shared pubsub (todo 7.3.5): one instance backs both ctx.pubsub() in
+	// scripts and the `pubsub` event delivery channel, so subscribers receive
+	// published events.
+	sharedPubSub := memory.NewPubSub()
+	disp := newDispatcher(reg, svcReg, database, cfg, cfgReg, sharedPubSub)
 	nativeEx := disp.NativeExecutor() // get the native executor from dispatcher
 	rb.SetDispatcher(disp)
 	rb.SetUIRegistry(uiReg)
@@ -624,6 +632,7 @@ func New(cfg Config) (*App, error) {
 		Hub:           hub,
 		EventLog:      eventLogStore,
 		Lookup:        eventChannelLookup,
+		PubSub:        sharedPubSub,
 		Subscriptions: composedDispatch,
 	}
 	outboxWorker := db.NewOutboxWorker(outboxStore, deliveryHandler)
@@ -639,6 +648,7 @@ func New(cfg Config) (*App, error) {
 		outboxWorker:     outboxWorker,
 		deliveryHandler:  deliveryHandler,
 		escalationWorker: escalationWorker,
+		pubsub:           sharedPubSub,
 		idempotency:      idempotencyStore,
 		nativeHandlers:   make(map[string]action.NativeHandler),
 	}
@@ -841,7 +851,7 @@ func (a *App) ReloadSpec() error {
 	// Integrator registry (todo 7.7.1): re-resolve on reload.
 	newItReg := buildIntegratorRegistry(specManifests.Manifests)
 
-	newDisp := newDispatcher(newReg, newSvcReg, a.database, a.cfg, newCfgReg)
+	newDisp := newDispatcher(newReg, newSvcReg, a.database, a.cfg, newCfgReg, a.pubsub)
 
 	// Re-register native Go handlers on the new dispatcher.
 	a.mu.RLock()
@@ -1131,7 +1141,7 @@ func buildIntegratorRegistry(manifests []manifest.RawManifest) *integrator.Regis
 	return reg
 }
 
-func newDispatcher(reg *entity.Registry, svcReg *service.Registry, database db.DB, cfg Config, cfgReg *config.Registry) *action.Dispatcher {
+func newDispatcher(reg *entity.Registry, svcReg *service.Registry, database db.DB, cfg Config, cfgReg *config.Registry, sharedPubSub ...*memory.PubSub) *action.Dispatcher {
 	disp := action.NewDispatcher()
 
 	scriptEx := action.NewScriptExecutor(cfg.SpecPath)
@@ -1142,7 +1152,7 @@ func newDispatcher(reg *entity.Registry, svcReg *service.Registry, database db.D
 	// config → in-memory registry. Named datastores (from the Control Plane
 	// snapshot) are not yet backed by a live connection (todo 2.9.4) and
 	// fail loudly.
-	scriptEx.SetDatastoreResolver(ctxPrimitiveResolver(database, stateDirFromDSN(cfg.DSN)))
+	scriptEx.SetDatastoreResolver(ctxPrimitiveResolver(database, stateDirFromDSN(cfg.DSN), sharedPubSub...))
 	// Strict ctx.* primitive enforcement (todo 2.6.4): in ProdMode/StrictMode,
 	// a script may only use ctx.* primitives it declared in uses.primitives.
 	scriptEx.SetStrictPrimitives(cfg.StrictMode || cfg.ProdMode)

@@ -24,12 +24,21 @@ type SpecLookup func(resource, eventName string) (channels []spec.EventDeliveryD
 // as a delivery failure (retryable).
 type SubscriptionDispatch func(ctx context.Context, workspaceID, eventName, resource string, payload map[string]any) error
 
+// PubSub is the minimal pub/sub contract the delivery handler needs for the
+// `pubsub` channel (todo 7.3.5) — non-durable, at-most-once.
+type PubSub interface {
+	Publish(ctx context.Context, channel string, payload any) error
+}
+
 // DeliveryEventHandler implements OutboxWorker's EventHandler, delivering
 // durable events enqueued by internal/action.DeliverEvents.
 type DeliveryEventHandler struct {
 	Hub      events.Hub
 	EventLog *EventLogStore
 	Lookup   SpecLookup
+	// PubSub, when non-nil, backs the `pubsub` delivery channel (todo 7.3.5):
+	// the event payload is published to a channel (non-durable, at-most-once).
+	PubSub PubSub
 	// Subscriptions, when non-nil, is invoked after channel fan-out to
 	// dispatch the event to matching kind: Subscription handlers. Wired from
 	// resource/formspec.go (which owns the subscription registry + action
@@ -64,8 +73,24 @@ func (h *DeliveryEventHandler) HandleEvent(ctx context.Context, workspaceID, eve
 			if err := h.EventLog.Write(ctx, workspaceID, eventName, resource, []byte(payload)); err != nil {
 				return err
 			}
+		case "pubsub":
+			// Non-durable, at-most-once (todo 7.3.5): publish the event payload
+			// to a channel. The channel name comes from the delivery target's
+			// scope, defaulting to "{resource}.{event}".
+			if h.PubSub != nil {
+				channel := ""
+				if ch.Target != nil {
+					channel = ch.Target.Scope
+				}
+				if channel == "" {
+					channel = resource + "." + eventName
+				}
+				if err := h.PubSub.Publish(ctx, channel, msg); err != nil {
+					return fmt.Errorf("pubsub delivery: %w", err)
+				}
+			}
 		default:
-			// reliable_event, queue, webhook, notification, pubsub: not yet
+			// reliable_event, queue, webhook, notification: not yet
 			// implemented. Treated as delivered (no error) so the worker
 			// doesn't retry forever on a channel this pass never promised
 			// to support.

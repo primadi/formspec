@@ -26,12 +26,17 @@ import (
 // connection in single-server mode (they come from the Control Plane
 // snapshot, todo 2.9.4) — the resolver returns a clear error so scripts fail
 // loudly instead of silently.
-func NewCtxPrimitiveResolver(database db.DB, stateDir string) func(primitiveType, name string) (interface{}, error) {
+func NewCtxPrimitiveResolver(database db.DB, stateDir string, sharedPubSub ...*memory.PubSub) func(primitiveType, name string) (interface{}, error) {
 	kv := memory.NewKV()         // ctx.kvstore
 	cache := memory.NewKV()      // ctx.cache (TTL honored by KV)
 	lock := memory.NewLock()     // ctx.lock
 	queue := memory.NewQueue()   // ctx.queue
 	pubsub := memory.NewPubSub() // ctx.pubsub
+	if len(sharedPubSub) > 0 && sharedPubSub[0] != nil {
+		// Share the pubsub instance with the event delivery handler (todo
+		// 7.3.5) so subscribers via ctx.pubsub() receive published events.
+		pubsub = sharedPubSub[0]
+	}
 
 	storage, err := memory.NewStorage(filepath.Join(stateDir, "storage"))
 	if err != nil {
@@ -83,8 +88,8 @@ func NewCtxPrimitiveResolver(database db.DB, stateDir string) func(primitiveType
 // connection in single-server mode (they come from the Control Plane
 // snapshot, todo 2.9.4) — the resolver returns a clear error so scripts fail
 // loudly instead of silently.
-func ctxPrimitiveResolver(database db.DB, stateDir string) func(primitiveType, name string) (interface{}, error) {
-	return NewCtxPrimitiveResolver(database, stateDir)
+func ctxPrimitiveResolver(database db.DB, stateDir string, sharedPubSub ...*memory.PubSub) func(primitiveType, name string) (interface{}, error) {
+	return NewCtxPrimitiveResolver(database, stateDir, sharedPubSub...)
 }
 
 // StateDirFromDSN derives a state directory from a DSN like
