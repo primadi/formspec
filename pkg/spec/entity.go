@@ -993,6 +993,20 @@ type RelationDecl struct {
 	Resource   string   `yaml:"resource" json:"resource"`
 	ForeignKey string   `yaml:"foreign_key,omitempty" json:"foreign_key,omitempty"`
 	OnDelete   OnDelete `yaml:"on_delete,omitempty" json:"on_delete,omitempty"` // restrict | cascade | set_null (v0.3.0)
+	// Snapshot copies master financial fields to the transaction at
+	// create/submit (02-core-extended.md §1.1, todo 7.10) — denormalisasi
+	// finansial. Values are copied (not live-joined), so old transactions are
+	// unaffected by later master changes.
+	Snapshot []SnapshotField `yaml:"snapshot,omitempty" json:"snapshot,omitempty"`
+}
+
+// SnapshotField copies one master field into the transaction at create/submit
+// (02-core-extended.md §1.1, todo 7.10).
+type SnapshotField struct {
+	// From is the master field name to copy.
+	From string `yaml:"from" json:"from"`
+	// As is the target field name on the transaction (default = From).
+	As string `yaml:"as,omitempty" json:"as,omitempty"`
 }
 
 // NaturalKeyRuleDecl defines how a natural key is generated.

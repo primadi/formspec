@@ -458,6 +458,13 @@ func (s *EntityStore) Insert(ctx context.Context, params InsertParams) (string, 
 			return err
 		}
 
+		// Financial snapshot (todo 7.10): copy declared master fields into the
+		// transaction at create — denormalisasi finansial (02-core-extended.md
+		// §1.1). Reads through txdb (same transaction, no deadlock).
+		if err := s.applyFinancialSnapshot(ctx, txdb, params.WorkspaceID, params.Data); err != nil {
+			return err
+		}
+
 		// Validate transaction_date policy (backdate/forward-date)
 		if err := s.validateTransactionDatePolicy(params.Data, params.Permissions); err != nil {
 			return err
@@ -1209,7 +1216,26 @@ func (s *EntityStore) Submit(ctx context.Context, workspaceID, id, userID string
 	if err != nil {
 		return fmt.Errorf("%s submit: %w", s.entity, err)
 	}
-	result, err := database.ExecContext(ctx, query, userID, id, workspaceID)
+
+	// Financial snapshot (todo 7.10): re-copy declared master fields at submit
+	// (02-core-extended.md §1.1) — the transaction's financial fields reflect
+	// the master values as of submit, not create. Reads through the same
+	// database handle as the UPDATE below.
+	if err := s.applyFinancialSnapshot(ctx, database, workspaceID, rec.Data); err != nil {
+		return fmt.Errorf("%s submit: snapshot: %w", s.entity, err)
+	}
+	dataJSON, err := json.Marshal(rec.Data)
+	if err != nil {
+		return fmt.Errorf("%s submit: marshal data: %w", s.entity, err)
+	}
+	query = fmt.Sprintf(
+		`UPDATE %s SET doc_status = 'submitted', data = ?, version = version + 1, updated_at = %s, updated_by = ? WHERE id = ? AND tenant_id = ? AND doc_status = 'draft'`,
+		tbl, currentTimestampExpr(s.driver))
+	if s.softDelete {
+		query += " AND deleted_at IS NULL"
+	}
+
+	result, err := database.ExecContext(ctx, query, dataJSON, userID, id, workspaceID)
 	if err != nil {
 		return fmt.Errorf("%s submit: %w", s.entity, err)
 	}
@@ -2190,6 +2216,71 @@ func (s *EntityStore) resolveRelations(ctx context.Context, records []EntityReco
 			}
 		}
 	}
+}
+
+// applyFinancialSnapshot copies master financial fields to the transaction at
+// create/submit (02-core-extended.md §1.1, todo 7.10) — denormalisasi
+// finansial. For each belongs_to relation field with a `snapshot:` block, the
+// referenced master record is resolved and the declared fields are copied into
+// the transaction data (as `as` field names). Values are copied, not
+// live-joined, so old transactions are unaffected by later master changes.
+//
+// Reads go through txdb (the caller's transaction) so the snapshot joins the
+// same transaction as the rest of the create/submit — no deadlock on a
+// single-connection SQLite driver.
+func (s *EntityStore) applyFinancialSnapshot(ctx context.Context, txdb DB, workspaceID string, data map[string]any) error {
+	for _, f := range s.fields {
+		if f.Relation == nil || f.Relation.Type != "belongs_to" || len(f.Relation.Snapshot) == 0 {
+			continue
+		}
+		fkVal, ok := data[f.Name].(string)
+		if !ok || fkVal == "" {
+			continue
+		}
+
+		targetModule, targetEntity := splitRelationResource(s.module, f.Relation.Resource)
+		targetTable := TableName(targetModule, targetEntity, "")
+		if s.driver == DriverPostgres && s.schema != "" {
+			targetTable = s.schema + "." + targetTable
+		}
+
+		var dataStr string
+		err := txdb.QueryRowContext(ctx,
+			`SELECT data FROM `+targetTable+` WHERE id = ? AND tenant_id = ?`,
+			fkVal, workspaceID).Scan(&dataStr)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				continue // master missing — leave snapshot fields absent
+			}
+			return fmt.Errorf("snapshot %s: query master %s: %w", f.Name, targetTable, err)
+		}
+		var master map[string]any
+		if err := json.Unmarshal([]byte(dataStr), &master); err != nil {
+			return fmt.Errorf("snapshot %s: unmarshal master %s: %w", f.Name, targetTable, err)
+		}
+
+		for _, snap := range f.Relation.Snapshot {
+			val, ok := master[snap.From]
+			if !ok {
+				continue
+			}
+			as := snap.As
+			if as == "" {
+				as = snap.From
+			}
+			data[as] = val
+		}
+	}
+	return nil
+}
+
+// splitRelationResource splits a relation resource ref ("module.entity" or
+// just "entity") into (module, entity), defaulting module to the caller's.
+func splitRelationResource(module, resource string) (string, string) {
+	if dotIdx := strings.Index(resource, "."); dotIdx >= 0 {
+		return resource[:dotIdx], resource[dotIdx+1:]
+	}
+	return module, resource
 }
 
 // FindByField finds a single entity record by a specific field value.

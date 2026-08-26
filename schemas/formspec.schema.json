@@ -313,6 +313,35 @@
       },
       "additionalProperties": false
     },
+    "CallbackDecl": {
+      "description": "CallbackDecl configures callback webhook delivery for a tracked async job\n(02-core-extended.md §13.1, todo 7.13.4). The callback URL is supplied by\nthe caller via a request header; the result is delivered HMAC-signed.\n",
+      "type": "object",
+      "properties": {
+        "channel": {
+          "description": "webhook",
+          "type": "string"
+        },
+        "header": {
+          "description": "header carrying the callback URL (e.g. X-Callback-URL)",
+          "type": "string"
+        },
+        "retry": {
+          "$ref": "#/$defs/RetryDecl",
+          "nullable": true
+        },
+        "sign": {
+          "type": "boolean"
+        },
+        "url_from": {
+          "description": "header",
+          "type": "string"
+        }
+      },
+      "required": [
+        "channel"
+      ],
+      "additionalProperties": false
+    },
     "Characteristic": {
       "title": "Characteristic",
       "description": "Data nature classification — determines storage strategy, partitioning, and API behavior",
@@ -2012,6 +2041,13 @@
           "description": "Target entity \\\"module/entity\\\" or just \\\"entity\\\" within same module",
           "type": "string"
         },
+        "snapshot": {
+          "description": "Snapshot copies master financial fields to the transaction at",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SnapshotField"
+          }
+        },
         "type": {
           "description": "Relation type: belongs_to (FK on this entity), has_many (FK on target), has_one (FK on target, unique)",
           "type": "string",
@@ -2339,6 +2375,24 @@
       },
       "required": [
         "name"
+      ],
+      "additionalProperties": false
+    },
+    "SnapshotField": {
+      "description": "SnapshotField copies one master field into the transaction at create/submit\n(02-core-extended.md §1.1, todo 7.10).\n",
+      "type": "object",
+      "properties": {
+        "as": {
+          "description": "As is the target field name on the transaction (default = From).",
+          "type": "string"
+        },
+        "from": {
+          "description": "From is the master field name to copy.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from"
       ],
       "additionalProperties": false
     },
@@ -3362,6 +3416,35 @@
       },
       "additionalProperties": false
     },
+    "CallbackDecl": {
+      "description": "CallbackDecl configures callback webhook delivery for a tracked async job\n(02-core-extended.md §13.1, todo 7.13.4). The callback URL is supplied by\nthe caller via a request header; the result is delivered HMAC-signed.\n",
+      "type": "object",
+      "properties": {
+        "channel": {
+          "description": "webhook",
+          "type": "string"
+        },
+        "header": {
+          "description": "header carrying the callback URL (e.g. X-Callback-URL)",
+          "type": "string"
+        },
+        "retry": {
+          "$ref": "#/$defs/RetryDecl",
+          "nullable": true
+        },
+        "sign": {
+          "type": "boolean"
+        },
+        "url_from": {
+          "description": "header",
+          "type": "string"
+        }
+      },
+      "required": [
+        "channel"
+      ],
+      "additionalProperties": false
+    },
     "Characteristic": {
       "title": "Characteristic",
       "description": "Data nature classification — determines storage strategy, partitioning, and API behavior",
@@ -5061,6 +5144,13 @@
           "description": "Target entity \\\"module/entity\\\" or just \\\"entity\\\" within same module",
           "type": "string"
         },
+        "snapshot": {
+          "description": "Snapshot copies master financial fields to the transaction at",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SnapshotField"
+          }
+        },
         "type": {
           "description": "Relation type: belongs_to (FK on this entity), has_many (FK on target), has_one (FK on target, unique)",
           "type": "string",
@@ -5388,6 +5478,24 @@
       },
       "required": [
         "name"
+      ],
+      "additionalProperties": false
+    },
+    "SnapshotField": {
+      "description": "SnapshotField copies one master field into the transaction at create/submit\n(02-core-extended.md §1.1, todo 7.10).\n",
+      "type": "object",
+      "properties": {
+        "as": {
+          "description": "As is the target field name on the transaction (default = From).",
+          "type": "string"
+        },
+        "from": {
+          "description": "From is the master field name to copy.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from"
       ],
       "additionalProperties": false
     },

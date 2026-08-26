@@ -59,6 +59,8 @@ func (c *Converter) Generate(collect *CollectResult) *GenerateResult {
 		"UsesConfigDecl", "UsesDbDecl",
 		"WebhookAuth", "WebhookSigConfig", "WebhookKeyRef",
 		"WorkflowEscalation", "WorkflowReject", "WorkflowStep", "WorkflowTrigger", "WorkflowTransitionRef", "StepEscalation",
+		"CallbackDecl", // async job callback webhook (todo 7.13)
+		"SnapshotField", // financial denormalization snapshot (todo 7.10)
 	}
 
 	for _, name := range sharedTypes {
