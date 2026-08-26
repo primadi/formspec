@@ -83,8 +83,9 @@ generate-schema:
 	@go run ./cmd/formspec-gen-schema/ --out schemas
 	@echo "✅ JSON Schema files generated in schemas/"
 
-# Stage (dan opsional upload) schema versi ke schemas/dist/ untuk
-# schemas.formspec.dev. Default: stage v1 lokal. Upload R2: tambah --upload.
+# Stage schema versi ke schemas/dist/ untuk schemas.formspec.dev.
+# Jalur deploy: git-based — commit schemas/dist lalu push (Cloudflare
+# auto-build). Default: stage v1 lokal. Upload R2 (cadangan): tambah --upload.
 #   make publish-schemas                         # stage v1
 #   make publish-schemas ARGS="--version v1 --upload --bucket formspec-schemas"
 publish-schemas:

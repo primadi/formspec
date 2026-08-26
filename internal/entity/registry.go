@@ -33,6 +33,19 @@ type Registry struct {
 	stores       map[string]*db.EntityStore // key = "module/name"
 	synced       bool
 	permRegistry *permission.Registry
+	// periodGuard reports whether a period ("YYYY-MM") is closed for a
+	// workspace (todo 7.11.5). Wired from resource/formspec.go; applied to
+	// every lazily-created store so transaction writes enforce
+	// FORMSPEC.PERIOD.CLOSED.
+	periodGuard func(ctx context.Context, workspaceID, period string) (bool, error)
+}
+
+// SetPeriodGuard wires the period-closing guard (todo 7.11.5) to every entity
+// store created after this call. When nil, the guard is disabled.
+func (r *Registry) SetPeriodGuard(fn func(ctx context.Context, workspaceID, period string) (bool, error)) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.periodGuard = fn
 }
 
 // SpecInfo holds a parsed and validated entity spec along with its source.
@@ -468,6 +481,10 @@ func (r *Registry) GetEntityStore(module, name string) (*db.EntityStore, error) 
 
 	// Lazy-create store
 	newStore := db.NewEntityStore(r.db, r.driver, info.Metadata, info.EntitySpec)
+
+	// Wire the period-closing guard (todo 7.11.5) so transaction writes
+	// enforce FORMSPEC.PERIOD.CLOSED.
+	newStore.SetPeriodGuard(r.periodGuard)
 
 	// Wire the cross-module table resolver (2.2.5) — resolves
 	// "{module}.{entity}" references to the actual registered table name

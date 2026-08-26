@@ -15,9 +15,9 @@ import (
 // sagaTestHarness builds an integrator dispatcher with a real SQLite saga
 // store and a recording executor.
 type sagaTestHarness struct {
-	disp     *Dispatcher
-	rec      *recordingExecutor
-	saga     *db.SagaStore
+	disp      *Dispatcher
+	rec       *recordingExecutor
+	saga      *db.SagaStore
 	entityReg *entity.Registry
 }
 

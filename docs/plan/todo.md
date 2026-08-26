@@ -1,7 +1,7 @@
 # Master Plan: FormSpec Implementation
 
-**Last Updated**: 2026-08-25  
-**Status**: ✅ Fase 0 complete · ✅ Fase 1 (1.1–1.5) · ✅ Fase 2.1 · ✅ Fase 2.2 · ✅ Fase 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6) · ✅ Fase 2.7 (idempotency prepare flow) · ✅ Fase 2.8 (spec.expose) · ✅ Fase 2.9 (2.9.1–2.9.3: ctx.\* primitives + dev auto-provision) · ✅ Fase 5 (5.1–5.4) · ✅ Spec hot-reload · ✅ Fase 11 (review schema↔docs) · ✅ Audit spec↔schema + tambah TODO item · ✅ `formspec validate` (3.1.1, engine+schema) · ✅ Rename forma→formspec (docs/plan/rename-formspec.md) · 🚧 Fase 12 Domain Infrastruktur (docs/architecture/09-domain-map.md) · ✅ Schema registry online (docs/plan/schema-registry-online.md) · ✅ CLI repl/seed/diff (3.4.1, 3.6.2, 3.6.3) · ✅ **Fase 4 (4.1–4.10) complete** (incl. 4.3.1–4.3.5 entity extension, 4.8.3 restore remap) · ✅ Landing page (5.1.3 + 5.13.5, docs/plan/landing-page.md) · ✅ App renderer archetypes (5.1.1–5.1.3: sidebar-nav/topnav/no-nav + access + persist_backend, docs/plan/landing-page.md) · ✅ **Fase 6.1 (6.1.1–6.1.3: login + token, entity-backed auth, external/ merge, generate-auth)** (docs/plan/auth-login-token.md) · ✅ **6.3.1 + 6.3.2 + 5.12.5 (role + role-assignment Entity, materialisasi grant page → permission)** (docs/changelog/2026-08-20-001) · ✅ **6.2.3 (wire permission check semua handler, surface-aware 404)** (docs/changelog/2026-08-20-002) · ✅ **Fase 6 COMPLETE (6.1–6.9, dogfooding auth module)** (docs/plan/fase6-dogfooding-auth-module.md, changelog 2026-08-20-003 s/d 2026-08-21-014) · 📐 **Widget strategy** (docs/plan/widget-strategy.md — sync 5.10, tambah 5.2.7/5.10a, cross-link 7.17.1) · ✅ **Fase 5 COMPLETE (5.1–5.16, docs/plan/fase5-completion.md, changelog 2026-08-24-027 s/d 2026-08-24-033)** · ✅ **Fase 7 subset (7.5, 7.8, 7.12, 7.14, 7.16 — docs/plan/fase7-subset.md, changelog 2026-08-25-001 s/d 2026-08-25-002)** · ✅ **7.2 Config runtime (7.2.1–7.2.4: Config registry + ctx.config/ctx.secrets wiring, docs/plan/fase7-config-runtime.md, changelog 2026-08-25-003)** · ✅ **7.5.4 unify state machine guard (internal/starlark/guard.go shared EvaluateGuard, changelog 2026-08-25-004)** · ✅ **7.1 Service runtime (7.1.1–7.1.4: registry + dispatch + API exposure + call:async, docs/plan/fase7-service-runtime.md, changelog 2026-08-25-005)** · ✅ **7.14.4 resource.new() (script runtime contract, changelog 2026-08-25-006)** · ✅ **7.17.2 storage spec enforcement (max_count + visibility, changelog 2026-08-25-007)** · ✅ **7.9.6 validation rules L1–L3 complete (length/in/script/unique, changelog 2026-08-25-008)** · ✅ **Contoh project service-demo (Service runtime + validation rules, examples/service-demo, changelog 2026-08-25-009)** · ✅ **7.6 Webhook engine (7.6.1–7.6.4: registry + route + HMAC signature + token auth, docs/plan/fase7-webhook-engine.md, changelog 2026-08-25-010)** · ✅ **7.3 Subscription Tier 1 (7.3.1: registry + dispatch + outbox wiring; 7.3.3 emits: sudah ada — docs/plan/fase7-subscription-engine.md, changelog 2026-08-25-011)** · ✅ **7.4 Workflow engine core (7.4.1–7.4.3, 7.4.5: registry + approval state machine + multi-approver modes + when + requester exclusion — docs/plan/fase7-workflow-engine.md, changelog 2026-08-25-012)** · ✅ **7.7 Integrator engine (7.7.1: registry + listen→call bridge — docs/plan/fase7-integrator-engine.md, changelog 2026-08-25-013)** · ✅ **7.4.6 Workflow audit trail (approval = signed statement di formspec_audit_log — docs/plan/fase7-workflow-audit-trail.md, changelog 2026-08-25-014)** · ✅ **7.4.4 Workflow escalation (timeout + reassign_roles, escalation worker — docs/plan/fase7-workflow-escalation.md, changelog 2026-08-25-015)** · ✅ **7.7.2+7.7.3 Integrator validation (symmetric cancel + idempotent target — docs/plan/fase7-integrator-validation.md, changelog 2026-08-25-016)** · ✅ **7.7.4 Integrator saga compensate (cross-boundary compensate ke saga log — docs/plan/fase7-integrator-saga.md, changelog 2026-08-25-017)** · ✅ **7.3.5 Delivery channels — pubsub (non-durable at-most-once, shared pubsub instance — docs/plan/fase7-delivery-channels.md, changelog 2026-08-25-018)** · ✅ **7.3.2 Subscription Tier 2 streaming (abstraksi `Stream` KVStore-like: memory + redis/Valkey, StreamingWorker at-least-once + positioned replay + filter/transform + retry/dead-letter — docs/plan/fase7-subscription-streaming.md, changelog 2026-08-25-019)** · ✅ **7.3.4 Dynamic subscriptions (Entity `formspec.core.subscription` bundled UIExposed, DynamicRefresher merge ke registry — docs/plan/fase7-dynamic-subscriptions.md, changelog 2026-08-25-020)** · ✅ **7.13 Async job tracker (call: async + track: true → 202 + job_id, progres kanal jobs, ctx.job.progress, callback webhook — docs/plan/fase7-async-job-tracker.md, changelog 2026-08-25-021)** · ✅ **7.10 Denormalisasi finansial (RelationDecl.Snapshot, applyFinancialSnapshot di create/submit — docs/plan/fase7-denormalisasi-finansial.md, changelog 2026-08-26-001)**
+**Last Updated**: 2026-08-24  
+**Status**: ✅ Fase 0 complete · ✅ Fase 1 (1.1–1.5) · ✅ Fase 2.1 · ✅ Fase 2.2 · ✅ Fase 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6) · ✅ Fase 2.7 (idempotency prepare flow) · ✅ Fase 2.8 (spec.expose) · ✅ Fase 2.9 (2.9.1–2.9.3: ctx.\* primitives + dev auto-provision) · ✅ Fase 5 (5.1–5.4) · ✅ Spec hot-reload · ✅ Fase 11 (review schema↔docs) · ✅ Audit spec↔schema + tambah TODO item · ✅ `formspec validate` (3.1.1, engine+schema) · ✅ Rename forma→formspec (docs/plan/rename-formspec.md) · 🚧 Fase 12 Domain Infrastruktur (docs/architecture/09-domain-map.md) · ✅ Schema registry online (docs/plan/schema-registry-online.md) · ✅ CLI repl/seed/diff (3.4.1, 3.6.2, 3.6.3) · ✅ **Fase 4 (4.1–4.10) complete** (incl. 4.3.1–4.3.5 entity extension, 4.8.3 restore remap) · ✅ Landing page (5.1.3 + 5.13.5, docs/plan/landing-page.md) · ✅ App renderer archetypes (5.1.1–5.1.3: sidebar-nav/topnav/no-nav + access + persist_backend, docs/plan/landing-page.md) · ✅ **Fase 6.1 (6.1.1–6.1.3: login + token, entity-backed auth, external/ merge, generate-auth)** (docs/plan/auth-login-token.md) · ✅ **6.3.1 + 6.3.2 + 5.12.5 (role + role-assignment Entity, materialisasi grant page → permission)** (docs/changelog/2026-08-20-001) · ✅ **6.2.3 (wire permission check semua handler, surface-aware 404)** (docs/changelog/2026-08-20-002) · ✅ **Fase 6 COMPLETE (6.1–6.9, dogfooding auth module)** (docs/plan/fase6-dogfooding-auth-module.md, changelog 2026-08-20-003 s/d 2026-08-21-014) · 📐 **Widget strategy** (docs/plan/widget-strategy.md — sync 5.10, tambah 5.2.7/5.10a, cross-link 7.17.1)
 
 > `⬜` not started · `✅` complete · `⏸️` deferred
 
@@ -442,9 +442,9 @@ ui-exposed), §9.3 "Akses dari script" (`resource.fetch`, `ctx.config().get`,
 
 - [x] 5.5.1 Drag-and-drop — wire `@dnd-kit/core`; drag card antar kolom → PATCH `status_field`
 - [x] 5.5.2 Optimistic update with server-enforced rollback (409 → snapshot restore)
-- [x] 5.5.3 `drag_guard` FormSpecExpr — pre-check UX, prevent drop that server will reject — `KanbanRenderer.handleDragEnd` evaluasi `entry.spec.drag_guard` (context `fields`=record, `target`=status kolom tujuan); drop diblokir + toast bila guard false; server state-machine guard tetap otoritas. ✅ 2026-08-24
+- [ ] 5.5.3 `drag_guard` FormSpecExpr — pre-check UX, prevent drop that server will reject
 - [x] 5.5.4 WIP limits — `max_cards_per_column`, soft UX enforcement (visual + toast)
-- [x] 5.5.5 Zero-config — derive columns from state machine or `group_by` enum — `deriveKanbanColumns` di `engine/derive.ts` (state machine states → `enum_values` status field); `KanbanRenderer` pakai bila `columns:` kosong + empty-state hint. ✅ 2026-08-24
+- [ ] 5.5.5 Zero-config — derive columns from state machine or `group_by` enum
 - [x] 5.5.6 Click card → detail page navigation
 - [x] 5.5.7 Row actions (view/edit/delete/custom) with confirm + permission check
 - [x] 5.5.8 Filter columns from `filters` manifest — Select dropdown per filter field
@@ -452,20 +452,20 @@ ui-exposed), §9.3 "Akses dari script" (`resource.fetch`, `ctx.config().get`,
 
 ### 5.6 `kind: Calendar`
 
-- [x] 5.6.1 Month/week/day/resource views — `views: [month, week, day, resource]` — `CalendarRenderer` (view switcher + MonthView/WeekView/DayView/ResourceView). ✅ 2026-08-24
-- [x] 5.6.2 Event rendering — from `date_field` + optional `end_field`; title from `label_field` or `title_field` — `CalendarRenderer` (events dari `date_field`/`end_field`, title dari `title_field` ?? `label_field`). ✅ 2026-08-24
-- [x] 5.6.3 Click event → detail Page/Form; click empty slot → Form create with date pre-filled — `openEvent` (navigate detail) + `createAt` (overlay create + `prefill.{date_field}`). ✅ 2026-08-24
-- [x] 5.6.4 Drag reschedule — call `update` action on date_field (server-enforced); submitted immutable rows disable drag — HTML5 drag → `apiPatch` date_field (+ end_field proporsional); submitted rows ditolak; 409 → toast. ✅ 2026-08-24
-- [x] 5.6.5 RRULE recurrence — parse RFC 5545, expand to instances for visible date range (render-time, not materialized) — library `rrule` (npm) + `expandRecurrence` (bounded `between`). ✅ 2026-08-24
-- [x] 5.6.6 Resource view — one lane per `resource_field` value; color by `color_field` — `ResourceView` (lane per resource, warna dari `color_field`). ✅ 2026-08-24
-- [ ] ⏸️ 5.6.7 RRULE exception per-instance — ubah/batalkan satu occurrence tanpa ubah pattern; butuh model data exception tersendiri (row terpisah + override tanggal asli); ditunda ke iterasi berikutnya (`06-page-kinds.md` §5 "Di luar cakupan v1")
+- [ ] 5.6.1 Month/week/day/resource views — `views: [month, week, day, resource]`
+- [ ] 5.6.2 Event rendering — from `date_field` + optional `end_field`; title from `label_field` or `title_field`
+- [ ] 5.6.3 Click event → detail Page/Form; click empty slot → Form create with date pre-filled
+- [ ] 5.6.4 Drag reschedule — call `update` action on date_field (server-enforced); submitted immutable rows disable drag
+- [ ] 5.6.5 RRULE recurrence — parse RFC 5545, expand to instances for visible date range (render-time, not materialized)
+- [ ] 5.6.6 Resource view — one lane per `resource_field` value; color by `color_field`
+- [ ] 5.6.7 RRULE exception per-instance — ubah/batalkan satu occurrence tanpa ubah pattern; butuh model data exception tersendiri (row terpisah + override tanggal asli); ditunda ke iterasi berikutnya (`06-page-kinds.md` §5 "Di luar cakupan v1")
 
 ### 5.7 `kind: Dashboard` + `kind: Widget`
 
 - [x] 5.7.1 Widget `stat` — fetch from summary entity, display number with label — `MetricWidget` di `DashboardRenderer.tsx` (query FormSpecExpr subset → server list filters). ✅ 2026-08-24
 - [x] 5.7.2 Widget `chart` — bar/line/pie from summary entity; add chart library dependency (katalog widget bawaan spec HANYA `stat` + `chart` — `07-component-kinds.md` §2; ListWidget/SummaryWidget tidak ada di spec, usulkan ke spec dulu bila dibutuhkan) — `ChartWidget` + `LineChart` SVG (tanpa dependency chart library; satu series per `group_by`). ✅ 2026-08-24
-- [x] 5.7.3 Dashboard customizable — `customizable: true`, user add/remove/reorder widgets from catalog; preference stored as runtime preference (not YAML) — `DashboardRenderer` (dnd-kit sortable reorder + add via Select catalog + remove button); layout disimpan di `usePrefsStore.dashboardLayouts` (localStorage), bukan YAML. ✅ 2026-08-24
-- [x] 5.7.4 Widget catalog visibility — derived from user's `list`/`view` permission on underlying entity (not manual flag) — catalog di-filter `checkPermission` pada entity underlying; widget terpasang juga di-filter. ✅ 2026-08-24
+- [ ] 5.7.3 Dashboard customizable — `customizable: true`, user add/remove/reorder widgets from catalog; preference stored as runtime preference (not YAML)
+- [ ] 5.7.4 Widget catalog visibility — derived from user's `list`/`view` permission on underlying entity (not manual flag) — **sebagian**: widget terpasang sudah di-filter permission di `DashboardRenderer`; katalog add/remove belum ada
 
 ### 5.8 Realtime WebSocket
 
@@ -517,27 +517,27 @@ ui-exposed), §9.3 "Akses dari script" (`resource.fetch`, `ctx.config().get`,
 
 ### 5.11 FormSpecExpr
 
-- [x] 5.11.1 Audit grammar vs spec — verify lexer→parser→evaluator supports all operators from `08-formspec-expr.md` §2 — grammar lengkap (literal, `fields.x`, perbandingan, and/or/not, aritmetika, len/sum, list comprehension, `in`); 94 test pass. ✅ 2026-08-24
-- [x] 5.11.2 Deploy-time static validation — `formspec apply`/`formspec check` rejects unresolvable field references + invalid grammar (ERROR, not warning) — `checkForms` (Form) + `checkKanban` (drag_guard) + `checkWizard` (step fields) + `validateExprGrammar` (tolak `ctx.`, def/import/return, delimiter tak seimbang). ✅ 2026-08-24
-- [x] 5.11.3 Runtime error state — nonexistent field reference → visible error state (never silent fail-safe/evaluate to `false`) — `strictEvalFormSpecExpr` (parse error + eval warnings → `error`); `FormRenderer` tampilkan banner error per field; `evalIdentifier` tetap graceful utk field belum-set (normal null), schema-level di-deploy-time. ✅ 2026-08-24
+- [ ] 5.11.1 Audit grammar vs spec — verify lexer→parser→evaluator supports all operators from `08-formspec-expr.md` §2
+- [ ] 5.11.2 Deploy-time static validation — `formspec apply`/`formspec check` rejects unresolvable field references + invalid grammar (ERROR, not warning)
+- [ ] 5.11.3 Runtime error state — nonexistent field reference → visible error state (never silent fail-safe/evaluate to `false`)
 - [x] 5.11.4 `title` interpolation — `"Order {order.number}"` pattern in Page/Wizard/Print titles — `PageRenderer` fetch record utk token title + `interpolate()`; Print/Wizard sudah pakai pola sama. ✅ 2026-08-24
-- [ ] ⏸️ 5.11.5 Cross-shell conformance test suite — identical interpretation across shells — **deferred**: hanya satu shell (`react-shadcn`) yang ada; interpreter JS (`lib/formspec-expr`) adalah referensi. Conformance test suite baru bermakna saat shell kedua muncul (mis. `vue`/`flutter`).
+- [ ] 5.11.5 Cross-shell conformance test suite — identical interpretation across shells
 
 ### 5.12 Spec Resolution API
 
 - [x] 5.12.1 ETag caching — conditional GET with 304 for `/_meta/ui` bundle — `internal/api/meta.go` (ETag over data portion + `If-None-Match` → 304). ✅ 2026-08-24
 - [x] 5.12.2 `label_field` fallback — `natural key` → `name` → `title` → `number` → `id` (`04-spec-resolution-api.md` §2) — `internal/ui/meta.go` `labelField()` + `TestLabelFieldFallbacks`. ✅ 2026-08-24
 - [x] 5.12.3 Entity schema shape — `label_field`, `lifecycle`, `actions` with embedded `permission` — `EntitySchema`/`ActionSummary` di `internal/ui/meta.go`. ✅ 2026-08-24
-- [x] 5.12.4 Permission filtering — entity (404 if no list/view), page (hidden if missing permission), action (permission string sent, not filtered) — `BuildBundle` (entity tanpa list/view → tidak ship → 404), `allowedPage` (page hidden bila tak ada permission), `ActionSummary.Permission` (string dikirim, tidak difilter). ✅ 2026-08-24
+- [ ] 5.12.4 Permission filtering — entity (404 if no list/view), page (hidden if missing permission), action (permission string sent, not filtered)
 - [x] 5.12.5 Task-based admin granting → materialized permission strings — `Materializer` (`internal/auth/materialize.go`) menurunkan footprint page (blocks/tabs → entity-action) + derived entity page (`{entity}-page`) + navigation kind (`{kind}:{name}`) dan meng-expand grant role → permission strings; di-wire ke auth service (`permissionsForUser` saat login). Admin UI granting: `GrantsEditor` menampilkan semua page app (authored + derived entity + navigation kinds) dengan label action + permission string inline + search + preview permission termaterialisasi. ✅ 2026-08-20 (materializer) · ✅ 2026-08-22 (GrantsEditor semua page, changelog 004)
 
 ### 5.13 Other UI kinds
 
 - [ ] 5.13.1 `kind: Report` — **sebagian**: ✅ totals row bug fixed (nilai kini dirender di kolom yang cocok via `TotalsRow`, bukan `<td>` kosong) + ✅ grouping + subtotal per group (`computeTotals` shared); ⏸️ export sebagai async job → download tray belum (butuh backend job infra; saat ini masih CSV Blob client-side) (`06-page-kinds.md` §8)
-- [x] 5.13.1a Report `source.filter` — filter parameterized deklaratif (`source: { entity, filter }` dengan `":param"` placeholder); saat ini parameter dikirim sebagai filter query `?<field>=<value>` (`06-page-kinds.md` §8 "Open — source.filter") — `ReportSource` di `pkg/spec` + `ReportRenderer` resolve `":param"` placeholder dari `parameters[]`; literal pass-through. ✅ 2026-08-24
-- [x] 5.13.2 `kind: Print` — PDF server-side generation; `format: html` via `window.print()` (existing) — endpoint `GET /_ui/print/{module}/{name}/{id}` (`internal/api/print.go`) render Print manifest + record ke PDF via `go-pdf/fpdf` (header/body fields/child_table/footer + `{path}` interpolation); route di `router.go`; test `print_test.go`. ✅ 2026-08-24
-- [x] 5.13.3 `kind: ApprovalInbox` — pending approvals list, `approve`/`reject` inline actions, badge count, `realtime: true` — `ApprovalInboxRenderer` (zero-config; load dari entity approval konvensional bila ada; approve/reject inline; badge count; realtime). ✅ 2026-08-24
-- [x] 5.13.4 `kind: NotificationCenter` — notification list, badge unread, `mark-read` action, `realtime: true`, deep-link on click — `NotificationCenterRenderer` (zero-config; unread badge; mark-read; realtime). ✅ 2026-08-24
+- [ ] 5.13.1a Report `source.filter` — filter parameterized deklaratif (`source: { entity, filter }` dengan `":param"` placeholder); saat ini parameter dikirim sebagai filter query `?<field>=<value>` (`06-page-kinds.md` §8 "Open — source.filter")
+- [ ] 5.13.2 `kind: Print` — PDF server-side generation; `format: html` via `window.print()` (existing)
+- [ ] 5.13.3 `kind: ApprovalInbox` — pending approvals list, `approve`/`reject` inline actions, badge count, `realtime: true`
+- [ ] 5.13.4 `kind: NotificationCenter` — notification list, badge unread, `mark-read` action, `realtime: true`, deep-link on click
 - [x] 5.13.5 `kind: Listing` — public catalog, no auth wrap, no row/bulk actions — `ListingRenderer` read-only (search + filter, tanpa create/row/bulk; klik baris → detail) + kind `Listing` end-to-end (spec, registry, bundle, route). Contoh `examples/storefront/`. Lihat `docs/plan/landing-page.md` + changelog 2026-08-19-001. ✅ 2026-08-19
 
 ### 5.14 Derivation engine
@@ -554,9 +554,9 @@ ui-exposed), §9.3 "Akses dari script" (`resource.fetch`, `ctx.config().get`,
 
 ### 5.16 VisualSpecKind/Renderer registry & resolution
 
-- [x] 5.16.1 Renderer resolution engine — pilih Renderer via `(implements, stack_family)`; hanya `official` auto-select; tanpa official → `formspec apply` error + sarankan kandidat `verified`/`community`; override via map `renderers:` di App manifest + field `renderer:` per-instance; Renderer non-official masuk consent footprint (`03-renderer-kind.md` §3) — `internal/manifest/renderer.go` (`RendererRegistry.ResolveRenderer` + `ValidateRendererResolution`); `AppSpec.Renderers` map + `PageSpec.Renderer` field; wired ke `formspec check`. ✅ 2026-08-24
-- [x] 5.16.2 Slot-tier validation at apply — `accepts_slots` hanya sah dari `tier: page|app`, `implements_slot` hanya dari `tier: component`; kombinasi lain ditolak (`02-visual-spec-kind.md` §4–§5) — `RendererRegistry.ValidateSlotTiers`. ✅ 2026-08-24
-- [x] 5.16.3 `stack_family` compatibility check — App shell + Page shell-integrated + Component wajib satu family; mismatch = compile-time error; Page independen tidak dicek (`01-visual-hierarchy.md` §3) — `RendererRegistry.ValidateStackFamily`. ✅ 2026-08-24
+- [ ] 5.16.1 Renderer resolution engine — pilih Renderer via `(implements, stack_family)`; hanya `official` auto-select; tanpa official → `formspec apply` error + sarankan kandidat `verified`/`community`; override via map `renderers:` di App manifest + field `renderer:` per-instance; Renderer non-official masuk consent footprint (`03-renderer-kind.md` §3)
+- [ ] 5.16.2 Slot-tier validation at apply — `accepts_slots` hanya sah dari `tier: page|app`, `implements_slot` hanya dari `tier: component`; kombinasi lain ditolak (`02-visual-spec-kind.md` §4–§5)
+- [ ] 5.16.3 `stack_family` compatibility check — App shell + Page shell-integrated + Component wajib satu family; mismatch = compile-time error; Page independen tidak dicek (`01-visual-hierarchy.md` §3)
 
 ---
 
@@ -646,79 +646,79 @@ mergeable ke project lain via `external/`/`spec/modules/`; middleware tetap Go.
 
 ### 7.1 `kind: Service` runtime
 
-- [x] 7.1.1 Service registry — register by `{module}.{name}` — `internal/service/registry.go` (`Registry` + `Add`/`Get`/`GetAction`/`List`); `buildServiceRegistry` di `resource/formspec.go` (boot + reload). ✅ 2026-08-25
-- [x] 7.1.2 Resolve `impl.native` — `ref: "{Type}.{Method}"` via `NativeExecutor` (sama seperti entity action); auto-scan `impl/**/*.go` belum (native handler didaftarkan eksplisit via `RegisterNative` — enhancement). ✅ 2026-08-25
-- [x] 7.1.3 Resolve `impl.script` / `impl.script_ref` / `impl.compiled` / `impl.sidecar` — permission enforcement seragam untuk KELIMA jenis impl via dispatcher yang sama (`invokeServiceAction` + `HandleServiceAction`); route `POST /api/v1/{module}/{service}/{action}`. ✅ 2026-08-25
-- [x] 7.1.4 `call: async` — fire-and-forget (no job_id, no progress, no result) — `HandleServiceAction` dispatch di goroutine + return 202 Accepted. ✅ 2026-08-25
+- [ ] 7.1.1 Service registry — register by `{module}.{name}`
+- [ ] 7.1.2 Resolve `impl.native` — scan `impl/**/*.go`, `ref: "{Type}.{Method}"`, must be unique in module
+- [ ] 7.1.3 Resolve `impl.script` / `impl.script_ref` / `impl.compiled` / `impl.sidecar` — permission enforcement seragam untuk KELIMA jenis impl (`01-core-basic.md` §5)
+- [ ] 7.1.4 `call: async` — fire-and-forget (no job_id, no progress, no result)
 
 ### 7.2 `kind: Config` runtime
 
-- [x] 7.2.1 Config registry — load Config manifests, resolve per environment — `internal/config/registry.go` (`Registry` + `NonSecret`/`Secrets`); `buildConfigRegistry` di `resource/formspec.go` di-wire di boot + reload. Single-server resolve per-environment = default yang dideklarasikan (Control Plane di-defer). ✅ 2026-08-25
-- [x] 7.2.2 `ctx.config.get("key")` — Starlark access; non-secret keys only — `SetConfigStore` → `ctxObj.Config = NewConfigAPI(e.ConfigStore)`; secret keys dipisah ke `ctx.secrets` (gated `uses.secrets`). ✅ 2026-08-25
-- [x] 7.2.3 `settings.*` namespace — global settings: currency, locale, timezone, date_format, fiscal_year_start — `Settings`/`ResolveSettings` di `pkg/spec` + `bundle.settings` (changelog 2026-08-24-008..014). ✅ 2026-08-24
-- [x] 7.2.4 Global settings defaults — spec MUST provide acceptable defaults for every setting; components MUST NOT guess — `DefaultSettings` + `ResolveSettings` overlay; formatter terpusat `lib/format.ts`. ✅ 2026-08-24
+- [ ] 7.2.1 Config registry — load Config manifests, resolve per environment
+- [ ] 7.2.2 `ctx.config.get("key")` — Starlark access; non-secret keys only
+- [ ] 7.2.3 `settings.*` namespace — global settings: currency, locale, timezone, date_format, fiscal_year_start
+- [ ] 7.2.4 Global settings defaults — spec MUST provide acceptable defaults for every setting; components MUST NOT guess
 
 ### 7.3 `kind: Subscription` engine
 
-- [x] 7.3.1 Tier 1 (outbox) — event → match Subscription → call handler; transactional — `internal/subscription/registry.go` (`Registry` + `Add`/`Get`/`List`/`ForEvent`, index by event name); `internal/subscription/dispatch.go` (`Dispatcher` dispatch handler `ImplDecl` via action dispatcher, payload + `_event` metadata); `buildSubscriptionRegistry` di `resource/formspec.go` (boot + reload); `DeliveryEventHandler.Subscriptions` di `renderers/jsonb-persist/event_handler.go` (dispatch setelah channel fan-out, fully-qualified event name); outbox worker kini di-start di dev mode (`App.StartBackgroundWorkers` + `cmd/formspec/dev.go`). ✅ 2026-08-25
-- [x] 7.3.2 Tier 2 (streaming) — Redis/Kafka; at-least-once, positioned replay, filter/transform Starlark — `internal/stream` (abstraksi `Stream` KVStore-like: memory + redis/Valkey), `StreamingWorker` (poll durable subs, filter/transform, retry max_retry, dead-letter `{stream}.dead`), durable dispatch append ke stream; `FORMSPEC_STREAM` (memory|redis) + `FORMSPEC_REDIS_ADDR` (default `valkey:6379`). ✅ 2026-08-25 (docs/plan/fase7-subscription-streaming.md, changelog 019)
-- [x] 7.3.3 `emits:` custom event emission — action declares `emits: <event-name>` → event emitted on action success — `ResolveEmission` + `ValidateActionEmits` + custom action emission di `internal/api/handler.go` (sudah ada). ✅ 2026-08-25
-- [x] 7.3.4 Dynamic subscriptions — runtime-created subscriptions as data (not manifest); live in `formspec.core` — Entity `formspec.core.subscription` (bundled, UIExposed), `RecordToSubscription` (record → SubscriptionSpec), `Registry.MergeDynamic` (key `formspec.core/{name}`), `DynamicRefresher` (poll 5s, merge ke registry); wiring boot + reload. ✅ 2026-08-25 (docs/plan/fase7-dynamic-subscriptions.md, changelog 020)
-- [x] 7.3.5 Delivery channels — `webhook` (outbound, HMAC signed, retry), `notification` (bridge to `formspec/notify`), `pubsub` (non-durable, at-most-once) — **pubsub channel selesai**: `DeliveryEventHandler.PubSub` di `renderers/jsonb-persist/event_handler.go` (publish event payload ke channel dari `target.scope` atau default `{resource}.{event}`, non-durable at-most-once); shared pubsub instance di `resource/formspec.go` (backing ctx.pubsub() + delivery channel, boot + reload via `App.pubsub`); contoh di service-demo (`on_create` deliver pubsub `demo.products`). `webhook`/`notification` di-defer. ✅ 2026-08-25
+- [ ] 7.3.1 Tier 1 (outbox) — event → match Subscription → call handler; transactional
+- [ ] 7.3.2 Tier 2 (streaming) — Redis/Kafka; at-least-once, positioned replay, filter/transform Starlark
+- [ ] 7.3.3 `emits:` custom event emission — action declares `emits: <event-name>` → event emitted on action success
+- [ ] 7.3.4 Dynamic subscriptions — runtime-created subscriptions as data (not manifest); live in `formspec.core`
+- [ ] 7.3.5 Delivery channels — `webhook` (outbound, HMAC signed, retry), `notification` (bridge to `formspec/notify`), `pubsub` (non-durable, at-most-once)
 
 ### 7.4 `kind: Workflow` engine
 
-- [x] 7.4.1 Approval state machine — attach to Entity transition without modifying Entity — `internal/workflow/registry.go` (`Registry` + `Add`/`Get`/`List`/`ForTransition`, index by `{entity}.{from}.{to}`); `buildWorkflowRegistry` di `resource/formspec.go` (boot + reload); `HandleCustomAction` intercept transisi → `handleWorkflowApproval` (create pending approval, approve/reject via `{"decision": ...}`); `executeWorkflowTransition` update state setelah approval selesai; tabel `formspec_workflow_approval` + `WorkflowApprovalStore`. ✅ 2026-08-25
-- [x] 7.4.2 Multi-approver modes — `all` (all eligible must approve), `any` (quorum from pool), `sequential` (chain order) — `StepMode`/`Quorum` di `internal/workflow/engine.go` (all=eligible count, any=approvers N, sequential=1). ✅ 2026-08-25
-- [x] 7.4.3 `when` condition — FormSpecExpr on `resource`; step skipped if false — `ApplicableSteps` evaluasi `when` via `starlark.EvaluateGuard`; `FieldMap` (internal/starlark/fieldmap.go) mendukung `resource.amount` dot-notation. ✅ 2026-08-25
-- [x] 7.4.4 `escalation` — timeout (`after`), notify_roles, reassign_roles — `internal/workflow/escalation.go` (`EscalationWorker` background poll pending approvals; step aktif dengan `escalation.after` yang sudah lewat → eskalasi: catat audit `workflow.escalate` + tandai step escalated dengan `reassign_roles`); `WorkflowApprovalRow.EscalatedSteps` (stepIdx → reassign_roles); `CanApprove` menerima reassign_roles sebagai eligible roles tambahan; `App.StartBackgroundWorkers`/`Close` wire worker; approval menyimpan nama manifest workflow (bukan pointer address) via `Registry.NameFor`. ✅ 2026-08-25
-- [x] 7.4.5 Requester can never approve own request — `CanApprove` menolak jika `userID == requesterID` (created_by record). ✅ 2026-08-25
-- [x] 7.4.6 Approval = signed statement recorded in audit trail — `db.WriteAuditLog` (exported wrapper); `recordWorkflowAudit` di `internal/api/handler.go` mencatat `workflow.approve`/`workflow.reject` (actor = approver) + `workflow.transition` (actor = system) ke `formspec_audit_log`; `SetAuditWriter` wiring di `resource/formspec.go` (boot + reload). ✅ 2026-08-25
+- [ ] 7.4.1 Approval state machine — attach to Entity transition without modifying Entity
+- [ ] 7.4.2 Multi-approver modes — `all` (all eligible must approve), `any` (quorum from pool), `sequential` (chain order)
+- [ ] 7.4.3 `when` condition — FormSpecExpr on `resource`; step skipped if false
+- [ ] 7.4.4 `escalation` — timeout (`after`), notify_roles, reassign_roles
+- [ ] 7.4.5 Requester can never approve own request
+- [ ] 7.4.6 Approval = signed statement recorded in audit trail
 
 ### 7.5 State machine engine (basic)
 
-- [x] 7.5.1 Transition validation — declared transitions only; undeclared → `STATE_TRANSITION_ERROR` — `StateMachineEngine.CanTransition` + `STATE_TRANSITION_ERROR` di `internal/entity/state_machine.go`. ✅ 2026-08-25
-- [x] 7.5.2 Starlark inline guards — guard on transition — `evaluateGuard` (Starlark `EvalExpr` terhadap resource data). ✅ 2026-08-25
-- [x] 7.5.3 Builtin aggregates — `sum_line(field)`, `len(resource.items)` for guard expressions — `sum_line_*` pre-computed + injected ke env guard (`computeSums`). ✅ 2026-08-25
-- [x] 7.5.4 Satukan dua implementasi state machine — `entity.StateMachineEngine` (lengkap, ber-guard) dipanggil dari `HandleCustomAction` via `CanTransition`; evaluasi guard diekstrak ke helper bersama `internal/starlark.EvaluateGuard` (`internal/starlark/guard.go`) yang dipakai BOTH `state_machine.go` (CanTransition) dan `crud.go` (validateStateTransition saat Update) — helper `sum_line_*`/`item_count`/`line_count` kini konsisten di kedua path. ✅ 2026-08-25
+- [ ] 7.5.1 Transition validation — declared transitions only; undeclared → `STATE_TRANSITION_ERROR`
+- [ ] 7.5.2 Starlark inline guards — guard on transition
+- [ ] 7.5.3 Builtin aggregates — `sum_line(field)`, `len(resource.items)` for guard expressions
+- [ ] 7.5.4 Satukan dua implementasi state machine — `entity.StateMachineEngine` (lengkap, ber-guard) tidak dipanggil dari `HandleCustomAction`; enforcement yang jalan versi sederhana di `db.EntityStore.Update` (`runtimes/02` §7, `runtimes/05` §5)
 
 ### 7.6 `kind: Webhook` engine
 
-- [x] 7.6.1 Inbound endpoint — route registration, method validation — `internal/webhook/registry.go` (`Registry` + `Add`/`Get`/`List`); `buildWebhookRegistry` di `resource/formspec.go` (boot + reload); `GenerateWebhookRoutes` (path auto-derive `/api/v1/webhooks/{module}/{name}` atau `spec.path`); `HandleWebhook` dispatch ke Service action `spec.for`. ✅ 2026-08-25
-- [x] 7.6.2 Signature verification — HMAC (strategy: `signature`, algorithm, header, payload) before handler — `internal/webhook/verify.go` (`Verify` + `computeHMAC` hmac-sha256/sha512, key dari config via `config.Registry.ResolveKey`). ✅ 2026-08-25
-- [x] 7.6.3 Token auth — strategy: `token` — `WebhookTokenConfig` (header + key ref config); `verifyToken` (dukung prefix "Bearer "). ✅ 2026-08-25
-- [x] 7.6.4 Verification failure → rejected BEFORE handler runs — `HandleWebhook` panggil `webhook.Verify` sebelum dispatch; gagal → 401 (auth) / 500 (misconfig). ✅ 2026-08-25
+- [ ] 7.6.1 Inbound endpoint — route registration, method validation
+- [ ] 7.6.2 Signature verification — HMAC (strategy: `signature`, algorithm, header, payload) before handler
+- [ ] 7.6.3 Token auth — strategy: `token`
+- [ ] 7.6.4 Verification failure → rejected BEFORE handler runs
 
 ### 7.7 `kind: Integrator` engine
 
-- [x] 7.7.1 Listen → call bridge — `listen.resource`+`event` triggers `call.resource`+`action` — `internal/integrator/registry.go` (`Registry` + `Add`/`Get`/`List`/`ForEvent`, index by `{resource}.{event}`); `internal/integrator/dispatch.go` (`Dispatcher` dispatch target action via entity/service registry + action dispatcher, payload + `_event` metadata); `buildIntegratorRegistry` di `resource/formspec.go` (boot + reload); composed ke `DeliveryEventHandler.Subscriptions` bersama subscription dispatch. ✅ 2026-08-25
-- [x] 7.7.2 Mandatory symmetric cancel handler — every Integrator MUST provide cancel handler — `validateIntegrators` di `cmd/formspec/validate.go` (cross-manifest check: integrator yang listen event non-cancel wajib punya pasangan `on_cancel`/`before_cancel` untuk resource yang sama). ✅ 2026-08-25
-- [x] 7.7.3 Target action must be `idempotent: true` for cross-boundary calls — `validateIntegrators` juga cek target action (`call.resource`+`call.action`) harus `idempotent: true` (resolve dari entity manifest set). ✅ 2026-08-25
-- [x] 7.7.4 Saga compensate — cross-boundary call registers `compensate` to Saga log; `FORMSPEC.SAGA.*` errors — `renderers/jsonb-persist/saga.go` (`SagaStore` + tabel `formspec_saga_log`: Register/ListPending/MarkCompleted/MarkCompensated); `internal/integrator/dispatch.go` register compensate saat dispatch cross-boundary call, invoke compensate action saat dispatch gagal (`FORMSPEC.SAGA.COMPENSATE_FAILED`); wire saga store di `resource/formspec.go` (boot + reload). ✅ 2026-08-25
+- [ ] 7.7.1 Listen → call bridge — `listen.resource`+`event` triggers `call.resource`+`action`
+- [ ] 7.7.2 Mandatory symmetric cancel handler — every Integrator MUST provide cancel handler
+- [ ] 7.7.3 Target action must be `idempotent: true` for cross-boundary calls
+- [ ] 7.7.4 Saga compensate — cross-boundary call registers `compensate` to Saga log; `FORMSPEC.SAGA.*` errors
 
 ### 7.8 Hook engine
 
-- [x] 7.8.1 5 hook points — `before`, `after`, `on_error`, `before_deliver`, `after_deliver` — `internal/action/hooks.go` (before/after/on_error) + `deliver.go` (before_deliver/after_deliver, todo 7.8.5). ✅ 2026-08-25
-- [x] 7.8.2 `before` — may modify action params or call `fail()` to abort — `RunBeforePhase` (Dispatch error → abort + on_error). ✅ 2026-08-25
-- [x] 7.8.3 `after` — post-action side effects — `RunAfterPhase` (best-effort, tidak gagalkan response). ✅ 2026-08-25
-- [x] 7.8.4 `on_error` — compensation/cleanup — `runOnErrorPhase` (params `_hook_error`). ✅ 2026-08-25
-- [x] 7.8.5 `before_deliver` — may suppress delivery or enrich payload — `runBeforeDeliver` (fail → suppress; ok(data) → enrich) + `runAfterDeliver` (best-effort); `SelectEventHooks` match `h.Event`; wired via `deliveryDepsFor` (dispatcher + entity hooks). ✅ 2026-08-25
-- [x] 7.8.6 Priority ordering — consistent with event priority (smaller first, kelipatan 10) — `SelectHooks`/`SelectEventHooks` sort by effective priority (0→10). ✅ 2026-08-25
-- [x] 7.8.7 Cross-module hooks — must declare `uses`; appear in consent footprint — hook eksekusi mewarisi `actionSpec.Uses` (`RunBeforePhase`/`RunAfterPhase`), jadi akses cross-module dari hook di-gate oleh uses action. ✅ 2026-08-25
+- [ ] 7.8.1 5 hook points — `before`, `after`, `on_error`, `before_deliver`, `after_deliver`
+- [ ] 7.8.2 `before` — may modify action params or call `fail()` to abort
+- [ ] 7.8.3 `after` — post-action side effects
+- [ ] 7.8.4 `on_error` — compensation/cleanup
+- [ ] 7.8.5 `before_deliver` — may suppress delivery or enrich payload
+- [ ] 7.8.6 Priority ordering — consistent with event priority (smaller first, kelipatan 10)
+- [ ] 7.8.7 Cross-module hooks — must declare `uses`; appear in consent footprint
 
 ### 7.9 Validation levels L4–L6
 
-- [ ] ⏸️ 7.9.1 L4 `business_rules` — single-record business constraints via script — **deferred**: kontrak deklarasi L4–L6 belum dispesifikasikan di `pkg/spec` (tidak ada field `business_rules`/`cross_validate`/`consistency` di `EntitySpec`); butuh design decision.
-- [ ] ⏸️ 7.9.2 L5 `cross_validate` — multi-field/child-record validation within same record — **deferred** (sama dengan 7.9.1).
-- [ ] ⏸️ 7.9.3 L6 `consistency` — cross-entity consistency (e.g., aggregate balance vs GL); requires `uses: db` — **deferred** (sama dengan 7.9.1).
-- [ ] ⏸️ 7.9.4 Sequential evaluation — L1–L3 → L4 → L5 → L6; stop at first failure — **deferred** (bergantung 7.9.1–7.9.3).
-- [ ] ⏸️ 7.9.5 Error response with `details: [{level, field?, message}]` — **deferred** (bergantung 7.9.1–7.9.3).
-- [x] 7.9.6 Katalog rule L1–L3 lengkap server-side — himpunan tertutup ~20 rule: `required, min_length, max_length, length, pattern, email, url, min, max, positive, precision, in, future, past, after:<field>, before:<field>, min_items, max_items, unique, exists, script` — `length`/`in`/`script`/`unique` ditambahkan di `validateSingleRule`/`validateUnique` (`renderers/jsonb-persist/crud.go`); `unique` baca lewat transaksi aktif (hindari deadlock SQLite). ✅ 2026-08-25
+- [ ] 7.9.1 L4 `business_rules` — single-record business constraints via script
+- [ ] 7.9.2 L5 `cross_validate` — multi-field/child-record validation within same record
+- [ ] 7.9.3 L6 `consistency` — cross-entity consistency (e.g., aggregate balance vs GL); requires `uses: db`
+- [ ] 7.9.4 Sequential evaluation — L1–L3 → L4 → L5 → L6; stop at first failure
+- [ ] 7.9.5 Error response with `details: [{level, field?, message}]`
+- [ ] 7.9.6 Katalog rule L1–L3 lengkap server-side — himpunan tertutup ~20 rule: `required, min_length, max_length, length, pattern, email, url, min, max, positive, precision, in, future, past, after:<field>, before:<field>, min_items, max_items, unique, exists, script` (`05-field-types.md` §3)
 
 ### 7.10 Denormalisasi finansial
 
-- [x] 7.10.1 Master financial fields snapshot to transaction on `create`/`submit` — not live-join — `RelationDecl.Snapshot []SnapshotField` (`{from, as}`) pada field relation `belongs_to`; `applyFinancialSnapshot` di `EntityStore.Insert` (setelah ValidateRelationTargets) + `Submit` (re-snapshot sebelum UPDATE); baca master via txdb (no deadlock). ✅ 2026-08-26
-- [x] 7.10.2 Old transactions unaffected by master value changes — nilai disalin (bukan live-join), jadi perubahan master tidak mengubah transaksi lama; `TestFinancialSnapshot_OldTransactionUnaffected`. ✅ 2026-08-26
+- [ ] 7.10.1 Master financial fields snapshot to transaction on `create`/`submit` — not live-join
+- [ ] 7.10.2 Old transactions unaffected by master value changes
 
 ### 7.11 Period closing
 
@@ -730,23 +730,23 @@ mergeable ke project lain via `external/`/`spec/modules/`; middleware tetap Go.
 
 ### 7.12 Rate limiter
 
-- [x] 7.12.1 Per-resource rate limit — `max`, `per`, `scope` (tenant|user|ip|global), `strategy` (sliding_window|token_bucket) — `ResourceRateLimiter` (`internal/api/resource_ratelimit.go`); `EntitySpec.RateLimit` + `Action.RateLimit`; scope key derivation. ✅ 2026-08-25
-- [x] 7.12.2 Per-action override — overrides resource default — `checkRateLimit` (per-action `Action.RateLimit` menang atas `EntitySpec.RateLimit`; key per-action). ✅ 2026-08-25
-- [x] 7.12.3 `429` response before handler runs — `checkRateLimit` di semua handler (List/Find/Create/Update/Delete/CustomAction) → `RATE_LIMITED` 429. ✅ 2026-08-25
+- [ ] 7.12.1 Per-resource rate limit — `max`, `per`, `scope` (tenant|user|ip|global), `strategy` (sliding_window|token_bucket)
+- [ ] 7.12.2 Per-action override — overrides resource default
+- [ ] 7.12.3 `429` response before handler runs
 
 ### 7.13 Async job tracker
 
-- [x] 7.13.1 `call: async` (tracked) → `202` with `job_id` — `Action.Track` (`call: async` + `track: true`); `dispatchTrackedAsync` (create job → goroutine dispatch → Complete/Fail); `JobStore` (`formspec_job` table) + `job.Tracker`; `meta.track` (websocket_event + poll_url). ✅ 2026-08-25
-- [x] 7.13.2 Progress via WebSocket `jobs` channel — `progress`/`completed`/`failed` events — `Tracker.publish` → hub broadcast per workspace (event `progress`/`completed`/`failed`, resource `jobs`). ✅ 2026-08-25
-- [x] 7.13.3 `ctx.job.progress(pct, message)` from handler — `CtxAPI.Job` (`jobAPI`), reporter di-thread via `ExecuteParams.JobID` → `action.ScriptExecutor` → `starlark.ScriptExecutor`; non-tracked → error jelas. ✅ 2026-08-25
-- [x] 7.13.4 Callback webhook delivery — HMAC-signed, durable retry — `Action.Callback` (`CallbackDecl`: channel/url_from/header/sign/retry); URL dari header request, disimpan di job row; `Tracker.deliverCallback` (HMAC-SHA256 `X-FormSpec-Signature`, bounded retry). ✅ 2026-08-25
+- [ ] 7.13.1 `call: async` (tracked) → `202` with `job_id`
+- [ ] 7.13.2 Progress via WebSocket `jobs` channel — `progress`/`completed`/`failed` events
+- [ ] 7.13.3 `ctx.job.progress(pct, message)` from handler
+- [ ] 7.13.4 Callback webhook delivery — HMAC-signed, durable retry
 
 ### 7.14 Starlark sandbox
 
-- [x] 7.14.1 Hard limits enforcement — wall-clock 5000ms, memory 64MB, iterations 100K, max 50 DB queries, max 1000 records read — `internal/starlark/limits.go` (`ScriptLimits` + `SetMaxExecutionSteps` 100K + context timeout 5s + query/records counters di `builtinQuery`). Memory 64MB tidak terukur langsung di interpreter Starlark — step limit adalah bound praktis. ✅ 2026-08-25
-- [x] 7.14.2 No network/filesystem/subprocess access — sandbox `Load: nil` (no imports), no I/O. ✅ 2026-08-25
-- [x] 7.14.3 Exceeding any limit → abort with error, no partial results — `CheckQuery`/`AddRecordsRead`/step limit → error abort. ✅ 2026-08-25
-- [x] 7.14.4 Kontrak API script runtime — `resource.field`/`resource.set/save/new`, `<resource>.load/call`, `ok()`/`fail()` (fail = rollback transaksi) — `resource.new()` (handle baru entity sama, `save()` → INSERT) ditambahkan 2026-08-25; `resource.field`/`set`/`save`/`fetch`/`call`/`create`/`ok`/`fail` sudah ada. `<Entity>.query()` (builder §16) di-defer (butuh scope builder query besar). ✅ 2026-08-25
+- [ ] 7.14.1 Hard limits enforcement — wall-clock 5000ms, memory 64MB, iterations 100K, max 50 DB queries, max 1000 records read
+- [ ] 7.14.2 No network/filesystem/subprocess access
+- [ ] 7.14.3 Exceeding any limit → abort with error, no partial results
+- [ ] 7.14.4 Kontrak API script runtime — `resource.field`/`resource.set/save/new`, `<Entity>.query()`, `<resource>.load/call`, `ok()`/`fail()` (fail = rollback transaksi) (`06-script-runtime.md` §2/§4/§6)
 
 ### 7.15 Sidecar multi-runtime
 
@@ -756,15 +756,15 @@ mergeable ke project lain via `external/`/`spec/modules/`; middleware tetap Go.
 
 ### 7.16 Money type
 
-- [x] 7.16.1 Money as first-class type — pair of exact amount (decimal) + currency code (ISO-4217) — `Money` struct (`pkg/spec/money.go`) + `Field.Currency`/`Field.DecimalPlaces`. ✅ 2026-08-25
-- [x] 7.16.2 Currency resolution order — explicit field → `settings.currency` → error (never guess) — `ResolveMoneyCurrency`. ✅ 2026-08-25
-- [x] 7.16.3 Banker's rounding default — `RoundMoney` (round-half-to-even default; `settings.rounding` override half_up/half_down/up/down). ✅ 2026-08-25
-- [x] 7.16.4 Non-default currency MUST declare `decimal_places` — `ValidateMoneyField` + `ValidateEntitySpec` (money field override currency tanpa decimal_places → error). ✅ 2026-08-25
+- [ ] 7.16.1 Money as first-class type — pair of exact amount (decimal) + currency code (ISO-4217)
+- [ ] 7.16.2 Currency resolution order — explicit field → `settings.currency` → error (never guess)
+- [ ] 7.16.3 Banker's rounding default
+- [ ] 7.16.4 Non-default currency MUST declare `decimal_places`
 
 ### 7.17 File storage
 
 - [x] 7.17.1 File upload route — `POST /:resource/:id/{field}` + `GET` download; storage resolver dua backend: `file` (default, `memory.Storage`) atau `minio` (`datastore/minio`, `FORMSPEC_STORAGE=minio`); permission update/view; StorageSpec enforcement. ✅ 2026-08-24
-- [x] 7.17.2 `storage` spec enforcement — `allowed_types`, `max_size_mb`, `max_count`, `visibility` (public|private|signed) — `max_size_mb`+`allowed_types` di upload (sudah ada); `max_count` (multi-file array key, `FILE_COUNT_EXCEEDED`) + `visibility` (public=anon, private=view, signed=501 deferred) di `internal/api/file.go`. ✅ 2026-08-25
+- [ ] 7.17.2 `storage` spec enforcement — `allowed_types`, `max_size_mb`, `max_count`, `visibility` (public|private|signed)
 - [ ] 7.17.3 Transform — server-side resize/thumbnail per `transform` spec
 
 ### 7.18 `kind: KindDefinition` runtime

@@ -13,8 +13,8 @@
       "description": "Tier 2: delivery channel",
       "nullable": true
     },
-    "durable": {
-      "description": "Tier 2: durability mode",
+    "durability": {
+      "description": "Tier 2: durability mode (\"durable\" = streaming)",
       "type": "string"
     },
     "events": {

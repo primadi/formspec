@@ -53,7 +53,7 @@ import {
 } from "@/engine/derive"
 import { resolveEntityRef } from "@/engine/entityRef"
 import { getLifecycle } from "@/engine/lifecycle"
-import { buildListParams, apiList, apiPatch, apiDelete } from "@/lib/api"
+import { buildListParams, apiList, apiDelete } from "@/lib/api"
 import {
   buildFixedFilterParams,
   resolveFilterValue,

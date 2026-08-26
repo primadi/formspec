@@ -36,7 +36,7 @@ func (c *Converter) Generate(collect *CollectResult) *GenerateResult {
 		"DeliveryDecl", "PublishDecl", "PayloadDecl", "EventDeliveryDecl", "DeliveryTarget",
 		"RetryDecl", "PageBlock", "PageTab", "BlockRef", "DashboardWidget", "WidgetLayout",
 		"SectionBlock", "SectionCTA", "SectionItem",
-		"ReportParam", "ReportColumn", "ReportGroup", "ReportTotal", "WizardStep",
+		"ReportParam", "ReportColumn", "ReportGroup", "ReportTotal", "ReportSource", "WizardStep",
 		"WizardOnComplete", "WizardSummaryItem", "KanbanColumn", "KanbanCard",
 		"PrintOutput", "PrintPaper", "PrintCustomPaper", "PrintHeader", "PrintBodyItem",
 		"PrintChildTable", "PrintTotals", "PrintFooter",
@@ -52,14 +52,15 @@ func (c *Converter) Generate(collect *CollectResult) *GenerateResult {
 		"IntegratorCall", "IntegratorListen",
 		"KvstoreUseDecl",
 		"PageLayout",
+		"PageBinds", "BlockBinds",
 		"ParamValidation",
 		"SlotDecl", "SlotContract",
 		"StorageTransform",
 		"SubDeliveryDecl",
 		"UsesConfigDecl", "UsesDbDecl",
-		"WebhookAuth", "WebhookSigConfig", "WebhookKeyRef",
+		"WebhookAuth", "WebhookSigConfig", "WebhookKeyRef", "WebhookTokenConfig",
 		"WorkflowEscalation", "WorkflowReject", "WorkflowStep", "WorkflowTrigger", "WorkflowTransitionRef", "StepEscalation",
-		"CallbackDecl", // async job callback webhook (todo 7.13)
+		"CallbackDecl",  // async job callback webhook (todo 7.13)
 		"SnapshotField", // financial denormalization snapshot (todo 7.10)
 	}
 

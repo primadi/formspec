@@ -1,0 +1,50 @@
+# Period closing (todo 7.11) — dimodelkan sebagai Entity (bukan perintah CLI)
+# sehingga otomatis mendapat doc_status, reference guard, audit trail, dan
+# model permission. submit → finalize (periode tertutup); cancel → reopen.
+# Reopen butuh permission elevated (accounting.reopen_period) + alasan tercatat.
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: period-closing
+  module: formspec.core
+  description: "Penutupan periode (02-core-extended.md §9.3) — submit = finalize (closed), cancel = reopen (open)."
+  annotations:
+    formspec.dev/ui-exposed: "true"
+spec:
+  version: v1
+  plural: period-closings
+  characteristic: master
+  display_field: period
+  fields:
+    - name: period
+      type: string
+      required: true
+      natural_key: true
+      title: "Periode"
+      description: "YYYY-MM, mis. 2026-08"
+    - name: module
+      type: string
+      default: global
+      title: "Module"
+      description: "global atau nama module yang ditutup"
+    - name: closed_at
+      type: datetime
+      title: "Ditutup Pada"
+    - name: closed_by
+      type: string
+      title: "Ditutup Oleh"
+    - name: reopen_reason
+      type: string
+      title: "Alasan Reopen"
+      description: "Wajib saat membuka kembali periode tertutup (7.11.3)"
+  actions:
+    - name: reopen
+      description: "Buka kembali periode tertutup — butuh permission accounting.reopen_period + alasan"
+      required_permission: accounting.reopen_period
+      params:
+        validate:
+          - field: reason
+            rules: [required]
+      impl:
+        type: native
+        ref: formspec.core.period-reopen

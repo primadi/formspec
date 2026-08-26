@@ -278,6 +278,25 @@
       },
       "additionalProperties": false
     },
+    "BlockBinds": {
+      "description": "BlockBinds ties a detail block to the master list block that drives it in a\n`layout.mode: split` page (frontend/06-page-kinds.md §1.1).\n",
+      "type": "object",
+      "properties": {
+        "param": {
+          "description": "Param is the field of the selected master record injected into the",
+          "type": "string"
+        },
+        "source": {
+          "description": "Source is the `ref` of the master Table block whose row selection",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "param"
+      ],
+      "additionalProperties": false
+    },
     "BlockRef": {
       "description": "BlockRef references another resource within a page block.\nEntity is resolved from the referenced Form/Table manifest's `spec.entity` —\nnot declared inline here (removed as redundant, since every Form/Table has\na 1:1 mapping to an entity).\n",
       "type": "object",
@@ -1656,6 +1675,34 @@
         "set_null"
       ]
     },
+    "PageBinds": {
+      "description": "PageBinds declares the backend footprint of a `mode: custom` page\n(frontend/06-page-kinds.md §13) — the same role as `needs:` on a component\nblock (frontend/07-component-kinds.md §4). Calls outside `binds` fail\nclient-side and are never authorized server-side either.\n",
+      "type": "object",
+      "properties": {
+        "actions": {
+          "description": "Actions the page may invoke, as \"module.entity.action\" (or wildcard).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "entities": {
+          "description": "Entities the page may read/write, as \"module.entity\" refs.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "subscribe": {
+          "description": "Subscribe channels (entity refs) the page may subscribe to.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
     "PageBlock": {
       "description": "PageBlock is a compositional unit within a Page.\n",
       "type": "object",
@@ -2125,6 +2172,28 @@
         "field",
         "label",
         "type"
+      ],
+      "additionalProperties": false
+    },
+    "ReportSource": {
+      "description": "ReportSource declares the report's data source + parameterized filter.\n",
+      "type": "object",
+      "properties": {
+        "entity": {
+          "description": "@schema {example: \"billing.order\"}",
+          "type": "string",
+          "examples": [
+            "billing.order"
+          ]
+        },
+        "filter": {
+          "description": "Filter maps a list-API filter field to a literal value or a `\":param\"`",
+          "type": "object",
+          "additionalProperties": {}
+        }
+      },
+      "required": [
+        "entity"
       ],
       "additionalProperties": false
     },
@@ -2868,6 +2937,26 @@
       ],
       "additionalProperties": false
     },
+    "WebhookTokenConfig": {
+      "description": "WebhookTokenConfig configures static-token verification for simple internal\nwebhooks (02-core-extended.md §4). The token is referenced via config so it\nnever appears inline in the manifest.\n",
+      "type": "object",
+      "properties": {
+        "header": {
+          "description": "Header is the request header carrying the token (e.g. \"Authorization\").",
+          "type": "string"
+        },
+        "key": {
+          "$ref": "#/$defs/WebhookKeyRef",
+          "description": "Key references the config key holding the expected token value.",
+          "nullable": true
+        }
+      },
+      "required": [
+        "header",
+        "key"
+      ],
+      "additionalProperties": false
+    },
     "WidgetLayout": {
       "description": "WidgetLayout controls grid placement.\n",
       "type": "object",
@@ -3379,6 +3468,25 @@
           "type": "string"
         }
       },
+      "additionalProperties": false
+    },
+    "BlockBinds": {
+      "description": "BlockBinds ties a detail block to the master list block that drives it in a\n`layout.mode: split` page (frontend/06-page-kinds.md §1.1).\n",
+      "type": "object",
+      "properties": {
+        "param": {
+          "description": "Param is the field of the selected master record injected into the",
+          "type": "string"
+        },
+        "source": {
+          "description": "Source is the `ref` of the master Table block whose row selection",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "param"
+      ],
       "additionalProperties": false
     },
     "BlockRef": {
@@ -4759,6 +4867,34 @@
         "set_null"
       ]
     },
+    "PageBinds": {
+      "description": "PageBinds declares the backend footprint of a `mode: custom` page\n(frontend/06-page-kinds.md §13) — the same role as `needs:` on a component\nblock (frontend/07-component-kinds.md §4). Calls outside `binds` fail\nclient-side and are never authorized server-side either.\n",
+      "type": "object",
+      "properties": {
+        "actions": {
+          "description": "Actions the page may invoke, as \"module.entity.action\" (or wildcard).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "entities": {
+          "description": "Entities the page may read/write, as \"module.entity\" refs.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "subscribe": {
+          "description": "Subscribe channels (entity refs) the page may subscribe to.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
     "PageBlock": {
       "description": "PageBlock is a compositional unit within a Page.\n",
       "type": "object",
@@ -5228,6 +5364,28 @@
         "field",
         "label",
         "type"
+      ],
+      "additionalProperties": false
+    },
+    "ReportSource": {
+      "description": "ReportSource declares the report's data source + parameterized filter.\n",
+      "type": "object",
+      "properties": {
+        "entity": {
+          "description": "@schema {example: \"billing.order\"}",
+          "type": "string",
+          "examples": [
+            "billing.order"
+          ]
+        },
+        "filter": {
+          "description": "Filter maps a list-API filter field to a literal value or a `\":param\"`",
+          "type": "object",
+          "additionalProperties": {}
+        }
+      },
+      "required": [
+        "entity"
       ],
       "additionalProperties": false
     },
@@ -5966,6 +6124,26 @@
       },
       "required": [
         "algorithm",
+        "header",
+        "key"
+      ],
+      "additionalProperties": false
+    },
+    "WebhookTokenConfig": {
+      "description": "WebhookTokenConfig configures static-token verification for simple internal\nwebhooks (02-core-extended.md §4). The token is referenced via config so it\nnever appears inline in the manifest.\n",
+      "type": "object",
+      "properties": {
+        "header": {
+          "description": "Header is the request header carrying the token (e.g. \"Authorization\").",
+          "type": "string"
+        },
+        "key": {
+          "$ref": "#/$defs/WebhookKeyRef",
+          "description": "Key references the config key holding the expected token value.",
+          "nullable": true
+        }
+      },
+      "required": [
         "header",
         "key"
       ],

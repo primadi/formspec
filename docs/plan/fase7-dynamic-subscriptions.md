@@ -9,8 +9,8 @@ Delivery), `pkg/spec/resources.go` (SubscriptionSpec),
 
 ## Konteks
 
-**Subscription dinamis** (dibuat runtime lewat API/admin panel) adalah *data,
-bukan manifest* — manifest Subscription mendefinisikan apa yang ikut ter-ship
+**Subscription dinamis** (dibuat runtime lewat API/admin panel) adalah _data,
+bukan manifest_ — manifest Subscription mendefinisikan apa yang ikut ter-ship
 bersama module; subscription dinamis mencatat pilihan operator, hidup di
 `formspec.core`.
 
@@ -78,7 +78,7 @@ bersama module; subscription dinamis mencatat pilihan operator, hidup di
 ## Verifikasi end-to-end (via `formspec dev` + curl)
 
 - `formspec dev` di `examples/service-demo` → `[subscription-dynamic] started
-  (poll=5s)`.
+(poll=5s)`.
 - Create dynamic subscription via UI surface
   (`POST /_ui/entity/formspec.core/subscription`) → DynamicRefresher merge ke
   registry → create product → handler `demo/handle_dynamic` di-dispatch →

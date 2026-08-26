@@ -2,8 +2,14 @@
 # Skema di-stage ke schemas/dist/ via make publish-schemas (atau
 # scripts/publish-schemas.sh), lalu folder itu di-serve statis.
 # Deploy command: npx wrangler deploy (flow wrangler baru → pakai [assets]).
-# Catatan: schemas/dist di-ignore git — untuk jalur Pages, commit paksa
-# (`git add -f schemas/dist/`), atau lebih baik pakai R2 bucket.
+#
+# Jalur deploy yang dipakai: GIT-BASED. schemas/dist/ ter-commit di repo dan
+# di-serve statis oleh Cloudflare (auto-build on push via GitHub integration
+# di dashboard Cloudflare). Alur publish:
+#   make publish-schemas   # regenerate + stage ke schemas/dist/
+#   git add schemas/dist && git commit && git push
+# Jalur R2 bucket (--upload) tidak dipakai — butuh CLOUDFLARE_API_TOKEN +
+# wrangler login, dan tidak memberi traceability git.
 name = "formspec-schemas"
 compatibility_date = "2026-08-13"
 workers_dev = false

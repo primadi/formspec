@@ -12,11 +12,20 @@ Generator: `cmd/formspec-gen-schema/` (dipanggil `make generate-schema`).
 
 ## Publikasi ke schemas.formspec.dev
 
+Jalur deploy yang dipakai: **git-based**. `schemas/dist/` ter-commit di repo dan
+di-serve statis oleh Cloudflare (auto-build on push via GitHub integration di
+dashboard Cloudflare). Alur publish:
+
 ```bash
-make publish-schemas                          # stage v1 lokal (schemas/dist/v1)
-make publish-schemas ARGS="--upload --bucket formspec-schemas"   # + upload R2
-make publish-schemas ARGS="--version v2 --upload --bucket formspec-schemas"
+make publish-schemas          # 1. regenerate + stage ke schemas/dist/
+git add schemas/dist          # 2. commit dist (sudah tracked, add normal cukup)
+git commit -m "..."           # 3. commit
+git push                      # 4. push → Cloudflare auto-build → live update
 ```
+
+> Jalur R2 bucket (`--upload`) tidak dipakai — butuh `CLOUDFLARE_API_TOKEN` +
+> wrangler login, dan tidak memberi traceability git. Script tetap mendukungnya
+> sebagai opsi cadangan.
 
 ### Konsumsi oleh CLI (online)
 
@@ -53,18 +62,21 @@ https://schemas.formspec.dev/latest/kinds/Entity.schema.json
 
 ### Opsi deploy
 
-**Opsi A — Cloudflare R2 public bucket (direkomendasikan, no build):**
+**Opsi A — Cloudflare Pages/Worker via git (dipakai, auto-build on push):**
+
+1. `schemas/dist/` ter-commit di repo (sudah tracked).
+2. Cloudflare Pages/Worker terhubung ke repo (GitHub integration) dengan
+   folder root `schemas/dist`, no build command, custom domain
+   `schemas.formspec.dev`.
+3. Setiap `git push` → Cloudflare auto-build → live update. Tanpa kredensial
+   tambahan, riwayat deploy = riwayat git.
+
+**Opsi B — Cloudflare R2 public bucket (cadangan, tidak dipakai):**
 
 1. Buat bucket `formspec-schemas`, set **public access** + custom domain
    `schemas.formspec.dev` (Cloudflare dashboard).
 2. `make publish-schemas ARGS="--upload --bucket formspec-schemas"` (butuh
    `CLOUDFLARE_API_TOKEN` + wrangler login).
-
-**Opsi B — Cloudflare Pages (static):**
-
-1. Deploy folder `schemas/dist/` sebagai project Pages statis (folder root
-   `schemas/dist`, no build command), custom domain `schemas.formspec.dev`.
-2. Jalankan `make publish-schemas` (stage) lalu deploy folder.
 
 ### Redirect dari formspec.dev/schemas
 

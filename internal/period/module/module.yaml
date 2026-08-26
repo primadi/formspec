@@ -1,0 +1,7 @@
+apiVersion: formspec.dev/v1
+kind: Module
+metadata:
+  name: formspec.core
+  description: "Framework-owned period-closing module — formspec.core namespace (period-closing, todo 7.11). Bundled + embedded."
+spec:
+  version: 1.0.0

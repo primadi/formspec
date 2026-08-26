@@ -64,7 +64,7 @@ message)`, hasil bisa dikirim via callback webhook HMAC-signed.
 ### JOB-5 — Callback webhook (7.13.4)
 
 - `Action.Callback *CallbackDecl` — `{channel: webhook, url_from: header,
-  header: X-Callback-URL, sign: true, retry: {...}}`.
+header: X-Callback-URL, sign: true, retry: {...}}`.
 - Saat job selesai/gagal: kirim hasil ke URL callback (dari header request,
   disimpan di job row) — HMAC-signed (reuse webhook sign), retry durable
   (reuse outbox retry pattern).
@@ -92,7 +92,7 @@ message)`, hasil bisa dikirim via callback webhook HMAC-signed.
 - `formspec dev` di `examples/service-demo` → service `report-generator`
   (`call: async` + `track: true` + `callback`).
 - `POST /api/v1/demo/report-generator/generate` → `202` `{job_id, status:
-  pending}` + `meta.track` (websocket_event `jobs`, poll_url).
+pending}` + `meta.track` (websocket_event `jobs`, poll_url).
 - Script `generate_report.star` memanggil `ctx.job.progress` (progress → 100);
   `GET /api/v1/demo/report-generator/jobs/{id}` → `status: completed`,
   `result: {rows, format, generated_by}`. ✅

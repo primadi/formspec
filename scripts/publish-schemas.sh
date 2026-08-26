@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 #
 # publish-schemas.sh — stage & (opsional) upload JSON Schema FormSpec ke
-# schemas.formspec.dev (Cloudflare R2 public bucket).
+# schemas.formspec.dev.
+#
+# Jalur deploy yang dipakai: GIT-BASED. Script ini hanya men-stage layout ke
+# schemas/dist/; deploy terjadi via git push → Cloudflare auto-build (lihat
+# schemas/README.md). Mode --upload (R2 bucket) adalah cadangan, tidak dipakai.
 #
 # Layout yang dihasilkan (staging di schemas/dist/):
 #   schemas/dist/index.html            → landing page (biar root tidak 404)
@@ -13,11 +17,12 @@
 # Mode:
 #   --stage (default)          generate + susun layout versi lokal di schemas/dist/
 #   --upload [--bucket NAME]   setelah stage, upload ke R2 via npx wrangler
+#                              (cadangan; butuh CLOUDFLARE_API_TOKEN + wrangler login)
 #
 # Contoh:
 #   scripts/publish-schemas.sh                        # stage v1
 #   scripts/publish-schemas.sh --version v1           # stage v1 eksplisit
-#   scripts/publish-schemas.sh --upload --bucket formspec-schemas
+#   scripts/publish-schemas.sh --upload --bucket formspec-schemas   # cadangan R2
 #
 # Prasyarat R2 (untuk --upload): bucket public + custom domain
 # schemas.formspec.dev sudah dikonfigurasi di Cloudflare; login wrangler

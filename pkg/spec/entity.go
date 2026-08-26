@@ -960,7 +960,7 @@ type RetryDecl struct {
 // (02-core-extended.md §13.1, todo 7.13.4). The callback URL is supplied by
 // the caller via a request header; the result is delivered HMAC-signed.
 type CallbackDecl struct {
-	Channel string     `yaml:"channel" json:"channel"` // webhook
+	Channel string     `yaml:"channel" json:"channel"`                       // webhook
 	URLFrom string     `yaml:"url_from,omitempty" json:"url_from,omitempty"` // header
 	Header  string     `yaml:"header,omitempty" json:"header,omitempty"`     // header carrying the callback URL (e.g. X-Callback-URL)
 	Sign    bool       `yaml:"sign,omitempty" json:"sign,omitempty"`

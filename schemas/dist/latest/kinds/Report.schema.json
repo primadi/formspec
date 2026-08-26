@@ -46,6 +46,11 @@
     "required_permission": {
       "type": "string"
     },
+    "source": {
+      "$ref": "#/$defs/ReportSource",
+      "description": "Source is the declarative parameterized filter (06-page-kinds.md §8",
+      "nullable": true
+    },
     "title": {
       "description": "@schema {example: \"Sales by Category\"}",
       "type": "string",

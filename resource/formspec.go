@@ -47,6 +47,7 @@ import (
 	"github.com/primadi/formspec/internal/integrator"
 	"github.com/primadi/formspec/internal/job"
 	"github.com/primadi/formspec/internal/manifest"
+	"github.com/primadi/formspec/internal/period"
 	"github.com/primadi/formspec/internal/permission"
 	"github.com/primadi/formspec/internal/service"
 	"github.com/primadi/formspec/internal/stream"
@@ -326,6 +327,12 @@ func New(cfg Config) (*App, error) {
 	if err := subscription.RegisterCoreEntities(reg); err != nil {
 		return nil, fmt.Errorf("register subscription core entities: %w", err)
 	}
+	// Register the framework-owned period-closing entity
+	// (formspec.core.period-closing, todo 7.11) — submit = finalize, cancel =
+	// reopen; transaction writes in a closed period are rejected.
+	if err := period.RegisterCoreEntities(reg); err != nil {
+		return nil, fmt.Errorf("register period core entities: %w", err)
+	}
 	for _, loadErr := range reg.LoadEntities() {
 		fmt.Fprintf(os.Stderr, "formspec: load warning: %v\n", loadErr)
 	}
@@ -336,6 +343,15 @@ func New(cfg Config) (*App, error) {
 	if _, err := reg.SyncSchema(context.Background()); err != nil {
 		return nil, fmt.Errorf("sync schema: %w", err)
 	}
+
+	// Wire the period-closing guard (todo 7.11.5): transaction writes whose
+	// transaction_date falls in a closed period are rejected with
+	// FORMSPEC.PERIOD.CLOSED. The guard reads formspec.core.period-closing
+	// (submitted = closed, cancelled = reopened).
+	periodGuard := period.NewGuard(reg)
+	reg.SetPeriodGuard(func(ctx context.Context, workspaceID, period string) (bool, error) {
+		return periodGuard.IsClosed(ctx, workspaceID, period)
+	})
 
 	// Frontend UI kinds (Page/Form/Table/... — Frontend Spec §2) + Meta API.
 	uiReg := ui.NewRegistry()
@@ -867,6 +883,9 @@ func (a *App) ReloadSpec() error {
 	if err := subscription.RegisterCoreEntities(newReg); err != nil {
 		fmt.Fprintf(os.Stderr, "formspec: reload register subscription core entities: %v\n", err)
 	}
+	if err := period.RegisterCoreEntities(newReg); err != nil {
+		fmt.Fprintf(os.Stderr, "formspec: reload register period core entities: %v\n", err)
+	}
 	for _, loadErr := range newReg.LoadEntities() {
 		fmt.Fprintf(os.Stderr, "formspec: reload: %v\n", loadErr)
 	}
@@ -877,6 +896,12 @@ func (a *App) ReloadSpec() error {
 	if _, err := newReg.SyncSchema(context.Background()); err != nil {
 		return fmt.Errorf("reload sync schema: %w", err)
 	}
+
+	// Re-wire the period-closing guard (todo 7.11.5) on the fresh registry.
+	reloadPeriodGuard := period.NewGuard(newReg)
+	newReg.SetPeriodGuard(func(ctx context.Context, workspaceID, period string) (bool, error) {
+		return reloadPeriodGuard.IsClosed(ctx, workspaceID, period)
+	})
 
 	// ── 2. Build fresh UI registry ──
 	newUIReg := ui.NewRegistry()

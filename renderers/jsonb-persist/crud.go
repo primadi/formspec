@@ -34,6 +34,12 @@ type EntityStore struct {
 	backdatePolicy    *spec.BackdatePolicy
 	forwardDatePolicy *spec.ForwardDatePolicy
 
+	// periodGuard reports whether the given period ("YYYY-MM") is closed for
+	// the workspace (todo 7.11.5). Wired from resource/formspec.go, which owns
+	// the formspec.core.period-closing entity store. When nil, the period
+	// guard is disabled.
+	periodGuard func(ctx context.Context, workspaceID, period string) (bool, error)
+
 	// targetTableResolver resolves a relation Resource reference
 	// ("module.entity" or "entity") to a qualified table name. Used by
 	// ValidateRelationTargets for cross-module relation resolution (2.2.5).
@@ -81,6 +87,13 @@ func (s *EntityStore) SetTargetTableResolver(fn func(module, entity string) (str
 // (4.4.2).
 func (s *EntityStore) SetTargetCategoryResolver(fn func(module, entity string) string) {
 	s.targetCategoryResolver = fn
+}
+
+// SetPeriodGuard wires the period-closing guard (todo 7.11.5): reports whether
+// a period ("YYYY-MM") is closed for the workspace. When nil, the guard is
+// disabled.
+func (s *EntityStore) SetPeriodGuard(fn func(ctx context.Context, workspaceID, period string) (bool, error)) {
+	s.periodGuard = fn
 }
 
 // PendingEvent is a durable event to enqueue to the outbox in the same
@@ -470,6 +483,12 @@ func (s *EntityStore) Insert(ctx context.Context, params InsertParams) (string, 
 			return err
 		}
 
+		// Period guard (todo 7.11.5): reject transaction_date in a closed
+		// period (FORMSPEC.PERIOD.CLOSED).
+		if err := s.validatePeriodGuard(ctx, params.WorkspaceID, params.Data); err != nil {
+			return err
+		}
+
 		// Extract children from data (table storage only)
 		parentData := params.Data
 		childrenData := make(map[string][]map[string]any)
@@ -758,6 +777,11 @@ func (s *EntityStore) Update(ctx context.Context, params UpdateParams) (int, err
 
 	// Validate transaction_date policy (backdate/forward-date)
 	if err := s.validateTransactionDatePolicy(params.Data, params.Permissions); err != nil {
+		return 0, fmt.Errorf("%s update: %w", s.entity, err)
+	}
+
+	// Period guard (todo 7.11.5): reject transaction_date in a closed period.
+	if err := s.validatePeriodGuard(ctx, params.WorkspaceID, params.Data); err != nil {
 		return 0, fmt.Errorf("%s update: %w", s.entity, err)
 	}
 
@@ -1201,6 +1225,12 @@ func (s *EntityStore) Submit(ctx context.Context, workspaceID, id, userID string
 		if guardErr := LifecycleGuard("submit", rec.EffectiveDocStatus()); guardErr != nil {
 			return fmt.Errorf("%s submit: %w", s.entity, guardErr)
 		}
+	}
+
+	// Period guard (todo 7.11.5): reject submit of a transaction whose
+	// transaction_date falls in a closed period.
+	if err := s.validatePeriodGuard(ctx, workspaceID, rec.Data); err != nil {
+		return fmt.Errorf("%s submit: %w", s.entity, err)
 	}
 
 	tbl := s.qualifiedTable()

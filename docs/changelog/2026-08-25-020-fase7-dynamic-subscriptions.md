@@ -3,7 +3,7 @@
 ## Apa yang diubah
 
 Implementasi **dynamic subscriptions** — subscription yang dibuat runtime
-lewat API/admin panel sebagai *data, bukan manifest* (kontrak
+lewat API/admin panel sebagai _data, bukan manifest_ (kontrak
 `docs/spec/backend/02-core-extended.md` §3), hidup di `formspec.core`.
 
 **Entity `formspec.core.subscription` (bundled, UIExposed).** Module baru
@@ -16,6 +16,7 @@ UIExposed (`formspec.dev/ui-exposed: "true"`) → dikelola lewat admin panel
 (surface `/_ui/entity/`), tanpa route external API.
 
 **Konversi + merge.** `internal/subscription/dynamic.go`:
+
 - `RecordToSubscription(data)` — pure function record → `DynamicSubscription`;
   skip record non-aktif / tanpa events / tanpa handler.
 - `Registry.MergeDynamic(subs)` — replace semua dynamic entry (key

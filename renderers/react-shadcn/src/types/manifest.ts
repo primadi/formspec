@@ -92,8 +92,6 @@ export const FIELD_NUMBER = "number" // deprecated, backward compat
 
 export type FieldType =
   | "string"
-  | "text"
-  | "richtext"
   | "integer"
   | "decimal"
   | "boolean"
@@ -102,7 +100,6 @@ export type FieldType =
   | "datetime"
   | "json"
   | "uuid"
-  | "file"
   | "relation"
   | "child"
   | "number"
@@ -835,15 +832,6 @@ export interface ReportSpec {
   groups?: ReportGroup[]
   totals?: ReportTotal[]
   export?: ExportFormat[]
-  /** Declarative parameterized filter (06-page-kinds.md §8). */
-  source?: ReportSource
-}
-
-export interface ReportSource {
-  entity: string
-  /** Maps a list-API filter field to a literal value or a `":param"`
-   *  placeholder resolved from `parameters[]` at execution time. */
-  filter?: Record<string, string>
 }
 
 export interface ReportParam {
@@ -945,34 +933,6 @@ export interface KanbanCard {
   assignee?: string
   fields?: string[]
   component?: string
-}
-
-// ── Calendar (Frontend §5) ──
-
-export interface CalendarSpec {
-  entity: string
-  date_field: string
-  end_field?: string
-  title_field?: string
-  resource_field?: string
-  color_field?: string
-  /** month | week | day | resource (default month). */
-  views?: string[]
-  realtime?: boolean
-}
-
-// ── ApprovalInbox (Frontend §11) ──
-
-export interface ApprovalInboxSpec {
-  realtime?: boolean
-  filters?: FilterSpec[]
-  search?: boolean
-}
-
-// ── NotificationCenter (Frontend §12) ──
-
-export interface NotificationCenterSpec {
-  realtime?: boolean
 }
 
 // ── Menu (Core Basic §4.4/§4.5) ──
@@ -1171,9 +1131,6 @@ export interface MetaBundle {
   prints: Entry<PrintSpec>[]
   themes: Entry<ThemeSpec>[]
   listings: Entry<ListingSpec>[]
-  calendars: Entry<CalendarSpec>[]
-  approval_inboxes: Entry<ApprovalInboxSpec>[]
-  notification_centers: Entry<NotificationCenterSpec>[]
   /** Resolved global settings namespace (spec §10). Always present. */
   settings: Settings
 }

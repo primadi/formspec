@@ -9,6 +9,7 @@ Delivery — Delivery channel)
 
 Event delivery saat ini mendukung `websocket` dan `audit_log` channels.
 7.3.5 menambah delivery channel lain:
+
 - `webhook` (outbound, HMAC signed, retry)
 - `notification` (bridge ke `formspec/notify`)
 - `pubsub` (non-durable, at-most-once)

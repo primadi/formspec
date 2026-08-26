@@ -1,10 +1,53 @@
 package db
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/primadi/formspec/pkg/spec"
 )
+
+// ErrPeriodClosed is returned when a transaction_date falls in a closed period
+// (02-core-extended.md §9.3, todo 7.11.5).
+var ErrPeriodClosed = fmt.Errorf("FORMSPEC.PERIOD.CLOSED")
+
+// periodFromDate extracts the accounting period ("YYYY-MM") from a date
+// string. Returns "" when the date cannot be parsed.
+func periodFromDate(dateStr string) string {
+	t, err := parseDate(dateStr)
+	if err != nil {
+		return ""
+	}
+	return t.Format("2006-01")
+}
+
+// validatePeriodGuard rejects a transaction whose transaction_date falls in a
+// closed period (todo 7.11.5). Only applies to characteristic: transaction
+// entities with a wired period guard. Reads the period-closing state via the
+// guard callback (wired from resource/formspec.go).
+func (s *EntityStore) validatePeriodGuard(ctx context.Context, workspaceID string, data map[string]any) error {
+	if s.characteristic != spec.CharTransaction || s.periodGuard == nil {
+		return nil
+	}
+	transactionDate, _ := data["transaction_date"].(string)
+	if transactionDate == "" {
+		return nil
+	}
+	period := periodFromDate(transactionDate)
+	if period == "" {
+		return nil
+	}
+	closed, err := s.periodGuard(ctx, workspaceID, period)
+	if err != nil {
+		return fmt.Errorf("period guard: %w", err)
+	}
+	if closed {
+		return fmt.Errorf("%w: transaction_date %s falls in closed period %s", ErrPeriodClosed, transactionDate, period)
+	}
+	return nil
+}
 
 // ValidateTransactionDate checks that a transaction_date value respects the
 // backdate/forward-date policy defined on the document spec (§14a).

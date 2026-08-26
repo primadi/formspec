@@ -56,22 +56,7 @@ export default function ReportRenderer({ entry }: ReportRendererProps) {
         if (value) listParams[key] = value
       }
 
-      // Declarative source.filter (5.13.1a): `":param"` placeholders resolve
-      // from the report's parameters; literal values pass through unchanged.
-      const source = entry.spec.source
-      const entityRef = source?.entity || entry.spec.entity
-      if (source?.filter) {
-        for (const [field, raw] of Object.entries(source.filter)) {
-          if (raw.startsWith(":")) {
-            const paramValue = params[raw.slice(1)]
-            if (paramValue) listParams[field] = paramValue
-          } else {
-            listParams[field] = raw
-          }
-        }
-      }
-
-      const [module, name] = resolveEntityRef(entityRef, entry.module)
+      const [module, name] = resolveEntityRef(entry.spec.entity, entry.module)
       const schema = getEntity(module, name)
       if (!schema) {
         throw new Error(`entity ${module}.${name} not found`)
@@ -94,14 +79,7 @@ export default function ReportRenderer({ entry }: ReportRendererProps) {
       setLoading(false)
       setExecuted(true)
     }
-  }, [
-    entry.spec.entity,
-    entry.spec.source,
-    entry.module,
-    params,
-    getClient,
-    getEntity,
-  ])
+  }, [entry.spec.entity, entry.module, params, getClient, getEntity])
 
   // Group data
   const groups = useMemo(() => {
