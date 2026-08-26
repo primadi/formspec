@@ -1413,6 +1413,7 @@ const (
 	ctxIdentity     contextKey = "identity"
 	ctxRequestID    contextKey = "request_id"
 	ctxURLWorkspace contextKey = "url_workspace" // extracted from URL before identity override
+	ctxApp          contextKey = "app"           // app scope (empty = workspace-level)
 )
 
 // IdentityFromContext extracts the authenticated identity from the request context.
@@ -1425,6 +1426,21 @@ func IdentityFromContext(ctx context.Context) *auth.Identity {
 // WithIdentity stores an Identity on the context.
 func WithIdentity(ctx context.Context, id *auth.Identity) context.Context {
 	return context.WithValue(ctx, ctxIdentity, id)
+}
+
+// AppFromContext extracts the app scope from the request context.
+// Empty means workspace-level (e.g. the _admin surface).
+func AppFromContext(ctx context.Context) string {
+	if id := IdentityFromContext(ctx); id != nil && id.App != "" {
+		return id.App
+	}
+	v, _ := ctx.Value(ctxApp).(string)
+	return v
+}
+
+// WithApp stores the app scope on the context.
+func WithApp(ctx context.Context, app string) context.Context {
+	return context.WithValue(ctx, ctxApp, app)
 }
 
 // URLWorkspaceFromContext extracts the URL-original workspace (before identity override).

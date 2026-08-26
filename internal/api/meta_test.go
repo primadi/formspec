@@ -262,3 +262,49 @@ func TestPublicEntities_NoPublicApp(t *testing.T) {
 
 // intPtr returns a pointer to the given int (for *int fields).
 func intPtr(v int) *int { return &v }
+
+func TestHandleMetaUI_GrantsMode_RequiresRoleManagePermission(t *testing.T) {
+	b := setupMetaTestRouter(t)
+	handler := b.HandleMetaUI()
+
+	// Caller with no role-management permission → 403.
+	identity := &auth.Identity{UserID: "user-1", WorkspaceID: "demo", Permissions: []string{"sales.orders.list"}}
+	req := httptest.NewRequest("GET", "/demo/_ui/_meta/ui?app=storefront&grants=true", nil)
+	req = req.WithContext(WithIdentity(context.Background(), identity))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != 403 {
+		t.Fatalf("expected 403 without role-manage permission, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleMetaUI_GrantsMode_AllowedWithRoleManagePermission(t *testing.T) {
+	b := setupMetaTestRouter(t)
+	handler := b.HandleMetaUI()
+
+	// Caller with formspec.core.roles.update → 200, app-scoped bundle.
+	identity := &auth.Identity{UserID: "user-1", WorkspaceID: "demo", Permissions: []string{"formspec.core.roles.update"}}
+	req := httptest.NewRequest("GET", "/demo/_ui/_meta/ui?app=storefront&grants=true", nil)
+	req = req.WithContext(WithIdentity(context.Background(), identity))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("expected 200 with role-manage permission, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp SingleResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	data, _ := json.Marshal(resp.Data)
+	var bundle ui.Bundle
+	if err := json.Unmarshal(data, &bundle); err != nil {
+		t.Fatalf("decode bundle: %v", err)
+	}
+	// Grants mode stays app-scoped (role management is per-App).
+	if bundle.App.Name != "storefront" {
+		t.Errorf("expected bundle scoped to storefront, got %q", bundle.App.Name)
+	}
+}

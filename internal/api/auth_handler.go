@@ -38,6 +38,9 @@ func clientIP(r *http.Request) string {
 type loginRequest struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
+	// App scopes the session to one App (role management is per-App). Empty =
+	// workspace-level session (e.g. the _admin surface).
+	App string `json:"app,omitempty"`
 }
 
 // refreshRequest is the POST /auth/refresh body.
@@ -83,7 +86,7 @@ func (b *RouterBuilder) HandleLogin() http.HandlerFunc {
 		}
 
 		workspaceID := workspaceFromContext(r.Context())
-		pair, err := authService.Login(r.Context(), workspaceID, req.Username, req.Password)
+		pair, err := authService.Login(r.Context(), workspaceID, req.App, req.Username, req.Password)
 		if err != nil {
 			// Do not leak whether the user exists — same 401 for both.
 			authAuditLog.record(AuthAuditEntry{

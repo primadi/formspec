@@ -24,6 +24,9 @@ spec:
     - name: expires_at
       type: datetime
       required: true
+    - name: app
+      type: string
+      index: true
     - name: ip
       type: string
     - name: user_agent

@@ -30,6 +30,8 @@ interface StoredSession {
   workspace: string
   token: string
   refreshToken: string
+  /** App scope for this session (empty = workspace-level, e.g. _admin). */
+  app?: string
 }
 
 function readStoredSession(): StoredSession | null {
@@ -62,6 +64,8 @@ function clearStoredSession(): void {
 export interface SessionState {
   /** The workspace slug from the URL (e.g. "acme") */
   workspace: string
+  /** App scope for this session (empty = workspace-level, e.g. _admin). */
+  app: string
   /** JWT access token (may be empty in dev mode) */
   token: string
   /** Refresh token used to mint a new access token when it expires. */
@@ -76,7 +80,12 @@ export interface SessionState {
   error: string | null
 
   // ── Actions ──
-  setSession: (workspace: string, token: string, refreshToken?: string) => void
+  setSession: (
+    workspace: string,
+    token: string,
+    refreshToken?: string,
+    app?: string,
+  ) => void
   clearSession: () => void
   /** Mark the session unauthenticated (401 / idle timeout) → login redirect */
   expireSession: () => void
@@ -84,6 +93,7 @@ export interface SessionState {
     workspace: string,
     token?: string,
     refreshToken?: string,
+    app?: string,
   ) => Promise<void>
   /** Refresh the access token (single-flight). Resolves true on success. */
   refreshSession: () => Promise<boolean>
@@ -97,6 +107,7 @@ let refreshInFlight: Promise<boolean> | null = null
 
 export const useSessionStore = create<SessionState>((set, get) => ({
   workspace: "",
+  app: "",
   token: "",
   refreshToken: "",
   me: null,
@@ -104,9 +115,15 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   unauthenticated: false,
   error: null,
 
-  setSession: (workspace: string, token: string, refreshToken?: string) => {
+  setSession: (
+    workspace: string,
+    token: string,
+    refreshToken?: string,
+    app?: string,
+  ) => {
     set({
       workspace,
+      app: app ?? "",
       token,
       refreshToken: refreshToken ?? "",
       loaded: true,
@@ -114,7 +131,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       unauthenticated: false,
     })
     if (token) {
-      writeStoredSession({ workspace, token, refreshToken: refreshToken ?? "" })
+      writeStoredSession({
+        workspace,
+        token,
+        refreshToken: refreshToken ?? "",
+        app: app ?? "",
+      })
     } else if (readStoredSession()?.workspace === workspace) {
       // Anonymous (public surface) on the same workspace — drop the session.
       clearStoredSession()
@@ -146,7 +168,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     })
   },
 
-  boot: async (workspace: string, token?: string, refreshToken?: string) => {
+  boot: async (
+    workspace: string,
+    token?: string,
+    refreshToken?: string,
+    app?: string,
+  ) => {
     // Restore a persisted session (same workspace) when no explicit token is
     // given — this is what survives a browser refresh.
     const stored = readStoredSession()
@@ -154,9 +181,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     const effectiveToken = token ?? (restore ? stored.token : "")
     const effectiveRefresh =
       refreshToken ?? (restore ? stored.refreshToken : "")
+    const effectiveApp = app ?? (restore ? (stored.app ?? "") : "")
 
     set({
       workspace,
+      app: effectiveApp,
       token: effectiveToken,
       refreshToken: effectiveRefresh,
       loaded: false,
@@ -217,6 +246,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         workspace,
         token: effectiveToken,
         refreshToken: effectiveRefresh,
+        app: effectiveApp,
       })
     }
     set({ me, loaded: true, error: null, unauthenticated: false })
@@ -243,6 +273,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
             workspace: get().workspace,
             token: body.data.access_token,
             refreshToken: body.data.refresh_token,
+            app: get().app,
           })
           return true
         } catch {

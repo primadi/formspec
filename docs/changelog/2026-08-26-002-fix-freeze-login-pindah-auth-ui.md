@@ -1,4 +1,4 @@
-# 2026-08-26-002 — Fix freeze login + pindah auth ke /_ui/auth
+# 2026-08-26-002 — Fix freeze login + pindah auth ke /\_ui/auth
 
 ## Apa yang diubah
 

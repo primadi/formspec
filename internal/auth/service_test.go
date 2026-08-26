@@ -44,7 +44,7 @@ func TestService_LoginSuccess(t *testing.T) {
 		t.Fatalf("SeedDevUser: %v", err)
 	}
 
-	pair, err := svc.Login(ctx, "demo", "admin", "admin")
+	pair, err := svc.Login(ctx, "demo", "", "admin", "admin")
 	if err != nil {
 		t.Fatalf("Login: %v", err)
 	}
@@ -64,7 +64,7 @@ func TestService_LoginWrongPassword(t *testing.T) {
 		t.Fatalf("SeedDevUser: %v", err)
 	}
 
-	if _, err := svc.Login(ctx, "demo", "admin", "wrong"); err != ErrInvalidCredentials {
+	if _, err := svc.Login(ctx, "demo", "", "admin", "wrong"); err != ErrInvalidCredentials {
 		t.Fatalf("expected ErrInvalidCredentials, got %v", err)
 	}
 }
@@ -74,7 +74,7 @@ func TestService_LoginUnknownUser(t *testing.T) {
 	ctx := context.Background()
 
 	// Same error as wrong password — no user enumeration.
-	if _, err := svc.Login(ctx, "demo", "nobody", "x"); err != ErrInvalidCredentials {
+	if _, err := svc.Login(ctx, "demo", "", "nobody", "x"); err != ErrInvalidCredentials {
 		t.Fatalf("expected ErrInvalidCredentials, got %v", err)
 	}
 }
@@ -87,7 +87,7 @@ func TestService_RefreshRotation(t *testing.T) {
 		t.Fatalf("SeedDevUser: %v", err)
 	}
 
-	pair, err := svc.Login(ctx, "demo", "admin", "admin")
+	pair, err := svc.Login(ctx, "demo", "", "admin", "admin")
 	if err != nil {
 		t.Fatalf("Login: %v", err)
 	}

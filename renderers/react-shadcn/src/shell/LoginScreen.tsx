@@ -16,6 +16,8 @@ import { usePrefsStore } from "@/stores/prefs"
 interface LoginScreenProps {
   /** Pre-filled workspace from the URL (in-app login) — hides the workspace field */
   workspace?: string
+  /** App scope for this login (role management is per-App); empty = workspace-level */
+  app?: string
   onLogin: (
     workspace: string,
     token: string,
@@ -25,6 +27,7 @@ interface LoginScreenProps {
 
 export function LoginScreen({
   workspace: workspaceProp,
+  app,
   onLogin,
 }: LoginScreenProps) {
   const [workspace, setWorkspace] = useState(workspaceProp ?? "")
@@ -60,6 +63,7 @@ export function LoginScreen({
         effectiveWorkspace,
         username.trim(),
         password,
+        app,
       )
       await onLogin(effectiveWorkspace, accessToken, refreshToken)
     } catch (err) {

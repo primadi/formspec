@@ -144,6 +144,9 @@ func AuthMiddleware(next http.Handler) http.Handler {
 				}
 
 				ctx = WithIdentity(ctx, identity)
+				// Carry the app scope (from JWT claims) so downstream handlers
+				// can make app-aware decisions (role management is per-App).
+				ctx = WithApp(ctx, identity.App)
 				// Also set legacy context values for backward compatibility
 				ctx = WithUser(ctx, identity.UserID)
 				// Override workspace with identity's workspace

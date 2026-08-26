@@ -1138,6 +1138,8 @@ export interface MetaBundle {
 export interface MeResponse {
   user_id: string
   workspace: string
+  /** App scope for this session (empty = workspace-level, e.g. _admin). */
+  app?: string
   roles: string[]
   permissions: string[]
 }

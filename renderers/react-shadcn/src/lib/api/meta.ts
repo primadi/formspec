@@ -51,12 +51,18 @@ function createMetaClient(
  * Pass `{ admin: true }` instead for the `_admin` surface: an unscoped bundle
  * (every module's entities, no App concept) gated by a single binary
  * permission (`_admin.access`) rather than the App's `?app=` scoping.
+ *
+ * Pass `{ grants: true }` (with `appName`) for the grants-editor bundle:
+ * app-scoped but NOT permission-filtered — the role form must list every
+ * page/action in the App so an admin can grant access to things they may not
+ * personally hold. Gated server-side by role-management permission.
  */
 export async function fetchMetaBundle(
   workspace: string,
   opts?: {
     appName?: string
     admin?: boolean
+    grants?: boolean
     token?: string
     getToken?: () => string
     onUnauthorized?: () => Promise<boolean>
@@ -66,7 +72,7 @@ export async function fetchMetaBundle(
   const searchParams = opts?.admin
     ? { admin: "true" }
     : opts?.appName
-      ? { app: opts.appName }
+      ? { app: opts.appName, ...(opts.grants ? { grants: "true" } : {}) }
       : undefined
   const response = await client.get(
     "_meta/ui",

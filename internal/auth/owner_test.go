@@ -66,7 +66,7 @@ func TestResolver_OwnerRoleGrantsWildcard(t *testing.T) {
 	_ = userID
 
 	user := &User{ID: "u1", WorkspaceID: "demo", Roles: []string{RoleWorkspaceOwner}}
-	perms, err := resolver.Resolve(ctx, "demo", user)
+	perms, err := resolver.Resolve(ctx, "demo", "", user)
 	if err != nil {
 		t.Fatal(err)
 	}

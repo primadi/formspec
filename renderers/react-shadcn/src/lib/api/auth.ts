@@ -14,16 +14,19 @@ export interface LoginResult {
 
 /**
  * Log in with username/password and return the JWT token pair.
+ * `app` scopes the session to one App (role management is per-App); empty =
+ * workspace-level session (e.g. the _admin surface).
  * Throws an Error with the server's message on invalid credentials.
  */
 export async function loginWithPassword(
   workspace: string,
   username: string,
   password: string,
+  app?: string,
 ): Promise<LoginResult> {
   try {
     const response = await ky.post(`/${workspace}/_ui/auth/login`, {
-      json: { username, password },
+      json: { username, password, ...(app ? { app } : {}) },
       retry: 0,
     })
     const body = (await response.json()) as {

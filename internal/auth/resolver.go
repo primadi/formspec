@@ -31,8 +31,13 @@ func NewPermissionResolver(users *EntityUserStore, roleStore *RoleStore, materia
 
 // Resolve returns the user's effective permissions, using the per-session
 // cache. The returned slice must not be mutated by the caller.
-func (r *PermissionResolver) Resolve(ctx context.Context, workspaceID string, user *User) ([]string, error) {
-	key := workspaceID + "/" + user.ID
+//
+// app scopes the resolution: roles with a non-empty App only contribute when
+// they match the current app (empty app = workspace-global role). The cache
+// key includes the app so a user logged into different Apps gets distinct
+// permission sets.
+func (r *PermissionResolver) Resolve(ctx context.Context, workspaceID, app string, user *User) ([]string, error) {
+	key := workspaceID + "/" + app + "/" + user.ID
 
 	r.mu.Lock()
 	if perms, ok := r.cache[key]; ok {
@@ -41,7 +46,7 @@ func (r *PermissionResolver) Resolve(ctx context.Context, workspaceID string, us
 	}
 	r.mu.Unlock()
 
-	perms, err := r.resolveUncached(ctx, workspaceID, user)
+	perms, err := r.resolveUncached(ctx, workspaceID, app, user)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +78,7 @@ func (r *PermissionResolver) InvalidateAll() {
 }
 
 // resolveUncached computes a user's effective permissions without the cache.
-func (r *PermissionResolver) resolveUncached(ctx context.Context, workspaceID string, user *User) ([]string, error) {
+func (r *PermissionResolver) resolveUncached(ctx context.Context, workspaceID, app string, user *User) ([]string, error) {
 	seen := map[string]bool{}
 	var out []string
 	add := func(p string) {
@@ -92,6 +97,11 @@ func (r *PermissionResolver) resolveUncached(ctx context.Context, workspaceID st
 		role, err := r.roleStore.GetByName(ctx, workspaceID, roleName)
 		if err != nil {
 			continue // unknown role — skip
+		}
+		// App-scoped roles only contribute when the current app matches.
+		// Empty app = workspace-global role (e.g. seeded owner roles).
+		if role.App != "" && role.App != app {
+			continue
 		}
 		// Owner roles grant broad wildcard access within their scope
 		// (todo 6.3.4) — no page-grant materialization needed.

@@ -41,6 +41,7 @@ func PermissionsFromContext(ctx context.Context) []string {
 type Identity struct {
 	UserID      string   // authenticated user ID (sub claim in JWT)
 	WorkspaceID string   // workspace scope
+	App         string   // app scope (empty = workspace-level, e.g. _admin)
 	Permissions []string // granted permissions, e.g. ["billing.invoices.*", "billing.customers.list"]
 	Roles       []string // assigned roles, e.g. ["billing-admin"]
 }

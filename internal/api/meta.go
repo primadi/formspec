@@ -28,6 +28,7 @@ import (
 type metaIdentity struct {
 	UserID      string   `json:"user_id"`
 	Workspace   string   `json:"workspace"`
+	App         string   `json:"app,omitempty"`
 	Roles       []string `json:"roles"`
 	Permissions []string `json:"permissions"`
 }
@@ -190,6 +191,27 @@ func (b *RouterBuilder) mergeRunningSettings(ctx context.Context, base *spec.Set
 // authored Apps (menu.permissions).
 const adminAccessPermission = "_admin.access"
 
+// roleManagePermissions gate the `?grants=true` bundle variant: the caller
+// must be able to manage roles (create or update) in the App. The grants
+// editor is an admin tool — it must show every page/action in the App
+// regardless of the caller's own permissions, so the bundle it consumes is
+// app-scoped but NOT permission-filtered.
+var roleManagePermissions = []string{
+	"formspec.core.roles.create",
+	"formspec.core.roles.update",
+}
+
+// canManageRoles reports whether the caller holds any role-management
+// permission (create or update on formspec.core.role).
+func canManageRoles(can ui.PermissionChecker) bool {
+	for _, p := range roleManagePermissions {
+		if can(p) {
+			return true
+		}
+	}
+	return false
+}
+
 // HandleMetaUI serves the full UI bundle with ETag/304 support. The bundle
 // is permission-filtered per caller and scoped to one resolved App (see
 // resolveAppContext), so the ETag is computed per response.
@@ -220,15 +242,30 @@ func (b *RouterBuilder) HandleMetaUI() http.HandlerFunc {
 				writeError(w, http.StatusBadRequest, "BAD_REQUEST", errMsg)
 				return
 			}
-			// An `access: public` App is entirely public (frontend/
-			// 05-app-kinds.md §1): its bundle ships to anonymous callers with
-			// every entity in its modules visible. Private Apps keep
-			// per-entity permission filtering.
-			can := callerChecker(r)
-			if appCtx.Access == string(spec.AppAccessPublic) {
-				can = func(string) bool { return true }
+			// `?grants=true` serves the grants-editor bundle: app-scoped
+			// (only the App's modules) but NOT permission-filtered — the
+			// role form must list every page/action in the App so an admin
+			// can grant access to things they may not personally hold.
+			// Gated by role-management permission (create/update).
+			if r.URL.Query().Get("grants") == "true" {
+				if !canManageRoles(callerChecker(r)) {
+					writeError(w, http.StatusForbidden, "FORBIDDEN",
+						"missing permission: formspec.core.roles.create/update")
+					return
+				}
+				alwaysVisible := func(string) bool { return true }
+				bundle = b.uiRegistry.BuildBundle(b.listEntityDescriptors, alwaysVisible, appCtx)
+			} else {
+				// An `access: public` App is entirely public (frontend/
+				// 05-app-kinds.md §1): its bundle ships to anonymous callers with
+				// every entity in its modules visible. Private Apps keep
+				// per-entity permission filtering.
+				can := callerChecker(r)
+				if appCtx.Access == string(spec.AppAccessPublic) {
+					can = func(string) bool { return true }
+				}
+				bundle = b.uiRegistry.BuildBundle(b.listEntityDescriptors, can, appCtx)
 			}
-			bundle = b.uiRegistry.BuildBundle(b.listEntityDescriptors, can, appCtx)
 		}
 
 		payload, err := json.Marshal(SingleResponse{
@@ -269,6 +306,7 @@ func (b *RouterBuilder) HandleMetaMe() http.HandlerFunc {
 			me = metaIdentity{
 				UserID:      id.UserID,
 				Workspace:   id.WorkspaceID,
+				App:         id.App,
 				Roles:       id.Roles,
 				Permissions: id.Permissions,
 			}

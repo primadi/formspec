@@ -105,7 +105,7 @@ func TestPermissionResolver_ResolveAndCache(t *testing.T) {
 	user := &User{ID: userID, WorkspaceID: "demo", Roles: []string{"sales-admin"}, Permissions: []string{"billing.customers.list"}}
 
 	// Resolve → direct + materialized role grants.
-	perms, err := resolver.Resolve(ctx, "demo", user)
+	perms, err := resolver.Resolve(ctx, "demo", "", user)
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
@@ -121,17 +121,88 @@ func TestPermissionResolver_ResolveAndCache(t *testing.T) {
 	}
 
 	// Second resolve hits the cache (same result).
-	perms2, _ := resolver.Resolve(ctx, "demo", user)
+	perms2, _ := resolver.Resolve(ctx, "demo", "", user)
 	if len(perms2) != len(want) {
 		t.Fatalf("cached resolve mismatch: %v", perms2)
 	}
 
 	// Invalidate → still resolves correctly (fresh).
 	resolver.Invalidate(userID)
-	perms3, _ := resolver.Resolve(ctx, "demo", user)
+	perms3, _ := resolver.Resolve(ctx, "demo", "", user)
 	if len(perms3) != len(want) {
 		t.Fatalf("post-invalidate resolve mismatch: %v", perms3)
 	}
 
 	_ = roleID
+}
+
+// TestPermissionResolver_AppScopedRoles verifies that a role with a non-empty
+// `app` only contributes its grants when the resolution app matches (role
+// management is per-App). Empty-app roles stay workspace-global.
+func TestPermissionResolver_AppScopedRoles(t *testing.T) {
+	resolver, reg, _ := setupResolver(t)
+	ctx := context.Background()
+
+	// Role scoped to app "kafe" with a grant on order-list.
+	roleStore, err := reg.GetEntityStore(CoreModule, "role")
+	if err != nil {
+		t.Fatalf("role store: %v", err)
+	}
+	if _, err := roleStore.Insert(ctx, db.InsertParams{
+		WorkspaceID: "demo", CreatedBy: "test",
+		Data: map[string]any{
+			"name": "kafe-admin",
+			"app":  "kafe",
+			"grants": []map[string]any{
+				{"page": "order-list", "actions": []map[string]any{{"name": "list"}, {"name": "view"}}},
+			},
+		},
+	}); err != nil {
+		t.Fatalf("insert role: %v", err)
+	}
+
+	userStore, err := reg.GetEntityStore(CoreModule, "user")
+	if err != nil {
+		t.Fatalf("user store: %v", err)
+	}
+	userID, err := userStore.Insert(ctx, db.InsertParams{
+		WorkspaceID: "demo", CreatedBy: "test",
+		Data: map[string]any{
+			"username":      "bob",
+			"password_hash": "x",
+			"roles":         []string{"kafe-admin"},
+			"permissions":   []string{},
+			"active":        true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+
+	user := &User{ID: userID, WorkspaceID: "demo", Roles: []string{"kafe-admin"}}
+
+	// In app "kafe" the role contributes its grants.
+	perms, err := resolver.Resolve(ctx, "demo", "kafe", user)
+	if err != nil {
+		t.Fatalf("Resolve(kafe): %v", err)
+	}
+	sort.Strings(perms)
+	want := []string{"billing.orders.list", "billing.orders.view"}
+	if len(perms) != len(want) {
+		t.Fatalf("kafe perms = %v, want %v", perms, want)
+	}
+	for i := range want {
+		if perms[i] != want[i] {
+			t.Errorf("kafe perms[%d]=%q, want %q", i, perms[i], want[i])
+		}
+	}
+
+	// In another app the role is ignored → no permissions.
+	perms2, err := resolver.Resolve(ctx, "demo", "storefront", user)
+	if err != nil {
+		t.Fatalf("Resolve(storefront): %v", err)
+	}
+	if len(perms2) != 0 {
+		t.Fatalf("storefront perms = %v, want empty", perms2)
+	}
 }

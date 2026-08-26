@@ -16,11 +16,11 @@ func TestService_ConcurrentSessionLimit(t *testing.T) {
 	}
 
 	// First login → 1 session.
-	if _, err := svc.Login(ctx, "demo", "admin", "admin"); err != nil {
+	if _, err := svc.Login(ctx, "demo", "", "admin", "admin"); err != nil {
 		t.Fatal(err)
 	}
 	// Second login → evicts oldest, still capped at 1.
-	if _, err := svc.Login(ctx, "demo", "admin", "admin"); err != nil {
+	if _, err := svc.Login(ctx, "demo", "", "admin", "admin"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -45,7 +45,7 @@ func TestService_UnlimitedSessionsByDefault(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i := 0; i < 3; i++ {
-		if _, err := svc.Login(ctx, "demo", "admin", "admin"); err != nil {
+		if _, err := svc.Login(ctx, "demo", "", "admin", "admin"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -63,10 +63,10 @@ func TestService_LogoutAll(t *testing.T) {
 	if err := svc.SeedDevUser(ctx, "demo", "admin", "admin"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.Login(ctx, "demo", "admin", "admin"); err != nil {
+	if _, err := svc.Login(ctx, "demo", "", "admin", "admin"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.Login(ctx, "demo", "admin", "admin"); err != nil {
+	if _, err := svc.Login(ctx, "demo", "", "admin", "admin"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -88,7 +88,7 @@ func TestService_PurgeExpired(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A live login session (future expiry).
-	if _, err := svc.Login(ctx, "demo", "admin", "admin"); err != nil {
+	if _, err := svc.Login(ctx, "demo", "", "admin", "admin"); err != nil {
 		t.Fatal(err)
 	}
 	// Manually insert an already-expired session.

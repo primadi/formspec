@@ -65,6 +65,7 @@ func NewTokenIssuer(secret, issuer, audience string, accessTTL, refreshTTL time.
 // accessClaims is the JWT claim set for an access token.
 type accessClaims struct {
 	Workspace string   `json:"ws"`
+	App       string   `json:"app,omitempty"`
 	Roles     []string `json:"roles,omitempty"`
 	Perms     []string `json:"perms,omitempty"`
 	Type      string   `json:"typ"`
@@ -74,6 +75,7 @@ type accessClaims struct {
 // refreshClaims is the JWT claim set for a refresh token.
 type refreshClaims struct {
 	Workspace string `json:"ws"`
+	App       string `json:"app,omitempty"`
 	Type      string `json:"typ"`
 	jwt.RegisteredClaims
 }
@@ -83,6 +85,7 @@ func (t *TokenIssuer) IssueAccessToken(u *User) (string, error) {
 	now := time.Now()
 	claims := accessClaims{
 		Workspace: u.WorkspaceID,
+		App:       u.App,
 		Roles:     u.Roles,
 		Perms:     u.Permissions,
 		Type:      TokenTypeAccess,
@@ -103,6 +106,7 @@ func (t *TokenIssuer) IssueRefreshToken(u *User) (string, error) {
 	now := time.Now()
 	claims := refreshClaims{
 		Workspace: u.WorkspaceID,
+		App:       u.App,
 		Type:      TokenTypeRefresh,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   u.ID,

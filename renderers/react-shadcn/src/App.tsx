@@ -482,6 +482,17 @@ function DefaultRedirect({
 // validated to be same-origin (prevents open redirect); missing/invalid
 // values fall back to the workspace admin surface.
 
+// App scope for a login URL: /{ws}/app/{app}/... → the segment after "app".
+// Empty for the _admin surface / top-level /login. Role management is per-App,
+// so the login must carry the app to resolve app-scoped permissions.
+function appFromPath(pathname: string): string | undefined {
+  const segments = pathname.split("/").filter(Boolean)
+  if (segments.length >= 3 && segments[1] === "app") {
+    return segments[2]
+  }
+  return undefined
+}
+
 function LoginPage() {
   const navigate = useNavigate()
   // In-app login (rendered inside a /:workspace/... surface) derives the
@@ -490,13 +501,14 @@ function LoginPage() {
   const { workspace: workspaceParam } = useParams<{ workspace?: string }>()
   const [searchParams] = useSearchParams()
   const boot = useSessionStore((s) => s.boot)
+  const app = appFromPath(window.location.pathname)
 
   const handleLogin = async (
     workspace: string,
     token: string,
     refreshToken?: string,
   ) => {
-    await boot(workspace, token, refreshToken)
+    await boot(workspace, token, refreshToken, app)
     // The bundle may have been loaded anonymously (empty entities) while on
     // the login route — reset it so it reloads with the authenticated
     // identity's permissions after the redirect.
@@ -516,7 +528,9 @@ function LoginPage() {
     navigate(`/${workspace}/_admin`, { replace: true })
   }
 
-  return <LoginScreen workspace={workspaceParam} onLogin={handleLogin} />
+  return (
+    <LoginScreen workspace={workspaceParam} app={app} onLogin={handleLogin} />
+  )
 }
 
 // ── 404 ──

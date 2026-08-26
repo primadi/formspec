@@ -24,9 +24,12 @@ type User struct {
 	Username     string
 	PasswordHash string
 	WorkspaceID  string
-	Roles        []string
-	Permissions  []string
-	Active       bool
+	// App is the app scope for this login/session (transient — set during
+	// login, not persisted). Empty = workspace-level (e.g. _admin).
+	App         string
+	Roles       []string
+	Permissions []string
+	Active      bool
 }
 
 // UserStore resolves a user by username or ID within a workspace.

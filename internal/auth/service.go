@@ -159,12 +159,13 @@ func (s *Service) InvalidatePermissions(userID string) {
 }
 
 // permissionsForUser resolves a user's effective permissions: their direct
-// permissions plus the materialized grants of every role they hold. Uses the
-// per-session cache when available (todo 6.2.4).
-func (s *Service) permissionsForUser(ctx context.Context, workspaceID string, user *User) ([]string, error) {
+// permissions plus the materialized grants of every role they hold (scoped to
+// the given app — roles with a non-empty app only contribute when they match).
+// Uses the per-session cache when available (todo 6.2.4).
+func (s *Service) permissionsForUser(ctx context.Context, workspaceID, app string, user *User) ([]string, error) {
 	s.ensureResolver()
 	if s.resolver != nil {
-		return s.resolver.Resolve(ctx, workspaceID, user)
+		return s.resolver.Resolve(ctx, workspaceID, app, user)
 	}
 	// Fallback (no role store/materializer wired): direct permissions only.
 	return user.Permissions, nil
@@ -189,8 +190,12 @@ func (s *Service) SeedDevUser(ctx context.Context, workspaceID, username, passwo
 
 // Login verifies credentials and issues an access + refresh token pair.
 //
+// app scopes the session to one App (role management is per-App): the user's
+// effective permissions are resolved for that App only. Empty app = workspace-
+// level session (e.g. the _admin surface) — all roles apply.
+//
 // On success it records a session (refresh jti) for rotation (todo 6.1.3).
-func (s *Service) Login(ctx context.Context, workspaceID, username, password string) (*TokenPair, error) {
+func (s *Service) Login(ctx context.Context, workspaceID, app, username, password string) (*TokenPair, error) {
 	user, err := s.users.GetByUsername(ctx, workspaceID, username)
 	if err != nil {
 		// Do not leak whether the user exists — same error for both cases.
@@ -203,6 +208,7 @@ func (s *Service) Login(ctx context.Context, workspaceID, username, password str
 		return nil, ErrInvalidCredentials
 	}
 
+	user.App = app
 	return s.issuePair(ctx, user)
 }
 
@@ -233,6 +239,8 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (*TokenPair,
 	if !user.Active {
 		return nil, ErrInvalidCredentials
 	}
+	// Re-scope to the same App the refresh token was issued for.
+	user.App = claims.App
 
 	// Rotate: invalidate the old session, then issue a new pair.
 	if err := s.session.Delete(ctx, claims.Workspace, claims.ID); err != nil {
@@ -243,9 +251,10 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (*TokenPair,
 
 // issuePair issues an access + refresh token pair and records the session.
 func (s *Service) issuePair(ctx context.Context, user *User) (*TokenPair, error) {
-	// Materialize the user's effective permissions (direct + role grants)
-	// so the access token carries the concrete permission strings (5.12.5).
-	perms, err := s.permissionsForUser(ctx, user.WorkspaceID, user)
+	// Materialize the user's effective permissions (direct + role grants,
+	// app-scoped) so the access token carries the concrete permission strings
+	// (5.12.5).
+	perms, err := s.permissionsForUser(ctx, user.WorkspaceID, user.App, user)
 	if err != nil {
 		return nil, fmt.Errorf("auth: resolve permissions: %w", err)
 	}
@@ -271,6 +280,7 @@ func (s *Service) issuePair(ctx context.Context, user *User) (*TokenPair, error)
 		JTI:         claims.ID,
 		UserID:      user.ID,
 		WorkspaceID: user.WorkspaceID,
+		App:         user.App,
 		ExpiresAt:   claims.ExpiresAt.Time,
 		CreatedAt:   now,
 	}

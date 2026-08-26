@@ -25,7 +25,9 @@ import {
 } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
+import { fetchMetaBundle } from "@/lib/api"
 import { useMetaStore } from "@/stores/meta"
+import { useSessionStore } from "@/stores/session"
 import type {
   BlockRef,
   DashboardSpec,
@@ -564,7 +566,30 @@ export function GrantsEditor({
   readonly = false,
   error,
 }: GrantsEditorProps) {
-  const bundle = useMetaStore((s) => s.bundle)
+  const workspace = useSessionStore((s) => s.workspace)
+  const appName = useMetaStore((s) => s.bundle?.app.name)
+  const metaBundle = useMetaStore((s) => s.bundle)
+  // The grants editor is an admin tool: it must list every page/action in the
+  // App regardless of the caller's own permissions. Fetch the app-scoped but
+  // unfiltered bundle (`?grants=true`); fall back to the filtered meta bundle
+  // if the fetch fails (e.g. caller lacks role-management permission).
+  const [grantsBundle, setGrantsBundle] = useState<MetaBundle | null>(null)
+  useEffect(() => {
+    if (!workspace || !appName) return
+    let cancelled = false
+    fetchMetaBundle(workspace, { appName, grants: true })
+      .then((b) => {
+        if (!cancelled) setGrantsBundle(b)
+      })
+      .catch(() => {
+        /* fall back to the filtered meta bundle */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [workspace, appName])
+
+  const bundle = grantsBundle ?? metaBundle
   const models = useMemo(
     () => (bundle ? buildPageModels(bundle) : []),
     [bundle],

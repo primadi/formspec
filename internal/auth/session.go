@@ -16,6 +16,7 @@ type Session struct {
 	JTI         string
 	UserID      string
 	WorkspaceID string
+	App         string
 	ExpiresAt   time.Time
 	CreatedAt   time.Time
 }
@@ -69,6 +70,7 @@ func (s *EntitySessionStore) Create(ctx context.Context, sess Session) error {
 			"transaction_date": sess.CreatedAt.UTC().Format("2006-01-02"),
 			"user_id":          sess.UserID,
 			"refresh_jti":      sess.JTI,
+			"app":              sess.App,
 			"expires_at":       sess.ExpiresAt.UTC().Format(time.RFC3339),
 		},
 	})
@@ -90,6 +92,7 @@ func (s *EntitySessionStore) Get(ctx context.Context, workspace, jti string) (*S
 		JTI:         jti,
 		UserID:      stringField(rec.Data, "user_id"),
 		WorkspaceID: rec.WorkspaceID,
+		App:         stringField(rec.Data, "app"),
 		ExpiresAt:   expiresAt,
 	}, true
 }
@@ -144,6 +147,7 @@ func (s *EntitySessionStore) ListForUser(ctx context.Context, workspace, userID 
 			JTI:         stringField(rec.Data, "refresh_jti"),
 			UserID:      userID,
 			WorkspaceID: rec.WorkspaceID,
+			App:         stringField(rec.Data, "app"),
 			ExpiresAt:   expiresAt,
 		})
 	}

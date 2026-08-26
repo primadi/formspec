@@ -9,7 +9,7 @@
     }
   ],
   "yaml.schemas": {
-    "schemas/formspec.schema.json": [
+    "https://schemas.formspec.dev/latest/formspec.schema.json": [
       "examples/**/spec/**/*.yaml",
       "examples/**/spec/**/*.yml",
       "verticals/**/spec/**/*.yaml",
