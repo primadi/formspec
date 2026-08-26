@@ -1,7 +1,9 @@
 // ─── Auth API ───
 //
-// Username/password login against the external surface (/api/v1/auth/login).
-// Returns the JWT access token used to authenticate the UI session.
+// Username/password login against the UI surface (/_ui/auth/login) — the
+// always-available surface for UI sessions. /api/v1/auth is opt-in for
+// programmatic clients (EnableAPIAuth). Returns the JWT access token used to
+// authenticate the UI session.
 
 import ky, { HTTPError } from "ky"
 
@@ -20,7 +22,7 @@ export async function loginWithPassword(
   password: string,
 ): Promise<LoginResult> {
   try {
-    const response = await ky.post(`/${workspace}/api/v1/auth/login`, {
+    const response = await ky.post(`/${workspace}/_ui/auth/login`, {
       json: { username, password },
       retry: 0,
     })

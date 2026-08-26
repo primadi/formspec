@@ -37,6 +37,11 @@ type RouterBuilder struct {
 	apps          map[string]*formspec_app.ResolvedApp // resolved kind: App manifests, keyed by name (Core §4.4)
 	settings      *spec.Settings                       // resolved global settings namespace (spec §10)
 	specVersionFn func() int64                         // returns the current spec version (for Meta API polling)
+	// enableAPIAuth mounts /api/v1/auth/* (login/refresh) on the external
+	// surface. Default false — auth lives on the UI surface (/_ui/auth/*),
+	// which is always available; /api/v1 is deny-by-default for external
+	// services (01-core-basic.md §8.2). Opt-in for programmatic clients.
+	enableAPIAuth bool
 }
 
 // NewRouterBuilder creates a new router builder backed by the entity registry.
@@ -229,6 +234,13 @@ func (b *RouterBuilder) SetSpecVersionFn(fn func() int64) {
 	b.specVersionFn = fn
 }
 
+// SetEnableAPIAuth mounts /api/v1/auth/* (login/refresh) on the external
+// surface. Default false — auth lives on the always-available UI surface
+// (/_ui/auth/*); /api/v1 is deny-by-default for external services.
+func (b *RouterBuilder) SetEnableAPIAuth(enabled bool) {
+	b.enableAPIAuth = enabled
+}
+
 // BuildRoutes generates route descriptors and stores them in the builder.
 // Includes both external API (/api/v1/) and UI (/ _ui/entity/) routes,
 // plus custom action routes for both surfaces.
@@ -265,6 +277,13 @@ func (b *RouterBuilder) BuildHTTP() http.Handler {
 		})
 		// ─── UI surface (§8.1): /_ui/ ───
 		r.Route("/_ui", func(r chi.Router) {
+			// Auth endpoints — public (no auth required). Login issues the
+			// initial token pair; refresh rotates it (todo 6.1.1/6.1.3).
+			// Auth lives on the always-available UI surface (login is a UI
+			// concern); /api/v1/auth is opt-in via EnableAPIAuth.
+			r.Post("/auth/login", b.HandleLogin())
+			r.Post("/auth/refresh", b.HandleRefresh())
+
 			// Meta API — read-only UI manifests + identity (Frontend §1.1).
 			r.Route("/_meta", func(r chi.Router) {
 				r.Get("/apps", b.HandleMetaApps())
@@ -317,10 +336,13 @@ func (b *RouterBuilder) BuildHTTP() http.Handler {
 
 		// ─── External API surface (§8.2): /api/v1/ ───
 		r.Route("/api/v1", func(r chi.Router) {
-			// Auth endpoints — public (no auth required). Login issues the
-			// initial token pair; refresh rotates it (todo 6.1.1/6.1.3).
-			r.Post("/auth/login", b.HandleLogin())
-			r.Post("/auth/refresh", b.HandleRefresh())
+			// Auth endpoints on the external surface are OPT-IN (EnableAPIAuth)
+			// — /api/v1 is deny-by-default for external services; the UI login
+			// lives on /_ui/auth/* (always available).
+			if b.enableAPIAuth {
+				r.Post("/auth/login", b.HandleLogin())
+				r.Post("/auth/refresh", b.HandleRefresh())
+			}
 
 			for _, rd := range b.routes {
 				if rd.Protocol != ProtocolREST {

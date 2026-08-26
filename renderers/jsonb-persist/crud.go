@@ -437,6 +437,15 @@ func (s *EntityStore) Insert(ctx context.Context, params InsertParams) (string, 
 		return "", fmt.Errorf("%s insert: %w", s.entity, err)
 	}
 
+	// Period guard (todo 7.11.5): reject transaction_date in a closed period
+	// (FORMSPEC.PERIOD.CLOSED). Checked BEFORE the transaction opens — the
+	// guard reads the period-closing entity store on its own connection, and
+	// querying it inside the Insert transaction would deadlock on a
+	// single-connection SQLite driver.
+	if err := s.validatePeriodGuard(ctx, params.WorkspaceID, params.Data); err != nil {
+		return "", fmt.Errorf("%s insert: %w", s.entity, err)
+	}
+
 	tbl := s.qualifiedTable()
 	id := NewUUIDv7()
 
@@ -480,12 +489,6 @@ func (s *EntityStore) Insert(ctx context.Context, params InsertParams) (string, 
 
 		// Validate transaction_date policy (backdate/forward-date)
 		if err := s.validateTransactionDatePolicy(params.Data, params.Permissions); err != nil {
-			return err
-		}
-
-		// Period guard (todo 7.11.5): reject transaction_date in a closed
-		// period (FORMSPEC.PERIOD.CLOSED).
-		if err := s.validatePeriodGuard(ctx, params.WorkspaceID, params.Data); err != nil {
 			return err
 		}
 

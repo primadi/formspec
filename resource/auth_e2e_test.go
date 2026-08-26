@@ -100,7 +100,7 @@ func login(t *testing.T, app *App, username, password string) string {
 // loginPair returns the access + refresh token pair for a username/password.
 func loginPair(t *testing.T, app *App, username, password string) (string, string) {
 	t.Helper()
-	status, out := doJSON(t, app, "POST", "/demo/api/v1/auth/login", map[string]any{
+	status, out := doJSON(t, app, "POST", "/demo/_ui/auth/login", map[string]any{
 		"username": username, "password": password,
 	})
 	if status != 200 {
@@ -186,7 +186,7 @@ func TestAuthAuthz_E2E(t *testing.T) {
 
 	// ── 1. Authentication: login success + wrong password ──
 	adminTok := login(t, app, "admin", "admin")
-	if status, _ := doJSON(t, app, "POST", "/demo/api/v1/auth/login", map[string]any{
+	if status, _ := doJSON(t, app, "POST", "/demo/_ui/auth/login", map[string]any{
 		"username": "admin", "password": "wrong",
 	}); status != 401 {
 		t.Fatalf("expected 401 for wrong password, got %d", status)
@@ -304,7 +304,7 @@ func TestAuthRefresh_Rotation_E2E(t *testing.T) {
 	_, refresh := loginPair(t, app, "admin", "admin")
 
 	// Refresh → new pair (200).
-	status, out := doJSON(t, app, "POST", "/demo/api/v1/auth/refresh", map[string]any{
+	status, out := doJSON(t, app, "POST", "/demo/_ui/auth/refresh", map[string]any{
 		"refresh_token": refresh,
 	})
 	if status != 200 {
@@ -317,14 +317,14 @@ func TestAuthRefresh_Rotation_E2E(t *testing.T) {
 	}
 
 	// Replay the OLD refresh token → 401 (rotated/invalidated).
-	if status, _ := doJSON(t, app, "POST", "/demo/api/v1/auth/refresh", map[string]any{
+	if status, _ := doJSON(t, app, "POST", "/demo/_ui/auth/refresh", map[string]any{
 		"refresh_token": refresh,
 	}); status != 401 {
 		t.Fatalf("expected 401 for replayed old refresh token, got %d", status)
 	}
 
 	// The NEW refresh token still works.
-	if status, _ := doJSON(t, app, "POST", "/demo/api/v1/auth/refresh", map[string]any{
+	if status, _ := doJSON(t, app, "POST", "/demo/_ui/auth/refresh", map[string]any{
 		"refresh_token": newRefresh,
 	}); status != 200 {
 		t.Fatalf("expected 200 for new refresh token, got %d", status)
@@ -461,7 +461,7 @@ func TestAuthSessionRevoke_E2E(t *testing.T) {
 	}
 
 	// Refresh with the revoked session's token → 401.
-	if status, _ := doJSON(t, app, "POST", "/demo/api/v1/auth/refresh", map[string]any{
+	if status, _ := doJSON(t, app, "POST", "/demo/_ui/auth/refresh", map[string]any{
 		"refresh_token": refresh,
 	}); status != 401 {
 		t.Fatalf("expected 401 for revoked session refresh, got %d", status)
@@ -494,13 +494,13 @@ func TestAuthConcurrentSessionLimit_E2E(t *testing.T) {
 	_, refreshB := loginPair(t, app, "admin", "admin")
 
 	// Refresh with the evicted session A's token → 401.
-	if status, _ := doJSON(t, app, "POST", "/demo/api/v1/auth/refresh", map[string]any{
+	if status, _ := doJSON(t, app, "POST", "/demo/_ui/auth/refresh", map[string]any{
 		"refresh_token": refreshA,
 	}); status != 401 {
 		t.Fatalf("expected 401 for evicted session A, got %d", status)
 	}
 	// Refresh with the current session B's token → 200.
-	if status, _ := doJSON(t, app, "POST", "/demo/api/v1/auth/refresh", map[string]any{
+	if status, _ := doJSON(t, app, "POST", "/demo/_ui/auth/refresh", map[string]any{
 		"refresh_token": refreshB,
 	}); status != 200 {
 		t.Fatalf("expected 200 for current session B, got %d", status)
@@ -527,14 +527,14 @@ func TestAuthRateLimit_E2E(t *testing.T) {
 
 	// Burst is 5 — the first 5 logins succeed.
 	for i := 0; i < 5; i++ {
-		if status, _ := doJSON(t, app, "POST", "/demo/api/v1/auth/login", map[string]any{
+		if status, _ := doJSON(t, app, "POST", "/demo/_ui/auth/login", map[string]any{
 			"username": "admin", "password": "admin",
 		}); status != 200 {
 			t.Fatalf("login %d: expected 200, got %d", i, status)
 		}
 	}
 	// The 6th login is rate-limited → 429.
-	if status, _ := doJSON(t, app, "POST", "/demo/api/v1/auth/login", map[string]any{
+	if status, _ := doJSON(t, app, "POST", "/demo/_ui/auth/login", map[string]any{
 		"username": "admin", "password": "admin",
 	}); status != 429 {
 		t.Fatalf("expected 429 after burst exhausted, got %d", status)
@@ -664,7 +664,7 @@ func TestAuthAuditLog_E2E(t *testing.T) {
 	// Successful login.
 	loginPair(t, app, "admin", "admin")
 	// Failed login.
-	doJSON(t, app, "POST", "/demo/api/v1/auth/login", map[string]any{
+	doJSON(t, app, "POST", "/demo/_ui/auth/login", map[string]any{
 		"username": "admin", "password": "wrong",
 	})
 

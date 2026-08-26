@@ -228,7 +228,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         const { workspace, refreshToken } = get()
         if (!refreshToken) return false
         try {
-          const response = await ky.post(`/${workspace}/api/v1/auth/refresh`, {
+          const response = await ky.post(`/${workspace}/_ui/auth/refresh`, {
             json: { refresh_token: refreshToken },
             retry: 0,
           })

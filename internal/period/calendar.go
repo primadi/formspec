@@ -2,6 +2,7 @@ package period
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/primadi/formspec/internal/entity"
@@ -23,7 +24,8 @@ func NewGuard(reg *entity.Registry) *Guard {
 
 // IsClosed reports whether the given period ("YYYY-MM") is closed for the
 // workspace — i.e. there is a submitted (finalized) period-closing record for
-// it. A cancelled (reopened) record means the period is open again.
+// it. A cancelled (reopened) record means the period is open again. A missing
+// record means the period is OPEN (not an error).
 func (g *Guard) IsClosed(ctx context.Context, workspaceID, period string) (bool, error) {
 	store, err := g.reg.GetEntityStore(CoreModule, "period-closing")
 	if err != nil {
@@ -31,6 +33,9 @@ func (g *Guard) IsClosed(ctx context.Context, workspaceID, period string) (bool,
 	}
 	rec, err := store.FindByField(ctx, workspaceID, "period", period)
 	if err != nil {
+		if errors.Is(err, db.ErrNotFound) {
+			return false, nil // no closing record → period is open
+		}
 		return false, err
 	}
 	if rec == nil {

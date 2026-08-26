@@ -45,7 +45,8 @@ type refreshRequest struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
-// HandleLogin serves POST /{ws}/api/v1/auth/login.
+// HandleLogin serves POST /{ws}/_ui/auth/login (and, when EnableAPIAuth is
+// set, POST /{ws}/api/v1/auth/login).
 //
 // Verifies credentials (bcrypt) and issues an access + refresh token pair
 // (todo 6.1.1). Public endpoint — no auth required.
@@ -108,7 +109,8 @@ func (b *RouterBuilder) HandleLogin() http.HandlerFunc {
 	}
 }
 
-// HandleRefresh serves POST /{ws}/api/v1/auth/refresh.
+// HandleRefresh serves POST /{ws}/_ui/auth/refresh (and, when EnableAPIAuth
+// is set, POST /{ws}/api/v1/auth/refresh).
 //
 // Validates the refresh token, rotates it (invalidates the old jti), and
 // issues a fresh pair (todo 6.1.3). Public endpoint — no auth required.

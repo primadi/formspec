@@ -78,6 +78,11 @@ type Config struct {
 	IdempotencyTTL     time.Duration // TTL for idempotency keys (default: db.DefaultIdempotencyTTL)
 	WorkspaceID        string        // Tenant scope used by script save/load/call handlers (default: "demo")
 	MaxSessionsPerUser int           // Concurrent session limit per user (todo 6.5.3); 0 = unlimited
+	// EnableAPIAuth mounts /api/v1/auth/* (login/refresh) on the external
+	// surface. Default false — auth lives on the always-available UI surface
+	// (/_ui/auth/*); /api/v1 is deny-by-default for external services
+	// (01-core-basic.md §8.2). Opt-in for programmatic clients.
+	EnableAPIAuth bool
 
 	// SidecarEndpoint is the app-process endpoint for impl: {type: sidecar}
 	// actions ("unix:///tmp/formspec/app.sock" or "http://localhost:9000").
@@ -493,6 +498,9 @@ func New(cfg Config) (*App, error) {
 		}
 	}
 	rb.SetSettings(spec.ResolveSettings(declaredSettings))
+	// Auth on the external surface (/api/v1/auth/*) is opt-in; the UI login
+	// lives on /_ui/auth/* (always available).
+	rb.SetEnableAPIAuth(cfg.EnableAPIAuth)
 
 	// Module asset roots (todo 5.9.1) — serve custom UI components from
 	// {root}/modules/{module}/assets/{path}.
@@ -1014,6 +1022,8 @@ func (a *App) ReloadSpec() error {
 		}
 	}
 	newRB.SetSettings(spec.ResolveSettings(declaredSettings))
+	// Auth on the external surface is opt-in (same as boot).
+	newRB.SetEnableAPIAuth(a.cfg.EnableAPIAuth)
 	if a.cfg.WebDir != "" {
 		newRB.SetWebDir(a.cfg.WebDir)
 	}

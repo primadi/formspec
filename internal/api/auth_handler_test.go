@@ -53,7 +53,7 @@ func TestAuthLogin_Success(t *testing.T) {
 	handler := setupAuthAPIEnv(t)
 
 	body := bytes.NewBufferString(`{"username":"admin","password":"admin"}`)
-	req := httptest.NewRequest(http.MethodPost, "/demo/api/v1/auth/login", body)
+	req := httptest.NewRequest(http.MethodPost, "/demo/_ui/auth/login", body)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -81,7 +81,7 @@ func TestAuthLogin_WrongPassword(t *testing.T) {
 	handler := setupAuthAPIEnv(t)
 
 	body := bytes.NewBufferString(`{"username":"admin","password":"wrong"}`)
-	req := httptest.NewRequest(http.MethodPost, "/demo/api/v1/auth/login", body)
+	req := httptest.NewRequest(http.MethodPost, "/demo/_ui/auth/login", body)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -96,7 +96,7 @@ func TestAuthRefresh_Rotation(t *testing.T) {
 
 	// Login first.
 	loginBody := bytes.NewBufferString(`{"username":"admin","password":"admin"}`)
-	loginReq := httptest.NewRequest(http.MethodPost, "/demo/api/v1/auth/login", loginBody)
+	loginReq := httptest.NewRequest(http.MethodPost, "/demo/_ui/auth/login", loginBody)
 	loginReq.Header.Set("Content-Type", "application/json")
 	loginRec := httptest.NewRecorder()
 	handler.ServeHTTP(loginRec, loginReq)
@@ -112,7 +112,7 @@ func TestAuthRefresh_Rotation(t *testing.T) {
 
 	// Refresh with the token.
 	refreshBody := bytes.NewBufferString(`{"refresh_token":"` + loginResp.Data.RefreshToken + `"}`)
-	refreshReq := httptest.NewRequest(http.MethodPost, "/demo/api/v1/auth/refresh", refreshBody)
+	refreshReq := httptest.NewRequest(http.MethodPost, "/demo/_ui/auth/refresh", refreshBody)
 	refreshReq.Header.Set("Content-Type", "application/json")
 	refreshRec := httptest.NewRecorder()
 	handler.ServeHTTP(refreshRec, refreshReq)
@@ -123,7 +123,7 @@ func TestAuthRefresh_Rotation(t *testing.T) {
 
 	// Replaying the old refresh token must now fail (rotated).
 	replayBody := bytes.NewBufferString(`{"refresh_token":"` + loginResp.Data.RefreshToken + `"}`)
-	replayReq := httptest.NewRequest(http.MethodPost, "/demo/api/v1/auth/refresh", replayBody)
+	replayReq := httptest.NewRequest(http.MethodPost, "/demo/_ui/auth/refresh", replayBody)
 	replayReq.Header.Set("Content-Type", "application/json")
 	replayRec := httptest.NewRecorder()
 	handler.ServeHTTP(replayRec, replayReq)
@@ -136,7 +136,7 @@ func TestAuthLogin_MissingFields(t *testing.T) {
 	handler := setupAuthAPIEnv(t)
 
 	body := bytes.NewBufferString(`{"username":"admin"}`)
-	req := httptest.NewRequest(http.MethodPost, "/demo/api/v1/auth/login", body)
+	req := httptest.NewRequest(http.MethodPost, "/demo/_ui/auth/login", body)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)

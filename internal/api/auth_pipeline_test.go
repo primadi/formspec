@@ -42,7 +42,7 @@ func TestLogin_RecordsAudit(t *testing.T) {
 
 	// Successful login.
 	body := bytes.NewBufferString(`{"username":"admin","password":"admin"}`)
-	req := httptest.NewRequest(http.MethodPost, "/demo/api/v1/auth/login", body)
+	req := httptest.NewRequest(http.MethodPost, "/demo/_ui/auth/login", body)
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
@@ -52,7 +52,7 @@ func TestLogin_RecordsAudit(t *testing.T) {
 
 	// Failed login.
 	body2 := bytes.NewBufferString(`{"username":"admin","password":"wrong"}`)
-	req2 := httptest.NewRequest(http.MethodPost, "/demo/api/v1/auth/login", body2)
+	req2 := httptest.NewRequest(http.MethodPost, "/demo/_ui/auth/login", body2)
 	req2.Header.Set("Content-Type", "application/json")
 	rr2 := httptest.NewRecorder()
 	handler.ServeHTTP(rr2, req2)
