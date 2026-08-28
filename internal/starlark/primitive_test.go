@@ -33,8 +33,11 @@ func TestCtxDBQuery_ResolvedAndExecuted(t *testing.T) {
 
 	ctxObj := NewCtxAPI("demo", "", "user", "", nil)
 	ctxObj.Now = now
-	ctxObj.SetDatastoreResolver(func(primitiveType, name string) (interface{}, error) {
-		if primitiveType != "db" || name != "default" {
+	ctxObj.SetDatastoreResolver(func(primitiveType, name, module string) (interface{}, error) {
+		// Plain ctx.db() passes an empty name — the registry applies
+		// module-scoped binding (todo 2.9.4); "" means "caller's bound
+		// datastore" which is 'default' for unbound modules.
+		if primitiveType != "db" || (name != "default" && name != "") {
 			t.Fatalf("unexpected resolve(%q, %q)", primitiveType, name)
 		}
 		return &fakeQuerier{rows: []map[string]any{{"one": int64(1)}}}, nil
@@ -97,7 +100,7 @@ func TestCtxDBQuery_UnsupportedBackend(t *testing.T) {
 	ctxObj := NewCtxAPI("demo", "", "user", "", nil)
 	ctxObj.Now = now
 	// Resolver returns a plain struct that does not implement Querier.
-	ctxObj.SetDatastoreResolver(func(primitiveType, name string) (interface{}, error) {
+	ctxObj.SetDatastoreResolver(func(primitiveType, name, module string) (interface{}, error) {
 		return struct{}{}, nil
 	})
 
@@ -207,7 +210,7 @@ func TestCtxPrimitives_ClosedSet(t *testing.T) {
 	queue := &fakeQueue{}
 	pubsub := &fakePubSub{}
 	storage := &fakeStorage{items: map[string][]byte{}}
-	ctxObj.SetDatastoreResolver(func(primitiveType, name string) (interface{}, error) {
+	ctxObj.SetDatastoreResolver(func(primitiveType, name, module string) (interface{}, error) {
 		switch primitiveType {
 		case "cache", "kvstore":
 			return kv, nil

@@ -50,6 +50,7 @@ func runValidate(args []string) {
 	schemaDir := fs.String("schema", "", "path to a local schemas/ dir (override; bypasses the registry)")
 	noSchema := fs.Bool("no-schema", false, "skip JSON Schema validation (engine loader only)")
 	refresh := fs.Bool("schema-refresh", false, "re-fetch schema version(s) from the registry even if cached")
+	fix := fs.Bool("fix", false, "remove declared-but-unused uses entries (never adds — consent expansion stays manual)")
 	if err := fs.Parse(args); err != nil {
 		os.Exit(2)
 	}
@@ -83,6 +84,19 @@ func runValidate(args []string) {
 	// Every Integrator that makes a side effect from one event must provide a
 	// symmetric cancel handler; the target action must be idempotent.
 	integratorRejects := validateIntegrators(res.Manifests)
+
+	// ── Layer 1.6: Starlark honesty scan (todo 3.1.1a) ──
+	// Static analysis of script impls vs their declared `uses:` block:
+	// undeclared usage → error, declared-but-unused → warning,
+	// ctx.environment branching → warning. --fix removes unused entries.
+	honestyIssues := scanHonesty(res.Manifests, *specPath)
+	if *fix {
+		if removed := applyHonestyFix(res.Manifests, honestyIssues); removed > 0 {
+			fmt.Printf("[FIXED] removed %d declared-but-unused uses entr(ies)\n", removed)
+			// Re-scan so the report reflects the fixed state.
+			honestyIssues = scanHonesty(res.Manifests, *specPath)
+		}
+	}
 
 	// ── Layer 2: JSON Schema validation, version-routed ──
 	//   * --schema <dir>: one local compiler for every manifest (no versioning).
@@ -161,6 +175,11 @@ func runValidate(args []string) {
 		if errMsg, ok := integratorRejects[m.Source]; ok {
 			msgs = append(msgs, "integrator: "+errMsg)
 		}
+		for _, iss := range honestyIssues {
+			if iss.Source == m.Source && iss.Severity == "error" {
+				msgs = append(msgs, "honesty: "+iss.Message)
+			}
+		}
 		if compilers != nil {
 			if verErr, ok := versionErrs[m.Source]; ok {
 				msgs = append(msgs, "schema: "+verErr)
@@ -182,6 +201,27 @@ func runValidate(args []string) {
 	}
 
 	fmt.Printf("\n%d manifest(s) validated, %d problem(s) found\n", len(sorted), fails)
+
+	// Honesty warnings (declared-but-unused, ctx.environment) never fail the
+	// run — they are advisory.
+	warns := 0
+	for _, iss := range honestyIssues {
+		if iss.Severity == "warning" {
+			if warns == 0 {
+				fmt.Println("\nhonesty warnings:")
+			}
+			loc := iss.Source
+			if iss.Script != "" {
+				loc = iss.Script
+			}
+			fmt.Printf("[WARN] %s\n       %s\n", loc, iss.Message)
+			warns++
+		}
+	}
+	if warns > 0 {
+		fmt.Printf("\n%d honesty warning(s) — run with --fix to remove declared-but-unused entries\n", warns)
+	}
+
 	if fails > 0 {
 		os.Exit(1)
 	}

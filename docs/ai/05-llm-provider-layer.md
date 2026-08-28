@@ -1,39 +1,36 @@
-# LLM Provider Layer — Vercel AI SDK & BYOK
+# LLM Provider Layer — openai-go & BYOK
 
-**Status:** Design — belum diimplementasikan
-**License:** Creative Commons CC0
+**Status:** Draft — diimplementasikan di `internal/consult/llm` (todo 10.2.3)
 
 > Lapisan kedua arsitektur FormSpec AI ([`01-architecture.md`](01-architecture.md)
-> §1): bagaimana `formspec-consult` memanggil LLM — multi-provider lewat Vercel AI
-> SDK, kredensial BYOK milik developer, dan batas kemampuan minimum model.
+> §1): bagaimana `formspec consult` memanggil LLM — multi-provider lewat SDK
+> resmi, kredensial BYOK milik developer, dan batas kemampuan minimum model.
 
 ---
 
-## 1. Kenapa Vercel AI SDK
+## 1. Fondasi: SDK Resmi, Interface Internal
 
-`formspec-consult` memakai **Vercel AI SDK** (TypeScript) sebagai fondasi provider
-layer — bukan agentic framework besar, bukan tulis sendiri dari nol:
+> **Keputusan 2026-08-27**: fondasi provider layer adalah **`openai-go` (SDK
+> resmi OpenAI)** di balik interface internal `llm.Provider` — bukan Vercel AI
+> SDK (TypeScript) seperti rancangan awal, bukan juga framework agentic
+> (`langchaingo` ditolak: API tidak stabil; `go-ai`/digitallysavvy dievaluasi
+> dan ditolak: bus factor, klaim paritas 1:1 dengan Vercel SDK sulit
+> dipertahankan, permukaan dependency besar). Tipe SDK tidak pernah bocor ke
+> logic consult — swap SDK adalah perubahan lokal.
 
-- **`ToolLoopAgent`** — siklus kirim → cek `tool_use` → eksekusi → kembalikan
-  `tool_result` ([`01-architecture.md`](01-architecture.md) §3) tersedia sebagai
-  abstraksi first-class; `formspec-consult` tidak menulis loop-nya manual.
-- **Provider adapter 25+ provider** — format tool-call di API mentah berbeda
-  per provider dan ini alasan konkret lapisan ini ada, bukan teoretis:
-  Anthropic memakai content-block (`type: "tool_use"`, `input` objek JSON
-  native); OpenAI memakai `message.tool_calls[].function.arguments` dengan
-  `arguments` berupa **string JSON** yang harus di-parse; DeepSeek sengaja
-  kompatibel format OpenAI; Gemini beda lagi (`functionCall` di dalam `parts`).
-  Normalisasi lintas-provider ditangani adapter SDK yang sudah matang, bukan
-  ditulis manual per provider.
-- **MCP client bawaan** — koneksi ke `formspec mcp-serve` (stdio) dan
-  `formspec-remote-mcp` (Streamable HTTP) tanpa implementasi protokol sendiri.
-
-Ini penerapan prinsip "manfaatkan open source dulu" — kebutuhan spesifik
-komponen ini (multi-provider + MCP + tool loop) paling matang di ekosistem
-TypeScript hari ini; itulah alasan `formspec-consult` berbahasa TypeScript
-sementara seluruh platform tetap Go ([`01-architecture.md`](01-architecture.md)
-§2). `formspec-local-mcp` (Go) tidak perlu berubah per provider — protokol MCP
-sendiri sudah bahasa/provider-agnostik by design.
+- **Satu wire format menutup target provider** — DeepSeek, GLM/Zhipu, dan
+  gateway OpenAI-compatible lain diakses lewat `openai-go` + base URL
+  override. Normalisasi 25+ format provider berbeda tidak pernah terpakai
+  karena capability bar (§2) hanya mengizinkan provider tervalidasi.
+- **Tool-use loop ditulis sendiri** (~100 baris di `internal/consult`) —
+  kirim → cek tool_call → eksekusi via MCP → kembalikan tool_result → ulang.
+  Satu wire format = satu loop; testable dengan mock provider.
+- **MCP client memakai `modelcontextprotocol/go-sdk`** (resmi, sama dengan
+  server) — bukan MCP client dari framework pihak ketiga.
+- **Jalur eskalasi murah**: provider non-OpenAI-compatible (mis. Anthropic
+  native untuk extended thinking/prompt caching) ditambah sebagai adapter
+  kedua (`anthropic-sdk-go`, juga Stainless-generated) di balik interface
+  `Provider` yang sama.
 
 FormSpec Skill **bukan** urusan lapisan ini: skill tidak pernah jadi konsep di
 level API provider mana pun — murni konvensi client-side, dikirim sebagai teks
@@ -110,8 +107,8 @@ berlaku ([`01-architecture.md`](01-architecture.md) §6).
 
 ## 6. Referensi
 
-| Dokumen | Isi |
-|---|---|
-| [`01-architecture.md`](01-architecture.md) | Tool-use loop yang dijalankan lapisan ini; dua budget token |
-| [`02-formspec-consult.md`](02-formspec-consult.md) | Client yang menggunakan lapisan ini |
-| [`06-formspec-skill.md`](06-formspec-skill.md) | Kenapa skill tidak butuh dukungan provider |
+| Dokumen                                            | Isi                                                         |
+| -------------------------------------------------- | ----------------------------------------------------------- |
+| [`01-architecture.md`](01-architecture.md)         | Tool-use loop yang dijalankan lapisan ini; dua budget token |
+| [`02-formspec-consult.md`](02-formspec-consult.md) | Client yang menggunakan lapisan ini                         |
+| [`06-formspec-skill.md`](06-formspec-skill.md)     | Kenapa skill tidak butuh dukungan provider                  |

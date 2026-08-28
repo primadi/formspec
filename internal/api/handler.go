@@ -15,6 +15,7 @@ import (
 	"github.com/primadi/formspec/internal/auth"
 	entityengine "github.com/primadi/formspec/internal/entity"
 	"github.com/primadi/formspec/internal/job"
+	"github.com/primadi/formspec/internal/observability"
 	"github.com/primadi/formspec/internal/service"
 	"github.com/primadi/formspec/internal/validation"
 	"github.com/primadi/formspec/internal/webhook"
@@ -1411,9 +1412,10 @@ const (
 	ctxWorkspaceID  contextKey = "tenant_id"
 	ctxUserID       contextKey = "user_id"
 	ctxIdentity     contextKey = "identity"
-	ctxRequestID    contextKey = "request_id"
 	ctxURLWorkspace contextKey = "url_workspace" // extracted from URL before identity override
 	ctxApp          contextKey = "app"           // app scope (empty = workspace-level)
+	// ctxRequestID moved to internal/observability (todo 8.2.3) so the
+	// Starlark executor can read the same key without an import cycle.
 )
 
 // IdentityFromContext extracts the authenticated identity from the request context.
@@ -1492,9 +1494,10 @@ func permissionsFromContext(ctx context.Context) []string {
 }
 
 // requestIDFromContext extracts the request ID from the context.
+// Delegates to internal/observability (todo 8.2.3) so the Starlark executor
+// can read the same context key without importing the API layer.
 func requestIDFromContext(ctx context.Context) string {
-	v, _ := ctx.Value(ctxRequestID).(string)
-	return v
+	return observability.RequestIDFromContext(ctx)
 }
 
 // WithWorkspace sets the workspace ID on the context.
@@ -1508,8 +1511,9 @@ func WithUser(ctx context.Context, userID string) context.Context {
 }
 
 // WithRequestID sets the request ID on the context.
+// Delegates to internal/observability (todo 8.2.3).
 func WithRequestID(ctx context.Context, requestID string) context.Context {
-	return context.WithValue(ctx, ctxRequestID, requestID)
+	return observability.WithRequestID(ctx, requestID)
 }
 
 // --- JSON helpers ---

@@ -28,6 +28,13 @@ type Loader struct {
 	BasePath string
 	Roots    []string // additional manifest roots (e.g. external/, vendors/) — walked after BasePath
 	Strict   bool     // reject unknown kinds / invalid schemas
+
+	// Aliases rewrites metadata.module after parse (todo 13.1.4): key =
+	// original module name, value = effective (aliased) name. Applied to
+	// every loaded manifest — vendor modules installed under an alias are
+	// registered under the alias everywhere (API routes, permissions,
+	// depends references).
+	Aliases map[string]string
 }
 
 // NewLoader creates a manifest loader for the given base path.
@@ -42,6 +49,23 @@ func (l *Loader) AddRoot(path string) {
 		return
 	}
 	l.Roots = append(l.Roots, path)
+}
+
+// SetAliases installs the module-name rewrite map (todo 13.1.4).
+func (l *Loader) SetAliases(m map[string]string) {
+	l.Aliases = m
+}
+
+// applyAliases rewrites metadata.module on every manifest per the alias map.
+func (l *Loader) applyAliases(manifests []RawManifest) {
+	if len(l.Aliases) == 0 {
+		return
+	}
+	for i := range manifests {
+		if eff, ok := l.Aliases[manifests[i].Metadata.Module]; ok {
+			manifests[i].Metadata.Module = eff
+		}
+	}
 }
 
 // Discover walks the spec directory (and any additional roots) and returns

@@ -1,0 +1,34 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: vendor
+  module: registry
+  description: "Vendor — penerbit module (identitas ed25519 untuk signature)"
+spec:
+  version: v1
+  characteristic: master
+  lifecycle: plain_crud
+  display_field: name
+  plural: vendors
+  fields:
+    - name: name
+      type: string
+      required: true
+      unique: true
+      title: "Vendor Name"
+      description: "Nama unik vendor, mis. acme"
+    - name: display_name
+      type: string
+      required: true
+      title: "Display Name"
+    - name: public_key
+      type: text
+      required: true
+      title: "Ed25519 Public Key"
+      description: "Public key ed25519 (base64) yang memverifikasi signature module vendor ini"
+    - name: url
+      type: string
+      title: "URL"
+  expose:
+    - type: rest
+      actions: [list, find, create, submit]

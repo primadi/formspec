@@ -1,0 +1,13 @@
+apiVersion: formspec.dev/v1
+kind: App
+metadata:
+  name: registry
+  description: "FormSpec Module Registry — katalog module, versi, signature, dan distribusi tarball (dogfooding POC, todo 13.3)"
+spec:
+  version: 0.1.0
+  vendor: formspec-dev
+  root_url: /app/registry
+  modules: [registry]
+  menu:
+    - type: module
+      module: registry

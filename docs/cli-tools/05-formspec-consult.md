@@ -13,10 +13,10 @@
 
 ## 1. Dua Artifact
 
-| Artifact             | Wujud                                                                             | Peran                                                                                                               |
-| -------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `formspec-consult`   | Binary standalone (TypeScript + Vercel AI SDK, compile via `bun build --compile`) | Client konsultasi: REPL, tool-use loop, sesi, diff — [`../ai/02-formspec-consult.md`](../ai/02-formspec-consult.md) |
-| `formspec mcp-serve` | Subcommand di binary `formspec` (Go) — bukan binary terpisah                      | Expose `formspec-local-mcp` lewat stdio — [`../ai/03-formspec-local-mcp.md`](../ai/03-formspec-local-mcp.md)        |
+| Artifact             | Wujud                                                        | Peran                                                                                                               |
+| -------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| `formspec consult`   | Subcommand di binary `formspec` (Go)                         | Client konsultasi: REPL, tool-use loop, sesi, diff — [`../ai/02-formspec-consult.md`](../ai/02-formspec-consult.md) |
+| `formspec mcp-serve` | Subcommand di binary `formspec` (Go) — bukan binary terpisah | Expose `formspec-local-mcp` lewat stdio — [`../ai/03-formspec-local-mcp.md`](../ai/03-formspec-local-mcp.md)        |
 
 `formspec consult` bukan CLI inti ketiga ([`README.md`](README.md)) — ia lapisan
 opsional; `formspec` (CLI utama Go) tidak berubah.

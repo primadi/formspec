@@ -78,9 +78,11 @@ func (e *ScriptExecutor) SetNextKeyHandler(fn func(ctx context.Context, workspac
 
 // SetDatastoreResolver wires the ctx.* primitive resolver into the engine so
 // scripts can call ctx.db()/ctx.cache()/... against live datastore
-// connections (todo 2.9.1). A nil resolver keeps the current behavior where
-// every ctx.* primitive errors with "datastore resolver not configured".
-func (e *ScriptExecutor) SetDatastoreResolver(resolver func(primitiveType, name string) (interface{}, error)) {
+// connections (todo 2.9.1). The resolver's third argument is the owning
+// module of the executing script, used for module-scoped datastore binding
+// (todo 2.9.4). A nil resolver keeps the current behavior where every ctx.*
+// primitive errors with "datastore resolver not configured".
+func (e *ScriptExecutor) SetDatastoreResolver(resolver func(primitiveType, name, module string) (interface{}, error)) {
 	e.engine.SetDatastoreResolver(resolver)
 }
 

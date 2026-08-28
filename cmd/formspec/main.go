@@ -54,6 +54,18 @@ func main() {
 		runNew(os.Args[2:])
 	case "dev":
 		runDev(os.Args[2:])
+	case "serve":
+		runServe(os.Args[2:])
+	case "mcp-serve":
+		runMcpServe(os.Args[2:])
+	case "consult":
+		runConsult(os.Args[2:])
+	case "module":
+		runModule(os.Args[2:])
+	case "override":
+		runOverride(os.Args[2:])
+	case "verify":
+		runVerify(os.Args[2:])
 	case "validate":
 		runValidate(os.Args[2:])
 	case "check":
@@ -84,7 +96,9 @@ func main() {
 		runInit(os.Args[2:])
 	case "schema":
 		runSchema(os.Args[2:])
-	case "saga", "module", "sign", "script",
+	case "sign":
+		runSign(os.Args[2:])
+	case "script",
 		"freeze", "rollback", "lock", "workspace":
 		fmt.Fprintf(os.Stderr, "formspec %s: not implemented yet — see docs/cli-tools/01-formspec-cli.md\n", os.Args[1])
 		os.Exit(1)
@@ -125,6 +139,13 @@ func usage() {
 	fmt.Fprintf(os.Stderr, "  new module          Scaffold a Module manifest\n")
 	fmt.Fprintf(os.Stderr, "  new entity          Scaffold an Entity manifest + basic fields\n")
 	fmt.Fprintf(os.Stderr, "  dev                 Development server (API + SPA built-in)\n")
+	fmt.Fprintf(os.Stderr, "  serve               Production single-server (--mode=production)\n")
+	fmt.Fprintf(os.Stderr, "  mcp-serve           Local MCP tool server for AI consult (stdio)\n")
+	fmt.Fprintf(os.Stderr, "  consult             AI business consultant REPL (BYOK)\n")
+	fmt.Fprintf(os.Stderr, "  module              Module vendoring (install/list/uninstall)\n")
+	fmt.Fprintf(os.Stderr, "  override            Shadow copy management (adopt/diff/list)\n")
+	fmt.Fprintf(os.Stderr, "  verify              Verify vendors/ checksums against formspec.lock\n")
+	fmt.Fprintf(os.Stderr, "  sign                Ed25519 module signing (keygen/sign/verify)\n")
 	fmt.Fprintf(os.Stderr, "  init                Scaffold a new FormSpec project with standard layout\n")
 	fmt.Fprintf(os.Stderr, "  schema              Manage cached JSON Schema versions (fetch, update, list, clear)\n")
 	fmt.Fprintf(os.Stderr, "\nNot yet implemented (see docs/cli-tools/01-formspec-cli.md):\n")

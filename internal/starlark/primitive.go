@@ -84,10 +84,10 @@ func threadContext(thread *starlark.Thread) context.Context {
 //
 // Usage in Starlark:
 //
-//	result = ctx.db().query("SELECT ...")              # default datastore
-//	result = ctx.db().named("analytics-db").query(...)  # named datastore
+//	result = ctx.db().query("SELECT ...")               # caller's bound datastore
+//	result = ctx.db.named("analytics-db").query(...)    # explicit named datastore
 //	ctx.cache().set("key", value, ttl=3600)
-//	ctx.cache().named("session-cache").get("key")
+//	ctx.cache.named("session-cache").get("key")
 type primitiveHandle struct {
 	primType string
 	resolver func(primitiveType, name string) (interface{}, error)
@@ -128,10 +128,16 @@ func (p *primitiveHandle) Attr(name string) (starlark.Value, error) {
 			if err := starlark.UnpackArgs("named", args, kwargs, "name", &dsName); err != nil {
 				return nil, err
 			}
-			return &primitiveHandle{
+			// Resolve immediately so the chain ctx.db.named("x").query(...)
+			// works: .named() returns the resolved connection runner.
+			conn, err := p.resolver(p.primType, dsName)
+			if err != nil {
+				return nil, fmt.Errorf("ctx.%s: %w", p.primType, err)
+			}
+			return &primitiveRunner{
 				primType: p.primType,
-				resolver: p.resolver,
-				namedDS:  dsName,
+				name:     dsName,
+				conn:     conn,
 			}, nil
 		}), nil
 	}
@@ -147,16 +153,19 @@ func (p *primitiveHandle) Name() string { return p.String() }
 // the resolved connection. Actual operations (query, get, set, etc.) are dispatched
 // via the runner's Attr method.
 func (p *primitiveHandle) CallInternal(thread *starlark.Thread, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	// An empty name means "the caller's bound datastore" (todo 2.9.4) —
+	// pass "" through so the registry can apply module-scoped binding;
+	// only .named("x") carries an explicit name.
 	name := p.namedDS
-	if name == "" {
-		name = "default"
-	}
 
 	conn, err := p.resolver(p.primType, name)
 	if err != nil {
 		return nil, fmt.Errorf("ctx.%s: %w", p.primType, err)
 	}
 
+	if name == "" {
+		name = "default"
+	}
 	return &primitiveRunner{
 		primType: p.primType,
 		name:     name,

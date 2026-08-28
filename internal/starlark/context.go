@@ -8,8 +8,8 @@
 //	ctx.now()
 //	ctx.log.info("event", {"key": "val"})
 //	ctx.next_key("field_name")
-//	ctx.db().query("SELECT ...")         // default datastore
-//	ctx.db().named("analytics-db").query(...)   // named datastore
+//	ctx.db().query("SELECT ...")         // caller's bound datastore (module-scoped)
+//	ctx.db.named("analytics-db").query(...)   // explicit named datastore
 package starlark
 
 import (
@@ -34,11 +34,24 @@ type CtxAPI struct {
 	Secrets   *secretsAPI
 	Job       *jobAPI
 
+	// RequestID is the correlation ID of the originating HTTP request
+	// (todo 8.2.3, spec platform/09-observability.md §2.3). Read-only in
+	// scripts as ctx.request_id — for log/trace correlation, never for
+	// business branching.
+	RequestID string
+
 	// uses is the caller action's declared uses block (todo 2.6.4). When
 	// strictPrimitives is true, accessing a ctx.* primitive not listed in
 	// uses.primitives is rejected with a USES_VIOLATION error.
 	uses             *spec.UsesDecl
 	strictPrimitives bool
+
+	// module is the owning module of the currently-executing script
+	// (todo 2.9.4). ctx.* primitives resolve against this module's bound
+	// datastore (platform/06-datastore.md §1.1) — a script can never reach
+	// another module's datastore, even via .named().
+	module     string
+	dsResolver func(primitiveType, name, module string) (interface{}, error)
 
 	// Primitive handles — callable starlark values with .named() support.
 	// Each is lazily initialized via the getter methods.
@@ -95,17 +108,34 @@ func (c *CtxAPI) checkPrimitive(name string) error {
 	return fmt.Errorf("USES_VIOLATION: ctx.%s used but not declared in uses.primitives — add %q to the action's uses.primitives", name, name)
 }
 
-// SetDatastoreResolver sets the resolver function for named datastore lookups.
-// The resolver receives (primitiveType, name) and returns the underlying connection or error.
-// This is called by the runtime after boot to wire the datastore registry into ctx.*.
-func (c *CtxAPI) SetDatastoreResolver(resolver func(primitiveType, name string) (interface{}, error)) {
-	c.db = newPrimitiveHandle("db", resolver)
-	c.cache = newPrimitiveHandle("cache", resolver)
-	c.lock = newPrimitiveHandle("lock", resolver)
-	c.queue = newPrimitiveHandle("queue", resolver)
-	c.pubsub = newPrimitiveHandle("pubsub", resolver)
-	c.storage = newPrimitiveHandle("storage", resolver)
-	c.kvstore = newPrimitiveHandle("kvstore", resolver)
+// SetModule records the module that owns the currently-executing script
+// (todo 2.9.4). Primitive resolution reads it at call time, so ctx.db()
+// without arguments resolves to the module's bound datastore
+// (platform/06-datastore.md §1.1) even when SetDatastoreResolver ran first.
+func (c *CtxAPI) SetModule(module string) {
+	c.module = module
+}
+
+// SetDatastoreResolver sets the resolver function for datastore lookups.
+// The resolver receives (primitiveType, name, module) and returns the
+// underlying connection or error. `module` is the owning module of the
+// executing script (set via SetModule) — the registry uses it to enforce
+// module-scoped datastore binding (todo 2.9.4). This is called by the
+// runtime after boot to wire the datastore registry into ctx.*.
+func (c *CtxAPI) SetDatastoreResolver(resolver func(primitiveType, name, module string) (interface{}, error)) {
+	c.dsResolver = resolver
+	// Wrap the 3-arg resolver into the handle's 2-arg signature; the module
+	// is read from c at resolution time (handles resolve lazily per call).
+	wrapped := func(primitiveType, name string) (interface{}, error) {
+		return resolver(primitiveType, name, c.module)
+	}
+	c.db = newPrimitiveHandle("db", wrapped)
+	c.cache = newPrimitiveHandle("cache", wrapped)
+	c.lock = newPrimitiveHandle("lock", wrapped)
+	c.queue = newPrimitiveHandle("queue", wrapped)
+	c.pubsub = newPrimitiveHandle("pubsub", wrapped)
+	c.storage = newPrimitiveHandle("storage", wrapped)
+	c.kvstore = newPrimitiveHandle("kvstore", wrapped)
 }
 
 // ─── starlark.Value interface ───
@@ -126,6 +156,10 @@ func (c *CtxAPI) Attr(name string) (starlark.Value, error) {
 		return c.User, nil
 	case "auth":
 		return c.Auth, nil
+	case "request_id":
+		// Correlation ID of the originating request (todo 8.2.3). Empty
+		// string (not None) when outside a request context (REPL, scheduler).
+		return starlark.String(c.RequestID), nil
 	case "now":
 		return c.builtinNow(), nil
 	case "today":

@@ -38,7 +38,11 @@ func Resolve(manifests []manifest.RawManifest, uiReg *ui.Registry) (map[string]*
 	for _, raw := range manifests {
 		switch spec.Kind(raw.Kind) {
 		case spec.KindApp:
-			as, err := manifest.RawSpecToAppSpec(raw.Spec.(map[string]any))
+			appSpecMap, ok := raw.Spec.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("%s: App spec is missing or not a mapping", raw.Source)
+			}
+			as, err := manifest.RawSpecToAppSpec(appSpecMap)
 			if err != nil {
 				return nil, fmt.Errorf("%s: parse App spec: %w", raw.Source, err)
 			}
@@ -49,7 +53,11 @@ func Resolve(manifests []manifest.RawManifest, uiReg *ui.Registry) (map[string]*
 			apps[name] = as
 			appSources[name] = raw.Source
 		case spec.KindModule:
-			ms, err := manifest.RawSpecToModuleSpec(raw.Spec.(map[string]any))
+			moduleSpecMap, ok := raw.Spec.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("%s: Module %q spec is missing or not a mapping", raw.Source, raw.Metadata.Name)
+			}
+			ms, err := manifest.RawSpecToModuleSpec(moduleSpecMap)
 			if err != nil {
 				return nil, fmt.Errorf("%s: parse Module spec: %w", raw.Source, err)
 			}

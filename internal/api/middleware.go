@@ -2,13 +2,13 @@ package api
 
 import (
 	"context"
-	"crypto/rand"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/primadi/formspec/internal/auth"
+	"github.com/primadi/formspec/internal/observability"
 	"github.com/primadi/formspec/pkg/spec"
 )
 
@@ -243,29 +243,63 @@ func isEntityVisibilityPerm(perm string) bool {
 	return action == "list" || action == "view"
 }
 
-// RequestIDMiddleware generates a unique request ID for every request.
+// RequestIDMiddleware issues a unique request ID for every request, or
+// forwards the upstream X-Request-ID when present (todo 8.2.3, spec
+// platform/09-observability.md §2.3: "meneruskan yang datang dari upstream").
 func RequestIDMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		id := generateRequestID()
-		ctx := WithRequestID(r.Context(), id)
+		id := r.Header.Get("X-Request-ID")
+		if id == "" {
+			id = observability.NewRequestID()
+		}
+		ctx := observability.WithRequestID(r.Context(), id)
 		w.Header().Set("X-Request-ID", id)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
 // CORSMiddleware applies permissive CORS headers for development.
+// Production must use NewCORSMiddleware with an explicit allow-list
+// (todo 8.1.5 — `*` is never acceptable in production).
 func CORSMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Request-ID")
+	return NewCORSMiddleware(nil)(next)
+}
 
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusNoContent)
-			return
+// NewCORSMiddleware returns a CORS middleware restricted to the given
+// origin allow-list (todo 8.1.5). Behavior:
+//   - nil/empty list  → permissive `*` (development only)
+//   - list contains "*" → permissive (explicit opt-in)
+//   - otherwise       → echo the Origin header only when it matches an
+//     allow-listed origin; other origins get no CORS headers.
+func NewCORSMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
+	permissive := len(allowedOrigins) == 0
+	allowed := make(map[string]bool, len(allowedOrigins))
+	for _, o := range allowedOrigins {
+		if o == "*" {
+			permissive = true
 		}
-		next.ServeHTTP(w, r)
-	})
+		allowed[strings.TrimSuffix(o, "/")] = true
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			origin := r.Header.Get("Origin")
+			switch {
+			case permissive:
+				w.Header().Set("Access-Control-Allow-Origin", "*")
+			case origin != "" && allowed[strings.TrimSuffix(origin, "/")]:
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Vary", "Origin")
+			}
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Request-ID")
+
+			if r.Method == "OPTIONS" {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // RecoveryMiddleware recovers from panics and returns 500.
@@ -281,20 +315,93 @@ func RecoveryMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// LoggingMiddleware logs every request with method, path, status.
-func LoggingMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := requestIDFromContext(r.Context())
-		fmt.Printf("[api] %s %s [%s]\n", r.Method, r.URL.Path, start)
-		next.ServeHTTP(w, r)
-	})
+// LoggingMiddleware logs every request as a structured JSON line carrying
+// the mandatory observability fields (todo 8.2.1, spec
+// platform/09-observability.md §2.1). Metadata only — never request bodies
+// or business values (§2.2).
+func LoggingMiddleware(log *observability.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
+			rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+			next.ServeHTTP(rec, r)
+			log.Info(observability.Fields{
+				"request_id":  observability.RequestIDFromContext(r.Context()),
+				"workspace":   workspaceFromContext(r.Context()),
+				"module":      nil,
+				"entity":      nil,
+				"action":      nil,
+				"actor":       userFromContext(r.Context()),
+				"duration_ms": time.Since(start).Milliseconds(),
+				"error_code":  nil,
+				"trace_id":    nil,
+				"method":      r.Method,
+				// route_class, not raw path (§3.2 cardinality discipline).
+				"route_class": ClassifyRoute(r.URL.Path),
+				"status":      rec.status,
+			})
+		})
+	}
 }
 
-// generateRequestID creates a short random request ID.
+// statusRecorder captures the response status for logging/metrics.
+type statusRecorder struct {
+	http.ResponseWriter
+	status      int
+	wroteHeader bool
+}
+
+func (r *statusRecorder) WriteHeader(code int) {
+	if !r.wroteHeader {
+		r.status = code
+		r.wroteHeader = true
+	}
+	r.ResponseWriter.WriteHeader(code)
+}
+
+// ClassifyRoute maps a request path to a bounded route_class label
+// (spec §3.2: entity CRUD, action invoke, admin panel, websocket, health —
+// never per-record paths).
+func ClassifyRoute(path string) string {
+	switch {
+	case strings.HasSuffix(path, "/health"):
+		return observability.RouteClassHealth
+	case strings.Contains(path, "/_ui/_ws") || strings.Contains(path, "/ws"):
+		return observability.RouteClassWebsocket
+	case strings.Contains(path, "/_admin") || strings.Contains(path, "/_ui"):
+		return observability.RouteClassAdmin
+	case strings.Contains(path, "/actions/"):
+		return observability.RouteClassAction
+	case strings.Contains(path, "/api/v1/"):
+		return observability.RouteClassEntityCRUD
+	}
+	return observability.RouteClassOther
+}
+
+// MetricsMiddleware instruments requests into the mandatory Prometheus
+// metric set (todo 8.2.4). routeClass is derived via ClassifyRoute —
+// bounded labels only (todo 8.2.5).
+func MetricsMiddleware(m *observability.Metrics) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
+			rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+			next.ServeHTTP(rec, r)
+			m.ObserveRequest(
+				ClassifyRoute(r.URL.Path),
+				r.Method,
+				rec.status,
+				time.Since(start).Seconds(),
+				"",
+			)
+		})
+	}
+}
+
+// generateRequestID is superseded by observability.NewRequestID (todo 8.2.3).
+// Kept as a thin alias for any remaining callers.
 func generateRequestID() string {
-	b := make([]byte, 8)
-	rand.Read(b)
-	return fmt.Sprintf("%x", b)
+	return observability.NewRequestID()
 }
 
 // contextKey and context functions are defined in handler.go.

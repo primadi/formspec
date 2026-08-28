@@ -15,6 +15,7 @@ import (
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
 
+	"github.com/primadi/formspec/internal/observability"
 	"github.com/primadi/formspec/pkg/spec"
 )
 
@@ -260,11 +261,14 @@ type ScriptExecutor struct {
 
 	// DatastoreResolver resolves a ctx primitive ("db", "cache", "lock", ...)
 	// and datastore name ("default" or a named datastore) to a live
-	// connection. It is wired into the CtxAPI before script execution so
-	// ctx.db()/ctx.cache()/... resolve to real backends instead of failing
-	// with "datastore resolver not configured" (todo 2.9.1). A nil resolver
-	// keeps the current behavior (every ctx.* primitive errors).
-	DatastoreResolver func(primitiveType, name string) (interface{}, error)
+	// connection. The third argument is the owning module of the executing
+	// script — the resolver enforces module-scoped datastore binding
+	// (todo 2.9.4, platform/06-datastore.md §1.1). It is wired into the
+	// CtxAPI before script execution so ctx.db()/ctx.cache()/... resolve to
+	// real backends instead of failing with "datastore resolver not
+	// configured" (todo 2.9.1). A nil resolver keeps the current behavior
+	// (every ctx.* primitive errors).
+	DatastoreResolver func(primitiveType, name, module string) (interface{}, error)
 
 	// StrictPrimitives enables strict enforcement of ctx.* primitive access
 	// against the caller action's uses.primitives (todo 2.6.4). Off by
@@ -288,7 +292,7 @@ type ScriptExecutor struct {
 
 // SetDatastoreResolver sets the resolver used to wire ctx.* primitives to
 // live datastore connections. See DatastoreResolver.
-func (e *ScriptExecutor) SetDatastoreResolver(resolver func(primitiveType, name string) (interface{}, error)) {
+func (e *ScriptExecutor) SetDatastoreResolver(resolver func(primitiveType, name, module string) (interface{}, error)) {
 	e.DatastoreResolver = resolver
 }
 
@@ -358,8 +362,14 @@ func (e *ScriptExecutor) Execute(ctx context.Context, scriptPath string, module,
 
 	// Build ctx
 	ctxObj := NewCtxAPI(workspaceID, "", userID, "", nil)
+	// Module-scoped ctx.* primitives (todo 2.9.4): the executing script's
+	// owning module determines which datastore ctx.db() resolves to.
+	ctxObj.SetModule(module)
 	ctxObj.SetUses(uses)
 	ctxObj.SetStrictPrimitives(e.StrictPrimitives)
+	// ctx.request_id (todo 8.2.3): propagate the correlation ID from the
+	// HTTP boundary into the script for log/trace correlation.
+	ctxObj.RequestID = observability.RequestIDFromContext(ctx)
 	if e.DatastoreResolver != nil {
 		ctxObj.SetDatastoreResolver(e.DatastoreResolver)
 	}

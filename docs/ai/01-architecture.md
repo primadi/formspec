@@ -15,7 +15,7 @@
 ┌──────────────────────────────────────────┐
 │ 1. Client (formspec-consult, TS)             │  ← REPL, kelola sesi, tampilkan diff
 ├──────────────────────────────────────────┤
-│ 2. LLM Provider Layer (Vercel AI SDK)     │  ← BYOK, ganti-ganti provider
+│ 2. LLM Provider Layer (openai-go)         │  ← BYOK, ganti-ganti provider
 ├──────────────────────────────────────────┤
 │ 3a. formspec-local-mcp (stdio, Go)           │  ← Grounding: workspace, project ini
 │ 3b. formspec-remote-mcp (HTTP, FormSpec Cloud)  │  ← Grounding: template & registry ekosistem
@@ -31,34 +31,44 @@ berdasarkan **kepemilikan data** — data project (lokal) dan data ekosistem
 Lapisan 4 hidup di server MCP, bukan di client, supaya proteksinya berlaku sama
 untuk client apa pun ([`03-formspec-local-mcp.md`](03-formspec-local-mcp.md) §2).
 
-## 2. Dua Artifact, Dua Bahasa, Satu Protokol
+## 2. Dua Artifact, Satu Bahasa, Satu Protokol
+
+> **Keputusan 2026-08-27**: client konsultasi diimplementasi dalam **Go**
+> sebagai subcommand `formspec consult` — bukan TypeScript + Vercel AI SDK
+> seperti rancangan awal. Alasan: satu binary tanpa toolchain bun/node,
+> MCP Go SDK resmi (`modelcontextprotocol/go-sdk`) menyediakan client + server
+> yang sama matangnya, `zalando/go-keyring` adalah library Go, dan seluruh
+> tim sudah Go. LLM SDK: `openai-go` (resmi) di balik interface internal
+> `llm.Provider` — wire format OpenAI-compatible menutup DeepSeek, GLM, dan
+> gateway lain lewat base URL override. Rencana teknis:
+> `docs/plan/fase10-consult-client.md`.
 
 ```
 formspec                     (Go — CLI utama: dev, apply, generate, module install; tidak berubah)
-  └─ formspec mcp-serve      subcommand baru: expose formspec-local-mcp lewat stdio —
-                          pembungkus tipis atas formspec-core, BUKAN binary terpisah
-
-formspec-consult             (TypeScript + Vercel AI SDK, di-compile jadi binary standalone
-                          via `bun build --compile`)
-  ├─ spawn `formspec mcp-serve` sebagai child process (stdio, satu mesin)
-  ├─ tool-use loop (ToolLoopAgent, Vercel AI SDK)
-  └─ panggil LLM API langsung lewat provider adapter (BYOK)
+  ├─ formspec mcp-serve      subcommand: expose formspec-local-mcp lewat stdio —
+  │                       pembungkus tipis atas formspec-core, BUKAN binary terpisah
+  └─ formspec consult        subcommand: client konsultasi (REPL, tool-use loop, sesi, diff)
+                          ├─ spawn `formspec mcp-serve` sebagai child process (stdio, satu mesin)
+                          ├─ tool-use loop (ditulis sendiri di internal/consult — satu wire format)
+                          └─ panggil LLM API langsung lewat llm.Provider (openai-go, BYOK)
 ```
 
-**Kenapa dua bahasa.** Tooling multi-provider LLM + MCP jauh lebih matang di
-ekosistem TypeScript (Vercel AI SDK: tool-use loop first-class, adapter 25+
-provider, MCP client bawaan — [`05-llm-provider-layer.md`](05-llm-provider-layer.md))
-dibanding Go hari ini. `formspec-consult` adalah satu-satunya bagian berbahasa
-TypeScript; kontributor yang bekerja di `formspec-core`/`formspec-server`/module
-system tidak pernah perlu menyentuhnya. Keduanya terhubung lewat MCP stdio yang
-bahasa-agnostik by design — bukan monolith satu bahasa, tapi juga bukan
-pencampuran kode dalam satu binary.
+**Kenapa satu bahasa.** Alasan awal memilih TypeScript adalah kematangan
+tooling multi-provider (Vercel AI SDK). Kini MCP Go SDK resmi menutup sisi
+client, dan target provider konsultan (DeepSeek, GLM via gateway
+OpenAI-compatible) semuanya memakai satu wire format — sehingga loop tool-use
+(~100 baris) dan satu adapter resmi cukup. Satu binary, satu bahasa, tanpa
+build pipeline kedua mengalahkan fleksibilitas 25+ adapter yang tidak
+terpakai. Capability bar (05 §2) berarti hanya provider tervalidasi yang
+diperbolehkan — bukan semua provider di dunia.
 
 **Kenapa `formspec mcp-serve` bukan binary terpisah.** Ia cuma pembungkus tipis
 atas `formspec-core` — sama-sama Go, tidak butuh build/release pipeline sendiri.
-Client MCP eksternal (VS Code/Claude Code/Cursor) dan `formspec-consult` (built-in)
+Client MCP eksternal (VS Code/Claude Code/Cursor) dan `formspec consult` (built-in)
 menjalankan command yang identik sebagai child process via stdio — **satu
-implementasi server, dua cara pakai**.
+implementasi server, dua cara pakai**. Boundary MCP tetap dipertahankan oleh
+client built-in: validation gate dan guard `vendors/` hidup di server, jadi
+proteksinya identik untuk client mana pun.
 
 **Kenapa client mandiri, bukan menumpang client cloud.** Spec bisnis ada di
 folder lokal (`modules/`, `vendors/`, `formspec.lock`) dan `formspec-local-mcp` perlu
@@ -174,10 +184,10 @@ atau riwayat jadi tidak valid untuk dikirim ulang.
 
 ## 7. Referensi
 
-| Dokumen | Isi |
-|---|---|
-| [`02-formspec-consult.md`](02-formspec-consult.md) | Client: alur konsultasi, sesi, diff/apply |
-| [`03-formspec-local-mcp.md`](03-formspec-local-mcp.md) | Tool lokal + validation gate (lapisan 3a & 4) |
-| [`04-formspec-remote-mcp.md`](04-formspec-remote-mcp.md) | Tool ekosistem (lapisan 3b) |
-| [`05-llm-provider-layer.md`](05-llm-provider-layer.md) | Lapisan 2 — Vercel AI SDK, BYOK |
+| Dokumen                                                                          | Isi                                                                    |
+| -------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| [`02-formspec-consult.md`](02-formspec-consult.md)                               | Client: alur konsultasi, sesi, diff/apply                              |
+| [`03-formspec-local-mcp.md`](03-formspec-local-mcp.md)                           | Tool lokal + validation gate (lapisan 3a & 4)                          |
+| [`04-formspec-remote-mcp.md`](04-formspec-remote-mcp.md)                         | Tool ekosistem (lapisan 3b)                                            |
+| [`05-llm-provider-layer.md`](05-llm-provider-layer.md)                           | Lapisan 2 — openai-go, BYOK                                            |
 | [`../spec/platform/08-project-layout.md`](../spec/platform/08-project-layout.md) | `modules/`/`vendors/`/`formspec.lock` yang dibaca `formspec-local-mcp` |

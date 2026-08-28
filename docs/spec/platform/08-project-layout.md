@@ -313,9 +313,12 @@ kode.
 
 ## 6. Module Lokal vs Vendor, Aktivasi, dan Shadow Copy
 
-> Status: arah desain yang disepakati tim, belum diimplementasikan — lihat
-> gap di §6.5. Detail diskusi ada di catatan kerja
-> [`docs/technical-notes/FormSpec-Technical-Note-Module-Vendoring-Aktivasi.md`](../../technical-notes/FormSpec-Technical-Note-Module-Vendoring-Aktivasi.md).
+> Status: **§6.1–§6.3 terimplementasikan** (todo 13.1, 2026-08-28 —
+> `internal/vendor/`, `formspec module install|list|uninstall`, `formspec
+> verify`, marker aktivasi, `formspec.lock`, alias Opsi B, boot-time
+> enforcement). §6.4 shadow copy menyusul (todo 13.2). Detail keputusan
+> [`docs/technical-notes/FormSpec-Technical-Note-Module-Vendoring-Aktivasi.md`](../../technical-notes/FormSpec-Technical-Note-Module-Vendoring-Aktivasi.md);
+> status implementasi: [`../../plan/todo.md`](../../plan/todo.md) Fase 13.
 
 ### 6.1 Struktur Folder
 
@@ -448,26 +451,39 @@ karena developer memang sudah sengaja ambil alih penuh file itu):
   → formspec override diff stripe-connector Form checkout-form
 ```
 
-### 6.5 Status Implementasi Hari Ini (Gap)
+### 6.5 Status Implementasi (update 2026-08-28)
 
-Seluruh §6 adalah **target desain, belum diimplementasikan** — `vendors/`,
-`overrides/`, `formspec.lock`, marker aktivasi, dan `formspec override
-adopt|diff` tidak ada di `formspec dev`/CLI hari ini
-([`../../cli-tools/02-formspec-cli.md`](../../cli-tools/02-formspec-cli.md) §9
-baru mencakup `formspec module list|install|uninstall` dasar). Pertanyaan
-terbuka yang masih perlu didalami sebelum implementasi (lihat catatan
-kerja untuk detail):
+**§6.1–§6.3 terimplementasikan** (todo 13.1):
 
-- `vendors/` di-commit ke git, atau di-gitignore dan direstore murni dari
-  `formspec.lock` (pola `node_modules`/vendor PHP)?
-- Mekanisme `formspec verify` (cek checksum tree `vendors/` vs `formspec.lock`,
-  tolak build kalau ada modifikasi manual) belum dispesifikasikan detail
-  teknisnya.
-- Format persis entri `formspec.lock` per module (§6.2) belum dituliskan
-  skema lengkapnya.
-- Bagaimana `formspec module install` menangani bundle (satu source, banyak
-  module) secara teknis — manifest bundle terpisah, atau `ModulePublish`
-  boleh mendeklarasikan banyak module sekaligus?
+- `formspec.lock` — entri per module: `source`, `name`, `alias`, `version`,
+  `checksum` (sha256 tree), `signature`, `trust_tier`, `installed_at`
+  (`internal/vendor/lock.go`).
+- `formspec module install <source>` — git URL / folder lokal / `.tar.gz`
+  (offline-first; registry 13.3 menyusul). Fetch → stage → validate
+  (`module.yaml` via loader engine) → copy ke `vendors/{effective}/` →
+  normalisasi `metadata.name` ke nama efektif → checksum → lock → marker
+  di App manifest. Flag `--use` mengaktifkan langsung; tanpa flag, entri
+  ter-comment (nonaktif).
+- Alias Opsi B — dihitung saat install terhadap semua module yang pernah
+  ter-install + module lokal; derivasi `{org}-{name}` dari source;
+  `module.yaml` vendor dinormalisasi ke nama efektif sehingga boot
+  mendaftar entity di bawah nama tersebut.
+- Marker aktivasi — blok `# >>> formspec:vendor <source> @<version>` di
+  dalam list `modules:` App manifest; entri ter-comment = nonaktif.
+  Re-install mempertahankan status aktif (D-g) kecuali `--use` eksplisit.
+- Boot-time enforcement — hanya module vendor AKTIF yang di-register
+  (`AddManifestRoot(vendors/{name})` di entity registry DAN loader
+  resolusi App/Module); module nonaktif diam di disk.
+- `formspec verify` — recompute checksum tree vs lock; modifikasi manual
+  `vendors/` terdeteksi (exit 1).
+
+**Masih terbuka / menyusul:**
+
+- §6.4 shadow copy (`overrides/`) + `formspec override adopt|diff` — todo 13.2.
+- Signature/trust-tier verification (ed25519) — todo 13.3.6 (butuh registry).
+- Bundle (satu source, banyak module) — todo 13.3.
+- `vendors/` commit vs gitignore — keputusan developer project; lock +
+  checksum membuat kedua pola aman.
 
 **Catatan 2026-08-19 — `external/` (module user-kustom):** Sebagai langkah
 pertama menuju §6, konsep **`external/`** diperkenalkan dan diimplementasikan

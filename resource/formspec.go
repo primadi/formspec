@@ -47,6 +47,7 @@ import (
 	"github.com/primadi/formspec/internal/integrator"
 	"github.com/primadi/formspec/internal/job"
 	"github.com/primadi/formspec/internal/manifest"
+	"github.com/primadi/formspec/internal/observability"
 	"github.com/primadi/formspec/internal/period"
 	"github.com/primadi/formspec/internal/permission"
 	"github.com/primadi/formspec/internal/service"
@@ -54,6 +55,7 @@ import (
 	"github.com/primadi/formspec/internal/subscription"
 	"github.com/primadi/formspec/internal/ui"
 	"github.com/primadi/formspec/internal/validation"
+	"github.com/primadi/formspec/internal/vendor"
 	"github.com/primadi/formspec/internal/webhook"
 	"github.com/primadi/formspec/internal/workflow"
 	"github.com/primadi/formspec/pkg/spec"
@@ -114,6 +116,42 @@ type Config struct {
 	// built-in formspec.core defaults (todo 6.1 merge strategy). Empty =
 	// no external overrides.
 	ExternalDir string
+
+	// ── Observability (todo 8.2, spec platform/09-observability.md) ──
+
+	// CORSOrigins is the origin allow-list (todo 8.1.5). Empty = permissive
+	// dev CORS (`*`). Production must set explicit origins.
+	CORSOrigins []string
+	// Logger is the structured JSON-lines logger (todo 8.2.1). Nil = legacy
+	// text logging (dev).
+	Logger *observability.Logger
+	// Metrics is the Prometheus metric set (todo 8.2.4). When non-nil,
+	// requests are instrumented; expose via the admin listener.
+	Metrics *observability.Metrics
+	// Health is the machine-readable health registry (todo 8.2.6). When
+	// non-nil, GET /health returns {status, reasons, checked_at} and a
+	// datastore probe is registered automatically.
+	Health *observability.Health
+}
+
+// projectRootOf derives the project root from the spec path: the spec dir
+// conventionally lives at <root>/spec (08-project-layout.md); when the spec
+// path IS the project root (no spec/ subdir), the parent is still the safest
+// guess for formspec.lock/vendors/ discovery — vendor.ActiveModules tolerates
+// a missing lock either way.
+func projectRootOf(specPath string) string {
+	abs, err := filepath.Abs(specPath)
+	if err != nil {
+		return specPath
+	}
+	if filepath.Base(abs) == "spec" {
+		return filepath.Dir(abs)
+	}
+	// spec/ subdir present next to the given path?
+	if fi, err := os.Stat(filepath.Join(abs, "spec")); err == nil && fi.IsDir() {
+		return abs
+	}
+	return filepath.Dir(abs)
 }
 
 func (c *Config) applyDefaults() {
@@ -305,7 +343,6 @@ func New(cfg Config) (*App, error) {
 		return nil, err
 	}
 	api.SetStrictMode(cfg.StrictMode || cfg.ProdMode)
-
 	database, err := db.Open(cfg.DSN)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
@@ -321,6 +358,43 @@ func New(cfg Config) (*App, error) {
 	// they win over built-in formspec.core defaults (todo 6.1 merge strategy).
 	if cfg.ExternalDir != "" {
 		reg.AddManifestRoot(cfg.ExternalDir)
+	}
+	// Vendor modules (todo 13.1.4): register ACTIVE vendor modules from
+	// vendors/ — activation state lives in the App manifest marker blocks,
+	// integrity in formspec.lock. Inactive (commented) markers are skipped.
+	// The vendored module.yaml already declares its effective (aliased)
+	// name — normalized at install time — so entities register under the
+	// name the App manifest references. The same roots are applied to the
+	// App/Module resolution loader below, so `modules:` references to
+	// vendor modules resolve.
+	projectRoot := projectRootOf(cfg.SpecPath)
+	var vendorRoots []string
+	if activeVendors, err := vendor.ActiveModules(projectRoot, cfg.SpecPath); err != nil {
+		return nil, fmt.Errorf("scan vendor modules: %w", err)
+	} else {
+		for _, name := range activeVendors {
+			vendorRoots = append(vendorRoots, filepath.Join(projectRoot, "vendors", name))
+			reg.AddManifestRoot(filepath.Join(projectRoot, "vendors", name))
+		}
+	}
+	// Shadow copies (todo 13.2.2, §6.4): overrides/ wins over modules/ and
+	// vendors/ (later roots win in the loader). The §5.4 whitelist is
+	// enforced first — a non-presentation kind under overrides/ refuses
+	// the boot.
+	if err := vendor.ValidateOverridesDir(projectRoot); err != nil {
+		return nil, err
+	}
+	if _, err := os.Stat(filepath.Join(projectRoot, "overrides")); err == nil {
+		reg.AddManifestRoot(filepath.Join(projectRoot, "overrides"))
+		vendorRoots = append(vendorRoots, filepath.Join(projectRoot, "overrides"))
+	}
+	// Drift detection (todo 13.2.4, §5.3): warn when an upstream file
+	// changed since its shadow copy was adopted — never a hard failure.
+	if drifts, err := vendor.CheckDrift(projectRoot); err == nil && len(drifts) > 0 {
+		for _, d := range drifts {
+			fmt.Fprintf(os.Stderr, "formspec: ⚠ drift: overrides for %s/%s (module %s): %s\n",
+				strings.ToLower(d.Kind), d.Name, d.Module, d.Detail)
+		}
 	}
 	// Register framework-owned auth entities (formspec.core.user/session)
 	// before loading user manifests, so external/ overrides can replace them.
@@ -395,7 +469,13 @@ func New(cfg Config) (*App, error) {
 	// Resolve kind: App / kind: Module manifests (Core §4.4/§4.5). A
 	// workspace MAY declare more than one App; all of them run
 	// simultaneously in this one process, distinguished by root_url.
-	specManifests, err := manifest.NewLoader(cfg.SpecPath).LoadAll()
+	// Vendor roots are applied here too (todo 13.1.4) so `modules:`
+	// references to active vendor modules resolve.
+	appLoader := manifest.NewLoader(cfg.SpecPath)
+	for _, root := range vendorRoots {
+		appLoader.AddRoot(root)
+	}
+	specManifests, err := appLoader.LoadAll()
 	if err != nil {
 		return nil, fmt.Errorf("load manifests for app resolution: %w", err)
 	}
@@ -454,7 +534,13 @@ func New(cfg Config) (*App, error) {
 	// wired once available (SetHub after rb.Hub()).
 	jobStore := db.NewJobStore(database, driver)
 	jobTracker := job.NewTracker(jobStore, nil, cfg.JWTSecret)
-	disp := newDispatcher(reg, svcReg, database, cfg, cfgReg, jobTracker, sharedPubSub)
+	// Datastore registry (todo 2.9.4): named kind: Datastore manifests +
+	// per-module `spec.datastore` bindings for module-scoped ctx.* resolution.
+	dsReg, err := buildDatastoreRegistry(specManifests.Manifests, database, stateDirFromDSN(cfg.DSN), sharedPubSub)
+	if err != nil {
+		return nil, err
+	}
+	disp := newDispatcher(reg, svcReg, database, cfg, cfgReg, jobTracker, dsReg, sharedPubSub)
 	nativeEx := disp.NativeExecutor() // get the native executor from dispatcher
 	rb.SetDispatcher(disp)
 	rb.SetUIRegistry(uiReg)
@@ -760,6 +846,49 @@ func New(cfg Config) (*App, error) {
 	// specVersionFn must be set before BuildHTTP() so HandleMetaVersion
 	// captures it. The closure reads from the live App's specVersion.
 	rb.SetSpecVersionFn(func() int64 { return app.specVersion.Load() })
+
+	// ── Observability wiring (todo 8.2) ──
+	rb.SetCORSOrigins(cfg.CORSOrigins)
+	rb.SetLogger(cfg.Logger)
+	rb.SetMetrics(cfg.Metrics)
+	rb.SetHealth(cfg.Health)
+	if cfg.Health != nil {
+		// Datastore probe (todo 8.2.6): datastore_unreachable when the DB
+		// does not answer within 2s. Hard failure → unhealthy.
+		cfg.Health.Register(observability.ReasonDatastoreUnreachable, func() (string, bool) {
+			pingCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			if err := database.Ping(pingCtx); err != nil {
+				return observability.ReasonDatastoreUnreachable, true
+			}
+			return "", false
+		})
+		// DB pool probe (todo 8.2.6): db_pool_exhausted when no connection
+		// is idle and all are in use. Degraded (still serving), not hard.
+		if sqlDB := database.Driver(); sqlDB != nil {
+			cfg.Health.Register(observability.ReasonDBPoolExhausted, func() (string, bool) {
+				stats := sqlDB.Stats()
+				if stats.OpenConnections > 0 && stats.Idle == 0 && stats.InUse == stats.OpenConnections {
+					return observability.ReasonDBPoolExhausted, false
+				}
+				return "", false
+			})
+			// Pool gauges (todo 8.2.4: db_pool_open/idle).
+			if cfg.Metrics != nil {
+				go func() {
+					t := time.NewTicker(10 * time.Second)
+					defer t.Stop()
+					for range t.C {
+						s := sqlDB.Stats()
+						cfg.Metrics.DBPoolOpen.Set(float64(s.OpenConnections))
+						cfg.Metrics.DBPoolIdle.Set(float64(s.Idle))
+						cfg.Metrics.DBPoolWaitTotal.Add(float64(s.WaitCount))
+					}
+				}()
+			}
+		}
+	}
+
 	app.handler = rb.BuildHTTP()
 	return app, nil
 }
@@ -982,8 +1111,14 @@ func (a *App) ReloadSpec() error {
 	newWfReg := buildWorkflowRegistry(specManifests.Manifests)
 	// Integrator registry (todo 7.7.1): re-resolve on reload.
 	newItReg := buildIntegratorRegistry(specManifests.Manifests)
+	// Datastore registry (todo 2.9.4): re-resolve on reload so new/changed
+	// kind: Datastore manifests and module bindings take effect.
+	newDsReg, err := buildDatastoreRegistry(specManifests.Manifests, a.database, stateDirFromDSN(a.cfg.DSN), a.pubsub)
+	if err != nil {
+		return err
+	}
 
-	newDisp := newDispatcher(newReg, newSvcReg, a.database, a.cfg, newCfgReg, a.jobTracker, a.pubsub)
+	newDisp := newDispatcher(newReg, newSvcReg, a.database, a.cfg, newCfgReg, a.jobTracker, newDsReg, a.pubsub)
 
 	// Re-register native Go handlers on the new dispatcher.
 	a.mu.RLock()
@@ -1358,18 +1493,17 @@ func buildIntegratorRegistry(manifests []manifest.RawManifest) *integrator.Regis
 	return reg
 }
 
-func newDispatcher(reg *entity.Registry, svcReg *service.Registry, database db.DB, cfg Config, cfgReg *config.Registry, jobTracker *job.Tracker, sharedPubSub ...*memory.PubSub) *action.Dispatcher {
+func newDispatcher(reg *entity.Registry, svcReg *service.Registry, database db.DB, cfg Config, cfgReg *config.Registry, jobTracker *job.Tracker, dsReg *DatastoreRegistry, sharedPubSub ...*memory.PubSub) *action.Dispatcher {
 	disp := action.NewDispatcher()
 
 	scriptEx := action.NewScriptExecutor(cfg.SpecPath)
-	// Wire the ctx.* primitive resolver (todo 2.9.1–2.9.3): the closed set of
-	// 9 primitives auto-provisions its 'default' backend in single-server
-	// mode — db → app's primary database (SQLite dev / Postgres prod),
-	// cache/lock/queue/pubsub/kvstore → in-memory, storage → filesystem,
-	// config → in-memory registry. Named datastores (from the Control Plane
-	// snapshot) are not yet backed by a live connection (todo 2.9.4) and
-	// fail loudly.
-	scriptEx.SetDatastoreResolver(ctxPrimitiveResolver(database, stateDirFromDSN(cfg.DSN), sharedPubSub...))
+	// Wire the ctx.* primitive resolver (todo 2.9.1–2.9.4): the closed set of
+	// 9 primitives resolves through the DatastoreRegistry — 'default' is
+	// auto-provisioned (db → app's primary database, cache/lock/queue/pubsub/
+	// kvstore → in-memory, storage → filesystem), named datastores come from
+	// kind: Datastore manifests, and per-module `spec.datastore` bindings make
+	// ctx.db() module-scoped (platform/06-datastore.md §1.1).
+	scriptEx.SetDatastoreResolver(resolverFromRegistry(dsReg))
 	// Strict ctx.* primitive enforcement (todo 2.6.4): in ProdMode/StrictMode,
 	// a script may only use ctx.* primitives it declared in uses.primitives.
 	scriptEx.SetStrictPrimitives(cfg.StrictMode || cfg.ProdMode)

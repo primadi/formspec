@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"io/fs"
 	"net/http"
 	"net/url"
@@ -13,6 +14,7 @@ import (
 	formspec_app "github.com/primadi/formspec/internal/app"
 	"github.com/primadi/formspec/internal/entity"
 	"github.com/primadi/formspec/internal/job"
+	"github.com/primadi/formspec/internal/observability"
 	"github.com/primadi/formspec/internal/service"
 	"github.com/primadi/formspec/internal/ui"
 	"github.com/primadi/formspec/internal/webhook"
@@ -42,6 +44,12 @@ type RouterBuilder struct {
 	// which is always available; /api/v1 is deny-by-default for external
 	// services (01-core-basic.md §8.2). Opt-in for programmatic clients.
 	enableAPIAuth bool
+
+	// Observability wiring (todo 8.2, spec platform/09-observability.md).
+	corsOrigins []string               // CORS allow-list (todo 8.1.5); empty = permissive dev
+	logger      *observability.Logger  // structured JSON-lines logger (todo 8.2.1)
+	metrics     *observability.Metrics // Prometheus metric set (todo 8.2.4)
+	health      *observability.Health  // machine-readable health registry (todo 8.2.6)
 }
 
 // NewRouterBuilder creates a new router builder backed by the entity registry.
@@ -241,6 +249,38 @@ func (b *RouterBuilder) SetEnableAPIAuth(enabled bool) {
 	b.enableAPIAuth = enabled
 }
 
+// SetCORSOrigins sets the CORS origin allow-list (todo 8.1.5). Empty list
+// keeps the permissive dev behavior (`*`); production must pass explicit
+// origins.
+func (b *RouterBuilder) SetCORSOrigins(origins []string) {
+	b.corsOrigins = origins
+}
+
+// SetLogger wires the structured JSON-lines logger (todo 8.2.1). When nil,
+// the legacy text logging is used (dev convenience).
+func (b *RouterBuilder) SetLogger(l *observability.Logger) {
+	b.logger = l
+}
+
+// SetMetrics wires the Prometheus metric set (todo 8.2.4). When non-nil,
+// requests are instrumented and the admin listener can expose /metrics.
+func (b *RouterBuilder) SetMetrics(m *observability.Metrics) {
+	b.metrics = m
+}
+
+// SetHealth wires the machine-readable health registry (todo 8.2.6).
+// When non-nil, GET /health returns {status, reasons, checked_at} instead
+// of the static dev response.
+func (b *RouterBuilder) SetHealth(h *observability.Health) {
+	b.health = h
+}
+
+// Metrics returns the wired metric set (may be nil).
+func (b *RouterBuilder) Metrics() *observability.Metrics { return b.metrics }
+
+// Health returns the wired health registry (may be nil).
+func (b *RouterBuilder) Health() *observability.Health { return b.health }
+
 // BuildRoutes generates route descriptors and stores them in the builder.
 // Includes both external API (/api/v1/) and UI (/ _ui/entity/) routes,
 // plus custom action routes for both surfaces.
@@ -261,9 +301,16 @@ func (b *RouterBuilder) BuildHTTP() http.Handler {
 
 	// Global middleware stack
 	r.Use(RecoveryMiddleware)
-	r.Use(LoggingMiddleware)
-	r.Use(CORSMiddleware)
+	if b.logger != nil {
+		r.Use(LoggingMiddleware(b.logger))
+	} else {
+		r.Use(legacyLoggingMiddleware)
+	}
+	r.Use(NewCORSMiddleware(b.corsOrigins))
 	r.Use(RequestIDMiddleware)
+	if b.metrics != nil {
+		r.Use(MetricsMiddleware(b.metrics))
+	}
 	r.Use(WorkspaceMiddleware)
 	r.Use(AuthMiddleware)
 
@@ -392,12 +439,43 @@ func (b *RouterBuilder) BuildHTTP() http.Handler {
 		r.Get("/manifest.json", assetHandler)
 	}
 
-	// Health check
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-	})
+	// Health check — machine-readable when a health registry is wired
+	// (todo 8.2.6, spec platform/09-observability.md §5); static dev
+	// response otherwise.
+	if b.health != nil {
+		r.Handle("/health", b.health.Handler())
+	} else {
+		r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+			writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		})
+	}
 
 	return r
+}
+
+// legacyLoggingMiddleware keeps the pre-8.2 text logging for dev mode
+// (no structured logger wired).
+func legacyLoggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := observability.RequestIDFromContext(r.Context())
+		fmt.Printf("[api] %s %s [%s]\n", r.Method, r.URL.Path, id)
+		next.ServeHTTP(w, r)
+	})
+}
+
+// NewAdminMux builds the administrative listener (todo 8.2.4): a separate
+// mux from business traffic serving GET /metrics (Prometheus text
+// exposition) and GET /health (machine-readable vocabulary). It never
+// carries business data.
+func NewAdminMux(m *observability.Metrics, h *observability.Health) http.Handler {
+	mux := http.NewServeMux()
+	if m != nil {
+		mux.Handle("/metrics", m.Handler())
+	}
+	if h != nil {
+		mux.Handle("/health", h.Handler())
+	}
+	return mux
 }
 
 // registerRoute registers a single route descriptor on the chi router.

@@ -73,7 +73,7 @@ module ([`../spec/platform/08-project-layout.md`](../spec/platform/08-project-la
 ## 4. Diff, Apply, Undo
 
 - **`formspec consult diff`** — bandingkan `draft/` vs `modules/`/`vendors/` yang
-  sebenarnya. Karena tidak ada tahap compile (spec FormSpec *adalah*
+  sebenarnya. Karena tidak ada tahap compile (spec FormSpec _adalah_
   implementasinya), diff yang relevan adalah **spec-ke-spec**: unified diff
   biasa atas YAML, tanpa mekanisme diff khusus.
 - **Accept/reject per file** — accept memindahkan file dari `draft/` ke lokasi
@@ -120,9 +120,9 @@ kalau fitur itu nanti dipakai.
 
 ## 7. Referensi
 
-| Dokumen | Isi |
-|---|---|
-| [`01-architecture.md`](01-architecture.md) | Tool-use loop yang dijalankan client ini; kompresi riwayat sesi |
-| [`03-formspec-local-mcp.md`](03-formspec-local-mcp.md) | Tool yang dipanggil client — termasuk `apply_draft`, guard `vendors/` |
-| [`05-llm-provider-layer.md`](05-llm-provider-layer.md) | Cara client memanggil LLM (BYOK, Vercel AI SDK) |
-| [`../cli-tools/05-formspec-consult.md`](../cli-tools/05-formspec-consult.md) | Referensi verb CLI |
+| Dokumen                                                                      | Isi                                                                   |
+| ---------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| [`01-architecture.md`](01-architecture.md)                                   | Tool-use loop yang dijalankan client ini; kompresi riwayat sesi       |
+| [`03-formspec-local-mcp.md`](03-formspec-local-mcp.md)                       | Tool yang dipanggil client — termasuk `apply_draft`, guard `vendors/` |
+| [`05-llm-provider-layer.md`](05-llm-provider-layer.md)                       | Cara client memanggil LLM (BYOK, openai-go)                           |
+| [`../cli-tools/05-formspec-consult.md`](../cli-tools/05-formspec-consult.md) | Referensi verb CLI                                                    |

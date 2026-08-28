@@ -1,0 +1,13 @@
+apiVersion: formspec.dev/v1
+kind: Module
+metadata:
+  name: registry
+  description: "Module Registry — katalog module FormSpec, versi, signature, dan distribusi tarball"
+spec:
+  version: 0.1.0
+  menu:
+    - label: "Registry"
+      icon: "package"
+      children:
+        - { label: "Modules", icon: "package", route: /registry/modules }
+        - { label: "Vendors", icon: "building", route: /registry/vendors }

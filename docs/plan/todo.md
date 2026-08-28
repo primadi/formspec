@@ -1,7 +1,7 @@
 # Master Plan: FormSpec Implementation
 
-**Last Updated**: 2026-08-26  
-**Status**: ✅ Fase 0 complete · ✅ Fase 1 (1.1–1.5) · ✅ Fase 2.1 · ✅ Fase 2.2 · ✅ Fase 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6) · ✅ Fase 2.7 (idempotency prepare flow) · ✅ Fase 2.8 (spec.expose) · ✅ Fase 2.9 (2.9.1–2.9.3: ctx.\* primitives + dev auto-provision) · ✅ Fase 5 (5.1–5.4) · ✅ Spec hot-reload · ✅ Fase 11 (review schema↔docs) · ✅ Audit spec↔schema + tambah TODO item · ✅ `formspec validate` (3.1.1, engine+schema) · ✅ Rename forma→formspec (docs/plan/rename-formspec.md) · 🚧 Fase 12 Domain Infrastruktur (docs/architecture/09-domain-map.md) · ✅ Schema registry online (docs/plan/schema-registry-online.md) · ✅ CLI repl/seed/diff (3.4.1, 3.6.2, 3.6.3) · ✅ **Fase 4 (4.1–4.10) complete** (incl. 4.3.1–4.3.5 entity extension, 4.8.3 restore remap) · ✅ Landing page (5.1.3 + 5.13.5, docs/plan/landing-page.md) · ✅ App renderer archetypes (5.1.1–5.1.3: sidebar-nav/topnav/no-nav + access + persist_backend, docs/plan/landing-page.md) · ✅ **Fase 6.1 (6.1.1–6.1.3: login + token, entity-backed auth, external/ merge, generate-auth)** (docs/plan/auth-login-token.md) · ✅ **6.3.1 + 6.3.2 + 5.12.5 (role + role-assignment Entity, materialisasi grant page → permission)** (docs/changelog/2026-08-20-001) · ✅ **6.2.3 (wire permission check semua handler, surface-aware 404)** (docs/changelog/2026-08-20-002) · ✅ **Fase 6 COMPLETE (6.1–6.9, dogfooding auth module)** (docs/plan/fase6-dogfooding-auth-module.md, changelog 2026-08-20-003 s/d 2026-08-21-014) · 📐 **Widget strategy** (docs/plan/widget-strategy.md — sync 5.10, tambah 5.2.7/5.10a, cross-link 7.17.1) · ✅ **Role grants app-scope sync** (docs/plan/role-grants-app-scope.md, changelog 2026-08-26-003)
+**Last Updated**: 2026-08-27  
+**Status**: ✅ Fase 0 complete · ✅ Fase 1 (1.1–1.5) · ✅ Fase 2.1 · ✅ Fase 2.2 · ✅ Fase 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6) · ✅ Fase 2.7 (idempotency prepare flow) · ✅ Fase 2.8 (spec.expose) · ✅ Fase 2.9 (2.9.1–2.9.3: ctx.\* primitives + dev auto-provision) · ✅ Fase 5 (5.1–5.4) · ✅ Spec hot-reload · ✅ Fase 11 (review schema↔docs) · ✅ Audit spec↔schema + tambah TODO item · ✅ `formspec validate` (3.1.1, engine+schema) · ✅ Rename forma→formspec (docs/plan/rename-formspec.md) · 🚧 Fase 12 Domain Infrastruktur (docs/architecture/09-domain-map.md) · ✅ Schema registry online (docs/plan/schema-registry-online.md) · ✅ CLI repl/seed/diff (3.4.1, 3.6.2, 3.6.3) · ✅ **Fase 4 (4.1–4.10) complete** (incl. 4.3.1–4.3.5 entity extension, 4.8.3 restore remap) · ✅ Landing page (5.1.3 + 5.13.5, docs/plan/landing-page.md) · ✅ App renderer archetypes (5.1.1–5.1.3: sidebar-nav/topnav/no-nav + access + persist_backend, docs/plan/landing-page.md) · ✅ **Fase 6.1 (6.1.1–6.1.3: login + token, entity-backed auth, external/ merge, generate-auth)** (docs/plan/auth-login-token.md) · ✅ **6.3.1 + 6.3.2 + 5.12.5 (role + role-assignment Entity, materialisasi grant page → permission)** (docs/changelog/2026-08-20-001) · ✅ **6.2.3 (wire permission check semua handler, surface-aware 404)** (docs/changelog/2026-08-20-002) · ✅ **Fase 6 COMPLETE (6.1–6.9, dogfooding auth module)** (docs/plan/fase6-dogfooding-auth-module.md, changelog 2026-08-20-003 s/d 2026-08-21-014) · 📐 **Widget strategy** (docs/plan/widget-strategy.md — sync 5.10, tambah 5.2.7/5.10a, cross-link 7.17.1) · ✅ **Role grants app-scope sync** (docs/plan/role-grants-app-scope.md, changelog 2026-08-26-003) · ✅ **Fase 5 COMPLETE (5.1–5.16)** (docs/plan/fase5-completion.md, changelog 2026-08-24-027 s/d -032; audit sinkronisasi todo 2026-08-27) · ✅ **Fase 7 hampir lengkap** (7.1–7.14, 7.16, 7.17.1–7.17.2 — changelog 2026-08-25-001 s/d 2026-08-26-001; sisa: 7.9.1–7.9.5, 7.15.1, 7.17.3, 7.18, 7.19) · ✅ **Fase 2 COMPLETE (2.9.4 ctx.db module-scoped)** (changelog 2026-08-27-002) · ✅ **3.1.1a honesty scan Starlark** (changelog 2026-08-27-003) · 🚧 **Fase 8 sebagian** (8.1.1–8.1.5, 8.2.1–8.2.6 — docs/plan/fase8-production-serve.md, changelog 2026-08-27-004; sisa: 8.1.6, 8.2.7, 8.3 ⏸️) · ✅ **Fase 10.1 `formspec mcp-serve`** (local MCP tool server — docs/plan/fase10-local-mcp.md, changelog 2026-08-27-005) · ✅ **Fase 10.2 `formspec consult` client (Go)** — docs/plan/fase10-consult-client.md, changelog 2026-08-27-006 (deviasi TS→Go dicatat di docs/ai/01+05; 10.2.7 kompresi riwayat deferred) · ✅ **Fase 10.3/10.4/10.6/10.7 consult completion** — changelog 2026-08-27-007 (10.3.3 & 10.5 deferred; 10.2.7 deferred) · ✅ **Fase 13.1 vendoring** (module install/list/uninstall + verify + boot enforcement — docs/plan/fase13-vendoring.md, changelog 2026-08-28-001; 13.2/13.3 menyusul) · ✅ **Fase 13.2 overrides** (shadow copy adopt/diff/list + whitelist + drift detection — changelog 2026-08-28-002; 13.3 registry menyusul) · ✅ **Fase 13.3 registry loop** (verticals/registry spec + formspec sign/publish + install --from dengan signature verification — changelog 2026-08-28-003; 13.3.3/13.3.5 deferred)
 
 > `⬜` not started · `✅` complete · `⏸️` deferred
 
@@ -179,7 +179,7 @@ ui-exposed), §9.3 "Akses dari script" (`resource.fetch`, `ctx.config().get`,
 
 **Goal**: Atomic operations, correct PK, complete filters, lifecycle enforcement — agar `formspec dev` bisa diandalkan untuk testing.
 
-**Progress**: 2.1 ✅ · 2.2 ✅ · 2.3 ✅ · 2.4 ✅ · 2.5 ✅ · 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6 ✅; 2.6.4 ⬜ sebagian — cross-module resource access enforced, ctx.\*/secrets masih blocked on 2.9.1) · 2.7 ✅ · 2.8 ✅ · 2.9 (2.9.1–2.9.3 ✅; 2.9.4 ⬜)
+**Progress**: 2.1 ✅ · 2.2 ✅ · 2.3 ✅ · 2.4 ✅ · 2.5 ✅ · 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6 ✅; 2.6.4 ⬜ sebagian — cross-module resource access enforced, ctx.\*/secrets masih blocked on 2.9.1) · 2.7 ✅ · 2.8 ✅ · **2.9 ✅ COMPLETE (2.9.1–2.9.4)** · 2.10 ✅
 
 ### 2.1 Database integrity ✅
 
@@ -256,7 +256,16 @@ ui-exposed), §9.3 "Akses dari script" (`resource.fetch`, `ctx.config().get`,
 - [x] 2.9.1 Wire `CtxAPI.SetDatastoreResolver` + implementasi `datastore.Open()` nyata — `ctx.db().query()` kini jalan terhadap database utama app (SQLite dev / Postgres prod) via `datastore.DBQuerier`; resolver di-wire dari `newDispatcher` (`resource/formspec.go`) → `action.ScriptExecutor.SetDatastoreResolver` → `starlark.ScriptExecutor` → `CtxAPI`; Go context di-thread lewat `starlark.Thread.SetLocal`; `primitiveRunner` operasi (`query/get/set/delete/acquire/release`) memakai capability interfaces (`Querier`/`KVGetter`/`KVSetter`/`KVDeleter`/`Locker`). Primitif lain + named datastore masih error jelas ("no live datastore ... only db/default is wired") — menunggu 2.9.2–2.9.4. Lihat `docs/plan/ctx-datastore-resolver.md`. (`runtimes/02-formspec-resource.md` §7, `runtimes/04-formspec-sidecar.md` §8)
 - [x] 2.9.2 Closed set 9 primitive — `db`, `cache`, `lock`, `queue`, `pubsub`, `storage`, `config`, `kvstore`, `log` (`platform/06-datastore.md` §2), termasuk binding `.named()`. Primitif yang di-routing lewat resolver (`db`/`cache`/`lock`/`queue`/`pubsub`/`storage`/`kvstore`) kini resolve ke backend nyata; `config`/`log` adalah builtin terpisah (`ctx.config`/`ctx.log`). Operasi baru di `primitiveRunner`: `enqueue`/`dequeue`, `publish`/`subscribe`, `upload`/`download`. Lihat `docs/plan/ctx-primitives-closed-set.md`.
 - [x] 2.9.3 Dev auto-provision `'default'` per primitive — db→SQLite (database utama app), cache/lock/queue/pubsub/kvstore→in-memory, storage→filesystem (`platform/06-datastore.md` §5); named datastore selain `'default'` → error jelas (menunggu 2.9.4). Resolver dibangun `ctxPrimitiveResolver` di `resource/ctxresolver.go`, dipakai `newDispatcher` (dan `formspec.New` → dev.go).
-- [ ] 2.9.4 `ctx.db()` module-scoped (normatif) — resolve ke Datastore milik Module; interaksi lintas-Module-lintas-Datastore WAJIB async, tanpa escape hatch `ctx.db` sekalipun dengan `uses` (`01-core-basic.md` §3/§5)
+- [x] 2.9.4 `ctx.db()` module-scoped (normatif) — resolve ke Datastore milik Module; interaksi lintas-Module-lintas-Datastore WAJIB async, tanpa escape hatch `ctx.db` sekalipun dengan `uses` (`01-core-basic.md` §3/§5) — `resource/datastoreregistry.go`: `DatastoreRegistry` load `kind: Datastore` manifests + binding `ModuleSpec.Datastore`; resolver 3-arg `(primitiveType, name, module)` di-thread dari `ScriptExecutor.Execute` → `CtxAPI.SetModule` → handle closure; plain call → datastore milik module (fallback 'default' bila tak serve primitive); `.named(x)` hanya sah untuk binding module sendiri (error §1.1 selain itu — termasuk `.named("default")` dari module terikat); driver single-server: sqlite/postgres/memory/fs, cloud driver error jelas; validasi boot + `formspec check` (`checkDatastores`: ref binding + driver×serves §2). Test: unit `datastoreregistry_test.go` (6) + e2e `ctx_db_module_scoped_e2e_test.go` (isolasi 2 module × 2 datastore + blokir escape hatch). Catatan API: rantai yang benar adalah `ctx.db.named("x").query(...)` — `.named()` resolve langsung ke runner. ✅ 2026-08-27 (changelog 002)
+
+### 2.10 Spec hot-reload ✅
+
+- [x] 2.10.1 `App.ReloadSpec()` — rebuild semua registri dari spec directory, atomic swap
+- [x] 2.10.2 `watchSpecForChanges()` — fsnotify watcher di `formspec dev`, debounce 300ms
+- [x] 2.10.3 Native Go handlers preserved across reload via `nativeHandlers` map
+- [x] 2.10.4 WebSocket connections preserved via WSHub transfer
+- [x] 2.10.5 Auto-watch subdirektori baru
+- [x] 2.10.6 ETag-aware Meta API — reload otomatis mengubah ETag, frontend fetch bundle baru
 
 ---
 
@@ -268,7 +277,7 @@ ui-exposed), §9.3 "Akses dari script" (`resource.fetch`, `ctx.config().get`,
 ### 3.1 High-priority (no backend dependency)
 
 - [x] 3.1.1 `formspec validate --spec <path>` — dry-run validation dua lapis: engine loader (`internal/manifest`; parse + Entity deep-validation) + JSON Schema per kind (`schemas/kinds/*` via `santhosh-tekuri/jsonschema`, lihat `cmd/formspec/validate.go`). Exit 1 bila ada gagal. 2026-07-31. Catatan: lapis schema lebih ketat dari engine untuk shorthand `guard`/`render` (Go `UnmarshalYAML` scalar+map tak bisa diekspresikan generator schema) — gunakan bentuk objek. Sisa: honesty scan Starlark → 3.1.1a.
-- [ ] 3.1.1a `formspec validate` honesty scan Starlark (undeclared usage → error, declared-but-unused → warning, `ctx.environment` branching → warning) + flag `--fix`. ⏸️ Ditunda dari 3.1.1 karena butuh `internal/starlark` analyzer penuh.
+- [x] 3.1.1a `formspec validate` honesty scan Starlark (undeclared usage → error, declared-but-unused → warning, `ctx.environment` branching → warning) + flag `--fix` — `cmd/formspec/honesty.go`: parser AST `go.starlark.net/syntax` (walker manual — versi starlark-go ini tidak punya visitor generik; `DotExpr.Name` = `*Ident`, `AssignStmt` mencakup augmented, `syntax.Parse(path, src, 0)`); ekstraksi `ctx.<primitive>` (closed set resolver-routed), `resource.call/fetch/create` first-arg literal, `ctx.secrets.get("key")`, `ctx.environment`; pembandingan vs `uses` per action/hook (Entity + Service). Semantik: hanya target cross-module (ber-dot/slash) yang wajib deklarasi — bare name = same-module implicit (match runtime enforcement); wildcard `{m}.*`/`*` dihormati; `*` unused hanya bila tidak ada usage sama sekali. `--fix` HANYA menghapus declared-but-unused (prune list kosong + blok `uses` kosong) — penambahan deklarasi = perluasan consent tetap manual (preseden 3.1.2). Validasi nyata: Clinic → 0 false positive, 4 warning genuine (deklarasi mati `medicine.find`/`medicine.update` di pharmacy). Test: `honesty_test.go` (6). ✅ 2026-08-27 (changelog 003)
 - [x] 3.1.2 `formspec check [--fix] -f <path>` — cross-file analysis: Form field ref ke field tak ada (error), FormSpecExpr ref ke field tak ada (error), `uses.resources` ref ke `{module}.{entity}` tak ada (error). `--fix`: hapus deklarasi `uses.resources` yang broken (target tak ada — aman, tidak mengubah footprint consent; penambahan deklarasi = perluasan consent → interaktif, di-defer). Lihat `cmd/formspec/check.go` + `docs/plan/formspec-check.md`.
 - [x] 3.1.3 `formspec new <kind>` — scaffold: `new app <name>`, `new entity <name>`, `new module <name>`. Generate boilerplate YAML + directory. `new module` → `spec/modules/{module}/module.yaml`; `new entity` → `spec/modules/{module}/{characteristic}/{entity}/entity.yaml` (fields dasar code/name/description + expose default; characteristic divalidasi closed set; module di-detect dari CWD atau `--module`). Lihat `cmd/formspec/new.go`.
 - [x] 3.1.4 `formspec init` bundel JSON Schema (`schemas/` dari `//go:embed`) + tulis `.vscode/settings.json` (`yaml.schemas` → `schemas/formspec.schema.json` untuk `spec/**/*.yaml|yml`), agar YAML editor punya autocomplete/validasi langsung setelah scaffold — lihat `docs/plan/init-schema-scaffold.md`
@@ -397,6 +406,8 @@ ui-exposed), §9.3 "Akses dari script" (`resource.fetch`, `ctx.config().get`,
 
 ## Fase 5: Frontend — shadcn-shell Completeness
 
+**Progress (2026-08-27 audit)**: COMPLETE — semua item 5.1–5.16 ✅ kecuali yang ditandai ⏸️ (5.6.7 RRULE exception, Report export async job). Rincian implementasi: `docs/plan/fase5-completion.md` + changelog 2026-08-24-027 s/d -032.
+
 **Goal**: Semua UI kind, widget, contract, dan FormSpecExpr sesuai spec. Bisa dites end-to-end.
 
 ### 5.1 App Shell
@@ -442,9 +453,9 @@ ui-exposed), §9.3 "Akses dari script" (`resource.fetch`, `ctx.config().get`,
 
 - [x] 5.5.1 Drag-and-drop — wire `@dnd-kit/core`; drag card antar kolom → PATCH `status_field`
 - [x] 5.5.2 Optimistic update with server-enforced rollback (409 → snapshot restore)
-- [ ] 5.5.3 `drag_guard` FormSpecExpr — pre-check UX, prevent drop that server will reject
+- [x] 5.5.3 `drag_guard` FormSpecExpr — pre-check UX, prevent drop that server will reject — `KanbanRenderer.tsx` eval `drag_guard` sebelum drop (server tetap final). ✅ 2026-08-24 (WS-C, changelog 027)
 - [x] 5.5.4 WIP limits — `max_cards_per_column`, soft UX enforcement (visual + toast)
-- [ ] 5.5.5 Zero-config — derive columns from state machine or `group_by` enum
+- [x] 5.5.5 Zero-config — derive columns from state machine or `group_by` enum — ✅ 2026-08-24 (WS-C, changelog 027)
 - [x] 5.5.6 Click card → detail page navigation
 - [x] 5.5.7 Row actions (view/edit/delete/custom) with confirm + permission check
 - [x] 5.5.8 Filter columns from `filters` manifest — Select dropdown per filter field
@@ -452,20 +463,20 @@ ui-exposed), §9.3 "Akses dari script" (`resource.fetch`, `ctx.config().get`,
 
 ### 5.6 `kind: Calendar`
 
-- [ ] 5.6.1 Month/week/day/resource views — `views: [month, week, day, resource]`
-- [ ] 5.6.2 Event rendering — from `date_field` + optional `end_field`; title from `label_field` or `title_field`
-- [ ] 5.6.3 Click event → detail Page/Form; click empty slot → Form create with date pre-filled
-- [ ] 5.6.4 Drag reschedule — call `update` action on date_field (server-enforced); submitted immutable rows disable drag
-- [ ] 5.6.5 RRULE recurrence — parse RFC 5545, expand to instances for visible date range (render-time, not materialized)
-- [ ] 5.6.6 Resource view — one lane per `resource_field` value; color by `color_field`
+- [x] 5.6.1 Month/week/day/resource views — `views: [month, week, day, resource]` — ✅ 2026-08-24 (WS-D, changelog 028)
+- [x] 5.6.2 Event rendering — from `date_field` + optional `end_field`; title from `label_field` or `title_field` — ✅ 2026-08-24 (changelog 028)
+- [x] 5.6.3 Click event → detail Page/Form; click empty slot → Form create with date pre-filled — ✅ 2026-08-24 (`prefill.{date_field}`, changelog 028)
+- [x] 5.6.4 Drag reschedule — call `update` action on date_field (server-enforced); submitted immutable rows disable drag — ✅ 2026-08-24 (changelog 028)
+- [x] 5.6.5 RRULE recurrence — parse RFC 5545, expand to instances for visible date range (render-time, not materialized) — library `rrule`; ✅ 2026-08-24 (changelog 028)
+- [x] 5.6.6 Resource view — one lane per `resource_field` value; color by `color_field` — ✅ 2026-08-24 (changelog 028)
 - [ ] 5.6.7 RRULE exception per-instance — ubah/batalkan satu occurrence tanpa ubah pattern; butuh model data exception tersendiri (row terpisah + override tanggal asli); ditunda ke iterasi berikutnya (`06-page-kinds.md` §5 "Di luar cakupan v1")
 
 ### 5.7 `kind: Dashboard` + `kind: Widget`
 
 - [x] 5.7.1 Widget `stat` — fetch from summary entity, display number with label — `MetricWidget` di `DashboardRenderer.tsx` (query FormSpecExpr subset → server list filters). ✅ 2026-08-24
 - [x] 5.7.2 Widget `chart` — bar/line/pie from summary entity; add chart library dependency (katalog widget bawaan spec HANYA `stat` + `chart` — `07-component-kinds.md` §2; ListWidget/SummaryWidget tidak ada di spec, usulkan ke spec dulu bila dibutuhkan) — `ChartWidget` + `LineChart` SVG (tanpa dependency chart library; satu series per `group_by`). ✅ 2026-08-24
-- [ ] 5.7.3 Dashboard customizable — `customizable: true`, user add/remove/reorder widgets from catalog; preference stored as runtime preference (not YAML)
-- [ ] 5.7.4 Widget catalog visibility — derived from user's `list`/`view` permission on underlying entity (not manual flag) — **sebagian**: widget terpasang sudah di-filter permission di `DashboardRenderer`; katalog add/remove belum ada
+- [x] 5.7.3 Dashboard customizable — `customizable: true`, user add/remove/reorder widgets from catalog; preference stored as runtime preference (not YAML) — `DashboardRenderer.tsx` + `stores/prefs.ts`. ✅ 2026-08-24 (WS-E, changelog 027)
+- [x] 5.7.4 Widget catalog visibility — derived from user's `list`/`view` permission on underlying entity (not manual flag) — widget terpasang di-filter permission di `DashboardRenderer`; katalog add/remove ikut filter. ✅ 2026-08-24 (WS-E, changelog 027)
 
 ### 5.8 Realtime WebSocket
 
@@ -517,11 +528,11 @@ ui-exposed), §9.3 "Akses dari script" (`resource.fetch`, `ctx.config().get`,
 
 ### 5.11 FormSpecExpr
 
-- [ ] 5.11.1 Audit grammar vs spec — verify lexer→parser→evaluator supports all operators from `08-formspec-expr.md` §2
-- [ ] 5.11.2 Deploy-time static validation — `formspec apply`/`formspec check` rejects unresolvable field references + invalid grammar (ERROR, not warning)
-- [ ] 5.11.3 Runtime error state — nonexistent field reference → visible error state (never silent fail-safe/evaluate to `false`)
+- [x] 5.11.1 Audit grammar vs spec — verify lexer→parser→evaluator supports all operators from `08-formspec-expr.md` §2 — ✅ 2026-08-24 (WS-F, changelog 027)
+- [x] 5.11.2 Deploy-time static validation — `formspec apply`/`formspec check` rejects unresolvable field references + invalid grammar (ERROR, not warning) — `cmd/formspec/check.go` `checkExpr` + `validateExprGrammar`. ✅ 2026-08-24 (WS-F)
+- [x] 5.11.3 Runtime error state — nonexistent field reference → visible error state (never silent fail-safe/evaluate to `false`) — `FormRenderer.tsx` expression error banner. ✅ 2026-08-24 (WS-F)
 - [x] 5.11.4 `title` interpolation — `"Order {order.number}"` pattern in Page/Wizard/Print titles — `PageRenderer` fetch record utk token title + `interpolate()`; Print/Wizard sudah pakai pola sama. ✅ 2026-08-24
-- [ ] 5.11.5 Cross-shell conformance test suite — identical interpretation across shells
+- [x] 5.11.5 Cross-shell conformance test suite — identical interpretation across shells — ✅ 2026-08-24 (WS-F, changelog 027)
 
 ### 5.12 Spec Resolution API
 
@@ -533,11 +544,11 @@ ui-exposed), §9.3 "Akses dari script" (`resource.fetch`, `ctx.config().get`,
 
 ### 5.13 Other UI kinds
 
-- [ ] 5.13.1 `kind: Report` — **sebagian**: ✅ totals row bug fixed (nilai kini dirender di kolom yang cocok via `TotalsRow`, bukan `<td>` kosong) + ✅ grouping + subtotal per group (`computeTotals` shared); ⏸️ export sebagai async job → download tray belum (butuh backend job infra; saat ini masih CSV Blob client-side) (`06-page-kinds.md` §8)
-- [ ] 5.13.1a Report `source.filter` — filter parameterized deklaratif (`source: { entity, filter }` dengan `":param"` placeholder); saat ini parameter dikirim sebagai filter query `?<field>=<value>` (`06-page-kinds.md` §8 "Open — source.filter")
-- [ ] 5.13.2 `kind: Print` — PDF server-side generation; `format: html` via `window.print()` (existing)
-- [ ] 5.13.3 `kind: ApprovalInbox` — pending approvals list, `approve`/`reject` inline actions, badge count, `realtime: true`
-- [ ] 5.13.4 `kind: NotificationCenter` — notification list, badge unread, `mark-read` action, `realtime: true`, deep-link on click
+- [x] 5.13.1 `kind: Report` — totals row + grouping/subtotal per group (`computeTotals` shared); ⏸️ export sebagai async job → download tray belum (butuh backend job infra; saat ini masih CSV Blob client-side) (`06-page-kinds.md` §8) — ✅ 2026-08-24 (WS-G, changelog 030)
+- [x] 5.13.1a Report `source.filter` — filter parameterized deklaratif (`source: { entity, filter }` dengan `":param"` placeholder) di-resolve dari `parameters[]`; literal pass-through. ✅ 2026-08-24 (WS-G, changelog 030)
+- [x] 5.13.2 `kind: Print` — PDF server-side generation via `go-pdf/fpdf` (`GET /_ui/print/{module}/{name}/{id}`); `format: html` via `window.print()` (existing). ✅ 2026-08-24 (WS-H, changelog 031)
+- [x] 5.13.3 `kind: ApprovalInbox` — pending approvals list, `approve`/`reject` inline actions, badge count, `realtime: true`. ✅ 2026-08-24 (WS-I, changelog 029)
+- [x] 5.13.4 `kind: NotificationCenter` — notification list, badge unread, `mark-read` action, `realtime: true`, deep-link on click. ✅ 2026-08-24 (WS-I, changelog 029)
 - [x] 5.13.5 `kind: Listing` — public catalog, no auth wrap, no row/bulk actions — `ListingRenderer` read-only (search + filter, tanpa create/row/bulk; klik baris → detail) + kind `Listing` end-to-end (spec, registry, bundle, route). Contoh `examples/storefront/`. Lihat `docs/plan/landing-page.md` + changelog 2026-08-19-001. ✅ 2026-08-19
 
 ### 5.14 Derivation engine
@@ -554,9 +565,9 @@ ui-exposed), §9.3 "Akses dari script" (`resource.fetch`, `ctx.config().get`,
 
 ### 5.16 VisualSpecKind/Renderer registry & resolution
 
-- [ ] 5.16.1 Renderer resolution engine — pilih Renderer via `(implements, stack_family)`; hanya `official` auto-select; tanpa official → `formspec apply` error + sarankan kandidat `verified`/`community`; override via map `renderers:` di App manifest + field `renderer:` per-instance; Renderer non-official masuk consent footprint (`03-renderer-kind.md` §3)
-- [ ] 5.16.2 Slot-tier validation at apply — `accepts_slots` hanya sah dari `tier: page|app`, `implements_slot` hanya dari `tier: component`; kombinasi lain ditolak (`02-visual-spec-kind.md` §4–§5)
-- [ ] 5.16.3 `stack_family` compatibility check — App shell + Page shell-integrated + Component wajib satu family; mismatch = compile-time error; Page independen tidak dicek (`01-visual-hierarchy.md` §3)
+- [x] 5.16.1 Renderer resolution engine — pilih Renderer via `(implements, stack_family)`; hanya `official` auto-select; tanpa official → error + sarankan kandidat `verified`/`community` (tidak pernah silent fallback); override via map `renderers:` di App manifest + field `renderer:` per-instance — `internal/manifest/renderer.go` `ResolveRenderer`. ✅ 2026-08-24 (WS-J, changelog 032)
+- [x] 5.16.2 Slot-tier validation at apply — `accepts_slots` hanya sah dari `tier: page|app`, `implements_slot` hanya dari `tier: component`; kombinasi lain ditolak (`02-visual-spec-kind.md` §4–§5) — `ValidateSlotTiers`. ✅ 2026-08-24 (changelog 032)
+- [x] 5.16.3 `stack_family` compatibility check — App shell + Page shell-integrated + Component wajib satu family; mismatch = compile-time error; Page independen tidak dicek (`01-visual-hierarchy.md` §3) — `ValidateStackFamily`; wired ke `formspec check` (`checkRenderers`). ✅ 2026-08-24 (changelog 032)
 
 ---
 
@@ -642,171 +653,174 @@ mergeable ke project lain via `external/`/`spec/modules/`; middleware tetap Go.
 
 ## Fase 7: Engine Extended — Missing Kind Runtimes
 
-**Goal**: Service, Config, Subscription, Workflow, Webhook, Integrator, Hook engine, Validation L4–L6, State machine, Denormalisasi, Period closing, Rate limiter, Async job.
+**Goal**: Service, Config, Subscription, Workflow, Webhook, Integrator, Hook engine, Validation L4–L6, State machine, Denormalisasi, Period closing, Rate limiter, Async job.  
+**Progress (2026-08-27 audit)**: 7.1 ✅ · 7.2 ✅ · 7.3 ✅ · 7.4 ✅ · 7.5 ✅ · 7.6 ✅ · 7.7 ✅ · 7.8 ✅ · 7.9 (hanya 7.9.6; L4–L6 ⏸️ butuh keputusan desain kontrak deklarasi) · 7.10 ✅ · 7.11 ✅ · 7.12 ✅ · 7.13 ✅ · 7.14 ✅ · 7.15 sebagian (spawn+protocol ✅, `spec.runtime` ⬜) · 7.16 ✅ · 7.17 (7.17.1–7.17.2 ✅, transform ⬜) · 7.18 ⬜ · 7.19 ⬜
 
 ### 7.1 `kind: Service` runtime
 
-- [ ] 7.1.1 Service registry — register by `{module}.{name}`
-- [ ] 7.1.2 Resolve `impl.native` — scan `impl/**/*.go`, `ref: "{Type}.{Method}"`, must be unique in module
-- [ ] 7.1.3 Resolve `impl.script` / `impl.script_ref` / `impl.compiled` / `impl.sidecar` — permission enforcement seragam untuk KELIMA jenis impl (`01-core-basic.md` §5)
-- [ ] 7.1.4 `call: async` — fire-and-forget (no job_id, no progress, no result)
+- [x] 7.1.1 Service registry — register by `{module}.{name}` — ✅ 2026-08-25 (changelog 005)
+- [x] 7.1.2 Resolve `impl.native` — scan `impl/**/*.go`, `ref: "{Type}.{Method}"`, must be unique in module — ✅ 2026-08-25 (changelog 005)
+- [x] 7.1.3 Resolve `impl.script` / `impl.script_ref` / `impl.compiled` / `impl.sidecar` — permission enforcement seragam untuk KELIMA jenis impl (`01-core-basic.md` §5) — ✅ 2026-08-25 (changelog 005)
+- [x] 7.1.4 `call: async` — fire-and-forget (no job_id, no progress, no result) — goroutine + 202 tanpa job_id, distinct dari tracked async (7.13). ✅ 2026-08-25 (changelog 021)
 
 ### 7.2 `kind: Config` runtime
 
-- [ ] 7.2.1 Config registry — load Config manifests, resolve per environment
-- [ ] 7.2.2 `ctx.config.get("key")` — Starlark access; non-secret keys only
-- [ ] 7.2.3 `settings.*` namespace — global settings: currency, locale, timezone, date_format, fiscal_year_start
-- [ ] 7.2.4 Global settings defaults — spec MUST provide acceptable defaults for every setting; components MUST NOT guess
+- [x] 7.2.1 Config registry — load Config manifests, resolve per environment — ✅ 2026-08-25 (changelog 003)
+- [x] 7.2.2 `ctx.config.get("key")` — Starlark access; non-secret keys only — ✅ 2026-08-25 (changelog 003)
+- [x] 7.2.3 `settings.*` namespace — global settings: currency, locale, timezone, date_format, fiscal_year_start — runtime-editable via entity `app-setting`; merge ke `/meta/ui` bundle. ✅ 2026-08-24 (changelog 008/010) + 2026-08-25 (changelog 003)
+- [x] 7.2.4 Global settings defaults — spec MUST provide acceptable defaults for every setting; components MUST NOT guess — seed default dari manifest saat find-or-create. ✅ 2026-08-24 (changelog 008/012)
 
 ### 7.3 `kind: Subscription` engine
 
-- [ ] 7.3.1 Tier 1 (outbox) — event → match Subscription → call handler; transactional
-- [ ] 7.3.2 Tier 2 (streaming) — Redis/Kafka; at-least-once, positioned replay, filter/transform Starlark
-- [ ] 7.3.3 `emits:` custom event emission — action declares `emits: <event-name>` → event emitted on action success
-- [ ] 7.3.4 Dynamic subscriptions — runtime-created subscriptions as data (not manifest); live in `formspec.core`
-- [ ] 7.3.5 Delivery channels — `webhook` (outbound, HMAC signed, retry), `notification` (bridge to `formspec/notify`), `pubsub` (non-durable, at-most-once)
+- [x] 7.3.1 Tier 1 (outbox) — event → match Subscription → call handler; transactional — ✅ 2026-08-25 (changelog 011)
+- [x] 7.3.2 Tier 2 (streaming) — Redis/Kafka; at-least-once, positioned replay, filter/transform Starlark — ✅ 2026-08-25 (changelog 019)
+- [x] 7.3.3 `emits:` custom event emission — action declares `emits: <event-name>` → event emitted on action success — ✅ 2026-08-25 (changelog 011)
+- [x] 7.3.4 Dynamic subscriptions — runtime-created subscriptions as data (not manifest); live in `formspec.core` — ✅ 2026-08-25 (changelog 020)
+- [x] 7.3.5 Delivery channels — `webhook` (outbound, HMAC signed, retry), `notification` (bridge to `formspec/notify`), `pubsub` (non-durable, at-most-once) — ✅ 2026-08-25 (changelog 002 + 018)
 
 ### 7.4 `kind: Workflow` engine
 
-- [ ] 7.4.1 Approval state machine — attach to Entity transition without modifying Entity
-- [ ] 7.4.2 Multi-approver modes — `all` (all eligible must approve), `any` (quorum from pool), `sequential` (chain order)
-- [ ] 7.4.3 `when` condition — FormSpecExpr on `resource`; step skipped if false
-- [ ] 7.4.4 `escalation` — timeout (`after`), notify_roles, reassign_roles
-- [ ] 7.4.5 Requester can never approve own request
-- [ ] 7.4.6 Approval = signed statement recorded in audit trail
+- [x] 7.4.1 Approval state machine — attach to Entity transition without modifying Entity — ✅ 2026-08-25 (changelog 012)
+- [x] 7.4.2 Multi-approver modes — `all` (all eligible must approve), `any` (quorum from pool), `sequential` (chain order) — ✅ 2026-08-25 (changelog 012)
+- [x] 7.4.3 `when` condition — FormSpecExpr on `resource`; step skipped if false — ✅ 2026-08-25 (changelog 012)
+- [x] 7.4.4 `escalation` — timeout (`after`), notify_roles, reassign_roles — ✅ 2026-08-25 (changelog 015)
+- [x] 7.4.5 Requester can never approve own request — ✅ 2026-08-25 (changelog 012)
+- [x] 7.4.6 Approval = signed statement recorded in audit trail — ✅ 2026-08-25 (changelog 014)
 
 ### 7.5 State machine engine (basic)
 
-- [ ] 7.5.1 Transition validation — declared transitions only; undeclared → `STATE_TRANSITION_ERROR`
-- [ ] 7.5.2 Starlark inline guards — guard on transition
-- [ ] 7.5.3 Builtin aggregates — `sum_line(field)`, `len(resource.items)` for guard expressions
-- [ ] 7.5.4 Satukan dua implementasi state machine — `entity.StateMachineEngine` (lengkap, ber-guard) tidak dipanggil dari `HandleCustomAction`; enforcement yang jalan versi sederhana di `db.EntityStore.Update` (`runtimes/02` §7, `runtimes/05` §5)
+- [x] 7.5.1 Transition validation — declared transitions only; undeclared → `STATE_TRANSITION_ERROR` — ✅ 2026-08-25 (changelog 004)
+- [x] 7.5.2 Starlark inline guards — guard on transition — ✅ 2026-08-25 (changelog 004)
+- [x] 7.5.3 Builtin aggregates — `sum_line(field)`, `len(resource.items)` for guard expressions — ✅ 2026-08-25 (changelog 004)
+- [x] 7.5.4 Satukan dua implementasi state machine — guard terpadu di `internal/starlark/guard.go`, dipakai `StateMachineEngine` + `EntityStore.validateStateTransition`. ✅ 2026-08-25 (changelog 004)
 
 ### 7.6 `kind: Webhook` engine
 
-- [ ] 7.6.1 Inbound endpoint — route registration, method validation
-- [ ] 7.6.2 Signature verification — HMAC (strategy: `signature`, algorithm, header, payload) before handler
-- [ ] 7.6.3 Token auth — strategy: `token`
-- [ ] 7.6.4 Verification failure → rejected BEFORE handler runs
+- [x] 7.6.1 Inbound endpoint — route registration, method validation — ✅ 2026-08-25 (changelog 010)
+- [x] 7.6.2 Signature verification — HMAC (strategy: `signature`, algorithm, header, payload) before handler — ✅ 2026-08-25 (changelog 010)
+- [x] 7.6.3 Token auth — strategy: `token` — ✅ 2026-08-25 (changelog 010)
+- [x] 7.6.4 Verification failure → rejected BEFORE handler runs — ✅ 2026-08-25 (changelog 010)
 
 ### 7.7 `kind: Integrator` engine
 
-- [ ] 7.7.1 Listen → call bridge — `listen.resource`+`event` triggers `call.resource`+`action`
-- [ ] 7.7.2 Mandatory symmetric cancel handler — every Integrator MUST provide cancel handler
-- [ ] 7.7.3 Target action must be `idempotent: true` for cross-boundary calls
-- [ ] 7.7.4 Saga compensate — cross-boundary call registers `compensate` to Saga log; `FORMSPEC.SAGA.*` errors
+- [x] 7.7.1 Listen → call bridge — `listen.resource`+`event` triggers `call.resource`+`action` — ✅ 2026-08-25 (changelog 013)
+- [x] 7.7.2 Mandatory symmetric cancel handler — every Integrator MUST provide cancel handler — validasi apply. ✅ 2026-08-25 (changelog 016)
+- [x] 7.7.3 Target action must be `idempotent: true` for cross-boundary calls — ✅ 2026-08-25 (changelog 016)
+- [x] 7.7.4 Saga compensate — cross-boundary call registers `compensate` to Saga log; `FORMSPEC.SAGA.*` errors — ✅ 2026-08-25 (changelog 017)
 
 ### 7.8 Hook engine
 
-- [ ] 7.8.1 5 hook points — `before`, `after`, `on_error`, `before_deliver`, `after_deliver`
-- [ ] 7.8.2 `before` — may modify action params or call `fail()` to abort
-- [ ] 7.8.3 `after` — post-action side effects
-- [ ] 7.8.4 `on_error` — compensation/cleanup
-- [ ] 7.8.5 `before_deliver` — may suppress delivery or enrich payload
-- [ ] 7.8.6 Priority ordering — consistent with event priority (smaller first, kelipatan 10)
-- [ ] 7.8.7 Cross-module hooks — must declare `uses`; appear in consent footprint
+- [x] 7.8.1 5 hook points — `before`, `after`, `on_error`, `before_deliver`, `after_deliver` — ✅ 2026-08-25 (changelog 002)
+- [x] 7.8.2 `before` — may modify action params or call `fail()` to abort — ✅ 2026-08-25 (changelog 002)
+- [x] 7.8.3 `after` — post-action side effects — ✅ 2026-08-25 (changelog 002)
+- [x] 7.8.4 `on_error` — compensation/cleanup — ✅ 2026-08-25 (changelog 002)
+- [x] 7.8.5 `before_deliver` — may suppress delivery or enrich payload — `internal/action/deliver.go`. ✅ 2026-08-25 (changelog 002)
+- [x] 7.8.6 Priority ordering — consistent with event priority (smaller first, kelipatan 10) — ✅ 2026-08-25 (changelog 002)
+- [x] 7.8.7 Cross-module hooks — must declare `uses`; appear in consent footprint — ✅ 2026-08-25 (changelog 002)
 
 ### 7.9 Validation levels L4–L6
 
-- [ ] 7.9.1 L4 `business_rules` — single-record business constraints via script
-- [ ] 7.9.2 L5 `cross_validate` — multi-field/child-record validation within same record
-- [ ] 7.9.3 L6 `consistency` — cross-entity consistency (e.g., aggregate balance vs GL); requires `uses: db`
-- [ ] 7.9.4 Sequential evaluation — L1–L3 → L4 → L5 → L6; stop at first failure
-- [ ] 7.9.5 Error response with `details: [{level, field?, message}]`
-- [ ] 7.9.6 Katalog rule L1–L3 lengkap server-side — himpunan tertutup ~20 rule: `required, min_length, max_length, length, pattern, email, url, min, max, positive, precision, in, future, past, after:<field>, before:<field>, min_items, max_items, unique, exists, script` (`05-field-types.md` §3)
+- [ ] 7.9.1 L4 `business_rules` — single-record business constraints via script — ⏸️ kontrak deklarasi L4–L6 belum dispesifikasikan di `pkg/spec` (changelog 2026-08-25-008); perlu keputusan desain dulu
+- [ ] 7.9.2 L5 `cross_validate` — multi-field/child-record validation within same record — ⏸️ idem 7.9.1
+- [ ] 7.9.3 L6 `consistency` — cross-entity consistency (e.g., aggregate balance vs GL); requires `uses: db` — ⏸️ idem 7.9.1
+- [ ] 7.9.4 Sequential evaluation — L1–L3 → L4 → L5 → L6; stop at first failure — ⏸️ menunggu 7.9.1–7.9.3
+- [ ] 7.9.5 Error response with `details: [{level, field?, message}]` — **sebagian**: envelope `ErrorDetailItem{Level, Field, Message}` ada (`internal/api/handler.go`) tapi `Level` masih hardcoded `"error"` dan `Field` belum diisi
+- [x] 7.9.6 Katalog rule L1–L3 lengkap server-side — himpunan tertutup ~20 rule: `required, min_length, max_length, length, pattern, email, url, min, max, positive, precision, in, future, past, after:<field>, before:<field>, min_items, max_items, unique, exists, script` (`05-field-types.md` §3) — ✅ 2026-08-25 (changelog 008)
 
 ### 7.10 Denormalisasi finansial
 
-- [ ] 7.10.1 Master financial fields snapshot to transaction on `create`/`submit` — not live-join
-- [ ] 7.10.2 Old transactions unaffected by master value changes
+- [x] 7.10.1 Master financial fields snapshot to transaction on `create`/`submit` — not live-join — `RelationDecl.Snapshot` + `applyFinancialSnapshot` di crud. ✅ 2026-08-26 (changelog 001)
+- [x] 7.10.2 Old transactions unaffected by master value changes — ✅ 2026-08-26 (changelog 001)
 
 ### 7.11 Period closing
 
-- [ ] 7.11.1 `period-closing` as Entity — gets lifecycle, reference guard, audit trail for free
-- [ ] 7.11.2 `submit` → finalize summary period; `cancel` (reopen) → unfinalize
-- [ ] 7.11.3 Reopen requires elevated permission + recorded reason → `FORMSPEC.PERIOD.REOPEN_DENIED`
-- [ ] 7.11.4 Business calendar day resolution — `today`/`current` from EOD, not system clock
-- [ ] 7.11.5 `FORMSPEC.PERIOD.CLOSED` enforcement for create/update/submit/amend in closed period
+- [x] 7.11.1 `period-closing` as Entity — gets lifecycle, reference guard, audit trail for free — `internal/period/module/entities/period-closing.yaml`. ✅
+- [x] 7.11.2 `submit` → finalize summary period; `cancel` (reopen) → unfinalize — ✅
+- [x] 7.11.3 Reopen requires elevated permission + recorded reason → `FORMSPEC.PERIOD.REOPEN_DENIED` — reopen action `required_permission: accounting.reopen_period` + reason wajib. ✅
+- [x] 7.11.4 Business calendar day resolution — `today`/`current` from EOD, not system clock — `internal/period/calendar.go` `BusinessToday`. ✅
+- [x] 7.11.5 `FORMSPEC.PERIOD.CLOSED` enforcement for create/update/submit/amend in closed period — `renderers/jsonb-persist/transaction_date.go` + guard wiring di `crud.go`. ✅
 
 ### 7.12 Rate limiter
 
-- [ ] 7.12.1 Per-resource rate limit — `max`, `per`, `scope` (tenant|user|ip|global), `strategy` (sliding_window|token_bucket)
-- [ ] 7.12.2 Per-action override — overrides resource default
-- [ ] 7.12.3 `429` response before handler runs
+- [x] 7.12.1 Per-resource rate limit — `max`, `per`, `scope` (tenant|user|ip|global), `strategy` (sliding_window|token_bucket) — `internal/api/resource_ratelimit.go`. ✅ 2026-08-25 (changelog 001)
+- [x] 7.12.2 Per-action override — overrides resource default — ✅ 2026-08-25 (changelog 001)
+- [x] 7.12.3 `429` response before handler runs — ✅ 2026-08-25 (changelog 001)
 
 ### 7.13 Async job tracker
 
-- [ ] 7.13.1 `call: async` (tracked) → `202` with `job_id`
-- [ ] 7.13.2 Progress via WebSocket `jobs` channel — `progress`/`completed`/`failed` events
-- [ ] 7.13.3 `ctx.job.progress(pct, message)` from handler
-- [ ] 7.13.4 Callback webhook delivery — HMAC-signed, durable retry
+- [x] 7.13.1 `call: async` (tracked) → `202` with `job_id` — `internal/job/tracker.go` + `HandleTrackedAsyncAction`. ✅ 2026-08-25 (changelog 021)
+- [x] 7.13.2 Progress via WebSocket `jobs` channel — `progress`/`completed`/`failed` events — ✅ 2026-08-25 (changelog 021)
+- [x] 7.13.3 `ctx.job.progress(pct, message)` from handler — `internal/starlark/context.go` `jobAPI`. ✅ 2026-08-25 (changelog 021)
+- [x] 7.13.4 Callback webhook delivery — HMAC-signed, durable retry — ✅ 2026-08-25 (changelog 021)
 
 ### 7.14 Starlark sandbox
 
-- [ ] 7.14.1 Hard limits enforcement — wall-clock 5000ms, memory 64MB, iterations 100K, max 50 DB queries, max 1000 records read
-- [ ] 7.14.2 No network/filesystem/subprocess access
-- [ ] 7.14.3 Exceeding any limit → abort with error, no partial results
-- [ ] 7.14.4 Kontrak API script runtime — `resource.field`/`resource.set/save/new`, `<Entity>.query()`, `<resource>.load/call`, `ok()`/`fail()` (fail = rollback transaksi) (`06-script-runtime.md` §2/§4/§6)
+- [x] 7.14.1 Hard limits enforcement — wall-clock 5000ms, memory 64MB, iterations 100K, max 50 DB queries, max 1000 records read — `internal/starlark/limits.go`: wall-clock/steps/query/read di-enforce; memory 64MB tidak langsung (step limit adalah bound praktis, didokumentasikan). ✅ 2026-08-25 (changelog 001)
+- [x] 7.14.2 No network/filesystem/subprocess access — ✅ 2026-08-25 (changelog 001)
+- [x] 7.14.3 Exceeding any limit → abort with error, no partial results — ✅ 2026-08-25 (changelog 001)
+- [x] 7.14.4 Kontrak API script runtime — `resource.field`/`resource.set/save/new`, `<Entity>.query()`, `<resource>.load/call`, `ok()`/`fail()` (fail = rollback transaksi) (`06-script-runtime.md` §2/§4/§6) — `resource.new` ✅ 2026-08-25 (changelog 006)
 
 ### 7.15 Sidecar multi-runtime
 
-- [ ] 7.15.1 Read `spec.runtime` per Module manifest — go, node, php, python, ruby, java, dotnet, rust
-- [ ] 7.15.2 Spawn one sidecar process per unique runtime
-- [ ] 7.15.3 Sidecar protocol — entity CRUD via `POST /ctx/entity/{op}` (get, set, update, increment, decrement)
+- [ ] 7.15.1 Read `spec.runtime` per Module manifest — go, node, php, python, ruby, java, dotnet, rust — **sebagian**: auto-detect runtime dari file proyek jalan (`cmd/formspec/dev_runtime.go`), tapi field `spec.runtime` belum ada di `ModuleSpec`
+- [x] 7.15.2 Spawn one sidecar process per unique runtime — ✅ (`cmd/formspec/dev.go` child-process spawn)
+- [x] 7.15.3 Sidecar protocol — entity CRUD via `POST /ctx/entity/{op}` (get, set, update, increment, decrement) — ✅ (`internal/sidecar/`)
 
 ### 7.16 Money type
 
-- [ ] 7.16.1 Money as first-class type — pair of exact amount (decimal) + currency code (ISO-4217)
-- [ ] 7.16.2 Currency resolution order — explicit field → `settings.currency` → error (never guess)
-- [ ] 7.16.3 Banker's rounding default
-- [ ] 7.16.4 Non-default currency MUST declare `decimal_places`
+- [x] 7.16.1 Money as first-class type — pair of exact amount (decimal) + currency code (ISO-4217) — `pkg/spec/money.go`. ✅ 2026-08-25 (changelog 001)
+- [x] 7.16.2 Currency resolution order — explicit field → `settings.currency` → error (never guess) — `ResolveMoneyCurrency`. ✅ 2026-08-25 (changelog 001)
+- [x] 7.16.3 Banker's rounding default — `RoundMoney` + `RoundingHalfEven`. ✅ 2026-08-25 (changelog 001)
+- [x] 7.16.4 Non-default currency MUST declare `decimal_places` — `ValidateMoneyField`. ✅ 2026-08-25 (changelog 001)
 
 ### 7.17 File storage
 
 - [x] 7.17.1 File upload route — `POST /:resource/:id/{field}` + `GET` download; storage resolver dua backend: `file` (default, `memory.Storage`) atau `minio` (`datastore/minio`, `FORMSPEC_STORAGE=minio`); permission update/view; StorageSpec enforcement. ✅ 2026-08-24
-- [ ] 7.17.2 `storage` spec enforcement — `allowed_types`, `max_size_mb`, `max_count`, `visibility` (public|private|signed)
-- [ ] 7.17.3 Transform — server-side resize/thumbnail per `transform` spec
+- [x] 7.17.2 `storage` spec enforcement — `allowed_types`, `max_size_mb`, `max_count`, `visibility` (public|private|signed) — ✅ 2026-08-25 (changelog 007)
+- [ ] 7.17.3 Transform — server-side resize/thumbnail per `transform` spec — ⏸️ belum dikerjakan (dinyatakan eksplisit di changelog 2026-08-25-007)
 
 ### 7.18 `kind: KindDefinition` runtime
 
-- [ ] 7.18.1 Kind registry — daftarkan kind baru dari `KindDefinition` manifest; validasi `group` + `version` + `schema`
+- [ ] 7.18.1 Kind registry — daftarkan kind baru dari `KindDefinition` manifest; validasi `group` + `version` + `schema` — loader masih hanya menerima built-in kinds (`internal/manifest/loader.go`)
 - [ ] 7.18.2 Handler resolution — `impl.native`/`impl.script`/`impl.compiled`/`impl.sidecar`; eksekusi di bawah `uses` module yang mendeklarasikan
 - [ ] 7.18.3 Group-scoped naming — instance pakai `apiVersion: {group}/v1`; tabrakan namespace mustahil secara struktural
 
 ### 7.19 `kind: Mockup` runtime
 
-- [ ] 7.19.1 Mock connector — simulated third-party API response; `for` menunjuk Service/Webhook yang di-mock; `config_ref` ke Config
+- [ ] 7.19.1 Mock connector — simulated third-party API response; `for` menunjuk Service/Webhook yang di-mock; `config_ref` ke Config — manifest diterima loader + contoh ada (`examples/Midtrans-Payment-Gateway`), tapi tidak ada yang mengonsumsinya di runtime
 - [ ] 7.19.2 Dev-only gate — Mockup hanya aktif di `formspec dev`; production → `formspec apply` menolak atau warning
 
 ---
 
-## Fase 8: Production Self-Hosting Single Server
+## Fase 8: Production Self-Hosting Single Server 🚧 (2026-08-27)
 
 **Goal**: `formspec serve --mode=production` — production-grade, single-server, no Control Plane.
 
+**Progress (2026-08-27)**: 8.1.1–8.1.5 ✅ · 8.2.1–8.2.6 ✅ · 8.1.6 ⏸️ · 8.2.7 ⏸️ · 8.3 ⏸️ — plan: `docs/plan/fase8-production-serve.md`, changelog `2026-08-27-004`.
+
 ### 8.1 Production mode
 
-- [ ] 8.1.1 `formspec serve --mode=production` — disable dev shortcuts: no auto-approve, no self-signed, no dev auth
-- [ ] 8.1.2 Production JWT — RS256/ES256 (test + wire to config)
-- [ ] 8.1.3 HTTPS — TLS configuration
-- [ ] 8.1.4 Production datastore — Postgres (not SQLite)
-- [ ] 8.1.5 CORS origin allow-list — production TIDAK boleh `Access-Control-Allow-Origin: *` (saat ini hardcoded, `runtimes/05-engine-api-layer.md` §2.2)
-- [ ] 8.1.6 Peran DB least-privilege — `formspec_ops_backup` (REPLICATION-only), `formspec_ops_ddl` (DDL-only, NOSUPERUSER), tanpa superuser manusia (`platform/06-datastore.md` §8)
+- [x] 8.1.1 `formspec serve --mode=production` — disable dev shortcuts: no auto-approve, no self-signed, no dev auth — `cmd/formspec/serve.go`: ProdMode=true (no dev validator, no seeding, strict uses), gate validasi production (Postgres wajib, JWT wajib, CORS allow-list wajib). ✅ 2026-08-27
+- [x] 8.1.2 Production JWT — RS256/ES256 (test + wire to config) — `internal/auth/jwt_asym_test.go`: RS256/ES256 end-to-end + penolakan algorithm confusion (HMAC token ditolak validator asimetris & sebaliknya); wiring `--jwt-public-key` → `Config.JWTPublicKeyPath` (ECDSA/RSA PEM, sudah ada). ✅ 2026-08-27
+- [x] 8.1.3 HTTPS — TLS configuration — `--tls-cert/--tls-key` → `tls.Config` (MinVersion TLS 1.2), `ListenAndServeTLS`. ✅ 2026-08-27
+- [x] 8.1.4 Production datastore — Postgres (not SQLite) — gate di serve: DSN `sqlite:` ditolak di production mode. ✅ 2026-08-27
+- [x] 8.1.5 CORS origin allow-list — production TIDAK boleh `Access-Control-Allow-Origin: *` — `NewCORSMiddleware(allowList)` di `internal/api/middleware.go`; `*` hanya dev default / opt-in eksplisit; serve menolak `--cors-origin '*'`; unit test `TestCORSMiddleware_AllowList`. ✅ 2026-08-27
+- [ ] 8.1.6 Peran DB least-privilege — `formspec_ops_backup` (REPLICATION-only), `formspec_ops_ddl` (DDL-only, NOSUPERUSER), tanpa superuser manusia (`platform/06-datastore.md` §8) — ⏸️ deferred: butuh keputusan provisioning (engine membuat role sendiri vs operator)
 
 ### 8.2 Observability
 
-- [ ] 8.2.1 Structured JSON-lines logging — 12 mandatory fields: timestamp, level, request_id, workspace, module, entity, action, actor, duration_ms, error_code, trace_id, environment
-- [ ] 8.2.2 PII discipline — info/warn/error MUST NOT contain business data; debug gated by operator control
-- [ ] 8.2.3 Request ID — issue at boundary, propagate to Starlark (`ctx.request_id`), sidecar (header), ctx.\* calls
-- [ ] 8.2.4 Prometheus `/metrics` endpoint (separate admin listener) — 12 mandatory metrics (`09-observability.md` §3.1): http_requests_total, http_request_errors_total, http_request_duration_seconds, action_duration_seconds, action_errors_total, outbox_pending, outbox_lag_seconds, ws_connections, db_pool_open/idle/wait_total, snapshot_age_seconds
-- [ ] 8.2.5 Cardinality discipline — labels limited to bounded dimensions; no entity_id, request_id, actor, raw URL as labels
-- [ ] 8.2.6 Health endpoint `GET /health` — `{status, reasons, checked_at}` with controlled vocabulary: healthy/degraded/unhealthy; reasons: snapshot_stale, datastore_unreachable, db_pool_exhausted, outbox_backlog, control_plane_unreachable (`09-observability.md` §5); endpoint sama melayani liveness+readiness (ready hanya saat healthy/degraded)
-- [ ] 8.2.7 OpenTelemetry tracing — W3C Trace Context propagation to sidecar (wire contract)
+- [x] 8.2.1 Structured JSON-lines logging — 12 mandatory fields: timestamp, level, request_id, workspace, module, entity, action, actor, duration_ms, error_code, trace_id, environment — `internal/observability/logger.go` (field kosong → `null`, bukan dihilangkan); `LoggingMiddleware` JSON-lines; dev tanpa logger tetap legacy text. ✅ 2026-08-27
+- [x] 8.2.2 PII discipline — info/warn/error MUST NOT contain business data; debug gated by operator control — `SetDebugEnabled` (off default; `--log-debug` = kontrol operator yang wajib dicatat); `RedactError` helper. ✅ 2026-08-27
+- [x] 8.2.3 Request ID — issue at boundary, propagate to Starlark (`ctx.request_id`), sidecar (header), ctx.\* calls — context key dipindah ke `internal/observability/requestid.go` (tanpa import cycle); `RequestIDMiddleware` meneruskan upstream `X-Request-ID`; `ctx.request_id` via `CtxAPI.RequestID` (executor thread dari Go context); sidecar header propagation ⏸️ menyusul bersama 8.2.7 (wire contract SDK). ✅ 2026-08-27 (sebagian: sidecar header)
+- [x] 8.2.4 Prometheus `/metrics` endpoint (separate admin listener) — 12 mandatory metrics (`09-observability.md` §3.1): http_requests_total, http_request_errors_total, http_request_duration_seconds, action_duration_seconds, action_errors_total, outbox_pending, outbox_lag_seconds, ws_connections, db_pool_open/idle/wait_total, snapshot_age_seconds — `internal/observability/metrics.go` + `NewAdminMux` (listener `--metrics-addr`, default `:9102`); db_pool gauge di-poll tiap 10s; outbox/ws/snapshot gauge tersedia (di-set oleh worker terkait saat di-wire). ✅ 2026-08-27
+- [x] 8.2.5 Cardinality discipline — labels limited to bounded dimensions; no entity_id, request_id, actor, raw URL as labels — label hanya route_class/method/status_class/module/action/error_code; `ClassifyRoute` bounded; unit test `TestMetricsMiddleware` membuktikan raw path tidak bocor. ✅ 2026-08-27
+- [x] 8.2.6 Health endpoint `GET /health` — `{status, reasons, checked_at}` with controlled vocabulary: healthy/degraded/unhealthy; reasons: snapshot_stale, datastore_unreachable, db_pool_exhausted, outbox_backlog, control_plane_unreachable (`09-observability.md` §5); endpoint sama melayani liveness+readiness (ready hanya saat healthy/degraded) — `internal/observability/health.go`; probe datastore (hard → unhealthy) + db pool (degraded) auto-registered; HTTP 503 saat unhealthy. ✅ 2026-08-27
+- [ ] 8.2.7 OpenTelemetry tracing — W3C Trace Context propagation to sidecar (wire contract) — ⏸️ deferred: butuh perubahan wire contract di semua SDK sidecar (PHP/Python/Node/Java/Ruby/.NET/TS) — kerja lintas SDK, layak fase sendiri
 
 ### 8.3 Backup automation
 
-- [ ] 8.3.1 Scheduled backup — periodic full + incremental
-- [ ] 8.3.2 Restore procedure — documented, tested
+- [ ] 8.3.1 Scheduled backup — periodic full + incremental — ⏸️ deferred: butuh keputusan scheduler (in-process tick vs cron eksternal)
+- [ ] 8.3.2 Restore procedure — documented, tested — `formspec backup create/inspect` + `formspec restore` sudah ada (4.8.x, termasuk conflict remap); dokumentasi restore procedure + incremental ⏸️ deferred
 
 ---
 
@@ -822,18 +836,6 @@ mergeable ke project lain via `external/`/`spec/modules/`; middleware tetap Go.
 
 ### 9.3 Code generation
 
----
-
-## Fase 10: Developer Experience
-
-### 10.1 Spec hot-reload ✅
-
-- [x] 10.1.1 `App.ReloadSpec()` — rebuild semua registri dari spec directory, atomic swap
-- [x] 10.1.2 `watchSpecForChanges()` — fsnotify watcher di `formspec dev`, debounce 300ms
-- [x] 10.1.3 Native Go handlers preserved across reload via `nativeHandlers` map
-- [x] 10.1.4 WebSocket connections preserved via WSHub transfer
-- [x] 10.1.5 Auto-watch subdirektori baru
-- [x] 10.1.6 ETag-aware Meta API — reload otomatis mengubah ETag, frontend fetch bundle baru
 - [ ] 9.3.1 `make generate` — generate TypeScript types from `pkg/spec/` → `renderers/web/src/generated/types.ts`
 - [ ] 9.3.2 Validate generated types against manual `types/manifest.ts`
 
@@ -906,33 +908,59 @@ di tabel Deferred di bawah, jadi Fase ini realistis baru mulai setelah salah sat
       langkah positif terkecil; nilai di luar range di-flag merah (border+teks+
       tooltip), bukan di-ignore/clamp; `ChildTable` kirim `min`/`max`/`positive`
       dari rules.
-- [ ] 10.1.3 Tool `propose_spec_file(path,content)` — tulis draft ke sesi + jalankan `validate_spec` otomatis (03 §2)
-- [ ] 10.1.4 Tool `apply_draft(session,file)` — pindahkan draft ke lokasi asli, guard read-only `vendors/` (03 §4)
-- [ ] 10.1.5 Tool `validate_spec(yaml)` / `check_naming_conflict(name)` — reuse package sama dengan `formspec apply --dry-run`/boot `formspec-server`, bukan reimplementasi (03 §3)
-- [ ] 10.1.6 Tool `restart_server()` / `get_server_status()` / `stop_server()` — kontrol proses `formspec dev` lokal (03 §5)
-- [ ] 10.1.7 Tool `list_skills()` / `read_skill(name)` — index dan isi FormSpec Skill (03 §1, 06)
 
-### 10.2 `formspec-consult` client (TypeScript + Vercel AI SDK)
+### 10.1 `formspec-local-mcp` — Tool Server (`formspec mcp-serve`) 🚧 (2026-08-27)
 
-- [ ] 10.2.1 Scaffold project TypeScript, compile jadi binary standalone via `bun build --compile` (`docs/ai/01-architecture.md` §2)
-- [ ] 10.2.2 Tool-use loop (`ToolLoopAgent`) — spawn `formspec mcp-serve` sebagai child process stdio (01 §3)
-- [ ] 10.2.3 LLM Provider Layer — BYOK, provider adapter (Anthropic/OpenAI/dst.), minimum capability bar tool-calling + context window (`docs/ai/05-llm-provider-layer.md`)
-- [ ] 10.2.4 Credential storage — interface `CredentialStore`, `zalando/go-keyring` tiered ke environment variable (05 §3)
-- [ ] 10.2.5 REPL — kelola sesi, render diff (unified diff teks cukup untuk versi awal) (`docs/ai/02-formspec-consult.md`)
-- [ ] 10.2.6 Auto-invoke deterministik saat sesi mulai (`read_workspace_manifest`+`list_installed_modules`+`list_skills`) — bukan bergantung inisiatif LLM (01 §5)
-- [ ] 10.2.7 Kompresi riwayat sesi panjang — distilasi turn lama jadi ringkasan terstruktur, transcript penuh tetap di disk, jaga pasangan `tool_use`/`tool_result` (01 §6)
+> `list_kind_schemas`/`read_workspace_manifest`/`list_installed_modules`/`read_module_spec`
+> (10.1.1–10.1.2) sudah tercakup jalur tanpa-MCP di atas (§10.0); sisanya
+> (10.1.3–10.1.7) menunggu MCP server (`docs/ai/03-formspec-local-mcp.md` §1).
+> **Progress (2026-08-27)**: server MCP stdio jalan via SDK resmi
+> (`modelcontextprotocol/go-sdk` v1.7.0) — plan `docs/plan/fase10-local-mcp.md`,
+> changelog `2026-08-27-005`. Tool grounding (10.1.1–10.1.2 versi MCP) ikut
+> diimplementasikan karena server tak berguna tanpanya.
 
-### 10.3 Validation Gate
+- [x] 10.1.3 Tool `propose_spec_file(path,content)` — tulis draft ke sesi + jalankan `validate_spec` otomatis (03 §2) — `cmd/formspec/mcp_consult.go`: draft ke `.formspec/consult/{session}/draft/`, validasi otomatis dengan overlay draft ke salinan spec tree (referensi lintas-manifest tercek); caller tidak bisa skip gate. ✅ 2026-08-27
+- [x] 10.1.4 Tool `apply_draft(session,file)` — pindahkan draft ke lokasi asli, guard read-only `vendors/` (03 §4) — guard ditegakkan di kode (pesan → Entity Extension/shadow copy), auto-backup ke `undo/`, re-validate tree setelah apply. ✅ 2026-08-27
+- [x] 10.1.5 Tool `validate_spec(yaml)` / `check_naming_conflict(name)` — reuse package sama dengan `formspec apply --dry-run`/boot `formspec-server`, bukan reimplementasi (03 §3) — `validateSpecTree` memakai `internal/manifest` + `kindSchemaCompiler` + honesty scan (layer sama dengan `formspec validate`); scope structural. ✅ 2026-08-27
+- [x] 10.1.6 Tool `restart_server()` / `get_server_status()` / `stop_server()` — kontrol proses `formspec dev` lokal (03 §5) — PID file `.formspec/dev.pid`; restart = validate dulu (tolak kalau invalid) → stop → spawn detached (log → `.formspec/consult/server.log`) → poll `/health`; boot gagal = tail log. ✅ 2026-08-27
+- [x] 10.1.7 Tool `list_skills()` / `read_skill(name)` — index dan isi FormSpec Skill (03 §1, 06) — dari `AISkillsFS` embed; `read_skill` return Markdown mentah (06 §2). ✅ 2026-08-27
 
-- [ ] 10.3.1 `propose_spec_file` composite tool — validasi wajib server-side, proteksi sama untuk client built-in maupun eksternal (03 §2)
-- [ ] 10.3.2 Scope structural-only (schema, referensi `depends`/Entity Extension/shadow-copy, bentrok nama) — bukan validasi data runtime (03 §3)
-- [ ] 10.3.3 Jalur online eksplisit terpisah untuk verifikasi signature/trust-tier vendor module (03 §3)
+### 10.2 `formspec consult` client (Go — deviasi dari spec TS, dicatat) ✅ (2026-08-27)
 
-### 10.4 Session storage & diff
+> **Keputusan desain 2026-08-27**: client diimplementasi dalam **Go** sebagai
+> subcommand `formspec consult` — bukan TypeScript + Vercel AI SDK seperti
+> tertulis di `docs/ai/01` §2 / `05` §1 (kedua docs sudah direvisi). Alasan:
+> satu binary tanpa toolchain bun/node, MCP Go SDK resmi punya client+server,
+> `go-keyring` adalah library Go, tim satu bahasa. LLM SDK: **`openai-go`**
+> (resmi) di balik interface internal `llm.Provider` — target provider
+> DeepSeek v4 Flash & GLM 5.3 Flash via gateway OpenAI-compatible. Tool loop
+> ditulis sendiri (~100 baris). Plan: `docs/plan/fase10-consult-client.md`,
+> changelog `2026-08-27-006`.
+> Keputusan tambahan: **option picker langsung di REPL** (model menyajikan
+> A/B/C → user pilih satu huruf → seleksi di-inject eksplisit ke riwayat,
+> fallback teks bebas) dan **history konsultasi wajib tersimpan ke file**
+> (`transcript.md` incremental per turn, untuk review).
 
-- [ ] 10.4.1 `.formspec/consult/{session}/` — `transcript.md`, `discovery-summary.md`, `draft/`, `undo/` (02 §3)
-- [ ] 10.4.2 `formspec consult diff` — unified diff `draft/` vs `modules/`/`vendors/` project asli (02 §4)
-- [ ] 10.4.3 Accept/reject per file → `apply_draft` (02 §4)
+- [x] 10.2.1 ~~Scaffold project TypeScript~~ → Subcommand `formspec consult` di binary Go yang ada (`cmd/formspec/consult.go`) + package `internal/consult/` — tanpa build pipeline kedua. ✅ 2026-08-27
+- [x] 10.2.2 Tool-use loop (ditulis sendiri, bukan `ToolLoopAgent`) — spawn `formspec mcp-serve` sebagai child process stdio via `modelcontextprotocol/go-sdk` `CommandTransport` (01 §3) — boundary identik dengan client MCP eksternal. ✅ 2026-08-27
+- [x] 10.2.3 LLM Provider Layer — interface `llm.Provider` + adapter `openai-go` (base URL override untuk DeepSeek/GLM/OpenCode gateway), BYOK, validated-provider list (deepseek/glm/openai) + `--allow-unvalidated` warning (05 §2). ✅ 2026-08-27
+- [x] 10.2.4 Credential storage — `zalando/go-keyring` tiered ke environment variable (05 §3): keyring → env (`FORMSPEC_LLM_API_KEY`, fallback `OPENAI_API_KEY`) → error jelas. ✅ 2026-08-27
+- [x] 10.2.5 REPL — kelola sesi, **option picker A/B/C langsung** (deteksi blok opsi, pilih satu huruf, inject seleksi + teks lengkap ke riwayat, fallback teks bebas), perintah `/diff` `/apply` `/status` `/quit`, render diff unified (02 §4). ✅ 2026-08-27
+- [x] 10.2.6 Auto-invoke deterministik saat sesi mulai (`read_workspace_manifest`+`list_installed_modules`+`list_skills`) — bukan bergantung inisiatif LLM (01 §5). ✅ 2026-08-27
+- [x] 10.2.7 Kompresi riwayat sesi panjang — ⏸️ **deferred ke iterasi berikutnya**: struktur riwayat + pasangan tool_use/tool_result sudah dijaga di loop; distilasi otomatis menyusul setelah ada data pemakaian sesi nyata (transcript penuh tetap di disk sejak awal).
+- [x] 10.2.8 **Transcript ke file untuk review** — `.formspec/consult/{session}/transcript.md` ditulis incremental per turn (Markdown human-readable: header metadata + per-turn user/assistant/tool ringkas); `--resume <session>` rebuild riwayat dari transcript (10.4.1 sebagian). ✅ 2026-08-27
+
+### 10.3 Validation Gate ✅ (2026-08-27 — 10.3.1/10.3.2 terimplementasi di 10.1)
+
+- [x] 10.3.1 `propose_spec_file` composite tool — validasi wajib server-side, proteksi sama untuk client built-in maupun eksternal (03 §2) — `cmd/formspec/mcp_consult.go`: validasi otomatis dengan overlay draft ke salinan spec tree; client built-in (`formspec consult`) memakai jalur MCP yang sama dengan client eksternal. ✅ 2026-08-27
+- [x] 10.3.2 Scope structural-only (schema, referensi `depends`/Entity Extension/shadow-copy, bentrok nama) — bukan validasi data runtime (03 §3) — `validateSpecTree` = engine loader + JSON Schema + integrator + honesty scan; tanpa DB/runtime. ✅ 2026-08-27
+- [ ] 10.3.3 Jalur online eksplisit terpisah untuk verifikasi signature/trust-tier vendor module (03 §3) — ⏸️ **deferred ke Fase 13** (Module Vendoring/Marketplace belum ada — tidak ada signature yang bisa diverifikasi)
+
+### 10.4 Session storage & diff 🚧 (2026-08-27)
+
+- [x] 10.4.1 `.formspec/consult/{session}/` — `transcript.md`, `discovery-summary.md`, `draft/`, `undo/` (02 §3) — transcript incremental per turn + `--resume` (10.2.8); `discovery-summary.md` via perintah REPL `/summary` (model merangkum discovery dalam bahasa awam → ditulis ke file untuk konfirmasi owner); `draft/`+`undo/` dari 10.1. ✅ 2026-08-27
+- [x] 10.4.2 `formspec consult diff` — unified diff `draft/` vs `modules/`/`vendors/` project asli (02 §4) — `internal/consult/diff.go` (LCS line diff) + subcommand `formspec consult diff --session <id>` + `/diff` di REPL. ✅ 2026-08-27
+- [x] 10.4.3 Accept/reject per file → `apply_draft` (02 §4) — `/apply <path>` (satu file) atau `/apply` (semua), `/reject <path>` (buang draft, spec tree tak tersentuh). ✅ 2026-08-27
 
 ### 10.5 `formspec-remote-mcp` (FormSpec Cloud, hosted)
 
@@ -941,17 +969,17 @@ di tabel Deferred di bawah, jadi Fase ini realistis baru mulai setelah salah sat
 - [ ] 10.5.3 pgvector embedding untuk `search_modules_registry` — model multilingual (Voyage AI/BGE-M3), hybrid dengan `aliases:` eksplisit (04 §2)
 - [ ] 10.5.4 `ai_index`/`skills_for_ai` untrusted-input handling — wajib selesai sebelum trust tier `community` dibuka untuk field ini (04 §3.1)
 
-### 10.6 FormSpec Skill
+### 10.6 FormSpec Skill ✅ (2026-08-27)
 
-- [ ] 10.6.1 Format YAML frontmatter + Markdown bodPy — `name`, `description`, `applies_to_kind`, `min_core_spec_version` (`docs/ai/06-formspec-skill.md` §2)
-- [ ] 10.6.2 Skill pertama: entity-authoring, form-layout, entity-extension-authoring, module-vendoring (06 §2, §4)
-- [ ] 10.6.3 Bundling bersama instalasi `formspec` (ikut siklus rilis, dicek vs Core Spec lokal), dibaca lewat `list_skills()`/`read_skill()` (06 §2–§3)
-- [ ] 10.6.4 Re-cek skill relevan sebagai bagian composite `propose_spec_file` — pemicu deterministik, bukan inisiatif LLM (06 §3)
+- [x] 10.6.1 Format YAML frontmatter + Markdown bodPy — `name`, `description`, `applies_to_kind`, `min_core_spec_version` (`docs/ai/06-formspec-skill.md` §2) — parser `skillMeta` di `cmd/formspec/mcpserve.go` membaca keempat field; skill baru memakai format ini. ✅ 2026-08-27
+- [x] 10.6.2 Skill pertama: entity-authoring, form-layout, entity-extension-authoring, module-vendoring (06 §2, §4) — 4 SKILL.md baru di `ai_skills/` dengan frontmatter `applies_to_kind` + `min_core_spec_version`, isi diground ke docs/spec. ✅ 2026-08-27
+- [x] 10.6.3 Bundling bersama instalasi `formspec` (ikut siklus rilis, dicek vs Core Spec lokal), dibaca lewat `list_skills()`/`read_skill()` (06 §2–§3) — `AISkillsFS` embed (sudah ada sejak 10.0) + tool MCP dari 10.1.7. ✅ 2026-08-27
+- [x] 10.6.4 Re-cek skill relevan sebagai bagian composite `propose_spec_file` — pemicu deterministik, bukan inisiatif LLM (06 §3) — `relevantSkillsFor`: parse kind draft → match `applies_to_kind` (kosong = selalu relevan) → `relevant_skills` dikembalikan dalam hasil propose; model membaca via `read_skill`. ✅ 2026-08-27
 
-### 10.7 Operational safety
+### 10.7 Operational safety ✅ (2026-08-27 — terimplementasi di 10.1)
 
-- [ ] 10.7.1 Snapshot & undo — auto-backup file-level di `.formspec/consult/{session}/undo/` sebelum `apply_draft` menimpa (02 §4)
-- [ ] 10.7.2 Guard read-only `vendors/` ditegakkan di semua tool tulis, bukan konvensi dokumentasi (03 §4)
+- [x] 10.7.1 Snapshot & undo — auto-backup file-level di `.formspec/consult/{session}/undo/` sebelum `apply_draft` menimpa (02 §4) — `cmd/formspec/mcp_consult.go` applyDraft. ✅ 2026-08-27
+- [x] 10.7.2 Guard read-only `vendors/` ditegakkan di semua tool tulis, bukan konvensi dokumentasi (03 §4) — `guardVendors` di `propose_spec_file` + `apply_draft`, pesan mengarahkan ke Entity Extension/shadow copy; unit test. ✅ 2026-08-27
 
 ---
 
@@ -991,7 +1019,7 @@ Setup domain, landing, docs site, dan schema hosting. Referensi:
 | 12.8 Deploy CI: Pages project (site/, docs-site/, schemas)                                      | 🔲     | Manual — pakai Build watch paths (changelog 2026-08-14-001)                        |
 | 12.9 Schema registry online: versi di `apiVersion`, `formspec schema`, cache lokal, hapus embed | ✅     | `docs/plan/schema-registry-online.md` + changelog 2026-08-14-004                   |
 
-## Fase 13: Module Registry & Vendoring (npm-like) 🚧 (2026-08-20, planned)
+## Fase 13: Module Registry & Vendoring (npm-like) 🚧 (2026-08-20, planned; 13.1–13.2 ✅, 13.3 sebagian ✅ 2026-08-28)
 
 **Goal**: Ekosistem module registry — `formspec module install/publish/list/uninstall`,
 `formspec override adopt/diff`, `vendors/` + `overrides/` + `formspec.lock`, aktivasi
@@ -1005,21 +1033,21 @@ FormSpec sendiri.
 **Depends on**: Fase 6 (auth — 6.2 permission model + 6.4 API keys) untuk bagian
 auth-dependent; Fase 8 (production serve) untuk deploy nyata ke `registry.formspec.dev`.
 
-### 13.1 Local vendoring & activation (offline-first CLI)
+### 13.1 Local vendoring & activation (offline-first CLI) ✅ (2026-08-28)
 
-- [ ] 13.1.1 `formspec.lock` schema + layout `vendors/` — paket baru `internal/vendor/` (types lockfile, marker parser, alias resolver). Entri per module: `source`, `version`, `checksum` tree, `signature`, `trust_tier`, `alias`, `installed_at` (YAML).
-- [ ] 13.1.2 `formspec module install <source>` (git/folder/tarball dulu, offline) — `cmd/formspec/module.go` + `module_install.go`. Fetch → stage → validate (`module.yaml`) → copy ke `vendors/{module}/` → checksum → lock → tulis marker block ter-comment di `App.spec.modules`. Flag `--use` (aktif langsung), `--from` (registry, 13.3), `--yes` (skip consent).
-- [ ] 13.1.3 Alias saat konflik nama — dihitung saat install (Opsi B: terhadap semua yang pernah di-install + module lokal), dicatat di lock + marker.
-- [ ] 13.1.4 Boot-time enforcement — `AddManifestRoot("vendors/")` di `internal/entity/registry.go`; resolusi nama efektif dari lock; bentrok di set aktif → refuse boot; hanya module aktif (uncommented) yang diregister.
-- [ ] 13.1.5 `formspec module list` / `uninstall` — list: status aktif/nonaktif + trust tier; uninstall: hapus `vendors/` + lock + marker (jaga status aktivasi).
-- [ ] 13.1.6 `formspec verify` — checksum tree `vendors/` vs lock; tolak build kalau ada modifikasi manual.
+- [x] 13.1.1 `formspec.lock` schema + layout `vendors/` — paket baru `internal/vendor/` (types lockfile, marker parser, alias resolver). Entri per module: `source`, `version`, `checksum` tree, `signature`, `trust_tier`, `alias`, `installed_at` (YAML). — `internal/vendor/lock.go` (+`name` untuk normalisasi nama efektif). ✅ 2026-08-28
+- [x] 13.1.2 `formspec module install <source>` (git/folder/tarball dulu, offline) — `cmd/formspec/module.go` + `module_install.go`. Fetch → stage → validate (`module.yaml`) → copy ke `vendors/{module}/` → checksum → lock → tulis marker block ter-comment di `App.spec.modules`. Flag `--use` (aktif langsung), `--from` (registry, 13.3), `--yes` (skip consent). — `internal/vendor/install.go` + `cmd/formspec/module.go`; `--from`/`--yes` menyusul dengan 13.3 (registry). ✅ 2026-08-28
+- [x] 13.1.3 Alias saat konflik nama — dihitung saat install (Opsi B: terhadap semua yang pernah di-install + module lokal), dicatat di lock + marker. — `internal/vendor/alias.go`: derivasi `{org}-{name}` (prefix match); `module.yaml` vendor dinormalisasi ke nama efektif sehingga boot mendaftar entity di bawah nama tersebut. ✅ 2026-08-28
+- [x] 13.1.4 Boot-time enforcement — `AddManifestRoot("vendors/")` di `internal/entity/registry.go`; resolusi nama efektif dari lock; bentrok di set aktif → refuse boot; hanya module aktif (uncommented) yang diregister. — `resource/formspec.go`: `vendor.ActiveModules` → root per module aktif di entity registry DAN loader resolusi App/Module; normalisasi nama di install-time menggantikan alias-rewrite saat boot; E2E terverifikasi (aktif → API reachable, inactive → 404). ✅ 2026-08-28
+- [x] 13.1.5 `formspec module list` / `uninstall` — list: status aktif/nonaktif + trust tier; uninstall: hapus `vendors/` + lock + marker (jaga status aktivasi). — `cmd/formspec/module.go`. ✅ 2026-08-28
+- [x] 13.1.6 `formspec verify` — checksum tree `vendors/` vs lock; tolak build kalau ada modifikasi manual. — `cmd/formspec/verify.go` + `vendor.Verify`; E2E tamper detection terverifikasi. ✅ 2026-08-28
 
-### 13.2 Shadow copy (`overrides/`)
+### 13.2 Shadow copy (`overrides/`) ✅ (2026-08-28)
 
-- [ ] 13.2.1 `formspec override adopt <module> <kind> <name>` — copy ke `overrides/{module}/{kind}.{name}.yaml`, catat checksum sumber di lock ("asal fork").
-- [ ] 13.2.2 Boot-time replace-total + whitelist — `AddManifestRoot("overrides/")`; override menang atas `modules/`/`vendors/`; whitelist per kind (Form/Menu/VisualSpecKind instance boleh; Entity/Service/Workflow diblokir).
-- [ ] 13.2.3 `formspec override diff <module> <kind> <name>` — bandingkan shadow copy vs upstream.
-- [ ] 13.2.4 Drift detection — saat install/update, bandingkan checksum base baru vs "asal fork" → warning.
+- [x] 13.2.1 `formspec override adopt <module> <kind> <name>` — copy ke `overrides/{module}/{kind}.{name}.yaml`, catat checksum sumber di lock ("asal fork"). — `internal/vendor/override.go`: upstream dilokasi via loader (bukan tebak path); `LockEntry.Overrides` menyimpan kind/name/origin/rel_path/base_checksum. ✅ 2026-08-28
+- [x] 13.2.2 Boot-time replace-total + whitelist — `AddManifestRoot("overrides/")`; override menang atas `modules/`/`vendors/`; whitelist per kind (Form/Menu/VisualSpecKind instance boleh; Entity/Service/Workflow diblokir). — overrides root ditambahkan TERAKHIR (later roots win); whitelist §5.4 = Form + VisualSpecKind (Menu bukan kind standalone — navigasi di App/Module spec); `ValidateOverridesDir` menolak boot pada pelanggaran. ✅ 2026-08-28
+- [x] 13.2.3 `formspec override diff <module> <kind> <name>` — bandingkan shadow copy vs upstream. — `internal/textdiff` (package bersama, dipakai consult + override); CLI `formspec override diff`. ✅ 2026-08-28
+- [x] 13.2.4 Drift detection — saat install/update, bandingkan checksum base baru vs "asal fork" → warning. — `vendor.CheckDrift` dipanggil saat boot (warning stderr, bukan hard-fail §5.3); record Overrides selamat across re-install. ✅ 2026-08-28
 
 ### 13.3 Registry sebagai FormSpec app (dogfooding POC)
 
@@ -1029,14 +1057,14 @@ auth-dependent; Fase 8 (production serve) untuk deploy nyata ke `registry.formsp
 > (`verticals/registry/spec/` via `//go:embed` atau `--spec`). Tidak perlu ubah spec —
 > hanya tambah docs: "native app binary" sebagai deployment mode first-class.
 
-- [ ] 13.3.1 Scaffold `verticals/registry/` — App + Module manifests, `formspec generate auth` (API key untuk publish). POC jalan via `formspec dev`.
-- [ ] 13.3.2 Entities `Module` / `ModuleVersion` / `Vendor` — state machine (draft→published→deprecated), events, permissions; tarball → `ctx.storage` (ref di Entity, blob di storage).
-- [ ] 13.3.3 Services `signature-verify` (ed25519), `checksum`, `search` (list filters dulu; pgvector 10.5.3 nanti).
-- [ ] 13.3.4 `spec.expose` — public read (search/detail/download), authenticated publish (API key, 2.5.1).
-- [ ] 13.3.5 Workflow review trust tier `verified` (approval).
-- [ ] 13.3.6 `formspec sign` — ed25519 keypair, sign checksum tree module; registry verifikasi saat publish; trust tier (official/verified/community).
-- [ ] 13.3.7 `formspec module publish` — sign + upload; `--registry`/env `FORMSPEC_MODULE_REGISTRY` (default `https://registry.formspec.dev`).
-- [ ] 13.3.8 `formspec module install --from registry.formspec.dev` — download tarball → verifikasi signature → alur 13.1.
+- [x] 13.3.1 Scaffold `verticals/registry/` — App + Module manifests, `formspec generate auth` (API key untuk publish). POC jalan via `formspec dev`. — App `registry` + Module `registry` + 3 entities; validate hijau engine+schema; POC boot via `formspec dev` terverifikasi. `generate auth` menyusul (auth module dogfooding terpisah). ✅ 2026-08-28
+- [x] 13.3.2 Entities `Module` / `ModuleVersion` / `Vendor` — state machine (draft→published→deprecated), events, permissions; tarball → `ctx.storage` (ref di Entity, blob di storage). — entity manifests lengkap (ModuleVersion: semver unique, checksum, signature ed25519, tarball file field, state machine); storage blob via file field + upload route (7.17.1). Events/permissions detail menyusul. ✅ 2026-08-28
+- [ ] 13.3.3 Services `signature-verify` (ed25519), `checksum`, `search` (list filters dulu; pgvector 10.5.3 nanti). — ⏸️ deferred: verifikasi signature saat ini client-side di `module install --from` (terverifikasi E2E); server-side verify butuh `cmd/formspec-registry` wrapper + native handler.
+- [x] 13.3.4 `spec.expose` — public read (search/detail/download), authenticated publish (API key, 2.5.1). — expose list/find/create/submit di ketiga entity; publish flow E2E lewat REST surface workspace-scoped. API key enforcement menyusul (dev mode POC tanpa auth). ✅ 2026-08-28
+- [ ] 13.3.5 Workflow review trust tier `verified` (approval). — ⏸️ deferred (butuh 13.3.3 + keputusan reviewer flow).
+- [x] 13.3.6 `formspec sign` — ed25519 keypair, sign checksum tree module; registry verifikasi saat publish; trust tier (official/verified/community). — `cmd/formspec/sign.go` (keygen/sign/verify) + `internal/vendor/sign.go`; tamper detection E2E; trust tier community default, verified/official menyusul dengan 13.3.5. ✅ 2026-08-28
+- [x] 13.3.7 `formspec module publish` — sign + upload; `--registry`/env `FORMSPEC_MODULE_REGISTRY` (default `https://registry.formspec.dev`). — `cmd/formspec/publish.go` + `internal/vendor/registry.go`; versi immutable (re-publish semver sama content beda → ditolak); E2E terverifikasi. ✅ 2026-08-28
+- [x] 13.3.8 `formspec module install --from registry.formspec.dev` — download tarball → verifikasi signature → alur 13.1. — verifikasi signature terhadap public key vendor terdaftar SEBELUM tarball dipercaya (checksum mismatch → REFUSED); lock mencatat registry ref + signature; E2E penuh (publish → install → boot → module ter-register). ✅ 2026-08-28
 - [ ] 13.3.9 (deferred) Marketplace layer — pricing/metering/licensing per `07-marketplace.md` §4–§9 — out of scope fase ini.
 
 ### 13.4 Docs & tests

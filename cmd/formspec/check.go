@@ -163,6 +163,10 @@ func runCheck(args []string) {
 	// Check 3+4: cross-module uses.resources existence + unused.
 	brokenRefs := checkUses(result, idx, res.Manifests)
 
+	// Check 2.9.4: kind: Datastore driver×serves compatibility +
+	// module `spec.datastore` binding targets (platform/06-datastore.md §1.1/§2).
+	checkDatastores(result, res.Manifests)
+
 	// ── --fix: remove broken uses.resources references ──
 	// A broken reference (target entity does not exist) is a clear error; the
 	// declaration is dead weight and safe to remove. This does NOT change the
@@ -414,6 +418,59 @@ func checkWizard(result *checkResult, idx *entityIndex, manifests []manifest.Raw
 				checkExpr(result, m.Source, m.Metadata.Name, "step "+step.Title+" field "+f.Field+".required_when", f.RequiredWhen, fields)
 				checkExpr(result, m.Source, m.Metadata.Name, "step "+step.Title+" field "+f.Field+".compute", f.Compute, fields)
 			}
+		}
+	}
+}
+
+// checkDatastores validates kind: Datastore manifests and module bindings
+// (todo 2.9.4, platform/06-datastore.md §1.1/§2):
+//   - driver×serves compatibility (§2 table)
+//   - module `spec.datastore` binding points to an existing Datastore manifest
+func checkDatastores(result *checkResult, manifests []manifest.RawManifest) {
+	datastores := map[string]manifest.RawManifest{} // name → manifest
+	for _, m := range manifests {
+		if spec.Kind(m.Kind) != spec.KindDatastore {
+			continue
+		}
+		sm, ok := m.Spec.(map[string]any)
+		if !ok {
+			continue
+		}
+		ds, err := manifest.RawSpecTo[spec.DatastoreSpec](sm)
+		if err != nil {
+			result.add(m.Source, "error", "datastore %q: %v", m.Metadata.Name, err)
+			continue
+		}
+		if len(ds.Serves) == 0 {
+			result.add(m.Source, "error", "datastore %q: spec.serves must list at least one primitive", m.Metadata.Name)
+			continue
+		}
+		compatible := map[spec.PrimitiveType]bool{}
+		for _, p := range ds.Driver.Serves() {
+			compatible[p] = true
+		}
+		for _, p := range ds.Serves {
+			if !compatible[p] {
+				result.add(m.Source, "error", "datastore %q: driver %q cannot serve primitive %q (platform/06-datastore.md §2)", m.Metadata.Name, ds.Driver, p)
+			}
+		}
+		datastores[m.Metadata.Name] = m
+	}
+
+	for _, m := range manifests {
+		if spec.Kind(m.Kind) != spec.KindModule {
+			continue
+		}
+		sm, ok := m.Spec.(map[string]any)
+		if !ok {
+			continue
+		}
+		ms, err := manifest.RawSpecToModuleSpec(sm)
+		if err != nil || ms.Datastore == "" {
+			continue
+		}
+		if _, ok := datastores[ms.Datastore]; !ok {
+			result.add(m.Source, "error", "module %q binds datastore %q which has no kind: Datastore manifest", m.Metadata.Name, ms.Datastore)
 		}
 	}
 }
