@@ -330,6 +330,7 @@ func (b *RouterBuilder) BuildHTTP() http.Handler {
 			// concern); /api/v1/auth is opt-in via EnableAPIAuth.
 			r.Post("/auth/login", b.HandleLogin())
 			r.Post("/auth/refresh", b.HandleRefresh())
+			r.Post("/auth/register", b.HandleRegister())
 
 			// Meta API — read-only UI manifests + identity (Frontend §1.1).
 			r.Route("/_meta", func(r chi.Router) {
@@ -389,6 +390,7 @@ func (b *RouterBuilder) BuildHTTP() http.Handler {
 			if b.enableAPIAuth {
 				r.Post("/auth/login", b.HandleLogin())
 				r.Post("/auth/refresh", b.HandleRefresh())
+				r.Post("/auth/register", b.HandleRegister())
 			}
 
 			for _, rd := range b.routes {

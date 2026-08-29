@@ -1,0 +1,16 @@
+apiVersion: formspec.dev/v1
+kind: Listing
+metadata:
+  name: module-catalog
+  module: portal
+  description: "Katalog publik module FormSpec Registry"
+spec:
+  entity: registry.module
+  columns:
+    - { field: name, label: "Module" }
+    - { field: display_name, label: "Nama" }
+    - { field: description, label: "Deskripsi" }
+    - { field: trust_tier, label: "Trust Tier", widget: badge }
+  filters:
+    - { field: trust_tier, label: "Trust Tier", type: select }
+  search: true

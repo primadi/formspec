@@ -1,0 +1,31 @@
+apiVersion: formspec.dev/v1
+kind: Page
+metadata:
+  name: vendor-signup
+  module: portal
+  description: "Halaman pendaftaran vendor — onboarding setelah sign up akun"
+spec:
+  route: /portal/vendor-signup
+  title: "Sign up Vendor"
+  blocks:
+    - section:
+        type: hero
+        title: "Jadi Vendor di FormSpec Registry"
+        subtitle: "Tiga langkah: buat akun → keypair ed25519 → daftarkan vendor. Setelah itu publish module pertama Anda."
+        variant: secondary
+    - form:
+        ref: vendor-signup
+        mode: create
+    - section:
+        type: card
+        title: "Sebelum Mendaftar"
+        columns: 3
+        items:
+          - { icon: user-plus, title: "1. Buat Akun", text: "Sign up di halaman login — username + password. Akun ini yang Anda tulis di kolom Owner." }
+          - { icon: key, title: "2. Keygen", text: "formspec sign keygen --out ~/.formspec/keys --name <vendor> — private key (.key) jangan pernah di-commit atau dibagikan." }
+          - { icon: upload, title: "3. Publish", text: "formspec module publish ./module-anda --vendor <nama> --key <private.key> --version 1.0.0" }
+    - section:
+        type: cta
+        title: "Sudah paham alurnya?"
+        subtitle: "Panduan lengkap ada di dokumentasi registry."
+        cta: { label: "Buka Quickstart", href: /listing/module-catalog }

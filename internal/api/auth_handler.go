@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"time"
@@ -21,8 +22,9 @@ func SetAuthService(svc *auth.Service) {
 
 // Auth endpoint rate limiters (todo 6.6.3) — token bucket per client IP.
 var (
-	loginLimiter   = newRateLimiter(0.5, 5) // 5 burst, refill 0.5/s (5 per 10s)
-	refreshLimiter = newRateLimiter(1, 10)  // 10 burst, refill 1/s
+	loginLimiter    = newRateLimiter(0.5, 5) // 5 burst, refill 0.5/s (5 per 10s)
+	refreshLimiter  = newRateLimiter(1, 10)  // 10 burst, refill 1/s
+	registerLimiter = newRateLimiter(0.1, 3) // 3 burst, refill 0.1/s (3 per 30s)
 )
 
 // clientIP extracts the client IP from the request (RemoteAddr host part).
@@ -104,6 +106,79 @@ func (b *RouterBuilder) HandleLogin() http.HandlerFunc {
 		})
 		writeJSON(w, http.StatusOK, SingleResponse{
 			Data: pair,
+			Meta: MetaSingle{
+				RequestID: requestIDFromContext(r.Context()),
+				Timestamp: time.Now().UTC().Format(time.RFC3339),
+			},
+		})
+	}
+}
+
+// HandleRegister serves POST /{ws}/_ui/auth/register (registry portal B.3 —
+// self-service vendor sign-up). Creates an active user with NO roles —
+// least privilege by default; role assignment is an admin concern.
+// Public endpoint, rate-limited per IP.
+func (b *RouterBuilder) HandleRegister() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if authService == nil {
+			writeError(w, http.StatusServiceUnavailable, "AUTH_NOT_CONFIGURED",
+				"auth service is not configured")
+			return
+		}
+
+		ip := clientIP(r)
+		if !registerLimiter.Allow("register:" + ip) {
+			authAuditLog.record(AuthAuditEntry{
+				Timestamp: time.Now().UTC(), Method: "register", IP: ip,
+				Result: "failure", Reason: "rate_limited",
+			})
+			writeError(w, http.StatusTooManyRequests, "RATE_LIMITED",
+				"too many registration attempts, try again later")
+			return
+		}
+
+		var req loginRequest // same shape: username + password
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "INVALID_REQUEST",
+				"invalid request body: "+err.Error())
+			return
+		}
+		if req.Username == "" || req.Password == "" {
+			writeError(w, http.StatusBadRequest, "INVALID_REQUEST",
+				"username and password are required")
+			return
+		}
+		if len(req.Password) < 8 {
+			writeError(w, http.StatusBadRequest, "WEAK_PASSWORD",
+				"password must be at least 8 characters")
+			return
+		}
+
+		workspaceID := workspaceFromContext(r.Context())
+		if err := authService.Register(r.Context(), workspaceID, req.Username, req.Password); err != nil {
+			reason := "error"
+			status := http.StatusInternalServerError
+			code := "INTERNAL"
+			switch {
+			case errors.Is(err, auth.ErrUsernameTaken):
+				status, code, reason = http.StatusConflict, "USERNAME_TAKEN", "username_taken"
+			case errors.Is(err, auth.ErrInvalidCredentials):
+				status, code, reason = http.StatusBadRequest, "INVALID_REQUEST", "invalid_input"
+			}
+			authAuditLog.record(AuthAuditEntry{
+				Timestamp: time.Now().UTC(), Method: "register", Username: req.Username,
+				IP: ip, Result: "failure", Reason: reason,
+			})
+			writeError(w, status, code, err.Error())
+			return
+		}
+
+		authAuditLog.record(AuthAuditEntry{
+			Timestamp: time.Now().UTC(), Method: "register", Username: req.Username,
+			IP: ip, Result: "success",
+		})
+		writeJSON(w, http.StatusCreated, SingleResponse{
+			Data: map[string]any{"username": req.Username, "created": true},
 			Meta: MetaSingle{
 				RequestID: requestIDFromContext(r.Context()),
 				Timestamp: time.Now().UTC().Format(time.RFC3339),

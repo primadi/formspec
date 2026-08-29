@@ -1,0 +1,26 @@
+apiVersion: formspec.dev/v1
+kind: Form
+metadata:
+  name: vendor-signup
+  module: portal
+  description: "Formulir pendaftaran vendor publik — buat akun dulu (sign up), lalu daftarkan vendor dengan public key ed25519"
+spec:
+  entity: registry.vendor
+  mode: create
+  sections:
+    - title: "Identitas Vendor"
+      description: "Nama vendor menjadi prefix nama module Anda di registry (mis. acme/billing)."
+      fields:
+        - { field: name, label: "Vendor Name", placeholder: "acme" }
+        - { field: display_name, label: "Display Name", placeholder: "ACME Software" }
+    - title: "Kunci Publik"
+      description: "Jalankan 'formspec sign keygen --out ~/.formspec/keys --name <vendor>' lalu tempel isi file .pub di sini. Private key TIDAK pernah dikirim ke registry."
+      fields:
+        - { field: public_key, label: "Ed25519 Public Key (base64)", widget: textarea }
+    - title: "Akun Pengelola"
+      fields:
+        - { field: owner_username, label: "Username Akun Anda", placeholder: "username dari sign up" }
+        - { field: url, label: "Website (opsional)", required_when: "false" }
+  submit:
+    label: "Daftarkan Vendor"
+    message: "Vendor terdaftar. Selanjutnya: formspec module publish --vendor <nama> --key <private.key> --version 1.0.0"

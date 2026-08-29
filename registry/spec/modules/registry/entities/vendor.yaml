@@ -26,6 +26,10 @@ spec:
       required: true
       title: "Ed25519 Public Key"
       description: "Public key ed25519 (base64) yang memverifikasi signature module vendor ini"
+    - name: owner_username
+      type: string
+      title: "Owner"
+      description: "Username akun registry yang mengelola vendor ini (diisi saat sign-up vendor)"
     - name: url
       type: string
       title: "URL"

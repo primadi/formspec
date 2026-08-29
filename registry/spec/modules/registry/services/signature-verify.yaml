@@ -1,0 +1,23 @@
+apiVersion: formspec.dev/v1
+kind: Service
+metadata:
+  name: signature-verify
+  module: registry
+  description: "Verifikasi signature ed25519 server-side (todo 13.3.3) — dipanggil publish flow; impl native hanya tersedia di binary cmd/formspec-registry"
+spec:
+  version: v1
+  actions:
+    - name: verify
+      description: "Verifikasi signature ed25519 (base64) atas tree checksum dengan public key vendor (base64)"
+      required_permission: registry.signature-verify.verify
+      params:
+        validate:
+          - field: checksum
+            rules: [required]
+          - field: signature
+            rules: [required]
+          - field: public_key
+            rules: [required]
+      impl:
+        type: native
+        ref: registry.SignatureVerify

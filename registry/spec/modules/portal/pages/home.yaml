@@ -1,0 +1,49 @@
+apiVersion: formspec.dev/v1
+kind: Page
+metadata:
+  name: home
+  module: portal
+  description: "Landing page FormSpec Registry — penjelasan, manual pemakaian, search, sign-in/sign-up"
+spec:
+  route: /
+  title: "FormSpec Registry"
+  blocks:
+    - section:
+        type: hero
+        title: "FormSpec Module Registry"
+        subtitle: "Ekosistem distribusi module npm-like untuk business apps — signed ed25519, versi immutable, terverifikasi. Halaman ini sendiri dibangun 100% dari YAML manifest FormSpec."
+        cta: { label: "Jelajahi Module", href: /listing/module-catalog, variant: primary }
+    - section:
+        type: feature_grid
+        title: "Kenapa FormSpec Registry"
+        subtitle: "Distribusi module yang aman dan dapat diaudit."
+        items:
+          - { icon: shield, title: "Signed ed25519", text: "Setiap module ditandatangani vendor; signature diverifikasi terhadap public key terdaftar SEBELUM tarball dipercaya." }
+          - { icon: lock, title: "Versi Immutable", text: "Semver yang sudah publish tidak bisa diganti isinya — re-publish konten berbeda ditolak." }
+          - { icon: eye, title: "Spec Terbuka", text: "Manifest YAML selalu terbaca: consent, review diff, dan AI-friendly sesuai filosofi FormSpec." }
+          - { icon: zap, title: "Install Sekali Klik", text: "formspec module install — fetch, verifikasi, lock, dan aktivasi berbasis marker." }
+    - section:
+        type: card
+        title: "Cara Memakai — 4 Langkah"
+        subtitle: "Dari keypair sampai module berjalan di app Anda."
+        columns: 2
+        items:
+          - { icon: key, title: "1. Keygen", text: "formspec sign keygen --out ~/.formspec/keys --name acme", cta: { label: "CLI Reference", href: /listing/module-catalog } }
+          - { icon: pen-tool, title: "2. Sign", text: "formspec sign ./my-module --key ~/.formspec/keys/acme.key" }
+          - { icon: upload, title: "3. Publish", text: "formspec module publish ./my-module --vendor acme --key ~/.formspec/keys/acme.key --version 1.0.0" }
+          - { icon: download, title: "4. Install", text: "formspec module install --from registry.formspec.dev acme-billing@1.0.0 --use" }
+    - section:
+        type: cta
+        title: "Cari Module"
+        subtitle: "Telusuri katalog module yang sudah dipublikasikan vendor."
+        cta: { label: "Buka Katalog", href: /listing/module-catalog }
+    - section:
+        type: cta
+        title: "Jadi Vendor"
+        subtitle: "Publikasikan module Anda sendiri — buat keypair, daftarkan vendor, dan publish versi pertama."
+        cta: { label: "Sign up Vendor", href: /portal/vendor-signup, variant: secondary }
+    - section:
+        type: cta
+        title: "Sudah punya akun?"
+        subtitle: "Masuk untuk mengelola module dan versi Anda."
+        cta: { label: "Sign in", href: /login, variant: ghost }

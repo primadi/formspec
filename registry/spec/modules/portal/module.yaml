@@ -1,0 +1,8 @@
+apiVersion: formspec.dev/v1
+kind: Module
+metadata:
+  name: portal
+  description: "Portal publik FormSpec Registry — landing page, katalog module, dan onboarding vendor"
+spec:
+  version: 0.1.0
+  vendor: formspec-dev

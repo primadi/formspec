@@ -18,6 +18,10 @@ var ErrInvalidCredentials = errors.New("auth: invalid credentials")
 // ErrSessionRevoked is returned when a refresh token's session no longer exists.
 var ErrSessionRevoked = errors.New("auth: session revoked")
 
+// ErrUsernameTaken is returned by Register when the username already exists
+// in the workspace (self-service sign-up, registry portal B.3).
+var ErrUsernameTaken = errors.New("auth: username already taken")
+
 // TokenPair is the result of a successful login or refresh.
 type TokenPair struct {
 	AccessToken  string `json:"access_token"`
@@ -185,6 +189,26 @@ func (s *Service) SeedDevUser(ctx context.Context, workspaceID, username, passwo
 		Roles:        []string{"admin"},
 		Permissions:  []string{"*"},
 		Active:       true,
+	})
+}
+
+// Register creates a new user account via self-service sign-up (registry
+// portal B.3). The username must be free within the workspace; the account is
+// created active with NO roles/permissions — role assignment remains an admin
+// concern (least privilege by default). Password is hashed inside CreateUser.
+func (s *Service) Register(ctx context.Context, workspaceID, username, password string) error {
+	if username == "" || password == "" {
+		return ErrInvalidCredentials
+	}
+	if _, err := s.users.GetByUsername(ctx, workspaceID, username); err == nil {
+		return ErrUsernameTaken
+	}
+	return s.users.CreateUser(ctx, workspaceID, &User{
+		Username:    username,
+		WorkspaceID: workspaceID,
+		Active:      true,
+		// PasswordHash carries the PLAINTEXT here — CreateUser hashes it.
+		PasswordHash: password,
 	})
 }
 
