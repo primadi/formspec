@@ -332,6 +332,23 @@
       },
       "additionalProperties": false
     },
+    "CacheSpec": {
+      "description": "CacheSpec configures the framework read-through cache for find-by-id\n(Fase 14). TTL must parse as a Go duration (\"300s\", \"5m\") within 1s–1h.\n",
+      "type": "object",
+      "properties": {
+        "ttl": {
+          "description": "@schema {example: \"300s\"}",
+          "type": "string",
+          "examples": [
+            "300s"
+          ]
+        }
+      },
+      "required": [
+        "ttl"
+      ],
+      "additionalProperties": false
+    },
     "CallbackDecl": {
       "description": "CallbackDecl configures callback webhook delivery for a tracked async job\n(02-core-extended.md §13.1, todo 7.13.4). The callback URL is supplied by\nthe caller via a request header; the result is delivered HMAC-signed.\n",
       "type": "object",
@@ -3522,6 +3539,23 @@
           "type": "string"
         }
       },
+      "additionalProperties": false
+    },
+    "CacheSpec": {
+      "description": "CacheSpec configures the framework read-through cache for find-by-id\n(Fase 14). TTL must parse as a Go duration (\"300s\", \"5m\") within 1s–1h.\n",
+      "type": "object",
+      "properties": {
+        "ttl": {
+          "description": "@schema {example: \"300s\"}",
+          "type": "string",
+          "examples": [
+            "300s"
+          ]
+        }
+      },
+      "required": [
+        "ttl"
+      ],
       "additionalProperties": false
     },
     "CallbackDecl": {
@@ -6761,6 +6795,11 @@
             },
             "backdate_policy": {
               "$ref": "#/$defs/BackdatePolicy",
+              "nullable": true
+            },
+            "cache": {
+              "$ref": "#/$defs/CacheSpec",
+              "description": "Cache opts this entity into the framework read-through cache on",
               "nullable": true
             },
             "characteristic": {

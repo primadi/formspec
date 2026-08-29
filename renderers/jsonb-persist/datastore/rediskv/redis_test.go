@@ -72,3 +72,51 @@ func TestKV_SetGetDelete(t *testing.T) {
 		t.Fatalf("get after delete: want nil, got %v", v)
 	}
 }
+
+// TestKV_BroadcastInvalidate_TwoInstances: instance A deletes+broadcasts;
+// instance B's copy of the key is gone (Fase 14 v2 — multi-instance
+// invalidation via Redis pub/sub).
+func TestKV_BroadcastInvalidate_TwoInstances(t *testing.T) {
+	addr := redisAddr()
+	if addr == "" {
+		t.Skip("no redis test target (set FORMSPEC_TEST_REDIS)")
+	}
+	a, err := New(addr, "test")
+	if err != nil {
+		t.Fatalf("connect A: %v", err)
+	}
+	defer a.Close()
+	b, err := New(addr, "test")
+	if err != nil {
+		t.Fatalf("connect B: %v", err)
+	}
+	defer b.Close()
+	ctx := context.Background()
+
+	// Both instances hold the same key.
+	for _, kv := range []*KV{a, b} {
+		if err := kv.Set(ctx, "shared", "v", time.Minute); err != nil {
+			t.Fatalf("set: %v", err)
+		}
+	}
+
+	// A mutates → broadcast. B must lose its copy.
+	if err := a.BroadcastInvalidate(ctx, "shared"); err != nil {
+		t.Fatalf("broadcast: %v", err)
+	}
+
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		v, err := b.Get(ctx, "shared")
+		if err != nil {
+			t.Fatalf("get on B: %v", err)
+		}
+		if v == nil {
+			return // invalidated on B — success
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("B still holds key after broadcast: %v", v)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}

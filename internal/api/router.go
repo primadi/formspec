@@ -127,6 +127,11 @@ func (b *RouterBuilder) SetAuditWriter(w AuditWriter) {
 	b.factory.SetAuditWriter(w)
 }
 
+// SetEntityCache wires the optional read-through find-by-id cache (Fase 14).
+func (b *RouterBuilder) SetEntityCache(c *EntityCache) {
+	b.factory.SetEntityCache(c)
+}
+
 // SetDeliveryDeps wires the event-delivery dependencies (hub, outbox, event
 // log) used by HandleCreate/HandleUpdate/HandleCustomAction to fan out
 // declared events after a successful action.

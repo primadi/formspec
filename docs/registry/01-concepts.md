@@ -57,3 +57,11 @@ entity di bawah nama tersebut.
 boot. Checksum "asal fork" dicatat di lock; vendor update yang mengubah upstream
 memicu drift warning (bukan hard-fail). Entity/Service/Workflow tidak bisa
 di-shadow-copy — gunakan Entity Extension / Integrator pattern.
+
+## Performa: Read-Through Cache
+
+Entity registry (`module`, `vendor`, `module-version`) mengaktifkan cache
+framework find-by-id (`spec.cache.ttl: 300s` — Fase 14). Read katalog portal
+dan lookup CLI dilayani dari cache; invalidasi otomatis saat publish/update
+(in-process + broadcast Redis pub/sub untuk multi-instance). Detail semantik:
+[`../spec/backend/01-core-basic.md`](../spec/backend/01-core-basic.md) §10.

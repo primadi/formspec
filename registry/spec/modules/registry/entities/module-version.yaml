@@ -59,6 +59,9 @@ spec:
       default: draft
       title: "Status"
       exclude: [ui]
+  cache:
+    ttl: 300s
+
   state_machine:
     field: status
     initial: draft

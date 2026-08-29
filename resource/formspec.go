@@ -540,6 +540,40 @@ func New(cfg Config) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Entity read-through cache (Fase 14, docs/plan/fase14-entity-cache.md):
+	// opt-in per entity via spec.cache.ttl. Backend = the module-bound
+	// datastore serving `cache` (Redis/Valkey in multi-instance deployments)
+	// or a shared in-memory KV when unbound. Cached entries hold RAW records
+	// — field-security sanitization stays per-request in the handlers.
+	sharedCacheKV := memory.NewKV()
+	rb.SetEntityCache(&api.EntityCache{
+		Resolve: func(module, entity string) api.CacheKV {
+			info, ok := reg.GetEntity(module, entity)
+			if !ok || info.EntitySpec == nil || info.EntitySpec.Cache == nil {
+				return nil // not opted in
+			}
+			if dsName := dsReg.Binding(module); dsName != "" {
+				if conn, err := dsReg.Resolve("cache", "", module); err == nil {
+					if kv, ok := conn.(api.CacheKV); ok {
+						return kv
+					}
+				}
+			}
+			return sharedCacheKV
+		},
+		TTLFor: func(module, entity string) time.Duration {
+			info, ok := reg.GetEntity(module, entity)
+			if !ok || info.EntitySpec == nil || info.EntitySpec.Cache == nil {
+				return time.Minute
+			}
+			if ttl, err := info.EntitySpec.Cache.CacheTTL(); err == nil {
+				return ttl
+			}
+			return time.Minute
+		},
+	})
+
 	disp := newDispatcher(reg, svcReg, database, cfg, cfgReg, jobTracker, dsReg, sharedPubSub)
 	nativeEx := disp.NativeExecutor() // get the native executor from dispatcher
 	rb.SetDispatcher(disp)

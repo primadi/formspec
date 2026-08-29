@@ -40,6 +40,9 @@ spec:
       type: text
       title: "AI Index"
       description: "Deskripsi untuk discovery AI (untrusted input — 04-formspec-remote-mcp.md §3.1)"
+  cache:
+    ttl: 300s
+
   expose:
     - type: rest
       actions: [list, find, create, update, submit]

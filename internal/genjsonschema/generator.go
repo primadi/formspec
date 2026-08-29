@@ -28,7 +28,7 @@ func (c *Converter) Generate(collect *CollectResult) *GenerateResult {
 		"MenuDecl", "MenuItem", "ValidationRule", "RelationDecl",
 		"ChildDecl", "ComputedDecl", "AutoFillDecl", "IndexDecl", "UsesDecl",
 		"ParamsDecl", "ConditionDecl", "HookDecl", "IdempotencyDecl",
-		"EntityAuth", "ExposeConfig", "RateLimitSpec",
+		"EntityAuth", "ExposeConfig", "RateLimitSpec", "CacheSpec",
 		"ActionUIHint", "FilterSpec", "FormSection", "FormField", "FormAction", "FormSubmit", "FormRenderDecl",
 		"TableColumn", "TableAction", "BackdatePolicy", "ForwardDatePolicy",
 		"SoftDeactivateDecl", "PersistSpec", "ExtendStorage",

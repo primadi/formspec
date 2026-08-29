@@ -43,12 +43,18 @@ type HandlerFactory struct {
 	assetRoots    []string                // manifest roots for module asset serving (todo 5.9.1)
 	rateLimiter   *ResourceRateLimiter    // optional — per-resource/per-action rate limits (todo 7.12)
 	jobTracker    *job.Tracker            // optional — tracked async jobs (call: async + track: true, todo 7.13)
+	entityCache   *EntityCache            // optional — read-through find-by-id cache (Fase 14, opt-in via spec.cache)
 }
 
 // EntityStoreProvider abstracts the entity registry for handler use.
 type EntityStoreProvider interface {
 	GetEntityStore(module, name string) (*db.EntityStore, error)
 }
+
+// SetEntityCache wires the optional read-through cache (Fase 14). The
+// resolver decides per entity whether caching applies (spec.cache opt-in)
+// and which backend to use (datastore-bound or shared in-memory).
+func (f *HandlerFactory) SetEntityCache(c *EntityCache) { f.entityCache = c }
 
 // NewHandlerFactory creates a handler factory.
 func NewHandlerFactory(registry EntityStoreProvider) *HandlerFactory {
@@ -565,6 +571,26 @@ func (f *HandlerFactory) HandleFind(module, entity string) http.HandlerFunc {
 		workspaceID := workspaceFromContext(ctx)
 		id := r.PathValue("id")
 
+		// ── Read-through cache (Fase 14, opt-in via spec.cache) ──
+		var cacheBackend CacheKV
+		var cacheKey string
+		var cacheTTL time.Duration
+		if f.entityCache != nil && f.entityCache.Resolve != nil {
+			if b := f.entityCache.Resolve(module, entity); b != nil {
+				cacheBackend = b
+				cacheKey = CacheKey(workspaceID, module, entity, id)
+				cacheTTL = f.entityCache.TTLFor(module, entity)
+				if rec, err := f.entityCache.GetRecord(ctx, b, cacheKey); err == nil && rec != nil {
+					rec.Data = f.sanitize(r, module, entity, rec.Data)
+					writeJSON(w, http.StatusOK, SingleResponse{
+						Data: rec,
+						Meta: MetaSingle{RequestID: requestIDFromContext(ctx), Timestamp: time.Now().UTC().Format(time.RFC3339)},
+					})
+					return
+				}
+			}
+		}
+
 		rec, err := store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: id})
 		if err != nil {
 			// Auto-create for reference entities with natural key: if
@@ -598,6 +624,11 @@ func (f *HandlerFactory) HandleFind(module, entity string) http.HandlerFunc {
 				writeError(w, http.StatusNotFound, "NOT_FOUND", err.Error())
 				return
 			}
+		}
+
+		// Populate the cache with the RAW record (pre-sanitize) — Fase 14.
+		if cacheBackend != nil {
+			_ = f.entityCache.SetRecord(ctx, cacheBackend, cacheKey, rec, cacheTTL)
 		}
 
 		rec.Data = f.sanitize(r, module, entity, rec.Data)
@@ -903,6 +934,8 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 
 		// Fetch updated record
 		rec, _ := store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: id})
+		// Invalidate the read-through cache (Fase 14) — never blocks the write path.
+		f.invalidateEntityCache(ctx, workspaceID, module, entity, id)
 		// Attach new version
 		if rec != nil {
 			rec.Version = newVersion
@@ -961,6 +994,8 @@ func (f *HandlerFactory) HandleDelete(module, entity string) http.HandlerFunc {
 		// to live listeners — listener-gated, no-op when nobody is connected.
 		action.NotifyMutation(f.deliveryDeps, workspaceID, module+"/"+entity, "deleted")
 
+		// Invalidate the read-through cache (Fase 14).
+		f.invalidateEntityCache(ctx, workspaceID, module, entity, id)
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
@@ -1021,6 +1056,8 @@ func (f *HandlerFactory) HandleSubmit(module, entity string) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "submitted but fetch failed: "+err.Error())
 			return
 		}
+		// Invalidate the read-through cache (Fase 14).
+		f.invalidateEntityCache(ctx, workspaceID, module, entity, id)
 
 		if rec != nil {
 			action.RunAfterPhase(ctx, f.dispatcher, hooks, actionSpec, "submit", action.ExecuteParams{
@@ -1287,6 +1324,8 @@ func (f *HandlerFactory) handleSetActive(module, entity, actionName string, acti
 			writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "updated but fetch failed: "+err.Error())
 			return
 		}
+		// Invalidate the read-through cache (Fase 14).
+		f.invalidateEntityCache(ctx, workspaceID, module, entity, id)
 
 		if rec != nil {
 			action.RunAfterPhase(ctx, f.dispatcher, hooks, actionSpec, actionName, action.ExecuteParams{
@@ -2146,6 +2185,8 @@ func (f *HandlerFactory) executeWorkflowTransition(
 	// Realtime channel: the transition completed.
 	action.NotifyMutation(f.deliveryDeps, workspaceID, module+"/"+entity, "updated")
 
+	// Invalidate the read-through cache (Fase 14).
+	f.invalidateEntityCache(ctx, workspaceID, module, entity, resourceID)
 	writeJSON(w, http.StatusOK, SingleResponse{
 		Data: map[string]any{
 			"status": "transition_completed",

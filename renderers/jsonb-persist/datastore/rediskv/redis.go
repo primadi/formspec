@@ -20,8 +20,15 @@ type KV struct {
 	namespace string // key prefix for multi-tenant/multi-app isolation
 }
 
+// invalidateChannel is the pub/sub channel for multi-instance cache
+// invalidation (Fase 14 v2): mutators publish the deleted key; every
+// instance subscribed deletes it locally (no re-broadcast — no loop).
+const invalidateChannel = "formspec:cache:invalidate"
+
 // New opens a Redis/Valkey connection at addr ("host:port") with an optional
-// key namespace prefix (empty = "formspec:").
+// key namespace prefix (empty = "formspec:"). A background goroutine
+// subscribes to the invalidation channel and deletes published keys locally,
+// making cross-instance invalidation automatic.
 func New(addr, namespace string) (*KV, error) {
 	if namespace == "" {
 		namespace = "formspec"
@@ -32,7 +39,37 @@ func New(addr, namespace string) (*KV, error) {
 	if err := client.Ping(ctx).Err(); err != nil {
 		return nil, fmt.Errorf("redis connect %s: %w", addr, err)
 	}
-	return &KV{client: client, namespace: namespace}, nil
+	kv := &KV{client: client, namespace: namespace}
+	go kv.subscribeInvalidate()
+	return kv, nil
+}
+
+// subscribeInvalidate listens on the invalidation channel and deletes
+// published keys locally. Runs for the lifetime of the connection; exits
+// quietly when the client is closed.
+func (k *KV) subscribeInvalidate() {
+	sub := k.client.Subscribe(context.Background(), invalidateChannel)
+	defer sub.Close()
+	for msg := range sub.Channel() {
+		if msg.Payload == "" {
+			continue
+		}
+		_ = k.client.Del(context.Background(), msg.Payload)
+	}
+}
+
+// BroadcastInvalidate deletes the key locally AND publishes it to the
+// invalidation channel so other instances delete their copy too (Fase 14 v2).
+// Implements the api.CacheInvalidator optional contract.
+func (k *KV) BroadcastInvalidate(ctx context.Context, key string) error {
+	if err := k.client.Del(ctx, k.key(key)).Err(); err != nil {
+		return fmt.Errorf("redis invalidate %s: %w", key, err)
+	}
+	// Publish the FULL (namespaced) key — subscribers delete verbatim.
+	if err := k.client.Publish(ctx, invalidateChannel, k.key(key)).Err(); err != nil {
+		return fmt.Errorf("redis invalidate publish %s: %w", key, err)
+	}
+	return nil
 }
 
 // Close closes the underlying connection.

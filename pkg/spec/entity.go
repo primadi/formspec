@@ -3,6 +3,7 @@ package spec
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -91,6 +92,10 @@ type EntitySpec struct {
 	Hooks             []HookDecl          `yaml:"hooks,omitempty" json:"hooks,omitempty"`
 	RateLimit         *RateLimitSpec      `yaml:"rate_limit,omitempty" json:"rate_limit,omitempty"`           // 1.4.1 resource-level rate limit (02-core-extended.md §17)
 	SoftDeactivate    *SoftDeactivateDecl `yaml:"soft_deactivate,omitempty" json:"soft_deactivate,omitempty"` // 1.4.10
+	// Cache opts this entity into the framework read-through cache on
+	// find-by-id (Fase 14, docs/plan/fase14-entity-cache.md). Absent = off
+	// (correctness by default). List endpoints are never cached.
+	Cache *CacheSpec `yaml:"cache,omitempty" json:"cache,omitempty"`
 	// @schema {example: "plain_crud", enum: ["two_step_autosave", "two_step_manual", "plain_crud"]}
 	Lifecycle string `yaml:"lifecycle,omitempty" json:"lifecycle,omitempty"` // explicit frontend lifecycle: two_step_autosave | two_step_manual | plain_crud (default derived from actions)
 	// @schema {example: "name"}
@@ -101,6 +106,26 @@ type EntitySpec struct {
 // DocumentSpec defines a stateful, persisted business data resource (Core §4.1).
 // Deprecated: Renamed to EntitySpec in v0.3.0; kept for backward compatibility.
 type DocumentSpec = EntitySpec
+
+// CacheSpec configures the framework read-through cache for find-by-id
+// (Fase 14). TTL must parse as a Go duration ("300s", "5m") within 1s–1h.
+type CacheSpec struct {
+	// @schema {example: "300s"}
+	TTL string `yaml:"ttl" json:"ttl"`
+}
+
+// CacheTTL parses and clamps the declared TTL (1s–1h). Returns an error for
+// unparseable or out-of-range values — called at spec validation time.
+func (c *CacheSpec) CacheTTL() (time.Duration, error) {
+	d, err := time.ParseDuration(c.TTL)
+	if err != nil {
+		return 0, fmt.Errorf("cache.ttl %q: %w", c.TTL, err)
+	}
+	if d < time.Second || d > time.Hour {
+		return 0, fmt.Errorf("cache.ttl %q: must be between 1s and 1h", c.TTL)
+	}
+	return d, nil
+}
 
 // ExposeConfig declares one external protocol surface for an Entity (D49).
 // Each entry opts the entity into one protocol type. Without any expose entries,
@@ -342,6 +367,12 @@ func ValidateEvents(events []EventDecl) error {
 //   - transaction_date field MUST be declared when characteristic: transaction.
 //   - Event naming convention: before_* = sync, on_* = async (Core §12).
 func ValidateEntitySpec(d *EntitySpec) error {
+	// Cache opt-in (Fase 14): TTL must parse and stay within 1s–1h.
+	if d.Cache != nil {
+		if _, err := d.Cache.CacheTTL(); err != nil {
+			return err
+		}
+	}
 	// Normalize alias field types: `attachment` is an alias for `file`
 	// (05-field-types.md §1.3). Do this before any storage/widget mapping so
 	// every downstream path treats them identically.

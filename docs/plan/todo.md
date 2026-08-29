@@ -1088,6 +1088,26 @@ tanpa auth.
 - [x] 13.5.5 Onboarding Vendor ter-link ke user register — halaman `/portal/vendor-signup` (Form create `registry.vendor` + field `owner_username`); alur register → create vendor E2E terverifikasi. ✅ 2026-08-28
 - [x] 13.5.6 Native binary `cmd/formspec-registry` + server-side signature verify (13.3.3) + Redis cache + deploy K8s 3 replica (Plan C). — **batch 1 ✅ 2026-08-29**: binary native (embed spec via `registry/embed.go`, extract temp saat boot) + service `signature-verify` (impl native `registry.SignatureVerify`) + publish CLI verify server-side sebelum upload (best-effort di registry dev); E2E: valid→lulus, tampered→ditolak, publish ke native registry sukses. **batch 2 ✅ 2026-08-29**: driver Redis/Valkey `ctx.cache` (`renderers/jsonb-persist/datastore/rediskv/` — resolve di `resource/datastoreregistry.go`, test integrasi vs Valkey dev container) + deploy artifacts `registry/deploy/` (Dockerfile distroless, K8s 3 replica + probes + Ingress TLS, Datastore valkey manifest). Sisa (deferred): cache-aside wiring di module registry, shared rate limiter antar-pod.
 
+## Fase 14: Framework-Level Entity Cache (Read-Through) ✅ (2026-08-29)
+
+**Goal**: Read-through cache di `HandleFind` (GetByID) — opt-in eksplisit per
+entity (`spec.cache.ttl`), invalidasi in-process + Redis pub/sub broadcast
+untuk multi-instance. List caching skip. Berlaku umum untuk semua app
+(registry = adopter pertama).
+**Plan**: `docs/plan/fase14-entity-cache.md` · **Keputusan**: opt-in eksplisit,
+list skip, v1+v2 invalidasi, Fase terpisah (bukan 13.6).
+
+- [x] 14.1 Spec — `CacheSpec{ttl}` di `pkg/spec/entity.go` + validasi (parse duration, 1s–1h) + JSON Schema (`CacheSpec` shared def). ✅ 2026-08-29
+- [x] 14.2 Cache layer — `internal/api/entitycache.go`: key `{ws}:{module}:{entity}:id:{id}`, read-through (record MENTAH via struct `cachedRecord` — EntityRecord MarshalJSON flat tanpa unmarshal kebalikan), invalidasi di update/delete/submit/deactivate/workflow-transition. ✅ 2026-08-29
+- [x] 14.3 Backend resolver — `resource/formspec.go`: module bound ke datastore `serves:[cache]` → backend itu; else shared in-memory. `SetEntityCache` di RouterBuilder + HandlerFactory. ✅ 2026-08-29
+- [x] 14.4 Invalidasi multi-instance (v2) — `rediskv.KV` subscription `formspec:cache:invalidate` (delete lokal tanpa re-broadcast) + `BroadcastInvalidate`; `api.CacheInvalidator` optional interface. ✅ 2026-08-29
+- [x] 14.5 Tests — 6 api (hit/miss, invalidasi, non-opted, tenant key, TTL) + 2 rediskv (termasuk broadcast dua-instance vs Valkey nyata); E2E smoke hit→stale→invalidasi. ✅ 2026-08-29
+- [x] 14.6 Adoptasi registry (`cache: {ttl: 300s}` di module/vendor/module-version) + docs (`backend/01` §10 baru + `registry/01-concepts`). ✅ 2026-08-29
+
+**Catatan**: `formspec validate` default memakai schema dari cache registry
+online — schema lokal dengan field `cache` perlu `make publish-schemas` dulu;
+sampai itu, validasi pakai `--schema schemas`.
+
 ## Deferred (Cloud Phase)
 
 | Area                                                                                                                                                                                                                                               | Reason                                                                                                                                                                                                                                                                                                                                                                                              |

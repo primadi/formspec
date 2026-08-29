@@ -599,7 +599,36 @@ action, dll.) wajib pakai kode kanonik ini, bukan pesan inline hard-coded.
 `conditions:` custom milik developer bebas pakai pesan sendiri, SEBAIKNYA
 tetap format `code` + `params` dengan namespace App sendiri (bukan `FORMSPEC.*`).
 
-## 10. Config & Global Settings
+## 10. Read-Through Cache (Find-by-ID)
+
+Entity dapat opt-in ke cache framework untuk endpoint find-by-id:
+
+```yaml
+spec:
+  cache:
+    ttl: 300s        # wajib; 1s–1h; absent = off (correctness by default)
+```
+
+Semantik (normatif):
+
+- **Lingkup**: hanya `GET /{id}` (find). List/query **tidak pernah** di-cache.
+- **Isi cache**: record **mentah** (pre-sanitize) — field security
+  (`exclude: [ui]`) tetap dievaluasi per-request; hasil sanitize tidak pernah
+  di-cache.
+- **Key**: `{workspace}:{module}:{entity}:id:{id}` — tenant di dalam key;
+  semantik cross-tenant 404 tetap terjaga.
+- **Invalidasi**: create/update/delete/submit/transisi state menghapus key
+  (in-process). Multi-instance: saat backend cache adalah Redis/Valkey,
+  invalidasi di-broadcast via pub/sub sehingga semua instance konsisten.
+- **Write path**: selalu ke DB — CAS version check tidak pernah melewati
+  cache; cache tidak pernah sumber kebenaran untuk write.
+- **Backend**: datastore module-bound yang `serves: [cache]` (mis. driver
+  `valkey`), atau shared in-memory saat module tidak bound.
+
+Implementasi: `internal/api/entitycache.go`; keputusan desain:
+`docs/plan/fase14-entity-cache.md`.
+
+## 11. Config & Global Settings
 
 Config adalah manifest, bukan dotenv:
 

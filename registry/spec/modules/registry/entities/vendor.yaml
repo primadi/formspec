@@ -33,6 +33,9 @@ spec:
     - name: url
       type: string
       title: "URL"
+  cache:
+    ttl: 300s
+
   expose:
     - type: rest
       actions: [list, find, create, submit]
