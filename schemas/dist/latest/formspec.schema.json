@@ -332,6 +332,23 @@
       },
       "additionalProperties": false
     },
+    "CacheSpec": {
+      "description": "CacheSpec configures the framework read-through cache for find-by-id\n(Fase 14). TTL must parse as a Go duration (\"300s\", \"5m\") within 1s–1h.\n",
+      "type": "object",
+      "properties": {
+        "ttl": {
+          "description": "@schema {example: \"300s\"}",
+          "type": "string",
+          "examples": [
+            "300s"
+          ]
+        }
+      },
+      "required": [
+        "ttl"
+      ],
+      "additionalProperties": false
+    },
     "CallbackDecl": {
       "description": "CallbackDecl configures callback webhook delivery for a tracked async job\n(02-core-extended.md §13.1, todo 7.13.4). The callback URL is supplied by\nthe caller via a request header; the result is delivered HMAC-signed.\n",
       "type": "object",
@@ -3524,6 +3541,23 @@
       },
       "additionalProperties": false
     },
+    "CacheSpec": {
+      "description": "CacheSpec configures the framework read-through cache for find-by-id\n(Fase 14). TTL must parse as a Go duration (\"300s\", \"5m\") within 1s–1h.\n",
+      "type": "object",
+      "properties": {
+        "ttl": {
+          "description": "@schema {example: \"300s\"}",
+          "type": "string",
+          "examples": [
+            "300s"
+          ]
+        }
+      },
+      "required": [
+        "ttl"
+      ],
+      "additionalProperties": false
+    },
     "CallbackDecl": {
       "description": "CallbackDecl configures callback webhook delivery for a tracked async job\n(02-core-extended.md §13.1, todo 7.13.4). The callback URL is supplied by\nthe caller via a request header; the result is delivered HMAC-signed.\n",
       "type": "object",
@@ -6516,6 +6550,13 @@
                 "$ref": "#/$defs/AppConsume"
               }
             },
+            "logo": {
+              "description": "Logo is the brand mark shown next to the title in the shell brand bar",
+              "type": "string",
+              "examples": [
+                "package"
+              ]
+            },
             "menu": {
               "type": "array",
               "items": {
@@ -6571,6 +6612,13 @@
               "type": "string",
               "examples": [
                 "ocean-blue"
+              ]
+            },
+            "title": {
+              "description": "Title is the human-readable display name (spaces allowed) — used for",
+              "type": "string",
+              "examples": [
+                "Acme Corp Portal"
               ]
             },
             "vendor": {
@@ -6761,6 +6809,11 @@
             },
             "backdate_policy": {
               "$ref": "#/$defs/BackdatePolicy",
+              "nullable": true
+            },
+            "cache": {
+              "$ref": "#/$defs/CacheSpec",
+              "description": "Cache opts this entity into the framework read-through cache on",
               "nullable": true
             },
             "characteristic": {
@@ -8218,6 +8271,11 @@
               "examples": [
                 "Order {order.number}"
               ]
+            },
+            "title_visible": {
+              "description": "Render the page title heading (default true)",
+              "type": "boolean",
+              "nullable": true
             }
           },
           "required": [

@@ -30,6 +30,13 @@
         "$ref": "#/$defs/AppConsume"
       }
     },
+    "logo": {
+      "description": "Logo is the brand mark shown next to the title in the shell brand bar",
+      "type": "string",
+      "examples": [
+        "package"
+      ]
+    },
     "menu": {
       "type": "array",
       "items": {
@@ -85,6 +92,13 @@
       "type": "string",
       "examples": [
         "ocean-blue"
+      ]
+    },
+    "title": {
+      "description": "Title is the human-readable display name (spaces allowed) — used for",
+      "type": "string",
+      "examples": [
+        "Acme Corp Portal"
       ]
     },
     "vendor": {

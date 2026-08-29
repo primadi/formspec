@@ -17,6 +17,11 @@
       "$ref": "#/$defs/BackdatePolicy",
       "nullable": true
     },
+    "cache": {
+      "$ref": "#/$defs/CacheSpec",
+      "description": "Cache opts this entity into the framework read-through cache on",
+      "nullable": true
+    },
     "characteristic": {
       "$ref": "#/$defs/Characteristic"
     },
