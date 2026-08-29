@@ -105,6 +105,14 @@ export interface SessionState {
 // Single-flight guard so concurrent 401s share one refresh call.
 let refreshInFlight: Promise<boolean> | null = null
 
+// Single-flight + generation guards for boot() — see boot below. Without
+// these, the AppSurface boot effect can start an anonymous boot while a
+// login boot is still in flight; the anonymous one finishes last and
+// overwrites the authenticated session (in dev auto-auth the tokenless
+// /_meta/me returns a real identity, so the anonymous guard never fires).
+let bootInFlight: Promise<void> | null = null
+let bootGeneration = 0
+
 export const useSessionStore = create<SessionState>((set, get) => ({
   workspace: "",
   app: "",
@@ -168,88 +176,110 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     })
   },
 
-  boot: async (
+  boot: (
     workspace: string,
     token?: string,
     refreshToken?: string,
     app?: string,
   ) => {
-    // Restore a persisted session (same workspace) when no explicit token is
-    // given — this is what survives a browser refresh.
-    const stored = readStoredSession()
-    const restore = stored !== null && stored.workspace === workspace
-    const effectiveToken = token ?? (restore ? stored.token : "")
-    const effectiveRefresh =
-      refreshToken ?? (restore ? stored.refreshToken : "")
-    const effectiveApp = app ?? (restore ? (stored.app ?? "") : "")
+    // Single-flight: an anonymous re-entry (the AppSurface boot effect
+    // re-running while a login boot is still in flight) must not start a
+    // second concurrent boot — the anonymous one would finish last and
+    // overwrite the authenticated session. A boot with an explicit token
+    // (login) always proceeds so it can invalidate older boots below.
+    if (!token && bootInFlight) return bootInFlight
+    const gen = ++bootGeneration
+    const run = (async () => {
+      // Restore a persisted session (same workspace) when no explicit token is
+      // given — this is what survives a browser refresh.
+      const stored = readStoredSession()
+      const restore = stored !== null && stored.workspace === workspace
+      const effectiveToken = token ?? (restore ? stored.token : "")
+      const effectiveRefresh =
+        refreshToken ?? (restore ? stored.refreshToken : "")
+      const effectiveApp = app ?? (restore ? (stored.app ?? "") : "")
 
-    set({
-      workspace,
-      app: effectiveApp,
-      token: effectiveToken,
-      refreshToken: effectiveRefresh,
-      loaded: false,
-      error: null,
-      unauthenticated: false,
-    })
-
-    let me: MeResponse | null
-    try {
-      me = await fetchMe(workspace, effectiveToken, {
-        getToken: () => get().token,
-        onUnauthorized: () => get().refreshSession(),
-      })
-    } catch {
-      // Server unreachable / error — connection error screen. Keep the
-      // persisted session so a later reload can retry.
       set({
-        me: null,
-        loaded: true,
-        error: "Failed to load session",
-        unauthenticated: false,
-      })
-      return
-    }
-    if (!me) {
-      // fetchMe returns null on 401 — invalid / expired token. Clear the
-      // persisted session and treat as unauthenticated so the auth guard
-      // redirects to the login page instead of showing a connection error.
-      clearStoredSession()
-      set({
-        token: "",
-        refreshToken: "",
-        me: null,
-        loaded: true,
-        error: null,
-        unauthenticated: true,
-      })
-      return
-    }
-    // _meta/me returns user_id "anonymous" when not authenticated. Treat that
-    // as unauthenticated so the auth guard redirects to /login — do NOT
-    // fabricate a synthetic identity (that would bypass authorization).
-    if (me.user_id === "anonymous") {
-      clearStoredSession()
-      set({
-        token: "",
-        refreshToken: "",
-        me: null,
-        loaded: true,
-        error: null,
-        unauthenticated: true,
-      })
-      return
-    }
-    // Persist the restored/authenticated session for the next refresh.
-    if (effectiveToken) {
-      writeStoredSession({
         workspace,
+        app: effectiveApp,
         token: effectiveToken,
         refreshToken: effectiveRefresh,
-        app: effectiveApp,
+        loaded: false,
+        error: null,
+        unauthenticated: false,
       })
-    }
-    set({ me, loaded: true, error: null, unauthenticated: false })
+
+      let me: MeResponse | null
+      try {
+        me = await fetchMe(workspace, effectiveToken, {
+          getToken: () => get().token,
+          onUnauthorized: () => get().refreshSession(),
+        })
+      } catch {
+        // Server unreachable / error — connection error screen. Keep the
+        // persisted session so a later reload can retry.
+        set({
+          me: null,
+          loaded: true,
+          error: "Failed to load session",
+          unauthenticated: false,
+        })
+        return
+      }
+      // A newer boot (e.g. login with an explicit token) superseded this one —
+      // discard the stale result instead of overwriting the newer state.
+      if (gen !== bootGeneration) return
+      if (!me) {
+        // fetchMe returns null on 401 — invalid / expired token. Clear the
+        // persisted session and treat as unauthenticated so the auth guard
+        // redirects to the login page instead of showing a connection error.
+        clearStoredSession()
+        set({
+          token: "",
+          refreshToken: "",
+          me: null,
+          loaded: true,
+          error: null,
+          unauthenticated: true,
+        })
+        return
+      }
+      // _meta/me returns user_id "anonymous" when not authenticated. Treat that
+      // as unauthenticated so the auth guard redirects to /login — do NOT
+      // fabricate a synthetic identity (that would bypass authorization).
+      if (me.user_id === "anonymous") {
+        clearStoredSession()
+        set({
+          token: "",
+          refreshToken: "",
+          me: null,
+          loaded: true,
+          error: null,
+          unauthenticated: true,
+        })
+        return
+      }
+      // Persist the restored/authenticated session for the next refresh.
+      if (effectiveToken) {
+        writeStoredSession({
+          workspace,
+          token: effectiveToken,
+          refreshToken: effectiveRefresh,
+          app: effectiveApp,
+        })
+      }
+      set({ me, loaded: true, error: null, unauthenticated: false })
+    })()
+    bootInFlight = run
+    void run.then(
+      () => {
+        if (bootInFlight === run) bootInFlight = null
+      },
+      () => {
+        if (bootInFlight === run) bootInFlight = null
+      },
+    )
+    return run
   },
 
   refreshSession: () => {

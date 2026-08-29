@@ -18,7 +18,9 @@ import type { MenuItem } from "@/types/manifest"
 // ── Nav derivation ──
 // Walk the resolved menu tree and collect leaf routes. We keep it shallow
 // (top-level groups + their leaves) to avoid a heavy nested nav in the bare
-// chrome.
+// chrome. Auth routes (/login, /register) are excluded — the shell renders
+// its own Sign in/Sign up controls, so a menu entry pointing there would
+// duplicate them in the brand bar.
 function collectPublicLinks(
   items: MenuItem[] | null | undefined,
   depth = 0,
@@ -27,6 +29,7 @@ function collectPublicLinks(
   const out: { label: string; route: string }[] = []
   for (const item of items) {
     if (item.route) {
+      if (item.route === "/login" || item.route === "/register") continue
       out.push({ label: item.label || item.route, route: item.route })
     } else if (item.children?.length && depth < 1) {
       out.push(...collectPublicLinks(item.children, depth + 1))
@@ -61,10 +64,17 @@ export function NoNavShell() {
             {links.length > 0 && (
               <nav className="hidden items-center gap-6 text-sm md:flex">
                 {links.map((link) => {
-                  const href = `${base}${link.route}`
+                  const href = `${base}${link.route}`.replace(/\/+$/, "")
+                  const path = location.pathname
+                  // Home ("/") is only active on an exact base match — a
+                  // prefix check would keep it bold on every page (e.g.
+                  // "/default/listing/...".startsWith("/default/")). Other
+                  // routes use a "/"-bounded prefix so "/listing-x" never
+                  // activates "/listing".
                   const active =
-                    location.pathname === href ||
-                    (href !== base && location.pathname.startsWith(href))
+                    link.route === "/"
+                      ? path === base || path === `${base}/`
+                      : path === href || path.startsWith(`${href}/`)
                   return (
                     <Link
                       key={link.route}

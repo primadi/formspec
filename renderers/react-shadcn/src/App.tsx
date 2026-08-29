@@ -351,13 +351,17 @@ function SurfaceShell({
   // In-app login lives at {surfacePath}/login (e.g. /{ws}/app/kafe/login for
   // the app surface, /{ws}/_admin/login for admin). On that route: show the
   // form when unauthenticated, otherwise bounce to the surface root.
+  // Public surfaces always show the form: their anonymous boot may still
+  // resolve to an identity (dev-mode auto-auth fabricates "developer" for
+  // every request), and an authenticated visitor may legitimately want to
+  // (re-)authenticate — bouncing them away makes the Sign in link dead.
   const loginPath = `${surfacePath}/login`
   const registerPath = `${surfacePath}/register`
   const isLoginRoute = location.pathname === loginPath
   const isRegisterRoute = location.pathname === registerPath
 
   if (isLoginRoute || isRegisterRoute) {
-    if (unauthenticated || isRegisterRoute) {
+    if (unauthenticated || isRegisterRoute || isPublic) {
       return <LoginPage mode={isRegisterRoute ? "register" : "login"} />
     }
     return <Navigate to={surfacePath} replace />

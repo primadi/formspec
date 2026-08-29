@@ -19,4 +19,4 @@ spec:
   menu:
     - { label: "Beranda", route: /, module: portal }
     - { label: "Module", route: /listing/module-catalog, module: portal }
-    - { label: "Sign in", route: /login, module: portal }
+    # Sign in/Sign up dirender oleh no-nav shell — jangan duplikasi di menu.
