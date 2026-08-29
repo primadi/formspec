@@ -1108,6 +1108,13 @@ list skip, v1+v2 invalidasi, Fase terpisah (bukan 13.6).
 online — schema lokal dengan field `cache` perlu `make publish-schemas` dulu;
 sampai itu, validasi pakai `--schema schemas`.
 
+### 14.a Portal UX & App identity (2026-08-29, commit a486267)
+
+- [x] AppSpec.title (display name, spasi boleh) + AppSpec.logo (lucide icon) — brand bar shell + document.title. ✅ 2026-08-29
+- [x] NoNavShell: brand logo+title, nav link active state, auth area (Sign in/Sign up saat anonim, Log out saat signed-in). ✅ 2026-08-29
+- [x] LoginScreen mode register (display_name + POST /{ws}/_ui/auth/register + auto-login) + route /register; public surface boot memakai session tersimpan (signed-in user dipertahankan di portal). ✅ 2026-08-29
+- [ ] ⏸️ Row-level ownership (update/delete module milik sendiri) — butuh fitur **record-level authorization** di framework (permission check per-record via relasi vendor.owner_username). Deferred: kerja framework, bukan registry-specific.
+
 ## Deferred (Cloud Phase)
 
 | Area                                                                                                                                                                                                                                               | Reason                                                                                                                                                                                                                                                                                                                                                                                              |
