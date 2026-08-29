@@ -71,9 +71,12 @@ export function NoNavShell() {
         </div>
       </header>
 
-      {/* Page content */}
+      {/* Page content — same container as header/footer so the page aligns
+          with the brand bar instead of hugging the viewport edge. */}
       <main className="flex-1">
-        <Outlet />
+        <div className="mx-auto max-w-6xl px-4 py-6">
+          <Outlet />
+        </div>
       </main>
 
       {/* Footer */}
