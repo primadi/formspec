@@ -23,6 +23,11 @@
       "description": "per-App auth strategy config",
       "type": "string"
     },
+    "chrome": {
+      "$ref": "#/$defs/AppChrome",
+      "description": "Chrome fine-tunes which shell chrome elements render (frontend/",
+      "nullable": true
+    },
     "consumes": {
       "description": "cross-app interfaces needed → grant request",
       "type": "array",

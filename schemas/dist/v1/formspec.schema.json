@@ -204,6 +204,86 @@
         "public"
       ]
     },
+    "AppChrome": {
+      "description": "AppChrome fine-tunes which chrome elements the App shell renders\n(frontend/05-app-kinds.md §4.1). Orthogonal to AppRenderer (layout\narchetype) and Access (auth axis): every element defaults to \"auto\" —\nthe archetype's own default — and explicit values override it. The meta\nAPI resolves the effective composition (internal/ui resolveChrome) so\nrenderers read final values.\n",
+      "type": "object",
+      "properties": {
+        "auth": {
+          "description": "Auth controls. \"links\": Sign in link + Sign up button (anon) /",
+          "type": "string",
+          "enum": [
+            "auto",
+            "links",
+            "button",
+            "none"
+          ],
+          "examples": [
+            "auto"
+          ]
+        },
+        "brand": {
+          "description": "Brand bar — App title + logo.",
+          "type": "string",
+          "enum": [
+            "auto",
+            "show",
+            "hide"
+          ],
+          "examples": [
+            "auto"
+          ]
+        },
+        "breadcrumbs": {
+          "description": "Breadcrumb row (sidebar-nav/topnav).",
+          "type": "string",
+          "enum": [
+            "auto",
+            "show",
+            "hide"
+          ],
+          "examples": [
+            "auto"
+          ]
+        },
+        "footer": {
+          "description": "Page footer.",
+          "type": "string",
+          "enum": [
+            "auto",
+            "show",
+            "hide"
+          ],
+          "examples": [
+            "auto"
+          ]
+        },
+        "nav": {
+          "description": "Navigation links derived from the resolved App menu.",
+          "type": "string",
+          "enum": [
+            "auto",
+            "menu",
+            "none"
+          ],
+          "examples": [
+            "auto"
+          ]
+        },
+        "theme_switcher": {
+          "description": "Theme switcher control (sidebar-nav/topnav).",
+          "type": "string",
+          "enum": [
+            "auto",
+            "show",
+            "hide"
+          ],
+          "examples": [
+            "auto"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
     "AppConsume": {
       "description": "AppConsume is one cross-app interface an App depends on; it triggers a\ngrant request to the owning App (02-workspace-app-module.md §3).\n",
       "type": "object",
@@ -3413,6 +3493,86 @@
         "public"
       ]
     },
+    "AppChrome": {
+      "description": "AppChrome fine-tunes which chrome elements the App shell renders\n(frontend/05-app-kinds.md §4.1). Orthogonal to AppRenderer (layout\narchetype) and Access (auth axis): every element defaults to \"auto\" —\nthe archetype's own default — and explicit values override it. The meta\nAPI resolves the effective composition (internal/ui resolveChrome) so\nrenderers read final values.\n",
+      "type": "object",
+      "properties": {
+        "auth": {
+          "description": "Auth controls. \"links\": Sign in link + Sign up button (anon) /",
+          "type": "string",
+          "enum": [
+            "auto",
+            "links",
+            "button",
+            "none"
+          ],
+          "examples": [
+            "auto"
+          ]
+        },
+        "brand": {
+          "description": "Brand bar — App title + logo.",
+          "type": "string",
+          "enum": [
+            "auto",
+            "show",
+            "hide"
+          ],
+          "examples": [
+            "auto"
+          ]
+        },
+        "breadcrumbs": {
+          "description": "Breadcrumb row (sidebar-nav/topnav).",
+          "type": "string",
+          "enum": [
+            "auto",
+            "show",
+            "hide"
+          ],
+          "examples": [
+            "auto"
+          ]
+        },
+        "footer": {
+          "description": "Page footer.",
+          "type": "string",
+          "enum": [
+            "auto",
+            "show",
+            "hide"
+          ],
+          "examples": [
+            "auto"
+          ]
+        },
+        "nav": {
+          "description": "Navigation links derived from the resolved App menu.",
+          "type": "string",
+          "enum": [
+            "auto",
+            "menu",
+            "none"
+          ],
+          "examples": [
+            "auto"
+          ]
+        },
+        "theme_switcher": {
+          "description": "Theme switcher control (sidebar-nav/topnav).",
+          "type": "string",
+          "enum": [
+            "auto",
+            "show",
+            "hide"
+          ],
+          "examples": [
+            "auto"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
     "AppConsume": {
       "description": "AppConsume is one cross-app interface an App depends on; it triggers a\ngrant request to the owning App (02-workspace-app-module.md §3).\n",
       "type": "object",
@@ -6542,6 +6702,11 @@
             "auth_config_ref": {
               "description": "per-App auth strategy config",
               "type": "string"
+            },
+            "chrome": {
+              "$ref": "#/$defs/AppChrome",
+              "description": "Chrome fine-tunes which shell chrome elements render (frontend/",
+              "nullable": true
             },
             "consumes": {
               "description": "cross-app interfaces needed → grant request",
