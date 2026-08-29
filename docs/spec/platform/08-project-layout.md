@@ -313,10 +313,13 @@ kode.
 
 ## 6. Module Lokal vs Vendor, Aktivasi, dan Shadow Copy
 
-> Status: **§6.1–§6.3 terimplementasikan** (todo 13.1, 2026-08-28 —
+> Status: **§6.1–§6.4 terimplementasikan** (todo 13.1–13.2, 2026-08-28 —
 > `internal/vendor/`, `formspec module install|list|uninstall`, `formspec
-> verify`, marker aktivasi, `formspec.lock`, alias Opsi B, boot-time
-> enforcement). §6.4 shadow copy menyusul (todo 13.2). Detail keputusan
+verify`, `formspec override adopt|diff|list`, marker aktivasi,
+> `formspec.lock`, alias Opsi B, boot-time enforcement, drift detection).
+> Registry (publish/install --from, ed25519) terimplementasikan di todo 13.3 —
+> dokumentasi: [`../../registry/README.md`](../../registry/README.md).
+> Detail keputusan
 > [`docs/technical-notes/FormSpec-Technical-Note-Module-Vendoring-Aktivasi.md`](../../technical-notes/FormSpec-Technical-Note-Module-Vendoring-Aktivasi.md);
 > status implementasi: [`../../plan/todo.md`](../../plan/todo.md) Fase 13.
 
@@ -479,8 +482,9 @@ karena developer memang sudah sengaja ambil alih penuh file itu):
 
 **Masih terbuka / menyusul:**
 
-- §6.4 shadow copy (`overrides/`) + `formspec override adopt|diff` — todo 13.2.
-- Signature/trust-tier verification (ed25519) — todo 13.3.6 (butuh registry).
+- Server-side signature verify saat publish (native service) — todo 13.3.3
+  (verifikasi saat ini client-side di `module install --from`, E2E terverifikasi).
+- Workflow review trust tier `verified` — todo 13.3.5.
 - Bundle (satu source, banyak module) — todo 13.3.
 - `vendors/` commit vs gitignore — keputusan developer project; lock +
   checksum membuat kedua pola aman.

@@ -10,19 +10,19 @@
 
 ## 1. Ringkasan Verb
 
-| Kategori                       | Verb                                                                                 |
-| ------------------------------ | ------------------------------------------------------------------------------------ |
-| **Deployment**                 | `apply`, `diff`, `delete`, `get`, `describe`, `validate`, `check [--fix]`, `promote` |
-| **Scaffolding**                | `new <kind>`                                                                         |
-| **Dev loop**                   | `dev`, `repl`                                                                        |
-| **Codegen**                    | `generate`                                                                           |
-| **Data lifecycle**             | `migrate`, `seed`, `backup create\|inspect`, `restore`                               |
-| **Data archival**              | `archive run\|view\|restore-batch`                                                   |
-| **Distributed workflow**       | `saga list\|resolve`                                                                 |
-| **Marketplace & signing**      | `module list\|install\|uninstall`, `sign`                                            |
-| **Scripting**                  | `script validate\|test`                                                              |
-| **Emergency (Resource Plane)** | `freeze`, `rollback`, `lock workspace`                                               |
-| **Ops**                        | `workspace create`, `logs`                                                           |
+| Kategori                       | Verb                                                                                       |
+| ------------------------------ | ------------------------------------------------------------------------------------------ |
+| **Deployment**                 | `apply`, `diff`, `delete`, `get`, `describe`, `validate`, `check [--fix]`, `promote`       |
+| **Scaffolding**                | `new <kind>`                                                                               |
+| **Dev loop**                   | `dev`, `repl`                                                                              |
+| **Codegen**                    | `generate`                                                                                 |
+| **Data lifecycle**             | `migrate`, `seed`, `backup create\|inspect`, `restore`                                     |
+| **Data archival**              | `archive run\|view\|restore-batch`                                                         |
+| **Distributed workflow**       | `saga list\|resolve`                                                                       |
+| **Marketplace & signing**      | `module list\|install\|uninstall\|publish`, `sign`, `override adopt\|diff\|list`, `verify` |
+| **Scripting**                  | `script validate\|test`                                                                    |
+| **Emergency (Resource Plane)** | `freeze`, `rollback`, `lock workspace`                                                     |
+| **Ops**                        | `workspace create`, `logs`                                                                 |
 
 ---
 
@@ -379,7 +379,7 @@ formspec module install billing-pro --from registry.formspec.dev --use
 Model folder (`vendors/` read-only), alias otomatis saat konflik nama, dan
 format marker aktivasi ada di
 [`../spec/platform/08-project-layout.md`](../spec/platform/08-project-layout.md)
-§6 — **target desain, belum diimplementasikan** (§6.5).
+§6 — **terimplementasikan** (todo 13.1, 2026-08-28).
 
 ### `formspec override adopt|diff`
 
@@ -391,19 +391,27 @@ formspec override diff stripe-connector Form checkout-form
 # Bandingkan shadow copy lokal vs versi vendor upstream saat ini
 ```
 
-Shadow copy hanya berlaku untuk kind presentation (`Form`, `Menu`/
-`Navigation`, dan instance `VisualSpecKind` lain seperti `Table`/`Kanban`) —
-bukan `Entity`/`Service`/`Workflow`. Detail whitelist dan deteksi drift ada di
+Shadow copy hanya berlaku untuk kind presentation (`Form` dan instance
+`VisualSpecKind` seperti `Table`/`Kanban`) — bukan `Entity`/`Service`/
+`Workflow`. Detail whitelist dan deteksi drift ada di
 [`../spec/platform/08-project-layout.md`](../spec/platform/08-project-layout.md)
-§6.4 — **target desain, belum diimplementasikan**.
+§6.4 — **terimplementasikan** (todo 13.2, 2026-08-28).
+
+> Referensi lengkap seluruh verb registry (termasuk `module publish` dan
+> `formspec sign keygen|sign|verify`): [`../registry/03-cli-reference.md`](../registry/03-cli-reference.md).
 
 ### `formspec sign`
 
-Tanda tangan artifact dengan owner key (App/Module Owner).
+Signing module ed25519 (todo 13.3.6, terimplementasikan):
 
 ```bash
-formspec sign -f order.yaml --key ~/.formspec/keys/billing-team.key --environment staging
+formspec sign keygen --out ~/.formspec/keys --name acme
+formspec sign <module-dir> --key ~/.formspec/keys/acme.key
+formspec sign verify <module-dir> --signature <b64|file> --public-key <pub.file>
 ```
+
+Payload yang ditandatangani adalah tree checksum module — nilai yang sama
+dicatat di `formspec.lock` dan registry.
 
 Integrator (cross-boundary call) yang idempotency-nya tidak `true` **ditolak** `formspec apply` — action target harus `idempotent: true` untuk dipakai lintas boundary.
 
