@@ -36,6 +36,13 @@ import { AssetRenderer } from "@/shell/AssetRenderer"
  * current route's params. Anything not starting with `:` is a literal value,
  * passed through unchanged.
  */
+// Whether the page title heading renders (spec.title_visible, default true).
+// Pages whose first block carries its own display title (e.g. a hero section)
+// set title_visible: false to avoid a duplicated heading.
+function showPageTitle(spec: PageSpec): boolean {
+  return spec.title_visible ?? true
+}
+
 function resolveRouteParam(
   raw: string | undefined,
   routeParams: Readonly<Record<string, string | undefined>>,
@@ -140,16 +147,18 @@ function CustomPage({ entry }: { entry: Entry<PageSpec> }) {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">
-          {entry.spec.title}
-        </h1>
-        {entry.spec.description && (
-          <p className="text-sm text-muted-foreground">
-            {entry.spec.description}
-          </p>
-        )}
-      </div>
+      {showPageTitle(entry.spec) && (
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">
+            {entry.spec.title}
+          </h1>
+          {entry.spec.description && (
+            <p className="text-sm text-muted-foreground">
+              {entry.spec.description}
+            </p>
+          )}
+        </div>
+      )}
       <AssetRenderer asset={asset} needs={needs} />
     </div>
   )
@@ -224,14 +233,16 @@ function PageBlocks({ entry }: { entry: Entry<PageSpec> }) {
   if (blocks.length === 1 && blocks[0].component) {
     return (
       <div className="space-y-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
-          {entry.spec.description && (
-            <p className="text-sm text-muted-foreground">
-              {entry.spec.description}
-            </p>
-          )}
-        </div>
+        {showPageTitle(entry.spec) && (
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
+            {entry.spec.description && (
+              <p className="text-sm text-muted-foreground">
+                {entry.spec.description}
+              </p>
+            )}
+          </div>
+        )}
         <PageBlockRenderer
           block={blocks[0]}
           module={entry.module}
@@ -252,14 +263,16 @@ function PageBlocks({ entry }: { entry: Entry<PageSpec> }) {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
-        {entry.spec.description && (
-          <p className="text-sm text-muted-foreground">
-            {entry.spec.description}
-          </p>
-        )}
-      </div>
+      {showPageTitle(entry.spec) && (
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
+          {entry.spec.description && (
+            <p className="text-sm text-muted-foreground">
+              {entry.spec.description}
+            </p>
+          )}
+        </div>
+      )}
 
       <div
         className="grid gap-4"
@@ -319,14 +332,16 @@ function PageSplit({
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
-        {entry.spec.description && (
-          <p className="text-sm text-muted-foreground">
-            {entry.spec.description}
-          </p>
-        )}
-      </div>
+      {showPageTitle(entry.spec) && (
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
+          {entry.spec.description && (
+            <p className="text-sm text-muted-foreground">
+              {entry.spec.description}
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         {/* Master — narrow left */}
@@ -552,16 +567,18 @@ function PageTabs({ entry }: { entry: Entry<PageSpec> }) {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">
-          {entry.spec.title}
-        </h1>
-        {entry.spec.description && (
-          <p className="text-sm text-muted-foreground">
-            {entry.spec.description}
-          </p>
-        )}
-      </div>
+      {showPageTitle(entry.spec) && (
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">
+            {entry.spec.title}
+          </h1>
+          {entry.spec.description && (
+            <p className="text-sm text-muted-foreground">
+              {entry.spec.description}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Tab bar */}
       <div className="flex border-b">

@@ -32,7 +32,7 @@ HandleCreate/Update/Delete → DB write (CAS tetap) → cache.Delete(key)
 ```yaml
 spec:
   cache:
-    ttl: 300s        # absent = off (default)
+    ttl: 300s # absent = off (default)
 ```
 
 - `pkg/spec`: `CacheSpec{ TTL string }` + field `Cache *CacheSpec` di
@@ -49,24 +49,24 @@ spec:
 
 ### 4. Invalidasi
 
-| Tingkat | Mekanisme | Cakupan |
-|---|---|---|
-| v1 | delete key di create/update/delete (in-process) + TTL | single-instance konsisten; multi-instance staleness ≤ TTL |
-| v2 | Redis pub/sub channel `formspec:cache:invalidate` — mutator publish key, semua instance subscribe & delete | multi-instance konsisten penuh; aktif hanya saat backend rediskv |
+| Tingkat | Mekanisme                                                                                                  | Cakupan                                                          |
+| ------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| v1      | delete key di create/update/delete (in-process) + TTL                                                      | single-instance konsisten; multi-instance staleness ≤ TTL        |
+| v2      | Redis pub/sub channel `formspec:cache:invalidate` — mutator publish key, semua instance subscribe & delete | multi-instance konsisten penuh; aktif hanya saat backend rediskv |
 
 v2 memakai klien Redis yang sudah ada di `rediskv` — tanpa outbox subscriber
 baru. `NotifyMutation` (SSE) tidak disentuh.
 
 ## Implementasi
 
-| File | Isi |
-|---|---|
-| `pkg/spec/entity.go` | `CacheSpec` + validasi |
-| `internal/api/entitycache.go` | key builder, read-through helper, invalidasi, pub/sub broadcast (v2) |
-| `internal/api/handler.go` | wiring HandleFind + HandleCreate/Update/Delete |
-| `internal/api/router.go` / `resource/formspec.go` | resolver seam backend KV |
-| `renderers/jsonb-persist/datastore/rediskv/` | pub/sub invalidate helper |
-| Tests | hit/miss/TTL, invalidasi, sanitize-not-cached, CAS unaffected, dua-instance (Redis) |
+| File                                              | Isi                                                                                 |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `pkg/spec/entity.go`                              | `CacheSpec` + validasi                                                              |
+| `internal/api/entitycache.go`                     | key builder, read-through helper, invalidasi, pub/sub broadcast (v2)                |
+| `internal/api/handler.go`                         | wiring HandleFind + HandleCreate/Update/Delete                                      |
+| `internal/api/router.go` / `resource/formspec.go` | resolver seam backend KV                                                            |
+| `renderers/jsonb-persist/datastore/rediskv/`      | pub/sub invalidate helper                                                           |
+| Tests                                             | hit/miss/TTL, invalidasi, sanitize-not-cached, CAS unaffected, dua-instance (Redis) |
 
 ## Adoptasi & Docs
 

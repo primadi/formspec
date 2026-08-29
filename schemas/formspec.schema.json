@@ -8257,6 +8257,11 @@
               "examples": [
                 "Order {order.number}"
               ]
+            },
+            "title_visible": {
+              "description": "Render the page title heading (default true)",
+              "type": "boolean",
+              "nullable": true
             }
           },
           "required": [

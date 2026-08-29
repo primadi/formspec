@@ -22,6 +22,7 @@
 ## 1. Entity (Entity)
 
 ### 1.1 Taksonomi Resource
+
 Dua tipe resource: `type: document` (persisted, sumber kebenaran data bisnis)
 dan `type: service` (stateless, komputasi murni — tidak punya `characteristic`,
 `doc_status`, atau lifecycle guard).
@@ -29,12 +30,12 @@ dan `type: service` (stateless, komputasi murni — tidak punya `characteristic`
 Entity punya `characteristic`, tepat satu nilai (mutually exclusive; `formspec
 apply` menolak lebih dari satu):
 
-| Characteristic | Arti | Wajib |
-|---|---|---|
-| `master` | Data referensi stabil (Customer, Product) | Boleh punya lifecycle (kalau `submit` aktif) atau tidak |
-| `transaction` | Append-heavy, time-partitioned (Invoice, Journal Entry) | Wajib field `transaction_date` |
-| `reference` | Seed data read-only, dimiliki App Owner (Provinsi, Tarif Pajak). Backend mendukung **find-or-create**: jika record belum ada saat diakses via GET, framework auto-create dengan field defaults. | — |
-| `summary` | Projeksi terkelola sistem (GL Balance) | `create`/`update`/`delete` permanen nonaktif via API |
+| Characteristic | Arti                                                                                                                                                                                            | Wajib                                                   |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `master`       | Data referensi stabil (Customer, Product)                                                                                                                                                       | Boleh punya lifecycle (kalau `submit` aktif) atau tidak |
+| `transaction`  | Append-heavy, time-partitioned (Invoice, Journal Entry)                                                                                                                                         | Wajib field `transaction_date`                          |
+| `reference`    | Seed data read-only, dimiliki App Owner (Provinsi, Tarif Pajak). Backend mendukung **find-or-create**: jika record belum ada saat diakses via GET, framework auto-create dengan field defaults. | —                                                       |
+| `summary`      | Projeksi terkelola sistem (GL Balance)                                                                                                                                                          | `create`/`update`/`delete` permanen nonaktif via API    |
 
 `summary` bukan tipe resource keempat — ia nilai `characteristic` yang sama
 kelasnya dengan `master`/`transaction`/`reference`.
@@ -48,6 +49,7 @@ kelasnya dengan `master`/`transaction`/`reference`.
 > Lihat implementasi `findOrCreateReference()` di renderer persist.
 
 ### 1.2 Field Reserved & Lifecycle (`doc_status`)
+
 Field berikut **reserved** — tidak boleh dipakai ulang sebagai nama field
 custom, otomatis ada di semua `type: document`, framework-managed: `owner`,
 `created_at`, `modified`, `doc_status`, `amends`, `amended_by`, `version`.
@@ -59,16 +61,16 @@ submitted | cancelled`, closed set — kebutuhan proses bisnis granular pakai
 field terpisah, lihat [`02-core-extended.md`](02-core-extended.md) §1),
 ditegakkan lewat delapan reserved action:
 
-| Action | Guard dasar | Post-condition |
-|---|---|---|
-| `create` | — | `doc_status = draft` |
-| `update` | `doc_status == draft` | — |
-| `submit` | `doc_status == draft` | `doc_status = submitted` |
-| `cancel` | `doc_status == submitted AND no_pending_references` | `doc_status = cancelled` |
-| `delete` | `doc_status == draft AND no_referencing_documents` | row dihapus (guard absolut, **tanpa** `override_permission`) |
-| `amend` | `doc_status == submitted OR cancelled` | atomik: cancel original + set `amended_by` + buat Entity baru linked (`amends`) sebagai `draft` |
-| `create-submit` | gabungan `create`+`submit` | derivasi otomatis kalau keduanya aktif |
-| `amend-submit` | gabungan `amend`+`submit` | derivasi otomatis kalau keduanya aktif |
+| Action          | Guard dasar                                         | Post-condition                                                                                  |
+| --------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `create`        | —                                                   | `doc_status = draft`                                                                            |
+| `update`        | `doc_status == draft`                               | —                                                                                               |
+| `submit`        | `doc_status == draft`                               | `doc_status = submitted`                                                                        |
+| `cancel`        | `doc_status == submitted AND no_pending_references` | `doc_status = cancelled`                                                                        |
+| `delete`        | `doc_status == draft AND no_referencing_documents`  | row dihapus (guard absolut, **tanpa** `override_permission`)                                    |
+| `amend`         | `doc_status == submitted OR cancelled`              | atomik: cancel original + set `amended_by` + buat Entity baru linked (`amends`) sebagai `draft` |
+| `create-submit` | gabungan `create`+`submit`                          | derivasi otomatis kalau keduanya aktif                                                          |
+| `amend-submit`  | gabungan `amend`+`submit`                           | derivasi otomatis kalau keduanya aktif                                                          |
 
 Developer boleh menambah `conditions` di atas guard dasar, **tidak boleh**
 melemahkannya. `create-submit`/`amend-submit` otomatis tersedia (tidak perlu
@@ -96,13 +98,14 @@ sebagai nama action, bukan "document updated").
 ditolak sebagai target relation saat runtime.
 
 ### 1.3 `child` vs `relation`
+
 Garis pembeda adalah **kepemilikan lifecycle**, bukan bentuk penyimpanan:
 
-| Aspek | `child` | `relation` |
-|---|---|---|
-| Lifecycle | Ikut parent — submit/cancel parent otomatis diteruskan | Independen — `doc_status` sendiri |
-| Identitas | `storage: jsonb` → tanpa UUID, embedded; `storage: table` → UUID v7 sendiri | UUID v7 sendiri, independen |
-| Eksistensi | Tidak bisa ada tanpa parent | Bisa berdiri sendiri |
+| Aspek      | `child`                                                                     | `relation`                        |
+| ---------- | --------------------------------------------------------------------------- | --------------------------------- |
+| Lifecycle  | Ikut parent — submit/cancel parent otomatis diteruskan                      | Independen — `doc_status` sendiri |
+| Identitas  | `storage: jsonb` → tanpa UUID, embedded; `storage: table` → UUID v7 sendiri | UUID v7 sendiri, independen       |
+| Eksistensi | Tidak bisa ada tanpa parent                                                 | Bisa berdiri sendiri              |
 
 Uji keputusan: "apakah punya makna di luar parent?" — line item invoice tanpa
 Invoice tidak bermakna (`child`); Order mereferensi Customer tapi keduanya
@@ -141,14 +144,15 @@ order. Katalog field-nya sendiri ada di
 `required`).
 
 ### 1.4 `spec.auth` — Persyaratan Autentikasi
+
 Entity (dan Service, `pkg/spec/resources.go`) boleh mendeklarasikan
 persyaratan autentikasi lewat `spec.auth`:
 
 ```yaml
 spec:
   auth:
-    required: true              # operasi Entity wajib terautentikasi
-    strategies: [sso, passkey]  # strategy autentikasi yang diterima
+    required: true # operasi Entity wajib terautentikasi
+    strategies: [sso, passkey] # strategy autentikasi yang diterima
 ```
 
 - `required` — `bool`. Menandai operasi Entity ini wajib dijalankan oleh
@@ -170,31 +174,31 @@ selalu, tanpa pengecualian.
 Berikut adalah seluruh atribut yang bisa dideklarasikan di `spec` Entity.
 Atribut wajib ditandai **\[wajib\]**.
 
-| Atribut | Tipe | Wajib | Default | Keterangan |
-|---|---|---|---|---|
-| `version` | string | **Ya** | — | Versi skema Entity. Selalu `v1` untuk Entity baru. |
-| `characteristic` | enum | **Ya** | — | `master` / `transaction` / `reference` / `summary`. Mutually exclusive. |
-| `plural` | string | — | auto (nama + `s`) | Nama jamak untuk URL collection. |
-| `display_field` | string | — | `name` / field pertama | Field yang dipakai sebagai label di UI (dropdown, breadcrumb). |
-| `lifecycle` | string | — | `two_step_autosave` | `two_step_autosave` / `two_step_manual` / `plain_crud`. String enum, bukan map. |
-| `soft_deactivate` | object | — | disabled | `{ enabled: true }` — tambah action `deactivate` + `reactivate`. |
-| `fields` | array | — | `[]` | Daftar field custom. Lihat [`05-field-types.md`](05-field-types.md). |
-| `state_machine` | object | — | — | State machine untuk business states di luar `doc_status`. Field: `field`, `initial`, `states[]`, `transitions[]`. Lihat §1.6. |
-| `actions` | array | — | reserved actions | Custom action bernama di luar reserved. Field: `name`, `description`, `required_permission`, `uses`, `audit`, `ui`, `idempotent`. |
-| `expose` | array | — | `[]` (UI only) | `[{ type: rest, actions: [...] }]` — kontrol permukaan external API (§8.4). |
-| `persist` | object | — | — | `{ soft_delete, category, indexes[] }` — kontrak persistensi (§3). |
-| `auth` | object | — | `{ required: true }` | `{ required, strategies[] }` — persyaratan autentikasi (§1.4). |
-| `events` | array | — | reserved events | Event custom di luar `before_*`/`on_*` reserved. (§7). |
-| `indexes` | array | — | `[]` | Indeks tambahan: `[{ fields: [...], unique: true/false }]`. |
+| Atribut           | Tipe   | Wajib  | Default                | Keterangan                                                                                                                        |
+| ----------------- | ------ | ------ | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `version`         | string | **Ya** | —                      | Versi skema Entity. Selalu `v1` untuk Entity baru.                                                                                |
+| `characteristic`  | enum   | **Ya** | —                      | `master` / `transaction` / `reference` / `summary`. Mutually exclusive.                                                           |
+| `plural`          | string | —      | auto (nama + `s`)      | Nama jamak untuk URL collection.                                                                                                  |
+| `display_field`   | string | —      | `name` / field pertama | Field yang dipakai sebagai label di UI (dropdown, breadcrumb).                                                                    |
+| `lifecycle`       | string | —      | `two_step_autosave`    | `two_step_autosave` / `two_step_manual` / `plain_crud`. String enum, bukan map.                                                   |
+| `soft_deactivate` | object | —      | disabled               | `{ enabled: true }` — tambah action `deactivate` + `reactivate`.                                                                  |
+| `fields`          | array  | —      | `[]`                   | Daftar field custom. Lihat [`05-field-types.md`](05-field-types.md).                                                              |
+| `state_machine`   | object | —      | —                      | State machine untuk business states di luar `doc_status`. Field: `field`, `initial`, `states[]`, `transitions[]`. Lihat §1.6.     |
+| `actions`         | array  | —      | reserved actions       | Custom action bernama di luar reserved. Field: `name`, `description`, `required_permission`, `uses`, `audit`, `ui`, `idempotent`. |
+| `expose`          | array  | —      | `[]` (UI only)         | `[{ type: rest, actions: [...] }]` — kontrol permukaan external API (§8.4).                                                       |
+| `persist`         | object | —      | —                      | `{ soft_delete, category, indexes[] }` — kontrak persistensi (§3).                                                                |
+| `auth`            | object | —      | `{ required: true }`   | `{ required, strategies[] }` — persyaratan autentikasi (§1.4).                                                                    |
+| `events`          | array  | —      | reserved events        | Event custom di luar `before_*`/`on_*` reserved. (§7).                                                                            |
+| `indexes`         | array  | —      | `[]`                   | Indeks tambahan: `[{ fields: [...], unique: true/false }]`.                                                                       |
 
 ### 1.6 `doc_status` vs `state_machine` — Dua Lapis State
 
 Entity punya **dua lapis state** yang independen namun bisa berinteraksi:
 
-| Lapis | Dikelola oleh | Scope | Kustomisasi |
-|---|---|---|---|
-| `doc_status` | Framework (built-in) | Lifecycle dokumen: `draft → submitted → cancelled` | Disable lewat `lifecycle: plain_crud` atau disable `submit`/`cancel`/`amend` |
-| Custom `state_machine` | Developer (deklaratif) | State bisnis: `draft → in_progress → completed` | Bebas mendefinisikan states, transitions, dan actions via `state_machine` block |
+| Lapis                  | Dikelola oleh          | Scope                                              | Kustomisasi                                                                     |
+| ---------------------- | ---------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `doc_status`           | Framework (built-in)   | Lifecycle dokumen: `draft → submitted → cancelled` | Disable lewat `lifecycle: plain_crud` atau disable `submit`/`cancel`/`amend`    |
+| Custom `state_machine` | Developer (deklaratif) | State bisnis: `draft → in_progress → completed`    | Bebas mendefinisikan states, transitions, dan actions via `state_machine` block |
 
 Keduanya berjalan **bersamaan**: Entity bisa punya `doc_status: submitted`
 (immutable secara data) DAN `state_machine.field: in_progress` (state bisnis).
@@ -206,14 +210,14 @@ dokumen sudah `submitted`.
 spec:
   version: v1
   characteristic: transaction
-  lifecycle: two_step_autosave     # doc_status aktif
+  lifecycle: two_step_autosave # doc_status aktif
   fields:
     - name: status
       type: enum
       enum_values: [draft, in_progress, completed, cancelled]
       default: draft
       index: true
-  state_machine:                   # state bisnis — paralel dengan doc_status
+  state_machine: # state bisnis — paralel dengan doc_status
     field: status
     initial: draft
     states:
@@ -238,6 +242,7 @@ Untuk Workflow (approval multi-level yang meng-intercept transition
 state_machine), lihat [`02-core-extended.md`](02-core-extended.md) §2.
 
 ## 2. Primary Key & Natural Key
+
 Primary key: **UUID v7** (time-ordered) untuk semua Entity — ini kontrak,
 bukan pilihan per backend. Natural key adalah **unique constraint per
 tenant**, bukan pernah jadi PK:
@@ -249,11 +254,11 @@ tenant**, bukan pernah jadi PK:
   immutable: true
   unique: true
   natural_key_rule:
-    strategy: sequence            # sequence | custom
+    strategy: sequence # sequence | custom
     format: "{prefix}-{year}-{seq:06d}"
     prefix: { config: billing.invoice_prefix, default: "INV" }
-    reset: yearly                 # never | yearly | monthly | daily
-    scope_field: branch_id        # opsional — sequence terpisah per nilai field ini
+    reset: yearly # never | yearly | monthly | daily
+    scope_field: branch_id # opsional — sequence terpisah per nilai field ini
 ```
 
 Jaminan generasi (gap-free, atomik, duplicate-free) adalah kontrak yang wajib
@@ -305,7 +310,7 @@ sekadar butuh izin lebih tinggi.
 ```yaml
 persist:
   soft_delete: true
-  category: operational   # operational | financial | compliance | analytics | master | archive
+  category: operational # operational | financial | compliance | analytics | master | archive
   indexes:
     - { field: status, type: btree }
 ```
@@ -318,6 +323,7 @@ terpisah, dll.) adalah detail implementasinya, lihat
 `indexes` memenuhi kontrak `04-persist-backend.md` §2 "Index generation".
 
 ## 4. Migration = Structural Diff
+
 Framework menghasilkan structural diff dari perubahan spec; PersistBackend
 menerima diff dan menerjemahkannya ke storage-nya sendiri. Tidak ada asumsi
 "framework generate SQL" — lihat [`04-persist-backend.md`](04-persist-backend.md)
@@ -345,19 +351,19 @@ Field ini opsional dan tidak memengaruhi perilaku backend.
 actions:
   - name: start-consultation
     ui:
-      button_label: "Mulai Konsultasi"   # label tombol (default: action name)
-      icon: play                         # ikon lucide-react
-      style: primary                     # primary | secondary | danger
-      confirm: "Panggil pasien ini ke ruang konsultasi?"  # pesan konfirmasi
+      button_label: "Mulai Konsultasi" # label tombol (default: action name)
+      icon: play # ikon lucide-react
+      style: primary # primary | secondary | danger
+      confirm: "Panggil pasien ini ke ruang konsultasi?" # pesan konfirmasi
 ```
 
-| Field | Tipe | Default | Keterangan |
-|---|---|---|---|
-| `button_label` | string | action name | Label tombol di UI |
-| `icon` | string | — | Nama ikon lucide-react (kebab-case, mis. `play`, `x`, `check`) |
-| `style` | string | `secondary` | `primary` (tombol solid), `secondary` (outline), `danger` (merah) |
-| `confirm` | string | — | Jika diisi, munculkan ConfirmDialog sebelum eksekusi; nilai = pesan |
-| `show_when` | string | — | FormSpecExpr; tombol hanya ditampilkan jika expression `true` |
+| Field          | Tipe   | Default     | Keterangan                                                          |
+| -------------- | ------ | ----------- | ------------------------------------------------------------------- |
+| `button_label` | string | action name | Label tombol di UI                                                  |
+| `icon`         | string | —           | Nama ikon lucide-react (kebab-case, mis. `play`, `x`, `check`)      |
+| `style`        | string | `secondary` | `primary` (tombol solid), `secondary` (outline), `danger` (merah)   |
+| `confirm`      | string | —           | Jika diisi, munculkan ConfirmDialog sebelum eksekusi; nilai = pesan |
+| `show_when`    | string | —           | FormSpecExpr; tombol hanya ditampilkan jika expression `true`       |
 
 `confirm` adalah satu-satunya mekanisme konfirmasi untuk action — definisikan
 di entity, bukan di table/kanban. Table/kanban tetap bisa override via
@@ -365,6 +371,7 @@ di entity, bukan di table/kanban. Table/kanban tetap bisa override via
 
 **Model permission (normatif untuk kelima jenis impl).** Setiap action
 mendeklarasikan dua hal secara eksplisit:
+
 - `required_permission` — guard bagi si pemanggil: siapa yang boleh memanggil.
 - `uses` — akses kode action itu sendiri: tier database, resource lain,
   primitives (`ctx.db`, `ctx.cache`, `ctx.lock`, `ctx.queue`, dst.).
@@ -490,14 +497,14 @@ DELETE /{ws}/_ui/entity/{module}/{entity}/{id}         → delete
 POST   /{ws}/_ui/entity/{module}/{entity}/{id}/{action} → custom action
 ```
 
-| Aspek | Ketentuan |
-|---|---|
-| Auth | Session cookie / OAuth (user agent). **Tidak menerima** API key. |
-| Gating | Permission `list`/`view`/`create`/`update`/`delete` + `required_permission` action-level ([§5](#5-action)) — **tidak** digerbangi `spec.expose` |
-| Field visibility | Semua field kecuali yang di-strip oleh `required_permission` field-level ([`05-field-types.md`](05-field-types.md) §5.3) |
-| Rate limit | Per user session |
-| Audit attribution | `user_id`, `session_id` |
-| Ketersediaan | Selalu ada untuk setiap Entity yang user punya permission-nya |
+| Aspek             | Ketentuan                                                                                                                                       |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Auth              | Session cookie / OAuth (user agent). **Tidak menerima** API key.                                                                                |
+| Gating            | Permission `list`/`view`/`create`/`update`/`delete` + `required_permission` action-level ([§5](#5-action)) — **tidak** digerbangi `spec.expose` |
+| Field visibility  | Semua field kecuali yang di-strip oleh `required_permission` field-level ([`05-field-types.md`](05-field-types.md) §5.3)                        |
+| Rate limit        | Per user session                                                                                                                                |
+| Audit attribution | `user_id`, `session_id`                                                                                                                         |
+| Ketersediaan      | Selalu ada untuk setiap Entity yang user punya permission-nya                                                                                   |
 
 ### 8.2 Permukaan External — `api/v1`
 
@@ -514,14 +521,14 @@ DELETE /{ws}/api/v1/{module}/{plural}/{id}         → delete
 POST   /{ws}/api/v1/{module}/{plural}/{id}/{action} → custom action
 ```
 
-| Aspek | Ketentuan |
-|---|---|
-| Auth | API key header (`X-FormSpec-Key`). **Tidak menerima** session cookie. |
-| Gating | `spec.expose` (deny-by-default) + `required_permission` action-level ([§5](#5-action)) |
-| Field visibility | Field dengan `exclude: [public_api]` disembunyikan dari respons ([`05-field-types.md`](05-field-types.md) §5.3) |
-| Rate limit | Per API key + plan tier |
-| Audit attribution | `api_key_id`, `service_label` |
-| Ketersediaan | Hanya untuk Entity dengan `spec.expose` — tanpa expose, endpoint 404 |
+| Aspek             | Ketentuan                                                                                                       |
+| ----------------- | --------------------------------------------------------------------------------------------------------------- |
+| Auth              | API key header (`X-FormSpec-Key`). **Tidak menerima** session cookie.                                           |
+| Gating            | `spec.expose` (deny-by-default) + `required_permission` action-level ([§5](#5-action))                          |
+| Field visibility  | Field dengan `exclude: [public_api]` disembunyikan dari respons ([`05-field-types.md`](05-field-types.md) §5.3) |
+| Rate limit        | Per API key + plan tier                                                                                         |
+| Audit attribution | `api_key_id`, `service_label`                                                                                   |
+| Ketersediaan      | Hanya untuk Entity dengan `spec.expose` — tanpa expose, endpoint 404                                            |
 
 `formspec generate` hanya menghasilkan typed client untuk permukaan external ini.
 Kalau tidak ada entity yang exposed, `formspec generate` menolak berjalan — tidak
@@ -534,10 +541,10 @@ path) — jumlah route tidak boleh mendegradasi performa secara linear. Dua
 permukaan didaftarkan sebagai **dua route group** dengan middleware auth yang
 berbeda di level router:
 
-| Route group | Middleware auth |
-|---|---|
-| `/_ui/` | Session cookie / OAuth |
-| `/api/v1/` | API key header (`X-FormSpec-Key`) |
+| Route group | Middleware auth                   |
+| ----------- | --------------------------------- |
+| `/_ui/`     | Session cookie / OAuth            |
+| `/api/v1/`  | API key header (`X-FormSpec-Key`) |
 
 **Satu logic path internal.** Engine (validasi, permission enforcement, guard
 lifecycle, state machine, natural key generation, event publishing) adalah **satu
@@ -579,15 +586,16 @@ meng-override bagaimana permukaan external dipublikasikan — `base_path`,
 
 Kedua permukaan **wajib** mematuhi kontrak yang sama untuk:
 
-| Kontrak | Referensi |
-|---|---|
-| Workspace prefix (`/{workspace_slug}`) | §8.2 — router wajib jatuh ke UUID kalau slug tidak diset |
-| Response envelope (`data`, `meta`, `error`) | `list: { data, meta: {page, per_page, total, total_pages}, links }`, `single: { data, meta: {request_id, timestamp} }`, `error: { error: {code, message, details}, meta }` |
-| Kode error standar | `VALIDATION_ERROR` (422), `UNAUTHORIZED` (401), `FORBIDDEN` (403), `NOT_FOUND` (404), `CONFLICT` (409), `STATE_TRANSITION_ERROR` (422), `INTERNAL_ERROR` (500) — daftar lengkap: [`error-glossary.yaml`](error-glossary.yaml) |
-| Query & filter ([§6](#6-query--filter-operator)) | `?page&per_page&sort&direction&fields&filter[...]&search&include` |
-| Optimistic concurrency (`version`) | Update wajib membawa `version`; mismatch → `409 CONFLICT` |
+| Kontrak                                          | Referensi                                                                                                                                                                                                                     |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Workspace prefix (`/{workspace_slug}`)           | §8.2 — router wajib jatuh ke UUID kalau slug tidak diset                                                                                                                                                                      |
+| Response envelope (`data`, `meta`, `error`)      | `list: { data, meta: {page, per_page, total, total_pages}, links }`, `single: { data, meta: {request_id, timestamp} }`, `error: { error: {code, message, details}, meta }`                                                    |
+| Kode error standar                               | `VALIDATION_ERROR` (422), `UNAUTHORIZED` (401), `FORBIDDEN` (403), `NOT_FOUND` (404), `CONFLICT` (409), `STATE_TRANSITION_ERROR` (422), `INTERNAL_ERROR` (500) — daftar lengkap: [`error-glossary.yaml`](error-glossary.yaml) |
+| Query & filter ([§6](#6-query--filter-operator)) | `?page&per_page&sort&direction&fields&filter[...]&search&include`                                                                                                                                                             |
+| Optimistic concurrency (`version`)               | Update wajib membawa `version`; mismatch → `409 CONFLICT`                                                                                                                                                                     |
 
 ## 9. Error Model
+
 Kode kanonik berformat `FORMSPEC.{DOMAIN}.{REASON}` (mis.
 `FORMSPEC.DOC.UPDATE_NOT_DRAFT`, `FORMSPEC.PERIOD.CLOSED`) — satu file
 `error-glossary.yaml`, versioned bersama Core Basic, dipakai ganda sebagai
@@ -606,7 +614,7 @@ Entity dapat opt-in ke cache framework untuk endpoint find-by-id:
 ```yaml
 spec:
   cache:
-    ttl: 300s        # wajib; 1s–1h; absent = off (correctness by default)
+    ttl: 300s # wajib; 1s–1h; absent = off (correctness by default)
 ```
 
 Semantik (normatif):
@@ -641,7 +649,7 @@ metadata:
 spec:
   keys:
     invoice_due_days: { type: int, default: 30 }
-    smtp_host:        { type: string, secret: true }
+    smtp_host: { type: string, secret: true }
 ```
 
 Nilai di-resolve per environment. Secret dan definisi environment digovern
@@ -675,10 +683,10 @@ metadata:
   module: formspec.core
 spec:
   keys:
-    settings.default_currency:  { type: string, default: "USD" }
-    settings.locale:            { type: string, default: "en-US" }
-    settings.timezone:          { type: string, default: "UTC" }
-    settings.date_format:       { type: string, default: "YYYY-MM-DD" }
+    settings.default_currency: { type: string, default: "USD" }
+    settings.locale: { type: string, default: "en-US" }
+    settings.timezone: { type: string, default: "UTC" }
+    settings.date_format: { type: string, default: "YYYY-MM-DD" }
     settings.fiscal_year_start: { type: string, default: "01-01" }
 ```
 

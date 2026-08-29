@@ -131,7 +131,11 @@ function RootSurface() {
     // root_url "/" owns the whole workspace root — any subpath matches.
     // (startsWith(a.root_url + "/") would test startsWith("//") and never
     // match, silently falling back to _admin for every nested route.)
-    if (a.root_url === "/" || rest === a.root_url || rest.startsWith(a.root_url + "/")) {
+    if (
+      a.root_url === "/" ||
+      rest === a.root_url ||
+      rest.startsWith(a.root_url + "/")
+    ) {
       if (!best || a.root_url.length > best.root_url.length) best = a
     }
   }
