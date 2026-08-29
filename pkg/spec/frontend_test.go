@@ -63,6 +63,50 @@ func TestValidateAppSpec_PersistBackend(t *testing.T) {
 	}
 }
 
+func TestValidateAppSpec_Chrome(t *testing.T) {
+	// Valid values pass.
+	valid := &AppSpec{RootURL: "/app", Chrome: &AppChrome{
+		Brand: ChromeShow, Nav: ChromeMenu, Auth: ChromeLinks,
+		Footer: ChromeHide, Breadcrumbs: ChromeAuto, ThemeSwitcher: ChromeHide,
+	}}
+	if err := ValidateAppSpec(valid); err != nil {
+		t.Errorf("expected no error for valid chrome, got %v", err)
+	}
+	// Empty chrome / nil chrome pass.
+	if err := ValidateAppSpec(&AppSpec{RootURL: "/app", Chrome: &AppChrome{}}); err != nil {
+		t.Errorf("expected no error for empty chrome, got %v", err)
+	}
+	// Invalid values fail with the field name in the message.
+	for _, tc := range []struct{ field, val string }{
+		{"brand", "maybe"}, {"nav", "sidebar"}, {"auth", "oauth"},
+		{"footer", "yes"}, {"breadcrumbs", "true"}, {"theme_switcher", "on"},
+	} {
+		c := &AppChrome{}
+		switch tc.field {
+		case "brand":
+			c.Brand = tc.val
+		case "nav":
+			c.Nav = tc.val
+		case "auth":
+			c.Auth = tc.val
+		case "footer":
+			c.Footer = tc.val
+		case "breadcrumbs":
+			c.Breadcrumbs = tc.val
+		case "theme_switcher":
+			c.ThemeSwitcher = tc.val
+		}
+		err := ValidateAppSpec(&AppSpec{RootURL: "/app", Chrome: c})
+		if err == nil {
+			t.Errorf("expected error for chrome.%s = %q", tc.field, tc.val)
+			continue
+		}
+		if !strings.Contains(err.Error(), "chrome."+tc.field) {
+			t.Errorf("error for chrome.%s should name the field, got: %v", tc.field, err)
+		}
+	}
+}
+
 func TestValidatePageSpec_BlocksAndTabsMutuallyExclusive(t *testing.T) {
 	p := &PageSpec{
 		Route:  "/x",

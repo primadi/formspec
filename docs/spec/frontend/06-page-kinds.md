@@ -40,7 +40,7 @@ satu entry `component:` tanpa blocks/tabs.
 presentasi penuh-lebar tanpa data binding dan tanpa auth. Generik dan
 reusable di App mana pun (public `no-nav`, sidebar-nav, topnav, ...), bukan
 milik satu archetype. Murni deklaratif — nol field styling; seluruh token
-visual hidup di `kind: Theme` ([`05-app-kinds.md`](05-app-kinds.md) §5),
+visual hidup di `kind: Theme` ([`05-app-kinds.md`](05-app-kinds.md) §6),
 tidak pernah inline.
 
 ```yaml

@@ -32,13 +32,18 @@ tanpa sidebar kiri. Mobile → hamburger membuka drawer berisi tree yang sama.
 Menu di-resolve lewat hook bersama `useResolvedMenu` (sama dengan Sidebar).
 Contoh: `examples/arisan/` (`app_renderer: topnav`). **Lengkap.**
 
-`no-nav`: chrome minimal tanpa nav standar — brand bar + nav opsional +
-footer + `Outlet`, tanpa sidebar/breadcrumb. Dipakai untuk App `access:
-public` (marketing/landing) maupun `private` (kiosk/full-screen). Blok
-`section:` pada `kind: Page` dirender oleh
-`src/components/sections/SectionBlocks.tsx` (hero, feature_grid, card,
-carousel, cta). Contoh: `examples/storefront/` (`no-nav` + `public`).
-**Lengkap.**
+`no-nav`: chrome minimal **tanpa navigasi sama sekali** — brand bar + footer
+
+- `Outlet`, tanpa sidebar/breadcrumb, tanpa nav link, tanpa auth controls
+  secara default. Komposisi dikontrol `bundle.app.chrome` (frontend/
+  05-app-kinds.md §5, di-resolve backend): App opt-in nav link via
+  `chrome.nav: menu` dan auth controls via `chrome.auth: links|button`
+  (komponen bersama `src/shell/AuthArea.tsx`). Dipakai untuk App `access:
+public` (marketing/landing) maupun `private` (kiosk/full-screen — tetap
+  di-guard surface boot). Blok `section:` pada `kind: Page` dirender oleh
+  `src/components/sections/SectionBlocks.tsx` (hero, feature_grid, card,
+  carousel, cta). Contoh: `examples/storefront/` (`no-nav` + `public`),
+  `registry/` (`no-nav` + `chrome: {nav: menu, auth: links}`). **Lengkap.**
 
 ## 3. Tier Page
 

@@ -48,6 +48,7 @@ func (c *Converter) Generate(collect *CollectResult) *GenerateResult {
 		"Settings", "CurrencySettings", // global settings namespace (spec §10)
 		"Dependency",
 		"AiIndexDecl", "AppInterface", "AppConsume",
+		"AppChrome", // App.spec.chrome — chrome composition (frontend/05 §5)
 		"EnvironmentPlane", "PolicyApproval",
 		"IntegratorCall", "IntegratorListen",
 		"KvstoreUseDecl",

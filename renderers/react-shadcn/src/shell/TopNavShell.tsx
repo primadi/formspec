@@ -11,6 +11,7 @@ import { useState } from "react"
 import { Link, NavLink, Outlet, useParams } from "react-router-dom"
 import { ChevronDown, Menu } from "lucide-react"
 import { useSurface } from "@/hooks/useSurface"
+import { useMetaStore } from "@/stores/meta"
 import { useMediaQuery } from "@/hooks/useMediaQuery"
 import { useResolvedMenu, linkHref } from "@/hooks/useResolvedMenu"
 import { resolveIcon } from "@/lib/icon-resolver"
@@ -19,7 +20,7 @@ import type { MenuItem } from "@/types/manifest"
 import { ErrorBoundary } from "@/components/ErrorBoundary"
 import { ThemeSwitcher } from "@/components/ThemeSwitcher"
 import { OverlayHost } from "./OverlayHost"
-import { LogoutButton } from "./LogoutButton"
+import { AuthArea } from "./AuthArea"
 import { Button } from "@/components/ui/button"
 import {
   Breadcrumb,
@@ -121,6 +122,9 @@ export function TopNavShell() {
   const isMobile = useMediaQuery("(max-width: 767px)")
   const [mobileOpen, setMobileOpen] = useState(false)
   const { items, basePath } = useResolvedMenu()
+  // Resolved chrome composition (frontend/05-app-kinds.md §4.1) — final
+  // values from the meta API; undefined only before the bundle loads.
+  const chrome = useMetaStore((s) => s.bundle?.app.chrome)
 
   // Breadcrumbs from the current path (same pattern as AppShell).
   const pathParts = locationPath.split("/").filter(Boolean).slice(1)
@@ -179,13 +183,16 @@ export function TopNavShell() {
             )}
 
             <div className="flex-1" />
-            <ThemeSwitcher />
-            <LogoutButton />
-            <Avatar className="size-8">
-              <AvatarFallback className="text-xs">
-                {workspace?.charAt(0).toUpperCase() ?? "F"}
-              </AvatarFallback>
-            </Avatar>
+            {chrome?.theme_switcher !== "hide" && <ThemeSwitcher />}
+            {/* Auth controls (resolved chrome.auth) + user avatar */}
+            <AuthArea mode={chrome?.auth} />
+            {chrome?.auth !== "none" && (
+              <Avatar className="size-8">
+                <AvatarFallback className="text-xs">
+                  {workspace?.charAt(0).toUpperCase() ?? "F"}
+                </AvatarFallback>
+              </Avatar>
+            )}
           </div>
         </header>
 
@@ -213,30 +220,32 @@ export function TopNavShell() {
           </div>
         )}
 
-        {/* Breadcrumb row */}
-        <div className="border-b px-4 py-2">
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbLink render={<Link to={surfacePrefix} />}>
-                  Home
-                </BreadcrumbLink>
-              </BreadcrumbItem>
-              {breadcrumbs.map((crumb, _idx) => (
-                <BreadcrumbItem key={crumb.href}>
-                  <BreadcrumbSeparator />
-                  {crumb.isLast ? (
-                    <BreadcrumbPage>{crumb.label}</BreadcrumbPage>
-                  ) : (
-                    <BreadcrumbLink render={<Link to={crumb.href} />}>
-                      {crumb.label}
-                    </BreadcrumbLink>
-                  )}
+        {/* Breadcrumb row — hidden via explicit chrome.breadcrumbs: hide */}
+        {chrome?.breadcrumbs !== "hide" && (
+          <div className="border-b px-4 py-2">
+            <Breadcrumb>
+              <BreadcrumbList>
+                <BreadcrumbItem>
+                  <BreadcrumbLink render={<Link to={surfacePrefix} />}>
+                    Home
+                  </BreadcrumbLink>
                 </BreadcrumbItem>
-              ))}
-            </BreadcrumbList>
-          </Breadcrumb>
-        </div>
+                {breadcrumbs.map((crumb, _idx) => (
+                  <BreadcrumbItem key={crumb.href}>
+                    <BreadcrumbSeparator />
+                    {crumb.isLast ? (
+                      <BreadcrumbPage>{crumb.label}</BreadcrumbPage>
+                    ) : (
+                      <BreadcrumbLink render={<Link to={crumb.href} />}>
+                        {crumb.label}
+                      </BreadcrumbLink>
+                    )}
+                  </BreadcrumbItem>
+                ))}
+              </BreadcrumbList>
+            </Breadcrumb>
+          </div>
+        )}
 
         {/* Page content */}
         <main className="flex-1 overflow-auto p-6">

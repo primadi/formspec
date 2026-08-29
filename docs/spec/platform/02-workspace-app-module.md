@@ -178,7 +178,7 @@ beda App bisa memakai Shell berbeda, dan bahkan dua App di Shell yang sama
 bisa punya kebutuhan brand berbeda (App internal vs App publik satu vendor).
 Workspace boleh menetapkan Theme default sebagai fallback untuk App yang
 tidak mendeklarasikan `theme_ref`, tapi keputusan akhir selalu di manifest
-App. ([`../frontend/05-app-kinds.md`](../frontend/05-app-kinds.md) §5
+App. ([`../frontend/05-app-kinds.md`](../frontend/05-app-kinds.md) §6
 mengikuti keputusan ini.)
 
 **Auth & authorization per-App (normatif).** Autentikasi dan otorisasi

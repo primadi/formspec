@@ -1102,6 +1102,28 @@ export interface AppSummary {
   stack_family?: string
   /** Entity persist backend (backend/04-persist-backend.md): jsonb-persist */
   persist_backend?: string
+  /** Resolved chrome composition (frontend/05-app-kinds.md §4.1) — archetype
+   *  defaults already applied by the backend; final values only. Always
+   *  present once the bundle loads. */
+  chrome?: ChromeConfig
+}
+
+/** Effective chrome composition (frontend/05-app-kinds.md §4.1). Resolved by
+ *  the meta API — every "auto" in the manifest is replaced by the archetype
+ *  default, so renderers read final values and never guess. */
+export interface ChromeConfig {
+  /** show | hide */
+  brand: string
+  /** menu | none */
+  nav: string
+  /** links | button | none */
+  auth: string
+  /** show | hide */
+  footer: string
+  /** show | hide */
+  breadcrumbs: string
+  /** show | hide */
+  theme_switcher: string
 }
 
 /**

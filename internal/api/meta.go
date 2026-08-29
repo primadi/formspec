@@ -119,6 +119,7 @@ func (b *RouterBuilder) resolveAppContext(r *http.Request) (ui.AppContext, strin
 		Access:         string(resolved.Spec.Access),
 		StackFamily:    resolved.Spec.StackFamily,
 		PersistBackend: resolved.Spec.PersistBackend,
+		Chrome:         resolved.Spec.Chrome,
 		Modules:        resolved.Modules,
 		Menu:           resolved.Menu,
 		Settings:       b.mergeRunningSettings(r.Context(), b.settings),

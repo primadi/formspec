@@ -11,6 +11,11 @@ spec:
   root_url: /
   app_renderer: no-nav
   access: public
+  # no-nav default-nya tanpa nav & tanpa auth controls (frontend/
+  # 05-app-kinds.md §4.1) — portal ini opt-in keduanya secara eksplisit.
+  chrome:
+    nav: menu
+    auth: links
   stack_family: react-shadcn
   persist_backend: jsonb-persist
   modules:

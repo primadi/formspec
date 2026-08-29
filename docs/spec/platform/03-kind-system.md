@@ -64,7 +64,7 @@ Semua ada hanya untuk _override_ auto-derived defaults dari Entity:
 | `ApprovalInbox` | `spec/frontend/06-page-kinds.md` §11 |
 | `NotificationCenter` | `spec/frontend/06-page-kinds.md` §12 |
 | `Print` | `spec/frontend/06-page-kinds.md` §8 |
-| `Theme` | `spec/frontend/05-app-kinds.md` §5 |
+| `Theme` | `spec/frontend/05-app-kinds.md` §6 |
 
 **Infra** — runtime infrastructure & governance:
 | Kind | Didefinisikan di |

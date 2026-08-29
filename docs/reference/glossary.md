@@ -61,6 +61,10 @@ Module → Resource`: dimiliki satu Data Owner (Workspace Owner), menampung
   chrome/navigasi subtree sebuah App — chrome penuh (menu persisten, header)
   versus minimal (tanpa nav standar). Contoh:
   `sidebar-nav`, `topnav`, `no-nav` — dipilih lewat field `app_renderer`
+  (`no-nav` = tanpa navigasi sama sekali). Komposisi elemen chrome (brand,
+  nav, auth, footer, breadcrumbs, theme_switcher) dikontrol `App.spec.chrome`
+  — ortogonal terhadap archetype dan `access`; default di-resolve backend
+  (`spec/frontend/05-app-kinds.md` §5).
   di manifest App. Auth adalah sumbu terpisah (`access`: `private`/`public`).
 - **Page renderer** — Tingkat ketiga hirarki visual: mengisi konten utama
   sebuah route di dalam App renderer, mis. `data-entry`, `wizard`, `kanban`,

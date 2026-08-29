@@ -1,6 +1,9 @@
 package spec
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // ─── Backend Kind Specs ───
 
@@ -87,9 +90,57 @@ type AppSpec struct {
 	// Applies to every instance of that kind in the App; individual instances
 	// may override via their own `renderer:` field.
 	Renderers map[string]string `yaml:"renderers,omitempty" json:"renderers,omitempty"`
-	Menu      []MenuItem        `yaml:"menu,omitempty" json:"menu,omitempty"`
-	Publishes []AppInterface    `yaml:"publishes,omitempty" json:"publishes,omitempty"` // cross-app interfaces offered
-	Consumes  []AppConsume      `yaml:"consumes,omitempty" json:"consumes,omitempty"`   // cross-app interfaces needed → grant request
+	// Chrome fine-tunes which shell chrome elements render (frontend/
+	// 05-app-kinds.md §4.1) — orthogonal to app_renderer (layout archetype)
+	// and access (auth axis). Every element defaults to "auto", meaning the
+	// archetype's own default; explicit values override. Resolved to effective
+	// values by the meta API — renderers never guess.
+	// @schema {example: "nav: menu"}
+	Chrome    *AppChrome     `yaml:"chrome,omitempty" json:"chrome,omitempty"`
+	Menu      []MenuItem     `yaml:"menu,omitempty" json:"menu,omitempty"`
+	Publishes []AppInterface `yaml:"publishes,omitempty" json:"publishes,omitempty"` // cross-app interfaces offered
+	Consumes  []AppConsume   `yaml:"consumes,omitempty" json:"consumes,omitempty"`   // cross-app interfaces needed → grant request
+}
+
+// Chrome element values (frontend/05-app-kinds.md §4.1). "auto" means the
+// archetype's own default; the rest are explicit overrides.
+const (
+	ChromeAuto   = "auto"
+	ChromeShow   = "show"
+	ChromeHide   = "hide"
+	ChromeMenu   = "menu"
+	ChromeNone   = "none"
+	ChromeLinks  = "links"
+	ChromeButton = "button"
+)
+
+// AppChrome fine-tunes which chrome elements the App shell renders
+// (frontend/05-app-kinds.md §4.1). Orthogonal to AppRenderer (layout
+// archetype) and Access (auth axis): every element defaults to "auto" —
+// the archetype's own default — and explicit values override it. The meta
+// API resolves the effective composition (internal/ui resolveChrome) so
+// renderers read final values.
+type AppChrome struct {
+	// Brand bar — App title + logo.
+	// @schema {example: "auto", enum: ["auto", "show", "hide"]}
+	Brand string `yaml:"brand,omitempty" json:"brand,omitempty"`
+	// Navigation links derived from the resolved App menu.
+	// @schema {example: "auto", enum: ["auto", "menu", "none"]}
+	Nav string `yaml:"nav,omitempty" json:"nav,omitempty"`
+	// Auth controls. "links": Sign in link + Sign up button (anon) /
+	// logout (signed-in). "button": single Sign in button. "none": no auth
+	// UI at all — private Apps still guard via the surface boot redirect.
+	// @schema {example: "auto", enum: ["auto", "links", "button", "none"]}
+	Auth string `yaml:"auth,omitempty" json:"auth,omitempty"`
+	// Page footer.
+	// @schema {example: "auto", enum: ["auto", "show", "hide"]}
+	Footer string `yaml:"footer,omitempty" json:"footer,omitempty"`
+	// Breadcrumb row (sidebar-nav/topnav).
+	// @schema {example: "auto", enum: ["auto", "show", "hide"]}
+	Breadcrumbs string `yaml:"breadcrumbs,omitempty" json:"breadcrumbs,omitempty"`
+	// Theme switcher control (sidebar-nav/topnav).
+	// @schema {example: "auto", enum: ["auto", "show", "hide"]}
+	ThemeSwitcher string `yaml:"theme_switcher,omitempty" json:"theme_switcher,omitempty"`
 }
 
 // AppInterface is one cross-app service interface offered by an App
@@ -597,6 +648,8 @@ var InstalledPersistBackends = map[string]bool{
 //   - persist_backend, when set, must be an installed backend — swapping to a
 //     backend that doesn't exist / isn't compatible with the storage contract
 //     is a hard error (not a warning).
+//   - chrome values, when set, must be from their enum (frontend/
+//     05-app-kinds.md §4.1).
 func ValidateAppSpec(a *AppSpec) error {
 	if a.AppRenderer != "" && !AppRendererNames[a.AppRenderer] {
 		return fmt.Errorf("app_renderer %q is not a known App renderer (closed set: sidebar-nav, topnav, no-nav)", a.AppRenderer)
@@ -607,5 +660,39 @@ func ValidateAppSpec(a *AppSpec) error {
 	if a.PersistBackend != "" && !InstalledPersistBackends[a.PersistBackend] {
 		return fmt.Errorf("persist_backend %q is not installed (installed: %s — implements %s)", a.PersistBackend, DefaultPersistBackend, EntityPersistContract)
 	}
+	if c := a.Chrome; c != nil {
+		if err := validateChromeValue("chrome.brand", c.Brand, ChromeAuto, ChromeShow, ChromeHide); err != nil {
+			return err
+		}
+		if err := validateChromeValue("chrome.nav", c.Nav, ChromeAuto, ChromeMenu, ChromeNone); err != nil {
+			return err
+		}
+		if err := validateChromeValue("chrome.auth", c.Auth, ChromeAuto, ChromeLinks, ChromeButton, ChromeNone); err != nil {
+			return err
+		}
+		if err := validateChromeValue("chrome.footer", c.Footer, ChromeAuto, ChromeShow, ChromeHide); err != nil {
+			return err
+		}
+		if err := validateChromeValue("chrome.breadcrumbs", c.Breadcrumbs, ChromeAuto, ChromeShow, ChromeHide); err != nil {
+			return err
+		}
+		if err := validateChromeValue("chrome.theme_switcher", c.ThemeSwitcher, ChromeAuto, ChromeShow, ChromeHide); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// validateChromeValue reports an error when val is non-empty and not one of
+// the allowed enum values.
+func validateChromeValue(field, val string, allowed ...string) error {
+	if val == "" {
+		return nil
+	}
+	for _, a := range allowed {
+		if val == a {
+			return nil
+		}
+	}
+	return fmt.Errorf("%s %q is invalid (enum: %s)", field, val, strings.Join(allowed, ", "))
 }

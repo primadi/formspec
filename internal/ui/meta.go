@@ -59,6 +59,23 @@ type AppSummary struct {
 	// PersistBackend is the entity persist backend (backend/04-persist-
 	// backend.md), e.g. jsonb-persist.
 	PersistBackend string `json:"persist_backend,omitempty"`
+	// Chrome is the resolved, effective chrome composition (frontend/
+	// 05-app-kinds.md §4.1) — archetype defaults already applied. Renderers
+	// read these final values and never guess. Always non-nil.
+	Chrome *ChromeConfig `json:"chrome"`
+}
+
+// ChromeConfig is the effective chrome composition for one App (frontend/
+// 05-app-kinds.md §4.1). Resolved by resolveChrome: every "auto" in the
+// manifest is replaced by the archetype's own default, so these are final
+// values — show/hide, menu/none, links/button/none.
+type ChromeConfig struct {
+	Brand         string `json:"brand"`          // show | hide
+	Nav           string `json:"nav"`            // menu | none
+	Auth          string `json:"auth"`           // links | button | none
+	Footer        string `json:"footer"`         // show | hide
+	Breadcrumbs   string `json:"breadcrumbs"`    // show | hide
+	ThemeSwitcher string `json:"theme_switcher"` // show | hide
 }
 
 // AppContext scopes BuildBundle to one resolved App: which modules it mounts
@@ -75,8 +92,11 @@ type AppContext struct {
 	Access         string
 	StackFamily    string
 	PersistBackend string
-	Modules        map[string]bool
-	Menu           []spec.MenuItem
+	// Chrome is the raw manifest declaration (App.spec.chrome) — defaults
+	// are applied later by resolveChrome, not here.
+	Chrome  *spec.AppChrome
+	Modules map[string]bool
+	Menu    []spec.MenuItem
 	// Settings is the resolved global presentation/config namespace (spec §10).
 	// Always non-nil — resolved with standard defaults by the caller.
 	Settings *spec.Settings
@@ -137,6 +157,44 @@ type EntityDescriptor struct {
 	Spec        *spec.EntitySpec
 }
 
+// resolveChrome applies the chrome default matrix (frontend/05-app-kinds.md
+// §4.1) on top of the raw manifest declaration. Unknown/empty values are
+// treated as "auto" (strict validation happens at manifest load time via
+// ValidateAppSpec + JSON Schema).
+func resolveChrome(appRenderer string, c *spec.AppChrome) *ChromeConfig {
+	cfg := &ChromeConfig{}
+	if appRenderer == "no-nav" {
+		cfg.Brand, cfg.Nav, cfg.Auth = spec.ChromeShow, spec.ChromeNone, spec.ChromeNone
+		cfg.Footer, cfg.Breadcrumbs, cfg.ThemeSwitcher = spec.ChromeShow, spec.ChromeHide, spec.ChromeHide
+	} else {
+		// sidebar-nav / topnav: full chrome.
+		cfg.Brand, cfg.Nav, cfg.Auth = spec.ChromeShow, spec.ChromeMenu, spec.ChromeLinks
+		cfg.Footer, cfg.Breadcrumbs, cfg.ThemeSwitcher = spec.ChromeHide, spec.ChromeShow, spec.ChromeShow
+	}
+	if c == nil {
+		return cfg
+	}
+	if c.Brand == spec.ChromeShow || c.Brand == spec.ChromeHide {
+		cfg.Brand = c.Brand
+	}
+	if c.Nav == spec.ChromeMenu || c.Nav == spec.ChromeNone {
+		cfg.Nav = c.Nav
+	}
+	if c.Auth == spec.ChromeLinks || c.Auth == spec.ChromeButton || c.Auth == spec.ChromeNone {
+		cfg.Auth = c.Auth
+	}
+	if c.Footer == spec.ChromeShow || c.Footer == spec.ChromeHide {
+		cfg.Footer = c.Footer
+	}
+	if c.Breadcrumbs == spec.ChromeShow || c.Breadcrumbs == spec.ChromeHide {
+		cfg.Breadcrumbs = c.Breadcrumbs
+	}
+	if c.ThemeSwitcher == spec.ChromeShow || c.ThemeSwitcher == spec.ChromeHide {
+		cfg.ThemeSwitcher = c.ThemeSwitcher
+	}
+	return cfg
+}
+
 // BuildBundle assembles the /_meta/ui payload for one caller, scoped to one
 // resolved App (appCtx — Core §4.4). Manifests belonging to a module outside
 // appCtx.Modules are excluded entirely, on top of permission filtering.
@@ -167,6 +225,7 @@ func (r *Registry) BuildBundle(entities EntityLister, can PermissionChecker, app
 			Access:         appCtx.Access,
 			StackFamily:    appCtx.StackFamily,
 			PersistBackend: appCtx.PersistBackend,
+			Chrome:         resolveChrome(appCtx.AppRenderer, appCtx.Chrome),
 		},
 		Menu:                menu,
 		Pages:               []*Entry[spec.PageSpec]{},

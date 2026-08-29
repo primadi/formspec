@@ -1,6 +1,6 @@
 # Master Plan: FormSpec Implementation
 
-**Last Updated**: 2026-08-28  
+**Last Updated**: 2026-08-29  
 **Status**: ✅ Fase 0 complete · ✅ Fase 1 (1.1–1.5) · ✅ Fase 2.1 · ✅ Fase 2.2 · ✅ Fase 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6) · ✅ Fase 2.7 (idempotency prepare flow) · ✅ Fase 2.8 (spec.expose) · ✅ Fase 2.9 (2.9.1–2.9.3: ctx.\* primitives + dev auto-provision) · ✅ Fase 5 (5.1–5.4) · ✅ Spec hot-reload · ✅ Fase 11 (review schema↔docs) · ✅ Audit spec↔schema + tambah TODO item · ✅ `formspec validate` (3.1.1, engine+schema) · ✅ Rename forma→formspec (docs/plan/rename-formspec.md) · 🚧 Fase 12 Domain Infrastruktur (docs/architecture/09-domain-map.md) · ✅ Schema registry online (docs/plan/schema-registry-online.md) · ✅ CLI repl/seed/diff (3.4.1, 3.6.2, 3.6.3) · ✅ **Fase 4 (4.1–4.10) complete** (incl. 4.3.1–4.3.5 entity extension, 4.8.3 restore remap) · ✅ Landing page (5.1.3 + 5.13.5, docs/plan/landing-page.md) · ✅ App renderer archetypes (5.1.1–5.1.3: sidebar-nav/topnav/no-nav + access + persist_backend, docs/plan/landing-page.md) · ✅ **Fase 6.1 (6.1.1–6.1.3: login + token, entity-backed auth, external/ merge, generate-auth)** (docs/plan/auth-login-token.md) · ✅ **6.3.1 + 6.3.2 + 5.12.5 (role + role-assignment Entity, materialisasi grant page → permission)** (docs/changelog/2026-08-20-001) · ✅ **6.2.3 (wire permission check semua handler, surface-aware 404)** (docs/changelog/2026-08-20-002) · ✅ **Fase 6 COMPLETE (6.1–6.9, dogfooding auth module)** (docs/plan/fase6-dogfooding-auth-module.md, changelog 2026-08-20-003 s/d 2026-08-21-014) · 📐 **Widget strategy** (docs/plan/widget-strategy.md — sync 5.10, tambah 5.2.7/5.10a, cross-link 7.17.1) · ✅ **Role grants app-scope sync** (docs/plan/role-grants-app-scope.md, changelog 2026-08-26-003) · ✅ **Fase 5 COMPLETE (5.1–5.16)** (docs/plan/fase5-completion.md, changelog 2026-08-24-027 s/d -032; audit sinkronisasi todo 2026-08-27) · ✅ **Fase 7 hampir lengkap** (7.1–7.14, 7.16, 7.17.1–7.17.2 — changelog 2026-08-25-001 s/d 2026-08-26-001; sisa: 7.9.1–7.9.5, 7.15.1, 7.17.3, 7.18, 7.19) · ✅ **Fase 2 COMPLETE (2.9.4 ctx.db module-scoped)** (changelog 2026-08-27-002) · ✅ **3.1.1a honesty scan Starlark** (changelog 2026-08-27-003) · 🚧 **Fase 8 sebagian** (8.1.1–8.1.5, 8.2.1–8.2.6 — docs/plan/fase8-production-serve.md, changelog 2026-08-27-004; sisa: 8.1.6, 8.2.7, 8.3 ⏸️) · ✅ **Fase 10.1 `formspec mcp-serve`** (local MCP tool server — docs/plan/fase10-local-mcp.md, changelog 2026-08-27-005) · ✅ **Fase 10.2 `formspec consult` client (Go)** — docs/plan/fase10-consult-client.md, changelog 2026-08-27-006 (deviasi TS→Go dicatat di docs/ai/01+05; 10.2.7 kompresi riwayat deferred) · ✅ **Fase 10.3/10.4/10.6/10.7 consult completion** — changelog 2026-08-27-007 (10.3.3 & 10.5 deferred; 10.2.7 deferred) · ✅ **Fase 13.1 vendoring** (module install/list/uninstall + verify + boot enforcement — docs/plan/fase13-vendoring.md, changelog 2026-08-28-001; 13.2/13.3 menyusul) · ✅ **Fase 13.2 overrides** (shadow copy adopt/diff/list + whitelist + drift detection — changelog 2026-08-28-002; 13.3 registry menyusul) · ✅ **Fase 13.3 registry loop** (verticals/registry spec + formspec sign/publish + install --from dengan signature verification — changelog 2026-08-28-003; 13.3.3/13.3.5 deferred)
 
 > `⬜` not started · `✅` complete · `⏸️` deferred
@@ -1111,9 +1111,19 @@ sampai itu, validasi pakai `--schema schemas`.
 ### 14.a Portal UX & App identity (2026-08-29, commit a486267)
 
 - [x] AppSpec.title (display name, spasi boleh) + AppSpec.logo (lucide icon) — brand bar shell + document.title. ✅ 2026-08-29
-- [x] NoNavShell: brand logo+title, nav link active state, auth area (Sign in/Sign up saat anonim, Log out saat signed-in). ✅ 2026-08-29
-- [x] LoginScreen mode register (display_name + POST /{ws}/_ui/auth/register + auto-login) + route /register; public surface boot memakai session tersimpan (signed-in user dipertahankan di portal). ✅ 2026-08-29
+- [x] NoNavShell: brand logo+title, nav link active state, auth area (Sign in/Sign up saat anonim, Log out saat signed-in). ✅ 2026-08-29 — _auth area kini dikontrol `App.spec.chrome` (14.b), bukan hardcode shell_
+- [x] LoginScreen mode register (display_name + POST /{ws}/\_ui/auth/register + auto-login) + route /register; public surface boot memakai session tersimpan (signed-in user dipertahankan di portal). ✅ 2026-08-29
 - [ ] ⏸️ Row-level ownership (update/delete module milik sendiri) — butuh fitur **record-level authorization** di framework (permission check per-record via relasi vendor.owner_username). Deferred: kerja framework, bukan registry-specific.
+
+### 14.b Chrome Composition Spec (2026-08-29)
+
+> Plan: `docs/plan/chrome-composition-spec.md` · changelog `2026-08-29-007`
+
+- [x] `App.spec.chrome` — sub-spec `brand`/`nav`/`auth`/`footer`/`breadcrumbs`/`theme_switcher` (default `auto`), ortogonal terhadap `app_renderer` & `access`; validasi enum di `ValidateAppSpec`; schemas regenerated. ✅ 2026-08-29
+- [x] Resolusi default di backend meta — `internal/ui.resolveChrome` → `bundle.app.chrome` (no-nav: nav=none, auth=none; sidebar/topnav: nav=menu, auth=links). ✅ 2026-08-29
+- [x] Frontend — komponen bersama `AuthArea`; `NoNavShell` tanpa hardcode auth/nav/footer; `AppShell`/`TopNavShell` hormati override breadcrumbs/theme_switcher/auth. ✅ 2026-08-29
+- [x] `registry.yaml` — `chrome: {nav: menu, auth: links}` eksplisit (perilaku portal tetap). ✅ 2026-08-29
+- [x] Docs — `05-app-kinds.md` §4 rewrite + §5 Chrome Composition (renumber §5→§6, §6→§7 + cross-ref), `03-kind-renderers.md`, glossary. ✅ 2026-08-29
 
 ## Deferred (Cloud Phase)
 
