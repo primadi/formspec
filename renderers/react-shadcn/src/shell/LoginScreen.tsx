@@ -69,21 +69,20 @@ export function LoginScreen({
     try {
       if (mode === "register") {
         // Self-service registration (portal sign-up) — then auto-login.
-        const res = await fetch(
-          `/${effectiveWorkspace}/_ui/auth/register`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              username: username.trim(),
-              password,
-              display_name: displayName.trim() || username.trim(),
-            }),
-          },
-        )
+        const res = await fetch(`/${effectiveWorkspace}/_ui/auth/register`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: username.trim(),
+            password,
+            display_name: displayName.trim() || username.trim(),
+          }),
+        })
         if (!res.ok) {
           const body = await res.json().catch(() => null)
-          throw new Error(body?.error?.message ?? `Registration failed (${res.status})`)
+          throw new Error(
+            body?.error?.message ?? `Registration failed (${res.status})`,
+          )
         }
       }
       const { accessToken, refreshToken } = await loginWithPassword(
@@ -213,7 +212,9 @@ export function LoginScreen({
             <>
               Don't have an account?{" "}
               <Link
-                to={window.location.pathname.replace(/\/login$/, "") + "/register"}
+                to={
+                  window.location.pathname.replace(/\/login$/, "") + "/register"
+                }
                 className="text-foreground underline"
               >
                 Sign up

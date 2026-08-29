@@ -92,14 +92,20 @@ export const FIELD_NUMBER = "number" // deprecated, backward compat
 
 export type FieldType =
   | "string"
+  | "text"
+  | "richtext"
   | "integer"
   | "decimal"
+  | "money"
   | "boolean"
   | "enum"
   | "date"
   | "datetime"
+  | "time"
   | "json"
   | "uuid"
+  | "file"
+  | "attachment"
   | "relation"
   | "child"
   | "number"
@@ -1138,8 +1144,34 @@ export interface MetaBundle {
   prints: Entry<PrintSpec>[]
   themes: Entry<ThemeSpec>[]
   listings: Entry<ListingSpec>[]
+  calendars: Entry<CalendarSpec>[]
+  approval_inboxes: Entry<ApprovalInboxSpec>[]
+  notification_centers: Entry<NotificationCenterSpec>[]
   /** Resolved global settings namespace (spec §10). Always present. */
   settings: Settings
+}
+
+export interface CalendarSpec {
+  public?: boolean
+  entity: string
+  date_field: string
+  end_field?: string
+  title_field?: string
+  resource_field?: string
+  color_field?: string
+  /** month | week | day | resource (default month) */
+  views?: string[]
+  realtime?: boolean
+}
+
+export interface ApprovalInboxSpec {
+  realtime?: boolean
+  filters?: FilterSpec[]
+  search?: boolean
+}
+
+export interface NotificationCenterSpec {
+  realtime?: boolean
 }
 
 export interface MeResponse {

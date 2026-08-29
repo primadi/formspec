@@ -231,10 +231,13 @@ function PageBlocks({ entry }: { entry: Entry<PageSpec> }) {
   // Document title: "<page title> · <App title>" (request #1 — judul tab
   // browser mengikuti halaman, bukan generik "web"). Saat page title sama
   // dengan App title, tampilkan sekali.
-  const appTitle = useMetaStore((s) => s.bundle?.app.title ?? s.bundle?.app.name)
+  const appTitle = useMetaStore(
+    (s) => s.bundle?.app.title ?? s.bundle?.app.name,
+  )
   useEffect(() => {
     if (!title) return
-    document.title = !appTitle || appTitle === title ? title : `${title} · ${appTitle}`
+    document.title =
+      !appTitle || appTitle === title ? title : `${title} · ${appTitle}`
   }, [title, appTitle])
 
   // Full-custom page (06-page-kinds.md §1) — a single `component:` block

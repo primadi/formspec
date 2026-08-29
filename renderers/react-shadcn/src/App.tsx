@@ -563,9 +563,9 @@ function LoginPage({ mode = "login" }: { mode?: "login" | "register" }) {
     // "//" (protocol-relative) and not a bare "/" (which would loop).
     navigate(
       returnTo &&
-      returnTo.startsWith("/") &&
-      !returnTo.startsWith("//") &&
-      returnTo !== "/"
+        returnTo.startsWith("/") &&
+        !returnTo.startsWith("//") &&
+        returnTo !== "/"
         ? returnTo
         : `/${workspace}`,
       { replace: true },

@@ -11,6 +11,7 @@ import type { EntitySchema } from "@/types/manifest"
 import { useSessionStore } from "@/stores/session"
 import { apiGet, apiPost, apiPatch } from "@/lib/api"
 import { buildZodField } from "@/lib/zod-schema"
+import type { RuntimeValue } from "@/lib/formspec-expr"
 import {
   evalVisibleWhen,
   evalReadonlyWhen,
@@ -50,8 +51,8 @@ export function createHeadlessForm(
   let version: number | undefined
 
   const ctx = () => ({
-    fields: values,
-    user: useSessionStore.getState().me,
+    fields: values as Record<string, RuntimeValue>,
+    user: useSessionStore.getState().me as unknown as Record<string, RuntimeValue>,
   })
 
   const schema = z.object(

@@ -39,12 +39,12 @@ type ActionSummary struct {
 
 // AppSummary identifies which resolved App a Bundle was built for (Core §4.4).
 type AppSummary struct {
-	Name    string `json:"name"`
+	Name string `json:"name"`
 	// Title is the human-readable display name (spaces allowed) for the
 	// shell brand bar and document.title; falls back to Name when absent.
 	Title string `json:"title,omitempty"`
 	// Logo is the brand mark icon name (lucide) shown next to the title.
-	Logo   string `json:"logo,omitempty"`
+	Logo    string `json:"logo,omitempty"`
 	RootURL string `json:"root_url"`
 	// AppRenderer is the resolved App renderer archetype (frontend/
 	// 05-app-kinds.md): sidebar-nav | topnav | no-nav. The renderer picks the

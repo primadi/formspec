@@ -17,10 +17,10 @@
 import { useEffect, useMemo, useState, useCallback } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { toast } from "@/lib/ui"
-import { ChevronLeft, ChevronRight, Loader2, Plus } from "lucide-react"
+import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react"
 import { RRule } from "rrule"
 
-import type { Entry, CalendarSpec, EntitySchema } from "@/types/manifest"
+import type { Entry, CalendarSpec } from "@/types/manifest"
 import { FormaApiError } from "@/types/manifest"
 import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
@@ -142,7 +142,7 @@ function expandRecurrence(
 export default function CalendarRenderer({ entry }: CalendarRendererProps) {
   const navigate = useNavigate()
   const { surfacePath } = useSurface()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [, setSearchParams] = useSearchParams()
   const getClient = useSessionStore((s) => s.getClient)
   const getEntity = useMetaStore((s) => s.getEntity)
   const me = useSessionStore((s) => s.me)
@@ -367,15 +367,6 @@ export default function CalendarRenderer({ entry }: CalendarRendererProps) {
     }
   }
 
-  const rangeLabel = useMemo(() => {
-    if (view === "month") {
-      return cursor.toLocaleDateString([], { month: "long", year: "numeric" })
-    }
-    if (view === "week") {
-      return `${range.start.toLocaleDateString()} – ${range.end.toLocaleDateString()}`
-    }
-    return cursor.toLocaleDateString()
-  }, [view, cursor, range])
 
   if (!entity) {
     return (
@@ -536,7 +527,6 @@ function MonthView({
   onOpen,
   onDragStart,
   onDrop,
-  dragging,
   dropDay,
   setDropDay,
   onCreate,
@@ -548,7 +538,7 @@ function MonthView({
   onDrop: (day: Date) => void
   dragging: CalEvent | null
   dropDay: Date | null
-  setDropDay: (d: Date | null) => void
+  setDropDay: React.Dispatch<React.SetStateAction<Date | null>>
   onCreate: (day: Date) => void
 }) {
   const year = cursor.getFullYear()
@@ -627,7 +617,6 @@ function WeekView({
   onOpen,
   onDragStart,
   onDrop,
-  dragging,
   dropDay,
   setDropDay,
   onCreate,
@@ -639,7 +628,7 @@ function WeekView({
   onDrop: (day: Date) => void
   dragging: CalEvent | null
   dropDay: Date | null
-  setDropDay: (d: Date | null) => void
+  setDropDay: React.Dispatch<React.SetStateAction<Date | null>>
   onCreate: (day: Date) => void
 }) {
   const days: Date[] = []
@@ -702,9 +691,6 @@ function DayView({
   onOpen,
   onDragStart,
   onDrop,
-  dragging,
-  dropDay,
-  setDropDay,
   onCreate,
 }: {
   day: Date
@@ -714,7 +700,7 @@ function DayView({
   onDrop: (day: Date) => void
   dragging: CalEvent | null
   dropDay: Date | null
-  setDropDay: (d: Date | null) => void
+  setDropDay: React.Dispatch<React.SetStateAction<Date | null>>
   onCreate: (day: Date) => void
 }) {
   const dayEvents = events
@@ -772,7 +758,6 @@ function ResourceView({
   onOpen,
   onDragStart,
   onDrop,
-  dragging,
   dropDay,
   setDropDay,
   onCreate,
@@ -785,7 +770,7 @@ function ResourceView({
   onDrop: (day: Date) => void
   dragging: CalEvent | null
   dropDay: Date | null
-  setDropDay: (d: Date | null) => void
+  setDropDay: React.Dispatch<React.SetStateAction<Date | null>>
   onCreate: (day: Date) => void
 }) {
   // Build the day columns for the visible month.

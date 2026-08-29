@@ -53,7 +53,7 @@ import { useMetaStore } from "@/stores/meta"
 import { resolveEntityRef } from "@/engine/entityRef"
 import { can as checkPermission } from "@/engine/permissions"
 import { deriveKanbanColumns } from "@/engine/derive"
-import { evalFormSpecExpr } from "@/lib/formspec-expr"
+import { evalFormSpecExpr, type RuntimeValue } from "@/lib/formspec-expr"
 import { useSurface } from "@/hooks/useSurface"
 import { useRealtime } from "@/hooks/useRealtime"
 import { useSelectFilterOptions } from "@/hooks/useSelectFilterOptions"
@@ -541,7 +541,7 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
       // is false; the server state-machine guard remains the authority.
       if (entry.spec.drag_guard) {
         const guard = evalFormSpecExpr(entry.spec.drag_guard, {
-          fields: activeRecord as Record<string, unknown>,
+          fields: activeRecord as Record<string, RuntimeValue>,
           target: targetStatus,
         })
         if (!guard.valid || !guard.value) {

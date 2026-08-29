@@ -164,7 +164,7 @@ export default function NotificationCenterRenderer({
                   <p className="text-sm font-medium truncate">
                     {String(item.title ?? item.message ?? item.id)}
                   </p>
-                  {item.message && item.title && (
+                  {Boolean(item.message) && item.title != null && (
                     <p className="text-sm text-muted-foreground truncate">
                       {String(item.message)}
                     </p>

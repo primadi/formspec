@@ -25,7 +25,6 @@ import {
 import type {
   Entry,
   DashboardSpec,
-  WidgetLayout,
   WidgetSpec,
   FilterOpValue,
 } from "@/types/manifest"

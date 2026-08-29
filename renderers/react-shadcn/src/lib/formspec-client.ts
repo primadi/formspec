@@ -75,21 +75,19 @@ function withNeeds(api: KyInstance, needs?: AssetNeeds): KyInstance {
   return api.extend({
     hooks: {
       beforeRequest: [
-        (request) => {
-          const url = new URL(request.url)
-          const parts = url.pathname.split("/").filter(Boolean)
-          const idx = parts.indexOf("entity")
-          if (idx === -1 || idx + 2 >= parts.length) return
-          const module = parts[idx + 1]
-          const entity = parts[idx + 2]
-          if (!isAllowed(module, entity, needs)) {
-            throw new Error(
-              `formspec.api: access to ${module}.${entity} not declared in needs`,
-            )
-          }
-        },
-      ],
-    },
+		(state) => {
+			const url = new URL(state.request.url)
+			const parts = url.pathname.split("/").filter(Boolean)
+			const idx = parts.indexOf("entity")
+			if (idx === -1 || idx + 2 >= parts.length) return
+			const module = parts[idx + 1]
+			const entity = parts[idx + 2]
+			if (!isAllowed(module, entity, needs)) {
+				throw new Error(`formspec.api: access to ${module}.${entity} not declared in needs`)
+			}
+		},
+		],
+	},
   })
 }
 
