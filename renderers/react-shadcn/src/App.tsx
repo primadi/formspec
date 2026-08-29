@@ -72,6 +72,7 @@ function Root() {
             the workspace resolves to no public App, redirect to _admin. */}
         <Route path="/:workspace/*" element={<RootSurface />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<LoginPage mode="register" />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
       <Toaster position="top-right" richColors />
@@ -217,6 +218,13 @@ function SurfaceShell({
     [bundle, surfacePath],
   )
 
+  // Document title: App display title (fallback name) — pages refine it.
+  useEffect(() => {
+    if (bundle) {
+      document.title = bundle.app.title ?? bundle.app.name
+    }
+  }, [bundle])
+
   // Boot: fetch session + meta, then start spec version polling.
   // A `public` surface is anonymous — no session boot, meta fetched without
   // a token (the server serves the public bundle for an `access: public`
@@ -224,11 +232,17 @@ function SurfaceShell({
   useEffect(() => {
     if (isPublic) {
       if (!sessionLoaded) {
-        // Mark session loaded so the loading gate below doesn't spin forever.
-        useSessionStore.getState().setSession(workspace, "")
-      }
-      if (!bundle && !metaLoading) {
-        loadMeta(workspace, "app")
+        // boot() restores a persisted session for this workspace when present
+        // (a signed-in user keeps their identity on the public surface —
+        // permissions apply, e.g. updating own modules); otherwise it boots
+        // anonymously. Either way it marks the session loaded.
+        boot(workspace).then(() => {
+          const { token } = useSessionStore.getState()
+          loadMeta(workspace, "app", token)
+        })
+      } else if (!bundle && !metaLoading) {
+        const { token } = useSessionStore.getState()
+        loadMeta(workspace, "app", token)
       }
       return
     }
@@ -338,11 +352,13 @@ function SurfaceShell({
   // the app surface, /{ws}/_admin/login for admin). On that route: show the
   // form when unauthenticated, otherwise bounce to the surface root.
   const loginPath = `${surfacePath}/login`
+  const registerPath = `${surfacePath}/register`
   const isLoginRoute = location.pathname === loginPath
+  const isRegisterRoute = location.pathname === registerPath
 
-  if (isLoginRoute) {
-    if (unauthenticated) {
-      return <LoginPage />
+  if (isLoginRoute || isRegisterRoute) {
+    if (unauthenticated || isRegisterRoute) {
+      return <LoginPage mode={isRegisterRoute ? "register" : "login"} />
     }
     return <Navigate to={surfacePath} replace />
   }
@@ -522,7 +538,7 @@ function appFromPath(pathname: string): string | undefined {
   return undefined
 }
 
-function LoginPage() {
+function LoginPage({ mode = "login" }: { mode?: "login" | "register" }) {
   const navigate = useNavigate()
   // In-app login (rendered inside a /:workspace/... surface) derives the
   // workspace from the URL; the top-level /login route has no param and asks
@@ -545,20 +561,24 @@ function LoginPage() {
     const returnTo = searchParams.get("returnTo")
     // Same-origin guard: only accept a path starting with "/" that is not
     // "//" (protocol-relative) and not a bare "/" (which would loop).
-    if (
+    navigate(
       returnTo &&
       returnTo.startsWith("/") &&
       !returnTo.startsWith("//") &&
       returnTo !== "/"
-    ) {
-      navigate(returnTo, { replace: true })
-      return
-    }
-    navigate(`/${workspace}/_admin`, { replace: true })
+        ? returnTo
+        : `/${workspace}`,
+      { replace: true },
+    )
   }
 
   return (
-    <LoginScreen workspace={workspaceParam} app={app} onLogin={handleLogin} />
+    <LoginScreen
+      workspace={workspaceParam}
+      app={app}
+      onLogin={handleLogin}
+      mode={mode}
+    />
   )
 }
 

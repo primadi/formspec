@@ -20,18 +20,18 @@ type PageSpec struct {
 	// @schema {example: "/orders/:id"}
 	Route string `yaml:"route" json:"route"`
 	// @schema {example: "Order {order.number}"}
-	Title       string      `yaml:"title" json:"title"`
+	Title string `yaml:"title" json:"title"`
 	// TitleVisible hides the rendered page-title heading when false (default
 	// true). Pages whose first block carries its own display title (e.g. a
 	// hero section) set title_visible: false to avoid a duplicated heading.
 	// @schema {description: "Render the page title heading (default true)"}
 	TitleVisible *bool       `yaml:"title_visible,omitempty" json:"title_visible,omitempty"`
-	Icon        string      `yaml:"icon,omitempty" json:"icon,omitempty"`
-	Description string      `yaml:"description,omitempty" json:"description,omitempty"`
-	Permissions []string    `yaml:"permissions,omitempty" json:"permissions,omitempty"`
-	Blocks      []PageBlock `yaml:"blocks,omitempty" json:"blocks,omitempty"`
-	Tabs        []PageTab   `yaml:"tabs,omitempty" json:"tabs,omitempty"`
-	Layout      *PageLayout `yaml:"layout,omitempty" json:"layout,omitempty"`
+	Icon         string      `yaml:"icon,omitempty" json:"icon,omitempty"`
+	Description  string      `yaml:"description,omitempty" json:"description,omitempty"`
+	Permissions  []string    `yaml:"permissions,omitempty" json:"permissions,omitempty"`
+	Blocks       []PageBlock `yaml:"blocks,omitempty" json:"blocks,omitempty"`
+	Tabs         []PageTab   `yaml:"tabs,omitempty" json:"tabs,omitempty"`
+	Layout       *PageLayout `yaml:"layout,omitempty" json:"layout,omitempty"`
 	// Mode is "custom" for a full-code page that hands all rendering to an
 	// asset (frontend/06-page-kinds.md §13). Empty means blocks/tabs.
 	// @schema {description: "Page mode. `custom` hands all rendering to an asset component; empty means blocks/tabs composition.", enum: ["", "custom"]}

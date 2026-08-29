@@ -7,6 +7,7 @@
 // handles the `returnTo` redirect) — this screen only authenticates.
 
 import { useState, type FormEvent } from "react"
+import { Link, useSearchParams } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
@@ -29,9 +30,16 @@ export function LoginScreen({
   workspace: workspaceProp,
   app,
   onLogin,
-}: LoginScreenProps) {
+  mode: modeProp,
+}: LoginScreenProps & { mode?: "login" | "register" }) {
+  const [searchParams] = useSearchParams()
+  const mode = (modeProp ??
+    (searchParams.get("mode") === "register" ? "register" : "login")) as
+    | "login"
+    | "register"
   const [workspace, setWorkspace] = useState(workspaceProp ?? "")
   const [username, setUsername] = useState("")
+  const [displayName, setDisplayName] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -59,6 +67,25 @@ export function LoginScreen({
     setLoading(true)
     setError(null)
     try {
+      if (mode === "register") {
+        // Self-service registration (portal sign-up) — then auto-login.
+        const res = await fetch(
+          `/${effectiveWorkspace}/_ui/auth/register`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              username: username.trim(),
+              password,
+              display_name: displayName.trim() || username.trim(),
+            }),
+          },
+        )
+        if (!res.ok) {
+          const body = await res.json().catch(() => null)
+          throw new Error(body?.error?.message ?? `Registration failed (${res.status})`)
+        }
+      }
       const { accessToken, refreshToken } = await loginWithPassword(
         effectiveWorkspace,
         username.trim(),
@@ -79,7 +106,9 @@ export function LoginScreen({
         <div className="text-center">
           <h1 className="text-2xl font-bold tracking-tight">FormSpec</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Sign in to your workspace
+            {mode === "register"
+              ? "Create your account"
+              : "Sign in to your workspace"}
           </p>
         </div>
 
@@ -99,6 +128,25 @@ export function LoginScreen({
                 onChange={(e) => setWorkspace(e.target.value)}
                 disabled={loading}
                 autoComplete="off"
+              />
+            </div>
+          )}
+
+          {mode === "register" && (
+            <div className="space-y-2.5">
+              <label
+                htmlFor="display_name"
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
+                Display Name
+              </label>
+              <Input
+                id="display_name"
+                placeholder="Your Name"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                disabled={loading}
+                autoComplete="name"
               />
             </div>
           )}
@@ -140,9 +188,39 @@ export function LoginScreen({
           {error && <p className="text-sm text-destructive">{error}</p>}
 
           <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? "Signing in..." : "Sign In"}
+            {loading
+              ? mode === "register"
+                ? "Creating account..."
+                : "Signing in..."
+              : mode === "register"
+                ? "Create Account"
+                : "Sign In"}
           </Button>
         </form>
+
+        <p className="text-center text-sm text-muted-foreground">
+          {mode === "register" ? (
+            <>
+              Already have an account?{" "}
+              <Link
+                to={window.location.pathname.replace(/\/register$/, "/login")}
+                className="text-foreground underline"
+              >
+                Sign in
+              </Link>
+            </>
+          ) : (
+            <>
+              Don't have an account?{" "}
+              <Link
+                to={window.location.pathname.replace(/\/login$/, "") + "/register"}
+                className="text-foreground underline"
+              >
+                Sign up
+              </Link>
+            </>
+          )}
+        </p>
 
         <div className="space-y-2.5">
           <label

@@ -1080,6 +1080,10 @@ export interface ActionSummary {
 
 export interface AppSummary {
   name: string
+  /** Human-readable display name (spaces allowed) — brand bar + document.title. Falls back to name. */
+  title?: string
+  /** Brand mark icon name (lucide) shown next to the title in the shell brand bar. */
+  logo?: string
   root_url: string
   /** Resolved App renderer archetype (frontend/05-app-kinds.md): sidebar-nav | topnav | no-nav */
   app_renderer?: string

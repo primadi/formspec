@@ -7,7 +7,6 @@ metadata:
 spec:
   route: /
   title: "FormSpec Registry"
-  title_visible: false
   blocks:
     - section:
         type: hero

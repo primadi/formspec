@@ -6,6 +6,8 @@ metadata:
 spec:
   version: 0.2.0
   vendor: formspec-dev
+  title: "FormSpec Registry"
+  logo: "package"
   root_url: /
   app_renderer: no-nav
   access: public

@@ -228,6 +228,15 @@ function PageBlocks({ entry }: { entry: Entry<PageSpec> }) {
     ? interpolate(entry.spec.title, titleCtx)
     : entry.spec.title
 
+  // Document title: "<page title> · <App title>" (request #1 — judul tab
+  // browser mengikuti halaman, bukan generik "web"). Saat page title sama
+  // dengan App title, tampilkan sekali.
+  const appTitle = useMetaStore((s) => s.bundle?.app.title ?? s.bundle?.app.name)
+  useEffect(() => {
+    if (!title) return
+    document.title = !appTitle || appTitle === title ? title : `${title} · ${appTitle}`
+  }, [title, appTitle])
+
   // Full-custom page (06-page-kinds.md §1) — a single `component:` block
   // (no blocks/tabs) renders full-bleed: no grid wrapper, no border.
   if (blocks.length === 1 && blocks[0].component) {

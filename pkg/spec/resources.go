@@ -58,6 +58,15 @@ type AppSpec struct {
 	Version string `yaml:"version" json:"version"`
 	// @schema {example: "acme-corp"}
 	Vendor string `yaml:"vendor" json:"vendor"`
+	// Title is the human-readable display name (spaces allowed) — used for
+	// the shell brand bar, document.title, and menus. metadata.name stays
+	// the machine identifier (kebab-case, no spaces).
+	// @schema {example: "Acme Corp Portal"}
+	Title string `yaml:"title,omitempty" json:"title,omitempty"`
+	// Logo is the brand mark shown next to the title in the shell brand bar
+	// — a lucide icon name (consistent with menu icons, e.g. "package").
+	// @schema {example: "package"}
+	Logo string `yaml:"logo,omitempty" json:"logo,omitempty"`
 	// @schema {example: "/app/klinik", pattern: "^(/|/app(/.*)?)$"}
 	RootURL string `yaml:"root_url" json:"root_url"`
 	// @schema {example: "[clinic, pharmacy]"}

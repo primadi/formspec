@@ -112,6 +112,8 @@ func (b *RouterBuilder) resolveAppContext(r *http.Request) (ui.AppContext, strin
 	}
 	return ui.AppContext{
 		Name:           resolved.Name,
+		Title:          resolved.Spec.Title,
+		Logo:           resolved.Spec.Logo,
 		RootURL:        resolved.Spec.RootURL,
 		AppRenderer:    resolved.Spec.AppRenderer,
 		Access:         string(resolved.Spec.Access),
