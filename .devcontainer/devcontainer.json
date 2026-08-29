@@ -59,10 +59,13 @@
   // "customizations": {},
 
   // Forward ports ke host (Windows/Mac). Prefix 1 untuk menghindari tabrakan.
-  // 18080 = formspec-resource API | 19000 = MinIO API | 19001 = MinIO Console
+  // 19000 = MinIO API | 19001 = MinIO Console
   // 16379 = Valkey | 11025 = Mailpit SMTP | 18025 = Mailpit UI
+  // 18080 TIDAK di-forward: dev server API/UI berjalan di :8080 di dalam
+  // container; forward 18080 memicu rewrite URL di tool browser
+  // (18080 → 18081) yang membuat open_browser_page timeout.
   // Keep this on IPv4 localhost to avoid Docker's flaky IPv6 forwarding in this environment.
-  "forwardPorts": [18080, 19000, 19001, 16379, 11025, 18025],
+  "forwardPorts": [19000, 19001, 16379, 11025, 18025],
 
   // Use 'postCreateCommand' to run commands after the container is created.
   // RTK global hooks must re-run here because /home/vscode state is ephemeral
