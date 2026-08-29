@@ -271,7 +271,14 @@ func TestDatastoreRegistry_UnsupportedDriver(t *testing.T) {
 		t.Fatalf("LoadManifests bindings: %v", err)
 	}
 	_, err = reg.Resolve("cache", "cloud-cache", "cloud-mod")
-	if err == nil || !strings.Contains(err.Error(), "not supported in single-server mode") {
-		t.Fatalf("valkey driver: want unsupported error, got %v", err)
+	// Plan C batch 2: valkey/redis now RESOLVE for KV primitives — the
+	// error is a connection failure (no Redis server in the test env), not
+	// "unsupported driver". Remaining cloud drivers (s3/minio/nats) still
+	// fail as unsupported.
+	if err == nil {
+		t.Fatalf("valkey driver: want connection error (no redis server), got nil")
+	}
+	if strings.Contains(err.Error(), "not supported in single-server mode") {
+		t.Fatalf("valkey driver: should be supported now, got %v", err)
 	}
 }

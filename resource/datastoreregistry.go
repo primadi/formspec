@@ -9,6 +9,7 @@ import (
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
 	"github.com/primadi/formspec/renderers/jsonb-persist/datastore"
 	"github.com/primadi/formspec/renderers/jsonb-persist/datastore/memory"
+	"github.com/primadi/formspec/renderers/jsonb-persist/datastore/rediskv"
 
 	"github.com/primadi/formspec/internal/manifest"
 	"github.com/primadi/formspec/pkg/spec"
@@ -27,8 +28,9 @@ import (
 //     events/outbox — never a direct ctx.* handle.
 //
 // Named datastores come from `kind: Datastore` manifests. Single-server
-// supports drivers: sqlite, postgres, memory, fs. Cloud drivers (valkey,
-// redis, s3, minio, nats) fail loudly at resolve time — they require the
+// supports drivers: sqlite, postgres, memory, fs, plus valkey/redis for the
+// KV primitives (cache/kvstore — Plan C batch 2). Remaining cloud drivers
+// (s3, minio, nats) fail loudly at resolve time — they require the
 // Control Plane snapshot with real credentials.
 
 // dsEntry is one named datastore: its spec plus lazily-opened connections.
@@ -161,6 +163,22 @@ func (e *dsEntry) open(stateDir string, pt spec.PrimitiveType) (interface{}, err
 			return nil, fmt.Errorf("datastore %q: filesystem backend: %w", e.name, err)
 		}
 		return s, nil
+	case spec.DatastoreDriverValkey, spec.DatastoreDriverRedis:
+		// Cloud cache driver (Plan C batch 2, todo 13.5.6): serves the KV
+		// primitives (cache/kvstore) over Redis/Valkey. DB/lock/queue/pubsub
+		// on Redis are separate backends — not wired here.
+		if pt != spec.PrimitiveCache && pt != spec.PrimitiveKVStore {
+			return nil, fmt.Errorf("driver %q does not serve primitive %q (supported: cache, kvstore)", drv, pt)
+		}
+		addr := fmt.Sprintf("%s:%d", e.spec.Connection.Host, e.spec.Connection.Port)
+		if e.spec.Connection.Host == "" {
+			addr = "localhost:6379"
+		}
+		kv, err := rediskv.New(addr, "formspec:"+e.name)
+		if err != nil {
+			return nil, fmt.Errorf("datastore %q: %w", e.name, err)
+		}
+		return kv, nil
 	default:
 		return nil, fmt.Errorf("datastore %q: driver %q is not supported in single-server mode yet (supported: sqlite, postgres, memory, fs)", e.name, drv)
 	}
