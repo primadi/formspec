@@ -1,0 +1,18 @@
+# Datastore manifest — Redis/Valkey untuk ctx.cache registry (Plan C batch 2).
+#
+# Cara pakai: salin file ini ke spec tree yang dipakai deployment (mis. mount
+# extra spec dir dan jalankan binary dengan --spec <dir-gabungan>), ATAU
+# embed langsung dengan menambahkan file ini ke registry/spec/apps/../
+# datastores/ sebelum build image. Namespace key otomatis "formspec:<name>:".
+apiVersion: formspec.dev/v1
+kind: Datastore
+metadata:
+  name: registry-cache
+  module: registry
+  description: "Cache MRU module metadata — Valkey/Redis (Plan C batch 2)"
+spec:
+  driver: valkey
+  serves: [cache, kvstore]
+  connection:
+    host: valkey
+    port: 6379
