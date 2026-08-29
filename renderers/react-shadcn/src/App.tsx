@@ -6,7 +6,7 @@
 // 3. Build route table from meta bundle
 // 4. Render AppShell with router
 
-import { useEffect, useMemo, useState } from "react"
+import { lazy, Suspense, useEffect, useMemo, useState } from "react"
 import {
   BrowserRouter,
   Routes,
@@ -37,6 +37,8 @@ import { useTheme } from "@/hooks/useTheme"
 import { useAutoLogout } from "@/hooks/useAutoLogout"
 import { preloadCommonRenderers } from "@/lib/preload"
 import { fetchMetaApps } from "@/lib/api"
+
+const PageRenderer = lazy(() => import("@/kinds/page/PageRenderer"))
 import type { AppSummary } from "@/types/manifest"
 
 // ── Shell registry ──
@@ -126,7 +128,10 @@ function RootSurface() {
   const rest = "/" + segments.slice(1).join("/")
   let best: AppSummary | undefined
   for (const a of apps) {
-    if (rest === a.root_url || rest.startsWith(a.root_url + "/")) {
+    // root_url "/" owns the whole workspace root — any subpath matches.
+    // (startsWith(a.root_url + "/") would test startsWith("//") and never
+    // match, silently falling back to _admin for every nested route.)
+    if (a.root_url === "/" || rest === a.root_url || rest.startsWith(a.root_url + "/")) {
       if (!best || a.root_url.length > best.root_url.length) best = a
     }
   }
@@ -137,7 +142,7 @@ function RootSurface() {
     return <Navigate to={`/${workspace}/_admin`} replace />
   }
 
-  return <SurfaceShell surface="app" public />
+  return <SurfaceShell surface="app" public mountPrefix={`/${workspace}`} />
 }
 
 // ── Surface Shell: boot + render for admin or app surface ──
@@ -149,9 +154,17 @@ function RootSurface() {
 function SurfaceShell({
   surface,
   public: isPublic = false,
+  mountPrefix: mountPrefixOverride,
 }: {
   surface: "admin" | "app"
   public?: boolean
+  /**
+   * Fixed pathname prefix consumed by the OUTER route. Default: admin →
+   * "/{ws}/_admin", app → "/{ws}/app". A public App that owns the workspace
+   * root (RootSurface, mounted at "/:workspace/*") must pass "/{ws}" — its
+   * nested routes are relative to the workspace, not to "/{ws}/app".
+   */
+  mountPrefix?: string
 }) {
   const { workspace = "default" } = useParams<{ workspace: string }>()
   const location = useLocation()
@@ -191,7 +204,10 @@ function SurfaceShell({
   // root_url is NOT part of it, even though it IS part of surfacePath — so
   // relative route paths must strip mountPrefix, never surfacePath.
   const mountPrefix =
-    surface === "admin" ? `/${workspace}/_admin` : `/${workspace}/app`
+    mountPrefixOverride ??
+    (surface === "admin" ? `/${workspace}/_admin` : `/${workspace}/app`)
+  // The App's home page (spec.route "/") — rendered as the surface index.
+  const homePage = bundle?.pages?.find((p) => p.spec.route === "/")
   const surfaceRoutes = useMemo(
     () => (bundle ? buildRoutes({ bundle, basePath: surfacePath }) : []),
     [bundle, surfacePath],
@@ -381,19 +397,28 @@ function SurfaceShell({
           {surfaceRoutes.map((route, idx) => (
             <Route
               key={`${surface}-${idx}`}
-              path={route.path?.replace(`${mountPrefix}/`, "") ?? ""}
+              path={route.path?.replace(`${mountPrefix}/`, "") || "/"}
               Component={route.Component}
             />
           ))}
-          {/* Default: redirect to first derived entity */}
+          {/* Index: the App's home page (spec.route "/") when authored —
+              otherwise fall back to the first derived entity. A page route
+              "/" strips to an empty relative path that never matches the
+              splat remainder, so it must be rendered as the index. */}
           <Route
             index
             element={
-              <DefaultRedirect
-                bundle={bundle}
-                workspace={workspace}
-                surface={surface}
-              />
+              homePage ? (
+                <Suspense fallback={null}>
+                  <PageRenderer entry={homePage} />
+                </Suspense>
+              ) : (
+                <DefaultRedirect
+                  bundle={bundle}
+                  workspace={workspace}
+                  surface={surface}
+                />
+              )
             }
           />
           {/* Catch-all: redirect to root */}

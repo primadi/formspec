@@ -84,7 +84,7 @@ export default function ListingRenderer({
       }
       const { items } = await apiList<RowData>(
         client,
-        `_ui/entity/${entity.module}/${entity.name}`,
+        `${entity.module}/${entity.name}`,
         params,
       )
       setItems(items)

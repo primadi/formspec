@@ -64,6 +64,10 @@ export function buildRoutes(options: RouteBuilderOptions): RouteObject[] {
 
   // 1. Page routes
   for (const page of bundle.pages ?? []) {
+    // The home page (route "/") is rendered as the surface INDEX (see
+    // SurfaceShell) — a "/" route strips to an empty relative path that
+    // never matches the splat remainder.
+    if (page.spec.route === "/") continue
     const route = page.spec.route.startsWith("/")
       ? page.spec.route
       : `/${page.spec.route}`
