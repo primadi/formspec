@@ -1,4 +1,4 @@
-.PHONY: all build clean test lint run-example dev web-deps web-dev web-build apply build-spa install
+.PHONY: all build clean test lint run-example dev web-deps web-dev web-build web-typecheck apply build-spa install
 
 # Build all binaries
 all: build
@@ -119,7 +119,13 @@ web-deps:
 web-dev:
 	cd renderers/react-shadcn && npm run dev
 
-web-build:
+# Typecheck frontend dengan tsconfig.app.json (config yang dipakai editor —
+# `tsc --noEmit` tanpa -p memakai tsconfig.json solution-style dan tidak
+# mengecek apa pun). Gate sebelum build agar type drift Go->TS tertangkap.
+web-typecheck:
+	cd renderers/react-shadcn && npx tsc --noEmit -p tsconfig.app.json
+
+web-build: web-typecheck
 	cd renderers/react-shadcn && npm run build
 
 # Format code
