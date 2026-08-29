@@ -48,7 +48,7 @@ spec:
 | `events` | []`string` | — | billing.invoice.on_submit |  |
 | `handler` | `ImplDecl` | ✅ |  |  |
 | `store` | `string` | — | redis |  |
-| `durable` | `string` | — |  | Tier 2: durability mode |
+| `durability` | `string` | — |  | Tier 2: durability mode ("durable" = streaming) |
 | `retry` | `RetryDecl` | — |  | Tier 2 |
 | `position` | enum (latest · earliest) | — | latest |  |
 | `filter` | `string` | — |  | Tier 2: Starlark filter over event payload |

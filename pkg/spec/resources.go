@@ -64,26 +64,27 @@ type AppSpec struct {
 	// Title is the human-readable display name (spaces allowed) — used for
 	// the shell brand bar, document.title, and menus. metadata.name stays
 	// the machine identifier (kebab-case, no spaces).
-	// @schema {example: "Acme Corp Portal"}
+	// @schema {example: "Acme Corp Portal", description: "Human-readable display name (spaces allowed) — brand bar + document.title; metadata.name stays the machine identifier"}
 	Title string `yaml:"title,omitempty" json:"title,omitempty"`
 	// Logo is the brand mark shown next to the title in the shell brand bar
 	// — a lucide icon name (consistent with menu icons, e.g. "package").
-	// @schema {example: "package"}
+	// @schema {example: "package", description: "Brand mark icon (lucide name) next to the title in the shell brand bar"}
 	Logo string `yaml:"logo,omitempty" json:"logo,omitempty"`
 	// @schema {example: "/app/klinik", pattern: "^(/|/app(/.*)?)$"}
 	RootURL string `yaml:"root_url" json:"root_url"`
-	// @schema {example: "[clinic, pharmacy]"}
+	// @schema {example: "[clinic, pharmacy]", description: "Modules mounted by this App — manifests outside these modules are excluded from the App bundle"}
 	Modules []string `yaml:"modules" json:"modules"`
-	// @schema {example: "no-nav", enum: ["sidebar-nav", "topnav", "no-nav"]}
+	// @schema {example: "no-nav", enum: ["sidebar-nav", "topnav", "no-nav"], description: "Chrome archetype (frontend/05-app-kinds.md): sidebar-nav | topnav | no-nav — no-nav means truly no navigation"}
 	AppRenderer string `yaml:"app_renderer,omitempty" json:"app_renderer,omitempty"` // chrome archetype (frontend/05-app-kinds.md): sidebar-nav | topnav | no-nav
-	// @schema {example: "private", enum: ["private", "public"]}
+	// @schema {example: "private", enum: ["private", "public"], description: "Auth axis: private (default, secure by default) | public — orthogonal to app_renderer"}
 	Access AppAccess `yaml:"access,omitempty" json:"access,omitempty"` // auth: private (default) | public — orthogonal to app_renderer
-	// @schema {example: "react-shadcn"}
+	// @schema {example: "react-shadcn", description: "Shell implementation (frontend/03-renderer-kind.md), e.g. react-shadcn"}
 	StackFamily string `yaml:"stack_family,omitempty" json:"stack_family,omitempty"` // shell implementation (frontend/03-renderer-kind.md)
-	// @schema {example: "jsonb-persist"}
+	// @schema {example: "jsonb-persist", description: "Entity persist backend (backend/04-persist-backend.md), e.g. jsonb-persist"}
 	PersistBackend string `yaml:"persist_backend,omitempty" json:"persist_backend,omitempty"` // entity persist backend (backend/04-persist-backend.md)
-	// @schema {example: "ocean-blue"}
-	ThemeRef      string `yaml:"theme_ref,omitempty" json:"theme_ref,omitempty"`             // per-App Theme resolution (platform/02 §3)
+	// @schema {example: "ocean-blue", description: "Theme kind name applied per-App (frontend/05-app-kinds.md §6)"}
+	ThemeRef string `yaml:"theme_ref,omitempty" json:"theme_ref,omitempty"` // per-App Theme resolution (platform/02 §3)
+	// @schema {description: "Per-App auth strategy config (kind: Config)"}
 	AuthConfigRef string `yaml:"auth_config_ref,omitempty" json:"auth_config_ref,omitempty"` // per-App auth strategy config
 	// Renderers maps a VisualSpecKind name → renderer for the whole App
 	// (frontend/03-renderer-kind.md §3): e.g. `{kanban: community/super-kanban}`.
@@ -91,11 +92,11 @@ type AppSpec struct {
 	// may override via their own `renderer:` field.
 	Renderers map[string]string `yaml:"renderers,omitempty" json:"renderers,omitempty"`
 	// Chrome fine-tunes which shell chrome elements render (frontend/
-	// 05-app-kinds.md §4.1) — orthogonal to app_renderer (layout archetype)
+	// 05-app-kinds.md §5) — orthogonal to app_renderer (layout archetype)
 	// and access (auth axis). Every element defaults to "auto", meaning the
 	// archetype's own default; explicit values override. Resolved to effective
 	// values by the meta API — renderers never guess.
-	// @schema {example: "nav: menu"}
+	// @schema {example: "nav: menu", description: "Chrome composition: brand/nav/auth/footer/breadcrumbs/theme_switcher, each auto|show|hide (auth: auto|links|button|none) — see frontend/05-app-kinds.md §5"}
 	Chrome    *AppChrome     `yaml:"chrome,omitempty" json:"chrome,omitempty"`
 	Menu      []MenuItem     `yaml:"menu,omitempty" json:"menu,omitempty"`
 	Publishes []AppInterface `yaml:"publishes,omitempty" json:"publishes,omitempty"` // cross-app interfaces offered

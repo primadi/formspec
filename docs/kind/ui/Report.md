@@ -62,6 +62,7 @@ spec:
 | `groups` | []`ReportGroup` | — |  |  |
 | `totals` | []`ReportTotal` | — |  |  |
 | `export` | []`string` | — |  | pdf \| csv \| xlsx |
+| `source` | `ReportSource` | — |  | Source is the declarative parameterized filter (06-page-kinds.md §8 |
 
 <!-- /generated:attributes -->
 

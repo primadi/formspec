@@ -51,7 +51,8 @@ spec:
 <!-- generated:attributes -->
 | Atribut | Tipe | Wajib | Contoh | Deskripsi |
 |---|---|---|---|---|
-| `keys` | map[string]`ConfigKey` | ✅ | {invoice_due_days: {type: int, default: 30}, smtp_host: {type: string, secret: true}} |  |
+| `keys` | map[string]`ConfigKey` | — | {invoice_due_days: {type: int, default: 30}, smtp_host: {type: string, secret: true}} |  |
+| `settings` | `Settings` | — |  | Settings is the typed global presentation/config namespace (spec §10). |
 
 <!-- /generated:attributes -->
 

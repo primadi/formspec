@@ -5,7 +5,7 @@
 //   - App surface: the curated, already-resolved bundle.menu, filtered by
 //     permission (`permissions:` on menu items) and `when:` conditions.
 //
-// Shared by the Sidebar (AppShell) and TopNavShell so both chrome variants
+// Shared by the Sidebar (SideNavShell) and TopNavShell so both chrome variants
 // render the exact same menu tree.
 
 import { useMemo } from "react"

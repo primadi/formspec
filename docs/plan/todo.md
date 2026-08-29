@@ -1121,7 +1121,7 @@ sampai itu, validasi pakai `--schema schemas`.
 
 - [x] `App.spec.chrome` — sub-spec `brand`/`nav`/`auth`/`footer`/`breadcrumbs`/`theme_switcher` (default `auto`), ortogonal terhadap `app_renderer` & `access`; validasi enum di `ValidateAppSpec`; schemas regenerated. ✅ 2026-08-29
 - [x] Resolusi default di backend meta — `internal/ui.resolveChrome` → `bundle.app.chrome` (no-nav: nav=none, auth=none; sidebar/topnav: nav=menu, auth=links). ✅ 2026-08-29
-- [x] Frontend — komponen bersama `AuthArea`; `NoNavShell` tanpa hardcode auth/nav/footer; `AppShell`/`TopNavShell` hormati override breadcrumbs/theme_switcher/auth. ✅ 2026-08-29
+- [x] Frontend — komponen bersama `AuthArea`; `NoNavShell` tanpa hardcode auth/nav/footer; `SideNavShell`/`TopNavShell` hormati override breadcrumbs/theme_switcher/auth. ✅ 2026-08-29
 - [x] `registry.yaml` — `chrome: {nav: menu, auth: links}` eksplisit (perilaku portal tetap). ✅ 2026-08-29
 - [x] Docs — `05-app-kinds.md` §4 rewrite + §5 Chrome Composition (renumber §5→§6, §6→§7 + cross-ref), `03-kind-renderers.md`, glossary. ✅ 2026-08-29
 

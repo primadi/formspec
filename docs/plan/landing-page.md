@@ -69,7 +69,7 @@ tetap berlaku ("keputusan chrome selesai di App renderer; tidak ada
 - `src/shell/NoNavShell.tsx` (rename `LandingShell`): brand bar + nav opsional
   - footer + Outlet. `src/shell/TopNavShell.tsx` (baru): nav atas + dropdown +
     breadcrumb + mobile drawer. Hook bersama `src/hooks/useResolvedMenu.ts`.
-- `src/App.tsx`: registry `APP_SHELLS` (`sidebar-nav`→AppShell,
+- `src/App.tsx`: registry `APP_SHELLS` (`sidebar-nav`→SideNavShell,
   `topnav`→TopNavShell, `no-nav`→NoNavShell); surface collapse `landing`→
   `app` + flag `public`; boot anonim saat `access: public`; login `returnTo`
   same-origin.

@@ -25,7 +25,7 @@ renderers/react-shadcn/src/
 ├── types/manifest.ts         # mirror pkg/spec/frontend.go + entity schema
 ├── stores/{session,meta,prefs}.ts   # zustand
 ├── engine/{derive,permissions,lifecycle,entityRef}.ts   # lihat §3, 02-derivation-engine.md
-├── shell/{AppShell,Sidebar,router,OverlayHost,LoginScreen}.tsx
+├── shell/{SideNavShell,Sidebar,router,OverlayHost,LoginScreen}.tsx
 ├── kinds/{page,form,table,dashboard,widget,report,wizard,kanban,timeline,print,theme}/
 ├── widgets/{TextInput,NumberInput,Select,Switch,Badge,RelationPicker}.tsx
 ├── hooks/{useMediaQuery,useTheme}.ts
@@ -59,7 +59,7 @@ menjalankan boot:
    route CRUD turunan per entity, satu route per entry
    Dashboard/Widget/Wizard/Kanban/Timeline/Report/Print
    (`/dashboard/{name}`, dst).
-4. `<AppShell>` membungkus seluruhnya. Path tak cocok dan index jatuh ke
+4. `<SideNavShell>` membungkus seluruhnya. Path tak cocok dan index jatuh ke
    `DefaultRedirect`: surface `app` menelusuri `bundle.menu` depth-first
    (mendarat di item menu authored pertama); surface `_admin` jatuh ke list
    derived entity non-summary pertama.

@@ -14,7 +14,7 @@ Context for AI coding agents working on the FormSpec frontend (React, TypeScript
 - `renderers/react-shadcn/src/engine/` — Derivation, permissions, lifecycle, entityRef
 - `renderers/react-shadcn/src/lib/formspec-expr/` — FormSpecExpr AST interpreter (lexer, parser, eval)
 - `renderers/react-shadcn/src/lib/api/` — ky-based HTTP client (client, meta)
-- `renderers/react-shadcn/src/shell/` — AppShell, Sidebar, router, OverlayHost
+- `renderers/react-shadcn/src/shell/` — SideNavShell, Sidebar, router, OverlayHost
 - `renderers/react-shadcn/src/stores/` — Zustand stores (meta, session, prefs)
 - `renderers/react-shadcn/src/types/manifest.ts` — TypeScript types mirroring pkg/spec/
 - `renderers/react-shadcn/src/widgets/` — Field-level input widgets

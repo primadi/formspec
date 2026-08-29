@@ -18,7 +18,7 @@ Ketiga archetype App renderer diimplementasikan di shell ini
 ([`../../spec/frontend/05-app-kinds.md`](../../spec/frontend/05-app-kinds.md)
 §1). Pemilihan shell per surface dilakukan di `src/App.tsx` dari
 `bundle.app.app_renderer` lewat registry `APP_SHELLS`
-(`sidebar-nav` → `AppShell`, `topnav` → `TopNavShell`, `no-nav` →
+(`sidebar-nav` → `SideNavShell`, `topnav` → `TopNavShell`, `no-nav` →
 `NoNavShell`). Auth (`access`) adalah sumbu terpisah — boot anonim saat
 `access: public`, boot session saat `private`.
 

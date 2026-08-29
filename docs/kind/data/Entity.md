@@ -103,6 +103,7 @@ spec:
 | `hooks` | []`HookDecl` | — |  |  |
 | `rate_limit` | `RateLimitSpec` | — |  | 1.4.1 resource-level rate limit (02-core-extended.md §17) |
 | `soft_deactivate` | `SoftDeactivateDecl` | — |  | 1.4.10 |
+| `cache` | `CacheSpec` | — |  | Cache opts this entity into the framework read-through cache on |
 | `lifecycle` | enum (two_step_autosave · two_step_manual · plain_crud) | — | plain_crud |  |
 | `display_field` | `string` | — | name |  |
 

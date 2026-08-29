@@ -4,7 +4,7 @@
 // 1. Parse URL → workspace + surface
 // 2. Fetch _meta/me + _meta/ui → fill stores
 // 3. Build route table from meta bundle
-// 4. Render AppShell with router
+// 4. Render SideNavShell with router
 
 import { lazy, Suspense, useEffect, useMemo, useState } from "react"
 import {
@@ -26,7 +26,7 @@ import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
 import { usePrefsStore } from "@/stores/prefs"
 import {
-  AppShell,
+  SideNavShell,
   NoNavShell,
   TopNavShell,
   LoginScreen,
@@ -46,7 +46,7 @@ import type { AppSummary } from "@/types/manifest"
 // implementation in this shell. Today react-shadcn fills all three; other
 // stack_families register their own implementations later.
 const APP_SHELLS: Record<string, React.ComponentType> = {
-  "sidebar-nav": AppShell,
+  "sidebar-nav": SideNavShell,
   topnav: TopNavShell,
   "no-nav": NoNavShell,
 }
@@ -411,7 +411,7 @@ function SurfaceShell({
   // picks the chrome for the whole surface. Falls back to the sidebar shell
   // for any unknown/absent archetype.
   const archetype = bundle.app.app_renderer ?? "sidebar-nav"
-  const Shell = APP_SHELLS[archetype] ?? AppShell
+  const Shell = APP_SHELLS[archetype] ?? SideNavShell
 
   return (
     <>

@@ -22,7 +22,7 @@ sumbu chrome (`app_renderer`) terpisah dari sumbu auth (`access`),
 - **App backoffice terpisah** — kelola `product` dan `registration` lewat UI
   derived (sidebar), di bawah root `/app/backoffice`, `access: private`.
 - **Renderer & komponen SAMA** untuk kedua App — bedanya hanya wrapper chrome
-  (`NoNavShell` vs `AppShell`) + pola auth (anonim vs autentikasi).
+  (`NoNavShell` vs `SideNavShell`) + pola auth (anonim vs autentikasi).
 - **`stack_family: react-shadcn` + `persist_backend: jsonb-persist`** —
   deklarasi eksplisit implementasi shell & backend persist.
 

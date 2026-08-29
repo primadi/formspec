@@ -52,6 +52,7 @@ spec:
 | `max_cards_per_column` | `integer` | — |  |  |
 | `sortable` | `boolean` | — |  | enable within-column drag-to-reorder |
 | `position_field` | `string` | — |  | field storing user-adjustable position (e.g. "queue_position") |
+| `drag_guard` | `string` | — |  | FormSpecExpr pre-check UX before drop: evaluated against the record + target column; drop blocked when false. Server state-machine guard remains authority. |
 
 <!-- /generated:attributes -->
 

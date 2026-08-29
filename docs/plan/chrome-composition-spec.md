@@ -74,21 +74,21 @@ benar-benar baru via `VisualSpecKind tier: app` (05-app-kinds.md §7).
 
 ## File yang Diubah
 
-| File                                               | Perubahan                                                                               |
-| -------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `pkg/spec/resources.go`                            | Struct `AppChrome` + field `Chrome` di `AppSpec` + konstanta nilai + validasi enum      |
-| `internal/ui/meta.go`                              | `ChromeConfig` (resolved) di `AppSummary`; `resolveChrome()` menerapkan matriks default |
-| `internal/api/meta.go`                             | Pass `Spec.Chrome` ke `AppContext`                                                      |
-| `renderers/react-shadcn/src/types/manifest.ts`     | Tipe `ChromeConfig` + `AppSummary.chrome`                                               |
-| `renderers/react-shadcn/src/shell/AuthArea.tsx`    | Komponen auth bersama (links/button/none × anonim/signed-in)                            |
-| `renderers/react-shadcn/src/shell/NoNavShell.tsx`  | Baca chrome; hapus hardcode auth/nav/footer                                             |
-| `renderers/react-shadcn/src/shell/AppShell.tsx`    | `AuthArea` + override breadcrumbs/theme_switcher                                        |
-| `renderers/react-shadcn/src/shell/TopNavShell.tsx` | idem                                                                                    |
-| `registry/spec/apps/registry.yaml`                 | `chrome: {nav: menu, auth: links}` — perilaku portal tidak berubah                      |
-| `schemas/dist/latest/`                             | Regenerate via `make generate-schema`                                                   |
-| `docs/spec/frontend/05-app-kinds.md`               | §4 no-nav + section Chrome Composition                                                  |
-| `docs/renderers/shadcn-shell/03-kind-renderers.md` | Perilaku shell terhadap chrome                                                          |
-| `docs/reference/glossary.md`                       | Entri `chrome`                                                                          |
+| File                                                | Perubahan                                                                               |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `pkg/spec/resources.go`                             | Struct `AppChrome` + field `Chrome` di `AppSpec` + konstanta nilai + validasi enum      |
+| `internal/ui/meta.go`                               | `ChromeConfig` (resolved) di `AppSummary`; `resolveChrome()` menerapkan matriks default |
+| `internal/api/meta.go`                              | Pass `Spec.Chrome` ke `AppContext`                                                      |
+| `renderers/react-shadcn/src/types/manifest.ts`      | Tipe `ChromeConfig` + `AppSummary.chrome`                                               |
+| `renderers/react-shadcn/src/shell/AuthArea.tsx`     | Komponen auth bersama (links/button/none × anonim/signed-in)                            |
+| `renderers/react-shadcn/src/shell/NoNavShell.tsx`   | Baca chrome; hapus hardcode auth/nav/footer                                             |
+| `renderers/react-shadcn/src/shell/SideNavShell.tsx` | `AuthArea` + override breadcrumbs/theme_switcher                                        |
+| `renderers/react-shadcn/src/shell/TopNavShell.tsx`  | idem                                                                                    |
+| `registry/spec/apps/registry.yaml`                  | `chrome: {nav: menu, auth: links}` — perilaku portal tidak berubah                      |
+| `schemas/dist/latest/`                              | Regenerate via `make generate-schema`                                                   |
+| `docs/spec/frontend/05-app-kinds.md`                | §4 no-nav + section Chrome Composition                                                  |
+| `docs/renderers/shadcn-shell/03-kind-renderers.md`  | Perilaku shell terhadap chrome                                                          |
+| `docs/reference/glossary.md`                        | Entri `chrome`                                                                          |
 
 ## Dependensi & Urutan
 

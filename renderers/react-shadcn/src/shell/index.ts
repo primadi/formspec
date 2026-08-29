@@ -1,4 +1,4 @@
-export { AppShell } from "./AppShell"
+export { SideNavShell } from "./SideNavShell"
 export { NoNavShell } from "./NoNavShell"
 export { TopNavShell } from "./TopNavShell"
 export { Sidebar } from "./Sidebar"

@@ -126,7 +126,7 @@ export function TopNavShell() {
   // values from the meta API; undefined only before the bundle loads.
   const chrome = useMetaStore((s) => s.bundle?.app.chrome)
 
-  // Breadcrumbs from the current path (same pattern as AppShell).
+  // Breadcrumbs from the current path (same pattern as SideNavShell).
   const pathParts = locationPath.split("/").filter(Boolean).slice(1)
   const breadcrumbs = pathParts.map((part, idx) => {
     const href = `/${workspace}/${pathParts.slice(0, idx + 1).join("/")}`

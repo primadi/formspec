@@ -5,10 +5,10 @@
   "properties": {
     "access": {
       "$ref": "#/$defs/AppAccess",
-      "description": "@schema {example: \"private\", enum: [\"private\", \"public\"]}"
+      "description": "@schema {example: \"private\", enum: [\"private\", \"public\"], description: \"Auth axis: private (default, secure by default) | public — orthogonal to app_renderer\"}"
     },
     "app_renderer": {
-      "description": "@schema {example: \"no-nav\", enum: [\"sidebar-nav\", \"topnav\", \"no-nav\"]}",
+      "description": "Chrome archetype (frontend/05-app-kinds.md): sidebar-nav | topnav | no-nav — no-nav means truly no navigation",
       "type": "string",
       "enum": [
         "sidebar-nav",
@@ -20,7 +20,7 @@
       ]
     },
     "auth_config_ref": {
-      "description": "per-App auth strategy config",
+      "description": "Per-App auth strategy config (kind: Config)",
       "type": "string"
     },
     "chrome": {
@@ -36,7 +36,7 @@
       }
     },
     "logo": {
-      "description": "Logo is the brand mark shown next to the title in the shell brand bar",
+      "description": "Brand mark icon (lucide name) next to the title in the shell brand bar",
       "type": "string",
       "examples": [
         "package"
@@ -49,7 +49,7 @@
       }
     },
     "modules": {
-      "description": "@schema {example: \"[clinic, pharmacy]\"}",
+      "description": "Modules mounted by this App — manifests outside these modules are excluded from the App bundle",
       "type": "array",
       "items": {
         "type": "string"
@@ -59,7 +59,7 @@
       ]
     },
     "persist_backend": {
-      "description": "@schema {example: \"jsonb-persist\"}",
+      "description": "Entity persist backend (backend/04-persist-backend.md), e.g. jsonb-persist",
       "type": "string",
       "examples": [
         "jsonb-persist"
@@ -86,21 +86,21 @@
       "pattern": "^(/|/app(/.*)?)$"
     },
     "stack_family": {
-      "description": "@schema {example: \"react-shadcn\"}",
+      "description": "Shell implementation (frontend/03-renderer-kind.md), e.g. react-shadcn",
       "type": "string",
       "examples": [
         "react-shadcn"
       ]
     },
     "theme_ref": {
-      "description": "@schema {example: \"ocean-blue\"}",
+      "description": "Theme kind name applied per-App (frontend/05-app-kinds.md §6)",
       "type": "string",
       "examples": [
         "ocean-blue"
       ]
     },
     "title": {
-      "description": "Title is the human-readable display name (spaces allowed) — used for",
+      "description": "Human-readable display name (spaces allowed) — brand bar + document.title; metadata.name stays the machine identifier",
       "type": "string",
       "examples": [
         "Acme Corp Portal"

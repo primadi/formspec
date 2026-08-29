@@ -1,4 +1,4 @@
-// ─── Side-nav Shell ───
+// ─── App Shell ───
 //
 // Main application layout: sidebar + header/breadcrumb + content area.
 //

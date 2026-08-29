@@ -1,11 +1,10 @@
 # Listing
 
 <!-- generated:meta -->
-
-|             |               |
-| ----------- | ------------- |
-| Grup        | `ui`          |
-| Plane       | `resource`    |
+| | |
+|---|---|
+| Grup | `ui` |
+| Plane | `resource` |
 | Spec struct | `ListingSpec` |
 
 <!-- /generated:meta -->
@@ -41,13 +40,12 @@ spec:
 ## Atribut
 
 <!-- generated:attributes -->
-
-| Atribut   | Tipe            | Wajib | Contoh       | Deskripsi |
-| --------- | --------------- | ----- | ------------ | --------- |
-| `entity`  | `string`        | ✅    | shop.product |           |
-| `columns` | []`TableColumn` | —     |              |           |
-| `filters` | []`FilterSpec`  | —     |              |           |
-| `search`  | `boolean`       | —     |              |           |
+| Atribut | Tipe | Wajib | Contoh | Deskripsi |
+|---|---|---|---|---|
+| `entity` | `string` | ✅ | shop.product |  |
+| `columns` | []`TableColumn` | — |  |  |
+| `filters` | []`FilterSpec` | — |  |  |
+| `search` | `boolean` | — |  |  |
 
 <!-- /generated:attributes -->
 

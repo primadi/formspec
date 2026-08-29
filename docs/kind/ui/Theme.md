@@ -1,11 +1,10 @@
 # Theme
 
 <!-- generated:meta -->
-
-|             |             |
-| ----------- | ----------- |
-| Grup        | `ui`        |
-| Plane       | `resource`  |
+| | |
+|---|---|
+| Grup | `ui` |
+| Plane | `resource` |
 | Spec struct | `ThemeSpec` |
 
 <!-- /generated:meta -->
@@ -44,13 +43,12 @@ spec:
 ## Atribut
 
 <!-- generated:attributes -->
-
-| Atribut      | Tipe      | Wajib | Contoh | Deskripsi                                                           |
-| ------------ | --------- | ----- | ------ | ------------------------------------------------------------------- |
-| `public`     | `boolean` | —     |        | If true (default), the theme is active and published in the bundle. |
-| `tokens`     | map       | —     |        |                                                                     |
-| `stylesheet` | `string`  | —     |        |                                                                     |
-| `widgets`    | map       | —     |        | base widget → asset skin                                            |
+| Atribut | Tipe | Wajib | Contoh | Deskripsi |
+|---|---|---|---|---|
+| `public` | `boolean` | — |  | If true (default), the theme is active and published in the bundle. |
+| `tokens` | map | — |  |  |
+| `stylesheet` | `string` | — |  |  |
+| `widgets` | map | — |  | base widget → asset skin |
 
 <!-- /generated:attributes -->
 
