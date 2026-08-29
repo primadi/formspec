@@ -564,6 +564,9 @@ export interface ForwardDatePolicy {
 export interface PageSpec {
   route: string
   title: string
+  /** Hide the rendered page-title heading (default true) — for pages whose
+   *  first block carries its own display title (e.g. a hero section). */
+  title_visible?: boolean
   icon?: string
   description?: string
   permissions?: string[]
