@@ -213,7 +213,12 @@ An App is a **curation** — a basket of modules declared via `spec.modules`.
 An App does NOT own objects; Modules do. The same Module can be mounted by
 multiple Apps in the same workspace.
 
-`spec.version`, `spec.vendor`, and `spec.root_url` are **required**.
+`spec.root_url` is **required** — unique within the workspace and free-form
+inside it: `/`, `/barbershop`, `/app/kafe`, … (the server mounts the SPA
+shell dynamically at each App's `root_url`). Reserved first segments are
+rejected: `_ui`, `api`, `_admin`, `assets`, `health`, `login`, `register`,
+`_ws`, `print`. `spec.version` and `spec.vendor` are optional — marketplace
+publishing metadata only, not consumed at runtime.
 
 ```yaml
 apiVersion: formspec.dev/v1

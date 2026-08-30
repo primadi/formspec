@@ -213,8 +213,12 @@ An App is a **curation** — a basket of modules declared via `spec.modules`.
 An App does NOT own objects; Modules do. The same Module can be mounted by
 multiple Apps in the same workspace.
 
-`spec.version`, `spec.vendor`, and `spec.root_url` are **required**.
-`root_url` must start with `/app/` and be unique within the workspace.
+`spec.root_url` is **required** — unique within the workspace and free-form
+inside it: `/`, `/barbershop`, `/app/kafe`, … (the server mounts the SPA
+shell dynamically at each App's `root_url`). Reserved first segments are
+rejected: `_ui`, `api`, `_admin`, `assets`, `health`, `login`, `register`,
+`_ws`, `print`. `spec.version` and `spec.vendor` are optional — marketplace
+publishing metadata only, not consumed at runtime.
 
 **Menu is owned by App** (§4 of the platform spec). Menu = "what can be
 reached via navigation" — it must be decided at the same level as

@@ -57,10 +57,15 @@ type Dependency struct {
 // more than one App; all Apps in a workspace run simultaneously, mounted at
 // their own RootURL.
 type AppSpec struct {
+	// Version is optional — only meaningful when publishing the App to the
+	// marketplace (docs/spec/07-marketplace.md); the runtime does not
+	// consume it.
 	// @schema {example: "1.0.0"}
-	Version string `yaml:"version" json:"version"`
+	Version string `yaml:"version,omitempty" json:"version,omitempty"`
+	// Vendor is optional — the publishing vendor identity, only required
+	// when publishing the App to the marketplace (platform/02 §2).
 	// @schema {example: "acme-corp"}
-	Vendor string `yaml:"vendor" json:"vendor"`
+	Vendor string `yaml:"vendor,omitempty" json:"vendor,omitempty"`
 	// Title is the human-readable display name (spaces allowed) — used for
 	// the shell brand bar, document.title, and menus. metadata.name stays
 	// the machine identifier (kebab-case, no spaces).
@@ -70,7 +75,12 @@ type AppSpec struct {
 	// — a lucide icon name (consistent with menu icons, e.g. "package").
 	// @schema {example: "package", description: "Brand mark icon (lucide name) next to the title in the shell brand bar"}
 	Logo string `yaml:"logo,omitempty" json:"logo,omitempty"`
-	// @schema {example: "/app/klinik", pattern: "^(/|/app(/.*)?)$"}
+	// RootURL is the App's mount prefix inside the workspace: "/" (workspace
+	// root) or any "/segment/..." path, unique per workspace. Reserved first
+	// segments (_ui, api, _admin, assets, health, login, register, _ws,
+	// print) are rejected at resolve time. "app" remains the conventional
+	// prefix (docs/plan/flexible-root-url.md).
+	// @schema {example: "/app/klinik", pattern: "^(/|/[^/]+(/[^/]+)*)$", description: "Mount prefix inside the workspace: \"/\" or any \"/path\" — unique per workspace; reserved segments (_ui, api, _admin, assets, health, login, register, _ws, print) are rejected"}
 	RootURL string `yaml:"root_url" json:"root_url"`
 	// @schema {example: "[clinic, pharmacy]", description: "Modules mounted by this App — manifests outside these modules are excluded from the App bundle"}
 	Modules []string `yaml:"modules" json:"modules"`

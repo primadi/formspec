@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -413,7 +414,11 @@ func (b *RouterBuilder) BuildHTTP() http.Handler {
 			r.Get("/{module}/{entity}/{id}/{field}", b.factory.HandleFileDownload())
 		})
 
-		// Static SPA (renderer) — /{ws}/_admin and /{ws}/app.
+		// Static SPA (renderer). Fixed mounts: /{ws}/_admin (admin surface,
+		// not App-scoped) and /{ws}/app (legacy convention). Plus a dynamic
+		// mount at every App's root_url (docs/plan/flexible-root-url.md) —
+		// root_url is a free-form prefix inside the workspace, so a
+		// single-App workspace can mount at "/" or "/barbershop".
 		// Priority: webFS (embed) > webDir (file system) > none.
 		var spa http.HandlerFunc
 		switch {
@@ -423,10 +428,22 @@ func (b *RouterBuilder) BuildHTTP() http.Handler {
 			spa = spaHandler(b.webDir)
 		}
 		if spa != nil {
-			r.Get("/_admin", spa)
-			r.Get("/_admin/*", spa)
-			r.Get("/app", spa)
-			r.Get("/app/*", spa)
+			mounts := map[string]bool{"/_admin": true, "/app": true}
+			for _, a := range b.apps {
+				mounts[a.Spec.RootURL] = true
+			}
+			for _, m := range sortedStrings(mounts) {
+				if m == "/" {
+					// A root App owns the whole workspace subtree: serve the
+					// SPA for every unmatched GET (API routes stay more
+					// specific and win; non-GET still 404s as JSON).
+					r.Get("/", spa)
+					r.Get("/*", spa)
+					continue
+				}
+				r.Get(m, spa)
+				r.Get(m+"/*", spa)
+			}
 		}
 	})
 
@@ -734,6 +751,17 @@ func (b *RouterBuilder) Routes() []RouteDescriptor {
 // RouteCount returns the number of registered routes.
 func (b *RouterBuilder) RouteCount() int {
 	return len(b.routes)
+}
+
+// sortedStrings returns the map keys in deterministic order (SPA mounts are
+// registered in a stable order so router rebuilds are reproducible).
+func sortedStrings(m map[string]bool) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // spaHandler serves static renderer assets from dir with an index.html

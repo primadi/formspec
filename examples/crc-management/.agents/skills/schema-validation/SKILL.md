@@ -50,18 +50,18 @@ Exit code: `0` = clean, `1` = at least one problem.
 Most failures map to a small set of canonical fixes. Always check the schema
 (`schemas/kinds/<Kind>.schema.json`) or the spec docs before inventing syntax.
 
-| Error / pattern | Canonical fix |
-|---|---|
-| `expose: all` / `expose: read` / `expose: none` | `expose` is an **array** of `{type, actions}`. Remove it entirely for UI-only, or use `expose: [{type: rest, actions: [list, find, create, update, delete]}]` (see `docs/spec/backend/01-core-basic.md` §8.4) |
-| `lifecycle: {doc_status: true}` | `lifecycle` is a **string** enum (`two_step_autosave`/`two_step_manual`/`plain_crud`). The built-in `doc_status` lifecycle is default-on → delete the block, or set a string value |
-| `type: relation, target: X` | `target` is silently ignored (dangling relation). Use `type: relation` + `relation: {type: belongs_to, resource: <module.entity>}` |
-| `type: child, target: X` (referencing another entity) | `child` is an *embedded* inline collection, not a reference. For a separate entity use `relation: {type: belongs_to, resource: <module.entity>}` |
-| Missing `spec.version` on Entity | Every Entity requires `spec.version: v1` |
-| `spec.version` missing on App | App requires `version`, `vendor`, `root_url` (plus optional `modules` + `menu`) |
-| Module `depends_on: [...]` | Use `depends: [{module: X}]` — `depends_on` is not a valid key |
-| Workflow with `states:`/`transitions:`/`guards:`/`condition:` | States/transitions live on the Entity (`state_machine`: `field`, `initial`, `states`, `transitions` with `via`). A `kind: Workflow` only declares `entity` + `on: {transition: {from, to}}` + `steps` + `on_reject` + `escalation` |
-| Unknown property "X" / additionalProperties | Remove it or check the kind schema for the correct key name |
-| `field.type: money` with `currency:` | `currency` is not a Field property; `money` is a plain field type |
+| Error / pattern                                               | Canonical fix                                                                                                                                                                                                                                                  |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `expose: all` / `expose: read` / `expose: none`               | `expose` is an **array** of `{type, actions}`. Remove it entirely for UI-only, or use `expose: [{type: rest, actions: [list, find, create, update, delete]}]` (see `docs/spec/backend/01-core-basic.md` §8.4)                                                  |
+| `lifecycle: {doc_status: true}`                               | `lifecycle` is a **string** enum (`two_step_autosave`/`two_step_manual`/`plain_crud`). The built-in `doc_status` lifecycle is default-on → delete the block, or set a string value                                                                             |
+| `type: relation, target: X`                                   | `target` is silently ignored (dangling relation). Use `type: relation` + `relation: {type: belongs_to, resource: <module.entity>}`                                                                                                                             |
+| `type: child, target: X` (referencing another entity)         | `child` is an _embedded_ inline collection, not a reference. For a separate entity use `relation: {type: belongs_to, resource: <module.entity>}`                                                                                                               |
+| Missing `spec.version` on Entity                              | Every Entity requires `spec.version: v1`                                                                                                                                                                                                                       |
+| `spec.root_url` missing on App                                | App requires `root_url` — unique, free-form inside the workspace (`/`, `/barbershop`, `/app/kafe`, …); reserved first segments (`_ui`, `api`, `_admin`, `assets`, `health`, `login`, `register`, `_ws`, `print`) are rejected. `version`/`vendor` are optional |
+| Module `depends_on: [...]`                                    | Use `depends: [{module: X}]` — `depends_on` is not a valid key                                                                                                                                                                                                 |
+| Workflow with `states:`/`transitions:`/`guards:`/`condition:` | States/transitions live on the Entity (`state_machine`: `field`, `initial`, `states`, `transitions` with `via`). A `kind: Workflow` only declares `entity` + `on: {transition: {from, to}}` + `steps` + `on_reject` + `escalation`                             |
+| Unknown property "X" / additionalProperties                   | Remove it or check the kind schema for the correct key name                                                                                                                                                                                                    |
+| `field.type: money` with `currency:`                          | `currency` is not a Field property; `money` is a plain field type                                                                                                                                                                                              |
 
 ## Known Schema-vs-Engine Gaps
 

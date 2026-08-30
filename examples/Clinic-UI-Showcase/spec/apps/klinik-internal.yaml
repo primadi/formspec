@@ -10,7 +10,7 @@ metadata:
 spec:
   version: 1.0.0
   vendor: formspec-examples
-  root_url: /app/klinik-internal
+  root_url: /klinik
   modules: [clinic, pharmacy]
   # Adopsi utuh default menu suggestion masing-masing module (Core Basic
   # §4.4/§4.5) — setara tampilan menu lama sebelum migrasi dari kind: Menu.

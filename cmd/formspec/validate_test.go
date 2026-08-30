@@ -168,16 +168,32 @@ spec:
 
 func TestValidateSchema_AppRequiresRootURL(t *testing.T) {
 	ksc := newTestCompiler(t)
+	// version/vendor are optional (marketplace-only metadata) — an App with
+	// only modules + root_url must be accepted.
 	doc := `
 apiVersion: formspec.dev/v1
 kind: App
 metadata: { name: myapp, description: "demo" }
 spec:
   modules: [inventory]
+  root_url: /app/myapp
 `
-	errMsg := validateSchemaString(t, ksc, doc)
-	if errMsg == "" {
-		t.Fatal("expected App without version/vendor/root_url to be rejected")
+	if errMsg := validateSchemaString(t, ksc, doc); errMsg != "" {
+		t.Fatalf("expected App without version/vendor to pass, got: %s", errMsg)
+	}
+
+	// root_url remains required — it is the App's routing identity.
+	docNoRoot := `
+apiVersion: formspec.dev/v1
+kind: App
+metadata: { name: myapp, description: "demo" }
+spec:
+  modules: [inventory]
+  version: 1.0.0
+  vendor: acme-corp
+`
+	if errMsg := validateSchemaString(t, ksc, docNoRoot); errMsg == "" {
+		t.Fatal("expected App without root_url to be rejected")
 	}
 }
 

@@ -22,10 +22,11 @@ renderer.
 | Shell implementasi | `stack_family`    | `react-shadcn` (default) — see `03-renderer-kind.md`            |
 | Backend persist    | `persist_backend` | `jsonb-persist` (default) — see `backend/04-persist-backend.md` |
 
-`access: public` memicu: bundle anonim (`alwaysVisible`), data seam anonim
-(list/find/create di `/_ui/entity/`), dan App boleh memegang root workspace
-(`root_url: /`). `app_renderer` hanya memilih chrome — tidak menyiratkan
-public/private.
+`access: public` memicu: bundle anonim (`alwaysVisible`) dan data seam
+anonim (list/find/create di `/_ui/entity/`). `root_url` kini bebas di dalam
+workspace (`/`, `/barbershop`, `/app/kafe`, …) — server me-mount SPA shell
+dinamis di setiap `root_url`; `access` tidak lagi membatasi pilihan prefix.
+`app_renderer` hanya memilih chrome — tidak menyiratkan public/private.
 
 Navigasi App sendiri (`App.spec.menu`/`Module.spec.menu`, bentuk `MenuItem`,
 batas nesting 3 level) adalah kontrak `kind: App`/`kind: Module` — didokumentasikan

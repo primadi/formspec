@@ -68,8 +68,9 @@ function Root() {
           path="/:workspace/app/*"
           element={<SurfaceShell surface="app" />}
         />
-        {/* Root surface: an `access: public` App owns the workspace root. If
-            the workspace resolves to no public App, redirect to _admin. */}
+        {/* Root surface: resolve the App owning this path by longest
+            root_url prefix (root_url is a free-form mount inside the
+            workspace). No match → redirect to _admin. */}
         <Route path="/:workspace/*" element={<RootSurface />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<LoginPage mode="register" />} />
@@ -140,14 +141,24 @@ function RootSurface() {
       if (!best || a.root_url.length > best.root_url.length) best = a
     }
   }
-  const publicApp = best && best.access === "public" ? best : undefined
 
-  if (!publicApp) {
-    // No public App at this path — fall back to the admin surface.
+  if (!best) {
+    // No App claims this path — fall back to the admin surface.
     return <Navigate to={`/${workspace}/_admin`} replace />
   }
 
-  return <SurfaceShell surface="app" public mountPrefix={`/${workspace}`} />
+  // root_url is a free-form mount prefix inside the workspace
+  // (docs/plan/flexible-root-url.md): any App matched here renders on the
+  // catch-all route with mountPrefix "/{ws}". Public Apps boot anonymously;
+  // private Apps boot a session and redirect to their in-app login
+  // ({surfacePath}/login) when unauthenticated.
+  return (
+    <SurfaceShell
+      surface="app"
+      public={best.access === "public"}
+      mountPrefix={`/${workspace}`}
+    />
+  )
 }
 
 // ── Surface Shell: boot + render for admin or app surface ──

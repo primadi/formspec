@@ -6758,12 +6758,12 @@
               "additionalProperties": {}
             },
             "root_url": {
-              "description": "@schema {example: \"/app/klinik\", pattern: \"^(/|/app(/.*)?)$\"}",
+              "description": "Mount prefix inside the workspace: \\\"/\\\" or any \\\"/path\\\" — unique per workspace; reserved segments (_ui, api, _admin, assets, health, login, register, _ws, print) are rejected",
               "type": "string",
               "examples": [
                 "/app/klinik"
               ],
-              "pattern": "^(/|/app(/.*)?)$"
+              "pattern": "^(/|/[^/]+(/[^/]+)*)$"
             },
             "stack_family": {
               "description": "Shell implementation (frontend/03-renderer-kind.md), e.g. react-shadcn",
@@ -6787,14 +6787,14 @@
               ]
             },
             "vendor": {
-              "description": "@schema {example: \"acme-corp\"}",
+              "description": "Vendor is optional — the publishing vendor identity, only required",
               "type": "string",
               "examples": [
                 "acme-corp"
               ]
             },
             "version": {
-              "description": "@schema {example: \"1.0.0\"}",
+              "description": "Version is optional — only meaningful when publishing the App to the",
               "type": "string",
               "examples": [
                 "1.0.0"
@@ -6802,8 +6802,6 @@
             }
           },
           "required": [
-            "version",
-            "vendor",
             "root_url"
           ],
           "additionalProperties": false

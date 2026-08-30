@@ -27,6 +27,22 @@ type ResolvedApp struct {
 	Menu    []spec.MenuItem
 }
 
+// reservedAppSegments are first path segments an App root_url must not use —
+// they collide with the engine's fixed per-workspace surfaces (see
+// internal/api/router.go BuildHTTP). "app" is deliberately NOT reserved: it
+// remains the conventional mount prefix.
+var reservedAppSegments = map[string]bool{
+	"_ui":      true,
+	"api":      true,
+	"_admin":   true,
+	"assets":   true,
+	"health":   true,
+	"login":    true,
+	"register": true,
+	"_ws":      true,
+	"print":    true,
+}
+
 // Resolve parses every kind: App / kind: Module manifest out of manifests,
 // validates them, and produces one ResolvedApp per App.
 func Resolve(manifests []manifest.RawManifest, uiReg *ui.Registry) (map[string]*ResolvedApp, error) {
@@ -94,18 +110,23 @@ func Resolve(manifests []manifest.RawManifest, uiReg *ui.Registry) (map[string]*
 		if err := spec.ValidateAppSpec(as); err != nil {
 			return nil, fmt.Errorf("app %q: %w", name, err)
 		}
-		// The renderer SPA is only mounted at /{workspace}/app/* (and
-		// /{workspace}/_admin, which isn't App-scoped) — see
-		// internal/api/router.go BuildHTTP. root_url must live under that
-		// mount for the static handler to actually serve the App's shell.
-		// Exception: a `public` App may own the workspace root "/" — its
-		// surface is served anonymously at /{workspace}/.
-		if as.Access == spec.AppAccessPublic {
-			if as.RootURL != "/" && as.RootURL != "/app" && !strings.HasPrefix(as.RootURL, "/app/") {
-				return nil, fmt.Errorf("app %q: public root_url %q must be \"/\" or start with \"/app/\"", name, as.RootURL)
-			}
-		} else if as.RootURL != "/app" && !strings.HasPrefix(as.RootURL, "/app/") {
-			return nil, fmt.Errorf("app %q: root_url %q must start with \"/app/\"", name, as.RootURL)
+		// root_url is a free-form mount prefix inside the workspace: "/"
+		// (workspace root — a public landing App may own it, private Apps
+		// boot their session there too) or any "/segment/..." path. The
+		// router mounts the SPA shell dynamically at each App's root_url
+		// (internal/api/router.go BuildHTTP). Reserved first segments would
+		// collide with the engine's fixed surfaces (/_ui, /api/v1, /_admin,
+		// /assets, /health, /login, /register, /_ws, /print) and are
+		// rejected; "app" stays allowed (legacy convention).
+		as.RootURL = strings.TrimSuffix(as.RootURL, "/")
+		if as.RootURL == "" {
+			as.RootURL = "/"
+		}
+		if !strings.HasPrefix(as.RootURL, "/") {
+			return nil, fmt.Errorf("app %q: root_url %q must start with \"/\"", name, as.RootURL)
+		}
+		if first := strings.SplitN(strings.TrimPrefix(as.RootURL, "/"), "/", 2)[0]; reservedAppSegments[first] {
+			return nil, fmt.Errorf("app %q: root_url %q uses reserved segment %q (reserved: _ui, api, _admin, assets, health, login, register, _ws, print)", name, as.RootURL, first)
 		}
 		if existing, ok := rootURLs[as.RootURL]; ok {
 			return nil, fmt.Errorf("app %q: root_url %q already used by app %q", name, as.RootURL, existing)

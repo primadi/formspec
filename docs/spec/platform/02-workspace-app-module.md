@@ -144,9 +144,9 @@ kind: App
 metadata:
   name: klinik-sehat-internal
 spec:
-  version: 2.1.0
-  vendor: acme-corp
-  root_url: /app/klinik-internal # prefiks routing, wajib unik per App dalam satu workspace
+  version: 2.1.0 # optional — marketplace publishing metadata
+  vendor: acme-corp # optional — marketplace publishing metadata
+  root_url: /app/klinik-internal # prefix mount bebas di dalam workspace (mis. "/", "/barbershop") — wajib unik per App dalam satu workspace
   modules: [billing, acme-corp/general-ledger]
   app_renderer: sidebar-nav # pilih App renderer — lihat spec/frontend/05-app-kinds.md
   menu: [] # lihat §4
