@@ -1,0 +1,1 @@
+import{bn as e,yn as t}from"./vendor-react-BfdVrfbx.js";function n(...n){return t(e(n))}function r(e){return e.replace(/[-_]+/g,` `).trim().replace(/\b\w/g,e=>e.toUpperCase())}export{r as n,n as t};

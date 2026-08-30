@@ -16,5 +16,8 @@
     "build": "tsc",
     "dev": "tsx --watch src/app.ts",
     "start": "node dist/app.js"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true
   }
 }

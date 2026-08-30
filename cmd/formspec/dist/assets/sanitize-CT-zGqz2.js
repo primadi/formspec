@@ -1,0 +1,1 @@
+var e=/<script[\s\S]*?<\/script>/gi,t=/<style[\s\S]*?<\/style>/gi,n=/<\s*\/?\s*(iframe|object|embed|form|input|button|link|meta)\b[^>]*>/gi,r=/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi,i=/\s(href|src)\s*=\s*["']?\s*javascript:[^"'\s>]*["']?/gi;function a(a){return a.replace(e,``).replace(t,``).replace(n,``).replace(r,``).replace(i,``)}export{a as t};
