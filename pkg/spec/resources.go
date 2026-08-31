@@ -25,10 +25,18 @@ type ModuleSpec struct {
 	Depends []Dependency `yaml:"depends,omitempty" json:"depends,omitempty"`
 	// Datastore binds the module to a named kind: Datastore for ctx.db()
 	// (platform/06-datastore.md §1.1). Empty = resolve to Datastore 'default'.
+	// Legacy single-primitive form — equivalent to datastores: {db: <name>}.
 	// @schema {example: "default"}
-	Datastore string         `yaml:"datastore,omitempty" json:"datastore,omitempty"`
-	Config    map[string]any `yaml:"config,omitempty" json:"config,omitempty"`     // module-specific configuration (02-workspace-app-module.md §2)
-	AiIndex   *AiIndexDecl   `yaml:"ai_index,omitempty" json:"ai_index,omitempty"` // AI discovery metadata (ai/04-formspec-remote-mcp.md §3)
+	Datastore string `yaml:"datastore,omitempty" json:"datastore,omitempty"`
+	// Datastores overrides the App-level datastore selection for this module
+	// (plan docs/plan/infra-registry-3-level.md fase B). Key is either a
+	// primitive type ("db") to set that primitive's default service, or
+	// "primitive/alias" ("db/analytics") to register a named logical
+	// primitive. Values are registered service names (kind: Datastore).
+	// @schema {example: "db: pg-main"}
+	Datastores map[string]string `yaml:"datastores,omitempty" json:"datastores,omitempty"`
+	Config     map[string]any    `yaml:"config,omitempty" json:"config,omitempty"`     // module-specific configuration (02-workspace-app-module.md §2)
+	AiIndex    *AiIndexDecl      `yaml:"ai_index,omitempty" json:"ai_index,omitempty"` // AI discovery metadata (ai/04-formspec-remote-mcp.md §3)
 	// Menu is a default navigation suggestion, module-relative (no `Module`
 	// field on its items — it's implicitly this module). An App adopts it
 	// wholesale via a `type: module` MenuItem (platform/02-workspace-app-module.md §4).
@@ -84,6 +92,17 @@ type AppSpec struct {
 	RootURL string `yaml:"root_url" json:"root_url"`
 	// @schema {example: "[clinic, pharmacy]", description: "Modules mounted by this App — manifests outside these modules are excluded from the App bundle"}
 	Modules []string `yaml:"modules" json:"modules"`
+	// Datastores is the App-level App Registry selection — the App Registry
+	// (plan docs/plan/infra-registry-3-level.md fase B). Key is either a
+	// primitive type ("db") to set that primitive's default service for
+	// every module of this App, or "primitive/alias" ("db/analytics") to
+	// register a named logical primitive reachable via ctx.db.named()
+	// (fase C). Values are registered service names (kind: Datastore).
+	// Every App in the workspace may pick different defaults (app1 →
+	// pg-main, app2 → pg-analytics). Modules may override per-primitive
+	// via ModuleSpec.Datastores.
+	// @schema {example: "db: pg-main"}
+	Datastores map[string]string `yaml:"datastores,omitempty" json:"datastores,omitempty"`
 	// @schema {example: "no-nav", enum: ["sidebar-nav", "topnav", "no-nav"], description: "Chrome archetype (frontend/05-app-kinds.md): sidebar-nav | topnav | no-nav — no-nav means truly no navigation"}
 	AppRenderer string `yaml:"app_renderer,omitempty" json:"app_renderer,omitempty"` // chrome archetype (frontend/05-app-kinds.md): sidebar-nav | topnav | no-nav
 	// @schema {example: "private", enum: ["private", "public"], description: "Auth axis: private (default, secure by default) | public — orthogonal to app_renderer"}

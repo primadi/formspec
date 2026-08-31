@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/primadi/formspec/pkg/spec"
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
 )
 
@@ -201,7 +200,3 @@ func (w *EscalationWorker) checkEscalation(ctx context.Context, row db.WorkflowA
 	log.Printf("[workflow-escalation] escalated step %d of approval %s (workflow %s, reassign=%v)",
 		row.ActiveStep, row.ID, row.WorkflowName, step.Escalation.ReassignRoles)
 }
-
-// specWorkflowStep is a compile-time alias to keep the escalation logic
-// readable against the spec type.
-type specWorkflowStep = spec.WorkflowStep

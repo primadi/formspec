@@ -697,10 +697,21 @@ Declares a deployment target (dev, staging, production).
 Declares governance rules (security, compliance, resource limits).
 **Control Plane kind** — managed by Platform Operator.
 
-### Datastore — Named Infrastructure Connection
+### Datastore — Infra Service Registration
 
-Declares a named database/object-storage connection.
+Registers a named physical infrastructure service (Postgres, Valkey, MinIO,
+SQLite, filesystem) in the Infra Registry, serving one or more `ctx.*`
+primitives (`serves: [db, cache, ...]` — closed set of 9: db, cache, lock,
+queue, pubsub, storage, kvstore, config, log). Multiple services per
+primitive are allowed; each primitive has one overridable default.
 **Control Plane kind** — managed by Platform Operator.
+
+Selection happens at App/Module level (`spec.datastores` map: key
+`"primitive"` = default, `"primitive/alias"` = named logical primitive
+reached via `ctx.db.named("alias")`, gated by `uses.datastores`).
+Resolution chain: action `uses.datastores` → module → App → workspace
+binding → service. See `docs/spec/platform/06-datastore.md` and
+`docs/reference/primitives.md`.
 
 ---
 
@@ -753,13 +764,14 @@ Declares a named database/object-storage connection.
 
 ### Infra
 
-| What you need                   | Kind to use      |
-| ------------------------------- | ---------------- |
-| Visual renderer implementation  | `Renderer`       |
-| Storage renderer implementation | `PersistBackend` |
-| Named DB/storage connection     | `Datastore`      |
-| Deployment target               | `Environment`    |
-| Governance rule                 | `Policy`         |
+| What you need                   | Kind to use                                       |
+| ------------------------------- | ------------------------------------------------- |
+| Visual renderer implementation  | `Renderer`                                        |
+| Storage renderer implementation | `PersistBackend`                                  |
+| Named DB/storage connection     | `Datastore`                                       |
+| Second database / named cache   | `Datastore` + `datastores` selection (App/Module) |
+| Deployment target               | `Environment`                                     |
+| Governance rule                 | `Policy`                                          |
 
 ---
 

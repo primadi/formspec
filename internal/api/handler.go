@@ -1806,7 +1806,7 @@ func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, a
 			if wfEngine.RequiresApproval(module+"."+entity, currentState, toState) {
 				// This transition requires approval. Route to the approval
 				// handler instead of executing the transition directly.
-				f.handleWorkflowApproval(w, r, ctx, module, entity, resourceID, actionName, currentState, toState, resourceData, resourceVersion, userID, workspaceID, params, wfEngine)
+				f.handleWorkflowApproval(w, r, ctx, module, entity, resourceID, currentState, toState, resourceData, resourceVersion, userID, workspaceID, params, wfEngine)
 				return
 			}
 		}
@@ -1963,7 +1963,7 @@ func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, a
 // The requester can never approve their own request (7.4.5).
 func (f *HandlerFactory) handleWorkflowApproval(
 	w http.ResponseWriter, r *http.Request, ctx context.Context,
-	module, entity, resourceID, actionName, fromState, toState string,
+	module, entity, resourceID, fromState, toState string,
 	resourceData map[string]any, resourceVersion int,
 	userID, workspaceID string, params map[string]any, wfEngine *workflow.Engine,
 ) {
@@ -2141,8 +2141,12 @@ func (f *HandlerFactory) handleWorkflowApproval(
 // executeWorkflowTransition performs the actual state-machine transition once
 // a workflow's approval is complete (or no approval is needed). It updates the
 // record's state field to the target state.
+//
+// r (the *http.Request) is unused today — kept in the signature for symmetry
+// with the other workflow handlers and future request-scoped needs; renamed to
+// _ to avoid the unused-param warning.
 func (f *HandlerFactory) executeWorkflowTransition(
-	w http.ResponseWriter, r *http.Request, ctx context.Context,
+	w http.ResponseWriter, _ *http.Request, ctx context.Context,
 	module, entity, resourceID, toState string,
 	resourceData map[string]any, resourceVersion int,
 	workspaceID, userID string,
@@ -2416,7 +2420,11 @@ func (f *HandlerFactory) dispatchTrackedAsync(w http.ResponseWriter, r *http.Req
 // (todo 7.13) — the polling alternative to the `jobs` websocket channel.
 //
 //	GET /api/v1/{module}/{service}/jobs/{job_id}
-func (f *HandlerFactory) HandleJobStatus(module, serviceName string) http.HandlerFunc {
+//
+// module/serviceName are part of the route-factory signature (mirroring the
+// other Handle* methods) but unused today — kept for future tenant-scoped job
+// listing; renamed to _ to avoid the unused-param warning.
+func (f *HandlerFactory) HandleJobStatus(_, _ string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		workspaceID := workspaceFromContext(ctx)
@@ -2459,7 +2467,11 @@ func (f *HandlerFactory) HandleJobStatus(module, serviceName string) http.Handle
 // referenced by `spec.for` ({module}.{service}).
 //
 //	POST {path}   (method from spec)
-func (f *HandlerFactory) HandleWebhook(module, name string, wh *spec.WebhookSpec) http.HandlerFunc {
+//
+// module/name identify the webhook endpoint but are unused today — kept for
+// future audit/rate-limit scoping; renamed to _ to avoid the unused-param
+// warning.
+func (f *HandlerFactory) HandleWebhook(_, _ string, wh *spec.WebhookSpec) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		workspaceID := workspaceFromContext(ctx)
@@ -2564,7 +2576,11 @@ func splitForRef(ref string) (module, service string, ok bool) {
 // The client attaches the returned key to the actual action call via the
 // Idempotency-Key header. Only actions declared `idempotent: true` with
 // `idempotency_key.from: server` expose a prepare route; anything else 404s.
-func (f *HandlerFactory) HandlePrepare(module, entity, actionName string, actionSpec spec.Action) http.HandlerFunc {
+//
+// module/entity/actionName are part of the route-factory signature but unused
+// today — kept for future key-scoping/audit; renamed to _ to avoid the
+// unused-param warning.
+func (f *HandlerFactory) HandlePrepare(_, _, _ string, actionSpec spec.Action) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Guard: prepare is only meaningful for server-sourced idempotent
 		// actions. The router only registers these routes for such actions,

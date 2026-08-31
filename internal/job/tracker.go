@@ -98,7 +98,7 @@ func (t *Tracker) Get(ctx context.Context, jobID string) (*db.JobRow, error) {
 }
 
 // publish pushes a job event to the `jobs` websocket channel for the workspace.
-func (t *Tracker) publish(ctx context.Context, workspaceID, jobID, event string, payload map[string]any) {
+func (t *Tracker) publish(_ context.Context, workspaceID, _, event string, payload map[string]any) {
 	if t.hub == nil {
 		return
 	}

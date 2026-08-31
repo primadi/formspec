@@ -822,7 +822,7 @@ func spaHandlerFS(spaFS fs.FS) http.HandlerFunc {
 }
 
 // serveFileFS serves a single file from an fs.FS (like http.ServeFile for embed).
-func serveFileFS(w http.ResponseWriter, r *http.Request, spaFS fs.FS, name string) {
+func serveFileFS(w http.ResponseWriter, _ *http.Request, spaFS fs.FS, name string) {
 	data, err := fs.ReadFile(spaFS, name)
 	if err != nil {
 		http.Error(w, "Not Found", http.StatusNotFound)

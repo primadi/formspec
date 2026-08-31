@@ -189,8 +189,10 @@ func TestCtxDB_ModuleScoped_EndToEnd(t *testing.T) {
 }
 
 // TestCtxDB_CrossDatastoreNamedBlocked_EndToEnd proves .named(x) from a
-// bound module cannot reach another datastore at runtime — the script fails
-// with the §1.1 error instead of silently writing elsewhere.
+// bound module cannot reach another datastore at runtime (plan fase C):
+// an unregistered alias fails with DATASTORE_NOT_FOUND instead of silently
+// writing elsewhere — the named-logical-primitive registry is the only
+// sanctioned escape hatch, and "default" is not a registered alias.
 func TestCtxDB_CrossDatastoreNamedBlocked_EndToEnd(t *testing.T) {
 	dir := t.TempDir()
 	buildModuleScopedSpecDir(t, dir)
@@ -228,7 +230,7 @@ func TestCtxDB_CrossDatastoreNamedBlocked_EndToEnd(t *testing.T) {
 	}
 	body, _ := out["error"].(map[string]any)
 	msg, _ := body["message"].(string)
-	if !strings.Contains(msg, "not accessible") || !strings.Contains(msg, "06-datastore.md") {
-		t.Fatalf("want §1.1 'not accessible' error, got status %d body %v", status, out)
+	if !strings.Contains(msg, "DATASTORE_NOT_FOUND") || !strings.Contains(msg, "06-datastore.md") {
+		t.Fatalf("want DATASTORE_NOT_FOUND error (platform/06-datastore.md §6), got status %d body %v", status, out)
 	}
 }

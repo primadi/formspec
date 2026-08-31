@@ -25,8 +25,12 @@ deskriptif) — ditambah section pendukung.
 | [`registry/`](registry/README.md)                      | FormSpec Module Registry: konsep, quickstart publish/install, CLI reference, REST API, self-hosting, trust tier                                  | Deskriptif                                   |
 | [`ai/`](ai/README.md)                                  | FormSpec AI: `formspec-consult`, `formspec-local-mcp`/`formspec-remote-mcp`, LLM provider layer (Vercel AI SDK, BYOK), FormSpec Skill            | Deskriptif — design, belum diimplementasikan |
 | [`guides/`](guides/)                                   | Cara menjalankan, tutorial Order-to-Cash, panduan menulis renderer/shell/persist-backend                                                         | Tutorial                                     |
-| [`reference/`](reference/)                             | Glossary istilah kanonik                                                                                                                         | Referensi                                    |
+| [`reference/`](reference/)                             | Glossary istilah kanonik, referensi ringkas 9 `ctx.*` primitives & 3-level registry                                                              | Referensi                                    |
 | [`comparison/`](comparison/)                           | FormSpec dibandingkan platform lain                                                                                                              | Referensi                                    |
+
+> **Catatan:** dokumen kerja & sejarah (plan, changelog, presentations,
+> technical-notes) tidak ada di sini — semuanya di `docs_internal/` di root
+> repo, dan tidak masuk docs-site.
 
 ## Jalur Baca per Persona
 

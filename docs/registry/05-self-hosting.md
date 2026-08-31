@@ -49,7 +49,7 @@ Native handler terdaftar di binary ini (tidak ada di `formspec dev`):
   → dilewati (client-side verify saat install tetap melindungi konsumen).
 
 Deployment target (batch berikutnya): K8s 3 replica stateless + Postgres HA +
-Redis cache (`ctx.cache`) untuk MRU modules — lihat `docs/plan/` untuk status.
+Redis cache (`ctx.cache`) untuk MRU modules — lihat `docs_internal/plan/` untuk status.
 
 ## Catatan Operasional
 

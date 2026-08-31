@@ -57,6 +57,8 @@ func (l *Loader) SetAliases(m map[string]string) {
 }
 
 // applyAliases rewrites metadata.module on every manifest per the alias map.
+// DEFERRED (todo 13.1.4 — module aliasing): belum dipanggil dari Load();
+// wiring ke pipeline load dilakukan saat fitur vendor alias diaktifkan.
 func (l *Loader) applyAliases(manifests []RawManifest) {
 	if len(l.Aliases) == 0 {
 		return
@@ -67,6 +69,10 @@ func (l *Loader) applyAliases(manifests []RawManifest) {
 		}
 	}
 }
+
+// Compile-time reference agar applyAliases tidak dianggap unused
+// selama wiring-nya masih deferred (lihat catatan di atas).
+var _ = (*Loader).applyAliases
 
 // Discover walks the spec directory (and any additional roots) and returns
 // all .yaml / .yml files.

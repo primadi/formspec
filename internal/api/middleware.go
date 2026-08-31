@@ -398,12 +398,6 @@ func MetricsMiddleware(m *observability.Metrics) func(http.Handler) http.Handler
 	}
 }
 
-// generateRequestID is superseded by observability.NewRequestID (todo 8.2.3).
-// Kept as a thin alias for any remaining callers.
-func generateRequestID() string {
-	return observability.NewRequestID()
-}
-
 // contextKey and context functions are defined in handler.go.
 // GetWorkspace returns the current workspace ID from the request context.
 func GetWorkspace(ctx context.Context) string {
@@ -484,3 +478,12 @@ func writeKvstoreAccessDenied(w http.ResponseWriter, msg string) {
 	writeError(w, http.StatusInternalServerError, "KVSTORE_ACCESS_DENIED",
 		"kvstore access denied: "+msg)
 }
+
+// Deferred helpers for Fase 2 uses enforcement (§16, todo UsesEnforcement):
+// dipakai begitu pengecekan uses terhadap Starlark runtime diaktifkan.
+// Assigned to _ agar tidak terdeteksi unused sampai wiring selesai.
+var (
+	_ = writeUsesViolation
+	_ = writeConfigAccessDenied
+	_ = writeKvstoreAccessDenied
+)

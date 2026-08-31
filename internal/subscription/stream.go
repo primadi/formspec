@@ -208,7 +208,7 @@ func (w *StreamingWorker) processEntry(ctx context.Context, sub DurableSub, even
 }
 
 // deadLetter appends a failed entry to the "{stream}.dead" stream and logs.
-func (w *StreamingWorker) deadLetter(ctx context.Context, sub DurableSub, eventName, streamName, group string, e stream.Entry, cause error) {
+func (w *StreamingWorker) deadLetter(ctx context.Context, sub DurableSub, eventName, streamName, _ string, e stream.Entry, cause error) {
 	deadStream := streamName + ".dead"
 	data := map[string]any{
 		"original_id":  e.ID,

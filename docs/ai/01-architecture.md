@@ -41,7 +41,7 @@ untuk client apa pun ([`03-formspec-local-mcp.md`](03-formspec-local-mcp.md) §2
 > tim sudah Go. LLM SDK: `openai-go` (resmi) di balik interface internal
 > `llm.Provider` — wire format OpenAI-compatible menutup DeepSeek, GLM, dan
 > gateway lain lewat base URL override. Rencana teknis:
-> `docs/plan/fase10-consult-client.md`.
+> `docs_internal/plan/fase10-consult-client.md`.
 
 ```
 formspec                     (Go — CLI utama: dev, apply, generate, module install; tidak berubah)

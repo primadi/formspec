@@ -9,7 +9,9 @@
 //	                  [--prod] [--jwt-public-key <pem>] [--web-dir <dist>]
 //
 // When --spec is omitted, the embedded spec is extracted to a temp dir
-// (single-file deployment). Native handlers registered here are unavailable
+// (single-file deployment). When --web-dir is omitted, the embedded SPA
+// (registry/web, synced by `make build-registry`) is served instead.
+// Native handlers registered here are unavailable
 // in `formspec dev` — the signature-verify service only exists in this binary.
 package main
 
@@ -24,6 +26,7 @@ import (
 
 	"github.com/primadi/formspec/internal/vendor"
 	native "github.com/primadi/formspec/registry"
+	web "github.com/primadi/formspec/registry/web"
 	formspec "github.com/primadi/formspec/resource"
 )
 
@@ -54,7 +57,10 @@ func main() {
 	fmt.Println("🚀 FormSpec Module Registry (native)")
 	fmt.Printf("   spec: %s\n   dsn:  %s\n", *specPath, *dsn)
 
-	app, err := formspec.New(formspec.Config{
+	// SPA source: explicit --web-dir wins; otherwise fall back to the
+	// embedded renderer dist (registry/web) so the binary serves the admin
+	// panel and portal out of the box.
+	cfg := formspec.Config{
 		DSN:              *dsn,
 		SpecPath:         *specPath,
 		Addr:             *addr,
@@ -63,8 +69,16 @@ func main() {
 		JWTIssuer:        *jwtIssuer,
 		JWTPublicKeyPath: *jwtPublicKey,
 		StrictMode:       *strictMode,
-		WebDir:           *webDir,
-	})
+	}
+	if *webDir != "" {
+		cfg.WebDir = *webDir
+		fmt.Printf("   web:  %s (from --web-dir)\n", *webDir)
+	} else {
+		cfg.WebFS = web.DistFS()
+		fmt.Println("   web:  embedded SPA (registry/web/dist)")
+	}
+
+	app, err := formspec.New(cfg)
 	if err != nil {
 		log.Fatalf("boot: %v", err)
 	}

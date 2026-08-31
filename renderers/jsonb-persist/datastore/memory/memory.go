@@ -161,7 +161,6 @@ func (q *Queue) Dequeue(_ context.Context, name string) (any, error) {
 type PubSub struct {
 	mu   sync.Mutex
 	subs map[string][]func(any)
-	seq  uint64
 }
 
 // NewPubSub creates an empty in-memory pub/sub bus.

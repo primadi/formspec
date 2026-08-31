@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/primadi/formspec/internal/artifact"
+	"github.com/primadi/formspec/pkg/spec"
+	"github.com/primadi/formspec/renderers/jsonb-persist/datastore"
 )
 
 // SnapshotHandler handles GET /v1/snapshot — builds and returns the
@@ -99,7 +101,57 @@ func (h *SnapshotHandler) buildSnapshot(ctx context.Context, workspaceID string,
 		snapshot.Deployments[i] = *d
 	}
 
+	// Workspace Binding (plan fase B2): evaluate every registered
+	// kind: Datastore service's access.filter against this workspace and
+	// include only the matches in the snapshot — services that don't match
+	// are invisible to the workspace (platform/06-datastore.md §4).
+	datastores, err := h.store.ListDatastores(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list datastores: %w", err)
+	}
+	ws := datastore.WorkspaceInfo{ID: workspaceID, Environment: snapshot.Environment}
+	for _, ds := range datastores {
+		dsSpec, err := decodeDatastoreSpec(ds.Spec)
+		if err != nil {
+			return nil, fmt.Errorf("datastore %q: %w", ds.Name, err)
+		}
+		// Service-level environment/labels (registration metadata) must
+		// match the snapshot environment first; then the spec's own
+		// access.filter decides workspace visibility.
+		if ds.Environment != "" && ds.Environment != snapshot.Environment {
+			continue
+		}
+		var filter *spec.DatastoreAccessFilter
+		if dsSpec.Access != nil {
+			filter = dsSpec.Access.Filter
+		}
+		if !datastore.FilterMatch(filter, ws) {
+			continue
+		}
+		binding := artifact.DatastoreBinding{
+			Name: ds.Name,
+			Spec: ds.Spec,
+		}
+		if dsSpec.Access != nil && dsSpec.Access.Permission != nil {
+			permJSON, err := json.Marshal(dsSpec.Access.Permission)
+			if err != nil {
+				return nil, fmt.Errorf("datastore %q permission: %w", ds.Name, err)
+			}
+			binding.Permission = permJSON
+		}
+		snapshot.Datastores = append(snapshot.Datastores, binding)
+	}
+
 	return snapshot, nil
+}
+
+// decodeDatastoreSpec parses a registered DatastoreSpec from its stored JSON.
+func decodeDatastoreSpec(raw json.RawMessage) (*spec.DatastoreSpec, error) {
+	var ds spec.DatastoreSpec
+	if err := json.Unmarshal(raw, &ds); err != nil {
+		return nil, fmt.Errorf("decode spec: %w", err)
+	}
+	return &ds, nil
 }
 
 // HashForETag computes a content-based ETag for snapshot comparison.

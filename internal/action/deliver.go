@@ -165,7 +165,7 @@ func DeliverEvents(ctx context.Context, deps DeliveryDeps, workspaceID, resource
 // returns fail() (surfaced as a Dispatch error) suppresses delivery — the
 // hook is a gate; if it doesn't pass, the event is not delivered. A hook
 // that returns ok(data) enriches the payload (last writer wins).
-func runBeforeDeliver(ctx context.Context, deps DeliveryDeps, workspaceID, resource string, ev EventEmission, payload map[string]any) (bool, map[string]any, error) {
+func runBeforeDeliver(ctx context.Context, deps DeliveryDeps, workspaceID, _ string, ev EventEmission, payload map[string]any) (bool, map[string]any, error) {
 	matches := SelectEventHooks(deps.Hooks, spec.HookOnBeforeDeliver, ev.Name)
 	if len(matches) == 0 {
 		return false, nil, nil

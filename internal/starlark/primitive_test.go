@@ -2,10 +2,14 @@ package starlark
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 // fakeQuerier implements Querier for tests.
@@ -57,6 +61,138 @@ func TestCtxDBQuery_ResolvedAndExecuted(t *testing.T) {
 	if got := result.Data["one"]; got != int64(1) {
 		t.Fatalf("one = %v, want 1", got)
 	}
+}
+
+// TestCtxDatastoreAccessDenied proves the uses.datastores gate (plan
+// docs/plan/infra-registry-3-level.md fase B): when the action declares a
+// datastores map, a ctx.<primitive> access not covered by a key fails with
+// DATASTORE_ACCESS_DENIED; a declared primitive passes through.
+func TestCtxDatastoreAccessDenied(t *testing.T) {
+	dir := t.TempDir()
+
+	// Script touching ctx.cache() — NOT declared in uses.datastores.
+	denied := "def execute(resource, params, ctx):\n    ctx.cache().set(\"k\", 1)\n    return ok({})\n"
+	deniedPath := filepath.Join(dir, "denied.star")
+	if err := os.WriteFile(deniedPath, []byte(denied), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Script touching ctx.db() — declared.
+	allowed := "def execute(resource, params, ctx):\n    rows = ctx.db().query(\"SELECT 1 AS one\")\n    return ok({\"n\": len(rows)})\n"
+	allowedPath := filepath.Join(dir, "allowed.star")
+	if err := os.WriteFile(allowedPath, []byte(allowed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	newCtx := func() *CtxAPI {
+		ctxObj := NewCtxAPI("demo", "", "user", "", nil)
+		ctxObj.SetUses(&spec.UsesDecl{
+			Primitives: []string{"db"},
+			Datastores: map[string]string{"db": "pg-main"},
+		})
+		ctxObj.SetDatastoreResolver(func(primitiveType, name, module string) (interface{}, error) {
+			return &fakeQuerier{rows: []map[string]any{{"one": int64(1)}}}, nil
+		})
+		return ctxObj
+	}
+
+	res := NewResourceAPI("clinic", "visit", "id-1", 1, map[string]any{})
+
+	// Denied: cache not in uses.datastores. Starlark errors surface as a
+	// failed ScriptResult (not a Go error).
+	deniedRes, err := ExecuteScript(context.Background(), deniedPath, res, nil, newCtx())
+	if err != nil {
+		t.Fatalf("denied case: unexpected Go error %v", err)
+	}
+	if deniedRes.OK || !strings.Contains(deniedRes.Error, "DATASTORE_ACCESS_DENIED") {
+		t.Fatalf("undeclared primitive: want DATASTORE_ACCESS_DENIED, got OK=%v error=%q", deniedRes.OK, deniedRes.Error)
+	}
+
+	// Allowed: db declared.
+	result, err := ExecuteScript(context.Background(), allowedPath, res, nil, newCtx())
+	if err != nil {
+		t.Fatalf("declared primitive: unexpected error %v", err)
+	}
+	if !result.OK {
+		t.Fatalf("declared primitive: script failed: %s", result.Error)
+	}
+}
+
+// TestCtxNamedDatastore proves the named logical primitive path (plan fase
+// C): ctx.db.named("analytics") resolves via the registry's ResolveNamed,
+// gated by the "db/analytics" key in uses.datastores.
+func TestCtxNamedDatastore(t *testing.T) {
+	dir := t.TempDir()
+
+	// Script using the named primitive — declared as "db/analytics".
+	named := "def execute(resource, params, ctx):\n    rows = ctx.db.named(\"analytics\").query(\"SELECT 1 AS one\")\n    return ok({\"n\": len(rows)})\n"
+	namedPath := filepath.Join(dir, "named.star")
+	if err := os.WriteFile(namedPath, []byte(named), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Script using an undeclared alias.
+	undeclared := "def execute(resource, params, ctx):\n    ctx.db.named(\"secret\").query(\"SELECT 1\")\n    return ok({})\n"
+	undeclaredPath := filepath.Join(dir, "undeclared.star")
+	if err := os.WriteFile(undeclaredPath, []byte(undeclared), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	newCtx := func() *CtxAPI {
+		ctxObj := NewCtxAPI("demo", "", "user", "", nil)
+		ctxObj.SetModule("billing")
+		ctxObj.SetUses(&spec.UsesDecl{
+			Datastores: map[string]string{"db/analytics": "pg-analytics"},
+		})
+		ctxObj.SetDatastoreResolver(func(primitiveType, name, module string) (interface{}, error) {
+			t.Fatalf("plain resolver must not be called for named access (got %q, %q)", primitiveType, name)
+			return nil, nil
+		})
+		// Attach a named-capable resolver (mimics DatastoreRegistry).
+		type namedResolver interface {
+			ResolveNamed(primitiveType, alias, module string) (interface{}, error)
+		}
+		ctxObj.SetDatastoreResolverNamed(namedResolverFunc(func(primitiveType, alias, module string) (interface{}, error) {
+			if alias != "analytics" {
+				return nil, fmt.Errorf("DATASTORE_NOT_FOUND — no named logical primitive %q", alias)
+			}
+			return &fakeQuerier{rows: []map[string]any{{"one": int64(1)}}}, nil
+		}))
+		_ = namedResolver(nil)
+		return ctxObj
+	}
+
+	res := NewResourceAPI("clinic", "visit", "id-1", 1, map[string]any{})
+
+	// Declared alias resolves through ResolveNamed.
+	result, err := ExecuteScript(context.Background(), namedPath, res, nil, newCtx())
+	if err != nil {
+		t.Fatalf("named primitive: unexpected error %v", err)
+	}
+	if !result.OK {
+		t.Fatalf("named primitive: script failed: %s", result.Error)
+	}
+	if got := result.Data["n"]; got != int64(1) {
+		t.Fatalf("n = %v, want 1", got)
+	}
+
+	// Undeclared alias → DATASTORE_ACCESS_DENIED (gate fires before
+	// resolution).
+	undRes, err := ExecuteScript(context.Background(), undeclaredPath, res, nil, newCtx())
+	if err != nil {
+		t.Fatalf("undeclared alias: unexpected Go error %v", err)
+	}
+	if undRes.OK || !strings.Contains(undRes.Error, "DATASTORE_ACCESS_DENIED") {
+		t.Fatalf("undeclared alias: want DATASTORE_ACCESS_DENIED, got OK=%v error=%q", undRes.OK, undRes.Error)
+	}
+}
+
+// namedResolverFunc adapts a function to the namedResolver interface used
+// by CtxAPI.resolveNamed (mirrors DatastoreRegistry's ResolveNamed).
+type namedResolverFunc func(primitiveType, alias, module string) (interface{}, error)
+
+func (f namedResolverFunc) ResolveNamed(primitiveType, alias, module string) (interface{}, error) {
+	return f(primitiveType, alias, module)
 }
 
 // TestCtxDBQuery_NoResolver proves the pre-2.9.1 behavior is preserved when

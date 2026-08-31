@@ -161,7 +161,7 @@ apa yang ia sentuh di tempat ia dipasang:
 
 > **Open — `needs:` belum didukung skema `BlockRef`.** Deklarasi `needs`
 > belum ada di `pkg/spec` (field `BlockRef` saat ini: `ref`/`asset`/`id`/`mode`/
-> `param`/`props`) — ditracking di `docs/plan/todo.md`. Enforcement footprint
+> `param`/`props`) — ditracking di `docs_internal/plan/todo.md`. Enforcement footprint
 > `uses` di sisi backend sudah berjalan; deklarasi `needs` di manifest adalah
 > target kontrak berikutnya.
 

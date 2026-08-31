@@ -58,7 +58,7 @@ spec:
 
 ## Gotchas
 
-- **`status_field` WAJIB saat ini** — zero-config derivasi kolom masih Open (tracking `docs/plan/kanban-full-implementation.md`).
+- **`status_field` WAJIB saat ini** — zero-config derivasi kolom masih Open (tracking `docs_internal/plan/kanban-full-implementation.md`).
 - **Drag = state transition** — memanggil action `via` transisi cocok; guard state machine dievaluasi server-side (otoritas). Transisi tidak dideklarasi → tidak ada drop target; server tolak `STATE_TRANSITION_ERROR`.
 - **Permission drag = permission action transisi itu**.
 - **`sortable: true` butuh `position_field`** — kombinasi tanpa itu tidak valid (manifest validation wajib menolak).

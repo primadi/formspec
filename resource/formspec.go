@@ -33,6 +33,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -61,7 +62,6 @@ import (
 	"github.com/primadi/formspec/pkg/spec"
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
 	"github.com/primadi/formspec/renderers/jsonb-persist/datastore/memory"
-	"github.com/primadi/formspec/renderers/jsonb-persist/datastore/minio"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -519,15 +519,6 @@ func New(cfg Config) (*App, error) {
 	// scripts and the `pubsub` event delivery channel, so subscribers receive
 	// published events.
 	sharedPubSub := memory.NewPubSub()
-	// Tier 2 stream backend (todo 7.3.2): durable subscriptions append events
-	// to a stream consumed by the StreamingWorker. Backend selected by
-	// FORMSPEC_STREAM (memory default | redis); redis addr via
-	// FORMSPEC_REDIS_ADDR (default "valkey:6379" — the Redis-compatible
-	// service in the dev container). Accessed only through stream.Stream.
-	streamBackend, err := buildStreamBackend()
-	if err != nil {
-		return nil, err
-	}
 	// Async job tracker (todo 7.13): tracked async actions (`call: async` +
 	// `track: true`) create a job row, report progress via ctx.job.progress,
 	// and end completed/failed on the `jobs` websocket channel. The hub is
@@ -537,6 +528,15 @@ func New(cfg Config) (*App, error) {
 	// Datastore registry (todo 2.9.4): named kind: Datastore manifests +
 	// per-module `spec.datastore` bindings for module-scoped ctx.* resolution.
 	dsReg, err := buildDatastoreRegistry(specManifests.Manifests, database, stateDirFromDSN(cfg.DSN), sharedPubSub)
+	if err != nil {
+		return nil, err
+	}
+	// Tier 2 stream backend (todo 7.3.2): durable subscriptions append events
+	// to a stream consumed by the StreamingWorker. Backend resolved via the
+	// datastore registry (plan fase E): a module bound to a service serving
+	// `queue`/`pubsub` backed by Redis/Valkey provides the Redis stream;
+	// otherwise in-memory (dev default). Accessed only through stream.Stream.
+	streamBackend, err := buildStreamBackend(dsReg)
 	if err != nil {
 		return nil, err
 	}
@@ -630,39 +630,43 @@ func New(cfg Config) (*App, error) {
 	}
 	rb.SetAssetRoots(assetRoots)
 
-	// Object store for file fields (todo 7.17.1). Two backends, selected by
-	// FORMSPEC_STORAGE:
-	//   file  (default) → filesystem under the state dir (.formspec/storage)
-	//   minio → MinIO/S3 (endpoint/creds/bucket via FORMSPEC_MINIO_* env)
-	storageBackend := os.Getenv("FORMSPEC_STORAGE")
-	if storageBackend == "" {
-		storageBackend = "file"
-	}
-	switch storageBackend {
-	case "minio":
-		endpoint := os.Getenv("FORMSPEC_MINIO_ENDPOINT")
-		if endpoint == "" {
-			endpoint = "minio:9000"
+	// Object store for file fields (todo 7.17.1). Resolved via the datastore
+	// registry (plan fase E — env-var implicit path removed): a module bound
+	// to a service serving `storage` backed by minio/s3 provides the object
+	// store; otherwise filesystem under the state dir (.formspec/storage).
+	storageResolved := false
+	for _, name := range sortedServiceNames(dsReg) {
+		e := dsReg.services[name]
+		if e == nil || e.spec == nil {
+			continue
 		}
-		accessKey := os.Getenv("FORMSPEC_MINIO_ACCESS_KEY")
-		if accessKey == "" {
-			accessKey = "minioadmin"
+		drv := e.spec.Driver
+		if drv != spec.DatastoreDriverMinio && drv != spec.DatastoreDriverS3 {
+			continue
 		}
-		secretKey := os.Getenv("FORMSPEC_MINIO_SECRET_KEY")
-		if secretKey == "" {
-			secretKey = "minioadmin"
+		servesStorage := false
+		for _, p := range e.spec.Serves {
+			if p == spec.PrimitiveStorage {
+				servesStorage = true
+				break
+			}
 		}
-		bucket := os.Getenv("FORMSPEC_MINIO_BUCKET")
-		if bucket == "" {
-			bucket = "formspec"
+		if !servesStorage {
+			continue
 		}
-		mc, err := minio.NewStorage(endpoint, accessKey, secretKey, bucket,
-			os.Getenv("FORMSPEC_MINIO_USE_SSL") == "true")
+		conn, err := dsReg.Resolve("storage", name, "")
 		if err != nil {
-			return nil, fmt.Errorf("init minio storage: %w", err)
+			return nil, fmt.Errorf("init storage service %q: %w", name, err)
+		}
+		mc, ok := conn.(api.Storage)
+		if !ok {
+			return nil, fmt.Errorf("storage service %q does not implement api.Storage", name)
 		}
 		rb.SetStorageResolver(func() (api.Storage, error) { return mc, nil })
-	default:
+		storageResolved = true
+		break
+	}
+	if !storageResolved {
 		fsStore, err := memory.NewStorage(filepath.Join(StateDirFromDSN(cfg.DSN), "storage"))
 		if err != nil {
 			return nil, fmt.Errorf("init storage: %w", err)
@@ -1451,34 +1455,57 @@ func buildSubscriptionRegistry(manifests []manifest.RawManifest) *subscription.R
 }
 
 // buildStreamBackend constructs the Tier 2 durable event-stream backend (todo
-// 7.3.2). Selected by FORMSPEC_STREAM:
-//
-//	memory (default) — in-memory, auto-provisioned like the other ctx.*
-//	                   primitives in dev
-//	redis            — Redis Streams / Valkey; address from
-//	                   FORMSPEC_REDIS_ADDR (default "valkey:6379", the
-//	                   Redis-compatible service in the dev container)
+// 7.3.2). Resolved via the datastore registry (plan fase E — env-var
+// implicit path removed): a module bound to a Redis/Valkey service serving
+// `queue`/`pubsub` provides the Redis stream backend; otherwise in-memory
+// (dev default, auto-provisioned like the other ctx.* primitives).
 //
 // The backend is accessed only through the stream.Stream abstraction — never
 // directly — so the implementation can be swapped (memory, redis, kafka, ...)
 // without touching subscription code.
-func buildStreamBackend() (stream.Stream, error) {
-	backend := os.Getenv("FORMSPEC_STREAM")
-	if backend == "" {
-		backend = "memory"
-	}
-	switch backend {
-	case "redis":
-		addr := os.Getenv("FORMSPEC_REDIS_ADDR")
-		if addr == "" {
-			addr = "valkey:6379"
+func buildStreamBackend(dsReg *DatastoreRegistry) (stream.Stream, error) {
+	// Probe the registry: any registered service backed by Redis/Valkey
+	// serving queue or pubsub can host the durable stream. Deterministic
+	// order for reproducibility.
+	for _, name := range sortedServiceNames(dsReg) {
+		e := dsReg.services[name]
+		if e == nil || e.spec == nil {
+			continue
+		}
+		drv := e.spec.Driver
+		if drv != spec.DatastoreDriverValkey && drv != spec.DatastoreDriverRedis {
+			continue
+		}
+		servesStream := false
+		for _, p := range e.spec.Serves {
+			if p == spec.PrimitiveQueue || p == spec.PrimitivePubSub {
+				servesStream = true
+				break
+			}
+		}
+		if !servesStream {
+			continue
+		}
+		addr := fmt.Sprintf("%s:%d", e.spec.Connection.Host, e.spec.Connection.Port)
+		if e.spec.Connection.Host == "" {
+			addr = "localhost:6379"
 		}
 		return stream.NewRedis(addr)
-	case "memory":
-		return stream.NewMemory(), nil
-	default:
-		return nil, fmt.Errorf("unknown FORMSPEC_STREAM backend %q (supported: memory, redis)", backend)
 	}
+	return stream.NewMemory(), nil
+}
+
+// sortedServiceNames returns registry service names in deterministic order
+// (helper for buildStreamBackend probing).
+func sortedServiceNames(dsReg *DatastoreRegistry) []string {
+	dsReg.mu.RLock()
+	defer dsReg.mu.RUnlock()
+	names := make([]string, 0, len(dsReg.services))
+	for name := range dsReg.services {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // buildWorkflowRegistry loads kind: Workflow manifests into a workflow.Registry
@@ -1527,7 +1554,7 @@ func buildIntegratorRegistry(manifests []manifest.RawManifest) *integrator.Regis
 	return reg
 }
 
-func newDispatcher(reg *entity.Registry, svcReg *service.Registry, database db.DB, cfg Config, cfgReg *config.Registry, jobTracker *job.Tracker, dsReg *DatastoreRegistry, sharedPubSub ...*memory.PubSub) *action.Dispatcher {
+func newDispatcher(reg *entity.Registry, svcReg *service.Registry, _ db.DB, cfg Config, cfgReg *config.Registry, jobTracker *job.Tracker, dsReg *DatastoreRegistry, _ ...*memory.PubSub) *action.Dispatcher {
 	disp := action.NewDispatcher()
 
 	scriptEx := action.NewScriptExecutor(cfg.SpecPath)
@@ -1538,6 +1565,9 @@ func newDispatcher(reg *entity.Registry, svcReg *service.Registry, database db.D
 	// kind: Datastore manifests, and per-module `spec.datastore` bindings make
 	// ctx.db() module-scoped (platform/06-datastore.md §1.1).
 	scriptEx.SetDatastoreResolver(resolverFromRegistry(dsReg))
+	// Named logical primitives (plan fase C): ctx.db.named("analytics")
+	// resolves via the App Registry named map, gated by uses.datastores.
+	scriptEx.SetDatastoreResolverNamed(dsReg)
 	// Strict ctx.* primitive enforcement (todo 2.6.4): in ProdMode/StrictMode,
 	// a script may only use ctx.* primitives it declared in uses.primitives.
 	scriptEx.SetStrictPrimitives(cfg.StrictMode || cfg.ProdMode)

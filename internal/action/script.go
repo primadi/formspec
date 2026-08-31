@@ -86,6 +86,15 @@ func (e *ScriptExecutor) SetDatastoreResolver(resolver func(primitiveType, name,
 	e.engine.SetDatastoreResolver(resolver)
 }
 
+// SetDatastoreResolverNamed wires the named-logical-primitive resolver (plan
+// fase C): ctx.db.named("analytics") resolves via DatastoreRegistry.
+// ResolveNamed, gated by uses.datastores key "db/analytics".
+func (e *ScriptExecutor) SetDatastoreResolverNamed(nr interface {
+	ResolveNamed(primitiveType, alias, module string) (interface{}, error)
+}) {
+	e.engine.SetDatastoreResolverNamed(nr)
+}
+
 // SetStrictPrimitives toggles strict ctx.* primitive enforcement against the
 // caller action's uses.primitives (todo 2.6.4).
 func (e *ScriptExecutor) SetStrictPrimitives(strict bool) {

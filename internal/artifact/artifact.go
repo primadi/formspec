@@ -119,17 +119,35 @@ type EvidenceRecord struct {
 
 // Snapshot is the desired-state bundle sent from Control to Resource Plane.
 type Snapshot struct {
-	Version     int             `json:"version"`
-	IssuedAt    time.Time       `json:"issued_at"`
-	Environment string          `json:"environment"`
-	Signature   string          `json:"signature"`
-	Deployments []Deployment    `json:"deployments"`
-	Policy      json.RawMessage `json:"policy,omitempty"`
-	Trust       json.RawMessage `json:"trust,omitempty"`
-	Grants      json.RawMessage `json:"grants,omitempty"`
-	Licenses    json.RawMessage `json:"licenses,omitempty"`
-	Revocations json.RawMessage `json:"revocations,omitempty"`
-	Memberships json.RawMessage `json:"memberships,omitempty"`
+	Version     int                `json:"version"`
+	IssuedAt    time.Time          `json:"issued_at"`
+	Environment string             `json:"environment"`
+	Signature   string             `json:"signature"`
+	Deployments []Deployment       `json:"deployments"`
+	Datastores  []DatastoreBinding `json:"datastores,omitempty"`
+	Policy      json.RawMessage    `json:"policy,omitempty"`
+	Trust       json.RawMessage    `json:"trust,omitempty"`
+	Grants      json.RawMessage    `json:"grants,omitempty"`
+	Licenses    json.RawMessage    `json:"licenses,omitempty"`
+	Revocations json.RawMessage    `json:"revocations,omitempty"`
+	Memberships json.RawMessage    `json:"memberships,omitempty"`
+}
+
+// DatastoreBinding is one authorized datastore service in a workspace
+// snapshot (plan fase B2 — Workspace Binding): the Control Plane evaluated
+// the Datastore's access.filter against the workspace and, on match,
+// included the service plus its permission ceiling here. The Resource Plane
+// populates its Infra Registry from this list — services absent from the
+// snapshot are invisible to the workspace.
+type DatastoreBinding struct {
+	// Name is the logical service name (kind: Datastore metadata.name).
+	Name string `json:"name"`
+	// Spec is the full Datastore spec (driver, connection, serves) with
+	// credentials resolved by the Control Plane (credential_ref → value).
+	Spec json.RawMessage `json:"spec"`
+	// Permission is the operation ceiling for this workspace (nil =
+	// read_write everywhere).
+	Permission json.RawMessage `json:"permission,omitempty"`
 }
 
 // LocalDeploymentManifest is the local state file maintained by the Resource Plane.

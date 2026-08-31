@@ -1,9 +1,9 @@
-.PHONY: all build clean test lint run-example dev web-deps web-dev web-build web-typecheck apply build-spa install
+.PHONY: all build clean test lint run-example dev web-deps web-dev web-build web-typecheck apply build-spa build-registry install
 
 # Build all binaries
 all: build
 
-build: build-spa build-ctl build-formspec build-operator
+build: build-spa build-ctl build-formspec build-registry build-operator
 
 build-ctl:
 	go build -o bin/formspec-ctl ./cmd/formspec-ctl
@@ -14,6 +14,14 @@ build-formspec: build-spa
 	@mkdir -p cmd/formspec/dist
 	cp -r renderers/react-shadcn/dist/* cmd/formspec/dist/
 	go build -o bin/formspec ./cmd/formspec
+
+# Build the registry binary with embedded SPA.
+# Syncs renderers/react-shadcn/dist → registry/web/dist for go:embed, so
+# formspec-registry serves the admin panel/portal without --web-dir.
+build-registry: build-spa
+	@mkdir -p registry/web/dist
+	cp -r renderers/react-shadcn/dist/* registry/web/dist/
+	go build -o bin/formspec-registry ./cmd/formspec-registry
 
 build-sidecar:
 	@echo "✅ Build complete: bin/formspec"

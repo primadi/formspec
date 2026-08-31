@@ -634,7 +634,7 @@ Semantik (normatif):
   `valkey`), atau shared in-memory saat module tidak bound.
 
 Implementasi: `internal/api/entitycache.go`; keputusan desain:
-`docs/plan/fase14-entity-cache.md`.
+`docs_internal/plan/fase14-entity-cache.md`.
 
 ## 11. Config & Global Settings
 

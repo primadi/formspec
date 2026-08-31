@@ -320,7 +320,7 @@ verify`, `formspec override adopt|diff|list`, marker aktivasi,
 > Registry (publish/install --from, ed25519) terimplementasikan di todo 13.3 —
 > dokumentasi: [`../../registry/README.md`](../../registry/README.md).
 > Detail keputusan
-> [`docs/technical-notes/FormSpec-Technical-Note-Module-Vendoring-Aktivasi.md`](../../technical-notes/FormSpec-Technical-Note-Module-Vendoring-Aktivasi.md);
+> [`docs_internal/technical-notes/FormSpec-Technical-Note-Module-Vendoring-Aktivasi.md`](../../technical-notes/FormSpec-Technical-Note-Module-Vendoring-Aktivasi.md);
 > status implementasi: [`../../plan/todo.md`](../../plan/todo.md) Fase 13.
 
 ### 6.1 Struktur Folder
@@ -491,7 +491,7 @@ karena developer memang sudah sengaja ambil alih penuh file itu):
 
 **Catatan 2026-08-19 — `external/` (module user-kustom):** Sebagai langkah
 pertama menuju §6, konsep **`external/`** diperkenalkan dan diimplementasikan
-untuk auth (todo 6.1, `docs/plan/auth-login-token.md`): folder module
+untuk auth (todo 6.1, `docs_internal/plan/auth-login-token.md`): folder module
 external yang **dikustomisasi user dan wajib di-commit ke git** — berbeda
 dari `vendors/` (readonly, tidak di-commit). Loader men-scan `external/`
 sebagai root tambahan; entity di sana **menang** atas default bawaan
@@ -508,7 +508,7 @@ Entity auth (`user`, `session`, `role`, `api-key`,
 `app-membership`, `workspace`) diekspresikan sebagai YAML manifests, bukan
 registrasi programatik Go. `formspec generate auth` menyalin module ini ke
 `external/auth` untuk dikustomisasi (selalu sinkron dengan bundled). Detail:
-`docs/plan/fase6-dogfooding-auth-module.md`.
+`docs_internal/plan/fase6-dogfooding-auth-module.md`.
 
 - Apakah shadow-copy (§6.4) perlu dilacak versinya sendiri secara
   eksplisit di `formspec.lock` (bukan cuma checksum "asal fork"), supaya

@@ -270,6 +270,14 @@ type ScriptExecutor struct {
 	// (every ctx.* primitive errors).
 	DatastoreResolver func(primitiveType, name, module string) (interface{}, error)
 
+	// DatastoreResolverNamed resolves named logical primitives (plan fase
+	// C): ctx.db.named("analytics") → the service registered under
+	// "db/analytics" in the owning App's App Registry. Nil = named access
+	// falls back to probing DatastoreResolver for a ResolveNamed method.
+	DatastoreResolverNamed interface {
+		ResolveNamed(primitiveType, alias, module string) (interface{}, error)
+	}
+
 	// StrictPrimitives enables strict enforcement of ctx.* primitive access
 	// against the caller action's uses.primitives (todo 2.6.4). Off by
 	// default (dev mode); enabled in ProdMode/StrictMode.
@@ -294,6 +302,14 @@ type ScriptExecutor struct {
 // live datastore connections. See DatastoreResolver.
 func (e *ScriptExecutor) SetDatastoreResolver(resolver func(primitiveType, name, module string) (interface{}, error)) {
 	e.DatastoreResolver = resolver
+}
+
+// SetDatastoreResolverNamed wires the named-logical-primitive resolver (plan
+// fase C). See DatastoreResolverNamed.
+func (e *ScriptExecutor) SetDatastoreResolverNamed(nr interface {
+	ResolveNamed(primitiveType, alias, module string) (interface{}, error)
+}) {
+	e.DatastoreResolverNamed = nr
 }
 
 // SetStrictPrimitives toggles strict ctx.* primitive enforcement (todo 2.6.4).
@@ -372,6 +388,9 @@ func (e *ScriptExecutor) Execute(ctx context.Context, scriptPath string, module,
 	ctxObj.RequestID = observability.RequestIDFromContext(ctx)
 	if e.DatastoreResolver != nil {
 		ctxObj.SetDatastoreResolver(e.DatastoreResolver)
+	}
+	if e.DatastoreResolverNamed != nil {
+		ctxObj.SetDatastoreResolverNamed(e.DatastoreResolverNamed)
 	}
 	if e.NextKeyHandler != nil {
 		ctxObj.NextKey = func(fieldName string) (string, error) {

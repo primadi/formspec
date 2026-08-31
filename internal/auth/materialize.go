@@ -299,7 +299,7 @@ func (m *Materializer) pageFootprint(page *ui.Entry[spec.PageSpec]) ([]Footprint
 }
 
 // blockFootprint derives actions for a single block (form/table/component).
-func (m *Materializer) blockFootprint(module, tab string, form, table, component *spec.BlockRef) ([]FootprintAction, error) {
+func (m *Materializer) blockFootprint(module, tab string, form, table, _ *spec.BlockRef) ([]FootprintAction, error) {
 	var out []FootprintAction
 
 	if form != nil && form.Ref != "" {

@@ -248,10 +248,9 @@ export default defineConfig({
     },
   },
   srcExclude: [
-    "plan/**",
-    "changelog/**",
-    "presentations/**",
-    "technical-notes/**",
+    // Folder internal sudah pindah ke docs_internal/ di root repo — tidak
+    // pernah masuk srcDir (symlink docs → ../docs). Exclusion ini tinggal
+    // untuk arsip docs_old bila pernah tersalin.
     "**/docs_old/**",
   ],
   lastUpdated: true,

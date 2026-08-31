@@ -1,7 +1,7 @@
 # Master Plan: FormSpec Implementation
 
-**Last Updated**: 2026-08-29  
-**Status**: ✅ Fase 0 complete · ✅ Fase 1 (1.1–1.5) · ✅ Fase 2.1 · ✅ Fase 2.2 · ✅ Fase 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6) · ✅ Fase 2.7 (idempotency prepare flow) · ✅ Fase 2.8 (spec.expose) · ✅ Fase 2.9 (2.9.1–2.9.3: ctx.\* primitives + dev auto-provision) · ✅ Fase 5 (5.1–5.4) · ✅ Spec hot-reload · ✅ Fase 11 (review schema↔docs) · ✅ Audit spec↔schema + tambah TODO item · ✅ `formspec validate` (3.1.1, engine+schema) · ✅ Rename forma→formspec (docs/plan/rename-formspec.md) · 🚧 Fase 12 Domain Infrastruktur (docs/architecture/09-domain-map.md) · ✅ Schema registry online (docs/plan/schema-registry-online.md) · ✅ CLI repl/seed/diff (3.4.1, 3.6.2, 3.6.3) · ✅ **Fase 4 (4.1–4.10) complete** (incl. 4.3.1–4.3.5 entity extension, 4.8.3 restore remap) · ✅ Landing page (5.1.3 + 5.13.5, docs/plan/landing-page.md) · ✅ App renderer archetypes (5.1.1–5.1.3: sidebar-nav/topnav/no-nav + access + persist_backend, docs/plan/landing-page.md) · ✅ **Fase 6.1 (6.1.1–6.1.3: login + token, entity-backed auth, external/ merge, generate-auth)** (docs/plan/auth-login-token.md) · ✅ **6.3.1 + 6.3.2 + 5.12.5 (role + role-assignment Entity, materialisasi grant page → permission)** (docs/changelog/2026-08-20-001) · ✅ **6.2.3 (wire permission check semua handler, surface-aware 404)** (docs/changelog/2026-08-20-002) · ✅ **Fase 6 COMPLETE (6.1–6.9, dogfooding auth module)** (docs/plan/fase6-dogfooding-auth-module.md, changelog 2026-08-20-003 s/d 2026-08-21-014) · 📐 **Widget strategy** (docs/plan/widget-strategy.md — sync 5.10, tambah 5.2.7/5.10a, cross-link 7.17.1) · ✅ **Role grants app-scope sync** (docs/plan/role-grants-app-scope.md, changelog 2026-08-26-003) · ✅ **Fase 5 COMPLETE (5.1–5.16)** (docs/plan/fase5-completion.md, changelog 2026-08-24-027 s/d -032; audit sinkronisasi todo 2026-08-27) · ✅ **Fase 7 hampir lengkap** (7.1–7.14, 7.16, 7.17.1–7.17.2 — changelog 2026-08-25-001 s/d 2026-08-26-001; sisa: 7.9.1–7.9.5, 7.15.1, 7.17.3, 7.18, 7.19) · ✅ **Fase 2 COMPLETE (2.9.4 ctx.db module-scoped)** (changelog 2026-08-27-002) · ✅ **3.1.1a honesty scan Starlark** (changelog 2026-08-27-003) · 🚧 **Fase 8 sebagian** (8.1.1–8.1.5, 8.2.1–8.2.6 — docs/plan/fase8-production-serve.md, changelog 2026-08-27-004; sisa: 8.1.6, 8.2.7, 8.3 ⏸️) · ✅ **Fase 10.1 `formspec mcp-serve`** (local MCP tool server — docs/plan/fase10-local-mcp.md, changelog 2026-08-27-005) · ✅ **Fase 10.2 `formspec consult` client (Go)** — docs/plan/fase10-consult-client.md, changelog 2026-08-27-006 (deviasi TS→Go dicatat di docs/ai/01+05; 10.2.7 kompresi riwayat deferred) · ✅ **Fase 10.3/10.4/10.6/10.7 consult completion** — changelog 2026-08-27-007 (10.3.3 & 10.5 deferred; 10.2.7 deferred) · ✅ **Fase 13.1 vendoring** (module install/list/uninstall + verify + boot enforcement — docs/plan/fase13-vendoring.md, changelog 2026-08-28-001; 13.2/13.3 menyusul) · ✅ **Fase 13.2 overrides** (shadow copy adopt/diff/list + whitelist + drift detection — changelog 2026-08-28-002; 13.3 registry menyusul) · ✅ **Fase 13.3 registry loop** (verticals/registry spec + formspec sign/publish + install --from dengan signature verification — changelog 2026-08-28-003; 13.3.3/13.3.5 deferred)
+**Last Updated**: 2026-08-30  
+**Status**: ✅ Fase 0 complete · ✅ Fase 1 (1.1–1.5) · ✅ Fase 2.1 · ✅ Fase 2.2 · ✅ Fase 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6) · ✅ Fase 2.7 (idempotency prepare flow) · ✅ Fase 2.8 (spec.expose) · ✅ Fase 2.9 (2.9.1–2.9.3: ctx.\* primitives + dev auto-provision) · ✅ Fase 5 (5.1–5.4) · ✅ Spec hot-reload · ✅ Fase 11 (review schema↔docs) · ✅ Audit spec↔schema + tambah TODO item · ✅ `formspec validate` (3.1.1, engine+schema) · ✅ Rename forma→formspec (docs_internal/plan/rename-formspec.md) · 🚧 Fase 12 Domain Infrastruktur (docs/architecture/09-domain-map.md) · ✅ Schema registry online (docs_internal/plan/schema-registry-online.md) · ✅ CLI repl/seed/diff (3.4.1, 3.6.2, 3.6.3) · ✅ **Fase 4 (4.1–4.10) complete** (incl. 4.3.1–4.3.5 entity extension, 4.8.3 restore remap) · ✅ Landing page (5.1.3 + 5.13.5, docs_internal/plan/landing-page.md) · ✅ App renderer archetypes (5.1.1–5.1.3: sidebar-nav/topnav/no-nav + access + persist_backend, docs_internal/plan/landing-page.md) · ✅ **Fase 6.1 (6.1.1–6.1.3: login + token, entity-backed auth, external/ merge, generate-auth)** (docs_internal/plan/auth-login-token.md) · ✅ **6.3.1 + 6.3.2 + 5.12.5 (role + role-assignment Entity, materialisasi grant page → permission)** (docs_internal/changelog/2026-08-20-001) · ✅ **6.2.3 (wire permission check semua handler, surface-aware 404)** (docs_internal/changelog/2026-08-20-002) · ✅ **Fase 6 COMPLETE (6.1–6.9, dogfooding auth module)** (docs_internal/plan/fase6-dogfooding-auth-module.md, changelog 2026-08-20-003 s/d 2026-08-21-014) · 📐 **Widget strategy** (docs_internal/plan/widget-strategy.md — sync 5.10, tambah 5.2.7/5.10a, cross-link 7.17.1) · ✅ **Role grants app-scope sync** (docs_internal/plan/role-grants-app-scope.md, changelog 2026-08-26-003) · ✅ **Fase 5 COMPLETE (5.1–5.16)** (docs_internal/plan/fase5-completion.md, changelog 2026-08-24-027 s/d -032; audit sinkronisasi todo 2026-08-27) · ✅ **Fase 7 hampir lengkap** (7.1–7.14, 7.16, 7.17.1–7.17.2 — changelog 2026-08-25-001 s/d 2026-08-26-001; sisa: 7.9.1–7.9.5, 7.15.1, 7.17.3, 7.18, 7.19) · ✅ **Fase 2 COMPLETE (2.9.4 ctx.db module-scoped)** (changelog 2026-08-27-002) · ✅ **3.1.1a honesty scan Starlark** (changelog 2026-08-27-003) · 🚧 **Fase 8 sebagian** (8.1.1–8.1.5, 8.2.1–8.2.6 — docs_internal/plan/fase8-production-serve.md, changelog 2026-08-27-004; sisa: 8.1.6, 8.2.7, 8.3 ⏸️) · ✅ **Fase 10.1 `formspec mcp-serve`** (local MCP tool server — docs_internal/plan/fase10-local-mcp.md, changelog 2026-08-27-005) · ✅ **Fase 10.2 `formspec consult` client (Go)** — docs_internal/plan/fase10-consult-client.md, changelog 2026-08-27-006 (deviasi TS→Go dicatat di docs/ai/01+05; 10.2.7 kompresi riwayat deferred) · ✅ **Fase 10.3/10.4/10.6/10.7 consult completion** — changelog 2026-08-27-007 (10.3.3 & 10.5 deferred; 10.2.7 deferred) · ✅ **Fase 13.1 vendoring** (module install/list/uninstall + verify + boot enforcement — docs_internal/plan/fase13-vendoring.md, changelog 2026-08-28-001; 13.2/13.3 menyusul) · ✅ **Fase 13.2 overrides** (shadow copy adopt/diff/list + whitelist + drift detection — changelog 2026-08-28-002; 13.3 registry menyusul) · ✅ **Fase 13.3 registry loop** (verticals/registry spec + formspec sign/publish + install --from dengan signature verification — changelog 2026-08-28-003; 13.3.3/13.3.5 deferred)
 
 > `⬜` not started · `✅` complete · `⏸️` deferred
 
@@ -12,15 +12,15 @@
 
 **Catatan 2026-07-31**: `platform/08-project-layout.md` §1–§2 ditulis ulang agar match
 layout contoh `examples/Clinic-UI-Showcase/spec/` (entity-centric + `spec/` container +
-`formspec-app.yaml` sebagai config dev) — lihat `docs/changelog/2026-07-31-002-update-project-layout-sesuai-clinic-ui-showcase.md`. §3–§6 tetap target desain.
+`formspec-app.yaml` sebagai config dev) — lihat `docs_internal/changelog/2026-07-31-002-update-project-layout-sesuai-clinic-ui-showcase.md`. §3–§6 tetap target desain.
 
 **Catatan 2026-07-31**: `rtk` (CLI proxy token LLM) di-bake ke
 `.devcontainer/Dockerfile` (binary pinned v0.44.1 + `rtk init -g`) karena
 `~/.local/bin`/`~/.claude` tidak di-persist volume — lihat
-`docs/changelog/2026-07-31-003-bake-rtk-ke-devcontainer-dockerfile.md`.
+`docs_internal/changelog/2026-07-31-003-bake-rtk-ke-devcontainer-dockerfile.md`.
 
 **Catatan 2026-08-11**: Jalur **agent-assisted app development tanpa MCP** selesai —
-lihat `docs/plan/agent-assisted-app-development.md`, guide
+lihat `docs_internal/plan/agent-assisted-app-development.md`, guide
 `docs/guides/agent-assisted-app-development.md`, dan contoh `examples/cafe/`.
 `formspec-app-workflow` skill kini punya Phase Detection + No-MCP Tool Map;
 `formspec init` menulis copilot-instructions yang mereferensikan workflow 4 fase +
@@ -35,7 +35,7 @@ konten skill dibuat MCP-agnostic agar reuse saat Fase 10 landing.
 `!empty(items)` invalid Starlark → `not empty(items)`; (4) visit lifecycle-active
 tanpa route submit → `submit: disabled` (lifecycle-free). Plus test time-dependent
 (hardcoded date) → `recentDate()`. `go test ./...` kini **571 pass, 0 fail**.
-Lihat `docs/changelog/2026-08-17-003-fix-clinic-e2e-failures.md`.
+Lihat `docs_internal/changelog/2026-08-17-003-fix-clinic-e2e-failures.md`.
 
 **Catatan 2026-08-20**: **Fase 13 Module Registry & Vendoring** ditambahkan
 (planned, belum dikerjakan) — ekosistem module registry npm-like:
@@ -51,7 +51,7 @@ registry server sebagai **FormSpec app (dogfooding)** untuk
 ulang sebagai **1 modul FormSpec** (`internal/auth/module/`, bundled + embed,
 namespace `formspec.core`) yang bisa di-merge ke project lain via `external/`
 atau `spec/modules/`. `formspec.core` dipindah dari registrasi programatik Go ke
-YAML manifests; middleware tetap Go. Plan: `docs/plan/fase6-dogfooding-auth-module.md`.
+YAML manifests; middleware tetap Go. Plan: `docs_internal/plan/fase6-dogfooding-auth-module.md`.
 Demo merge: `verticals/reference-app` + `examples/Clinic-UI-Showcase`.
 
 **Catatan 2026-08-24**: **Global Settings Config** selesai — namespace
@@ -61,7 +61,7 @@ kontrak berlaku: `Settings`/`CurrencySettings` di `pkg/spec`, di-resolve dari
 format terpusat `lib/format.ts` di frontend (money/date/number/relative).
 Semua hard-code format per komponen (`en-US`/`USD` vs `id-ID`/`IDR`) di-refactor
 ke formatter. Contoh: `examples/cafe/spec/modules/formspec.core/config.yaml`.
-Plan: `docs/plan/global-settings-config.md` · changelog: `2026-08-24-008`.
+Plan: `docs_internal/plan/global-settings-config.md` · changelog: `2026-08-24-008`.
 Follow-up: menu sidebar kategori **"Global"** (Akses User dan Peran +
 Pengaturan) + halaman settings (`examples/cafe/spec/modules/formspec.core/
 pages/settings.yaml`) — changelog `2026-08-24-009`.
@@ -74,7 +74,7 @@ pages/settings.yaml`) — changelog `2026-08-24-009`.
 DB; backend merge ke `bundle.settings`; halaman Pengaturan = Configuration
 Page (Form edit); auto-apply via refresh meta setelah save. Fix bug widget
 resolution integer/decimal di FormRenderer. Plan:
-`docs/plan/date-input-global-format-runtime-settings.md` · changelog:
+`docs_internal/plan/date-input-global-format-runtime-settings.md` · changelog:
 `2026-08-24-010`.
 
 **Catatan 2026-08-24**: **Fix: seed `app-setting` default dari manifest** —
@@ -243,7 +243,7 @@ ui-exposed), §9.3 "Akses dari script" (`resource.fetch`, `ctx.config().get`,
 
 ### 2.7 Idempotency ✅
 
-- [x] 2.7.1 Two-step prepare flow — `POST /{resource}/{action}/prepare` → receive key → retry action with key. Endpoint `HandlePrepare` (server-sourced idempotent actions only; header/param-sourced 404), route `POST /api/v1/{module}/{plural}/create/prepare` + `/{action}/prepare` di kedua surface (external + `/_ui/entity/`). Lihat `docs/plan/idempotency-prepare-flow.md`.
+- [x] 2.7.1 Two-step prepare flow — `POST /{resource}/{action}/prepare` → receive key → retry action with key. Endpoint `HandlePrepare` (server-sourced idempotent actions only; header/param-sourced 404), route `POST /api/v1/{module}/{plural}/create/prepare` + `/{action}/prepare` di kedua surface (external + `/_ui/entity/`). Lihat `docs_internal/plan/idempotency-prepare-flow.md`.
 - [x] 2.7.2 Idempotency store — `(tenant, action, key) → pending|completed + response` (`01-core-basic.md` §5 — tanpa state `failed`); enforcement di `HandleCreate` + `HandleCustomAction`: duplicate after completed → replay response asli (status + body); duplicate saat pending (in-flight) → 409; failed → retry diizinkan. `IdempotencyStore.Lookup` membedakan pending vs failed (TryClaim menggabungkan keduanya). Store di-wire ke router di `New()` + `ReloadSpec()`.
 
 ### 2.8 `spec.expose` enforcement ✅
@@ -253,10 +253,29 @@ ui-exposed), §9.3 "Akses dari script" (`resource.fetch`, `ctx.config().get`,
 
 ### 2.9 `ctx.*` infrastructure primitives
 
-- [x] 2.9.1 Wire `CtxAPI.SetDatastoreResolver` + implementasi `datastore.Open()` nyata — `ctx.db().query()` kini jalan terhadap database utama app (SQLite dev / Postgres prod) via `datastore.DBQuerier`; resolver di-wire dari `newDispatcher` (`resource/formspec.go`) → `action.ScriptExecutor.SetDatastoreResolver` → `starlark.ScriptExecutor` → `CtxAPI`; Go context di-thread lewat `starlark.Thread.SetLocal`; `primitiveRunner` operasi (`query/get/set/delete/acquire/release`) memakai capability interfaces (`Querier`/`KVGetter`/`KVSetter`/`KVDeleter`/`Locker`). Primitif lain + named datastore masih error jelas ("no live datastore ... only db/default is wired") — menunggu 2.9.2–2.9.4. Lihat `docs/plan/ctx-datastore-resolver.md`. (`runtimes/02-formspec-resource.md` §7, `runtimes/04-formspec-sidecar.md` §8)
-- [x] 2.9.2 Closed set 9 primitive — `db`, `cache`, `lock`, `queue`, `pubsub`, `storage`, `config`, `kvstore`, `log` (`platform/06-datastore.md` §2), termasuk binding `.named()`. Primitif yang di-routing lewat resolver (`db`/`cache`/`lock`/`queue`/`pubsub`/`storage`/`kvstore`) kini resolve ke backend nyata; `config`/`log` adalah builtin terpisah (`ctx.config`/`ctx.log`). Operasi baru di `primitiveRunner`: `enqueue`/`dequeue`, `publish`/`subscribe`, `upload`/`download`. Lihat `docs/plan/ctx-primitives-closed-set.md`.
+- [x] 2.9.1 Wire `CtxAPI.SetDatastoreResolver` + implementasi `datastore.Open()` nyata — `ctx.db().query()` kini jalan terhadap database utama app (SQLite dev / Postgres prod) via `datastore.DBQuerier`; resolver di-wire dari `newDispatcher` (`resource/formspec.go`) → `action.ScriptExecutor.SetDatastoreResolver` → `starlark.ScriptExecutor` → `CtxAPI`; Go context di-thread lewat `starlark.Thread.SetLocal`; `primitiveRunner` operasi (`query/get/set/delete/acquire/release`) memakai capability interfaces (`Querier`/`KVGetter`/`KVSetter`/`KVDeleter`/`Locker`). Primitif lain + named datastore masih error jelas ("no live datastore ... only db/default is wired") — menunggu 2.9.2–2.9.4. Lihat `docs_internal/plan/ctx-datastore-resolver.md`. (`runtimes/02-formspec-resource.md` §7, `runtimes/04-formspec-sidecar.md` §8)
+- [x] 2.9.2 Closed set 9 primitive — `db`, `cache`, `lock`, `queue`, `pubsub`, `storage`, `config`, `kvstore`, `log` (`platform/06-datastore.md` §2), termasuk binding `.named()`. Primitif yang di-routing lewat resolver (`db`/`cache`/`lock`/`queue`/`pubsub`/`storage`/`kvstore`) kini resolve ke backend nyata; `config`/`log` adalah builtin terpisah (`ctx.config`/`ctx.log`). Operasi baru di `primitiveRunner`: `enqueue`/`dequeue`, `publish`/`subscribe`, `upload`/`download`. Lihat `docs_internal/plan/ctx-primitives-closed-set.md`.
 - [x] 2.9.3 Dev auto-provision `'default'` per primitive — db→SQLite (database utama app), cache/lock/queue/pubsub/kvstore→in-memory, storage→filesystem (`platform/06-datastore.md` §5); named datastore selain `'default'` → error jelas (menunggu 2.9.4). Resolver dibangun `ctxPrimitiveResolver` di `resource/ctxresolver.go`, dipakai `newDispatcher` (dan `formspec.New` → dev.go).
 - [x] 2.9.4 `ctx.db()` module-scoped (normatif) — resolve ke Datastore milik Module; interaksi lintas-Module-lintas-Datastore WAJIB async, tanpa escape hatch `ctx.db` sekalipun dengan `uses` (`01-core-basic.md` §3/§5) — `resource/datastoreregistry.go`: `DatastoreRegistry` load `kind: Datastore` manifests + binding `ModuleSpec.Datastore`; resolver 3-arg `(primitiveType, name, module)` di-thread dari `ScriptExecutor.Execute` → `CtxAPI.SetModule` → handle closure; plain call → datastore milik module (fallback 'default' bila tak serve primitive); `.named(x)` hanya sah untuk binding module sendiri (error §1.1 selain itu — termasuk `.named("default")` dari module terikat); driver single-server: sqlite/postgres/memory/fs, cloud driver error jelas; validasi boot + `formspec check` (`checkDatastores`: ref binding + driver×serves §2). Test: unit `datastoreregistry_test.go` (6) + e2e `ctx_db_module_scoped_e2e_test.go` (isolasi 2 module × 2 datastore + blokir escape hatch). Catatan API: rantai yang benar adalah `ctx.db.named("x").query(...)` — `.named()` resolve langsung ke runner. ✅ 2026-08-27 (changelog 002)
+
+#### 2.9.5 Infra Registry 3-level (docs_internal/plan/infra-registry-3-level.md)
+
+> Model: 9 logical primitive (`db`, `cache`, `lock`, `queue`, `pubsub`,
+> `storage`, `kvstore`, `config`, `log`) dimapping eksplisit lewat 3 level:
+> **Infra Registry** (cloud control — service fisik, multi-service per
+> primitive, default overridable) → **App Registry** (per `kind: App` —
+> default + named logical primitive) → **Workspace Binding** (pemetaan
+> logical→fisik via `access.filter`). Chain resolusi: action `uses` →
+> module → app → workspace → infra service.
+
+- [x] A.1 InfraRegistry per-primitive — `resource/datastoreregistry.go` restrukturisasi: unit registrasi = service (`serviceEntry`), `services` + `defaults map[PrimitiveType]string`; tiap primitive bisa punya >1 service (mis. 2 db); default = pointer ke service teregistrasi (bukan backend implisit), overridable via `SetDefault`/`Default`/`Services`; plain call resolve ke per-primitive default (bukan hardcoded `'default'`). Public API dipertahankan. ✅ 2026-08-30 (changelog 2026-08-30-003)
+- [x] A.2 Backend per-primitive — `rediskv.Lock`/`Queue`/`PubSub` (Redis/Valkey: SET NX PX + token release, LPUSH/RPOP FIFO, pub/sub JSON) untuk primitive `lock`/`queue`/`pubsub`; driver `minio`/`s3` via named `kind: Datastore` (kredensial `spec.connection.extra`, fallback env); helper `dialRedis` bersama; `spec.AllPrimitiveTypes()`. ✅ 2026-08-30 (changelog 2026-08-30-003)
+- [x] B App Registry — deklarasi `datastores` map (key `default` + named alias) di `kind: App`; `ModuleSpec` override per module; enforce `UsesDecl.Datastores` (`pkg/spec/entity.go` — key `primitive` atau `primitive/alias`) — ✅ 2026-08-30 (changelog 2026-08-30-004): `AppSpec.Datastores` + `ModuleSpec.Datastores` (key `primitive` atau `primitive/alias`); chain resolusi module binding → module `datastores` → App selection → registry default (`chainTarget`); gate `checkDatastoreAccess` di `CtxAPI` → `DATASTORE_ACCESS_DENIED`; validasi fail-loud selection; named key di module level ditolak sampai fase C. Test +4.
+- [x] B.2 Workspace Binding — snapshot per-workspace (`internal/control/snapshot.go`) evaluasi `access.filter` → binding logical→fisik; `WorkspaceSpec.Datastores` (operator) diberi peran ini — ✅ 2026-08-31 (changelog 2026-08-31-001): `artifact.DatastoreBinding` + `DatastoreRegistration` + store methods (`UpsertDatastore`/`ListDatastores`); `buildSnapshot` evaluasi `access.filter` per workspace (service tak cocok tidak muncul di snapshot; permission ceiling ikut binding); `DatastoreRegistry.LoadSnapshotDatastores` (populate registry dari snapshot, built-in 'default' tak pernah diganti) + `Permission(service)`; test `TestBuildSnapshot_DatastoreFilter` + `TestDatastoreRegistry_SnapshotBinding`.
+- [x] C Buka `.named()` resmi — resolve via App Registry named map, gate `uses.datastores`; error codes `DATASTORE_NOT_FOUND`/`DATASTORE_ACCESS_DENIED`/`DATASTORE_PERMISSION_DENIED` (spec §6) — ✅ 2026-08-30 (changelog 2026-08-30-005): `DatastoreRegistry.ResolveNamed` (alias app-scoped via `appNamed`, module-level named key merged ke App pemiliknya); `.named(alias)` kirim prefix `named:` → `CtxAPI` route ke `ResolveNamed` + gate `checkDatastoreAlias` (key `db/analytics`); `checkDatastoreAccess` kini mengizinkan base primitive bila ada named key-nya; `SetDatastoreResolverNamed` di `ScriptExecutor`/`action`; e2e `.named("default")` kini `DATASTORE_NOT_FOUND`. Test +3.
+- [x] D `config`/`log` routable — builtin `ctx.config`/`ctx.log` jadi fallback, bisa diarahkan ke service `serves: [config]`/`[log]` (9 primitive lengkap) — ✅ 2026-08-30 (changelog 2026-08-30-006): capability `Logger` + runner `.info/.warn/.error`/`.get`; backend `KVConfig`/`KVLog` (memory/redis), `MemoryLog`, `FileLog` (fs), `DBConfigLog` (sqlite/postgres); driver×serves diperluas (config: memory/valkey/redis/sqlite/postgres; log: memory/fs/valkey/redis/sqlite/postgres); `ctx.config`/`ctx.log` probe resolver dulu (runner dengan conn non-nil), fallback builtin bila tidak ada service; test `TestDatastoreRegistry_ConfigLogRoutable`.
+- [x] E Distribusi Control Plane — snapshot membawa infra registry + binding; hapus env-var implicit (`FORMSPEC_STORAGE`/`FORMSPEC_MINIO_*`/`FORMSPEC_STREAM`); auto-provision hanya dev mode — ✅ 2026-08-31 (changelog 2026-08-31-001): `buildStreamBackend(dsReg)` resolve via registry (service Redis/Valkey serves queue/pubsub → Redis stream; else memory); storage resolver resolve via registry (service minio/s3 serves storage → object store; else filesystem); env-var `FORMSPEC_STORAGE`/`FORMSPEC_MINIO_*`/`FORMSPEC_STREAM`/`FORMSPEC_REDIS_ADDR` dihapus dari boot path.
+- [x] F Update spec normatif — `platform/06-datastore.md` §1.1 (`.named()` resmi), §4 (workspace binding), §5 (default per-app); `platform/05-plane-protocol.md` §4.1 (snapshot membawa datastore) — ✅ 2026-08-30/31: `06-datastore.md` v0.2.0 (kontrak 3-level lengkap — bagian dari konsolidasi docs, changelog 2026-08-30-007); `05-plane-protocol.md` §4.1 + field `datastores` (Workspace Binding) di snapshot.
 
 ### 2.10 Spec hot-reload ✅
 
@@ -278,9 +297,9 @@ ui-exposed), §9.3 "Akses dari script" (`resource.fetch`, `ctx.config().get`,
 
 - [x] 3.1.1 `formspec validate --spec <path>` — dry-run validation dua lapis: engine loader (`internal/manifest`; parse + Entity deep-validation) + JSON Schema per kind (`schemas/kinds/*` via `santhosh-tekuri/jsonschema`, lihat `cmd/formspec/validate.go`). Exit 1 bila ada gagal. 2026-07-31. Catatan: lapis schema lebih ketat dari engine untuk shorthand `guard`/`render` (Go `UnmarshalYAML` scalar+map tak bisa diekspresikan generator schema) — gunakan bentuk objek. Sisa: honesty scan Starlark → 3.1.1a.
 - [x] 3.1.1a `formspec validate` honesty scan Starlark (undeclared usage → error, declared-but-unused → warning, `ctx.environment` branching → warning) + flag `--fix` — `cmd/formspec/honesty.go`: parser AST `go.starlark.net/syntax` (walker manual — versi starlark-go ini tidak punya visitor generik; `DotExpr.Name` = `*Ident`, `AssignStmt` mencakup augmented, `syntax.Parse(path, src, 0)`); ekstraksi `ctx.<primitive>` (closed set resolver-routed), `resource.call/fetch/create` first-arg literal, `ctx.secrets.get("key")`, `ctx.environment`; pembandingan vs `uses` per action/hook (Entity + Service). Semantik: hanya target cross-module (ber-dot/slash) yang wajib deklarasi — bare name = same-module implicit (match runtime enforcement); wildcard `{m}.*`/`*` dihormati; `*` unused hanya bila tidak ada usage sama sekali. `--fix` HANYA menghapus declared-but-unused (prune list kosong + blok `uses` kosong) — penambahan deklarasi = perluasan consent tetap manual (preseden 3.1.2). Validasi nyata: Clinic → 0 false positive, 4 warning genuine (deklarasi mati `medicine.find`/`medicine.update` di pharmacy). Test: `honesty_test.go` (6). ✅ 2026-08-27 (changelog 003)
-- [x] 3.1.2 `formspec check [--fix] -f <path>` — cross-file analysis: Form field ref ke field tak ada (error), FormSpecExpr ref ke field tak ada (error), `uses.resources` ref ke `{module}.{entity}` tak ada (error). `--fix`: hapus deklarasi `uses.resources` yang broken (target tak ada — aman, tidak mengubah footprint consent; penambahan deklarasi = perluasan consent → interaktif, di-defer). Lihat `cmd/formspec/check.go` + `docs/plan/formspec-check.md`.
+- [x] 3.1.2 `formspec check [--fix] -f <path>` — cross-file analysis: Form field ref ke field tak ada (error), FormSpecExpr ref ke field tak ada (error), `uses.resources` ref ke `{module}.{entity}` tak ada (error). `--fix`: hapus deklarasi `uses.resources` yang broken (target tak ada — aman, tidak mengubah footprint consent; penambahan deklarasi = perluasan consent → interaktif, di-defer). Lihat `cmd/formspec/check.go` + `docs_internal/plan/formspec-check.md`.
 - [x] 3.1.3 `formspec new <kind>` — scaffold: `new app <name>`, `new entity <name>`, `new module <name>`. Generate boilerplate YAML + directory. `new module` → `spec/modules/{module}/module.yaml`; `new entity` → `spec/modules/{module}/{characteristic}/{entity}/entity.yaml` (fields dasar code/name/description + expose default; characteristic divalidasi closed set; module di-detect dari CWD atau `--module`). Lihat `cmd/formspec/new.go`.
-- [x] 3.1.4 `formspec init` bundel JSON Schema (`schemas/` dari `//go:embed`) + tulis `.vscode/settings.json` (`yaml.schemas` → `schemas/formspec.schema.json` untuk `spec/**/*.yaml|yml`), agar YAML editor punya autocomplete/validasi langsung setelah scaffold — lihat `docs/plan/init-schema-scaffold.md`
+- [x] 3.1.4 `formspec init` bundel JSON Schema (`schemas/` dari `//go:embed`) + tulis `.vscode/settings.json` (`yaml.schemas` → `schemas/formspec.schema.json` untuk `spec/**/*.yaml|yml`), agar YAML editor punya autocomplete/validasi langsung setelah scaffold — lihat `docs_internal/plan/init-schema-scaffold.md`
 
 ### 3.2 `formspec dev` — verify against spec
 
@@ -299,24 +318,24 @@ ui-exposed), §9.3 "Akses dari script" (`resource.fetch`, `ctx.config().get`,
 
 ### 3.4 Read-only CLI ops
 
-- [x] 3.4.1 `formspec diff -f <path>` — compare local vs deployed (dry-run) — dalam scope single-server, "deployed" = schema DB vs manifest lokal via `MigrationRunner.PlanMigrations`; exit 1 bila ada perbedaan (gate CI). Lihat `docs/plan/formspec-repl-seed-diff.md`. ✅ 2026-08-17
-- [x] 3.4.2 `formspec get <kind> <name>` — fetch resource, table/JSON output. Beroperasi terhadap manifest lokal (Control Plane di-defer): `get <kind> [name] [--output table|json]`; `document` = alias `entity`. Lihat `cmd/formspec/get.go` + `docs/plan/formspec-get-describe.md`.
+- [x] 3.4.1 `formspec diff -f <path>` — compare local vs deployed (dry-run) — dalam scope single-server, "deployed" = schema DB vs manifest lokal via `MigrationRunner.PlanMigrations`; exit 1 bila ada perbedaan (gate CI). Lihat `docs_internal/plan/formspec-repl-seed-diff.md`. ✅ 2026-08-17
+- [x] 3.4.2 `formspec get <kind> <name>` — fetch resource, table/JSON output. Beroperasi terhadap manifest lokal (Control Plane di-defer): `get <kind> [name] [--output table|json]`; `document` = alias `entity`. Lihat `cmd/formspec/get.go` + `docs_internal/plan/formspec-get-describe.md`.
 - [x] 3.4.3 `formspec describe <kind> <name>` — detailed view: field, action, state machine, permission (`02-formspec-cli.md` §2). Untuk Entity: fields, actions (+ permission + impl), state machine, expose; non-Entity: spec JSON. Lihat `cmd/formspec/get.go`.
 
 ### 3.5 Mutation CLI ops
 
-- [x] 3.5.1 `formspec delete <kind> <name> --confirm` — remove resource. Beroperasi terhadap manifest lokal (Control Plane di-defer): file satu-dokumen → hapus file; file multi-dokumen → hapus dokumen yang cocok (yaml.v3 node), sisakan lainnya. `--confirm` wajib. Lihat `cmd/formspec/delete.go` + `docs/plan/formspec-delete.md`.
+- [x] 3.5.1 `formspec delete <kind> <name> --confirm` — remove resource. Beroperasi terhadap manifest lokal (Control Plane di-defer): file satu-dokumen → hapus file; file multi-dokumen → hapus dokumen yang cocok (yaml.v3 node), sisakan lainnya. `--confirm` wajib. Lihat `cmd/formspec/delete.go` + `docs_internal/plan/formspec-delete.md`.
 
 ### 3.6 Engine-dependent CLI ops
 
-- [x] 3.6.1 `formspec migrate plan|apply` — structural diff from Entity changes, applied via migration runner. `plan` → `PlanMigrations` + cetak DDL (tanpa eksekusi); `apply` → `ApplyMigrations` (idempotent). Daftar entity dibangun dari manifest lokal. Lihat `cmd/formspec/migrate.go` + `docs/plan/formspec-migrate.md`.
-- [x] 3.6.2 `formspec repl [--environment]` — interactive Starlark console, full `ctx.*` (via `NewCtxPrimitiveResolver` + `App.Database()`); mode one-shot `-e <expr>`; `--environment` diterima (policy Control Plane di-defer). Lihat `docs/plan/formspec-repl-seed-diff.md`. ✅ 2026-08-17
-- [x] 3.6.3 `formspec seed [--module]` — run seeders from YAML seed files (`kind: Seed`, format baru karena `formspec/seed` official module belum ada); idempotent via natural key. Lihat `docs/plan/formspec-repl-seed-diff.md`. ✅ 2026-08-17
-- [ ] 3.6.4 `formspec summary rebuild <entity>` — rebuild summary Entity dari replay event durable (`02-core-extended.md` §6) — ⏸️ **butuh design decision**: kontrak `sources`/`join_key`/`rebuild` untuk summary Entity belum dispesifikasikan di `pkg/spec` (tidak ada field `sources`/`join_key`/`rebuild` di `EntitySpec`), dan `docs/renderers/jsonb-persist/04-query-and-keys.md` §4 menyatakan detail populasi summary "mengikuti bagaimana Summary dipopulasikan dari event durable" yang belum ada (projection engine belum ada — lihat `docs/plan/fix-clinic-dashboard-summary.md`). Jangan invent contract; perlu keputusan desain dulu.
+- [x] 3.6.1 `formspec migrate plan|apply` — structural diff from Entity changes, applied via migration runner. `plan` → `PlanMigrations` + cetak DDL (tanpa eksekusi); `apply` → `ApplyMigrations` (idempotent). Daftar entity dibangun dari manifest lokal. Lihat `cmd/formspec/migrate.go` + `docs_internal/plan/formspec-migrate.md`.
+- [x] 3.6.2 `formspec repl [--environment]` — interactive Starlark console, full `ctx.*` (via `NewCtxPrimitiveResolver` + `App.Database()`); mode one-shot `-e <expr>`; `--environment` diterima (policy Control Plane di-defer). Lihat `docs_internal/plan/formspec-repl-seed-diff.md`. ✅ 2026-08-17
+- [x] 3.6.3 `formspec seed [--module]` — run seeders from YAML seed files (`kind: Seed`, format baru karena `formspec/seed` official module belum ada); idempotent via natural key. Lihat `docs_internal/plan/formspec-repl-seed-diff.md`. ✅ 2026-08-17
+- [ ] 3.6.4 `formspec summary rebuild <entity>` — rebuild summary Entity dari replay event durable (`02-core-extended.md` §6) — ⏸️ **butuh design decision**: kontrak `sources`/`join_key`/`rebuild` untuk summary Entity belum dispesifikasikan di `pkg/spec` (tidak ada field `sources`/`join_key`/`rebuild` di `EntitySpec`), dan `docs/renderers/jsonb-persist/04-query-and-keys.md` §4 menyatakan detail populasi summary "mengikuti bagaimana Summary dipopulasikan dari event durable" yang belum ada (projection engine belum ada — lihat `docs_internal/plan/fix-clinic-dashboard-summary.md`). Jangan invent contract; perlu keputusan desain dulu.
 
 ### 3.7 Data lifecycle CLI ops
 
-- [x] 3.7.1 `formspec backup create [--full|--incremental|--filter]` — backup DB + artifacts, open format — `--full` implemented (tar: manifest.json + `<module>_<entity>.jsonl`); `--incremental`/`--filter` belum (gap). File storage (ctx.storage) belum ikut (gap 4.8.1). Lihat `docs/plan/formspec-repl-seed-diff.md`. ✅ 2026-08-17
+- [x] 3.7.1 `formspec backup create [--full|--incremental|--filter]` — backup DB + artifacts, open format — `--full` implemented (tar: manifest.json + `<module>_<entity>.jsonl`); `--incremental`/`--filter` belum (gap). File storage (ctx.storage) belum ikut (gap 4.8.1). Lihat `docs_internal/plan/formspec-repl-seed-diff.md`. ✅ 2026-08-17
 - [x] 3.7.2 `formspec backup inspect <file>` — inspect backup contents — baca manifest.json (created_at, driver, tables + counts). ✅ 2026-08-17
 - [x] 3.7.3 `formspec restore --from <file> [--map-resource] [--conflict skip|overwrite|remap] [--dry-run]` — restore with conflict resolution — `--conflict skip|overwrite` + `--dry-run` implemented; `--map-resource`/`remap` belum (gap). ✅ 2026-08-17
 - [x] 3.7.4 `formspec logs [--workspace] [--module] [--entity] [--action] [--level] [--since] [--until] [--request-id] [--output pretty|json] [--follow]` — tail structured logs (`09-observability.md` §7) — baca event log (`formspec_event_log`, channel audit_log) dengan filter workspace/module/entity + output pretty|json; `--action/--level/--since/--until/--request-id/--follow` belum (full 12-field request logging = Fase 8.2). ✅ 2026-08-17
@@ -400,13 +419,13 @@ ui-exposed), §9.3 "Akses dari script" (`resource.fetch`, `ctx.config().get`,
 ### 4.10 Soft-delete & soft-deactivation
 
 - [x] 4.10.1 `persist.soft_delete: true` → `deleted_at` column + query auto-filters — sudah ada: `deleted_at` column di DDL (default true, bisa di-disable), semua query auto-filter `deleted_at IS NULL`, `SoftDelete()` method. ✅ 2026-08-17 (verifikasi — sudah terimplementasi sebelumnya)
-- [x] 4.10.2 `is_active` + `deactivate`/`reactivate` pattern — dropdown filters `is_active: true` for new transactions; list shows all — `soft_deactivate: {enabled: true}` kini inject `is_active` field (default true) + `deactivate`/`reactivate` actions (store methods, handlers, routes, permissions). Dropdown filter `is_active: true` untuk transaksi baru = concern frontend (Fase 5). Lihat `docs/plan/soft-deactivate.md`. ✅ 2026-08-17
+- [x] 4.10.2 `is_active` + `deactivate`/`reactivate` pattern — dropdown filters `is_active: true` for new transactions; list shows all — `soft_deactivate: {enabled: true}` kini inject `is_active` field (default true) + `deactivate`/`reactivate` actions (store methods, handlers, routes, permissions). Dropdown filter `is_active: true` untuk transaksi baru = concern frontend (Fase 5). Lihat `docs_internal/plan/soft-deactivate.md`. ✅ 2026-08-17
 
 ---
 
 ## Fase 5: Frontend — shadcn-shell Completeness
 
-**Progress (2026-08-27 audit)**: COMPLETE — semua item 5.1–5.16 ✅ kecuali yang ditandai ⏸️ (5.6.7 RRULE exception, Report export async job). Rincian implementasi: `docs/plan/fase5-completion.md` + changelog 2026-08-24-027 s/d -032.
+**Progress (2026-08-27 audit)**: COMPLETE — semua item 5.1–5.16 ✅ kecuali yang ditandai ⏸️ (5.6.7 RRULE exception, Report export async job). Rincian implementasi: `docs_internal/plan/fase5-completion.md` + changelog 2026-08-24-027 s/d -032.
 
 **Goal**: Semua UI kind, widget, contract, dan FormSpecExpr sesuai spec. Bisa dites end-to-end.
 
@@ -414,7 +433,7 @@ ui-exposed), §9.3 "Akses dari script" (`resource.fetch`, `ctx.config().get`,
 
 - [x] 5.1.1 `sidebar-nav` — full chrome, side navigation, breadcrumb (verified, working)
 - [x] 5.1.2 `topnav` — full chrome, top navigation — `TopNavShell` (nav atas + dropdown group + breadcrumb + mobile drawer), menu di-resolve via `useResolvedMenu` (sama dgn Sidebar). Contoh `examples/arisan/`. ✅ 2026-08-19
-- [x] 5.1.3 `no-nav` — chrome minimal tanpa nav standar — App renderer archetype (bukan "landing"/marketing): chrome & auth dipisah (`app_renderer` = chrome; `access: public|private` = auth). `NoNavShell` chrome-only + blok `section:` declarative (hero/feature_grid/card/carousel/cta) + anonim create (list/find/create publik di module App `access: public`) + login `returnTo`. Contoh `examples/storefront/`. Lihat `docs/plan/landing-page.md` + changelog 2026-08-19-001/002. ✅ 2026-08-19
+- [x] 5.1.3 `no-nav` — chrome minimal tanpa nav standar — App renderer archetype (bukan "landing"/marketing): chrome & auth dipisah (`app_renderer` = chrome; `access: public|private` = auth). `NoNavShell` chrome-only + blok `section:` declarative (hero/feature_grid/card/carousel/cta) + anonim create (list/find/create publik di module App `access: public`) + login `returnTo`. Contoh `examples/storefront/`. Lihat `docs_internal/plan/landing-page.md` + changelog 2026-08-19-001/002. ✅ 2026-08-19
 
 ### 5.1a App-level fields (chrome/auth/shell/persist)
 
@@ -459,7 +478,7 @@ ui-exposed), §9.3 "Akses dari script" (`resource.fetch`, `ctx.config().get`,
 - [x] 5.5.6 Click card → detail page navigation
 - [x] 5.5.7 Row actions (view/edit/delete/custom) with confirm + permission check
 - [x] 5.5.8 Filter columns from `filters` manifest — Select dropdown per filter field
-- [x] 5.5.9 Filter generik server-side — `filters` objek (`default` seed, type `select`/`date`/`text`, `today()`) + `fixed_filters` immutable; `transaction_date[eq]=` untuk scope tanggal board (lihat `docs/plan/kanban-filter-tanggal-filter-generik.md`)
+- [x] 5.5.9 Filter generik server-side — `filters` objek (`default` seed, type `select`/`date`/`text`, `today()`) + `fixed_filters` immutable; `transaction_date[eq]=` untuk scope tanggal board (lihat `docs_internal/plan/kanban-filter-tanggal-filter-generik.md`)
 
 ### 5.6 `kind: Calendar`
 
@@ -486,7 +505,7 @@ ui-exposed), §9.3 "Akses dari script" (`resource.fetch`, `ctx.config().get`,
 
 ### 5.9 Asset Component Contract
 
-> **Track C widget strategy** (docs/plan/widget-strategy.md): 5.9.2 `formspec.components`, 5.9.3
+> **Track C widget strategy** (docs_internal/plan/widget-strategy.md): 5.9.2 `formspec.components`, 5.9.3
 > `formspec.ui`, 5.9.4 `formspec.files` = jalur #2 "UI rich" — expose chrome struktural shadcn ke
 > component `asset`, bukan dijadikan field widget.
 
@@ -501,7 +520,7 @@ ui-exposed), §9.3 "Akses dari script" (`resource.fetch`, `ctx.config().get`,
 
 ### 5.10 Missing input widgets
 
-> **Keputusan strategi widget** (docs/plan/widget-strategy.md): registry widget dasar = **closed set**
+> **Keputusan strategi widget** (docs_internal/plan/widget-strategy.md): registry widget dasar = **closed set**
 > yang dikurasi (`07-component-kinds.md` §1) — **TIDAK** semua komponen shadcn di-mapping ke widget.
 > Tiga jalur "UI rich": (1) field widget — set tertutup dikurasi (bagian ini), (2) chrome struktural via
 > `formspec.ui`/`formspec.components`/`formspec.files` untuk component `asset` (5.9), (3) block presentasi
@@ -518,7 +537,7 @@ ui-exposed), §9.3 "Akses dari script" (`resource.fetch`, `ctx.config().get`,
 - [x] 5.10.8 Base UI components — breadcrumb/skeleton/badge/card/pagination SUDAH ada + `EmptyState` (`components/ui/empty-state.tsx`). ✅ 2026-08-24
 - [x] 5.10.9 Textarea — `TextareaInput` widget (`widgets/TextareaInput.tsx`, wrap `components/ui/textarea.tsx`); router case `textarea` + field type `text`; render pre-wrap di DetailPage. ✅ 2026-08-24
 
-#### 5.10a Field widget kurasi (Track B, docs/plan/widget-strategy.md)
+#### 5.10a Field widget kurasi (Track B, docs_internal/plan/widget-strategy.md)
 
 - [x] 5.10.10 RadioGroup — `RadioGroup` widget (`widgets/RadioGroup.tsx`, button-based, no dep); single-choice enum alternatif `select`. ✅ 2026-08-24
 - [x] 5.10.11 Combobox — `Combobox` widget (`widgets/Combobox.tsx`, custom dropdown + search, no dep); searchable select utk enum besar. ✅ 2026-08-24
@@ -549,7 +568,7 @@ ui-exposed), §9.3 "Akses dari script" (`resource.fetch`, `ctx.config().get`,
 - [x] 5.13.2 `kind: Print` — PDF server-side generation via `go-pdf/fpdf` (`GET /_ui/print/{module}/{name}/{id}`); `format: html` via `window.print()` (existing). ✅ 2026-08-24 (WS-H, changelog 031)
 - [x] 5.13.3 `kind: ApprovalInbox` — pending approvals list, `approve`/`reject` inline actions, badge count, `realtime: true`. ✅ 2026-08-24 (WS-I, changelog 029)
 - [x] 5.13.4 `kind: NotificationCenter` — notification list, badge unread, `mark-read` action, `realtime: true`, deep-link on click. ✅ 2026-08-24 (WS-I, changelog 029)
-- [x] 5.13.5 `kind: Listing` — public catalog, no auth wrap, no row/bulk actions — `ListingRenderer` read-only (search + filter, tanpa create/row/bulk; klik baris → detail) + kind `Listing` end-to-end (spec, registry, bundle, route). Contoh `examples/storefront/`. Lihat `docs/plan/landing-page.md` + changelog 2026-08-19-001. ✅ 2026-08-19
+- [x] 5.13.5 `kind: Listing` — public catalog, no auth wrap, no row/bulk actions — `ListingRenderer` read-only (search + filter, tanpa create/row/bulk; klik baris → detail) + kind `Listing` end-to-end (spec, registry, bundle, route). Contoh `examples/storefront/`. Lihat `docs_internal/plan/landing-page.md` + changelog 2026-08-19-001. ✅ 2026-08-19
 
 ### 5.14 Derivation engine
 
@@ -571,7 +590,7 @@ ui-exposed), §9.3 "Akses dari script" (`resource.fetch`, `ctx.config().get`,
 
 ---
 
-## Fase 6: Auth & Authorization ✅ COMPLETE (inti) — sebagian item ⏸️ deferred (dogfooding — `docs/plan/fase6-dogfooding-auth-module.md`)
+## Fase 6: Auth & Authorization ✅ COMPLETE (inti) — sebagian item ⏸️ deferred (dogfooding — `docs_internal/plan/fase6-dogfooding-auth-module.md`)
 
 **Goal**: Login, JWT, permission model, roles, API keys, sessions, field security. Prod requirement.
 **Pendekatan**: `formspec.core` = bundled module YAML (`internal/auth/module/`, embed + loader),
@@ -583,7 +602,7 @@ mergeable ke project lain via `external/`/`spec/modules/`; middleware tetap Go.
 
 ### 6.1 Login & token
 
-- [x] 6.1.1 Login endpoint — `POST /api/v1/auth/login`, credential verification (password hash), JWT issuance (access + refresh) — `POST /{ws}/api/v1/auth/login`; bcrypt verify; access + refresh JWT. Backed by `formspec.core.user`/`session` entities (internal, tanpa route). Dev seed `admin/admin`. Lihat `docs/plan/auth-login-token.md`. ✅ 2026-08-19
+- [x] 6.1.1 Login endpoint — `POST /api/v1/auth/login`, credential verification (password hash), JWT issuance (access + refresh) — `POST /{ws}/api/v1/auth/login`; bcrypt verify; access + refresh JWT. Backed by `formspec.core.user`/`session` entities (internal, tanpa route). Dev seed `admin/admin`. Lihat `docs_internal/plan/auth-login-token.md`. ✅ 2026-08-19
 - [x] 6.1.2 Token claims — `sub`, `workspace`, `roles`, `permissions`, `exp`, `iat` — access claims: `sub`, `ws`, `roles`, `perms`, `typ=access`, `iat`, `exp`, `iss`, `aud`; refresh claims: `sub`, `ws`, `typ=refresh`, `jti`, `iat`, `exp`. ✅ 2026-08-19
 - [x] 6.1.3 Token refresh — rotate (invalidate old, issue new) — `POST /{ws}/api/v1/auth/refresh`; session (jti) di-rotate: hapus jti lama + issue baru; replay token lama → 401. ✅ 2026-08-19
 - [x] 6.1.4 Auth per-App via `auth_config_ref` — App me-resolve strategy autentikasi dari yang terpasang (`basic-auth` minimum untuk single-server; `sso` OIDC/SAML, `social-sso`, `passwordless`, `passkey` = set terbuka) (`platform/02-workspace-app-module.md` §3) — `ResolveAppAuth` + `RoleResolver.SetOverride`. ✅ 2026-08-20 (Fase F, changelog 008)
@@ -796,7 +815,7 @@ mergeable ke project lain via `external/`/`spec/modules/`; middleware tetap Go.
 
 **Goal**: `formspec serve --mode=production` — production-grade, single-server, no Control Plane.
 
-**Progress (2026-08-27)**: 8.1.1–8.1.5 ✅ · 8.2.1–8.2.6 ✅ · 8.1.6 ⏸️ · 8.2.7 ⏸️ · 8.3 ⏸️ — plan: `docs/plan/fase8-production-serve.md`, changelog `2026-08-27-004`.
+**Progress (2026-08-27)**: 8.1.1–8.1.5 ✅ · 8.2.1–8.2.6 ✅ · 8.1.6 ⏸️ · 8.2.7 ⏸️ · 8.3 ⏸️ — plan: `docs_internal/plan/fase8-production-serve.md`, changelog `2026-08-27-004`.
 
 ### 8.1 Production mode
 
@@ -861,7 +880,7 @@ di tabel Deferred di bawah, jadi Fase ini realistis baru mulai setelah salah sat
 ### 10.0 Jalur tanpa-MCP — agent-assisted app development ✅
 
 > Jalur yang berjalan hari ini **tanpa** MCP — lihat
-> `docs/plan/agent-assisted-app-development.md`. MCP (10.1–10.7 di bawah) tetap
+> `docs_internal/plan/agent-assisted-app-development.md`. MCP (10.1–10.7 di bawah) tetap
 > di-defer.
 
 - [x] 10.0.1 Skill `formspec-app-workflow`: section Phase Detection + No-MCP Tool Map
@@ -872,8 +891,8 @@ di tabel Deferred di bawah, jadi Fase ini realistis baru mulai setelah salah sat
 ### 10.0.5 Cafe Order — child items UX (auto-fill, read_only, dropdown) ✅
 
 > Lanjutan `examples/cafe` order form (`order-create`, widget `child-grid`).
-> Plan: `docs/plan/cafe-order-child-autofill-readonly-dropdown.md`; changelog
-> `docs/changelog/2026-08-24-001`.
+> Plan: `docs_internal/plan/cafe-order-child-autofill-readonly-dropdown.md`; changelog
+> `docs_internal/changelog/2026-08-24-001`.
 
 - [x] 10.0.5.1 `auto_fill` client-side — child field `unit_price` auto-fill dari
       `menu_item_id → price` (record lengkap dari RelationPicker via `onSelectRecord`);
@@ -915,7 +934,7 @@ di tabel Deferred di bawah, jadi Fase ini realistis baru mulai setelah salah sat
 > (10.1.1–10.1.2) sudah tercakup jalur tanpa-MCP di atas (§10.0); sisanya
 > (10.1.3–10.1.7) menunggu MCP server (`docs/ai/03-formspec-local-mcp.md` §1).
 > **Progress (2026-08-27)**: server MCP stdio jalan via SDK resmi
-> (`modelcontextprotocol/go-sdk` v1.7.0) — plan `docs/plan/fase10-local-mcp.md`,
+> (`modelcontextprotocol/go-sdk` v1.7.0) — plan `docs_internal/plan/fase10-local-mcp.md`,
 > changelog `2026-08-27-005`. Tool grounding (10.1.1–10.1.2 versi MCP) ikut
 > diimplementasikan karena server tak berguna tanpanya.
 
@@ -934,7 +953,7 @@ di tabel Deferred di bawah, jadi Fase ini realistis baru mulai setelah salah sat
 > `go-keyring` adalah library Go, tim satu bahasa. LLM SDK: **`openai-go`**
 > (resmi) di balik interface internal `llm.Provider` — target provider
 > DeepSeek v4 Flash & GLM 5.3 Flash via gateway OpenAI-compatible. Tool loop
-> ditulis sendiri (~100 baris). Plan: `docs/plan/fase10-consult-client.md`,
+> ditulis sendiri (~100 baris). Plan: `docs_internal/plan/fase10-consult-client.md`,
 > changelog `2026-08-27-006`.
 > Keputusan tambahan: **option picker langsung di REPL** (model menyajikan
 > A/B/C → user pilih satu huruf → seleksi di-inject eksplisit ke riwayat,
@@ -986,7 +1005,7 @@ di tabel Deferred di bawah, jadi Fase ini realistis baru mulai setelah salah sat
 ## Fase 11: Resolusi Review Schema ↔ Docs ✅ COMPLETE (2026-07-31)
 
 Menutup kontradiksi `pkg/spec`/JSON Schema/`renderers/web` vs `docs/spec/`.
-Referensi: `docs/changelog/2026-07-31-001-resolusi-review-schema-docs.md`.
+Referensi: `docs_internal/changelog/2026-07-31-001-resolusi-review-schema-docs.md`.
 
 | Item                                                                                                                                                           | Status | Catatan                                                                                     |
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------- |
@@ -996,7 +1015,7 @@ Referensi: `docs/changelog/2026-07-31-001-resolusi-review-schema-docs.md`.
 | B2: `EnvironmentSpec`/`PolicySpec` (`pkg/spec/control.go`) — schema tak lagi bare                                                                              | ✅     | eksekusi control-plane tetap defer                                                          |
 | B3: `attachment` alias `file` + docs `spec.auth` §1.4                                                                                                          | ✅     | normalisasi di `ValidateEntitySpec`                                                         |
 | C1: Form `sections`/`read_only`/`render:{mode}` + Table `filters`/`default_sort` — docs→kode                                                                   | ✅     | perbaiki fixture `internal/ui` (test sebelumnya merah)                                      |
-| C2: Kanban docs → schema (`status_field` wajib, `columns{status,label}`, `card_template`) + Open zero-config/`group_by`/`drag_guard`/`wip_limit`/`card_fields` | ✅     | defer → `docs/plan/kanban-full-implementation.md`                                           |
+| C2: Kanban docs → schema (`status_field` wajib, `columns{status,label}`, `card_template`) + Open zero-config/`group_by`/`drag_guard`/`wip_limit`/`card_fields` | ✅     | defer → `docs_internal/plan/kanban-full-implementation.md`                                  |
 | C3: Dashboard/Widget docs → ref-based + Open rendering widget                                                                                                  | ✅     | defer → Fase 5.7                                                                            |
 | C4: Report docs → kode (`parameters`/`groups`/`export`, objek) + Open `source.filter`; TS/ renderer fix                                                        | ✅     | contoh manifest Report diperbarui                                                           |
 | C5: Print hapus `formats` redundan                                                                                                                             | ✅     | satu format per manifest = `output.format`                                                  |
@@ -1005,7 +1024,7 @@ Referensi: `docs/changelog/2026-07-31-001-resolusi-review-schema-docs.md`.
 ## Fase 12: Domain Infrastruktur formspec.dev 🚧 (2026-08-12)
 
 Setup domain, landing, docs site, dan schema hosting. Referensi:
-`docs/architecture/09-domain-map.md`, `docs/plan/rename-formspec.md`.
+`docs/architecture/09-domain-map.md`, `docs_internal/plan/rename-formspec.md`.
 
 | Item                                                                                            | Status | Catatan                                                                            |
 | ----------------------------------------------------------------------------------------------- | ------ | ---------------------------------------------------------------------------------- |
@@ -1017,7 +1036,7 @@ Setup domain, landing, docs site, dan schema hosting. Referensi:
 | 12.6 Reserve subdomain backend (registry/mcp/api/ops/status/try/control.\*)                     | 🔲     | Manual — Cloudflare DNS                                                            |
 | 12.7 `security.txt`, `.well-known`, `robots.txt`, `_redirects`/`_headers`                       | ✅     | Di `site/public/` & `docs-site/public/`                                            |
 | 12.8 Deploy CI: Pages project (site/, docs-site/, schemas)                                      | 🔲     | Manual — pakai Build watch paths (changelog 2026-08-14-001)                        |
-| 12.9 Schema registry online: versi di `apiVersion`, `formspec schema`, cache lokal, hapus embed | ✅     | `docs/plan/schema-registry-online.md` + changelog 2026-08-14-004                   |
+| 12.9 Schema registry online: versi di `apiVersion`, `formspec schema`, cache lokal, hapus embed | ✅     | `docs_internal/plan/schema-registry-online.md` + changelog 2026-08-14-004          |
 
 ## Fase 13: Module Registry & Vendoring (npm-like) 🚧 (2026-08-20, planned; 13.1–13.2 ✅, 13.3 sebagian ✅ 2026-08-28)
 
@@ -1087,6 +1106,7 @@ tanpa auth.
 - [x] 13.5.4 `POST /{ws}/_ui/auth/register` — register publik (bcrypt, rate limit 3/30s per IP); E2E smoke hijau (boot → register → meta UI). ✅ 2026-08-28
 - [x] 13.5.5 Onboarding Vendor ter-link ke user register — halaman `/portal/vendor-signup` (Form create `registry.vendor` + field `owner_username`); alur register → create vendor E2E terverifikasi. ✅ 2026-08-28
 - [x] 13.5.6 Native binary `cmd/formspec-registry` + server-side signature verify (13.3.3) + Redis cache + deploy K8s 3 replica (Plan C). — **batch 1 ✅ 2026-08-29**: binary native (embed spec via `registry/embed.go`, extract temp saat boot) + service `signature-verify` (impl native `registry.SignatureVerify`) + publish CLI verify server-side sebelum upload (best-effort di registry dev); E2E: valid→lulus, tampered→ditolak, publish ke native registry sukses. **batch 2 ✅ 2026-08-29**: driver Redis/Valkey `ctx.cache` (`renderers/jsonb-persist/datastore/rediskv/` — resolve di `resource/datastoreregistry.go`, test integrasi vs Valkey dev container) + deploy artifacts `registry/deploy/` (Dockerfile distroless, K8s 3 replica + probes + Ingress TLS, Datastore valkey manifest). Sisa (deferred): cache-aside wiring di module registry, shared rate limiter antar-pod.
+  - 备注 2026-08-31: registry binary 新增内嵌 SPA fallback — `--web-dir` 为空时用 `registry/web` 内嵌 dist（`make build-registry` 同步），见 changelog 2026-08-31-004。
 
 ## Fase 14: Framework-Level Entity Cache (Read-Through) ✅ (2026-08-29)
 
@@ -1094,7 +1114,7 @@ tanpa auth.
 entity (`spec.cache.ttl`), invalidasi in-process + Redis pub/sub broadcast
 untuk multi-instance. List caching skip. Berlaku umum untuk semua app
 (registry = adopter pertama).
-**Plan**: `docs/plan/fase14-entity-cache.md` · **Keputusan**: opt-in eksplisit,
+**Plan**: `docs_internal/plan/fase14-entity-cache.md` · **Keputusan**: opt-in eksplisit,
 list skip, v1+v2 invalidasi, Fase terpisah (bukan 13.6).
 
 - [x] 14.1 Spec — `CacheSpec{ttl}` di `pkg/spec/entity.go` + validasi (parse duration, 1s–1h) + JSON Schema (`CacheSpec` shared def). ✅ 2026-08-29
@@ -1117,7 +1137,7 @@ sampai itu, validasi pakai `--schema schemas`.
 
 ### 14.b Chrome Composition Spec (2026-08-29)
 
-> Plan: `docs/plan/chrome-composition-spec.md` · changelog `2026-08-29-007`
+> Plan: `docs_internal/plan/chrome-composition-spec.md` · changelog `2026-08-29-007`
 
 - [x] `App.spec.chrome` — sub-spec `brand`/`nav`/`auth`/`footer`/`breadcrumbs`/`theme_switcher` (default `auto`), ortogonal terhadap `app_renderer` & `access`; validasi enum di `ValidateAppSpec`; schemas regenerated. ✅ 2026-08-29
 - [x] Resolusi default di backend meta — `internal/ui.resolveChrome` → `bundle.app.chrome` (no-nav: nav=none, auth=none; sidebar/topnav: nav=menu, auth=links). ✅ 2026-08-29

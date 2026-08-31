@@ -250,18 +250,18 @@ Setiap perubahan code wajib mengikuti alur kerja berikut. Urutan ini **tidak bis
 
 ### 1. Plan Before Code
 
-Sebelum menulis implementasi dari todo, **buat rencana teknis terlebih dahulu** di `docs/plan/`. Rencana harus mencakup:
+Sebelum menulis implementasi dari todo, **buat rencana teknis terlebih dahulu** di `docs_internal/plan/`. Rencana harus mencakup:
 
 - File apa saja yang akan dibuat/diubah
 - Dependensi antar task
 - Estimasi level of effort (small / medium / large)
 - Referensi ke spec document yang relevan di `docs/spec/`
 
-Rencana bisa berupa file Markdown baru (misal `docs/plan/entity-engine-plan.md`) atau section di file plan yang sudah ada.
+Rencana bisa berupa file Markdown baru (misal `docs_internal/plan/entity-engine-plan.md`) atau section di file plan yang sudah ada.
 
 ### 2. Changelog
 
-Setiap kali ada perubahan code, **catat di `docs/changelog/`**:
+Setiap kali ada perubahan code, **catat di `docs_internal/changelog/`**:
 
 - Buat file dengan format `YYYY-MM-DD-NNN-<deskripsi-singkat>.md`  
   — `NNN` adalah 3-digit sequence number (001, 002, …) yang **reset setiap hari**  
@@ -272,7 +272,7 @@ Setiap kali ada perubahan code, **catat di `docs/changelog/`**:
 
 ### 3. Todo Management
 
-File utama: `docs/plan/todo.md`.
+File utama: `docs_internal/plan/todo.md`.
 
 | Aksi                         | Aturan                                                    |
 | ---------------------------- | --------------------------------------------------------- |
@@ -284,7 +284,7 @@ File utama: `docs/plan/todo.md`.
 
 ### 4. Code → Plan Traceability
 
-Setiap perubahan code **harus mereferensi `docs/plan/`**:
+Setiap perubahan code **harus mereferensi `docs_internal/plan/`**:
 
 - Commit message menyebutkan plan file terkait
 - PR description (jika ada) mencantumkan link ke plan

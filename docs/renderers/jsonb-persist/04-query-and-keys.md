@@ -71,7 +71,7 @@ dan mengeksposnya lewat `App.Idempotency()` — TTL-nya nyata dipakai, bukan
 field yang dihitung lalu dibuang. Resolusi TTL dari manifest `kind: Config`
 (`core.idempotency_retention` sebagai key config, bukan field Go) menunggu
 runtime Config-kind (belum ada registry-nya — lihat Fase 7.2 di
-`docs/plan/todo.md`); sampai saat itu, `Config.IdempotencyTTL` adalah seam
+`docs_internal/plan/todo.md`); sampai saat itu, `Config.IdempotencyTTL` adalah seam
 konfigurasi yang setara, sama seperti `JWTSecret` dkk.
 
 **Jalur HTTP sudah aktif (Fase 2.7, 2026-08-17).** Store di-wire ke router

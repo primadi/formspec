@@ -133,7 +133,7 @@ entries, master data + panel detail. Enforcement permission tetap **per-blok**
 menautkan seleksi, tidak melonggarkan gating.
 
 > **Open — `binds`/`layout.mode: split`.** Master-detail belum didukung skema
-> `PageSpec`/`BlockRef` maupun renderer — ditracking di `docs/plan/todo.md`.
+> `PageSpec`/`BlockRef` maupun renderer — ditracking di `docs_internal/plan/todo.md`.
 > Saat ini master-detail dilakukan via `param` + route (`:id`) biasa.
 
 ## 2. `data-entry` (`kind: Form`)
@@ -367,7 +367,7 @@ sebagai kolom.
 
 > **Open — zero-config derivasi kolom.** Derivas kolom otomatis dari state
 > machine/`group_by` (menghilangkan kewajiban `status_field`) belum
-> diimplementasikan — ditracking di `docs/plan/kanban-full-implementation.md`.
+> diimplementasikan — ditracking di `docs_internal/plan/kanban-full-implementation.md`.
 
 **Derivasi kolom:**
 
@@ -394,12 +394,12 @@ kolom, tak diulang di kartu). Override lewat `card_template`
 
 > **Open — `drag_guard`.** Pre-check UX sebelum drop (FormSpecExpr,
 > [`08-formspec-expr.md`](08-formspec-expr.md)) belum diimplementasikan — ditracking di
-> `docs/plan/kanban-full-implementation.md`. Validasi server (guard state
+> `docs_internal/plan/kanban-full-implementation.md`. Validasi server (guard state
 > machine) tetap otoritas dan sudah berjalan.
 
 > **Open — WIP limit.** `wip_limit` per kolom (batas jumlah kartu, soft
 > pre-check UX) belum ada di skema `columns` — ditracking di
-> `docs/plan/kanban-full-implementation.md`. Pengganti saat ini:
+> `docs_internal/plan/kanban-full-implementation.md`. Pengganti saat ini:
 > `max_cards_per_column` (integer, level board) di `KanbanSpec`.
 
 **Realtime:** `realtime: true` = subscribe event `updated`/`created`, kartu
@@ -658,7 +658,7 @@ katalog widget derived dari permission, mekanisme customizable — lihat
 
 > **Open — rendering widget.** Renderer widget (`stat`/`chart`/`table`/`list`)
 > dan kanvas dashboard belum sepenuhnya diimplementasikan — skema kontrak di
-> atas sudah final; eksekusi ditracking di `docs/plan/todo.md` §5.7.
+> atas sudah final; eksekusi ditracking di `docs_internal/plan/todo.md` §5.7.
 
 ## 8. `report` dan `print`
 
@@ -849,7 +849,7 @@ footprint backend yang ia konsumsi.
 
 > **Open — `mode: custom`/`binds`.** Custom Page belum didukung skema
 > `PageSpec` maupun renderer (Page saat ini hanya `blocks`/`tabs`) — ditracking
-> di `docs/plan/todo.md`. Kontrak di bawah adalah target desain.
+> di `docs_internal/plan/todo.md`. Kontrak di bawah adalah target desain.
 
 ```yaml
 apiVersion: formspec.dev/v1

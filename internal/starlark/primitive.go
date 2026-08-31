@@ -58,6 +58,13 @@ type (
 	Config interface {
 		Get(ctx context.Context, key string) (any, error)
 	}
+	// Logger serves the ctx.log primitive when it is routed through the
+	// datastore resolver (plan fase D): a centralized log backend (e.g.
+	// Redis) for multi-instance deployments. The builtin ctx.log (in-memory
+	// entries returned via ScriptResult.LogEntries) remains the fallback.
+	Logger interface {
+		Log(ctx context.Context, level, event string, meta map[string]any) error
+	}
 )
 
 // ctxKey is the thread-local key under which the Go context.Context for the
@@ -129,8 +136,11 @@ func (p *primitiveHandle) Attr(name string) (starlark.Value, error) {
 				return nil, err
 			}
 			// Resolve immediately so the chain ctx.db.named("x").query(...)
-			// works: .named() returns the resolved connection runner.
-			conn, err := p.resolver(p.primType, dsName)
+			// works: .named() returns the resolved connection runner. The
+			// "named:" prefix routes the request to the named-logical-
+			// primitive path in the resolver wrapper (plan fase C) — the
+			// alias gate (checkDatastoreAlias) fires there.
+			conn, err := p.resolver(p.primType, namedPrefix+dsName)
 			if err != nil {
 				return nil, fmt.Errorf("ctx.%s: %w", p.primType, err)
 			}
@@ -221,6 +231,12 @@ func (r *primitiveRunner) Attr(name string) (starlark.Value, error) {
 		return r.builtinUpload(), nil
 	case "download":
 		return r.builtinDownload(), nil
+	case "info":
+		return r.builtinLog("info"), nil
+	case "warn":
+		return r.builtinLog("warn"), nil
+	case "error":
+		return r.builtinLog("error"), nil
 	default:
 		return nil, starlark.NoSuchAttrError(fmt.Sprintf("%s connection has no .%s", r.primType, name))
 	}
@@ -228,7 +244,8 @@ func (r *primitiveRunner) Attr(name string) (starlark.Value, error) {
 
 func (r *primitiveRunner) AttrNames() []string {
 	return []string{"query", "get", "set", "delete", "acquire", "release",
-		"enqueue", "dequeue", "publish", "subscribe", "upload", "download"}
+		"enqueue", "dequeue", "publish", "subscribe", "upload", "download",
+		"info", "warn", "error"}
 }
 
 func (r *primitiveRunner) builtinQuery() *starlark.Builtin {
@@ -273,6 +290,20 @@ func (r *primitiveRunner) builtinGet() *starlark.Builtin {
 		if err := starlark.UnpackArgs("get", args, kwargs, "key", &key); err != nil {
 			return nil, err
 		}
+		// Fase D: the config primitive accepts both KVGetter (KV-backed
+		// config store) and the Config capability (SQL-backed store).
+		if r.primType == "config" {
+			if cfg, ok := r.conn.(Config); ok {
+				val, err := cfg.Get(threadContext(thread), key)
+				if err != nil {
+					return nil, fmt.Errorf("ctx.%s.get: %w", r.primType, err)
+				}
+				if val == nil {
+					return starlark.None, nil
+				}
+				return toStarlark(val)
+			}
+		}
 		g, ok := r.conn.(KVGetter)
 		if !ok {
 			return starlark.None, fmt.Errorf("ctx.%s.get: not yet implemented for this backend (connection=%q)", r.primType, r.name)
@@ -281,7 +312,39 @@ func (r *primitiveRunner) builtinGet() *starlark.Builtin {
 		if err != nil {
 			return nil, fmt.Errorf("ctx.%s.get: %w", r.primType, err)
 		}
+		if val == nil {
+			return starlark.None, nil
+		}
 		return toStarlark(val)
+	})
+}
+
+// builtinLog serves ctx.log.info/warn/error when the log primitive is
+// routed through the datastore resolver (plan fase D) — entries go to the
+// centralized backend instead of the in-memory logAPI.
+func (r *primitiveRunner) builtinLog(level string) *starlark.Builtin {
+	return starlark.NewBuiltin("log."+level, func(
+		thread *starlark.Thread,
+		fn *starlark.Builtin,
+		args starlark.Tuple,
+		kwargs []starlark.Tuple,
+	) (starlark.Value, error) {
+		var event string
+		var meta starlark.Value = starlark.None
+		if err := starlark.UnpackArgs("log", args, kwargs,
+			"event", &event,
+			"meta?", &meta,
+		); err != nil {
+			return nil, err
+		}
+		lg, ok := r.conn.(Logger)
+		if !ok {
+			return starlark.None, fmt.Errorf("ctx.%s.%s: not yet implemented for this backend (connection=%q)", r.primType, level, r.name)
+		}
+		if err := lg.Log(threadContext(thread), level, event, starlarkValueToMap(meta)); err != nil {
+			return nil, fmt.Errorf("ctx.%s.%s: %w", r.primType, level, err)
+		}
+		return starlark.None, nil
 	})
 }
 

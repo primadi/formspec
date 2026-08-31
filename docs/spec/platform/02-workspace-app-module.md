@@ -65,9 +65,13 @@ spec:
     - module: billing
       version: ">=1.0 <2.0"
   datastore:
-    default # opsional — nama kind: Datastore untuk ctx.db()
-    # module ini; default kalau tidak diisi. Lihat
+    default # opsional (legacy) — nama kind: Datastore untuk ctx.db()
+    # module ini; setara datastores: {db: <name>}. Lihat
     # ../backend/01-core-basic.md §3 dan 06-datastore.md §1.1
+  datastores:
+    db: pg-main # opsional — seleksi per primitive (06-datastore.md §1.1);
+    # key "primitive" = default service, "primitive/alias" = named
+    # logical primitive (ctx.db.named("alias"))
   config:
     fiscal_year_start: "04-01" # module-specific: GL mulai tahun fiskal April
     coa_structure: "4-2-2-2" # module-specific: struktur kode akun 4 segmen
@@ -307,12 +311,13 @@ sederhana, mis. cek data referensi). Framework tidak melarang entity read
 lintas-module, tapi konvensi mengarahkan ke pola lebih longgar untuk apa pun
 yang menyangkut _behavior_, bukan sekadar baca.
 
-**Kalau kedua Module beda `spec.datastore` (§2), preferensi di atas jadi
-keharusan (normatif):** _entity read langsung_ dan _action/service call_
-lewat `ctx.db` sama-sama **tidak tersedia** lintas-Datastore — satu-satunya
-jalur yang tersisa adalah **event subscribe**
+**Kalau kedua Module resolve ke service fisik berbeda (`spec.datastore` /
+`spec.datastores`, §2), preferensi di atas jadi keharusan (normatif):**
+_entity read langsung_ dan _action/service call_ lewat `ctx.db` sama-sama
+**tidak tersedia** lintas-Datastore — satu-satunya jalur yang tersisa adalah
+**event subscribe**
 ([`../backend/01-core-basic.md`](../backend/01-core-basic.md) §3,
-[`06-datastore.md`](06-datastore.md) §1.1). Beda Datastore = beda
+[`06-datastore.md`](06-datastore.md) §1.1). Beda service fisik = beda
 deployment boundary; tidak ada tingkat consent yang membuka akses langsung
 ke sana.
 

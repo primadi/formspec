@@ -14,6 +14,7 @@ package starlark
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"go.starlark.net/starlark"
@@ -50,8 +51,12 @@ type CtxAPI struct {
 	// (todo 2.9.4). ctx.* primitives resolve against this module's bound
 	// datastore (platform/06-datastore.md §1.1) — a script can never reach
 	// another module's datastore, even via .named().
-	module     string
-	dsResolver func(primitiveType, name, module string) (interface{}, error)
+	module         string
+	dsResolver     func(primitiveType, name, module string) (interface{}, error)
+	dsResolverImpl any // underlying resolver (may implement ResolveNamed — fase C)
+	namedResolver  interface {
+		ResolveNamed(primitiveType, alias, module string) (interface{}, error)
+	}
 
 	// Primitive handles — callable starlark values with .named() support.
 	// Each is lazily initialized via the getter methods.
@@ -62,6 +67,12 @@ type CtxAPI struct {
 	pubsub  *primitiveHandle
 	storage *primitiveHandle
 	kvstore *primitiveHandle
+
+	// configPrim/logPrim are the datastore-resolver-backed overrides for
+	// ctx.config/ctx.log (plan fase D). nil = builtin path (Config store /
+	// in-memory log entries).
+	configPrim *primitiveHandle
+	logPrim    *primitiveHandle
 }
 
 var _ starlark.Value = (*CtxAPI)(nil)
@@ -108,6 +119,50 @@ func (c *CtxAPI) checkPrimitive(name string) error {
 	return fmt.Errorf("USES_VIOLATION: ctx.%s used but not declared in uses.primitives — add %q to the action's uses.primitives", name, name)
 }
 
+// checkDatastoreAccess enforces the uses.datastores declaration (plan
+// docs/plan/infra-registry-3-level.md fase B): when the action declares a
+// datastores map, every ctx.<primitive> access must be covered by a key
+// "primitive" or a named key "primitive/alias" (fase C). Actions without a
+// datastores declaration are unrestricted (the primitives list remains the
+// coarse gate). Returns DATASTORE_ACCESS_DENIED on violation — the error
+// code from platform/06-datastore.md §6.
+func (c *CtxAPI) checkDatastoreAccess(primitive string) error {
+	if c.uses == nil || len(c.uses.Datastores) == 0 {
+		return nil
+	}
+	if _, ok := c.uses.Datastores[primitive]; ok {
+		return nil
+	}
+	// A named key ("db/analytics") also grants the base primitive — the
+	// alias gate (checkDatastoreAlias) enforces the exact alias at
+	// resolution time.
+	for key := range c.uses.Datastores {
+		if base, _, found := strings.Cut(key, "/"); found && base == primitive {
+			return nil
+		}
+	}
+	return fmt.Errorf("DATASTORE_ACCESS_DENIED: ctx.%s used but not declared in uses.datastores — add %q to the action's uses.datastores (platform/06-datastore.md §6)", primitive, primitive)
+}
+
+// namedPrefix marks a .named(alias) resolution request flowing through the
+// same 2-arg resolver signature (plan fase C): ctx.db.named("analytics")
+// resolves with name "named:analytics".
+const namedPrefix = "named:"
+
+// checkDatastoreAlias enforces the uses.datastores declaration for named
+// logical primitives (plan fase C): ctx.db.named("analytics") requires the
+// key "db/analytics" in the action's uses.datastores. Actions without a
+// datastores declaration are unrestricted.
+func (c *CtxAPI) checkDatastoreAlias(primitive, alias string) error {
+	if c.uses == nil || len(c.uses.Datastores) == 0 {
+		return nil
+	}
+	if _, ok := c.uses.Datastores[primitive+"/"+alias]; ok {
+		return nil
+	}
+	return fmt.Errorf("DATASTORE_ACCESS_DENIED: ctx.%s.named(%q) used but %q is not declared in uses.datastores (platform/06-datastore.md §6)", primitive, alias, primitive+"/"+alias)
+}
+
 // SetModule records the module that owns the currently-executing script
 // (todo 2.9.4). Primitive resolution reads it at call time, so ctx.db()
 // without arguments resolves to the module's bound datastore
@@ -122,11 +177,23 @@ func (c *CtxAPI) SetModule(module string) {
 // executing script (set via SetModule) — the registry uses it to enforce
 // module-scoped datastore binding (todo 2.9.4). This is called by the
 // runtime after boot to wire the datastore registry into ctx.*.
+//
+// A name with the "named:" prefix (sent by .named(alias), plan fase C) is
+// routed to the registry's named-logical-primitive resolution
+// (ResolveNamed) with the alias gate (checkDatastoreAlias); plain names go
+// through the module-scoped chain (Resolve).
 func (c *CtxAPI) SetDatastoreResolver(resolver func(primitiveType, name, module string) (interface{}, error)) {
 	c.dsResolver = resolver
+	c.dsResolverImpl = resolver
 	// Wrap the 3-arg resolver into the handle's 2-arg signature; the module
 	// is read from c at resolution time (handles resolve lazily per call).
 	wrapped := func(primitiveType, name string) (interface{}, error) {
+		if alias, ok := strings.CutPrefix(name, namedPrefix); ok {
+			if err := c.checkDatastoreAlias(primitiveType, alias); err != nil {
+				return nil, err
+			}
+			return c.resolveNamed(primitiveType, alias)
+		}
 		return resolver(primitiveType, name, c.module)
 	}
 	c.db = newPrimitiveHandle("db", wrapped)
@@ -136,6 +203,37 @@ func (c *CtxAPI) SetDatastoreResolver(resolver func(primitiveType, name, module 
 	c.pubsub = newPrimitiveHandle("pubsub", wrapped)
 	c.storage = newPrimitiveHandle("storage", wrapped)
 	c.kvstore = newPrimitiveHandle("kvstore", wrapped)
+	// Fase D: config/log become routable — the builtin ctx.config/ctx.log
+	// remain the fallback when no service serves them.
+	c.configPrim = newPrimitiveHandle("config", wrapped)
+	c.logPrim = newPrimitiveHandle("log", wrapped)
+}
+
+// resolveNamed dispatches a named logical primitive to the underlying
+// resolver's named path. The registry exposes ResolveNamed; other resolver
+// implementations (tests, sidecar) only implement the plain path — for
+// those, the named request is forwarded verbatim so the backend can decide.
+func (c *CtxAPI) resolveNamed(primitiveType, alias string) (interface{}, error) {
+	type namedResolver interface {
+		ResolveNamed(primitiveType, alias, module string) (interface{}, error)
+	}
+	if c.namedResolver != nil {
+		return c.namedResolver.ResolveNamed(primitiveType, alias, c.module)
+	}
+	if nr, ok := c.dsResolverImpl.(namedResolver); ok {
+		return nr.ResolveNamed(primitiveType, alias, c.module)
+	}
+	return c.dsResolver(primitiveType, namedPrefix+alias, c.module)
+}
+
+// SetDatastoreResolverNamed wires a dedicated named-logical-primitive
+// resolver (plan fase C). When set, ctx.<primitive>.named(alias) resolves
+// through it instead of probing the plain resolver for a ResolveNamed
+// method. The alias gate (checkDatastoreAlias) still applies.
+func (c *CtxAPI) SetDatastoreResolverNamed(nr interface {
+	ResolveNamed(primitiveType, alias, module string) (interface{}, error)
+}) {
+	c.namedResolver = nr
 }
 
 // ─── starlark.Value interface ───
@@ -165,10 +263,32 @@ func (c *CtxAPI) Attr(name string) (starlark.Value, error) {
 	case "today":
 		return c.builtinToday(), nil
 	case "log":
+		// Fase D: when a service serves `log`, route through the resolver
+		// (centralized sink); otherwise the builtin in-memory logAPI. A nil
+		// connection or resolve error falls back to the builtin. The resolved
+		// runner is returned directly — it exposes .info/.warn/.error (the
+		// handle only exposes .named).
+		if c.logPrim != nil {
+			if runner, err := c.logPrim.CallInternal(nil, nil, nil); err == nil && runner != nil {
+				if pr, ok := runner.(*primitiveRunner); ok && pr.conn != nil {
+					return runner, nil
+				}
+			}
+		}
 		return c.Log, nil
 	case "next_key":
 		return c.builtinNextKey(), nil
 	case "config":
+		// Fase D: when a service serves `config`, route through the resolver
+		// (centralized store); otherwise the builtin Config store. The
+		// resolved runner is returned directly — it exposes .get.
+		if c.configPrim != nil {
+			if runner, err := c.configPrim.CallInternal(nil, nil, nil); err == nil && runner != nil {
+				if pr, ok := runner.(*primitiveRunner); ok && pr.conn != nil {
+					return runner, nil
+				}
+			}
+		}
 		return c.Config, nil
 	case "job":
 		if c.Job == nil {
@@ -179,12 +299,18 @@ func (c *CtxAPI) Attr(name string) (starlark.Value, error) {
 		if err := c.checkPrimitive("db"); err != nil {
 			return nil, err
 		}
+		if err := c.checkDatastoreAccess("db"); err != nil {
+			return nil, err
+		}
 		if c.db == nil {
 			return starlark.None, fmt.Errorf("ctx.db: datastore resolver not configured")
 		}
 		return c.db, nil
 	case "cache":
 		if err := c.checkPrimitive("cache"); err != nil {
+			return nil, err
+		}
+		if err := c.checkDatastoreAccess("cache"); err != nil {
 			return nil, err
 		}
 		if c.cache == nil {
@@ -195,12 +321,18 @@ func (c *CtxAPI) Attr(name string) (starlark.Value, error) {
 		if err := c.checkPrimitive("lock"); err != nil {
 			return nil, err
 		}
+		if err := c.checkDatastoreAccess("lock"); err != nil {
+			return nil, err
+		}
 		if c.lock == nil {
 			return starlark.None, fmt.Errorf("ctx.lock: datastore resolver not configured")
 		}
 		return c.lock, nil
 	case "queue":
 		if err := c.checkPrimitive("queue"); err != nil {
+			return nil, err
+		}
+		if err := c.checkDatastoreAccess("queue"); err != nil {
 			return nil, err
 		}
 		if c.queue == nil {
@@ -211,6 +343,9 @@ func (c *CtxAPI) Attr(name string) (starlark.Value, error) {
 		if err := c.checkPrimitive("pubsub"); err != nil {
 			return nil, err
 		}
+		if err := c.checkDatastoreAccess("pubsub"); err != nil {
+			return nil, err
+		}
 		if c.pubsub == nil {
 			return starlark.None, fmt.Errorf("ctx.pubsub: datastore resolver not configured")
 		}
@@ -219,12 +354,18 @@ func (c *CtxAPI) Attr(name string) (starlark.Value, error) {
 		if err := c.checkPrimitive("storage"); err != nil {
 			return nil, err
 		}
+		if err := c.checkDatastoreAccess("storage"); err != nil {
+			return nil, err
+		}
 		if c.storage == nil {
 			return starlark.None, fmt.Errorf("ctx.storage: datastore resolver not configured")
 		}
 		return c.storage, nil
 	case "kvstore":
 		if err := c.checkPrimitive("kvstore"); err != nil {
+			return nil, err
+		}
+		if err := c.checkDatastoreAccess("kvstore"); err != nil {
 			return nil, err
 		}
 		if c.kvstore == nil {

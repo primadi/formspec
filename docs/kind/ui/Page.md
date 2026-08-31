@@ -90,7 +90,7 @@ spec:
   per-blok, komposisi tidak melonggarkan gating.
 - **`layout.mode: split`** (master-detail / `binds`) masih **Open** — belum
   didukung skema `PageSpec`/`BlockRef` maupun renderer (tracking di
-  `docs/plan/todo.md`). Saat ini master-detail via `param` + route `:id`.
+  `docs_internal/plan/todo.md`). Saat ini master-detail via `param` + route `:id`.
 - **`mode: custom`** (custom page, `binds` footprint) juga **Open** — Page saat
   ini hanya `blocks`/`tabs`. Kontrak di `docs/spec/frontend/06-page-kinds.md`
   §13 adalah target desain.

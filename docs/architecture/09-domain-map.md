@@ -39,7 +39,7 @@ setup DNS di Cloudflare serta deployment.
 | Referensi                                 | Lokasi                                                                              |
 | ----------------------------------------- | ----------------------------------------------------------------------------------- |
 | `formspec.dev/schemas` (JSON Schema)      | `docs/cli-tools/02-formspec-cli.md` §2                                              |
-| `registry.formspec.dev` (module registry) | `docs/cli-tools/02-formspec-cli.md` §9, `docs/plan/rename-formspec.md`              |
+| `registry.formspec.dev` (module registry) | `docs/cli-tools/02-formspec-cli.md` §9, `docs_internal/plan/rename-formspec.md`              |
 | `formspec-remote-mcp` (hosted MCP)        | `docs/ai/04-formspec-remote-mcp.md`                                                 |
 | `control.{region}.formspec.dev`           | `docs/architecture/01-architecture-overview.md`, `docs/runtimes/01-formspec-ctl.md` |
 | `formspec/ops.{region}.formspec.dev`      | `docs/architecture/02-admin-surfaces.md`                                            |
@@ -198,4 +198,4 @@ curl -I https://docs.formspec.dev                    # → 200
 - Landing: `site/` (Vite + React). Docs: `docs-site/` (VitePress, symlink
   `docs-site/docs → ../docs`). Schema: `scripts/publish-schemas.sh`.
 - Registry/MCP/control plane **deferred** ke cloud phase — lihat
-  `docs/plan/todo.md` "Deferred (Cloud Phase)".
+  `docs_internal/plan/todo.md` "Deferred (Cloud Phase)".

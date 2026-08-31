@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/primadi/formspec/internal/starlark"
 	"github.com/primadi/formspec/pkg/spec"
@@ -101,7 +100,7 @@ func Quorum(step spec.WorkflowStep, eligibleCount int) int {
 // stepIdx is the 0-based index of the step within the workflow's steps.
 // escalatedRoles are the reassign_roles granted by escalation for this step
 // (empty when the step has not been escalated).
-func (e *Engine) CanApprove(wf *spec.WorkflowSpec, stepIdx int, userID string, userRoles []string, requesterID string, escalatedRoles []string, resourceData map[string]any) (bool, string) {
+func (e *Engine) CanApprove(wf *spec.WorkflowSpec, stepIdx int, userID string, userRoles []string, requesterID string, escalatedRoles []string, _ map[string]any) (bool, string) {
 	if wf == nil || stepIdx < 0 || stepIdx >= len(wf.Steps) {
 		return false, "workflow step out of range"
 	}
@@ -229,15 +228,6 @@ func (a *Approval) Advance() {
 	if a.ActiveStep >= len(a.Approvals) {
 		// No more steps recorded — the caller tracks step count separately.
 	}
-}
-
-// splitEntityRef splits "module.entity" into module and entity.
-func splitEntityRef(ref string) (module, entity string, ok bool) {
-	parts := strings.Split(ref, ".")
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", false
-	}
-	return parts[0], parts[1], true
 }
 
 // ToRow converts an Approval into a persistence row. The row's ID/tenant/

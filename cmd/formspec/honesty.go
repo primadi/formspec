@@ -513,7 +513,7 @@ func walkExpr(e syntax.Expr, visit func(syntax.Expr)) {
 
 // applyHonestyFix removes declared-but-unused entries from the manifest YAML
 // files. It NEVER adds declarations (consent expansion stays manual).
-func applyHonestyFix(manifests []manifest.RawManifest, issues []honestyIssue) (removed int) {
+func applyHonestyFix(_ []manifest.RawManifest, issues []honestyIssue) (removed int) {
 	bySource := map[string][]honestyIssue{}
 	for _, iss := range issues {
 		if iss.FixKind == "" {

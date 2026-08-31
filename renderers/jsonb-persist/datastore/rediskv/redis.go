@@ -33,15 +33,27 @@ func New(addr, namespace string) (*KV, error) {
 	if namespace == "" {
 		namespace = "formspec"
 	}
-	client := redis.NewClient(&redis.Options{Addr: addr})
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := client.Ping(ctx).Err(); err != nil {
-		return nil, fmt.Errorf("redis connect %s: %w", addr, err)
+	client, err := dialRedis(addr)
+	if err != nil {
+		return nil, err
 	}
 	kv := &KV{client: client, namespace: namespace}
 	go kv.subscribeInvalidate()
 	return kv, nil
+}
+
+// dialRedis opens a Redis client at addr and verifies connectivity with a
+// short ping — shared by every backend in this package (KV, Lock, Queue,
+// PubSub) so a bad address fails loudly at construction time.
+func dialRedis(addr string) (*redis.Client, error) {
+	client := redis.NewClient(&redis.Options{Addr: addr})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := client.Ping(ctx).Err(); err != nil {
+		_ = client.Close()
+		return nil, fmt.Errorf("redis connect %s: %w", addr, err)
+	}
+	return client, nil
 }
 
 // subscribeInvalidate listens on the invalidation channel and deletes

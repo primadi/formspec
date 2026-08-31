@@ -23,23 +23,23 @@ def execute(resource, params, ctx):
     return ok({ "status": "done" })
 ```
 
-| Argumen | Isi |
-|---|---|
-| `resource` | Record yang menjadi sasaran action — objek Entity dengan API di §2. Untuk action `type: service` yang tidak terikat record, `resource` bisa `None`. |
-| `params` | Payload masukan action (body request/argumen pemanggil), sudah lolos validasi field-level (L1–L3, [`05-field-types.md`](05-field-types.md) §3) sebelum entrypoint dipanggil. |
-| `ctx` | Context runtime — primitive `ctx.*` (§5), identitas (`ctx.user`, `ctx.tenant`), utility (`ctx.now()`, `ctx.next_key()`), config & secret. |
+| Argumen    | Isi                                                                                                                                                                          |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `resource` | Record yang menjadi sasaran action — objek Entity dengan API di §2. Untuk action `type: service` yang tidak terikat record, `resource` bisa `None`.                          |
+| `params`   | Payload masukan action (body request/argumen pemanggil), sudah lolos validasi field-level (L1–L3, [`05-field-types.md`](05-field-types.md) §3) sebelum entrypoint dipanggil. |
+| `ctx`      | Context runtime — primitive `ctx.*` (§5), identitas (`ctx.user`, `ctx.tenant`), utility (`ctx.now()`, `ctx.next_key()`), config & secret.                                    |
 
 ## 2. Objek `resource`
 
 `resource` adalah handle ke satu record Entity, bukan dict mentah:
 
-| API | Arti |
-|---|---|
-| `resource.id` | Primary key (UUID v7, [`01-core-basic.md`](01-core-basic.md) §2). |
-| `resource.field(name)` | Membaca nilai satu field. |
-| `resource.set(field, value)` | Menyetel nilai field di memori — belum dipersist sampai `save()`. |
-| `resource.save()` | Mempersist perubahan **dalam transaksi action** ([`01-core-basic.md`](01-core-basic.md) §3), memicu guard lifecycle dan penulisan outbox event yang berlaku ([`01-core-basic.md`](01-core-basic.md) §7). |
-| `resource.new()` | Membuat handle record **baru** (belum tersimpan) untuk entity yang sama; isi lewat `set(...)` lalu `save()`. |
+| API                          | Arti                                                                                                                                                                                                     |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `resource.id`                | Primary key (UUID v7, [`01-core-basic.md`](01-core-basic.md) §2).                                                                                                                                        |
+| `resource.field(name)`       | Membaca nilai satu field.                                                                                                                                                                                |
+| `resource.set(field, value)` | Menyetel nilai field di memori — belum dipersist sampai `save()`.                                                                                                                                        |
+| `resource.save()`            | Mempersist perubahan **dalam transaksi action** ([`01-core-basic.md`](01-core-basic.md) §3), memicu guard lifecycle dan penulisan outbox event yang berlaku ([`01-core-basic.md`](01-core-basic.md) §7). |
+| `resource.new()`             | Membuat handle record **baru** (belum tersimpan) untuk entity yang sama; isi lewat `set(...)` lalu `save()`.                                                                                             |
 
 `save()` bukan sekadar UPDATE mentah — ia melewati jalur yang sama dengan mutasi
 lewat API (guard, denormalisasi, event), sehingga script tidak bisa menembus
@@ -73,9 +73,9 @@ memakai notasi qualifier `{module}/{entity}` ([`02-core-extended.md`](02-core-ex
 
 Memanggil atau memuat record entity **lain** dari dalam script:
 
-| API | Arti |
-|---|---|
-| `<resource>.load(id)` | Memuat satu record entity lain berdasarkan id, mengembalikan handle §2. |
+| API                               | Arti                                                                                         |
+| --------------------------------- | -------------------------------------------------------------------------------------------- |
+| `<resource>.load(id)`             | Memuat satu record entity lain berdasarkan id, mengembalikan handle §2.                      |
 | `<resource>.call(action, params)` | Memanggil action bernama pada entity lain (mis. membuat journal entry dari handler invoice). |
 
 Keduanya adalah akses lintas-resource dan **wajib** dideklarasikan di `uses`
@@ -87,20 +87,28 @@ di-dispatch langsung tanpa melewati jaringan ([`01-core-basic.md`](01-core-basic
 
 ## 5. Logging & Primitive `ctx.*`
 
-Katalog lengkap `ctx.*` (db/cache/lock/queue/pubsub/storage/kvstore, identitas,
-utility) hidup di [`../../runtimes/02-formspec-resource.md`](../../runtimes/02-formspec-resource.md)
-§4 dan [`04-persist-backend.md`](04-persist-backend.md) §5. Yang relevan untuk
-penulisan handler:
+Katalog lengkap `ctx.*` — **closed set 9 primitive infrastruktur** (`db`,
+`cache`, `lock`, `queue`, `pubsub`, `storage`, `kvstore`, `config`, `log`) —
+hidup di [`../platform/06-datastore.md`](../platform/06-datastore.md) §2
+(registrasi service, driver×serves, chain resolusi) dan
+[`../../runtimes/02-formspec-resource.md`](../../runtimes/02-formspec-resource.md)
+§4. Yang relevan untuk penulisan handler:
 
 - **Logging** — `ctx.log.info(...)`, `ctx.log.warn(...)`, `ctx.log.error(...)`
   meng-emit log terstruktur ([`../platform/09-observability.md`](../platform/09-observability.md)
   §2). Log **tidak pernah** boleh memuat nilai secret ([`02-core-extended.md`](02-core-extended.md)
   §18) atau PII mentah ([`../platform/09-observability.md`](../platform/09-observability.md)
-  §2.2).
+  §2.2). Backend log mengikuti service `serves: [log]` yang dipilih lewat
+  App Registry (default: in-memory per-proses).
 - **Config & secret** — `ctx.config.get("key")` untuk key non-secret
-  ([`01-core-basic.md`](01-core-basic.md) §10); `ctx.secrets` untuk key
-  `secret: true`, tunduk `uses: {secrets: [...]}` dan selalu di-audit
-  ([`02-core-extended.md`](02-core-extended.md) §18).
+  ([`01-core-basic.md`](01-core-basic.md) §10); backend config mengikuti
+  service `serves: [config]` (default: Config manifest lokal). `ctx.secrets`
+  untuk key `secret: true`, tunduk `uses: {secrets: [...]}` dan selalu
+  di-audit ([`02-core-extended.md`](02-core-extended.md) §18).
+- **Named primitive** — `ctx.db.named("analytics")` mengakses named logical
+  primitive yang teregistrasi di App Registry; wajib dideklarasikan sebagai
+  key `db/analytics` di `uses.datastores`
+  ([`../platform/06-datastore.md`](../platform/06-datastore.md) §1.2).
 - **Async job** — `ctx.job.progress(pct, message)` melaporkan progres dari
   handler async yang di-track ([`02-core-extended.md`](02-core-extended.md) §13).
 
@@ -109,9 +117,9 @@ penulisan handler:
 Handler mengembalikan salah satu dari dua konstruktor hasil, yang memetakan
 langsung ke envelope respons HTTP ([`01-core-basic.md`](01-core-basic.md) §8.5):
 
-| Return | Hasil |
-|---|---|
-| `ok(data)` | Sukses — `data` menjadi `data` di envelope respons (`2xx`). |
+| Return                 | Hasil                                                                                                                                                                                                                                                                                                  |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ok(data)`             | Sukses — `data` menjadi `data` di envelope respons (`2xx`).                                                                                                                                                                                                                                            |
 | `fail(message, code?)` | Gagal — membatalkan transaksi action dan mengembalikan envelope error `{error: {code, message, details}, meta}`. Tanpa `code`, `fail` memakai kode error generik; `conditions`/error bisnis SEBAIKNYA membawa `code` bernamespace App (bukan `FORMSPEC.*`, [`01-core-basic.md`](01-core-basic.md) §9). |
 
 `fail()` di dalam handler membatalkan seluruh transaksi (§2 `save()` yang sudah
@@ -130,9 +138,8 @@ impl:
   ref: "OrderResource.UpdateDiscountRule"
 ```
 
-Resolusi terjadi dengan **memindai `impl/**/*.go` module** untuk tipe exported
-plus method exported yang cocok dengan nama itu (`OrderResource` +
-`UpdateDiscountRule`). Aturan normatif:
+Resolusi terjadi dengan **memindai `impl/**/\*.go` module** untuk tipe exported
+plus method exported yang cocok dengan nama itu (`OrderResource`+`UpdateDiscountRule`). Aturan normatif:
 
 - **Nama harus unik dalam module.** Bila lebih dari satu `{Type}.{Method}` cocok
   di seluruh `impl/` module, itu **error saat `formspec apply`/build** — bukan

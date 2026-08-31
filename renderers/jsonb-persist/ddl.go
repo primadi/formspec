@@ -451,7 +451,7 @@ type ExtensionDDLInfo struct {
 // GenerateExtensionDDL generates ALTER TABLE DDL for an entity extension.
 // According to Core spec §10-ext, extension adds a separate column ext_{namespace}
 // to the target table, not nested inside the base data column.
-func GenerateExtensionDDL(meta spec.Metadata, entity *spec.EntitySpec, driver DriverType) (*ExtensionDDLInfo, error) {
+func GenerateExtensionDDL(_ spec.Metadata, entity *spec.EntitySpec, driver DriverType) (*ExtensionDDLInfo, error) {
 	if entity.ExtendStorage == nil {
 		return nil, fmt.Errorf("extension: extend_storage is nil")
 	}

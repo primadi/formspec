@@ -102,7 +102,7 @@ spec:
 
 ## Gotchas
 
-- **`root_url` wajib dan unik per workspace** — bebas di dalam workspace: `/`, `/barbershop`, `/app/kafe`, dll. (server me-mount SPA dinamis di setiap `root_url`; lihat `docs/plan/flexible-root-url.md`). Reserved segment pertama tidak boleh: `_ui`, `api`, `_admin`, `assets`, `health`, `login`, `register`, `_ws`, `print`. `version` + `vendor` **optional** — metadata publishing marketplace, tidak dikonsumsi runtime.
+- **`root_url` wajib dan unik per workspace** — bebas di dalam workspace: `/`, `/barbershop`, `/app/kafe`, dll. (server me-mount SPA dinamis di setiap `root_url`; lihat `docs_internal/plan/flexible-root-url.md`). Reserved segment pertama tidak boleh: `_ui`, `api`, `_admin`, `assets`, `health`, `login`, `register`, `_ws`, `print`. `version` + `vendor` **optional** — metadata publishing marketplace, tidak dikonsumsi runtime.
 - **Menu = struktur pohon Group → Leaf** (1–2 level, maks 3). Jangan leaf gundul di level top — renderer menyelipkannya ke group terakhir (merusak navigasi).
 - **`type: module` adopt node hanya di level 1** — splicing `Module.spec.menu` di posisi itu. Adopt node TIDAK boleh punya `label`/`icon`/`view`/`route`/`children`.
 - **Leaf node butuh `module` + persis satu dari `view`/`route`.** `view` resolve kind visual terdaftar (Page, Dashboard, Widget, Report, Wizard, Kanban, Timeline, Print — bukan Form/Table); `route` adalah escape hatch.

@@ -10,7 +10,7 @@ applies_to_kind: [Form]
 min_core_spec_version: "0.2.0"
 metadata:
   version: "1.0"
-  source: docs/spec/frontend/ + docs/plan/fase5-completion.md
+  source: docs/spec/frontend/ + docs_internal/plan/fase5-completion.md
 ---
 
 # Form Layout

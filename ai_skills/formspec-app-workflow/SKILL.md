@@ -275,10 +275,10 @@ Field/validation changes?
 
 **Changelog**:
 
-- File: `docs/changelog/YYYY-MM-DD-NNN-<deskripsi-singkat>.md`
+- File: `docs_internal/changelog/YYYY-MM-DD-NNN-<deskripsi-singkat>.md`
 - `NNN` = 3-digit sequence number, resets per day
 - Content: what changed, which layer(s), why, files affected
-- Example: `docs/changelog/2026-08-10-001-add-discount-field-to-invoice.md`
+- Example: `docs_internal/changelog/2026-08-10-001-add-discount-field-to-invoice.md`
 
 **Consistency check** (run after every iteration):
 

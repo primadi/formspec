@@ -303,7 +303,7 @@ func checkForms(result *checkResult, idx *entityIndex, manifests []manifest.RawM
 // any that are missing from the entity schema. It also validates the grammar
 // (5.11.2): constructs outside the expression subset (§2) are rejected at
 // deploy time, never silently accepted and left to fail at runtime.
-func checkExpr(result *checkResult, source, owner, where, expr string, fields map[string]bool) {
+func checkExpr(result *checkResult, source, _, where, expr string, fields map[string]bool) {
 	if expr == "" {
 		return
 	}

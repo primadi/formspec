@@ -144,6 +144,26 @@ func DefaultDatastorePermission() *DatastorePermission {
 	}
 }
 
+// Allows reports whether the permission ceiling permits an operation of the
+// given kind — "read" or "write" (platform/06-datastore.md §4). A nil
+// receiver means no ceiling (read_write everywhere). Semantics: `read`
+// permits read operations only; `write` implies read; `read_write` permits
+// everything. Rules[] (glob per module.table scope) do not apply to
+// primitive-level operations — they govern scope-based access elsewhere.
+func (p *DatastorePermission) Allows(op string) bool {
+	if p == nil {
+		return true
+	}
+	switch p.Default {
+	case AccessRead:
+		return op == "read"
+	case AccessWrite:
+		return op == "read" || op == "write"
+	default: // AccessReadWrite or unset
+		return true
+	}
+}
+
 // IsValidPrimitiveType returns true if p is a known primitive type.
 func IsValidPrimitiveType(p PrimitiveType) bool {
 	switch p {
@@ -155,21 +175,31 @@ func IsValidPrimitiveType(p PrimitiveType) bool {
 	}
 }
 
+// AllPrimitiveTypes returns every primitive type in the closed set
+// (platform/06-datastore.md §2) — the 9 logical primitives an infra
+// registry can register services for.
+func AllPrimitiveTypes() []PrimitiveType {
+	return []PrimitiveType{
+		PrimitiveDB, PrimitiveCache, PrimitiveLock, PrimitiveQueue,
+		PrimitivePubSub, PrimitiveStorage, PrimitiveConfig, PrimitiveKVStore, PrimitiveLog,
+	}
+}
+
 // DriverServers returns which primitive types a driver is compatible with.
 func (d DatastoreDriver) Serves() []PrimitiveType {
 	switch d {
 	case DatastoreDriverSQLite, DatastoreDriverPostgres:
-		return []PrimitiveType{PrimitiveDB, PrimitiveKVStore}
+		return []PrimitiveType{PrimitiveDB, PrimitiveKVStore, PrimitiveConfig, PrimitiveLog}
 	case DatastoreDriverValkey, DatastoreDriverRedis:
-		return []PrimitiveType{PrimitiveCache, PrimitiveLock, PrimitiveKVStore, PrimitiveQueue, PrimitivePubSub}
+		return []PrimitiveType{PrimitiveCache, PrimitiveLock, PrimitiveKVStore, PrimitiveQueue, PrimitivePubSub, PrimitiveConfig, PrimitiveLog}
 	case DatastoreDriverS3, DatastoreDriverMinio:
 		return []PrimitiveType{PrimitiveStorage}
 	case DatastoreDriverNATS:
 		return []PrimitiveType{PrimitiveQueue, PrimitivePubSub}
 	case DatastoreDriverMemory:
-		return []PrimitiveType{PrimitiveCache, PrimitiveLock, PrimitiveQueue, PrimitivePubSub, PrimitiveKVStore}
+		return []PrimitiveType{PrimitiveCache, PrimitiveLock, PrimitiveQueue, PrimitivePubSub, PrimitiveKVStore, PrimitiveConfig, PrimitiveLog}
 	case DatastoreDriverFS:
-		return []PrimitiveType{PrimitiveStorage}
+		return []PrimitiveType{PrimitiveStorage, PrimitiveLog}
 	default:
 		return nil
 	}

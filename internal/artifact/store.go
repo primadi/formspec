@@ -23,6 +23,12 @@ type Store interface {
 	ListDeployments(ctx context.Context, workspaceID string) ([]*Deployment, error)
 	GetDeployment(ctx context.Context, workspaceID, app string) (*Deployment, error)
 
+	// Datastore registry (plan fase B2 — Workspace Binding): registered
+	// kind: Datastore services, evaluated per-workspace at snapshot time
+	// via access.filter.
+	UpsertDatastore(ctx context.Context, ds *DatastoreRegistration) error
+	ListDatastores(ctx context.Context) ([]*DatastoreRegistration, error)
+
 	// Evidence (append-only)
 	AppendEvidence(ctx context.Context, e *EvidenceRecord) error
 	ListEvidence(ctx context.Context, instanceID string, since time.Time) ([]*EvidenceRecord, error)
@@ -39,6 +45,7 @@ type MemStore struct {
 	mu             sync.RWMutex
 	artifacts      map[ArtifactID]*Artifact
 	deployments    map[string]*Deployment // key = "workspace/app"
+	datastores     map[string]*DatastoreRegistration
 	evidence       []*EvidenceRecord
 	snapVersion    int
 	nextArtifactID int
@@ -49,9 +56,25 @@ func NewMemStore() *MemStore {
 	return &MemStore{
 		artifacts:   make(map[ArtifactID]*Artifact),
 		deployments: make(map[string]*Deployment),
+		datastores:  make(map[string]*DatastoreRegistration),
 		evidence:    make([]*EvidenceRecord, 0),
 		snapVersion: 1,
 	}
+}
+
+// DatastoreRegistration is one registered kind: Datastore service at the
+// Control Plane (plan fase B2): the spec plus the workspace metadata used
+// to evaluate access.filter at snapshot time.
+type DatastoreRegistration struct {
+	// Name is the logical service name (metadata.name).
+	Name string `json:"name"`
+	// Spec is the DatastoreSpec as JSON (driver, connection, serves, access).
+	Spec json.RawMessage `json:"spec"`
+	// Environment is the environment this service belongs to (matched
+	// against the snapshot's environment).
+	Environment string `json:"environment,omitempty"`
+	// Labels are service labels matched against workspace labels.
+	Labels map[string]string `json:"labels,omitempty"`
 }
 
 func deploymentKey(workspaceID, app string) string {
@@ -152,6 +175,27 @@ func (m *MemStore) GetDeployment(ctx context.Context, workspaceID, app string) (
 		return nil, fmt.Errorf("deployment %s/%s: not found", workspaceID, app)
 	}
 	return d, nil
+}
+
+// UpsertDatastore registers (or replaces) a kind: Datastore service in the
+// Control Plane registry (plan fase B2).
+func (m *MemStore) UpsertDatastore(ctx context.Context, ds *DatastoreRegistration) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.datastores[ds.Name] = ds
+	return nil
+}
+
+// ListDatastores returns all registered datastore services.
+func (m *MemStore) ListDatastores(ctx context.Context) ([]*DatastoreRegistration, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	var result []*DatastoreRegistration
+	for _, ds := range m.datastores {
+		result = append(result, ds)
+	}
+	return result, nil
 }
 
 func (m *MemStore) AppendEvidence(ctx context.Context, e *EvidenceRecord) error {

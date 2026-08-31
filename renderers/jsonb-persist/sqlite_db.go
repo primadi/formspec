@@ -5,14 +5,12 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-	"sync"
 
 	_ "modernc.org/sqlite"
 )
 
 // SQLiteDB implements DB for SQLite.
 type SQLiteDB struct {
-	mu     sync.RWMutex
 	db     *sql.DB
 	dsn    string
 	dbPath string

@@ -156,12 +156,3 @@ func boolField(data map[string]any, key string, def bool) bool {
 	}
 	return def
 }
-
-// ensureEntityUserStore is a compile-time helper documenting the store
-// construction path used by the auth service.
-func ensureEntityUserStore(store *db.EntityStore) (*EntityUserStore, error) {
-	if store == nil {
-		return nil, fmt.Errorf("auth: nil entity store for user role")
-	}
-	return NewEntityUserStore(store), nil
-}
