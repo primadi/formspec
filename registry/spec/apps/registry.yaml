@@ -11,11 +11,19 @@ spec:
   root_url: /
   app_renderer: no-nav
   access: public
+  # Theme binding (frontend/05-app-kinds.md §6) — tema indigo portal registry.
+  theme_ref: registry-theme
   # no-nav default-nya tanpa nav & tanpa auth controls (frontend/
   # 05-app-kinds.md §4.1) — portal ini opt-in keduanya secara eksplisit.
   chrome:
     nav: menu
     auth: links
+    # no-nav default theme_switcher-nya hide — portal opt-in agar pengunjung
+    # bisa ganti light/dark/system.
+    theme_switcher: show
+    # Route halaman profil user yang sedang sign-in — dirender sebagai item
+    # "Profile" di user menu (kanan atas).
+    profile_route: /portal/profile
   stack_family: react-shadcn
   persist_backend: jsonb-persist
   modules:

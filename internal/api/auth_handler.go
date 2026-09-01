@@ -162,6 +162,8 @@ func (b *RouterBuilder) HandleRegister() http.HandlerFunc {
 			switch {
 			case errors.Is(err, auth.ErrUsernameTaken):
 				status, code, reason = http.StatusConflict, "USERNAME_TAKEN", "username_taken"
+			case errors.Is(err, auth.ErrInvalidUsername):
+				status, code, reason = http.StatusBadRequest, "INVALID_USERNAME", "invalid_username"
 			case errors.Is(err, auth.ErrInvalidCredentials):
 				status, code, reason = http.StatusBadRequest, "INVALID_REQUEST", "invalid_input"
 			}

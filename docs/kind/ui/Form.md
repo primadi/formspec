@@ -66,6 +66,7 @@ spec:
 | `actions` | []`FormAction` | — |  |  |
 | `submit` | `FormSubmit` | — |  |  |
 | `render` | `FormRenderDecl` | — |  |  |
+| `context` | []`ContextDecl` | — |  | Context declares render-context variables injected into this form's |
 
 <!-- /generated:attributes -->
 

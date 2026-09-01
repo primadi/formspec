@@ -33,7 +33,20 @@ import {
 } from "lucide-react"
 import { buttonVariants } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { interpolate } from "@/lib/interpolate"
 import type { SectionBlock, SectionCTA } from "@/types/manifest"
+
+// ── Context interpolation ──
+//
+// Section text may carry `{dotted.path}` tokens resolved against a render
+// context (standard slots: `user`, `route`, plus any page-level context).
+// Without a context the literal token is kept (interpolate() fallback).
+function t(
+  value: string | undefined,
+  ctx?: Record<string, unknown>,
+): string | undefined {
+  return ctx ? interpolate(value, ctx) : value
+}
 
 // ── Icon map (lucide) ──
 // Curated set of common section icons. Unknown names fall back to a circle.
@@ -95,10 +108,12 @@ function HeroBlock({
   block,
   workspace,
   rootUrl,
+  context,
 }: {
   block: SectionBlock
   workspace: string
   rootUrl: string
+  context?: Record<string, unknown>
 }) {
   return (
     <section className="relative overflow-hidden border-b">
@@ -106,12 +121,12 @@ function HeroBlock({
         <div className="flex flex-col justify-center gap-6">
           {block.title && (
             <h1 className="text-4xl font-bold tracking-tight md:text-5xl">
-              {block.title}
+              {t(block.title, context)}
             </h1>
           )}
           {block.subtitle && (
             <p className="max-w-xl text-lg text-muted-foreground">
-              {block.subtitle}
+              {t(block.subtitle, context)}
             </p>
           )}
           {block.cta && (
@@ -140,16 +155,26 @@ function HeroBlock({
 
 // ── Feature Grid ──
 
-function FeatureGridBlock({ block }: { block: SectionBlock }) {
+function FeatureGridBlock({
+  block,
+  context,
+}: {
+  block: SectionBlock
+  context?: Record<string, unknown>
+}) {
   const columns = block.columns ?? 3
   const items = block.items ?? []
   return (
     <section className="mx-auto max-w-6xl px-4 py-16">
       {block.title && (
-        <h2 className="text-3xl font-bold tracking-tight">{block.title}</h2>
+        <h2 className="text-3xl font-bold tracking-tight">
+          {t(block.title, context)}
+        </h2>
       )}
       {block.subtitle && (
-        <p className="mt-2 text-muted-foreground">{block.subtitle}</p>
+        <p className="mt-2 text-muted-foreground">
+          {t(block.subtitle, context)}
+        </p>
       )}
       <div
         className="mt-10 grid gap-6"
@@ -161,10 +186,14 @@ function FeatureGridBlock({ block }: { block: SectionBlock }) {
               <Icon name={item.icon} className="size-6 text-primary" />
             )}
             {item.title && (
-              <h3 className="text-lg font-semibold">{item.title}</h3>
+              <h3 className="text-lg font-semibold">
+                {t(item.title, context)}
+              </h3>
             )}
             {item.text && (
-              <p className="text-sm text-muted-foreground">{item.text}</p>
+              <p className="text-sm text-muted-foreground">
+                {t(item.text, context)}
+              </p>
             )}
           </div>
         ))}
@@ -179,20 +208,26 @@ function CardBlock({
   block,
   workspace,
   rootUrl,
+  context,
 }: {
   block: SectionBlock
   workspace: string
   rootUrl: string
+  context?: Record<string, unknown>
 }) {
   const columns = block.columns ?? 3
   const items = block.items ?? []
   return (
     <section className="mx-auto max-w-6xl px-4 py-16">
       {block.title && (
-        <h2 className="text-3xl font-bold tracking-tight">{block.title}</h2>
+        <h2 className="text-3xl font-bold tracking-tight">
+          {t(block.title, context)}
+        </h2>
       )}
       {block.subtitle && (
-        <p className="mt-2 text-muted-foreground">{block.subtitle}</p>
+        <p className="mt-2 text-muted-foreground">
+          {t(block.subtitle, context)}
+        </p>
       )}
       <div
         className="mt-10 grid gap-6"
@@ -212,10 +247,14 @@ function CardBlock({
             )}
             <div className="flex flex-1 flex-col gap-2 p-6">
               {item.title && (
-                <h3 className="text-lg font-semibold">{item.title}</h3>
+                <h3 className="text-lg font-semibold">
+                  {t(item.title, context)}
+                </h3>
               )}
               {item.text && (
-                <p className="text-sm text-muted-foreground">{item.text}</p>
+                <p className="text-sm text-muted-foreground">
+                  {t(item.text, context)}
+                </p>
               )}
               {item.cta && (
                 <div className="mt-auto pt-4">
@@ -243,10 +282,12 @@ function CarouselBlock({
   block,
   workspace,
   rootUrl,
+  context,
 }: {
   block: SectionBlock
   workspace: string
   rootUrl: string
+  context?: Record<string, unknown>
 }) {
   const items = block.items ?? []
   const interval = block.interval_ms ?? 5000
@@ -266,7 +307,9 @@ function CarouselBlock({
   return (
     <section className="mx-auto max-w-6xl px-4 py-16">
       {block.title && (
-        <h2 className="text-3xl font-bold tracking-tight">{block.title}</h2>
+        <h2 className="text-3xl font-bold tracking-tight">
+          {t(block.title, context)}
+        </h2>
       )}
       <div className="relative mt-10 overflow-hidden rounded-lg border">
         <div
@@ -280,10 +323,14 @@ function CarouselBlock({
                   <Icon name={item.icon} className="size-10 text-primary" />
                 )}
                 {item.title && (
-                  <h3 className="text-2xl font-semibold">{item.title}</h3>
+                  <h3 className="text-2xl font-semibold">
+                    {t(item.title, context)}
+                  </h3>
                 )}
                 {item.text && (
-                  <p className="max-w-xl text-muted-foreground">{item.text}</p>
+                  <p className="max-w-xl text-muted-foreground">
+                    {t(item.text, context)}
+                  </p>
                 )}
                 {item.cta && (
                   <CtaButton
@@ -329,19 +376,25 @@ function CtaBlock({
   block,
   workspace,
   rootUrl,
+  context,
 }: {
   block: SectionBlock
   workspace: string
   rootUrl: string
+  context?: Record<string, unknown>
 }) {
   return (
     <section className="border-t">
       <div className="mx-auto flex max-w-6xl flex-col items-center gap-6 px-4 py-16 text-center">
         {block.title && (
-          <h2 className="text-3xl font-bold tracking-tight">{block.title}</h2>
+          <h2 className="text-3xl font-bold tracking-tight">
+            {t(block.title, context)}
+          </h2>
         )}
         {block.subtitle && (
-          <p className="max-w-xl text-muted-foreground">{block.subtitle}</p>
+          <p className="max-w-xl text-muted-foreground">
+            {t(block.subtitle, context)}
+          </p>
         )}
         {block.cta && (
           <CtaButton cta={block.cta} workspace={workspace} rootUrl={rootUrl} />
@@ -373,7 +426,13 @@ const ALERT_ICONS: Record<string, LucideIcon> = {
   destructive: AlertOctagon,
 }
 
-function AlertBlock({ block }: { block: SectionBlock }) {
+function AlertBlock({
+  block,
+  context,
+}: {
+  block: SectionBlock
+  context?: Record<string, unknown>
+}) {
   const variant = block.variant ?? "info"
   const IconCmp = ALERT_ICONS[variant] ?? Info
   return (
@@ -386,9 +445,11 @@ function AlertBlock({ block }: { block: SectionBlock }) {
       <IconCmp className="mt-0.5 size-5 shrink-0" />
       <div className="space-y-1">
         {block.title && (
-          <div className="text-sm font-semibold">{block.title}</div>
+          <div className="text-sm font-semibold">{t(block.title, context)}</div>
         )}
-        {block.subtitle && <div className="text-sm">{block.subtitle}</div>}
+        {block.subtitle && (
+          <div className="text-sm">{t(block.subtitle, context)}</div>
+        )}
       </div>
     </div>
   )
@@ -400,28 +461,58 @@ export function SectionBlockRenderer({
   block,
   workspace,
   rootUrl,
+  context,
 }: {
   block: SectionBlock
   workspace: string
   rootUrl: string
+  /** Render context for `{dotted.path}` token interpolation (standard
+   *  slots: `user`, `route`, plus page-level context). */
+  context?: Record<string, unknown>
 }) {
   switch (block.type) {
     case "hero":
-      return <HeroBlock block={block} workspace={workspace} rootUrl={rootUrl} />
+      return (
+        <HeroBlock
+          block={block}
+          workspace={workspace}
+          rootUrl={rootUrl}
+          context={context}
+        />
+      )
     case "feature_grid":
-      return <FeatureGridBlock block={block} />
+      return <FeatureGridBlock block={block} context={context} />
     case "card":
-      return <CardBlock block={block} workspace={workspace} rootUrl={rootUrl} />
+      return (
+        <CardBlock
+          block={block}
+          workspace={workspace}
+          rootUrl={rootUrl}
+          context={context}
+        />
+      )
     case "carousel":
       return (
-        <CarouselBlock block={block} workspace={workspace} rootUrl={rootUrl} />
+        <CarouselBlock
+          block={block}
+          workspace={workspace}
+          rootUrl={rootUrl}
+          context={context}
+        />
       )
     case "cta":
-      return <CtaBlock block={block} workspace={workspace} rootUrl={rootUrl} />
+      return (
+        <CtaBlock
+          block={block}
+          workspace={workspace}
+          rootUrl={rootUrl}
+          context={context}
+        />
+      )
     case "banner":
     case "alert":
     case "notice":
-      return <AlertBlock block={block} />
+      return <AlertBlock block={block} context={context} />
     default:
       return null
   }

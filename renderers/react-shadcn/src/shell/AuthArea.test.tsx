@@ -66,10 +66,10 @@ describe("AuthArea", () => {
     expect(screen.queryByText("Sign up")).not.toBeInTheDocument()
   })
 
-  it("renders logout for a signed-in session", () => {
+  it("renders user menu for a signed-in session", () => {
     useSessionStore.setState({ token: "tok-123", workspace: "default" })
     renderAuthArea("links")
-    expect(screen.getByLabelText("Log out")).toBeInTheDocument()
+    expect(screen.getByLabelText("User menu")).toBeInTheDocument()
     expect(screen.queryByText("Sign in")).not.toBeInTheDocument()
   })
 })

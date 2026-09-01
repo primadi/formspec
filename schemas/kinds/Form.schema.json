@@ -9,6 +9,13 @@
         "$ref": "#/$defs/FormAction"
       }
     },
+    "context": {
+      "description": "Context declares render-context variables injected into this form's",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ContextDecl"
+      }
+    },
     "entity": {
       "description": "@schema {example: \"billing.order\"}",
       "type": "string",

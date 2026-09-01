@@ -1,0 +1,17 @@
+# kind: Theme — tema default portal FormSpec Registry (frontend/05-app-kinds.md §6).
+# Di-resolve per-App lewat `theme_ref: registry-theme` di registry.yaml.
+# Token di-inject sebagai <style> :root oleh ThemeRenderer — primary indigo
+# terbaca baik di light maupun dark mode (toggle light/dark/system tetap jalan,
+# Frontend Spec §10 D35).
+apiVersion: formspec.dev/v1
+kind: Theme
+metadata:
+  name: registry-theme
+  module: portal
+  description: "Tema portal registry — primary indigo, radius lembut"
+spec:
+  tokens:
+    color.primary: "oklch(0.55 0.2 262)"
+    color.primary-foreground: "oklch(0.985 0 0)"
+    color.ring: "oklch(0.55 0.2 262)"
+    radius.md: "0.75rem"

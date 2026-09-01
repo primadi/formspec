@@ -3,9 +3,10 @@ kind: Form
 metadata:
   name: vendor-signup
   module: portal
-  description: "Formulir pendaftaran vendor publik — buat akun dulu (sign up), lalu daftarkan vendor dengan public key ed25519"
+  description: "Formulir pendaftaran vendor publik — bukan sign-up akun. Buat akun dulu (Sign up di kanan atas), lalu daftarkan vendor dengan public key ed25519"
 spec:
   entity: registry.vendor
+  public: false
   mode: create
   sections:
     - title: "Identitas Vendor"
@@ -19,8 +20,8 @@ spec:
         - { field: public_key, label: "Ed25519 Public Key (base64)", widget: textarea }
     - title: "Akun Pengelola"
       fields:
-        - { field: owner_username, label: "Username Akun Anda", placeholder: "username dari sign up" }
+        - { field: owner_username, label: "Username Akun Anda", help: "Username akun yang Anda buat lewat Sign up — bukan email.", placeholder: "username dari sign up" }
         - { field: url, label: "Website (opsional)", required_when: "false" }
   submit:
     label: "Daftarkan Vendor"
-    message: "Vendor terdaftar. Selanjutnya: formspec module publish --vendor <nama> --key <private.key> --version 1.0.0"
+    message: "Vendor terdaftar (ini bukan akun baru — akun Anda tetap sama). Selanjutnya: formspec module publish --vendor <nama> --key <private.key> --version 1.0.0"

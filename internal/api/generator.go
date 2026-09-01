@@ -464,6 +464,42 @@ func GenerateServiceRoutes(svcReg *service.Registry) []RouteDescriptor {
 	return routes
 }
 
+// GenerateUIServiceRoutes produces RouteDescriptors for stateless Service
+// actions on the UI surface (/_ui/service/). The external /api/v1 surface is
+// deny-by-default for programmatic clients; the UI surface is always
+// available to session-authenticated callers (render-context `source: api`).
+// Permission defaults to {module}.{service}.{action} unless the action
+// declares required_permission.
+func GenerateUIServiceRoutes(svcReg *service.Registry) []RouteDescriptor {
+	var routes []RouteDescriptor
+	if svcReg == nil {
+		return routes
+	}
+	for _, info := range svcReg.List() {
+		for _, actionName := range info.Actions {
+			actionSpec, ok := svcReg.GetAction(info.Module, info.Name, actionName)
+			if !ok || actionSpec.Disabled || actionSpec.Impl == nil {
+				continue
+			}
+			perm := actionSpec.RequiredPermission
+			if perm == "" {
+				perm = info.Module + "." + info.Name + "." + actionName
+			}
+			routes = append(routes, RouteDescriptor{
+				Module:             info.Module,
+				Entity:             info.Name,
+				Action:             actionName,
+				Method:             "POST",
+				Path:               "/_ui/service/" + info.Module + "/" + info.Name + "/" + actionName,
+				Protocol:           spec.ProtocolREST,
+				Handler:            "service",
+				RequiredPermission: perm,
+			})
+		}
+	}
+	return routes
+}
+
 // GenerateWebhookRoutes creates route descriptors for verified inbound
 // webhook endpoints (todo 7.6, 02-core-extended.md §4). Each Webhook declares
 // a path (auto-derived from its name when absent) and method; the handler

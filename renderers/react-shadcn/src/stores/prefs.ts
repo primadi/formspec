@@ -78,6 +78,9 @@ export interface PrefsState {
   colorPreset: string
   /** Name of the active manifest theme, or null for no theme (use index.css defaults) */
   activeTheme: string | null
+  /** True once the user explicitly picked a theme/color preset — blocks the
+   *  App's theme_ref auto-apply (frontend/05-app-kinds.md §6). */
+  themeTouched: boolean
   /** Auto-logout idle timeout in minutes (0 = disabled). Set on the login screen. */
   sessionTimeoutMinutes: number
   /** Per-dashboard saved widget layouts (5.7.3) — keyed by dashboard name. */
@@ -99,6 +102,7 @@ export const usePrefsStore = create<PrefsState>()(
       theme: "system",
       colorPreset: "neutral",
       activeTheme: null,
+      themeTouched: false,
       sessionTimeoutMinutes: DEFAULT_SESSION_TIMEOUT_MINUTES,
       dashboardLayouts: {},
 
@@ -106,8 +110,8 @@ export const usePrefsStore = create<PrefsState>()(
         set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
       setTheme: (theme) => set({ theme }),
-      setColorPreset: (name) => set({ colorPreset: name }),
-      setActiveTheme: (name) => set({ activeTheme: name }),
+      setColorPreset: (name) => set({ colorPreset: name, themeTouched: true }),
+      setActiveTheme: (name) => set({ activeTheme: name, themeTouched: true }),
       setSessionTimeoutMinutes: (minutes) =>
         set({ sessionTimeoutMinutes: minutes }),
       setDashboardLayout: (name, widgets) =>

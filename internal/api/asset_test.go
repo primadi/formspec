@@ -1,12 +1,25 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/go-chi/chi/v5"
 )
+
+// assetRequest builds a request with a chi route context carrying the "*"
+// wildcard tail (the handler reads the full spec-relative asset path via
+// chi.URLParam — matching how the router registers /assets/*).
+func assetRequest(url, tail string) *http.Request {
+	req := httptest.NewRequest("GET", url, nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("*", tail)
+	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+}
 
 // TestHandleAsset verifies the module asset-serving endpoint (todo 5.9.1):
 // serves {root}/modules/{module}/assets/{path}, 404 on missing, 400 on
@@ -25,10 +38,9 @@ func TestHandleAsset(t *testing.T) {
 	factory := NewHandlerFactory(nil)
 	factory.SetAssetRoots([]string{dir})
 
-	// Existing asset → 200 with content.
-	req := httptest.NewRequest("GET", "/demo/_ui/assets/billing/assets/hello.js", nil)
-	req.SetPathValue("module", "billing")
-	req.SetPathValue("path", "assets/hello.js")
+	// Existing asset → 200 with content. The wildcard is the
+	// spec-root-relative path ("modules/{module}/assets/x.js").
+	req := assetRequest("/demo/_ui/assets/modules/billing/assets/hello.js", "modules/billing/assets/hello.js")
 	rec := httptest.NewRecorder()
 	factory.HandleAsset()(rec, req)
 	if rec.Code != http.StatusOK {
@@ -39,9 +51,7 @@ func TestHandleAsset(t *testing.T) {
 	}
 
 	// Missing asset → 404.
-	req2 := httptest.NewRequest("GET", "/demo/_ui/assets/billing/assets/nope.js", nil)
-	req2.SetPathValue("module", "billing")
-	req2.SetPathValue("path", "assets/nope.js")
+	req2 := assetRequest("/demo/_ui/assets/modules/billing/assets/nope.js", "modules/billing/assets/nope.js")
 	rec2 := httptest.NewRecorder()
 	factory.HandleAsset()(rec2, req2)
 	if rec2.Code != http.StatusNotFound {
@@ -49,9 +59,7 @@ func TestHandleAsset(t *testing.T) {
 	}
 
 	// Path traversal → 400.
-	req3 := httptest.NewRequest("GET", "/demo/_ui/assets/billing/../../etc/passwd", nil)
-	req3.SetPathValue("module", "billing")
-	req3.SetPathValue("path", "../../etc/passwd")
+	req3 := assetRequest("/demo/_ui/assets/../../etc/passwd", "../../etc/passwd")
 	rec3 := httptest.NewRecorder()
 	factory.HandleAsset()(rec3, req3)
 	if rec3.Code != http.StatusBadRequest {

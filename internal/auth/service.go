@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -21,6 +22,26 @@ var ErrSessionRevoked = errors.New("auth: session revoked")
 // ErrUsernameTaken is returned by Register when the username already exists
 // in the workspace (self-service sign-up, registry portal B.3).
 var ErrUsernameTaken = errors.New("auth: username already taken")
+
+// ErrInvalidUsername is returned by Register when the username violates the
+// format rules (see ValidateUsername).
+var ErrInvalidUsername = errors.New("auth: invalid username format")
+
+// usernamePattern constrains self-service usernames: 3–32 chars, letters
+// (a-z, A-Z), digits, dot, underscore, hyphen. No spaces or other symbols —
+// usernames appear in URLs, CLI flags (--vendor), and lookup-by-username
+// paths where free-form text is unsafe.
+var usernamePattern = regexp.MustCompile(`^[a-zA-Z0-9._-]{3,32}$`)
+
+// ValidateUsername checks the username format rules. Existing accounts are
+// unaffected — only new registrations are validated.
+func ValidateUsername(username string) error {
+	if !usernamePattern.MatchString(username) {
+		return fmt.Errorf("%w: must be 3-32 chars (letters, digits, . _ -)",
+			ErrInvalidUsername)
+	}
+	return nil
+}
 
 // TokenPair is the result of a successful login or refresh.
 type TokenPair struct {
@@ -197,7 +218,10 @@ func (s *Service) SeedDevUser(ctx context.Context, workspaceID, username, passwo
 // created active with NO roles/permissions — role assignment remains an admin
 // concern (least privilege by default). Password is hashed inside CreateUser.
 func (s *Service) Register(ctx context.Context, workspaceID, username, password string) error {
-	if username == "" || password == "" {
+	if err := ValidateUsername(username); err != nil {
+		return err
+	}
+	if password == "" {
 		return ErrInvalidCredentials
 	}
 	if _, err := s.users.GetByUsername(ctx, workspaceID, username); err == nil {

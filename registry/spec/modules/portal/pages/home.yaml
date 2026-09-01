@@ -41,8 +41,8 @@ spec:
     - section:
         type: cta
         title: "Jadi Vendor"
-        subtitle: "Publikasikan module Anda sendiri — buat keypair, daftarkan vendor, dan publish versi pertama."
-        cta: { label: "Sign up Vendor", href: /portal/vendor-signup, variant: secondary }
+        subtitle: "Publikasikan module Anda sendiri — buat akun, keypair ed25519, daftarkan vendor, lalu publish versi pertama."
+        cta: { label: "Daftarkan Vendor", href: /portal/vendor-signup, variant: secondary }
     - section:
         type: cta
         title: "Sudah punya akun?"

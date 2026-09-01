@@ -296,8 +296,9 @@ func (b *RouterBuilder) BuildRoutes() {
 	customRoutes := GenerateCustomActionRoutes(b.registry)
 	uiCustomRoutes := GenerateUICustomActionRoutes(b.registry)
 	svcRoutes := GenerateServiceRoutes(b.svcRegistry)
+	uiSvcRoutes := GenerateUIServiceRoutes(b.svcRegistry)
 	whRoutes := GenerateWebhookRoutes(b.whRegistry)
-	b.routes = mergeRoutes(restRoutes, uiRoutes, customRoutes, uiCustomRoutes, svcRoutes, whRoutes)
+	b.routes = mergeRoutes(restRoutes, uiRoutes, customRoutes, uiCustomRoutes, svcRoutes, uiSvcRoutes, whRoutes)
 }
 
 // BuildHTTP constructs the chi router with all middleware and route registration.
@@ -351,7 +352,10 @@ func (b *RouterBuilder) BuildHTTP() http.Handler {
 			r.Get("/_ws", b.HandleWS())
 
 			// Module asset files (custom UI components, todo 5.9.1).
-			r.Get("/assets/{module}/{path*}", b.factory.HandleAsset())
+			// Asset path is spec-root-relative
+			// ("modules/{module}/assets/x.js") — the wildcard carries the
+			// full path, read via chi.URLParam(r, "*").
+			r.Get("/assets/*", b.factory.HandleAsset())
 
 			// Server-side Print PDF generation (todo 5.13.2) — renders a
 			// kind: Print manifest + record to PDF without a browser.
@@ -385,6 +389,22 @@ func (b *RouterBuilder) BuildHTTP() http.Handler {
 				// permission dynamically.
 				r.Post("/{module}/{entity}/{id}/{field}", b.factory.HandleFileUpload())
 				r.Get("/{module}/{entity}/{id}/{field}", b.factory.HandleFileDownload())
+			})
+
+			// Stateless Service actions on the UI surface (render-context
+			// `source: api`, todo 7.1). Session-authenticated callers may
+			// invoke services without the deny-by-default /api/v1 gate.
+			r.Route("/service", func(r chi.Router) {
+				for _, rd := range b.routes {
+					if rd.Protocol != ProtocolREST {
+						continue
+					}
+					if !strings.HasPrefix(rd.Path, "/_ui/service") {
+						continue
+					}
+					pattern := strings.TrimPrefix(rd.Path, "/_ui/service")
+					b.registerRouteWithPattern(r, rd, pattern)
+				}
 			})
 		})
 
@@ -720,6 +740,14 @@ func (b *RouterBuilder) registerRouteWithPattern(r chi.Router, rd RouteDescripto
 			return
 		}
 		handler = b.factory.HandlePrepare(rd.Module, rd.Entity, rd.Action, *actionSpec)
+	case "service":
+		// Stateless Service action on the UI surface (render-context
+		// `source: api`). Resolve the action spec from the service registry.
+		actionSpec, ok := b.svcRegistry.GetAction(rd.Module, rd.Entity, rd.Action)
+		if !ok {
+			return
+		}
+		handler = b.factory.HandleServiceAction(rd.Module, rd.Entity, rd.Action, *actionSpec)
 	default:
 		return
 	}

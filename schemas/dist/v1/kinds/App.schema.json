@@ -35,6 +35,14 @@
         "$ref": "#/$defs/AppConsume"
       }
     },
+    "datastores": {
+      "description": "Datastores is the App-level App Registry selection — the App Registry",
+      "type": "object",
+      "additionalProperties": {},
+      "examples": [
+        "db: pg-main"
+      ]
+    },
     "logo": {
       "description": "Brand mark icon (lucide name) next to the title in the shell brand bar",
       "type": "string",

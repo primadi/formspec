@@ -269,6 +269,10 @@
             "auto"
           ]
         },
+        "profile_route": {
+          "description": "ProfileRoute is the in-app route to the signed-in user's profile",
+          "type": "string"
+        },
         "theme_switcher": {
           "description": "Theme switcher control (sidebar-nav/topnav).",
           "type": "string",
@@ -545,6 +549,63 @@
       },
       "required": [
         "type"
+      ],
+      "additionalProperties": false
+    },
+    "ContextDecl": {
+      "description": "ContextDecl declares one render-context variable injected into a Page/Form\n(render-context-standard plan). Sources are a closed set:\n\n\tsession | entity | api | const | expr\n\nStandard slots (`user`, `route`, `fields`) are always present and need no\ndeclaration; `context:` adds named variables resolved from these sources.\n",
+      "type": "object",
+      "properties": {
+        "call": {
+          "description": "Call for source: api — \"module.service.action\".",
+          "type": "string"
+        },
+        "entity": {
+          "description": "Entity ref for source: entity (\"module.entity\").",
+          "type": "string"
+        },
+        "expr": {
+          "description": "Expr for source: expr — a FormSpecExpr string evaluated against the",
+          "type": "string"
+        },
+        "fallback": {
+          "description": "Fallback is used while the source is loading or on error."
+        },
+        "id": {
+          "description": "ID for source: entity — a record id, or a template token like",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name is the context variable name (e.g. \"vendor\") — referenced in",
+          "type": "string"
+        },
+        "params": {
+          "description": "Params for source: api — action params.",
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "realtime": {
+          "description": "Realtime (source: entity) — subscribe to the entity's events and",
+          "type": "boolean"
+        },
+        "source": {
+          "description": "Context source — closed set.",
+          "type": "string",
+          "enum": [
+            "session",
+            "entity",
+            "api",
+            "const",
+            "expr"
+          ]
+        },
+        "value": {
+          "description": "Value for source: const — a literal value."
+        }
+      },
+      "required": [
+        "name",
+        "source"
       ],
       "additionalProperties": false
     },
@@ -3558,6 +3619,10 @@
             "auto"
           ]
         },
+        "profile_route": {
+          "description": "ProfileRoute is the in-app route to the signed-in user's profile",
+          "type": "string"
+        },
         "theme_switcher": {
           "description": "Theme switcher control (sidebar-nav/topnav).",
           "type": "string",
@@ -3834,6 +3899,63 @@
       },
       "required": [
         "type"
+      ],
+      "additionalProperties": false
+    },
+    "ContextDecl": {
+      "description": "ContextDecl declares one render-context variable injected into a Page/Form\n(render-context-standard plan). Sources are a closed set:\n\n\tsession | entity | api | const | expr\n\nStandard slots (`user`, `route`, `fields`) are always present and need no\ndeclaration; `context:` adds named variables resolved from these sources.\n",
+      "type": "object",
+      "properties": {
+        "call": {
+          "description": "Call for source: api — \"module.service.action\".",
+          "type": "string"
+        },
+        "entity": {
+          "description": "Entity ref for source: entity (\"module.entity\").",
+          "type": "string"
+        },
+        "expr": {
+          "description": "Expr for source: expr — a FormSpecExpr string evaluated against the",
+          "type": "string"
+        },
+        "fallback": {
+          "description": "Fallback is used while the source is loading or on error."
+        },
+        "id": {
+          "description": "ID for source: entity — a record id, or a template token like",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name is the context variable name (e.g. \"vendor\") — referenced in",
+          "type": "string"
+        },
+        "params": {
+          "description": "Params for source: api — action params.",
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "realtime": {
+          "description": "Realtime (source: entity) — subscribe to the entity's events and",
+          "type": "boolean"
+        },
+        "source": {
+          "description": "Context source — closed set.",
+          "type": "string",
+          "enum": [
+            "session",
+            "entity",
+            "api",
+            "const",
+            "expr"
+          ]
+        },
+        "value": {
+          "description": "Value for source: const — a literal value."
+        }
+      },
+      "required": [
+        "name",
+        "source"
       ],
       "additionalProperties": false
     },
@@ -6715,6 +6837,14 @@
                 "$ref": "#/$defs/AppConsume"
               }
             },
+            "datastores": {
+              "description": "Datastores is the App-level App Registry selection — the App Registry",
+              "type": "object",
+              "additionalProperties": {},
+              "examples": [
+                "db: pg-main"
+              ]
+            },
             "logo": {
               "description": "Brand mark icon (lucide name) next to the title in the shell brand bar",
               "type": "string",
@@ -6871,6 +7001,14 @@
               "type": "string",
               "examples": [
                 "default"
+              ]
+            },
+            "datastores": {
+              "description": "Datastores overrides the App-level datastore selection for this module",
+              "type": "object",
+              "additionalProperties": {},
+              "examples": [
+                "db: pg-main"
               ]
             },
             "depends": {
@@ -8365,7 +8503,7 @@
           "type": "object",
           "properties": {
             "asset": {
-              "description": "Asset is the module-relative asset path for `mode: custom`",
+              "description": "Asset is the spec-root-relative asset path for `mode: custom`",
               "type": "string"
             },
             "binds": {
@@ -8377,6 +8515,13 @@
               "type": "array",
               "items": {
                 "$ref": "#/$defs/PageBlock"
+              }
+            },
+            "context": {
+              "description": "Context declares render-context variables injected into this page's",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ContextDecl"
               }
             },
             "description": {
@@ -8501,6 +8646,13 @@
               "type": "array",
               "items": {
                 "$ref": "#/$defs/FormAction"
+              }
+            },
+            "context": {
+              "description": "Context declares render-context variables injected into this form's",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ContextDecl"
               }
             },
             "entity": {

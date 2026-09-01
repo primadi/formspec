@@ -40,6 +40,7 @@ func PermissionsFromContext(ctx context.Context) []string {
 // All fields are immutable after construction.
 type Identity struct {
 	UserID      string   // authenticated user ID (sub claim in JWT)
+	Username    string   // display identity (username claim in JWT)
 	WorkspaceID string   // workspace scope
 	App         string   // app scope (empty = workspace-level, e.g. _admin)
 	Permissions []string // granted permissions, e.g. ["billing.invoices.*", "billing.customers.list"]

@@ -20,6 +20,14 @@
         "default"
       ]
     },
+    "datastores": {
+      "description": "Datastores overrides the App-level datastore selection for this module",
+      "type": "object",
+      "additionalProperties": {},
+      "examples": [
+        "db: pg-main"
+      ]
+    },
     "depends": {
       "description": "Module dependencies — array of {module, version?}",
       "type": "array",

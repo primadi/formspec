@@ -133,8 +133,12 @@ func (v *JWTValidator) Validate(ctx context.Context, tokenString string) (*Ident
 	// Extract optional app scope (empty = workspace-level, e.g. _admin).
 	app, _ := claims["app"].(string)
 
+	// Extract optional display username (UserMenu/avatar identity).
+	username, _ := claims["username"].(string)
+
 	return &Identity{
 		UserID:      userID,
+		Username:    username,
 		WorkspaceID: workspaceID,
 		App:         app,
 		Permissions: permissions,

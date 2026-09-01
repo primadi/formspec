@@ -66,6 +66,7 @@ func NewTokenIssuer(secret, issuer, audience string, accessTTL, refreshTTL time.
 type accessClaims struct {
 	Workspace string   `json:"ws"`
 	App       string   `json:"app,omitempty"`
+	Username  string   `json:"username,omitempty"` // display identity (UserMenu/avatar)
 	Roles     []string `json:"roles,omitempty"`
 	Perms     []string `json:"perms,omitempty"`
 	Type      string   `json:"typ"`
@@ -86,6 +87,7 @@ func (t *TokenIssuer) IssueAccessToken(u *User) (string, error) {
 	claims := accessClaims{
 		Workspace: u.WorkspaceID,
 		App:       u.App,
+		Username:  u.Username,
 		Roles:     u.Roles,
 		Perms:     u.Permissions,
 		Type:      TokenTypeAccess,

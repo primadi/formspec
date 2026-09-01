@@ -24,6 +24,7 @@ import { can as checkPermission } from "@/engine/permissions"
 import { resolveEntityRef } from "@/engine/entityRef"
 import { apiGet } from "@/lib/api"
 import { interpolate } from "@/lib/interpolate"
+import { useRenderContext } from "@/hooks/useRenderContext"
 import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/ui/empty-state"
 import { cn } from "@/lib/utils"
@@ -175,6 +176,18 @@ function PageBlocks({ entry }: { entry: Entry<PageSpec> }) {
   const getEntity = useMetaStore((s) => s.getEntity)
   const getForm = useMetaStore((s) => s.getForm)
   const getClient = useSessionStore((s) => s.getClient)
+  // Standard slot `user` (render-context-standard plan): session identity
+  // from /_meta/me — available to every Page block for `{user.*}` tokens.
+  const me = useSessionStore((s) => s.me)
+  const userCtx = useMemo<Record<string, unknown> | undefined>(
+    () => (me ? { user: me } : undefined),
+    [me],
+  )
+  // Phase 2: resolve `spec.context` declarations over the standard slots.
+  const { context: pageCtx, loading: ctxLoading } = useRenderContext(
+    entry.spec.context,
+    userCtx ?? {},
+  )
 
   // Title interpolation (e.g. "Pasien — {patient.name}") needs whichever
   // record its tokens reference — fetch the first form block that resolves
@@ -225,8 +238,8 @@ function PageBlocks({ entry }: { entry: Entry<PageSpec> }) {
   ])
 
   const title = titleCtx
-    ? interpolate(entry.spec.title, titleCtx)
-    : entry.spec.title
+    ? interpolate(entry.spec.title, { ...titleCtx, ...pageCtx })
+    : interpolate(entry.spec.title, pageCtx)
 
   // Document title: "<page title> · <App title>" (request #1 — judul tab
   // browser mengikuti halaman, bukan generik "web"). Saat page title sama
@@ -261,6 +274,7 @@ function PageBlocks({ entry }: { entry: Entry<PageSpec> }) {
           routeParams={routeParams}
           workspace={workspace}
           rootUrl={rootUrl}
+          context={pageCtx}
           bare
         />
       </div>
@@ -271,6 +285,21 @@ function PageBlocks({ entry }: { entry: Entry<PageSpec> }) {
   // on the left drives a detail block on the right via `binds`.
   if (entry.spec.layout?.mode === "split") {
     return <PageSplit entry={entry} title={title} />
+  }
+
+  // Async `spec.context` still resolving — show a skeleton so blocks that
+  // interpolate context tokens don't flash their literal tokens.
+  if (ctxLoading && entry.spec.context?.length) {
+    return (
+      <div className="space-y-4">
+        {showPageTitle(entry.spec) && (
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
+          </div>
+        )}
+        <Skeleton className="h-48 w-full" />
+      </div>
+    )
   }
 
   return (
@@ -298,6 +327,7 @@ function PageBlocks({ entry }: { entry: Entry<PageSpec> }) {
             routeParams={routeParams}
             workspace={workspace}
             rootUrl={rootUrl}
+            context={pageCtx}
           />
         ))}
       </div>
@@ -424,6 +454,7 @@ function PageBlockRenderer({
   onSelect,
   overrideId,
   overrideFilters,
+  context,
 }: {
   block: PageBlock
   module: string
@@ -440,6 +471,8 @@ function PageBlockRenderer({
   overrideId?: string
   /** Master-detail: extra fixed filters merged into a Table block's fetch. */
   overrideFilters?: Record<string, string>
+  /** Render context for `{dotted.path}` token interpolation in section text. */
+  context?: Record<string, unknown>
 }) {
   const getEntity = useMetaStore((s) => s.getEntity)
   const getForm = useMetaStore((s) => s.getForm)
@@ -556,6 +589,7 @@ function PageBlockRenderer({
         block={block.section}
         workspace={workspace}
         rootUrl={rootUrl}
+        context={context}
       />
     )
   }

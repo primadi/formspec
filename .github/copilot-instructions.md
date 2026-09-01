@@ -248,6 +248,17 @@ make clean       # Clean build artifacts
 
 Setiap perubahan code wajib mengikuti alur kerja berikut. Urutan ini **tidak bisa dilompati**.
 
+### 0. Tool-Use Rules (wajib, berlaku untuk semua sesi)
+
+- **JANGAN mengulang search/query yang hasilnya no match atau error.** Hasil kosong
+  ("No files found", empty result) adalah jawaban konklusif — langsung lanjut ke aksi
+  berikutnya (mis. buat file dengan create, tanpa verifikasi ulang keberadaan).
+- **JANGAN mengulang tool call yang sama dengan harapan hasil berbeda.** Setiap hasil
+  harus meng-update keyakinan; jika hasil tidak berubah, ganti strategi atau berhenti.
+- Retry hanya untuk error transient (network/timeout/5xx) dengan backoff dan batas
+  maksimal 3 percobaan — bukan untuk hasil yang sudah konklusif.
+- Jika sebuah aksi gagal berulang, **berhenti dan laporkan** — jangan loop.
+
 ### 1. Plan Before Code
 
 Sebelum menulis implementasi dari todo, **buat rencana teknis terlebih dahulu** di `docs_internal/plan/`. Rencana harus mencakup:

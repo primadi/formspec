@@ -27,6 +27,7 @@ import (
 // metaIdentity is the /_meta/me payload.
 type metaIdentity struct {
 	UserID      string   `json:"user_id"`
+	Username    string   `json:"username,omitempty"` // display identity (UserMenu/avatar)
 	Workspace   string   `json:"workspace"`
 	App         string   `json:"app,omitempty"`
 	Roles       []string `json:"roles"`
@@ -119,6 +120,7 @@ func (b *RouterBuilder) resolveAppContext(r *http.Request) (ui.AppContext, strin
 		Access:         string(resolved.Spec.Access),
 		StackFamily:    resolved.Spec.StackFamily,
 		PersistBackend: resolved.Spec.PersistBackend,
+		ThemeRef:       resolved.Spec.ThemeRef,
 		Chrome:         resolved.Spec.Chrome,
 		Modules:        resolved.Modules,
 		Menu:           resolved.Menu,
@@ -308,6 +310,7 @@ func (b *RouterBuilder) HandleMetaMe() http.HandlerFunc {
 		if id != nil {
 			me = metaIdentity{
 				UserID:      id.UserID,
+				Username:    id.Username,
 				Workspace:   id.WorkspaceID,
 				App:         id.App,
 				Roles:       id.Roles,

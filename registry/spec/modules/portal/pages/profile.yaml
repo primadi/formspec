@@ -1,0 +1,47 @@
+apiVersion: formspec.dev/v1
+kind: Page
+metadata:
+  name: profile
+  module: portal
+  description: "Halaman profil user yang sedang sign-in — identitas, roles, permissions (pure YAML via standard slot `user`)"
+spec:
+  route: /portal/profile
+  public: false
+  title: "Profil Saya"
+  title_visible: false
+  # Pure YAML — memakai standard slot `user` (identitas session dari
+  # /_meta/me) yang di-inject renderer ke context blocks. Token {user.*}
+  # di-interpolasi di section items (render-context-standard plan Phase 1).
+  #
+  # Phase 2: `context:` menambah variabel dari closed source set
+  # (session | entity | api | const | expr). Contoh di bawah: const + expr
+  # + api (signature-verify — untuk user tanpa grant akan fallback).
+  # Phase 3: `realtime: true` pada source entity — subscribe event entity
+  # dan re-resolve record saat berubah (dashboard live-update).
+  context:
+    - { name: greeting, source: const, value: "Selamat datang" }
+    - { name: is_admin, source: expr, expr: "user.roles.contains('admin')" }
+    - { name: sig_check, source: api, call: registry.signature-verify.verify, params: { checksum: "", signature: "", public_key: "" } }
+    - { name: module_status, source: entity, entity: registry.module, id: "{user.module_id}", realtime: true, fallback: "—" }
+  blocks:
+    - section:
+        type: card
+        title: "Profil Saya"
+        subtitle: "Identitas akun Anda di FormSpec Registry."
+        columns: 1
+        items:
+          - { icon: user, title: "{greeting}, {user.username}", text: "User ID: {user.user_id} · Workspace: {user.workspace}" }
+    - section:
+        type: card
+        title: "Roles"
+        subtitle: "Peran yang Anda miliki di workspace ini."
+        columns: 1
+        items:
+          - { icon: shield, title: "Roles", text: "{user.roles}" }
+    - section:
+        type: card
+        title: "Permissions"
+        subtitle: "Hak akses efektif Anda."
+        columns: 1
+        items:
+          - { icon: lock, title: "Permissions", text: "{user.permissions}" }

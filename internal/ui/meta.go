@@ -59,6 +59,10 @@ type AppSummary struct {
 	// PersistBackend is the entity persist backend (backend/04-persist-
 	// backend.md), e.g. jsonb-persist.
 	PersistBackend string `json:"persist_backend,omitempty"`
+	// Theme is the App's resolved default theme (frontend/05-app-kinds.md §6
+	// theme binding): the Theme kind name from App.spec.theme_ref. The
+	// renderer auto-applies it unless the user has picked a theme themselves.
+	Theme string `json:"theme,omitempty"`
 	// Chrome is the resolved, effective chrome composition (frontend/
 	// 05-app-kinds.md §4.1) — archetype defaults already applied. Renderers
 	// read these final values and never guess. Always non-nil.
@@ -76,6 +80,9 @@ type ChromeConfig struct {
 	Footer        string `json:"footer"`         // show | hide
 	Breadcrumbs   string `json:"breadcrumbs"`    // show | hide
 	ThemeSwitcher string `json:"theme_switcher"` // show | hide
+	// ProfileRoute is the in-app route to the signed-in user's profile page
+	// (opt-in via manifest `profile_route`; empty = no Profile menu item).
+	ProfileRoute string `json:"profile_route,omitempty"`
 }
 
 // AppContext scopes BuildBundle to one resolved App: which modules it mounts
@@ -92,6 +99,9 @@ type AppContext struct {
 	Access         string
 	StackFamily    string
 	PersistBackend string
+	// ThemeRef is the raw manifest declaration (App.spec.theme_ref) — the
+	// Theme kind name applied as this App's default theme (§6 theme binding).
+	ThemeRef string
 	// Chrome is the raw manifest declaration (App.spec.chrome) — defaults
 	// are applied later by resolveChrome, not here.
 	Chrome  *spec.AppChrome
@@ -192,6 +202,9 @@ func resolveChrome(appRenderer string, c *spec.AppChrome) *ChromeConfig {
 	if c.ThemeSwitcher == spec.ChromeShow || c.ThemeSwitcher == spec.ChromeHide {
 		cfg.ThemeSwitcher = c.ThemeSwitcher
 	}
+	// ProfileRoute is a plain route string (no auto/show/hide matrix) —
+	// pass through as-is.
+	cfg.ProfileRoute = c.ProfileRoute
 	return cfg
 }
 
@@ -225,6 +238,7 @@ func (r *Registry) BuildBundle(entities EntityLister, can PermissionChecker, app
 			Access:         appCtx.Access,
 			StackFamily:    appCtx.StackFamily,
 			PersistBackend: appCtx.PersistBackend,
+			Theme:          appCtx.ThemeRef,
 			Chrome:         resolveChrome(appCtx.AppRenderer, appCtx.Chrome),
 		},
 		Menu:                menu,

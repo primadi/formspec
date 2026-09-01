@@ -8,8 +8,12 @@
 // Design doc §5.2 step 3.
 
 import { lazy, Suspense } from "react"
+import type { ReactNode } from "react"
+import { Navigate, useLocation } from "react-router-dom"
 import type { RouteObject } from "react-router-dom"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useSessionStore } from "@/stores/session"
+import { useSurface } from "@/hooks/useSurface"
 import type { MetaBundle } from "@/types/manifest"
 
 // ─── Lazy-loaded kind renderers ──
@@ -50,6 +54,36 @@ function Loading() {
 
 // ── Route Builder ──
 
+// ── Private route guard (frontend §3 `public: false`) ──
+//
+// A Page/Form inside an `access: public` App may still declare
+// `public: false`: the surface boots anonymously, but THIS route requires a
+// signed-in session. Anonymous visitors are redirected to the surface login
+// with a returnTo so they land back here after authenticating.
+function RequireSession({ children }: { children: ReactNode }) {
+  const token = useSessionStore((s) => s.token)
+  const me = useSessionStore((s) => s.me)
+  const { surfacePath } = useSurface()
+  const location = useLocation()
+
+  const anonymous = !token || !me || me.user_id === "anonymous"
+  if (anonymous) {
+    const returnTo = location.pathname + location.search
+    return (
+      <Navigate
+        to={`${surfacePath("login")}?returnTo=${encodeURIComponent(returnTo)}`}
+        replace
+      />
+    )
+  }
+  return <>{children}</>
+}
+
+/** Wrap `node` in RequireSession when the manifest says `public: false`. */
+function guard(pub: boolean | undefined, node: ReactNode): ReactNode {
+  return pub === false ? <RequireSession>{node}</RequireSession> : node
+}
+
 export interface RouteBuilderOptions {
   bundle: MetaBundle
   basePath: string // e.g. "/acme" or "/acme/_admin"
@@ -74,11 +108,13 @@ export function buildRoutes(options: RouteBuilderOptions): RouteObject[] {
 
     routes.push({
       path: `${basePath}${route}`,
-      Component: () => (
-        <Suspense fallback={<Loading />}>
-          <PageRenderer entry={page} />
-        </Suspense>
-      ),
+      Component: () =>
+        guard(
+          page.spec.public,
+          <Suspense fallback={<Loading />}>
+            <PageRenderer entry={page} />
+          </Suspense>,
+        ),
     })
   }
 

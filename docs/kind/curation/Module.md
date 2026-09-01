@@ -59,6 +59,7 @@ spec:
 | `vendor` | `string` | — | acme-corp |  |
 | `depends` | []`Dependency` | — | formspec/core | Module dependencies — array of {module, version?} |
 | `datastore` | `string` | — | default | Datastore binds the module to a named kind: Datastore for ctx.db() |
+| `datastores` | map | — | db: pg-main | Datastores overrides the App-level datastore selection for this module |
 | `config` | map | — |  | module-specific configuration (02-workspace-app-module.md §2) |
 | `ai_index` | `AiIndexDecl` | — |  | AI discovery metadata (ai/04-formspec-remote-mcp.md §3) |
 | `menu` | []`MenuItem` | — |  | Menu is a default navigation suggestion, module-relative (no `Module` |

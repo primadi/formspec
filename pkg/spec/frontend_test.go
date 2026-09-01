@@ -150,3 +150,40 @@ func TestValidatePageSpec_UnknownSectionType(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
+
+func TestValidateContextDecls(t *testing.T) {
+	// Valid: all closed sources.
+	valid := []ContextDecl{
+		{Name: "me", Source: "session"},
+		{Name: "vendor", Source: "entity", Entity: "registry.vendor", ID: "{user.vendor_id}"},
+		{Name: "stats", Source: "api", Call: "portal.stats.summary"},
+		{Name: "greeting", Source: "const", Value: "Halo"},
+		{Name: "isAdmin", Source: "expr", Expr: "user.roles.contains('admin')"},
+	}
+	if err := ValidateContextDecls(valid); err != nil {
+		t.Fatalf("expected valid decls to pass, got %v", err)
+	}
+
+	// Unknown source → error.
+	if err := ValidateContextDecls([]ContextDecl{{Name: "x", Source: "http"}}); err == nil {
+		t.Fatal("expected error for unknown source")
+	}
+
+	// Duplicate name → error.
+	if err := ValidateContextDecls([]ContextDecl{
+		{Name: "x", Source: "const"},
+		{Name: "x", Source: "const"},
+	}); err == nil {
+		t.Fatal("expected error for duplicate name")
+	}
+
+	// entity without entity ref → error.
+	if err := ValidateContextDecls([]ContextDecl{{Name: "x", Source: "entity"}}); err == nil {
+		t.Fatal("expected error for entity source without entity ref")
+	}
+
+	// api without call → error.
+	if err := ValidateContextDecls([]ContextDecl{{Name: "x", Source: "api"}}); err == nil {
+		t.Fatal("expected error for api source without call")
+	}
+}

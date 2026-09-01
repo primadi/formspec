@@ -171,6 +171,10 @@ type AppChrome struct {
 	// Theme switcher control (sidebar-nav/topnav).
 	// @schema {example: "auto", enum: ["auto", "show", "hide"]}
 	ThemeSwitcher string `yaml:"theme_switcher,omitempty" json:"theme_switcher,omitempty"`
+	// ProfileRoute is the in-app route to the signed-in user's profile
+	// page (e.g. "/portal/profile"). When set, the auth-area user menu
+	// renders a Profile item navigating there; empty = no Profile item.
+	ProfileRoute string `yaml:"profile_route,omitempty" json:"profile_route,omitempty"`
 }
 
 // AppInterface is one cross-app service interface offered by an App

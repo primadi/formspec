@@ -84,6 +84,21 @@ describe("NoNavShell", () => {
     expect(screen.getByText("Sign up")).toBeInTheDocument()
   })
 
+  it("opts into the theme switcher via chrome.theme_switcher: show", () => {
+    // no-nav default is hide — the App must opt in explicitly (§4.1).
+    renderShell(
+      makeBundle({
+        brand: "show",
+        nav: "menu",
+        auth: "links",
+        footer: "show",
+        breadcrumbs: "hide",
+        theme_switcher: "show",
+      }),
+    )
+    expect(screen.getByTitle("Theme settings")).toBeInTheDocument()
+  })
+
   it("excludes /login and /register menu entries from the nav", () => {
     renderShell(
       makeBundle({

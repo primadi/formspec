@@ -567,9 +567,36 @@ export interface ForwardDatePolicy {
 
 // ── Page (Frontend §3) ──
 
+/** One render-context variable injected into a Page/Form (render-context
+ *  standard). Sources are a closed set: session | entity | api | const | expr. */
+export interface ContextDecl {
+  name: string
+  /** session | entity | api | const | expr */
+  source: string
+  /** source: entity — "module.entity" */
+  entity?: string
+  /** source: entity — record id or a template token like "{user.vendor_id}" */
+  id?: string
+  /** source: api — "module.service.action" */
+  call?: string
+  /** source: api — action params */
+  params?: Record<string, unknown>
+  /** source: const — literal value */
+  value?: unknown
+  /** source: expr — FormSpecExpr string */
+  expr?: string
+  /** source: entity — subscribe to entity events and re-resolve on change */
+  realtime?: boolean
+  /** Used while the source is loading or on error. */
+  fallback?: unknown
+}
+
 export interface PageSpec {
   route: string
   title: string
+  /** Auth axis (frontend §3): false = requires a signed-in session even when
+   *  the owning App is `access: public`. Default (undefined/true) = public. */
+  public?: boolean
   /** Hide the rendered page-title heading (default true) — for pages whose
    *  first block carries its own display title (e.g. a hero section). */
   title_visible?: boolean
@@ -587,6 +614,9 @@ export interface PageSpec {
   /** Backend footprint (entities/actions/subscribe) a custom page may touch —
    *  enforced client-side like a component's `needs`. */
   binds?: PageBinds
+  /** Render-context variables injected into this page's blocks. Standard
+   *  slots (`user`, `route`) are always present. */
+  context?: ContextDecl[]
 }
 
 /** Backend footprint of a `mode: custom` page (06-page-kinds.md §13). */
@@ -680,11 +710,15 @@ export interface AssetNeeds {
 
 export interface FormSpec {
   entity: string
+  /** Auth axis: false = requires a signed-in session (mirrors PageSpec). */
+  public?: boolean
   mode?: "create" | "edit" | "view"
   sections: FormSection[]
   actions?: FormAction[]
   submit?: FormSubmit
   render?: FormRender
+  /** Render-context variables injected into this form's expressions. */
+  context?: ContextDecl[]
 }
 
 export interface FormSection {
@@ -1102,6 +1136,10 @@ export interface AppSummary {
   stack_family?: string
   /** Entity persist backend (backend/04-persist-backend.md): jsonb-persist */
   persist_backend?: string
+  /** App's default theme (frontend/05-app-kinds.md §6 theme binding) — the
+   *  Theme kind name from App.spec.theme_ref. Auto-applied unless the user
+   *  has picked a theme themselves. */
+  theme?: string
   /** Resolved chrome composition (frontend/05-app-kinds.md §4.1) — archetype
    *  defaults already applied by the backend; final values only. Always
    *  present once the bundle loads. */
@@ -1124,6 +1162,9 @@ export interface ChromeConfig {
   breadcrumbs: string
   /** show | hide */
   theme_switcher: string
+  /** In-app route to the signed-in user's profile page (optional —
+   *  when set, the auth-area user menu renders a Profile item). */
+  profile_route?: string
 }
 
 /**
@@ -1198,6 +1239,8 @@ export interface NotificationCenterSpec {
 
 export interface MeResponse {
   user_id: string
+  /** Display identity (username) — preferred over user_id for UI labels. */
+  username?: string
   workspace: string
   /** App scope for this session (empty = workspace-level, e.g. _admin). */
   app?: string

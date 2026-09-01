@@ -12,6 +12,83 @@ import (
 // has a route (derived Page wrapper); explicit false means embed-only.
 func IsPublic(p *bool) bool { return p == nil || *p }
 
+// ContextDecl declares one render-context variable injected into a Page/Form
+// (render-context-standard plan). Sources are a closed set:
+//
+//	session | entity | api | const | expr
+//
+// Standard slots (`user`, `route`, `fields`) are always present and need no
+// declaration; `context:` adds named variables resolved from these sources.
+type ContextDecl struct {
+	// Name is the context variable name (e.g. "vendor") — referenced in
+	// templates as {vendor.field}.
+	Name string `yaml:"name" json:"name"`
+	// Source is the data source — closed set.
+	// @schema {description: "Context source — closed set.", enum: ["session", "entity", "api", "const", "expr"]}
+	Source string `yaml:"source" json:"source"`
+	// Entity ref for source: entity ("module.entity").
+	Entity string `yaml:"entity,omitempty" json:"entity,omitempty"`
+	// ID for source: entity — a record id, or a template token like
+	// "{user.vendor_id}" resolved against the standard slots.
+	ID string `yaml:"id,omitempty" json:"id,omitempty"`
+	// Call for source: api — "module.service.action".
+	Call string `yaml:"call,omitempty" json:"call,omitempty"`
+	// Params for source: api — action params.
+	Params map[string]any `yaml:"params,omitempty" json:"params,omitempty"`
+	// Value for source: const — a literal value.
+	Value any `yaml:"value,omitempty" json:"value,omitempty"`
+	// Expr for source: expr — a FormSpecExpr string evaluated against the
+	// standard slots + previously-resolved context entries.
+	Expr string `yaml:"expr,omitempty" json:"expr,omitempty"`
+	// Realtime (source: entity) — subscribe to the entity's events and
+	// re-resolve the record on change (dashboard live-update, Phase 3).
+	Realtime bool `yaml:"realtime,omitempty" json:"realtime,omitempty"`
+	// Fallback is used while the source is loading or on error.
+	Fallback any `yaml:"fallback,omitempty" json:"fallback,omitempty"`
+}
+
+// ContextSourceSet is the closed set of allowed context sources.
+var ContextSourceSet = map[string]bool{
+	"session": true,
+	"entity":  true,
+	"api":     true,
+	"const":   true,
+	"expr":    true,
+}
+
+// ValidateContextDecls validates a list of context declarations: unique
+// names and a closed source set.
+func ValidateContextDecls(decls []ContextDecl) error {
+	seen := map[string]bool{}
+	for i, d := range decls {
+		if d.Name == "" {
+			return fmt.Errorf("context[%d]: `name` is required", i)
+		}
+		if seen[d.Name] {
+			return fmt.Errorf("context: duplicate name %q", d.Name)
+		}
+		seen[d.Name] = true
+		if !ContextSourceSet[d.Source] {
+			return fmt.Errorf("context %q: source %q is not a known source (closed set: session, entity, api, const, expr)", d.Name, d.Source)
+		}
+		switch d.Source {
+		case "entity":
+			if d.Entity == "" {
+				return fmt.Errorf("context %q: source entity requires `entity` (module.entity)", d.Name)
+			}
+		case "api":
+			if d.Call == "" {
+				return fmt.Errorf("context %q: source api requires `call` (module.service.action)", d.Name)
+			}
+		case "expr":
+			if d.Expr == "" {
+				return fmt.Errorf("context %q: source expr requires `expr`", d.Name)
+			}
+		}
+	}
+	return nil
+}
+
 // PageSpec defines a routed screen composing blocks (Frontend §3).
 // `blocks` and `tabs` are mutually exclusive; `mode: custom` excludes both.
 type PageSpec struct {
@@ -36,12 +113,17 @@ type PageSpec struct {
 	// asset (frontend/06-page-kinds.md §13). Empty means blocks/tabs.
 	// @schema {description: "Page mode. `custom` hands all rendering to an asset component; empty means blocks/tabs composition.", enum: ["", "custom"]}
 	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`
-	// Asset is the module-relative asset path for `mode: custom`
-	// (e.g. "logistics/assets/dispatch-console.js").
+	// Asset is the spec-root-relative asset path for `mode: custom`
+	// (e.g. "modules/logistics/assets/dispatch-console.js").
 	Asset string `yaml:"asset,omitempty" json:"asset,omitempty"`
 	// Binds is the backend footprint (entities/actions/subscribe) a custom
 	// page may touch — enforced client-side like a component's `needs`.
 	Binds *PageBinds `yaml:"binds,omitempty" json:"binds,omitempty"`
+	// Context declares render-context variables injected into this page's
+	// blocks (render-context-standard plan). Standard slots (`user`, `route`)
+	// are always present; `context:` adds named variables from a closed set
+	// of sources.
+	Context []ContextDecl `yaml:"context,omitempty" json:"context,omitempty"`
 	// Renderer is the per-instance renderer override (frontend/03-renderer-
 	// kind.md §3), e.g. "community/super-kanban". Overrides the App-level
 	// `renderers:` map for this instance.
@@ -175,6 +257,10 @@ type FormSpec struct {
 	Actions  []FormAction    `yaml:"actions,omitempty" json:"actions,omitempty"`
 	Submit   *FormSubmit     `yaml:"submit,omitempty" json:"submit,omitempty"`
 	Render   *FormRenderDecl `yaml:"render,omitempty" json:"render,omitempty"`
+	// Context declares render-context variables injected into this form's
+	// expressions (visible_when/required_when/compute). Standard slots
+	// (`user`, `route`, `fields`) are always present.
+	Context []ContextDecl `yaml:"context,omitempty" json:"context,omitempty"`
 }
 
 // FormSection groups form fields.
@@ -678,6 +764,9 @@ func ValidatePageSpec(p *PageSpec) error {
 		if !SectionBlockTypes[blk.Section.Type] {
 			return fmt.Errorf("page block %d: section.type %q is not a known section block (closed set: hero, feature_grid, card, carousel, cta)", i, blk.Section.Type)
 		}
+	}
+	if err := ValidateContextDecls(p.Context); err != nil {
+		return fmt.Errorf("page: %w", err)
 	}
 	return nil
 }

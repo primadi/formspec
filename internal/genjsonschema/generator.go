@@ -54,6 +54,7 @@ func (c *Converter) Generate(collect *CollectResult) *GenerateResult {
 		"KvstoreUseDecl",
 		"PageLayout",
 		"PageBinds", "BlockBinds",
+		"ContextDecl", // render-context standard (Page/Form spec.context)
 		"ParamValidation",
 		"SlotDecl", "SlotContract",
 		"StorageTransform",

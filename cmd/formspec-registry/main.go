@@ -35,6 +35,7 @@ func main() {
 	specPath := flag.String("spec", "", "Spec directory (default: embedded spec extracted to temp)")
 	addr := flag.String("addr", ":8080", "Listen address")
 	prodMode := flag.Bool("prod", false, "Production mode (Postgres + JWT + strict gates)")
+	devAuth := flag.Bool("dev-auth", true, "Dev mode + real JWT auth (login & authorization enforced)")
 	jwtSecret := flag.String("jwt-secret", "", "JWT HMAC secret (dev only)")
 	jwtIssuer := flag.String("jwt-issuer", "formspec-registry", "JWT issuer")
 	jwtPublicKey := flag.String("jwt-public-key", "", "RSA/ECDSA public key PEM for asymmetric JWT")
@@ -65,6 +66,7 @@ func main() {
 		SpecPath:         *specPath,
 		Addr:             *addr,
 		ProdMode:         *prodMode,
+		DevAuth:          *devAuth,
 		JWTSecret:        *jwtSecret,
 		JWTIssuer:        *jwtIssuer,
 		JWTPublicKeyPath: *jwtPublicKey,

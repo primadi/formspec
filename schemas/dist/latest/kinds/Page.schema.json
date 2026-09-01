@@ -4,7 +4,7 @@
   "type": "object",
   "properties": {
     "asset": {
-      "description": "Asset is the module-relative asset path for `mode: custom`",
+      "description": "Asset is the spec-root-relative asset path for `mode: custom`",
       "type": "string"
     },
     "binds": {
@@ -16,6 +16,13 @@
       "type": "array",
       "items": {
         "$ref": "#/$defs/PageBlock"
+      }
+    },
+    "context": {
+      "description": "Context declares render-context variables injected into this page's",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ContextDecl"
       }
     },
     "description": {

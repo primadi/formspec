@@ -1,6 +1,6 @@
 // ─── AssetRenderer — loads & mounts a custom asset component (todo 5.9.1) ───
 //
-// Loads an ES module from `asset` (module-relative path like
+// Loads an ES module from `asset` (spec-root-relative path like
 // "billing/assets/payment-timeline.js"), calls its default export's
 // `mount(el, props, formspec)` on mount and `unmount(el)` on unmount. The
 // `formspec` client is injected per the asset contract
@@ -50,7 +50,8 @@ export function AssetRenderer({
     const el = containerRef.current
     if (!el) return
 
-    // Resolve "module/assets/x.js" → "/{ws}/_ui/assets/module/assets/x.js"
+    // Resolve spec-root-relative asset path:
+    // "modules/x/assets/y.js" → "/{ws}/_ui/assets/modules/x/assets/y.js"
     const url = `/${workspace}/_ui/assets/${asset}`
 
     const formspec = createFormspecClient({

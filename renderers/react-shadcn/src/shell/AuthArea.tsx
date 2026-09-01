@@ -14,7 +14,7 @@
 import { Link } from "react-router-dom"
 import { useSessionStore } from "@/stores/session"
 import { useSurface } from "@/hooks/useSurface"
-import { LogoutButton } from "./LogoutButton"
+import { UserMenu } from "./UserMenu"
 
 export function AuthArea({ mode }: { mode: string | undefined }) {
   const token = useSessionStore((s) => s.token)
@@ -22,8 +22,8 @@ export function AuthArea({ mode }: { mode: string | undefined }) {
 
   if (mode !== "links" && mode !== "button") return null
 
-  // Signed-in → logout control (all modes that render auth UI).
-  if (token) return <LogoutButton />
+  // Signed-in → avatar user menu (Profile identity + Sign out).
+  if (token) return <UserMenu />
 
   if (mode === "button") {
     return (

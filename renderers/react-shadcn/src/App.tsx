@@ -205,6 +205,8 @@ function SurfaceShell({
   // keeps the same Component references across those re-renders.
   // Must run before any early return below — Hooks can't be conditional.
   const activeTheme = usePrefsStore((s) => s.activeTheme)
+  const themeTouched = usePrefsStore((s) => s.themeTouched)
+  const setActiveTheme = usePrefsStore((s) => s.setActiveTheme)
   // The app surface uses this resolved App's own root_url (Core §4.4) —
   // a workspace can resolve to more than one App, each mounted at its own
   // root_url under the shared /{ws}/app/* renderer SPA. Falls back to a
@@ -235,6 +237,19 @@ function SurfaceShell({
       document.title = bundle.app.title ?? bundle.app.name
     }
   }, [bundle])
+
+  // Theme binding (frontend/05-app-kinds.md §6): auto-apply the App's
+  // theme_ref as the default theme — but only until the user picks a theme
+  // (or color preset) themselves (prefs.themeTouched). Mode toggles
+  // (light/dark/system) do NOT count as a pick, so switching mode never
+  // cancels the App's theme.
+  useEffect(() => {
+    if (!bundle || themeTouched) return
+    const ref = bundle.app.theme
+    if (ref && bundle.themes.some((t) => t.name === ref)) {
+      setActiveTheme(ref)
+    }
+  }, [bundle, themeTouched, setActiveTheme])
 
   // Boot: fetch session + meta, then start spec version polling.
   // A `public` surface is anonymous — no session boot, meta fetched without

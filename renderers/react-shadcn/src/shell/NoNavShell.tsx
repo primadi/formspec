@@ -15,6 +15,7 @@
 import { Link, Outlet, useLocation, useParams } from "react-router-dom"
 import { useMetaStore } from "@/stores/meta"
 import { AuthArea } from "./AuthArea"
+import { ThemeSwitcher } from "@/components/ThemeSwitcher"
 import { resolveIcon } from "@/lib/icon-resolver"
 import type { MenuItem } from "@/types/manifest"
 
@@ -96,6 +97,9 @@ export function NoNavShell() {
                   })}
                 </nav>
               )}
+              {/* Theme switcher — no-nav default-nya hide; App opt-in via
+                  chrome.theme_switcher: show (frontend/05-app-kinds.md §4.1). */}
+              {chrome?.theme_switcher === "show" && <ThemeSwitcher />}
               <AuthArea mode={chrome?.auth} />
             </div>
           </div>
