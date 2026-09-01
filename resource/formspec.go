@@ -998,7 +998,13 @@ func (a *App) StartBackgroundWorkers() {
 // call Handler()) never spins up a background poller.
 func (a *App) ListenAndServe() error {
 	a.StartBackgroundWorkers()
-	a.httpServer = &http.Server{Addr: a.cfg.Addr, Handler: a.handler}
+	// Use the dynamic Handler() wrapper (not a.handler directly) so a
+	// ReloadSpec() swap of a.handler takes effect on the live server —
+	// otherwise the http.Server keeps serving the boot-time handler with
+	// the stale UI registry (hot-reload would "complete" but serve old
+	// manifests). `formspec dev` already uses Handler(); this makes the
+	// native binaries (formspec-registry) behave the same.
+	a.httpServer = &http.Server{Addr: a.cfg.Addr, Handler: a.Handler()}
 	return a.httpServer.ListenAndServe()
 }
 

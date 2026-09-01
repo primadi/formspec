@@ -652,6 +652,9 @@ export interface SectionBlock {
   cta?: SectionCTA
   items?: SectionItem[]
   columns?: number
+  /** Text alignment of title/subtitle/items — left (default) | center | right.
+   *  Ignored by cta (always centered by design). */
+  align?: "left" | "center" | "right"
   autoplay?: boolean
   interval_ms?: number
 }

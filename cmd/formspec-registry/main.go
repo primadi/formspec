@@ -22,8 +22,11 @@ import (
 	"io/fs"
 	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 
+	"github.com/primadi/formspec/internal/devserver"
 	"github.com/primadi/formspec/internal/vendor"
 	native "github.com/primadi/formspec/registry"
 	web "github.com/primadi/formspec/registry/web"
@@ -42,6 +45,26 @@ func main() {
 	strictMode := flag.Bool("strict", false, "Strict uses enforcement")
 	webDir := flag.String("web-dir", "", "Renderer SPA root (serves /{ws}/_admin and portal)")
 	flag.Parse()
+
+	// ── Dev DX (same as `formspec dev`): PID file + auto-kill previous ──
+	// A second invocation kills the first instead of failing on the port.
+	pidFile := filepath.Join(".formspec", "registry.pid")
+	devserver.AutoKillPrevious(pidFile)
+	devserver.WritePIDFile(pidFile)
+
+	// ── Port conflict resolution ──
+	// Kill a previous formspec-registry holding the port; a foreign process
+	// yields a descriptive error. /proc/<pid>/comm truncates to 15 chars
+	// ("formspec-regist"), so match that too.
+	if err := devserver.EnsurePort(*addr, "formspec-regist"); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	// Disk-backed spec (explicit --spec) → hot-reload watcher, same as
+	// `formspec dev`. The embedded spec is a compile-time snapshot extracted
+	// to a temp dir — watching it is useless, so log a hint instead.
+	watchSpec := *specPath != ""
 
 	if *specPath == "" {
 		// Extract the embedded spec so Config.SpecPath (a disk path) can read it.
@@ -91,8 +114,18 @@ func main() {
 	})
 	fmt.Println("✓ native handlers: registry.SignatureVerify")
 
+	// ── Spec hot-reload (disk-backed --spec only) ──
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	if watchSpec {
+		go devserver.WatchSpec(ctx, app, *specPath, nil)
+	} else {
+		fmt.Println("ℹ spec: embedded snapshot — edit registry/spec + restart, or run with --spec registry/spec for hot-reload")
+	}
+
 	fmt.Printf("✓ Server starting on http://localhost%s\n", *addr)
-	log.Fatal(app.ListenAndServe())
+	devserver.ServeAppUntilSignal(ctx, app)
+	devserver.CleanupPIDFile(pidFile)
 }
 
 // signatureVerify implements the registry.signature-verify.verify service

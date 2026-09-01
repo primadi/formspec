@@ -22,21 +22,17 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
-	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
-	"github.com/fsnotify/fsnotify"
-
+	"github.com/primadi/formspec/internal/devserver"
 	"github.com/primadi/formspec/internal/sidecar"
 	"github.com/primadi/formspec/pkg/spec"
 	"github.com/primadi/formspec/renderers/jsonb-persist/datastore"
@@ -358,88 +354,13 @@ func pidFilePath() string {
 	return filepath.Join(".formspec", pidFileName)
 }
 
-// autoKillPrevious reads the PID file from .formspec/dev.pid, kills the process
-// if it still exists and is a formspec dev instance, then removes the stale file.
-func autoKillPrevious() {
-	pidPath := pidFilePath()
-	data, err := os.ReadFile(pidPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return
-		}
-		log.Printf("[formspec] warning: cannot read PID file %s: %v", pidPath, err)
-		return
-	}
+// autoKillPrevious / writePIDFile / cleanupPIDFile delegate to the shared
+// internal/devserver package (also used by cmd/formspec-registry).
+func autoKillPrevious() { devserver.AutoKillPrevious(pidFilePath()) }
 
-	oldPID, err := strconv.Atoi(strings.TrimSpace(string(data)))
-	if err != nil {
-		log.Printf("[formspec] warning: invalid PID in %s, removing...", pidPath)
-		os.Remove(pidPath)
-		return
-	}
+func writePIDFile() { devserver.WritePIDFile(pidFilePath()) }
 
-	proc, err := os.FindProcess(oldPID)
-	if err != nil {
-		// Process not found, clean up stale PID file
-		os.Remove(pidPath)
-		return
-	}
-
-	// Send SIGTERM; if it fails, process is already dead
-	if err := proc.Signal(syscall.SIGTERM); err != nil {
-		os.Remove(pidPath)
-		return
-	}
-
-	log.Printf("[formspec] killing previous instance (PID %d)...", oldPID)
-
-	// Give it a real chance to run its own graceful shutdown (which stops
-	// its app/Vite children cleanly) instead of racing it with a fixed
-	// short sleep — that previously SIGKILLed it before it got around to
-	// signaling its children, leaving them orphaned in their own process
-	// group (see ensurePort for the same fix).
-	deadline := time.Now().Add(8 * time.Second)
-	for time.Now().Before(deadline) && processAlive(oldPID) {
-		time.Sleep(150 * time.Millisecond)
-	}
-
-	if processAlive(oldPID) {
-		log.Printf("[formspec] previous instance (PID %d) did not exit gracefully — forcing", oldPID)
-		killDescendants(oldPID)
-		proc.Signal(syscall.SIGKILL)
-		time.Sleep(200 * time.Millisecond)
-	}
-
-	os.Remove(pidPath)
-}
-
-// processAlive reports whether pid still exists, via a zero-signal probe.
-func processAlive(pid int) bool {
-	proc, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	return proc.Signal(syscall.Signal(0)) == nil
-}
-
-// writePIDFile writes the current PID to the PID file.
-func writePIDFile() {
-	pidPath := pidFilePath()
-	if err := os.MkdirAll(filepath.Dir(pidPath), 0755); err != nil {
-		log.Printf("[formspec] warning: cannot create state dir for PID file: %v", err)
-		return
-	}
-	if err := os.WriteFile(pidPath, fmt.Appendf(nil, "%d\n", os.Getpid()), 0644); err != nil {
-		log.Printf("[formspec] warning: cannot write PID file: %v", err)
-	}
-}
-
-// cleanupPIDFile removes the PID file.
-func cleanupPIDFile() {
-	if err := os.Remove(pidFilePath()); err != nil && !os.IsNotExist(err) {
-		log.Printf("[formspec] warning: cannot remove PID file: %v", err)
-	}
-}
+func cleanupPIDFile() { devserver.CleanupPIDFile(pidFilePath()) }
 
 // chdirIfPositionalArg checks if the first arg is a directory (not a flag).
 // If so, it changes to that directory and returns the remaining args.
@@ -598,146 +519,15 @@ func isLocalRuntime(runtime string) bool {
 
 // ─── Port Conflict Resolution (from ex-sidecar) ───
 
-// ensurePort checks whether the given address is free. If it is in use and
-// --force was passed, it kills previous formspec instances holding it;
-// if a different program holds the port, it returns a descriptive error.
+// ensurePort / killDescendants / extractPort / findProcessOnPort delegate to
+// the shared internal/devserver package (also used by cmd/formspec-registry).
 func ensurePort(addr, ownProcessName string) error {
-	port, err := extractPort(addr)
-	if err != nil {
-		return nil // Unix sockets skip check
-	}
-	if port == 0 {
-		return nil
-	}
-
-	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
-	if err == nil {
-		ln.Close()
-		return nil
-	}
-
-	pid, procName, err := findProcessOnPort(port)
-	if err != nil {
-		return fmt.Errorf("port %d is in use but cannot identify the owner: %w", port, err)
-	}
-
-	if procName == ownProcessName || procName == "exe" || strings.Contains(procName, ownProcessName) {
-		fmt.Fprintf(os.Stderr, "port %d is held by a previous %s (PID %d) — killing it...\n", port, ownProcessName, pid)
-		proc, err := os.FindProcess(pid)
-		if err != nil {
-			return nil
-		}
-		proc.Signal(syscall.SIGTERM)
-
-		// Give the old instance a real chance to run its own graceful
-		// shutdown (which stops its app/Vite children cleanly) instead of
-		// racing it with a fixed short sleep — that previously SIGKILLed it
-		// before it got around to signaling its children, leaving them
-		// orphaned in their own process group.
-		deadline := time.Now().Add(8 * time.Second)
-		for time.Now().Before(deadline) {
-			if ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port)); err == nil {
-				ln.Close()
-				return nil
-			}
-			time.Sleep(150 * time.Millisecond)
-		}
-
-		// It's still holding the port after a generous wait — force it,
-		// and sweep any children it leaked (e.g. an app/Vite process
-		// detached in its own process group) so they don't accumulate
-		// across restarts.
-		fmt.Fprintf(os.Stderr, "port %d: previous instance (PID %d) did not exit gracefully — forcing\n", port, pid)
-		killDescendants(pid)
-		proc.Signal(syscall.SIGKILL)
-		time.Sleep(200 * time.Millisecond)
-		return nil
-	}
-
-	return fmt.Errorf("port %d is already in use by %q (PID %d). Stop it manually first", port, procName, pid)
+	return devserver.EnsurePort(addr, ownProcessName)
 }
 
-// killDescendants force-kills every descendant of pid (depth-first) so that
-// children left behind in their own process group — e.g. an app/Vite
-// process started with Setpgid, which doesn't die just because its parent
-// does — don't survive a forced kill of that parent.
-func killDescendants(pid int) {
-	out, err := exec.Command("pgrep", "-P", strconv.Itoa(pid)).Output()
-	if err != nil {
-		return
-	}
-	for _, field := range strings.Fields(string(out)) {
-		childPid, err := strconv.Atoi(field)
-		if err != nil {
-			continue
-		}
-		killDescendants(childPid)
-		if proc, err := os.FindProcess(childPid); err == nil {
-			proc.Signal(syscall.SIGKILL)
-		}
-	}
-}
+func processAlive(pid int) bool { return devserver.ProcessAlive(pid) }
 
-// extractPort extracts the TCP port from an address string.
-// Supports :8080, http://127.0.0.1:9090, etc. Unix sockets return 0.
-func extractPort(addr string) (int, error) {
-	addr = strings.TrimSpace(addr)
-	if strings.HasPrefix(addr, "unix://") {
-		return 0, nil
-	}
-	addr = strings.TrimPrefix(addr, "http://")
-	addr = strings.TrimPrefix(addr, "https://")
-	addr = strings.TrimPrefix(addr, "tcp://")
-
-	_, portStr, err := net.SplitHostPort(addr)
-	if err != nil {
-		if strings.HasPrefix(addr, ":") {
-			portStr = addr[1:]
-		} else {
-			return 0, fmt.Errorf("cannot parse address %q: %w", addr, err)
-		}
-	}
-	port, err := strconv.Atoi(portStr)
-	if err != nil {
-		return 0, fmt.Errorf("invalid port %q in address %q", portStr, addr)
-	}
-	return port, nil
-}
-
-// findProcessOnPort returns the PID and process name for the process listening on the given port.
-func findProcessOnPort(port int) (int, string, error) {
-	// Try lsof first (Linux/macOS)
-	cmd := exec.Command("lsof", "-ti", fmt.Sprintf(":%d", port))
-	out, err := cmd.Output()
-	if err == nil {
-		pidStr := strings.TrimSpace(string(out))
-		if pid, err := strconv.Atoi(pidStr); err == nil {
-			// Get process name
-			proc, err := os.FindProcess(pid)
-			if err == nil {
-				// Try to read /proc/PID/comm on Linux
-				comm, err := os.ReadFile(fmt.Sprintf("/proc/%d/comm", pid))
-				if err == nil {
-					return pid, strings.TrimSpace(string(comm)), nil
-				}
-				return pid, fmt.Sprintf("PID %d", pid), nil
-			}
-			_ = proc
-		}
-	}
-
-	// Fallback: try fuser
-	cmd = exec.Command("fuser", fmt.Sprintf("%d/tcp", port))
-	out, err = cmd.Output()
-	if err == nil {
-		pidStr := strings.TrimSpace(string(out))
-		if pid, err := strconv.Atoi(pidStr); err == nil {
-			return pid, fmt.Sprintf("PID %d", pid), nil
-		}
-	}
-
-	return 0, "", fmt.Errorf("cannot determine owner of port %d", port)
-}
+func killDescendants(pid int) { devserver.KillDescendants(pid) }
 
 // ─── Vite SPA Proxy ───
 
@@ -778,105 +568,19 @@ func viteSPAProxy(next http.Handler, viteTarget, workspaceID string) http.Handle
 	})
 }
 
-// watchSpecForChanges watches the spec directory for YAML/STAR file changes
-// and triggers a full reload of all registries via App.ReloadSpec().
-//
-// viteHMRURL is the Vite dev server's /_dev/hmr-reload endpoint (empty when
-// --dev-ui is not active). When set, the watcher calls it after each reload
-// so Vite broadcasts a custom HMR event to connected browsers — no polling.
-//
-// Runs in a background goroutine. Stops when ctx is cancelled (SIGINT/SIGTERM).
+// watchSpecForChanges delegates to the shared internal/devserver watcher
+// (also used by cmd/formspec-registry), adding the Vite HMR notify callback
+// used in --dev-ui mode.
 func watchSpecForChanges(ctx context.Context, app *formspec.App, specPath string, viteHMRURL string) {
-	watcher, err := fsnotify.NewWatcher()
-	if err != nil {
-		log.Printf("[formspec] spec watcher: %v (hot-reload disabled)", err)
-		return
-	}
-	defer watcher.Close()
-
-	// Add the spec directory and all subdirectories recursively.
-	filepath.Walk(specPath, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info.IsDir() {
-			base := filepath.Base(path)
-			if strings.HasPrefix(base, ".") || base == "node_modules" || base == "impl" {
-				return filepath.SkipDir
+	var onReload func()
+	if viteHMRURL != "" {
+		onReload = func() {
+			if resp, err := http.Get(viteHMRURL); err != nil {
+				log.Printf("[formspec] vite hmr notify: %v", err)
+			} else {
+				resp.Body.Close()
 			}
-			if watchErr := watcher.Add(path); watchErr != nil {
-				log.Printf("[formspec] spec watcher: cannot watch %s: %v", path, watchErr)
-			}
-		}
-		return nil
-	})
-
-	log.Printf("[formspec] watching %s for spec changes (hot-reload)", specPath)
-
-	// Debounce mechanism: coalesce rapid file events (e.g. editor save
-	// sequences) into a single reload call after 300ms of inactivity.
-	const debounceInterval = 300 * time.Millisecond
-	var timer *time.Timer
-
-	for {
-		select {
-		case <-ctx.Done():
-			if timer != nil {
-				timer.Stop()
-			}
-			return
-
-		case event, ok := <-watcher.Events:
-			if !ok {
-				return
-			}
-
-			// Automatically watch newly created subdirectories.
-			if event.Op&fsnotify.Create != 0 {
-				if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
-					base := filepath.Base(event.Name)
-					if !strings.HasPrefix(base, ".") && base != "node_modules" && base != "impl" {
-						watcher.Add(event.Name)
-					}
-				}
-			}
-
-			if event.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Remove|fsnotify.Rename) == 0 {
-				continue
-			}
-			ext := strings.ToLower(filepath.Ext(event.Name))
-			if ext != ".yaml" && ext != ".yml" && ext != ".star" {
-				continue
-			}
-
-			// Reset debounce timer on each event.
-			if timer != nil {
-				timer.Stop()
-			}
-			timer = time.NewTimer(debounceInterval)
-			go func(name string) {
-				<-timer.C
-				log.Printf("[formspec] spec change detected: %s — reloading...", filepath.Base(name))
-				if err := app.ReloadSpec(); err != nil {
-					log.Printf("[formspec] spec reload error: %v", err)
-				} else {
-					log.Printf("[formspec] spec reload complete")
-					// Notify Vite HMR (only in --dev-ui mode).
-					if viteHMRURL != "" {
-						if resp, err := http.Get(viteHMRURL); err != nil {
-							log.Printf("[formspec] vite hmr notify: %v", err)
-						} else {
-							resp.Body.Close()
-						}
-					}
-				}
-			}(event.Name)
-
-		case err, ok := <-watcher.Errors:
-			if !ok {
-				return
-			}
-			log.Printf("[formspec] spec watcher error: %v", err)
 		}
 	}
+	devserver.WatchSpec(ctx, app, specPath, onReload)
 }

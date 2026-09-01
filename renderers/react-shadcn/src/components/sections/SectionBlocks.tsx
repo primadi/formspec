@@ -165,7 +165,8 @@ function FeatureGridBlock({
   const columns = block.columns ?? 3
   const items = block.items ?? []
   return (
-    <section className="mx-auto max-w-6xl px-4 py-16">
+    // Stretch to grid column — no mx-auto (see CardBlock note).
+    <section className={cn("max-w-6xl px-4 py-16", alignClass(block.align))}>
       {block.title && (
         <h2 className="text-3xl font-bold tracking-tight">
           {t(block.title, context)}
@@ -204,6 +205,13 @@ function FeatureGridBlock({
 
 // ── Card ──
 
+// Align maps `block.align` to a text-alignment class (default left).
+function alignClass(align?: string): string {
+  if (align === "center") return "text-center"
+  if (align === "right") return "text-right"
+  return ""
+}
+
 function CardBlock({
   block,
   workspace,
@@ -217,8 +225,13 @@ function CardBlock({
 }) {
   const columns = block.columns ?? 3
   const items = block.items ?? []
+  const center = block.align === "center"
   return (
-    <section className="mx-auto max-w-6xl px-4 py-16">
+    // No `mx-auto` on the section element: as a grid item, auto margins
+    // disable stretch sizing → shrink-to-fit → sections of different content
+    // length appear centered/left inconsistently. The section stretches to
+    // its grid column instead (plan section-block-align.md).
+    <section className={cn("max-w-6xl px-4 py-16", alignClass(block.align))}>
       {block.title && (
         <h2 className="text-3xl font-bold tracking-tight">
           {t(block.title, context)}
@@ -236,7 +249,10 @@ function CardBlock({
         {items.map((item, idx) => (
           <div
             key={idx}
-            className="flex flex-col overflow-hidden rounded-lg border"
+            className={cn(
+              "flex flex-col overflow-hidden rounded-lg border",
+              center && "items-center",
+            )}
           >
             {item.image && (
               <img
@@ -246,6 +262,9 @@ function CardBlock({
               />
             )}
             <div className="flex flex-1 flex-col gap-2 p-6">
+              {item.icon && (
+                <Icon name={item.icon} className="size-6 text-primary" />
+              )}
               {item.title && (
                 <h3 className="text-lg font-semibold">
                   {t(item.title, context)}
@@ -305,7 +324,8 @@ function CarouselBlock({
   if (items.length === 0) return null
 
   return (
-    <section className="mx-auto max-w-6xl px-4 py-16">
+    // Stretch to grid column — no mx-auto (see CardBlock note).
+    <section className={cn("max-w-6xl px-4 py-16", alignClass(block.align))}>
       {block.title && (
         <h2 className="text-3xl font-bold tracking-tight">
           {t(block.title, context)}

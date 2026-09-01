@@ -27,7 +27,8 @@ spec:
     - section:
         type: card
         title: "Profil Saya"
-        subtitle: "Identitas akun Anda di FormSpec Registry."
+        subtitle: "Identitas akun Anda di FormSpec Registry"
+        # align: center
         columns: 1
         items:
           - { icon: user, title: "{greeting}, {user.username}", text: "User ID: {user.user_id} · Workspace: {user.workspace}" }

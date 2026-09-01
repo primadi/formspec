@@ -183,6 +183,10 @@ type SectionBlock struct {
 	Items []SectionItem `yaml:"items,omitempty" json:"items,omitempty"`
 	// Columns controls the grid width for feature_grid / card (default 3).
 	Columns int `yaml:"columns,omitempty" json:"columns,omitempty"`
+	// Align controls text alignment of title/subtitle/items — left (default)
+	// | center | right. Ignored by cta (always centered by design).
+	// @schema {enum: ["left", "center", "right"], default: "left"}
+	Align string `yaml:"align,omitempty" json:"align,omitempty"`
 	// Autoplay + IntervalMS drive carousel auto-advance (default off / 5000ms).
 	Autoplay   bool `yaml:"autoplay,omitempty" json:"autoplay,omitempty"`
 	IntervalMS int  `yaml:"interval_ms,omitempty" json:"interval_ms,omitempty"`
