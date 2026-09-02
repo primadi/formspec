@@ -26,10 +26,12 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/primadi/formspec/internal/api"
 	"github.com/primadi/formspec/internal/devserver"
 	"github.com/primadi/formspec/internal/vendor"
 	native "github.com/primadi/formspec/registry"
 	web "github.com/primadi/formspec/registry/web"
+	db "github.com/primadi/formspec/renderers/jsonb-persist"
 	formspec "github.com/primadi/formspec/resource"
 )
 
@@ -111,8 +113,9 @@ func main() {
 	// ── Native handlers (13.3.3) — only in this binary ──
 	app.RegisterNatives(map[string]formspec.NativeHandler{
 		"registry.SignatureVerify": signatureVerify,
+		"registry.vendor.approve":  vendorApprove(app),
 	})
-	fmt.Println("✓ native handlers: registry.SignatureVerify")
+	fmt.Println("✓ native handlers: registry.SignatureVerify, registry.vendor.approve")
 
 	// ── Spec hot-reload (disk-backed --spec only) ──
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -126,6 +129,57 @@ func main() {
 	fmt.Printf("✓ Server starting on http://localhost%s\n", *addr)
 	devserver.ServeAppUntilSignal(ctx, app)
 	devserver.CleanupPIDFile(pidFile)
+}
+
+// vendorApprove implements the registry.vendor.approve action (Fase 6 —
+// vendor upgrade flow): an admin approves a pending vendor application →
+// vendor status becomes active + the owner user is granted the `vendor` role
+// and registry permissions (registry.vendor.*, registry.module.*).
+func vendorApprove(app *formspec.App) formspec.NativeHandler {
+	return func(ctx context.Context, params formspec.NativeParams) (any, error) {
+		owner, _ := params.Resource["owner_username"].(string)
+		if owner == "" {
+			return nil, fmt.Errorf("vendor has no owner_username")
+		}
+
+		// 1. Activate the vendor record (status → active) with CAS.
+		store, err := app.Registry().GetEntityStore("registry", "vendor")
+		if err != nil {
+			return nil, fmt.Errorf("resolve vendor store: %w", err)
+		}
+		rec, err := store.GetByID(ctx, db.GetByIDParams{WorkspaceID: params.WorkspaceID, ID: params.ResourceID})
+		if err != nil {
+			return nil, fmt.Errorf("load vendor: %w", err)
+		}
+		data := map[string]any{}
+		for k, v := range rec.Data {
+			data[k] = v
+		}
+		data["status"] = "active"
+		if _, err := store.Update(ctx, db.UpdateParams{
+			WorkspaceID: params.WorkspaceID,
+			ID:          params.ResourceID,
+			Version:     rec.Version,
+			UpdatedBy:   params.UserID,
+			Data:        data,
+		}); err != nil {
+			return nil, fmt.Errorf("activate vendor: %w", err)
+		}
+
+		// 2. Grant the owner user the vendor role + registry permissions.
+		svc := api.GetAuthService()
+		if svc == nil {
+			return nil, fmt.Errorf("auth service not configured")
+		}
+		if err := svc.GrantRoles(ctx, params.WorkspaceID, owner,
+			[]string{"vendor"},
+			[]string{"registry.vendor.*", "registry.module.*"},
+		); err != nil {
+			return nil, fmt.Errorf("grant vendor role to %s: %w", owner, err)
+		}
+
+		return map[string]any{"approved": true, "vendor": params.ResourceID, "owner": owner}, nil
+	}
 }
 
 // signatureVerify implements the registry.signature-verify.verify service

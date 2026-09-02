@@ -27,6 +27,33 @@ var ErrUsernameTaken = errors.New("auth: username already taken")
 // format rules (see ValidateUsername).
 var ErrInvalidUsername = errors.New("auth: invalid username format")
 
+// ErrRegistrationClosed is returned by Register when the workspace's
+// registration policy is "closed" (self-service sign-up disabled; admins
+// create users).
+var ErrRegistrationClosed = errors.New("auth: self-service registration is disabled")
+
+// ErrNotPending is returned by ApproveUser when the target user is not in
+// the pending state (only pending users can be approved).
+var ErrNotPending = errors.New("auth: user is not pending")
+
+// RegistrationPolicy is the resolved workspace-level sign-up policy
+// (auth redesign Fase 4).
+//
+//   - open     (default): sign-up creates an active user with DefaultRole.
+//   - approval: sign-up creates a pending user; admin approves + assigns role.
+//   - closed:   self-service sign-up disabled; admins create users.
+type RegistrationPolicy struct {
+	Policy      string
+	DefaultRole string
+}
+
+// Registration policy values.
+const (
+	RegPolicyOpen     = "open"
+	RegPolicyApproval = "approval"
+	RegPolicyClosed   = "closed"
+)
+
 // usernamePattern constrains self-service usernames: 3–32 chars, letters
 // (a-z, A-Z), digits, dot, underscore, hyphen. No spaces or other symbols —
 // usernames appear in URLs, CLI flags (--vendor), and lookup-by-username
@@ -120,6 +147,7 @@ type Service struct {
 	materialize *Materializer
 	resolver    *PermissionResolver
 	maxSessions int // 0 = unlimited (concurrent session limit, todo 6.5.3)
+	regPolicy   RegistrationPolicy
 
 	cleanupStop chan struct{}
 	cleanupOnce sync.Once
@@ -148,6 +176,15 @@ func NewService(roles *RoleResolver, issuer *TokenIssuer) (*Service, error) {
 // user's roles into grants.
 func (s *Service) SetRoleStore(rs *RoleStore) { s.roleStore = rs }
 
+// SetRegistrationPolicy sets the workspace-level sign-up policy (auth
+// redesign Fase 4). Defaults to open when never set.
+func (s *Service) SetRegistrationPolicy(p RegistrationPolicy) {
+	if p.Policy == "" {
+		p.Policy = RegPolicyOpen
+	}
+	s.regPolicy = p
+}
+
 // SetMaterializer wires the materializer that expands role grants into
 // concrete permission strings (todo 5.12.5).
 func (s *Service) SetMaterializer(m *Materializer) { s.materialize = m }
@@ -164,6 +201,55 @@ func (s *Service) SeedOwnerRoles(ctx context.Context, workspaceID string) error 
 		return nil
 	}
 	return s.roleStore.SeedOwnerRoles(ctx, workspaceID)
+}
+
+// ErrSetupComplete is returned when first-run setup is attempted but the
+// workspace already has users (setup is a one-time bootstrap).
+var ErrSetupComplete = errors.New("auth: setup already complete")
+
+// SetupRequired reports whether the workspace needs first-run setup — i.e.
+// it has no user records at all. Used to gate the setup wizard (self-hosted
+// prod bootstrap without formspec-ctl).
+func (s *Service) SetupRequired(ctx context.Context, workspaceID string) (bool, error) {
+	has, err := s.users.HasUsers(ctx, workspaceID)
+	if err != nil {
+		return false, err
+	}
+	return !has, nil
+}
+
+// SetupFirstAdmin creates the first admin user (roles ["admin"], permissions
+// ["*"]) and seeds the 4 owner roles. Only valid when the workspace has no
+// users yet — the one-time bootstrap for self-hosted production. After the
+// first admin exists, normal auth (login/register) applies.
+func (s *Service) SetupFirstAdmin(ctx context.Context, workspaceID, username, password, displayName string) error {
+	required, err := s.SetupRequired(ctx, workspaceID)
+	if err != nil {
+		return err
+	}
+	if !required {
+		return ErrSetupComplete
+	}
+	if err := ValidateUsername(username); err != nil {
+		return err
+	}
+	if len(password) < 8 {
+		return ErrInvalidCredentials
+	}
+	if err := s.users.CreateUser(ctx, workspaceID, &User{
+		Username:    username,
+		DisplayName: displayName,
+		// PasswordHash carries the PLAINTEXT here — CreateUser hashes it.
+		PasswordHash: password,
+		WorkspaceID:  workspaceID,
+		Roles:        []string{"admin"},
+		Permissions:  []string{"*"},
+		Active:       true,
+		Status:       UserStatusActive,
+	}); err != nil {
+		return err
+	}
+	return s.SeedOwnerRoles(ctx, workspaceID)
 }
 
 // ensureResolver lazily builds the permission resolver once both the role
@@ -214,9 +300,14 @@ func (s *Service) SeedDevUser(ctx context.Context, workspaceID, username, passwo
 }
 
 // Register creates a new user account via self-service sign-up (registry
-// portal B.3). The username must be free within the workspace; the account is
-// created active with NO roles/permissions — role assignment remains an admin
-// concern (least privilege by default). Password is hashed inside CreateUser.
+// portal B.3). The username must be free within the workspace. Behavior
+// follows the workspace registration policy (auth redesign Fase 4):
+//
+//   - open     (default): active user with the policy's DefaultRole.
+//   - approval: pending user (cannot log in until an admin approves).
+//   - closed:   returns ErrRegistrationClosed (sign-up disabled).
+//
+// Password is hashed inside CreateUser.
 func (s *Service) Register(ctx context.Context, workspaceID, username, password string) error {
 	if err := ValidateUsername(username); err != nil {
 		return err
@@ -227,13 +318,99 @@ func (s *Service) Register(ctx context.Context, workspaceID, username, password 
 	if _, err := s.users.GetByUsername(ctx, workspaceID, username); err == nil {
 		return ErrUsernameTaken
 	}
-	return s.users.CreateUser(ctx, workspaceID, &User{
-		Username:    username,
-		WorkspaceID: workspaceID,
-		Active:      true,
-		// PasswordHash carries the PLAINTEXT here — CreateUser hashes it.
-		PasswordHash: password,
-	})
+
+	policy := s.regPolicy.Policy
+	if policy == "" {
+		policy = RegPolicyOpen
+	}
+	switch policy {
+	case RegPolicyClosed:
+		return ErrRegistrationClosed
+	case RegPolicyApproval:
+		return s.users.CreateUser(ctx, workspaceID, &User{
+			Username:    username,
+			WorkspaceID: workspaceID,
+			Active:      true,
+			Status:      UserStatusPending,
+			// PasswordHash carries the PLAINTEXT here — CreateUser hashes it.
+			PasswordHash: password,
+		})
+	default: // open
+		roles := []string{}
+		if s.regPolicy.DefaultRole != "" {
+			roles = append(roles, s.regPolicy.DefaultRole)
+		}
+		return s.users.CreateUser(ctx, workspaceID, &User{
+			Username:    username,
+			WorkspaceID: workspaceID,
+			Active:      true,
+			Status:      UserStatusActive,
+			Roles:       roles,
+			// PasswordHash carries the PLAINTEXT here — CreateUser hashes it.
+			PasswordHash: password,
+		})
+	}
+}
+
+// ApproveUser approves a pending user (approval registration policy): sets
+// status to active and assigns the given roles. Only pending users can be
+// approved. The permission cache for the user is invalidated so the next
+// login resolves fresh grants.
+func (s *Service) ApproveUser(ctx context.Context, workspaceID, username string, roles []string) error {
+	user, err := s.users.GetByUsername(ctx, workspaceID, username)
+	if err != nil {
+		return err
+	}
+	if user.Status != UserStatusPending {
+		return ErrNotPending
+	}
+	user.Status = UserStatusActive
+	user.Roles = roles
+	if err := s.users.UpdateUser(ctx, workspaceID, user); err != nil {
+		return err
+	}
+	s.InvalidatePermissions(user.ID)
+	return nil
+}
+
+// GrantRoles adds roles and permissions to an existing user (idempotent —
+// duplicates are skipped). Used by the vendor-approval flow (Fase 6): when an
+// admin approves a vendor application, the owner user is granted the `vendor`
+// role + registry permissions. The permission cache is invalidated so the
+// next login resolves the new grants.
+func (s *Service) GrantRoles(ctx context.Context, workspaceID, username string, roles, permissions []string) error {
+	user, err := s.users.GetByUsername(ctx, workspaceID, username)
+	if err != nil {
+		return err
+	}
+	user.Roles = mergeStrings(user.Roles, roles)
+	user.Permissions = mergeStrings(user.Permissions, permissions)
+	if err := s.users.UpdateUser(ctx, workspaceID, user); err != nil {
+		return err
+	}
+	s.InvalidatePermissions(user.ID)
+	return nil
+}
+
+// mergeStrings appends items to base, skipping duplicates.
+func mergeStrings(base, extra []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(base)+len(extra))
+	for _, s := range base {
+		if s == "" || seen[s] {
+			continue
+		}
+		seen[s] = true
+		out = append(out, s)
+	}
+	for _, s := range extra {
+		if s == "" || seen[s] {
+			continue
+		}
+		seen[s] = true
+		out = append(out, s)
+	}
+	return out
 }
 
 // Login verifies credentials and issues an access + refresh token pair.
@@ -250,6 +427,11 @@ func (s *Service) Login(ctx context.Context, workspaceID, app, username, passwor
 		return nil, ErrInvalidCredentials
 	}
 	if !user.Active {
+		return nil, ErrInvalidCredentials
+	}
+	// Pending users (registration policy "approval") cannot log in until an
+	// admin approves them. Disabled is covered by Active=false.
+	if user.Status == UserStatusPending {
 		return nil, ErrInvalidCredentials
 	}
 	if !VerifyPassword(user.PasswordHash, password) {

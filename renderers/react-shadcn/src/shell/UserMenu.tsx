@@ -38,6 +38,7 @@ export function UserMenu() {
   const navigate = useNavigate()
   const token = useSessionStore((s) => s.token)
   const me = useSessionStore((s) => s.me)
+  const workspace = useSessionStore((s) => s.workspace)
   const clearSession = useSessionStore((s) => s.clearSession)
   const chrome = useMetaStore((s) => s.bundle?.app.chrome)
   const { surfacePath } = useSurface()
@@ -78,6 +79,11 @@ export function UserMenu() {
             {me?.roles?.length ? (
               <p className="text-xs font-normal text-muted-foreground">
                 {me.roles.join(", ")}
+              </p>
+            ) : null}
+            {workspace ? (
+              <p className="text-xs font-normal text-muted-foreground">
+                Workspace: {workspace}
               </p>
             ) : null}
           </DropdownMenuLabel>

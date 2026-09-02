@@ -1215,6 +1215,9 @@ export interface MetaBundle {
   notification_centers: Entry<NotificationCenterSpec>[]
   /** Resolved global settings namespace (spec §10). Always present. */
   settings: Settings
+  /** True when the workspace has no users yet — the SPA redirects to the
+   *  first-run setup wizard (self-hosted prod bootstrap). */
+  setup_required?: boolean
 }
 
 export interface CalendarSpec {

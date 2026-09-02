@@ -39,6 +39,9 @@ spec:
           help: "Permission string (JSON array), mis. [\"*\"]"
         - field: active
           label: "Aktif"
+        - field: status
+          label: "Status"
+          help: "active | pending | disabled — pending tidak bisa login sampai di-approve"
   submit:
     label: "Simpan Perubahan"
     message: "User berhasil diperbarui"

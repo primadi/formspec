@@ -30,6 +30,7 @@ import {
   NoNavShell,
   TopNavShell,
   LoginScreen,
+  SetupScreen,
   buildRoutes,
 } from "@/shell"
 import ThemeRenderer from "@/kinds/theme/ThemeRenderer"
@@ -64,6 +65,9 @@ function Root() {
           path="/:workspace/_admin/*"
           element={<SurfaceShell surface="admin" />}
         />
+        {/* First-run setup wizard — standalone (no meta bundle needed).
+            Reached via redirect when the workspace has no users yet. */}
+        <Route path="/:workspace/_admin/setup" element={<SetupScreen />} />
         <Route
           path="/:workspace/app/*"
           element={<SurfaceShell surface="app" />}
@@ -227,8 +231,15 @@ function SurfaceShell({
   // The App's home page (spec.route "/") — rendered as the surface index.
   const homePage = bundle?.pages?.find((p) => p.spec.route === "/")
   const surfaceRoutes = useMemo(
-    () => (bundle ? buildRoutes({ bundle, basePath: surfacePath }) : []),
-    [bundle, surfacePath],
+    () =>
+      bundle
+        ? buildRoutes({
+            bundle,
+            basePath: surfacePath,
+            surfacePublic: isPublic,
+          })
+        : [],
+    [bundle, surfacePath, isPublic],
   )
 
   // Document title: App display title (fallback name) — pages refine it.
@@ -374,6 +385,13 @@ function SurfaceShell({
     )
   }
 
+  // First-run setup: the workspace has no users yet → show the setup wizard
+  // (self-hosted prod bootstrap without formspec-ctl). Only for anonymous
+  // visitors — a signed-in user implies setup already happened.
+  if (bundle?.setup_required && !token) {
+    return <Navigate to={`/${workspace}/_admin/setup`} replace />
+  }
+
   // In-app login lives at {surfacePath}/login (e.g. /{ws}/app/kafe/login for
   // the app surface, /{ws}/_admin/login for admin). On that route: show the
   // form when unauthenticated, otherwise bounce to the surface root.
@@ -386,6 +404,24 @@ function SurfaceShell({
   const isLoginRoute = location.pathname === loginPath
   const isRegisterRoute = location.pathname === registerPath
 
+  // A page explicitly marked `public: true` is reachable anonymously even in
+  // a private App (auth redesign Fase 3 — App access is the default, pages
+  // override per-page). Match the current path against public page routes
+  // (param segments like `:id` match any value).
+  const currentPageIsPublic = bundle?.pages?.some((p) => {
+    if (p.spec.public !== true) return false
+    const route = p.spec.route.startsWith("/")
+      ? p.spec.route
+      : `/${p.spec.route}`
+    const full = `${surfacePath}${route}`
+    const fullSegs = full.split("/").filter(Boolean)
+    const pathSegs = location.pathname.split("/").filter(Boolean)
+    if (fullSegs.length !== pathSegs.length) return false
+    return fullSegs.every(
+      (seg, i) => seg.startsWith(":") || seg === pathSegs[i],
+    )
+  })
+
   if (isLoginRoute || isRegisterRoute) {
     if (unauthenticated || isRegisterRoute || isPublic) {
       return <LoginPage mode={isRegisterRoute ? "register" : "login"} />
@@ -395,8 +431,10 @@ function SurfaceShell({
 
   // Not logged in — redirect to the in-app login page with a returnTo so the
   // user lands back here after authenticating. Public surfaces boot
-  // anonymously and never reach this state.
-  if (!isPublic && unauthenticated) {
+  // anonymously and never reach this state. A private surface still renders
+  // routes when the current page is explicitly public (the per-page guard in
+  // buildRoutes keeps the other routes session-gated).
+  if (!isPublic && unauthenticated && !currentPageIsPublic) {
     const returnTo = location.pathname + location.search
     return (
       <Navigate

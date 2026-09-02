@@ -20,6 +20,12 @@ func SetAuthService(svc *auth.Service) {
 	authService = svc
 }
 
+// GetAuthService returns the configured global auth service (may be nil).
+// Used by native handlers (e.g. vendor approval) to grant roles.
+func GetAuthService() *auth.Service {
+	return authService
+}
+
 // Auth endpoint rate limiters (todo 6.6.3) — token bucket per client IP.
 var (
 	loginLimiter    = newRateLimiter(0.5, 5) // 5 burst, refill 0.5/s (5 per 10s)
@@ -166,6 +172,8 @@ func (b *RouterBuilder) HandleRegister() http.HandlerFunc {
 				status, code, reason = http.StatusBadRequest, "INVALID_USERNAME", "invalid_username"
 			case errors.Is(err, auth.ErrInvalidCredentials):
 				status, code, reason = http.StatusBadRequest, "INVALID_REQUEST", "invalid_input"
+			case errors.Is(err, auth.ErrRegistrationClosed):
+				status, code, reason = http.StatusForbidden, "REGISTRATION_CLOSED", "registration_closed"
 			}
 			authAuditLog.record(AuthAuditEntry{
 				Timestamp: time.Now().UTC(), Method: "register", Username: req.Username,

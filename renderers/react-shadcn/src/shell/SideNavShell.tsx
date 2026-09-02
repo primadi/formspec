@@ -26,7 +26,6 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { TooltipProvider } from "@/components/ui/tooltip"
 
 export function SideNavShell() {
@@ -143,15 +142,8 @@ export function SideNavShell() {
             {/* Theme switcher — hidden via explicit chrome.theme_switcher: hide */}
             {chrome?.theme_switcher !== "hide" && <ThemeSwitcher />}
 
-            {/* Auth controls (resolved chrome.auth) + user avatar */}
+            {/* Auth controls (resolved chrome.auth) — single user identity */}
             <AuthArea mode={chrome?.auth} />
-            {chrome?.auth !== "none" && (
-              <Avatar className="size-8">
-                <AvatarFallback className="text-xs">
-                  {workspace?.charAt(0).toUpperCase() ?? "F"}
-                </AvatarFallback>
-              </Avatar>
-            )}
           </header>
 
           {/* Page content */}

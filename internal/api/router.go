@@ -338,6 +338,16 @@ func (b *RouterBuilder) BuildHTTP() http.Handler {
 			r.Post("/auth/login", b.HandleLogin())
 			r.Post("/auth/refresh", b.HandleRefresh())
 			r.Post("/auth/register", b.HandleRegister())
+			// Approve a pending user (approval registration policy) — admin
+			// only (formspec.core.users.update).
+			r.With(RequirePermission("formspec.core.users.update")).
+				Post("/auth/approve", b.HandleApproveUser())
+
+			// First-run setup — public (no auth). GET reports whether the
+			// workspace needs bootstrap (no users); POST creates the first
+			// admin (self-hosted prod, no formspec-ctl needed).
+			r.Get("/setup", b.HandleSetupStatus())
+			r.Post("/setup", b.HandleSetup())
 
 			// Meta API — read-only UI manifests + identity (Frontend §1.1).
 			r.Route("/_meta", func(r chi.Router) {

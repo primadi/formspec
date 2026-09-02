@@ -228,6 +228,10 @@ type App struct {
 	// and the `pubsub` event delivery channel (todo 7.3.5). Held so a
 	// ReloadSpec() reuses the same instance.
 	pubsub *memory.PubSub
+	// authSvc is the auth service (login/register/approve). Held so a
+	// ReloadSpec() can re-wire the registration policy from a changed
+	// Config manifest without recreating the service.
+	authSvc *auth.Service
 	// stream is the Tier 2 durable event-stream backend (todo 7.3.2). Held so
 	// a ReloadSpec() reuses the same backend (and its consumer groups) while
 	// rebuilding the streaming worker.
@@ -713,6 +717,15 @@ func New(cfg Config) (*App, error) {
 	}
 	api.SetAuthService(authSvc)
 
+	// Wire the workspace registration policy (auth redesign Fase 4) from the
+	// resolved global settings — per-workspace, applies to every App.
+	if resolvedSettings := spec.ResolveSettings(declaredSettings); resolvedSettings.Registration != nil {
+		authSvc.SetRegistrationPolicy(auth.RegistrationPolicy{
+			Policy:      resolvedSettings.Registration.Policy,
+			DefaultRole: resolvedSettings.Registration.DefaultRole,
+		})
+	}
+
 	// Wire API key auth (todo 6.4): the X-FormSpec-Key header on the external
 	// surface (/api/v1/) resolves against formspec.core.api-key. The store is
 	// resolved via RoleResolver so a user override (external/) wins.
@@ -877,6 +890,7 @@ func New(cfg Config) (*App, error) {
 		jobTracker:       jobTracker,
 		idempotency:      idempotencyStore,
 		nativeHandlers:   make(map[string]action.NativeHandler),
+		authSvc:          authSvc,
 	}
 	// Register native handlers for auth entity hooks (password hashing on
 	// formspec.core.user create/update).
@@ -1201,6 +1215,15 @@ func (a *App) ReloadSpec() error {
 		}
 	}
 	newRB.SetSettings(spec.ResolveSettings(declaredSettings))
+	// Re-wire the workspace registration policy (auth redesign Fase 4) on the
+	// preserved auth service so a changed `settings.registration` in a Config
+	// manifest takes effect on hot-reload (not just at boot).
+	if resolvedSettings := spec.ResolveSettings(declaredSettings); resolvedSettings.Registration != nil {
+		a.authSvc.SetRegistrationPolicy(auth.RegistrationPolicy{
+			Policy:      resolvedSettings.Registration.Policy,
+			DefaultRole: resolvedSettings.Registration.DefaultRole,
+		})
+	}
 	// Auth on the external surface is opt-in (same as boot).
 	newRB.SetEnableAPIAuth(a.cfg.EnableAPIAuth)
 	if a.cfg.WebDir != "" {

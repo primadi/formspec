@@ -273,6 +273,15 @@ func (b *RouterBuilder) HandleMetaUI() http.HandlerFunc {
 			}
 		}
 
+		// First-run setup flag: the workspace has no users yet → the SPA
+		// redirects to the setup wizard (self-hosted prod bootstrap).
+		// Non-fatal: a setup-detection failure must not break the bundle.
+		if authService != nil {
+			if required, err := authService.SetupRequired(r.Context(), workspaceFromContext(r.Context())); err == nil {
+				bundle.SetupRequired = required
+			}
+		}
+
 		payload, err := json.Marshal(SingleResponse{
 			Data: bundle,
 			Meta: MetaSingle{RequestID: requestIDFromContext(r.Context()), Timestamp: time.Now().UTC().Format(time.RFC3339)},

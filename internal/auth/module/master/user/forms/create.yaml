@@ -40,6 +40,9 @@ spec:
         - field: active
           label: "Aktif"
           help: "Nonaktifkan untuk memblokir login"
+        - field: status
+          label: "Status"
+          help: "active | pending | disabled — pending tidak bisa login sampai di-approve"
   submit:
     label: "Buat User"
     message: "User berhasil dibuat"

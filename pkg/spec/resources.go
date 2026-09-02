@@ -317,6 +317,25 @@ type Settings struct {
 	// Rounding is the default rounding mode for money/decimal arithmetic:
 	// "half_even" (banker's, default) | "half_up" | "half_down" | "up" | "down".
 	Rounding string `yaml:"rounding,omitempty" json:"rounding,omitempty"`
+	// Registration is the workspace-level self-service sign-up policy
+	// (auth redesign Fase 4).
+	Registration *RegistrationSettings `yaml:"registration,omitempty" json:"registration,omitempty"`
+}
+
+// RegistrationSettings configures the workspace-level self-service sign-up
+// policy (auth redesign Fase 4). Per-workspace — applies to every App in the
+// workspace.
+//
+//   - open     (default): sign-up creates an active user with DefaultRole.
+//   - approval: sign-up creates a pending user; an admin approves + assigns
+//     the role before the user can log in.
+//   - closed:   self-service sign-up is disabled; admins create users.
+type RegistrationSettings struct {
+	// @schema {enum: ["open", "approval", "closed"], default: "open"}
+	Policy string `yaml:"policy,omitempty" json:"policy,omitempty"`
+	// DefaultRole is assigned on sign-up when Policy is "open" (e.g. "user").
+	// Empty = no role.
+	DefaultRole string `yaml:"default_role,omitempty" json:"default_role,omitempty"`
 }
 
 // CurrencySettings configures the default money currency (05-field-types.md §2).
@@ -346,6 +365,7 @@ func DefaultSettings() *Settings {
 		DateFormat:   "YYYY-MM-DD",
 		DecimalScale: 2,
 		Rounding:     "half_even",
+		Registration: &RegistrationSettings{Policy: "open"},
 	}
 }
 
@@ -381,6 +401,14 @@ func ResolveSettings(declared *Settings) *Settings {
 	}
 	if declared.Rounding != "" {
 		d.Rounding = declared.Rounding
+	}
+	if declared.Registration != nil {
+		if declared.Registration.Policy != "" {
+			d.Registration.Policy = declared.Registration.Policy
+		}
+		if declared.Registration.DefaultRole != "" {
+			d.Registration.DefaultRole = declared.Registration.DefaultRole
+		}
 	}
 	return d
 }

@@ -13,7 +13,7 @@ spec:
     - section:
         type: hero
         title: "Daftarkan Vendor di FormSpec Registry"
-        subtitle: "Ini BUKAN sign-up akun — ini pendaftaran identitas penerbit module. Tiga langkah: buat akun → keypair ed25519 → daftarkan vendor. Setelah itu publish module pertama Anda."
+        subtitle: "Ini BUKAN sign-up akun — ini pendaftaran identitas penerbit module. Empat langkah: buat akun → keypair ed25519 → ajukan vendor → tunggu approval admin. Setelah approve, akun Anda otomatis mendapat role vendor dan bisa publish module pertama."
         variant: secondary
     - form:
         ref: vendor-signup

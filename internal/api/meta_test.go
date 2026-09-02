@@ -10,6 +10,7 @@ import (
 	formspec_app "github.com/primadi/formspec/internal/app"
 	"github.com/primadi/formspec/internal/auth"
 	"github.com/primadi/formspec/internal/entity"
+	"github.com/primadi/formspec/internal/manifest"
 	"github.com/primadi/formspec/internal/ui"
 	"github.com/primadi/formspec/pkg/spec"
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
@@ -257,6 +258,81 @@ func TestPublicEntities_NoPublicApp(t *testing.T) {
 	})
 	if b.isPublicEntity("sales", "product") {
 		t.Error("expected sales/product to NOT be public with only private Apps")
+	}
+}
+
+// TestHandleMetaUI_PrivateApp_PublicPageShipsToAnonymous verifies that a page
+// explicitly marked `public: true` inside a PRIVATE App is served to
+// anonymous callers (auth redesign Fase 3 — App access is the default, pages
+// override per-page). Pages without permissions already ship to anonymous;
+// this pins the behavior so the frontend can render them without redirecting
+// to login.
+func TestHandleMetaUI_PrivateApp_PublicPageShipsToAnonymous(t *testing.T) {
+	b := setupMetaTestRouter(t)
+	b.SetApps(map[string]*formspec_app.ResolvedApp{
+		"backoffice": {
+			Name:    "backoffice",
+			Spec:    &spec.AppSpec{RootURL: "/app", AppRenderer: "topnav", Access: spec.AppAccessPrivate, Modules: []string{"sales"}},
+			Modules: map[string]bool{"sales": true},
+		},
+	})
+	// Register a public page (no permissions) + a private page (permissions).
+	uiReg := ui.NewRegistry()
+	uiReg.Load([]manifest.RawManifest{
+		{
+			Kind:     "Page",
+			Metadata: manifest.RawMetadata{Name: "landing", Module: "sales"},
+			Spec: map[string]any{
+				"route":  "/landing",
+				"public": true,
+				"blocks": []any{},
+			},
+		},
+		{
+			Kind:     "Page",
+			Metadata: manifest.RawMetadata{Name: "orders", Module: "sales"},
+			Spec: map[string]any{
+				"route":       "/orders",
+				"permissions": []any{"sales.orders.list"},
+				"blocks":      []any{},
+			},
+		},
+	})
+	b.SetUIRegistry(uiReg)
+
+	handler := b.HandleMetaUI()
+	// Anonymous caller (no identity in context).
+	req := httptest.NewRequest("GET", "/demo/_ui/_meta/ui?app=backoffice", nil)
+	req = req.WithContext(context.Background())
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("expected 200 for anonymous private-App bundle, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp SingleResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	data, _ := json.Marshal(resp.Data)
+	var bundle ui.Bundle
+	if err := json.Unmarshal(data, &bundle); err != nil {
+		t.Fatalf("decode bundle: %v", err)
+	}
+
+	// The public page ships to anonymous; the permission-gated page does not.
+	foundLanding := false
+	for _, p := range bundle.Pages {
+		if p.Name == "landing" {
+			foundLanding = true
+		}
+		if p.Name == "orders" {
+			t.Error("expected permission-gated page 'orders' to be filtered for anonymous caller")
+		}
+	}
+	if !foundLanding {
+		t.Error("expected public page 'landing' to ship to anonymous caller in a private App")
 	}
 }
 

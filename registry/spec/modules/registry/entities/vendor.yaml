@@ -33,8 +33,22 @@ spec:
     - name: url
       type: string
       title: "URL"
+    - name: status
+      type: string
+      default: pending
+      title: "Status"
+      description: "pending | active | rejected — vendor harus di-approve admin sebelum bisa publish module"
   cache:
     ttl: 300s
+
+  actions:
+    - name: approve
+      description: "Approve aplikasi vendor — aktifkan vendor + grant role vendor ke owner"
+      required_permission: registry.vendors.update
+      impl:
+        type: native
+        ref: registry.vendor.approve
+      expose: [rest]
 
   expose:
     - type: rest

@@ -79,21 +79,39 @@ function RequireSession({ children }: { children: ReactNode }) {
   return <>{children}</>
 }
 
-/** Wrap `node` in RequireSession when the manifest says `public: false`. */
-function guard(pub: boolean | undefined, node: ReactNode): ReactNode {
-  return pub === false ? <RequireSession>{node}</RequireSession> : node
+/** Wrap `node` in RequireSession based on the surface's access default and
+ *  the page's explicit override (auth redesign Fase 3 — App access is the
+ *  default, pages override per-page):
+ *
+ *  - Public surface (App access: public): only explicit `public: false`
+ *    requires a session; everything else is anonymous.
+ *  - Private surface (App access: private): only explicit `public: true` is
+ *    anonymous; everything else requires a session.
+ */
+function guard(
+  pub: boolean | undefined,
+  node: ReactNode,
+  surfacePublic: boolean,
+): ReactNode {
+  if (surfacePublic) {
+    return pub === false ? <RequireSession>{node}</RequireSession> : node
+  }
+  return pub === true ? node : <RequireSession>{node}</RequireSession>
 }
 
 export interface RouteBuilderOptions {
   bundle: MetaBundle
   basePath: string // e.g. "/acme" or "/acme/_admin"
+  /** Whether the App surface boots anonymously (App access: public).
+   *  Drives the per-page guard default (auth redesign Fase 3). */
+  surfacePublic?: boolean
 }
 
 /**
  * Build a flat array of RouteObject from the Meta bundle.
  */
 export function buildRoutes(options: RouteBuilderOptions): RouteObject[] {
-  const { bundle, basePath } = options
+  const { bundle, basePath, surfacePublic = false } = options
   const routes: RouteObject[] = []
 
   // 1. Page routes
@@ -114,6 +132,7 @@ export function buildRoutes(options: RouteBuilderOptions): RouteObject[] {
           <Suspense fallback={<Loading />}>
             <PageRenderer entry={page} />
           </Suspense>,
+          surfacePublic,
         ),
     })
   }

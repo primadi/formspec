@@ -23,5 +23,5 @@ spec:
         - { field: owner_username, label: "Username Akun Anda", help: "Username akun yang Anda buat lewat Sign up — bukan email.", placeholder: "username dari sign up" }
         - { field: url, label: "Website (opsional)", required_when: "false" }
   submit:
-    label: "Daftarkan Vendor"
-    message: "Vendor terdaftar (ini bukan akun baru — akun Anda tetap sama). Selanjutnya: formspec module publish --vendor <nama> --key <private.key> --version 1.0.0"
+    label: "Ajukan Vendor"
+    message: "Aplikasi vendor terkirim (status: pending). Admin akan meng-approve sebelum Anda bisa publish module — setelah approve, akun Anda otomatis mendapat role vendor."

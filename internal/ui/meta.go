@@ -149,6 +149,10 @@ type Bundle struct {
 	// Settings is the resolved global presentation/config namespace (spec §10).
 	// Always present (resolved with standard defaults) so renderers never guess.
 	Settings *spec.Settings `json:"settings"`
+	// SetupRequired reports whether the workspace has no users yet — the SPA
+	// redirects to the first-run setup wizard when true (self-hosted prod
+	// bootstrap without formspec-ctl).
+	SetupRequired bool `json:"setup_required"`
 }
 
 // PermissionChecker reports whether the caller holds a permission
