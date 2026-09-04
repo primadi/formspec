@@ -83,6 +83,7 @@ func TestRunInit_ScaffoldsProject(t *testing.T) {
 	// Standard layout
 	assertExists("formspec-app.yaml")
 	assertExists(".gitignore")
+	assertExists("AGENTS.md")
 	assertExists(".github/copilot-instructions.md")
 	assertExists(".vscode/settings.json")
 	assertExists("spec/apps")
@@ -114,8 +115,9 @@ func TestRunInit_ScaffoldsProject(t *testing.T) {
 		t.Fatalf("expected non-empty schemas/ (err=%v)", err)
 	}
 
-	// copilot-instructions references the workflow + validation gate
-	ci, err := os.ReadFile(filepath.Join(root, ".github", "copilot-instructions.md"))
+	// AGENTS.md references the workflow + validation gate; copilot-instructions
+	// is a thin pointer to it.
+	ci, err := os.ReadFile(filepath.Join(root, "AGENTS.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +130,7 @@ func TestRunInit_ScaffoldsProject(t *testing.T) {
 		"Iterate",
 	} {
 		if !strings.Contains(content, want) {
-			t.Errorf("copilot-instructions.md missing %q", want)
+			t.Errorf("AGENTS.md missing %q", want)
 		}
 	}
 }

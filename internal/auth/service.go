@@ -817,7 +817,7 @@ func (s *Service) UnlinkOAuthIdentity(ctx context.Context, workspaceID, userID, 
 // notifyAccountUnlinked emails the account owner when an OAuth identity is
 // removed from their account. No-op when no mailer is configured or the
 // account has no email.
-func (s *Service) notifyAccountUnlinked(ctx context.Context, user *User) {
+func (s *Service) notifyAccountUnlinked(_ context.Context, user *User) {
 	if s.mailer == nil || user.Email == "" {
 		return
 	}
@@ -837,7 +837,7 @@ func (s *Service) notifyAccountUnlinked(ctx context.Context, user *User) {
 // linked to their account (takeover or attach). No-op when no mailer is
 // configured or the account has no email. This makes silent account merging
 // visible to the owner.
-func (s *Service) notifyAccountLinked(ctx context.Context, user *User) {
+func (s *Service) notifyAccountLinked(_ context.Context, user *User) {
 	if s.mailer == nil || user.Email == "" {
 		return
 	}

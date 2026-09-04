@@ -2,9 +2,13 @@
 // layout defined in docs/spec/platform/08-project-layout.md.
 //
 // It also extracts embedded AI skills (ai_skills/*) into .agents/skills/
-// so that VS Code Copilot can assist with FormSpec app development, and writes
+// so that AI coding agents can assist with FormSpec app development, and writes
 // the JSON Schema files (schemas/) + .vscode/settings.json (yaml.schemas)
 // so the YAML editor gets autocomplete and validation for FormSpec manifests.
+//
+// Agent instructions are written to AGENTS.md (tool-agnostic standard, read by
+// Copilot, Codex, Cursor, Gemini CLI, etc.) plus a thin pointer at
+// .github/copilot-instructions.md for older Copilot versions.
 //
 // Usage:
 //
@@ -48,8 +52,8 @@ func runInit(args []string) {
 		fmt.Fprintf(os.Stderr, "  - formspec-app.yaml configuration\n")
 		fmt.Fprintf(os.Stderr, "  - schemas/ with JSON Schema for YAML editor validation\n")
 		fmt.Fprintf(os.Stderr, "  - .vscode/settings.json registering yaml.schemas\n")
-		fmt.Fprintf(os.Stderr, "  - .agents/skills/ with AI skills for VS Code Copilot\n")
-		fmt.Fprintf(os.Stderr, "  - .github/copilot-instructions.md\n\n")
+		fmt.Fprintf(os.Stderr, "  - .agents/skills/ with AI skills for coding agents\n")
+		fmt.Fprintf(os.Stderr, "  - AGENTS.md (+ .github/copilot-instructions.md pointer)\n\n")
 		fmt.Fprintf(os.Stderr, "Flags:\n")
 		fs.PrintDefaults()
 	}
@@ -169,8 +173,17 @@ build/
 Thumbs.db
 `)
 
-	// .github/copilot-instructions.md
-	writeFile(".github/copilot-instructions.md", makeCopilotInstructions(projectName))
+	// AGENTS.md — the single source of agent instructions (tool-agnostic).
+	writeFile("AGENTS.md", makeAgentsInstructions(projectName))
+
+	// .github/copilot-instructions.md — thin pointer for Copilot versions that
+	// do not read AGENTS.md yet. Never clobber an existing file.
+	ciPath := filepath.Join(targetDir, ".github", "copilot-instructions.md")
+	if _, err := os.Stat(ciPath); os.IsNotExist(err) {
+		writeFile(".github/copilot-instructions.md", fmt.Sprintf(
+			"All agent instructions for this project live in {BT}AGENTS.md{BT}.\n"+
+				"Read and follow {BT}AGENTS.md{BT} at the repository root.\n"))
+	}
 
 	// Write embedded AI skills to .agents/skills/
 	fmt.Fprintf(os.Stderr, "Extracting AI skills...\n")
@@ -276,9 +289,10 @@ console.log("FormSpec sidecar ready: " + formspec.moduleName);
 	fmt.Printf("  1. Open this folder in VS Code\n")
 	fmt.Printf("  2. Run: formspec dev\n")
 	fmt.Println()
-	fmt.Println("Then ask Copilot (Agent mode) to build your app — it follows the")
-	fmt.Println("4-phase workflow (Discovery -> Proposal -> Draft -> Iterate) via")
-	fmt.Println(".agents/skills/, with formspec validate --spec spec as the gate:")
+	fmt.Println("Then ask your AI coding agent (Agent mode) to build your app — it")
+	fmt.Println("follows the 4-phase workflow (Discovery -> Proposal -> Draft ->")
+	fmt.Println("Iterate) defined in AGENTS.md + .agents/skills/, with")
+	fmt.Println("formspec validate --spec spec as the gate:")
 	fmt.Println("  > buat formspec app untuk inventory management")
 	fmt.Println()
 	fmt.Println("YAML editor:")
@@ -286,8 +300,8 @@ console.log("FormSpec sidecar ready: " + formspec.moduleName);
 	fmt.Println("  spec/**/*.yaml gets autocomplete + validation in VS Code.")
 }
 
-func makeCopilotInstructions(projectName string) string {
-	return fmt.Sprintf(`# %s — Copilot Instructions
+func makeAgentsInstructions(projectName string) string {
+	return fmt.Sprintf(`# %s — AGENTS.md
 
 ## Project Overview
 
@@ -313,8 +327,8 @@ which files happen to exist.
 
 ## Skills Loaded
 
-This project includes AI skills in {BT}.agents/skills/{BT}. Use {BT}/skills{BT}
-in Copilot Chat to see them:
+This project includes AI skills in {BT}.agents/skills/{BT}. In Copilot Chat,
+use {BT}/skills{BT} to see them:
 
 - **formspec-app-workflow** — Full lifecycle orchestrator (Discovery → Proposal → Draft → Iterate)
 - **formspec-kinds** — Complete catalog of all 33 FormSpec resource kinds
@@ -359,12 +373,13 @@ fix errors (use the schema-validation skill) before moving on.
 
 {BT}{BT}{BT}
 %s/
-  formspec-app.yaml       # CLI config (NOT a kind: Config manifest)
+  AGENTS.md              # Agent instructions (tool-agnostic)
+  formspec-app.yaml      # CLI config (NOT a kind: Config manifest)
   spec/                # All YAML manifests
     apps/              # kind: App manifests
     modules/           # kind: Module -> Entity, Page, Form, etc.
   app/                 # Optional sidecar (only with --with-sidecar)
-  .agents/skills/      # AI skills for Copilot
+  .agents/skills/      # AI skills for coding agents
 {BT}{BT}{BT}
 `, projectName, projectName)
 }
