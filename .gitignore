@@ -21,7 +21,10 @@ coverage.html
 .formspec/
 
 # Dependencies
-vendor/
+# Root-anchored: only ignores a root-level Go vendor/ dir. internal/vendor/
+# is a real Go package (module vendoring) and MUST be committed.
+/vendor/
+sdk/php/vendor/
 
 # IDE
 .idea/
