@@ -44,6 +44,13 @@ func setupAuthAPIEnv(t *testing.T) http.Handler {
 	}
 	SetAuthService(svc)
 
+	// Prod-mode JWT validator so authenticated requests (e.g. change-password)
+	// resolve a real identity from the token. Restore the previous validator on
+	// cleanup so other tests relying on the dev fallback are unaffected.
+	prev := GetAuthValidator()
+	SetAuthValidator(auth.NewJWTValidator("test-secret", "formspec", ""))
+	t.Cleanup(func() { SetAuthValidator(prev) })
+
 	rb := NewRouterBuilder(reg)
 	rb.BuildRoutes()
 	return rb.BuildHTTP()
@@ -137,6 +144,96 @@ func TestAuthLogin_MissingFields(t *testing.T) {
 
 	body := bytes.NewBufferString(`{"username":"admin"}`)
 	req := httptest.NewRequest(http.MethodPost, "/demo/_ui/auth/login", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestAuthRegister_WithEmail(t *testing.T) {
+	handler := setupAuthAPIEnv(t)
+
+	body := bytes.NewBufferString(`{"username":"newuser","email":"new@example.com","password":"password123"}`)
+	req := httptest.NewRequest(http.MethodPost, "/demo/_ui/auth/register", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// The account exists and is unverified (no mailer in this env → no
+	// verification email, but the flag stays false).
+	svc := GetAuthService()
+	user, err := svc.GetUserByEmail(context.Background(), "demo", "new@example.com")
+	if err != nil {
+		t.Fatalf("GetUserByEmail: %v", err)
+	}
+	if user.EmailVerified {
+		t.Error("expected new account to start unverified")
+	}
+}
+
+func TestAuthRegister_EmailTaken(t *testing.T) {
+	handler := setupAuthAPIEnv(t)
+
+	reg := func(username string) int {
+		body := bytes.NewBufferString(`{"username":"` + username + `","email":"dup@example.com","password":"password123"}`)
+		req := httptest.NewRequest(http.MethodPost, "/demo/_ui/auth/register", body)
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	if code := reg("first"); code != http.StatusCreated {
+		t.Fatalf("expected 201 for first register, got %d", code)
+	}
+	if code := reg("second"); code != http.StatusConflict {
+		t.Fatalf("expected 409 for duplicate email, got %d", code)
+	}
+}
+
+func TestAuthVerifyEmail_Endpoint(t *testing.T) {
+	handler := setupAuthAPIEnv(t)
+	svc := GetAuthService()
+
+	// Register with a mailer so a verification token is generated.
+	m := &apiFakeMailer{baseURL: "http://localhost:18080"}
+	svc.SetMailer(m)
+	if err := svc.Register(context.Background(), "demo", "newuser", "new@example.com", "password123"); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	token := extractVerifyToken(t, m.sent[0])
+
+	body := bytes.NewBufferString(`{"token":"` + token + `"}`)
+	req := httptest.NewRequest(http.MethodPost, "/demo/_ui/auth/verify-email", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	user, err := svc.GetUserByEmail(context.Background(), "demo", "new@example.com")
+	if err != nil {
+		t.Fatalf("GetUserByEmail: %v", err)
+	}
+	if !user.EmailVerified {
+		t.Error("expected email verified after endpoint call")
+	}
+}
+
+func TestAuthVerifyEmail_InvalidToken(t *testing.T) {
+	handler := setupAuthAPIEnv(t)
+
+	body := bytes.NewBufferString(`{"token":"bogus"}`)
+	req := httptest.NewRequest(http.MethodPost, "/demo/_ui/auth/verify-email", body)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)

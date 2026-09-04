@@ -29,13 +29,25 @@ const (
 // (todo 6.1.2). WorkspaceID scopes the user to a single workspace (tenancy §1).
 // Status is active | pending | disabled (default active); pending users cannot
 // log in until approved.
+//
+// EmailVerified tracks whether the email address has been proven owned — via
+// the email-verification flow (registration) or an OAuth provider's
+// `email_verified` claim. OAuth login only links to a verified email (account
+// pre-hijacking protection). OAuthProvider/OAuthSub record the external
+// identity (provider name + subject id) so the same identity maps to the same
+// account.
 type User struct {
-	ID           string
-	Username     string
-	Email        string
-	DisplayName  string
-	PasswordHash string
-	WorkspaceID  string
+	ID            string
+	Username      string
+	Email         string
+	EmailVerified bool
+	DisplayName   string
+	PasswordHash  string
+	WorkspaceID   string
+	// OAuthProvider/OAuthSub is the external identity this account is linked
+	// to (e.g. "google" + the `sub` claim). Empty = password-only account.
+	OAuthProvider string
+	OAuthSub      string
 	// App is the app scope for this login/session (transient — set during
 	// login, not persisted). Empty = workspace-level (e.g. _admin).
 	App         string
@@ -96,6 +108,176 @@ func (s *EntityUserStore) GetByID(ctx context.Context, workspaceID, id string) (
 	return userFromRecord(rec, workspaceID), nil
 }
 
+// GetByEmail looks up a user by email within a workspace. Used by OAuth
+// login (Fase 5) to link an external identity to an existing account.
+func (s *EntityUserStore) GetByEmail(ctx context.Context, workspaceID, email string) (*User, error) {
+	rec, err := s.store.FindByField(ctx, workspaceID, "email", email)
+	if err != nil {
+		return nil, ErrUserNotFound
+	}
+	if rec == nil {
+		return nil, ErrUserNotFound
+	}
+	return userFromRecord(rec, workspaceID), nil
+}
+
+// GetByOAuthIdentity looks up a user by its external identity (provider name
+// + subject id). Used by OAuth login to map the same external identity to the
+// same account — the strongest linking signal (stronger than email).
+func (s *EntityUserStore) GetByOAuthIdentity(ctx context.Context, workspaceID, provider, sub string) (*User, error) {
+	if provider == "" || sub == "" {
+		return nil, ErrUserNotFound
+	}
+	res, err := s.store.List(ctx, db.ListParams{
+		WorkspaceID: workspaceID,
+		Page:        1,
+		PerPage:     1,
+		Filters: map[string]db.FilterOp{
+			"oauth_provider": {Op: "eq", Value: provider},
+			"oauth_sub":      {Op: "eq", Value: sub},
+		},
+	})
+	if err != nil {
+		return nil, ErrUserNotFound
+	}
+	if len(res.Data) == 0 {
+		return nil, ErrUserNotFound
+	}
+	return userFromRecord(&res.Data[0], workspaceID), nil
+}
+
+// LinkOAuthIdentity attaches an external identity (provider + sub) to an
+// existing user. Used when OAuth login links to an existing account or when a
+// signed-in user explicitly links a provider.
+func (s *EntityUserStore) LinkOAuthIdentity(ctx context.Context, workspaceID, userID, provider, sub string) error {
+	if provider == "" || sub == "" {
+		return nil
+	}
+	rec, err := s.store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: userID})
+	if err != nil {
+		return err
+	}
+	_, err = s.store.Update(ctx, db.UpdateParams{
+		WorkspaceID: workspaceID,
+		ID:          userID,
+		Version:     rec.Version,
+		UpdatedBy:   stringField(rec.Data, "username"),
+		Data: map[string]any{
+			"username":       stringField(rec.Data, "username"),
+			"password_hash":  stringField(rec.Data, "password_hash"),
+			"email":          stringField(rec.Data, "email"),
+			"email_verified": boolField(rec.Data, "email_verified", false),
+			"display_name":   stringField(rec.Data, "display_name"),
+			"oauth_provider": provider,
+			"oauth_sub":      sub,
+			"roles":          stringSliceField(rec.Data, "roles"),
+			"permissions":    stringSliceField(rec.Data, "permissions"),
+			"active":         boolField(rec.Data, "active", true),
+			"status":         stringField(rec.Data, "status"),
+		},
+	})
+	return err
+}
+
+// UnlinkOAuthIdentity detaches the external identity from a user (clears
+// oauth_provider + oauth_sub). Used by the explicit unlink flow — the
+// service layer guards against unlinking the only sign-in method.
+func (s *EntityUserStore) UnlinkOAuthIdentity(ctx context.Context, workspaceID, userID string) error {
+	rec, err := s.store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: userID})
+	if err != nil {
+		return err
+	}
+	_, err = s.store.Update(ctx, db.UpdateParams{
+		WorkspaceID: workspaceID,
+		ID:          userID,
+		Version:     rec.Version,
+		UpdatedBy:   stringField(rec.Data, "username"),
+		Data: map[string]any{
+			"username":       stringField(rec.Data, "username"),
+			"password_hash":  stringField(rec.Data, "password_hash"),
+			"email":          stringField(rec.Data, "email"),
+			"email_verified": boolField(rec.Data, "email_verified", false),
+			"display_name":   stringField(rec.Data, "display_name"),
+			"oauth_provider": "",
+			"oauth_sub":      "",
+			"roles":          stringSliceField(rec.Data, "roles"),
+			"permissions":    stringSliceField(rec.Data, "permissions"),
+			"active":         boolField(rec.Data, "active", true),
+			"status":         stringField(rec.Data, "status"),
+		},
+	})
+	return err
+}
+
+// SetEmailVerified updates the user's email-verification flag. Used by the
+// email-verification flow (VerifyEmail).
+func (s *EntityUserStore) SetEmailVerified(ctx context.Context, workspaceID, userID string, verified bool) error {
+	rec, err := s.store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: userID})
+	if err != nil {
+		return err
+	}
+	_, err = s.store.Update(ctx, db.UpdateParams{
+		WorkspaceID: workspaceID,
+		ID:          userID,
+		Version:     rec.Version,
+		UpdatedBy:   stringField(rec.Data, "username"),
+		Data: map[string]any{
+			"username":       stringField(rec.Data, "username"),
+			"password_hash":  stringField(rec.Data, "password_hash"),
+			"email":          stringField(rec.Data, "email"),
+			"email_verified": verified,
+			"display_name":   stringField(rec.Data, "display_name"),
+			"oauth_provider": stringField(rec.Data, "oauth_provider"),
+			"oauth_sub":      stringField(rec.Data, "oauth_sub"),
+			"roles":          stringSliceField(rec.Data, "roles"),
+			"permissions":    stringSliceField(rec.Data, "permissions"),
+			"active":         boolField(rec.Data, "active", true),
+			"status":         stringField(rec.Data, "status"),
+		},
+	})
+	return err
+}
+
+// TakeoverUnverifiedEmail claims an unverified account on behalf of the real
+// email owner (proven via a provider-verified OAuth login): marks the email
+// verified, replaces any password the previous claimant set with a dead hash
+// (so it stops working — the account behaves like a pure OAuth account), and
+// attaches the OAuth identity. This is the account pre-hijacking recovery
+// path.
+func (s *EntityUserStore) TakeoverUnverifiedEmail(ctx context.Context, workspaceID, userID, provider, sub string) error {
+	rec, err := s.store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: userID})
+	if err != nil {
+		return err
+	}
+	// A hash of the empty string is the "no password" marker (same as
+	// OAuth-created users): no real password authenticates, and the entity's
+	// required password_hash stays non-empty.
+	deadHash, err := HashPassword("")
+	if err != nil {
+		return fmt.Errorf("auth: dead hash: %w", err)
+	}
+	_, err = s.store.Update(ctx, db.UpdateParams{
+		WorkspaceID: workspaceID,
+		ID:          userID,
+		Version:     rec.Version,
+		UpdatedBy:   stringField(rec.Data, "username"),
+		Data: map[string]any{
+			"username":       stringField(rec.Data, "username"),
+			"password_hash":  deadHash, // previous claimant's password stops working
+			"email":          stringField(rec.Data, "email"),
+			"email_verified": true,
+			"display_name":   stringField(rec.Data, "display_name"),
+			"oauth_provider": provider,
+			"oauth_sub":      sub,
+			"roles":          stringSliceField(rec.Data, "roles"),
+			"permissions":    stringSliceField(rec.Data, "permissions"),
+			"active":         boolField(rec.Data, "active", true),
+			"status":         stringField(rec.Data, "status"),
+		},
+	})
+	return err
+}
+
 // userFromRecord converts an entity record into a User.
 func userFromRecord(rec *db.EntityRecord, workspaceID string) *User {
 	status := stringField(rec.Data, "status")
@@ -103,16 +285,19 @@ func userFromRecord(rec *db.EntityRecord, workspaceID string) *User {
 		status = UserStatusActive
 	}
 	return &User{
-		ID:           rec.ID,
-		Username:     stringField(rec.Data, "username"),
-		Email:        stringField(rec.Data, "email"),
-		DisplayName:  stringField(rec.Data, "display_name"),
-		WorkspaceID:  workspaceID,
-		PasswordHash: stringField(rec.Data, "password_hash"),
-		Roles:        stringSliceField(rec.Data, "roles"),
-		Permissions:  stringSliceField(rec.Data, "permissions"),
-		Active:       boolField(rec.Data, "active", true),
-		Status:       status,
+		ID:            rec.ID,
+		Username:      stringField(rec.Data, "username"),
+		Email:         stringField(rec.Data, "email"),
+		EmailVerified: boolField(rec.Data, "email_verified", false),
+		DisplayName:   stringField(rec.Data, "display_name"),
+		WorkspaceID:   workspaceID,
+		PasswordHash:  stringField(rec.Data, "password_hash"),
+		OAuthProvider: stringField(rec.Data, "oauth_provider"),
+		OAuthSub:      stringField(rec.Data, "oauth_sub"),
+		Roles:         stringSliceField(rec.Data, "roles"),
+		Permissions:   stringSliceField(rec.Data, "permissions"),
+		Active:        boolField(rec.Data, "active", true),
+		Status:        status,
 	}
 }
 
@@ -135,14 +320,17 @@ func (s *EntityUserStore) CreateUser(ctx context.Context, workspaceID string, u 
 		WorkspaceID: workspaceID,
 		CreatedBy:   u.Username,
 		Data: map[string]any{
-			"username":      u.Username,
-			"email":         u.Email,
-			"password_hash": hash,
-			"display_name":  displayName,
-			"roles":         u.Roles,
-			"permissions":   u.Permissions,
-			"active":        u.Active,
-			"status":        status,
+			"username":       u.Username,
+			"email":          u.Email,
+			"email_verified": u.EmailVerified,
+			"password_hash":  hash,
+			"display_name":   displayName,
+			"oauth_provider": u.OAuthProvider,
+			"oauth_sub":      u.OAuthSub,
+			"roles":          u.Roles,
+			"permissions":    u.Permissions,
+			"active":         u.Active,
+			"status":         status,
 		},
 	})
 	return err
@@ -181,14 +369,52 @@ func (s *EntityUserStore) UpdateUser(ctx context.Context, workspaceID string, u 
 		Version:     rec.Version,
 		UpdatedBy:   username,
 		Data: map[string]any{
-			"username":      username,
-			"password_hash": passwordHash,
-			"display_name":  u.DisplayName,
-			"email":         u.Email,
-			"roles":         u.Roles,
-			"permissions":   u.Permissions,
-			"active":        u.Active,
-			"status":        u.Status,
+			"username":       username,
+			"password_hash":  passwordHash,
+			"display_name":   u.DisplayName,
+			"email":          u.Email,
+			"email_verified": u.EmailVerified,
+			"oauth_provider": u.OAuthProvider,
+			"oauth_sub":      u.OAuthSub,
+			"roles":          u.Roles,
+			"permissions":    u.Permissions,
+			"active":         u.Active,
+			"status":         u.Status,
+		},
+	})
+	return err
+}
+
+// SetPassword hashes a plaintext password and updates ONLY the user's
+// password_hash, preserving every other field. Used by change-password and
+// reset-password flows (self-service). The plaintext never touches the store.
+func (s *EntityUserStore) SetPassword(ctx context.Context, workspaceID, userID, plain string) error {
+	rec, err := s.store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: userID})
+	if err != nil {
+		return err
+	}
+	hash, err := HashPassword(plain)
+	if err != nil {
+		return fmt.Errorf("auth: hash password: %w", err)
+	}
+	username := stringField(rec.Data, "username")
+	_, err = s.store.Update(ctx, db.UpdateParams{
+		WorkspaceID: workspaceID,
+		ID:          userID,
+		Version:     rec.Version,
+		UpdatedBy:   username,
+		Data: map[string]any{
+			"username":       username,
+			"password_hash":  hash,
+			"email":          stringField(rec.Data, "email"),
+			"email_verified": boolField(rec.Data, "email_verified", false),
+			"display_name":   stringField(rec.Data, "display_name"),
+			"oauth_provider": stringField(rec.Data, "oauth_provider"),
+			"oauth_sub":      stringField(rec.Data, "oauth_sub"),
+			"roles":          stringSliceField(rec.Data, "roles"),
+			"permissions":    stringSliceField(rec.Data, "permissions"),
+			"active":         boolField(rec.Data, "active", true),
+			"status":         stringField(rec.Data, "status"),
 		},
 	})
 	return err

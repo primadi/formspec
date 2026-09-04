@@ -1,0 +1,13 @@
+apiVersion: formspec.dev/v1
+kind: Config
+metadata:
+  name: portal-config
+  module: portal
+  description: "Konfigurasi portal — OAuth providers (test Fase 5)"
+spec:
+  settings:
+    auth:
+      providers:
+        github:
+          client_id: test-client-id
+          client_secret: test-client-secret

@@ -2,6 +2,8 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"regexp"
@@ -9,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/primadi/formspec/internal/auth/oauth"
 	"github.com/primadi/formspec/internal/entity"
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
 )
@@ -35,6 +38,53 @@ var ErrRegistrationClosed = errors.New("auth: self-service registration is disab
 // ErrNotPending is returned by ApproveUser when the target user is not in
 // the pending state (only pending users can be approved).
 var ErrNotPending = errors.New("auth: user is not pending")
+
+// ErrWeakPassword is returned when a new password does not meet the minimum
+// strength requirement (non-empty, at least 8 characters). Applied on
+// register, change-password, and reset-password.
+var ErrWeakPassword = errors.New("auth: password must be at least 8 characters")
+
+// ErrInvalidResetToken is returned by ResetPassword when the reset token is
+// unknown, expired, or already used.
+var ErrInvalidResetToken = errors.New("auth: invalid or expired reset token")
+
+// ErrEmailTaken is returned by Register when the email is already registered
+// in the workspace (email is the OAuth linking key — duplicates are rejected
+// at the service layer to keep GetByEmail unambiguous).
+var ErrEmailTaken = errors.New("auth: email already registered")
+
+// ErrEmailUnverified is returned by OAuth login when the matching account's
+// email is unverified and the provider did not verify it either. An
+// unverified email is a claim, not proof of ownership — linking would enable
+// account pre-hijacking.
+var ErrEmailUnverified = errors.New("auth: email is not verified")
+
+// ErrAccountLinkRequired is returned by OAuth login when the provider email
+// matches a verified account that has a password. The account is never
+// silently merged with a different external identity — the user must sign in
+// with the password and explicitly link the provider.
+var ErrAccountLinkRequired = errors.New("auth: sign in with your password to link this account")
+
+// ErrEmailMismatch is returned by LinkOAuthIdentity when the provider email
+// does not match the signed-in account's email.
+var ErrEmailMismatch = errors.New("auth: oauth email does not match account email")
+
+// ErrIdentityTaken is returned by LinkOAuthIdentity when the external
+// identity is already linked to a different account.
+var ErrIdentityTaken = errors.New("auth: oauth identity already linked to another account")
+
+// ErrNotLinked is returned by UnlinkOAuthIdentity when the requested provider
+// is not the one linked to the account.
+var ErrNotLinked = errors.New("auth: this provider is not linked to your account")
+
+// ErrUnlinkRequiresPassword is returned by UnlinkOAuthIdentity when the
+// account has no password — unlinking its only sign-in method would lock the
+// user out. They must set a password first.
+var ErrUnlinkRequiresPassword = errors.New("auth: set a password before unlinking your only sign-in method")
+
+// ErrInvalidVerifyToken is returned by VerifyEmail when the verification
+// token is unknown, expired, or already used.
+var ErrInvalidVerifyToken = errors.New("auth: invalid or expired verification token")
 
 // RegistrationPolicy is the resolved workspace-level sign-up policy
 // (auth redesign Fase 4).
@@ -148,10 +198,54 @@ type Service struct {
 	resolver    *PermissionResolver
 	maxSessions int // 0 = unlimited (concurrent session limit, todo 6.5.3)
 	regPolicy   RegistrationPolicy
+	oauth       map[string]oauth.Provider
+	mailer      Mailer
+
+	// resetTokens holds single-use password-reset tokens (workspace-scoped,
+	// TTL'd). In-memory — adequate for a single resource process; a
+	// distributed deployment would back this with ctx.cache/ctx.db.
+	resetTokens map[string]resetToken
+	resetMu     sync.Mutex
+
+	// verifyTokens holds single-use email-verification tokens (workspace-
+	// scoped, TTL'd). Same in-memory trade-off as resetTokens.
+	verifyTokens map[string]verifyToken
+	verifyMu     sync.Mutex
 
 	cleanupStop chan struct{}
 	cleanupOnce sync.Once
 }
+
+// Mailer is the transactional email sender used by the auth service
+// (password reset). *mail.Mailer (internal/mail) satisfies it; tests use a
+// fake.
+type Mailer interface {
+	// Send delivers a message to one recipient.
+	Send(to, subject, text, html string) error
+	// BaseURL returns the public origin used to build links in emails.
+	BaseURL() string
+}
+
+// resetToken is a single-use password-reset grant.
+type resetToken struct {
+	WorkspaceID string
+	UserID      string
+	Expires     time.Time
+}
+
+// resetTokenTTL is how long a password-reset token stays valid.
+const resetTokenTTL = 15 * time.Minute
+
+// verifyToken is a single-use email-verification grant.
+type verifyToken struct {
+	WorkspaceID string
+	UserID      string
+	Email       string
+	Expires     time.Time
+}
+
+// verifyTokenTTL is how long an email-verification token stays valid.
+const verifyTokenTTL = 24 * time.Hour
 
 // NewService creates an auth service. The user/session stores are built from
 // the RoleResolver's resolved entities.
@@ -183,6 +277,49 @@ func (s *Service) SetRegistrationPolicy(p RegistrationPolicy) {
 		p.Policy = RegPolicyOpen
 	}
 	s.regPolicy = p
+}
+
+// SetOAuthProviders wires the configured external auth providers (auth
+// redesign Fase 5). Keyed by provider name.
+func (s *Service) SetOAuthProviders(providers map[string]oauth.Provider) {
+	s.oauth = providers
+}
+
+// OAuthProvider returns a configured OAuth provider by name, or nil.
+func (s *Service) OAuthProvider(name string) oauth.Provider {
+	if s.oauth == nil {
+		return nil
+	}
+	return s.oauth[name]
+}
+
+// OAuthProviders returns all configured OAuth provider names (for the login
+// screen buttons).
+func (s *Service) OAuthProviders() []string {
+	out := make([]string, 0, len(s.oauth))
+	for name := range s.oauth {
+		out = append(out, name)
+	}
+	return out
+}
+
+// SetMailer wires the transactional email sender used for email flows
+// (password reset). Nil (default) disables them — RequestPasswordReset
+// becomes a no-op that never sends.
+func (s *Service) SetMailer(m Mailer) {
+	s.mailer = m
+}
+
+// GetUserByEmail looks up a user by email within a workspace. Used by admin
+// tooling and tests.
+func (s *Service) GetUserByEmail(ctx context.Context, workspaceID, email string) (*User, error) {
+	return s.users.GetByEmail(ctx, workspaceID, email)
+}
+
+// GetUserByID looks up a user by ID within a workspace. Used by the meta
+// identity endpoint to expose email-verification state.
+func (s *Service) GetUserByID(ctx context.Context, workspaceID, id string) (*User, error) {
+	return s.users.GetByID(ctx, workspaceID, id)
 }
 
 // SetMaterializer wires the materializer that expands role grants into
@@ -308,7 +445,13 @@ func (s *Service) SeedDevUser(ctx context.Context, workspaceID, username, passwo
 //   - closed:   returns ErrRegistrationClosed (sign-up disabled).
 //
 // Password is hashed inside CreateUser.
-func (s *Service) Register(ctx context.Context, workspaceID, username, password string) error {
+//
+// email is optional but recommended. When provided it must be free within the
+// workspace (ErrEmailTaken) and the account is created with
+// EmailVerified=false — a verification email is sent (when a mailer is
+// configured) so the address can be proven owned. An unverified email can
+// never be linked via OAuth (account pre-hijacking protection).
+func (s *Service) Register(ctx context.Context, workspaceID, username, email, password string) error {
 	if err := ValidateUsername(username); err != nil {
 		return err
 	}
@@ -318,38 +461,119 @@ func (s *Service) Register(ctx context.Context, workspaceID, username, password 
 	if _, err := s.users.GetByUsername(ctx, workspaceID, username); err == nil {
 		return ErrUsernameTaken
 	}
+	if email != "" {
+		if _, err := s.users.GetByEmail(ctx, workspaceID, email); err == nil {
+			return ErrEmailTaken
+		}
+	}
 
 	policy := s.regPolicy.Policy
 	if policy == "" {
 		policy = RegPolicyOpen
 	}
+	var user *User
 	switch policy {
 	case RegPolicyClosed:
 		return ErrRegistrationClosed
 	case RegPolicyApproval:
-		return s.users.CreateUser(ctx, workspaceID, &User{
+		user = &User{
 			Username:    username,
+			Email:       email,
 			WorkspaceID: workspaceID,
 			Active:      true,
 			Status:      UserStatusPending,
 			// PasswordHash carries the PLAINTEXT here — CreateUser hashes it.
 			PasswordHash: password,
-		})
+		}
 	default: // open
 		roles := []string{}
 		if s.regPolicy.DefaultRole != "" {
 			roles = append(roles, s.regPolicy.DefaultRole)
 		}
-		return s.users.CreateUser(ctx, workspaceID, &User{
+		user = &User{
 			Username:    username,
+			Email:       email,
 			WorkspaceID: workspaceID,
 			Active:      true,
 			Status:      UserStatusActive,
 			Roles:       roles,
 			// PasswordHash carries the PLAINTEXT here — CreateUser hashes it.
 			PasswordHash: password,
-		})
+		}
 	}
+	if err := s.users.CreateUser(ctx, workspaceID, user); err != nil {
+		return err
+	}
+	// Email verification: the account starts unverified; a verification email
+	// proves ownership. No-op when no mailer is configured (the account stays
+	// usable by password, but its email can never be OAuth-linked).
+	if email != "" {
+		if err := s.RequestEmailVerification(ctx, workspaceID, user.Username); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// RequestEmailVerification generates a single-use verification token and
+// emails a verification link to the user's address. Used at registration and
+// for resend. No-op (nil) when the user has no email or no mailer is
+// configured.
+func (s *Service) RequestEmailVerification(ctx context.Context, workspaceID, username string) error {
+	user, err := s.users.GetByUsername(ctx, workspaceID, username)
+	if err != nil {
+		return err
+	}
+	if user.Email == "" || s.mailer == nil {
+		return nil
+	}
+
+	token, err := newResetToken()
+	if err != nil {
+		return err
+	}
+	s.verifyMu.Lock()
+	if s.verifyTokens == nil {
+		s.verifyTokens = map[string]verifyToken{}
+	}
+	s.verifyTokens[token] = verifyToken{
+		WorkspaceID: workspaceID,
+		UserID:      user.ID,
+		Email:       user.Email,
+		Expires:     time.Now().Add(verifyTokenTTL),
+	}
+	s.verifyMu.Unlock()
+
+	link := fmt.Sprintf("%s/%s/verify-email?verify_token=%s", s.resetBaseURL(), workspaceID, token)
+	subject := "Verify your email — FormSpec"
+	text := "Confirm this email address for your FormSpec account.\n\n" +
+		"Open this link to verify your email (valid for 24 hours):\n\n" +
+		link + "\n\n" +
+		"If you didn't create this account, you can safely ignore this email."
+	html := "<p>Confirm this email address for your FormSpec account.</p>" +
+		"<p>Open this link to verify your email (valid for 24 hours):</p>" +
+		"<p><a href=\"" + link + "\">" + link + "</a></p>" +
+		"<p>If you didn't create this account, you can safely ignore this email.</p>"
+	return s.mailer.Send(user.Email, subject, text, html)
+}
+
+// VerifyEmail consumes a single-use verification token and marks the user's
+// email as verified. Returns ErrInvalidVerifyToken when the token is unknown,
+// expired, or used.
+func (s *Service) VerifyEmail(ctx context.Context, workspaceID, token string) error {
+	s.verifyMu.Lock()
+	vt, ok := s.verifyTokens[token]
+	if ok {
+		delete(s.verifyTokens, token) // single-use
+	}
+	s.verifyMu.Unlock()
+	if !ok {
+		return ErrInvalidVerifyToken
+	}
+	if vt.WorkspaceID != workspaceID || time.Now().After(vt.Expires) {
+		return ErrInvalidVerifyToken
+	}
+	return s.users.SetEmailVerified(ctx, workspaceID, vt.UserID, true)
 }
 
 // ApproveUser approves a pending user (approval registration policy): sets
@@ -392,6 +616,276 @@ func (s *Service) GrantRoles(ctx context.Context, workspaceID, username string, 
 	return nil
 }
 
+// OAuthLogin completes an external auth login (auth redesign Fase 5): it
+// exchanges the provider's authorization code for userinfo, then finds or
+// creates the user and issues a token pair.
+//
+// Linking policy (account pre-hijacking protection — plan
+// account-pre-hijacking-fix.md):
+//
+//  1. Identity match (provider, sub) → login directly (same external identity).
+//  2. Email match:
+//     - Email unverified + provider verified it → takeover: mark verified,
+//     clear the previous claimant's password, attach identity, login.
+//     - Email unverified + provider did not verify → ErrEmailUnverified.
+//     - Email verified + account has a password → ErrAccountLinkRequired
+//     (never silently merge a different identity into a password account).
+//     - Email verified + account has no password (pure OAuth) → attach
+//     identity, notify, login.
+//  3. New user → created with a username derived from the email, status per
+//     the registration policy (open → active, approval → pending), and
+//     EmailVerified from the provider.
+//
+// Returns ErrInvalidCredentials when the provider is unknown or the user is
+// inactive/pending.
+func (s *Service) OAuthLogin(ctx context.Context, workspaceID, providerName, code string) (*TokenPair, error) {
+	prov := s.OAuthProvider(providerName)
+	if prov == nil {
+		return nil, ErrInvalidCredentials
+	}
+	info, err := prov.Exchange(ctx, code)
+	if err != nil {
+		return nil, fmt.Errorf("oauth: %s: %w", providerName, err)
+	}
+	if info.Email == "" {
+		return nil, fmt.Errorf("oauth: %s returned no email", providerName)
+	}
+
+	// 1. Identity match — the strongest signal: the same external identity
+	// always maps to the same account.
+	if info.ID != "" {
+		if user, err := s.users.GetByOAuthIdentity(ctx, workspaceID, providerName, info.ID); err == nil {
+			if !user.Active || user.Status == UserStatusPending {
+				return nil, ErrInvalidCredentials
+			}
+			return s.issuePair(ctx, user)
+		}
+	}
+
+	// 2. Email match — gated on email verification.
+	if user, err := s.users.GetByEmail(ctx, workspaceID, info.Email); err == nil {
+		if !user.Active || user.Status == UserStatusPending {
+			return nil, ErrInvalidCredentials
+		}
+		if !user.EmailVerified {
+			// Unverified email = a claim, not proof of ownership. Only a
+			// provider-verified OAuth user may claim it (takeover).
+			if !info.EmailVerified {
+				return nil, ErrEmailUnverified
+			}
+			// Provider-verified takeover: the OAuth user owns the email, so
+			// the unverified account is theirs. Clear any password the
+			// previous claimant set so it stops working.
+			if err := s.users.TakeoverUnverifiedEmail(ctx, workspaceID, user.ID, providerName, info.ID); err != nil {
+				return nil, err
+			}
+			user.EmailVerified = true
+			user.PasswordHash = ""
+			user.OAuthProvider = providerName
+			user.OAuthSub = info.ID
+			s.notifyAccountLinked(ctx, user)
+			return s.issuePair(ctx, user)
+		}
+		// Verified email. A password account is never silently merged with a
+		// different external identity — require explicit linking.
+		if userHasPassword(user) {
+			return nil, ErrAccountLinkRequired
+		}
+		// Pure OAuth account (no password) — safe to attach a new identity.
+		if info.ID != "" {
+			if err := s.users.LinkOAuthIdentity(ctx, workspaceID, user.ID, providerName, info.ID); err != nil {
+				return nil, err
+			}
+		}
+		s.notifyAccountLinked(ctx, user)
+		return s.issuePair(ctx, user)
+	}
+
+	// 3. New user — create with a derived username, status per policy.
+	username := usernameFromEmail(info.Email)
+	// Ensure uniqueness: append a numeric suffix if taken.
+	for i := 2; ; i++ {
+		if _, err := s.users.GetByUsername(ctx, workspaceID, username); err != nil {
+			break
+		}
+		username = fmt.Sprintf("%s%d", usernameFromEmail(info.Email), i)
+	}
+
+	status := UserStatusActive
+	if s.regPolicy.Policy == RegPolicyApproval {
+		status = UserStatusPending
+	}
+	roles := []string{}
+	if s.regPolicy.Policy == RegPolicyOpen && s.regPolicy.DefaultRole != "" {
+		roles = append(roles, s.regPolicy.DefaultRole)
+	}
+	if err := s.users.CreateUser(ctx, workspaceID, &User{
+		Username:      username,
+		Email:         info.Email,
+		EmailVerified: info.EmailVerified,
+		DisplayName:   info.Name,
+		WorkspaceID:   workspaceID,
+		Active:        true,
+		Status:        status,
+		Roles:         roles,
+		OAuthProvider: providerName,
+		OAuthSub:      info.ID,
+	}); err != nil {
+		return nil, err
+	}
+
+	// Pending users cannot log in yet (approval policy).
+	if status == UserStatusPending {
+		return nil, ErrInvalidCredentials
+	}
+	user, err := s.users.GetByUsername(ctx, workspaceID, username)
+	if err != nil {
+		return nil, err
+	}
+	return s.issuePair(ctx, user)
+}
+
+// LinkOAuthIdentity explicitly links an external identity to the signed-in
+// user's account (explicit account linking — the user signs in with their
+// password, then links a provider). The provider email must match the
+// account's verified email, and the identity must not already belong to
+// another account.
+func (s *Service) LinkOAuthIdentity(ctx context.Context, workspaceID, userID, providerName, code string) error {
+	prov := s.OAuthProvider(providerName)
+	if prov == nil {
+		return ErrInvalidCredentials
+	}
+	info, err := prov.Exchange(ctx, code)
+	if err != nil {
+		return fmt.Errorf("oauth: %s: %w", providerName, err)
+	}
+	if info.Email == "" {
+		return fmt.Errorf("oauth: %s returned no email", providerName)
+	}
+	user, err := s.users.GetByID(ctx, workspaceID, userID)
+	if err != nil {
+		return ErrInvalidCredentials
+	}
+	// The provider email must match the account's verified email — otherwise
+	// a user could attach someone else's identity.
+	if !strings.EqualFold(user.Email, info.Email) {
+		return ErrEmailMismatch
+	}
+	if !user.EmailVerified {
+		return ErrEmailUnverified
+	}
+	// The identity must not already be linked to another account.
+	if info.ID != "" {
+		if other, err := s.users.GetByOAuthIdentity(ctx, workspaceID, providerName, info.ID); err == nil && other.ID != user.ID {
+			return ErrIdentityTaken
+		}
+	}
+	if info.ID != "" {
+		if err := s.users.LinkOAuthIdentity(ctx, workspaceID, user.ID, providerName, info.ID); err != nil {
+			return err
+		}
+	}
+	s.notifyAccountLinked(ctx, user)
+	return nil
+}
+
+// UnlinkOAuthIdentity detaches the external identity from the signed-in
+// user's account (explicit unlink). The requested provider must be the one
+// currently linked, and the account must keep at least one usable sign-in
+// method — unlinking the only method (a pure-OAuth account with no password)
+// is rejected with ErrUnlinkRequiresPassword.
+func (s *Service) UnlinkOAuthIdentity(ctx context.Context, workspaceID, userID, providerName string) error {
+	user, err := s.users.GetByID(ctx, workspaceID, userID)
+	if err != nil {
+		return ErrInvalidCredentials
+	}
+	if user.OAuthProvider == "" || !strings.EqualFold(user.OAuthProvider, providerName) {
+		return ErrNotLinked
+	}
+	// A pure-OAuth account (no password) would be locked out — require a
+	// password before removing its only sign-in method.
+	if !userHasPassword(user) {
+		return ErrUnlinkRequiresPassword
+	}
+	if err := s.users.UnlinkOAuthIdentity(ctx, workspaceID, user.ID); err != nil {
+		return err
+	}
+	s.notifyAccountUnlinked(ctx, user)
+	return nil
+}
+
+// notifyAccountUnlinked emails the account owner when an OAuth identity is
+// removed from their account. No-op when no mailer is configured or the
+// account has no email.
+func (s *Service) notifyAccountUnlinked(ctx context.Context, user *User) {
+	if s.mailer == nil || user.Email == "" {
+		return
+	}
+	subject := "Sign-in method removed — FormSpec"
+	text := "An external sign-in method was just removed from your FormSpec account.\n\n" +
+		"If this was you, no action is needed.\n\n" +
+		"If you didn't do this, someone may have accessed your account — " +
+		"reset your password immediately and contact support."
+	html := "<p>An external sign-in method was just removed from your FormSpec account.</p>" +
+		"<p>If this was you, no action is needed.</p>" +
+		"<p>If you didn't do this, someone may have accessed your account — " +
+		"<strong>reset your password immediately</strong> and contact support.</p>"
+	_ = s.mailer.Send(user.Email, subject, text, html)
+}
+
+// notifyAccountLinked emails the account owner when an OAuth identity is
+// linked to their account (takeover or attach). No-op when no mailer is
+// configured or the account has no email. This makes silent account merging
+// visible to the owner.
+func (s *Service) notifyAccountLinked(ctx context.Context, user *User) {
+	if s.mailer == nil || user.Email == "" {
+		return
+	}
+	subject := "New sign-in method linked — FormSpec"
+	text := "Your FormSpec account was just linked to an external sign-in method.\n\n" +
+		"If this was you, no action is needed.\n\n" +
+		"If you didn't do this, someone may have accessed your account — " +
+		"reset your password immediately and contact support."
+	html := "<p>Your FormSpec account was just linked to an external sign-in method.</p>" +
+		"<p>If this was you, no action is needed.</p>" +
+		"<p>If you didn't do this, someone may have accessed your account — " +
+		"<strong>reset your password immediately</strong> and contact support.</p>"
+	_ = s.mailer.Send(user.Email, subject, text, html)
+}
+
+// usernameFromEmail derives a username from an email's local part, sanitized
+// to the username pattern (letters, digits, . _ -). Falls back to "user".
+func usernameFromEmail(email string) string {
+	local := email
+	if i := strings.IndexByte(email, '@'); i > 0 {
+		local = email[:i]
+	}
+	// Sanitize: keep [a-zA-Z0-9._-], collapse others.
+	var b strings.Builder
+	for _, r := range local {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') || r == '.' || r == '_' || r == '-' {
+			b.WriteRune(r)
+		}
+	}
+	out := b.String()
+	if len(out) < 3 {
+		out = "user" + out
+	}
+	if len(out) > 32 {
+		out = out[:32]
+	}
+	return out
+}
+
+// userHasPassword reports whether the account has a real (non-empty)
+// password. OAuth-created and taken-over accounts store a hash of the empty
+// string as the "no password" marker — a hash that only matches an empty
+// password (which Login rejects), so it is not a usable credential.
+func userHasPassword(u *User) bool {
+	return u.PasswordHash != "" && !VerifyPassword(u.PasswordHash, "")
+}
+
 // mergeStrings appends items to base, skipping duplicates.
 func mergeStrings(base, extra []string) []string {
 	seen := map[string]bool{}
@@ -421,6 +915,13 @@ func mergeStrings(base, extra []string) []string {
 //
 // On success it records a session (refresh jti) for rotation (todo 6.1.3).
 func (s *Service) Login(ctx context.Context, workspaceID, app, username, password string) (*TokenPair, error) {
+	// Reject empty password at the service layer (defense in depth — the
+	// HTTP handler also checks). This also blocks OAuth-created users whose
+	// password_hash is a bcrypt hash of "" from logging in with an empty
+	// password.
+	if password == "" {
+		return nil, ErrInvalidCredentials
+	}
 	user, err := s.users.GetByUsername(ctx, workspaceID, username)
 	if err != nil {
 		// Do not leak whether the user exists — same error for both cases.
@@ -440,6 +941,131 @@ func (s *Service) Login(ctx context.Context, workspaceID, app, username, passwor
 
 	user.App = app
 	return s.issuePair(ctx, user)
+}
+
+// ChangePassword updates the caller's own password (self-service, profile).
+//
+//   - currentPassword is verified when the user has a password set (non-empty
+//     password_hash). OAuth-created users (empty hash) skip the check — they
+//     are already authenticated via session and have no password to verify.
+//   - newPassword must be non-empty and at least 8 characters.
+//
+// Returns ErrInvalidCredentials on a wrong current password, ErrWeakPassword
+// on a weak new password.
+func (s *Service) ChangePassword(ctx context.Context, workspaceID, userID, currentPassword, newPassword string) error {
+	if err := validateNewPassword(newPassword); err != nil {
+		return err
+	}
+	user, err := s.users.GetByID(ctx, workspaceID, userID)
+	if err != nil {
+		return ErrInvalidCredentials
+	}
+	if user.PasswordHash != "" && !VerifyPassword(user.PasswordHash, currentPassword) {
+		return ErrInvalidCredentials
+	}
+	return s.users.SetPassword(ctx, workspaceID, userID, newPassword)
+}
+
+// validateNewPassword enforces the shared password-strength rule: non-empty
+// and at least 8 characters.
+func validateNewPassword(pw string) error {
+	if pw == "" {
+		return ErrInvalidCredentials
+	}
+	if len(pw) < 8 {
+		return ErrWeakPassword
+	}
+	return nil
+}
+
+// RequestPasswordReset starts the email-based reset flow: it generates a
+// single-use token and emails a reset link to the user's address.
+//
+// It never reveals whether an email exists — unknown emails return nil
+// (success) without sending. When no mailer is configured, it is a no-op
+// (nil) so the endpoint stays uniform.
+func (s *Service) RequestPasswordReset(ctx context.Context, workspaceID, email string) error {
+	if email == "" || s.mailer == nil {
+		return nil
+	}
+	user, err := s.users.GetByEmail(ctx, workspaceID, email)
+	if err != nil {
+		// Unknown email — do not leak existence.
+		return nil
+	}
+	if user.Email == "" {
+		return nil
+	}
+
+	token, err := newResetToken()
+	if err != nil {
+		return err
+	}
+	s.resetMu.Lock()
+	if s.resetTokens == nil {
+		s.resetTokens = map[string]resetToken{}
+	}
+	s.resetTokens[token] = resetToken{
+		WorkspaceID: workspaceID,
+		UserID:      user.ID,
+		Expires:     time.Now().Add(resetTokenTTL),
+	}
+	s.resetMu.Unlock()
+
+	// Note: the query param is `reset_token`, NOT `token` — the auth
+	// middleware reads `?token=` as a JWT (WebSocket handshake), so a reset
+	// token there would be rejected as malformed.
+	link := fmt.Sprintf("%s/%s/reset-password?reset_token=%s", s.resetBaseURL(), workspaceID, token)
+	subject := "Reset password — FormSpec"
+	text := "Someone requested a password reset for your FormSpec account.\n\n" +
+		"Open this link to choose a new password (valid for 15 minutes):\n\n" +
+		link + "\n\n" +
+		"If you didn't request this, you can safely ignore this email."
+	html := "<p>Someone requested a password reset for your FormSpec account.</p>" +
+		"<p>Open this link to choose a new password (valid for 15 minutes):</p>" +
+		"<p><a href=\"" + link + "\">" + link + "</a></p>" +
+		"<p>If you didn't request this, you can safely ignore this email.</p>"
+	return s.mailer.Send(user.Email, subject, text, html)
+}
+
+// resetBaseURL returns the public base URL used to build reset links.
+// Falls back to a relative link when unset (works when the SPA and API share
+// an origin).
+func (s *Service) resetBaseURL() string {
+	if s.mailer == nil {
+		return ""
+	}
+	return s.mailer.BaseURL()
+}
+
+// ResetPassword consumes a single-use reset token and sets a new password.
+// Returns ErrInvalidResetToken when the token is unknown, expired, or used.
+func (s *Service) ResetPassword(ctx context.Context, workspaceID, token, newPassword string) error {
+	if err := validateNewPassword(newPassword); err != nil {
+		return err
+	}
+	s.resetMu.Lock()
+	rt, ok := s.resetTokens[token]
+	if ok {
+		delete(s.resetTokens, token) // single-use
+	}
+	s.resetMu.Unlock()
+	if !ok {
+		return ErrInvalidResetToken
+	}
+	if rt.WorkspaceID != workspaceID || time.Now().After(rt.Expires) {
+		return ErrInvalidResetToken
+	}
+	return s.users.SetPassword(ctx, workspaceID, rt.UserID, newPassword)
+}
+
+// newResetToken returns a cryptographically random 32-byte hex token.
+func newResetToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("auth: generate reset token: %w", err)
+	}
+	return hex.EncodeToString(b), nil
 }
 
 // Refresh validates a refresh token, rotates it (invalidates the old jti and

@@ -18,6 +18,7 @@ import (
 // Storage is a MinIO/S3-backed object store.
 type Storage struct {
 	client *minio.Client
+	core   minio.Core // multipart upload API (PutObjectPart lives on Core)
 	bucket string
 }
 
@@ -43,7 +44,7 @@ func NewStorage(endpoint, accessKey, secretKey, bucket string, useSSL bool) (*St
 		}
 	}
 
-	return &Storage{client: client, bucket: bucket}, nil
+	return &Storage{client: client, core: minio.Core{Client: client}, bucket: bucket}, nil
 }
 
 // Upload writes data to path.

@@ -51,6 +51,15 @@ type loginRequest struct {
 	App string `json:"app,omitempty"`
 }
 
+// registerRequest is the POST /auth/register body. Email is optional but
+// recommended — when provided, the account starts unverified and a
+// verification email is sent (account pre-hijacking protection).
+type registerRequest struct {
+	Username string `json:"username"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
 // refreshRequest is the POST /auth/refresh body.
 type refreshRequest struct {
 	RefreshToken string `json:"refresh_token"`
@@ -143,7 +152,7 @@ func (b *RouterBuilder) HandleRegister() http.HandlerFunc {
 			return
 		}
 
-		var req loginRequest // same shape: username + password
+		var req registerRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeError(w, http.StatusBadRequest, "INVALID_REQUEST",
 				"invalid request body: "+err.Error())
@@ -161,13 +170,15 @@ func (b *RouterBuilder) HandleRegister() http.HandlerFunc {
 		}
 
 		workspaceID := workspaceFromContext(r.Context())
-		if err := authService.Register(r.Context(), workspaceID, req.Username, req.Password); err != nil {
+		if err := authService.Register(r.Context(), workspaceID, req.Username, req.Email, req.Password); err != nil {
 			reason := "error"
 			status := http.StatusInternalServerError
 			code := "INTERNAL"
 			switch {
 			case errors.Is(err, auth.ErrUsernameTaken):
 				status, code, reason = http.StatusConflict, "USERNAME_TAKEN", "username_taken"
+			case errors.Is(err, auth.ErrEmailTaken):
+				status, code, reason = http.StatusConflict, "EMAIL_TAKEN", "email_taken"
 			case errors.Is(err, auth.ErrInvalidUsername):
 				status, code, reason = http.StatusBadRequest, "INVALID_USERNAME", "invalid_username"
 			case errors.Is(err, auth.ErrInvalidCredentials):
@@ -189,6 +200,106 @@ func (b *RouterBuilder) HandleRegister() http.HandlerFunc {
 		})
 		writeJSON(w, http.StatusCreated, SingleResponse{
 			Data: map[string]any{"username": req.Username, "created": true},
+			Meta: MetaSingle{
+				RequestID: requestIDFromContext(r.Context()),
+				Timestamp: time.Now().UTC().Format(time.RFC3339),
+			},
+		})
+	}
+}
+
+// verifyEmailRequest is the POST /auth/verify-email body.
+type verifyEmailRequest struct {
+	Token string `json:"token"`
+}
+
+// HandleVerifyEmail serves POST /{ws}/_ui/auth/verify-email — consumes the
+// emailed verification token and marks the user's email as verified. Public +
+// rate-limited. A verified email is required before OAuth login will link to
+// the account (account pre-hijacking protection).
+func (b *RouterBuilder) HandleVerifyEmail() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if authService == nil {
+			writeError(w, http.StatusServiceUnavailable, "AUTH_NOT_CONFIGURED",
+				"auth service is not configured")
+			return
+		}
+		ip := clientIP(r)
+		if !registerLimiter.Allow("verify:" + ip) {
+			writeError(w, http.StatusTooManyRequests, "RATE_LIMITED",
+				"too many requests, try again later")
+			return
+		}
+
+		var req verifyEmailRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "INVALID_REQUEST",
+				"invalid request body: "+err.Error())
+			return
+		}
+		if req.Token == "" {
+			writeError(w, http.StatusBadRequest, "INVALID_REQUEST",
+				"token is required")
+			return
+		}
+
+		workspaceID := workspaceFromContext(r.Context())
+		if err := authService.VerifyEmail(r.Context(), workspaceID, req.Token); err != nil {
+			switch {
+			case errors.Is(err, auth.ErrInvalidVerifyToken):
+				writeError(w, http.StatusBadRequest, "INVALID_VERIFY_TOKEN",
+					"invalid or expired verification token")
+			default:
+				writeError(w, http.StatusInternalServerError, "INTERNAL",
+					"failed to verify email")
+			}
+			return
+		}
+
+		authAuditLog.record(AuthAuditEntry{
+			Timestamp: time.Now().UTC(), Method: "verify-email",
+			IP: ip, Result: "success",
+		})
+		writeJSON(w, http.StatusOK, SingleResponse{
+			Data: map[string]any{"verified": true},
+			Meta: MetaSingle{
+				RequestID: requestIDFromContext(r.Context()),
+				Timestamp: time.Now().UTC().Format(time.RFC3339),
+			},
+		})
+	}
+}
+
+// HandleResendVerification serves POST /{ws}/_ui/auth/resend-verification —
+// re-sends the email-verification link to the signed-in user's address.
+// Authenticated (the caller's user ID comes from the session identity).
+func (b *RouterBuilder) HandleResendVerification() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if authService == nil {
+			writeError(w, http.StatusServiceUnavailable, "AUTH_NOT_CONFIGURED",
+				"auth service is not configured")
+			return
+		}
+		id := IdentityFromContext(r.Context())
+		if id == nil || id.UserID == "" {
+			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED",
+				"authentication required")
+			return
+		}
+
+		workspaceID := workspaceFromContext(r.Context())
+		if err := authService.RequestEmailVerification(r.Context(), workspaceID, id.Username); err != nil {
+			writeError(w, http.StatusInternalServerError, "INTERNAL",
+				"failed to send verification email")
+			return
+		}
+
+		authAuditLog.record(AuthAuditEntry{
+			Timestamp: time.Now().UTC(), Method: "resend-verification",
+			Username: id.Username, IP: clientIP(r), Result: "success",
+		})
+		writeJSON(w, http.StatusOK, SingleResponse{
+			Data: map[string]any{"sent": true},
 			Meta: MetaSingle{
 				RequestID: requestIDFromContext(r.Context()),
 				Timestamp: time.Now().UTC().Format(time.RFC3339),
@@ -250,6 +361,197 @@ func (b *RouterBuilder) HandleRefresh() http.HandlerFunc {
 		})
 		writeJSON(w, http.StatusOK, SingleResponse{
 			Data: pair,
+			Meta: MetaSingle{
+				RequestID: requestIDFromContext(r.Context()),
+				Timestamp: time.Now().UTC().Format(time.RFC3339),
+			},
+		})
+	}
+}
+
+// changePasswordRequest is the POST /auth/change-password body.
+type changePasswordRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
+// HandleChangePassword serves POST /{ws}/_ui/auth/change-password — the
+// self-service "change my password" flow from the profile/user menu.
+//
+// Authenticated: the caller's user ID comes from the session identity (401
+// when anonymous). Verifies the current password (when the user has one) and
+// sets the new one.
+func (b *RouterBuilder) HandleChangePassword() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if authService == nil {
+			writeError(w, http.StatusServiceUnavailable, "AUTH_NOT_CONFIGURED",
+				"auth service is not configured")
+			return
+		}
+		id := IdentityFromContext(r.Context())
+		if id == nil || id.UserID == "" {
+			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED",
+				"authentication required")
+			return
+		}
+
+		var req changePasswordRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "INVALID_REQUEST",
+				"invalid request body: "+err.Error())
+			return
+		}
+		if req.NewPassword == "" {
+			writeError(w, http.StatusBadRequest, "INVALID_REQUEST",
+				"new_password is required")
+			return
+		}
+
+		workspaceID := workspaceFromContext(r.Context())
+		err := authService.ChangePassword(r.Context(), workspaceID, id.UserID,
+			req.CurrentPassword, req.NewPassword)
+		if err != nil {
+			switch {
+			case errors.Is(err, auth.ErrWeakPassword):
+				writeError(w, http.StatusBadRequest, "WEAK_PASSWORD",
+					"password must be at least 8 characters")
+			case errors.Is(err, auth.ErrInvalidCredentials):
+				writeError(w, http.StatusUnauthorized, "UNAUTHORIZED",
+					"current password is incorrect")
+			default:
+				writeError(w, http.StatusInternalServerError, "INTERNAL",
+					"failed to change password")
+			}
+			return
+		}
+
+		authAuditLog.record(AuthAuditEntry{
+			Timestamp: time.Now().UTC(), Method: "change-password",
+			Username: id.Username, IP: clientIP(r), Result: "success",
+		})
+		writeJSON(w, http.StatusOK, SingleResponse{
+			Data: map[string]any{"changed": true},
+			Meta: MetaSingle{
+				RequestID: requestIDFromContext(r.Context()),
+				Timestamp: time.Now().UTC().Format(time.RFC3339),
+			},
+		})
+	}
+}
+
+// forgotPasswordRequest is the POST /auth/forgot-password body.
+type forgotPasswordRequest struct {
+	Email string `json:"email"`
+}
+
+// HandleForgotPassword serves POST /{ws}/_ui/auth/forgot-password — the
+// "forgot password" flow from the login screen. Public + rate-limited.
+//
+// Always returns 200 (even for unknown emails) so the endpoint does not leak
+// whether an address is registered. When the user exists and a mailer is
+// configured, an email with a reset link is sent.
+func (b *RouterBuilder) HandleForgotPassword() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if authService == nil {
+			writeError(w, http.StatusServiceUnavailable, "AUTH_NOT_CONFIGURED",
+				"auth service is not configured")
+			return
+		}
+		ip := clientIP(r)
+		if !registerLimiter.Allow("forgot:" + ip) {
+			writeError(w, http.StatusTooManyRequests, "RATE_LIMITED",
+				"too many requests, try again later")
+			return
+		}
+
+		var req forgotPasswordRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "INVALID_REQUEST",
+				"invalid request body: "+err.Error())
+			return
+		}
+		if req.Email == "" {
+			writeError(w, http.StatusBadRequest, "INVALID_REQUEST",
+				"email is required")
+			return
+		}
+
+		workspaceID := workspaceFromContext(r.Context())
+		if err := authService.RequestPasswordReset(r.Context(), workspaceID, req.Email); err != nil {
+			// Log server-side; still return 200 to the client (no leak).
+			authAuditLog.record(AuthAuditEntry{
+				Timestamp: time.Now().UTC(), Method: "forgot-password",
+				IP: ip, Result: "failure", Reason: "mail_error",
+			})
+		}
+
+		writeJSON(w, http.StatusOK, SingleResponse{
+			Data: map[string]any{"sent": true},
+			Meta: MetaSingle{
+				RequestID: requestIDFromContext(r.Context()),
+				Timestamp: time.Now().UTC().Format(time.RFC3339),
+			},
+		})
+	}
+}
+
+// resetPasswordRequest is the POST /auth/reset-password body.
+type resetPasswordRequest struct {
+	Token    string `json:"token"`
+	Password string `json:"password"`
+}
+
+// HandleResetPassword serves POST /{ws}/_ui/auth/reset-password — consumes
+// the emailed token and sets a new password. Public + rate-limited.
+func (b *RouterBuilder) HandleResetPassword() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if authService == nil {
+			writeError(w, http.StatusServiceUnavailable, "AUTH_NOT_CONFIGURED",
+				"auth service is not configured")
+			return
+		}
+		ip := clientIP(r)
+		if !registerLimiter.Allow("reset:" + ip) {
+			writeError(w, http.StatusTooManyRequests, "RATE_LIMITED",
+				"too many requests, try again later")
+			return
+		}
+
+		var req resetPasswordRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "INVALID_REQUEST",
+				"invalid request body: "+err.Error())
+			return
+		}
+		if req.Token == "" || req.Password == "" {
+			writeError(w, http.StatusBadRequest, "INVALID_REQUEST",
+				"token and password are required")
+			return
+		}
+
+		workspaceID := workspaceFromContext(r.Context())
+		err := authService.ResetPassword(r.Context(), workspaceID, req.Token, req.Password)
+		if err != nil {
+			switch {
+			case errors.Is(err, auth.ErrWeakPassword):
+				writeError(w, http.StatusBadRequest, "WEAK_PASSWORD",
+					"password must be at least 8 characters")
+			case errors.Is(err, auth.ErrInvalidResetToken):
+				writeError(w, http.StatusBadRequest, "INVALID_RESET_TOKEN",
+					"invalid or expired reset token")
+			default:
+				writeError(w, http.StatusInternalServerError, "INTERNAL",
+					"failed to reset password")
+			}
+			return
+		}
+
+		authAuditLog.record(AuthAuditEntry{
+			Timestamp: time.Now().UTC(), Method: "reset-password",
+			IP: ip, Result: "success",
+		})
+		writeJSON(w, http.StatusOK, SingleResponse{
+			Data: map[string]any{"reset": true},
 			Meta: MetaSingle{
 				RequestID: requestIDFromContext(r.Context()),
 				Timestamp: time.Now().UTC().Format(time.RFC3339),

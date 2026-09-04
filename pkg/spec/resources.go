@@ -320,6 +320,44 @@ type Settings struct {
 	// Registration is the workspace-level self-service sign-up policy
 	// (auth redesign Fase 4).
 	Registration *RegistrationSettings `yaml:"registration,omitempty" json:"registration,omitempty"`
+	// Auth configures external authentication providers (auth redesign Fase 5
+	// — OAuth multi-provider). Declared under `settings.auth.providers`.
+	Auth *AuthSettings `yaml:"auth,omitempty" json:"auth,omitempty"`
+}
+
+// AuthSettings configures external authentication (OAuth/OIDC) providers
+// (auth redesign Fase 5). Providers are declared by name under
+// `settings.auth.providers`; well-known presets (google, github, microsoft)
+// fill in the endpoint URLs, custom providers declare them explicitly.
+type AuthSettings struct {
+	// Providers maps a provider name → its OAuth config. The name is used in
+	// the authorize/callback URLs and shown on the login screen.
+	Providers map[string]*OAuthProviderSettings `yaml:"providers,omitempty" json:"providers,omitempty"`
+}
+
+// OAuthProviderSettings configures one external auth provider.
+//
+//   - type: "oidc" (default) | "oauth2". OIDC uses discovery (issuer) to
+//     resolve endpoints; oauth2 declares them explicitly.
+//   - Presets: name "google" | "github" | "microsoft" fill in the endpoint
+//     URLs automatically — only client_id/client_secret are required.
+//   - Custom: declare type + authorize_url/token_url/userinfo_url.
+type OAuthProviderSettings struct {
+	// @schema {enum: ["oidc", "oauth2"], default: "oidc"}
+	Type string `yaml:"type,omitempty" json:"type,omitempty"`
+	// @schema {description: "OAuth client ID"}
+	ClientID string `yaml:"client_id" json:"client_id"`
+	// @schema {description: "OAuth client secret (secret — never exposed to the renderer)"}
+	ClientSecret string `yaml:"client_secret" json:"client_secret"`
+	// @schema {description: "OAuth scopes (default: openid email profile)"}
+	Scopes []string `yaml:"scopes,omitempty" json:"scopes,omitempty"`
+	// Issuer is the OIDC issuer URL (type: oidc) — discovery resolves
+	// authorize/token/userinfo endpoints from it.
+	Issuer string `yaml:"issuer,omitempty" json:"issuer,omitempty"`
+	// AuthorizeURL / TokenURL / UserInfoURL for type: oauth2 (custom).
+	AuthorizeURL string `yaml:"authorize_url,omitempty" json:"authorize_url,omitempty"`
+	TokenURL     string `yaml:"token_url,omitempty" json:"token_url,omitempty"`
+	UserInfoURL  string `yaml:"userinfo_url,omitempty" json:"userinfo_url,omitempty"`
 }
 
 // RegistrationSettings configures the workspace-level self-service sign-up
@@ -409,6 +447,9 @@ func ResolveSettings(declared *Settings) *Settings {
 		if declared.Registration.DefaultRole != "" {
 			d.Registration.DefaultRole = declared.Registration.DefaultRole
 		}
+	}
+	if declared.Auth != nil {
+		d.Auth = declared.Auth
 	}
 	return d
 }

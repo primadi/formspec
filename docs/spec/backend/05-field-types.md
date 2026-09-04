@@ -19,22 +19,22 @@ dan protokol; perbedaan hasil antar backend adalah non-konformansi.
 
 ### 1.1 Tipe Primitif
 
-| Type | Domain | Representasi kanonik | Catatan |
-|---|---|---|---|
-| `string` | Teks pendek satu baris | UTF-8 | Kandidat generated column/index; batasi panjang via rule `max_length` |
-| `text` | Teks panjang multi-baris | UTF-8 | Tidak diindeks penuh secara default; untuk deskripsi, catatan |
-| `richtext` | Teks kaya (markup) | HTML/Markdown ter-**sanitasi** | Backend/engine **wajib** menyanitasi di server sebelum simpan — payload dari klien tidak pernah dipercaya mentah ([`01-core-basic.md`](01-core-basic.md) §3) |
-| `integer` | Bilangan bulat 64-bit | int64 | Nama kanonik `integer` (bukan `int`) |
-| `decimal` | Bilangan eksak presisi-arbitrer | string desimal | **Wajib** untuk kuantitas numerik non-uang yang butuh eksak; **tidak pernah** float. Semantik `precision`/`scale` — §1.2 |
-| `money` | Uang = jumlah + mata uang | `{ amount, currency }` | Tipe first-class — §2 |
-| `boolean` | `true`/`false` | bool | — |
-| `date` | Tanggal kalender | `YYYY-MM-DD` (ISO-8601) | Tanpa zona waktu |
-| `datetime` | Titik waktu | ISO-8601 dengan offset zona | Disimpan UTC, disajikan per `settings.timezone` |
-| `time` | Waktu-hari | `HH:MM:SS` (ISO-8601) | Tanpa tanggal/zona |
-| `uuid` | Identitas 128-bit | UUID v7 (time-ordered) | Default untuk PK ([`01-core-basic.md`](01-core-basic.md) §2) |
-| `enum` | Satu nilai dari himpunan tertutup | string | **Wajib** `enum_values: [...]`; nilai di luar himpunan → `VALIDATION_ERROR` |
-| `json` | Struktur bebas | JSON | Tanpa skema yang ditegakkan framework; hindari untuk data yang butuh query/validasi |
-| `file` | Referensi objek tersimpan | pointer object storage | Isi hidup di `ctx.storage`, bukan di baris — §1.3. `attachment` adalah alias `file` |
+| Type       | Domain                            | Representasi kanonik           | Catatan                                                                                                                                                      |
+| ---------- | --------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `string`   | Teks pendek satu baris            | UTF-8                          | Kandidat generated column/index; batasi panjang via rule `max_length`                                                                                        |
+| `text`     | Teks panjang multi-baris          | UTF-8                          | Tidak diindeks penuh secara default; untuk deskripsi, catatan                                                                                                |
+| `richtext` | Teks kaya (markup)                | HTML/Markdown ter-**sanitasi** | Backend/engine **wajib** menyanitasi di server sebelum simpan — payload dari klien tidak pernah dipercaya mentah ([`01-core-basic.md`](01-core-basic.md) §3) |
+| `integer`  | Bilangan bulat 64-bit             | int64                          | Nama kanonik `integer` (bukan `int`)                                                                                                                         |
+| `decimal`  | Bilangan eksak presisi-arbitrer   | string desimal                 | **Wajib** untuk kuantitas numerik non-uang yang butuh eksak; **tidak pernah** float. Semantik `precision`/`scale` — §1.2                                     |
+| `money`    | Uang = jumlah + mata uang         | `{ amount, currency }`         | Tipe first-class — §2                                                                                                                                        |
+| `boolean`  | `true`/`false`                    | bool                           | —                                                                                                                                                            |
+| `date`     | Tanggal kalender                  | `YYYY-MM-DD` (ISO-8601)        | Tanpa zona waktu                                                                                                                                             |
+| `datetime` | Titik waktu                       | ISO-8601 dengan offset zona    | Disimpan UTC, disajikan per `settings.timezone`                                                                                                              |
+| `time`     | Waktu-hari                        | `HH:MM:SS` (ISO-8601)          | Tanpa tanggal/zona                                                                                                                                           |
+| `uuid`     | Identitas 128-bit                 | UUID v7 (time-ordered)         | Default untuk PK ([`01-core-basic.md`](01-core-basic.md) §2)                                                                                                 |
+| `enum`     | Satu nilai dari himpunan tertutup | string                         | **Wajib** `enum_values: [...]`; nilai di luar himpunan → `VALIDATION_ERROR`                                                                                  |
+| `json`     | Struktur bebas                    | JSON                           | Tanpa skema yang ditegakkan framework; hindari untuk data yang butuh query/validasi                                                                          |
+| `file`     | Referensi objek tersimpan         | pointer object storage         | Isi hidup di `ctx.storage`, bukan di baris — §1.3. `attachment` adalah alias `file`                                                                          |
 
 Format tanggal/waktu, zona, dan default lain yang lintas-komponen dibaca dari
 **global settings** (`settings.*`, [`01-core-basic.md`](01-core-basic.md) §10) —
@@ -53,6 +53,7 @@ opsional membentuk shape-nya:
 - `scale` — digit di belakang koma.
 
 Aturan normatif:
+
 - Tanpa `precision`/`scale`, backend menyimpan nilai secara eksak apa adanya
   (arbitrary-precision) — **tidak ada** pembulatan diam-diam.
 - Dengan `scale` diset, nilai dengan digit pecahan melebihi `scale` dibulatkan
@@ -80,17 +81,21 @@ kebijakan aksesnya lewat blok `storage`:
 - name: photo
   type: file
   storage:
-    allowed_types: [image/png, image/jpeg, .pdf]  # allowlist MIME/ekstensi
+    allowed_types: [image/png, image/jpeg, .pdf] # allowlist MIME/ekstensi
     max_size_mb: 10
-    max_count: 5                  # hanya untuk field multi-file
-    visibility: private           # public | private | signed
-    signed_url_ttl: 15m           # TTL URL akses terbatas-waktu (visibility: signed)
-    cdn: true                     # opsional — passthrough CDN untuk objek public
-    transform:                    # opsional — turunan resize/thumbnail image
+    max_count: 5 # hanya untuk field multi-file
+    visibility: private # public | private | signed
+    signed_url_ttl: 15m # TTL URL akses terbatas-waktu (visibility: signed)
+    one_time: false # true = objek dihapus setelah link didownload
+    ttl: 168h # objek dihapus bila tidak didownload dalam durasi ini
+    max_download_mb: 50 # batas ukuran download (efektif = min global, field)
+    cdn: true # opsional — passthrough CDN untuk objek public
+    transform: # opsional — turunan resize/thumbnail image
       - { name: thumb, width: 200, height: 200, fit: cover }
 ```
 
 Aturan normatif:
+
 - `allowed_types` — allowlist MIME type / ekstensi. Ditegakkan **server-side**
   pada upload; tipe di luar allowlist → `VALIDATION_ERROR` (422). Deteksi tipe
   memakai content sniffing, bukan sekadar percaya `Content-Type`/ekstensi klien.
@@ -102,6 +107,15 @@ Aturan normatif:
 - `signed_url_ttl` — masa berlaku signed URL untuk `visibility: signed`
   (durasi, mis. `15m`, `24h`). Dibaca dari default global bila tidak diset
   ([`01-core-basic.md`](01-core-basic.md) §10) — komponen tidak menebak.
+- `one_time` — link download berlaku **satu kali**: setelah objek berhasil
+  didownload via link, objek dihapus dari storage dan link berikutnya → `410
+GONE`. Penegakan atomic di server (budget download), bukan konvensi klien.
+- `ttl` — objek yang **tidak pernah didownload** dalam durasi ini dihapus
+  otomatis oleh sweeper (format durasi Go, mis. `168h`).
+- `max_download_mb` — batas ukuran objek yang boleh dilayani via route
+  download/link. Limit efektif = min(limit global `FORMSPEC_DOWNLOAD_MAX_MB`,
+  nilai per-field); pelanggaran → `413 FILE_TOO_LARGE` **sebelum** objek
+  dimuat (cek ukuran via stat, todo 7.17.7).
 - `cdn` — passthrough CDN untuk objek `public`; detail delivery adalah urusan
   primitif storage ([`../platform/06-datastore.md`](../platform/06-datastore.md) §2).
 - `transform` — spesifikasi turunan image (resize/thumbnail). Turunan
@@ -142,6 +156,7 @@ tidak mungkin.
 
 **Sumber mata uang — jangan pernah menebak** ([`01-core-basic.md`](01-core-basic.md)
 §10). Urutan resolusi:
+
 1. `currency` eksplisit di deklarasi field, kalau ada.
 2. Kalau tidak, `settings.currency` global.
 3. Kalau keduanya tidak tersedia dan tidak ada default standar → **error**,
@@ -181,10 +196,11 @@ memilih mode pembulatan sendiri. Setiap operasi yang menghasilkan digit di luar
 skala mata uang dibulatkan dengan mode ini.
 
 **Format tampilan** (simbol, posisi, pemisah ribuan) mengikuti `settings.locale`
-+ `symbol` yang dideklarasikan di `settings.currency`/field itu sendiri — bukan
-hard-code per komponen, dan bukan hasil query ke Entity katalog (kalau app
-punya Entity katalog mata uang, itu murni data tampilan/pilihan-user, di luar
-jalur baca tipe `money`).
+
+- `symbol` yang dideklarasikan di `settings.currency`/field itu sendiri — bukan
+  hard-code per komponen, dan bukan hasil query ke Entity katalog (kalau app
+  punya Entity katalog mata uang, itu murni data tampilan/pilihan-user, di luar
+  jalur baca tipe `money`).
 
 **Open — FX & multi-currency.** Konversi antar mata uang (rate table, tanggal
 rate, revaluasi, gain/loss selisih kurs) **di luar scope core**. Ia menjadi
@@ -203,25 +219,25 @@ event) sebelum handler action berjalan (level "Field",
 untuk UX; ia tidak pernah menjadi satu-satunya penjaga — payload yang melewati
 frontend tetap tertahan di backend.
 
-| Kategori | Rule | Arti |
-|---|---|---|
-| Presence | `required` | Nilai wajib ada (non-null, non-empty) |
-| | `optional` | Eksplisit boleh kosong (default) |
-| String | `min_length` / `max_length` | Batas panjang |
-| | `length` | Panjang persis |
-| | `pattern` | Cocok regex |
-| | `email` | Format email |
-| | `url` | Format URL |
-| Numeric | `min` / `max` | Batas nilai |
-| | `positive` | > 0 |
-| | `precision` | Batas digit signifikan (untuk `decimal`, §1.2) |
-| Enum/set | `in` | Nilai termasuk himpunan yang diberikan |
-| Date | `future` / `past` | Relatif terhadap `ctx.now()` |
-| | `after:<field>` / `before:<field>` | Relatif terhadap field lain di dokumen yang sama |
-| Collection | `min_items` / `max_items` | Batas jumlah elemen (child/list) |
-| Cross-record | `unique` | Unik per tenant ([`01-core-basic.md`](01-core-basic.md) §2 — unique constraint, bukan PK) |
-| | `exists:<resource>` | Nilai wajib menunjuk record yang ada |
-| Escape hatch | `script` + `message` | Starlark inline untuk aturan di luar kosakata; pesan pakai format `code`+`params` bernamespace App ([`01-core-basic.md`](01-core-basic.md) §9) |
+| Kategori     | Rule                               | Arti                                                                                                                                           |
+| ------------ | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Presence     | `required`                         | Nilai wajib ada (non-null, non-empty)                                                                                                          |
+|              | `optional`                         | Eksplisit boleh kosong (default)                                                                                                               |
+| String       | `min_length` / `max_length`        | Batas panjang                                                                                                                                  |
+|              | `length`                           | Panjang persis                                                                                                                                 |
+|              | `pattern`                          | Cocok regex                                                                                                                                    |
+|              | `email`                            | Format email                                                                                                                                   |
+|              | `url`                              | Format URL                                                                                                                                     |
+| Numeric      | `min` / `max`                      | Batas nilai                                                                                                                                    |
+|              | `positive`                         | > 0                                                                                                                                            |
+|              | `precision`                        | Batas digit signifikan (untuk `decimal`, §1.2)                                                                                                 |
+| Enum/set     | `in`                               | Nilai termasuk himpunan yang diberikan                                                                                                         |
+| Date         | `future` / `past`                  | Relatif terhadap `ctx.now()`                                                                                                                   |
+|              | `after:<field>` / `before:<field>` | Relatif terhadap field lain di dokumen yang sama                                                                                               |
+| Collection   | `min_items` / `max_items`          | Batas jumlah elemen (child/list)                                                                                                               |
+| Cross-record | `unique`                           | Unik per tenant ([`01-core-basic.md`](01-core-basic.md) §2 — unique constraint, bukan PK)                                                      |
+|              | `exists:<resource>`                | Nilai wajib menunjuk record yang ada                                                                                                           |
+| Escape hatch | `script` + `message`               | Starlark inline untuk aturan di luar kosakata; pesan pakai format `code`+`params` bernamespace App ([`01-core-basic.md`](01-core-basic.md) §9) |
 
 Kegagalan validasi mengembalikan envelope error normatif
 ([`01-core-basic.md`](01-core-basic.md) §8.5) dengan `details: [{level, field?,
@@ -241,7 +257,7 @@ Di atas itu, satu marker normatif mengaktifkan dukungan hierarki:
 ```yaml
 - name: parent_id
   type: relation
-  relation: { type: belongs_to, resource: account }   # self-referential
+  relation: { type: belongs_to, resource: account } # self-referential
   tree: true
 ```
 
@@ -255,12 +271,12 @@ parent satu tingkat.
 ber-`tree: true` menambah operator berikut **khusus untuk field itu** — bukan
 memperluas himpunan dasar untuk field lain:
 
-| Operator | Arti | Contoh |
-|---|---|---|
-| `descendant_of` | Semua turunan (rekursif) dari id | `filter[parent_id][descendant_of]=<id>` |
-| `ancestor_of` | Semua leluhur (rekursif) dari id | `filter[parent_id][ancestor_of]=<id>` |
-| `child_of` | Anak langsung (satu tingkat) dari id | `filter[parent_id][child_of]=<id>` |
-| `root` | Node akar (parent null) | `filter[parent_id][root]=true` |
+| Operator        | Arti                                 | Contoh                                  |
+| --------------- | ------------------------------------ | --------------------------------------- |
+| `descendant_of` | Semua turunan (rekursif) dari id     | `filter[parent_id][descendant_of]=<id>` |
+| `ancestor_of`   | Semua leluhur (rekursif) dari id     | `filter[parent_id][ancestor_of]=<id>`   |
+| `child_of`      | Anak langsung (satu tingkat) dari id | `filter[parent_id][child_of]=<id>`      |
+| `root`          | Node akar (parent null)              | `filter[parent_id][root]=true`          |
 
 Semantiknya **identik di seluruh PersistBackend** — cara backend memenuhinya
 (recursive CTE, closure table, materialized path, dll.) adalah detail
@@ -292,6 +308,7 @@ tidak pernah menjadi penjaganya.
 
 `computed` menandai field yang nilainya **diturunkan server-side**, bukan ditulis
 klien. Marker ini menegakkan:
+
 - **Never client-writable** — nilai `computed` di payload klien diabaikan (bukan
   error diam-diam yang menimpa hasil hitung); satu-satunya sumber nilai adalah
   evaluasi formula.
@@ -367,12 +384,13 @@ guard **lebih halus** di atasnya:
 ```yaml
 - name: email
   type: string
-  classification: pii            # pii | financial | internal
+  classification: pii # pii | financial | internal
 ```
 
 `classification` adalah **label governance** — bukan penjaga akses, melainkan tag
 untuk pelaporan dan disiplin data. Nilai kanonik minimal: `pii`, `financial`,
 `internal`. Label ini menjadi dasar:
+
 - pelaporan governance (inventarisasi field ber-PII/finansial per App/module);
 - disiplin PII observability — field ber-`classification: pii` tidak pernah
   masuk log mentah ([`../platform/09-observability.md`](../platform/09-observability.md)

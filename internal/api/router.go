@@ -159,6 +159,24 @@ func (b *RouterBuilder) SetStorageResolver(fn func() (Storage, error)) {
 	b.factory.SetStorageResolver(fn)
 }
 
+// SetUploadLimitMB wires the global upload size limit in MB
+// (todo 7.17.7). Per-field max_size_mb lowers it further.
+func (b *RouterBuilder) SetUploadLimitMB(mb int) {
+	b.factory.SetUploadLimitMB(mb)
+}
+
+// SetDownloadLimitMB wires the global download size limit in MB
+// (todo 7.17.7). Per-field max_download_mb lowers it further.
+func (b *RouterBuilder) SetDownloadLimitMB(mb int) {
+	b.factory.SetDownloadLimitMB(mb)
+}
+
+// SetLinkStore wires the storage-link store used by the link issue/consume
+// routes (todo 7.17.6). When nil, link routes return 503.
+func (b *RouterBuilder) SetLinkStore(s *db.StorageLinkStore) {
+	b.factory.SetLinkStore(s)
+}
+
 // SetAssetRoots wires the manifest roots used to resolve module asset files
 // (todo 5.9.1).
 func (b *RouterBuilder) SetAssetRoots(roots []string) {
@@ -338,10 +356,28 @@ func (b *RouterBuilder) BuildHTTP() http.Handler {
 			r.Post("/auth/login", b.HandleLogin())
 			r.Post("/auth/refresh", b.HandleRefresh())
 			r.Post("/auth/register", b.HandleRegister())
+			// Email verification (account pre-hijacking protection): verify
+			// (public, token) + resend (authenticated).
+			r.Post("/auth/verify-email", b.HandleVerifyEmail())
+			r.Post("/auth/resend-verification", b.HandleResendVerification())
+			// Self-service password management: change (authenticated) and
+			// email-based reset (public, rate-limited).
+			r.Post("/auth/change-password", b.HandleChangePassword())
+			r.Post("/auth/forgot-password", b.HandleForgotPassword())
+			r.Post("/auth/reset-password", b.HandleResetPassword())
 			// Approve a pending user (approval registration policy) — admin
 			// only (formspec.core.users.update).
 			r.With(RequirePermission("formspec.core.users.update")).
 				Post("/auth/approve", b.HandleApproveUser())
+			// External auth (OAuth/OIDC, auth redesign Fase 5) — public.
+			r.Get("/auth/oauth/{provider}/authorize", b.HandleOAuthAuthorize())
+			r.Get("/auth/oauth/{provider}/callback", b.HandleOAuthCallback())
+			// Explicit account linking (authenticated) — the signed-in user
+			// links an external identity to their account.
+			r.Post("/auth/oauth/{provider}/link", b.HandleOAuthLink())
+			// Explicit account unlinking (authenticated) — the signed-in user
+			// removes an external identity from their account.
+			r.Post("/auth/oauth/{provider}/unlink", b.HandleOAuthUnlink())
 
 			// First-run setup — public (no auth). GET reports whether the
 			// workspace needs bootstrap (no users); POST creates the first
@@ -399,7 +435,16 @@ func (b *RouterBuilder) BuildHTTP() http.Handler {
 				// permission dynamically.
 				r.Post("/{module}/{entity}/{id}/{field}", b.factory.HandleFileUpload())
 				r.Get("/{module}/{entity}/{id}/{field}", b.factory.HandleFileDownload())
+				// Download-link issue (todo 7.17.6) + chunked upload (7.17.5).
+				r.Post("/{module}/{entity}/{id}/{field}/link", b.factory.HandleLinkIssue())
+				r.Post("/{module}/{entity}/{id}/{field}/upload/init", b.factory.HandleChunkInit())
+				r.Post("/{module}/{entity}/{id}/{field}/upload/{uid}/part/{part}", b.factory.HandleChunkPart())
+				r.Post("/{module}/{entity}/{id}/{field}/upload/{uid}/complete", b.factory.HandleChunkComplete())
 			})
+
+			// Link consume (todo 7.17.6) — token is the credential, anonymous
+			// allowed. Registered on the UI surface (session-auth compatible).
+			r.Get("/storage/link/{token}", b.factory.HandleLinkConsume())
 
 			// Stateless Service actions on the UI surface (render-context
 			// `source: api`, todo 7.1). Session-authenticated callers may
@@ -442,6 +487,13 @@ func (b *RouterBuilder) BuildHTTP() http.Handler {
 			// File upload/download (todo 7.17.1).
 			r.Post("/{module}/{entity}/{id}/{field}", b.factory.HandleFileUpload())
 			r.Get("/{module}/{entity}/{id}/{field}", b.factory.HandleFileDownload())
+			// Download-link issue (todo 7.17.6) + chunked upload (7.17.5).
+			r.Post("/{module}/{entity}/{id}/{field}/link", b.factory.HandleLinkIssue())
+			r.Post("/{module}/{entity}/{id}/{field}/upload/init", b.factory.HandleChunkInit())
+			r.Post("/{module}/{entity}/{id}/{field}/upload/{uid}/part/{part}", b.factory.HandleChunkPart())
+			r.Post("/{module}/{entity}/{id}/{field}/upload/{uid}/complete", b.factory.HandleChunkComplete())
+			// Link consume (todo 7.17.6) — token is the credential.
+			r.Get("/storage/link/{token}", b.factory.HandleLinkConsume())
 		})
 
 		// Static SPA (renderer). Fixed mounts: /{ws}/_admin (admin surface,

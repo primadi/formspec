@@ -65,6 +65,31 @@ type (
 	Logger interface {
 		Log(ctx context.Context, level, event string, meta map[string]any) error
 	}
+	// Deleter serves ctx.storage().delete(path) — object removal. Also used
+	// by the delete-after-download (one_time) and TTL sweep flows.
+	Deleter interface {
+		Delete(ctx context.Context, path string) error
+	}
+	// Stater reports an object's size in bytes (todo 7.17.4). Used by the
+	// download-size limit (413 without loading the object) and by chunked
+	// upload completion.
+	Stater interface {
+		Stat(ctx context.Context, path string) (int64, error)
+	}
+	// Linker serves ctx.storage().link(path, ttl=) — a time-limited download
+	// URL. MinIO/S3 backends return a presigned URL; app-route backends
+	// return a link-token URL handled by the api link routes.
+	Linker interface {
+		Link(ctx context.Context, path string, ttl time.Duration) (string, error)
+	}
+	// ChunkUploader serves ctx.storage() chunked upload (todo 7.17.5) for
+	// large files: init returns an upload id, put_chunk appends a part,
+	// complete assembles the parts into the final object.
+	ChunkUploader interface {
+		InitChunkUpload(ctx context.Context, path string) (uploadID string, err error)
+		PutChunk(ctx context.Context, uploadID string, partNo int, data []byte) error
+		CompleteChunkUpload(ctx context.Context, uploadID string) (path string, err error)
+	}
 )
 
 // ctxKey is the thread-local key under which the Go context.Context for the
@@ -231,6 +256,16 @@ func (r *primitiveRunner) Attr(name string) (starlark.Value, error) {
 		return r.builtinUpload(), nil
 	case "download":
 		return r.builtinDownload(), nil
+	case "link":
+		return r.builtinLink(), nil
+	case "stat":
+		return r.builtinStat(), nil
+	case "init_upload":
+		return r.builtinInitUpload(), nil
+	case "put_chunk":
+		return r.builtinPutChunk(), nil
+	case "complete_upload":
+		return r.builtinCompleteUpload(), nil
 	case "info":
 		return r.builtinLog("info"), nil
 	case "warn":
@@ -245,6 +280,7 @@ func (r *primitiveRunner) Attr(name string) (starlark.Value, error) {
 func (r *primitiveRunner) AttrNames() []string {
 	return []string{"query", "get", "set", "delete", "acquire", "release",
 		"enqueue", "dequeue", "publish", "subscribe", "upload", "download",
+		"link", "stat", "init_upload", "put_chunk", "complete_upload",
 		"info", "warn", "error"}
 }
 
@@ -586,5 +622,135 @@ func (r *primitiveRunner) builtinDownload() *starlark.Builtin {
 			return nil, fmt.Errorf("ctx.%s.download: %w", r.primType, err)
 		}
 		return starlark.Bytes(data), nil
+	})
+}
+
+// builtinLink serves ctx.storage().link(path, ttl=) (todo 7.17.4): a
+// time-limited download URL. Returns the URL string, or "not yet implemented"
+// when the backend has no Linker capability (e.g. plain fs backend without
+// the api link routes wired).
+func (r *primitiveRunner) builtinLink() *starlark.Builtin {
+	return starlark.NewBuiltin(r.primType+".link", func(
+		thread *starlark.Thread,
+		fn *starlark.Builtin,
+		args starlark.Tuple,
+		kwargs []starlark.Tuple,
+	) (starlark.Value, error) {
+		var path string
+		var ttl int64
+		if err := starlark.UnpackArgs("link", args, kwargs, "path", &path, "ttl?", &ttl); err != nil {
+			return nil, err
+		}
+		l, ok := r.conn.(Linker)
+		if !ok {
+			return starlark.None, fmt.Errorf("ctx.%s.link: not yet implemented for this backend (connection=%q)", r.primType, r.name)
+		}
+		url, err := l.Link(threadContext(thread), path, time.Duration(ttl)*time.Second)
+		if err != nil {
+			return nil, fmt.Errorf("ctx.%s.link: %w", r.primType, err)
+		}
+		return starlark.String(url), nil
+	})
+}
+
+// builtinStat serves ctx.storage().stat(path) (todo 7.17.4): the object's
+// size in bytes.
+func (r *primitiveRunner) builtinStat() *starlark.Builtin {
+	return starlark.NewBuiltin(r.primType+".stat", func(
+		thread *starlark.Thread,
+		fn *starlark.Builtin,
+		args starlark.Tuple,
+		kwargs []starlark.Tuple,
+	) (starlark.Value, error) {
+		var path string
+		if err := starlark.UnpackArgs("stat", args, kwargs, "path", &path); err != nil {
+			return nil, err
+		}
+		s, ok := r.conn.(Stater)
+		if !ok {
+			return starlark.None, fmt.Errorf("ctx.%s.stat: not yet implemented for this backend (connection=%q)", r.primType, r.name)
+		}
+		size, err := s.Stat(threadContext(thread), path)
+		if err != nil {
+			return nil, fmt.Errorf("ctx.%s.stat: %w", r.primType, err)
+		}
+		return starlark.MakeInt64(size), nil
+	})
+}
+
+// builtinInitUpload serves ctx.storage().init_upload(path) (todo 7.17.5):
+// starts a chunked upload session, returns the upload id.
+func (r *primitiveRunner) builtinInitUpload() *starlark.Builtin {
+	return starlark.NewBuiltin(r.primType+".init_upload", func(
+		thread *starlark.Thread,
+		fn *starlark.Builtin,
+		args starlark.Tuple,
+		kwargs []starlark.Tuple,
+	) (starlark.Value, error) {
+		var path string
+		if err := starlark.UnpackArgs("init_upload", args, kwargs, "path", &path); err != nil {
+			return nil, err
+		}
+		c, ok := r.conn.(ChunkUploader)
+		if !ok {
+			return starlark.None, fmt.Errorf("ctx.%s.init_upload: not yet implemented for this backend (connection=%q)", r.primType, r.name)
+		}
+		id, err := c.InitChunkUpload(threadContext(thread), path)
+		if err != nil {
+			return nil, fmt.Errorf("ctx.%s.init_upload: %w", r.primType, err)
+		}
+		return starlark.String(id), nil
+	})
+}
+
+// builtinPutChunk serves ctx.storage().put_chunk(upload_id, part, data)
+// (todo 7.17.5): appends one chunk part to an in-flight upload session.
+func (r *primitiveRunner) builtinPutChunk() *starlark.Builtin {
+	return starlark.NewBuiltin(r.primType+".put_chunk", func(
+		thread *starlark.Thread,
+		fn *starlark.Builtin,
+		args starlark.Tuple,
+		kwargs []starlark.Tuple,
+	) (starlark.Value, error) {
+		var uploadID string
+		var part int
+		var data starlark.Bytes
+		if err := starlark.UnpackArgs("put_chunk", args, kwargs,
+			"upload_id", &uploadID, "part", &part, "data", &data); err != nil {
+			return nil, err
+		}
+		c, ok := r.conn.(ChunkUploader)
+		if !ok {
+			return starlark.None, fmt.Errorf("ctx.%s.put_chunk: not yet implemented for this backend (connection=%q)", r.primType, r.name)
+		}
+		if err := c.PutChunk(threadContext(thread), uploadID, part, []byte(data)); err != nil {
+			return nil, fmt.Errorf("ctx.%s.put_chunk: %w", r.primType, err)
+		}
+		return starlark.None, nil
+	})
+}
+
+// builtinCompleteUpload serves ctx.storage().complete_upload(upload_id)
+// (todo 7.17.5): assembles the parts into the final object, returns its path.
+func (r *primitiveRunner) builtinCompleteUpload() *starlark.Builtin {
+	return starlark.NewBuiltin(r.primType+".complete_upload", func(
+		thread *starlark.Thread,
+		fn *starlark.Builtin,
+		args starlark.Tuple,
+		kwargs []starlark.Tuple,
+	) (starlark.Value, error) {
+		var uploadID string
+		if err := starlark.UnpackArgs("complete_upload", args, kwargs, "upload_id", &uploadID); err != nil {
+			return nil, err
+		}
+		c, ok := r.conn.(ChunkUploader)
+		if !ok {
+			return starlark.None, fmt.Errorf("ctx.%s.complete_upload: not yet implemented for this backend (connection=%q)", r.primType, r.name)
+		}
+		path, err := c.CompleteChunkUpload(threadContext(thread), uploadID)
+		if err != nil {
+			return nil, fmt.Errorf("ctx.%s.complete_upload: %w", r.primType, err)
+		}
+		return starlark.String(path), nil
 	})
 }

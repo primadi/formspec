@@ -31,6 +31,9 @@ import {
   TopNavShell,
   LoginScreen,
   SetupScreen,
+  OAuthCallback,
+  OAuthLinkCallback,
+  ResetPasswordScreen,
   buildRoutes,
 } from "@/shell"
 import ThemeRenderer from "@/kinds/theme/ThemeRenderer"
@@ -68,6 +71,25 @@ function Root() {
         {/* First-run setup wizard — standalone (no meta bundle needed).
             Reached via redirect when the workspace has no users yet. */}
         <Route path="/:workspace/_admin/setup" element={<SetupScreen />} />
+        {/* OAuth callback — reads the token pair from the URL fragment and
+            boots the session (auth redesign Fase 5). */}
+        <Route
+          path="/:workspace/_admin/oauth/callback"
+          element={<OAuthCallback />}
+        />
+        {/* OAuth link callback — explicit account linking (todo 5.2.21):
+            reads the code from the URL fragment and POSTs it to the
+            authenticated link endpoint. */}
+        <Route
+          path="/:workspace/_admin/oauth/link-callback"
+          element={<OAuthLinkCallback />}
+        />
+        {/* Password reset — landing page for the emailed reset link
+            (?token=...). Standalone, no session needed. */}
+        <Route
+          path="/:workspace/reset-password"
+          element={<ResetPasswordScreen />}
+        />
         <Route
           path="/:workspace/app/*"
           element={<SurfaceShell surface="app" />}

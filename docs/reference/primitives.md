@@ -5,17 +5,17 @@ normatif: [`../spec/platform/06-datastore.md`](../spec/platform/06-datastore.md)
 
 ## 9 Primitive (Closed Set)
 
-| # | Primitive | Akses | Fungsi | Operasi utama |
-|---|---|---|---|---|
-| 1 | `db` | `ctx.db()` | Query SQL mentah, module-scoped | `query(sql, args...)` |
-| 2 | `cache` | `ctx.cache()` | KV dengan TTL | `get` / `set(key, val, ttl=)` / `delete` |
-| 3 | `lock` | `ctx.lock()` | Distributed lock | `acquire(key, ttl=)` / `release(key)` |
-| 4 | `queue` | `ctx.queue()` | FIFO queue | `enqueue(name, payload)` / `dequeue(name)` |
-| 5 | `pubsub` | `ctx.pubsub()` | Publish/subscribe | `publish(ch, payload)` / `subscribe(ch, cb)` |
-| 6 | `storage` | `ctx.storage()` | Object storage (file field) | `upload(path, data)` / `download(path)` |
-| 7 | `kvstore` | `ctx.kvstore()` | KV durable tanpa TTL | `get` / `set` / `delete` |
-| 8 | `config` | `ctx.config` | Config non-secret | `get(key, default=)` |
-| 9 | `log` | `ctx.log` | Log terstruktur | `info(event, meta)` / `warn` / `error` |
+| #   | Primitive | Akses           | Fungsi                          | Operasi utama                                                                                                                                  |
+| --- | --------- | --------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `db`      | `ctx.db()`      | Query SQL mentah, module-scoped | `query(sql, args...)`                                                                                                                          |
+| 2   | `cache`   | `ctx.cache()`   | KV dengan TTL                   | `get` / `set(key, val, ttl=)` / `delete`                                                                                                       |
+| 3   | `lock`    | `ctx.lock()`    | Distributed lock                | `acquire(key, ttl=)` / `release(key)`                                                                                                          |
+| 4   | `queue`   | `ctx.queue()`   | FIFO queue                      | `enqueue(name, payload)` / `dequeue(name)`                                                                                                     |
+| 5   | `pubsub`  | `ctx.pubsub()`  | Publish/subscribe               | `publish(ch, payload)` / `subscribe(ch, cb)`                                                                                                   |
+| 6   | `storage` | `ctx.storage()` | Object storage (file field)     | `upload(path, data)` / `download(path)` / `link(path, ttl=)` / `stat(path)` / `delete(path)` / `init_upload` / `put_chunk` / `complete_upload` |
+| 7   | `kvstore` | `ctx.kvstore()` | KV durable tanpa TTL            | `get` / `set` / `delete`                                                                                                                       |
+| 8   | `config`  | `ctx.config`    | Config non-secret               | `get(key, default=)`                                                                                                                           |
+| 9   | `log`     | `ctx.log`       | Log terstruktur                 | `info(event, meta)` / `warn` / `error`                                                                                                         |
 
 Set tertutup — tidak bisa ditambah. Kebutuhan baru (mail, scheduler,
 notification) = module resmi di atas primitive yang ada.
@@ -52,14 +52,14 @@ mempersempit, tidak melebar.
 
 ## Driver × Serves
 
-| Driver | Kompatibel `serves` |
-|---|---|
-| `sqlite`, `postgres` | `db`, `kvstore`, `config`, `log` |
-| `valkey`, `redis` | `cache`, `lock`, `kvstore`, `queue`, `pubsub`, `config`, `log` |
-| `s3`, `minio` | `storage` |
-| `nats` | `queue`, `pubsub` |
-| `memory` | `cache`, `lock`, `queue`, `pubsub`, `kvstore`, `config`, `log` |
-| `fs` | `storage`, `log` |
+| Driver               | Kompatibel `serves`                                            |
+| -------------------- | -------------------------------------------------------------- |
+| `sqlite`, `postgres` | `db`, `kvstore`, `config`, `log`                               |
+| `valkey`, `redis`    | `cache`, `lock`, `kvstore`, `queue`, `pubsub`, `config`, `log` |
+| `s3`, `minio`        | `storage`                                                      |
+| `nats`               | `queue`, `pubsub`                                              |
+| `memory`             | `cache`, `lock`, `queue`, `pubsub`, `kvstore`, `config`, `log` |
+| `fs`                 | `storage`, `log`                                               |
 
 ## Contoh Manifest Lengkap
 
@@ -92,16 +92,16 @@ Deklarasi di action:
 ```yaml
 uses:
   datastores:
-    db: pg-main            # base primitive
-    db/analytics: pg-analytics   # named primitive
+    db: pg-main # base primitive
+    db/analytics: pg-analytics # named primitive
 ```
 
 ## Error Codes
 
-| Kode | Kondisi |
-|---|---|
-| `DATASTORE_NOT_FOUND` | Service/alias tidak ditemukan |
-| `DATASTORE_ACCESS_DENIED` | Tidak dideklarasikan di `uses.datastores` |
-| `DATASTORE_PERMISSION_DENIED` | Melampaui ceiling `access.permission` |
-| `DATASTORE_DRIVER_INCOMPATIBLE` | `serves` ≠ kemampuan driver |
-| `DATASTORE_CREDENTIAL_MISSING` | `credential_ref` wajib tapi kosong |
+| Kode                            | Kondisi                                   |
+| ------------------------------- | ----------------------------------------- |
+| `DATASTORE_NOT_FOUND`           | Service/alias tidak ditemukan             |
+| `DATASTORE_ACCESS_DENIED`       | Tidak dideklarasikan di `uses.datastores` |
+| `DATASTORE_PERMISSION_DENIED`   | Melampaui ceiling `access.permission`     |
+| `DATASTORE_DRIVER_INCOMPATIBLE` | `serves` ≠ kemampuan driver               |
+| `DATASTORE_CREDENTIAL_MISSING`  | `credential_ref` wajib tapi kosong        |

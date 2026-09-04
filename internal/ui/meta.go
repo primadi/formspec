@@ -153,6 +153,9 @@ type Bundle struct {
 	// redirects to the first-run setup wizard when true (self-hosted prod
 	// bootstrap without formspec-ctl).
 	SetupRequired bool `json:"setup_required"`
+	// OAuthProviders lists the configured external auth provider names (auth
+	// redesign Fase 5) — the login screen renders a button per provider.
+	OAuthProviders []string `json:"oauth_providers,omitempty"`
 }
 
 // PermissionChecker reports whether the caller holds a permission

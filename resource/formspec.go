@@ -34,6 +34,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -43,10 +44,12 @@ import (
 	"github.com/primadi/formspec/internal/api"
 	formspec_app "github.com/primadi/formspec/internal/app"
 	"github.com/primadi/formspec/internal/auth"
+	"github.com/primadi/formspec/internal/auth/oauth"
 	"github.com/primadi/formspec/internal/config"
 	"github.com/primadi/formspec/internal/entity"
 	"github.com/primadi/formspec/internal/integrator"
 	"github.com/primadi/formspec/internal/job"
+	"github.com/primadi/formspec/internal/mail"
 	"github.com/primadi/formspec/internal/manifest"
 	"github.com/primadi/formspec/internal/observability"
 	"github.com/primadi/formspec/internal/period"
@@ -85,6 +88,18 @@ type Config struct {
 	// (/_ui/auth/*); /api/v1 is deny-by-default for external services
 	// (01-core-basic.md §8.2). Opt-in for programmatic clients.
 	EnableAPIAuth bool
+
+	// ── Transactional email (password reset) ──
+	// SMTPHost/Port/User/Pass configure the SMTP relay; MailFrom is the
+	// sender address; MailBaseURL is the public origin used to build reset
+	// links in emails. Empty SMTPHost disables email flows (forgot-password
+	// becomes a silent no-op). Dev default targets Mailpit (mailpit:1025).
+	SMTPHost    string
+	SMTPPort    int
+	SMTPUser    string
+	SMTPPass    string
+	MailFrom    string
+	MailBaseURL string
 
 	// SidecarEndpoint is the app-process endpoint for impl: {type: sidecar}
 	// actions ("unix:///tmp/formspec/app.sock" or "http://localhost:9000").
@@ -173,6 +188,17 @@ func (c *Config) applyDefaults() {
 	if c.WorkspaceID == "" {
 		c.WorkspaceID = "demo"
 	}
+	// Transactional email defaults target Mailpit (the devcontainer SMTP
+	// sink). Leave SMTPHost empty to disable email flows entirely.
+	if c.SMTPHost == "" {
+		c.SMTPHost = "mailpit"
+	}
+	if c.SMTPPort == 0 {
+		c.SMTPPort = 1025
+	}
+	if c.MailFrom == "" {
+		c.MailFrom = "no-reply@formspec.dev"
+	}
 }
 
 // ─── Public Native Handler API ───
@@ -224,6 +250,9 @@ type App struct {
 	httpServer      *http.Server
 	// escalationWorker escalates stale workflow approvals (todo 7.4.4).
 	escalationWorker *workflow.EscalationWorker
+	// linkSweeper enforces storage-link TTLs (delete_if_untouched) and
+	// purges consumed link rows (todo 7.17.6).
+	linkSweeper *api.StorageLinkSweeper
 	// pubsub is the shared in-memory pub/sub bus backing both ctx.pubsub()
 	// and the `pubsub` event delivery channel (todo 7.3.5). Held so a
 	// ReloadSpec() reuses the same instance.
@@ -639,6 +668,7 @@ func New(cfg Config) (*App, error) {
 	// to a service serving `storage` backed by minio/s3 provides the object
 	// store; otherwise filesystem under the state dir (.formspec/storage).
 	storageResolved := false
+	var storageFn func() (api.Storage, error)
 	for _, name := range sortedServiceNames(dsReg) {
 		e := dsReg.services[name]
 		if e == nil || e.spec == nil {
@@ -666,7 +696,8 @@ func New(cfg Config) (*App, error) {
 		if !ok {
 			return nil, fmt.Errorf("storage service %q does not implement api.Storage", name)
 		}
-		rb.SetStorageResolver(func() (api.Storage, error) { return mc, nil })
+		storageFn = func() (api.Storage, error) { return mc, nil }
+		rb.SetStorageResolver(storageFn)
 		storageResolved = true
 		break
 	}
@@ -675,8 +706,18 @@ func New(cfg Config) (*App, error) {
 		if err != nil {
 			return nil, fmt.Errorf("init storage: %w", err)
 		}
-		rb.SetStorageResolver(func() (api.Storage, error) { return fsStore, nil })
+		storageFn = func() (api.Storage, error) { return fsStore, nil }
+		rb.SetStorageResolver(storageFn)
 	}
+
+	// Storage links (todo 7.17.6) — token store for download links backing
+	// the one_time (delete-after-download) and TTL (delete-if-untouched)
+	// flows, plus the global size limits (todo 7.17.7, FORMSPEC_*_MAX_MB).
+	linkStore := db.NewStorageLinkStore(database, driver)
+	rb.SetLinkStore(linkStore)
+	rb.SetUploadLimitMB(envInt("FORMSPEC_UPLOAD_MAX_MB", api.DefaultUploadLimitMB))
+	rb.SetDownloadLimitMB(envInt("FORMSPEC_DOWNLOAD_MAX_MB", api.DefaultDownloadLimitMB))
+	linkSweeper := api.NewStorageLinkSweeper(linkStore, storageFn, time.Minute)
 
 	appAuths, authErrs := auth.ResolveAppAuth(resolvedApps, configs)
 	for _, e := range authErrs {
@@ -717,6 +758,19 @@ func New(cfg Config) (*App, error) {
 	}
 	api.SetAuthService(authSvc)
 
+	// Wire the transactional mailer (password reset). Defaults target Mailpit
+	// in dev; leave SMTPHost empty to disable email flows.
+	if cfg.SMTPHost != "" {
+		authSvc.SetMailer(mail.New(mail.Config{
+			Host:    cfg.SMTPHost,
+			Port:    cfg.SMTPPort,
+			User:    cfg.SMTPUser,
+			Pass:    cfg.SMTPPass,
+			From:    cfg.MailFrom,
+			BaseURL: cfg.MailBaseURL,
+		}))
+	}
+
 	// Wire the workspace registration policy (auth redesign Fase 4) from the
 	// resolved global settings — per-workspace, applies to every App.
 	if resolvedSettings := spec.ResolveSettings(declaredSettings); resolvedSettings.Registration != nil {
@@ -724,6 +778,19 @@ func New(cfg Config) (*App, error) {
 			Policy:      resolvedSettings.Registration.Policy,
 			DefaultRole: resolvedSettings.Registration.DefaultRole,
 		})
+	}
+
+	// Wire external auth providers (auth redesign Fase 5) from
+	// `settings.auth.providers`. Non-fatal: a misconfigured provider logs a
+	// warning and is skipped — the rest of auth still works.
+	if resolvedSettings := spec.ResolveSettings(declaredSettings); resolvedSettings.Auth != nil {
+		providers, errs := buildOAuthProviders(resolvedSettings.Auth, cfg.WorkspaceID)
+		for _, err := range errs {
+			fmt.Fprintf(os.Stderr, "formspec: oauth provider: %v\n", err)
+		}
+		if len(providers) > 0 {
+			authSvc.SetOAuthProviders(providers)
+		}
 	}
 
 	// Wire API key auth (todo 6.4): the X-FormSpec-Key header on the external
@@ -889,6 +956,7 @@ func New(cfg Config) (*App, error) {
 		dynamicRefresher: dynamicRefresher,
 		jobTracker:       jobTracker,
 		idempotency:      idempotencyStore,
+		linkSweeper:      linkSweeper,
 		nativeHandlers:   make(map[string]action.NativeHandler),
 		authSvc:          authSvc,
 	}
@@ -1004,6 +1072,9 @@ func (a *App) StartBackgroundWorkers() {
 	if a.dynamicRefresher != nil {
 		a.dynamicRefresher.Start(context.Background())
 	}
+	if a.linkSweeper != nil {
+		a.linkSweeper.Start(context.Background())
+	}
 }
 
 // ListenAndServe starts the HTTP server on cfg.Addr. It also starts the
@@ -1038,6 +1109,9 @@ func (a *App) Close(ctx context.Context) error {
 	}
 	if a.dynamicRefresher != nil {
 		a.dynamicRefresher.Stop()
+	}
+	if a.linkSweeper != nil {
+		a.linkSweeper.Stop()
 	}
 	if a.stream != nil {
 		_ = a.stream.Close()
@@ -1224,6 +1298,17 @@ func (a *App) ReloadSpec() error {
 			DefaultRole: resolvedSettings.Registration.DefaultRole,
 		})
 	}
+	// Re-wire external auth providers (auth redesign Fase 5) on hot-reload so
+	// a changed `settings.auth.providers` takes effect without a restart.
+	if resolvedSettings := spec.ResolveSettings(declaredSettings); resolvedSettings.Auth != nil {
+		providers, errs := buildOAuthProviders(resolvedSettings.Auth, a.cfg.WorkspaceID)
+		for _, err := range errs {
+			fmt.Fprintf(os.Stderr, "formspec: oauth provider: %v\n", err)
+		}
+		if len(providers) > 0 {
+			a.authSvc.SetOAuthProviders(providers)
+		}
+	}
 	// Auth on the external surface is opt-in (same as boot).
 	newRB.SetEnableAPIAuth(a.cfg.EnableAPIAuth)
 	if a.cfg.WebDir != "" {
@@ -1392,6 +1477,38 @@ func randomDevSecret() string {
 	return hex.EncodeToString(b)
 }
 
+// buildOAuthProviders constructs external auth providers from the resolved
+// `settings.auth` (auth redesign Fase 5). Returns the providers that built
+// successfully plus the errors for the ones that failed (caller logs them).
+func buildOAuthProviders(authSettings *spec.AuthSettings, workspaceID string) (map[string]oauth.Provider, []error) {
+	providers := map[string]oauth.Provider{}
+	var errs []error
+	for name, ps := range authSettings.Providers {
+		if ps == nil || ps.ClientID == "" || ps.ClientSecret == "" {
+			errs = append(errs, fmt.Errorf("%s: client_id and client_secret are required", name))
+			continue
+		}
+		prov, err := oauth.New(oauth.Config{
+			Name:         name,
+			Type:         ps.Type,
+			ClientID:     ps.ClientID,
+			ClientSecret: ps.ClientSecret,
+			Scopes:       ps.Scopes,
+			Issuer:       ps.Issuer,
+			AuthorizeURL: ps.AuthorizeURL,
+			TokenURL:     ps.TokenURL,
+			UserInfoURL:  ps.UserInfoURL,
+			RedirectURL:  "/" + workspaceID + "/_ui/auth/oauth/" + name + "/callback",
+		})
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", name, err))
+			continue
+		}
+		providers[name] = prov
+	}
+	return providers, errs
+}
+
 // buildConfigRegistry loads kind: Config manifests and resolves their typed
 // keys into a config.Registry backing ctx.config (non-secret) and ctx.secrets
 // (secret) in the script runtime (todo 7.2.1/7.2.2, 6.8.1). Single-server mode
@@ -1535,6 +1652,17 @@ func sortedServiceNames(dsReg *DatastoreRegistry) []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// envInt reads an integer env var, returning def when unset or invalid
+// (helper for the global storage size limits, todo 7.17.7).
+func envInt(key string, def int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return def
 }
 
 // buildWorkflowRegistry loads kind: Workflow manifests into a workflow.Registry

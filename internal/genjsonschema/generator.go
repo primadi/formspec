@@ -46,6 +46,7 @@ func (c *Converter) Generate(collect *CollectResult) *GenerateResult {
 		"DatastoreAccess", "DatastoreConnection", "DatastoreAccessFilter", "DatastorePermission", "DatastorePool", "DatastorePermissionRule",
 		"ConfigKey",                    // map value type for ConfigSpec.Keys
 		"Settings", "CurrencySettings", // global settings namespace (spec §10)
+		"AuthSettings", "OAuthProviderSettings", "RegistrationSettings", // settings.auth / settings.registration (auth redesign Fase 4-5)
 		"Dependency",
 		"AiIndexDecl", "AppInterface", "AppConsume",
 		"AppChrome", // App.spec.chrome — chrome composition (frontend/05 §5)

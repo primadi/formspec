@@ -8,8 +8,9 @@
 // Hidden for anonymous and dev-bypass sessions (no token) — same rule as
 // LogoutButton.
 
+import * as React from "react"
 import { useNavigate } from "react-router-dom"
-import { LogOut, UserRound } from "lucide-react"
+import { KeyRound, Link2, LogOut, UserRound } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
   DropdownMenu,
@@ -23,6 +24,8 @@ import {
 import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
 import { useSurface } from "@/hooks/useSurface"
+import { ChangePasswordDialog } from "./ChangePasswordDialog"
+import { LinkedAccountsDialog } from "./LinkedAccountsDialog"
 function initialsOf(id: string): string {
   // Split on whitespace/punctuation AND camelCase boundaries (TestUser →
   // T,U) so mixed-case usernames produce proper two-letter initials.
@@ -42,6 +45,8 @@ export function UserMenu() {
   const clearSession = useSessionStore((s) => s.clearSession)
   const chrome = useMetaStore((s) => s.bundle?.app.chrome)
   const { surfacePath } = useSurface()
+  const [changePasswordOpen, setChangePasswordOpen] = React.useState(false)
+  const [linkedAccountsOpen, setLinkedAccountsOpen] = React.useState(false)
 
   // No real session (anonymous or dev bypass) → nothing to show.
   if (!token) return null
@@ -102,11 +107,33 @@ export function UserMenu() {
             Profile
           </DropdownMenuItem>
         ) : null}
+        <DropdownMenuItem
+          onClick={() => setChangePasswordOpen(true)}
+          className="cursor-pointer"
+        >
+          <KeyRound className="size-4" />
+          Change Password
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => setLinkedAccountsOpen(true)}
+          className="cursor-pointer"
+        >
+          <Link2 className="size-4" />
+          Linked Accounts
+        </DropdownMenuItem>
         <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
           <LogOut className="size-4" />
           Sign out
         </DropdownMenuItem>
       </DropdownMenuContent>
+      <ChangePasswordDialog
+        open={changePasswordOpen}
+        onOpenChange={setChangePasswordOpen}
+      />
+      <LinkedAccountsDialog
+        open={linkedAccountsOpen}
+        onOpenChange={setLinkedAccountsOpen}
+      />
     </DropdownMenu>
   )
 }

@@ -1148,6 +1148,19 @@ type StorageSpec struct {
 	SignedURLTTL string             `yaml:"signed_url_ttl,omitempty" json:"signed_url_ttl,omitempty"` // e.g. "15m"
 	CDN          bool               `yaml:"cdn,omitempty" json:"cdn,omitempty"`
 	Transform    []StorageTransform `yaml:"transform,omitempty" json:"transform,omitempty"`
+	// OneTime deletes the object after the configured number of successful
+	// link downloads (todo 7.17.6 — 1x download). Implied by a link route.
+	OneTime bool `yaml:"one_time,omitempty" json:"one_time,omitempty"`
+	// TTL auto-deletes the object if it is not downloaded within the
+	// duration (todo 7.17.6). Format: Go duration string, e.g. "24h", "7d"
+	// is NOT valid — use "168h".
+	TTL string `yaml:"ttl,omitempty" json:"ttl,omitempty"`
+	// ChunkSizeMB is the client hint for chunked-upload part size (todo
+	// 7.17.5). The server enforces max_size_mb on the assembled object.
+	ChunkSizeMB int `yaml:"chunk_size_mb,omitempty" json:"chunk_size_mb,omitempty"`
+	// MaxDownloadMB caps the size of a file served via download/link routes
+	// (todo 7.17.7). Effective limit = min(global, per-field).
+	MaxDownloadMB int `yaml:"max_download_mb,omitempty" json:"max_download_mb,omitempty"`
 }
 
 // StorageTransform declares an image transformation preset for a file field.

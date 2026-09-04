@@ -1218,6 +1218,9 @@ export interface MetaBundle {
   /** True when the workspace has no users yet — the SPA redirects to the
    *  first-run setup wizard (self-hosted prod bootstrap). */
   setup_required?: boolean
+  /** Configured external auth provider names (auth redesign Fase 5) — the
+   *  login screen renders a button per provider. */
+  oauth_providers?: string[]
 }
 
 export interface CalendarSpec {
@@ -1252,6 +1255,10 @@ export interface MeResponse {
   app?: string
   roles: string[]
   permissions: string[]
+  /** Whether the signed-in user's email is verified (account pre-hijacking protection). */
+  email_verified?: boolean
+  /** External identity linked to this account (e.g. "google"). Empty = password-only. */
+  oauth_provider?: string
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

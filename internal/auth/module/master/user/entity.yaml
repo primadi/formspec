@@ -29,6 +29,20 @@ spec:
       type: string
     - name: email
       type: string
+      index: true
+      description: "Email — dipakai untuk OAuth login (find-or-create by email). Hanya email yang verified (email_verified=true) yang bisa di-link via OAuth (anti account pre-hijacking)."
+    - name: email_verified
+      type: boolean
+      default: false
+      description: "Apakah email sudah dibuktikan dimiliki — via link verifikasi email (registrasi) atau klaim email_verified dari provider OAuth. OAuth login hanya link ke email verified."
+    - name: oauth_provider
+      type: string
+      index: true
+      description: "Nama provider OAuth yang ter-link (mis. google) — identitas eksternal akun ini."
+    - name: oauth_sub
+      type: string
+      index: true
+      description: "Subject id dari provider OAuth (klaim sub) — bersama oauth_provider membentuk identitas eksternal unik."
     - name: roles
       type: json
     - name: permissions

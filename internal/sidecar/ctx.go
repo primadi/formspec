@@ -11,6 +11,7 @@ package sidecar
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/primadi/formspec/renderers/jsonb-persist"
+	db "github.com/primadi/formspec/renderers/jsonb-persist"
 )
 
 // PrimitiveResolver resolves a primitive type ("db", "cache", "lock", ...)
@@ -70,6 +71,27 @@ type (
 		IncrementField(ctx context.Context, workspaceID, id, field string, amount float64) error
 		DecrementField(ctx context.Context, workspaceID, id, field string, amount float64) (float64, error)
 	}
+	// Storage serves POST /ctx/storage/upload and /ctx/storage/download —
+	// the mirror of internal/starlark's Storage capability (todo 7.17.4).
+	Storage interface {
+		Upload(ctx context.Context, path string, data []byte) error
+		Download(ctx context.Context, path string) ([]byte, error)
+	}
+	// Stater serves POST /ctx/storage/stat — object size in bytes.
+	Stater interface {
+		Stat(ctx context.Context, path string) (int64, error)
+	}
+	// Linker serves POST /ctx/storage/link — a time-limited download URL.
+	Linker interface {
+		Link(ctx context.Context, path string, ttl time.Duration) (string, error)
+	}
+	// ChunkUploader serves POST /ctx/storage/init_upload, /put_chunk, and
+	// /complete_upload — chunked upload for large files (todo 7.17.5).
+	ChunkUploader interface {
+		InitChunkUpload(ctx context.Context, path string) (uploadID string, err error)
+		PutChunk(ctx context.Context, uploadID string, partNo int, data []byte) error
+		CompleteChunkUpload(ctx context.Context, uploadID string) (path string, err error)
+	}
 )
 
 // ctxRequest is the union request body for all /ctx/{prim}/{op} calls
@@ -89,6 +111,11 @@ type ctxRequest struct {
 	Field      string         `json:"field,omitempty"`
 	Amount     float64        `json:"amount,omitempty"`
 	Fields     map[string]any `json:"fields,omitempty"`
+	// Storage ops (todo 7.17.4/7.17.5). Path addresses an object; Data is
+	// base64-encoded bytes (upload / put_chunk); Part is the chunk number.
+	Path string `json:"path,omitempty"`
+	Data string `json:"data,omitempty"`
+	Part int    `json:"part,omitempty"`
 }
 
 type ctxResponse struct {
@@ -346,12 +373,141 @@ func (h *CtxHandler) dispatch(w http.ResponseWriter, ctx context.Context, prim, 
 		}
 		writeCtxJSON(w, ctxResponse{Data: newVal, OK: boolPtr(true)})
 
+	// ─── Storage ops (todo 7.17.4/7.17.5) — storage primitive only ───
+
+	case "upload":
+		if prim != "storage" {
+			writeCtxError(w, http.StatusNotFound, fmt.Sprintf("unknown operation %q for primitive %q", op, prim))
+			return
+		}
+		s, ok := conn.(Storage)
+		if !ok {
+			notImplemented()
+			return
+		}
+		data, err := base64.StdEncoding.DecodeString(req.Data)
+		if err != nil {
+			writeCtxError(w, http.StatusBadRequest, fmt.Sprintf("data base64: %v", err))
+			return
+		}
+		if err := s.Upload(ctx, req.Path, data); err != nil {
+			writeCtxError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		writeCtxJSON(w, ctxResponse{OK: boolPtr(true)})
+
+	case "download":
+		if prim != "storage" {
+			writeCtxError(w, http.StatusNotFound, fmt.Sprintf("unknown operation %q for primitive %q", op, prim))
+			return
+		}
+		s, ok := conn.(Storage)
+		if !ok {
+			notImplemented()
+			return
+		}
+		data, err := s.Download(ctx, req.Path)
+		if err != nil {
+			writeCtxError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		writeCtxJSON(w, ctxResponse{Data: base64.StdEncoding.EncodeToString(data)})
+
+	case "link":
+		if prim != "storage" {
+			writeCtxError(w, http.StatusNotFound, fmt.Sprintf("unknown operation %q for primitive %q", op, prim))
+			return
+		}
+		l, ok := conn.(Linker)
+		if !ok {
+			notImplemented()
+			return
+		}
+		url, err := l.Link(ctx, req.Path, time.Duration(req.TTLSeconds)*time.Second)
+		if err != nil {
+			writeCtxError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		writeCtxJSON(w, ctxResponse{Data: url})
+
+	case "stat":
+		if prim != "storage" {
+			writeCtxError(w, http.StatusNotFound, fmt.Sprintf("unknown operation %q for primitive %q", op, prim))
+			return
+		}
+		s, ok := conn.(Stater)
+		if !ok {
+			notImplemented()
+			return
+		}
+		size, err := s.Stat(ctx, req.Path)
+		if err != nil {
+			writeCtxError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		writeCtxJSON(w, ctxResponse{Data: size})
+
+	case "init_upload":
+		if prim != "storage" {
+			writeCtxError(w, http.StatusNotFound, fmt.Sprintf("unknown operation %q for primitive %q", op, prim))
+			return
+		}
+		c, ok := conn.(ChunkUploader)
+		if !ok {
+			notImplemented()
+			return
+		}
+		id, err := c.InitChunkUpload(ctx, req.Path)
+		if err != nil {
+			writeCtxError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		writeCtxJSON(w, ctxResponse{Data: id})
+
+	case "put_chunk":
+		if prim != "storage" {
+			writeCtxError(w, http.StatusNotFound, fmt.Sprintf("unknown operation %q for primitive %q", op, prim))
+			return
+		}
+		c, ok := conn.(ChunkUploader)
+		if !ok {
+			notImplemented()
+			return
+		}
+		data, err := base64.StdEncoding.DecodeString(req.Data)
+		if err != nil {
+			writeCtxError(w, http.StatusBadRequest, fmt.Sprintf("data base64: %v", err))
+			return
+		}
+		if err := c.PutChunk(ctx, req.Key, req.Part, data); err != nil {
+			writeCtxError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		writeCtxJSON(w, ctxResponse{OK: boolPtr(true)})
+
+	case "complete_upload":
+		if prim != "storage" {
+			writeCtxError(w, http.StatusNotFound, fmt.Sprintf("unknown operation %q for primitive %q", op, prim))
+			return
+		}
+		c, ok := conn.(ChunkUploader)
+		if !ok {
+			notImplemented()
+			return
+		}
+		path, err := c.CompleteChunkUpload(ctx, req.Key)
+		if err != nil {
+			writeCtxError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		writeCtxJSON(w, ctxResponse{Data: path})
+
 	default:
 		if prim == "entity" {
 			writeCtxError(w, http.StatusNotFound, fmt.Sprintf("unknown operation %q for entity primitive (want get/set/update/increment/decrement)", op))
 			return
 		}
-		writeCtxError(w, http.StatusNotFound, fmt.Sprintf("unknown operation %q (want query/get/set/delete/acquire/release)", op))
+		writeCtxError(w, http.StatusNotFound, fmt.Sprintf("unknown operation %q (want query/get/set/delete/acquire/release or storage upload/download/link/stat/init_upload/put_chunk/complete_upload)", op))
 	}
 }
 

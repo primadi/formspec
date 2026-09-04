@@ -32,6 +32,12 @@ type metaIdentity struct {
 	App         string   `json:"app,omitempty"`
 	Roles       []string `json:"roles"`
 	Permissions []string `json:"permissions"`
+	// EmailVerified reports whether the signed-in user's email is verified
+	// (account pre-hijacking protection). Omitted for anonymous callers.
+	EmailVerified bool `json:"email_verified,omitempty"`
+	// OAuthProvider is the external identity linked to this account (e.g.
+	// "google"). Empty = password-only account. Omitted for anonymous callers.
+	OAuthProvider string `json:"oauth_provider,omitempty"`
 }
 
 // callerChecker returns a PermissionChecker for the request's identity.
@@ -281,6 +287,9 @@ func (b *RouterBuilder) HandleMetaUI() http.HandlerFunc {
 				bundle.SetupRequired = required
 			}
 		}
+		// External auth providers (auth redesign Fase 5) — the login screen
+		// renders a button per configured provider.
+		bundle.OAuthProviders = oauthProviderNames()
 
 		payload, err := json.Marshal(SingleResponse{
 			Data: bundle,
@@ -324,6 +333,14 @@ func (b *RouterBuilder) HandleMetaMe() http.HandlerFunc {
 				App:         id.App,
 				Roles:       id.Roles,
 				Permissions: id.Permissions,
+			}
+			// Expose email-verification state (best-effort — the user record
+			// may be gone or the service unwired).
+			if authService != nil {
+				if u, err := authService.GetUserByID(r.Context(), id.WorkspaceID, id.UserID); err == nil {
+					me.EmailVerified = u.EmailVerified
+					me.OAuthProvider = u.OAuthProvider
+				}
 			}
 		}
 		if me.Workspace == "" {

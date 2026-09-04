@@ -224,6 +224,25 @@ func SystemTableDDLs(driver DriverType) []string {
 			fmt.Sprintf("created_at    %s NOT NULL DEFAULT %s", ts, ts),
 			fmt.Sprintf("updated_at    %s NOT NULL DEFAULT %s", ts, ts),
 		),
+
+		// formspec_storage_link — download-link tokens for file fields
+		// (plan: storage-links-plan.md Fase 2, todo 7.17.6). Backs the
+		// 1x-download (one_time) and TTL flows: the link route issues a
+		// token, the consume route validates/increments atomically, and
+		// the sweeper deletes objects whose ttl passed untouched.
+		createTableSQL(driver, "formspec_storage_link",
+			"token               text    PRIMARY KEY",
+			"tenant_id           text    NOT NULL",
+			"path                text    NOT NULL", // object key in the storage backend
+			fmt.Sprintf("expires_at         %s NOT NULL", ts),
+			"max_downloads       integer NOT NULL DEFAULT 0", // 0 = unlimited
+			"download_count      integer NOT NULL DEFAULT 0",
+			"status              text    NOT NULL DEFAULT 'active'", // active | consumed
+			"delete_on_download  integer NOT NULL DEFAULT 0",        // one_time
+			"delete_if_untouched integer NOT NULL DEFAULT 0",        // ttl sweeper
+			"downloaded_at       text",
+			fmt.Sprintf("created_at         %s NOT NULL DEFAULT %s", ts, ts),
+		),
 	}
 }
 
@@ -256,6 +275,7 @@ func (r *MigrationRunner) EnsureSystemTables(ctx context.Context) error {
 		"formspec_idempotency_keys", "formspec_outbox",
 		"formspec_extensions", "formspec_audit_log", "formspec_event_log",
 		"formspec_workflow_approval", "formspec_saga_log", "formspec_job",
+		"formspec_storage_link",
 	}
 	for i, ddl := range ddls {
 		if _, err := r.db.ExecContext(ctx, ddl); err != nil {

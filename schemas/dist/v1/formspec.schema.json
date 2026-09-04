@@ -330,6 +330,18 @@
       ],
       "additionalProperties": false
     },
+    "AuthSettings": {
+      "description": "AuthSettings configures external authentication (OAuth/OIDC) providers\n(auth redesign Fase 5). Providers are declared by name under\n`settings.auth.providers`; well-known presets (google, github, microsoft)\nfill in the endpoint URLs, custom providers declare them explicitly.\n",
+      "type": "object",
+      "properties": {
+        "providers": {
+          "description": "Providers maps a provider name → its OAuth config. The name is used in",
+          "type": "object",
+          "additionalProperties": {}
+        }
+      },
+      "additionalProperties": false
+    },
     "AutoFillDecl": {
       "description": "AutoFillDecl defines a client-side lookup/auto-fill on a field.\nWhen the relation field named in `from` (same child row) changes, the\nrelated record is fetched and its `field` value is copied into the field\nthat declares this AutoFillDecl.\n",
       "type": "object",
@@ -1824,6 +1836,54 @@
       ],
       "additionalProperties": false
     },
+    "OAuthProviderSettings": {
+      "description": "OAuthProviderSettings configures one external auth provider.\n\n  - type: \"oidc\" (default) | \"oauth2\". OIDC uses discovery (issuer) to\n    resolve endpoints; oauth2 declares them explicitly.\n  - Presets: name \"google\" | \"github\" | \"microsoft\" fill in the endpoint\n    URLs automatically — only client_id/client_secret are required.\n  - Custom: declare type + authorize_url/token_url/userinfo_url.\n",
+      "type": "object",
+      "properties": {
+        "authorize_url": {
+          "description": "AuthorizeURL / TokenURL / UserInfoURL for type: oauth2 (custom).",
+          "type": "string"
+        },
+        "client_id": {
+          "description": "OAuth client ID",
+          "type": "string"
+        },
+        "client_secret": {
+          "description": "OAuth client secret (secret — never exposed to the renderer)",
+          "type": "string"
+        },
+        "issuer": {
+          "description": "Issuer is the OIDC issuer URL (type: oidc) — discovery resolves",
+          "type": "string"
+        },
+        "scopes": {
+          "description": "OAuth scopes (default: openid email profile)",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "token_url": {
+          "type": "string"
+        },
+        "type": {
+          "description": "@schema {enum: [\"oidc\", \"oauth2\"], default: \"oidc\"}",
+          "type": "string",
+          "enum": [
+            "oidc",
+            "oauth2"
+          ]
+        },
+        "userinfo_url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "client_id",
+        "client_secret"
+      ],
+      "additionalProperties": false
+    },
     "OnDelete": {
       "description": "Referential action on target delete",
       "type": "string",
@@ -2231,6 +2291,26 @@
       ],
       "additionalProperties": false
     },
+    "RegistrationSettings": {
+      "description": "RegistrationSettings configures the workspace-level self-service sign-up\npolicy (auth redesign Fase 4). Per-workspace — applies to every App in the\nworkspace.\n\n  - open     (default): sign-up creates an active user with DefaultRole.\n  - approval: sign-up creates a pending user; an admin approves + assigns\n    the role before the user can log in.\n  - closed:   self-service sign-up is disabled; admins create users.\n",
+      "type": "object",
+      "properties": {
+        "default_role": {
+          "description": "DefaultRole is assigned on sign-up when Policy is \"open\" (e.g. \"user\").",
+          "type": "string"
+        },
+        "policy": {
+          "description": "@schema {enum: [\"open\", \"approval\", \"closed\"], default: \"open\"}",
+          "type": "string",
+          "enum": [
+            "open",
+            "approval",
+            "closed"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
     "RelationDecl": {
       "description": "RelationDecl defines a relation to another entity.\n@schema {title: \"Relation Declaration\"}\n",
       "type": "object",
@@ -2409,6 +2489,15 @@
       "description": "SectionBlock is a declarative presentation section inside a Page\n(frontend/06-page-kinds.md §1). Sections are generic — reusable in any App\n(marketing/hero, no-nav, sidebar-nav, ...): pure presentation, no data\nbinding, no auth, and zero styling fields — every visual token lives in\nkind: Theme (frontend/05-app-kinds.md §5), never inline.\n",
       "type": "object",
       "properties": {
+        "align": {
+          "description": "Align controls text alignment of title/subtitle/items — left (default)",
+          "type": "string",
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ]
+        },
         "autoplay": {
           "description": "Autoplay + IntervalMS drive carousel auto-advance (default off / 5000ms).",
           "type": "boolean"
@@ -2541,6 +2630,11 @@
       "description": "Settings is the typed global presentation/config namespace. It is declared\nonce on a workspace/App `kind: Config` manifest under `settings:` and\nresolved with standard defaults so behavior is consistent across every\ncomponent even when unset. Renderers/backends read these values instead of\nguessing per component (01-core-basic.md §10, 05-field-types.md §2).\n",
       "type": "object",
       "properties": {
+        "auth": {
+          "$ref": "#/$defs/AuthSettings",
+          "description": "Auth configures external authentication providers (auth redesign Fase 5",
+          "nullable": true
+        },
         "currency": {
           "$ref": "#/$defs/CurrencySettings",
           "description": "Currency is the default money currency for the workspace (ISO-4217 code,",
@@ -2557,6 +2651,11 @@
         "locale": {
           "description": "Locale is the IETF BCP-47 locale used for number/date formatting",
           "type": "string"
+        },
+        "registration": {
+          "$ref": "#/$defs/RegistrationSettings",
+          "description": "Registration is the workspace-level self-service sign-up policy",
+          "nullable": true
         },
         "rounding": {
           "description": "Rounding is the default rounding mode for money/decimal arithmetic:",
@@ -3680,6 +3779,18 @@
       ],
       "additionalProperties": false
     },
+    "AuthSettings": {
+      "description": "AuthSettings configures external authentication (OAuth/OIDC) providers\n(auth redesign Fase 5). Providers are declared by name under\n`settings.auth.providers`; well-known presets (google, github, microsoft)\nfill in the endpoint URLs, custom providers declare them explicitly.\n",
+      "type": "object",
+      "properties": {
+        "providers": {
+          "description": "Providers maps a provider name → its OAuth config. The name is used in",
+          "type": "object",
+          "additionalProperties": {}
+        }
+      },
+      "additionalProperties": false
+    },
     "AutoFillDecl": {
       "description": "AutoFillDecl defines a client-side lookup/auto-fill on a field.\nWhen the relation field named in `from` (same child row) changes, the\nrelated record is fetched and its `field` value is copied into the field\nthat declares this AutoFillDecl.\n",
       "type": "object",
@@ -5174,6 +5285,54 @@
       ],
       "additionalProperties": false
     },
+    "OAuthProviderSettings": {
+      "description": "OAuthProviderSettings configures one external auth provider.\n\n  - type: \"oidc\" (default) | \"oauth2\". OIDC uses discovery (issuer) to\n    resolve endpoints; oauth2 declares them explicitly.\n  - Presets: name \"google\" | \"github\" | \"microsoft\" fill in the endpoint\n    URLs automatically — only client_id/client_secret are required.\n  - Custom: declare type + authorize_url/token_url/userinfo_url.\n",
+      "type": "object",
+      "properties": {
+        "authorize_url": {
+          "description": "AuthorizeURL / TokenURL / UserInfoURL for type: oauth2 (custom).",
+          "type": "string"
+        },
+        "client_id": {
+          "description": "OAuth client ID",
+          "type": "string"
+        },
+        "client_secret": {
+          "description": "OAuth client secret (secret — never exposed to the renderer)",
+          "type": "string"
+        },
+        "issuer": {
+          "description": "Issuer is the OIDC issuer URL (type: oidc) — discovery resolves",
+          "type": "string"
+        },
+        "scopes": {
+          "description": "OAuth scopes (default: openid email profile)",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "token_url": {
+          "type": "string"
+        },
+        "type": {
+          "description": "@schema {enum: [\"oidc\", \"oauth2\"], default: \"oidc\"}",
+          "type": "string",
+          "enum": [
+            "oidc",
+            "oauth2"
+          ]
+        },
+        "userinfo_url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "client_id",
+        "client_secret"
+      ],
+      "additionalProperties": false
+    },
     "OnDelete": {
       "description": "Referential action on target delete",
       "type": "string",
@@ -5581,6 +5740,26 @@
       ],
       "additionalProperties": false
     },
+    "RegistrationSettings": {
+      "description": "RegistrationSettings configures the workspace-level self-service sign-up\npolicy (auth redesign Fase 4). Per-workspace — applies to every App in the\nworkspace.\n\n  - open     (default): sign-up creates an active user with DefaultRole.\n  - approval: sign-up creates a pending user; an admin approves + assigns\n    the role before the user can log in.\n  - closed:   self-service sign-up is disabled; admins create users.\n",
+      "type": "object",
+      "properties": {
+        "default_role": {
+          "description": "DefaultRole is assigned on sign-up when Policy is \"open\" (e.g. \"user\").",
+          "type": "string"
+        },
+        "policy": {
+          "description": "@schema {enum: [\"open\", \"approval\", \"closed\"], default: \"open\"}",
+          "type": "string",
+          "enum": [
+            "open",
+            "approval",
+            "closed"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
     "RelationDecl": {
       "description": "RelationDecl defines a relation to another entity.\n@schema {title: \"Relation Declaration\"}\n",
       "type": "object",
@@ -5759,6 +5938,15 @@
       "description": "SectionBlock is a declarative presentation section inside a Page\n(frontend/06-page-kinds.md §1). Sections are generic — reusable in any App\n(marketing/hero, no-nav, sidebar-nav, ...): pure presentation, no data\nbinding, no auth, and zero styling fields — every visual token lives in\nkind: Theme (frontend/05-app-kinds.md §5), never inline.\n",
       "type": "object",
       "properties": {
+        "align": {
+          "description": "Align controls text alignment of title/subtitle/items — left (default)",
+          "type": "string",
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ]
+        },
         "autoplay": {
           "description": "Autoplay + IntervalMS drive carousel auto-advance (default off / 5000ms).",
           "type": "boolean"
@@ -5891,6 +6079,11 @@
       "description": "Settings is the typed global presentation/config namespace. It is declared\nonce on a workspace/App `kind: Config` manifest under `settings:` and\nresolved with standard defaults so behavior is consistent across every\ncomponent even when unset. Renderers/backends read these values instead of\nguessing per component (01-core-basic.md §10, 05-field-types.md §2).\n",
       "type": "object",
       "properties": {
+        "auth": {
+          "$ref": "#/$defs/AuthSettings",
+          "description": "Auth configures external authentication providers (auth redesign Fase 5",
+          "nullable": true
+        },
         "currency": {
           "$ref": "#/$defs/CurrencySettings",
           "description": "Currency is the default money currency for the workspace (ISO-4217 code,",
@@ -5907,6 +6100,11 @@
         "locale": {
           "description": "Locale is the IETF BCP-47 locale used for number/date formatting",
           "type": "string"
+        },
+        "registration": {
+          "$ref": "#/$defs/RegistrationSettings",
+          "description": "Registration is the workspace-level self-service sign-up policy",
+          "nullable": true
         },
         "rounding": {
           "description": "Rounding is the default rounding mode for money/decimal arithmetic:",

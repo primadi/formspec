@@ -26,24 +26,27 @@ import (
 
 // HandlerFactory creates HTTP handlers backed by an EntityStore.
 type HandlerFactory struct {
-	registry      EntityStoreProvider
-	dispatcher    *action.Dispatcher
-	svcRegistry   *service.Registry                                  // kind: Service manifests (todo 7.1)
-	whRegistry    *webhook.Registry                                  // kind: Webhook manifests (todo 7.6)
-	whKeys        webhook.KeyResolver                                // resolves webhook secret/token keys from config (todo 7.6)
-	wfRegistry    *workflow.Registry                                 // kind: Workflow manifests (todo 7.4)
-	wfApprovals   *db.WorkflowApprovalStore                          // persists approval requests (todo 7.4)
-	auditWriter   AuditWriter                                        // writes framework-owned audit records (todo 7.4.6)
-	specLookup    func(module, name string) (*spec.EntitySpec, bool) // optional — enables sort/filter validation, hooks, and event resolution
-	specDirLookup func(module, name string) (string, bool)           // optional — resolves the entity's spec directory for hook/custom script refs
-	deliveryDeps  action.DeliveryDeps
-	idempotency   *db.IdempotencyStore    // wired when idempotency enforcement is enabled (todo 2.7)
-	settings      *spec.Settings          // resolved global settings namespace (spec §10) — seeds app-setting find-or-create
-	storage       func() (Storage, error) // optional — enables file upload/download routes (todo 7.17.1)
-	assetRoots    []string                // manifest roots for module asset serving (todo 5.9.1)
-	rateLimiter   *ResourceRateLimiter    // optional — per-resource/per-action rate limits (todo 7.12)
-	jobTracker    *job.Tracker            // optional — tracked async jobs (call: async + track: true, todo 7.13)
-	entityCache   *EntityCache            // optional — read-through find-by-id cache (Fase 14, opt-in via spec.cache)
+	registry        EntityStoreProvider
+	dispatcher      *action.Dispatcher
+	svcRegistry     *service.Registry                                  // kind: Service manifests (todo 7.1)
+	whRegistry      *webhook.Registry                                  // kind: Webhook manifests (todo 7.6)
+	whKeys          webhook.KeyResolver                                // resolves webhook secret/token keys from config (todo 7.6)
+	wfRegistry      *workflow.Registry                                 // kind: Workflow manifests (todo 7.4)
+	wfApprovals     *db.WorkflowApprovalStore                          // persists approval requests (todo 7.4)
+	auditWriter     AuditWriter                                        // writes framework-owned audit records (todo 7.4.6)
+	specLookup      func(module, name string) (*spec.EntitySpec, bool) // optional — enables sort/filter validation, hooks, and event resolution
+	specDirLookup   func(module, name string) (string, bool)           // optional — resolves the entity's spec directory for hook/custom script refs
+	deliveryDeps    action.DeliveryDeps
+	idempotency     *db.IdempotencyStore    // wired when idempotency enforcement is enabled (todo 2.7)
+	settings        *spec.Settings          // resolved global settings namespace (spec §10) — seeds app-setting find-or-create
+	storage         func() (Storage, error) // optional — enables file upload/download routes (todo 7.17.1)
+	assetRoots      []string                // manifest roots for module asset serving (todo 5.9.1)
+	rateLimiter     *ResourceRateLimiter    // optional — per-resource/per-action rate limits (todo 7.12)
+	jobTracker      *job.Tracker            // optional — tracked async jobs (call: async + track: true, todo 7.13)
+	entityCache     *EntityCache            // optional — read-through find-by-id cache (Fase 14, opt-in via spec.cache)
+	linkStore       *db.StorageLinkStore    // optional — enables link routes (todo 7.17.6); nil → link routes return 503
+	uploadLimitMB   int                     // global upload limit (FORMSPEC_UPLOAD_MAX_MB, default 100)
+	downloadLimitMB int                     // global download limit (FORMSPEC_DOWNLOAD_MAX_MB, default 200)
 }
 
 // EntityStoreProvider abstracts the entity registry for handler use.
@@ -58,7 +61,34 @@ func (f *HandlerFactory) SetEntityCache(c *EntityCache) { f.entityCache = c }
 
 // NewHandlerFactory creates a handler factory.
 func NewHandlerFactory(registry EntityStoreProvider) *HandlerFactory {
-	return &HandlerFactory{registry: registry, dispatcher: action.NewDispatcher()}
+	return &HandlerFactory{
+		registry:        registry,
+		dispatcher:      action.NewDispatcher(),
+		uploadLimitMB:   DefaultUploadLimitMB,
+		downloadLimitMB: DefaultDownloadLimitMB,
+	}
+}
+
+// SetUploadLimitMB wires the global upload size limit in MB
+// (FORMSPEC_UPLOAD_MAX_MB). Per-field max_size_mb lowers it further.
+func (f *HandlerFactory) SetUploadLimitMB(mb int) {
+	if mb > 0 {
+		f.uploadLimitMB = mb
+	}
+}
+
+// SetDownloadLimitMB wires the global download size limit in MB
+// (FORMSPEC_DOWNLOAD_MAX_MB). Per-field max_download_mb lowers it further.
+func (f *HandlerFactory) SetDownloadLimitMB(mb int) {
+	if mb > 0 {
+		f.downloadLimitMB = mb
+	}
+}
+
+// SetLinkStore wires the storage-link store used by the link issue/consume
+// routes (todo 7.17.6). When nil, link routes return 503.
+func (f *HandlerFactory) SetLinkStore(s *db.StorageLinkStore) {
+	f.linkStore = s
 }
 
 // SetDispatcher sets the action dispatcher used for custom action execution.
