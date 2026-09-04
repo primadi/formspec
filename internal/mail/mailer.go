@@ -68,9 +68,15 @@ func (m *Mailer) Send(to, subject, text, html string) error {
 // buildMessage assembles the raw RFC 5322 message bytes.
 func buildMessage(from, to, subject, text, html string) []byte {
 	var b strings.Builder
-	b.WriteString("From: " + from + "\r\n")
-	b.WriteString("To: " + to + "\r\n")
-	b.WriteString("Subject: " + subject + "\r\n")
+	b.WriteString("From: ")
+	b.WriteString(from)
+	b.WriteString("\r\n")
+	b.WriteString("To: ")
+	b.WriteString(to)
+	b.WriteString("\r\n")
+	b.WriteString("Subject: ")
+	b.WriteString(subject)
+	b.WriteString("\r\n")
 	b.WriteString("MIME-Version: 1.0\r\n")
 	if html == "" {
 		b.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
@@ -79,19 +85,25 @@ func buildMessage(from, to, subject, text, html string) []byte {
 		b.WriteString(text)
 	} else {
 		boundary := "formspec-boundary-7f4a"
-		b.WriteString("Content-Type: multipart/alternative; boundary=\"" + boundary + "\"\r\n")
+		fmt.Fprintf(&b, "Content-Type: multipart/alternative; boundary=\"%s\"\r\n", boundary)
 		b.WriteString("\r\n")
-		b.WriteString("--" + boundary + "\r\n")
+		b.WriteString("--")
+		b.WriteString(boundary)
+		b.WriteString("\r\n")
 		b.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
 		b.WriteString("Content-Transfer-Encoding: 8bit\r\n")
 		b.WriteString("\r\n")
 		b.WriteString(text)
-		b.WriteString("\r\n--" + boundary + "\r\n")
+		b.WriteString("\r\n--")
+		b.WriteString(boundary)
+		b.WriteString("\r\n")
 		b.WriteString("Content-Type: text/html; charset=UTF-8\r\n")
 		b.WriteString("Content-Transfer-Encoding: 8bit\r\n")
 		b.WriteString("\r\n")
 		b.WriteString(html)
-		b.WriteString("\r\n--" + boundary + "--\r\n")
+		b.WriteString("\r\n--")
+		b.WriteString(boundary)
+		b.WriteString("--\r\n")
 	}
 	return []byte(b.String())
 }

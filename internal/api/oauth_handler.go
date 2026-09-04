@@ -327,11 +327,6 @@ func oauthProviderNames() []string {
 	return authService.OAuthProviders()
 }
 
-// oauthAuthorizePath builds the authorize URL for a provider.
-func oauthAuthorizePath(workspace, provider string) string {
-	return "/" + workspace + "/_ui/auth/oauth/" + provider + "/authorize"
-}
-
 // isOAuthProviderName reports whether the string is a configured provider.
 func isOAuthProviderName(name string) bool {
 	for _, n := range oauthProviderNames() {
