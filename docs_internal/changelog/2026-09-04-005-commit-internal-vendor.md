@@ -12,6 +12,7 @@ overrides) yang dipakai `resource/formspec.go` dan CLI. Karena ter-ignore,
 paket tidak pernah di-commit sehingga tidak ada di module yang dipublish.
 
 **Perbaikan:**
+
 - `.gitignore`: `vendor/` → `/vendor/` (root-anchored, hanya ignore Go vendor
   dir di root), tambah `sdk/php/vendor/` eksplisit (composer deps tetap ignore).
 - Commit `internal/vendor/` (11 file) — commit `15e663d`.
