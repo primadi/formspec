@@ -1,4 +1,4 @@
-# FormSpec Framework — Agent Instructions
+# FormSpec — Agent Instructions
 
 ## Project Overview
 
@@ -244,6 +244,45 @@ make clean       # Clean build artifacts
 
 ---
 
+## Dokumentasi
+
+- **`docs/` adalah satu-satunya dokumentasi otoritatif dan eksternal-facing.**
+  Terstruktur contract-vs-renderer: `docs/spec/` (kontrak normatif:
+  platform/backend/frontend) dan `docs/renderers/` (implementasi resmi:
+  shadcn-shell, persist-postgres). Ditulis present-tense — tanpa narasi
+  historis. Isinya bersih dan final: `spec/`, `kind/`, `renderers/`,
+  `runtimes/`, `cli-tools/`, `reference/`, `guides/`, `architecture/`, `ai/`,
+  `comparison/`, `registry/`.
+- **`docs_internal/` adalah dokumen kerja & sejarah** — plan (`docs_internal/
+plan/`, termasuk `todo.md`), changelog (`docs_internal/changelog/`),
+  presentations, technical-notes. Bukan dokumentasi developer FormSpec,
+  tidak masuk docs-site. Workflow discipline (plan → changelog → todo)
+  menunjuk ke sini.
+- **`docs_old/` dan `reff_docs/` adalah arsip internal/historis.** Jangan kutip
+  sebagai kontrak berlaku dan jangan edit (read-only). Keduanya hanya source
+  material selama migrasi docs dan akan dihapus. Peta migrasi + aturan "tree
+  otoritatif per topik selama transisi": `docs_old/MIGRATION.md`.
+- Jangan menambahkan konten historis ("dulu X, diganti Y", changelog, decision
+  ledger) ke `docs/` — catatan semacam itu ke `docs_internal/changelog/` atau
+  cukup di git history.
+- Dokumen `docs/spec/` berstatus `Outline → Draft → Final`. Yang masih
+  `Outline` belum menjelaskan perilaku kode; perilaku kode yang berjalan masih
+  mengikuti `docs_old/spec/` sampai dokumen penerusnya ≥ Draft.
+
+## Konvensi
+
+- Bahasa docs: Indonesia; nama kind/field/istilah teknis tetap English.
+- Commit lokal saja; push hanya jika diminta.
+
+## JSON Schema untuk YAML Editor
+
+- **`schemas/`** berisi JSON Schema (Draft-07) untuk semua FormSpec resource kind.
+- Digenenerate otomatis dari `pkg/spec/` via `make generate-schema`.
+- Terdaftar di `.vscode/settings.json` → `yaml.schemas` untuk autocomplete + validasi di spec YAML files.
+- Tambah `// @schema {key: val}` di Go struct comments untuk enhance generated schema (description, enum, minLength, pattern, dll).
+
+---
+
 ## Workflow Discipline
 
 Setiap perubahan code wajib mengikuti alur kerja berikut. Urutan ini **tidak bisa dilompati**.
@@ -326,21 +365,9 @@ Saat melakukan audit (membandingkan code terhadap spec atau todo):
 # RTK — Token-Optimized CLI
 
 **rtk** is a CLI proxy that filters and compresses command outputs, saving 60-90% tokens.
+Shell commands are auto-rewritten by the PreToolUse hook (`.github/hooks/rtk-rewrite.json` untuk Copilot, `rtk hook claude` untuk Claude Code) — no manual prefix needed.
 
-## Rule
-
-Always prefix shell commands with `rtk`:
-
-```bash
-# Instead of:              Use:
-git status                 rtk git status
-git log -10                rtk git log -10
-cargo test                 rtk cargo test
-docker ps                  rtk docker ps
-kubectl get pods           rtk kubectl get pods
-```
-
-## Meta commands (use directly)
+Meta commands (use directly):
 
 ```bash
 rtk gain              # Token savings dashboard

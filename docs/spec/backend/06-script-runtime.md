@@ -128,9 +128,10 @@ atomisitas ([`01-core-basic.md`](01-core-basic.md) §3).
 
 ## 7. Resolusi `ref` Handler Native
 
-Untuk `impl.type: native`, handler ditulis sebagai method Go di `impl/`
-([`../platform/08-project-layout.md`](../platform/08-project-layout.md) §2) dan
-dirujuk lewat string `ref: "{Type}.{Method}"`:
+Untuk `impl.type: native`, handler ditulis sebagai **fungsi Go** dan didaftarkan
+eksplisit ke engine lewat API publik `App.RegisterNative` / `App.RegisterNatives`
+(`resource/formspec.go`). Action di YAML merujuk handler lewat string
+`ref: "{Type}.{Method}"`:
 
 ```yaml
 impl:
@@ -138,8 +139,55 @@ impl:
   ref: "OrderResource.UpdateDiscountRule"
 ```
 
-Resolusi terjadi dengan **memindai `impl/**/\*.go` module** untuk tipe exported
-plus method exported yang cocok dengan nama itu (`OrderResource`+`UpdateDiscountRule`). Aturan normatif:
+### 7.1 API Registrasi
+
+```go
+type NativeHandler func(ctx context.Context, params NativeParams) (any, error)
+
+type NativeParams struct {
+    Module      string         // owning module (mis. "billing")
+    Entity      string         // entity atau service (mis. "order")
+    ActionName  string         // action yang dipanggil (mis. "checkout")
+    ResourceID  string         // ID record entity (kosong untuk service action)
+    Resource    map[string]any // data record entity saat ini
+    Params      map[string]any // parameter action dari request body
+    WorkspaceID string         // workspace saat ini
+    UserID      string         // user terautentikasi
+}
+```
+
+Registrasi dilakukan saat boot app:
+
+```go
+app.RegisterNative("Billing.Order.CalculateTax", calculateTax) // single
+app.RegisterNatives(map[string]formspec.NativeHandler{         // batch
+    "registry.SignatureVerify": signatureVerify,
+    "registry.vendor.approve":  vendorApprove(app),
+})
+```
+
+Handler yang sudah diregistrasi **dipertahankan lintas `ReloadSpec()`** — saat
+spec hot-reload, handler di-re-register otomatis ke dispatcher baru tanpa perlu
+memanggil `RegisterNative` ulang.
+
+### 7.2 Format `ref` dan Urutan Resolusi
+
+`NativeExecutor` me-resolve `ref` dengan mencoba tiga format, berurutan:
+
+| #   | Format                            | Contoh                                       |
+| --- | --------------------------------- | -------------------------------------------- |
+| 1   | Exact ref (`TypeName.MethodName`) | `"OrderResource.UpdateDiscountRule"`         |
+| 2   | `module.entity.action`            | `"billing.order.update-discount-rule"`       |
+| 3   | `module.TypeName.MethodName`      | `"billing.OrderResource.UpdateDiscountRule"` |
+
+Ref yang tidak cocok dengan handler terdaftar mana pun → error
+`"native handler %q not registered"` saat action dieksekusi.
+
+### 7.3 Auto-scan `impl/**/*.go` (target desain)
+
+Desain normatif jangka panjang: handler ditulis sebagai method Go di `impl/`
+([`../platform/08-project-layout.md`](../platform/08-project-layout.md) §2) dan
+di-scan otomatis saat `formspec apply`/build. Aturan normatif:
 
 - **Nama harus unik dalam module.** Bila lebih dari satu `{Type}.{Method}` cocok
   di seluruh `impl/` module, itu **error saat `formspec apply`/build** — bukan
@@ -147,6 +195,14 @@ plus method exported yang cocok dengan nama itu (`OrderResource`+`UpdateDiscount
 - Tidak ada match sama sekali juga error build-time — `ref` menggantung ditolak
   sebelum deployment.
 
-Resolusi build-time ini menjaga `ref` selalu menunjuk tepat satu handler yang
-ada, sehingga permukaan action yang di-compile tidak pernah menyembunyikan
-handler hilang atau dobel.
+**Status hari ini:** auto-scan belum diimplementasikan — handler tetap
+didaftarkan eksplisit via `RegisterNative`/`RegisterNatives` (§7.1), dan
+resolusi terjadi di runtime mengikuti urutan §7.2.
+
+### 7.4 Handler Bawaan Engine
+
+| Ref                                | Lokasi                          | Fungsi                                                                         |
+| ---------------------------------- | ------------------------------- | ------------------------------------------------------------------------------ |
+| `formspec.core.user.hash-password` | `resource/auth_native.go`       | Hook before create/update — hash `password` → `password_hash`, hapus plaintext |
+| `registry.SignatureVerify`         | `cmd/formspec-registry/main.go` | Verify ed25519 server-side (service `registry.signature-verify.verify`)        |
+| `registry.vendor.approve`          | `cmd/formspec-registry/main.go` | Approve vendor → status `active` + grant role `vendor` + perms registry        |

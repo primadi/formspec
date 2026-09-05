@@ -24,21 +24,21 @@ Dua binary embed engine yang sama: **app Go native** (`import` langsung) dan **`
 
 ## 2. Fitur
 
-| Fitur | Package | Status |
-|---|---|---|
-| **Entity engine** — CRUD, optimistic concurrency (`Version`), soft delete, search+pagination, `Submit`/`Cancel`/`Amend` lifecycle | `internal/db` (`crud.go`) | ✅ Implemented |
-| **Schema migration** — generate DDL dari `EntitySpec` (dialect-aware SQLite/Postgres), checksum-tracked migration runner | `internal/db` (`ddl.go`, `migrate.go`) | ✅ Implemented |
-| **Manifest loading & validasi** — multi-doc YAML, kind validation, reserved-field rules | `internal/manifest`, `pkg/spec` | ✅ Implemented (untuk kind `Document`/`Entity`) |
-| **REST API generator** — CRUD routes + custom action routes, deny-by-default via `Expose` | `internal/api` | ✅ Implemented |
-| **Permission enforcement** — explicit required-permission per action, auto-prefix, module footprint | `internal/permission` | ✅ Implemented |
-| **Action dispatch** — routing berdasarkan `impl.type` (`script`/`native`/`sidecar`) | `internal/action` | ⚠️ Sebagian — lihat §7 |
-| **State machine** — validasi transisi state | `internal/entity` (`state_machine.go`) + `internal/db` | ⚠️ Dua implementasi terpisah, tidak konsisten — lihat §7 |
-| **`ctx.*` primitives untuk Starlark** — db/cache/lock/queue/pubsub/storage/kvstore | `internal/starlark` | ⚠️ API-nya ada, tapi semua operasi stub — lihat §7 |
-| **Auth** — JWT (HS256/RS256/ES256) + dev token, wildcard permission matching | `internal/auth` | ✅ Implemented |
-| **Tenant isolation** — `{workspace}` URL scoping, cross-tenant → 404 | `internal/api` (`middleware.go`) | ✅ Implemented |
-| **Idempotency store** | `internal/db` (`idempotency.go`) | ✅ Implemented |
-| **Outbox (substrat event delivery)** | `internal/db` (`outbox.go`, `outbox_worker.go`) | ⚠️ Fungsional tapi belum disambungkan ke action dispatch — lihat §7 |
-| **Admin panel auto-generated (`/_admin`)** | — | ❌ Belum ada sama sekali — lihat §7 |
+| Fitur                                                                                                                             | Package                                                | Status                                                              |
+| --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------- |
+| **Entity engine** — CRUD, optimistic concurrency (`Version`), soft delete, search+pagination, `Submit`/`Cancel`/`Amend` lifecycle | `internal/db` (`crud.go`)                              | ✅ Implemented                                                      |
+| **Schema migration** — generate DDL dari `EntitySpec` (dialect-aware SQLite/Postgres), checksum-tracked migration runner          | `internal/db` (`ddl.go`, `migrate.go`)                 | ✅ Implemented                                                      |
+| **Manifest loading & validasi** — multi-doc YAML, kind validation, reserved-field rules                                           | `internal/manifest`, `pkg/spec`                        | ✅ Implemented (untuk kind `Document`/`Entity`)                     |
+| **REST API generator** — CRUD routes + custom action routes, deny-by-default via `Expose`                                         | `internal/api`                                         | ✅ Implemented                                                      |
+| **Permission enforcement** — explicit required-permission per action, auto-prefix, module footprint                               | `internal/permission`                                  | ✅ Implemented                                                      |
+| **Action dispatch** — routing berdasarkan `impl.type` (`script`/`native`/`sidecar`)                                               | `internal/action`                                      | ⚠️ Sebagian — lihat §7                                              |
+| **State machine** — validasi transisi state                                                                                       | `internal/entity` (`state_machine.go`) + `internal/db` | ⚠️ Dua implementasi terpisah, tidak konsisten — lihat §7            |
+| **`ctx.*` primitives untuk Starlark** — db/cache/lock/queue/pubsub/storage/kvstore                                                | `internal/starlark`                                    | ⚠️ API-nya ada, tapi semua operasi stub — lihat §7                  |
+| **Auth** — JWT (HS256/RS256/ES256) + dev token, wildcard permission matching                                                      | `internal/auth`                                        | ✅ Implemented                                                      |
+| **Tenant isolation** — `{workspace}` URL scoping, cross-tenant → 404                                                              | `internal/api` (`middleware.go`)                       | ✅ Implemented                                                      |
+| **Idempotency store**                                                                                                             | `internal/db` (`idempotency.go`)                       | ✅ Implemented                                                      |
+| **Outbox (substrat event delivery)**                                                                                              | `internal/db` (`outbox.go`, `outbox_worker.go`)        | ⚠️ Fungsional tapi belum disambungkan ke action dispatch — lihat §7 |
+| **Admin panel auto-generated (`/_admin`)**                                                                                        | —                                                      | ❌ Belum ada sama sekali — lihat §7                                 |
 
 ---
 
@@ -46,18 +46,18 @@ Dua binary embed engine yang sama: **app Go native** (`import` langsung) dan **`
 
 ### 3.1 Package Map
 
-| Package | Tanggung jawab |
-|---|---|
-| `internal/entity` | Registry (`LoadEntities`/`RegisterArtifactManifest`), `SyncSchema`, `GetEntityStore`; `StateMachineEngine` (transisi state, guard via Starlark) |
-| `internal/api` | Generator route (`GenerateRoutes`, `GenerateCustomActionRoutes`), router chi (`RouterBuilder`), middleware chain |
-| `internal/action` | `Dispatcher` — routing eksekusi by `ImplType`; executor `native`/`script`/`sidecar` |
-| `internal/permission` | Registry permission & "uses" declaration, module footprint, deteksi cross-module write |
-| `internal/db` | `EntityStore` (CRUD lengkap), DDL generator, migration runner, child-table store, natural-key counter, audit log, idempotency store, outbox |
-| `internal/manifest` | Loader multi-doc YAML |
-| `internal/starlark` | `CtxAPI` — permukaan `ctx.*` untuk script; evaluator kondisi/guard |
-| `internal/datastore` | Registry/resolver/factory koneksi per driver (sqlite/postgres/valkey/redis/s3/...) — dipakai `ctx.*` resolusi datastore |
-| `internal/auth` | `TokenValidator` (JWT/dev), `Identity`, permission matching |
-| `internal/validation` | Cross-field rules (`after`/`before`/`exists:`), validasi action params |
+| Package               | Tanggung jawab                                                                                                                                  |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `internal/entity`     | Registry (`LoadEntities`/`RegisterArtifactManifest`), `SyncSchema`, `GetEntityStore`; `StateMachineEngine` (transisi state, guard via Starlark) |
+| `internal/api`        | Generator route (`GenerateRoutes`, `GenerateCustomActionRoutes`), router chi (`RouterBuilder`), middleware chain                                |
+| `internal/action`     | `Dispatcher` — routing eksekusi by `ImplType`; executor `native`/`script`/`sidecar`                                                             |
+| `internal/permission` | Registry permission & "uses" declaration, module footprint, deteksi cross-module write                                                          |
+| `internal/db`         | `EntityStore` (CRUD lengkap), DDL generator, migration runner, child-table store, natural-key counter, audit log, idempotency store, outbox     |
+| `internal/manifest`   | Loader multi-doc YAML                                                                                                                           |
+| `internal/starlark`   | `CtxAPI` — permukaan `ctx.*` untuk script; evaluator kondisi/guard                                                                              |
+| `internal/datastore`  | Registry/resolver/factory koneksi per driver (sqlite/postgres/valkey/redis/s3/...) — dipakai `ctx.*` resolusi datastore                         |
+| `internal/auth`       | `TokenValidator` (JWT/dev), `Identity`, permission matching                                                                                     |
+| `internal/validation` | Cross-field rules (`after`/`before`/`exists:`), validasi action params                                                                          |
 
 ### 3.2 Middleware Chain (REST API)
 
@@ -83,7 +83,7 @@ Document/Entity spec (Expose: [{type: rest, actions: [list, find, create, ...]}]
 POST /{workspace}/api/v1/{module}/{plural}/{id}/{action}
   → Middleware chain (auth, permission)
   → Dispatcher.Dispatch(impl.type)
-      type: native  → NativeExecutor (lookup handler by ref/module/entity/action)
+      type: native  → NativeExecutor (lookup handler by ref — lihat §5.3)
       type: script  → ScriptExecutor (resolve .star file, jalankan via internal/starlark)
       type: sidecar → SidecarExecutor (panggil app process via socket — lihat 04-formspec-sidecar.md)
   → ExecuteResult { NewState, Events, ... }
@@ -95,17 +95,17 @@ POST /{workspace}/api/v1/{module}/{plural}/{id}/{action}
 
 Permukaan primitive yang dipanggil dari `.star` script (`internal/starlark/primitive.go`):
 
-| Primitive | Method | Fungsi |
-|---|---|---|
-| `ctx.db` | `.query()`, `.get()`, `.set()`, `.delete()` | Akses datastore relasional/dokumen |
-| `ctx.cache` | `.get()`, `.set()`, `.delete()` | Key-value cache (Valkey/Redis) |
-| `ctx.lock` | `.acquire()`, `.release()` | Distributed lock (mutual exclusion — lihat `docs/architecture/05-failover.md` §3.4) |
-| `ctx.queue` | — | Job queue |
-| `ctx.pubsub` | — | Publish/subscribe realtime |
-| `ctx.storage` | — | Object storage (S3-compatible) |
-| `ctx.kvstore` | — | KV store sederhana |
-| `ctx.tenant` / `ctx.user` / `ctx.auth` | `.has()` | Identitas & permission check |
-| `ctx.now()`, `ctx.next_key()`, `ctx.log.{info,warn,error}`, `ctx.config.get()` | | Utility |
+| Primitive                                                                      | Method                                      | Fungsi                                                                              |
+| ------------------------------------------------------------------------------ | ------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `ctx.db`                                                                       | `.query()`, `.get()`, `.set()`, `.delete()` | Akses datastore relasional/dokumen                                                  |
+| `ctx.cache`                                                                    | `.get()`, `.set()`, `.delete()`             | Key-value cache (Valkey/Redis)                                                      |
+| `ctx.lock`                                                                     | `.acquire()`, `.release()`                  | Distributed lock (mutual exclusion — lihat `docs/architecture/05-failover.md` §3.4) |
+| `ctx.queue`                                                                    | —                                           | Job queue                                                                           |
+| `ctx.pubsub`                                                                   | —                                           | Publish/subscribe realtime                                                          |
+| `ctx.storage`                                                                  | —                                           | Object storage (S3-compatible)                                                      |
+| `ctx.kvstore`                                                                  | —                                           | KV store sederhana                                                                  |
+| `ctx.tenant` / `ctx.user` / `ctx.auth`                                         | `.has()`                                    | Identitas & permission check                                                        |
+| `ctx.now()`, `ctx.next_key()`, `ctx.log.{info,warn,error}`, `ctx.config.get()` |                                             | Utility                                                                             |
 
 Semua primitive mendukung `.named("name")` untuk binding ke datastore spesifik (multi-datastore per `kind: Datastore` — lihat `docs/spec/platform/06-datastore.md`).
 
@@ -139,7 +139,33 @@ Untuk pengkabelan yang **sesuai desain plane protocol** (memuat dari artifact Co
 
 ### 5.2 Untuk App Non-Go (via FormSpec Sidecar)
 
-Model *single-process embed* (lihat `04-formspec-sidecar.md`): `formspec-sidecar` meng-compile-in package `formspec` yang sama seperti di atas (entity engine, API generator, dsb) sebagai satu proses, ditambah listener socket/HTTP untuk komunikasi dengan proses app (PHP/Python/dst).
+Model _single-process embed_ (lihat `04-formspec-sidecar.md`): `formspec-sidecar` meng-compile-in package `formspec` yang sama seperti di atas (entity engine, API generator, dsb) sebagai satu proses, ditambah listener socket/HTTP untuk komunikasi dengan proses app (PHP/Python/dst).
+
+### 5.3 Native Handler API
+
+`impl.type: native` dieksekusi oleh `NativeExecutor` yang mencari handler Go
+yang didaftarkan eksplisit lewat API publik `App.RegisterNative` /
+`App.RegisterNatives` (`resource/formspec.go`):
+
+```go
+type NativeHandler func(ctx context.Context, params NativeParams) (any, error)
+
+app.RegisterNative("Billing.Order.CalculateTax", calculateTax)
+app.RegisterNatives(map[string]formspec.NativeHandler{
+    "registry.SignatureVerify": signatureVerify,
+    "registry.vendor.approve":  vendorApprove(app),
+})
+```
+
+`NativeParams` membawa konteks eksekusi: `Module`, `Entity`, `ActionName`,
+`ResourceID`, `Resource` (data record), `Params` (parameter action),
+`WorkspaceID`, `UserID`. Handler yang sudah diregistrasi dipertahankan lintas
+`ReloadSpec()` (hot-reload) tanpa perlu registrasi ulang.
+
+Resolusi `ref` mencoba tiga format berurutan — exact `TypeName.MethodName`,
+`module.entity.action`, lalu `module.TypeName.MethodName`. Detail lengkap
+(kontrak handler, format ref, handler bawaan engine) ada di
+[`../spec/backend/06-script-runtime.md`](../spec/backend/06-script-runtime.md) §7.
 
 ---
 
@@ -159,7 +185,7 @@ Kind lain yang parse valid tapi **belum dikonsumsi runtime apapun** (lihat §7):
 4. **State machine punya dua implementasi yang tidak konsisten.** `entity.StateMachineEngine` (lengkap, dengan guard evaluation) tidak pernah dipanggil dari `internal/api.HandleCustomAction` — enforcement transisi state yang benar-benar jalan justru ada di `db.EntityStore.Update` (`validateStateTransition`), sebuah pengecekan terpisah dan lebih sederhana yang ter-trigger saat field state berubah lewat `Update()`.
 5. **`emits:` events tidak tersambung.** `ExecuteResult.Events` didefinisikan tapi tidak pernah diisi executor manapun, dan tidak pernah dikonsumsi handler HTTP. Outbox (`internal/db/outbox.go`) fungsional secara independen tapi tidak ada yang men-enqueue dari action dispatch.
 6. **`SidecarExecutor.Execute` selalu return error** ("not implemented ... deferred to Fase 5") — ini persis titik yang perlu diimplementasikan sesuai desain `04-formspec-sidecar.md`.
-7. **`NativeExecutor` fungsional tapi tak ada handler yang pernah diregistrasi** di binary manapun — setiap action `impl.type: native` akan error "not registered" dalam praktiknya hari ini.
+7. **`NativeExecutor` fungsional dan handler sudah diregistrasi** — `formspec.core.user.hash-password` (`resource/auth_native.go`) dan handler binary registry (`cmd/formspec-registry/main.go`: `registry.SignatureVerify`, `registry.vendor.approve`) terdaftar via `App.RegisterNative`/`RegisterNatives` (lihat §5.3). Action `impl.type: native` tanpa handler terdaftar tetap error "not registered".
 8. **Natural key counter (`db.NaturalKeyCounter`) real tapi tidak dipakai** — `resource/formspec.go`'s dispatcher (dan sebelumnya `formspec-serve`) men-stub `next_key` dengan `fmt.Sprintf("KEY-%d", time.Now().UnixNano())`, bukan memanggil counter sequence yang sudah ada.
 9. **`internal/ctx`, `internal/service`, `internal/tenant`, `internal/events` kosong** — bukan berarti fungsinya hilang; masing-masing tersebar: tenant resolution ada inline di `internal/api/middleware.go`, ctx (untuk Go native, bukan Starlark) belum ada bentuknya sama sekali, events paling dekat diwakili outbox yang belum disambungkan.
 
@@ -175,10 +201,10 @@ Kind lain yang parse valid tapi **belum dikonsumsi runtime apapun** (lihat §7):
 
 ## 8. References
 
-| Dokumen | Isi |
-|---|---|
+| Dokumen                                                                       | Isi                                                |
+| ----------------------------------------------------------------------------- | -------------------------------------------------- |
 | `docs/spec/backend/01-core-basic.md`, `docs/spec/backend/02-core-extended.md` | Skema normatif Document/Entity/Action/StateMachine |
-| `docs/spec/platform/06-datastore.md` | Skema `kind: Datastore` dan resolusi `ctx.*` |
-| `docs/architecture/01-architecture-overview.md` §2, §4.3 | Model compile-in Go, resource pod |
-| `docs/runtimes/01-formspec-ctl.md` | Sisi server dari plane protocol |
-| `docs/runtimes/04-formspec-sidecar.md` | Model embedding untuk app non-Go |
+| `docs/spec/platform/06-datastore.md`                                          | Skema `kind: Datastore` dan resolusi `ctx.*`       |
+| `docs/architecture/01-architecture-overview.md` §2, §4.3                      | Model compile-in Go, resource pod                  |
+| `docs/runtimes/01-formspec-ctl.md`                                            | Sisi server dari plane protocol                    |
+| `docs/runtimes/04-formspec-sidecar.md`                                        | Model embedding untuk app non-Go                   |

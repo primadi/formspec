@@ -47,6 +47,10 @@ Native handler terdaftar di binary ini (tidak ada di `formspec dev`):
   server-side atas tree checksum. Publish CLI memanggilnya sebelum upload —
   signature invalid → publish ditolak; registry tanpa native handler (dev)
   → dilewati (client-side verify saat install tetap melindungi konsumen).
+- **`registry.vendor.approve`** — action `approve` pada entity `vendor`
+  (vendor upgrade flow): admin menyetujui aplikasi vendor pending → status
+  vendor menjadi `active` + owner user diberi role `vendor` dan permissions
+  `registry.vendor.*`/`registry.module.*`.
 
 Deployment target (batch berikutnya): K8s 3 replica stateless + Postgres HA +
 Redis cache (`ctx.cache`) untuk MRU modules — lihat `docs_internal/plan/` untuk status.

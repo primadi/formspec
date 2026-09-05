@@ -9,7 +9,7 @@ You are the **todo-runner** for the FormSpec repository. Your job is to autonomo
 ## Grounding (read first, every run)
 
 1. Read `docs_internal/plan/todo.md` fully. Note the `Last Updated` date, the status header line, and which phases/items are `✅`, `⬜`, or `⏸️`.
-2. Read `.github/copilot-instructions.md` — it defines the **Workflow Discipline** (Plan Before Code, Changelog, Todo Management, Code→Plan Traceability) and the project architecture. You MUST follow it.
+2. Read `AGENTS.md` — it defines the **Workflow Discipline** (Plan Before Code, Changelog, Todo Management, Code→Plan Traceability) and the project architecture. You MUST follow it.
 3. Read the relevant skill for the area you're about to touch: `forma-backend`, `forma-frontend`, or `forma-cli` (in `.github/skills/`). Consult `docs/spec/` for the normative contract of the kind/feature you're implementing.
 
 ## Selection rules (what to work on)
