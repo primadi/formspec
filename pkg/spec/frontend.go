@@ -33,6 +33,11 @@ type ContextDecl struct {
 	ID string `yaml:"id,omitempty" json:"id,omitempty"`
 	// Call for source: api — "module.service.action".
 	Call string `yaml:"call,omitempty" json:"call,omitempty"`
+	// Config for source: config — "<config-name>.<key>" referencing a
+	// `kind: Config` manifest key (plan custom-screens-spec-driven Phase 3).
+	// Only keys marked `public: true` (and non-secret) are resolvable —
+	// others resolve to the fallback.
+	Config string `yaml:"config,omitempty" json:"config,omitempty"`
 	// Params for source: api — action params.
 	Params map[string]any `yaml:"params,omitempty" json:"params,omitempty"`
 	// Value for source: const — a literal value.
@@ -54,6 +59,7 @@ var ContextSourceSet = map[string]bool{
 	"api":     true,
 	"const":   true,
 	"expr":    true,
+	"config":  true,
 }
 
 // ValidateContextDecls validates a list of context declarations: unique
@@ -69,7 +75,7 @@ func ValidateContextDecls(decls []ContextDecl) error {
 		}
 		seen[d.Name] = true
 		if !ContextSourceSet[d.Source] {
-			return fmt.Errorf("context %q: source %q is not a known source (closed set: session, entity, api, const, expr)", d.Name, d.Source)
+			return fmt.Errorf("context %q: source %q is not a known source (closed set: session, entity, api, const, expr, config)", d.Name, d.Source)
 		}
 		switch d.Source {
 		case "entity":
@@ -79,6 +85,10 @@ func ValidateContextDecls(decls []ContextDecl) error {
 		case "api":
 			if d.Call == "" {
 				return fmt.Errorf("context %q: source api requires `call` (module.service.action)", d.Name)
+			}
+		case "config":
+			if d.Config == "" {
+				return fmt.Errorf("context %q: source config requires `config` (<config-name>.<key>)", d.Name)
 			}
 		case "expr":
 			if d.Expr == "" {
@@ -255,6 +265,13 @@ type FormSpec struct {
 	Public *bool `yaml:"public,omitempty" json:"public,omitempty"`
 	// @schema {example: "billing.order"}
 	Entity string `yaml:"entity" json:"entity"`
+	// AuthAction binds the form submit to a platform auth action instead of
+	// entity CRUD (plan custom-screens-spec-driven Phase 2). Mutually
+	// exclusive with `entity`. Field names map conventionally to the auth
+	// payload: username, password, current_password, new_password, email,
+	// display_name, token.
+	// @schema {description: "Bind submit to a platform auth action (mutually exclusive with entity).", enum: ["login", "register", "change_password", "forgot_password", "reset_password"]}
+	AuthAction string `yaml:"auth_action,omitempty" json:"auth_action,omitempty"`
 	// @schema {example: "edit", enum: ["create", "edit", "view"]}
 	Mode     string          `yaml:"mode,omitempty" json:"mode,omitempty"` // create | edit | view
 	Sections []FormSection   `yaml:"sections" json:"sections"`
@@ -265,6 +282,43 @@ type FormSpec struct {
 	// expressions (visible_when/required_when/compute). Standard slots
 	// (`user`, `route`, `fields`) are always present.
 	Context []ContextDecl `yaml:"context,omitempty" json:"context,omitempty"`
+}
+
+// FormAuthActions is the closed set of auth actions a Form can bind to via
+// `auth_action` (plan custom-screens-spec-driven Phase 2). Each maps 1:1 to
+// an endpoint under /{ws}/_ui/auth/*:
+//
+//	login            POST /auth/login            fields: username, password
+//	register         POST /auth/register         fields: username, email, password, display_name
+//	change_password  POST /auth/change-password  fields: current_password, new_password
+//	forgot_password  POST /auth/forgot-password  fields: email
+//	reset_password   POST /auth/reset-password   fields: token, password
+var FormAuthActions = map[string]bool{
+	"login":           true,
+	"register":        true,
+	"change_password": true,
+	"forgot_password": true,
+	"reset_password":  true,
+}
+
+// ValidateFormSpec validates a FormSpec: `auth_action` (when set) must be a
+// known auth action and is mutually exclusive with `entity`; context
+// declarations are validated.
+func ValidateFormSpec(f *FormSpec) error {
+	if f.AuthAction != "" {
+		if !FormAuthActions[f.AuthAction] {
+			return fmt.Errorf("form: auth_action %q is not a known auth action (closed set: login, register, change_password, forgot_password, reset_password)", f.AuthAction)
+		}
+		if f.Entity != "" {
+			return fmt.Errorf("form: `auth_action` and `entity` are mutually exclusive")
+		}
+	} else if f.Entity == "" {
+		return fmt.Errorf("form: `entity` is required (or declare `auth_action` for an auth form)")
+	}
+	if err := ValidateContextDecls(f.Context); err != nil {
+		return fmt.Errorf("form: %w", err)
+	}
+	return nil
 }
 
 // FormSection groups form fields.

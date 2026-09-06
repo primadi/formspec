@@ -24,7 +24,6 @@ import {
 import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
 import { useSurface } from "@/hooks/useSurface"
-import { ChangePasswordDialog } from "./ChangePasswordDialog"
 import { LinkedAccountsDialog } from "./LinkedAccountsDialog"
 function initialsOf(id: string): string {
   // Split on whitespace/punctuation AND camelCase boundaries (TestUser →
@@ -45,7 +44,6 @@ export function UserMenu() {
   const clearSession = useSessionStore((s) => s.clearSession)
   const chrome = useMetaStore((s) => s.bundle?.app.chrome)
   const { surfacePath } = useSurface()
-  const [changePasswordOpen, setChangePasswordOpen] = React.useState(false)
   const [linkedAccountsOpen, setLinkedAccountsOpen] = React.useState(false)
 
   // No real session (anonymous or dev bypass) → nothing to show.
@@ -108,7 +106,7 @@ export function UserMenu() {
           </DropdownMenuItem>
         ) : null}
         <DropdownMenuItem
-          onClick={() => setChangePasswordOpen(true)}
+          onClick={() => navigate(surfacePath("change-password"))}
           className="cursor-pointer"
         >
           <KeyRound className="size-4" />
@@ -126,10 +124,6 @@ export function UserMenu() {
           Sign out
         </DropdownMenuItem>
       </DropdownMenuContent>
-      <ChangePasswordDialog
-        open={changePasswordOpen}
-        onOpenChange={setChangePasswordOpen}
-      />
       <LinkedAccountsDialog
         open={linkedAccountsOpen}
         onOpenChange={setLinkedAccountsOpen}

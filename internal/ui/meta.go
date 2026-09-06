@@ -67,6 +67,12 @@ type AppSummary struct {
 	// 05-app-kinds.md §4.1) — archetype defaults already applied. Renderers
 	// read these final values and never guess. Always non-nil.
 	Chrome *ChromeConfig `json:"chrome"`
+	// Auth is the resolved auth screen configuration (plan
+	// docs_internal/plan/auth-screens-spec-driven.md) — each slot is the
+	// App's override (App.spec.auth) or the framework default
+	// (formspec.core/<slot>). Renderers read these final refs and never
+	// guess. Nil when the App declares no auth overrides.
+	Auth *AuthConfig `json:"auth,omitempty"`
 }
 
 // ChromeConfig is the effective chrome composition for one App (frontend/
@@ -83,6 +89,65 @@ type ChromeConfig struct {
 	// ProfileRoute is the in-app route to the signed-in user's profile page
 	// (opt-in via manifest `profile_route`; empty = no Profile menu item).
 	ProfileRoute string `json:"profile_route,omitempty"`
+}
+
+// AuthConfig is the resolved auth screen configuration for one App (plan
+// docs_internal/plan/auth-screens-spec-driven.md). Each slot is a `kind:
+// Page` reference in `module/name` form — the App's override when declared
+// (App.spec.auth), otherwise the framework default (formspec.core/<slot>).
+// ChromeAuth is a component asset reference replacing the default chrome
+// auth area; empty = the chrome.auth value drives the default AuthArea.
+type AuthConfig struct {
+	LoginPage          string `json:"login_page,omitempty"`
+	SetupPage          string `json:"setup_page,omitempty"`
+	ChangePasswordPage string `json:"change_password_page,omitempty"`
+	ResetPasswordPage  string `json:"reset_password_page,omitempty"`
+	OAuthCallbackPage  string `json:"oauth_callback_page,omitempty"`
+	ChromeAuth         string `json:"chrome_auth,omitempty"`
+}
+
+// Default auth page slots (module formspec.core) — the framework's spec
+// defaults used when an App declares no override for a slot.
+const (
+	DefaultLoginPage          = "formspec.core/login"
+	DefaultSetupPage          = "formspec.core/setup"
+	DefaultChangePasswordPage = "formspec.core/change-password"
+	DefaultResetPasswordPage  = "formspec.core/reset-password"
+	DefaultOAuthCallbackPage  = "formspec.core/oauth-callback"
+)
+
+// resolveAuth fills every auth slot with the App's override when declared,
+// otherwise the framework default (formspec.core/<slot>). Returns nil when
+// the App declares no auth overrides at all (renderers then use their
+// built-in defaults).
+func resolveAuth(a *spec.AppAuth) *AuthConfig {
+	if a == nil {
+		return nil
+	}
+	cfg := &AuthConfig{
+		LoginPage:          DefaultLoginPage,
+		SetupPage:          DefaultSetupPage,
+		ChangePasswordPage: DefaultChangePasswordPage,
+		ResetPasswordPage:  DefaultResetPasswordPage,
+		OAuthCallbackPage:  DefaultOAuthCallbackPage,
+	}
+	if a.LoginPage != "" {
+		cfg.LoginPage = a.LoginPage
+	}
+	if a.SetupPage != "" {
+		cfg.SetupPage = a.SetupPage
+	}
+	if a.ChangePasswordPage != "" {
+		cfg.ChangePasswordPage = a.ChangePasswordPage
+	}
+	if a.ResetPasswordPage != "" {
+		cfg.ResetPasswordPage = a.ResetPasswordPage
+	}
+	if a.OAuthCallbackPage != "" {
+		cfg.OAuthCallbackPage = a.OAuthCallbackPage
+	}
+	cfg.ChromeAuth = a.ChromeAuth
+	return cfg
 }
 
 // AppContext scopes BuildBundle to one resolved App: which modules it mounts
@@ -104,7 +169,12 @@ type AppContext struct {
 	ThemeRef string
 	// Chrome is the raw manifest declaration (App.spec.chrome) — defaults
 	// are applied later by resolveChrome, not here.
-	Chrome  *spec.AppChrome
+	Chrome *spec.AppChrome
+	// Auth is the raw manifest declaration (App.spec.auth) — page refs for
+	// the auth screens (login/setup/change-password/reset-password/oauth-
+	// callback) + chrome auth area. Empty slots resolve to the framework
+	// defaults (formspec.core) in BuildBundle.
+	Auth    *spec.AppAuth
 	Modules map[string]bool
 	Menu    []spec.MenuItem
 	// Settings is the resolved global presentation/config namespace (spec §10).
@@ -116,9 +186,11 @@ type AppContext struct {
 // App's bundle. "core" is a repo-wide convention for App-level/cross-module
 // content that isn't owned by any one declared Module (e.g. a cross-module
 // Dashboard, or an app-level Config) — it always ships, since it was never
-// meant to be gated by spec.modules in the first place.
+// meant to be gated by spec.modules in the first place. "formspec.core" is
+// the framework core module (internal/auth/core.go) — its system pages
+// (auth screens, access management) always ship too.
 func (c AppContext) allows(module string) bool {
-	if c.Modules == nil || module == "core" {
+	if c.Modules == nil || module == "core" || module == "formspec.core" {
 		return true
 	}
 	return c.Modules[module]
@@ -247,6 +319,7 @@ func (r *Registry) BuildBundle(entities EntityLister, can PermissionChecker, app
 			PersistBackend: appCtx.PersistBackend,
 			Theme:          appCtx.ThemeRef,
 			Chrome:         resolveChrome(appCtx.AppRenderer, appCtx.Chrome),
+			Auth:           resolveAuth(appCtx.Auth),
 		},
 		Menu:                menu,
 		Pages:               []*Entry[spec.PageSpec]{},
@@ -297,7 +370,10 @@ func (r *Registry) BuildBundle(entities EntityLister, can PermissionChecker, app
 		}
 	}
 	for _, k := range sortedKeys(r.Forms) {
-		if e := r.Forms[k]; appCtx.allows(e.Module) && entityVisible(e.Module, e.Spec.Entity) {
+		// Auth forms (spec.auth_action, plan custom-screens-spec-driven) have
+		// no entity — include them directly: they carry no data, only the
+		// declarative field layout for the public /_ui/auth/* endpoints.
+		if e := r.Forms[k]; appCtx.allows(e.Module) && (e.Spec.AuthAction != "" || entityVisible(e.Module, e.Spec.Entity)) {
 			b.Forms = append(b.Forms, e)
 		}
 	}

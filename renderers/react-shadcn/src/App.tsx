@@ -13,8 +13,6 @@ import {
   Route,
   Navigate,
   useParams,
-  useNavigate,
-  useSearchParams,
   useLocation,
 } from "react-router-dom"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -29,11 +27,8 @@ import {
   SideNavShell,
   NoNavShell,
   TopNavShell,
-  LoginScreen,
-  SetupScreen,
-  OAuthCallback,
   OAuthLinkCallback,
-  ResetPasswordScreen,
+  AuthPage,
   buildRoutes,
 } from "@/shell"
 import ThemeRenderer from "@/kinds/theme/ThemeRenderer"
@@ -68,14 +63,25 @@ function Root() {
           path="/:workspace/_admin/*"
           element={<SurfaceShell surface="admin" />}
         />
-        {/* First-run setup wizard — standalone (no meta bundle needed).
+        {/* First-run setup wizard — the resolved auth setup page (default:
+            formspec.core/setup, overridable via App.spec.auth.setup_page).
             Reached via redirect when the workspace has no users yet. */}
-        <Route path="/:workspace/_admin/setup" element={<SetupScreen />} />
+        <Route
+          path="/:workspace/_admin/setup"
+          element={<AuthPage slot="setup_page" />}
+        />
+        {/* Change password — the resolved auth change-password page (default:
+            formspec.core/change-password, overridable via
+            App.spec.auth.change_password_page). Reached from the user menu. */}
+        <Route
+          path="/:workspace/_admin/change-password"
+          element={<AuthPage slot="change_password_page" />}
+        />
         {/* OAuth callback — reads the token pair from the URL fragment and
             boots the session (auth redesign Fase 5). */}
         <Route
           path="/:workspace/_admin/oauth/callback"
-          element={<OAuthCallback />}
+          element={<AuthPage slot="oauth_callback_page" />}
         />
         {/* OAuth link callback — explicit account linking (todo 5.2.21):
             reads the code from the URL fragment and POSTs it to the
@@ -88,7 +94,7 @@ function Root() {
             (?token=...). Standalone, no session needed. */}
         <Route
           path="/:workspace/reset-password"
-          element={<ResetPasswordScreen />}
+          element={<AuthPage slot="reset_password_page" />}
         />
         <Route
           path="/:workspace/app/*"
@@ -98,8 +104,11 @@ function Root() {
             root_url prefix (root_url is a free-form mount inside the
             workspace). No match → redirect to _admin. */}
         <Route path="/:workspace/*" element={<RootSurface />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<LoginPage mode="register" />} />
+        <Route path="/login" element={<AuthPage slot="login_page" />} />
+        <Route
+          path="/register"
+          element={<AuthPage slot="login_page" mode="register" />}
+        />
         <Route path="*" element={<NotFound />} />
       </Routes>
       <Toaster position="top-right" richColors />
@@ -409,9 +418,17 @@ function SurfaceShell({
 
   // First-run setup: the workspace has no users yet → show the setup wizard
   // (self-hosted prod bootstrap without formspec-ctl). Only for anonymous
-  // visitors — a signed-in user implies setup already happened.
+  // visitors — a signed-in user implies setup already happened. The original
+  // URL is carried as `forward` so the setup wizard can route the user back
+  // to where they were headed after the first admin is created.
   if (bundle?.setup_required && !token) {
-    return <Navigate to={`/${workspace}/_admin/setup`} replace />
+    const forward = location.pathname + location.search
+    return (
+      <Navigate
+        to={`/${workspace}/_admin/setup?forward=${encodeURIComponent(forward)}`}
+        replace
+      />
+    )
   }
 
   // In-app login lives at {surfacePath}/login (e.g. /{ws}/app/kafe/login for
@@ -446,7 +463,12 @@ function SurfaceShell({
 
   if (isLoginRoute || isRegisterRoute) {
     if (unauthenticated || isRegisterRoute || isPublic) {
-      return <LoginPage mode={isRegisterRoute ? "register" : "login"} />
+      return (
+        <AuthPage
+          slot="login_page"
+          mode={isRegisterRoute ? "register" : "login"}
+        />
+      )
     }
     return <Navigate to={surfacePath} replace />
   }
@@ -607,68 +629,6 @@ function DefaultRedirect({
         </p>
       </div>
     </div>
-  )
-}
-
-// ── Login Page ──
-//
-// Workspace-scoped login with a `returnTo` redirect: after a successful login
-// the user returns to the page they originally tried to reach. `returnTo` is
-// validated to be same-origin (prevents open redirect); missing/invalid
-// values fall back to the workspace admin surface.
-
-// App scope for a login URL: /{ws}/app/{app}/... → the segment after "app".
-// Empty for the _admin surface / top-level /login. Role management is per-App,
-// so the login must carry the app to resolve app-scoped permissions.
-function appFromPath(pathname: string): string | undefined {
-  const segments = pathname.split("/").filter(Boolean)
-  if (segments.length >= 3 && segments[1] === "app") {
-    return segments[2]
-  }
-  return undefined
-}
-
-function LoginPage({ mode = "login" }: { mode?: "login" | "register" }) {
-  const navigate = useNavigate()
-  // In-app login (rendered inside a /:workspace/... surface) derives the
-  // workspace from the URL; the top-level /login route has no param and asks
-  // the user for it.
-  const { workspace: workspaceParam } = useParams<{ workspace?: string }>()
-  const [searchParams] = useSearchParams()
-  const boot = useSessionStore((s) => s.boot)
-  const app = appFromPath(window.location.pathname)
-
-  const handleLogin = async (
-    workspace: string,
-    token: string,
-    refreshToken?: string,
-  ) => {
-    await boot(workspace, token, refreshToken, app)
-    // The bundle may have been loaded anonymously (empty entities) while on
-    // the login route — reset it so it reloads with the authenticated
-    // identity's permissions after the redirect.
-    useMetaStore.getState().reset()
-    const returnTo = searchParams.get("returnTo")
-    // Same-origin guard: only accept a path starting with "/" that is not
-    // "//" (protocol-relative) and not a bare "/" (which would loop).
-    navigate(
-      returnTo &&
-        returnTo.startsWith("/") &&
-        !returnTo.startsWith("//") &&
-        returnTo !== "/"
-        ? returnTo
-        : `/${workspace}`,
-      { replace: true },
-    )
-  }
-
-  return (
-    <LoginScreen
-      workspace={workspaceParam}
-      app={app}
-      onLogin={handleLogin}
-      mode={mode}
-    />
   )
 }
 

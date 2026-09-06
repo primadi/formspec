@@ -1,10 +1,11 @@
 # Page
 
 <!-- generated:meta -->
-| | |
-|---|---|
-| Grup | `ui` |
-| Plane | `resource` |
+
+|             |            |
+| ----------- | ---------- |
+| Grup        | `ui`       |
+| Plane       | `resource` |
 | Spec struct | `PageSpec` |
 
 <!-- /generated:meta -->
@@ -17,12 +18,14 @@ routable; mereka tampil sebagai blok di dalam Page ATAU lewat auto-Page wrapper
 yang di-derive framework (route `/<module>/form/<name>`) saat `public: true`.
 
 **Kapan memakai Page (bukan auto-derived):**
+
 - Komposisi multi-entity dalam satu layar (master-detail, tabs, multi-block)
 - Full-custom page (`mode: custom` atau satu blok `component:`)
 - Pola Tabbed Resources — kelompokkan master-data kecil terkait di satu tab Page
 - Pola Configuration Page — `kind: Page` ber-tabs atas Entity `characteristic: reference`
 
 **Kapan TIDAK pakai Page:**
+
 - Hanya ubah tampilan satu entity → `kind: Form` / `kind: Table` (lebih kecil)
 - Data entry sederhana → cukup `kind: Entity` (auto-derived)
 
@@ -43,7 +46,7 @@ spec:
   route: /orders/:id
   title: "Order {order.number}"
   blocks:
-    - form:  { ref: order-edit, id: ":id", mode: view }
+    - form: { ref: order-edit, id: ":id", mode: view }
     - table: { ref: order-payments, param: { order_id: ":id" } }
   layout: { columns: 2 }
 
@@ -52,33 +55,53 @@ spec:
 spec:
   route: /settings
   tabs:
-    - { label: General,  form:  { ref: settings-general } }
-    - { label: Tax,      form:  { ref: settings-tax } }
+    - { label: General, form: { ref: settings-general } }
+    - { label: Tax, form: { ref: settings-tax } }
     - { label: Products, table: { ref: product-list } }
 ```
 
 ## Atribut
 
 <!-- generated:attributes -->
-| Atribut | Tipe | Wajib | Contoh | Deskripsi |
-|---|---|---|---|---|
-| `public` | `boolean` | — | true | If true (default), a route is generated for this page. Set false to restrict to embedding only. |
-| `route` | `string` | ✅ | /orders/:id |  |
-| `title` | `string` | ✅ | Order {order.number} |  |
-| `title_visible` | `boolean` | — |  | Render the page title heading (default true) |
-| `icon` | `string` | — |  |  |
-| `description` | `string` | — |  |  |
-| `permissions` | []`string` | — |  |  |
-| `blocks` | []`PageBlock` | — |  |  |
-| `tabs` | []`PageTab` | — |  |  |
-| `layout` | `PageLayout` | — |  |  |
-| `mode` | enum ( · custom) | — |  | Page mode. `custom` hands all rendering to an asset component; empty means blocks/tabs composition. |
-| `asset` | `string` | — |  | Asset is the spec-root-relative asset path for `mode: custom` |
-| `binds` | `PageBinds` | — |  | Binds is the backend footprint (entities/actions/subscribe) a custom |
-| `context` | []`ContextDecl` | — |  | Context declares render-context variables injected into this page's |
-| `renderer` | `string` | — |  | Renderer is the per-instance renderer override (frontend/03-renderer- |
+
+| Atribut         | Tipe             | Wajib | Contoh               | Deskripsi                                                                                           |
+| --------------- | ---------------- | ----- | -------------------- | --------------------------------------------------------------------------------------------------- |
+| `public`        | `boolean`        | —     | true                 | If true (default), a route is generated for this page. Set false to restrict to embedding only.     |
+| `route`         | `string`         | ✅    | /orders/:id          |                                                                                                     |
+| `title`         | `string`         | ✅    | Order {order.number} |                                                                                                     |
+| `title_visible` | `boolean`        | —     |                      | Render the page title heading (default true)                                                        |
+| `icon`          | `string`         | —     |                      |                                                                                                     |
+| `description`   | `string`         | —     |                      |                                                                                                     |
+| `permissions`   | []`string`       | —     |                      |                                                                                                     |
+| `blocks`        | []`PageBlock`    | —     |                      |                                                                                                     |
+| `tabs`          | []`PageTab`      | —     |                      |                                                                                                     |
+| `layout`        | `PageLayout`     | —     |                      |                                                                                                     |
+| `mode`          | enum ( · custom) | —     |                      | Page mode. `custom` hands all rendering to an asset component; empty means blocks/tabs composition. |
+| `asset`         | `string`         | —     |                      | Asset is the spec-root-relative asset path for `mode: custom`                                       |
+| `binds`         | `PageBinds`      | —     |                      | Binds is the backend footprint (entities/actions/subscribe) a custom                                |
+| `context`       | []`ContextDecl`  | —     |                      | Context declares render-context variables injected into this page's                                 |
+| `renderer`      | `string`         | —     |                      | Renderer is the per-instance renderer override (frontend/03-renderer-                               |
 
 <!-- /generated:attributes -->
+
+## Render Context (standard slots)
+
+Setiap Page menerima render context berisi standard slots (hardcoded, tanpa
+perlu deklarasi `context:`):
+
+| Slot    | Isi                                                        | Token contoh                                                  |
+| ------- | ---------------------------------------------------------- | ------------------------------------------------------------- |
+| `route` | `params` (path params), `query` (URL query string), `path` | `{route.params.id}`, `{route.query.returnTo}`, `{route.path}` |
+| `user`  | Identitas session pemanggil dari `/_meta/me`               | `{user.username}`, `{user.roles}`                             |
+
+Slot tersedia untuk interpolasi title/section text, `spec.context`
+deklarasi (`expr`, `fallback`), dan tokens `{...}` lainnya. Nilai `route`
+adalah data caller-supplied read-only — aman untuk interpolasi teks, jangan
+dipakai sebagai id API call tanpa validasi.
+
+Deklarasi tambahan via `context:` (closed source set: `session`, `entity`,
+`api`, `const`, `expr`, `config` — config membaca key `kind: Config` yang
+ditandai `public: true` + non-secret via `/{ws}/_ui/config/{name}`).
 
 ## Gotchas
 

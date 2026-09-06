@@ -115,6 +115,12 @@ type AppSpec struct {
 	ThemeRef string `yaml:"theme_ref,omitempty" json:"theme_ref,omitempty"` // per-App Theme resolution (platform/02 §3)
 	// @schema {description: "Per-App auth strategy config (kind: Config)"}
 	AuthConfigRef string `yaml:"auth_config_ref,omitempty" json:"auth_config_ref,omitempty"` // per-App auth strategy config
+	// Auth overrides the auth screens (login, setup, change-password,
+	// reset-password, oauth-callback) and the chrome auth area with
+	// references to `kind: Page` / component assets. Empty slots fall back
+	// to the framework's default auth page specs (module formspec.core).
+	// @schema {description: "Per-App auth screen overrides: login_page/setup_page/change_password_page/reset_password_page/oauth_callback_page (kind: Page refs) + chrome_auth (component ref) — empty slots fall back to formspec.core defaults"}
+	Auth *AppAuth `yaml:"auth,omitempty" json:"auth,omitempty"`
 	// Renderers maps a VisualSpecKind name → renderer for the whole App
 	// (frontend/03-renderer-kind.md §3): e.g. `{kanban: community/super-kanban}`.
 	// Applies to every instance of that kind in the App; individual instances
@@ -175,6 +181,40 @@ type AppChrome struct {
 	// page (e.g. "/portal/profile"). When set, the auth-area user menu
 	// renders a Profile item navigating there; empty = no Profile item.
 	ProfileRoute string `yaml:"profile_route,omitempty" json:"profile_route,omitempty"`
+}
+
+// AppAuth overrides the auth screens and chrome auth area for one App
+// (plan docs_internal/plan/auth-screens-spec-driven.md). Each page slot is a
+// `kind: Page` reference in `module/name` form; empty slots fall back to the
+// framework's default auth page specs (module formspec.core). ChromeAuth is a
+// component asset reference replacing the default auth area (Sign in/Sign up/
+// logout/user menu).
+type AppAuth struct {
+	// LoginPage is the Page used as the login screen (default:
+	// formspec.core/login).
+	// @schema {example: "portal/pages/login", description: "kind: Page ref (module/name) used as the login screen — empty = formspec.core default"}
+	LoginPage string `yaml:"login_page,omitempty" json:"login_page,omitempty"`
+	// SetupPage is the Page used as the first-run setup wizard (default:
+	// formspec.core/setup).
+	// @schema {example: "portal/pages/setup", description: "kind: Page ref (module/name) used as the first-run setup wizard — empty = formspec.core default"}
+	SetupPage string `yaml:"setup_page,omitempty" json:"setup_page,omitempty"`
+	// ChangePasswordPage is the Page used for self-service password change
+	// (default: formspec.core/change-password).
+	// @schema {example: "portal/pages/change-password", description: "kind: Page ref (module/name) used for change-password — empty = formspec.core default"}
+	ChangePasswordPage string `yaml:"change_password_page,omitempty" json:"change_password_page,omitempty"`
+	// ResetPasswordPage is the Page used for password reset via email link
+	// (default: formspec.core/reset-password).
+	// @schema {example: "portal/pages/reset-password", description: "kind: Page ref (module/name) used for reset-password — empty = formspec.core default"}
+	ResetPasswordPage string `yaml:"reset_password_page,omitempty" json:"reset_password_page,omitempty"`
+	// OAuthCallbackPage is the Page handling the OAuth callback fragment
+	// (default: formspec.core/oauth-callback).
+	// @schema {example: "portal/pages/oauth-callback", description: "kind: Page ref (module/name) used for the OAuth callback — empty = formspec.core default"}
+	OAuthCallbackPage string `yaml:"oauth_callback_page,omitempty" json:"oauth_callback_page,omitempty"`
+	// ChromeAuth is a component asset reference replacing the default auth
+	// area in the shell chrome (Sign in/Sign up/logout/user menu). Empty =
+	// the chrome.auth value (links/button/none) drives the default AuthArea.
+	// @schema {example: "portal/components/auth-area", description: "Component asset ref replacing the default chrome auth area — empty = default AuthArea driven by chrome.auth"}
+	ChromeAuth string `yaml:"chrome_auth,omitempty" json:"chrome_auth,omitempty"`
 }
 
 // AppInterface is one cross-app service interface offered by an App
@@ -288,6 +328,13 @@ type ConfigKey struct {
 	Type    string `yaml:"type" json:"type"` // int | string | bool | decimal | json
 	Default any    `yaml:"default,omitempty" json:"default,omitempty"`
 	Secret  bool   `yaml:"secret,omitempty" json:"secret,omitempty"`
+	// Public opts the key in to UI-surface exposure (plan
+	// custom-screens-spec-driven Phase 3): public + non-secret keys are
+	// served by GET /{ws}/_ui/config/{name} for spec.context
+	// `source: config`. Secret keys are never exposed regardless of this
+	// flag. Default false — nothing is exposed unless explicitly opted in
+	// (Security by Default).
+	Public bool `yaml:"public,omitempty" json:"public,omitempty"`
 }
 
 // ─── Global Settings (spec §10 — "jangan pernah menebak") ───
@@ -782,6 +829,42 @@ func ValidateAppSpec(a *AppSpec) error {
 		if err := validateChromeValue("chrome.theme_switcher", c.ThemeSwitcher, ChromeAuto, ChromeShow, ChromeHide); err != nil {
 			return err
 		}
+	}
+	if a.Auth != nil {
+		if err := validatePageRef("auth.login_page", a.Auth.LoginPage); err != nil {
+			return err
+		}
+		if err := validatePageRef("auth.setup_page", a.Auth.SetupPage); err != nil {
+			return err
+		}
+		if err := validatePageRef("auth.change_password_page", a.Auth.ChangePasswordPage); err != nil {
+			return err
+		}
+		if err := validatePageRef("auth.reset_password_page", a.Auth.ResetPasswordPage); err != nil {
+			return err
+		}
+		if err := validatePageRef("auth.oauth_callback_page", a.Auth.OAuthCallbackPage); err != nil {
+			return err
+		}
+		if err := validatePageRef("auth.chrome_auth", a.Auth.ChromeAuth); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validatePageRef reports an error when ref is non-empty and not a valid
+// `module/name` reference (no leading/trailing slash, exactly one separator).
+// Existence in the UI registry is checked at resolve time (BuildBundle).
+func validatePageRef(field, ref string) error {
+	if ref == "" {
+		return nil
+	}
+	if strings.HasPrefix(ref, "/") || strings.HasSuffix(ref, "/") {
+		return fmt.Errorf("%s %q is invalid: must be a module/name reference (no leading/trailing slash)", field, ref)
+	}
+	if !strings.Contains(ref, "/") {
+		return fmt.Errorf("%s %q is invalid: must be a module/name reference (e.g. \"portal/pages/login\")", field, ref)
 	}
 	return nil
 }

@@ -1,0 +1,10 @@
+apiVersion: formspec.dev/v1
+kind: Page
+metadata:
+  name: setup
+  module: formspec.core
+  description: "Default first-run setup wizard — creates the first admin (plan auth-screens-spec-driven)"
+spec:
+  route: /_auth/setup
+  mode: custom
+  asset: formspec-core/auth/setup

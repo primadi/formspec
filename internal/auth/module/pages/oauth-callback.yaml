@@ -1,0 +1,10 @@
+apiVersion: formspec.dev/v1
+kind: Page
+metadata:
+  name: oauth-callback
+  module: formspec.core
+  description: "Default OAuth callback handler — reads token pair from URL fragment (plan auth-screens-spec-driven)"
+spec:
+  route: /_auth/oauth-callback
+  mode: custom
+  asset: formspec-core/auth/oauth-callback

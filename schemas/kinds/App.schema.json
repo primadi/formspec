@@ -19,6 +19,11 @@
         "no-nav"
       ]
     },
+    "auth": {
+      "$ref": "#/$defs/AppAuth",
+      "description": "Auth overrides the auth screens (login, setup, change-password,",
+      "nullable": true
+    },
     "auth_config_ref": {
       "description": "Per-App auth strategy config (kind: Config)",
       "type": "string"

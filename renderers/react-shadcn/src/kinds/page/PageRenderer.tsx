@@ -9,7 +9,7 @@
 // Design doc §5.5 Page kind (F3)
 
 import { lazy, Suspense, useEffect, useMemo, useState } from "react"
-import { useParams, useSearchParams } from "react-router-dom"
+import { useLocation, useParams, useSearchParams } from "react-router-dom"
 import type {
   Entry,
   PageSpec,
@@ -30,6 +30,7 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { cn } from "@/lib/utils"
 import { SectionBlockRenderer } from "@/components/sections/SectionBlocks"
 import { AssetRenderer } from "@/shell/AssetRenderer"
+import { BUILTIN_AUTH_ASSETS } from "@/shell/authAssets"
 
 /**
  * Resolve a `:param`-style placeholder (the only kind Page blocks author,
@@ -70,6 +71,7 @@ function resolveRouteParams(
 // Lazy load kind renderers to avoid circular deps
 const TableRenderer = lazy(() => import("@/kinds/table/TableRenderer"))
 const FormRenderer = lazy(() => import("@/kinds/form/FormRenderer"))
+const AuthFormRenderer = lazy(() => import("@/kinds/form/AuthFormRenderer"))
 
 interface PageRendererProps {
   entry: Entry<PageSpec>
@@ -146,6 +148,14 @@ function CustomPage({ entry }: { entry: Entry<PageSpec> }) {
     )
   }
 
+  // Framework built-in auth asset (default auth page — formspec.core/auth/*):
+  // render the built-in shell component directly. It owns its full-page
+  // layout, so it is NOT wrapped in the page title/description container.
+  const Builtin = BUILTIN_AUTH_ASSETS[asset]
+  if (Builtin) {
+    return <Builtin />
+  }
+
   return (
     <div className="space-y-4">
       {showPageTitle(entry.spec) && (
@@ -183,10 +193,27 @@ function PageBlocks({ entry }: { entry: Entry<PageSpec> }) {
     () => (me ? { user: me } : undefined),
     [me],
   )
+  // Standard slot `route` (plan custom-screens-spec-driven Phase 1): route
+  // params + query string + path — `{route.params.id}`, `{route.query.x}`,
+  // `{route.path}` are available to context decls (expr/fallback) and token
+  // interpolation in titles/sections. Read-only caller-supplied data: safe
+  // for interpolation, never blindly used as an API id.
+  const location = useLocation()
+  const [searchParams] = useSearchParams()
+  const routeCtx = useMemo<Record<string, unknown>>(
+    () => ({
+      route: {
+        params: routeParams,
+        query: Object.fromEntries(searchParams.entries()),
+        path: location.pathname,
+      },
+    }),
+    [routeParams, searchParams, location.pathname],
+  )
   // Phase 2: resolve `spec.context` declarations over the standard slots.
   const { context: pageCtx, loading: ctxLoading } = useRenderContext(
     entry.spec.context,
-    userCtx ?? {},
+    { ...routeCtx, ...(userCtx ?? {}) },
   )
 
   // Title interpolation (e.g. "Pasien — {patient.name}") needs whichever
@@ -484,6 +511,16 @@ function PageBlockRenderer({
   // Form block — entity resolved from the referenced Form manifest's spec.entity
   if (block.form) {
     const formEntry = block.form.ref ? getForm(block.form.ref) : undefined
+    // Auth form (spec.auth_action, plan custom-screens-spec-driven Phase 2):
+    // no entity — submit dispatches to the platform auth endpoints via
+    // FormspecAuth instead of entity CRUD.
+    if (formEntry?.spec.auth_action) {
+      return wrap(
+        <Suspense fallback={<Skeleton className="h-32" />}>
+          <AuthFormRenderer spec={formEntry.spec} />
+        </Suspense>,
+      )
+    }
     const entityRef = formEntry?.spec.entity
     const entity = entityRef
       ? getEntity(...resolveEntityRef(entityRef, formEntry?.module ?? module))

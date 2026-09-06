@@ -34,7 +34,9 @@ pintu custom code.
 
 1. **Standard slots (hardcoded, didokumentasikan resmi di kontrak kind):**
    - `fields` — nilai form saat ini (khusus Form)
-   - `route` — path params (Page & Form)
+   - `route` — path params + query string + path (`route.params.*`,
+     `route.query.*`, `route.path` — diperluas lewat plan
+     `custom-screens-spec-driven.md` Phase 1, 2026-09-06)
    - `user` — identitas session pemanggil dari `/_meta/me` (Page & Form).
      Nama kanonik = `user` (kontinuitas dengan form existing). Alasan
      hardcode: zero-cost (sudah di-fetch saat boot), data caller sendiri
@@ -142,6 +144,18 @@ resolver `api` source memanggil route tsb dengan permission ceiling
 **Catatan demo live-update:** verifikasi penuh butuh user ber-permission +
 producer event (mis. update record module). Mekanisme subscribe+refetch
 ter-wire dan teruji via type-check + test.
+
+### Perluasan — standard slot `route` (plan custom-screens-spec-driven Phase 1) ✅ 2026-09-06
+
+- `PageRenderer.tsx` (PageBlocks): slot `route = { params, query, path }`
+  dibangun dari `useParams()` + `useSearchParams()` + `useLocation()`,
+  dimasukkan ke base `useRenderContext` — jadi tersedia untuk context
+  decls (`expr`/`fallback`), interpolasi title, dan section blocks:
+  `{route.params.id}`, `{route.query.returnTo}`, `{route.path}`.
+- Read-only, caller-supplied: aman untuk interpolasi teks; TIDAK untuk
+  dipakai sebagai id API call tanpa validasi (doc-guard).
+- Verifikasi: `tsc` bersih, `vitest`, page dengan section text memakai
+  `{route.query.x}`.
 
 ## File Terdampak
 

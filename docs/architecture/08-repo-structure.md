@@ -103,6 +103,36 @@ Ini **rename/move**, bukan rewrite — logic yang sudah teruji di `internal/db`,
 | `internal/control/`, `internal/permission/`, `internal/auth/` | [`docs/spec/platform/04-control-plane.md`](../spec/platform/04-control-plane.md)                                                                                             | Governance & keamanan                                            |
 | `cmd/formspec/`, `cmd/formspec-ctl/`                          | [`docs/cli-tools/`](../cli-tools/README.md)                                                                                                                                  | CLI                                                              |
 
+### 3.1 Layering Auth — domain vs transport
+
+Auth mengikuti pemisahan **domain vs transport** yang sama dengan area lain:
+
+- **`internal/auth/` = domain auth (bebas HTTP).** Tidak mengimpor `net/http` maupun
+  `internal/api`. Berisi `AuthService` (`Login`, `Register`, `SetupFirstAdmin`,
+  `SetupRequired`, `ChangePassword`, `ResetPassword`, `OAuthLogin`, `ApproveUser`,
+  `GrantRoles`), `EntityUserStore` (persist user), `password.go`, `session.go`,
+  `token.go`, `jwt.go`, `oauth/`, dan resolver otorisasi (`resolver.go`,
+  `materialize.go`, `abac.go`, `role.go`, `grant.go`, `apikey.go`, `appauth.go`).
+  Bisa diuji tanpa HTTP dan dipakai ulang oleh entry point non-HTTP (formspec-ctl,
+  operator, sidecar).
+- **`internal/api/*_handler.go` = transport HTTP (handler tipis).** `auth_handler.go`,
+  `setup_handler.go`, `oauth_handler.go`, `approve_handler.go`, `middleware.go` —
+  parse JSON → panggil `authService` → tulis response. Semua handler HTTP hidup di
+  `internal/api/` (bukan di `internal/auth/`) karena: (1) `internal/api` mengimpor
+  `internal/auth` — memindahkan handler ke `internal/auth` menciptakan import cycle;
+  (2) `internal/auth` sengaja bebas HTTP agar domain tetap murni.
+
+**Frontend — auth UI sebagai system screens.** Semua UI auth hidup di
+`renderers/react-shadcn/src/shell/` (`LoginScreen`, `SetupScreen`,
+`ChangePasswordPage`, `ResetPasswordScreen`, `OAuthCallback`, `AuthArea`,
+`UserMenu`). Ini **system screens level shell** — bukan manifest-driven business
+UI kinds (Page/Form/Table). Sejak plan `auth-screens-spec-driven`, screens ini
+adalah **built-in renderer untuk default auth page specs** (module `formspec.core`,
+`mode: custom` + `asset: formspec-core/auth/<slot>`), dan bisa di-override per-App
+via `App.spec.auth.{login_page,setup_page,change_password_page,reset_password_page,
+oauth_callback_page,chrome_auth}`. Perilaku auth (OAuth providers, registration
+policy, `setup_required`) tetap data-driven via meta bundle + `kind: Config`.
+
 ---
 
 ## 4. Kesenjangan Terhadap Pemisahan Ideal

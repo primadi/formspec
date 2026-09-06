@@ -45,7 +45,6 @@ export function LoginScreen({
   const [workspace, setWorkspace] = useState(workspaceProp ?? "")
   const [username, setUsername] = useState("")
   const [displayName, setDisplayName] = useState("")
-  const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)

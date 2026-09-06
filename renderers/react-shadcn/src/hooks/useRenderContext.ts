@@ -12,6 +12,8 @@
 //   - api     → a Service action invoked on the UI surface
 //               (/{ws}/_ui/service/{module}/{service}/{action}),
 //               permission-gated: module.service.action
+//   - config  → a public, non-secret key of a `kind: Config` manifest
+//               (/{ws}/_ui/config/{name}) — opt-in exposure per key
 //
 // Async entries resolve in parallel; the hook reports `loading` until all
 // settle, and per-entry `error` (fallback is used on error).
@@ -22,6 +24,26 @@ import { evalFormSpecExpr } from "@/lib/formspec-expr"
 import { subscribeRealtime } from "@/hooks/useRealtime"
 import { useSessionStore } from "@/stores/session"
 import type { ContextDecl } from "@/types/manifest"
+
+// In-memory cache of public config keys per config name (source: config,
+// plan custom-screens-spec-driven Phase 3). Config values are static for the
+// lifetime of the page load — one fetch per config name per session.
+const configCache = new Map<string, Promise<Record<string, unknown>>>()
+
+function fetchPublicConfig(
+  getClient: () => import("ky").KyInstance,
+  name: string,
+): Promise<Record<string, unknown>> {
+  let cached = configCache.get(name)
+  if (!cached) {
+    // Client prefix is /{ws}/_ui/entity — "../config/{name}" normalizes to
+    // /{ws}/_ui/config/{name}. Only public + non-secret keys are served.
+    cached = apiGet<Record<string, unknown>>(getClient(), `../config/${name}`)
+    configCache.set(name, cached)
+    cached.catch(() => configCache.delete(name))
+  }
+  return cached
+}
 
 export interface RenderContextState {
   /** Merged context: standard slots + resolved declarations. */
@@ -96,6 +118,19 @@ async function resolveDecl(
         )
         const body = (await response.json()) as { data?: unknown }
         return body.data ?? body
+      } catch {
+        return decl.fallback
+      }
+    }
+    case "config": {
+      if (!decl.config) return decl.fallback
+      const dot = decl.config.indexOf(".")
+      if (dot <= 0) return decl.fallback
+      const name = decl.config.slice(0, dot)
+      const key = decl.config.slice(dot + 1)
+      try {
+        const keys = await fetchPublicConfig(getClient(), name)
+        return keys[key] ?? decl.fallback
       } catch {
         return decl.fallback
       }

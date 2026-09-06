@@ -547,6 +547,7 @@ func New(cfg Config) (*App, error) {
 	// GenerateWebhookRoutes sees it (todo 7.6).
 	rb.SetWebhookRegistry(whReg)
 	rb.SetWebhookKeyResolver(cfgReg)
+	rb.SetConfigRegistry(cfgReg)
 	rb.BuildRoutes()
 	// Shared pubsub (todo 7.3.5): one instance backs both ctx.pubsub() in
 	// scripts and the `pubsub` event delivery channel, so subscribers receive
@@ -1265,6 +1266,7 @@ func (a *App) ReloadSpec() error {
 	// Set the webhook registry + key resolver BEFORE BuildRoutes (todo 7.6).
 	newRB.SetWebhookRegistry(newWhReg)
 	newRB.SetWebhookKeyResolver(newCfgReg)
+	newRB.SetConfigRegistry(newCfgReg)
 	// Set the workflow registry + approval store BEFORE BuildRoutes (todo 7.4).
 	newRB.SetWorkflowRegistry(newWfReg)
 	newRB.SetWorkflowApprovalStore(db.NewWorkflowApprovalStore(a.database, a.driver))

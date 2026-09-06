@@ -568,10 +568,10 @@ export interface ForwardDatePolicy {
 // ── Page (Frontend §3) ──
 
 /** One render-context variable injected into a Page/Form (render-context
- *  standard). Sources are a closed set: session | entity | api | const | expr. */
+ *  standard). Sources are a closed set: session | entity | api | const | expr | config. */
 export interface ContextDecl {
   name: string
-  /** session | entity | api | const | expr */
+  /** session | entity | api | const | expr | config */
   source: string
   /** source: entity — "module.entity" */
   entity?: string
@@ -581,6 +581,8 @@ export interface ContextDecl {
   call?: string
   /** source: api — action params */
   params?: Record<string, unknown>
+  /** source: config — "<config-name>.<key>" (public non-secret keys only) */
+  config?: string
   /** source: const — literal value */
   value?: unknown
   /** source: expr — FormSpecExpr string */
@@ -712,7 +714,15 @@ export interface AssetNeeds {
 // ── Form (Frontend §4) ──
 
 export interface FormSpec {
-  entity: string
+  /** Target entity (`module.entity`). Absent when `auth_action` is declared. */
+  entity?: string
+  /**
+   * Bind submit to a platform auth action instead of entity CRUD
+   * (plan custom-screens-spec-driven Phase 2). Closed set:
+   * login | register | change_password | forgot_password | reset_password.
+   * Mutually exclusive with `entity`.
+   */
+  auth_action?: string
   /** Auth axis: false = requires a signed-in session (mirrors PageSpec). */
   public?: boolean
   mode?: "create" | "edit" | "view"
@@ -1147,6 +1157,30 @@ export interface AppSummary {
    *  defaults already applied by the backend; final values only. Always
    *  present once the bundle loads. */
   chrome?: ChromeConfig
+  /** Resolved auth screen configuration — each slot is a `kind: Page`
+   *  reference (module/name): the App's override (App.spec.auth) or the
+   *  framework default (formspec.core/<slot>). Present when the App declares
+   *  auth overrides; renderers fall back to built-in defaults otherwise. */
+  auth?: AuthConfig
+}
+
+/** Resolved auth screen configuration (plan
+ *  docs_internal/plan/auth-screens-spec-driven.md). Each page slot is a
+ *  `kind: Page` reference in `module/name` form. ChromeAuth is a component
+ *  asset reference replacing the default chrome auth area. */
+export interface AuthConfig {
+  /** kind: Page ref (module/name) used as the login screen */
+  login_page?: string
+  /** kind: Page ref (module/name) used as the first-run setup wizard */
+  setup_page?: string
+  /** kind: Page ref (module/name) used for change-password */
+  change_password_page?: string
+  /** kind: Page ref (module/name) used for reset-password */
+  reset_password_page?: string
+  /** kind: Page ref (module/name) used for the OAuth callback */
+  oauth_callback_page?: string
+  /** Component asset ref replacing the default chrome auth area */
+  chrome_auth?: string
 }
 
 /** Effective chrome composition (frontend/05-app-kinds.md §4.1). Resolved by

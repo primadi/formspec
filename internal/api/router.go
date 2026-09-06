@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/primadi/formspec/internal/action"
 	formspec_app "github.com/primadi/formspec/internal/app"
+	"github.com/primadi/formspec/internal/config"
 	"github.com/primadi/formspec/internal/entity"
 	"github.com/primadi/formspec/internal/job"
 	"github.com/primadi/formspec/internal/observability"
@@ -34,8 +35,9 @@ type RouterBuilder struct {
 	factory       *HandlerFactory
 	dispatcher    *action.Dispatcher
 	uiRegistry    *ui.Registry
-	webDir        string // static SPA root (renderers/react-shadcn/dist); empty = no static serving
-	webFS         fs.FS  // embedded SPA (embed.FS); empty = no static serving
+	cfgReg        *config.Registry // kind: Config manifests (public key exposure, custom-screens plan Phase 3)
+	webDir        string           // static SPA root (renderers/react-shadcn/dist); empty = no static serving
+	webFS         fs.FS            // embedded SPA (embed.FS); empty = no static serving
 	hub           *WSHub
 	apps          map[string]*formspec_app.ResolvedApp // resolved kind: App manifests, keyed by name (Core §4.4)
 	settings      *spec.Settings                       // resolved global settings namespace (spec §10)
@@ -95,6 +97,14 @@ func (b *RouterBuilder) SetDispatcher(d *action.Dispatcher) {
 func (b *RouterBuilder) SetServiceRegistry(s *service.Registry) {
 	b.svcRegistry = s
 	b.factory.SetServiceRegistry(s)
+}
+
+// SetConfigRegistry wires the Config manifest registry used by
+// GET /{ws}/_ui/config/{name} (render-context `source: config`, plan
+// custom-screens-spec-driven Phase 3). Only public non-secret keys are
+// served.
+func (b *RouterBuilder) SetConfigRegistry(reg *config.Registry) {
+	b.cfgReg = reg
 }
 
 // SetWebhookRegistry sets the kind: Webhook registry used to generate
@@ -396,6 +406,11 @@ func (b *RouterBuilder) BuildHTTP() http.Handler {
 
 			// Realtime event push (Frontend kanban/board realtime: true).
 			r.Get("/_ws", b.HandleWS())
+
+			// Public non-secret Config keys (render-context `source: config`,
+			// plan custom-screens-spec-driven Phase 3). Opt-in per key via
+			// `public: true`; secrets are never served.
+			r.Get("/config/{name}", b.HandleConfig())
 
 			// Module asset files (custom UI components, todo 5.9.1).
 			// Asset path is spec-root-relative

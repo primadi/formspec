@@ -61,6 +61,27 @@ func (r *Registry) NonSecret() map[string]any {
 	return out
 }
 
+// PublicFor resolves the UI-exposable keys of ONE named Config manifest
+// (plan custom-screens-spec-driven Phase 3): only keys that are BOTH
+// non-secret and explicitly marked `public: true` are returned. Used by
+// GET /{ws}/_ui/config/{name} (spec.context `source: config`).
+func (r *Registry) PublicFor(configName string) (map[string]any, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	cs, ok := r.configs[configName]
+	if !ok || cs == nil {
+		return nil, false
+	}
+	out := make(map[string]any)
+	for key, ck := range cs.Keys {
+		if ck.Secret || !ck.Public {
+			continue
+		}
+		out[key] = resolveValue(ck)
+	}
+	return out, true
+}
+
 // Secrets resolves all secret keys across every registered Config manifest
 // into a flat map for ctx.secrets. Non-secret keys are excluded.
 func (r *Registry) Secrets() map[string]string {

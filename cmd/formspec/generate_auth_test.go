@@ -61,7 +61,7 @@ func TestGenerateAuthModule_ValidYAML(t *testing.T) {
 			t.Errorf("manifest error: %v", e)
 		}
 	}
-	if len(res.Manifests) != 13 {
-		t.Errorf("expected 13 manifests (module + 6 entities + 3 forms + 2 tables + 1 page), got %d", len(res.Manifests))
+	if len(res.Manifests) != 18 {
+		t.Errorf("expected 18 manifests (module + 6 entities + 3 forms + 2 tables + 6 pages), got %d", len(res.Manifests))
 	}
 }

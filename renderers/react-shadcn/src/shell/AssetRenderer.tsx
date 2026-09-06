@@ -60,6 +60,7 @@ export function AssetRenderer({
         navigate(page + q)
       },
       needs: needsRef.current,
+      workspace,
     })
 
     // Shadow DOM host — scopes the component's CSS so it never leaks to the

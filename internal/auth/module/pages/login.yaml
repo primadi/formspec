@@ -1,0 +1,10 @@
+apiVersion: formspec.dev/v1
+kind: Page
+metadata:
+  name: login
+  module: formspec.core
+  description: "Default login screen — username/password + OAuth providers (plan auth-screens-spec-driven)"
+spec:
+  route: /_auth/login
+  mode: custom
+  asset: formspec-core/auth/login

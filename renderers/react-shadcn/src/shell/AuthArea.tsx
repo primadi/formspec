@@ -13,12 +13,21 @@
 
 import { Link } from "react-router-dom"
 import { useSessionStore } from "@/stores/session"
+import { useMetaStore } from "@/stores/meta"
 import { useSurface } from "@/hooks/useSurface"
+import { AssetRenderer } from "./AssetRenderer"
 import { UserMenu } from "./UserMenu"
 
 export function AuthArea({ mode }: { mode: string | undefined }) {
   const token = useSessionStore((s) => s.token)
   const { surfacePath } = useSurface()
+  // Custom chrome auth area (App.spec.auth.chrome_auth) — a component asset
+  // replaces the default Sign in/Sign up/logout/user menu entirely.
+  const chromeAuth = useMetaStore((s) => s.bundle?.app.auth?.chrome_auth)
+
+  if (chromeAuth) {
+    return <AssetRenderer asset={chromeAuth} />
+  }
 
   if (mode !== "links" && mode !== "button") return null
 

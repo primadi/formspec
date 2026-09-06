@@ -399,6 +399,18 @@ func (l *Loader) Validate(raw RawManifest) error {
 		}
 	}
 
+	// Form: entity required (or auth_action), auth_action closed set +
+	// mutual exclusion with entity (plan custom-screens-spec-driven Phase 2).
+	if raw.Kind == "Form" && raw.Spec != nil {
+		formSpec, err := RawSpecTo[spec.FormSpec](raw.Spec.(map[string]any))
+		if err != nil {
+			return fmt.Errorf("%s: invalid spec: %w", raw.Source, err)
+		}
+		if err := spec.ValidateFormSpec(formSpec); err != nil {
+			return fmt.Errorf("%s: %w", raw.Source, err)
+		}
+	}
+
 	return nil
 }
 

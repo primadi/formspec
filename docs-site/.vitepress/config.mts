@@ -190,6 +190,7 @@ const cliTools = [
 const guides = [
   item("Guides", "/guides/"),
   item("How to Run", "/guides/how-to-run"),
+  item("Authentication", "/guides/authentication"),
   item("Order-to-Cash Tutorial", "/guides/order-to-cash-tutorial"),
   item("Order-to-Cash Companion", "/guides/order-to-cash-companion"),
   item("Agent-Assisted App Dev", "/guides/agent-assisted-app-development"),

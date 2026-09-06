@@ -1,10 +1,11 @@
 # Form
 
 <!-- generated:meta -->
-| | |
-|---|---|
-| Grup | `ui` |
-| Plane | `resource` |
+
+|             |            |
+| ----------- | ---------- |
+| Grup        | `ui`       |
+| Plane       | `resource` |
 | Spec struct | `FormSpec` |
 
 <!-- /generated:meta -->
@@ -14,12 +15,14 @@
 `kind: Form` adalah **override layout input/edit** untuk satu Entity — menggantikan form hasil derivasi otomatis.
 
 **Kapan memakai Form:**
+
 - Urutan/label/hide field berbeda dari default
 - Grouping field per section (`sections`), multi-kolom
 - `visible_when` / `readonly_when` / `required_when` / `compute` (FormSpecExpr)
 - Ubah container: `render` modal / drawer / separate_page
 
 **Kapan TIDAK pakai Form:**
+
 - Entity cukup dengan default → jangan deklarasi Form sama sekali
 - Komposisi multi-entity → `kind: Page`
 
@@ -38,8 +41,8 @@ metadata:
 spec:
   public: true
   entity: billing.order
-  mode: edit                  # create | edit | view
-  render: { mode: separate_page }   # modal | drawer | separate_page
+  mode: edit # create | edit | view
+  render: { mode: separate_page } # modal | drawer | separate_page
   sections:
     - title: Customer
       columns: 2
@@ -48,8 +51,11 @@ spec:
         - { field: member_tier, read_only: true }
     - title: Totals
       fields:
-        - { field: total, read_only: true,
-            compute: "sum([i.quantity * i.price for i in fields.items])" }
+        - {
+            field: total,
+            read_only: true,
+            compute: "sum([i.quantity * i.price for i in fields.items])",
+          }
   actions:
     - { action: checkout, label: "Checkout", style: primary }
 ```
@@ -57,18 +63,37 @@ spec:
 ## Atribut
 
 <!-- generated:attributes -->
-| Atribut | Tipe | Wajib | Contoh | Deskripsi |
-|---|---|---|---|---|
-| `public` | `boolean` | — | true | If true (default), a route /module/form/<name> is auto-generated. Set false for embed-only forms. |
-| `entity` | `string` | ✅ | billing.order |  |
-| `mode` | enum (create · edit · view) | — | edit |  |
-| `sections` | []`FormSection` | — |  |  |
-| `actions` | []`FormAction` | — |  |  |
-| `submit` | `FormSubmit` | — |  |  |
-| `render` | `FormRenderDecl` | — |  |  |
-| `context` | []`ContextDecl` | — |  | Context declares render-context variables injected into this form's |
+
+| Atribut    | Tipe                        | Wajib | Contoh        | Deskripsi                                                                                         |
+| ---------- | --------------------------- | ----- | ------------- | ------------------------------------------------------------------------------------------------- |
+| `public`   | `boolean`                   | —     | true          | If true (default), a route /module/form/<name> is auto-generated. Set false for embed-only forms. |
+| `entity`   | `string`                    | ✅    | billing.order |                                                                                                   |
+| `mode`     | enum (create · edit · view) | —     | edit          |                                                                                                   |
+| `sections` | []`FormSection`             | —     |               |                                                                                                   |
+| `actions`  | []`FormAction`              | —     |               |                                                                                                   |
+| `submit`   | `FormSubmit`                | —     |               |                                                                                                   |
+| `render`   | `FormRenderDecl`            | —     |               |                                                                                                   |
+| `context`  | []`ContextDecl`             | —     |               | Context declares render-context variables injected into this form's                               |
 
 <!-- /generated:attributes -->
+
+## Render Context (standard slots)
+
+Form menerima standard slots `fields` (nilai form saat ini), `route`
+(`route.params.*`, `route.query.*`, `route.path`), dan `user` (identitas
+session). Tambahan variabel via `context:` (closed source set: `session`,
+`entity`, `api`, `const`, `expr`, `config`).
+
+## Auth Forms (`auth_action`)
+
+Form TANPA `entity` yang mendeklarasikan `auth_action` (closed set:
+`login | register | change_password | forgot_password | reset_password`)
+me-render custom auth screen pure-YAML: submit di-dispatch ke endpoint
+`/_ui/auth/*` (bukan entity CRUD). Nama field memetakan konvensional ke
+payload auth: `username`, `password`, `current_password`, `new_password`,
+`email`, `display_name`, `token`. Sukses login/register → session boot +
+redirect `{route.query.returnTo}` (same-origin guard). `forgot_password` dan
+`reset_password` cocok untuk halaman public (`Page.public: true`).
 
 ## Gotchas
 

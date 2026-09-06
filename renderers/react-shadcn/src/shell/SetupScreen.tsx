@@ -7,13 +7,19 @@
 // SPA redirects to the in-app login.
 
 import { useState, type FormEvent } from "react"
-import { useNavigate, useParams } from "react-router-dom"
+import { useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
 export function SetupScreen() {
   const { workspace = "default" } = useParams<{ workspace: string }>()
   const navigate = useNavigate()
+  // `forward` = the URL the visitor originally tried to reach before being
+  // redirected here (set by the App.tsx setup redirect). After the first
+  // admin is created it is chained through the login screen's `returnTo` so
+  // the user lands back on their original page after signing in.
+  const [searchParams] = useSearchParams()
+  const forward = searchParams.get("forward")
   const [username, setUsername] = useState("")
   const [displayName, setDisplayName] = useState("")
   const [password, setPassword] = useState("")
@@ -51,8 +57,23 @@ export function SetupScreen() {
         const body = await res.json().catch(() => null)
         throw new Error(body?.error?.message ?? `Setup failed (${res.status})`)
       }
-      // Setup complete → the login screen takes over.
-      navigate(`/${workspace}/_admin/login`, { replace: true })
+      // Setup complete → route the user back where they came from. The
+      // original URL is carried as `forward` (set by the App.tsx redirect);
+      // it is validated same-origin and chained through the login screen's
+      // `returnTo` so the user lands on their original page after signing in.
+      const returnTo =
+        forward &&
+        forward.startsWith("/") &&
+        !forward.startsWith("//") &&
+        forward !== "/"
+          ? forward
+          : null
+      navigate(
+        returnTo
+          ? `/${workspace}/_admin/login?returnTo=${encodeURIComponent(returnTo)}`
+          : `/${workspace}/_admin/login`,
+        { replace: true },
+      )
     } catch (err) {
       setError(err instanceof Error ? err.message : "Setup failed")
     } finally {
