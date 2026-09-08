@@ -99,8 +99,9 @@ func TestCtxPrimitives_EndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
+	tok := seedAdminToken(t, app)
 
-	status, out := doJSON(t, app, "POST", "/demo/_ui/entity/alpha/order", map[string]any{
+	status, out := doAuthed(t, app, "POST", "/default/_ui/entity/alpha/order", tok, map[string]any{
 		"transaction_date": recentDate(),
 		"number":           "ORD-1",
 	})
@@ -112,7 +113,7 @@ func TestCtxPrimitives_EndToEnd(t *testing.T) {
 		t.Fatalf("expected order id, got %v", out)
 	}
 
-	status, out = doJSON(t, app, "POST", "/demo/_ui/entity/alpha/order/"+id+"/prims", nil)
+	status, out = doAuthed(t, app, "POST", "/default/_ui/entity/alpha/order/"+id+"/prims", tok, nil)
 	if status != http.StatusOK {
 		t.Fatalf("prims: status %d, body %v", status, out)
 	}

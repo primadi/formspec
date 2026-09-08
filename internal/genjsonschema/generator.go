@@ -282,6 +282,16 @@ func fieldToSchema(fd FieldDef, collect *CollectResult, sharedDefs map[string]*S
 		s.Type = fd.TypeName
 		s.Nullable = true
 
+	case "pointer-slice":
+		// *[]T (nil vs empty is semantically distinct, e.g.
+		// AppSpec.Workspaces): array, nullable — items from the slice elem.
+		s.Type = "array"
+		s.Nullable = true
+		elemFD := fd
+		elemFD.GoType = fd.GoType.(*types.Pointer).Elem()
+		elemFD.TypeKind = "slice"
+		s.Items = fieldItemsSchema(elemFD, collect, sharedDefs)
+
 	case "pointer-struct", "pointer":
 		if fd.NamedType != nil {
 			refName := *fd.NamedType

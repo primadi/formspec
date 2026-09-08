@@ -673,7 +673,7 @@ func TestWorkspaceMiddleware_Isolation(t *testing.T) {
 	}{
 		{"/acme/api/v1/billing/customers", "acme"},
 		{"/demo/api/v1/test", "demo"},
-		{"/", "demo"}, // default fallback
+		{"/", "default"}, // default fallback (spec.DefaultWorkspaceSlug)
 	}
 
 	for _, tt := range tests {

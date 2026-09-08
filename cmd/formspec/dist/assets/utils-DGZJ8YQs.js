@@ -1,0 +1,1 @@
+import{Q as e,Z as t}from"./vendor-BjK-o6dF.js";function n(...n){return t(e(n))}function r(e){return e.replace(/[-_]+/g,` `).trim().replace(/\b\w/g,e=>e.toUpperCase())}export{r as n,n as t};

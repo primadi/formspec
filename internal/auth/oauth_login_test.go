@@ -478,6 +478,11 @@ func TestService_Register_WithEmail_SendsVerification(t *testing.T) {
 	ctx := context.Background()
 	m := &fakeMailer{baseURL: "http://localhost:18080"}
 	svc.SetMailer(m)
+	// Registration is blocked while the workspace has no users (first-run
+	// guard) — seed an admin so self-service registration applies.
+	if err := svc.SeedDevUser(ctx, "demo", "admin", "admin"); err != nil {
+		t.Fatalf("SeedDevUser: %v", err)
+	}
 
 	if err := svc.Register(ctx, "demo", "newuser", "new@example.com", "password123"); err != nil {
 		t.Fatalf("Register: %v", err)
@@ -504,6 +509,9 @@ func TestService_VerifyEmail(t *testing.T) {
 	ctx := context.Background()
 	m := &fakeMailer{baseURL: "http://localhost:18080"}
 	svc.SetMailer(m)
+	if err := svc.SeedDevUser(ctx, "demo", "admin", "admin"); err != nil {
+		t.Fatalf("SeedDevUser: %v", err)
+	}
 
 	if err := svc.Register(ctx, "demo", "newuser", "new@example.com", "password123"); err != nil {
 		t.Fatalf("Register: %v", err)
@@ -532,12 +540,35 @@ func TestService_VerifyEmail(t *testing.T) {
 func TestService_Register_EmailTaken(t *testing.T) {
 	svc, _, _ := setupAuthService(t)
 	ctx := context.Background()
+	if err := svc.SeedDevUser(ctx, "demo", "admin", "admin"); err != nil {
+		t.Fatalf("SeedDevUser: %v", err)
+	}
 
 	if err := svc.Register(ctx, "demo", "first", "dup@example.com", "password123"); err != nil {
 		t.Fatalf("Register: %v", err)
 	}
 	if err := svc.Register(ctx, "demo", "second", "dup@example.com", "password123"); err != ErrEmailTaken {
 		t.Fatalf("expected ErrEmailTaken, got %v", err)
+	}
+}
+
+// TestService_Register_SetupRequired verifies the first-run guard: when the
+// workspace has no users, self-service registration is refused — the first
+// account must come from the setup wizard (otherwise a non-admin user would
+// permanently lock the workspace out of _admin).
+func TestService_Register_SetupRequired(t *testing.T) {
+	svc, _, _ := setupAuthService(t)
+	ctx := context.Background()
+
+	if err := svc.Register(ctx, "demo", "early", "early@example.com", "password123"); err != ErrSetupRequired {
+		t.Fatalf("expected ErrSetupRequired, got %v", err)
+	}
+	// After the first admin exists, registration works again.
+	if err := svc.SeedDevUser(ctx, "demo", "admin", "admin"); err != nil {
+		t.Fatalf("SeedDevUser: %v", err)
+	}
+	if err := svc.Register(ctx, "demo", "early", "early@example.com", "password123"); err != nil {
+		t.Fatalf("Register after setup: %v", err)
 	}
 }
 

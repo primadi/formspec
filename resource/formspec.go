@@ -75,13 +75,12 @@ type Config struct {
 	SpecPath           string        // Path to the manifest directory (default: "./spec")
 	Addr               string        // HTTP listen address for ListenAndServe (default: ":8080")
 	ProdMode           bool          // Enable JWT auth and strict `uses` enforcement
-	DevAuth            bool          // Enable real JWT auth even in dev mode (for testing authorization)
-	JWTSecret          string        // HMAC secret for JWT validation (ProdMode/DevAuth, symmetric)
+	JWTSecret          string        // HMAC secret for JWT validation (symmetric; auto-generated in dev when empty)
 	JWTIssuer          string        // JWT issuer (default: "formspec")
 	JWTPublicKeyPath   string        // PEM file for asymmetric JWT validation (ProdMode)
 	StrictMode         bool          // Force strict `uses` enforcement even outside ProdMode
 	IdempotencyTTL     time.Duration // TTL for idempotency keys (default: db.DefaultIdempotencyTTL)
-	WorkspaceID        string        // Tenant scope used by script save/load/call handlers (default: "demo")
+	WorkspaceID        string        // Tenant scope used by script save/load/call handlers (default: "default")
 	MaxSessionsPerUser int           // Concurrent session limit per user (todo 6.5.3); 0 = unlimited
 	// EnableAPIAuth mounts /api/v1/auth/* (login/refresh) on the external
 	// surface. Default false — auth lives on the always-available UI surface
@@ -149,12 +148,12 @@ type Config struct {
 	Health *observability.Health
 }
 
-// projectRootOf derives the project root from the spec path: the spec dir
+// ProjectRootOf derives the project root from the spec path: the spec dir
 // conventionally lives at <root>/spec (08-project-layout.md); when the spec
 // path IS the project root (no spec/ subdir), the parent is still the safest
 // guess for formspec.lock/vendors/ discovery — vendor.ActiveModules tolerates
 // a missing lock either way.
-func projectRootOf(specPath string) string {
+func ProjectRootOf(specPath string) string {
 	abs, err := filepath.Abs(specPath)
 	if err != nil {
 		return specPath
@@ -186,7 +185,7 @@ func (c *Config) applyDefaults() {
 		c.IdempotencyTTL = db.DefaultIdempotencyTTL
 	}
 	if c.WorkspaceID == "" {
-		c.WorkspaceID = "demo"
+		c.WorkspaceID = spec.DefaultWorkspaceSlug
 	}
 	// Transactional email defaults target Mailpit (the devcontainer SMTP
 	// sink). Leave SMTPHost empty to disable email flows entirely.
@@ -362,13 +361,15 @@ func (a *App) RegisterNatives(handlers map[string]NativeHandler) {
 func New(cfg Config) (*App, error) {
 	cfg.applyDefaults()
 
-	// DevAuth: enable real JWT auth in dev mode. If no explicit secret is
-	// configured, generate one so the validator (configureAuth) and the token
-	// issuer (below) share the same key. When the user sets JWTSecret (e.g. via
-	// formspec-app.yaml `jwt-secret`), it is used as-is so issued tokens survive
-	// restarts. Config is passed by value, so set it on the local cfg before
-	// configureAuth and the TokenIssuer read it.
-	if cfg.DevAuth && cfg.JWTSecret == "" {
+	// JWT auth is now uniform across dev and prod: the DevValidator bypass
+	// is gone. In dev, when no explicit secret is configured, generate one so
+	// the validator (configureAuth) and the token issuer (below) share the
+	// same key. When the user sets JWTSecret (e.g. via formspec-app.yaml
+	// `jwt-secret` or the persisted .formspec/dev-jwt-secret), it is used
+	// as-is so issued tokens survive restarts. Config is passed by value, so
+	// set it on the local cfg before configureAuth and the TokenIssuer read
+	// it. ProdMode still requires an explicit secret or public key.
+	if !cfg.ProdMode && cfg.JWTSecret == "" {
 		cfg.JWTSecret = randomDevSecret()
 	}
 
@@ -400,7 +401,7 @@ func New(cfg Config) (*App, error) {
 	// name the App manifest references. The same roots are applied to the
 	// App/Module resolution loader below, so `modules:` references to
 	// vendor modules resolve.
-	projectRoot := projectRootOf(cfg.SpecPath)
+	projectRoot := ProjectRootOf(cfg.SpecPath)
 	var vendorRoots []string
 	if activeVendors, err := vendor.ActiveModules(projectRoot, cfg.SpecPath); err != nil {
 		return nil, fmt.Errorf("scan vendor modules: %w", err)
@@ -801,18 +802,16 @@ func New(cfg Config) (*App, error) {
 		api.SetApiKeyStore(auth.NewApiKeyStore(apiKeyStore))
 	}
 
-	// Seed a default dev user so login works out of the box in dev mode.
-	// Never seeds in ProdMode.
-	if !cfg.ProdMode {
-		if err := authSvc.SeedDevUser(context.Background(), cfg.WorkspaceID, "admin", "admin"); err != nil {
-			fmt.Fprintf(os.Stderr, "formspec: warning: seed dev user: %v\n", err)
-		}
-		// Seed the 4 symmetric owner roles (todo 6.3.4) so there's a
-		// baseline to grant from.
-		if err := authSvc.SeedOwnerRoles(context.Background(), cfg.WorkspaceID); err != nil {
-			fmt.Fprintf(os.Stderr, "formspec: warning: seed owner roles: %v\n", err)
-		}
-	}
+	// Wire the workspace registry (plan docs_internal/plan/named-workspaces.md):
+	// `kind: Workspace` manifest seeds + CLI-created workspaces converge on
+	// the formspec.core/workspace entity. WorkspaceMiddleware consults it —
+	// unregistered slugs are rejected with 404. Non-fatal on failure: the
+	// registry stays unwired and the middleware passes slugs through.
+	syncWorkspaceRegistry(reg, specManifests.Manifests)
+
+	// Auth is uniform across dev and prod (no dev seeding): the first admin
+	// is created via the first-run setup wizard (POST /{ws}/_ui/setup →
+	// SetupFirstAdmin), which also seeds the 4 symmetric owner roles.
 
 	validation.SetEntityLookup(func(module, entityName, id string) (bool, error) {
 		store, err := reg.GetEntityStore(module, entityName)
@@ -1417,6 +1416,10 @@ func (a *App) ReloadSpec() error {
 		return true, nil
 	})
 
+	// Re-wire the workspace registry on reload (plan named-workspaces.md) so
+	// a changed `kind: Workspace` seed set takes effect without a restart.
+	syncWorkspaceRegistry(newReg, specManifests.Manifests)
+
 	// ── 6. Atomic swap — only the pointer assignment is locked ──
 	a.mu.Lock()
 	a.reg = newReg
@@ -1436,13 +1439,10 @@ func (a *App) ReloadSpec() error {
 }
 
 func configureAuth(cfg Config) error {
-	// Dev mode without DevAuth: bypass auth entirely (synthetic developer
-	// identity with wildcard permissions). DevAuth opts into real JWT auth so
-	// authorization behavior can be tested in dev.
-	if !cfg.ProdMode && !cfg.DevAuth {
-		api.SetAuthValidator(auth.NewDevValidator())
-		return nil
-	}
+	// Auth is uniform across dev and prod: always real JWT validation (the
+	// old DevValidator bypass is removed). Dev auto-generates a secret in
+	// New() before this is called; ProdMode requires an explicit secret or
+	// public key.
 	if cfg.JWTSecret == "" && cfg.JWTPublicKeyPath == "" {
 		return fmt.Errorf("JWT auth requires JWTSecret or JWTPublicKeyPath")
 	}
@@ -1555,6 +1555,69 @@ func buildServiceRegistry(manifests []manifest.RawManifest) *service.Registry {
 		reg.Add(raw.Metadata.Module, raw.Metadata.Name, svc)
 	}
 	return reg
+}
+
+// syncWorkspaceRegistry collects `kind: Workspace` manifest seeds, upserts
+// them into the formspec.core/workspace registry, always ensures the default
+// workspace exists (dev ergonomics — /default/... stays routable even when a
+// project declares only named workspaces), and wires the registry into
+// WorkspaceMiddleware (plan docs_internal/plan/named-workspaces.md). Non-fatal:
+// any failure leaves the middleware unwired (slugs pass through unvalidated)
+// and only logs a warning.
+func syncWorkspaceRegistry(reg *entity.Registry, manifests []manifest.RawManifest) {
+	store, err := reg.GetEntityStore(auth.CoreModule, auth.CoreWorkspaceEntity)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "formspec: workspace registry: %v\n", err)
+		return
+	}
+	wsReg := auth.NewWorkspaceRegistry(store)
+	ctx := context.Background()
+	for _, seed := range collectWorkspaceSeeds(manifests) {
+		if _, err := wsReg.Ensure(ctx, seed); err != nil {
+			fmt.Fprintf(os.Stderr, "formspec: workspace seed %q: %v\n", seed.Slug, err)
+		}
+	}
+	// The default workspace is always registered (idempotent upsert): the
+	// CLI/SPA fall back to "default" when no slug is given.
+	if _, err := wsReg.Ensure(ctx, auth.WorkspaceInfo{
+		Slug:        spec.DefaultWorkspaceSlug,
+		DisplayName: "Default Workspace",
+	}); err != nil {
+		fmt.Fprintf(os.Stderr, "formspec: workspace seed %q: %v\n", spec.DefaultWorkspaceSlug, err)
+	}
+	api.SetWorkspaceResolver(wsReg)
+}
+
+// collectWorkspaceSeeds extracts WorkspaceInfo seeds from `kind: Workspace`
+// manifests. The effective slug (spec.slug or metadata.name) is validated
+// here too — loader validation already rejects invalid manifests, so a
+// failure here only logs.
+func collectWorkspaceSeeds(manifests []manifest.RawManifest) []auth.WorkspaceInfo {
+	var out []auth.WorkspaceInfo
+	for _, raw := range manifests {
+		if spec.Kind(raw.Kind) != spec.KindWorkspace {
+			continue
+		}
+		specMap, ok := raw.Spec.(map[string]any)
+		if !ok {
+			continue
+		}
+		ws, err := manifest.RawSpecTo[spec.WorkspaceSpec](specMap)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "formspec: workspace manifest %s: %v\n", raw.Source, err)
+			continue
+		}
+		if err := spec.ValidateWorkspaceSpec(ws, raw.Metadata.Name); err != nil {
+			fmt.Fprintf(os.Stderr, "formspec: workspace manifest %s: %v\n", raw.Source, err)
+			continue
+		}
+		out = append(out, auth.WorkspaceInfo{
+			Slug:        ws.EffectiveSlug(raw.Metadata.Name),
+			DisplayName: ws.DisplayName,
+			OwnerUserID: ws.OwnerUserID,
+		})
+	}
+	return out
 }
 
 // buildWebhookRegistry loads kind: Webhook manifests into a webhook.Registry

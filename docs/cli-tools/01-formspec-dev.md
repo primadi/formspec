@@ -67,21 +67,40 @@ formspec dev
 
 ## 3. Flag Reference
 
-| Flag             | Default                    | Deskripsi                                                   |
-| ---------------- | -------------------------- | ----------------------------------------------------------- |
-| `--spec`         | `./spec`                   | Path direktori YAML manifests                               |
-| `--dsn`          | `sqlite:.formspec/data.db` | Database DSN                                                |
-| `--addr`         | `:8080`                    | REST API listen address                                     |
-| `--listen`       | `none`                     | Mode ctx listener (lihat §5)                                |
-| `--app-endpoint` | `none`                     | Mode app endpoint (lihat §5)                                |
-| `--runtime`      | auto-detect                | Runtime app process                                         |
-| `--dev`          | `false`                    | Dev mode (auth bypass)                                      |
-| `--dev-ui`       | `false`                    | Dev mode + Vite HMR (implied `--dev`)                       |
-| `--dev-auth`     | `false`                    | Dev mode + real JWT auth (login & authorization enforced)   |
-| `--jwt-secret`   | `""`                       | HMAC secret untuk JWT signing (persist token antar restart) |
-| `--state-dir`    | `.formspec`                | State directory (auto-create)                               |
-| `--web-dir`      | auto-detect                | Override SPA directory                                      |
-| `--workspace-id` | `default`                  | Workspace/tenant ID                                         |
+| Flag             | Default                    | Deskripsi                                                                                                                                                  |
+| ---------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--spec`         | `./spec`                   | Path direktori YAML manifests                                                                                                                              |
+| `--dsn`          | `sqlite:.formspec/data.db` | Database DSN — path SQLite **relative di-anchor ke project root dari `--spec`** (lihat catatan di bawah); absolute dipakai apa adanya                      |
+| `--addr`         | `:8080`                    | REST API listen address                                                                                                                                    |
+| `--listen`       | `none`                     | Mode ctx listener (lihat §5)                                                                                                                               |
+| `--app-endpoint` | `none`                     | Mode app endpoint (lihat §5)                                                                                                                               |
+| `--runtime`      | auto-detect                | Runtime app process                                                                                                                                        |
+| `--dev`          | `false`                    | Dev mode (hot-reload, Vite proxy, dsb.) — auth tetap JWT asli, seragam dengan prod                                                                         |
+| `--dev-ui`       | `false`                    | Dev mode + Vite HMR (implied `--dev`)                                                                                                                      |
+| `--jwt-secret`   | auto                       | HMAC secret untuk JWT signing. Kosong di dev → auto-generate + persist ke `.formspec/dev-jwt-secret` (sesi bertahan antar restart); kosong di prod → error |
+| `--state-dir`    | `.formspec`                | State directory (auto-create) — default ikut lokasi db hasil anchor DSN                                                                                    |
+| `--web-dir`      | auto-detect                | Override SPA directory                                                                                                                                     |
+| `--workspace-id` | `default`                  | Workspace/tenant ID                                                                                                                                        |
+
+### Resolusi path DSN (relative di-anchor ke lokasi spec)
+
+Path SQLite pada `--dsn` yang **relative** di-anchor ke project root yang
+di-derive dari lokasi `--spec` (konvensi: spec tinggal di `<root>/spec`),
+bukan ke working directory. Dengan begitu file database **statis** —
+dijalankan dari mana pun, db yang sama:
+
+```bash
+# Dari root repo ATAU dari dalam folder example — hasilnya sama:
+# <project>/examples/Clinic-UI-Showcase/.formspec/clinic.db
+formspec dev --spec examples/Clinic-UI-Showcase/spec \
+  --dsn "sqlite:.formspec/clinic.db"
+```
+
+- DSN **absolute** dipakai apa adanya: `sqlite:///abs/path/clinic.db`
+- DSN **postgres** tidak diubah
+- Query param SQLite (`?_pragma=…`) dipertahankan
+- `--state-dir` default mengikuti folder db hasil anchor (set `--state-dir`
+  eksplisit untuk meng-override)
 
 ---
 
@@ -159,11 +178,10 @@ workspace-id: default
 runtime: auto # auto | local | php | python | node
 state-dir: .formspec
 dev: false
-dev-auth: false # real JWT auth di dev mode (login & authorization enforced)
-jwt-secret: "" # HMAC secret untuk JWT signing (persist token antar restart)
+dev-ui: false
+jwt-secret: "" # kosong di dev → auto-generate + persist ke .formspec/dev-jwt-secret
 force: false
 web-dir: ""
-dev-ui: false
 ```
 
 Prioritas (low → high): Default code → Config file → CLI flags.

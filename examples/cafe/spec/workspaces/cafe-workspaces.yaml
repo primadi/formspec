@@ -1,0 +1,15 @@
+# Workspaces (named) — seed registry for the cafe example
+# (plan docs_internal/plan/named-workspaces.md).
+#
+# `kind: Workspace` is a platform-level seed manifest: the slug becomes the
+# URL prefix (/{ws}/...) and the tenant scope of all data. These rows are
+# upserted into the formspec.core/workspace registry at boot; additional
+# workspaces can be created at runtime via
+# `formspec workspace create <slug> --dsn sqlite:.formspec/cafe.db`.
+apiVersion: formspec.dev/v1
+kind: Workspace
+metadata:
+  name: cafe
+  description: "Workspace utama contoh aplikasi kafe — pesanan, pembayaran, laporan"
+spec:
+  display_name: "Kafe Demo"

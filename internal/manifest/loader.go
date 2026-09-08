@@ -321,6 +321,8 @@ var KnownKinds = KindSet{
 	"ApprovalInbox": true, "NotificationCenter": true,
 	// Control Plane
 	"Environment": true, "Policy": true, "Datastore": true,
+	// Platform — named workspace registry seed (platform/02-workspace-app-module.md §1)
+	"Workspace": true,
 }
 
 // Versions maps a spec version (the segment of apiVersion, e.g. "v1") to the
@@ -395,6 +397,18 @@ func (l *Loader) Validate(raw RawManifest) error {
 			return fmt.Errorf("%s: invalid spec: %w", raw.Source, err)
 		}
 		if err := spec.ValidatePageSpec(pageSpec); err != nil {
+			return fmt.Errorf("%s: %w", raw.Source, err)
+		}
+	}
+
+	// Workspace: slug kebab-case + reserved-segment check (platform/
+	// 02-workspace-app-module.md §1). Slug defaults to metadata.name.
+	if raw.Kind == "Workspace" && raw.Spec != nil {
+		wsSpec, err := RawSpecTo[spec.WorkspaceSpec](raw.Spec.(map[string]any))
+		if err != nil {
+			return fmt.Errorf("%s: invalid spec: %w", raw.Source, err)
+		}
+		if err := spec.ValidateWorkspaceSpec(wsSpec, raw.Metadata.Name); err != nil {
 			return fmt.Errorf("%s: %w", raw.Source, err)
 		}
 	}

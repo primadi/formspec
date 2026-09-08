@@ -42,6 +42,43 @@ server sendiri memakai lisensi enterprise dan menjalankan FormSpec Cloud-nya
 sendiri sebagai Platform Operator, bukan lewat mode tenancy khusus di dalam
 aplikasi.
 
+### 1.1 Workspace Registry — slug bernama
+
+Slug workspace adalah segmen pertama URL (`/{ws}/...`) dan **sekaligus
+workspace ID** — tidak ada mapping slug→UUID; semua store, session, dan
+permission di-scope langsung oleh slug. Slug wajib kebab-case dan tidak
+boleh memakai segmen reserved router (`_ui`, `api`, `_admin`, `assets`,
+`health`, `login`, `register`, `_ws`, `print`).
+
+Workspace harus **terdaftar** di workspace registry (entity bawaan
+`formspec.core/workspace` — fields `name`, `slug` unique, `owner_user_id`,
+`settings`). Ada dua sumber yang konvergen ke registry yang sama:
+
+1. **Manifest `kind: Workspace`** — seed deklaratif, di-upsert ke registry
+   saat boot dan hot-reload:
+
+   ```yaml
+   apiVersion: formspec.dev/v1
+   kind: Workspace
+   metadata:
+     name: cafe
+   spec:
+     display_name: "Kafe Demo"
+   ```
+
+   (`spec.slug` opsional; default `metadata.name`.)
+
+2. **CLI** — penambahan runtime:
+   `formspec workspace create <slug> --name "..." --dsn <dsn>`
+   (juga `list`, `delete --confirm`).
+
+`WorkspaceMiddleware` memvalidasi setiap slug URL terhadap registry:
+slug tak terdaftar → **404 `WORKSPACE_NOT_FOUND`** (anti-enumeration,
+konsisten dengan cross-workspace check di §AuthMiddleware). Workspace
+`default` selalu di-seed otomatis saat boot agar fallback URL tanpa slug
+tetap routable. Proses tanpa registry ter-wire (embedded/test) bersifat
+pass-through — validasi hanya aktif saat registry terpasang.
+
 ## 2. Module
 
 Package manifest — identitas, versi, dependency. Isi ditemukan lewat
@@ -151,6 +188,7 @@ spec:
   version: 2.1.0 # optional — marketplace publishing metadata
   vendor: acme-corp # optional — marketplace publishing metadata
   root_url: /app/klinik-internal # prefix mount bebas di dalam workspace (mis. "/", "/barbershop") — wajib unik per App dalam satu workspace
+  workspaces: [klinik] # optional — allowlist mount workspace (lihat §3.1)
   modules: [billing, acme-corp/general-ledger]
   app_renderer: sidebar-nav # pilih App renderer — lihat spec/frontend/05-app-kinds.md
   menu: [] # lihat §4
@@ -166,6 +204,35 @@ spec:
 Default private. Akses lintas-app hanya lewat publish → request → **grant
 disetujui Data Owner**, tercatat, revocable, metered
 ([`04-control-plane.md`](04-control-plane.md) §5 Contracts).
+
+### 3.1 `workspaces` — Allowlist Mount Workspace
+
+Field opsional `spec.workspaces` membatasi di workspace mana App di-mount
+(plan `docs_internal/plan/named-workspaces.md`). Pointer semantics — tiga
+state yang dibedakan eksplisit:
+
+| Deklarasi                           | Efek                                                                                                                                          |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| field **tidak ada** (default)       | App di-mount di **semua** workspace deployment — backward compatible                                                                          |
+| `workspaces: []` (eksplisit kosong) | **Staged** — App tervalidasi & ter-reload, tapi di-mount **di mana pun** (App di-upload tapi belum di-bind; `formspec check` memberi warning) |
+| `workspaces: [cafe, kopi]`          | Hanya workspace tersebut                                                                                                                      |
+
+Aturan: slug format-only (kebab-case, bukan segmen reserved) — slug boleh
+mereferensikan workspace yang dibuat belakangan via CLI; keberadaan registry
+tidak divalidasi saat manifest load. Enforcement request-time: `/_meta/apps`
+hanya menampilkan App yang di-mount di workspace request, app-scoped
+`/_meta/ui` menolak App di luar allowlist, dan SPA mount root_url-nya 404 —
+semuanya **404, bukan 403** (anti-enumeration, konsisten §15.2).
+
+**Limitasi**: anonymous surface App `access: public` (registrasi permission
+entitas publiknya) masih berlaku global, tidak per-workspace — deferred.
+
+**Versi**: `version`/`vendor` adalah metadata publikasi (opsional, semver
+bila diisi) — diekspos di `/_meta/apps` untuk inspeksi. Per-workspace App
+versioning BUKAN konsep in-process: satu proses selalu menjalankan satu
+versi; upgrade per workspace = keputusan control plane (artifact registry
+`vendor/app@version` + binding state per deployment — cloud phase,
+[`07-marketplace.md`](07-marketplace.md)).
 
 `app_renderer` memilih archetype chrome App ini
 ([`../frontend/01-visual-hierarchy.md`](../frontend/01-visual-hierarchy.md),

@@ -174,12 +174,12 @@ function blockActions(
   if (block.form?.ref) {
     const form = bundle.forms.find((f) => f.name === block.form?.ref)
     if (form) {
+      // spec.entity is optional in the manifest type — a form without one
+      // grants nothing entity-scoped.
+      const entityRef = form.spec.entity ?? ""
       const mode = block.form?.mode ?? form.spec.mode ?? "create"
-      push(
-        mode === "edit" || mode === "view" ? "update" : "create",
-        form.spec.entity,
-      )
-      form.spec.actions?.forEach((a) => push(a.action, form.spec.entity))
+      push(mode === "edit" || mode === "view" ? "update" : "create", entityRef)
+      form.spec.actions?.forEach((a) => push(a.action, entityRef))
     }
   }
   if (block.table?.ref) {

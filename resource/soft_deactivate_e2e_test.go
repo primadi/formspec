@@ -77,9 +77,10 @@ func TestSoftDeactivate_EndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
+	tok := seedAdminToken(t, app)
 
 	// Create a customer.
-	status, out := doJSON(t, app, "POST", "/demo/_ui/entity/alpha/customer", map[string]any{
+	status, out := doAuthed(t, app, "POST", "/default/_ui/entity/alpha/customer", tok, map[string]any{
 		"code": "C-001",
 		"name": "PT Maju",
 	})
@@ -92,7 +93,7 @@ func TestSoftDeactivate_EndToEnd(t *testing.T) {
 	}
 
 	// is_active should default to true.
-	status, out = doJSON(t, app, "GET", "/demo/_ui/entity/alpha/customer/"+id, nil)
+	status, out = doAuthed(t, app, "GET", "/default/_ui/entity/alpha/customer/"+id, tok, nil)
 	if status != http.StatusOK {
 		t.Fatalf("find: status %d, body %v", status, out)
 	}
@@ -102,7 +103,7 @@ func TestSoftDeactivate_EndToEnd(t *testing.T) {
 	}
 
 	// Deactivate → is_active=false.
-	status, out = doJSON(t, app, "POST", "/demo/_ui/entity/alpha/customer/"+id+"/deactivate", nil)
+	status, out = doAuthed(t, app, "POST", "/default/_ui/entity/alpha/customer/"+id+"/deactivate", tok, nil)
 	if status != http.StatusOK {
 		t.Fatalf("deactivate: status %d, body %v", status, out)
 	}
@@ -112,7 +113,7 @@ func TestSoftDeactivate_EndToEnd(t *testing.T) {
 	}
 
 	// Reactivate → is_active=true.
-	status, out = doJSON(t, app, "POST", "/demo/_ui/entity/alpha/customer/"+id+"/reactivate", nil)
+	status, out = doAuthed(t, app, "POST", "/default/_ui/entity/alpha/customer/"+id+"/reactivate", tok, nil)
 	if status != http.StatusOK {
 		t.Fatalf("reactivate: status %d, body %v", status, out)
 	}

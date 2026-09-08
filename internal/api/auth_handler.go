@@ -185,6 +185,10 @@ func (b *RouterBuilder) HandleRegister() http.HandlerFunc {
 				status, code, reason = http.StatusBadRequest, "INVALID_REQUEST", "invalid_input"
 			case errors.Is(err, auth.ErrRegistrationClosed):
 				status, code, reason = http.StatusForbidden, "REGISTRATION_CLOSED", "registration_closed"
+			case errors.Is(err, auth.ErrSetupRequired):
+				// Workspace has no users yet — the first account must come
+				// from the setup wizard, not self-service registration.
+				status, code, reason = http.StatusForbidden, "SETUP_REQUIRED", "setup_required"
 			}
 			authAuditLog.record(AuthAuditEntry{
 				Timestamp: time.Now().UTC(), Method: "register", Username: req.Username,

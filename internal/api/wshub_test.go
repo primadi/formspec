@@ -79,10 +79,9 @@ func TestHandleWS_BroadcastEndToEnd(t *testing.T) {
 	}
 	time.Sleep(50 * time.Millisecond)
 
-	// No auth validator is configured in this test, so AuthMiddleware's
-	// dev fallback applies and every connection is registered under workspace
-	// "demo" regardless of the URL workspace segment (see workspaceFromContext).
-	rb.Hub().Broadcast("demo", events.EventMessage{Event: "completed", Resource: "clinic/visit"})
+	// No auth validator is configured in this test, so connections register
+	// under the URL workspace segment (WorkspaceMiddleware) — "acme" here.
+	rb.Hub().Broadcast("acme", events.EventMessage{Event: "completed", Resource: "clinic/visit"})
 
 	msg, ok := readOneMessage(t, conn, 2*time.Second)
 	if !ok {
@@ -266,7 +265,7 @@ func TestHandleWS_SubscribeFrameFiltersEndToEnd(t *testing.T) {
 	}
 	time.Sleep(50 * time.Millisecond)
 
-	rb.Hub().Broadcast("demo", events.EventMessage{Event: "created", Resource: "clinic/visit"})
+	rb.Hub().Broadcast("acme", events.EventMessage{Event: "created", Resource: "clinic/visit"})
 	msg, ok := readOneMessage(t, conn, 2*time.Second)
 	if !ok {
 		t.Fatal("did not receive the subscribed resource's event")
@@ -276,7 +275,7 @@ func TestHandleWS_SubscribeFrameFiltersEndToEnd(t *testing.T) {
 	}
 
 	// Unsubscribed resource must NOT arrive — expect the read to time out.
-	rb.Hub().Broadcast("demo", events.EventMessage{Event: "created", Resource: "pharmacy/prescription"})
+	rb.Hub().Broadcast("acme", events.EventMessage{Event: "created", Resource: "pharmacy/prescription"})
 	ctx2, cancel2 := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel2()
 	if _, data, err := conn.Read(ctx2); err == nil {
@@ -298,7 +297,7 @@ func TestHandleWS_UnsubscribeFrameEndToEnd(t *testing.T) {
 	}
 	time.Sleep(50 * time.Millisecond)
 
-	rb.Hub().Broadcast("demo", events.EventMessage{Event: "created", Resource: "clinic/visit"})
+	rb.Hub().Broadcast("acme", events.EventMessage{Event: "created", Resource: "clinic/visit"})
 	msg, ok := readOneMessage(t, conn, 2*time.Second)
 	if !ok {
 		t.Fatal("did not receive the subscribed resource's event")
@@ -315,7 +314,7 @@ func TestHandleWS_UnsubscribeFrameEndToEnd(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// After unsubscribe, expect NO message — the read times out (final op).
-	rb.Hub().Broadcast("demo", events.EventMessage{Event: "updated", Resource: "clinic/visit"})
+	rb.Hub().Broadcast("acme", events.EventMessage{Event: "updated", Resource: "clinic/visit"})
 	ctx4, cancel4 := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel4()
 	if _, data, err := conn.Read(ctx4); err == nil {

@@ -52,6 +52,10 @@ func runMigrate(args []string) {
 			positional = append(positional, args[i])
 		}
 	}
+
+	// Anchor relative SQLite DSN ke lokasi spec (plan dsn-spec-anchored.md).
+	dsn = resolveDSN(dsn, specPath)
+
 	if len(positional) < 1 {
 		fmt.Fprintf(os.Stderr, "Usage: formspec migrate <plan|apply|data> [--spec <path>] [--dsn <dsn>]\n")
 		os.Exit(2)

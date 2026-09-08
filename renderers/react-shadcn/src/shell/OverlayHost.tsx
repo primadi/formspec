@@ -74,8 +74,9 @@ export function OverlayHost() {
   // Resolve entity: from the authored form's spec.entity ("module.entity"),
   // or directly from the `entity` param in the derived-form fallback.
   // resolveEntityRef splits at the last dot so dotted module names
-  // (e.g. "formspec.core.role") resolve correctly.
-  const entityRef = form ? form.spec.entity : entityParam!
+  // (e.g. "formspec.core.role") resolve correctly. spec.entity is optional
+  // in the manifest type — treat missing as "" (resolveEntityRef handles it).
+  const entityRef = form ? (form.spec.entity ?? "") : entityParam!
   const [module, entityName] = resolveEntityRef(entityRef, form?.module ?? "")
   const entity = getEntity(module, entityName)
   if (!entity) return null

@@ -33,6 +33,19 @@ export const DEFAULT_AUTH_REFS: Record<AuthSlot, string> = {
   oauth_callback_page: "formspec.core/oauth-callback",
 }
 
+/** The built-in asset ref for each default auth slot. DEFAULT_AUTH_REFS uses
+ *  the module/name ref format (`formspec.core/login`), while
+ *  BUILTIN_AUTH_ASSETS is keyed by asset refs (`formspec-core/auth/login`) —
+ *  this map bridges the two (a key-format mismatch here used to make AuthPage
+ *  return null for every default auth screen → blank page). */
+const SLOT_BUILTIN_REFS: Record<AuthSlot, string> = {
+  login_page: "formspec-core/auth/login",
+  setup_page: "formspec-core/auth/setup",
+  change_password_page: "formspec-core/auth/change-password",
+  reset_password_page: "formspec-core/auth/reset-password",
+  oauth_callback_page: "formspec-core/auth/oauth-callback",
+}
+
 export function AuthPage({
   slot,
   mode,
@@ -47,7 +60,7 @@ export function AuthPage({
 
   // Framework default (or bundle not loaded yet) → built-in component.
   if (ref === DEFAULT_AUTH_REFS[slot] || !page) {
-    const Builtin = BUILTIN_AUTH_ASSETS[DEFAULT_AUTH_REFS[slot]]
+    const Builtin = BUILTIN_AUTH_ASSETS[SLOT_BUILTIN_REFS[slot]]
     if (!Builtin) return null
     if (slot === "login_page") return <LoginPage mode={mode} />
     return <Builtin />

@@ -16,11 +16,12 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/primadi/formspec/pkg/spec"
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
 )
 
 func runLogs(args []string) {
-	workspace := "demo"
+	workspace := spec.DefaultWorkspaceSlug
 	module := ""
 	entityName := ""
 	limit := 50

@@ -68,6 +68,11 @@ func runArchiveView(args []string) {
 			os.Exit(2)
 		}
 	}
+
+	// Anchor relative SQLite DSN ke lokasi spec (plan dsn-spec-anchored.md).
+	// archive view tidak punya --spec — pakai konvensi default "spec".
+	dsn = resolveDSN(dsn, "spec")
+
 	if batchID == "" {
 		fmt.Fprintf(os.Stderr, "formspec archive view: --batch-id is required\n")
 		os.Exit(2)
@@ -141,6 +146,10 @@ func runArchiveRun(args []string) {
 			os.Exit(2)
 		}
 	}
+
+	// Anchor relative SQLite DSN ke lokasi spec (plan dsn-spec-anchored.md).
+	dsn = resolveDSN(dsn, specPath)
+
 	if maxAge == "" {
 		fmt.Fprintf(os.Stderr, "formspec archive run: --max-age is required (e.g. 3y, 180d)\n")
 		os.Exit(2)

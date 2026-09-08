@@ -25,6 +25,9 @@ func KindMapping() []KindEntry {
 		{Kind: "Policy", SpecStruct: "PolicySpec"},
 		{Kind: "Datastore", SpecStruct: "DatastoreSpec"},
 
+		// — Platform —
+		{Kind: "Workspace", SpecStruct: "WorkspaceSpec"},
+
 		// — Renderer Kinds —
 		{Kind: "Renderer", SpecStruct: "RendererSpec"},
 		{Kind: "PersistBackend", SpecStruct: "PersistBackendSpec"},

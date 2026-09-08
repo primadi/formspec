@@ -32,6 +32,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/primadi/formspec/internal/devsecret"
 	"github.com/primadi/formspec/internal/devserver"
 	"github.com/primadi/formspec/internal/sidecar"
 	"github.com/primadi/formspec/pkg/spec"
@@ -55,7 +56,6 @@ type DevConfig struct {
 	StateDir       string
 	DevMode        bool
 	DevUI          bool
-	DevAuth        bool   // Enable real JWT auth in dev mode (for testing authorization)
 	JWTSecret      string // HMAC secret for JWT signing (persist across restarts)
 	Force          bool
 	WebDir         string
@@ -97,6 +97,14 @@ func runDev(args []string) {
 
 	// ── 2. Try config file (formspec-app.yaml / formspec-sidecar.yaml) ──
 	cfg = mergeConfigFile(cfg)
+
+	// ── 2b. Anchor relative SQLite DSN to the spec location ──
+	// (plan dsn-spec-anchored.md) — path db statis di <project-root>/.formspec
+	// di mana pun perintah dijalankan; absolute DSN tetap dipakai apa adanya.
+	cfg.DSN = resolveDSN(cfg.DSN, cfg.SpecPath)
+	if cfg.StateDir == defaultStateDir {
+		cfg.StateDir = formspec.StateDirFromDSN(cfg.DSN)
+	}
 
 	// ── 3. Apply defaults for values not set by CLI or config file ──
 	if cfg.AppDir == "" {
@@ -164,12 +172,30 @@ func runDev(args []string) {
 	// ── 10. Boot FormSpec engine ──
 	log.Printf("[formspec] starting — spec=%s dsn=%s addr=%s", cfg.SpecPath, cfg.DSN, cfg.Addr)
 
+	// Auth is uniform across dev and prod (always real JWT). In dev, when no
+	// explicit secret is configured, resolve (or generate + persist) the dev
+	// secret so sessions survive restarts. Prod-like runs (control-plane
+	// artifact mode) require an explicit secret, same as `formspec serve`.
+	prodLike := !cfg.DevMode && cfg.ControlURL != ""
+	if prodLike && cfg.JWTSecret == "" {
+		log.Fatalf("[formspec] prod-like run requires --jwt-secret (or jwt-secret in formspec-app.yaml)")
+	}
+	if !prodLike && cfg.JWTSecret == "" {
+		secret, generated, err := devsecret.Resolve(cfg.StateDir)
+		if err != nil {
+			log.Fatalf("[formspec] resolve dev jwt secret: %v", err)
+		}
+		cfg.JWTSecret = secret
+		if generated {
+			log.Printf("[formspec] generated dev jwt secret → %s (sessions persist across restarts)", filepath.Join(cfg.StateDir, devsecret.FileName))
+		}
+	}
+
 	formaCfg := formspec.Config{
 		SpecPath:             cfg.SpecPath,
 		DSN:                  cfg.DSN,
 		Addr:                 cfg.Addr,
-		ProdMode:             !cfg.DevMode && cfg.ControlURL != "",
-		DevAuth:              cfg.DevAuth,
+		ProdMode:             prodLike,
 		JWTSecret:            cfg.JWTSecret,
 		SidecarEndpoint:      appEndpointURL,
 		SidecarInvokeTimeout: cfg.InvokeTimeout,
@@ -416,8 +442,7 @@ func parseDevFlags(args []string) DevConfig {
 	stateDir := fs.String("state-dir", "", "State directory (default: .formspec)")
 	devMode := fs.Bool("dev", false, "Development mode (implied by --dev-ui)")
 	devUI := fs.Bool("dev-ui", false, "Development UI: start Vite HMR (implies --dev)")
-	devAuth := fs.Bool("dev-auth", false, "Enable real JWT auth in dev mode (login + authorization enforced)")
-	jwtSecret := fs.String("jwt-secret", "", "HMAC secret for JWT signing (persists tokens across restarts)")
+	jwtSecret := fs.String("jwt-secret", "", "HMAC secret for JWT signing (persists tokens across restarts; auto-generated + persisted in .formspec/dev-jwt-secret when empty)")
 	force := fs.Bool("force", false, "Force kill previous instance on same ports")
 	webDir := fs.String("web-dir", "", "Override SPA directory. Auto-detect if empty")
 	invokeTimeout := fs.Duration("invoke-timeout", 30*time.Second, "Timeout for sidecar action invocation")
@@ -442,7 +467,6 @@ func parseDevFlags(args []string) DevConfig {
 		StateDir:       orDefault(*stateDir, defaultStateDir),
 		DevMode:        *devMode || *devUI,
 		DevUI:          *devUI,
-		DevAuth:        *devAuth,
 		JWTSecret:      *jwtSecret,
 		Force:          *force,
 		WebDir:         *webDir,
@@ -556,9 +580,11 @@ func viteSPAProxy(next http.Handler, viteTarget, workspaceID string) http.Handle
 		//   /{ws}/_ui/...    UI surface (meta API, entity CRUD, WebSocket)
 		//   /{ws}/api/...    External API
 		//   /health          Health check
-		if strings.HasPrefix(path, "/"+workspaceID+"/_ui/") ||
-			strings.HasPrefix(path, "/"+workspaceID+"/api/") ||
-			path == "/health" {
+		// {ws} is ANY workspace slug (plan named-workspaces.md): the backend
+		// owns the workspace registry check (unregistered slug → 404), so the
+		// proxy must forward every /{ws}/_ui|api/ prefix, not just the
+		// configured default workspace.
+		if isWorkspaceAPIPath(path) || path == "/health" {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -566,6 +592,19 @@ func viteSPAProxy(next http.Handler, viteTarget, workspaceID string) http.Handle
 		// Semua yang lain (/{ws}/_admin/..., /{ws}/app/...) → Vite dev server
 		proxy.ServeHTTP(w, r)
 	})
+}
+
+// isWorkspaceAPIPath reports whether path targets the backend API surface of
+// any workspace: /{ws}/_ui/... or /{ws}/api/... (first segment = workspace
+// slug, second = surface). Reserved single-segment paths (/health) are
+// handled by the caller.
+func isWorkspaceAPIPath(path string) bool {
+	rest := strings.TrimPrefix(path, "/")
+	parts := strings.SplitN(rest, "/", 3)
+	if len(parts) < 2 || parts[0] == "" {
+		return false
+	}
+	return parts[1] == "_ui" || parts[1] == "api"
 }
 
 // watchSpecForChanges delegates to the shared internal/devserver watcher

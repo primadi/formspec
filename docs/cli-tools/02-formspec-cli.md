@@ -22,7 +22,7 @@
 | **Marketplace & signing**      | `module list\|install\|uninstall\|publish`, `sign`, `override adopt\|diff\|list`, `verify` |
 | **Scripting**                  | `script validate\|test`                                                                    |
 | **Emergency (Resource Plane)** | `freeze`, `rollback`, `lock workspace`                                                     |
-| **Ops**                        | `workspace create`, `logs`                                                                 |
+| **Ops**                        | `workspace create\|list\|delete`, `logs`                                                   |
 
 ---
 
@@ -445,11 +445,20 @@ Setiap aksi darurat **wajib** menyertakan alasan, ditandatangani aktor, dan terc
 
 ## 12. Ops
 
-### `formspec workspace create`
+### `formspec workspace`
+
+Kelola registry workspace bernama (slug = workspace ID; slug tak terdaftar
+ditolak 404 oleh `WorkspaceMiddleware`):
 
 ```bash
-formspec workspace create --region jakarta --cluster-class premium
+formspec workspace create kopi --name "Kopi Kita" --dsn sqlite:.formspec/cafe.db
+formspec workspace list --dsn sqlite:.formspec/cafe.db
+formspec workspace delete kopi --dsn sqlite:.formspec/cafe.db --confirm
 ```
+
+Slug wajib kebab-case dan tidak boleh memakai segmen reserved router.
+Workspace `default` tidak bisa dihapus. Contoh deklaratif: `kind: Workspace`
+manifest (lihat [`../spec/platform/02-workspace-app-module.md`](../spec/platform/02-workspace-app-module.md) §1.1).
 
 ### `formspec logs`
 
@@ -481,6 +490,7 @@ muncul kalau operator mengaktifkan level `debug`, yang off secara default di
 | `apply --watch`                     | ✅                 | `fsnotify`, debounce 500ms                                                                                                                                             |
 | `validate`                          | ✅ Sebagian        | Engine loader + JSON Schema per kind; honesty scan Starlark masih roadmap (§2)                                                                                         |
 | `new`, `dev`, `generate`, `migrate` | ⏳                 | Belum dikerjakan                                                                                                                                                       |
+| `workspace create\|list\|delete`    | ✅                 | Registry workspace bernama (entity `formspec.core/workspace`); slug = workspace ID, tak terdaftar → 404 (§12)                                                          |
 | Semua verb lain (§2–§12)            | ❌ Belum ada logic | Dikenali dispatcher, tapi cuma print "not implemented yet" — lihat `cmd/formspec/main.go`                                                                              |
 
 ### 13.1 Urutan Pembangunan yang Disarankan

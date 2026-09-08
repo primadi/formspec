@@ -159,6 +159,7 @@ func runCheck(args []string) {
 	// Check 5.16: renderer registry & resolution (5.16.1), slot-tier
 	// validation (5.16.2), stack_family compatibility (5.16.3).
 	checkRenderers(result, res.Manifests)
+	checkAppWorkspaces(result, res.Manifests)
 
 	// Check 3+4: cross-module uses.resources existence + unused.
 	brokenRefs := checkUses(result, idx, res.Manifests)
@@ -502,6 +503,32 @@ func checkRenderers(result *checkResult, manifests []manifest.RawManifest) {
 	}
 	for _, msg := range reg.ValidateStackFamily(apps, pages) {
 		result.add("", "error", "%s", msg)
+	}
+}
+
+// checkAppWorkspaces warns about Apps whose Workspaces allowlist mounts them
+// nowhere (explicit `workspaces: []` — a staged App, plan
+// docs_internal/plan/named-workspaces.md). This is legal (staging an App
+// before binding it to workspaces), but easy to forget — so it surfaces as a
+// warning, never an error.
+func checkAppWorkspaces(result *checkResult, manifests []manifest.RawManifest) {
+	for _, m := range manifests {
+		if spec.Kind(m.Kind) != spec.KindApp || m.Spec == nil {
+			continue
+		}
+		specMap, ok := m.Spec.(map[string]any)
+		if !ok {
+			continue
+		}
+		appSpec, err := manifest.RawSpecToAppSpec(specMap)
+		if err != nil {
+			continue
+		}
+		if appSpec.Workspaces != nil && len(*appSpec.Workspaces) == 0 {
+			result.add(m.Source, "warning",
+				"app %q is staged — explicit empty `workspaces: []` mounts it in no workspace (intentional? fill the allowlist or remove the field)",
+				m.Metadata.Name)
+		}
 	}
 }
 

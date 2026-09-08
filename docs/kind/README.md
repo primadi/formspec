@@ -3,26 +3,26 @@
 Referensi per-kind yang lengkap: **satu file per kind**, dipecah dalam 4 grup
 yang mencerminkan taksonomi kind (`docs/spec/platform/03-kind-system.md` §1).
 
-| Grup | Isi | Jumlah |
-|---|---|---|
-| [`curation/`](curation/) | Struktur workspace — App, Module | 2 |
-| [`data/`](data/) | Model domain & behavior — Entity, Service, Config, dst. | 11 |
-| [`ui/`](ui/) | Presentasi visual — Page, Form, Table, Dashboard, dst. | 15 |
-| [`infra/`](infra/) | Renderer, storage, control plane — Renderer, Datastore, Policy, dst. | 5 |
+| Grup                     | Isi                                                                  | Jumlah |
+| ------------------------ | -------------------------------------------------------------------- | ------ |
+| [`curation/`](curation/) | Struktur workspace — Workspace, App, Module                          | 3      |
+| [`data/`](data/)         | Model domain & behavior — Entity, Service, Config, dst.              | 11     |
+| [`ui/`](ui/)             | Presentasi visual — Page, Form, Table, Dashboard, dst.               | 15     |
+| [`infra/`](infra/)       | Renderer, storage, control plane — Renderer, Datastore, Policy, dst. | 5      |
 
-**Total: 33 kind.** Meta-kind (`VisualSpecKind`) tidak punya halaman sendiri —
+**Total: 34 kind.** Meta-kind (`VisualSpecKind`) tidak punya halaman sendiri —
 didefinisikan di `docs/spec/frontend/02-visual-spec-kind.md`.
 
 ## Cara Baca
 
 Tiap file kind punya struktur konsisten:
 
-| Section | Sumber | Boleh diedit? |
-|---|---|---|
-| `Kapan Memakai` | Manual | ✅ Ya — narasi author |
-| `Contoh Manifest` | Manual | ✅ Ya — contoh YAML |
-| `Atribut` | **Generated** dari `pkg/spec` | ❌ Jangan edit — ditimpa saat regenerate |
-| `Gotchas` | Manual | ✅ Ya — narasi author |
+| Section           | Sumber                        | Boleh diedit?                            |
+| ----------------- | ----------------------------- | ---------------------------------------- |
+| `Kapan Memakai`   | Manual                        | ✅ Ya — narasi author                    |
+| `Contoh Manifest` | Manual                        | ✅ Ya — contoh YAML                      |
+| `Atribut`         | **Generated** dari `pkg/spec` | ❌ Jangan edit — ditimpa saat regenerate |
+| `Gotchas`         | Manual                        | ✅ Ya — narasi author                    |
 
 > ⚠️ **Aturan emas:** jangan pernah mengedit konten **di antara** marker
 > `<!-- generated:... -->`. Ubah atribut di `pkg/spec` (Go struct + godoc +
@@ -37,7 +37,7 @@ keduanya berarti hal yang sama dan divalidasi identik.
 ## Cara Regenerate
 
 ```bash
-make generate-kind-docs   # regenerate semua 33 file
+make generate-kind-docs   # regenerate semua 34 file
 ```
 
 Idempotent: setelah regenerate, `git diff` pada `docs/kind/` hanya menunjukkan

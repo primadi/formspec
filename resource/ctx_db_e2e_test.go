@@ -88,9 +88,10 @@ func TestCtxDBQuery_EndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
+	tok := seedAdminToken(t, app)
 
 	// Create a record so the custom action has a resource to act on.
-	status, out := doJSON(t, app, "POST", "/demo/_ui/entity/alpha/order", map[string]any{
+	status, out := doAuthed(t, app, "POST", "/default/_ui/entity/alpha/order", tok, map[string]any{
 		"transaction_date": recentDate(),
 		"number":           "ORD-1",
 	})
@@ -103,7 +104,7 @@ func TestCtxDBQuery_EndToEnd(t *testing.T) {
 	}
 
 	// Invoke the ping action, which runs ctx.db().query("SELECT 1 AS one").
-	status, out = doJSON(t, app, "POST", "/demo/_ui/entity/alpha/order/"+id+"/ping", nil)
+	status, out = doAuthed(t, app, "POST", "/default/_ui/entity/alpha/order/"+id+"/ping", tok, nil)
 	if status != http.StatusOK {
 		t.Fatalf("ping: status %d, body %v", status, out)
 	}

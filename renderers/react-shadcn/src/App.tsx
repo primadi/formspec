@@ -224,7 +224,15 @@ function SurfaceShell({
   const unauthenticated = useSessionStore((s) => s.unauthenticated)
   const token = useSessionStore((s) => s.token)
   const boot = useSessionStore((s) => s.boot)
-  const bundle = useMetaStore((s) => s.bundle)
+  const storedBundle = useMetaStore((s) => s.bundle)
+  const metaSurface = useMetaStore((s) => s.loadedSurface)
+  // The meta store holds ONE bundle for the whole SPA. A bundle fetched for
+  // the other surface (e.g. the app bundle while rendering the admin
+  // surface) is stale here — treat it as absent so the boot effect reloads
+  // for this surface and the guards never misread it. (Reading
+  // setup_required=true from the app bundle used to loop the admin login
+  // route back to the setup wizard forever after first-run setup.)
+  const bundle = metaSurface === surface ? storedBundle : null
   const metaLoading = useMetaStore((s) => s.loading)
   const metaError = useMetaStore((s) => s.error)
   const metaForbidden = useMetaStore((s) => s.forbidden)
@@ -462,7 +470,24 @@ function SurfaceShell({
   })
 
   if (isLoginRoute || isRegisterRoute) {
-    if (unauthenticated || isRegisterRoute || isPublic) {
+    // First-run guard: while the workspace has no users, the register form
+    // is a trap — it would create a non-admin user and lock the setup
+    // wizard (409 SETUP_COMPLETE) with no admin left. Route the visitor to
+    // the setup wizard instead; it chains back through login afterwards.
+    if (isRegisterRoute && bundle?.setup_required && !token) {
+      const forward = location.pathname + location.search
+      return (
+        <Navigate
+          to={`/${workspace}/_admin/setup?forward=${encodeURIComponent(forward)}`}
+          replace
+        />
+      )
+    }
+    // Show the auth form only when there is something to authenticate. An
+    // authenticated visitor on either route is bounced to the surface root —
+    // in particular the register route must not re-show the sign-up form to
+    // a signed-in user (e.g. after setup chained returnTo=.../register).
+    if (unauthenticated || isPublic) {
       return (
         <AuthPage
           slot="login_page"

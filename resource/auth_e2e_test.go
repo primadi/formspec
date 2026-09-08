@@ -100,7 +100,7 @@ func login(t *testing.T, app *App, username, password string) string {
 // loginPair returns the access + refresh token pair for a username/password.
 func loginPair(t *testing.T, app *App, username, password string) (string, string) {
 	t.Helper()
-	status, out := doJSON(t, app, "POST", "/demo/_ui/auth/login", map[string]any{
+	status, out := doJSON(t, app, "POST", "/default/_ui/auth/login", map[string]any{
 		"username": username, "password": password,
 	})
 	if status != 200 {
@@ -152,7 +152,7 @@ func seedUser(t *testing.T, app *App, username, password string, perms []string)
 		t.Fatalf("hash: %v", err)
 	}
 	if _, err := userStore.Insert(context.Background(), db.InsertParams{
-		WorkspaceID: "demo", CreatedBy: "test",
+		WorkspaceID: "default", CreatedBy: "test",
 		Data: map[string]any{
 			"username": username, "password_hash": hash,
 			"roles": []string{}, "permissions": perms, "active": true,
@@ -160,6 +160,16 @@ func seedUser(t *testing.T, app *App, username, password string, perms []string)
 	}); err != nil {
 		t.Fatalf("insert user %s: %v", username, err)
 	}
+}
+
+// seedAdminToken seeds an admin user (wildcard permissions) and returns a
+// bearer token for it. Auth is uniform across dev and prod (no anonymous
+// bypass), so tests exercising protected endpoints must authenticate.
+func seedAdminToken(t *testing.T, app *App) string {
+	t.Helper()
+	api.ResetAuthRateLimiters()
+	seedUser(t, app, "admin", "admin", []string{"*"})
+	return login(t, app, "admin", "admin")
 }
 
 // TestAuthAuthz_E2E exercises the full authentication + authorization flow
@@ -186,14 +196,14 @@ func TestAuthAuthz_E2E(t *testing.T) {
 
 	// ── 1. Authentication: login success + wrong password ──
 	adminTok := login(t, app, "admin", "admin")
-	if status, _ := doJSON(t, app, "POST", "/demo/_ui/auth/login", map[string]any{
+	if status, _ := doJSON(t, app, "POST", "/default/_ui/auth/login", map[string]any{
 		"username": "admin", "password": "wrong",
 	}); status != 401 {
 		t.Fatalf("expected 401 for wrong password, got %d", status)
 	}
 
 	// ── 2. Authorization: create customer with admin token ──
-	status, out := doAuthed(t, app, "POST", "/demo/_ui/entity/acme/customer", adminTok, map[string]any{
+	status, out := doAuthed(t, app, "POST", "/default/_ui/entity/acme/customer", adminTok, map[string]any{
 		"name": "Alice", "secret": "topsecret", "salary": 100000,
 	})
 	if status != 201 {
@@ -205,7 +215,7 @@ func TestAuthAuthz_E2E(t *testing.T) {
 	}
 
 	// ── 3. Field-level security: masked field in response ──
-	status, out = doAuthed(t, app, "GET", "/demo/_ui/entity/acme/customer/"+custID, adminTok, nil)
+	status, out = doAuthed(t, app, "GET", "/default/_ui/entity/acme/customer/"+custID, adminTok, nil)
 	if status != 200 {
 		t.Fatalf("get customer: status %d", status)
 	}
@@ -220,7 +230,7 @@ func TestAuthAuthz_E2E(t *testing.T) {
 	}
 
 	// ── 4. Authentication: no token → 401 ──
-	if status, _ := doJSON(t, app, "GET", "/demo/_ui/entity/acme/customer/"+custID, nil); status != 401 {
+	if status, _ := doJSON(t, app, "GET", "/default/_ui/entity/acme/customer/"+custID, nil); status != 401 {
 		t.Fatalf("expected 401 without token, got %d", status)
 	}
 
@@ -228,7 +238,7 @@ func TestAuthAuthz_E2E(t *testing.T) {
 	limitedTok := login(t, app, "limited", "limited")
 
 	// view allowed (has acme.customers.view)
-	status, out = doAuthed(t, app, "GET", "/demo/_ui/entity/acme/customer/"+custID, limitedTok, nil)
+	status, out = doAuthed(t, app, "GET", "/default/_ui/entity/acme/customer/"+custID, limitedTok, nil)
 	if status != 200 {
 		t.Fatalf("expected 200 for view (has permission), got %d", status)
 	}
@@ -238,7 +248,7 @@ func TestAuthAuthz_E2E(t *testing.T) {
 		t.Fatal("expected salary excluded for user without required_permission")
 	}
 	// delete forbidden (no acme.customers.delete)
-	if status, _ := doAuthed(t, app, "DELETE", "/demo/_ui/entity/acme/customer/"+custID, limitedTok, nil); status != 403 {
+	if status, _ := doAuthed(t, app, "DELETE", "/default/_ui/entity/acme/customer/"+custID, limitedTok, nil); status != 403 {
 		t.Fatalf("expected 403 for delete (no permission), got %d", status)
 	}
 
@@ -249,13 +259,13 @@ func TestAuthAuthz_E2E(t *testing.T) {
 		t.Fatalf("api-key store: %v", err)
 	}
 	keyStore := auth.NewApiKeyStore(apiKeyStore)
-	plaintext, err := keyStore.Create(context.Background(), "demo", &auth.ApiKey{
+	plaintext, err := keyStore.Create(context.Background(), "default", &auth.ApiKey{
 		Name: "svc", Scope: "workspace", Permissions: []string{"acme.customers.list"},
 	})
 	if err != nil {
 		t.Fatalf("create api key: %v", err)
 	}
-	req := httptest.NewRequest("GET", "/demo/api/v1/acme/customers", nil)
+	req := httptest.NewRequest("GET", "/default/api/v1/acme/customers", nil)
 	req.Header.Set("X-FormSpec-Key", plaintext)
 	rr := httptest.NewRecorder()
 	app.Handler().ServeHTTP(rr, req)
@@ -265,14 +275,14 @@ func TestAuthAuthz_E2E(t *testing.T) {
 
 	// ── 7. API key revoked → 401 ──
 	// Resolve the key to get its ID, then revoke it.
-	key, err := keyStore.GetByKey(context.Background(), "demo", plaintext)
+	key, err := keyStore.GetByKey(context.Background(), "default", plaintext)
 	if err != nil {
 		t.Fatalf("get api key: %v", err)
 	}
-	if err := keyStore.Revoke(context.Background(), "demo", key.ID); err != nil {
+	if err := keyStore.Revoke(context.Background(), "default", key.ID); err != nil {
 		t.Fatalf("revoke api key: %v", err)
 	}
-	req2 := httptest.NewRequest("GET", "/demo/api/v1/acme/customers", nil)
+	req2 := httptest.NewRequest("GET", "/default/api/v1/acme/customers", nil)
 	req2.Header.Set("X-FormSpec-Key", plaintext)
 	rr2 := httptest.NewRecorder()
 	app.Handler().ServeHTTP(rr2, req2)
@@ -304,7 +314,7 @@ func TestAuthRefresh_Rotation_E2E(t *testing.T) {
 	_, refresh := loginPair(t, app, "admin", "admin")
 
 	// Refresh → new pair (200).
-	status, out := doJSON(t, app, "POST", "/demo/_ui/auth/refresh", map[string]any{
+	status, out := doJSON(t, app, "POST", "/default/_ui/auth/refresh", map[string]any{
 		"refresh_token": refresh,
 	})
 	if status != 200 {
@@ -317,14 +327,14 @@ func TestAuthRefresh_Rotation_E2E(t *testing.T) {
 	}
 
 	// Replay the OLD refresh token → 401 (rotated/invalidated).
-	if status, _ := doJSON(t, app, "POST", "/demo/_ui/auth/refresh", map[string]any{
+	if status, _ := doJSON(t, app, "POST", "/default/_ui/auth/refresh", map[string]any{
 		"refresh_token": refresh,
 	}); status != 401 {
 		t.Fatalf("expected 401 for replayed old refresh token, got %d", status)
 	}
 
 	// The NEW refresh token still works.
-	if status, _ := doJSON(t, app, "POST", "/demo/_ui/auth/refresh", map[string]any{
+	if status, _ := doJSON(t, app, "POST", "/default/_ui/auth/refresh", map[string]any{
 		"refresh_token": newRefresh,
 	}); status != 200 {
 		t.Fatalf("expected 200 for new refresh token, got %d", status)
@@ -353,7 +363,7 @@ func TestAuthRoleGrants_E2E(t *testing.T) {
 
 	// Create a customer as admin (for the viewer to read).
 	adminTok := login(t, app, "admin", "admin")
-	status, out := doAuthed(t, app, "POST", "/demo/_ui/entity/acme/customer", adminTok, map[string]any{
+	status, out := doAuthed(t, app, "POST", "/default/_ui/entity/acme/customer", adminTok, map[string]any{
 		"name": "Bob",
 	})
 	if status != 201 {
@@ -368,7 +378,7 @@ func TestAuthRoleGrants_E2E(t *testing.T) {
 		t.Fatalf("role store: %v", err)
 	}
 	if _, err := roleStore.Insert(context.Background(), db.InsertParams{
-		WorkspaceID: "demo", CreatedBy: "test",
+		WorkspaceID: "default", CreatedBy: "test",
 		Data: map[string]any{
 			"name": "viewer", "app": "", "module": "",
 			"grants": []map[string]any{
@@ -389,7 +399,7 @@ func TestAuthRoleGrants_E2E(t *testing.T) {
 		t.Fatalf("hash: %v", err)
 	}
 	if _, err := userStore.Insert(context.Background(), db.InsertParams{
-		WorkspaceID: "demo", CreatedBy: "test",
+		WorkspaceID: "default", CreatedBy: "test",
 		Data: map[string]any{
 			"username": "viewer", "password_hash": hash,
 			"roles": []string{"viewer"}, "permissions": []string{}, "active": true,
@@ -402,11 +412,11 @@ func TestAuthRoleGrants_E2E(t *testing.T) {
 	viewerTok := login(t, app, "viewer", "viewer")
 
 	// view allowed (materialized acme.customers.view).
-	if status, _ := doAuthed(t, app, "GET", "/demo/_ui/entity/acme/customer/"+custID, viewerTok, nil); status != 200 {
+	if status, _ := doAuthed(t, app, "GET", "/default/_ui/entity/acme/customer/"+custID, viewerTok, nil); status != 200 {
 		t.Fatalf("expected 200 for view (materialized grant), got %d", status)
 	}
 	// delete forbidden (no acme.customers.delete in the role grant).
-	if status, _ := doAuthed(t, app, "DELETE", "/demo/_ui/entity/acme/customer/"+custID, viewerTok, nil); status != 403 {
+	if status, _ := doAuthed(t, app, "DELETE", "/default/_ui/entity/acme/customer/"+custID, viewerTok, nil); status != 403 {
 		t.Fatalf("expected 403 for delete (no grant), got %d", status)
 	}
 }
@@ -438,7 +448,7 @@ func TestAuthSessionRevoke_E2E(t *testing.T) {
 	if err != nil {
 		t.Fatalf("user store: %v", err)
 	}
-	userRec, err := userStore.FindByField(context.Background(), "demo", "username", "admin")
+	userRec, err := userStore.FindByField(context.Background(), "default", "username", "admin")
 	if err != nil || userRec == nil {
 		t.Fatalf("find admin user: %v", err)
 	}
@@ -448,20 +458,20 @@ func TestAuthSessionRevoke_E2E(t *testing.T) {
 	}
 	// Delete sessions for the admin user ID.
 	res, err := sessionStore.List(context.Background(), db.ListParams{
-		WorkspaceID: "demo", PerPage: 100,
+		WorkspaceID: "default", PerPage: 100,
 		Filters: map[string]db.FilterOp{"user_id": {Op: "eq", Value: userRec.ID}},
 	})
 	if err != nil {
 		t.Fatalf("list sessions: %v", err)
 	}
 	for _, rec := range res.Data {
-		if err := sessionStore.SoftDelete(context.Background(), "demo", rec.ID); err != nil {
+		if err := sessionStore.SoftDelete(context.Background(), "default", rec.ID); err != nil {
 			t.Fatalf("delete session: %v", err)
 		}
 	}
 
 	// Refresh with the revoked session's token → 401.
-	if status, _ := doJSON(t, app, "POST", "/demo/_ui/auth/refresh", map[string]any{
+	if status, _ := doJSON(t, app, "POST", "/default/_ui/auth/refresh", map[string]any{
 		"refresh_token": refresh,
 	}); status != 401 {
 		t.Fatalf("expected 401 for revoked session refresh, got %d", status)
@@ -494,13 +504,13 @@ func TestAuthConcurrentSessionLimit_E2E(t *testing.T) {
 	_, refreshB := loginPair(t, app, "admin", "admin")
 
 	// Refresh with the evicted session A's token → 401.
-	if status, _ := doJSON(t, app, "POST", "/demo/_ui/auth/refresh", map[string]any{
+	if status, _ := doJSON(t, app, "POST", "/default/_ui/auth/refresh", map[string]any{
 		"refresh_token": refreshA,
 	}); status != 401 {
 		t.Fatalf("expected 401 for evicted session A, got %d", status)
 	}
 	// Refresh with the current session B's token → 200.
-	if status, _ := doJSON(t, app, "POST", "/demo/_ui/auth/refresh", map[string]any{
+	if status, _ := doJSON(t, app, "POST", "/default/_ui/auth/refresh", map[string]any{
 		"refresh_token": refreshB,
 	}); status != 200 {
 		t.Fatalf("expected 200 for current session B, got %d", status)
@@ -527,14 +537,14 @@ func TestAuthRateLimit_E2E(t *testing.T) {
 
 	// Burst is 5 — the first 5 logins succeed.
 	for i := 0; i < 5; i++ {
-		if status, _ := doJSON(t, app, "POST", "/demo/_ui/auth/login", map[string]any{
+		if status, _ := doJSON(t, app, "POST", "/default/_ui/auth/login", map[string]any{
 			"username": "admin", "password": "admin",
 		}); status != 200 {
 			t.Fatalf("login %d: expected 200, got %d", i, status)
 		}
 	}
 	// The 6th login is rate-limited → 429.
-	if status, _ := doJSON(t, app, "POST", "/demo/_ui/auth/login", map[string]any{
+	if status, _ := doJSON(t, app, "POST", "/default/_ui/auth/login", map[string]any{
 		"username": "admin", "password": "admin",
 	}); status != 429 {
 		t.Fatalf("expected 429 after burst exhausted, got %d", status)
@@ -563,7 +573,7 @@ func TestAuthWildcardPermission_E2E(t *testing.T) {
 
 	// Create a customer as admin.
 	adminTok := login(t, app, "admin", "admin")
-	status, out := doAuthed(t, app, "POST", "/demo/_ui/entity/acme/customer", adminTok, map[string]any{
+	status, out := doAuthed(t, app, "POST", "/default/_ui/entity/acme/customer", adminTok, map[string]any{
 		"name": "Carol",
 	})
 	if status != 201 {
@@ -573,7 +583,7 @@ func TestAuthWildcardPermission_E2E(t *testing.T) {
 
 	// Manager (acme.customers.*) can delete → 204 (wildcard matches delete).
 	managerTok := login(t, app, "manager", "manager")
-	if status, _ := doAuthed(t, app, "DELETE", "/demo/_ui/entity/acme/customer/"+custID, managerTok, nil); status != 204 && status != 200 {
+	if status, _ := doAuthed(t, app, "DELETE", "/default/_ui/entity/acme/customer/"+custID, managerTok, nil); status != 204 && status != 200 {
 		t.Fatalf("expected 204 for wildcard delete, got %d", status)
 	}
 }
@@ -603,7 +613,7 @@ func TestAuthOwnerRole_E2E(t *testing.T) {
 		t.Fatalf("role store: %v", err)
 	}
 	if _, err := roleStore.Insert(context.Background(), db.InsertParams{
-		WorkspaceID: "demo", CreatedBy: "test",
+		WorkspaceID: "default", CreatedBy: "test",
 		Data: map[string]any{"name": "workspace-owner", "app": "", "module": "", "grants": []any{}},
 	}); err != nil {
 		t.Fatalf("insert owner role: %v", err)
@@ -617,7 +627,7 @@ func TestAuthOwnerRole_E2E(t *testing.T) {
 		t.Fatalf("hash: %v", err)
 	}
 	if _, err := userStore.Insert(context.Background(), db.InsertParams{
-		WorkspaceID: "demo", CreatedBy: "test",
+		WorkspaceID: "default", CreatedBy: "test",
 		Data: map[string]any{
 			"username": "owner", "password_hash": hash,
 			"roles": []string{"workspace-owner"}, "permissions": []string{}, "active": true,
@@ -628,7 +638,7 @@ func TestAuthOwnerRole_E2E(t *testing.T) {
 
 	// Create a customer as admin.
 	adminTok := login(t, app, "admin", "admin")
-	status, out := doAuthed(t, app, "POST", "/demo/_ui/entity/acme/customer", adminTok, map[string]any{
+	status, out := doAuthed(t, app, "POST", "/default/_ui/entity/acme/customer", adminTok, map[string]any{
 		"name": "Dave",
 	})
 	if status != 201 {
@@ -638,7 +648,7 @@ func TestAuthOwnerRole_E2E(t *testing.T) {
 
 	// Owner (workspace-owner → *) can delete → 204.
 	ownerTok := login(t, app, "owner", "owner")
-	if status, _ := doAuthed(t, app, "DELETE", "/demo/_ui/entity/acme/customer/"+custID, ownerTok, nil); status != 204 && status != 200 {
+	if status, _ := doAuthed(t, app, "DELETE", "/default/_ui/entity/acme/customer/"+custID, ownerTok, nil); status != 204 && status != 200 {
 		t.Fatalf("expected 204 for owner delete, got %d", status)
 	}
 }
@@ -664,7 +674,7 @@ func TestAuthAuditLog_E2E(t *testing.T) {
 	// Successful login.
 	loginPair(t, app, "admin", "admin")
 	// Failed login.
-	doJSON(t, app, "POST", "/demo/_ui/auth/login", map[string]any{
+	doJSON(t, app, "POST", "/default/_ui/auth/login", map[string]any{
 		"username": "admin", "password": "wrong",
 	})
 

@@ -105,9 +105,11 @@ Recovery → Logging → CORS → RequestID → Workspace → Auth
   konfigurasi allow-list origin.
 - **RequestIDMiddleware** (`middleware.go:156-163`) — ID acak per request,
   disuntik ke context dan header `X-Request-ID`.
-- **WorkspaceMiddleware** (`middleware.go:34-54`) — mengekstrak segmen
+- **WorkspaceMiddleware** (`middleware.go`) — mengekstrak segmen
   pertama path (`/{workspace}/...`) sebagai workspace ID; fallback ke
-  `"demo"` kalau kosong. Nilai ini disimpan dua kali di context: sebagai
+  `"default"` kalau kosong. Saat workspace registry ter-wire
+  (`api.SetWorkspaceResolver` — plan `docs_internal/plan/named-workspaces.md`),
+  slug tak terdaftar → **404 `WORKSPACE_NOT_FOUND`**; kegagalan lookup → 500. Nilai ini disimpan dua kali di context: sebagai
   "URL workspace" (`WithURLWorkspace`, dipakai untuk pengecekan silang di
   `AuthMiddleware`) dan sebagai workspace aktif (`WithWorkspace`,
   ditimpa lagi oleh identity di langkah berikutnya kalau identity punya

@@ -127,10 +127,11 @@ func TestCtxDB_ModuleScoped_EndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
+	tok := seedAdminToken(t, app)
 
 	// Create one record per module so each custom action has a resource.
 	create := func(mod string) string {
-		status, out := doJSON(t, app, "POST", "/demo/_ui/entity/"+mod+"/order", map[string]any{
+		status, out := doAuthed(t, app, "POST", "/default/_ui/entity/"+mod+"/order", tok, map[string]any{
 			"transaction_date": recentDate(),
 			"number":           "ORD-" + mod,
 		})
@@ -148,7 +149,7 @@ func TestCtxDB_ModuleScoped_EndToEnd(t *testing.T) {
 
 	// Invoke both probe actions.
 	for _, tc := range []struct{ mod, id string }{{"alpha", alphaID}, {"beta", betaID}} {
-		status, out := doJSON(t, app, "POST", "/demo/_ui/entity/"+tc.mod+"/order/"+tc.id+"/probe", nil)
+		status, out := doAuthed(t, app, "POST", "/default/_ui/entity/"+tc.mod+"/order/"+tc.id+"/probe", tok, nil)
 		if status != http.StatusOK {
 			t.Fatalf("probe %s: status %d, body %v", tc.mod, status, out)
 		}
@@ -214,8 +215,9 @@ func TestCtxDB_CrossDatastoreNamedBlocked_EndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
+	tok := seedAdminToken(t, app)
 
-	status, out := doJSON(t, app, "POST", "/demo/_ui/entity/alpha/order", map[string]any{
+	status, out := doAuthed(t, app, "POST", "/default/_ui/entity/alpha/order", tok, map[string]any{
 		"transaction_date": recentDate(),
 		"number":           "ORD-1",
 	})
@@ -224,7 +226,7 @@ func TestCtxDB_CrossDatastoreNamedBlocked_EndToEnd(t *testing.T) {
 	}
 	id, _ := out["data"].(map[string]any)["id"].(string)
 
-	status, out = doJSON(t, app, "POST", "/demo/_ui/entity/alpha/order/"+id+"/probe", nil)
+	status, out = doAuthed(t, app, "POST", "/default/_ui/entity/alpha/order/"+id+"/probe", tok, nil)
 	if status == http.StatusOK {
 		t.Fatalf("escape hatch succeeded — want rejection, got %v", out)
 	}

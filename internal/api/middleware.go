@@ -41,11 +41,36 @@ func SetApiKeyStore(s *auth.ApiKeyStore) { apiKeyStore = s }
 // GetApiKeyStore returns the current global API key store (may be nil).
 func GetApiKeyStore() *auth.ApiKeyStore { return apiKeyStore }
 
-// WorkspaceMiddleware extracts the workspace slug from the URL, resolves it,
-// and injects the workspace ID into the request context.
+// WorkspaceResolver reports whether a workspace slug is registered
+// (plan docs_internal/plan/named-workspaces.md). Implemented by
+// auth.WorkspaceRegistry (formspec.core/workspace entity). Nil = no
+// registry — WorkspaceMiddleware passes the slug through unvalidated
+// (backward compatibility for tests/embedded use).
+type WorkspaceResolver interface {
+	Registered(ctx context.Context, slug string) (bool, error)
+}
+
+// workspaceResolver is the active workspace registry, configured at boot
+// from resource.App and re-wired on every ReloadSpec.
+var workspaceResolver WorkspaceResolver
+
+// SetWorkspaceResolver configures the global workspace registry (nil
+// disables registration validation — any slug is accepted).
+func SetWorkspaceResolver(r WorkspaceResolver) { workspaceResolver = r }
+
+// GetWorkspaceResolver returns the current global workspace resolver (may
+// be nil). Used by tests to restore the previous resolver after overriding.
+func GetWorkspaceResolver() WorkspaceResolver { return workspaceResolver }
+
+// WorkspaceMiddleware extracts the workspace slug from the URL, resolves it
+// against the workspace registry (when wired), and injects the workspace ID
+// into the request context.
 //
 // URL format: /{workspace_slug}/api/...
-// Falls back to "demo" for development.
+// Falls back to "default" when no segment is present.
+// Registration validation (plan named-workspaces.md): when a
+// WorkspaceResolver is configured, an unregistered slug is rejected with
+// 404 — indistinguishable from a missing resource (§15.2 anti-enumeration).
 // Workspace isolation (§15.2): the workspace ID is set once here and all
 // downstream handlers MUST use it from context — never from request body.
 // Cross-workspace mismatch is enforced in AuthMiddleware (identity workspace vs URL).
@@ -60,12 +85,30 @@ func WorkspaceMiddleware(next http.Handler) http.Handler {
 			workspaceID = parts[0]
 		}
 		if workspaceID == "" {
-			workspaceID = "demo"
+			workspaceID = spec.DefaultWorkspaceSlug
+		}
+
+		// Registry check (plan named-workspaces.md): only registered
+		// workspaces are routable. A DB failure is a 500; an unregistered
+		// slug is a 404 — never 403 (anti-enumeration, §15.2).
+		if workspaceResolver != nil {
+			ok, err := workspaceResolver.Registered(r.Context(), workspaceID)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "INTERNAL",
+					"workspace lookup failed")
+				return
+			}
+			if !ok {
+				writeError(w, http.StatusNotFound, "WORKSPACE_NOT_FOUND",
+					"workspace not found")
+				return
+			}
 		}
 
 		// Save URL-extracted workspace for cross-workspace check in AuthMiddleware
 		ctx := WithURLWorkspace(r.Context(), workspaceID)
-		// In production: lookup workspace slug → internal workspace UUID
+		// The URL slug IS the workspace ID (no slug→UUID mapping; plan
+		// named-workspaces.md decision 1).
 		ctx = WithWorkspace(ctx, workspaceID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
@@ -91,7 +134,7 @@ func AuthMiddleware(next http.Handler) http.Handler {
 			if apiKey := r.Header.Get("X-FormSpec-Key"); apiKey != "" {
 				ws := workspaceFromContext(ctx)
 				if ws == "" {
-					ws = "demo"
+					ws = spec.DefaultWorkspaceSlug
 				}
 				k, err := apiKeyStore.GetByKey(ctx, ws, apiKey)
 				if err != nil || !k.IsValid(time.Now()) {
@@ -157,7 +200,10 @@ func AuthMiddleware(next http.Handler) http.Handler {
 		} else {
 			// No validator configured — dev fallback (should not happen if SetAuthValidator is called)
 			ctx = WithUser(ctx, "developer")
-			ctx = WithWorkspace(ctx, "demo")
+			// Do NOT override the workspace here: WorkspaceMiddleware already
+			// set it from the URL slug. Forcing a constant (the old "demo")
+			// would break workspace-scoped features (e.g. AppSpec.Workspaces
+			// allowlist checks) for every request in validator-less tests.
 		}
 
 		next.ServeHTTP(w, r.WithContext(ctx))

@@ -257,6 +257,11 @@ func TestOAuth_Callback_UnverifiedEmail_Redirects(t *testing.T) {
 
 	// Seed an unverified account with the mock provider's email (a hacker's
 	// claim). No mailer → no verification email → stays unverified.
+	// (Seed an admin first — registration is blocked while the workspace has
+	// no users, the first-run guard.)
+	if err := svc.SeedDevUser(context.Background(), "demo", "admin", "admin"); err != nil {
+		t.Fatalf("SeedDevUser: %v", err)
+	}
 	if err := svc.Register(context.Background(), "demo", "claimed", "oauth.user@example.com", "password123"); err != nil {
 		t.Fatalf("Register: %v", err)
 	}
@@ -275,6 +280,9 @@ func TestOAuth_Callback_LinkRequired_Redirects(t *testing.T) {
 	// with a mailer, then consume the emailed verification token.
 	m := &apiFakeMailer{baseURL: "http://localhost:18080"}
 	svc.SetMailer(m)
+	if err := svc.SeedDevUser(context.Background(), "demo", "admin", "admin"); err != nil {
+		t.Fatalf("SeedDevUser: %v", err)
+	}
 	if err := svc.Register(context.Background(), "demo", "owner", "oauth.user@example.com", "password123"); err != nil {
 		t.Fatalf("Register: %v", err)
 	}

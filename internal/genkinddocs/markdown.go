@@ -46,8 +46,9 @@ type GroupInfo struct {
 
 var kindGroups = map[string]GroupInfo{
 	// Curation — workspace structure
-	"App":    {Group: "curation", Plane: "resource"},
-	"Module": {Group: "curation", Plane: "resource"},
+	"App":       {Group: "curation", Plane: "resource"},
+	"Module":    {Group: "curation", Plane: "resource"},
+	"Workspace": {Group: "curation", Plane: "resource"},
 	// Data — domain model & behavior
 	"Entity":         {Group: "data", Plane: "resource"},
 	"Service":        {Group: "data", Plane: "resource"},

@@ -83,6 +83,7 @@ spec:
 | `title` | `string` | — | Acme Corp Portal | Human-readable display name (spaces allowed) — brand bar + document.title; metadata.name stays the machine identifier |
 | `logo` | `string` | — | package | Brand mark icon (lucide name) next to the title in the shell brand bar |
 | `root_url` | `string` | ✅ | /app/klinik | Mount prefix inside the workspace: \"/\" or any \"/path\" — unique per workspace; reserved segments (_ui, api, _admin, assets, health, login, register, _ws, print) are rejected |
+| `workspaces` | — | — | [cafe, kopi] | Optional workspace mount allowlist — absent = all workspaces; [] = staged (mounted nowhere); [slug,...] = only those workspaces |
 | `modules` | []`string` | — | [clinic, pharmacy] | Modules mounted by this App — manifests outside these modules are excluded from the App bundle |
 | `datastores` | map | — | db: pg-main | Datastores is the App-level App Registry selection — the App Registry |
 | `app_renderer` | enum (sidebar-nav · topnav · no-nav) | — | no-nav | Chrome archetype (frontend/05-app-kinds.md): sidebar-nav \| topnav \| no-nav — no-nav means truly no navigation |
@@ -91,6 +92,7 @@ spec:
 | `persist_backend` | `string` | — | jsonb-persist | Entity persist backend (backend/04-persist-backend.md), e.g. jsonb-persist |
 | `theme_ref` | `string` | — | ocean-blue | Theme kind name applied per-App (frontend/05-app-kinds.md §6) |
 | `auth_config_ref` | `string` | — |  | Per-App auth strategy config (kind: Config) |
+| `auth` | `AppAuth` | — |  | Per-App auth screen overrides: login_page/setup_page/change_password_page/reset_password_page/oauth_callback_page (kind: Page refs) + chrome_auth (component ref) — empty slots fall back to formspec.core defaults |
 | `renderers` | map | — |  | Renderers maps a VisualSpecKind name → renderer for the whole App |
 | `chrome` | `AppChrome` | — | nav: menu | Chrome composition: brand/nav/auth/footer/breadcrumbs/theme_switcher, each auto\|show\|hide (auth: auto\|links\|button\|none) — see frontend/05-app-kinds.md §5 |
 | `menu` | []`MenuItem` | — |  |  |

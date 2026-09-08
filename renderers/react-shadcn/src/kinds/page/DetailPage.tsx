@@ -75,7 +75,9 @@ export default function DetailPage({ entity }: DetailPageProps) {
   }, [id, entity, getClient, navigate, workspace])
 
   // All entity schemas from the meta bundle — used to resolve relation display fields
-  const entities = useMetaStore((s) => s.bundle?.entities ?? [])
+  // Select the raw value (stable reference) and fall back outside the selector
+  // — a `?? []` inside would return a fresh array every render and loop forever.
+  const entities = useMetaStore((s) => s.bundle?.entities) ?? []
   const settings = useMetaStore((s) => s.bundle?.settings)
   const formatter = useMemo(() => createFormatter(settings), [settings])
 

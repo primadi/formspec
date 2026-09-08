@@ -1763,7 +1763,8 @@
         "Listing",
         "Calendar",
         "ApprovalInbox",
-        "NotificationCenter"
+        "NotificationCenter",
+        "Workspace"
       ]
     },
     "KvstoreUseDecl": {
@@ -5285,7 +5286,8 @@
         "Listing",
         "Calendar",
         "ApprovalInbox",
-        "NotificationCenter"
+        "NotificationCenter",
+        "Workspace"
       ]
     },
     "KvstoreUseDecl": {
@@ -7090,7 +7092,8 @@
         "Webhook",
         "Widget",
         "Wizard",
-        "Workflow"
+        "Workflow",
+        "Workspace"
       ]
     },
     "metadata": {
@@ -7278,6 +7281,17 @@
               "examples": [
                 "1.0.0"
               ]
+            },
+            "workspaces": {
+              "description": "Optional workspace mount allowlist — absent = all workspaces; [] = staged (mounted nowhere); [slug,...] = only those workspaces",
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "examples": [
+                "[cafe, kopi]"
+              ],
+              "nullable": true
             }
           },
           "required": [
@@ -8639,6 +8653,90 @@
             "driver",
             "connection"
           ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "apiVersion",
+        "kind",
+        "metadata",
+        "spec"
+      ]
+    },
+    {
+      "properties": {
+        "apiVersion": {
+          "type": "string",
+          "const": "formspec.dev/v1"
+        },
+        "kind": {
+          "type": "string",
+          "const": "Workspace"
+        },
+        "metadata": {
+          "description": "Metadata is common to all FormSpec resources.\n",
+          "type": "object",
+          "properties": {
+            "annotations": {
+              "type": "object",
+              "additionalProperties": {}
+            },
+            "description": {
+              "type": "string"
+            },
+            "labels": {
+              "type": "object",
+              "additionalProperties": {}
+            },
+            "module": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        "spec": {
+          "title": "Workspace Spec",
+          "description": "WorkspaceSpec is the kind-specific body of a `kind: Workspace` manifest.\n",
+          "type": "object",
+          "properties": {
+            "description": {
+              "description": "Description explains the workspace's purpose (AI readability).",
+              "type": "string",
+              "examples": [
+                "Workspace utama aplikasi kafe demo"
+              ]
+            },
+            "display_name": {
+              "description": "Human-readable workspace name — shown in admin surfaces",
+              "type": "string",
+              "examples": [
+                "Kafe Demo"
+              ]
+            },
+            "owner_user_id": {
+              "description": "Optional user ID seeded as workspace owner — empty = no seeded owner (first admin via setup wizard)",
+              "type": "string"
+            },
+            "settings": {
+              "description": "Free-form workspace metadata persisted to the registry row (json) — structured platform settings belong to kind: Config",
+              "type": "object",
+              "additionalProperties": {}
+            },
+            "slug": {
+              "description": "URL-facing workspace slug — defaults to metadata.name; kebab-case, unique across the deployment",
+              "type": "string",
+              "examples": [
+                "cafe"
+              ],
+              "pattern": "^[a-z0-9](-[a-z0-9])*$"
+            }
+          },
           "additionalProperties": false
         }
       },

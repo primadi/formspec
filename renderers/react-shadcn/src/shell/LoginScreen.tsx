@@ -7,7 +7,7 @@
 // handles the `returnTo` redirect) — this screen only authenticates.
 
 import { useState, type FormEvent } from "react"
-import { Link, useSearchParams } from "react-router-dom"
+import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
@@ -34,6 +34,7 @@ export function LoginScreen({
   mode: modeProp,
 }: LoginScreenProps & { mode?: "login" | "register" }) {
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
   const mode = (modeProp ??
     (searchParams.get("mode") === "register" ? "register" : "login")) as
     | "login"
@@ -50,8 +51,15 @@ export function LoginScreen({
   const [error, setError] = useState<string | null>(null)
 
   // Configured external auth providers (auth redesign Fase 5) — a button per
-  // provider redirects to the authorize endpoint.
-  const oauthProviders = useMetaStore((s) => s.bundle?.oauth_providers ?? [])
+  // provider redirects to the authorize endpoint. Select the raw value (stable
+  // reference) and fall back to [] outside the selector — a `?? []` inside
+  // would return a fresh array every render and loop forever (React error
+  // #185 → blank login screen when bundle is null).
+  const oauthProviders = useMetaStore((s) => s.bundle?.oauth_providers) ?? []
+  // First-run guard: while the workspace has no users, registration is a
+  // trap — it would create a non-admin user and lock setup (409) forever.
+  // The Sign up link is hidden and the register submit redirects to setup.
+  const setupRequired = useMetaStore((s) => s.bundle?.setup_required) ?? false
 
   // Auto-logout idle timeout preference (persisted; 0 = never).
   const sessionTimeoutMinutes = usePrefsStore((s) => s.sessionTimeoutMinutes)
@@ -93,6 +101,15 @@ export function LoginScreen({
         })
         if (!res.ok) {
           const body = await res.json().catch(() => null)
+          // Workspace has no users yet — the first account must be the setup
+          // wizard's admin. Send the visitor there instead of an error.
+          if (body?.error?.code === "SETUP_REQUIRED") {
+            navigate(
+              `/${effectiveWorkspace}/_admin/setup?forward=${encodeURIComponent(window.location.pathname)}`,
+              { replace: true },
+            )
+            return
+          }
           throw new Error(
             body?.error?.message ?? `Registration failed (${res.status})`,
           )
@@ -391,15 +408,24 @@ export function LoginScreen({
               ) : (
                 <>
                   Don't have an account?{" "}
-                  <Link
-                    to={
-                      window.location.pathname.replace(/\/login$/, "") +
-                      "/register"
-                    }
-                    className="text-foreground underline"
-                  >
-                    Sign up
-                  </Link>
+                  {setupRequired ? (
+                    <Link
+                      to={`/${effectiveWorkspace}/_admin/setup`}
+                      className="text-foreground underline"
+                    >
+                      Set up admin
+                    </Link>
+                  ) : (
+                    <Link
+                      to={
+                        window.location.pathname.replace(/\/login$/, "") +
+                        "/register"
+                      }
+                      className="text-foreground underline"
+                    >
+                      Sign up
+                    </Link>
+                  )}
                 </>
               )}
             </p>

@@ -1526,7 +1526,9 @@ func WithURLWorkspace(ctx context.Context, workspaceID string) context.Context {
 }
 
 // workspaceFromContext extracts the workspace ID from the request context.
-// Priority: Identity.WorkspaceID > context value > default "demo".
+// Priority: Identity.WorkspaceID > context value > "default" (spec.
+// DefaultWorkspaceSlug — unified across API/CLI/frontend; plan
+// named-workspaces.md decision 5).
 func workspaceFromContext(ctx context.Context) string {
 	// Prefer workspace from identity (set by auth middleware)
 	if id := IdentityFromContext(ctx); id != nil && id.WorkspaceID != "" {
@@ -1534,7 +1536,7 @@ func workspaceFromContext(ctx context.Context) string {
 	}
 	v, _ := ctx.Value(ctxWorkspaceID).(string)
 	if v == "" {
-		return "demo"
+		return spec.DefaultWorkspaceSlug
 	}
 	return v
 }

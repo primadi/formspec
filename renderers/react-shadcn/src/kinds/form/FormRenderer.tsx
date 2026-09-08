@@ -102,7 +102,7 @@ export default function FormRenderer({
   const id = fixedId ?? routeId
   const getClient = useSessionStore((s) => s.getClient)
   const me = useSessionStore((s) => s.me)
-  const bundleForms = useMetaStore((s) => s.bundle?.forms ?? [])
+  const bundleForms = useMetaStore((s) => s.bundle?.forms) ?? []
   const appName = useMetaStore((s) => s.bundle?.app.name)
 
   const authoredForms = useMemo(() => {

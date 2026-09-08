@@ -27,6 +27,7 @@ import (
 	"syscall"
 
 	"github.com/primadi/formspec/internal/api"
+	"github.com/primadi/formspec/internal/devsecret"
 	"github.com/primadi/formspec/internal/devserver"
 	"github.com/primadi/formspec/internal/vendor"
 	native "github.com/primadi/formspec/registry"
@@ -40,8 +41,7 @@ func main() {
 	specPath := flag.String("spec", "", "Spec directory (default: embedded spec extracted to temp)")
 	addr := flag.String("addr", ":8080", "Listen address")
 	prodMode := flag.Bool("prod", false, "Production mode (Postgres + JWT + strict gates)")
-	devAuth := flag.Bool("dev-auth", true, "Dev mode + real JWT auth (login & authorization enforced)")
-	jwtSecret := flag.String("jwt-secret", "", "JWT HMAC secret (dev only)")
+	jwtSecret := flag.String("jwt-secret", "", "JWT HMAC secret (dev: auto-generated + persisted in .formspec/dev-jwt-secret when empty)")
 	jwtIssuer := flag.String("jwt-issuer", "formspec-registry", "JWT issuer")
 	jwtPublicKey := flag.String("jwt-public-key", "", "RSA/ECDSA public key PEM for asymmetric JWT")
 	strictMode := flag.Bool("strict", false, "Strict uses enforcement")
@@ -86,12 +86,25 @@ func main() {
 	// SPA source: explicit --web-dir wins; otherwise fall back to the
 	// embedded renderer dist (registry/web) so the binary serves the admin
 	// panel and portal out of the box.
+	// Auth is uniform across dev and prod (always real JWT). In dev, when no
+	// explicit secret is configured, resolve (or generate + persist) the dev
+	// secret so sessions survive restarts.
+	if !*prodMode && *jwtSecret == "" {
+		secret, generated, err := devsecret.Resolve(".formspec")
+		if err != nil {
+			log.Fatalf("resolve dev jwt secret: %v", err)
+		}
+		*jwtSecret = secret
+		if generated {
+			fmt.Printf("   jwt:  generated dev secret → %s\n", filepath.Join(".formspec", devsecret.FileName))
+		}
+	}
+
 	cfg := formspec.Config{
 		DSN:              *dsn,
 		SpecPath:         *specPath,
 		Addr:             *addr,
 		ProdMode:         *prodMode,
-		DevAuth:          *devAuth,
 		JWTSecret:        *jwtSecret,
 		JWTIssuer:        *jwtIssuer,
 		JWTPublicKeyPath: *jwtPublicKey,

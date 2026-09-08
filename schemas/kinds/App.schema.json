@@ -132,6 +132,17 @@
       "examples": [
         "1.0.0"
       ]
+    },
+    "workspaces": {
+      "description": "Optional workspace mount allowlist — absent = all workspaces; [] = staged (mounted nowhere); [slug,...] = only those workspaces",
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "examples": [
+        "[cafe, kopi]"
+      ],
+      "nullable": true
     }
   },
   "required": [

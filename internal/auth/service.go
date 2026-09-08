@@ -344,6 +344,13 @@ func (s *Service) SeedOwnerRoles(ctx context.Context, workspaceID string) error 
 // workspace already has users (setup is a one-time bootstrap).
 var ErrSetupComplete = errors.New("auth: setup already complete")
 
+// ErrSetupRequired is returned by Register when the workspace has no users
+// yet: the first account must be created via the setup wizard
+// (SetupFirstAdmin). Self-service registration would otherwise create a
+// non-admin user, flip SetupRequired to false, and permanently lock the
+// workspace out of _admin (setup becomes a 409 dead end, no admin exists).
+var ErrSetupRequired = errors.New("auth: complete first-run setup before registering")
+
 // SetupRequired reports whether the workspace needs first-run setup — i.e.
 // it has no user records at all. Used to gate the setup wizard (self-hosted
 // prod bootstrap without formspec-ctl).
@@ -419,23 +426,6 @@ func (s *Service) permissionsForUser(ctx context.Context, workspaceID, app strin
 	return user.Permissions, nil
 }
 
-// SeedDevUser creates a default user for development mode. It is idempotent —
-// if the username already exists, it is left untouched. Only used in dev
-// (never in ProdMode).
-func (s *Service) SeedDevUser(ctx context.Context, workspaceID, username, password string) error {
-	if _, err := s.users.GetByUsername(ctx, workspaceID, username); err == nil {
-		return nil // already seeded
-	}
-	return s.users.CreateUser(ctx, workspaceID, &User{
-		Username:     username,
-		PasswordHash: password, // hashed inside CreateUser
-		WorkspaceID:  workspaceID,
-		Roles:        []string{"admin"},
-		Permissions:  []string{"*"},
-		Active:       true,
-	})
-}
-
 // Register creates a new user account via self-service sign-up (registry
 // portal B.3). The username must be free within the workspace. Behavior
 // follows the workspace registration policy (auth redesign Fase 4):
@@ -452,6 +442,15 @@ func (s *Service) SeedDevUser(ctx context.Context, workspaceID, username, passwo
 // configured) so the address can be proven owned. An unverified email can
 // never be linked via OAuth (account pre-hijacking protection).
 func (s *Service) Register(ctx context.Context, workspaceID, username, email, password string) error {
+	// First-run guard: the first account in a workspace is always the setup
+	// wizard's admin — never a self-service registration.
+	required, err := s.SetupRequired(ctx, workspaceID)
+	if err != nil {
+		return err
+	}
+	if required {
+		return ErrSetupRequired
+	}
 	if err := ValidateUsername(username); err != nil {
 		return err
 	}

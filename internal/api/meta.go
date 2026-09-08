@@ -62,17 +62,26 @@ type appMetaSummary struct {
 	StackFamily string `json:"stack_family,omitempty"`
 	// PersistBackend is the entity persist backend (e.g. jsonb-persist).
 	PersistBackend string `json:"persist_backend,omitempty"`
+	// Version/Vendor are publish metadata (07-marketplace.md) — surfaced so
+	// operators/control plane can see which app version is live.
+	Version string `json:"version,omitempty"`
+	Vendor  string `json:"vendor,omitempty"`
 }
 
 // HandleMetaApps lists every resolved App in this workspace (name + root_url)
 // — Core §4.4. The renderer fetches this once, matches the current
 // window.location.pathname against each root_url, and uses the winning
 // App's name as the `app` query param on subsequent /_meta/ui calls.
+// Apps whose Workspaces allowlist excludes the current workspace are not
+// listed (AppSpec.MountsWithin — plan named-workspaces.md).
 func (b *RouterBuilder) HandleMetaApps() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		ws := workspaceFromContext(r.Context())
 		names := make([]string, 0, len(b.apps))
-		for name := range b.apps {
-			names = append(names, name)
+		for name, a := range b.apps {
+			if a.Spec != nil && a.Spec.MountsWithin(ws) {
+				names = append(names, name)
+			}
 		}
 		sort.Strings(names)
 
@@ -86,6 +95,8 @@ func (b *RouterBuilder) HandleMetaApps() http.HandlerFunc {
 				Access:         string(a.Spec.Access),
 				StackFamily:    a.Spec.StackFamily,
 				PersistBackend: a.Spec.PersistBackend,
+				Version:        a.Spec.Version,
+				Vendor:         a.Spec.Vendor,
 			})
 		}
 
@@ -115,6 +126,12 @@ func (b *RouterBuilder) resolveAppContext(r *http.Request) (ui.AppContext, strin
 	}
 	resolved, ok := b.apps[name]
 	if !ok {
+		return ui.AppContext{}, "unknown app " + name
+	}
+	// Workspace allowlist (AppSpec.MountsWithin — plan named-workspaces.md):
+	// an App not mounted in this workspace is indistinguishable from one
+	// that does not exist (anti-enumeration — same message as above).
+	if resolved.Spec != nil && !resolved.Spec.MountsWithin(workspaceFromContext(r.Context())) {
 		return ui.AppContext{}, "unknown app " + name
 	}
 	return ui.AppContext{

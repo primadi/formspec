@@ -156,9 +156,10 @@ func TestUsesEnforcement_CrossModuleFetchBlocked(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
+	tok := seedAdminToken(t, app)
 
 	// Seed a beta item so the cross-module fetch has a target.
-	status, out := doJSON(t, app, "POST", "/demo/_ui/entity/beta/item", map[string]any{"name": "Paracetamol"})
+	status, out := doAuthed(t, app, "POST", "/default/_ui/entity/beta/item", tok, map[string]any{"name": "Paracetamol"})
 	if status != http.StatusCreated {
 		t.Fatalf("create item: status %d, body %v", status, out)
 	}
@@ -168,7 +169,7 @@ func TestUsesEnforcement_CrossModuleFetchBlocked(t *testing.T) {
 	}
 
 	// Now call alpha's peek action, which fetches beta.item cross-module.
-	status, out = doJSON(t, app, "POST", "/demo/_ui/entity/alpha/order/"+itemID+"/peek", map[string]any{"item_id": itemID})
+	status, out = doAuthed(t, app, "POST", "/default/_ui/entity/alpha/order/"+itemID+"/peek", tok, map[string]any{"item_id": itemID})
 	if status == http.StatusOK {
 		t.Fatalf("expected cross-module fetch to be BLOCKED (no uses declaration), got 200: %v", out)
 	}
@@ -196,14 +197,15 @@ func TestUsesEnforcement_CrossModuleFetchAllowed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
+	tok := seedAdminToken(t, app)
 
-	status, out := doJSON(t, app, "POST", "/demo/_ui/entity/beta/item", map[string]any{"name": "Paracetamol"})
+	status, out := doAuthed(t, app, "POST", "/default/_ui/entity/beta/item", tok, map[string]any{"name": "Paracetamol"})
 	if status != http.StatusCreated {
 		t.Fatalf("create item: status %d, body %v", status, out)
 	}
 	itemID, _ := out["data"].(map[string]any)["id"].(string)
 
-	status, out = doJSON(t, app, "POST", "/demo/_ui/entity/alpha/order/"+itemID+"/peek", map[string]any{"item_id": itemID})
+	status, out = doAuthed(t, app, "POST", "/default/_ui/entity/alpha/order/"+itemID+"/peek", tok, map[string]any{"item_id": itemID})
 	if status != http.StatusOK {
 		t.Fatalf("expected cross-module fetch allowed with uses declaration, got %d: %v", status, out)
 	}
@@ -237,14 +239,15 @@ func TestUsesEnforcement_SameModuleAllowed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
+	tok := seedAdminToken(t, app)
 
-	status, out := doJSON(t, app, "POST", "/demo/_ui/entity/alpha/order", map[string]any{"number": "ORD-1", "transaction_date": recentDate()})
+	status, out := doAuthed(t, app, "POST", "/default/_ui/entity/alpha/order", tok, map[string]any{"number": "ORD-1", "transaction_date": recentDate()})
 	if status != http.StatusCreated {
 		t.Fatalf("create order: status %d, body %v", status, out)
 	}
 	orderID, _ := out["data"].(map[string]any)["id"].(string)
 
-	status, out = doJSON(t, app, "POST", "/demo/_ui/entity/alpha/order/"+orderID+"/peek", nil)
+	status, out = doAuthed(t, app, "POST", "/default/_ui/entity/alpha/order/"+orderID+"/peek", tok, nil)
 	if status != http.StatusOK {
 		t.Fatalf("expected same-module fetch allowed without uses, got %d: %v", status, out)
 	}

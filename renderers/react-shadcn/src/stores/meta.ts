@@ -56,6 +56,12 @@ function detectAppName(
 
 export interface MetaState {
   bundle: MetaBundle | null
+  // Which surface the loaded bundle belongs to ("admin" | "app"). The store
+  // holds ONE bundle — navigating between surfaces must ignore (and reload)
+  // a bundle fetched for the other surface, otherwise guards read stale data
+  // (e.g. setup_required=true from the app bundle blocking the admin login
+  // route → setup↔login redirect loop after first-run setup).
+  loadedSurface: "admin" | "app" | null
   loading: boolean
   error: string | null
   // Set when the server rejected the request with 403 (e.g. `_admin` without
@@ -166,6 +172,7 @@ function getOrBuildLookups(bundle: MetaBundle | null) {
 
 export const useMetaStore = create<MetaState>((set, get) => ({
   bundle: null,
+  loadedSurface: null,
   loading: false,
   error: null,
   forbidden: false,
@@ -199,7 +206,13 @@ export const useMetaStore = create<MetaState>((set, get) => ({
           onUnauthorized,
         })
       }
-      set({ bundle, loading: false, error: null, forbidden: false })
+      set({
+        bundle,
+        loading: false,
+        error: null,
+        forbidden: false,
+        loadedSurface: surface,
+      })
     } catch (err) {
       // 403 → forbidden (distinct from a connection error): the `_admin`
       // surface without `_admin.access`, or an app the caller can't see.
@@ -212,7 +225,15 @@ export const useMetaStore = create<MetaState>((set, get) => ({
             ? err.response.status
             : undefined
       if (status === 403) {
-        set({ loading: false, error: null, forbidden: true })
+        // Drop any previously loaded bundle — a failed load must not leave a
+        // wrong-surface bundle behind for the guards to misread.
+        set({
+          loading: false,
+          error: null,
+          forbidden: true,
+          bundle: null,
+          loadedSurface: null,
+        })
         return
       }
       if (status === 401) {
@@ -220,12 +241,23 @@ export const useMetaStore = create<MetaState>((set, get) => ({
         // auth guard redirects to login instead of showing a connection
         // error. Keep the meta state clear so the loading gate exits.
         notifySessionExpired()
-        set({ loading: false, error: null, forbidden: false })
+        set({
+          loading: false,
+          error: null,
+          forbidden: false,
+          bundle: null,
+          loadedSurface: null,
+        })
         return
       }
       const message =
         err instanceof Error ? err.message : "Failed to load meta bundle"
-      set({ loading: false, error: message })
+      set({
+        loading: false,
+        error: message,
+        bundle: null,
+        loadedSurface: null,
+      })
     }
   },
 
@@ -258,7 +290,7 @@ export const useMetaStore = create<MetaState>((set, get) => ({
           onUnauthorized,
         })
       }
-      set({ bundle, error: null })
+      set({ bundle, error: null, loadedSurface: surface })
     } catch (err) {
       // A 401 means the token expired — expire the session (login redirect).
       // Other refresh errors are silently ignored — keep the old bundle.
@@ -275,7 +307,13 @@ export const useMetaStore = create<MetaState>((set, get) => ({
   },
 
   reset: () => {
-    set({ bundle: null, loading: false, error: null, forbidden: false })
+    set({
+      bundle: null,
+      loadedSurface: null,
+      loading: false,
+      error: null,
+      forbidden: false,
+    })
   },
 
   getEntity: (module: string, name: string) => {

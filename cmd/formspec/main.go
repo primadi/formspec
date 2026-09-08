@@ -96,10 +96,12 @@ func main() {
 		runInit(os.Args[2:])
 	case "schema":
 		runSchema(os.Args[2:])
+	case "workspace":
+		runWorkspace(os.Args[2:])
 	case "sign":
 		runSign(os.Args[2:])
 	case "script",
-		"freeze", "rollback", "lock", "workspace":
+		"freeze", "rollback", "lock":
 		fmt.Fprintf(os.Stderr, "formspec %s: not implemented yet — see docs/cli-tools/01-formspec-cli.md\n", os.Args[1])
 		os.Exit(1)
 	default:
@@ -125,6 +127,7 @@ func usage() {
 	fmt.Fprintf(os.Stderr, "  restore             Restore data from a backup archive\n")
 	fmt.Fprintf(os.Stderr, "  logs                Tail structured logs (event log)\n")
 	fmt.Fprintf(os.Stderr, "  archive             Archive transactions (run/view/restore-batch)\n")
+	fmt.Fprintf(os.Stderr, "  workspace           Register/list/remove named workspaces (create/list/delete)\n")
 	fmt.Fprintf(os.Stderr, "  generate            Derive a typed TypeScript client from entity manifests\n")
 	fmt.Fprintf(os.Stderr, "  generate node-app   Scaffold a TypeScript sidecar app\n")
 	fmt.Fprintf(os.Stderr, "  generate go-app     Scaffold a Go sidecar app\n")

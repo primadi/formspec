@@ -60,6 +60,9 @@ func runRepl(args []string) {
 		}
 	}
 
+	// Anchor relative SQLite DSN ke lokasi spec (plan dsn-spec-anchored.md).
+	dsn = resolveDSN(dsn, specPath)
+
 	app, err := formspec.New(formspec.Config{SpecPath: specPath, DSN: dsn})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)

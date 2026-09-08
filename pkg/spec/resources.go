@@ -2,6 +2,7 @@ package spec
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -90,6 +91,21 @@ type AppSpec struct {
 	// prefix (docs/plan/flexible-root-url.md).
 	// @schema {example: "/app/klinik", pattern: "^(/|/[^/]+(/[^/]+)*)$", description: "Mount prefix inside the workspace: \"/\" or any \"/path\" — unique per workspace; reserved segments (_ui, api, _admin, assets, health, login, register, _ws, print) are rejected"}
 	RootURL string `yaml:"root_url" json:"root_url"`
+	// Workspaces is the optional mount allowlist for this App (plan
+	// docs_internal/plan/named-workspaces.md). Three states — the pointer
+	// distinguishes "field absent" from "explicitly empty":
+	//   - absent (nil): the App mounts in ALL workspaces of the deployment
+	//     (backward-compatible default).
+	//   - explicitly empty (`workspaces: []`): the App is STAGED — validated
+	//     and reloadable, but mounted in NO workspace (an App that was
+	//     uploaded but not yet installed anywhere).
+	//   - non-empty: the App mounts ONLY in the listed workspace slugs.
+	// Slugs are format-checked only (kebab-case, not reserved) — a slug MAY
+	// reference a workspace created later via the CLI. Per-workspace App
+	// versioning is a control-plane concern (artifact registry + binding
+	// state), never an in-process concept.
+	// @schema {example: "[cafe, kopi]", description: "Optional workspace mount allowlist — absent = all workspaces; [] = staged (mounted nowhere); [slug,...] = only those workspaces"}
+	Workspaces *[]string `yaml:"workspaces,omitempty" json:"workspaces,omitempty"`
 	// @schema {example: "[clinic, pharmacy]", description: "Modules mounted by this App — manifests outside these modules are excluded from the App bundle"}
 	Modules []string `yaml:"modules" json:"modules"`
 	// Datastores is the App-level App Registry selection — the App Registry
@@ -755,6 +771,10 @@ var AppRendererNames = map[string]bool{
 	"no-nav":      true,
 }
 
+// appVersionPattern validates the optional App.spec.version as semver
+// (MAJOR.MINOR.PATCH with optional prerelease/build suffix).
+var appVersionPattern = regexp.MustCompile(`^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$`)
+
 // DefaultAppRenderer is applied when App.spec.app_renderer is empty.
 const DefaultAppRenderer = "sidebar-nav"
 
@@ -801,6 +821,25 @@ var InstalledPersistBackends = map[string]bool{
 //   - chrome values, when set, must be from their enum (frontend/
 //     05-app-kinds.md §4.1).
 func ValidateAppSpec(a *AppSpec) error {
+	// version, when set, must be semver (MAJOR.MINOR.PATCH with optional
+	// prerelease) — it is publish metadata (07-marketplace.md), never
+	// consumed by the runtime.
+	if a.Version != "" && !appVersionPattern.MatchString(a.Version) {
+		return fmt.Errorf("version %q is invalid (semver required, e.g. 1.0.0 or 1.0.0-beta.1)", a.Version)
+	}
+	// workspaces allowlist: format-only check (kebab-case, not a reserved
+	// router segment). Existence in the workspace registry is NOT required —
+	// a slug may reference a workspace created later via the CLI.
+	if a.Workspaces != nil {
+		for _, ws := range *a.Workspaces {
+			if !IsValidWorkspaceSlug(ws) {
+				if workspaceSlugPattern.MatchString(ws) {
+					return fmt.Errorf("workspaces: %q is a reserved segment (reserved: _ui, api, _admin, assets, health, login, register, _ws, print)", ws)
+				}
+				return fmt.Errorf("workspaces: %q is invalid (kebab-case required: lowercase letters, digits, hyphens)", ws)
+			}
+		}
+	}
 	if a.AppRenderer != "" && !AppRendererNames[a.AppRenderer] {
 		return fmt.Errorf("app_renderer %q is not a known App renderer (closed set: sidebar-nav, topnav, no-nav)", a.AppRenderer)
 	}

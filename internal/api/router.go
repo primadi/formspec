@@ -525,21 +525,38 @@ func (b *RouterBuilder) BuildHTTP() http.Handler {
 			spa = spaHandler(b.webDir)
 		}
 		if spa != nil {
-			mounts := map[string]bool{"/_admin": true, "/app": true}
+			// mount prefix → owning App (nil = workspace-level mount, no
+			// allowlist check). App mounts carry the App's Workspaces
+			// allowlist (AppSpec.MountsWithin — plan named-workspaces.md).
+			mounts := map[string]*formspec_app.ResolvedApp{"/_admin": nil, "/app": nil}
 			for _, a := range b.apps {
-				mounts[a.Spec.RootURL] = true
+				mounts[a.Spec.RootURL] = a
 			}
-			for _, m := range sortedStrings(mounts) {
+			for _, m := range sortedAppMounts(mounts) {
+				// Wrap the SPA handler with the owning App's workspace
+				// allowlist: an App not mounted in this workspace serves 404
+				// — indistinguishable from a missing route (anti-enumeration).
+				app := mounts[m]
+				spaForMount := spa
+				if app != nil {
+					spaForMount = func(w http.ResponseWriter, r *http.Request) {
+						if !app.Spec.MountsWithin(workspaceFromContext(r.Context())) {
+							writeError(w, http.StatusNotFound, "NOT_FOUND", "endpoint not found")
+							return
+						}
+						spa(w, r)
+					}
+				}
 				if m == "/" {
 					// A root App owns the whole workspace subtree: serve the
 					// SPA for every unmatched GET (API routes stay more
 					// specific and win; non-GET still 404s as JSON).
-					r.Get("/", spa)
-					r.Get("/*", spa)
+					r.Get("/", spaForMount)
+					r.Get("/*", spaForMount)
 					continue
 				}
-				r.Get(m, spa)
-				r.Get(m+"/*", spa)
+				r.Get(m, spaForMount)
+				r.Get(m+"/*", spaForMount)
 			}
 		}
 	})
@@ -861,6 +878,17 @@ func (b *RouterBuilder) RouteCount() int {
 // sortedStrings returns the map keys in deterministic order (SPA mounts are
 // registered in a stable order so router rebuilds are reproducible).
 func sortedStrings(m map[string]bool) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// sortedAppMounts returns the SPA mount prefixes in deterministic order
+// (router rebuilds are reproducible).
+func sortedAppMounts(m map[string]*formspec_app.ResolvedApp) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
 		out = append(out, k)

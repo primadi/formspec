@@ -129,7 +129,9 @@ async function resolveDecl(
       const name = decl.config.slice(0, dot)
       const key = decl.config.slice(dot + 1)
       try {
-        const keys = await fetchPublicConfig(getClient(), name)
+        // fetchPublicConfig takes the client GETTER (lazy — only invoked on
+        // cache miss), so pass `getClient` itself, not the invoked client.
+        const keys = await fetchPublicConfig(getClient, name)
         return keys[key] ?? decl.fallback
       } catch {
         return decl.fallback

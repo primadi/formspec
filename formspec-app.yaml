@@ -2,11 +2,9 @@
 # Configures `formspec dev` / `formspec serve` di root repo registry.
 # Bukan kind: Config manifest — CLI tooling config only.
 #
-# dev-auth: real JWT auth di dev mode (login + authorization enforced).
-# Tanpa ini, dev mode memakai DevValidator (identity sintetis "developer"
-# dengan permission "*") — itulah sebabnya avatar menampilkan "DE" dan
-# roles "admin developer" meskipun login sebagai user lain.
+# Auth seragam di dev dan prod: selalu JWT asli (tanpa bypass). Tanpa
+# jwt-secret, dev meng-generate + persist secret di .formspec/dev-jwt-secret
+# sehingga sesi bertahan antar restart.
 spec: registry/spec
 dsn: sqlite:.formspec/registry.db
-dev-auth: true
 jwt-secret: registry-dev-secret

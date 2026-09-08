@@ -48,7 +48,7 @@ func TestApiKeyMiddleware_ExternalSurface(t *testing.T) {
 	store := setupApiKeyStoreEnv(t)
 	ctx := context.Background()
 
-	plaintext, err := store.Create(ctx, "demo", &auth.ApiKey{
+	plaintext, err := store.Create(ctx, "default", &auth.ApiKey{
 		Name:        "svc",
 		Scope:       "workspace",
 		Permissions: []string{"billing.customers.list"},
@@ -71,7 +71,7 @@ func TestApiKeyMiddleware_ExternalSurface(t *testing.T) {
 	}))
 
 	// External surface (/api/v1/) accepts X-FormSpec-Key.
-	req := httptest.NewRequest(http.MethodGet, "/demo/api/v1/billing/customers", nil)
+	req := httptest.NewRequest(http.MethodGet, "/default/api/v1/billing/customers", nil)
 	req.Header.Set("X-FormSpec-Key", plaintext)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)

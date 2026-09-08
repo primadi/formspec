@@ -13,7 +13,7 @@ metadata:
 spec:
   version: 1.0.0
   vendor: formspec-examples
-  root_url: /app/klinik-portal
+  root_url: /klinik-portal
   modules: [clinic]
   menu:
     - label: "Layanan Publik"

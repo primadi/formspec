@@ -409,6 +409,11 @@ func resolveFieldType(fd *FieldDef, _ map[string]*TypeDef) {
 		case *types.Basic:
 			fd.TypeName = basicTypeName(elem)
 			fd.TypeKind = "pointer-basic"
+		case *types.Slice:
+			// Pointer to slice (e.g. *[]string — nil vs empty is meaningful,
+			// like AppSpec.Workspaces): handled as "pointer-slice" in the
+			// generator (array + nullable, elem derived from GoType).
+			fd.TypeKind = "pointer-slice"
 		}
 	case *types.Slice:
 		fd.TypeKind = "slice"

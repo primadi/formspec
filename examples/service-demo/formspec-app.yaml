@@ -8,5 +8,4 @@
 spec: spec
 dsn: sqlite:.formspec/service-demo.db
 dev-ui: true
-dev-auth: true
 jwt-secret: change-me

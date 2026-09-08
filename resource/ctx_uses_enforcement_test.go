@@ -95,8 +95,9 @@ func TestCtxUses_StrictModeBlocked(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
+	tok := seedAdminToken(t, app)
 
-	status, out := doJSON(t, app, "POST", "/demo/_ui/entity/alpha/order", map[string]any{
+	status, out := doAuthed(t, app, "POST", "/default/_ui/entity/alpha/order", tok, map[string]any{
 		"transaction_date": recentDate(),
 		"number":           "ORD-1",
 	})
@@ -105,7 +106,7 @@ func TestCtxUses_StrictModeBlocked(t *testing.T) {
 	}
 	id, _ := out["data"].(map[string]any)["id"].(string)
 
-	status, out = doJSON(t, app, "POST", "/demo/_ui/entity/alpha/order/"+id+"/cachehit", nil)
+	status, out = doAuthed(t, app, "POST", "/default/_ui/entity/alpha/order/"+id+"/cachehit", tok, nil)
 	if status == http.StatusOK {
 		t.Fatalf("expected USES_VIOLATION in strict mode, got 200: %v", out)
 	}
@@ -128,8 +129,9 @@ func TestCtxUses_StrictModeAllowed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
+	tok := seedAdminToken(t, app)
 
-	status, out := doJSON(t, app, "POST", "/demo/_ui/entity/alpha/order", map[string]any{
+	status, out := doAuthed(t, app, "POST", "/default/_ui/entity/alpha/order", tok, map[string]any{
 		"transaction_date": recentDate(),
 		"number":           "ORD-1",
 	})
@@ -138,7 +140,7 @@ func TestCtxUses_StrictModeAllowed(t *testing.T) {
 	}
 	id, _ := out["data"].(map[string]any)["id"].(string)
 
-	status, out = doJSON(t, app, "POST", "/demo/_ui/entity/alpha/order/"+id+"/cachehit", nil)
+	status, out = doAuthed(t, app, "POST", "/default/_ui/entity/alpha/order/"+id+"/cachehit", tok, nil)
 	if status != http.StatusOK {
 		t.Fatalf("expected 200 with uses.primitives declared, got %d: %v", status, out)
 	}
@@ -161,8 +163,9 @@ func TestCtxUses_DevModeRelaxed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
+	tok := seedAdminToken(t, app)
 
-	status, out := doJSON(t, app, "POST", "/demo/_ui/entity/alpha/order", map[string]any{
+	status, out := doAuthed(t, app, "POST", "/default/_ui/entity/alpha/order", tok, map[string]any{
 		"transaction_date": recentDate(),
 		"number":           "ORD-1",
 	})
@@ -171,7 +174,7 @@ func TestCtxUses_DevModeRelaxed(t *testing.T) {
 	}
 	id, _ := out["data"].(map[string]any)["id"].(string)
 
-	status, out = doJSON(t, app, "POST", "/demo/_ui/entity/alpha/order/"+id+"/cachehit", nil)
+	status, out = doAuthed(t, app, "POST", "/default/_ui/entity/alpha/order/"+id+"/cachehit", tok, nil)
 	if status != http.StatusOK {
 		t.Fatalf("expected 200 in dev mode, got %d: %v", status, out)
 	}

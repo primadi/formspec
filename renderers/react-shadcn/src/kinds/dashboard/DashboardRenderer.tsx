@@ -48,7 +48,7 @@ export default function DashboardRenderer({ entry }: DashboardRendererProps) {
   const me = useSessionStore((s) => s.me)
   const getWidget = useMetaStore((s) => s.getWidget)
   const getEntity = useMetaStore((s) => s.getEntity)
-  const allWidgets = useMetaStore((s) => s.bundle?.widgets ?? [])
+  const allWidgets = useMetaStore((s) => s.bundle?.widgets) ?? []
   const savedLayout = usePrefsStore((s) => s.dashboardLayouts[entry.spec.title])
   const setDashboardLayout = usePrefsStore((s) => s.setDashboardLayout)
 

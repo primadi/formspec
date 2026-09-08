@@ -33,17 +33,7 @@ yang dipegang (dengan cache per-session).
 
 ## 2. Setup Pertama Kali (Bootstrap)
 
-### Dev mode (`formspec dev`)
-
-Otomatis — tidak perlu setup:
-
-- Tanpa `--dev-auth`: bypass auth penuh (identity sintetis `developer`, `*`).
-- Dengan `--dev-auth` (default di `formspec-registry`): user `admin`/`admin`
-  di-seed otomatis + 4 owner roles (`workspace-owner`, `app-owner`,
-  `module-owner`, `cloud-owner`).
-
-### Production / self-hosting
-
+Auth seragam di dev dan prod: selalu JWT asli (tanpa bypass, tanpa auto-seed).
 Jalankan pertama kali dengan **database kosong** → `_admin` otomatis
 mengarahkan ke **setup wizard** (`/{ws}/_admin/setup`). Buat admin pertama di
 situ — admin mendapat `roles: ["admin"]`, `permissions: ["*"]` + owner roles
@@ -51,7 +41,11 @@ di-seed.
 
 Deteksi: workspace tanpa satu pun user → meta bundle
 `"setup_required": true` → SPA redirect. Setup adalah one-time: setelah ada
-user, endpoint setup menolak (409).
+user, endpoint setup menolak (409) dan wizard mengarahkan ke login.
+
+JWT secret di dev: tanpa `jwt-secret` eksplisit, secret di-generate sekali
+dan di-persist ke `.formspec/dev-jwt-secret` — sesi bertahan antar restart.
+Di prod, `jwt-secret` (atau `jwt-public-key`) wajib di-set.
 
 Manual check:
 

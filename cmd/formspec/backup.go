@@ -100,6 +100,10 @@ func runBackupCreate(args []string) {
 			os.Exit(2)
 		}
 	}
+
+	// Anchor relative SQLite DSN ke lokasi spec (plan dsn-spec-anchored.md).
+	dsn = resolveDSN(dsn, specPath)
+
 	if !full {
 		fmt.Fprintf(os.Stderr, "formspec backup create: --full is required (incremental not yet implemented)\n")
 		os.Exit(2)
@@ -364,6 +368,10 @@ func runRestore(args []string) {
 			os.Exit(2)
 		}
 	}
+
+	// Anchor relative SQLite DSN ke lokasi spec (plan dsn-spec-anchored.md).
+	dsn = resolveDSN(dsn, specPath)
+
 	if from == "" {
 		fmt.Fprintf(os.Stderr, "formspec restore: --from <file> is required\n")
 		os.Exit(2)

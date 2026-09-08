@@ -6,10 +6,11 @@
 // POST /{ws}/_ui/setup endpoint — no formspec-ctl needed. After setup the
 // SPA redirects to the in-app login.
 
-import { useState, type FormEvent } from "react"
+import { useEffect, useState, type FormEvent } from "react"
 import { useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { useMetaStore } from "@/stores/meta"
 
 export function SetupScreen() {
   const { workspace = "default" } = useParams<{ workspace: string }>()
@@ -26,6 +27,42 @@ export function SetupScreen() {
   const [confirm, setConfirm] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // The login screen this wizard chains into (carries the original URL as
+  // `returnTo` so the user lands back where they came from after signing in).
+  const loginPath =
+    forward &&
+    forward.startsWith("/") &&
+    !forward.startsWith("//") &&
+    forward !== "/"
+      ? `/${workspace}/_admin/login?returnTo=${encodeURIComponent(forward)}`
+      : `/${workspace}/_admin/login`
+
+  // Setup is one-time: when the workspace already has users, the wizard is a
+  // dead end (POST would fail with 409 SETUP_COMPLETE) — send the visitor
+  // straight to login instead of showing a form that cannot succeed.
+  useEffect(() => {
+    let cancelled = false
+    fetch(`/${workspace}/_ui/setup`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => {
+        if (cancelled) return
+        if (body?.data?.setup_required === false) {
+          // Drop the stale bundle (it still says setup_required=true) so the
+          // next surface boots fresh instead of redirecting back here.
+          useMetaStore.getState().reset()
+          navigate(loginPath, { replace: true })
+        }
+      })
+      .catch(() => {
+        // Status endpoint unreachable — leave the form visible; the POST
+        // will surface a proper error if setup is indeed complete.
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspace])
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -55,25 +92,23 @@ export function SetupScreen() {
       })
       if (!res.ok) {
         const body = await res.json().catch(() => null)
+        // Setup already done (e.g. the wizard was open in a stale tab while
+        // another tab completed it) — login is the right place to be.
+        if (body?.error?.code === "SETUP_COMPLETE") {
+          navigate(loginPath, { replace: true })
+          return
+        }
         throw new Error(body?.error?.message ?? `Setup failed (${res.status})`)
       }
       // Setup complete → route the user back where they came from. The
       // original URL is carried as `forward` (set by the App.tsx redirect);
       // it is validated same-origin and chained through the login screen's
       // `returnTo` so the user lands on their original page after signing in.
-      const returnTo =
-        forward &&
-        forward.startsWith("/") &&
-        !forward.startsWith("//") &&
-        forward !== "/"
-          ? forward
-          : null
-      navigate(
-        returnTo
-          ? `/${workspace}/_admin/login?returnTo=${encodeURIComponent(returnTo)}`
-          : `/${workspace}/_admin/login`,
-        { replace: true },
-      )
+      // Reset the meta store first: the loaded bundle still says
+      // setup_required=true and would redirect the next surface straight
+      // back here (setup ↔ login loop).
+      useMetaStore.getState().reset()
+      navigate(loginPath, { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : "Setup failed")
     } finally {

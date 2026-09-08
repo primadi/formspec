@@ -117,7 +117,7 @@ export default function TableRenderer({
   const authoredForm = useMemo(() => {
     if (!metaBundle) return undefined
     return metaBundle.forms.find((f) => {
-      const [m, n] = resolveEntityRef(f.spec.entity, f.module)
+      const [m, n] = resolveEntityRef(f.spec.entity ?? "", f.module ?? "")
       return m === entity.module && n === entity.name
     })
   }, [metaBundle, entity])

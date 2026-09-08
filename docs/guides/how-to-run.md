@@ -64,21 +64,20 @@ Satu port `:8080` untuk API + SPA. Buka **http://localhost:8080/default/\_admin*
 
 ## Flags
 
-| Flag               | Fungsi                                                                               | Default                    |
-| ------------------ | ------------------------------------------------------------------------------------ | -------------------------- |
-| `--spec`           | Path ke direktori YAML manifests                                                     | `./spec`                   |
-| `--dsn`            | Database DSN (sqlite atau postgres)                                                  | `sqlite:.formspec/data.db` |
-| `--addr`           | REST API listen address                                                              | `:8080`                    |
-| `--dev`            | Dev mode (auth bypass, unsigned artifacts)                                           | `false`                    |
-| `--dev-auth`       | Dev mode + real JWT auth (login & authorization enforced)                            | `false`                    |
-| `--jwt-secret`     | HMAC secret untuk JWT signing (persist token antar restart)                          | `""`                       |
-| `--state-dir`      | Local state directory                                                                | `.formspec`                |
-| `--force`          | Kill previous `formspec` engine on same ports                                        | `false`                    |
-| `--web-dir`        | Built SPA directory (e.g. `renderers/react-shadcn/dist`)                             | `""`                       |
-| `--dev-ui`         | Spawn `npm run dev` otomatis (implikasikan `--dev`)                                  | `false`                    |
-| `--runtime`        | App runtime: `auto`, `go`, `php`, `python`, `ruby`, `java`, `dotnet`, `rust`, `node` | `auto`                     |
-| `--app-dir`        | App source directory (child-process runtime)                                         | `.formspec/app`            |
-| `--app-entrypoint` | Entrypoint file (default tergantung runtime)                                         | auto                       |
+| Flag               | Fungsi                                                                                                                       | Default                    |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| `--spec`           | Path ke direktori YAML manifests                                                                                             | `./spec`                   |
+| `--dsn`            | Database DSN (sqlite atau postgres)                                                                                          | `sqlite:.formspec/data.db` |
+| `--addr`           | REST API listen address                                                                                                      | `:8080`                    |
+| `--dev`            | Dev mode (hot-reload, unsigned artifacts) — auth tetap JWT asli, seragam dengan prod                                         | `false`                    |
+| `--jwt-secret`     | HMAC secret untuk JWT signing. Kosong di dev → auto-generate + persist ke `.formspec/dev-jwt-secret`; kosong di prod → error | auto                       |
+| `--state-dir`      | Local state directory                                                                                                        | `.formspec`                |
+| `--force`          | Kill previous `formspec` engine on same ports                                                                                | `false`                    |
+| `--web-dir`        | Built SPA directory (e.g. `renderers/react-shadcn/dist`)                                                                     | `""`                       |
+| `--dev-ui`         | Spawn `npm run dev` otomatis (implikasikan `--dev`)                                                                          | `false`                    |
+| `--runtime`        | App runtime: `auto`, `go`, `php`, `python`, `ruby`, `java`, `dotnet`, `rust`, `node`                                         | `auto`                     |
+| `--app-dir`        | App source directory (child-process runtime)                                                                                 | `.formspec/app`            |
+| `--app-entrypoint` | Entrypoint file (default tergantung runtime)                                                                                 | auto                       |
 
 > `--listen` dan `--app-endpoint` sudah otomatis diatur oleh `formspec dev` — tidak perlu di-set manual.
 

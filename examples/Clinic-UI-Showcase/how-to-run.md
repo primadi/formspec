@@ -138,20 +138,24 @@ rm -rf .formspec/
 
 Database akan auto-generate saat `formspec dev` dijalankan ulang.
 
+> Path DSN SQLite relative di-anchor ke lokasi spec (project root), bukan
+> working directory — dijalankan dari root repo maupun dari folder example,
+> db-nya selalu `<project>/examples/Clinic-UI-Showcase/.formspec/clinic.db`.
+
 ## Flag Referensi
 
-| Flag             | Default                    | Fungsi                                                 |
-| ---------------- | -------------------------- | ------------------------------------------------------ |
-| `--spec`         | `./spec`                   | Path ke direktori YAML manifests                       |
-| `--dsn`          | `sqlite:.formspec/data.db` | Database DSN (sqlite atau postgres)                    |
-| `--addr`         | `:8080`                    | REST API listen address                                |
-| `--listen`       | `none`                     | Mode ctx listener: `none`, `local_http`, `unix_socket` |
-| `--app-endpoint` | `none`                     | Mode app endpoint: `none`, `local_http`, `unix_socket` |
-| `--runtime`      | auto-detect                | Runtime: `local`, `php`, `python`, `node`              |
-| `--dev`          | `false`                    | Dev mode (implied oleh `--dev-ui`)                     |
-| `--dev-ui`       | `false`                    | Development UI: spawn Vite HMR                         |
-| `--state-dir`    | `.formspec`                | Local state directory (auto-create)                    |
-| `--web-dir`      | auto-detect                | Override SPA directory                                 |
+| Flag             | Default                    | Fungsi                                                                             |
+| ---------------- | -------------------------- | ---------------------------------------------------------------------------------- |
+| `--spec`         | `./spec`                   | Path ke direktori YAML manifests                                                   |
+| `--dsn`          | `sqlite:.formspec/data.db` | Database DSN (sqlite atau postgres); path SQLite relative di-anchor ke lokasi spec |
+| `--addr`         | `:8080`                    | REST API listen address                                                            |
+| `--listen`       | `none`                     | Mode ctx listener: `none`, `local_http`, `unix_socket`                             |
+| `--app-endpoint` | `none`                     | Mode app endpoint: `none`, `local_http`, `unix_socket`                             |
+| `--runtime`      | auto-detect                | Runtime: `local`, `php`, `python`, `node`                                          |
+| `--dev`          | `false`                    | Dev mode (implied oleh `--dev-ui`)                                                 |
+| `--dev-ui`       | `false`                    | Development UI: spawn Vite HMR                                                     |
+| `--state-dir`    | `.formspec`                | Local state directory (auto-create)                                                |
+| `--web-dir`      | auto-detect                | Override SPA directory                                                             |
 
 > `--listen` dan `--app-endpoint` default `none` — untuk single process tidak
 > diperlukan. Gunakan `local_http` jika ada app process (PHP/Python/Node).

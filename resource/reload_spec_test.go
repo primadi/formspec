@@ -22,7 +22,6 @@ func TestReloadSpec_PreservesEmbeddedCoreEntities(t *testing.T) {
 	app, err := New(Config{
 		SpecPath:  dir,
 		DSN:       "sqlite:" + filepath.Join(t.TempDir(), "reload.db"),
-		DevAuth:   true,
 		JWTSecret: "test-secret",
 	})
 	if err != nil {
