@@ -9,6 +9,17 @@
         "$ref": "#/$defs/FormAction"
       }
     },
+    "auth_action": {
+      "description": "Bind submit to a platform auth action (mutually exclusive with entity).",
+      "type": "string",
+      "enum": [
+        "login",
+        "register",
+        "change_password",
+        "forgot_password",
+        "reset_password"
+      ]
+    },
     "context": {
       "description": "Context declares render-context variables injected into this form's",
       "type": "array",

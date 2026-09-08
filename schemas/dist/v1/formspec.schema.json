@@ -204,6 +204,55 @@
         "public"
       ]
     },
+    "AppAuth": {
+      "description": "AppAuth overrides the auth screens and chrome auth area for one App\n(plan docs_internal/plan/auth-screens-spec-driven.md). Each page slot is a\n`kind: Page` reference in `module/name` form; empty slots fall back to the\nframework's default auth page specs (module formspec.core). ChromeAuth is a\ncomponent asset reference replacing the default auth area (Sign in/Sign up/\nlogout/user menu).\n",
+      "type": "object",
+      "properties": {
+        "change_password_page": {
+          "description": "kind: Page ref (module/name) used for change-password — empty = formspec.core default",
+          "type": "string",
+          "examples": [
+            "portal/pages/change-password"
+          ]
+        },
+        "chrome_auth": {
+          "description": "Component asset ref replacing the default chrome auth area — empty = default AuthArea driven by chrome.auth",
+          "type": "string",
+          "examples": [
+            "portal/components/auth-area"
+          ]
+        },
+        "login_page": {
+          "description": "kind: Page ref (module/name) used as the login screen — empty = formspec.core default",
+          "type": "string",
+          "examples": [
+            "portal/pages/login"
+          ]
+        },
+        "oauth_callback_page": {
+          "description": "kind: Page ref (module/name) used for the OAuth callback — empty = formspec.core default",
+          "type": "string",
+          "examples": [
+            "portal/pages/oauth-callback"
+          ]
+        },
+        "reset_password_page": {
+          "description": "kind: Page ref (module/name) used for reset-password — empty = formspec.core default",
+          "type": "string",
+          "examples": [
+            "portal/pages/reset-password"
+          ]
+        },
+        "setup_page": {
+          "description": "kind: Page ref (module/name) used as the first-run setup wizard — empty = formspec.core default",
+          "type": "string",
+          "examples": [
+            "portal/pages/setup"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
     "AppChrome": {
       "description": "AppChrome fine-tunes which chrome elements the App shell renders\n(frontend/05-app-kinds.md §4.1). Orthogonal to AppRenderer (layout\narchetype) and Access (auth axis): every element defaults to \"auto\" —\nthe archetype's own default — and explicit values override it. The meta\nAPI resolves the effective composition (internal/ui resolveChrome) so\nrenderers read final values.\n",
       "type": "object",
@@ -551,6 +600,10 @@
       "type": "object",
       "properties": {
         "default": {},
+        "public": {
+          "description": "Public opts the key in to UI-surface exposure (plan",
+          "type": "boolean"
+        },
         "secret": {
           "type": "boolean"
         },
@@ -570,6 +623,10 @@
       "properties": {
         "call": {
           "description": "Call for source: api — \"module.service.action\".",
+          "type": "string"
+        },
+        "config": {
+          "description": "Config for source: config — \"\u003cconfig-name\u003e.\u003ckey\u003e\" referencing a",
           "type": "string"
         },
         "entity": {
@@ -1706,7 +1763,8 @@
         "Listing",
         "Calendar",
         "ApprovalInbox",
-        "NotificationCenter"
+        "NotificationCenter",
+        "Workspace"
       ]
     },
     "KvstoreUseDecl": {
@@ -2820,11 +2878,23 @@
         "cdn": {
           "type": "boolean"
         },
+        "chunk_size_mb": {
+          "description": "ChunkSizeMB is the client hint for chunked-upload part size (todo",
+          "type": "integer"
+        },
         "max_count": {
+          "type": "integer"
+        },
+        "max_download_mb": {
+          "description": "MaxDownloadMB caps the size of a file served via download/link routes",
           "type": "integer"
         },
         "max_size_mb": {
           "type": "integer"
+        },
+        "one_time": {
+          "description": "OneTime deletes the object after the configured number of successful",
+          "type": "boolean"
         },
         "signed_url_ttl": {
           "description": "e.g. \"15m\"",
@@ -2835,6 +2905,10 @@
           "items": {
             "$ref": "#/$defs/StorageTransform"
           }
+        },
+        "ttl": {
+          "description": "TTL auto-deletes the object if it is not downloaded within the",
+          "type": "string"
         },
         "visibility": {
           "description": "public | private | signed",
@@ -3653,6 +3727,55 @@
         "public"
       ]
     },
+    "AppAuth": {
+      "description": "AppAuth overrides the auth screens and chrome auth area for one App\n(plan docs_internal/plan/auth-screens-spec-driven.md). Each page slot is a\n`kind: Page` reference in `module/name` form; empty slots fall back to the\nframework's default auth page specs (module formspec.core). ChromeAuth is a\ncomponent asset reference replacing the default auth area (Sign in/Sign up/\nlogout/user menu).\n",
+      "type": "object",
+      "properties": {
+        "change_password_page": {
+          "description": "kind: Page ref (module/name) used for change-password — empty = formspec.core default",
+          "type": "string",
+          "examples": [
+            "portal/pages/change-password"
+          ]
+        },
+        "chrome_auth": {
+          "description": "Component asset ref replacing the default chrome auth area — empty = default AuthArea driven by chrome.auth",
+          "type": "string",
+          "examples": [
+            "portal/components/auth-area"
+          ]
+        },
+        "login_page": {
+          "description": "kind: Page ref (module/name) used as the login screen — empty = formspec.core default",
+          "type": "string",
+          "examples": [
+            "portal/pages/login"
+          ]
+        },
+        "oauth_callback_page": {
+          "description": "kind: Page ref (module/name) used for the OAuth callback — empty = formspec.core default",
+          "type": "string",
+          "examples": [
+            "portal/pages/oauth-callback"
+          ]
+        },
+        "reset_password_page": {
+          "description": "kind: Page ref (module/name) used for reset-password — empty = formspec.core default",
+          "type": "string",
+          "examples": [
+            "portal/pages/reset-password"
+          ]
+        },
+        "setup_page": {
+          "description": "kind: Page ref (module/name) used as the first-run setup wizard — empty = formspec.core default",
+          "type": "string",
+          "examples": [
+            "portal/pages/setup"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
     "AppChrome": {
       "description": "AppChrome fine-tunes which chrome elements the App shell renders\n(frontend/05-app-kinds.md §4.1). Orthogonal to AppRenderer (layout\narchetype) and Access (auth axis): every element defaults to \"auto\" —\nthe archetype's own default — and explicit values override it. The meta\nAPI resolves the effective composition (internal/ui resolveChrome) so\nrenderers read final values.\n",
       "type": "object",
@@ -4000,6 +4123,10 @@
       "type": "object",
       "properties": {
         "default": {},
+        "public": {
+          "description": "Public opts the key in to UI-surface exposure (plan",
+          "type": "boolean"
+        },
         "secret": {
           "type": "boolean"
         },
@@ -4019,6 +4146,10 @@
       "properties": {
         "call": {
           "description": "Call for source: api — \"module.service.action\".",
+          "type": "string"
+        },
+        "config": {
+          "description": "Config for source: config — \"\u003cconfig-name\u003e.\u003ckey\u003e\" referencing a",
           "type": "string"
         },
         "entity": {
@@ -5155,7 +5286,8 @@
         "Listing",
         "Calendar",
         "ApprovalInbox",
-        "NotificationCenter"
+        "NotificationCenter",
+        "Workspace"
       ]
     },
     "KvstoreUseDecl": {
@@ -6269,11 +6401,23 @@
         "cdn": {
           "type": "boolean"
         },
+        "chunk_size_mb": {
+          "description": "ChunkSizeMB is the client hint for chunked-upload part size (todo",
+          "type": "integer"
+        },
         "max_count": {
+          "type": "integer"
+        },
+        "max_download_mb": {
+          "description": "MaxDownloadMB caps the size of a file served via download/link routes",
           "type": "integer"
         },
         "max_size_mb": {
           "type": "integer"
+        },
+        "one_time": {
+          "description": "OneTime deletes the object after the configured number of successful",
+          "type": "boolean"
         },
         "signed_url_ttl": {
           "description": "e.g. \"15m\"",
@@ -6284,6 +6428,10 @@
           "items": {
             "$ref": "#/$defs/StorageTransform"
           }
+        },
+        "ttl": {
+          "description": "TTL auto-deletes the object if it is not downloaded within the",
+          "type": "string"
         },
         "visibility": {
           "description": "public | private | signed",
@@ -6944,7 +7092,8 @@
         "Webhook",
         "Widget",
         "Wizard",
-        "Workflow"
+        "Workflow",
+        "Workspace"
       ]
     },
     "metadata": {
@@ -7018,6 +7167,11 @@
               "examples": [
                 "no-nav"
               ]
+            },
+            "auth": {
+              "$ref": "#/$defs/AppAuth",
+              "description": "Auth overrides the auth screens (login, setup, change-password,",
+              "nullable": true
             },
             "auth_config_ref": {
               "description": "Per-App auth strategy config (kind: Config)",
@@ -7127,6 +7281,17 @@
               "examples": [
                 "1.0.0"
               ]
+            },
+            "workspaces": {
+              "description": "Optional workspace mount allowlist — absent = all workspaces; [] = staged (mounted nowhere); [slug,...] = only those workspaces",
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "examples": [
+                "[cafe, kopi]"
+              ],
+              "nullable": true
             }
           },
           "required": [
@@ -8506,6 +8671,90 @@
         },
         "kind": {
           "type": "string",
+          "const": "Workspace"
+        },
+        "metadata": {
+          "description": "Metadata is common to all FormSpec resources.\n",
+          "type": "object",
+          "properties": {
+            "annotations": {
+              "type": "object",
+              "additionalProperties": {}
+            },
+            "description": {
+              "type": "string"
+            },
+            "labels": {
+              "type": "object",
+              "additionalProperties": {}
+            },
+            "module": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        "spec": {
+          "title": "Workspace Spec",
+          "description": "WorkspaceSpec is the kind-specific body of a `kind: Workspace` manifest.\n",
+          "type": "object",
+          "properties": {
+            "description": {
+              "description": "Description explains the workspace's purpose (AI readability).",
+              "type": "string",
+              "examples": [
+                "Workspace utama aplikasi kafe demo"
+              ]
+            },
+            "display_name": {
+              "description": "Human-readable workspace name — shown in admin surfaces",
+              "type": "string",
+              "examples": [
+                "Kafe Demo"
+              ]
+            },
+            "owner_user_id": {
+              "description": "Optional user ID seeded as workspace owner — empty = no seeded owner (first admin via setup wizard)",
+              "type": "string"
+            },
+            "settings": {
+              "description": "Free-form workspace metadata persisted to the registry row (json) — structured platform settings belong to kind: Config",
+              "type": "object",
+              "additionalProperties": {}
+            },
+            "slug": {
+              "description": "URL-facing workspace slug — defaults to metadata.name; kebab-case, unique across the deployment",
+              "type": "string",
+              "examples": [
+                "cafe"
+              ],
+              "pattern": "^[a-z0-9](-[a-z0-9])*$"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "apiVersion",
+        "kind",
+        "metadata",
+        "spec"
+      ]
+    },
+    {
+      "properties": {
+        "apiVersion": {
+          "type": "string",
+          "const": "formspec.dev/v1"
+        },
+        "kind": {
+          "type": "string",
           "const": "Renderer"
         },
         "metadata": {
@@ -8845,6 +9094,17 @@
               "items": {
                 "$ref": "#/$defs/FormAction"
               }
+            },
+            "auth_action": {
+              "description": "Bind submit to a platform auth action (mutually exclusive with entity).",
+              "type": "string",
+              "enum": [
+                "login",
+                "register",
+                "change_password",
+                "forgot_password",
+                "reset_password"
+              ]
             },
             "context": {
               "description": "Context declares render-context variables injected into this form's",
