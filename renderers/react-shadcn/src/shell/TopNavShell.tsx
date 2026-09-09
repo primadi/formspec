@@ -8,7 +8,8 @@
 // chrome variants render the same permission-filtered tree.
 
 import { useState } from "react"
-import { Link, NavLink, Outlet, useParams } from "react-router-dom"
+import { Outlet, useParams } from "react-router-dom"
+import { AppLink as Link, AppNavLink as NavLink } from "@/lib/navigation"
 import { ChevronDown, Menu } from "lucide-react"
 import { useSurface } from "@/hooks/useSurface"
 import { useMetaStore } from "@/stores/meta"
@@ -239,8 +240,10 @@ export function TopNavShell() {
           </div>
         )}
 
-        {/* Page content */}
-        <main className="flex-1 overflow-auto p-6">
+        {/* Page content — view-transition-name scopes the page transition
+            (App.spec.page_transition) to this area only; the topnav and
+            header stay visually static. */}
+        <main className="flex-1 overflow-auto p-6 [view-transition-name:page-content]">
           <ErrorBoundary>
             <Outlet />
           </ErrorBoundary>

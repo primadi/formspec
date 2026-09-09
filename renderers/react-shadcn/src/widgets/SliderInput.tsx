@@ -13,6 +13,8 @@ interface SliderInputProps {
   step?: number
   readonly?: boolean
   error?: string
+  /** id forwarded to the range input so <label htmlFor> can target it */
+  id?: string
 }
 
 export function SliderInput({
@@ -23,6 +25,7 @@ export function SliderInput({
   step = 1,
   readonly = false,
   error,
+  id,
 }: SliderInputProps) {
   const v = typeof value === "number" ? value : min
 
@@ -33,6 +36,7 @@ export function SliderInput({
   return (
     <div className={cn("flex items-center gap-3", error && "text-destructive")}>
       <input
+        id={id}
         type="range"
         min={min}
         max={max}

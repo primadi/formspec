@@ -11,7 +11,8 @@
 // then redirects to `?returnTo` (same-origin guard, plan Phase 1 route slot).
 
 import { useMemo, useState, type FormEvent } from "react"
-import { useNavigate, useParams, useSearchParams } from "react-router-dom"
+import { useAppNavigate } from "@/lib/navigation"
+import { useParams, useSearchParams } from "react-router-dom"
 import { Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { TextInput } from "@/widgets/TextInput"
@@ -49,7 +50,7 @@ function fieldWidget(field: FormField) {
 
 export default function AuthFormRenderer({ spec }: { spec: FormSpec }) {
   const { workspace = "default" } = useParams<{ workspace: string }>()
-  const navigate = useNavigate()
+  const navigate = useAppNavigate()
   const [searchParams] = useSearchParams()
   const auth = useMemo(() => createAuth(workspace), [workspace])
 

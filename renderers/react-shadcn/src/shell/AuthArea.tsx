@@ -11,7 +11,7 @@
 //
 // `undefined` (bundle not loaded yet) renders nothing — never guess.
 
-import { Link } from "react-router-dom"
+import { AppLink as Link } from "@/lib/navigation"
 import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
 import { useSurface } from "@/hooks/useSurface"

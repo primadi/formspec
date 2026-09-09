@@ -14,6 +14,8 @@ interface ComboboxProps {
   placeholder?: string
   readonly?: boolean
   error?: string
+  /** Accessible name for the trigger button (set from the field label) */
+  label?: string
 }
 
 export function Combobox({
@@ -23,6 +25,7 @@ export function Combobox({
   placeholder,
   readonly = false,
   error,
+  label,
 }: ComboboxProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState("")
@@ -54,6 +57,7 @@ export function Combobox({
     <div ref={containerRef} className="relative">
       <button
         type="button"
+        aria-label={label}
         onClick={() => setOpen((o) => !o)}
         className={cn(
           "flex h-8 w-full items-center justify-between rounded-lg border border-input bg-transparent px-2.5 text-sm focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",

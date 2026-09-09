@@ -47,18 +47,22 @@ var workspaceSlugPattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
 // ReservedWorkspaceSlugs is the closed set of first path segments that
 // cannot be used as a workspace slug — they are reserved by the router
-// surfaces mounted under the workspace prefix (AppSpec.RootURL docs):
-// _ui, api, _admin, assets, health, login, register, _ws, print.
+// surfaces mounted under the workspace prefix (AppSpec.RootURL docs) and by
+// root-level mounts (static assets, health): _ui, api, _admin, assets,
+// health, login, register, _ws, print, favicon.svg, icons.svg, manifest.json.
 var ReservedWorkspaceSlugs = map[string]bool{
-	"_ui":      true,
-	"api":      true,
-	"_admin":   true,
-	"assets":   true,
-	"health":   true,
-	"login":    true,
-	"register": true,
-	"_ws":      true,
-	"print":    true,
+	"_ui":           true,
+	"api":           true,
+	"_admin":        true,
+	"assets":        true,
+	"health":        true,
+	"login":         true,
+	"register":      true,
+	"_ws":           true,
+	"print":         true,
+	"favicon.svg":   true,
+	"icons.svg":     true,
+	"manifest.json": true,
 }
 
 // DefaultWorkspaceSlug is the workspace seeded/assumed when no explicit
@@ -93,7 +97,7 @@ func ValidateWorkspaceSpec(w *WorkspaceSpec, name string) error {
 	slug := w.EffectiveSlug(name)
 	if !IsValidWorkspaceSlug(slug) {
 		if workspaceSlugPattern.MatchString(slug) {
-			return fmt.Errorf("workspace slug %q is reserved (reserved segments: _ui, api, _admin, assets, health, login, register, _ws, print)", slug)
+			return fmt.Errorf("workspace slug %q is reserved (reserved segments: _ui, api, _admin, assets, health, login, register, _ws, print, favicon.svg, icons.svg, manifest.json)", slug)
 		}
 		return fmt.Errorf("workspace slug %q is invalid (kebab-case required: lowercase letters, digits, hyphens)", slug)
 	}

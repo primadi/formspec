@@ -32,6 +32,8 @@ interface DateInputProps {
   error?: string
   /** Extra classes for the visible text input (sizing, etc.). */
   className?: string
+  /** id forwarded to the text input so <label htmlFor> can target it */
+  id?: string
 }
 
 export function DateInput({
@@ -41,6 +43,7 @@ export function DateInput({
   withTime = false,
   error,
   className,
+  id,
 }: DateInputProps) {
   const settings = useMetaStore((s) => s.bundle?.settings)
   const formatter = createFormatter(settings)
@@ -100,6 +103,7 @@ export function DateInput({
   return (
     <div className="relative">
       <Input
+        id={id}
         type="text"
         value={displayValue}
         placeholder={placeholder}
@@ -127,6 +131,8 @@ export function DateInput({
         ref={nativeRef}
         type={withTime ? "datetime-local" : "date"}
         value={value}
+        id={id ? `${id}-picker` : undefined}
+        name={id ? undefined : "date-picker-native"}
         onChange={(e) => {
           onChange?.(e.target.value)
           setText(null)

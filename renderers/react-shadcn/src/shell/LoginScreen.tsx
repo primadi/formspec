@@ -7,7 +7,8 @@
 // handles the `returnTo` redirect) — this screen only authenticates.
 
 import { useState, type FormEvent } from "react"
-import { Link, useNavigate, useSearchParams } from "react-router-dom"
+import { AppLink as Link, useAppNavigate } from "@/lib/navigation"
+import { useSearchParams } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
@@ -34,7 +35,7 @@ export function LoginScreen({
   mode: modeProp,
 }: LoginScreenProps & { mode?: "login" | "register" }) {
   const [searchParams] = useSearchParams()
-  const navigate = useNavigate()
+  const navigate = useAppNavigate()
   const mode = (modeProp ??
     (searchParams.get("mode") === "register" ? "register" : "login")) as
     | "login"
@@ -440,6 +441,7 @@ export function LoginScreen({
             Auto logout after
           </label>
           <Select
+            id="session-timeout"
             value={String(sessionTimeoutMinutes)}
             onChange={(v) => setSessionTimeoutMinutes(Number(v))}
             options={[

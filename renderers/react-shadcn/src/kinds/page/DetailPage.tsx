@@ -6,7 +6,8 @@
 // Design doc §5.5 Detail page (F3)
 
 import { useEffect, useState, useMemo } from "react"
-import { useNavigate, useParams } from "react-router-dom"
+import { useAppNavigate } from "@/lib/navigation"
+import { useParams } from "react-router-dom"
 import { useSurface } from "@/hooks/useSurface"
 import { toast } from "@/lib/ui"
 import { ArrowLeft, Edit, FileText, Loader2 } from "lucide-react"
@@ -31,7 +32,7 @@ interface DetailPageProps {
 }
 
 export default function DetailPage({ entity }: DetailPageProps) {
-  const navigate = useNavigate()
+  const navigate = useAppNavigate()
   const { workspace = "default", id } = useParams<{
     workspace: string
     id: string

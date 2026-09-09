@@ -5,7 +5,8 @@
 // Renders inside a BrowserRouter context via Outlet.
 // Wraps children with TooltipProvider for sidebar tooltips.
 
-import { Outlet, useParams, useLocation, Link } from "react-router-dom"
+import { Outlet, useParams, useLocation } from "react-router-dom"
+import { AppLink as Link } from "@/lib/navigation"
 import { useSurface } from "@/hooks/useSurface"
 import { useMetaStore } from "@/stores/meta"
 import { ChevronLeft, ChevronRight, Menu, Home } from "lucide-react"
@@ -146,8 +147,10 @@ export function SideNavShell() {
             <AuthArea mode={chrome?.auth} />
           </header>
 
-          {/* Page content */}
-          <main className="flex-1 overflow-auto p-6">
+          {/* Page content — view-transition-name scopes the page transition
+              (App.spec.page_transition) to this area only; the sidebar and
+              header stay visually static. */}
+          <main className="flex-1 overflow-auto p-6 [view-transition-name:page-content]">
             <ErrorBoundary>
               <Outlet />
             </ErrorBoundary>

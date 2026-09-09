@@ -5,10 +5,11 @@
 //
 // Design doc §5.5 Form kind (F3)
 
-import { useMemo, useState, useEffect, useCallback, useRef } from "react"
+import { useMemo, useState, useEffect, useCallback, useRef, useId } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { useNavigate, useParams } from "react-router-dom"
+import { useAppNavigate } from "@/lib/navigation"
+import { useParams } from "react-router-dom"
 import { useSurface } from "@/hooks/useSurface"
 import { z } from "zod"
 import { buildZodField } from "@/lib/zod-schema"
@@ -93,7 +94,7 @@ export default function FormRenderer({
   inOverlay,
   onClose,
 }: FormRendererProps) {
-  const navigate = useNavigate()
+  const navigate = useAppNavigate()
   const { workspace = "default", id: routeId } = useParams<{
     workspace: string
     id?: string
@@ -104,6 +105,9 @@ export default function FormRenderer({
   const me = useSessionStore((s) => s.me)
   const bundleForms = useMetaStore((s) => s.bundle?.forms) ?? []
   const appName = useMetaStore((s) => s.bundle?.app.name)
+  // Unique prefix for field input ids so <label htmlFor> can associate with
+  // each form field (a11y — avoids "no label associated with form field").
+  const formIdPrefix = useId()
 
   const authoredForms = useMemo(() => {
     const map = new Map<string, import("@/types/manifest").Entry<FormSpec>>()
@@ -433,6 +437,9 @@ export default function FormRenderer({
                 }}
               >
                 {section.fields.map((field) => {
+                  // Stable per-field id so the <label> below can associate
+                  // with the input (a11y — no orphan form fields).
+                  const fieldId = `form-${formIdPrefix}-${field.name}`
                   const entityField = entity.fields.find(
                     (f) => f.name === field.name,
                   )
@@ -484,6 +491,19 @@ export default function FormRenderer({
 
                   if (!isVisible) return null
 
+                  // Only widgets that render a native labelable element
+                  // (<input>/<textarea>) may be the target of <label htmlFor>.
+                  // Button-based custom controls (select, switch, combobox,
+                  // radio-group) and composite widgets (child-grid) get their
+                  // accessible name via aria-label / internal labels instead —
+                  // pointing <label for> at a <button> or a missing id is
+                  // flagged as incorrect by a11y checkers. Readonly fields
+                  // render a display <div>, not an input, so they are not
+                  // labelable either.
+                  const widgetName = field.widget ?? entityField.type
+                  const isLabelable =
+                    !isReadonly && !isView && LABELABLE_WIDGETS.has(widgetName)
+
                   return (
                     <div key={field.name} className="flex flex-col gap-2">
                       {exprError && (
@@ -495,15 +515,29 @@ export default function FormRenderer({
                           <span>Expression error: {exprError}</span>
                         </div>
                       )}
-                      <label className="text-sm font-medium leading-snug peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                        {field.label ?? field.name}
-                        {isRequired && (
-                          <span className="text-destructive ml-0.5">*</span>
-                        )}
-                      </label>
+                      {isLabelable ? (
+                        <label
+                          htmlFor={fieldId}
+                          className="text-sm font-medium leading-snug peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                        >
+                          {field.label ?? field.name}
+                          {isRequired && (
+                            <span className="text-destructive ml-0.5">*</span>
+                          )}
+                        </label>
+                      ) : (
+                        <span className="text-sm font-medium leading-snug peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                          {field.label ?? field.name}
+                          {isRequired && (
+                            <span className="text-destructive ml-0.5">*</span>
+                          )}
+                        </span>
+                      )}
                       <FormFieldWidget
                         field={field}
                         entityField={entityField}
+                        id={fieldId}
+                        label={field.label ?? field.name}
                         value={formValues[field.name as keyof FormData]}
                         error={
                           errors[field.name]?.message as string | undefined
@@ -636,6 +670,32 @@ export default function FormRenderer({
 
 // ── Field Widget Router ──
 
+// ── Label association ──
+// Widgets that render a native labelable element (<input>/<textarea>) and can
+// therefore be targeted by <label htmlFor>. Everything else (select/switch/
+// combobox/radio-group trigger buttons, child-grid, uuid, grants-editor) is
+// labeled via aria-label or internal labels instead.
+const LABELABLE_WIDGETS = new Set([
+  "string",
+  "text",
+  "input",
+  "textarea",
+  "integer",
+  "decimal",
+  "number",
+  "decimalinput",
+  "date",
+  "datetime",
+  "datepicker",
+  "datetimeinput",
+  "json",
+  "slider",
+  "tags",
+  "password",
+  "relation",
+  "relation-picker",
+])
+
 function FormFieldWidget({
   field,
   entityField,
@@ -647,6 +707,8 @@ function FormFieldWidget({
   entityName,
   recordId,
   fieldName,
+  id,
+  label,
   onChange,
 }: {
   field: import("@/types/manifest").FormField
@@ -659,6 +721,10 @@ function FormFieldWidget({
   entityName?: string
   recordId?: string
   fieldName?: string
+  /** id of the rendered input — matches the <label htmlFor> above */
+  id?: string
+  /** Field label, used as accessible name for button-based widgets */
+  label?: string
   onChange: (value: any) => void
 }) {
   const widget = field.widget ?? entityField.type
@@ -672,6 +738,7 @@ function FormFieldWidget({
           options={entityField.enum_values ?? []}
           readonly={readonly}
           error={error}
+          label={label}
         />
       )
 
@@ -684,6 +751,7 @@ function FormFieldWidget({
           placeholder={field.placeholder}
           readonly={readonly}
           error={error}
+          label={label}
         />
       )
 
@@ -695,6 +763,7 @@ function FormFieldWidget({
           placeholder={field.placeholder}
           readonly={readonly}
           error={error}
+          id={id}
         />
       )
 
@@ -720,19 +789,31 @@ function FormFieldWidget({
           }
           readonly={readonly}
           error={error}
+          id={id}
         />
       )
 
-    case "tags":
+    case "tags": {
+      // Pass the value as-is: string fields keep the comma-separated shape,
+      // json fields keep their array shape (TagsInput is value-type-aware).
+      // For json fields force array shape even when empty (create mode),
+      // so a string never leaks into a json column.
+      const isJsonField = entityField.type === "json"
+      const tagsValue = isJsonField
+        ? ((value as string[] | undefined) ?? [])
+        : ((value as string | undefined) ?? "")
       return (
         <TagsInput
-          value={(value as string) ?? ""}
+          value={tagsValue}
           onChange={(v) => onChange(v)}
           placeholder={field.placeholder}
           readonly={readonly}
           error={error}
+          id={id}
         />
       )
+    }
+
     case "input":
       return (
         <TextInput
@@ -746,6 +827,7 @@ function FormFieldWidget({
               | undefined
           }
           error={error}
+          id={id}
         />
       )
 
@@ -762,6 +844,7 @@ function FormFieldWidget({
               | undefined
           }
           error={error}
+          id={id}
         />
       )
 
@@ -798,6 +881,7 @@ function FormFieldWidget({
               | undefined
           }
           error={error}
+          id={id}
         />
       )
 
@@ -811,6 +895,8 @@ function FormFieldWidget({
           placeholder={field.placeholder}
           readonly={readonly}
           error={error}
+          id={id}
+          ariaLabel={label}
         />
       )
 
@@ -821,6 +907,7 @@ function FormFieldWidget({
           value={(value as boolean) ?? false}
           onChange={(v) => onChange(v)}
           readonly={readonly}
+          ariaLabel={label}
         />
       )
 
@@ -844,6 +931,7 @@ function FormFieldWidget({
           placeholder={field.placeholder}
           readonly={readonly}
           error={error}
+          id={id}
         />
       )
 
@@ -858,6 +946,7 @@ function FormFieldWidget({
           readonly={readonly}
           withTime={entityField.type === "datetime"}
           error={error}
+          id={id}
         />
       )
 
@@ -869,6 +958,7 @@ function FormFieldWidget({
           placeholder={field.placeholder}
           readonly={readonly}
           error={error}
+          id={id}
         />
       )
 
@@ -920,6 +1010,7 @@ function FormFieldWidget({
           placeholder={field.placeholder}
           readonly={readonly}
           error={error}
+          id={id}
         />
       )
   }

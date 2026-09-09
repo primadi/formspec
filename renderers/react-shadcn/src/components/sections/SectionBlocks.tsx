@@ -9,7 +9,7 @@
 // Rendered by kinds/page/PageRenderer when a Page block has `section:`.
 
 import { useEffect, useState } from "react"
-import { Link } from "react-router-dom"
+import { AppLink as Link } from "@/lib/navigation"
 import {
   AlertOctagon,
   AlertTriangle,

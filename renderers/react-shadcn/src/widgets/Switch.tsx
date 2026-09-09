@@ -7,15 +7,19 @@ interface SwitchProps {
   onChange?: (value: boolean) => void
   readonly?: boolean
   label?: string
+  /** Accessible name when the switch is rendered without a visible label */
+  ariaLabel?: string
 }
 
-export function Switch({ value = false, onChange, readonly = false, label }: SwitchProps) {
+export function Switch({
+  value = false,
+  onChange,
+  readonly = false,
+  label,
+  ariaLabel,
+}: SwitchProps) {
   if (readonly) {
-    return (
-      <div className="py-1 text-sm">
-        {value ? "Yes" : "No"}
-      </div>
-    )
+    return <div className="py-1 text-sm">{value ? "Yes" : "No"}</div>
   }
 
   return (
@@ -24,6 +28,7 @@ export function Switch({ value = false, onChange, readonly = false, label }: Swi
         type="button"
         role="switch"
         aria-checked={value}
+        aria-label={label ?? ariaLabel}
         onClick={() => onChange?.(!value)}
         disabled={readonly}
         className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 ${

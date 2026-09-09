@@ -12,7 +12,7 @@
 //   - Icons from lucide-react by name
 //   - Active route highlighting
 
-import { NavLink } from "react-router-dom"
+import { AppNavLink as NavLink } from "@/lib/navigation"
 
 import { cn } from "@/lib/utils"
 import { useMetaStore } from "@/stores/meta"

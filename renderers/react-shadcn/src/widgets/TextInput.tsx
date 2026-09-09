@@ -13,6 +13,8 @@ interface TextInputProps {
   required?: boolean
   maxLength?: number
   error?: string
+  /** id forwarded to the input so <label htmlFor> can target it */
+  id?: string
 }
 
 export function TextInput({
@@ -23,13 +25,17 @@ export function TextInput({
   required = false,
   maxLength,
   error,
+  id,
 }: TextInputProps) {
   const isTextarea = maxLength != null && maxLength > 120
 
   if (readonly) {
     return (
       <div className="py-1 text-sm">
-        {value || (required ? <span className="text-muted-foreground italic">Empty</span> : null)}
+        {value ||
+          (required ? (
+            <span className="text-muted-foreground italic">Empty</span>
+          ) : null)}
       </div>
     )
   }
@@ -38,8 +44,11 @@ export function TextInput({
     return (
       <div>
         <Textarea
+          id={id}
           value={value}
-          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => onChange?.(e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+            onChange?.(e.target.value)
+          }
           placeholder={placeholder}
           maxLength={maxLength}
           className={error ? "border-destructive" : ""}
@@ -50,8 +59,11 @@ export function TextInput({
 
   return (
     <Input
+      id={id}
       value={value}
-      onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange?.(e.target.value)}
+      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+        onChange?.(e.target.value)
+      }
       placeholder={placeholder}
       maxLength={maxLength}
       className={error ? "border-destructive" : ""}

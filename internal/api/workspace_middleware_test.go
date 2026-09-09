@@ -80,6 +80,38 @@ func TestWorkspaceMiddleware_NilResolverPassthrough(t *testing.T) {
 	}
 }
 
+// TestWorkspaceMiddleware_ReservedSegmentPassthrough verifies that root-level
+// router surfaces (static assets, favicon, health) are not treated as
+// workspace slugs — chi middlewares run before routing, so without this skip
+// the registry check would swallow /assets/* as 404 WORKSPACE_NOT_FOUND and
+// Vite absolute asset URLs would break (bug 2026-09-08).
+func TestWorkspaceMiddleware_ReservedSegmentPassthrough(t *testing.T) {
+	setupWorkspaceResolver(t, &fakeWorkspaceResolver{registered: map[string]bool{
+		"default": true, // "assets" dkk deliberately NOT registered
+	}})
+	var seenWorkspace string
+	handler := WorkspaceMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenWorkspace = GetWorkspace(r.Context())
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	for _, path := range []string{
+		"/assets/index-abc123.js",
+		"/favicon.svg",
+		"/health",
+	} {
+		req := httptest.NewRequest("GET", path, nil)
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("reserved segment %s: expected passthrough 200, got %d", path, rr.Code)
+		}
+		if seenWorkspace != "default" {
+			t.Fatalf("reserved segment %s: expected default workspace in context, got %q", path, seenWorkspace)
+		}
+	}
+}
+
 // TestWorkspaceMiddleware_ResolverError500 verifies that a registry failure
 // surfaces as 500 — never as a silent pass-through or a 404.
 func TestWorkspaceMiddleware_ResolverError500(t *testing.T) {

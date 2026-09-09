@@ -154,8 +154,14 @@ export default function ReportRenderer({ entry }: ReportRendererProps) {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {(entry.spec.parameters ?? []).map((param) => (
               <div key={param.field} className="space-y-1">
-                <label className="text-xs font-medium">{param.label}</label>
+                <label
+                  htmlFor={`report-param-${param.field}`}
+                  className="text-xs font-medium"
+                >
+                  {param.label}
+                </label>
                 <ReportParamInput
+                  id={`report-param-${param.field}`}
                   param={param}
                   value={params[param.field] ?? ""}
                   module={entry.module}
@@ -304,15 +310,18 @@ function ReportParamInput({
   value,
   module,
   onChange,
+  id,
 }: {
   param: ReportParam
   value: string
   module: string
   onChange: (value: string) => void
+  id?: string
 }) {
   if (param.type === "date" || param.type === "datetime") {
     return (
       <Input
+        id={id}
         type={param.type === "datetime" ? "datetime-local" : "date"}
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -329,6 +338,7 @@ function ReportParamInput({
     }
     return (
       <RelationPicker
+        id={id}
         value={value}
         onChange={onChange}
         entityField={syntheticField}
@@ -340,6 +350,7 @@ function ReportParamInput({
 
   return (
     <Input
+      id={id}
       placeholder={param.label}
       value={value}
       onChange={(e) => onChange(e.target.value)}

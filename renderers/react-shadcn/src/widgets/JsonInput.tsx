@@ -14,6 +14,8 @@ interface JsonInputProps {
   readonly?: boolean
   placeholder?: string
   error?: string
+  /** id forwarded to the textarea so <label htmlFor> can target it */
+  id?: string
 }
 
 export function JsonInput({
@@ -22,6 +24,7 @@ export function JsonInput({
   readonly = false,
   placeholder,
   error,
+  id,
 }: JsonInputProps) {
   const [text, setText] = useState(() => stringify(value))
   const [parseError, setParseError] = useState<string | null>(null)
@@ -44,6 +47,7 @@ export function JsonInput({
   return (
     <div>
       <Textarea
+        id={id}
         value={text}
         onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
           const next = e.target.value

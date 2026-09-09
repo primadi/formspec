@@ -25,6 +25,10 @@ interface NumberInputProps {
    *  false/undefined = decimal field (parseFloat). Do NOT infer from `step`
    *  — callers pass `step` inconsistently (decimal often passes undefined). */
   integer?: boolean
+  /** id forwarded to the input so <label htmlFor> can target it */
+  id?: string
+  /** name attribute for the native input (a11y: id or name is required) */
+  name?: string
 }
 
 export function NumberInput({
@@ -39,6 +43,8 @@ export function NumberInput({
   error,
   integer = false,
   positive = false,
+  id,
+  name,
 }: NumberInputProps) {
   if (readonly) {
     const settings = useMetaStore.getState().bundle?.settings
@@ -96,6 +102,8 @@ export function NumberInput({
 
   return (
     <Input
+      id={id}
+      name={name}
       type="number"
       value={value ?? ""}
       onChange={(e: React.ChangeEvent<HTMLInputElement>) => {

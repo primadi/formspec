@@ -14,6 +14,8 @@ interface PasswordInputProps {
   placeholder?: string
   readonly?: boolean
   error?: string
+  /** id forwarded to the input so <label htmlFor> can target it */
+  id?: string
 }
 
 export function PasswordInput({
@@ -22,6 +24,7 @@ export function PasswordInput({
   placeholder,
   readonly = false,
   error,
+  id,
 }: PasswordInputProps) {
   const [show, setShow] = useState(false)
 
@@ -32,6 +35,7 @@ export function PasswordInput({
   return (
     <div className="relative">
       <Input
+        id={id}
         type={show ? "text" : "password"}
         value={value}
         onChange={(e) => onChange?.(e.target.value)}

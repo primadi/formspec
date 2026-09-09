@@ -8,13 +8,14 @@
 // admin surface.
 
 import { useEffect, useState } from "react"
-import { useNavigate, useParams } from "react-router-dom"
+import { useAppNavigate } from "@/lib/navigation"
+import { useParams } from "react-router-dom"
 import { toast } from "sonner"
 import { useSessionStore } from "@/stores/session"
 
 export function OAuthLinkCallback() {
   const { workspace = "default" } = useParams<{ workspace: string }>()
-  const navigate = useNavigate()
+  const navigate = useAppNavigate()
   const boot = useSessionStore((s) => s.boot)
   const [error, setError] = useState<string | null>(null)
 

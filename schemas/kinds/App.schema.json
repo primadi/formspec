@@ -71,6 +71,20 @@
         "[clinic, pharmacy]"
       ]
     },
+    "page_transition": {
+      "description": "Page-to-page navigation animation (View Transitions API), scoped to the page content area: none | fade (default) | slide | slide-up | scale",
+      "type": "string",
+      "enum": [
+        "none",
+        "fade",
+        "slide",
+        "slide-up",
+        "scale"
+      ],
+      "examples": [
+        "fade"
+      ]
+    },
     "persist_backend": {
       "description": "Entity persist backend (backend/04-persist-backend.md), e.g. jsonb-persist",
       "type": "string",

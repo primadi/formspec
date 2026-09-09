@@ -15,7 +15,8 @@
 // Back button closes overlay. URL is shareable.
 
 import { lazy, Suspense, useCallback } from "react"
-import { useSearchParams, useNavigate } from "react-router-dom"
+import { useAppNavigate } from "@/lib/navigation"
+import { useSearchParams } from "react-router-dom"
 import {
   Dialog,
   DialogContent,
@@ -41,7 +42,7 @@ const FormRenderer = lazy(() => import("@/kinds/form/FormRenderer"))
 
 export function OverlayHost() {
   const [searchParams, _setSearchParams] = useSearchParams()
-  const navigate = useNavigate()
+  const navigate = useAppNavigate()
 
   const action = searchParams.get("action")
   const formName = searchParams.get("form")

@@ -14,7 +14,8 @@ import {
   type SortingState,
   type ColumnDef,
 } from "@tanstack/react-table"
-import { useNavigate, useSearchParams } from "react-router-dom"
+import { useAppNavigate } from "@/lib/navigation"
+import { useSearchParams } from "react-router-dom"
 import { useSurface } from "@/hooks/useSurface"
 import {
   ChevronUp,
@@ -100,7 +101,7 @@ export default function TableRenderer({
   fixedFilters,
   onSelect,
 }: TableRendererProps) {
-  const navigate = useNavigate()
+  const navigate = useAppNavigate()
   const { surfacePath } = useSurface()
   const [searchParams, setSearchParams] = useSearchParams()
   const me = useSessionStore((s) => s.me)

@@ -10,7 +10,8 @@
 // (currency/date/relative/badge) so listings look consistent across surfaces.
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { useNavigate, useParams } from "react-router-dom"
+import { useAppNavigate } from "@/lib/navigation"
+import { useParams } from "react-router-dom"
 import { Search } from "lucide-react"
 import { resolveEntityRef } from "@/engine/entityRef"
 import type {
@@ -50,7 +51,7 @@ export default function ListingRenderer({
   entry: Entry<ListingSpec>
 }) {
   const { workspace = "default" } = useParams<{ workspace: string }>()
-  const navigate = useNavigate()
+  const navigate = useAppNavigate()
   const spec = entry.spec
   const getEntity = useMetaStore((s) => s.getEntity)
   const getClient = useSessionStore((s) => s.getClient)

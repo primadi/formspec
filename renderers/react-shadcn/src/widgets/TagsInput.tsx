@@ -1,25 +1,49 @@
 // ─── Tags Input Widget ───
 //
-// Multi-select stored as a comma-separated string on a string field
-// (frontend-only — no backend change). Opt-in via `widget: tags`.
+// Multi-select widget that accepts two value shapes:
+//   - string  → stored as a comma-separated string on a string field
+//   - string[] → stored as a JSON array (entity field type: json, e.g. roles)
+// The value kind is preserved: array in → array out, string in → string out.
+// Opt-in via `widget: tags`.
 
 import { useState, useRef, type KeyboardEvent } from "react"
 import { X } from "lucide-react"
 import { cn } from "@/lib/utils"
 
+type TagsValue = string | string[]
+
 interface TagsInputProps {
-  value?: string // comma-separated
-  onChange?: (value: string) => void
+  value?: TagsValue
+  onChange?: (value: TagsValue) => void
   placeholder?: string
   readonly?: boolean
   error?: string
+  /** id forwarded to the tag input so <label htmlFor> can target it */
+  id?: string
 }
 
-function parseTags(value?: string): string[] {
-  return (value ?? "")
-    .split(",")
-    .map((t) => t.trim())
-    .filter(Boolean)
+/** Normalize any incoming value shape to a tag list. Never throws —
+ * unsupported shapes (json object, null) degrade to an empty list. */
+function parseTags(value?: TagsValue): string[] {
+  if (value == null) return []
+  if (Array.isArray(value)) {
+    return value.map((t) => String(t).trim()).filter(Boolean)
+  }
+  if (typeof value === "string") {
+    return value
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean)
+  }
+  return []
+}
+
+/** Serialize a tag list back into the value shape given on input.
+ * `isArray` must be decided by the caller's schema (json → array),
+ * not by the current emptiness of the value. */
+function serializeTags(tags: string[], isArray: boolean): TagsValue {
+  if (isArray) return tags
+  return tags.join(",")
 }
 
 export function TagsInput({
@@ -28,21 +52,27 @@ export function TagsInput({
   placeholder,
   readonly = false,
   error,
+  id,
 }: TagsInputProps) {
   const [draft, setDraft] = useState("")
   const inputRef = useRef<HTMLInputElement>(null)
   const tags = parseTags(value)
+  const isArray = Array.isArray(value)
+
+  const emit = (next: string[]) => {
+    onChange?.(serializeTags(next, isArray))
+  }
 
   const commit = () => {
     const t = draft.trim()
     if (t && !tags.includes(t)) {
-      onChange?.([...tags, t].join(","))
+      emit([...tags, t])
     }
     setDraft("")
   }
 
   const remove = (tag: string) => {
-    onChange?.(tags.filter((t) => t !== tag).join(","))
+    emit(tags.filter((t) => t !== tag))
   }
 
   if (readonly) {
@@ -89,6 +119,7 @@ export function TagsInput({
         ))}
         <input
           ref={inputRef}
+          id={id}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {

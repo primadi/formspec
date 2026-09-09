@@ -38,6 +38,8 @@ interface RelationPickerProps {
   placeholder?: string
   readonly?: boolean
   error?: string
+  /** id forwarded to the search input so <label htmlFor> can target it */
+  id?: string
 }
 
 interface SearchResult {
@@ -90,6 +92,7 @@ export function RelationPicker({
   placeholder,
   readonly = false,
   error,
+  id,
 }: RelationPickerProps) {
   const getClient = useSessionStore((s) => s.getClient)
   const bundle = useMetaStore((s) => s.bundle)
@@ -391,6 +394,7 @@ export function RelationPicker({
             <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
               ref={inputRef}
+              id={id}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onFocus={() => setIsOpen(true)}

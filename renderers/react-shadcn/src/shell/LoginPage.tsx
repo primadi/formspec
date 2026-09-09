@@ -7,7 +7,8 @@
 // resolved auth page is the framework default; App.spec.auth.login_page
 // overrides render through the normal PageRenderer instead.
 
-import { useNavigate, useParams, useSearchParams } from "react-router-dom"
+import { useAppNavigate } from "@/lib/navigation"
+import { useParams, useSearchParams } from "react-router-dom"
 import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
 import { LoginScreen } from "./LoginScreen"
@@ -24,7 +25,7 @@ function appFromPath(pathname: string): string | undefined {
 }
 
 export function LoginPage({ mode = "login" }: { mode?: "login" | "register" }) {
-  const navigate = useNavigate()
+  const navigate = useAppNavigate()
   // In-app login (rendered inside a /:workspace/... surface) derives the
   // workspace from the URL; the top-level /login route has no param and asks
   // the user for it.

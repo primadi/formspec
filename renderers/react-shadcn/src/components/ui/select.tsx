@@ -24,6 +24,10 @@ interface SelectProps {
   disabled?: boolean
   className?: string
   error?: boolean
+  /** id forwarded to the trigger button so <label htmlFor> can target it */
+  id?: string
+  /** Accessible name for the trigger button (set from the field label) */
+  ariaLabel?: string
 }
 
 function normalizeOption(opt: string | SelectOption): SelectOption {
@@ -44,6 +48,8 @@ export function Select({
   disabled = false,
   className,
   error,
+  id,
+  ariaLabel,
 }: SelectProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [focusedIndex, setFocusedIndex] = useState(-1)
@@ -185,11 +191,13 @@ export function Select({
       {/* Trigger */}
       <button
         type="button"
+        id={id}
         disabled={disabled}
         onClick={() => setIsOpen((prev) => !prev)}
         onKeyDown={handleKeyDown}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
+        aria-label={ariaLabel}
         className={cn(
           "flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors",
           "hover:border-ring",

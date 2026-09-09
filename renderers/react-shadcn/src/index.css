@@ -177,3 +177,84 @@ body {
     @apply font-sans;
   }
 }
+
+/* ─── Page transitions (App.spec.page_transition) ───
+   View Transitions API. The mode is mirrored onto <html
+   data-page-transition> by usePageTransitionEffect (lib/navigation.tsx);
+   "none" needs no rules — transitions are skipped in JS.
+
+   The animation targets ::view-transition-*(page-content) — the <main>
+   area carries view-transition-name: page-content in every shell — so the
+   shell chrome (sidebar/topnav/header) stays visually static while only
+   the page content animates. The root snapshot cross-fades by default,
+   which is invisible for identical chrome.
+
+   Enter-only: the OLD page snapshot is hidden instantly — only the NEW
+   page animates in (no lingering old content behind the incoming one). */
+html[data-page-transition]:not(
+    [data-page-transition="none"]
+  )::view-transition-old(page-content) {
+  animation: none;
+  opacity: 0;
+}
+@keyframes vt-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes vt-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes vt-slide-up-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes vt-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+html[data-page-transition="fade"]::view-transition-new(page-content) {
+  animation: vt-fade-in 150ms ease-in;
+}
+html[data-page-transition="slide"]::view-transition-new(page-content) {
+  animation: vt-slide-in 200ms ease-out;
+}
+html[data-page-transition="slide-up"]::view-transition-new(page-content) {
+  animation: vt-slide-up-in 200ms ease-out;
+}
+html[data-page-transition="scale"]::view-transition-new(page-content) {
+  animation: vt-scale-in 180ms ease-out;
+}
+
+/* Respect reduced-motion preferences — fall back to an instant cut. */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root),
+  ::view-transition-old(page-content),
+  ::view-transition-new(page-content) {
+    animation: none;
+  }
+}

@@ -15,7 +15,8 @@
 // Design doc §5.5 Calendar kind (F4)
 
 import { useEffect, useMemo, useState, useCallback } from "react"
-import { useNavigate, useSearchParams } from "react-router-dom"
+import { useAppNavigate } from "@/lib/navigation"
+import { useSearchParams } from "react-router-dom"
 import { toast } from "@/lib/ui"
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react"
 import { RRule } from "rrule"
@@ -140,7 +141,7 @@ function expandRecurrence(
 }
 
 export default function CalendarRenderer({ entry }: CalendarRendererProps) {
-  const navigate = useNavigate()
+  const navigate = useAppNavigate()
   const { surfacePath } = useSurface()
   const [, setSearchParams] = useSearchParams()
   const getClient = useSessionStore((s) => s.getClient)
@@ -366,7 +367,6 @@ export default function CalendarRenderer({ entry }: CalendarRendererProps) {
       }
     }
   }
-
 
   if (!entity) {
     return (

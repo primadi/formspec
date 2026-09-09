@@ -9,7 +9,7 @@
 // LogoutButton.
 
 import * as React from "react"
-import { useNavigate } from "react-router-dom"
+import { useAppNavigate } from "@/lib/navigation"
 import { KeyRound, Link2, LogOut, UserRound } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
@@ -37,7 +37,7 @@ function initialsOf(id: string): string {
 }
 
 export function UserMenu() {
-  const navigate = useNavigate()
+  const navigate = useAppNavigate()
   const token = useSessionStore((s) => s.token)
   const me = useSessionStore((s) => s.me)
   const workspace = useSessionStore((s) => s.workspace)

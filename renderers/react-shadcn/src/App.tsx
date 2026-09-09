@@ -23,6 +23,7 @@ import { DownloadTray } from "@/shell/DownloadTray"
 import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
 import { usePrefsStore } from "@/stores/prefs"
+import { usePageTransitionEffect } from "@/lib/navigation"
 import {
   SideNavShell,
   NoNavShell,
@@ -54,9 +55,18 @@ const APP_SHELLS: Record<string, React.ComponentType> = {
 
 function Root() {
   useTheme()
+  // Mirror App.spec.page_transition onto <html data-page-transition> so the
+  // ::view-transition-* CSS in index.css targets the configured animation.
+  usePageTransitionEffect()
   preloadCommonRenderers()
   return (
-    <BrowserRouter>
+    // useTransitions={false}: BrowserRouter otherwise wraps its state update
+    // in React.startTransition, which flushSync cannot flush synchronously
+    // (transition lane ≠ sync lane). Page transitions (lib/navigation.tsx)
+    // need the DOM update to land INSIDE the startViewTransition callback,
+    // or the "new" snapshot is identical to the old one and the animation
+    // is invisible.
+    <BrowserRouter useTransitions={false}>
       <Routes>
         <Route path="/" element={<Navigate to="/default" replace />} />
         <Route

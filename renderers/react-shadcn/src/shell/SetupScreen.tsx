@@ -7,14 +7,15 @@
 // SPA redirects to the in-app login.
 
 import { useEffect, useState, type FormEvent } from "react"
-import { useNavigate, useParams, useSearchParams } from "react-router-dom"
+import { useAppNavigate } from "@/lib/navigation"
+import { useParams, useSearchParams } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useMetaStore } from "@/stores/meta"
 
 export function SetupScreen() {
   const { workspace = "default" } = useParams<{ workspace: string }>()
-  const navigate = useNavigate()
+  const navigate = useAppNavigate()
   // `forward` = the URL the visitor originally tried to reach before being
   // redirected here (set by the App.tsx setup redirect). After the first
   // admin is created it is chained through the login screen's `returnTo` so

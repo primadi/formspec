@@ -33,10 +33,14 @@ spec:
       fields:
         - field: roles
           label: "Roles"
-          help: "Daftar nama role (JSON array), mis. [\"admin\"]"
+          widget: tags
+          placeholder: "Ketik nama role, tekan Enter"
+          help: "Daftar nama role — ketik lalu Enter untuk menambah, X untuk menghapus"
         - field: permissions
           label: "Permissions"
-          help: "Permission string (JSON array), mis. [\"*\"]"
+          widget: tags
+          placeholder: "Ketik permission, tekan Enter"
+          help: "Permission string — ketik lalu Enter untuk menambah, X untuk menghapus, mis. *"
         - field: active
           label: "Aktif"
           help: "Nonaktifkan untuk memblokir login"

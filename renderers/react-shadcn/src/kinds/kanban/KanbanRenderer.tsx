@@ -7,7 +7,7 @@
 // Design doc §5.5 Kanban kind (F4)
 
 import { useEffect, useState, useCallback, useMemo } from "react"
-import { useNavigate } from "react-router-dom"
+import { useAppNavigate } from "@/lib/navigation"
 import { toast } from "@/lib/ui"
 import {
   DndContext,
@@ -172,7 +172,7 @@ function resolveField(record: Record<string, unknown>, path: string): string {
 // ── Main Renderer ──
 
 export default function KanbanRenderer({ entry }: KanbanRendererProps) {
-  const navigate = useNavigate()
+  const navigate = useAppNavigate()
   const { surfacePath } = useSurface()
   const getClient = useSessionStore((s) => s.getClient)
   const getEntity = useMetaStore((s) => s.getEntity)
@@ -1128,7 +1128,7 @@ function KanbanCardContent({
   entityModule: string
   entityPlural: string
 }) {
-  const navigate = useNavigate()
+  const navigate = useAppNavigate()
   const { surfacePath } = useSurface()
 
   const title = useMemo(() => {

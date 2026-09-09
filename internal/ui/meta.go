@@ -63,6 +63,10 @@ type AppSummary struct {
 	// theme binding): the Theme kind name from App.spec.theme_ref. The
 	// renderer auto-applies it unless the user has picked a theme themselves.
 	Theme string `json:"theme,omitempty"`
+	// PageTransition is the resolved page-to-page navigation animation mode
+	// (App.spec.page_transition): none | fade | slide. Empty/unknown values
+	// resolve to "fade" — renderers read final values and never guess.
+	PageTransition string `json:"page_transition,omitempty"`
 	// Chrome is the resolved, effective chrome composition (frontend/
 	// 05-app-kinds.md §4.1) — archetype defaults already applied. Renderers
 	// read these final values and never guess. Always non-nil.
@@ -174,9 +178,12 @@ type AppContext struct {
 	// the auth screens (login/setup/change-password/reset-password/oauth-
 	// callback) + chrome auth area. Empty slots resolve to the framework
 	// defaults (formspec.core) in BuildBundle.
-	Auth    *spec.AppAuth
-	Modules map[string]bool
-	Menu    []spec.MenuItem
+	Auth *spec.AppAuth
+	// PageTransition is the raw manifest declaration (App.spec.
+	// page_transition) — resolved to the default (fade) in BuildBundle.
+	PageTransition string
+	Modules        map[string]bool
+	Menu           []spec.MenuItem
 	// Settings is the resolved global presentation/config namespace (spec §10).
 	// Always non-nil — resolved with standard defaults by the caller.
 	Settings *spec.Settings
@@ -287,6 +294,17 @@ func resolveChrome(appRenderer string, c *spec.AppChrome) *ChromeConfig {
 	return cfg
 }
 
+// resolvePageTransition normalizes the raw App.spec.page_transition
+// declaration to the effective mode: empty or unknown values fall back to
+// the default (fade). Strict validation happens at manifest load time
+// (ValidateAppSpec + JSON Schema).
+func resolvePageTransition(raw string) string {
+	if spec.PageTransitionNames[raw] {
+		return raw
+	}
+	return spec.DefaultPageTransition
+}
+
 // BuildBundle assembles the /_meta/ui payload for one caller, scoped to one
 // resolved App (appCtx — Core §4.4). Manifests belonging to a module outside
 // appCtx.Modules are excluded entirely, on top of permission filtering.
@@ -318,6 +336,7 @@ func (r *Registry) BuildBundle(entities EntityLister, can PermissionChecker, app
 			StackFamily:    appCtx.StackFamily,
 			PersistBackend: appCtx.PersistBackend,
 			Theme:          appCtx.ThemeRef,
+			PageTransition: resolvePageTransition(appCtx.PageTransition),
 			Chrome:         resolveChrome(appCtx.AppRenderer, appCtx.Chrome),
 			Auth:           resolveAuth(appCtx.Auth),
 		},

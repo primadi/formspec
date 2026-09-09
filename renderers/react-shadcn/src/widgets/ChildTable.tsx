@@ -245,6 +245,7 @@ export function ChildTable({
                           <ChildCell
                             field={f}
                             value={view[f.name]}
+                            cellName={`child-${idx}-${f.name}`}
                             onChange={
                               isRelation
                                 ? (v) =>
@@ -312,6 +313,7 @@ function ChildCell({
   displayOnly = false,
   onSelectRecord,
   fmt,
+  cellName,
 }: {
   field: Field
   value: unknown
@@ -321,6 +323,8 @@ function ChildCell({
   displayOnly?: boolean
   onSelectRecord?: (record: Record<string, unknown>) => void
   fmt?: Formatter
+  /** name attribute for the rendered input (a11y: every form field needs an id or name) */
+  cellName?: string
 }) {
   // Readonly or computed cells render like parent-table cells (badge,
   // currency, date…) instead of an input.
@@ -357,6 +361,7 @@ function ChildCell({
               | undefined
           }
           positive={!!field.rules?.some((r) => r.name === "positive")}
+          name={cellName}
         />
       )
 
@@ -364,6 +369,7 @@ function ChildCell({
       return (
         <input
           type="checkbox"
+          name={cellName}
           className="size-4 rounded border border-input"
           checked={!!value}
           onChange={(e) => onChange(e.target.checked)}
@@ -385,6 +391,7 @@ function ChildCell({
         <Input
           type={field.type === "datetime" ? "datetime-local" : "date"}
           className="h-8"
+          name={cellName}
           value={(value as string) ?? ""}
           onChange={(e) => onChange(e.target.value)}
         />
@@ -415,6 +422,7 @@ function ChildCell({
       return (
         <Input
           className="h-8 font-mono text-xs"
+          name={cellName}
           value={(value as string) ?? ""}
           onChange={(e) => onChange(e.target.value)}
         />
@@ -436,6 +444,7 @@ function ChildCell({
       return (
         <Input
           className="h-8"
+          name={cellName}
           value={(value as string) ?? ""}
           onChange={(e) => onChange(e.target.value)}
         />

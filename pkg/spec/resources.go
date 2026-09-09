@@ -148,10 +148,18 @@ type AppSpec struct {
 	// archetype's own default; explicit values override. Resolved to effective
 	// values by the meta API — renderers never guess.
 	// @schema {example: "nav: menu", description: "Chrome composition: brand/nav/auth/footer/breadcrumbs/theme_switcher, each auto|show|hide (auth: auto|links|button|none) — see frontend/05-app-kinds.md §5"}
-	Chrome    *AppChrome     `yaml:"chrome,omitempty" json:"chrome,omitempty"`
-	Menu      []MenuItem     `yaml:"menu,omitempty" json:"menu,omitempty"`
-	Publishes []AppInterface `yaml:"publishes,omitempty" json:"publishes,omitempty"` // cross-app interfaces offered
-	Consumes  []AppConsume   `yaml:"consumes,omitempty" json:"consumes,omitempty"`   // cross-app interfaces needed → grant request
+	Chrome *AppChrome `yaml:"chrome,omitempty" json:"chrome,omitempty"`
+	// PageTransition controls the page-to-page navigation animation via the
+	// View Transitions API (frontend/05-app-kinds.md §5). Closed set:
+	// none | fade | slide | slide-up | scale. Empty = fade (the default).
+	// The animation is scoped to the page content area — shell chrome
+	// (sidebar/topnav) stays static. Renderers that do not support the View
+	// Transitions API ignore it gracefully.
+	// @schema {example: "fade", enum: ["none", "fade", "slide", "slide-up", "scale"], description: "Page-to-page navigation animation (View Transitions API), scoped to the page content area: none | fade (default) | slide | slide-up | scale"}
+	PageTransition string         `yaml:"page_transition,omitempty" json:"page_transition,omitempty"`
+	Menu           []MenuItem     `yaml:"menu,omitempty" json:"menu,omitempty"`
+	Publishes      []AppInterface `yaml:"publishes,omitempty" json:"publishes,omitempty"` // cross-app interfaces offered
+	Consumes       []AppConsume   `yaml:"consumes,omitempty" json:"consumes,omitempty"`   // cross-app interfaces needed → grant request
 }
 
 // Chrome element values (frontend/05-app-kinds.md §4.1). "auto" means the
@@ -778,6 +786,28 @@ var appVersionPattern = regexp.MustCompile(`^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?(\+[
 // DefaultAppRenderer is applied when App.spec.app_renderer is empty.
 const DefaultAppRenderer = "sidebar-nav"
 
+// Page transition values (App.spec.page_transition). "fade" is the default
+// when omitted; "none" disables page-transition animation entirely.
+const (
+	PageTransitionNone    = "none"
+	PageTransitionFade    = "fade"
+	PageTransitionSlide   = "slide"
+	PageTransitionSlideUp = "slide-up"
+	PageTransitionScale   = "scale"
+)
+
+// DefaultPageTransition is applied when App.spec.page_transition is empty.
+const DefaultPageTransition = PageTransitionFade
+
+// PageTransitionNames is the closed set of page transition modes.
+var PageTransitionNames = map[string]bool{
+	PageTransitionNone:    true,
+	PageTransitionFade:    true,
+	PageTransitionSlide:   true,
+	PageTransitionSlideUp: true,
+	PageTransitionScale:   true,
+}
+
 // AppAccess controls whether an App's surface is publicly reachable without
 // authentication (frontend/05-app-kinds.md §1). `private` is the
 // secure-by-default. Orthogonal to the App renderer archetype: any of
@@ -842,6 +872,9 @@ func ValidateAppSpec(a *AppSpec) error {
 	}
 	if a.AppRenderer != "" && !AppRendererNames[a.AppRenderer] {
 		return fmt.Errorf("app_renderer %q is not a known App renderer (closed set: sidebar-nav, topnav, no-nav)", a.AppRenderer)
+	}
+	if a.PageTransition != "" && !PageTransitionNames[a.PageTransition] {
+		return fmt.Errorf("page_transition %q is invalid (enum: none, fade, slide, slide-up, scale)", a.PageTransition)
 	}
 	if a.Access != "" && a.Access != AppAccessPrivate && a.Access != AppAccessPublic {
 		return fmt.Errorf("access %q is invalid (enum: private, public)", a.Access)

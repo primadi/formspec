@@ -11,6 +11,8 @@ interface RadioGroupProps {
   options: string[]
   readonly?: boolean
   error?: string
+  /** Accessible name for the radiogroup (set from the field label) */
+  label?: string
 }
 
 export function RadioGroup({
@@ -19,6 +21,7 @@ export function RadioGroup({
   options,
   readonly = false,
   error,
+  label,
 }: RadioGroupProps) {
   if (readonly) {
     return <div className="py-1 text-sm">{value || "-"}</div>
@@ -31,6 +34,7 @@ export function RadioGroup({
         error && "text-destructive",
       )}
       role="radiogroup"
+      aria-label={label}
     >
       {options.map((opt) => {
         const label =

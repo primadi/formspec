@@ -1153,6 +1153,10 @@ export interface AppSummary {
    *  Theme kind name from App.spec.theme_ref. Auto-applied unless the user
    *  has picked a theme themselves. */
   theme?: string
+  /** Resolved page-to-page navigation animation mode (App.spec.
+   *  page_transition): none | fade | slide | slide-up | scale. Empty/unknown
+   *  resolves to "fade" server-side — final values only. */
+  page_transition?: "none" | "fade" | "slide" | "slide-up" | "scale"
   /** Resolved chrome composition (frontend/05-app-kinds.md §4.1) — archetype
    *  defaults already applied by the backend; final values only. Always
    *  present once the bundle loads. */

@@ -6,7 +6,8 @@
 // Design doc §5.5 Wizard kind (F4)
 
 import { useState, useEffect } from "react"
-import { useSearchParams, useNavigate } from "react-router-dom"
+import { useAppNavigate } from "@/lib/navigation"
+import { useSearchParams } from "react-router-dom"
 import { useSurface } from "@/hooks/useSurface"
 import { ArrowLeft, ArrowRight, Check, X } from "lucide-react"
 import { toast } from "@/lib/ui"
@@ -26,7 +27,7 @@ interface WizardRendererProps {
 }
 
 export default function WizardRenderer({ entry }: WizardRendererProps) {
-  const navigate = useNavigate()
+  const navigate = useAppNavigate()
   const { adminPath } = useSurface()
   const [searchParams, setSearchParams] = useSearchParams()
   const getClient = useSessionStore((s) => s.getClient)

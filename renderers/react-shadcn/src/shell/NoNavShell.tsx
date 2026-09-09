@@ -12,7 +12,8 @@
 // The nav (when enabled) is derived from the App's resolved menu, filtered
 // to leaves with a route. Falls back to no nav when the App declares no menu.
 
-import { Link, Outlet, useLocation, useParams } from "react-router-dom"
+import { Outlet, useLocation, useParams } from "react-router-dom"
+import { AppLink as Link } from "@/lib/navigation"
 import { useMetaStore } from "@/stores/meta"
 import { AuthArea } from "./AuthArea"
 import { ThemeSwitcher } from "@/components/ThemeSwitcher"
@@ -107,8 +108,10 @@ export function NoNavShell() {
       )}
 
       {/* Page content — same container as header/footer so the page aligns
-          with the brand bar instead of hugging the viewport edge. */}
-      <main className="flex-1">
+          with the brand bar instead of hugging the viewport edge.
+          view-transition-name scopes the page transition
+          (App.spec.page_transition) to this area only. */}
+      <main className="flex-1 [view-transition-name:page-content]">
         <div className="mx-auto max-w-6xl px-4 py-6">
           <Outlet />
         </div>

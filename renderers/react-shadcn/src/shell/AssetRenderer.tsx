@@ -7,7 +7,8 @@
 // (07-component-kinds.md §4).
 
 import { useEffect, useRef, useState } from "react"
-import { useNavigate, useParams } from "react-router-dom"
+import { useAppNavigate } from "@/lib/navigation"
+import { useParams } from "react-router-dom"
 import { Loader2 } from "lucide-react"
 import type { AssetNeeds } from "@/types/manifest"
 import {
@@ -37,7 +38,7 @@ export function AssetRenderer({
 }: AssetRendererProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [error, setError] = useState<string | null>(null)
-  const navigate = useNavigate()
+  const navigate = useAppNavigate()
   const { workspace = "default" } = useParams<{ workspace: string }>()
   const propsRef = useRef(props)
   propsRef.current = props

@@ -11,6 +11,9 @@ interface SelectProps {
   placeholder?: string
   readonly?: boolean
   error?: string
+  id?: string
+  /** Accessible name for the trigger button (set from the field label) */
+  ariaLabel?: string
 }
 
 export function Select({
@@ -20,13 +23,11 @@ export function Select({
   placeholder,
   readonly = false,
   error,
+  id,
+  ariaLabel,
 }: SelectProps) {
   if (readonly) {
-    return (
-      <div className="py-1 text-sm">
-        {value || "-"}
-      </div>
-    )
+    return <div className="py-1 text-sm">{value || "-"}</div>
   }
 
   return (
@@ -37,6 +38,8 @@ export function Select({
       placeholder={placeholder}
       disabled={readonly}
       error={!!error}
+      id={id}
+      ariaLabel={ariaLabel}
     />
   )
 }

@@ -14,6 +14,8 @@ interface TextareaInputProps {
   maxLength?: number
   error?: string
   rows?: number
+  /** id forwarded to the textarea so <label htmlFor> can target it */
+  id?: string
 }
 
 export function TextareaInput({
@@ -24,6 +26,7 @@ export function TextareaInput({
   maxLength,
   error,
   rows = 4,
+  id,
 }: TextareaInputProps) {
   if (readonly) {
     return (
@@ -33,6 +36,7 @@ export function TextareaInput({
 
   return (
     <Textarea
+      id={id}
       value={value}
       onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
         onChange?.(e.target.value)

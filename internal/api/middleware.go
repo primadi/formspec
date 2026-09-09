@@ -71,6 +71,13 @@ func GetWorkspaceResolver() WorkspaceResolver { return workspaceResolver }
 // Registration validation (plan named-workspaces.md): when a
 // WorkspaceResolver is configured, an unregistered slug is rejected with
 // 404 — indistinguishable from a missing resource (§15.2 anti-enumeration).
+//
+// Reserved first segments (spec.ReservedWorkspaceSlugs — assets, health,
+// favicon.svg, dll) are NOT workspaces: they pass through untouched so the
+// router can match root-level static routes (/assets/*, /favicon.svg,
+// /health). Without this skip, chi middlewares run before routing and the
+// registry check would swallow the request as 404 WORKSPACE_NOT_FOUND
+// (bug: Vite absolute asset URLs escaped the workspace prefix).
 // Workspace isolation (§15.2): the workspace ID is set once here and all
 // downstream handlers MUST use it from context — never from request body.
 // Cross-workspace mismatch is enforced in AuthMiddleware (identity workspace vs URL).
@@ -84,8 +91,14 @@ func WorkspaceMiddleware(next http.Handler) http.Handler {
 		if len(parts) >= 1 && parts[0] != "" {
 			workspaceID = parts[0]
 		}
-		if workspaceID == "" {
+
+		// Reserved first segments are router surfaces, not workspace slugs —
+		// skip registry validation and let the router decide (default workspace
+		// in context; root-level handlers do not use the workspace ID).
+		if workspaceID == "" || spec.ReservedWorkspaceSlugs[workspaceID] {
 			workspaceID = spec.DefaultWorkspaceSlug
+			next.ServeHTTP(w, r.WithContext(WithURLWorkspace(WithWorkspace(r.Context(), workspaceID), workspaceID)))
+			return
 		}
 
 		// Registry check (plan named-workspaces.md): only registered

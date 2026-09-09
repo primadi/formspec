@@ -5,14 +5,14 @@
 // dev-bypass (developer identity) sessions where there is nothing to log out
 // of.
 
-import { useNavigate } from "react-router-dom"
+import { useAppNavigate } from "@/lib/navigation"
 import { LogOut } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useSessionStore } from "@/stores/session"
 import { useSurface } from "@/hooks/useSurface"
 
 export function LogoutButton() {
-  const navigate = useNavigate()
+  const navigate = useAppNavigate()
   const token = useSessionStore((s) => s.token)
   const clearSession = useSessionStore((s) => s.clearSession)
   const { surfacePath } = useSurface()

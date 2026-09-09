@@ -9,12 +9,13 @@
 // reads `?token=` as a JWT for WebSocket handshakes.
 
 import { useState, type FormEvent } from "react"
-import { useNavigate, useParams, useSearchParams } from "react-router-dom"
+import { useAppNavigate } from "@/lib/navigation"
+import { useParams, useSearchParams } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
 export function ResetPasswordScreen() {
-  const navigate = useNavigate()
+  const navigate = useAppNavigate()
   const { workspace = "default" } = useParams<{ workspace: string }>()
   const [searchParams] = useSearchParams()
   const token = searchParams.get("reset_token") ?? ""
