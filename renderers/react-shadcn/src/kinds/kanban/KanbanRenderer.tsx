@@ -65,7 +65,7 @@ import {
   shouldShowAll,
   allLabel,
 } from "@/lib/filters"
-import { titleCase } from "@/lib/utils"
+import { interpolateConfirm, titleCase } from "@/lib/utils"
 import { Badge } from "@/widgets/Badge"
 import { Input } from "@/components/ui/input"
 import { DateInput } from "@/widgets/DateInput"
@@ -623,9 +623,15 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
         return
       }
 
-      // Resolve confirm message
+      // Resolve confirm message: kanban action first, then entity action's
+      // ui.confirm, then the App-level delete default (plan confirm-dialogs.md).
       const entityAction = entity.actions?.find((a) => a.name === action.action)
-      const confirmMsg = action.confirm_msg ?? entityAction?.ui?.confirm
+      const confirmMsg =
+        action.confirm_msg ??
+        entityAction?.ui?.confirm ??
+        (action.action === "delete"
+          ? interpolateConfirm(appConfirm?.delete ?? "", entity.name)
+          : "")
 
       if (confirmMsg && !skipConfirm) {
         setPendingAction({ action, record })
@@ -779,7 +785,16 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
           if (!open) setPendingAction(null)
         }}
         title={pendingAction?.action.label ?? "Confirm Action"}
-        message={pendingAction?.action.confirm_msg ?? "Are you sure?"}
+        message={
+          (pendingAction?.action.confirm_msg ??
+            (pendingAction?.action.action === "delete"
+              ? interpolateConfirm(
+                  metaBundle?.app.confirm?.delete ?? "",
+                  entity?.name ?? "",
+                )
+              : "")) ||
+          "Are you sure?"
+        }
         onConfirm={() => {
           if (!pendingAction) return
           handleRowAction(pendingAction.action, pendingAction.record, true)

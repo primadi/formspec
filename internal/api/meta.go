@@ -147,6 +147,7 @@ func (b *RouterBuilder) resolveAppContext(r *http.Request) (ui.AppContext, strin
 		Chrome:         resolved.Spec.Chrome,
 		Auth:           resolved.Spec.Auth,
 		PageTransition: resolved.Spec.PageTransition,
+		Confirm:        resolved.Spec.Confirm,
 		Modules:        resolved.Modules,
 		Menu:           resolved.Menu,
 		Settings:       b.mergeRunningSettings(r.Context(), b.settings),

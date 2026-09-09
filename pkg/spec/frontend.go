@@ -282,6 +282,22 @@ type FormSpec struct {
 	// expressions (visible_when/required_when/compute). Standard slots
 	// (`user`, `route`, `fields`) are always present.
 	Context []ContextDecl `yaml:"context,omitempty" json:"context,omitempty"`
+	// Confirm overrides the App-level confirm defaults for this form
+	// (plan confirm-dialogs.md). Verbs: create (mode=create), update
+	// (mode=edit). nil = inherit the App default; "" = explicitly off;
+	// non-empty = custom message.
+	// @schema {description: "Per-form confirm override: create/update message — nil = inherit App default, empty string = off"}
+	Confirm *FormConfirm `yaml:"confirm,omitempty" json:"confirm,omitempty"`
+}
+
+// FormConfirm is the per-form confirm override (plan confirm-dialogs.md).
+type FormConfirm struct {
+	// @schema {description: "Confirm message before create — nil = inherit App default, empty string = off"}
+	Create *string `yaml:"create,omitempty" json:"create,omitempty"`
+	// @schema {description: "Confirm message before update — nil = inherit App default, empty string = off"}
+	Update *string `yaml:"update,omitempty" json:"update,omitempty"`
+	// @schema {description: "Confirm message before delete — nil = inherit App default, empty string = off"}
+	Delete *string `yaml:"delete,omitempty" json:"delete,omitempty"`
 }
 
 // FormAuthActions is the closed set of auth actions a Form can bind to via

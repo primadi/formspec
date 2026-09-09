@@ -50,6 +50,8 @@ func runInit(args []string) {
 		fmt.Fprintf(os.Stderr, "The project includes:\n")
 		fmt.Fprintf(os.Stderr, "  - Standard directory structure (spec/)\n")
 		fmt.Fprintf(os.Stderr, "  - formspec-app.yaml configuration\n")
+		fmt.Fprintf(os.Stderr, "  - spec/apps/<module>.yaml — kind: App scaffold (with default confirm dialogs)\n")
+		fmt.Fprintf(os.Stderr, "  - spec/workspaces/<module>.yaml — kind: Workspace seed\n")
 		fmt.Fprintf(os.Stderr, "  - schemas/ with JSON Schema for YAML editor validation\n")
 		fmt.Fprintf(os.Stderr, "  - .vscode/settings.json registering yaml.schemas\n")
 		fmt.Fprintf(os.Stderr, "  - .agents/skills/ with AI skills for coding agents\n")
@@ -102,6 +104,7 @@ func runInit(args []string) {
 	dirs := []string{
 		filepath.Join(targetDir, "spec", "apps"),
 		filepath.Join(targetDir, "spec", "modules"),
+		filepath.Join(targetDir, "spec", "workspaces"),
 		filepath.Join(targetDir, ".agents", "skills"),
 		filepath.Join(targetDir, ".vscode"),
 		filepath.Join(targetDir, ".github"),
@@ -145,6 +148,48 @@ dsn: sqlite:.formspec/%s.db
 # app-entrypoint: src/app.ts
 # dev: true
 `, modName))
+
+	// spec/apps/<module>.yaml — root App manifest scaffold. Mounted at the
+	// workspace root (`root_url: /`) — the workspace itself is scaffolded
+	// below. Ships with App-wide default confirm dialogs (plan
+	// confirm-dialogs); `{name}` is interpolated by the renderer with the
+	// entity display name. Forms and actions override per-instance; set a
+	// verb to "" to opt out.
+	writeFile(filepath.Join("spec", "apps", modName+".yaml"), fmt.Sprintf(`apiVersion: formspec.dev/v1
+kind: App
+metadata:
+  name: %s
+  description: "%s — FormSpec application"
+spec:
+  root_url: /
+  modules:
+    - %s
+  menu:
+    - type: module
+      module: %s
+  # App-wide default confirm dialogs — {name} interpolates the entity
+  # display name. Override per form/action, or set "" to disable one.
+  confirm:
+    create: "Buat {name} baru?"
+    update: "Simpan perubahan {name} ini?"
+    delete: "Hapus data {name}?"
+`, modName, projectName, modName, modName))
+
+	// spec/workspaces/<module>.yaml — named-workspace seed (plan
+	// named-workspaces.md). The slug (= metadata.name) becomes the URL
+	// prefix (/{ws}/...) and the tenant scope of all data. Upserted into
+	// the formspec.core/workspace registry at boot.
+	writeFile(filepath.Join("spec", "workspaces", modName+".yaml"), fmt.Sprintf(`# Named workspace seed — the slug becomes the URL prefix (/{ws}/...)
+# and the tenant scope of all data. Upserted into the workspace registry
+# at boot; additional workspaces via `+"`"+`formspec workspace create`+"`"+`.
+apiVersion: formspec.dev/v1
+kind: Workspace
+metadata:
+  name: %s
+  description: "Workspace utama %s"
+spec:
+  display_name: "%s"
+`, modName, projectName, projectName))
 
 	// .gitignore
 	writeFile(".gitignore", `# FormSpec runtime data

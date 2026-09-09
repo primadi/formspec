@@ -732,6 +732,17 @@ export interface FormSpec {
   render?: FormRender
   /** Render-context variables injected into this form's expressions. */
   context?: ContextDecl[]
+  /** Per-form confirm override (plan confirm-dialogs.md). nil = inherit the
+   *  App default; "" = explicitly off; non-empty = custom message. */
+  confirm?: FormConfirm
+}
+
+/** Per-form confirm override — verbs map to form mode: create (mode=create),
+ *  update (mode=edit). */
+export interface FormConfirm {
+  create?: string | null
+  update?: string | null
+  delete?: string | null
 }
 
 export interface FormSection {
@@ -1166,6 +1177,14 @@ export interface AppSummary {
    *  framework default (formspec.core/<slot>). Present when the App declares
    *  auth overrides; renderers fall back to built-in defaults otherwise. */
   auth?: AuthConfig
+  /** App-wide default confirm dialogs (plan confirm-dialogs.md). Pointer
+   *  semantics: absent = off, "" = explicitly off (opt out), non-empty =
+   *  dialog message. Forms/actions resolve their own override on top. */
+  confirm?: {
+    create?: string | null
+    update?: string | null
+    delete?: string | null
+  }
 }
 
 /** Resolved auth screen configuration (plan

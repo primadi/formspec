@@ -67,6 +67,10 @@ type AppSummary struct {
 	// (App.spec.page_transition): none | fade | slide. Empty/unknown values
 	// resolve to "fade" — renderers read final values and never guess.
 	PageTransition string `json:"page_transition,omitempty"`
+	// Confirm is the App-wide default confirm-dialog configuration
+	// (plan confirm-dialogs.md) — raw manifest declaration, passed through:
+	// nil verb = off, "" = explicitly off, non-empty = dialog message.
+	Confirm *ConfirmConfig `json:"confirm,omitempty"`
 	// Chrome is the resolved, effective chrome composition (frontend/
 	// 05-app-kinds.md §4.1) — archetype defaults already applied. Renderers
 	// read these final values and never guess. Always non-nil.
@@ -77,6 +81,16 @@ type AppSummary struct {
 	// (formspec.core/<slot>). Renderers read these final refs and never
 	// guess. Nil when the App declares no auth overrides.
 	Auth *AuthConfig `json:"auth,omitempty"`
+}
+
+// ConfirmConfig is the App-wide default confirm-dialog configuration shipped
+// on the bundle (plan confirm-dialogs.md). Pointer semantics preserved from
+// the manifest: nil = off, "" = explicitly off (opt out), non-empty = the
+// dialog message. Forms resolve their own override on top.
+type ConfirmConfig struct {
+	Create *string `json:"create,omitempty"`
+	Update *string `json:"update,omitempty"`
+	Delete *string `json:"delete,omitempty"`
 }
 
 // ChromeConfig is the effective chrome composition for one App (frontend/
@@ -182,8 +196,11 @@ type AppContext struct {
 	// PageTransition is the raw manifest declaration (App.spec.
 	// page_transition) — resolved to the default (fade) in BuildBundle.
 	PageTransition string
-	Modules        map[string]bool
-	Menu           []spec.MenuItem
+	// Confirm is the raw manifest declaration (App.spec.confirm) — the
+	// App-wide default confirm dialogs (plan confirm-dialogs.md).
+	Confirm *spec.AppConfirm
+	Modules map[string]bool
+	Menu    []spec.MenuItem
 	// Settings is the resolved global presentation/config namespace (spec §10).
 	// Always non-nil — resolved with standard defaults by the caller.
 	Settings *spec.Settings
@@ -305,6 +322,16 @@ func resolvePageTransition(raw string) string {
 	return spec.DefaultPageTransition
 }
 
+// resolveConfirm maps the App-level confirm declaration onto the bundle's
+// ConfirmConfig (plan confirm-dialogs.md). Nil verbs stay nil (off) — the
+// renderer resolves the form-level override on top.
+func resolveConfirm(c *spec.AppConfirm) *ConfirmConfig {
+	if c == nil {
+		return nil
+	}
+	return &ConfirmConfig{Create: c.Create, Update: c.Update, Delete: c.Delete}
+}
+
 // BuildBundle assembles the /_meta/ui payload for one caller, scoped to one
 // resolved App (appCtx — Core §4.4). Manifests belonging to a module outside
 // appCtx.Modules are excluded entirely, on top of permission filtering.
@@ -339,6 +366,7 @@ func (r *Registry) BuildBundle(entities EntityLister, can PermissionChecker, app
 			PageTransition: resolvePageTransition(appCtx.PageTransition),
 			Chrome:         resolveChrome(appCtx.AppRenderer, appCtx.Chrome),
 			Auth:           resolveAuth(appCtx.Auth),
+			Confirm:        resolveConfirm(appCtx.Confirm),
 		},
 		Menu:                menu,
 		Pages:               []*Entry[spec.PageSpec]{},

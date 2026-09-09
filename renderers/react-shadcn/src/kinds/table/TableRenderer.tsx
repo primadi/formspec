@@ -69,7 +69,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { DateInput } from "@/widgets/DateInput"
 import { Select } from "@/components/ui/select"
-import { cn, titleCase } from "@/lib/utils"
+import { cn, interpolateConfirm, titleCase } from "@/lib/utils"
 import { resolveIcon } from "@/lib/icon-resolver"
 import ConfirmDialog from "@/components/ui/confirm-dialog"
 
@@ -604,9 +604,15 @@ export default function TableRenderer({
       return
     }
 
-    // Resolve confirm message: table action first, then entity action's ui.confirm
+    // Resolve confirm message: table action first, then entity action's ui.confirm,
+    // then the App-level delete default (plan confirm-dialogs.md).
     const entityAction = entity.actions?.find((a) => a.name === action.action)
-    const confirmMsg = action.confirm_msg ?? entityAction?.ui?.confirm
+    const confirmMsg =
+      action.confirm_msg ??
+      entityAction?.ui?.confirm ??
+      (action.action === "delete"
+        ? interpolateConfirm(metaBundle?.app.confirm?.delete ?? "", entity.name)
+        : "")
 
     // Confirm — intercept if confirm_msg exists and not skipped
     if (confirmMsg && !skipConfirm) {
@@ -994,14 +1000,20 @@ export default function TableRenderer({
           ? React.createElement(ActionIconComponent, { className: "size-5" })
           : undefined
 
-        // Resolve confirm message: table action first, then entity action
+        // Resolve confirm message: table action first, then entity action,
+        // then the App-level delete default (plan confirm-dialogs.md).
         const entityActionForConfirm = actionName
           ? entity.actions?.find((a) => a.name === actionName)
           : undefined
         const confirmMsg =
           pendingAction?.action.confirm_msg ??
           entityActionForConfirm?.ui?.confirm ??
-          ""
+          (pendingAction?.action.action === "delete"
+            ? interpolateConfirm(
+                metaBundle?.app.confirm?.delete ?? "",
+                entity.name,
+              )
+            : "")
 
         return (
           <ConfirmDialog

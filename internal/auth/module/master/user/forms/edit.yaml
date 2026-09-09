@@ -49,3 +49,5 @@ spec:
   submit:
     label: "Simpan Perubahan"
     message: "User berhasil diperbarui"
+  confirm:
+    update: "Simpan perubahan pada user ini?"

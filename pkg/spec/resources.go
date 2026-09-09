@@ -156,10 +156,29 @@ type AppSpec struct {
 	// (sidebar/topnav) stays static. Renderers that do not support the View
 	// Transitions API ignore it gracefully.
 	// @schema {example: "fade", enum: ["none", "fade", "slide", "slide-up", "scale"], description: "Page-to-page navigation animation (View Transitions API), scoped to the page content area: none | fade (default) | slide | slide-up | scale"}
-	PageTransition string         `yaml:"page_transition,omitempty" json:"page_transition,omitempty"`
-	Menu           []MenuItem     `yaml:"menu,omitempty" json:"menu,omitempty"`
-	Publishes      []AppInterface `yaml:"publishes,omitempty" json:"publishes,omitempty"` // cross-app interfaces offered
-	Consumes       []AppConsume   `yaml:"consumes,omitempty" json:"consumes,omitempty"`   // cross-app interfaces needed → grant request
+	PageTransition string `yaml:"page_transition,omitempty" json:"page_transition,omitempty"`
+	// Confirm sets App-wide default confirmation dialogs for mutating
+	// operations (plan confirm-dialogs.md). Three verbs — create, update,
+	// delete — each a message string. Empty/absent = no confirm (backward
+	// compatible). Forms and entity actions may override per-instance; a
+	// form sets the verb to "" to explicitly opt out of the App default.
+	// @schema {description: "App-wide default confirm dialogs: create/update/delete message strings — absent = off; forms/actions override per-instance"}
+	Confirm   *AppConfirm    `yaml:"confirm,omitempty" json:"confirm,omitempty"`
+	Menu      []MenuItem     `yaml:"menu,omitempty" json:"menu,omitempty"`
+	Publishes []AppInterface `yaml:"publishes,omitempty" json:"publishes,omitempty"` // cross-app interfaces offered
+	Consumes  []AppConsume   `yaml:"consumes,omitempty" json:"consumes,omitempty"`   // cross-app interfaces needed → grant request
+}
+
+// AppConfirm is the App-wide default confirm-dialog configuration
+// (plan confirm-dialogs.md). Each verb holds the dialog message; nil =
+// inherit/off, "" = explicitly off (opt out of an inherited default).
+type AppConfirm struct {
+	// @schema {example: "Buat data baru?", description: "Confirm message before create — absent = off; {name} interpolates the entity display name"}
+	Create *string `yaml:"create,omitempty" json:"create,omitempty"`
+	// @schema {example: "Simpan perubahan?", description: "Confirm message before update — absent = off; {name} interpolates the entity display name"}
+	Update *string `yaml:"update,omitempty" json:"update,omitempty"`
+	// @schema {example: "Hapus data ini?", description: "Confirm message before delete — absent = off; {name} interpolates the entity display name"}
+	Delete *string `yaml:"delete,omitempty" json:"delete,omitempty"`
 }
 
 // Chrome element values (frontend/05-app-kinds.md §4.1). "auto" means the

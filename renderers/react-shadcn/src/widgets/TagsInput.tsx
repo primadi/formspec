@@ -4,10 +4,24 @@
 //   - string  → stored as a comma-separated string on a string field
 //   - string[] → stored as a JSON array (entity field type: json, e.g. roles)
 // The value kind is preserved: array in → array out, string in → string out.
-// Opt-in via `widget: tags`.
+// Tags can be drag-dropped to reorder (dnd-kit sortable). Opt-in via `widget: tags`.
 
 import { useState, useRef, type KeyboardEvent } from "react"
 import { X } from "lucide-react"
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core"
+import {
+  SortableContext,
+  horizontalListSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
 import { cn } from "@/lib/utils"
 
 type TagsValue = string | string[]
@@ -75,6 +89,22 @@ export function TagsInput({
     emit(tags.filter((t) => t !== tag))
   }
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+  )
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const from = tags.indexOf(String(active.id))
+    const to = tags.indexOf(String(over.id))
+    if (from === -1 || to === -1) return
+    const next = [...tags]
+    const [moved] = next.splice(from, 1)
+    next.splice(to, 0, moved)
+    emit(next)
+  }
+
   if (readonly) {
     return (
       <div className="flex flex-wrap gap-1.5 py-1">
@@ -101,46 +131,75 @@ export function TagsInput({
         error && "border-destructive",
       )}
     >
-      <div className="flex flex-wrap gap-1.5">
-        {tags.map((t) => (
-          <span
-            key={t}
-            className="inline-flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-xs"
-          >
-            {t}
-            <button
-              type="button"
-              onClick={() => remove(t)}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <X className="size-3" />
-            </button>
-          </span>
-        ))}
-        <input
-          ref={inputRef}
-          id={id}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
-            if (e.key === "Enter" || e.key === ",") {
-              e.preventDefault()
-              commit()
-            } else if (
-              e.key === "Backspace" &&
-              draft === "" &&
-              tags.length > 0
-            ) {
-              remove(tags[tags.length - 1])
-            }
-          }}
-          onBlur={commit}
-          placeholder={
-            tags.length === 0 ? (placeholder ?? "Type and press Enter…") : ""
-          }
-          className="h-6 min-w-24 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-        />
-      </div>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext items={tags} strategy={horizontalListSortingStrategy}>
+          <div className="flex flex-wrap gap-1.5">
+            {tags.map((t) => (
+              <SortableTag key={t} tag={t} onRemove={() => remove(t)} />
+            ))}
+            <input
+              ref={inputRef}
+              id={id}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
+                if (e.key === "Enter" || e.key === ",") {
+                  e.preventDefault()
+                  commit()
+                } else if (
+                  e.key === "Backspace" &&
+                  draft === "" &&
+                  tags.length > 0
+                ) {
+                  remove(tags[tags.length - 1])
+                }
+              }}
+              onBlur={commit}
+              placeholder={
+                tags.length === 0
+                  ? (placeholder ?? "Type and press Enter…")
+                  : ""
+              }
+              className="h-6 min-w-24 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            />
+          </div>
+        </SortableContext>
+      </DndContext>
     </div>
+  )
+}
+
+/** One draggable tag badge. The whole badge is the drag surface; the X
+ * button opts out of dragging via stopPropagation so clicks still work
+ * (PointerSensor needs 6px of movement to activate a drag anyway). */
+function SortableTag({ tag, onRemove }: { tag: string; onRemove: () => void }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useSortable({ id: tag })
+
+  return (
+    <span
+      ref={setNodeRef}
+      style={{ transform: CSS.Translate.toString(transform) }}
+      {...attributes}
+      {...listeners}
+      className={cn(
+        "inline-flex cursor-grab touch-none items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-xs select-none",
+        isDragging && "opacity-40",
+      )}
+    >
+      {tag}
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={onRemove}
+        className="cursor-pointer text-muted-foreground hover:text-foreground"
+      >
+        <X className="size-3" />
+      </button>
+    </span>
   )
 }

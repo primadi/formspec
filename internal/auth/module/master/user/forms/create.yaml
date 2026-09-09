@@ -50,3 +50,5 @@ spec:
   submit:
     label: "Buat User"
     message: "User berhasil dibuat"
+  confirm:
+    create: "Buat user baru dengan data ini?"

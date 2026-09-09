@@ -17,3 +17,12 @@ export function titleCase(s: string): string {
     .trim()
     .replace(/\b\w/g, (c) => c.toUpperCase())
 }
+
+/**
+ * Interpolate `{name}` tokens in a confirm message with the entity's
+ * display name (plan confirm-dialogs.md). e.g. "Hapus data {name}?" →
+ * "Hapus data Journal Entry?" Unknown tokens are left as-is.
+ */
+export function interpolateConfirm(msg: string, entityName: string): string {
+  return msg.replaceAll("{name}", titleCase(entityName))
+}

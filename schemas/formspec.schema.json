@@ -337,6 +337,37 @@
       },
       "additionalProperties": false
     },
+    "AppConfirm": {
+      "description": "AppConfirm is the App-wide default confirm-dialog configuration\n(plan confirm-dialogs.md). Each verb holds the dialog message; nil =\ninherit/off, \"\" = explicitly off (opt out of an inherited default).\n",
+      "type": "object",
+      "properties": {
+        "create": {
+          "description": "Confirm message before create — absent = off; {name} interpolates the entity display name",
+          "type": "string",
+          "examples": [
+            "Buat data baru?"
+          ],
+          "nullable": true
+        },
+        "delete": {
+          "description": "Confirm message before delete — absent = off; {name} interpolates the entity display name",
+          "type": "string",
+          "examples": [
+            "Hapus data ini?"
+          ],
+          "nullable": true
+        },
+        "update": {
+          "description": "Confirm message before update — absent = off; {name} interpolates the entity display name",
+          "type": "string",
+          "examples": [
+            "Simpan perubahan?"
+          ],
+          "nullable": true
+        }
+      },
+      "additionalProperties": false
+    },
     "AppConsume": {
       "description": "AppConsume is one cross-app interface an App depends on; it triggers a\ngrant request to the owning App (02-workspace-app-module.md §3).\n",
       "type": "object",
@@ -1381,6 +1412,28 @@
       "required": [
         "action"
       ],
+      "additionalProperties": false
+    },
+    "FormConfirm": {
+      "description": "FormConfirm is the per-form confirm override (plan confirm-dialogs.md).\n",
+      "type": "object",
+      "properties": {
+        "create": {
+          "description": "Confirm message before create — nil = inherit App default, empty string = off",
+          "type": "string",
+          "nullable": true
+        },
+        "delete": {
+          "description": "Confirm message before delete — nil = inherit App default, empty string = off",
+          "type": "string",
+          "nullable": true
+        },
+        "update": {
+          "description": "Confirm message before update — nil = inherit App default, empty string = off",
+          "type": "string",
+          "nullable": true
+        }
+      },
       "additionalProperties": false
     },
     "FormField": {
@@ -3860,6 +3913,37 @@
       },
       "additionalProperties": false
     },
+    "AppConfirm": {
+      "description": "AppConfirm is the App-wide default confirm-dialog configuration\n(plan confirm-dialogs.md). Each verb holds the dialog message; nil =\ninherit/off, \"\" = explicitly off (opt out of an inherited default).\n",
+      "type": "object",
+      "properties": {
+        "create": {
+          "description": "Confirm message before create — absent = off; {name} interpolates the entity display name",
+          "type": "string",
+          "examples": [
+            "Buat data baru?"
+          ],
+          "nullable": true
+        },
+        "delete": {
+          "description": "Confirm message before delete — absent = off; {name} interpolates the entity display name",
+          "type": "string",
+          "examples": [
+            "Hapus data ini?"
+          ],
+          "nullable": true
+        },
+        "update": {
+          "description": "Confirm message before update — absent = off; {name} interpolates the entity display name",
+          "type": "string",
+          "examples": [
+            "Simpan perubahan?"
+          ],
+          "nullable": true
+        }
+      },
+      "additionalProperties": false
+    },
     "AppConsume": {
       "description": "AppConsume is one cross-app interface an App depends on; it triggers a\ngrant request to the owning App (02-workspace-app-module.md §3).\n",
       "type": "object",
@@ -4904,6 +4988,28 @@
       "required": [
         "action"
       ],
+      "additionalProperties": false
+    },
+    "FormConfirm": {
+      "description": "FormConfirm is the per-form confirm override (plan confirm-dialogs.md).\n",
+      "type": "object",
+      "properties": {
+        "create": {
+          "description": "Confirm message before create — nil = inherit App default, empty string = off",
+          "type": "string",
+          "nullable": true
+        },
+        "delete": {
+          "description": "Confirm message before delete — nil = inherit App default, empty string = off",
+          "type": "string",
+          "nullable": true
+        },
+        "update": {
+          "description": "Confirm message before update — nil = inherit App default, empty string = off",
+          "type": "string",
+          "nullable": true
+        }
+      },
       "additionalProperties": false
     },
     "FormField": {
@@ -7182,6 +7288,11 @@
               "description": "Chrome fine-tunes which shell chrome elements render (frontend/",
               "nullable": true
             },
+            "confirm": {
+              "$ref": "#/$defs/AppConfirm",
+              "description": "Confirm sets App-wide default confirmation dialogs for mutating",
+              "nullable": true
+            },
             "consumes": {
               "description": "cross-app interfaces needed → grant request",
               "type": "array",
@@ -9119,6 +9230,11 @@
                 "forgot_password",
                 "reset_password"
               ]
+            },
+            "confirm": {
+              "$ref": "#/$defs/FormConfirm",
+              "description": "Confirm overrides the App-level confirm defaults for this form",
+              "nullable": true
             },
             "context": {
               "description": "Context declares render-context variables injected into this form's",

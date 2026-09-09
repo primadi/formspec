@@ -30,7 +30,7 @@ import {
   strictEvalFormSpecExpr,
 } from "@/lib/formspec-expr"
 import { apiGet, apiPost, apiPatch } from "@/lib/api"
-import { titleCase } from "@/lib/utils"
+import { interpolateConfirm, titleCase } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import ConfirmDialog from "@/components/ui/confirm-dialog"
 import { TextInput } from "@/widgets/TextInput"
@@ -105,6 +105,7 @@ export default function FormRenderer({
   const me = useSessionStore((s) => s.me)
   const bundleForms = useMetaStore((s) => s.bundle?.forms) ?? []
   const appName = useMetaStore((s) => s.bundle?.app.name)
+  const appConfirm = useMetaStore((s) => s.bundle?.app.confirm)
   // Unique prefix for field input ids so <label htmlFor> can associate with
   // each form field (a11y — avoids "no label associated with form field").
   const formIdPrefix = useId()
@@ -169,6 +170,24 @@ export default function FormRenderer({
   // save the user just attempted, stashed so it can be re-applied on top of
   // the freshly-reloaded record once they confirm the reload prompt.
   const [conflictOpen, setConflictOpen] = useState(false)
+  // Pending form data awaiting the save-confirmation dialog (plan
+  // confirm-dialogs.md). Non-null → the dialog is open.
+  const [pendingConfirm, setPendingConfirm] = useState<FormData | null>(null)
+
+  // Resolve the effective confirm message for this form's mode (plan
+  // confirm-dialogs.md): form override > App default > off. Form value
+  // semantics: undefined = inherit App, "" = explicitly off, non-empty =
+  // custom message.
+  const confirmMsg = useMemo(() => {
+    const verb = isEdit ? "update" : ("create" as const)
+    const formVal = formSpec.confirm?.[verb]
+    const effective =
+      formVal !== undefined && formVal !== null
+        ? formVal
+        : (appConfirm?.[verb] ?? "")
+    // {name} → entity display name (plan confirm-dialogs.md)
+    return interpolateConfirm(effective, entity.name)
+  }, [formSpec, appConfirm, isEdit, entity.name])
   const pendingSaveRef = useRef<FormData | null>(null)
 
   const loadRecord = useCallback(async () => {
@@ -317,7 +336,7 @@ export default function FormRenderer({
   }, [formValues, formSpec.sections, form, me])
 
   // Submit handler
-  const onSubmit = async (data: FormData) => {
+  const doSubmit = async (data: FormData) => {
     autoSaveBlockedRef.current = false // unblock auto-save on manual save
     // Roles are scoped per-App (security per-App) — the form no longer asks
     // for `app`; auto-fill it from the current App context when empty.
@@ -370,6 +389,18 @@ export default function FormRenderer({
       }
       toast.error(err instanceof Error ? err.message : "Save failed")
     }
+  }
+
+  // Submit entry point — intercepts with the confirmation dialog when a
+  // confirm message resolves (form override or App default). Validation has
+  // already passed by the time this runs (handleSubmit), so the dialog only
+  // appears for valid data.
+  const onSubmit = (data: FormData) => {
+    if (confirmMsg) {
+      setPendingConfirm(data)
+      return
+    }
+    return doSubmit(data)
   }
 
   if (loading) {
@@ -663,6 +694,22 @@ export default function FormRenderer({
         confirmLabel="Reload & Reapply"
         cancelLabel="Keep Editing"
         onConfirm={resolveConflict}
+      />
+
+      <ConfirmDialog
+        open={pendingConfirm !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingConfirm(null)
+        }}
+        title={isEdit ? "Simpan Perubahan" : "Simpan Data"}
+        message={confirmMsg}
+        confirmLabel="Simpan"
+        cancelLabel="Batal"
+        onConfirm={() => {
+          const data = pendingConfirm
+          setPendingConfirm(null)
+          if (data) void doSubmit(data)
+        }}
       />
     </div>
   )

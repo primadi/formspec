@@ -33,6 +33,11 @@
       "description": "Chrome fine-tunes which shell chrome elements render (frontend/",
       "nullable": true
     },
+    "confirm": {
+      "$ref": "#/$defs/AppConfirm",
+      "description": "Confirm sets App-wide default confirmation dialogs for mutating",
+      "nullable": true
+    },
     "consumes": {
       "description": "cross-app interfaces needed → grant request",
       "type": "array",

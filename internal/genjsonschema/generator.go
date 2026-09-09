@@ -49,8 +49,10 @@ func (c *Converter) Generate(collect *CollectResult) *GenerateResult {
 		"AuthSettings", "OAuthProviderSettings", "RegistrationSettings", // settings.auth / settings.registration (auth redesign Fase 4-5)
 		"Dependency",
 		"AiIndexDecl", "AppInterface", "AppConsume",
-		"AppChrome", // App.spec.chrome — chrome composition (frontend/05 §5)
-		"AppAuth",   // App.spec.auth — auth screen overrides (plan auth-screens-spec-driven)
+		"AppChrome",   // App.spec.chrome — chrome composition (frontend/05 §5)
+		"AppAuth",     // App.spec.auth — auth screen overrides (plan auth-screens-spec-driven)
+		"AppConfirm",  // App.spec.confirm — default confirm dialogs (plan confirm-dialogs)
+		"FormConfirm", // Form.spec.confirm — per-form confirm override (plan confirm-dialogs)
 		"EnvironmentPlane", "PolicyApproval",
 		"IntegratorCall", "IntegratorListen",
 		"KvstoreUseDecl",
