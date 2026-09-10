@@ -5,6 +5,8 @@ Tutorial dan panduan praktis — bukan kontrak. Untuk definisi normatif, lihat
 
 | Dokumen                                                                | Untuk siapa                                                                         |
 | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| [install.md](install.md)                                               | Semua developer — install CLI (installer script / go install / manual download)     |
+| [releasing.md](releasing.md)                                           | Maintainer — prosedur release manual multi-OS (`make release-upload`)               |
 | [how-to-run.md](how-to-run.md)                                         | Menjalankan FormSpec secara lokal                                                   |
 | [authentication.md](authentication.md)                                 | Admin/operator — konfigurasi auth: setup, registration policy, OAuth multi-provider |
 | [agent-assisted-app-development.md](agent-assisted-app-development.md) | App developer — membangun aplikasi FormSpec dibantu AI agent (tanpa MCP)            |

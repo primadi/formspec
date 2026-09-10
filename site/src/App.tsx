@@ -5,6 +5,7 @@ import { Architecture } from "./components/Architecture"
 import { ImplTypes } from "./components/ImplTypes"
 import { Derived } from "./components/Derived"
 import { Marketplace } from "./components/Marketplace"
+import { Install } from "./components/Install"
 import { Quickstart } from "./components/Quickstart"
 import { CTA } from "./components/CTA"
 import { Footer } from "./components/Footer"
@@ -20,6 +21,7 @@ export default function App() {
         <ImplTypes />
         <Derived />
         <Marketplace />
+        <Install />
         <Quickstart />
         <CTA />
       </main>

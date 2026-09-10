@@ -630,7 +630,10 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
         action.confirm_msg ??
         entityAction?.ui?.confirm ??
         (action.action === "delete"
-          ? interpolateConfirm(appConfirm?.delete ?? "", entity.name)
+          ? interpolateConfirm(
+              metaBundle?.app.confirm?.delete ?? "",
+              entity.name,
+            )
           : "")
 
       if (confirmMsg && !skipConfirm) {

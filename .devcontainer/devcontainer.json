@@ -11,7 +11,8 @@
     },
     "ghcr.io/devcontainers/features/node:2.1.0": {
       "version": "lts"
-    }
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {}
     // Java (JDK 17 + Maven) — commented out to save ~319 MB disk + JVM RAM.
     // Enable when working on sdk/java:
     // 1. Uncomment the block below

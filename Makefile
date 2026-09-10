@@ -1,4 +1,4 @@
-.PHONY: all build clean test lint run-example registry-dev dev web-deps web-dev web-build web-typecheck apply build-spa build-registry install
+.PHONY: all build clean test lint run-example registry-dev dev web-deps web-dev web-build web-typecheck apply build-spa build-registry install release release-upload
 
 # Build all binaries
 all: build
@@ -124,6 +124,69 @@ validate-spec:
 deps:
 	go mod tidy
 	go mod download
+
+# ---------------------------------------------------------------------------
+# Release — cross-compile prebuilt binaries untuk semua OS/arch.
+#
+# SPA dibangun SEKALI (identik untuk semua target), lalu binary dicompile untuk
+# {linux,darwin,windows} × {amd64,arm64} dengan CGO_ENABLED=0 (SQLite pakai
+# driver pure-Go modernc.org/sqlite).
+#
+#   make release                        # VERSION otomatis dari git describe
+#   make release VERSION=v1.2.3         # override manual
+#   make release-upload VERSION=v1.2.3  # upload dist/release/* ke GitHub Releases (draft)
+#
+# Output: dist/release/formspec-<os>-<arch>.tar.gz|.zip + SHA256SUMS.txt
+# Prosedur lengkap (prasyarat, tag, upload, verifikasi): docs/guides/releasing.md
+# ---------------------------------------------------------------------------
+
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+RELEASE_DIR := dist/release
+
+# Pairs "<os>/<arch>:<ext>" — ext = packaging (tar.gz | zip)
+RELEASE_TARGETS := \
+	linux/amd64:tar.gz \
+	linux/arm64:tar.gz \
+	darwin/amd64:tar.gz \
+	darwin/arm64:tar.gz \
+	windows/amd64:zip \
+	windows/arm64:zip
+
+release: build-spa
+	@mkdir -p cmd/formspec/dist
+	cp -r renderers/react-shadcn/dist/* cmd/formspec/dist/
+	@rm -rf $(RELEASE_DIR)
+	@mkdir -p $(RELEASE_DIR)
+	@echo "🚀 Building formspec $(VERSION) untuk semua platform..."
+	@for t in $(RELEASE_TARGETS); do \
+		os=$${t%%/*}; rest=$${t#*/}; arch=$${rest%%:*}; ext=$${rest#*:}; \
+		echo "  → $$os/$$arch"; \
+		out="$(RELEASE_DIR)/formspec-$$os-$$arch"; mkdir -p "$$out"; \
+		name=formspec; if [ "$$os" = "windows" ]; then name="formspec.exe"; fi; \
+		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch \
+			go build -trimpath \
+			-ldflags "-s -w -X main.version=$(VERSION)" \
+			-o "$$out/$$name" ./cmd/formspec; \
+		if [ "$$ext" = "tar.gz" ]; then \
+			tar -czf "$(RELEASE_DIR)/formspec-$$os-$$arch.tar.gz" -C "$$out" $$name; \
+		else \
+			zip -q -j "$(RELEASE_DIR)/formspec-$$os-$$arch.zip" "$$out/$$name"; \
+		fi; \
+		rm -rf "$$out"; \
+	done
+	@cd $(RELEASE_DIR) && shasum -a 256 *.tar.gz *.zip > SHA256SUMS.txt
+	@echo "✅ Release artifacts siap di $(RELEASE_DIR)/"
+	@ls -lh $(RELEASE_DIR)
+
+release-upload:
+	@test -n "$(VERSION)" || (echo "❌ Set VERSION, mis. make release-upload VERSION=v0.1.0 (jangan mengandalkan git describe — lihat docs/guides/releasing.md)" && exit 1)
+	@printf '%s' "$(VERSION)" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+' || (echo "❌ VERSION='$(VERSION)' bukan semver (format: v<major>.<minor>.patch>). Rilis pertama juga harus tag semver yang dipilih sadar." && exit 1)
+	@git rev-parse "$(VERSION)^{commit}" >/dev/null 2>&1 || (echo "❌ Tag $(VERSION) belum ada lokal — buat dulu: git tag $(VERSION) && git push origin $(VERSION)" && exit 1)
+	@if git ls-remote --tags origin | grep -q "refs/tags/$(VERSION)$$"; then \
+		echo "❌ Tag $(VERSION) sudah ada di remote — satu tag = satu release. Pakai versi baru."; exit 1; \
+	fi
+	@command -v gh >/dev/null 2>&1 || (echo "❌ 'gh' CLI tidak ditemukan — upload manual via https://github.com/primadi/formspec/releases/new" && exit 1)
+	@gh release create $(VERSION) $(RELEASE_DIR)/* --draft --generate-notes
 
 # Frontend
 web-deps:

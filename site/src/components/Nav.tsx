@@ -3,6 +3,7 @@ import { useState } from "react"
 import { GithubIcon } from "./GithubIcon"
 
 const LINKS = [
+  { label: "Install", href: "#install" },
   { label: "Dokumentasi", href: "https://docs.formspec.dev" },
   { label: "Schema", href: "https://schemas.formspec.dev" },
   { label: "Registry", href: "https://registry.formspec.dev" },

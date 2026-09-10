@@ -14,6 +14,10 @@ import (
 //go:embed dist/favicon.svg dist/icons.svg dist/index.html dist/assets/*
 var spaFS embed.FS
 
+// version is stamped at build time via -ldflags "-X main.version=<tag>".
+// Development builds (go run / plain go build) report "dev".
+var version = "dev"
+
 func main() {
 	if len(os.Args) < 2 {
 		usage()
@@ -21,6 +25,8 @@ func main() {
 	}
 
 	switch os.Args[1] {
+	case "version":
+		runVersion()
 	case "apply":
 		runApply(os.Args[2:])
 	case "generate":
@@ -110,6 +116,10 @@ func main() {
 	}
 }
 
+func runVersion() {
+	fmt.Printf("formspec %s\n", version)
+}
+
 func usage() {
 	fmt.Fprintf(os.Stderr, "Usage: formspec <command> [flags]\n\n")
 	fmt.Fprintf(os.Stderr, "Commands:\n")
@@ -151,6 +161,7 @@ func usage() {
 	fmt.Fprintf(os.Stderr, "  sign                Ed25519 module signing (keygen/sign/verify)\n")
 	fmt.Fprintf(os.Stderr, "  init                Scaffold a new FormSpec project with standard layout\n")
 	fmt.Fprintf(os.Stderr, "  schema              Manage cached JSON Schema versions (fetch, update, list, clear)\n")
+	fmt.Fprintf(os.Stderr, "  version             Print the binary version\n")
 	fmt.Fprintf(os.Stderr, "\nNot yet implemented (see docs/cli-tools/01-formspec-cli.md):\n")
 	fmt.Fprintf(os.Stderr, "  saga, module, sign, script,\n")
 	fmt.Fprintf(os.Stderr, "  freeze, rollback, lock, workspace\n")

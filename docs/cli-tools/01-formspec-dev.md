@@ -215,9 +215,9 @@ go run github.com/primadi/formspec/cmd/formspec@latest dev --spec ./spec
 ### PHP developer
 
 ```bash
-# Download binary
-wget .../formspec-linux-amd64.tar.gz
-./formspec dev
+# Binary prebuilt — tanpa Go. Lihat docs/guides/install.md untuk semua platform.
+curl -fsSL https://formspec.dev/install.sh | sh
+formspec dev
 # Auto-detect composer.json → spawn PHP
 ```
 

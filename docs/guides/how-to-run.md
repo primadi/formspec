@@ -2,6 +2,9 @@
 
 FormSpec berjalan dalam satu proses engine (`formspec dev`) + frontend (SPA React). App business logic dalam bahasa apapun (Go, PHP, Python, Ruby, Java, .NET, TypeScript, Rust) berjalan sebagai child process.
 
+> Belum install CLI `formspec`? Lihat [install.md](install.md) — installer script
+> satu perintah tanpa Go, atau `go install` untuk Go developer.
+
 | Opsi               | Cara                               | Terminal | HMR | Cocok untuk                |
 | ------------------ | ---------------------------------- | -------- | --- | -------------------------- |
 | **A — `--dev-ui`** | `formspec dev` spawn Vite otomatis | **1**    | ✅  | Development paling praktis |
