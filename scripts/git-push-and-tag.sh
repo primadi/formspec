@@ -77,6 +77,20 @@ if git ls-remote --tags origin | grep -q "refs/tags/${VERSION}$"; then
   exit 1
 fi
 
+# Guard versi mundur: VERSION harus lebih tinggi dari tag tertinggi yang ada.
+# Tanpa ini, release semver lebih rendah (mis. v0.0.10 setelah v0.1.0) tetap
+# terbuat dan — karena GitHub 'latest' = release terakhir di-publish — installer
+# akan men-downgrade user.
+LATEST_TAG="$(git tag --sort=-v:refname | head -n 1)"
+if [ -n "$LATEST_TAG" ]; then
+  HIGHEST="$(printf '%s\n%s\n' "$LATEST_TAG" "$VERSION" | sort -V | tail -n 1)"
+  if [ "$HIGHEST" = "$LATEST_TAG" ]; then
+    echo "❌ VERSION=$VERSION tidak lebih tinggi dari tag terakhir $LATEST_TAG — versi tidak boleh mundur." >&2
+    echo "   Pilih versi yang lebih tinggi, mis. bump patch/minor dari $LATEST_TAG." >&2
+    exit 1
+  fi
+fi
+
 command -v gh >/dev/null 2>&1 || {
   echo "❌ 'gh' CLI tidak ditemukan — ikuti prosedur manual di docs/guides/releasing.md §4" >&2
   exit 1

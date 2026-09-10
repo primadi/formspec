@@ -36,9 +36,12 @@ resolve versi terbaru via GitHub API saat runtime.
 
 Script yang sama menerapkan semua guard prosedur manual sebelum menyentuh
 apapun: `VERSION` harus semver, working tree harus bersih, tag belum dipakai
-(lokal & remote), `gh` ter-auth, dan sedang di branch `main`. Output akhirnya
-adalah **draft release** — tetap harus di-review lalu Publish (langkah yang
-sama seperti §4).
+(lokal & remote), `gh` ter-auth, dan sedang di branch `main`. Selain itu,
+`VERSION` harus **lebih tinggi** dari tag tertinggi yang sudah ada — versi
+tidak boleh mundur, karena GitHub menentukan release "latest" berdasarkan
+yang terakhir di-publish (bukan semver tertinggi); release semver lebih rendah
+akan membuat installer men-downgrade user. Output akhirnya adalah **draft
+release** — tetap harus di-review lalu Publish (langkah yang sama seperti §4).
 
 > Script memerlukan working tree bersih — commit semua perubahan dulu.
 > Untuk kondisi khusus (mis. release dari commit tertentu, atau setelah gagal
