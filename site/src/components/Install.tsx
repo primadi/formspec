@@ -124,7 +124,7 @@ export function Install() {
                   <span className="text-zinc-600">$</span>{" "}
                   <span className="text-mint-300">{methods[0].code}</span>
                   {"\n"}
-                  <span className="text-zinc-500">✓ Version: v0.0.3</span>
+                  <span className="text-zinc-500">✓ Version: v0.0.4</span>
                   {"\n"}
                   <span className="text-zinc-500">
                     ✓ Installed: ~/.local/bin/formspec
@@ -135,7 +135,7 @@ export function Install() {
                   <span className="text-zinc-600">$</span>{" "}
                   <span className="text-mint-300">formspec version</span>
                   {"\n"}
-                  <span className="text-zinc-500">formspec v0.0.3</span>
+                  <span className="text-zinc-500">formspec v0.0.4</span>
                 </code>
               </pre>
             </div>
