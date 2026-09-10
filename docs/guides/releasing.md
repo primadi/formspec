@@ -109,8 +109,15 @@ Output: `dist/release/`. Verifikasi cepat sebelum upload:
 ```bash
 cd dist/release
 shasum -a 256 -c SHA256SUMS.txt
+ls -lh                # semua arsip harus besar (belasan–dua puluh MB); ukuran
+                      # < 1 MB berarti binary di dalamnya kosong — jangan upload
 tar -xzf formspec-darwin-arm64.tar.gz -C /tmp && /tmp/formspec version   # → formspec v0.4.2
 ```
+
+> Catatan: `SHA256SUMS.txt` di-generate dari file yang ada — checksum "OK"
+> hanya membuktikan konsistensi, bukan bahwa artifact valid. Ukuran file dan
+> cek `formspec version` yang mendeteksi artifact rusak. Makefile guard
+> `release` juga fail-fast bila binary hasil build kosong.
 
 ## 4. Upload ke GitHub Releases
 

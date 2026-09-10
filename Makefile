@@ -157,8 +157,10 @@ release: build-spa
 	cp -r renderers/react-shadcn/dist/* cmd/formspec/dist/
 	@rm -rf $(RELEASE_DIR)
 	@mkdir -p $(RELEASE_DIR)
+	# Sanity check per target: binary harus ada & tidak 0 byte — tar bungkus
+	# file kosong menghasilkan arsip korup yang tetap lolos checksum.
 	@echo "🚀 Building formspec $(VERSION) untuk semua platform..."
-	@for t in $(RELEASE_TARGETS); do \
+	@set -e; for t in $(RELEASE_TARGETS); do \
 		os=$${t%%/*}; rest=$${t#*/}; arch=$${rest%%:*}; ext=$${rest#*:}; \
 		echo "  → $$os/$$arch"; \
 		out="$(RELEASE_DIR)/formspec-$$os-$$arch"; mkdir -p "$$out"; \
@@ -167,6 +169,7 @@ release: build-spa
 			go build -trimpath \
 			-ldflags "-s -w -X main.version=$(VERSION)" \
 			-o "$$out/$$name" ./cmd/formspec; \
+		test -s "$$out/$$name" || { echo "❌ Binary $$os/$$arch kosong setelah build — abort" >&2; exit 1; }; \
 		if [ "$$ext" = "tar.gz" ]; then \
 			tar -czf "$(RELEASE_DIR)/formspec-$$os-$$arch.tar.gz" -C "$$out" $$name; \
 		else \
