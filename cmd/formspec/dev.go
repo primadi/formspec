@@ -216,9 +216,15 @@ func runDev(args []string) {
 		formaCfg.WebDir = cfg.WebDir
 		log.Printf("[formspec] SPA from folder: %s", cfg.WebDir)
 	} else {
-		// embed.FS stores files with their relative path (dist/index.html).
-		// Use fs.Sub to strip the dist/ prefix so the FS is rooted at dist/.
-		subFS, err := fs.Sub(spaFS, "dist")
+		// embed.FS stores files with their relative path (dist/index.html —
+		// or spa_stub/index.html when built without -tags formspec_spa).
+		// Use fs.Sub to strip that prefix so the FS is rooted at the SPA root.
+		if !spaEmbedded {
+			log.Printf("[formspec] note: binary built without embedded SPA " +
+				"(go install / tanpa -tags formspec_spa) — serving placeholder. " +
+				"Full UI: make build-formspec, --dev-ui, atau --web-dir")
+		}
+		subFS, err := fs.Sub(spaFS, spaEmbedRoot)
 		if err == nil {
 			formaCfg.WebFS = subFS
 		} else {

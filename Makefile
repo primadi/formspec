@@ -9,21 +9,24 @@ build-ctl:
 	go build -o bin/formspec-ctl ./cmd/formspec-ctl
 
 # Build the formspec CLI with embedded SPA.
-# build-spa builds renderers/react-shadcn/dist/, then we copy it to cmd/formspec/dist/ for go:embed.
+# build-spa builds renderers/react-shadcn/dist/, then we copy it to
+# cmd/formspec/dist/ for go:embed. dist/ di-gitignore — dibersihkan dulu agar
+# asset hash lama tidak menumpuk. -tags formspec_spa memilih spa_embed.go;
+# tanpa tag, spa_stub.go menyediakan placeholder (go install tetap jalan).
 build-formspec: build-spa
+	rm -rf cmd/formspec/dist
 	@mkdir -p cmd/formspec/dist
 	cp -r renderers/react-shadcn/dist/* cmd/formspec/dist/
-	go build -o bin/formspec ./cmd/formspec
-
+	go build -tags formspec_spa -o bin/formspec ./cmd/formspec
 # Build the registry binary with embedded SPA.
 # Syncs renderers/react-shadcn/dist → cmd/formspec-registry/web/dist for
 # go:embed, so formspec-registry serves the admin panel/portal without
 # --web-dir.
 build-registry: build-spa
-	@mkdir -p cmd/formspec-registry/web/dist
-	cp -r renderers/react-shadcn/dist/* cmd/formspec-registry/web/dist/
-	go build -o bin/formspec-registry ./cmd/formspec-registry
-
+        rm -rf cmd/formspec-registry/web/dist
+        @mkdir -p cmd/formspec-registry/web/dist
+        cp -r renderers/react-shadcn/dist/* cmd/formspec-registry/web/dist/
+        go build -tags formspec_spa -o bin/formspec-registry ./cmd/formspec-registry
 build-sidecar:
 	@echo "✅ Build complete: bin/formspec"
 
@@ -153,6 +156,7 @@ RELEASE_TARGETS := \
 	windows/arm64:zip
 
 release: build-spa
+	@rm -rf cmd/formspec/dist
 	@mkdir -p cmd/formspec/dist
 	cp -r renderers/react-shadcn/dist/* cmd/formspec/dist/
 	@rm -rf $(RELEASE_DIR)
@@ -166,7 +170,7 @@ release: build-spa
 		out="$(RELEASE_DIR)/formspec-$$os-$$arch"; mkdir -p "$$out"; \
 		name=formspec; if [ "$$os" = "windows" ]; then name="formspec.exe"; fi; \
 		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch \
-			go build -trimpath \
+			go build -tags formspec_spa -trimpath \
 			-ldflags "-s -w -X main.version=$(VERSION)" \
 			-o "$$out/$$name" ./cmd/formspec; \
 		test -s "$$out/$$name" || { echo "❌ Binary $$os/$$arch kosong setelah build — abort" >&2; exit 1; }; \

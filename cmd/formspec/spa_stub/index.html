@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>formspec — SPA not embedded</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        display: grid;
+        place-items: center;
+        min-height: 100vh;
+        margin: 0;
+        background: #09090b;
+        color: #e4e4e7;
+      }
+      main {
+        max-width: 40rem;
+        padding: 2rem;
+        line-height: 1.6;
+      }
+      code {
+        background: #27272a;
+        padding: 0.15rem 0.4rem;
+        border-radius: 0.25rem;
+        font-size: 0.9em;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>SPA tidak ter-embed di binary ini</h1>
+      <p>
+        Binary <code>formspec</code> ini dibangun tanpa embedded SPA (build
+        default, mis. via <code>go install</code> — yang tidak bisa menjalankan
+        npm). UI tetap tersedia lewat:
+      </p>
+      <ul>
+        <li>
+          <code>make build</code> / <code>make build-formspec</code> — build SPA
+          lalu embed via <code>-tags formspec_spa</code>
+        </li>
+        <li>
+          <code>formspec dev --dev-ui</code> — proxied ke Vite dev server
+        </li>
+        <li>
+          <code>formspec dev --web-dir &lt;folder&gt;</code> — serve SPA dari
+          folder
+        </li>
+      </ul>
+    </main>
+  </body>
+</html>

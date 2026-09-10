@@ -77,6 +77,11 @@ Catatan: `go install` mendownload seluruh dependency dan meng-compile dari
 source — pertama kali butuh beberapa menit. Jalur ini memasang binary ke
 `$(go env GOPATH)/bin` — pastikan folder itu ada di PATH.
 
+Catatan UI: binary hasil `go install` tidak memuat embedded SPA (build ini
+tidak bisa menjalankan npm). Perintah CLI tetap lengkap; untuk UI lengkap
+pakai installer (Metode 1) atau `make build` di repo — atau saat `formspec dev`
+gunakan `--dev-ui` (Vite) / `--web-dir`.
+
 ---
 
 ## Metode 3: Manual download

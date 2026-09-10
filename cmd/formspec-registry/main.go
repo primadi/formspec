@@ -128,7 +128,13 @@ func main() {
 		fmt.Printf("   web:  %s (from --web-dir)\n", *webDir)
 	} else {
 		cfg.WebFS = web.DistFS()
-		fmt.Println("   web:  embedded SPA (web/dist)")
+		if web.Embedded {
+			fmt.Println("   web:  embedded SPA (web/dist)")
+		} else {
+			fmt.Println("   web:  placeholder — binary built without embedded SPA " +
+				"(go install / tanpa -tags formspec_spa); full UI: make build-registry " +
+				"atau --web-dir")
+		}
 	}
 
 	app, err := formspec.New(cfg)

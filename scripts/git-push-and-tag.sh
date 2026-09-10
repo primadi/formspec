@@ -140,6 +140,26 @@ sync_version_refs() {
 }
 sync_version_refs
 
+# --- Langkah 0.5: preflight generated artifacts -------------------------------
+# schemas/ dan docs/kind/ di-generate dari pkg/spec dan DI-COMMIT. Regenerate
+# di sini dan fail-fast bila ada drift — release tidak boleh membawa schema
+# atau kind docs yang stale (mis. pkg/spec baru diubah tapi generator lupa
+# dijalankan). Bila gagal, perubahan regenerate dibiarkan di tree: commit dulu,
+# lalu jalankan ulang script.
+preflight_generated() {
+  echo "🧬 Regenerate schema + kind docs (cek drift)..."
+  make generate-schema >/dev/null
+  make generate-kind-docs >/dev/null
+  if [ -n "$(git status --porcelain -- schemas docs/kind)" ]; then
+    echo "❌ Generated artifacts stale — schemas/ atau docs/kind berubah setelah regenerate:" >&2
+    git status --short -- schemas docs/kind | head -10 >&2
+    echo "   → Commit perubahan itu (biasanya pkg/spec baru diubah), lalu jalankan ulang script." >&2
+    exit 1
+  fi
+  echo "🔖 Schema & kind docs fresh — tidak ada drift"
+}
+preflight_generated
+
 # --- Langkah 1: test -----------------------------------------------------------
 if [ "$SKIP_TESTS" = false ]; then
   echo "🧪 go test ./..."

@@ -43,6 +43,10 @@ Thumbs.db
 
 # Go build output & release artifacts (dist/release, lihat docs/guides/releasing.md)
 dist/
+# Embedded SPA salinan renderers/react-shadcn/dist — di-build saat make build/release,
+# tidak di-commit (go:embed via build tag formspec_spa, lihat cmd/formspec/spa_embed.go)
+cmd/formspec/dist/
+cmd/formspec-registry/web/dist/
 
 # Node (frontend)
 node_modules/

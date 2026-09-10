@@ -34,6 +34,12 @@ di-commit, sehingga tag selalu berisi site/docs dengan versi yang benar.
 Installer (`install.sh`/`install.ps1`) sendiri tidak perlu diubah karena
 resolve versi terbaru via GitHub API saat runtime.
 
+Setelah itu script menjalankan **preflight generated artifacts**: regenerate
+`make generate-schema` + `make generate-kind-docs` lalu fail-fast bila
+`schemas/` atau `docs/kind/` berubah (artefak basi — biasanya `pkg/spec` baru
+diubah tapi generator lupa dijalankan). Bila preflight gagal, hasil regenerate
+dibiarkan di tree — commit dulu, lalu jalankan ulang script.
+
 Script yang sama menerapkan semua guard prosedur manual sebelum menyentuh
 apapun: `VERSION` harus semver, working tree harus bersih, tag belum dipakai
 (lokal & remote), `gh` ter-auth, dan sedang di branch `main`. Selain itu,
@@ -177,3 +183,16 @@ Tag tidak bisa dipakai ulang. Untuk memutar versi user kembali:
 GitHub Actions workflow yang trigger on tag push (build + release otomatis)
 sengaja ditunda — lihat `docs_internal/plan/install-page-plan.md` §Excluded.
 Target `make release` di Makefile adalah basis script yang siap diadaptasi.
+
+## Yang sengaja di luar script
+
+Dua pipeline deploy berjalan dengan kadensi tersendiri dan **tidak** diikat ke
+release CLI:
+
+- **schemas.formspec.dev** — JSON Schema untuk YAML editor. Generator
+  (`make generate-schema`) di-commit ke repo dan diverifikasi fresh oleh
+  preflight script; pen-deployan-nya lewat jalur git-based terpisah
+  (`make publish-schemas` men-stage `schemas/dist/<version>`, commit, push →
+  Cloudflare auto-build — lihat `schemas/README.md`).
+- **docs-site** (`docs/`) — auto-build oleh Cloudflare saat main ter-push;
+  tidak perlu langkah release khusus.

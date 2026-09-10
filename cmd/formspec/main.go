@@ -6,13 +6,12 @@
 package main
 
 import (
-	"embed"
 	"fmt"
 	"os"
 )
 
-//go:embed dist/favicon.svg dist/icons.svg dist/index.html dist/assets/*
-var spaFS embed.FS
+// spaFS (embed.FS) dideklarasikan di spa_embed.go (tag formspec_spa — SPA
+// sungguhan) atau spa_stub.go (default — placeholder). Lihat file tersebut.
 
 // version is stamped at build time via -ldflags "-X main.version=<tag>".
 // Development builds (go run / plain go build) report "dev".
