@@ -11,10 +11,16 @@
 // - Override page → the normal PageRenderer, which renders the App's own
 //   Page kind (blocks/tabs/custom asset).
 
+import { lazy, Suspense } from "react"
 import { useMetaStore } from "@/stores/meta"
-import PageRenderer from "@/kinds/page/PageRenderer"
 import { BUILTIN_AUTH_ASSETS } from "./authAssets"
 import { LoginPage } from "./LoginPage"
+
+// Lazy: PageRenderer is dynamically imported elsewhere (App.tsx, router.tsx,
+// preload.ts) to keep it out of the entry chunk. A static import here would
+// defeat all of them (Rollup [INEFFECTIVE_DYNAMIC_IMPORT] warning) — same
+// pattern as OverlayHost/FormRenderer (changelog 2026-07-27-008).
+const PageRenderer = lazy(() => import("@/kinds/page/PageRenderer"))
 
 /** The auth page slots (chrome_auth is a component ref, handled separately). */
 export type AuthSlot =
@@ -67,5 +73,9 @@ export function AuthPage({
   }
 
   // Override page → normal PageRenderer.
-  return <PageRenderer entry={page} />
+  return (
+    <Suspense fallback={null}>
+      <PageRenderer entry={page} />
+    </Suspense>
+  )
 }
