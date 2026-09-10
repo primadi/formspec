@@ -6,8 +6,8 @@
 #
 # Opsi:
 #   sh install.sh                       # install versi terbaru (stable)
-#   sh install.sh --version v0.4.1     # install versi tertentu
-#   FORMSPEC_VERSION=v0.4.1 sh install.sh
+#   sh install.sh --version v0.0.3     # install versi tertentu
+#   FORMSPEC_VERSION=v0.0.3 sh install.sh
 #
 # Perilaku:
 #   - Tanpa sudo: binary dipasang di ~/.local/bin/formspec (user-local).

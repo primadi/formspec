@@ -44,13 +44,13 @@ Yang dilakukan installer:
 
 ```bash
 # macOS / Linux
-curl -fsSL https://formspec.dev/install.sh | sh -s -- --version v0.4.1
-# atau via env: FORMSPEC_VERSION=v0.4.1 sh -c "$(curl -fsSL https://formspec.dev/install.sh)"
+curl -fsSL https://formspec.dev/install.sh | sh -s -- --version v0.0.3
+# atau via env: FORMSPEC_VERSION=v0.0.3 sh -c "$(curl -fsSL https://formspec.dev/install.sh)"
 ```
 
 ```powershell
 # Windows
-$env:FORMSPEC_VERSION = 'v0.4.1'; irm https://formspec.dev/install.ps1 | iex
+$env:FORMSPEC_VERSION = 'v0.0.3'; irm https://formspec.dev/install.ps1 | iex
 ```
 
 ### Catatan shell sandbox
@@ -99,7 +99,7 @@ Semua binary ada di
 ```bash
 # contoh: darwin arm64 (Apple Silicon)
 curl -fsSL -o formspec.tar.gz \
-  https://github.com/primadi/formspec/releases/download/v0.4.1/formspec-darwin-arm64.tar.gz
+  https://github.com/primadi/formspec/releases/download/v0.0.3/formspec-darwin-arm64.tar.gz
 tar -xzf formspec-darwin-arm64.tar.gz
 mkdir -p ~/.local/bin && mv formspec ~/.local/bin/
 ```
@@ -127,7 +127,7 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc   # atau ~/.zshrc
 
 ```bash
 formspec version
-# formspec v0.4.1
+# formspec v0.0.3
 ```
 
 Lanjutkan ke [How to Run](how-to-run.md) untuk menjalankan aplikasi pertama.
