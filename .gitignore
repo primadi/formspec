@@ -41,6 +41,9 @@ Thumbs.db
 .env.local
 .env.*.local
 
+# Go build output & release artifacts (dist/release, lihat docs/guides/releasing.md)
+dist/
+
 # Node (frontend)
 node_modules/
 sdk/typescript/dist/

@@ -101,6 +101,12 @@ Membuat **draft** release dengan semua artifact + `SHA256SUMS.txt` + generated
 notes. Review di halaman Releases (urutan, notes, checksum), lalu klik
 **Publish**.
 
+Guard `release-upload` mengecek apakah **release** dengan tag tersebut sudah
+ada di GitHub (bukan apakah tag sudah di-push — push tag di langkah 2 memang
+mendahului upload). Jadi tag yang sudah di-push tapi belum punya release tetap
+bisa di-upload ulang; yang diblokir adalah membuat release kedua untuk tag yang
+sama.
+
 Tanpa `gh`: upload `dist/release/*` manual di
 `https://github.com/primadi/formspec/releases/new` — pilih tag di langkah 2.
 

@@ -182,10 +182,10 @@ release-upload:
 	@test -n "$(VERSION)" || (echo "❌ Set VERSION, mis. make release-upload VERSION=v0.1.0 (jangan mengandalkan git describe — lihat docs/guides/releasing.md)" && exit 1)
 	@printf '%s' "$(VERSION)" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+' || (echo "❌ VERSION='$(VERSION)' bukan semver (format: v<major>.<minor>.patch>). Rilis pertama juga harus tag semver yang dipilih sadar." && exit 1)
 	@git rev-parse "$(VERSION)^{commit}" >/dev/null 2>&1 || (echo "❌ Tag $(VERSION) belum ada lokal — buat dulu: git tag $(VERSION) && git push origin $(VERSION)" && exit 1)
-	@if git ls-remote --tags origin | grep -q "refs/tags/$(VERSION)$$"; then \
-		echo "❌ Tag $(VERSION) sudah ada di remote — satu tag = satu release. Pakai versi baru."; exit 1; \
-	fi
 	@command -v gh >/dev/null 2>&1 || (echo "❌ 'gh' CLI tidak ditemukan — upload manual via https://github.com/primadi/formspec/releases/new" && exit 1)
+	@if gh release view $(VERSION) --json tagName >/dev/null 2>&1; then \
+		echo "❌ Release $(VERSION) sudah ada di GitHub — satu tag = satu release. Pakai versi baru."; exit 1; \
+	fi
 	@gh release create $(VERSION) $(RELEASE_DIR)/* --draft --generate-notes
 
 # Frontend
