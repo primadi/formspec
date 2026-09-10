@@ -3,6 +3,8 @@
 # git-push-and-tag.sh — jalur cepat release FormSpec dalam satu perintah.
 #
 # Menggabungkan langkah 2–4 dari docs/guides/releasing.md:
+#   0. Sinkronisasi versi contoh di docs + site (Install.tsx, install.md, dsb.)
+#      — auto replace versi lama → VERSION, commit, lalu tag menunjuk commit itu
 #   1. Validasi: semver, working tree bersih, tag belum dipakai (lokal & remote)
 #   2. git tag <VERSION> + git push origin main --tags
 #   3. make release VERSION=<VERSION>        (cross-compile 6 target + packaging)
@@ -10,6 +12,9 @@
 #
 # Setelah selesai, release masih DRAFT. Review di halaman Releases lalu klik
 # Publish — installer user hanya melihat release yang sudah published.
+#
+# Catatan: file install.sh/install.ps1 sendiri resolve versi terbaru via GitHub
+# API saat runtime — yang perlu di-replace hanya teks contoh/preview hardcoded.
 #
 # Contoh:
 #   scripts/git-push-and-tag.sh v0.0.2              # jalur normal
@@ -57,6 +62,12 @@ if [ -n "$(git status --porcelain)" ]; then
   exit 1
 fi
 
+BRANCH="$(git branch --show-current)"
+if [ "$BRANCH" != "main" ]; then
+  echo "⚠️  Bukan di branch main (sekarang: '$BRANCH'). Tag rilis harus menunjuk main." >&2
+  exit 1
+fi
+
 if git rev-parse "${VERSION}^{commit}" >/dev/null 2>&1; then
   echo "❌ Tag $VERSION sudah ada lokal — satu tag = satu release. Pakai versi baru." >&2
   exit 1
@@ -75,13 +86,45 @@ gh auth status >/dev/null 2>&1 || {
   exit 1
 }
 
-BRANCH="$(git branch --show-current)"
-if [ "$BRANCH" != "main" ]; then
-  echo "⚠️  Bukan di branch main (sekarang: '$BRANCH'). Tag rilis harus menunjuk main." >&2
-  exit 1
-fi
-
 echo "▶️  Release $VERSION dari branch $BRANCH"
+
+# --- Langkah 0: sinkronisasi versi contoh di docs + site ---------------------
+# File berisi contoh versi installer yang hardcoded (preview UI & docs).
+# Diganti + di-commit SEBELUM tag agar formspec.dev tidak menampilkan versi lama.
+VERSION_REF_FILES=(
+  "site/src/components/Install.tsx"
+  "docs/guides/install.md"
+  "site/public/install.sh"
+  "site/public/install.ps1"
+)
+
+sync_version_refs() {
+  local old_version
+  old_version="$(grep -hoE 'v[0-9]+\.[0-9]+\.[0-9]+' "site/src/components/Install.tsx" | head -n 1)"
+  if [ -z "$old_version" ]; then
+    echo "❌ Tidak bisa mendeteksi versi contoh di site/src/components/Install.tsx" >&2
+    exit 1
+  fi
+  if [ "$old_version" = "$VERSION" ]; then
+    echo "🔖 Versi contoh sudah $VERSION — tidak ada yang perlu diganti"
+    return
+  fi
+  echo "🔖 Ganti versi contoh $old_version → $VERSION di docs + site"
+  local f changed=()
+  for f in "${VERSION_REF_FILES[@]}"; do
+    if [ -f "$f" ]; then
+      # -i.bak + rm: portable untuk GNU sed (Linux) dan BSD sed (macOS)
+      sed -i.bak "s/${old_version//./\\.}/${VERSION//./\\.}/g" "$f"
+      rm -f "$f.bak"
+      changed+=("$f")
+    else
+      echo "⚠️  File versi-ref tidak ditemukan (skip): $f" >&2
+    fi
+  done
+  git add "${changed[@]}"
+  git commit -m "chore: bump contoh versi installer ${old_version} → ${VERSION} (docs + site)"
+}
+sync_version_refs
 
 # --- Langkah 1: test -----------------------------------------------------------
 if [ "$SKIP_TESTS" = false ]; then

@@ -27,6 +27,13 @@ scripts/git-push-and-tag.sh v0.4.2                # test + tag + push + build + 
 scripts/git-push-and-tag.sh v0.4.2 --skip-tests   # lewati go test (harus sudah dijalankan manual)
 ```
 
+Sebelum tagging, script juga otomatis menyinkronkan versi contoh yang hardcoded
+di `site/src/components/Install.tsx` (bagian Install di formspec.dev) dan
+`docs/guides/install.md` — versi lama di-replace ke versi release lalu
+di-commit, sehingga tag selalu berisi site/docs dengan versi yang benar.
+Installer (`install.sh`/`install.ps1`) sendiri tidak perlu diubah karena
+resolve versi terbaru via GitHub API saat runtime.
+
 Script yang sama menerapkan semua guard prosedur manual sebelum menyentuh
 apapun: `VERSION` harus semver, working tree harus bersih, tag belum dipakai
 (lokal & remote), `gh` ter-auth, dan sedang di branch `main`. Output akhirnya
