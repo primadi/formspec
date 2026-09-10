@@ -60,8 +60,8 @@ spec:
 | Atribut | Tipe | Wajib | Contoh | Deskripsi |
 |---|---|---|---|---|
 | `version` | `string` | ✅ | v1 |  |
-| `actions` | []`Action` | — |  |  |
-| `auth` | `EntityAuth` | — |  |  |
+| `actions` | [][`Action`](../../spec/backend/01-core-basic.md) | — |  |  |
+| `auth` | [`EntityAuth`](../../spec/backend/01-core-basic.md) | — |  |  |
 
 <!-- /generated:attributes -->
 

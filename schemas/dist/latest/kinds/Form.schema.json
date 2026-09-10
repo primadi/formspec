@@ -20,6 +20,11 @@
         "reset_password"
       ]
     },
+    "confirm": {
+      "$ref": "#/$defs/FormConfirm",
+      "description": "Confirm overrides the App-level confirm defaults for this form",
+      "nullable": true
+    },
     "context": {
       "description": "Context declares render-context variables injected into this form's",
       "type": "array",

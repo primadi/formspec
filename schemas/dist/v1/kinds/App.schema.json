@@ -33,6 +33,11 @@
       "description": "Chrome fine-tunes which shell chrome elements render (frontend/",
       "nullable": true
     },
+    "confirm": {
+      "$ref": "#/$defs/AppConfirm",
+      "description": "Confirm sets App-wide default confirmation dialogs for mutating",
+      "nullable": true
+    },
     "consumes": {
       "description": "cross-app interfaces needed → grant request",
       "type": "array",
@@ -69,6 +74,20 @@
       },
       "examples": [
         "[clinic, pharmacy]"
+      ]
+    },
+    "page_transition": {
+      "description": "Page-to-page navigation animation (View Transitions API), scoped to the page content area: none | fade (default) | slide | slide-up | scale",
+      "type": "string",
+      "enum": [
+        "none",
+        "fade",
+        "slide",
+        "slide-up",
+        "scale"
+      ],
+      "examples": [
+        "fade"
       ]
     },
     "persist_backend": {

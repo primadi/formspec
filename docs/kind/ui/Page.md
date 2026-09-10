@@ -77,7 +77,7 @@ spec:
 | `mode` | enum ( · custom) | — |  | Page mode. `custom` hands all rendering to an asset component; empty means blocks/tabs composition. |
 | `asset` | `string` | — |  | Asset is the spec-root-relative asset path for `mode: custom` |
 | `binds` | `PageBinds` | — |  | Binds is the backend footprint (entities/actions/subscribe) a custom |
-| `context` | []`ContextDecl` | — |  | Context declares render-context variables injected into this page's |
+| `context` | [][`ContextDecl`](../../spec/frontend/04-spec-resolution-api.md) | — |  | Context declares render-context variables injected into this page's |
 | `renderer` | `string` | — |  | Renderer is the per-instance renderer override (frontend/03-renderer- |
 
 <!-- /generated:attributes -->

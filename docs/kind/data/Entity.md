@@ -88,26 +88,46 @@ spec:
 | `version` | `string` | ✅ | v1 |  |
 | `plural` | `string` | — | invoices |  |
 | `characteristic` | enum (master · transaction · reference · summary) | — |  |  |
-| `auth` | `EntityAuth` | — |  |  |
-| `persist` | `PersistSpec` | — |  |  |
-| `fields` | []`Field` | — |  |  |
-| `actions` | []`Action` | — |  |  |
-| `state_machine` | `StateMachine` | — |  |  |
-| `events` | []`EventDecl` | — |  |  |
-| `deliver` | []`DeliveryDecl` | — |  |  |
-| `indexes` | []`IndexDecl` | — |  |  |
-| `extend_storage` | `ExtendStorage` | — |  |  |
+| `auth` | [`EntityAuth`](../../spec/backend/01-core-basic.md) | — |  |  |
+| `persist` | [`PersistSpec`](../../spec/backend/04-persist-backend.md) | — |  |  |
+| `fields` | [][`Field`](../../spec/backend/05-field-types.md) | — |  |  |
+| `actions` | [][`Action`](../../spec/backend/01-core-basic.md) | — |  |  |
+| `state_machine` | [`StateMachine`](../../spec/backend/02-core-extended.md) | — |  |  |
+| `events` | [][`EventDecl`](../../spec/backend/01-core-basic.md) | — |  |  |
+| `deliver` | [][`DeliveryDecl`](../../spec/backend/02-core-extended.md) | — |  |  |
+| `indexes` | [][`IndexDecl`](../../spec/backend/01-core-basic.md) | — |  |  |
+| `extend_storage` | [`ExtendStorage`](../../spec/backend/03-entity-extension.md) | — |  |  |
 | `expose` | []`ExposeConfig` | — |  |  |
-| `backdate_policy` | `BackdatePolicy` | — |  |  |
-| `forward_date_policy` | `ForwardDatePolicy` | — |  |  |
-| `hooks` | []`HookDecl` | — |  |  |
-| `rate_limit` | `RateLimitSpec` | — |  | 1.4.1 resource-level rate limit (02-core-extended.md §17) |
-| `soft_deactivate` | `SoftDeactivateDecl` | — |  | 1.4.10 |
+| `backdate_policy` | [`BackdatePolicy`](../../spec/backend/02-core-extended.md) | — |  |  |
+| `forward_date_policy` | [`ForwardDatePolicy`](../../spec/backend/02-core-extended.md) | — |  |  |
+| `hooks` | [][`HookDecl`](../../spec/backend/02-core-extended.md) | — |  |  |
+| `rate_limit` | [`RateLimitSpec`](../../spec/backend/02-core-extended.md) | — |  | 1.4.1 resource-level rate limit (02-core-extended.md §17) |
+| `soft_deactivate` | [`SoftDeactivateDecl`](../../spec/backend/02-core-extended.md) | — |  | 1.4.10 |
 | `cache` | `CacheSpec` | — |  | Cache opts this entity into the framework read-through cache on |
 | `lifecycle` | enum (two_step_autosave · two_step_manual · plain_crud) | — | plain_crud |  |
 | `display_field` | `string` | — | name |  |
 
 <!-- /generated:attributes -->
+
+## Referensi Struct
+
+Nama struct di kolom **Tipe** di atas adalah tipe Go di `pkg/spec/entity.go`
+(dan `pkg/spec/spec.go`). Kontrak normatifnya didokumentasikan di `docs/spec/backend/`:
+
+| Struct | Dokumentasi normatif |
+|---|---|
+| `Field` | [`05-field-types.md`](../../spec/backend/05-field-types.md) — katalog tipe (§1), money (§2), validasi (§3), tree (§4), keamanan & computed (§5) |
+| `EntityAuth` | [`01-core-basic.md`](../../spec/backend/01-core-basic.md) §1.4 |
+| `Action` | [`01-core-basic.md`](../../spec/backend/01-core-basic.md) §5 |
+| `EventDecl` | [`01-core-basic.md`](../../spec/backend/01-core-basic.md) §7 |
+| `StateMachine` | [`02-core-extended.md`](../../spec/backend/02-core-extended.md) §1 |
+| `DeliveryDecl` | [`02-core-extended.md`](../../spec/backend/02-core-extended.md) §3 |
+| `BackdatePolicy` / `ForwardDatePolicy` | [`02-core-extended.md`](../../spec/backend/02-core-extended.md) §9 |
+| `HookDecl` | [`02-core-extended.md`](../../spec/backend/02-core-extended.md) §15 |
+| `RateLimitSpec` | [`02-core-extended.md`](../../spec/backend/02-core-extended.md) §17 |
+| `SoftDeactivateDecl` | [`02-core-extended.md`](../../spec/backend/02-core-extended.md) §19 |
+| `PersistSpec` | [`04-persist-backend.md`](../../spec/backend/04-persist-backend.md) |
+| `ExtendStorage` | [`03-entity-extension.md`](../../spec/backend/03-entity-extension.md) |
 
 ## Gotchas
 

@@ -249,9 +249,7 @@ export function RelationPicker({
   }, [query, isOpen, readonly, doSearch])
 
   // ── Auto-focus input when opening ──
-  // Without this, the shadcn Input's blockAutofill mechanism leaves the
-  // field readOnly until focused, preventing the user from typing directly
-  // after clicking the label display.
+  // Lets the user type directly after clicking the label display.
   useEffect(() => {
     if (isOpen) {
       requestAnimationFrame(() => inputRef.current?.focus())

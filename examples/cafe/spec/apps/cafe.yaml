@@ -9,7 +9,7 @@ spec:
   version: 1.0.0
   vendor: formspec
   root_url: /
-  # page_transition: slide
+  page_transition: slide
   modules:
     - cafe-master
     - cafe-order

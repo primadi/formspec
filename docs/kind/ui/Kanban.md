@@ -45,8 +45,8 @@ spec:
 | `columns` | []`KanbanColumn` | — |  |  |
 | `card_template` | `KanbanCard` | — |  |  |
 | `realtime` | `boolean` | — |  | default true (§12) |
-| `filters` | []`FilterSpec` | — |  |  |
-| `fixed_filters` | []`FilterSpec` | — |  |  |
+| `filters` | [][`FilterSpec`](../../spec/frontend/06-page-kinds.md) | — |  |  |
+| `fixed_filters` | [][`FilterSpec`](../../spec/frontend/06-page-kinds.md) | — |  |  |
 | `search` | `boolean` | — |  |  |
 | `row_actions` | []`TableAction` | — |  |  |
 | `max_cards_per_column` | `integer` | — |  |  |

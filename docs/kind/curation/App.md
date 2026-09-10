@@ -95,6 +95,8 @@ spec:
 | `auth` | `AppAuth` | — |  | Per-App auth screen overrides: login_page/setup_page/change_password_page/reset_password_page/oauth_callback_page (kind: Page refs) + chrome_auth (component ref) — empty slots fall back to formspec.core defaults |
 | `renderers` | map | — |  | Renderers maps a VisualSpecKind name → renderer for the whole App |
 | `chrome` | `AppChrome` | — | nav: menu | Chrome composition: brand/nav/auth/footer/breadcrumbs/theme_switcher, each auto\|show\|hide (auth: auto\|links\|button\|none) — see frontend/05-app-kinds.md §5 |
+| `page_transition` | enum (none · fade · slide · slide-up · scale) | — | fade | Page-to-page navigation animation (View Transitions API), scoped to the page content area: none \| fade (default) \| slide \| slide-up \| scale |
+| `confirm` | `AppConfirm` | — |  | App-wide default confirm dialogs: create/update/delete message strings — absent = off; forms/actions override per-instance |
 | `menu` | []`MenuItem` | — |  |  |
 | `publishes` | []`AppInterface` | — |  | cross-app interfaces offered |
 | `consumes` | []`AppConsume` | — |  | cross-app interfaces needed → grant request |

@@ -72,7 +72,8 @@ spec:
 | `actions` | []`FormAction` | — |  |  |
 | `submit` | `FormSubmit` | — |  |  |
 | `render` | `FormRenderDecl` | — |  |  |
-| `context` | []`ContextDecl` | — |  | Context declares render-context variables injected into this form's |
+| `context` | [][`ContextDecl`](../../spec/frontend/04-spec-resolution-api.md) | — |  | Context declares render-context variables injected into this form's |
+| `confirm` | `FormConfirm` | — |  | Per-form confirm override: create/update message — nil = inherit App default, empty string = off |
 
 <!-- /generated:attributes -->
 

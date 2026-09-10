@@ -303,10 +303,67 @@ func fieldType(fd genjsonschema.FieldDef, collect *genjsonschema.CollectResult) 
 	}
 }
 
+// structDocLinks maps named Go struct types (as they appear in the Tipe
+// column of attribute tables) to the normative spec document that defines
+// them. Links are relative to docs/kind/<group>/<Kind>.md. Structs not in
+// this map render as plain inline code — add an entry only when the target
+// document actually documents the struct's contract.
+var structDocLinks = map[string]string{
+	// Backend — Entity & friends (docs/spec/backend/)
+	"Field":              "../../spec/backend/05-field-types.md",
+	"EntityAuth":         "../../spec/backend/01-core-basic.md",
+	"Action":             "../../spec/backend/01-core-basic.md",
+	"EventDecl":          "../../spec/backend/01-core-basic.md",
+	"IndexDecl":          "../../spec/backend/01-core-basic.md",
+	"StateMachine":       "../../spec/backend/02-core-extended.md",
+	"DeliveryDecl":       "../../spec/backend/02-core-extended.md",
+	"SubDeliveryDecl":    "../../spec/backend/02-core-extended.md",
+	"RetryDecl":          "../../spec/backend/02-core-extended.md",
+	"HookDecl":           "../../spec/backend/02-core-extended.md",
+	"RateLimitSpec":      "../../spec/backend/02-core-extended.md",
+	"BackdatePolicy":     "../../spec/backend/02-core-extended.md",
+	"ForwardDatePolicy":  "../../spec/backend/02-core-extended.md",
+	"SoftDeactivateDecl": "../../spec/backend/02-core-extended.md",
+	"IdempotencyDecl":    "../../spec/backend/02-core-extended.md",
+	"PersistSpec":        "../../spec/backend/04-persist-backend.md",
+	"ExtendStorage":      "../../spec/backend/03-entity-extension.md",
+
+	// Frontend — visual & app kinds (docs/spec/frontend/)
+	"FormSpec":               "../../spec/frontend/06-page-kinds.md",
+	"TableSpec":              "../../spec/frontend/06-page-kinds.md",
+	"PageSpec":               "../../spec/frontend/06-page-kinds.md",
+	"KanbanSpec":             "../../spec/frontend/06-page-kinds.md",
+	"CalendarSpec":           "../../spec/frontend/06-page-kinds.md",
+	"WizardSpec":             "../../spec/frontend/06-page-kinds.md",
+	"DashboardSpec":          "../../spec/frontend/06-page-kinds.md",
+	"ReportSpec":             "../../spec/frontend/06-page-kinds.md",
+	"PrintSpec":              "../../spec/frontend/06-page-kinds.md",
+	"TimelineSpec":           "../../spec/frontend/06-page-kinds.md",
+	"ListingSpec":            "../../spec/frontend/06-page-kinds.md",
+	"ApprovalInboxSpec":      "../../spec/frontend/06-page-kinds.md",
+	"NotificationCenterSpec": "../../spec/frontend/06-page-kinds.md",
+	"FilterSpec":             "../../spec/frontend/06-page-kinds.md",
+	"WidgetSpec":             "../../spec/frontend/07-component-kinds.md",
+	"ContextDecl":            "../../spec/frontend/04-spec-resolution-api.md",
+	"AppSpec":                "../../spec/frontend/05-app-kinds.md",
+	"ModuleSpec":             "../../spec/frontend/05-app-kinds.md",
+	"WorkspaceSpec":          "../../spec/frontend/05-app-kinds.md",
+
+	// Backend — extended data kinds (docs/spec/backend/02-core-extended.md)
+	"WorkflowSpec":     "../../spec/backend/02-core-extended.md",
+	"ApiSpec":          "../../spec/backend/02-core-extended.md",
+	"WebhookSpec":      "../../spec/backend/02-core-extended.md",
+	"SubscriptionSpec": "../../spec/backend/02-core-extended.md",
+	"IntegratorSpec":   "../../spec/backend/02-core-extended.md",
+	"MockupSpec":       "../../spec/backend/02-core-extended.md",
+}
+
 // namedType renders a type name, inlining enum values when the name refers
 // to a known string enum. Rendering is uniform with annotation-based enums
 // (see fieldType): the Go type name is omitted — it never appears in YAML,
-// so it would only add noise for manifest authors.
+// so it would only add noise for manifest authors. Named structs that have
+// an entry in structDocLinks are rendered as a link to their normative spec
+// document.
 func namedType(name string, collect *genjsonschema.CollectResult) string {
 	if name == "" {
 		return "—"
@@ -317,6 +374,9 @@ func namedType(name string, collect *genjsonschema.CollectResult) string {
 			vals = append(vals[:8], "…")
 		}
 		return "enum (" + strings.Join(vals, " · ") + ")"
+	}
+	if link, ok := structDocLinks[name]; ok {
+		return fmt.Sprintf("[`%s`](%s)", name, link)
 	}
 	return "`" + name + "`"
 }

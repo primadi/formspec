@@ -49,14 +49,14 @@ spec:
 | `handler` | `ImplDecl` | ✅ |  |  |
 | `store` | `string` | — | redis |  |
 | `durability` | `string` | — |  | Tier 2: durability mode ("durable" = streaming) |
-| `retry` | `RetryDecl` | — |  | Tier 2 |
+| `retry` | [`RetryDecl`](../../spec/backend/02-core-extended.md) | — |  | Tier 2 |
 | `position` | enum (latest · earliest) | — | latest |  |
 | `filter` | `string` | — |  | Tier 2: Starlark filter over event payload |
 | `transform` | `string` | — |  | Tier 2: Starlark transform over event payload |
 | `dead_letter` | `DeliveryTarget` | — |  | Tier 2 |
 | `max_retry` | `integer` | — |  | Tier 2 |
 | `retention` | `string` | — |  | Tier 2: stream retention duration |
-| `delivery` | `SubDeliveryDecl` | — |  | Tier 2: delivery channel |
+| `delivery` | [`SubDeliveryDecl`](../../spec/backend/02-core-extended.md) | — |  | Tier 2: delivery channel |
 
 <!-- /generated:attributes -->
 

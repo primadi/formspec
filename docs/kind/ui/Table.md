@@ -65,8 +65,8 @@ spec:
 | `realtime` | `boolean` | — |  |  |
 | `row_actions` | []`TableAction` | — |  |  |
 | `bulk_actions` | []`TableAction` | — |  |  |
-| `filters` | []`FilterSpec` | — |  |  |
-| `fixed_filters` | []`FilterSpec` | — |  |  |
+| `filters` | [][`FilterSpec`](../../spec/frontend/06-page-kinds.md) | — |  |  |
+| `fixed_filters` | [][`FilterSpec`](../../spec/frontend/06-page-kinds.md) | — |  |  |
 | `batch_edit` | []`string` | — |  | Batch editing: fields editable across a multi-row selection. Framework runs update per row, partial failure reported per row. |
 
 <!-- /generated:attributes -->

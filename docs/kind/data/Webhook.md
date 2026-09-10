@@ -52,7 +52,7 @@ spec:
 | `path` | `string` | — | /webhooks/midtrans |  |
 | `auth` | `WebhookAuth` | ✅ |  |  |
 | `idempotent` | `boolean` | — |  |  |
-| `idempotency_key` | `IdempotencyDecl` | — |  |  |
+| `idempotency_key` | [`IdempotencyDecl`](../../spec/backend/02-core-extended.md) | — |  |  |
 
 <!-- /generated:attributes -->
 

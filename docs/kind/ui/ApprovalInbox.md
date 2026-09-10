@@ -37,7 +37,7 @@ spec:
 | Atribut | Tipe | Wajib | Contoh | Deskripsi |
 |---|---|---|---|---|
 | `realtime` | `boolean` | — |  |  |
-| `filters` | []`FilterSpec` | — |  |  |
+| `filters` | [][`FilterSpec`](../../spec/frontend/06-page-kinds.md) | — |  |  |
 | `search` | `boolean` | — |  |  |
 
 <!-- /generated:attributes -->
