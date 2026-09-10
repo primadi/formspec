@@ -6,8 +6,12 @@
   "service": "app",
   "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
   "features": {
+    // Python: pakai versi bawaan distro (apt) — mode "latest" harus
+    // mengunduh source python.org + compile dari source, dan itu gagal
+    // (curl error 56, connection reset) saat build. sdk/python cuma butuh
+    // Python ≥ 3.9, jadi python3 dari apt sudah cukup.
     "ghcr.io/devcontainers/features/python:1": {
-      "version": "latest"
+      "version": "os-provided"
     },
     "ghcr.io/devcontainers/features/node:2.1.0": {
       "version": "lts"
@@ -67,6 +71,16 @@
   // (18080 → 18081) yang membuat open_browser_page timeout.
   // Keep this on IPv4 localhost to avoid Docker's flaky IPv6 forwarding in this environment.
   "forwardPorts": [19000, 19001, 16379, 11025, 18025],
+
+  // 18080 (publish compose untuk :8080 di dalam container) tetap terdeteksi
+  // VS Code sebagai "active port" dan di-auto-forward ke 18081 walau tidak
+  // masuk forwardPorts. Blokir di sini supaya tidak pernah di-forward.
+  "portsAttributes": {
+    "18080": {
+      "label": "Dev Server (tidak di-forward)",
+      "onAutoForward": "ignore"
+    }
+  },
 
   // Use 'postCreateCommand' to run commands after the container is created.
   // RTK global hooks must re-run here because /home/vscode state is ephemeral
