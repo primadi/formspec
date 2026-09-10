@@ -17,6 +17,27 @@ Prosedur manual untuk maintainer memproduksi dan mempublikasikan release CLI
 gh auth status   # pastikan sudah login ke github.com
 ```
 
+## Cara cepat — script satu perintah
+
+Langkah 2–4 di bawah ini (tag → push → build → upload draft) bisa digabung
+dalam satu perintah:
+
+```bash
+scripts/git-push-and-tag.sh v0.4.2                # test + tag + push + build + upload draft
+scripts/git-push-and-tag.sh v0.4.2 --skip-tests   # lewati go test (harus sudah dijalankan manual)
+```
+
+Script yang sama menerapkan semua guard prosedur manual sebelum menyentuh
+apapun: `VERSION` harus semver, working tree harus bersih, tag belum dipakai
+(lokal & remote), `gh` ter-auth, dan sedang di branch `main`. Output akhirnya
+adalah **draft release** — tetap harus di-review lalu Publish (langkah yang
+sama seperti §4).
+
+> Script memerlukan working tree bersih — commit semua perubahan dulu.
+> Untuk kondisi khusus (mis. release dari commit tertentu, atau setelah gagal
+> di tengah jalan), ikuti langkah manual §2–§4 di bawah yang lebih bisa
+> diputus per langkah.
+
 ## 0. Cek versi — tidak perlu diingat-ingat
 
 Versi yang pernah di-release tersimpan di 3 tempat; versi berikutnya selalu
