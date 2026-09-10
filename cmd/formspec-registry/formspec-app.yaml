@@ -1,10 +1,18 @@
-# ── FormSpec Dev Config — Registry ──
-# Configures `formspec dev` / `formspec serve` di root repo registry.
+# ── FormSpec Registry Dev Config ──
+# Config untuk menjalankan FormSpec Module Registry (cmd/formspec-registry)
+# dalam mode dev:
+#
+#   scripts/run-registry.sh                                  (recommended)
+#   go run ./cmd/formspec-registry --config cmd/formspec-registry/formspec-app.yaml
+#
+# Jalankan dari root repo — path di bawah relative ke root repo.
 # Bukan kind: Config manifest — CLI tooling config only.
 #
+# spec: cmd/formspec-registry/app-spec/spec (bukan embedded snapshot) →
+# hot-reload watcher aktif (edit spec, tanpa restart).
 # Auth seragam di dev dan prod: selalu JWT asli (tanpa bypass). Tanpa
 # jwt-secret, dev meng-generate + persist secret di .formspec/dev-jwt-secret
 # sehingga sesi bertahan antar restart.
-spec: registry/spec
+spec: cmd/formspec-registry/app-spec/spec
 dsn: sqlite:.formspec/registry.db
 jwt-secret: registry-dev-secret

@@ -1,7 +1,7 @@
 // Package web embeds the built renderer SPA (renderers/react-shadcn/dist)
 // so formspec-registry can serve the admin panel and portal UI without
 // --web-dir — single-file deployment, mirroring the spec embed in
-// registry/embed.go.
+// app-spec/embed.go.
 //
 // The dist tree is synced from renderers/react-shadcn/dist by
 // `make build-registry` (same pattern as build-formspec → cmd/formspec/dist).
@@ -24,7 +24,7 @@ func DistFS() fs.FS {
 	sub, err := fs.Sub(distFiles, "dist")
 	if err != nil {
 		// Unreachable: "dist" is a compile-time directory in distFiles.
-		panic("registry/web: embedded dist missing: " + err.Error())
+		panic("formspec-registry/web: embedded dist missing: " + err.Error())
 	}
 	return sub
 }

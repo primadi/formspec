@@ -1,6 +1,6 @@
 # FormSpec Module Registry — production image (Plan C batch 2).
-# Build:  docker build -t formspec-registry:latest -f registry/deploy/Dockerfile .
-# Run:    see registry/deploy/k8s/
+# Build:  docker build -t formspec-registry:latest -f cmd/formspec-registry/deploy/Dockerfile .
+# Run:    see cmd/formspec-registry/deploy/k8s/
 FROM golang:1.26-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum ./
@@ -12,7 +12,7 @@ RUN CGO_ENABLED=0 go build -o /out/formspec-registry ./cmd/formspec-registry
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/formspec-registry /formspec-registry
-# Spec is embedded in the binary (registry/embed.go) — no spec mount needed.
+# Spec is embedded in the binary (app-spec/embed.go) — no spec mount needed.
 EXPOSE 8080 9102
 ENTRYPOINT ["/formspec-registry"]
 # Default flags; override via container args (see deployment.yaml):

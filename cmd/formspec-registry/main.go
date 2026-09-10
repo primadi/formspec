@@ -1,6 +1,6 @@
 // Command formspec-registry is the native production binary for the FormSpec
 // Module Registry (todo 13.5.6 / Plan C): a thin wrapper that embeds the
-// engine + the registry app spec (registry/embed.go, //go:embed) and
+// engine + the registry app spec (app-spec/embed.go, //go:embed) and
 // registers native handlers — signature-verify server-side (13.3.3).
 //
 // Usage:
@@ -10,7 +10,7 @@
 //
 // When --spec is omitted, the embedded spec is extracted to a temp dir
 // (single-file deployment). When --web-dir is omitted, the embedded SPA
-// (registry/web, synced by `make build-registry`) is served instead.
+// (web/, synced by `make build-registry`) is served instead.
 // Native handlers registered here are unavailable
 // in `formspec dev` — the signature-verify service only exists in this binary.
 package main
@@ -26,27 +26,40 @@ import (
 	"path/filepath"
 	"syscall"
 
+	appspec "github.com/primadi/formspec/cmd/formspec-registry/app-spec"
+	web "github.com/primadi/formspec/cmd/formspec-registry/web"
 	"github.com/primadi/formspec/internal/api"
 	"github.com/primadi/formspec/internal/devsecret"
 	"github.com/primadi/formspec/internal/devserver"
 	"github.com/primadi/formspec/internal/vendor"
-	native "github.com/primadi/formspec/registry"
-	web "github.com/primadi/formspec/registry/web"
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
 	formspec "github.com/primadi/formspec/resource"
+	"gopkg.in/yaml.v3"
 )
 
 func main() {
-	dsn := flag.String("dsn", "sqlite:.formspec/registry.db", "Database DSN (production: postgres://...)")
+	dsn := flag.String("dsn", "", "Database DSN (default: sqlite:.formspec/registry.db; production: postgres://...)")
 	specPath := flag.String("spec", "", "Spec directory (default: embedded spec extracted to temp)")
-	addr := flag.String("addr", ":8080", "Listen address")
+	addr := flag.String("addr", "", "Listen address (default: :8080)")
 	prodMode := flag.Bool("prod", false, "Production mode (Postgres + JWT + strict gates)")
 	jwtSecret := flag.String("jwt-secret", "", "JWT HMAC secret (dev: auto-generated + persisted in .formspec/dev-jwt-secret when empty)")
 	jwtIssuer := flag.String("jwt-issuer", "formspec-registry", "JWT issuer")
 	jwtPublicKey := flag.String("jwt-public-key", "", "RSA/ECDSA public key PEM for asymmetric JWT")
 	strictMode := flag.Bool("strict", false, "Strict uses enforcement")
 	webDir := flag.String("web-dir", "", "Renderer SPA root (serves /{ws}/_admin and portal)")
+	configFile := flag.String("config", "", "Config file (formspec-app.yaml format; auto-discovered in CWD when omitted)")
 	flag.Parse()
+
+	// ── Config file (formspec-app.yaml) — CLI flags win ──
+	applyConfigFile(configFile, &specPath, &dsn, &addr, &jwtSecret, &webDir)
+
+	// ── Defaults for values not set by CLI or config file ──
+	if *dsn == "" {
+		*dsn = "sqlite:.formspec/registry.db"
+	}
+	if *addr == "" {
+		*addr = ":8080"
+	}
 
 	// ── Dev DX (same as `formspec dev`): PID file + auto-kill previous ──
 	// A second invocation kills the first instead of failing on the port.
@@ -74,7 +87,7 @@ func main() {
 		if err != nil {
 			log.Fatalf("extract embedded spec: %v", err)
 		}
-		if err := extractSpec(native.SpecFS(), tmp); err != nil {
+		if err := extractSpec(appspec.SpecFS(), tmp); err != nil {
 			log.Fatalf("extract embedded spec: %v", err)
 		}
 		*specPath = filepath.Join(tmp, "spec")
@@ -84,7 +97,7 @@ func main() {
 	fmt.Printf("   spec: %s\n   dsn:  %s\n", *specPath, *dsn)
 
 	// SPA source: explicit --web-dir wins; otherwise fall back to the
-	// embedded renderer dist (registry/web) so the binary serves the admin
+	// embedded renderer dist (web/) so the binary serves the admin
 	// panel and portal out of the box.
 	// Auth is uniform across dev and prod (always real JWT). In dev, when no
 	// explicit secret is configured, resolve (or generate + persist) the dev
@@ -115,7 +128,7 @@ func main() {
 		fmt.Printf("   web:  %s (from --web-dir)\n", *webDir)
 	} else {
 		cfg.WebFS = web.DistFS()
-		fmt.Println("   web:  embedded SPA (registry/web/dist)")
+		fmt.Println("   web:  embedded SPA (web/dist)")
 	}
 
 	app, err := formspec.New(cfg)
@@ -136,12 +149,71 @@ func main() {
 	if watchSpec {
 		go devserver.WatchSpec(ctx, app, *specPath, nil)
 	} else {
-		fmt.Println("ℹ spec: embedded snapshot — edit registry/spec + restart, or run with --spec registry/spec for hot-reload")
+		fmt.Println("ℹ spec: embedded snapshot — edit cmd/formspec-registry/app-spec/spec + restart, or run with --spec cmd/formspec-registry/app-spec/spec for hot-reload")
 	}
 
 	fmt.Printf("✓ Server starting on http://localhost%s\n", *addr)
 	devserver.ServeAppUntilSignal(ctx, app)
 	devserver.CleanupPIDFile(pidFile)
+}
+
+// ─── Config file (formspec-app.yaml) ───
+//
+// Sama formatnya dengan config `formspec dev` (cmd/formspec/dev_config.go).
+// Nilai config hanya berlaku untuk flag yang tidak di-set CLI.
+
+// registryConfigFile adalah subset field formspec-app.yaml yang relevan
+// untuk formspec-registry.
+type registryConfigFile struct {
+	Spec      *string `yaml:"spec"`
+	DSN       *string `yaml:"dsn"`
+	Addr      *string `yaml:"addr"`
+	JWTSecret *string `yaml:"jwt-secret"`
+	WebDir    *string `yaml:"web-dir"`
+}
+
+// applyConfigFile membaca config file dan mengisi nilai flag yang masih
+// kosong (CLI menang). Tanpa --config, auto-discover formspec-app.yaml di
+// CWD (legacy formspec-sidecar.yaml ikut didukung).
+func applyConfigFile(configFile *string, specPath, dsn, addr, jwtSecret, webDir **string) {
+	path := *configFile
+	if path == "" {
+		for _, c := range []string{"formspec-app.yaml", "formspec-app.yml", "formspec-sidecar.yaml"} {
+			if _, err := os.Stat(c); err == nil {
+				path = c
+				break
+			}
+		}
+	}
+	if path == "" {
+		return
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		log.Fatalf("read config %s: %v", path, err)
+	}
+	var cf registryConfigFile
+	if err := yaml.Unmarshal(data, &cf); err != nil {
+		log.Fatalf("parse config %s: %v", path, err)
+	}
+	fmt.Printf("⚙ config: %s\n", path)
+
+	if cf.Spec != nil && **specPath == "" {
+		**specPath = *cf.Spec
+	}
+	if cf.DSN != nil && **dsn == "" {
+		**dsn = *cf.DSN
+	}
+	if cf.Addr != nil && **addr == "" {
+		**addr = *cf.Addr
+	}
+	if cf.JWTSecret != nil && **jwtSecret == "" {
+		**jwtSecret = *cf.JWTSecret
+	}
+	if cf.WebDir != nil && **webDir == "" {
+		**webDir = *cf.WebDir
+	}
 }
 
 // vendorApprove implements the registry.vendor.approve action (Fase 6 —

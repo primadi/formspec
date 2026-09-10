@@ -1,7 +1,7 @@
-// Package registry embeds the FormSpec Registry app spec so the native
+// Package appspec embeds the FormSpec Registry app spec so the native
 // binary (cmd/formspec-registry) can run without a checked-out source tree
 // (todo 13.5.6 / Plan C — "native app binary" deployment mode).
-package registry
+package appspec
 
 import (
 	"embed"

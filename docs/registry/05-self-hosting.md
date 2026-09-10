@@ -3,10 +3,10 @@
 ## Mode Dev (POC)
 
 ```bash
-formspec dev --spec registry/spec
+formspec dev --spec cmd/formspec-registry/app-spec/spec
 ```
 
-Registry adalah FormSpec app biasa (`registry/spec/`): App `registry` + Module
+Registry adalah FormSpec app biasa (`cmd/formspec-registry/app-spec/spec/`): App `registry` + Module
 `registry` + entities `Vendor`/`Module`/`ModuleVersion`. Data di SQLite lokal,
 tarball via file storage. Cocok untuk development dan smoke test.
 
@@ -20,7 +20,7 @@ Prasyarat (Fase 8 production serve):
 - **CORS allow-list** — wildcard `*` ditolak
 
 ```bash
-formspec serve --mode=production --spec registry/spec \
+formspec serve --mode=production --spec cmd/formspec-registry/app-spec/spec \
   --dsn postgres://... --jwt-public-key keys/jwt.pub \
   --tls-cert cert.pem --tls-key key.pem \
   --cors-origin https://registry.formspec.dev
@@ -32,7 +32,7 @@ Observability bawaan: health `GET /health`, Prometheus di `--metrics-addr`
 ## Native Binary (Plan C — batch 1 ✅)
 
 `cmd/formspec-registry` = wrapper tipis yang meng-embed engine + spec via
-`//go:embed` (`registry/embed.go`) — single-file deployment: tanpa `--spec`,
+`//go:embed` (`app-spec/embed.go`) — single-file deployment: tanpa `--spec`,
 spec diekstrak ke temp dir saat boot.
 
 ```bash

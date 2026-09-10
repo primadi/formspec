@@ -26,13 +26,13 @@ Publish mengirim header `Authorization: Bearer <api-key>`.
 
 ## Sisi Server
 
-| Kode                                                             | Peran                                               |
-| ---------------------------------------------------------------- | --------------------------------------------------- |
-| `registry/spec/modules/registry/entities/*.yaml` → `spec.expose` | Sumber endpoint (actions yang terekspos)            |
-| `internal/api/generator.go` → `GenerateRoutes`                   | Entity registry + expose → RouteDescriptor          |
-| `internal/api/router.go`                                         | Mount `/{ws}/api/v1/...`                            |
-| `internal/api/handler.go` → `HandlerFactory`                     | CRUD generic + dispatch action (termasuk `submit`)  |
-| `internal/api/file.go` → `HandleFileUpload`                      | Upload/download file field (7.17.1) → `ctx.storage` |
+| Kode                                                                                   | Peran                                               |
+| -------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| `cmd/formspec-registry/app-spec/spec/modules/registry/entities/*.yaml` → `spec.expose` | Sumber endpoint (actions yang terekspos)            |
+| `internal/api/generator.go` → `GenerateRoutes`                                         | Entity registry + expose → RouteDescriptor          |
+| `internal/api/router.go`                                                               | Mount `/{ws}/api/v1/...`                            |
+| `internal/api/handler.go` → `HandlerFactory`                                           | CRUD generic + dispatch action (termasuk `submit`)  |
+| `internal/api/file.go` → `HandleFileUpload`                                            | Upload/download file field (7.17.1) → `ctx.storage` |
 
 Mengubah perilaku publish (validasi, permission) = ubah **manifest entity**
 (`spec.expose`, permissions, state machine guards) — bukan menulis handler baru.

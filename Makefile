@@ -1,4 +1,4 @@
-.PHONY: all build clean test lint run-example dev web-deps web-dev web-build web-typecheck apply build-spa build-registry install
+.PHONY: all build clean test lint run-example registry-dev dev web-deps web-dev web-build web-typecheck apply build-spa build-registry install
 
 # Build all binaries
 all: build
@@ -16,11 +16,12 @@ build-formspec: build-spa
 	go build -o bin/formspec ./cmd/formspec
 
 # Build the registry binary with embedded SPA.
-# Syncs renderers/react-shadcn/dist → registry/web/dist for go:embed, so
-# formspec-registry serves the admin panel/portal without --web-dir.
+# Syncs renderers/react-shadcn/dist → cmd/formspec-registry/web/dist for
+# go:embed, so formspec-registry serves the admin panel/portal without
+# --web-dir.
 build-registry: build-spa
-	@mkdir -p registry/web/dist
-	cp -r renderers/react-shadcn/dist/* registry/web/dist/
+	@mkdir -p cmd/formspec-registry/web/dist
+	cp -r renderers/react-shadcn/dist/* cmd/formspec-registry/web/dist/
 	go build -o bin/formspec-registry ./cmd/formspec-registry
 
 build-sidecar:
@@ -70,6 +71,10 @@ dev:
 	@echo ""
 	@echo "Press Ctrl+C to stop all processes"
 	wait
+
+# Run the Module Registry in dev mode (config: registry/formspec-app.yaml)
+registry-dev:
+	scripts/run-registry.sh
 
 # Run specific example (legacy — use formspec apply instead)
 run-example:

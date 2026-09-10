@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # run-registry.sh — jalankan FormSpec Module Registry (cmd/formspec-registry)
-# dalam mode dev, dengan config dari registry/formspec-app.yaml.
+# dalam mode dev, dengan config dari cmd/formspec-registry/formspec-app.yaml.
 #
 # Config memberi:
-#   spec: registry/spec     → disk-backed spec → hot-reload watcher aktif
-#                             (edit registry/spec/*.yaml, tanpa restart)
+#   spec: cmd/formspec-registry/app-spec/spec
+#         → disk-backed spec → hot-reload watcher aktif
+#                             (edit cmd/formspec-registry/app-spec/spec/*.yaml,
+#                              tanpa restart)
 #   dsn:  sqlite:.formspec/registry.db
 #   jwt-secret              → sesi bertahan antar restart
 #
@@ -23,7 +25,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-CONFIG="registry/formspec-app.yaml"
+CONFIG="cmd/formspec-registry/formspec-app.yaml"
 [[ -f "$CONFIG" ]] || { echo "Error: $CONFIG tidak ditemukan" >&2; exit 1; }
 
 echo "▶ FormSpec Module Registry (dev)"

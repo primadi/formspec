@@ -318,7 +318,7 @@ kode.
 verify`, `formspec override adopt|diff|list`, marker aktivasi,
 > `formspec.lock`, alias Opsi B, boot-time enforcement, drift detection).
 > Registry (publish/install --from, ed25519) terimplementasikan di todo 13.3 —
-> dokumentasi: [`../../registry/README.md`](../../registry/README.md).
+> dokumentasi: [`../registry/05-self-hosting.md`](../registry/05-self-hosting.md).
 > Detail keputusan
 > [`docs_internal/technical-notes/FormSpec-Technical-Note-Module-Vendoring-Aktivasi.md`](../../technical-notes/FormSpec-Technical-Note-Module-Vendoring-Aktivasi.md);
 > status implementasi: [`../../plan/todo.md`](../../plan/todo.md) Fase 13.

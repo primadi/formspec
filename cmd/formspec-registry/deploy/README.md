@@ -13,14 +13,14 @@ Production deployment artifacts untuk `cmd/formspec-registry` (Plan C batch 2).
 ## Deploy
 
 ```bash
-docker build -t formspec-registry:latest -f registry/deploy/Dockerfile .
+docker build -t formspec-registry:latest -f cmd/formspec-registry/deploy/Dockerfile .
 kubectl create namespace formspec
 # JWT keys (production: asymmetric RS256/ES256 — HMAC hanya dev):
 kubectl create secret generic registry-jwt-keys -n formspec \
   --from-file=jwt.pub=keys/jwt.pub
 # Datastore valkey: gabungkan ke spec tree (lihat komentar file) atau embed
 # sebelum build image.
-kubectl apply -f registry/deploy/k8s/deployment.yaml
+kubectl apply -f cmd/formspec-registry/deploy/k8s/deployment.yaml
 ```
 
 ## Arsitektur

@@ -16,8 +16,8 @@
       "verticals/**/spec/**/*.yml"
     ],
     "./schemas/dist/latest/formspec.schema.json": [
-      "registry/spec/**/*.yaml",
-      "registry/spec/**/*.yml"
+      "cmd/formspec-registry/app-spec/spec/**/*.yaml",
+      "cmd/formspec-registry/app-spec/spec/**/*.yml"
     ]
   },
   "python-envs.defaultEnvManager": "ms-python.python:system",

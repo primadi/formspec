@@ -5,7 +5,7 @@
 ## Model Data
 
 Registry menyimpan tiga entity (didefinisikan sebagai manifest FormSpec biasa
-di `registry/spec/modules/registry/entities/`):
+di `cmd/formspec-registry/app-spec/spec/modules/registry/entities/`):
 
 | Entity          | Peran                               | Field kunci                                                                       |
 | --------------- | ----------------------------------- | --------------------------------------------------------------------------------- |
