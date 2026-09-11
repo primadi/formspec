@@ -23,10 +23,10 @@ build-formspec: build-spa
 # go:embed, so formspec-registry serves the admin panel/portal without
 # --web-dir.
 build-registry: build-spa
-        rm -rf cmd/formspec-registry/web/dist
-        @mkdir -p cmd/formspec-registry/web/dist
-        cp -r renderers/react-shadcn/dist/* cmd/formspec-registry/web/dist/
-        go build -tags formspec_spa -o bin/formspec-registry ./cmd/formspec-registry
+	rm -rf cmd/formspec-registry/web/dist
+	@mkdir -p cmd/formspec-registry/web/dist
+	cp -r renderers/react-shadcn/dist/* cmd/formspec-registry/web/dist/
+	go build -tags formspec_spa -o bin/formspec-registry ./cmd/formspec-registry
 build-sidecar:
 	@echo "✅ Build complete: bin/formspec"
 
@@ -181,6 +181,13 @@ release: build-spa
 		fi; \
 		rm -rf "$$out"; \
 	done
+	# SPA artifact (platform-agnostic) untuk `formspec spa install` — layout
+	# dist → spa/ + manifest versi. Platform-agnostic: satu file, tanpa os/arch.
+	@mkdir -p "$(RELEASE_DIR)/spa-staging"
+	cp -r cmd/formspec/dist "$(RELEASE_DIR)/spa-staging/spa"
+	printf '{"version": "%s"}\n' "$(VERSION)" > "$(RELEASE_DIR)/spa-staging/spa/manifest.json"
+	tar -czf "$(RELEASE_DIR)/spa-$(VERSION).tar.gz" -C "$(RELEASE_DIR)/spa-staging" spa
+	@rm -rf "$(RELEASE_DIR)/spa-staging"
 	@cd $(RELEASE_DIR) && shasum -a 256 *.tar.gz *.zip > SHA256SUMS.txt
 	@echo "✅ Release artifacts siap di $(RELEASE_DIR)/"
 	@ls -lh $(RELEASE_DIR)

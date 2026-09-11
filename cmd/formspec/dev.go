@@ -215,6 +215,11 @@ func runDev(args []string) {
 		cfg.WebDir = found
 		formaCfg.WebDir = cfg.WebDir
 		log.Printf("[formspec] SPA from folder: %s", cfg.WebDir)
+	} else if cache := spaCacheDir(); cache != "" {
+		// Cache hasil `formspec spa install` (artifact release versi yang sama
+		// dengan binary) — jalur UI untuk binary tanpa embedded SPA.
+		formaCfg.WebDir = cache
+		log.Printf("[formspec] SPA from cache: %s (formspec spa install)", cache)
 	} else {
 		// embed.FS stores files with their relative path (dist/index.html —
 		// or spa_stub/index.html when built without -tags formspec_spa).
@@ -572,7 +577,7 @@ func killDescendants(pid int) { devserver.KillDescendants(pid) }
 // Non-proxied (backend-handled) paths:
 //   - /{workspaceID}/api/* — REST API + meta + WebSocket
 //   - /health              — health check
-func viteSPAProxy(next http.Handler, viteTarget, workspaceID string) http.Handler {
+func viteSPAProxy(next http.Handler, viteTarget, _ string) http.Handler {
 	target, err := url.Parse(viteTarget)
 	if err != nil {
 		log.Fatalf("[formspec] invalid Vite target URL %q: %v", viteTarget, err)

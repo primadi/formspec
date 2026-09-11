@@ -7,7 +7,7 @@ kondisi:
 | Metode                  | Perlu Go? | Cocok untuk                      |
 | ----------------------- | --------- | -------------------------------- |
 | **1. Installer script** | ❌        | Semua developer (recommended)    |
-| **2. `go install`**     | ✅ ≥ 1.26 | Go developer                     |
+| **2. `go install`**     | ✅ ≥ 1.26 | CLI-only (Go developer)          |
 | **3. Manual download**  | ❌        | Environment tanpa curl/sandboxed |
 
 Binary yang terpasang selalu bernama **`formspec`** (tanpa versi). Versi yang
@@ -65,9 +65,9 @@ sh install.sh
 
 ---
 
-## Metode 2: `go install`
+## Metode 2: `go install` (CLI-only)
 
-Untuk developer yang sudah punya Go ≥ 1.26:
+Untuk developer yang sudah punya Go ≥ 1.26 dan bekerja di level CLI/impl:
 
 ```bash
 go install github.com/primadi/formspec/cmd/formspec@latest
@@ -77,10 +77,33 @@ Catatan: `go install` mendownload seluruh dependency dan meng-compile dari
 source — pertama kali butuh beberapa menit. Jalur ini memasang binary ke
 `$(go env GOPATH)/bin` — pastikan folder itu ada di PATH.
 
-Catatan UI: binary hasil `go install` tidak memuat embedded SPA (build ini
-tidak bisa menjalankan npm). Perintah CLI tetap lengkap; untuk UI lengkap
-pakai installer (Metode 1) atau `make build` di repo — atau saat `formspec dev`
-gunakan `--dev-ui` (Vite) / `--web-dir`.
+### Batasan: tanpa embedded UI
+
+`go install` hanya menjalankan compiler Go — tidak bisa menjalankan npm —
+sehingga binary ini **tidak memuat embedded SPA**. Semua perintah CLI tetap
+lengkap (`apply`, `validate`, `check`, `diff`, dll.), tapi UI menampilkan
+placeholder. Untuk UI lengkap:
+
+1. **`formspec spa install`** (recommended) — download & cache SPA artifact
+   dari GitHub Releases versi yang sama dengan binary (checksum terverifikasi
+   terhadap `SHA256SUMS.txt`), lalu `formspec dev` memakainya otomatis.
+2. Installer (Metode 1) — binary release sudah embed SPA penuh.
+3. Dari repo checkout: `make build` / `--dev-ui` / `--web-dir`.
+
+### `formspec spa` — UI untuk binary tanpa embedded SPA
+
+```bash
+formspec spa install    # download spa-<versi-binary>.tar.gz + verifikasi SHA256
+formspec spa path       # path cache (untuk scripting / --web-dir)
+formspec spa remove     # hapus cache versi ini (--all: semua versi)
+```
+
+- Cache: `~/.formspec/spa/<versi>/`. Idempotent — `--force` untuk download ulang.
+- Download selalu dari release **dengan versi yang sama** dengan binary
+  (`formspec version`), bukan `latest` — mencegah mismatch SPA ↔ CLI.
+- Binary build `dev` (go run / tanpa ldflags) akan menolak `spa install` —
+  pakai auto-detect repo atau `--dev-ui`.
+- Base URL bisa dioverride via `FORMSPEC_SPA_URL` (proxy/enterprise).
 
 ---
 

@@ -2,13 +2,20 @@
 #
 # git-push-and-tag.sh — jalur cepat release FormSpec dalam satu perintah.
 #
-# Menggabungkan langkah 2–4 dari docs/guides/releasing.md:
+# Pipeline lengkap build + publish (menggabungkan langkah 2–4 dari
+# docs/guides/releasing.md):
 #   0. Sinkronisasi versi contoh di docs + site (Install.tsx, install.md, dsb.)
 #      — auto replace versi lama → VERSION, commit, lalu tag menunjuk commit itu
+#   0.5. Generate + publish artifact yang di-commit:
+#        - JSON Schema: generate-schema + stage schemas/dist (publish-schemas.sh)
+#          → schemas.formspec.dev ter-deploy via git push (Cloudflare auto-build)
+#        - Kind docs: generate-kind-docs → docs/kind/
+#        Perubahan hasil regenerate di-commit OTOMATIS (tidak fail-fast lagi).
 #   1. Validasi: semver, working tree bersih, tag belum dipakai (lokal & remote)
-#   2. git tag <VERSION> + git push origin main --tags
-#   3. make release VERSION=<VERSION>        (cross-compile 6 target + packaging)
-#   4. make release-upload VERSION=<VERSION> (draft release via gh → review → Publish)
+#   2. go test ./...
+#   3. git tag <VERSION> + git push origin main --tags
+#   4. make release VERSION=<VERSION>        (cross-compile 6 target + packaging)
+#   5. make release-upload VERSION=<VERSION> (draft release via gh → review → Publish)
 #
 # Setelah selesai, release masih DRAFT. Review di halaman Releases lalu klik
 # Publish — installer user hanya melihat release yang sudah published.
@@ -17,8 +24,14 @@
 # API saat runtime — yang perlu di-replace hanya teks contoh/preview hardcoded.
 #
 # Contoh:
-#   scripts/git-push-and-tag.sh v0.0.2              # jalur normal
-#   scripts/git-push-and-tag.sh v0.0.2 --skip-tests # lewati go test (harus sudah hijau)
+#   scripts/git-push-and-tag.sh v0.0.2               # jalur normal (semua langkah)
+#   scripts/git-push-and-tag.sh v0.0.2 --skip-tests  # lewati go test (harus sudah hijau)
+#   scripts/git-push-and-tag.sh v0.0.2 --skip-schema --skip-doc-kind
+#                                                    # lewati generate + publish
+#                                                    # schema/kind docs (anggap fresh)
+#   scripts/git-push-and-tag.sh v0.0.2 --skip-release
+#                                                    # hanya tag + push, tanpa
+#                                                    # build/upload artifact release
 #
 # Semua guard yang sama tetap berlaku — "satu tag = satu release" di-enforce
 # oleh Makefile guard `release-upload`. Prosedur manual & rollback tetap di
@@ -29,16 +42,26 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
 usage() {
-  echo "usage: $0 <vX.Y.Z> [--skip-tests]" >&2
+  echo "usage: $0 <vX.Y.Z> [--skip-tests] [--skip-schema] [--skip-doc-kind] [--skip-release]" >&2
+  echo "  --skip-tests     lewati go test ./..." >&2
+  echo "  --skip-schema    lewati generate + publish JSON Schema (schemas/dist)" >&2
+  echo "  --skip-doc-kind  lewati generate kind reference docs (docs/kind)" >&2
+  echo "  --skip-release   lewati make release + release-upload (hanya tag + push)" >&2
   echo "  contoh: $0 v0.0.2" >&2
   exit 1
 }
 
 VERSION=""
 SKIP_TESTS=false
+SKIP_SCHEMA=false
+SKIP_DOC_KIND=false
+SKIP_RELEASE=false
 for arg in "$@"; do
   case "$arg" in
     --skip-tests) SKIP_TESTS=true ;;
+    --skip-schema) SKIP_SCHEMA=true ;;
+    --skip-doc-kind) SKIP_DOC_KIND=true ;;
+    --skip-release) SKIP_RELEASE=true ;;
     -h|--help) usage ;;
     -*) echo "❌ Flag tidak dikenal: $arg" >&2; usage ;;
     *)
@@ -92,13 +115,19 @@ if [ -n "$LATEST_TAG" ]; then
 fi
 
 command -v gh >/dev/null 2>&1 || {
-  echo "❌ 'gh' CLI tidak ditemukan — ikuti prosedur manual di docs/guides/releasing.md §4" >&2
-  exit 1
+  if [ "$SKIP_RELEASE" = false ]; then
+    echo "❌ 'gh' CLI tidak ditemukan — ikuti prosedur manual di docs/guides/releasing.md §4" >&2
+    exit 1
+  fi
+  echo "⚠️  'gh' CLI tidak ditemukan — lanjut tanpa upload release (--skip-release)" >&2
 }
-gh auth status >/dev/null 2>&1 || {
-  echo "❌ gh belum ter-auth — jalankan 'gh auth login' dulu (lihat docs/guides/releasing.md)" >&2
-  exit 1
-}
+if command -v gh >/dev/null 2>&1 && ! gh auth status >/dev/null 2>&1; then
+  if [ "$SKIP_RELEASE" = false ]; then
+    echo "❌ gh belum ter-auth — jalankan 'gh auth login' dulu (lihat docs/guides/releasing.md)" >&2
+    exit 1
+  fi
+  echo "⚠️  gh belum ter-auth — lanjut tanpa upload release (--skip-release)" >&2
+fi
 
 echo "▶️  Release $VERSION dari branch $BRANCH"
 
@@ -140,27 +169,49 @@ sync_version_refs() {
 }
 sync_version_refs
 
-# --- Langkah 0.5: preflight generated artifacts -------------------------------
-# schemas/ dan docs/kind/ di-generate dari pkg/spec dan DI-COMMIT. Regenerate
-# di sini dan fail-fast bila ada drift — release tidak boleh membawa schema
-# atau kind docs yang stale (mis. pkg/spec baru diubah tapi generator lupa
-# dijalankan). Bila gagal, perubahan regenerate dibiarkan di tree: commit dulu,
-# lalu jalankan ulang script.
-preflight_generated() {
-  echo "🧬 Regenerate schema + kind docs (cek drift)..."
-  make generate-schema >/dev/null
-  make generate-kind-docs >/dev/null
-  if [ -n "$(git status --porcelain -- schemas docs/kind)" ]; then
-    echo "❌ Generated artifacts stale — schemas/ atau docs/kind berubah setelah regenerate:" >&2
-    git status --short -- schemas docs/kind | head -10 >&2
-    echo "   → Commit perubahan itu (biasanya pkg/spec baru diubah), lalu jalankan ulang script." >&2
-    exit 1
-  fi
-  echo "🔖 Schema & kind docs fresh — tidak ada drift"
-}
-preflight_generated
+# --- Langkah 0.5: generate + publish artifact yang di-commit -------------------
+# schemas/ + schemas/dist/ dan docs/kind/ di-generate dari pkg/spec dan
+# DI-COMMIT. Berbeda dari dulu (fail-fast saat drift), script ini sekarang
+# regenerate lalu commit otomatis — release tidak boleh membawa schema/kind
+# docs stale, dan schemas.formspec.dev ter-deploy via git push (Cloudflare
+# auto-build). Flag --skip-schema / --skip-doc-kind melewati generate
+# (artikel diasumsikan sudah fresh).
 
-# --- Langkah 1: test -----------------------------------------------------------
+generate_and_commit() {
+  local label=$1; shift
+  local paths=()
+  for p in "$@"; do [ -e "$p" ] && paths+=("$p"); done
+  if [ -n "$(git status --porcelain -- "${paths[@]}")" ]; then
+    echo "🔖 Commit hasil regenerate $label"
+    git status --short -- "${paths[@]}"
+    git add -- "${paths[@]}"
+    git commit -m "chore: regenerate $label untuk $VERSION"
+  else
+    echo "🔖 $label fresh — tidak ada drift"
+  fi
+}
+
+if [ "$SKIP_SCHEMA" = false ]; then
+  test -f scripts/publish-schemas.sh || {
+    echo "❌ scripts/publish-schemas.sh tidak ditemukan" >&2
+    exit 1
+  }
+  echo "🧬 Generate + stage JSON Schema (publish-schemas.sh)..."
+  ./scripts/publish-schemas.sh
+  generate_and_commit "JSON Schema (schemas/ + schemas/dist/)" schemas
+else
+  echo "⏭️  --skip-schema: melewati generate + publish JSON Schema (anggap schemas/ fresh)"
+fi
+
+if [ "$SKIP_DOC_KIND" = false ]; then
+  echo "🧬 Generate kind reference docs..."
+  make generate-kind-docs >/dev/null
+  generate_and_commit "kind reference docs (docs/kind)" docs/kind
+else
+  echo "⏭️  --skip-doc-kind: melewati generate kind docs (anggap docs/kind fresh)"
+fi
+
+# --- Langkah 2: test -----------------------------------------------------------
 if [ "$SKIP_TESTS" = false ]; then
   echo "🧪 go test ./..."
   go test ./...
@@ -168,20 +219,26 @@ else
   echo "⏭️  --skip-tests: melewati go test (pastikan sudah dijalankan manual)"
 fi
 
-# --- Langkah 2: tag + push -----------------------------------------------------
+# --- Langkah 3: tag + push -----------------------------------------------------
 echo "🏷️  Tag $VERSION + push origin $BRANCH --tags"
 git tag "$VERSION"
 git push origin "$BRANCH" --tags
 
-# --- Langkah 3: build semua artifact -------------------------------------------
-echo "🏗️  make release VERSION=$VERSION"
-make release VERSION="$VERSION"
+# --- Langkah 4: build semua artifact -------------------------------------------
+if [ "$SKIP_RELEASE" = false ]; then
+  echo "🏗️  make release VERSION=$VERSION"
+  make release VERSION="$VERSION"
 
-# --- Langkah 4: upload draft release -------------------------------------------
-echo "📦 make release-upload VERSION=$VERSION"
-make release-upload VERSION="$VERSION"
+  # --- Langkah 5: upload draft release -----------------------------------------
+  echo "📦 make release-upload VERSION=$VERSION"
+  make release-upload VERSION="$VERSION"
 
-echo
-echo "✅ Draft release $VERSION dibuat."
-echo "   → Review & Publish: $(gh repo view --json url --jq .url)/releases"
-echo "   → Setelah publish, verifikasi: curl -fsSL https://formspec.dev/install.sh | sh && formspec version"
+  echo
+  echo "✅ Draft release $VERSION dibuat."
+  echo "   → Review & Publish: $(gh repo view --json url --jq .url)/releases"
+  echo "   → Setelah publish, verifikasi: curl -fsSL https://formspec.dev/install.sh | sh && formspec version"
+else
+  echo
+  echo "✅ Tag $VERSION ter-push (--skip-release: build/upload artifact dilewati)."
+  echo "   → Jalankan nanti: make release VERSION=$VERSION && make release-upload VERSION=$VERSION"
+fi

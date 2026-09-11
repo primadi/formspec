@@ -22,7 +22,7 @@
 | **Marketplace & signing**      | `module list\|install\|uninstall\|publish`, `sign`, `override adopt\|diff\|list`, `verify` |
 | **Scripting**                  | `script validate\|test`                                                                    |
 | **Emergency (Resource Plane)** | `freeze`, `rollback`, `lock workspace`                                                     |
-| **Ops**                        | `workspace create\|list\|delete`, `logs`                                                   |
+| **Ops**                        | `workspace create\|list\|delete`, `logs`, `spa install\|path\|remove`                      |
 
 ---
 
@@ -132,6 +132,30 @@ formspec schema clear                     # hapus seluruh cache
 
 Registry bisa di-override via env `FORMSPEC_SCHEMA_REGISTRY` atau
 `schema-registry:` di `formspec-app.yaml`.
+
+### `formspec spa install|path|remove`
+
+UI untuk binary yang dibangun tanpa embedded SPA (mis. hasil `go install` —
+`go install` hanya menjalankan compiler Go, tidak bisa menjalankan npm).
+Download artifact `spa-<versi>.tar.gz` dari GitHub Releases **versi yang sama
+dengan binary** (`formspec version` — bukan `latest`, mencegah mismatch SPA
+↔ CLI), verifikasi checksum terhadap `SHA256SUMS.txt` dari release yang sama,
+lalu extract ke cache `~/.formspec/spa/<versi>/`.
+
+```bash
+formspec spa install             # download + verify + extract ke cache
+formspec spa install --force     # download ulang meski sudah ada
+formspec spa path                # path cache (untuk scripting / --web-dir)
+formspec spa remove              # hapus cache versi ini
+formspec spa remove --all        # hapus semua versi cache
+```
+
+- Eksplisit, bukan auto-download — `formspec dev` tidak pernah mengunduh apa
+  pun di belakang layar; ia hanya MEMBACA cache yang sudah ada sebagai
+  fallback sebelum embedded FS.
+- Binary build `dev` menolak `spa install` (tidak ada tag rilis untuk
+  di-match) — gunakan auto-detect repo atau `--dev-ui`.
+- Base URL bisa di-override via env `FORMSPEC_SPA_URL`.
 
 ### `formspec check [--fix]`
 

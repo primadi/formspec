@@ -36,17 +36,10 @@
         npm). UI tetap tersedia lewat:
       </p>
       <ul>
-        <li>
-          <code>make build</code> / <code>make build-formspec</code> — build SPA
-          lalu embed via <code>-tags formspec_spa</code>
-        </li>
-        <li>
-          <code>formspec dev --dev-ui</code> — proxied ke Vite dev server
-        </li>
-        <li>
-          <code>formspec dev --web-dir &lt;folder&gt;</code> — serve SPA dari
-          folder
-        </li>
+        <li><code>formspec spa install</code> — download & cache SPA dari GitHub Releases versi binary ini</li>
+        <li><code>make build</code> / <code>make build-formspec</code> — build SPA lalu embed via <code>-tags formspec_spa</code></li>
+        <li><code>formspec dev --dev-ui</code> — proxied ke Vite dev server (butuh repo)</li>
+        <li><code>formspec dev --web-dir &lt;folder&gt;</code> — serve SPA dari folder</li>
       </ul>
     </main>
   </body>
