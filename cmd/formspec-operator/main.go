@@ -33,9 +33,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	formspecv1alpha1 "github.com/primadi/formspec/internal/operator/api/v1alpha1"
-	formspeccontroller "github.com/primadi/formspec/internal/operator/controller"
-	"github.com/primadi/formspec/internal/operator/report"
+	formspecv1alpha1 "github.com/primadi/formspec/cmd/formspec-operator/api/v1alpha1"
+	formspeccontroller "github.com/primadi/formspec/cmd/formspec-operator/controller"
+	"github.com/primadi/formspec/cmd/formspec-operator/report"
 )
 
 var (

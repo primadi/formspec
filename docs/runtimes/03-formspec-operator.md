@@ -11,15 +11,15 @@
 
 ## 1. Fitur
 
-| Fitur | Deskripsi |
-|---|---|
-| **Workspace Controller** | Reconcile `Workspace` CRD → Deployment + Service + Secret + ConfigMap (+HPA jika auto-scaling) |
-| **Datastore Controller** | Reconcile `Datastore` CRD → validasi endpoint, simpan kredensial sebagai Secret, daftarkan ke registry cluster |
-| **ResourceClaim Controller** | Reconcile `ResourceClaim` CRD → verifikasi signature + `allowedTenants`, inject kredensial atau set status `Denied` |
-| **Scale-to-zero per ClusterClass** | `minReplicas`/`scaleToZero` dari ClusterClass diterapkan ke Deployment (D-ARCH-31 — lihat `docs/architecture/05-failover.md` §3.2) |
-| **Rolling restart saat binary handler berubah** | Baca `deploy_status: restart_required` dari Cluster Control, patch annotation pod template untuk trigger rolling restart |
-| **Node labeling awareness** | Placement pod via `nodeSelector`/`nodeAffinity` berdasarkan label `formspec.dev/*` |
-| **Health & metrics reporting** | Lapor node health (15 detik) dan workspace status (on-change) ke Cluster Control |
+| Fitur                                           | Deskripsi                                                                                                                          |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| **Workspace Controller**                        | Reconcile `Workspace` CRD → Deployment + Service + Secret + ConfigMap (+HPA jika auto-scaling)                                     |
+| **Datastore Controller**                        | Reconcile `Datastore` CRD → validasi endpoint, simpan kredensial sebagai Secret, daftarkan ke registry cluster                     |
+| **ResourceClaim Controller**                    | Reconcile `ResourceClaim` CRD → verifikasi signature + `allowedTenants`, inject kredensial atau set status `Denied`                |
+| **Scale-to-zero per ClusterClass**              | `minReplicas`/`scaleToZero` dari ClusterClass diterapkan ke Deployment (D-ARCH-31 — lihat `docs/architecture/05-failover.md` §3.2) |
+| **Rolling restart saat binary handler berubah** | Baca `deploy_status: restart_required` dari Cluster Control, patch annotation pod template untuk trigger rolling restart           |
+| **Node labeling awareness**                     | Placement pod via `nodeSelector`/`nodeAffinity` berdasarkan label `formspec.dev/*`                                                 |
+| **Health & metrics reporting**                  | Lapor node health (15 detik) dan workspace status (on-change) ke Cluster Control                                                   |
 
 ---
 
@@ -84,21 +84,21 @@ ResourceClaim Created/Updated:
 
 Mengikuti konvensi standar controller-runtime:
 
-| Endpoint | Fungsi |
-|---|---|
-| `GET /healthz` | Liveness probe operator (K8s) |
-| `GET /readyz` | Readiness probe operator |
+| Endpoint       | Fungsi                                                                       |
+| -------------- | ---------------------------------------------------------------------------- |
+| `GET /healthz` | Liveness probe operator (K8s)                                                |
+| `GET /readyz`  | Readiness probe operator                                                     |
 | `GET /metrics` | Prometheus metrics (reconcile count, error rate, queue depth per controller) |
 
 ### 3.2 Kontrak dengan Cluster Control
 
 Operator adalah **klien** dari `formspec-ctl --mode=cluster` (lihat `01-formspec-ctl.md`). Kontrak pelaporan (desain diusulkan — belum final di plane protocol spec):
 
-| Arah | Endpoint (diusulkan) | Frekuensi | Isi |
-|---|---|---|---|
-| Operator → Cluster Control | `POST /v1/node-health` | 15 detik | Status per node (healthy/degraded), workspace count, CPU/mem |
-| Operator → Cluster Control | `POST /v1/workspace-status` | On-change | Status Deployment per workspace (Ready/Progressing/Degraded/restart_required consumed) |
-| Cluster Control → Operator | (pull, bukan push) `GET /v1/snapshot` per workspace, via pod itu sendiri | — | Operator tidak pull snapshot — itu tanggung jawab pod (`formspec-resource`/`formspec-sidecar`), bukan operator |
+| Arah                       | Endpoint (diusulkan)                                                     | Frekuensi | Isi                                                                                                            |
+| -------------------------- | ------------------------------------------------------------------------ | --------- | -------------------------------------------------------------------------------------------------------------- |
+| Operator → Cluster Control | `POST /v1/node-health`                                                   | 15 detik  | Status per node (healthy/degraded), workspace count, CPU/mem                                                   |
+| Operator → Cluster Control | `POST /v1/workspace-status`                                              | On-change | Status Deployment per workspace (Ready/Progressing/Degraded/restart_required consumed)                         |
+| Cluster Control → Operator | (pull, bukan push) `GET /v1/snapshot` per workspace, via pod itu sendiri | —         | Operator tidak pull snapshot — itu tanggung jawab pod (`formspec-resource`/`formspec-sidecar`), bukan operator |
 
 > **Catatan desain:** endpoint di atas belum dispesifikasikan secara normatif di `docs/spec/platform/05-plane-protocol.md` (yang baru mendefinisikan kontrak Region↔Cluster↔Resource, bukan Operator↔Cluster). Ini perlu ditambahkan sebagai ekstensi wire protocol saat operator mulai dibangun.
 
@@ -106,12 +106,12 @@ Operator adalah **klien** dari `formspec-ctl --mode=cluster` (lihat `01-formspec
 
 Skema lengkap ada di `docs/architecture/06-k8s-operator.md` §3 — ringkasan field penting untuk konteks reconciler:
 
-| CRD | Field kunci | Status subresource |
-|---|---|---|
-| `ClusterClass` | `sla`, `nodeType`, `maxWorkspaces`, `scaling.{minReplicas,scaleToZero}`, `pricing` | — (tidak punya status, murni config) |
-| `Workspace` | `owner`, `region`, `clusterClass`, `environment`, `resources`, `datastores`, `cache` | `conditions: [Ready, Progressing, Degraded]`, `phase` |
-| `Datastore` | `driver`, `endpointSecretRef`, `allowedTenants`, `owner`, `capacity` | `conditions: [Validated, Denied]` |
-| `ResourceClaim` | `datastore`, `workspace`, `permission`, `grantedBy`, `signature` | `conditions: [Ready, Denied]` |
+| CRD             | Field kunci                                                                          | Status subresource                                    |
+| --------------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------- |
+| `ClusterClass`  | `sla`, `nodeType`, `maxWorkspaces`, `scaling.{minReplicas,scaleToZero}`, `pricing`   | — (tidak punya status, murni config)                  |
+| `Workspace`     | `owner`, `region`, `clusterClass`, `environment`, `resources`, `datastores`, `cache` | `conditions: [Ready, Progressing, Degraded]`, `phase` |
+| `Datastore`     | `driver`, `endpointSecretRef`, `allowedTenants`, `owner`, `capacity`                 | `conditions: [Validated, Denied]`                     |
+| `ResourceClaim` | `datastore`, `workspace`, `permission`, `grantedBy`, `signature`                     | `conditions: [Ready, Denied]`                         |
 
 ### 3.4 RBAC yang Dibutuhkan
 
@@ -123,7 +123,8 @@ rules:
     resources: ["workspaces", "datastores", "resourceclaims", "clusterclasses"]
     verbs: ["get", "list", "watch", "update", "patch"]
   - apiGroups: ["formspec.dev"]
-    resources: ["workspaces/status", "datastores/status", "resourceclaims/status"]
+    resources:
+      ["workspaces/status", "datastores/status", "resourceclaims/status"]
     verbs: ["update", "patch"]
   - apiGroups: ["apps"]
     resources: ["deployments"]
@@ -136,7 +137,7 @@ rules:
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: ["coordination.k8s.io"]
     resources: ["leases"]
-    verbs: ["get", "list", "watch", "create", "update"]  # leader election
+    verbs: ["get", "list", "watch", "create", "update"] # leader election
 ```
 
 Secret read/write sengaja dibatasi ke namespace workspace masing-masing lewat scoping RBAC per-namespace jika model multi-namespace dipakai (satu namespace per workspace) — keputusan ini perlu difinalkan bersama desain namespace-per-workspace vs shared-namespace.
@@ -168,14 +169,15 @@ metadata:
   name: formspec-operator
   namespace: formspec-system
 spec:
-  replicas: 2   # HA — leader election menentukan siapa aktif
+  replicas: 2 # HA — leader election menentukan siapa aktif
   template:
     spec:
       serviceAccountName: formspec-operator
       containers:
         - name: operator
-          image: registry.formspec.dev/formspec-operator:1.4.2   # closed source, image terpisah
-          args: ["--leader-elect", "--control-cluster-url=$(CONTROL_CLUSTER_URL)"]
+          image: registry.formspec.dev/formspec-operator:1.4.2 # closed source, image terpisah
+          args:
+            ["--leader-elect", "--control-cluster-url=$(CONTROL_CLUSTER_URL)"]
 ```
 
 ---
@@ -188,9 +190,9 @@ spec:
 
 ## 7. Status Implementasi Hari Ini
 
-**Implementasi awal sudah ada.** `cmd/formspec-operator` + `internal/operator` (controller-runtime, leader election via `--leader-elect`) mengimplementasikan:
+**Implementasi awal sudah ada.** `cmd/formspec-operator` (controller-runtime, leader election via `--leader-elect`) mengimplementasikan:
 
-- CRD Go types `formspec.dev/v1alpha1` (`internal/operator/api/v1alpha1`, deepcopy hand-written — repo tidak memakai controller-gen) + CRD YAML & RBAC manifests di `deploy/operator/`.
+- CRD Go types `formspec.dev/v1alpha1` (`cmd/formspec-operator/api/v1alpha1`, deepcopy hand-written — repo tidak memakai controller-gen) + CRD YAML & RBAC manifests di `deploy/operator/`.
 - `WorkspaceReconciler` (§2.3): Deployment (generic image via `--resource-image`, env `CONTROL_CLUSTER_URL`/`WORKSPACE_ID`, nodeSelector `formspec.dev/*`, anti-affinity saat `minReplicas >= 2`) + Service + ConfigMap + HPA (feature `auto-scaling`), injeksi kredensial dari ResourceClaim ber-status Ready, status conditions Ready/Progressing/Degraded. Delete via owner references; Secret sengaja tidak di-own (retained). Scale-to-zero: annotation `formspec.dev/idle: "true"` pada Workspace ber-class `scaleToZero` → 0 replicas.
 - `DatastoreReconciler`: validasi keberadaan Secret endpoint → conditions Validated/Denied.
 - `ResourceClaimReconciler` (§2.4): verifikasi ed25519 (`spec.ownerPublicKey` hex di Datastore, pesan kanonik `datastore|workspace|permission|grantedBy|grantedAt`) + cek `allowedTenants` → Ready/Denied. `--insecure-skip-signature-verify` untuk dev.
@@ -210,9 +212,9 @@ spec:
 
 ## 8. References
 
-| Dokumen | Isi |
-|---|---|
-| `docs/architecture/06-k8s-operator.md` | Skema CRD lengkap, topologi K8s, node labeling |
-| `docs/architecture/05-failover.md` | Model workspace↔pod (1 Deployment per workspace), scale-to-zero |
-| `docs/architecture/04-resource-registration.md` | Lifecycle registrasi resource (Datastore/node) |
-| `docs/runtimes/01-formspec-ctl.md` | Sisi Cluster Control yang jadi lawan bicara Operator |
+| Dokumen                                         | Isi                                                             |
+| ----------------------------------------------- | --------------------------------------------------------------- |
+| `docs/architecture/06-k8s-operator.md`          | Skema CRD lengkap, topologi K8s, node labeling                  |
+| `docs/architecture/05-failover.md`              | Model workspace↔pod (1 Deployment per workspace), scale-to-zero |
+| `docs/architecture/04-resource-registration.md` | Lifecycle registrasi resource (Datastore/node)                  |
+| `docs/runtimes/01-formspec-ctl.md`              | Sisi Cluster Control yang jadi lawan bicara Operator            |

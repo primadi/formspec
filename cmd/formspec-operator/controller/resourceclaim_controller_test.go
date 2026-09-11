@@ -13,7 +13,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	formspecv1alpha1 "github.com/primadi/formspec/internal/operator/api/v1alpha1"
+	formspecv1alpha1 "github.com/primadi/formspec/cmd/formspec-operator/api/v1alpha1"
 )
 
 func newTestScheme(t *testing.T) *runtime.Scheme {

@@ -10,7 +10,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 
-	formspecv1alpha1 "github.com/primadi/formspec/internal/operator/api/v1alpha1"
+	formspecv1alpha1 "github.com/primadi/formspec/cmd/formspec-operator/api/v1alpha1"
 )
 
 func intstrFromInt(port int) intstr.IntOrString {

@@ -19,7 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	formspecv1alpha1 "github.com/primadi/formspec/internal/operator/api/v1alpha1"
+	formspecv1alpha1 "github.com/primadi/formspec/cmd/formspec-operator/api/v1alpha1"
 )
 
 // NodeHealthInterval is the node reporting cadence
