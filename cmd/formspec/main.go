@@ -165,6 +165,5 @@ func usage() {
 	fmt.Fprintf(os.Stderr, "  spa                 Download & cache the SPA UI (install/path/remove)\n")
 	fmt.Fprintf(os.Stderr, "  version             Print the binary version\n")
 	fmt.Fprintf(os.Stderr, "\nNot yet implemented (see docs/cli-tools/01-formspec-cli.md):\n")
-	fmt.Fprintf(os.Stderr, "  saga, module, sign, script,\n")
-	fmt.Fprintf(os.Stderr, "  freeze, rollback, lock, workspace\n")
+	fmt.Fprintf(os.Stderr, "  saga, script, freeze, rollback, lock\n")
 }

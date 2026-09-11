@@ -17,7 +17,7 @@ build-formspec: build-spa
 	rm -rf cmd/formspec/dist
 	@mkdir -p cmd/formspec/dist
 	cp -r renderers/react-shadcn/dist/* cmd/formspec/dist/
-	go build -tags formspec_spa -o bin/formspec ./cmd/formspec
+	go build -tags formspec_spa -ldflags "-X main.version=$(VERSION)" -o bin/formspec ./cmd/formspec
 # Build the registry binary with embedded SPA.
 # Syncs renderers/react-shadcn/dist → cmd/formspec-registry/web/dist for
 # go:embed, so formspec-registry serves the admin panel/portal without

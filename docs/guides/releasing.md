@@ -166,11 +166,52 @@ yang di-install user baru.
 
 ## Rollback rilis
 
-Tag tidak bisa dipakai ulang. Untuk memutar versi user kembali:
+Tag **published** tidak bisa dipakai ulang — installer user bisa saja sudah
+mengunduh artifact dari tag tersebut (URL download meng-embed tag), sehingga
+retag membuat artifact yang sudah disebar tidak lagi cocok. Untuk memutar versi
+user kembali:
 
-1. Hapus/retag artifact bila masih draft — atau rilis patch baru `v0.4.3`.
+1. Rilis patch baru `v0.4.3`, atau
 2. Minta user jalankan installer ulang dengan versi terdahulu:
    `FORMSPEC_VERSION=v0.4.1 sh -c "$(curl -fsSL https://formspec.dev/install.sh)"`.
+
+## Hapus tag pada release yang masih DRAFT
+
+Berbeda dengan published, tag pada release yang masih **draft** boleh dihapus
+dan dipakai ulang — draft tidak bisa diunduh user, jadi tidak ada artifact yang
+pernah tersebar dengan stamp versi itu:
+
+```bash
+gh release delete v0.0.5 --cleanup-tag --yes   # hapus draft release + tag remote
+
+git tag -d v0.0.5                             # hapus tag lokal
+```
+
+Setelah itu tag bisa dibuat ulang menunjuk commit mana pun dan di-upload ulang
+(`scripts/git-push-and-tag.sh` / `make release-upload`). Guard "versi tidak
+boleh mundur" tetap berlaku terhadap tag published tertinggi — tag yang
+dihapus tidak dihitung lagi karena sudah tidak ada di remote.
+
+Catatan: `gh release delete` tanpa `--cleanup-tag` hanya menghapus release-nya;
+tag git tetap ada dan harus dihapus terpisah (tag draft release tetap ter-push
+ke remote karena dibuat lewat `git push --tags` sebelum upload).
+
+### Kalau release yang dihapus sudah PUBLISHED
+
+Jangan. Konsekuensinya:
+
+1. **URL download tag itu 404** — user yang install dengan
+   `FORMSPEC_VERSION=<tag>` gagal. User yang sudah ter-install tidak terdampak
+   (binary lokal tetap jalan, stamp versinya tetap).
+2. **Label "Latest" berpindah bila yang dihapus adalah latest** — GitHub
+   memilih release published yang _terakhir di-publish_ (bukan semver
+   tertinggi), jadi user baru bisa ter-downgrade.
+3. **Nomor versi jadi tidak bisa dipercaya** — bila tag ikut dihapus dan
+   dipakai ulang, dua artifact berbeda pernah beredar dengan stamp versi sama;
+   guard `release-upload` juga lolos lagi sehingga upload ulang tidak
+   terdeteksi. Anggap nomor versi yang pernah published "terbakar": jika
+   artifact-nya bermasalah, hapus tag+release lalu rilis versi **lebih
+   tinggi** — jangan pakai ulang nomornya.
 
 ## Catatan versi di mesin user
 
