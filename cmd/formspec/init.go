@@ -3,8 +3,9 @@
 //
 // It also extracts embedded AI skills (ai_skills/*) into .agents/skills/
 // so that AI coding agents can assist with FormSpec app development, and writes
-// the JSON Schema files (schemas/) + .vscode/settings.json (yaml.schemas)
-// so the YAML editor gets autocomplete and validation for FormSpec manifests.
+// .vscode/settings.json (yaml.schemas) pointing directly at the registry
+// schema URL so the YAML editor gets autocomplete and validation for
+// FormSpec manifests without downloading schemas/ at scaffold time.
 //
 // Agent instructions are written to AGENTS.md (tool-agnostic standard, read by
 // Copilot, Codex, Cursor, Gemini CLI, etc.) plus a thin pointer at
@@ -30,12 +31,16 @@ import (
 	"strings"
 
 	formspec "github.com/primadi/formspec"
-	"github.com/primadi/formspec/internal/schemaregistry"
 )
 
 // bt is a placeholder for backtick (`) in raw string literals.
 // Replaced with actual backtick before writing files.
 const bt = "\x60"
+
+// schemaURL is the root FormSpec JSON Schema served by the schema registry.
+// init wires it directly into .vscode/settings.json (yaml.schemas) — no
+// local schemas/ download needed at scaffold time.
+const schemaURL = "https://schemas.formspec.dev/v1/formspec.schema.json"
 
 func runInit(args []string) {
 	fs := flag.NewFlagSet("init", flag.ExitOnError)
@@ -52,8 +57,8 @@ func runInit(args []string) {
 		fmt.Fprintf(os.Stderr, "  - formspec-app.yaml configuration\n")
 		fmt.Fprintf(os.Stderr, "  - spec/apps/<module>.yaml — kind: App scaffold (with default confirm dialogs)\n")
 		fmt.Fprintf(os.Stderr, "  - spec/workspaces/<module>.yaml — kind: Workspace seed\n")
-		fmt.Fprintf(os.Stderr, "  - schemas/ with JSON Schema for YAML editor validation\n")
 		fmt.Fprintf(os.Stderr, "  - .vscode/settings.json registering yaml.schemas\n")
+		fmt.Fprintf(os.Stderr, "    → yaml.schemas points to %s (no local schemas/ copy)\n", schemaURL)
 		fmt.Fprintf(os.Stderr, "  - .agents/skills/ with AI skills for coding agents\n")
 		fmt.Fprintf(os.Stderr, "  - AGENTS.md (+ .github/copilot-instructions.md pointer)\n\n")
 		fmt.Fprintf(os.Stderr, "Flags:\n")
@@ -237,28 +242,22 @@ Thumbs.db
 		os.Exit(1)
 	}
 
-	// Fetch JSON Schema files from the registry into schemas/ (editor autocomplete).
-	fmt.Fprintf(os.Stderr, "Fetching JSON Schema (registry)...\n")
-	if err := fetchSchemas(targetDir); err != nil {
-		fmt.Fprintf(os.Stderr, "  ⚠️  cannot fetch schemas: %v\n", err)
-		fmt.Fprintf(os.Stderr, "     Project tetap ter-scaffold — jalankan ulang saat online atau\n")
-		fmt.Fprintf(os.Stderr, "     gunakan \"formspec schema fetch v1\" untuk autocomplete editor (schemas/ dilewati).\n")
-	}
-
 	// Register schemas for the YAML editor (.vscode/settings.json).
+	// yaml.schemas points directly at the registry URL — no local schemas/
+	// copy is needed (the root schema is self-contained via $defs).
 	// Only write if missing — never clobber existing editor settings.
 	settingsPath := filepath.Join(targetDir, ".vscode", "settings.json")
 	if _, err := os.Stat(settingsPath); os.IsNotExist(err) {
-		writeFile(".vscode/settings.json", `{
+		writeFile(".vscode/settings.json", fmt.Sprintf(`{
   "yaml.schemas": {
-    "schemas/formspec.schema.json": ["spec/**/*.yaml", "spec/**/*.yml"]
+    "%s": ["spec/**/*.yaml", "spec/**/*.yml"]
   }
 }
-`)
-		fmt.Fprintf(os.Stderr, "  ✓ .vscode/settings.json (yaml.schemas)\n")
+`, schemaURL))
+		fmt.Fprintf(os.Stderr, "  ✓ .vscode/settings.json (yaml.schemas → %s)\n", schemaURL)
 	} else {
 		fmt.Fprintf(os.Stderr, "  ⚠️  .vscode/settings.json already exists — add yaml.schemas manually:\n")
-		fmt.Fprintf(os.Stderr, "     \"yaml.schemas\": {\"schemas/formspec.schema.json\": [\"spec/**/*.yaml\", \"spec/**/*.yml\"]}\n")
+		fmt.Fprintf(os.Stderr, "     \"yaml.schemas\": {\"%s\": [\"spec/**/*.yaml\", \"spec/**/*.yml\"]}\n", schemaURL)
 	}
 
 	// Optional sidecar files
@@ -341,8 +340,8 @@ console.log("FormSpec sidecar ready: " + formspec.moduleName);
 	fmt.Println("  > buat formspec app untuk inventory management")
 	fmt.Println()
 	fmt.Println("YAML editor:")
-	fmt.Println("  schemas/ + .vscode/settings.json (yaml.schemas) are ready —")
-	fmt.Println("  spec/**/*.yaml gets autocomplete + validation in VS Code.")
+	fmt.Println("  .vscode/settings.json (yaml.schemas) is ready — spec/**/*.yaml gets")
+	fmt.Println("  autocomplete + validation in VS Code via " + schemaURL + ".")
 }
 
 func makeAgentsInstructions(projectName string) string {
@@ -466,53 +465,9 @@ func extractSkills(targetDir string) error {
 	})
 }
 
-// fetchSchemas fetches the v1 schema set from the registry into the target
-// project's schemas/ dir, so the YAML editor gets autocomplete + validation
-// (see .vscode/settings.json -> yaml.schemas). The registry client first caches
-// the schemas locally (os.UserCacheDir()/formspec/schemas) so later runs — and
-// `formspec validate` — work without network.
-func fetchSchemas(targetDir string) error {
-	reg := schemaregistry.New(schemaRegistryBaseURL())
-	if err := reg.EnsureFull("v1", false); err != nil {
-		return err
-	}
-	srcDir, err := reg.VersionDir("v1")
-	if err != nil {
-		return err
-	}
-	return copySchemas(srcDir, filepath.Join(targetDir, "schemas"))
-}
-
-// copySchemas copies formspec.schema.json + kinds/*.schema.json from srcDir
-// into destDir, preserving the layout expected by .vscode/settings.json.
-func copySchemas(srcDir, destDir string) error {
-	files := []string{"formspec.schema.json"}
-	kindEntries, err := os.ReadDir(filepath.Join(srcDir, "kinds"))
-	if err != nil {
-		return fmt.Errorf("read cached kinds: %w", err)
-	}
-	for _, e := range kindEntries {
-		if !e.IsDir() && strings.HasSuffix(e.Name(), ".schema.json") {
-			files = append(files, "kinds/"+e.Name())
-		}
-	}
-	for _, rel := range files {
-		src := filepath.Join(srcDir, rel)
-		dst := filepath.Join(destDir, rel)
-		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-			return fmt.Errorf("mkdir %s: %w", filepath.Dir(dst), err)
-		}
-		data, err := os.ReadFile(src)
-		if err != nil {
-			return fmt.Errorf("read %s: %w", rel, err)
-		}
-		if err := os.WriteFile(dst, data, 0o644); err != nil {
-			return fmt.Errorf("write %s: %w", rel, err)
-		}
-		fmt.Fprintf(os.Stderr, "  ✓ schemas/%s\n", rel)
-	}
-	return nil
-}
+// fetchSchemas was removed: init no longer downloads the schema set.
+// yaml.schemas points directly at the registry URL (schemaURL) so the YAML
+// editor gets autocomplete + validation without a local schemas/ copy.
 
 // printTree prints a directory tree for display after scaffolding.
 func printTree(root string, indent string) {

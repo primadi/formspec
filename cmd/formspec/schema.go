@@ -3,8 +3,9 @@
 // Schemas are fetched from the registry (default https://schemas.formspec.dev,
 // overridable via FORMSPEC_SCHEMA_REGISTRY or formspec-app.yaml schema-registry:)
 // and cached under os.UserCacheDir()/formspec/schemas/<version>. `formspec
-// validate` and `formspec init` reuse the same cache — a new spec version never
-// requires a CLI reinstall.
+// validate` reuses the same cache — a new spec version never requires a CLI
+// reinstall. (`formspec init` no longer fetches schemas; it points
+// .vscode/settings.json straight at the registry URL.)
 //
 // Usage:
 //
@@ -18,9 +19,44 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/primadi/formspec/internal/schemaregistry"
 )
+
+// copySchemas copies formspec.schema.json + kinds/*.schema.json from srcDir
+// into destDir, preserving the registry layout (used by `formspec schema
+// fetch --out ./schemas`). `formspec init` does NOT use this anymore — it
+// wires yaml.schemas straight to the registry URL instead.
+func copySchemas(srcDir, destDir string) error {
+	files := []string{"formspec.schema.json"}
+	kindEntries, err := os.ReadDir(filepath.Join(srcDir, "kinds"))
+	if err != nil {
+		return fmt.Errorf("read cached kinds: %w", err)
+	}
+	for _, e := range kindEntries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".schema.json") {
+			files = append(files, "kinds/"+e.Name())
+		}
+	}
+	for _, rel := range files {
+		src := filepath.Join(srcDir, rel)
+		dst := filepath.Join(destDir, rel)
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			return fmt.Errorf("mkdir %s: %w", filepath.Dir(dst), err)
+		}
+		data, err := os.ReadFile(src)
+		if err != nil {
+			return fmt.Errorf("read %s: %w", rel, err)
+		}
+		if err := os.WriteFile(dst, data, 0o644); err != nil {
+			return fmt.Errorf("write %s: %w", rel, err)
+		}
+		fmt.Fprintf(os.Stderr, "  ✓ schemas/%s\n", rel)
+	}
+	return nil
+}
 
 func runSchema(args []string) {
 	if len(args) == 0 {
