@@ -42,29 +42,19 @@ const METHODS: Record<string, Method[]> = {
       code: "github.com/primadi/formspec/releases",
     },
   ],
-  Linux: [
-    {
-      label: "Installer (recommended)",
-      note: "Tanpa sudo. Otomatis deteksi amd64/arm64, pasang di ~/.local/bin",
-      code: "curl -fsSL https://formspec.dev/install.sh | sh",
-    },
-    {
-      label: "Go install",
-      note: "Butuh Go ≥ 1.26 di mesin Anda",
-      code: "go install github.com/primadi/formspec/cmd/formspec@latest",
-    },
-    {
-      label: "Manual",
-      note: "Download .tar.gz dari GitHub Releases, ekstrak ke PATH",
-      code: "github.com/primadi/formspec/releases",
-    },
-  ],
 }
 
-const OS_TABS = ["macOS / Linux", "Windows", "Linux"]
+const OS_TABS = ["macOS / Linux", "Windows"]
+
+// Auto-pilih tab default dari OS browser: pengunjung Windows langsung
+// melihat perintah PowerShell tanpa klik tab.
+function detectDefaultTab(): string {
+  if (typeof window === "undefined") return OS_TABS[0]
+  return /windows/i.test(navigator.userAgent) ? "Windows" : OS_TABS[0]
+}
 
 export function Install() {
-  const [tab, setTab] = useState(OS_TABS[0])
+  const [tab, setTab] = useState(detectDefaultTab)
   const methods = METHODS[tab]
 
   return (
@@ -140,6 +130,20 @@ export function Install() {
               </pre>
             </div>
           </div>
+
+          {tab === "Windows" && (
+            <p className="mt-3 text-center text-xs text-zinc-500">
+              Di WSL atau Git Bash, pakai perintah tab{" "}
+              <button
+                type="button"
+                onClick={() => setTab("macOS / Linux")}
+                className="text-mint-300 underline underline-offset-2"
+              >
+                macOS / Linux
+              </button>
+              .
+            </p>
+          )}
 
           {/* Alternatif lain */}
           <div className="mt-6 grid gap-4 sm:grid-cols-2">

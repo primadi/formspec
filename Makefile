@@ -1,4 +1,4 @@
-.PHONY: all build clean test lint run-example registry-dev dev web-deps web-dev web-build web-typecheck apply build-spa build-registry install release release-upload
+.PHONY: all build clean test lint run-example registry-dev dev web-deps web-dev web-build web-typecheck site-deps site-dev site-build site-typecheck apply build-spa build-registry install release release-upload
 
 # Build all binaries
 all: build
@@ -217,6 +217,24 @@ web-typecheck:
 
 web-build: web-typecheck
 	cd renderers/react-shadcn && npm run build
+
+# Landing page site/ (formspec.dev) — React + Vite + Cloudflare.
+# Usage:
+#   make site-dev           # dev server http://localhost:5198/
+#   make site-dev PORT=5300 # port custom
+PORT ?= 5198
+
+site-dev:
+	cd site && npx vite --port $(PORT) --strictPort --host
+
+site-deps:
+	cd site && npm install
+
+site-typecheck:
+	cd site && npx tsc -b --noEmit
+
+site-build: site-typecheck
+	cd site && npm run build
 
 # Format code
 fmt:
