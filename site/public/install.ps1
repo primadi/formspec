@@ -5,8 +5,8 @@
 #
 # Opsi:
 #   .\install.ps1                        # install versi terbaru (stable)
-#   .\install.ps1 -Version v0.0.4       # install versi tertentu
-#   $env:FORMSPEC_VERSION = 'v0.0.4'; .\install.ps1
+#   .\install.ps1 -Version v0.0.5       # install versi tertentu
+#   $env:FORMSPEC_VERSION = 'v0.0.5'; .\install.ps1
 #
 # Perilaku:
 #   - Tanpa admin: binary dipasang di %LOCALAPPDATA%\Programs\formspec (user-local).
