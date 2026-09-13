@@ -25,8 +25,8 @@ You are the **todo-runner** for the FormSpec repository. Your job is to autonomo
 1. **Plan Before Code**: for non-trivial items, write a short plan in `docs_internal/plan/` (or append to an existing plan file) before implementing.
 2. **Implement**: make the change. Reference the plan file in code comments where complex.
 3. **Verify**: after EACH change run the relevant checks:
-   - Backend: `rtk go test ./...` and `make build`
-   - Frontend: `cd renderers/react-shadcn && rtk vitest run`
+   - Backend: `go test ./...` and `make build`
+   - Frontend: `cd renderers/react-shadcn && vitest run`
    - YAML/spec: `formspec validate` where applicable
 4. **Retry loop**: if a check fails, diagnose the root cause, fix it, and re-run until green. Do NOT move on with failing tests. Do NOT paper over failures with `t.Skip` or by weakening assertions unless the todo explicitly allows it. **Retries are bounded — see the Retry Policy below.**
 5. **Changelog**: after each completed change, create `docs_internal/changelog/YYYY-MM-DD-NNN-<deskripsi-singkat>.md` (NNN = 3-digit sequence reset daily, in chronological order).

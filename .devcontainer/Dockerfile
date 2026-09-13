@@ -12,20 +12,9 @@ FROM mcr.microsoft.com/devcontainers/go:2-1.26-trixie
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     && apt-get -y install --no-install-recommends sqlite3 php-cli php-curl composer
 
-# Install rtk (Rust Token Killer) — CLI proxy that compresses shell output
-# before it reaches LLM agents (Claude Code / Copilot hook).
-#   - Installed as the `vscode` user so the binary lands in ~/.local/bin,
-#     which is auto-added to PATH by ~/.profile in the base image.
-#   - Without RTK_VERSION the installer fetches the latest release (see rtk-ai/rtk releases).
-#   - rtk init -g (global hook) is NOT run here because /home/vscode state is
-#     ephemeral across container rebuilds. It runs via postCreateCommand instead
-#     so it re-initializes every time the container starts.
+# Install opencode CLI as the `vscode` user (non-fatal — network flakiness on
+# opencode.ai should not block build)
 USER vscode
-RUN curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/install.sh -o /tmp/rtk-install.sh \
-    && sh /tmp/rtk-install.sh \
-    && rm -f /tmp/rtk-install.sh
-
-# Install opencode CLI (non-fatal — network flakiness on opencode.ai should not block build)
 RUN curl -fsSL --retry 3 --retry-delay 5 --retry-max-time 30 https://opencode.ai/install | bash || echo "WARNING: opencode CLI install skipped (network error)"
 USER root
 

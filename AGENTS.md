@@ -359,21 +359,3 @@ Saat melakukan audit (membandingkan code terhadap spec atau todo):
 | Selesaikan gap              | Implementasi perbaikan sesuai workflow di atas                                  |
 | Gap selesai                 | Update changelog, dan update dokumen terkait (spec, plan, todo) jika dibutuhkan |
 | Gap tidak bisa diselesaikan | Catat sebagai deferred todo dengan alasan                                       |
-
-<!-- rtk-instructions v2 -->
-
-# RTK — Token-Optimized CLI
-
-**rtk** is a CLI proxy that filters and compresses command outputs, saving 60-90% tokens.
-Shell commands are auto-rewritten by the PreToolUse hook (`.github/hooks/rtk-rewrite.json` untuk Copilot, `rtk hook claude` untuk Claude Code) — no manual prefix needed.
-
-Meta commands (use directly):
-
-```bash
-rtk gain              # Token savings dashboard
-rtk gain --history    # Per-command savings history
-rtk discover          # Find missed rtk opportunities
-rtk proxy <cmd>       # Run raw (no filtering) but track usage
-```
-
-<!-- /rtk-instructions -->
