@@ -139,6 +139,10 @@ deps:
 #   make release VERSION=v1.2.3         # override manual
 #   make release-upload VERSION=v1.2.3  # upload dist/release/* ke GitHub Releases (draft)
 #
+# release-upload idempotent: boleh diulang. Bila upload terputus di tengah
+# (asset baru sebagian naik), jalankan perintah yang sama lagi — draft release
+# di-resume, asset yang sudah lengkap dilewati.
+#
 # Output: dist/release/formspec-<os>-<arch>.tar.gz|.zip + SHA256SUMS.txt
 # Prosedur lengkap (prasyarat, tag, upload, verifikasi): docs/guides/releasing.md
 # ---------------------------------------------------------------------------
@@ -192,15 +196,52 @@ release: build-spa
 	@echo "✅ Release artifacts siap di $(RELEASE_DIR)/"
 	@ls -lh $(RELEASE_DIR)
 
+# Create-or-resume: pembuatan draft dipisah dari upload asset supaya upload
+# bisa diulang. Release yang sudah PUBLISHED tetap ditolak ("satu tag = satu
+# release" — artifact sudah tersebar ke user, isinya tidak boleh berubah).
+# Asset di-upload satu per file (bukan paralel): progres lebih granular, dan
+# file yang sudah naik dengan ukuran sama dilewati saat target diulang.
 release-upload:
 	@test -n "$(VERSION)" || (echo "❌ Set VERSION, mis. make release-upload VERSION=v0.1.0 (jangan mengandalkan git describe — lihat docs/guides/releasing.md)" && exit 1)
 	@printf '%s' "$(VERSION)" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+' || (echo "❌ VERSION='$(VERSION)' bukan semver (format: v<major>.<minor>.patch>). Rilis pertama juga harus tag semver yang dipilih sadar." && exit 1)
 	@git rev-parse "$(VERSION)^{commit}" >/dev/null 2>&1 || (echo "❌ Tag $(VERSION) belum ada lokal — buat dulu: git tag $(VERSION) && git push origin $(VERSION)" && exit 1)
 	@command -v gh >/dev/null 2>&1 || (echo "❌ 'gh' CLI tidak ditemukan — upload manual via https://github.com/primadi/formspec/releases/new" && exit 1)
-	@if gh release view $(VERSION) --json tagName >/dev/null 2>&1; then \
-		echo "❌ Release $(VERSION) sudah ada di GitHub — satu tag = satu release. Pakai versi baru."; exit 1; \
-	fi
-	@gh release create $(VERSION) $(RELEASE_DIR)/* --draft --generate-notes
+	@test -d $(RELEASE_DIR) && ls $(RELEASE_DIR)/* >/dev/null 2>&1 || (echo "❌ $(RELEASE_DIR)/ kosong — jalankan 'make release VERSION=$(VERSION)' dulu" && exit 1)
+	@gh release upload --help 2>&1 | grep -q -- --clobber || (echo "❌ 'gh' terlalu tua: butuh >= 2.18 ('gh release upload --clobber') — upgrade gh atau upload manual" && exit 1)
+	@state="$$(gh release view $(VERSION) --json isDraft --jq '.isDraft' 2>/dev/null || echo missing)"; \
+	if [ "$$state" = "false" ]; then \
+		echo "❌ Release $(VERSION) sudah PUBLISHED di GitHub — satu tag = satu release. Pakai versi baru (lihat docs/guides/releasing.md §Rollback rilis)." >&2; \
+		exit 1; \
+	fi; \
+	if [ "$$state" = "true" ]; then \
+		echo "♻️  Draft release $(VERSION) sudah ada — resume upload (asset yang sudah lengkap dilewati)"; \
+	else \
+		echo "📦 Membuat draft release $(VERSION) (asset di-upload menyusul)..."; \
+		gh release create $(VERSION) --draft --generate-notes; \
+	fi; \
+	remote="$$(gh release view $(VERSION) --json assets --jq '.assets[] | "\(.name) \(.size)"')"; \
+	uploaded=0; skipped=0; \
+	for f in $(RELEASE_DIR)/*; do \
+		name="$$(basename "$$f")"; size="$$(wc -c < "$$f" | tr -d ' ')"; \
+		if printf '%s\n' "$$remote" | grep -qx "$$name $$size"; then \
+			printf '  ⏭️  %s (sudah ada, %s byte)\n' "$$name" "$$size"; skipped=$$((skipped + 1)); continue; \
+		fi; \
+		printf '  → %s ... ' "$$name"; \
+		if gh release upload $(VERSION) "$$f" --clobber >/dev/null 2>&1; then \
+			echo "OK"; uploaded=$$((uploaded + 1)); \
+		else \
+			echo "GAGAL"; \
+			echo "   Upload terputus sebagian — ulangi perintah yang sama untuk melanjutkan (asset yang sudah naik dilewati)." >&2; \
+			exit 1; \
+		fi; \
+	done; \
+	want=$$(ls $(RELEASE_DIR)/* | wc -l); got=$$(gh release view $(VERSION) --json assets --jq '.assets | length'); \
+	if [ "$$want" != "$$got" ]; then \
+		echo "❌ Asset di GitHub ($$got) != file di $(RELEASE_DIR)/ ($$want) — ulangi perintah ini untuk melengkapi." >&2; \
+		exit 1; \
+	fi; \
+	echo "✅ Draft release $(VERSION) lengkap: $$want asset ($$uploaded di-upload, $$skipped dilewati)"; \
+	echo "   → Review & Publish: $$(gh repo view --json url --jq '.url')/releases"
 
 # Frontend
 web-deps:

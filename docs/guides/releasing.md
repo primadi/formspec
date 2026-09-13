@@ -77,8 +77,9 @@ formspec version
 Catatan: repo tidak menyimpan file `VERSION` — angka versi di-stamp saat build
 dari tag (`-ldflags -X main.version=`), jadi tidak ada angka versi yang bisa
 stale di source code. `make release-upload` tanpa `VERSION=` pun otomatis pakai
-`git describe --tags`, dan guard-nya akan gagal cepat bila tag sudah dipakai
-(satu tag = satu release).
+`git describe --tags`, dan guard-nya menolak bila tag sudah punya release
+**published** (satu tag = satu release; draft yang belum lengkap justru
+di-resume — lihat §4).
 
 > **Status repo saat ini**: belum ada tag semver — satu-satunya tag adalah
 > `docs-pre-restructure-2026-07-15` (marker internal restrukturisasi docs,
@@ -145,14 +146,32 @@ Membuat **draft** release dengan semua artifact + `SHA256SUMS.txt` + generated
 notes. Review di halaman Releases (urutan, notes, checksum), lalu klik
 **Publish**.
 
-Guard `release-upload` mengecek apakah **release** dengan tag tersebut sudah
-ada di GitHub (bukan apakah tag sudah di-push — push tag di langkah 2 memang
-mendahului upload). Jadi tag yang sudah di-push tapi belum punya release tetap
-bisa di-upload ulang; yang diblokir adalah membuat release kedua untuk tag yang
-sama.
+Target ini **idempotent — boleh diulang**. Kalau upload macet atau terputus di
+tengah jalan (mis. baru sebagian asset yang naik), jalankan perintah yang sama
+lagi; tidak ada yang perlu dihapus lebih dulu:
 
-Tanpa `gh`: upload `dist/release/*` manual di
-`https://github.com/primadi/formspec/releases/new` — pilih tag di langkah 2.
+- Release **belum ada** → draft dibuat dulu (`--draft --generate-notes`, tanpa
+  asset), lalu asset di-upload menyusul.
+- Release **draft** sudah ada → upload dilanjutkan: asset yang ukurannya sudah
+  cocok di GitHub dilewati, sisanya di-upload ulang dengan
+  `gh release upload --clobber`.
+- Release sudah **published** → ditolak ("satu tag = satu release"): artifact
+  sudah bisa diunduh user lewat URL yang meng-embed tag, jadi isinya tidak boleh
+  berubah lagi — lihat §Rollback rilis.
+
+Upload dijalankan **satu file per file** (bukan paralel), jadi progresnya
+granular dan file yang gagal bisa diulang tanpa mengulang yang sudah naik. Bila
+satu asset gagal, target berhenti dengan pesan yang menyuruh mengulang perintah
+yang sama. Di akhir, jumlah asset di GitHub diverifikasi sama dengan jumlah file
+di `dist/release/`.
+
+Guard ini mengecek status **release**, bukan status tag (push tag di langkah 2
+memang mendahului upload) — jadi tag yang sudah di-push tapi belum punya
+release tetap bisa di-upload.
+
+`--clobber` baru ada di `gh` >= 2.18. Tanpa `gh` (atau `gh` terlalu tua): upload
+`dist/release/*` manual di `https://github.com/primadi/formspec/releases/new` —
+pilih tag di langkah 2, pilih **draft**, dan sertakan `SHA256SUMS.txt`.
 
 ## 5. Verifikasi pasca-publish (public sanity check)
 
@@ -177,9 +196,16 @@ user kembali:
 
 ## Hapus tag pada release yang masih DRAFT
 
-Berbeda dengan published, tag pada release yang masih **draft** boleh dihapus
-dan dipakai ulang — draft tidak bisa diunduh user, jadi tidak ada artifact yang
-pernah tersebar dengan stamp versi itu:
+Draft yang assetnya belum lengkap **tidak perlu** dihapus lebih dulu — cukup
+jalankan ulang `make release-upload VERSION=<tag>` dan upload dilanjutkan dari
+asset yang belum naik (§4).
+
+Menghapus draft diperlukan bila isi draft itu sendiri yang salah — mis. dist
+`dist/release/` sudah dibangun ulang dari commit berbeda sehingga ukuran asset
+tidak lagi cocok dan upload ulang justru mencampur dua build. Berbeda dengan
+published, tag pada release yang masih **draft** boleh dihapus dan dipakai
+ulang — draft tidak bisa diunduh user, jadi tidak ada artifact yang pernah
+tersebar dengan stamp versi itu:
 
 ```bash
 gh release delete v0.0.5 --cleanup-tag --yes   # hapus draft release + tag remote

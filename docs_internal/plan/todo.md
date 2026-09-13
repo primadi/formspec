@@ -1125,6 +1125,17 @@ Setup domain, landing, docs site, dan schema hosting. Referensi:
 | 12.16 Uji installer end-to-end di macOS + Windows (ARM64 included)                              | 🔲     | Setelah 12.15 — validasi PATH/checksum per OS                                      |
 | 12.17 Autodetect tab OS di section `#install` (via userAgent) + merge tab Linux → 2 tab         | ✅     | `site/src/components/Install.tsx` (changelog 2026-09-11-003)                       |
 
+> **Catatan 2026-09-13** — `make release-upload` sekarang idempotent: draft
+> release yang upload-nya terputus di tengah bisa dilanjutkan dengan menjalankan
+> perintah yang sama (asset yang sudah lengkap dilewati berdasarkan size, sisanya
+> `gh release upload --clobber`). Release yang sudah _published_ tetap ditolak
+> ("satu tag = satu release"). Implementasi: `Makefile` target `release-upload` +
+> `docs/guides/releasing.md` §4 — changelog
+> `docs_internal/changelog/2026-09-13-003-release-upload-resume.md`.
+>
+> Draft `v0.0.7` sudah dibuat dan lengkap (8 asset) — sisa 12.15: review lalu
+> klik **Publish** di GitHub Releases, kemudian lanjut 12.16.
+
 ## Fase 13: Module Registry & Vendoring (npm-like) 🚧 (2026-08-20, planned; 13.1–13.2 ✅, 13.3 sebagian ✅ 2026-08-28)
 
 **Goal**: Ekosistem module registry — `formspec module install/publish/list/uninstall`,

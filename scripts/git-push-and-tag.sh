@@ -16,6 +16,9 @@
 #   3. git tag <VERSION> + git push origin main --tags
 #   4. make release VERSION=<VERSION>        (cross-compile 6 target + packaging)
 #   5. make release-upload VERSION=<VERSION> (draft release via gh → review → Publish)
+#      Idempotent: kalau upload terputus di tengah, target yang sama bisa
+#      dijalankan ulang untuk resume (asset yang sudah lengkap dilewati).
+#      Release yang sudah PUBLISHED tetap ditolak — lihat docs/guides/releasing.md §4.
 #
 # Setelah selesai, release masih DRAFT. Review di halaman Releases lalu klik
 # Publish — installer user hanya melihat release yang sudah published.
@@ -230,6 +233,9 @@ if [ "$SKIP_RELEASE" = false ]; then
   make release VERSION="$VERSION"
 
   # --- Langkah 5: upload draft release -----------------------------------------
+  # Idempotent: bila upload terputus, lanjutkan langsung dengan
+  # `make release-upload VERSION=$VERSION` — script ini tidak bisa diulang dari
+  # awal karena guard tag di langkah 3 menolak tag yang sudah ada.
   echo "📦 make release-upload VERSION=$VERSION"
   make release-upload VERSION="$VERSION"
 
