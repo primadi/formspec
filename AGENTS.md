@@ -209,23 +209,24 @@ make clean       # Clean build artifacts
 
 ## Key Reference Files
 
-| Path                                                           | Isi                                                          |
-| -------------------------------------------------------------- | ------------------------------------------------------------ |
-| `docs/spec/01-overview.md`                                     | Visi, arsitektur, prinsip, 6 sources of inspiration          |
-| `docs/spec/02-core-basic.md`                                   | Core spec — minimal implementation yang harus dipenuhi       |
-| `docs/spec/03-core-extended.md`                                | Extended kinds — Workflow, Api, Webhook                      |
-| `docs/spec/04-control-plane.md`                                | Control Plane — Environment, Policy, signing, audit          |
-| `docs/spec/05-frontend.md`                                     | Frontend spec — 12 UI kinds, renderer contract, FormSpecExpr |
-| `docs/spec/06-plane-protocol.md`                               | Plane Protocol — komunikasi Control ↔ Resource               |
-| `docs/spec/07-marketplace.md`                                  | Marketplace spec — pricing, metering, licensing              |
-| `docs/spec/10-entity-extension.md`                             | Entity Extension — add fields to owned entities              |
-| `docs/spec/11-reference.md`                                    | Glossary & semua design decisions (D1–D48)                   |
-| `reff_docs/FormSpec-Foundation-Document-v2.0.md`               | Foundation doc — latar belakang, keputusan fundamental       |
-| `reff_docs/FormSpec-Technical-Note-DX-dan-Entity-Extension.md` | Technical note — DX dan entity extension                     |
-| `pkg/spec/entity.go`                                           | Go struct untuk Entity manifest                              |
-| `pkg/spec/frontend.go`                                         | Go struct untuk frontend kinds                               |
-| `pkg/spec/spec.go`                                             | Enum dan shared types                                        |
-| `internal/manifest/loader.go`                                  | Manifest loader — load, parse, validate YAML                 |
+| Path                                                           | Isi                                                                 |
+| -------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `docs/spec/01-overview.md`                                     | Visi, arsitektur, prinsip, 6 sources of inspiration                 |
+| `docs/spec/02-core-basic.md`                                   | Core spec — minimal implementation yang harus dipenuhi              |
+| `docs/spec/03-core-extended.md`                                | Extended kinds — Workflow, Api, Webhook                             |
+| `docs/spec/04-control-plane.md`                                | Control Plane — Environment, Policy, signing, audit                 |
+| `docs/spec/05-frontend.md`                                     | Frontend spec — 12 UI kinds, renderer contract, FormSpecExpr        |
+| `docs/spec/06-plane-protocol.md`                               | Plane Protocol — komunikasi Control ↔ Resource                      |
+| `docs/spec/07-marketplace.md`                                  | Marketplace spec — pricing, metering, licensing                     |
+| `docs/spec/10-entity-extension.md`                             | Entity Extension — add fields to owned entities                     |
+| `docs/spec/11-reference.md`                                    | Glossary & semua design decisions (D1–D48)                          |
+| `docs/kind/`                                                   | Kind reference — 34 kind, 4 grup; atribut generated dari `pkg/spec` |
+| `reff_docs/FormSpec-Foundation-Document-v2.0.md`               | Foundation doc — latar belakang, keputusan fundamental              |
+| `reff_docs/FormSpec-Technical-Note-DX-dan-Entity-Extension.md` | Technical note — DX dan entity extension                            |
+| `pkg/spec/entity.go`                                           | Go struct untuk Entity manifest                                     |
+| `pkg/spec/frontend.go`                                         | Go struct untuk frontend kinds                                      |
+| `pkg/spec/spec.go`                                             | Enum dan shared types                                               |
+| `internal/manifest/loader.go`                                  | Manifest loader — load, parse, validate YAML                        |
 
 ---
 

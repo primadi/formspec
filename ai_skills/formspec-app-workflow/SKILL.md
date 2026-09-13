@@ -97,6 +97,7 @@ that a business owner can read and confirm.
 **Example probing questions**:
 
 - "Who are the users? What roles do they have?"
+- "Is this for logged-in staff only, or should anonymous/public visitors reach parts of it?"
 - "What data is entered? By whom? How often?"
 - "What are the approval or review steps?"
 - "Are there any reports or dashboards needed?"
@@ -147,6 +148,7 @@ entity characteristics, state machines, and which entities need UI overrides.
 **Content — `architecture.md`**:
 
 - Module breakdown (bounded contexts) with rationale
+- **App shape** — how many Apps (one private / one public / public + private), and for each: `access` (private/public), `app_renderer` (sidebar-nav/topnav/no-nav), and `root_url`. Ask the user; never silently default. See `formspec-kinds` → App shape.
 - Entity characteristic assignments (master/transaction/reference/summary) with justification
 - Key design decisions (why plain_crud vs doc_status, why 3 modules vs 1, etc.)
 - Module dependencies (who depends on whom)
@@ -170,6 +172,7 @@ entity characteristics, state machines, and which entities need UI overrides.
 **Decision checklist** (AI must answer all before proceeding):
 
 - [ ] Module boundaries defined and justified
+- [ ] App shape decided: 1 or 2 Apps, each with `access` + `app_renderer` (+ `root_url` when 2)
 - [ ] All entities have characteristic assigned
 - [ ] All state machines diagrammed (if any)
 - [ ] Module dependencies mapped
@@ -199,7 +202,9 @@ only where needed, validate everything.
    - `Page` (`page.yaml`) — when composition spans multiple entities
 4. `App` manifest (`apps/<name>.yaml`) — curation + menu (Dashboard landing
    at top if present; modules ordered by access frequency — see
-   `formspec-kinds` Menu section)
+   `formspec-kinds` Menu section). Set `access` + `app_renderer` from the
+   agreed App shape; when the proposal chose two Apps, write one manifest per
+   App with distinct `root_url`.
 5. Other kinds as needed (`Dashboard`, `Report`, `Config`, `Workflow`, etc.)
 
 **Validation gate** (must pass before Phase 3 is complete):

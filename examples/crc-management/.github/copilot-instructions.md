@@ -19,20 +19,20 @@ spec documentation.
 
 ## Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Backend | Go, module github.com/primadi/formspec |
-| Frontend | React + TypeScript + Vite + shadcn/ui |
-| Database | PostgreSQL (production) / SQLite (dev) |
+| Layer     | Technology                                     |
+| --------- | ---------------------------------------------- |
+| Backend   | Go, module github.com/primadi/formspec         |
+| Frontend  | React + TypeScript + Vite + shadcn/ui          |
+| Database  | PostgreSQL (production) / SQLite (dev)         |
 | Scripting | Starlark (sandboxed, editable via admin panel) |
-| Manifest | YAML (apiVersion/kind/metadata/spec) |
+| Manifest  | YAML (apiVersion/kind/metadata/spec)           |
 
 ## Key Commands
 
-| Command | Purpose |
-|---------|---------|
-| `formspec dev` | Start development server (API + UI) |
-| `formspec apply` | Register YAML manifests |
+| Command             | Purpose                                                |
+| ------------------- | ------------------------------------------------------ |
+| `formspec dev`      | Start development server (API + UI)                    |
+| `formspec apply`    | Register YAML manifests                                |
 | `formspec generate` | Generate typed TypeScript client from Entity manifests |
 
 ## Conventions
@@ -42,7 +42,7 @@ spec documentation.
 3. **Entity characteristics** — master (stable data), transaction (append-heavy),
    reference (read-only seed), summary (system-managed projection)
 4. **Permissions** — permission = resource + action, never hardcode role names
-5. **Use ctx.* primitives** — ctx.db, ctx.cache, ctx.lock, ctx.queue,
+5. **Use ctx.\* primitives** — ctx.db, ctx.cache, ctx.lock, ctx.queue,
    ctx.pubsub, ctx.storage — never raw SQL
 6. **Derived by default** — Entity auto-generates CRUD API + Table + Forms + Page
 
@@ -54,7 +54,6 @@ crc-management/
   spec/                # All YAML manifests
     apps/              # kind: App manifests
     modules/           # kind: Module -> Entity, Page, Form, etc.
-  app/                 # Optional sidecar (only with --with-sidecar)
   .agents/skills/      # AI skills for Copilot
 ```
 

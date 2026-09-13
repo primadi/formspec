@@ -1,4 +1,4 @@
-# cafe — Copilot Instructions
+# {{projectName}} — AGENTS.md
 
 ## Project Overview
 
@@ -22,15 +22,38 @@ creating or changing this app. It orchestrates the full lifecycle:
 phase you are in is decided by the user's request + their approvals — not by
 which files happen to exist.
 
+## App Shape — decide before you build
+
+Every `kind: App` has two orthogonal axes. **Confirm both with the user**
+before writing the App manifest (see the **formspec-kinds** skill → App shape):
+
+| Axis           | Values                                                    | Default       |
+| -------------- | --------------------------------------------------------- | ------------- |
+| `access`       | `private` (login required) · `public` (anonymous landing) | `private`     |
+| `app_renderer` | `sidebar-nav` · `topnav` · `no-nav`                       | `sidebar-nav` |
+
+Ask whether the app is a single **private** app (back-office), a single
+**public** app (landing — pair with `kind: Listing`), or **two apps** (public
+portal + private admin sharing modules at different `root_url`).
+
 ## Skills Loaded
 
-This project includes AI skills in `.agents/skills/`. Use `/skills`
-in Copilot Chat to see them:
+This project includes AI skills in `.agents/skills/`. In Copilot Chat,
+use `/skills` to see them:
 
 - **formspec-app-workflow** — Full lifecycle orchestrator (Discovery → Proposal → Draft → Iterate)
-- **formspec-kinds** — Complete catalog of all 33 FormSpec resource kinds
+- **formspec-kinds** — Complete catalog of all 34 FormSpec resource kinds
 - **formspec-spec-structure** — Navigate the FormSpec spec docs
 - **schema-validation** — Run `formspec validate`, classify errors, repair manifests
+
+## Reference Docs
+
+Authoritative FormSpec documentation lives at <https://docs.formspec.dev/>:
+
+- **Kind reference** — <https://docs.formspec.dev/kind/> — one page per kind
+  (attributes, when to use, examples, gotchas)
+- **Contracts** — <https://docs.formspec.dev/spec/> — platform / backend / frontend specs
+- **Guides** — <https://docs.formspec.dev/guides/>
 
 ## Stack
 
@@ -69,10 +92,11 @@ fix errors (use the schema-validation skill) before moving on.
 ## Project Layout
 
 ```
-cafe/
-  formspec-app.yaml       # CLI config (NOT a kind: Config manifest)
-  spec/                # All YAML manifests
-    apps/              # kind: App manifests
-    modules/           # kind: Module -> Entity, Page, Form, etc.
-  .agents/skills/      # AI skills for Copilot
+{{projectName}}/
+  AGENTS.md              # Agent instructions (tool-agnostic)
+  formspec-app.yaml      # CLI config (NOT a kind: Config manifest)
+  spec/                  # All YAML manifests
+    apps/                # kind: App manifests
+    modules/             # kind: Module -> Entity, Page, Form, etc.
+  .agents/skills/        # AI skills for coding agents
 ```

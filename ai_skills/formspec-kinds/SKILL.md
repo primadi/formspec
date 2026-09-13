@@ -1,6 +1,6 @@
 ---
 name: formspec-kinds
-description: Catalog of all FormSpec resource kinds grouped in 4 categories — Curation (App, Module), Data (Entity, Service, Config, Migration, Subscription, Workflow, Api, Webhook, Mockup, Integrator, KindDefinition), UI (Page, Form, Table, Dashboard, Widget, Report, Wizard, Kanban, Timeline, Calendar, Listing, ApprovalInbox, NotificationCenter, Print, Theme), Infra (Renderer, PersistBackend, Environment, Policy, Datastore). Use when the user asks about FormSpec kinds, needs to choose the right kind for a task, asks how to declare a YAML manifest, or mentions specific kinds by name. Also use when creating a new FormSpec app to understand which kinds to declare.
+description: Catalog of all FormSpec resource kinds grouped in 4 categories — Curation (App, Module, Workspace), Data (Entity, Service, Config, Migration, Subscription, Workflow, Api, Webhook, Mockup, Integrator, KindDefinition), UI (Page, Form, Table, Dashboard, Widget, Report, Wizard, Kanban, Timeline, Calendar, Listing, ApprovalInbox, NotificationCenter, Print, Theme), Infra (Renderer, PersistBackend, Environment, Policy, Datastore). Use when the user asks about FormSpec kinds, needs to choose the right kind for a task, asks how to declare a YAML manifest, or mentions specific kinds by name. Also use when creating a new FormSpec app to understand which kinds to declare.
 metadata:
   version: "2.0"
   source: docs/spec/platform/03-kind-system.md + schemas/kinds/
@@ -9,16 +9,16 @@ metadata:
 # FormSpec Kinds — Complete Catalog
 
 Every FormSpec resource is declared as a YAML manifest with a `kind` field.
-This catalog groups all 33 built-in kinds into **4 categories**:
+This catalog groups all 34 built-in kinds into **4 categories**:
 
-> **Referensi atribut lengkap per kind:** [`docs/kind/`](../docs/kind/README.md) —
-> satu file per kind (33 file, 4 grup), tabel atribut **generated dari `pkg/spec`**
+> **Referensi atribut lengkap per kind:** <https://docs.formspec.dev/kind/> —
+> satu file per kind (34 file, 4 grup), tabel atribut **generated dari `pkg/spec`**
 > (zero drift) + narasi manual (kapan memakai, contoh YAML, gotchas). Skill ini
-> adalah katalog ringkas + gotchas; `docs/kind/` adalah referensi detailnya.
+> adalah katalog ringkas + gotchas; halaman kind docs adalah referensi detailnya.
 
 | #            | Group | Count                                                                                                                                                                    | Contains              | Mirrors |
 | ------------ | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------- | ------- |
-| **Curation** | 2     | `App`, `Module`                                                                                                                                                          | `docs/spec/platform/` |
+| **Curation** | 3     | `App`, `Module`, `Workspace`                                                                                                                                             | `docs/spec/platform/` |
 | **Data**     | 11    | `Entity`, `Service`, `Config`, `Migration`, `Subscription`, `Workflow`, `Api`, `Webhook`, `Mockup`, `Integrator`, `KindDefinition`                                       | `docs/spec/backend/`  |
 | **UI**       | 15    | `Page`, `Form`, `Table`, `Dashboard`, `Widget`, `Report`, `Wizard`, `Kanban`, `Timeline`, `Calendar`, `Listing`, `ApprovalInbox`, `NotificationCenter`, `Print`, `Theme` | `docs/spec/frontend/` |
 | **Infra**    | 5     | `Renderer`, `PersistBackend`, `Environment`, `Policy`, `Datastore`                                                                                                       | `docs/spec/platform/` |
@@ -67,6 +67,55 @@ shell dynamically at each App's `root_url`). Reserved first segments are
 rejected: `_ui`, `api`, `_admin`, `assets`, `health`, `login`, `register`,
 `_ws`, `print`. `spec.version` and `spec.vendor` are optional — marketplace
 publishing metadata only, not consumed at runtime.
+
+**App shape — `access` × `app_renderer` (consult the user first).** Two
+orthogonal axes decide how the App behaves _before_ any menu is written.
+**Always ask the user which shape they want** — never silently default.
+
+| Axis           | Values                                        | Meaning                                                                                                                                                   |
+| -------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `access`       | `private` (default) · `public`                | Who can reach it: `private` = login required (secure by default); `public` = anonymous read + create on every mounted module (landing / portal / catalog) |
+| `app_renderer` | `sidebar-nav` (default) · `topnav` · `no-nav` | Chrome archetype (`05-app-kinds.md`): `sidebar-nav` = persistent left sidebar; `topnav` = horizontal bar; `no-nav` = truly no nav + no auth controls      |
+
+`access` is **orthogonal** to `app_renderer` — a `no-nav` App can be private
+(kiosk, still redirected to login) or public (landing page).
+
+**Ask the user: one App or two?** Most real apps are **public + private**,
+built as _two_ Apps in the same workspace, each mounted at its own
+`root_url`:
+
+- **Single private App** — internal back-office (staff only). _Default when unsure._
+- **Single public App** — public marketing / landing / catalog, no login (pair with `Listing`).
+- **Two Apps** — a public portal (`access: public`, usually `no-nav`) plus a private admin (`access: private`, `sidebar-nav`), sharing the same Modules at different `root_url` prefixes.
+
+**Renderer heuristic:**
+
+| Renderer      | Use when                                        | Example                     |
+| ------------- | ----------------------------------------------- | --------------------------- |
+| `sidebar-nav` | Back-office, many modules/categories, desktop   | internal admin              |
+| `topnav`      | Few nav items, wide content, app-like           | small portal (3–5 sections) |
+| `no-nav`      | Landing / marketing / kiosk — no persistent nav | public catalog, kiosk       |
+
+**Chrome opt-in on `no-nav`.** `no-nav` means _truly_ no nav **and** no auth
+controls (`chrome.nav: none`, `chrome.auth: none`). To add nav links or a
+Sign in / Sign up control, opt in explicitly:
+
+```yaml
+spec:
+  app_renderer: no-nav
+  access: public
+  chrome:
+    nav: menu # opt-in nav links from spec.menu
+    auth: links # Sign in / Sign up / logout
+```
+
+A kiosk that needs logout but no nav uses `chrome: { auth: button }`. See
+`docs/spec/frontend/05-app-kinds.md` §5.
+
+**Public App pairing.** A public App almost always pairs with `kind: Listing`
+(the public catalog page). `access: public` grants anonymous read + create on
+every mounted module — never mount write-heavy transactional modules into a
+public App unless anonymous intake (e.g. public registration) is intended.
 
 **Menu is owned by App** (§4 of the platform spec). Menu = "what can be
 reached via navigation" — it must be decided at the same level as
@@ -812,6 +861,12 @@ binding → service. See `docs/spec/platform/06-datastore.md` and
 - **Menu nesting is capped at 3 levels.** Adopt nodes only at level 1; groups
   at levels 1–2; leaves at levels 1–3 — the landing Dashboard is the
   canonical level-1 leaf.
+- **`access` is orthogonal to `app_renderer`.** `access: public` (landing) and
+  `app_renderer: no-nav` are independent axes — `no-nav` can be public or
+  private, and `public` can use any renderer. Default is `private` +
+  `sidebar-nav`.
+- **`no-nav` disables auth controls too** — no nav links AND no Sign in/out by
+  default. Opt back in per element via `chrome: {nav: menu, auth: links}`.
 - **Table `default_sort` must reference an existing field** on the target entity.
   Check the entity's field list before setting `default_sort`. Framework-managed
   fields (`id`, `version`, `created_at`, `updated_at`, `created_by`, `updated_by`,

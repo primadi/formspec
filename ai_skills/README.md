@@ -9,16 +9,16 @@ VS Code Copilot (and other compatible agents) can discover and use them.
 
 ## Skill Inventory
 
-| Skill | Folder | Purpose |
-|-------|--------|---------|
-| Spec Structure | `formspec-spec-structure/` | Navigate `docs/spec/` — which file covers what, doc status lifecycle, contract-vs-renderer principle |
-| Kinds Catalog | `formspec-kinds/` | Complete catalog of all 33 FormSpec resource kinds grouped in 4 categories (Curation/Data/UI/Infra) + UI 3-layer wrapping model |
-| App Workflow | `formspec-app-workflow/` | Full lifecycle orchestrator — Discovery → Proposal → Draft (YAML spec) → Iterate (change management) |
-| Schema Validation | `schema-validation/` | Run `formspec validate`, interpret engine vs schema errors, and repair all manifests to canonical form (generate → validate → fix → re-validate) |
-| Entity Authoring | `entity-authoring/` | Author Entity manifests — field types, characteristic, natural_key, state machine, actions/uses, expose (todo 10.6.2) |
-| Form Layout | `form-layout/` | Form kind — layout modes, widget per field type, FormSpecExpr (visible_when/compute), child table |
-| Entity Extension | `entity-extension-authoring/` | Add fields/validation to vendor entities — extension vs shadow copy vs new action |
-| Module Vendoring | `module-vendoring/` | modules/ vs vendors/ (read-only), overrides/, formspec.lock, trust tiers |
+| Skill             | Folder                        | Purpose                                                                                                                                          |
+| ----------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Spec Structure    | `formspec-spec-structure/`    | Navigate `docs/spec/` — which file covers what, doc status lifecycle, contract-vs-renderer principle                                             |
+| Kinds Catalog     | `formspec-kinds/`             | Complete catalog of all 34 FormSpec resource kinds grouped in 4 categories (Curation/Data/UI/Infra) + UI 3-layer wrapping model                  |
+| App Workflow      | `formspec-app-workflow/`      | Full lifecycle orchestrator — Discovery → Proposal → Draft (YAML spec) → Iterate (change management)                                             |
+| Schema Validation | `schema-validation/`          | Run `formspec validate`, interpret engine vs schema errors, and repair all manifests to canonical form (generate → validate → fix → re-validate) |
+| Entity Authoring  | `entity-authoring/`           | Author Entity manifests — field types, characteristic, natural_key, state machine, actions/uses, expose (todo 10.6.2)                            |
+| Form Layout       | `form-layout/`                | Form kind — layout modes, widget per field type, FormSpecExpr (visible_when/compute), child table                                                |
+| Entity Extension  | `entity-extension-authoring/` | Add fields/validation to vendor entities — extension vs shadow copy vs new action                                                                |
+| Module Vendoring  | `module-vendoring/`           | modules/ vs vendors/ (read-only), overrides/, formspec.lock, trust tiers                                                                         |
 
 ## Maintenance
 

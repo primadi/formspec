@@ -30,10 +30,10 @@ Sisa pekerjaan = file `.devcontainer/*` + artefak terinstal.
 
 `compose.yaml` mem-bind-mount `../..` (home host) → `/workspaces`. Jadi:
 
-| Path | Sifat | Isi |
-| --- | --- | --- |
-| `/workspaces/.local`, `/workspaces/.config`, `/workspaces/.claude`, `/workspaces/.cache` | **persisten** (host) | binary, config, hook, skill, agent, MCP |
-| `/home/vscode/.local`, `/home/vscode/.config`, `/home/vscode/.claude` | **ephemeral** (container) | sisa `rtk init -g` |
+| Path                                                                                     | Sifat                     | Isi                                     |
+| ---------------------------------------------------------------------------------------- | ------------------------- | --------------------------------------- |
+| `/workspaces/.local`, `/workspaces/.config`, `/workspaces/.claude`, `/workspaces/.cache` | **persisten** (host)      | binary, config, hook, skill, agent, MCP |
+| `/home/vscode/.local`, `/home/vscode/.config`, `/home/vscode/.claude`                    | **ephemeral** (container) | sisa `rtk init -g`                      |
 
 `HOME=/home/vscode`, tapi `~/.local/bin` kosong → `rtk` exit 127.
 
@@ -41,9 +41,9 @@ Sisa pekerjaan = file `.devcontainer/*` + artefak terinstal.
 
 ### A. File repo
 
-| File | Aksi |
-| --- | --- |
-| `.devcontainer/Dockerfile` | Hapus blok `RUN curl ... rtk-ai/rtk install.sh` |
+| File                              | Aksi                                                                                                                      |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `.devcontainer/Dockerfile`        | Hapus blok `RUN curl ... rtk-ai/rtk install.sh`                                                                           |
 | `.devcontainer/devcontainer.json` | `postCreateCommand`: hapus `rtk init -g ...` dan rantai install/config/index `codebase-memory-mcp`; sisakan `npm install` |
 
 ### B. Artefak `rtk` (persisten)

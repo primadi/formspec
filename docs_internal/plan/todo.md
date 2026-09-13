@@ -28,6 +28,16 @@ dicabut (catatan 2026-07-31 di atas tidak berlaku lagi) — lihat
 `docs_internal/plan/uninstall-rtk-codebase-memory.md` dan
 `docs_internal/changelog/2026-09-13-001-uninstall-rtk-codebase-memory.md`.
 
+**Catatan 2026-09-13**: ✅ **App shape consultation + ekstraksi template `init`** —
+skill App-authoring (`formspec-kinds` + `formspec-app-workflow`) kini
+mengonsultasikan bentuk App (`access` private/public × `app_renderer`
+sidebar-nav/topnav/no-nav; satu atau dua App); referensi kind di skill +
+AGENTS.md scaffold diarahkan ke `https://docs.formspec.dev/kind/`; dan seluruh
+hardcode `formspec init` dipindah ke `cmd/formspec/template_init/`
+(embed `//go:embed all:template_init`). Lihat
+`docs_internal/plan/app-shape-and-init-templates.md` dan
+`docs_internal/changelog/2026-09-13-002-app-shape-and-init-templates.md`.
+
 **Catatan 2026-08-11**: Jalur **agent-assisted app development tanpa MCP** selesai —
 lihat `docs_internal/plan/agent-assisted-app-development.md`, guide
 `docs/guides/agent-assisted-app-development.md`, dan contoh `examples/cafe/`.

@@ -1,0 +1,24 @@
+apiVersion: formspec.dev/v1
+kind: App
+metadata:
+  name: {{module}}
+  description: "{{projectName}} — FormSpec application"
+spec:
+  root_url: /
+  # App shape — decide with the user before going live (see AGENTS.md → App
+  # Shape, and the formspec-kinds skill → App shape). Both are design-time.
+  #   access:       private (default, login required) | public (anonymous landing/portal)
+  #   app_renderer: sidebar-nav (default) | topnav | no-nav
+  # access: private
+  # app_renderer: sidebar-nav
+  modules:
+    - {{module}}
+  menu:
+    - type: module
+      module: {{module}}
+  # App-wide default confirm dialogs — {name} interpolates the entity
+  # display name. Override per form/action, or set "" to disable one.
+  confirm:
+    create: "Buat {name} baru?"
+    update: "Simpan perubahan {name} ini?"
+    delete: "Hapus data {name}?"

@@ -1,15 +1,27 @@
 ---
 name: formspec-kinds
-description: Catalog of all FormSpec resource kinds — Entity, Service, App, Module, Page, Form, Table, Dashboard, Widget, Report, Wizard, Kanban, Timeline, Calendar, Listing, ApprovalInbox, NotificationCenter, Print, Theme, Config, Migration, Subscription, Workflow, Api, Webhook, Mockup, KindDefinition, Integrator, Renderer, PersistBackend, Environment, Policy, Datastore. Use when the user asks about FormSpec kinds, needs to choose the right kind for a task, asks how to declare a YAML manifest, or mentions specific kinds by name. Also use when creating a new FormSpec app to understand which kinds to declare.
+description: Catalog of all FormSpec resource kinds grouped in 4 categories — Curation (App, Module, Workspace), Data (Entity, Service, Config, Migration, Subscription, Workflow, Api, Webhook, Mockup, Integrator, KindDefinition), UI (Page, Form, Table, Dashboard, Widget, Report, Wizard, Kanban, Timeline, Calendar, Listing, ApprovalInbox, NotificationCenter, Print, Theme), Infra (Renderer, PersistBackend, Environment, Policy, Datastore). Use when the user asks about FormSpec kinds, needs to choose the right kind for a task, asks how to declare a YAML manifest, or mentions specific kinds by name. Also use when creating a new FormSpec app to understand which kinds to declare.
 metadata:
-  version: "1.0"
+  version: "2.0"
   source: docs/spec/platform/03-kind-system.md + schemas/kinds/
 ---
 
 # FormSpec Kinds — Complete Catalog
 
 Every FormSpec resource is declared as a YAML manifest with a `kind` field.
-This catalog lists every built-in kind, grouped by concern.
+This catalog groups all 34 built-in kinds into **4 categories**:
+
+> **Referensi atribut lengkap per kind:** <https://docs.formspec.dev/kind/> —
+> satu file per kind (34 file, 4 grup), tabel atribut **generated dari `pkg/spec`**
+> (zero drift) + narasi manual (kapan memakai, contoh YAML, gotchas). Skill ini
+> adalah katalog ringkas + gotchas; halaman kind docs adalah referensi detailnya.
+
+| #            | Group | Count                                                                                                                                                                    | Contains              | Mirrors |
+| ------------ | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------- | ------- |
+| **Curation** | 3     | `App`, `Module`, `Workspace`                                                                                                                                             | `docs/spec/platform/` |
+| **Data**     | 11    | `Entity`, `Service`, `Config`, `Migration`, `Subscription`, `Workflow`, `Api`, `Webhook`, `Mockup`, `Integrator`, `KindDefinition`                                       | `docs/spec/backend/`  |
+| **UI**       | 15    | `Page`, `Form`, `Table`, `Dashboard`, `Widget`, `Report`, `Wizard`, `Kanban`, `Timeline`, `Calendar`, `Listing`, `ApprovalInbox`, `NotificationCenter`, `Print`, `Theme` | `docs/spec/frontend/` |
+| **Infra**    | 5     | `Renderer`, `PersistBackend`, `Environment`, `Policy`, `Datastore`                                                                                                       | `docs/spec/platform/` |
 
 ## Universal Manifest Format
 
@@ -35,28 +47,290 @@ Key rules:
 - `metadata.description` — **always include** for AI readability
 - `spec` body is kind-specific — see individual kind sections below
 
-## Quick Reference: Concern → Kind
+---
 
-| Concern             | Kind(s)                                                                                                                                                                  | Spec File                             |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------- |
-| Domain model        | `Entity`, `Service`                                                                                                                                                      | `backend/01-core-basic.md`            |
-| Curation            | `App`, `Module`                                                                                                                                                          | `platform/02-workspace-app-module.md` |
-| Configuration       | `Config`                                                                                                                                                                 | `backend/01-core-basic.md` §10        |
-| Custom DDL          | `Migration`                                                                                                                                                              | `backend/01-core-basic.md` §4         |
-| Cross-module events | `Subscription`                                                                                                                                                           | `backend/01-core-basic.md` §7         |
-| Business process    | `Workflow`                                                                                                                                                               | `backend/02-core-extended.md` §2      |
-| API surface         | `Api`, `Webhook`, `Mockup`                                                                                                                                               | `backend/02-core-extended.md`         |
-| Extension           | `KindDefinition`                                                                                                                                                         | `platform/03-kind-system.md` §2       |
-| Reactive bridge     | `Integrator`                                                                                                                                                             | `backend/02-core-extended.md` §5      |
-| Visual renderer     | `Renderer`                                                                                                                                                               | `frontend/03-renderer-kind.md`        |
-| Storage renderer    | `PersistBackend`                                                                                                                                                         | `backend/04-persist-backend.md`       |
-| Visual — page tier  | `Page`, `Form`, `Table`, `Dashboard`, `Widget`, `Report`, `Wizard`, `Kanban`, `Timeline`, `Calendar`, `Listing`, `ApprovalInbox`, `NotificationCenter`, `Print`, `Theme` | `frontend/05,06,07`                   |
-| Governance          | `Environment`, `Policy`                                                                                                                                                  | `platform/04-control-plane.md`        |
-| Infrastructure      | `Datastore`                                                                                                                                                              | `platform/06-datastore.md`            |
+## Curation Kinds
+
+Curation kinds define the **workspace structure** — App and Module. These are
+the first kinds you declare when building a FormSpec application. They define
+_boundaries_ and _composition_, not behavior.
+
+### App — Curated Collection of Modules
+
+An App is a **curation** — a basket of modules declared via `spec.modules`.
+An App does NOT own objects; Modules do. The same Module can be mounted by
+multiple Apps in the same workspace.
+
+`spec.root_url` is **required** — unique within the workspace and free-form
+inside it: `/`, `/barbershop`, `/app/kafe`, … (the server mounts the SPA
+shell dynamically at each App's `root_url`). Reserved first segments are
+rejected: `_ui`, `api`, `_admin`, `assets`, `health`, `login`, `register`,
+`_ws`, `print`. `spec.version` and `spec.vendor` are optional — marketplace
+publishing metadata only, not consumed at runtime.
+
+**App shape — `access` × `app_renderer` (consult the user first).** Two
+orthogonal axes decide how the App behaves *before* any menu is written.
+**Always ask the user which shape they want** — never silently default.
+
+| Axis           | Values                                                | Meaning                                                                                                                                                   |
+| -------------- | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `access`       | `private` (default) · `public`                        | Who can reach it: `private` = login required (secure by default); `public` = anonymous read + create on every mounted module (landing / portal / catalog) |
+| `app_renderer` | `sidebar-nav` (default) · `topnav` · `no-nav`         | Chrome archetype (`05-app-kinds.md`): `sidebar-nav` = persistent left sidebar; `topnav` = horizontal bar; `no-nav` = truly no nav + no auth controls       |
+
+`access` is **orthogonal** to `app_renderer` — a `no-nav` App can be private
+(kiosk, still redirected to login) or public (landing page).
+
+**Ask the user: one App or two?** Most real apps are **public + private**,
+built as *two* Apps in the same workspace, each mounted at its own
+`root_url`:
+
+- **Single private App** — internal back-office (staff only). *Default when unsure.*
+- **Single public App** — public marketing / landing / catalog, no login (pair with `Listing`).
+- **Two Apps** — a public portal (`access: public`, usually `no-nav`) plus a private admin (`access: private`, `sidebar-nav`), sharing the same Modules at different `root_url` prefixes.
+
+**Renderer heuristic:**
+
+| Renderer      | Use when                                          | Example                     |
+| ------------- | ------------------------------------------------- | --------------------------- |
+| `sidebar-nav` | Back-office, many modules/categories, desktop     | internal admin              |
+| `topnav`      | Few nav items, wide content, app-like             | small portal (3–5 sections) |
+| `no-nav`      | Landing / marketing / kiosk — no persistent nav   | public catalog, kiosk       |
+
+**Chrome opt-in on `no-nav`.** `no-nav` means *truly* no nav **and** no auth
+controls (`chrome.nav: none`, `chrome.auth: none`). To add nav links or a
+Sign in / Sign up control, opt in explicitly:
+
+```yaml
+spec:
+  app_renderer: no-nav
+  access: public
+  chrome:
+    nav: menu # opt-in nav links from spec.menu
+    auth: links # Sign in / Sign up / logout
+```
+
+A kiosk that needs logout but no nav uses `chrome: { auth: button }`. See
+`docs/spec/frontend/05-app-kinds.md` §5.
+
+**Public App pairing.** A public App almost always pairs with `kind: Listing`
+(the public catalog page). `access: public` grants anonymous read + create on
+every mounted module — never mount write-heavy transactional modules into a
+public App unless anonymous intake (e.g. public registration) is intended.
+
+**Menu is owned by App** (§4 of the platform spec). Menu = "what can be
+reached via navigation" — it must be decided at the same level as
+view/action visibility (different Apps can expose different subsets of the
+same Module). Analogy: **Module = catalog, App.menu = shopping list from
+that catalog.**
+
+The menu is defined in `spec.menu` as a list of `MenuItem` nodes. Three
+node types (validated at load):
+
+| Node      | `type`   | level  | Required                                         | Forbidden                                    |
+| --------- | -------- | ------ | ------------------------------------------------ | -------------------------------------------- |
+| **Adopt** | `module` | 1 only | `module`                                         | `label`, `icon`, `view`, `route`, `children` |
+| **Group** | (empty)  | 1–2    | `label`, `children`                              | `module`, `view`, `route`                    |
+| **Leaf**  | (empty)  | 2–3    | `label`, `module`, exactly one of `view`/`route` | `children`                                   |
+
+- **Adopt node** splices the entire `Module.spec.menu` default suggestion at
+  this position. Module must be in `spec.modules`.
+- **Group node** creates a submenu. Children can come from different modules.
+- **Leaf node** links to a view or a raw route. `view` resolves a registered
+  manifest (Page, Dashboard, Widget, Report, Wizard, Kanban, Timeline, or
+  Print — NOT Form/Table). `route` is an escape hatch for derived entity-list
+  routes (`/<module>/<plural>`) or external URLs.
+- Nesting capped at **3 levels**. Order of items = display order.
+
+```yaml
+kind: App
+spec:
+  modules: [clinic, pharmacy]
+  root_url: /app/klinik
+  menu:
+    # Adopt: splice module's default menu suggestion
+    - type: module
+      module: clinic
+    # Group with mixed children from different modules
+    - label: "Farmasi"
+      icon: "pill"
+      children:
+        - { label: "Antrian Resep", view: pharmacy-queue, module: pharmacy }
+        - {
+            label: "Semua Resep",
+            route: /pharmacy/prescriptions,
+            module: pharmacy,
+          }
+    # Leaf: direct view (resolved server-side to /wizard/checklist-fill)
+    - {
+        label: "Isi Checklist",
+        icon: "edit",
+        view: checklist-fill-wizard,
+        module: crc-field,
+      }
+```
+
+### Module — Bounded Context
+
+A Module **owns** objects (Entity, Service, VisualSpecKind instances).
+One Module = one complete business bounded context. Module structure is a
+closed set: Entity, Service, and VisualSpecKind instances.
+
+`spec.version` is **required**. Dependencies use `depends` (array of
+`{module, version?}`), NOT `depends_on`.
+
+**Module may provide a default menu suggestion** (`spec.menu`) — same
+`MenuItem[]` type as App's menu, but **module-relative**: leaf nodes never
+set `module` (it's implied = this module when adopted). `view` is the
+manifest name within this module; `route` is a raw URL (typically
+`/<module>/<plural>` for derived entity-list routes).
+
+```yaml
+kind: Module
+metadata:
+  name: clinic
+spec:
+  version: 1.0.0
+  vendor: acme-corp
+  depends:
+    - module: formspec/core
+  menu:
+    - label: "Klinik"
+      icon: "stethoscope"
+      children:
+        - {
+            label: "Dashboard",
+            icon: "layout-dashboard",
+            view: clinic-dashboard,
+          }
+        - { label: "Daftar Kunjungan", icon: "list", view: visits-page }
+        - label: "Kasir"
+          icon: "wallet"
+          route: /clinic/payments
+    - { label: "Isi Checklist", icon: "edit", view: checklist-fill-wizard }
+```
+
+**Menu structure rule (1–2 levels, always categorized).** Every menu
+(`App.spec.menu` and `Module.spec.menu`) must be authored as a tree of
+**Group nodes** (a `label` + `children`) with **Leaf nodes** underneath.
+The renderer treats each top-level item independently — a leaf without
+children renders as a standalone link, and the resolver never re-nests
+leaves — so keep the structure explicit and categorized to avoid ambiguous
+navigation. Concretely:
+
+- **Level 1 = category** (Group node: `label` + `children`).
+- **Level 2 = item** (Leaf node: `label` + exactly one of `view`/`route`).
+- Use a **third level only** when a category genuinely needs sub-groups
+  (rare); nesting is capped at 3 levels.
+- Every module's default menu suggestion should open with its own category
+  group so adopted modules render as distinct top-level categories instead
+  of collapsing into one.
+- **The one allowed level-1 leaf: a landing Dashboard.** If the app has a
+  Dashboard, put it as the **first** top-level leaf (`label` + `module` +
+  `view`) at position 0 — it is the landing page users see on open. Avoid
+  other bare top-level leaves.
+
+**App menu ordering (curation heuristic).** Order `App.spec.menu` by access
+frequency, most-used first. For a typical transaction-heavy business app the
+default is **Transaksi → Laporan → Master → Config/Pengaturan**:
+
+| Position | Item               | Why                                          |
+| -------- | ------------------ | -------------------------------------------- |
+| 1        | Dashboard (if any) | Landing — summary at a glance on open        |
+| 2        | Transaksi          | Daily operations (orders, payments, visits)  |
+| 3        | Laporan            | Consulted regularly (recaps, reports)        |
+| 4        | Master             | Mostly set up early, referenced occasionally |
+| 5        | Config/Pengaturan  | Rarely changed (settings, admin)             |
+
+This is a **heuristic, not a hard rule** — a master-heavy app (e.g. a
+product catalog) may lead with Master instead. "Config" here means a UI
+settings/administration module (Pengaturan), **not** `kind: Config`
+(module configuration).
+
+Canonical 2-level module menu (each module = one or more categories):
+
+```yaml
+kind: Module
+metadata:
+  name: crc-field
+spec:
+  version: 1.0.0
+  vendor: trakindo
+  menu:
+    - label: "Eksekusi" # level 1 — category (Group node)
+      icon: "clipboard-check"
+      children:
+        - {
+            label: "Dokumen Checklist",
+            icon: "clipboard-check",
+            route: /crc-field/checklist-documents,
+          } # level 2 — leaf
+        - { label: "Isi Checklist", icon: "edit", view: checklist-fill-wizard }
+```
+
+A module with several concerns uses several categories (each a Group node):
+
+```yaml
+menu:
+  - label: "Laporan"
+    icon: "bar-chart-3"
+    children:
+      - {
+          label: "CRC Summary",
+          icon: "layout-dashboard",
+          view: crc-summary-dashboard,
+        }
+      - {
+          label: "Laporan Ringkasan",
+          icon: "bar-chart-3",
+          view: checklist-summary-report,
+        }
+  - label: "Portal"
+    icon: "globe"
+    children:
+      - { label: "Portal Customer", icon: "globe", view: customer-portal }
+```
+
+**view resolves ALL visual kinds** (via server-side registration):
+Page, Form, Table, Dashboard, Widget, Report, Wizard, Kanban, Timeline, Print.
+
+Every visual kind has a `public` field (default `true`). When `public: true`,
+the framework auto-generates a Page wrapper with route
+`/<module>/<kind-lowercase>/<name>` — the kind can be navigated directly.
+When `public: false`, the kind is embed-only (no standalone route; can only
+appear inside an authored Page's blocks/tabs). Set `public: false` on
+Forms/Tables that are meant to be used exclusively inside a Page.
+
+**`public` field per visual kind:**
+
+```yaml
+kind: Form
+metadata:
+  name: quick-create-invoice
+  module: billing
+spec:
+  public: true # default — auto-Page route /billing/form/quick-create-invoice
+  entity: billing.invoice
+  mode: create
+```
+
+**Menu resolution flow:**
+
+1. `App.spec.menu` defines the tree (authoritative).
+2. `type: module` adopt nodes expand to `Module.spec.menu` (default
+   suggestion) — App can freely override/restrict/rearrange.
+3. Server resolves `view` → concrete `route` from the registered manifest.
+4. `route` leaves are sent as-is (no server resolution).
+5. If a module has no `spec.menu`, its adopt node expands to empty.
+   The App then has no navigation entries for that module unless other
+   leaves/groups reference it.
 
 ---
 
-## Domain Model Kinds
+## Data Kinds
+
+Data kinds define the **domain model and behavior** — entities, services,
+configuration, events, and integration. These are the core of every FormSpec
+module.
 
 ### Entity — Stateful Business Data
 
@@ -203,69 +477,6 @@ spec:
     ref: "TaxService.Calculate"
 ```
 
----
-
-## Curation Kinds
-
-### App — Curated Collection of Modules
-
-An App is a **curation** — a basket of modules declared via `spec.modules`.
-An App does NOT own objects; Modules do. The same Module can be mounted by
-multiple Apps in the same workspace.
-
-`spec.root_url` is **required** — unique within the workspace and free-form
-inside it: `/`, `/barbershop`, `/app/kafe`, … (the server mounts the SPA
-shell dynamically at each App's `root_url`). Reserved first segments are
-rejected: `_ui`, `api`, `_admin`, `assets`, `health`, `login`, `register`,
-`_ws`, `print`. `spec.version` and `spec.vendor` are optional — marketplace
-publishing metadata only, not consumed at runtime.
-
-```yaml
-apiVersion: formspec.dev/v1
-kind: App
-metadata:
-  name: klinik-internal
-  description: "Klinik internal"
-spec:
-  version: 1.0.0
-  vendor: acme-corp
-  root_url: /app/klinik
-  modules:
-    - clinic
-    - pharmacy
-  menu:
-    - type: module
-      module: clinic
-    - type: module
-      module: pharmacy
-```
-
-### Module — Bounded Context
-
-A Module **owns** objects (Entity, Service, VisualSpecKind instances).
-One Module = one complete business bounded context. Module structure is a
-closed set: Entity, Service, and VisualSpecKind instances.
-
-`spec.version` is **required**. Dependencies use `depends` (array of
-`{module, version?}`), NOT `depends_on`.
-
-```yaml
-apiVersion: formspec.dev/v1
-kind: Module
-metadata:
-  name: billing
-  description: "Billing module"
-spec:
-  version: 1.0.0
-  vendor: acme-corp
-  depends:
-    - module: general-ledger
-```
-
----
-
-## Configuration, DDL, and Events
-
 ### Config — Module-Level Configuration
 
 Module configuration, read via `ctx.config` in scripts.
@@ -319,10 +530,6 @@ spec:
     ref: "GLHandler.OnInvoiceSubmitted"
 ```
 
----
-
-## Business Process & API Surface
-
 ### Workflow — Multi-Approver Approval
 
 Approval-based role gating attached to ONE Entity state-machine transition.
@@ -370,36 +577,84 @@ Simulates third-party integrations for testing.
 
 Reactive bridge between modules (e.g., sales→inventory, sales→GL).
 
+### KindDefinition — Declare a New Kind
+
+Extends the kind system. Used by official modules (e.g., `Seed`, `Schedule`,
+`MailTemplate`) or third-party modules with namespaced kinds.
+
+```yaml
+apiVersion: formspec.dev/v1
+kind: KindDefinition
+metadata:
+  name: Seed
+  module: formspec/seed
+spec:
+  group: seed.formspec.dev
+  version: v1
+  scope: module
+  handler:
+    type: native
+    ref: "FormaSeed.Apply"
+```
+
 ---
 
-## Renderer Kinds
+## UI Kinds
 
-### Renderer — Visual Renderer Implementation
+UI kinds define the **visual presentation** — pages, forms, tables, dashboards,
+and all other frontend surfaces. They exist to **override** auto-derived
+defaults from Entity; in most cases you don't need to declare any UI kind.
 
-Implements a VisualSpecKind for a specific shell/stack (e.g., React/shadcn).
+### UI 3-Layer Model
 
-### PersistBackend — Storage Renderer Implementation
+FormSpec's UI follows a strict 3-layer wrapping hierarchy. Understanding this
+model is critical to knowing **when** to declare a UI kind vs letting the
+engine auto-derive everything.
 
-Implements the storage seam (e.g., JSONB on Postgres/SQLite).
+```
+┌─────────────────────────────────────────────┐
+│ PAGE  (route + composition)                 │
+│  /app/klinik/invoice/create                 │
+│                                             │
+│  ┌───────────────────────────────────────┐  │
+│  │ FORM / TABLE  (layout override)       │  │
+│  │  visible_when, readonly_when, ...     │  │
+│  │                                       │  │
+│  │  ┌─────────────────────────────────┐  │  │
+│  │  │ ENTITY  (data model)            │  │  │
+│  │  │  fields, state_machine,         │  │  │
+│  │  │  permissions, actions           │  │  │
+│  │  └─────────────────────────────────┘  │  │
+│  └───────────────────────────────────────┘  │
+└─────────────────────────────────────────────┘
+```
 
----
+**Wrapping rules — what the engine generates automatically:**
 
-## Visual Kinds (Page Tier)
+| You declare                      | Engine auto-derives                                                                      | When to override                                                                                                 |
+| -------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `Entity` only                    | Default Table + Form(create) + Form(edit) + Page(detail) + REST API + Admin menu entries | You need custom field order/layout, hide specific fields, group fields, or compose multiple entities on one page |
+| `Form` (`public: true`)          | Auto-wrapped in Page with route `/<module>/form/<name>`                                  | This form needs a custom Page (multi-tab, side panel, complex composition)                                       |
+| `Table` (`public: true`)         | Auto-wrapped in Page with route `/<module>/table/<name>`                                 | This table needs a custom Page                                                                                   |
+| `Page`                           | Route directly — no additional wrapping                                                  | — (Page is always explicit)                                                                                      |
+| `Form`/`Table` (`public: false`) | No route; only usable as embedded block inside an authored Page                          | —                                                                                                                |
 
-ALL of these are instances of `VisualSpecKind` with tier `page`.
-They exist only to **override** the auto-derived defaults from Entity.
+**Decision flow — do I need a UI kind override?**
 
-### Derived by Default
+```
+Is Entity auto-derived UI sufficient?
+  ├── YES → Done. Don't write any UI kind.
+  └── NO  → What needs changing?
+       ├── Field order/labels/hide → write kind: Form (public: true or false)
+       ├── Column selection/sort → write kind: Table (public: true or false)
+       ├── Multi-entity composition → write kind: Page (compose blocks/tabs)
+       ├── Dashboard/report/wizard/etc → write the appropriate UI kind
+       └── Custom component → write kind: Page with asset block
+```
 
-Every Entity automatically generates:
-
-- CRUD REST API endpoints
-- A `Table` (list/browse view)
-- Two `Form`s (create, edit)
-- A detail `Page`
-- Menu entries in the admin panel
-
-**You only need to declare visual kinds when you want to override these defaults.**
+**Key principle**: 80-95% of entities need ZERO UI kind declarations. The
+engine generates full CRUD UI from Entity alone. Only declare UI kinds when
+the auto-derived result is genuinely insufficient.
 
 ### Page — Route + UI Composition
 
@@ -467,7 +722,19 @@ CSS variables and styling configuration for the UI.
 
 ---
 
-## Governance & Infrastructure
+## Infra Kinds
+
+Infra kinds define the **runtime infrastructure** — renderer implementations,
+storage backends, and control plane resources. These are typically declared
+once per deployment, not per application.
+
+### Renderer — Visual Renderer Implementation
+
+Implements a VisualSpecKind for a specific shell/stack (e.g., React/shadcn).
+
+### PersistBackend — Storage Renderer Implementation
+
+Implements the storage seam (e.g., JSONB on Postgres/SQLite).
 
 ### Environment — Deployment Target
 
@@ -479,38 +746,34 @@ Declares a deployment target (dev, staging, production).
 Declares governance rules (security, compliance, resource limits).
 **Control Plane kind** — managed by Platform Operator.
 
-### Datastore — Named Infrastructure Connection
+### Datastore — Infra Service Registration
 
-Declares a named database/object-storage connection.
+Registers a named physical infrastructure service (Postgres, Valkey, MinIO,
+SQLite, filesystem) in the Infra Registry, serving one or more `ctx.*`
+primitives (`serves: [db, cache, ...]` — closed set of 9: db, cache, lock,
+queue, pubsub, storage, kvstore, config, log). Multiple services per
+primitive are allowed; each primitive has one overridable default.
 **Control Plane kind** — managed by Platform Operator.
 
----
-
-## Extension Kinds
-
-### KindDefinition — Declare a New Kind
-
-Extends the kind system. Used by official modules (e.g., `Seed`, `Schedule`,
-`MailTemplate`) or third-party modules with namespaced kinds.
-
-```yaml
-apiVersion: formspec.dev/v1
-kind: KindDefinition
-metadata:
-  name: Seed
-  module: formspec/seed
-spec:
-  group: seed.formspec.dev
-  version: v1
-  scope: module
-  handler:
-    type: native
-    ref: "FormaSeed.Apply"
-```
+Selection happens at App/Module level (`spec.datastores` map: key
+`"primitive"` = default, `"primitive/alias"` = named logical primitive
+reached via `ctx.db.named("alias")`, gated by `uses.datastores`).
+Resolution chain: action `uses.datastores` → module → App → workspace
+binding → service. See `docs/spec/platform/06-datastore.md` and
+`docs/reference/primitives.md`.
 
 ---
 
 ## Choosing the Right Kind
+
+### Curation
+
+| What you need                         | Kind to use |
+| ------------------------------------- | ----------- |
+| Define bounded context, own entities  | `Module`    |
+| Curate modules into a user-facing app | `App`       |
+
+### Data
 
 | What you need                      | Kind to use                              |
 | ---------------------------------- | ---------------------------------------- |
@@ -519,30 +782,45 @@ spec:
 | Read-only seed data                | `Entity` (`characteristic: reference`)   |
 | System-managed aggregates          | `Entity` (`characteristic: summary`)     |
 | Computation without state          | `Service`                                |
+| Module-level configuration         | `Config`                                 |
+| Custom DDL (index, trigger)        | `Migration`                              |
+| React to another resource's events | `Subscription`                           |
 | Approval-based state transitions   | `Workflow`                               |
+| Override external API surface      | `Api`                                    |
 | Inbound webhook endpoint           | `Webhook`                                |
 | Mock third-party integration       | `Mockup`                                 |
 | Cross-module reactive bridge       | `Integrator`                             |
-| React to another resource's events | `Subscription`                           |
-| Override external API surface      | `Api`                                    |
-| Custom DDL (index, trigger)        | `Migration`                              |
-| Screen / route                     | `Page`                                   |
-| Data entry form                    | `Form`                                   |
-| List / browse table                | `Table`                                  |
-| Multi-step process                 | `Wizard`                                 |
-| Drag-drop status board             | `Kanban`                                 |
-| Chronological event feed           | `Timeline`                               |
-| Dashboard with widgets             | `Dashboard` + `Widget`                   |
-| Parameterized report               | `Report`                                 |
-| Printable document                 | `Print`                                  |
-| Look & feel                        | `Theme`                                  |
-| Calendar view                      | `Calendar`                               |
-| Public catalog                     | `Listing`                                |
-| Approval task queue                | `ApprovalInbox`                          |
-| Notification center                | `NotificationCenter`                     |
-| Named DB/storage connection        | `Datastore`                              |
-| Deployment target                  | `Environment`                            |
-| Governance rule                    | `Policy`                                 |
+| Extend the kind system             | `KindDefinition`                         |
+
+### UI
+
+| What you need                          | Kind to use            |
+| -------------------------------------- | ---------------------- |
+| Screen / route with UI composition     | `Page`                 |
+| Data entry form (override default)     | `Form`                 |
+| List / browse table (override default) | `Table`                |
+| Multi-step process                     | `Wizard`               |
+| Drag-drop status board                 | `Kanban`               |
+| Chronological event feed               | `Timeline`             |
+| Calendar view                          | `Calendar`             |
+| Dashboard with widgets                 | `Dashboard` + `Widget` |
+| Parameterized report                   | `Report`               |
+| Printable document                     | `Print`                |
+| Public catalog                         | `Listing`              |
+| Approval task queue                    | `ApprovalInbox`        |
+| Notification center                    | `NotificationCenter`   |
+| Look & feel                            | `Theme`                |
+
+### Infra
+
+| What you need                   | Kind to use                                       |
+| ------------------------------- | ------------------------------------------------- |
+| Visual renderer implementation  | `Renderer`                                        |
+| Storage renderer implementation | `PersistBackend`                                  |
+| Named DB/storage connection     | `Datastore`                                       |
+| Second database / named cache   | `Datastore` + `datastores` selection (App/Module) |
+| Deployment target               | `Environment`                                     |
+| Governance rule                 | `Policy`                                          |
 
 ---
 
@@ -568,3 +846,33 @@ spec:
   for autocomplete/validation. `spec.version: v1` is required on every Entity.
 - **`on:` is a normal YAML key** for Workflow (`on: { transition: ... }`) — do
   not quote it; only YAML 1.1 parsers (e.g. PyYAML) misread it as boolean `true`.
+- **Menu: always provide `spec.menu` in Module if you use `type: module` adopt
+  nodes in App.** An adopt node with an empty/null module menu produces no
+  navigation entries — the module has zero sidebar visibility. If ALL modules
+  in an App lack menus, the UI sidebar and default redirect will be empty.
+- **`view` resolves ALL visual kinds (Page, Form, Table, Dashboard, Widget,
+  Report, Wizard, Kanban, Timeline, Print).** Form and Table are now valid
+  `view` targets — each gets an auto-derived Page wrapper with route
+  `/<module>/form/<name>` or `/<module>/table/<name>` (unless `public: false`).
+  No need to use `route` escape hatch for Forms/Tables anymore.
+- **`public` (default `true`) on every visual kind** controls whether the kind
+  gets a standalone route via auto-derived Page wrapper. Set `public: false`
+  for embed-only Forms/Tables.
+- **Menu nesting is capped at 3 levels.** Adopt nodes only at level 1; groups
+  at levels 1–2; leaves at levels 1–3 — the landing Dashboard is the
+  canonical level-1 leaf.
+- **`access` is orthogonal to `app_renderer`.** `access: public` (landing) and
+  `app_renderer: no-nav` are independent axes — `no-nav` can be public or
+  private, and `public` can use any renderer. Default is `private` +
+  `sidebar-nav`.
+- **`no-nav` disables auth controls too** — no nav links AND no Sign in/out by
+  default. Opt back in per element via `chrome: {nav: menu, auth: links}`.
+- **Table `default_sort` must reference an existing field** on the target entity.
+  Check the entity's field list before setting `default_sort`. Framework-managed
+  fields (`id`, `version`, `created_at`, `updated_at`, `created_by`, `updated_by`,
+  `doc_status`) are always valid; custom fields like `modified` do NOT exist
+  unless explicitly declared.
+- **Dashboard widget `ref` uses just the widget name** — NOT `module.name`
+  format. Example: `ref: doc-in-progress`, not `ref: crc-report.doc-in-progress`.
+  The registry indexes widgets by `metadata.name` only. Module-qualified refs
+  will fail validation with "widget ref not found" even when the widget file exists.
