@@ -10,16 +10,16 @@ import (
 	"testing"
 )
 
-// spaChecksumFromSums — parse entri "  <hex>  <name>".
+// checksumFromSums (helper bersama di release.go) — parse entri "  <hex>  <name>".
 func TestSpaChecksumFromSums(t *testing.T) {
 	sums := "  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  formspec-linux-amd64.tar.gz\n" +
 		"  abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890  spa-v0.0.4.tar.gz\n"
-	got := spaChecksumFromSums(sums, "spa-v0.0.4.tar.gz")
+	got := checksumFromSums(sums, "spa-v0.0.4.tar.gz")
 	want := "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
 	if got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}
-	if spaChecksumFromSums(sums, "spa-v0.0.5.tar.gz") != "" {
+	if checksumFromSums(sums, "spa-v0.0.5.tar.gz") != "" {
 		t.Fatal("missing entry harus mengembalikan string kosong")
 	}
 }
@@ -47,7 +47,7 @@ func makeTestSpaTar(t *testing.T, entries map[string]string) []byte {
 	return buf.Bytes()
 }
 
-// spaExtract: strip prefix "spa/", isi index.html + manifest.json.
+// extractTarGz (helper bersama di release.go): strip prefix "spa/", isi index.html + manifest.json.
 func TestSpaExtract(t *testing.T) {
 	data := makeTestSpaTar(t, map[string]string{
 		"index.html":    "<html>ok</html>",
@@ -55,7 +55,7 @@ func TestSpaExtract(t *testing.T) {
 		"manifest.json": `{"version": "v0.0.4"}`,
 	})
 	dest := t.TempDir()
-	if err := spaExtract(data, dest); err != nil {
+	if err := extractTarGz(data, dest, "spa/"); err != nil {
 		t.Fatal(err)
 	}
 	for _, f := range []string{"index.html", filepath.Join("assets", "a.js"), "manifest.json"} {
@@ -69,7 +69,7 @@ func TestSpaExtract(t *testing.T) {
 	}
 }
 
-// spaExtract: path traversal di tar harus ditolak.
+// extractTarGz: path traversal di tar harus ditolak.
 func TestSpaExtractRejectsTraversal(t *testing.T) {
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)
@@ -83,7 +83,7 @@ func TestSpaExtractRejectsTraversal(t *testing.T) {
 	gz.Close()
 
 	dest := t.TempDir()
-	if err := spaExtract(buf.Bytes(), dest); err == nil {
+	if err := extractTarGz(buf.Bytes(), dest, "spa/"); err == nil {
 		t.Fatal("path traversal harus ditolak, tapi extract sukses")
 	}
 	// Tidak boleh ada file di luar dest.

@@ -103,6 +103,8 @@ func main() {
 		runSchema(os.Args[2:])
 	case "spa":
 		runSpa(os.Args[2:])
+	case "upgrade":
+		runUpgrade(os.Args[2:])
 	case "workspace":
 		runWorkspace(os.Args[2:])
 	case "sign":
@@ -163,6 +165,7 @@ func usage() {
 	fmt.Fprintf(os.Stderr, "  init                Scaffold a new FormSpec project with standard layout\n")
 	fmt.Fprintf(os.Stderr, "  schema              Manage cached JSON Schema versions (fetch, update, list, clear)\n")
 	fmt.Fprintf(os.Stderr, "  spa                 Download & cache the SPA UI (install/path/remove)\n")
+	fmt.Fprintf(os.Stderr, "  upgrade             Self-update the binary from GitHub Releases\n")
 	fmt.Fprintf(os.Stderr, "  version             Print the binary version\n")
 	fmt.Fprintf(os.Stderr, "\nNot yet implemented (see docs/cli-tools/01-formspec-cli.md):\n")
 	fmt.Fprintf(os.Stderr, "  saga, script, freeze, rollback, lock\n")

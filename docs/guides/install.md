@@ -164,7 +164,22 @@ Lanjutkan ke [How to Run](how-to-run.md) untuk menjalankan aplikasi pertama.
 
 ## Upgrade
 
-Jalankan ulang installer (idempotent — menimpa binary lama di slot yang sama):
+Jalankan `formspec upgrade` — binary tahu platform & path-nya sendiri, download
+artifact resmi dari GitHub Releases, verifikasi checksum, lalu mengganti dirinya
+di tempat:
+
+```bash
+formspec upgrade --check    # lihat dulu apakah ada versi lebih baru
+formspec upgrade            # upgrade ke versi terbaru
+```
+
+Untuk instalasi yang dikelola **package manager** (brew/scoop/apt), upgrade
+lewat package manager tersebut.
+
+### Fallback: jalankan ulang installer
+
+Untuk install pertama kali, direktori binary yang read-only, atau bila memilih
+jalur manual — installer bersifat idempotent (menimpa binary di slot yang sama):
 
 ```bash
 # macOS / Linux
@@ -177,6 +192,12 @@ irm https://formspec.dev/install.ps1 | iex
 Atau untuk Metode 2: `go install github.com/primadi/formspec/cmd/formspec@latest` lagi.
 
 ## Rollback ke versi sebelumnya
+
+```bash
+formspec upgrade --version v0.4.0
+```
+
+Atau lewat installer:
 
 ```bash
 # macOS / Linux

@@ -161,7 +161,12 @@ export function Install() {
             ))}
           </div>
 
-          <p className="mt-6 text-center text-sm text-zinc-500">
+          <p className="mt-6 text-center text-xs text-zinc-500">
+            Sudah terpasang? Upgrade dengan{" "}
+            <code className="font-mono">formspec upgrade</code>.
+          </p>
+
+          <p className="mt-3 text-center text-sm text-zinc-500">
             Panduan lengkap (upgrade, rollback, uninstall, windows-arm):{" "}
             <a
               href="https://docs.formspec.dev/guides/install.html"

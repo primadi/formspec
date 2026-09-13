@@ -38,6 +38,17 @@ hardcode `formspec init` dipindah ke `cmd/formspec/template_init/`
 `docs_internal/plan/app-shape-and-init-templates.md` dan
 `docs_internal/changelog/2026-09-13-002-app-shape-and-init-templates.md`.
 
+**Catatan 2026-09-13**: ✅ **`formspec upgrade` (self-update binary)** — verb
+baru (Fase 3.9) yang mengganti binary dari GitHub Releases tanpa install ulang:
+resolve `releases/latest`/`--version`, verify `SHA256SUMS.txt`, smoke test, swap
+atomik di `os.Executable()` (Windows rename-ke-`.old`); flag `--check`,
+`--dry-run`, `--force`, `--yes`. Helper download/verify/extract diekstrak ke
+`cmd/formspec/release.go` (dipakai bersama `spa install`), semver comparator
+in-repo `cmd/formspec/semver.go` (tanpa dependency baru). E2E terverifikasi
+(upgrade v0.0.6→v0.0.7, idempotent, rollback). Lihat
+`docs_internal/plan/formspec-upgrade-command.md` dan
+`docs_internal/changelog/2026-09-13-004-formspec-upgrade-command.md`.
+
 **Catatan 2026-08-11**: Jalur **agent-assisted app development tanpa MCP** selesai —
 lihat `docs_internal/plan/agent-assisted-app-development.md`, guide
 `docs/guides/agent-assisted-app-development.md`, dan contoh `examples/cafe/`.
@@ -396,6 +407,11 @@ closed-set agar custom screen sederhana (login, landing) bisa pure-YAML tanpa
 ### 3.8 Deferred CLI ops
 
 - [ ] ⏸️ `promote`, `archive`, `saga`, `module`, `sign`, `script`, `freeze`, `rollback`, `lock`, `workspace create`, `suspend scripts` — depend on Control Plane or backend maturity
+
+### 3.9 Distribution — self-update
+
+- [x] 3.9.1 `formspec upgrade` — self-update binary dari GitHub Releases tanpa install ulang: resolve versi (`releases/latest` / `--version`), download artifact `formspec-<os>-<arch>.{tar.gz,zip}` + verify `SHA256SUMS.txt`, smoke test, lalu swap atomik di `os.Executable()` (Windows: rename-ke-`.old`). Flag `--check`, `--dry-run`, `--force`, `--yes`. Prinsip eksplisit (bukan auto-update), tanpa `sudo`, tanpa dependency baru (semver comparator in-repo). File: `cmd/formspec/upgrade.go`, `cmd/formspec/release.go` (helper bersama, `spa.go` di-refactor memakainya), `cmd/formspec/semver.go`. Docs: `02-formspec-cli.md`, `install.md`, `releasing.md`, CLI skill, landing page. E2E terverifikasi (upgrade/rollback/idempotent). Lihat `docs_internal/plan/formspec-upgrade-command.md`, changelog `2026-09-13-004`. ✅ 2026-09-13
+- [ ] 3.9.2 ⏸️ `formspec upgrade --spa` — auto-install cache SPA versi baru setelah upgrade (saat ini hanya hint `formspec spa install`). Di-defer: butuh `upgrade` stabil dulu; lihat plan §Out of Scope.
 
 ---
 

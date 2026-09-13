@@ -22,7 +22,7 @@
 | **Marketplace & signing**      | `module list\|install\|uninstall\|publish`, `sign`, `override adopt\|diff\|list`, `verify` |
 | **Scripting**                  | `script validate\|test`                                                                    |
 | **Emergency (Resource Plane)** | `freeze`, `rollback`, `lock workspace`                                                     |
-| **Ops**                        | `workspace create\|list\|delete`, `logs`, `spa install\|path\|remove`                      |
+| **Ops**                        | `workspace create\|list\|delete`, `logs`, `spa install\|path\|remove`, `upgrade`           |
 
 ---
 
@@ -156,6 +156,39 @@ formspec spa remove --all        # hapus semua versi cache
 - Binary build `dev` menolak `spa install` (tidak ada tag rilis untuk
   di-match) — gunakan auto-detect repo atau `--dev-ui`.
 - Base URL bisa di-override via env `FORMSPEC_SPA_URL`.
+
+### `formspec upgrade`
+
+Self-update binary dari GitHub Releases — tanpa install ulang. Resolve versi
+target (`releases/latest`, atau `--version <tag>`), download artifact
+`formspec-<os>-<arch>.tar.gz|.zip` + `SHA256SUMS.txt` dari tag yang sama,
+verifikasi checksum, smoke test (`<binary-baru> version`), lalu menimpa binary
+di path `os.Executable()` secara atomik.
+
+```bash
+formspec upgrade                     # ke versi terbaru
+formspec upgrade --check             # cek tanpa mengubah binary
+formspec upgrade --dry-run           # tampilkan rencana (versi, URL, path)
+formspec upgrade --version v0.0.7    # pin / rollback ke tag tertentu
+formspec upgrade --force             # paksa walau versi sama (re-install)
+formspec upgrade --yes               # non-interaktif (tanpa konfirmasi)
+```
+
+- **Eksplisit, bukan auto-update** — tidak ada cek versi di background.
+- **Rilis resmi saja** — checksum wajib cocok; mismatch = abort tanpa
+  menyentuh binary lama. Sumber bisa di-override via env
+  `FORMSPEC_RELEASE_BASE` (mirror/proxy) dan `FORMSPEC_RELEASE_API`.
+- **Fail-safe** — binary baru di-extract ke temp di direktori yang sama, di-smoke
+  test dulu, baru di-swap. Gagal di langkah mana pun sebelum swap = tidak ada
+  perubahan.
+- **Tanpa `sudo`** — bila direktori binary tidak writable, perintah berhenti
+  dengan pesan + fallback installer.
+- Build `dev` (tanpa tag rilis) menolak `upgrade` — sama seperti `spa install`.
+- Setelah upgrade, cache SPA `~/.formspec/spa/<versi-lama>/` tidak dipakai
+  binary baru; jalankan `formspec spa install` bila memakai binary tanpa
+  embedded SPA (mis. hasil `go install`).
+- Untuk instalasi yang dikelola package manager (brew/scoop/apt), upgrade lewat
+  package manager tersebut.
 
 ### `formspec check [--fix]`
 

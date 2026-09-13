@@ -136,6 +136,11 @@ tar -xzf formspec-darwin-arm64.tar.gz -C /tmp && /tmp/formspec version   # → f
 > cek `formspec version` yang mendeteksi artifact rusak. Makefile guard
 > `release` juga fail-fast bila binary hasil build kosong.
 
+> **Kontrak publik**: nama artifact (`formspec-<os>-<arch>.tar.gz|.zip`),
+> `SHA256SUMS.txt` (satu baris per artifact), dan endpoint
+> `releases/latest` adalah API yang dipakai `formspec upgrade` dan installer
+> script. Jangan mengubahnya tanpa bump major.
+
 ## 4. Upload ke GitHub Releases
 
 ```bash

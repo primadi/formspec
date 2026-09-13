@@ -21,6 +21,10 @@ Context for AI coding agents working on the FormSpec CLI (`cmd/formspec/`).
 - `cmd/formspec/schema.go` — `formspec schema` (fetch/update/list/clear)
 - `cmd/formspec/schema_registry.go` — registry URL resolution (env > config > default)
 - `internal/schemaregistry/` — registry client + local schema cache
+- `cmd/formspec/spa.go` — `formspec spa install|path|remove`
+- `cmd/formspec/upgrade.go` — `formspec upgrade` (self-update binary)
+- `cmd/formspec/release.go` — helper bersama download/verify/extract artifact GitHub Releases
+- `cmd/formspec/semver.go` — comparator semver in-repo (tanpa dependency)
 
 ## Command Status
 
@@ -31,6 +35,8 @@ Context for AI coding agents working on the FormSpec CLI (`cmd/formspec/`).
 | `generate --lang typescript`                                                                                            | Implemented ✅    |
 | `validate`, `check`, `new`, `diff`, `get`, `describe`, `delete`, `migrate`, `repl`, `seed`, `backup`, `restore`, `logs` | Implemented ✅    |
 | `schema` (fetch/update/list/clear)                                                                                      | Implemented ✅    |
+| `spa install\|path\|remove`                                                                                             | Implemented ✅    |
+| `upgrade`                                                                                                               | Implemented ✅    |
 | `promote`, `archive`, `saga`, `module`, `sign`, `script`, `freeze`, `rollback`, `lock`, `workspace`                     | Stub, deferred ⏸️ |
 
 ## Implementation priority (per docs/cli-tools/01-formspec-cli.md)

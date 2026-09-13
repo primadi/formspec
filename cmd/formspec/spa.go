@@ -15,22 +15,11 @@
 package main
 
 import (
-	"archive/tar"
-	"compress/gzip"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 )
-
-// spaDownloadBaseURL — base URL download artifact spa. Bisa di-override via
-// env FORMSPEC_SPA_URL (proxy/enterprise scenario), stretch dari plan §Risks.
-const spaDownloadBaseURL = "https://github.com/primadi/formspec/releases/download"
 
 func runSpa(args []string) {
 	if len(args) < 1 {
@@ -86,6 +75,18 @@ func spaCacheDir() string {
 	return ""
 }
 
+// spaCacheInstalled melaporkan apakah cache SPA untuk versi tertentu sudah
+// terpasang (dipakai `formspec upgrade` untuk mengingatkan `spa install` ulang
+// setelah versi binary berubah).
+func spaCacheInstalled(ver string) bool {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+	st, err := os.Stat(filepath.Join(home, ".formspec", "spa", ver, "index.html"))
+	return err == nil && !st.IsDir()
+}
+
 func runSpaInstall(args []string) {
 	force := false
 	for _, a := range args {
@@ -124,14 +125,15 @@ Build dev tidak punya versi rilis untuk di-match. Untuk UI saat development:
 
 	base := os.Getenv("FORMSPEC_SPA_URL")
 	if base == "" {
-		base = spaDownloadBaseURL
+		base = releaseBaseURL()
 	}
 	base = strings.TrimRight(base, "/")
-	artifactURL := fmt.Sprintf("%s/%s/spa-%s.tar.gz", base, version, version)
+	artifactName := fmt.Sprintf("spa-%s.tar.gz", version)
+	artifactURL := fmt.Sprintf("%s/%s/%s", base, version, artifactName)
 	sumsURL := fmt.Sprintf("%s/%s/SHA256SUMS.txt", base, version)
 
 	fmt.Printf("⬇️  Download %s\n", artifactURL)
-	artifact, err := spaHTTPGet(artifactURL)
+	artifact, err := releaseGet(artifactURL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ %v\n", err)
 		fmt.Fprintf(os.Stderr, "   (versi %s mungkin belum punya spa artifact —\n", version)
@@ -140,21 +142,15 @@ Build dev tidak punya versi rilis untuk di-match. Untuk UI saat development:
 	}
 
 	fmt.Printf("⬇️  Download %s\n", sumsURL)
-	sums, err := spaHTTPGet(sumsURL)
+	sums, err := releaseGet(sumsURL)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ %v\n", err)
 		os.Exit(1)
 	}
 
 	// Verify checksum terhadap SHA256SUMS.txt (baris spa-<v>.tar.gz).
-	want := spaChecksumFromSums(string(sums), fmt.Sprintf("spa-%s.tar.gz", version))
-	if want == "" {
-		fmt.Fprint(os.Stderr, "❌ SHA256SUMS.txt tidak berisi entri untuk spa artifact — download dibatalkan\n")
-		os.Exit(1)
-	}
-	got := sha256.Sum256(artifact)
-	if hex.EncodeToString(got[:]) != want {
-		fmt.Fprintf(os.Stderr, "❌ Checksum mismatch — download dibatalkan\n   want %s\n   got  %s\n", want, hex.EncodeToString(got[:]))
+	if err := verifyArtifact(artifact, string(sums), artifactName); err != nil {
+		fmt.Fprintf(os.Stderr, "❌ %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Println("🔒 Checksum SHA256 OK")
@@ -167,93 +163,12 @@ Build dev tidak punya versi rilis untuk di-match. Untuk UI saat development:
 		fmt.Fprintf(os.Stderr, "❌ %v\n", err)
 		os.Exit(1)
 	}
-	if err := spaExtract(artifact, dir); err != nil {
+	if err := extractTarGz(artifact, dir, "spa/"); err != nil {
 		fmt.Fprintf(os.Stderr, "❌ extract: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Printf("✅ SPA %s ter-install di %s\n", version, dir)
 	fmt.Printf("   → formspec dev akan otomatis memakai cache ini\n")
-}
-
-// spaChecksumFromSums extracts the hex digest for name from a
-// "  <hex>  <name>" SHA256SUMS line. "" when absent.
-func spaChecksumFromSums(sums, name string) string {
-	for _, line := range strings.Split(sums, "\n") {
-		fields := strings.Fields(line)
-		if len(fields) == 2 && filepath.Base(fields[1]) == name {
-			return strings.ToLower(fields[0])
-		}
-	}
-	return ""
-}
-
-// spaHTTPGet fetches a URL, returning the body. Mapping status jadi pesan
-// yang jelas (404 → release/artifact tidak ada).
-func spaHTTPGet(url string) ([]byte, error) {
-	client := &http.Client{Timeout: 5 * time.Minute}
-	resp, err := client.Get(url)
-	if err != nil {
-		return nil, fmt.Errorf("download gagal: %w", err)
-	}
-	defer resp.Body.Close()
-	switch {
-	case resp.StatusCode == 404:
-		return nil, fmt.Errorf("artifact tidak ditemukan (404): %s", url)
-	case resp.StatusCode != 200:
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, url)
-	}
-	return io.ReadAll(resp.Body)
-}
-
-// spaExtract extracts a spa-<version>.tar.gz (layout: spa/index.html,
-// spa/assets/*) stripping the top-level "spa/" prefix into dest, with a
-// path-traversal guard.
-func spaExtract(data []byte, dest string) error {
-	gz, err := gzip.NewReader(strings.NewReader(string(data)))
-	if err != nil {
-		return err
-	}
-	defer gz.Close()
-
-	tr := tar.NewReader(gz)
-	for {
-		hdr, err := tr.Next()
-		if err == io.EOF {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		// Strip prefix "spa/" — hasil: <dest>/index.html, <dest>/manifest.json.
-		name := strings.TrimPrefix(hdr.Name, "spa/")
-		if name == "" || name == "." {
-			continue
-		}
-		clean := filepath.Clean(name)
-		if strings.HasPrefix(clean, "..") || filepath.IsAbs(clean) {
-			return fmt.Errorf("path tidak valid di tar: %s", name)
-		}
-		target := filepath.Join(dest, clean)
-		switch hdr.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(target, 0o755); err != nil {
-				return err
-			}
-		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-				return err
-			}
-			out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(hdr.Mode)&0o755)
-			if err != nil {
-				return err
-			}
-			if _, err := io.Copy(out, tr); err != nil {
-				out.Close()
-				return err
-			}
-			out.Close()
-		}
-	}
 }
 
 func runSpaPath() {
