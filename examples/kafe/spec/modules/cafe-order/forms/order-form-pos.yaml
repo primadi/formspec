@@ -1,0 +1,71 @@
+apiVersion: formspec.dev/v1
+kind: Form
+metadata:
+  name: order-form-pos
+  module: cafe-order
+  description: "Detail pesanan untuk kasir — termasuk tindakan status"
+spec:
+  entity: cafe-order.order
+  mode: edit
+  # Drawer: kasir tidak kehilangan daftar pesanan saat membuka detail.
+  # GAP-37: bentuk objek wajib; shorthand `render: drawer` ditolak schema.
+  render: { mode: drawer }
+  sections:
+    - title: "Pesanan"
+      columns: 2
+      fields:
+        - { field: number, read_only: true }
+        - { field: status, read_only: true }
+        - { field: channel, read_only: true }
+        - { field: dining_table_id, widget: relation-picker }
+        - { field: employee_id, label: "Kasir", widget: relation-picker }
+        - { field: member_id, widget: relation-picker }
+        - { field: guest_note, read_only: true }
+    - title: "Item Pesanan"
+      fields:
+        # Child table: baris pesanan bisa diselesaikan per item oleh bar/dapur
+        # (line_status), supaya satu pesanan berisi kopi + makanan tidak
+        # menahan barang yang sudah siap.
+        - { field: lines }
+    - title: "Pembayaran"
+      columns: 2
+      fields:
+        - { field: subtotal, read_only: true }
+        - { field: promo_id, widget: relation-picker }
+        - { field: discount_amount, read_only: true }
+        # `visible_when` di sini hanya membandingkan `status` (enum).
+        # Untuk field money: bandingkan money dengan money
+        # (`fields.a > fields.b`) — membandingkannya dengan angka mentah
+        # adalah error, bukan 0 (S7).
+        - field: manual_discount_amount
+          label: "Diskon Manual"
+          visible_when: "fields.status == 'draft' or fields.status == 'awaiting_payment'"
+        - field: manual_discount_reason
+          label: "Alasan Diskon Manual"
+          # Wajib bila diskon manual melebihi batas di Config (aturan bisnis #8).
+          required_when: "fields.manual_discount_amount != null"
+          help: "Wajib diisi bila diskon melebihi batas yang diizinkan kasir."
+        - { field: points_redeemed, label: "Poin Ditukar" }
+        - { field: points_value, read_only: true }
+        - { field: service_charge_amount, read_only: true }
+        - { field: tax_amount, read_only: true }
+        - { field: total_amount, read_only: true }
+        - { field: paid_amount, read_only: true }
+        - { field: change_amount, read_only: true }
+    - title: "Pembatalan"
+      visible_when: "fields.status == 'cancelled'"
+      columns: 2
+      fields:
+        - { field: void_reason, read_only: true }
+        - { field: void_approved_by, read_only: true, label: "Disetujui Oleh" }
+  actions:
+    - { action: confirm-payment, label: "Tandai Lunas", style: primary }
+    - { action: start-preparing, label: "Mulai Kerjakan" }
+    - { action: mark-ready, label: "Siap Disajikan" }
+    - { action: mark-served, label: "Disajikan" }
+    - { action: complete-order, label: "Selesai" }
+    - { action: void-order, label: "Void", style: danger }
+  # CATATAN GAP-05: form ini adalah bentuk SEMENTARA untuk POS. Alur yang
+  # diinginkan (grid menu + keranjang + numpad uang) butuh blok cart yang belum
+  # ada di PageBlock (himpunan tertutup: form/table/component/widget/html/section).
+  # GAP-01: seluruh field money di sini tanpa widget uang -> input teks polos.

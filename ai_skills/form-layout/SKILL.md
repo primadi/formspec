@@ -27,18 +27,28 @@ metadata:
 
 ## Widget per Tipe Field
 
-| Field type | Widget default | Catatan |
-|---|---|---|
-| string | TextInput | |
-| text | Textarea | |
-| integer | NumberInput (`integer: true`) | blokir pecahan |
-| decimal | NumberInput (`scale`) | dibatasi `scale` desimal |
-| money | MoneyInput | format mata uang otomatis |
-| boolean | Switch | |
-| enum | Select | `type-ahead` untuk opsi banyak |
-| date / datetime | DateInput | format ikut global settings |
-| relation | RelationPicker | dropdown + pencarian; portal anti-terpotong |
-| child table | ChildTable | untuk baris item (order items, dll.) |
+Widget diturunkan dari tipe field; `widget:` hanya ditulis untuk **mengganti**
+turunan itu. Nilainya **himpunan tertutup** — divalidasi `formspec validate`
+dan di-autocomplete editor (lihat `docs/spec/frontend/07-component-kinds.md` §1).
+
+| Field type        | Widget default                         | `widget:` kanonik                                                   |
+| ----------------- | -------------------------------------- | ------------------------------------------------------------------- |
+| string            | text input                             | `input`, `textarea`, `richtext`, `password`, `tags`, `uuid`, `json` |
+| text              | textarea                               | `textarea`                                                          |
+| integer / decimal | number input                           | `number`, `decimalinput`, `slider`                                  |
+| money             | **text input** (belum ada widget uang) | `decimalinput` (sementara)                                          |
+| boolean           | switch                                 | `switch`, `radio-group`                                             |
+| enum              | select                                 | `select`, `combobox`, `radio-group`                                 |
+| date / datetime   | date input                             | `datepicker`, `datetimeinput`                                       |
+| relation          | relation picker                        | `relation-picker`                                                   |
+| child             | child grid                             | `child-grid`                                                        |
+| file / attachment | file input                             | `fileinput`                                                         |
+
+Jangan menulis nama yang tidak ada di daftar itu. Sebelum S10, salah ketik
+(`relaion-picker`) lolos validasi dan diam-diam jadi input teks; sekarang
+`formspec validate` menolaknya dengan menyebut nama yang benar. `money` dan
+`time` **belum** punya widget khusus — keduanya jatuh ke input teks, dan
+`MoneyInput`/`TimeInput` adalah gap yang tercatat, bukan nama yang boleh ditulis.
 
 ## FormSpecExpr
 

@@ -1,0 +1,27 @@
+apiVersion: formspec.dev/v1
+kind: Page
+metadata:
+  name: pos-workbench
+  module: cafe-order
+  description: "Meja kasir: daftar pesanan (kiri) + detail terpilih (kanan)"
+spec:
+  route: /pos
+  title: "Kasir"
+  icon: "calculator"
+  # Master-detail tanpa pindah halaman: memilih baris di daftar menggerakkan
+  # panel detail. Ini pola komposisi Page yang sudah didukung (06-page-kinds §1.1)
+  # — bukan kind baru.
+  layout: { mode: split }
+  blocks:
+    - table: { ref: order-table-pos }
+    - form:
+        ref: order-form-pos
+        binds: { source: order-table-pos, param: id }
+        mode: view
+  # CATATAN GAP-05 (diperbarui 2026-09-15): sisi PELANGGAN sudah tertutup —
+  # pemilihan baris dinyatakan sebagai `picker` pada child field `order.lines`
+  # (lihat `menu-catalog.yaml` + `order-form-qr.yaml`). Workbench ini tetap
+  # bentuk SEMENTARA untuk sisi KASIR: POS yang diinginkan butuh grid menu +
+  # numpad uang + kembalian + pembayaran gabungan. Numpad uang menunggu widget
+  # `MoneyInput` (gaps_found/TODO.md 2.14), dan layar POS sebagai kind tersendiri
+  # belum ada.

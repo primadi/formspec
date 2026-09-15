@@ -439,6 +439,17 @@ func (f *HandlerFactory) HandleList(module, entity string) http.HandlerFunc {
 			return
 		}
 
+		// Row scope (S2, #6/#9): merge the entity's server-resolved scope into
+		// the client's filters, overriding any client value on a scoped field.
+		// A scoped entity whose scope cannot be resolved fails closed.
+		if es, ok := f.entitySpec(module, entity); ok {
+			filters, err = f.applyRowScope(r, es, filters)
+			if err != nil {
+				writeError(w, http.StatusForbidden, "FORBIDDEN", err.Error())
+				return
+			}
+		}
+
 		result, err := store.List(ctx, db.ListParams{
 			WorkspaceID: workspaceID,
 			Page:        page,
@@ -534,10 +545,25 @@ func (f *HandlerFactory) parseListQuery(r *http.Request, module, entity string) 
 		}
 	}
 
+	// Declared row-scope `from: route` parameters are request context, not field
+	// filters: `?branch=A` must not be parsed as `filter branch = A` (which would
+	// fail as an unknown field). The scope itself is applied by applyRowScope.
+	scopeParams := map[string]bool{}
+	for i := range es.Scope {
+		if es.Scope[i].From != "route" {
+			continue
+		}
+		p := es.Scope[i].Param
+		if p == "" {
+			p = es.Scope[i].Field
+		}
+		scopeParams[p] = true
+	}
+
 	// Filters
 	var filters map[string]db.FilterOp
 	for key, values := range q {
-		if reservedListParams[key] || len(values) == 0 {
+		if reservedListParams[key] || scopeParams[key] || len(values) == 0 {
 			continue
 		}
 		field, op := key, "eq"
@@ -747,6 +773,13 @@ func (f *HandlerFactory) HandleCreate(module, entity string) http.HandlerFunc {
 			hooks = entitySpec.Hooks
 		}
 
+		// Canonicalize money fields before hooks and storage see them: one shape
+		// {amount, currency}, currency resolved (never guessed). Gap #46.
+		if err := f.normalizeMoneyFields(entitySpec, body); err != nil {
+			writeError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", err.Error())
+			return
+		}
+
 		// Idempotency gate (todo 2.7): if create is declared idempotent with a
 		// key source, claim the key up front. Completed keys replay the stored
 		// response; in-flight keys get 409; new/failed keys proceed.
@@ -859,6 +892,18 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 		var body map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "invalid JSON: "+err.Error())
+			return
+		}
+		if body == nil {
+			body = make(map[string]any)
+		}
+		// Canonicalize money fields before the merge/validate/storage path (gap #46).
+		var updateEntitySpec *spec.EntitySpec
+		if f.specLookup != nil {
+			updateEntitySpec, _ = f.specLookup(module, entity)
+		}
+		if err := f.normalizeMoneyFields(updateEntitySpec, body); err != nil {
+			writeError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", err.Error())
 			return
 		}
 
@@ -991,6 +1036,39 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 			Meta: MetaSingle{RequestID: requestIDFromContext(ctx), Timestamp: time.Now().UTC().Format(time.RFC3339)},
 		})
 	}
+}
+
+// normalizeMoneyFields canonicalizes money-typed fields in a request body
+// (05-field-types.md §2, gap #46). Accepted inputs are a Money object, a bare
+// number, or a numeric string; the stored value is always {amount, currency}
+// with the currency resolved from the field or `settings.currency`. An
+// unresolvable currency is an error rather than data with no unit.
+func (f *HandlerFactory) normalizeMoneyFields(entitySpec *spec.EntitySpec, data map[string]any) error {
+	if entitySpec == nil || len(data) == 0 {
+		return nil
+	}
+	for i := range entitySpec.Fields {
+		fld := &entitySpec.Fields[i]
+		if fld.Type != spec.FieldMoney {
+			continue
+		}
+		raw, ok := data[fld.Name]
+		if !ok || raw == nil {
+			continue
+		}
+		normalized, err := spec.NormalizeMoneyValue(raw, fld, f.settings)
+		if err != nil {
+			return err
+		}
+		// ValidateMoneyValue (existing contract, previously never called) rejects
+		// a currency that disagrees with the field and an amount beyond the
+		// field's scale.
+		if err := spec.ValidateMoneyValue(fld, normalized, f.settings); err != nil {
+			return err
+		}
+		data[fld.Name] = normalized
+	}
+	return nil
 }
 
 // HandleDelete returns a DELETE /{id} handler for the given entity.

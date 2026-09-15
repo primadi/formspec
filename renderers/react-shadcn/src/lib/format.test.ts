@@ -9,10 +9,45 @@
 import { describe, it, expect } from "vitest"
 import {
   createFormatter,
+  moneyAmount,
   parseDateByPattern,
   formatDateInput,
   roundTo,
 } from "./format"
+
+describe("moneyAmount — one shape for every money value", () => {
+  it("accepts a bare number", () => {
+    expect(moneyAmount(25000)).toBe(25000)
+  })
+
+  it("accepts a numeric string", () => {
+    expect(moneyAmount("15000")).toBe(15000)
+  })
+
+  it("accepts the canonical {amount, currency} wire shape", () => {
+    expect(moneyAmount({ amount: "25000", currency: "IDR" })).toBe(25000)
+    expect(moneyAmount({ amount: 25000, currency: "IDR" })).toBe(25000)
+  })
+
+  it("returns undefined when there is no usable amount", () => {
+    expect(moneyAmount(null)).toBeUndefined()
+    expect(moneyAmount(undefined)).toBeUndefined()
+    expect(moneyAmount("")).toBeUndefined()
+    expect(moneyAmount("Rp25.000")).toBeUndefined()
+    expect(moneyAmount({ currency: "IDR" })).toBeUndefined()
+    expect(moneyAmount({})).toBeUndefined()
+  })
+
+  it("round-trips into the formatter", () => {
+    const fmt = createFormatter({
+      currency: { code: "IDR", decimal_places: 0, symbol: "Rp" },
+      locale: "id-ID",
+    } as never)
+    expect(fmt.money(moneyAmount({ amount: "25000", currency: "IDR" })!)).toBe(
+      "Rp25.000",
+    )
+  })
+})
 
 describe("createFormatter — defaults (no settings)", () => {
   const fmt = createFormatter()

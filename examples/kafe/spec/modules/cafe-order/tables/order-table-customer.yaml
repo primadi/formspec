@@ -1,0 +1,29 @@
+apiVersion: formspec.dev/v1
+kind: Table
+metadata:
+  name: order-table-customer
+  module: cafe-order
+  description: "Pesanan pelanggan — kolom dibatasi agar tidak bocor data internal"
+spec:
+  entity: cafe-order.order
+  # GAP-07: `exclude: [public_api]` BELUM ditegakkan, jadi penyaringan field
+  # untuk permukaan publik dilakukan MANUAL di sini: hanya field yang aman
+  # untuk pelanggan yang dideklarasikan. Admin (yang memakai
+  # `order-table-pos`) melihat kolom yang jauh lebih lengkap dari entity yang
+  # sama — bukti bahwa pembatasan per-permukaan harus ditulis tangan.
+  columns:
+    - { field: number, label: "No. Pesanan" }
+    - { field: dining_table_id, label: "Meja" }
+    - { field: transaction_date, label: "Waktu", format: relative }
+    - { field: status, label: "Status", widget: badge }
+    - { field: total_amount, label: "Total", format: currency, align: right }
+  default_sort: -transaction_date
+  search: false
+  # Realtime: TIDAK tersedia untuk Listing, dan Table ini dipakai di halaman
+  # publik. `realtime: true` di sini hanya berguna bila halaman dirender di
+  # surface app ber-sesi. Untuk pelanggan anonim, status perlu refresh manual
+  # (GAP-17: tidak ada heartbeat, dan status pelanggan butuh reload).
+  realtime: false
+  # Tidak ada row_actions / bulk_actions: pelanggan tidak boleh mengubah apa pun.
+  # Satu-satunya aksi pelanggan (batalkan pesanan dalam batas waktu) adalah
+  # kandidat berikutnya, dan akan butuh action khusus + guard waktu.

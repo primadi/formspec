@@ -97,6 +97,20 @@ func (idx *entityIndex) fieldNames(module, entity string) map[string]bool {
 	return names
 }
 
+// fieldType resolves a field's declared type on an indexed entity.
+func (idx *entityIndex) fieldType(module, entity, field string) (spec.FieldType, bool) {
+	es, ok := idx.byKey[module+"."+entity]
+	if !ok {
+		return "", false
+	}
+	for _, f := range es.Fields {
+		if f.Name == field {
+			return f.Type, true
+		}
+	}
+	return "", false
+}
+
 // buildEntityIndex indexes all Entity/Document manifests by "{module}.{entity}".
 func buildEntityIndex(manifests []manifest.RawManifest) *entityIndex {
 	idx := &entityIndex{byKey: map[string]*spec.EntitySpec{}, sourceByKey: map[string]string{}}
@@ -155,6 +169,10 @@ func runCheck(args []string) {
 	// Check 2 (extended): FormSpecExpr in Kanban drag_guard + Wizard steps.
 	checkKanban(result, idx, res.Manifests)
 	checkWizard(result, idx, res.Manifests)
+
+	// Check 6: aggregate declarations (Report columns/totals, Widget config) —
+	// SUM/AVG/MIN/MAX only mean something over a numeric or money field (S7).
+	checkAggregates(result, idx, res.Manifests)
 
 	// Check 5.16: renderer registry & resolution (5.16.1), slot-tier
 	// validation (5.16.2), stack_family compatibility (5.16.3).
@@ -421,6 +439,116 @@ func checkWizard(result *checkResult, idx *entityIndex, manifests []manifest.Raw
 			}
 		}
 	}
+}
+
+// aggregateFns is the closed set of aggregate functions. SUM/AVG/MIN/MAX are
+// numeric; COUNT is defined over any field (and over no field at all).
+var aggregateFns = map[string]bool{"sum": true, "avg": true, "count": true, "min": true, "max": true}
+
+// checkAggregates verifies that every declared aggregate can mean something
+// (S7 / gap #28):
+//
+//   - the function is one of sum | avg | count | min | max
+//   - the target field exists on the report/widget entity
+//   - a non-COUNT aggregate targets a numeric or money field
+//
+// Money is a first-class {amount, currency} value, so aggregating it is
+// well-defined only because the engine reads its `.amount` component. A `sum`
+// over a text column is a spec bug — and it used to surface as a confident 0 in
+// reports, which is precisely the failure mode this gate removes.
+func checkAggregates(result *checkResult, idx *entityIndex, manifests []manifest.RawManifest) {
+	for _, m := range manifests {
+		sm, ok := m.Spec.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		switch m.Kind {
+		case "Report":
+			rs, err := manifest.RawSpecTo[spec.ReportSpec](sm)
+			if err != nil {
+				continue
+			}
+			entityRef := rs.Entity
+			if rs.Source != nil && rs.Source.Entity != "" {
+				entityRef = rs.Source.Entity
+			}
+			for _, col := range rs.Columns {
+				if col.Aggregate == "" {
+					continue
+				}
+				where := fmt.Sprintf("Report %q column %q", m.Metadata.Name, col.Field)
+				checkAggregateDecl(result, idx, m, entityRef, where, col.Aggregate, col.Field)
+			}
+			for _, total := range rs.Totals {
+				where := fmt.Sprintf("Report %q total %q", m.Metadata.Name, total.Label)
+				checkAggregateDecl(result, idx, m, entityRef, where, total.Fn, total.Field)
+			}
+
+		case "Widget":
+			ws, err := manifest.RawSpecTo[spec.WidgetSpec](sm)
+			if err != nil {
+				continue
+			}
+			fn, _ := ws.Config["aggregate"].(string)
+			if fn == "" {
+				continue
+			}
+			field, _ := ws.Config["field"].(string)
+			where := fmt.Sprintf("Widget %q config", m.Metadata.Name)
+			checkAggregateDecl(result, idx, m, ws.Entity, where, fn, field)
+		}
+	}
+}
+
+// checkAggregateDecl validates one aggregate declaration.
+func checkAggregateDecl(
+	result *checkResult,
+	idx *entityIndex,
+	m manifest.RawManifest,
+	entityRef, where, fn, field string,
+) {
+	if entityRef == "" {
+		// No entity to resolve against — a missing data source is another
+		// check's business.
+		return
+	}
+	if !aggregateFns[fn] {
+		result.add(m.Source, "error",
+			"%s: aggregate %q is not defined (want sum|avg|count|min|max)", where, fn)
+		return
+	}
+	// count(field) is legal over any field, and count() over none at all.
+	if fn == "count" && field == "" {
+		return
+	}
+	if field == "" {
+		result.add(m.Source, "error", "%s: aggregate %q needs a field", where, fn)
+		return
+	}
+
+	module, entity := splitEntityRef(entityRef, m.Metadata.Module)
+	if _, ok := idx.byKey[module+"."+entity]; !ok {
+		result.add(m.Source, "error",
+			"%s: aggregate %q references unknown entity %q", where, fn, entityRef)
+		return
+	}
+	ft, ok := idx.fieldType(module, entity, field)
+	if !ok {
+		result.add(m.Source, "error",
+			"%s: aggregate %q references unknown field %q on %s.%s", where, fn, field, module, entity)
+		return
+	}
+	if fn == "count" {
+		return
+	}
+	switch ft {
+	case spec.FieldInteger, spec.FieldDecimal, spec.FieldNumber, spec.FieldMoney:
+		return
+	}
+	result.add(m.Source, "error",
+		"%s: %s(%s) is not defined — field %q has type %s, which is not numeric (money fields aggregate over their amount)",
+		where, fn, field, field, ft)
 }
 
 // checkDatastores validates kind: Datastore manifests and module bindings

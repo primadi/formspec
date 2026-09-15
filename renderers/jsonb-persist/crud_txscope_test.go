@@ -54,11 +54,11 @@ func TestEntityStore_ResolveRelations_NoDeadlockUnderTxScope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("customer Insert under open TxScope failed: %v", err)
 	}
-	// A belongs_to target must be submitted (or lifecycle-free) before it
-	// can be referenced — ValidateRelationTargets enforces this.
-	if err := custStore.Submit(scopedCtx, "t1", custID, "u1"); err != nil {
-		t.Fatalf("customer Submit under open TxScope failed: %v", err)
-	}
+	// `customer` is characteristic master, so it is lifecycle-free (gap #44):
+	// the record is a valid relation target immediately after create, with no
+	// Submit step. ValidateRelationTargets accepts null/submitted doc_status
+	// only — before the lifecycle-free rule this required an explicit Submit.
+	// (Submitting here would now fail: there is no draft status to leave.)
 
 	orderID, err := orderStore.Insert(scopedCtx, InsertParams{
 		WorkspaceID: "t1", CreatedBy: "u1",

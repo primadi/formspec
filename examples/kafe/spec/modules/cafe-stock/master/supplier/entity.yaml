@@ -1,0 +1,37 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: supplier
+  module: cafe-stock
+  description: "Pemasok bahan baku"
+spec:
+  version: v1
+  characteristic: master
+  plural: suppliers
+  display_field: name
+  soft_deactivate: { enabled: true }
+  fields:
+    - name: code
+      type: string
+      required: true
+      unique: true
+      natural_key: true
+      title: "Kode Supplier"
+    - name: name
+      type: string
+      required: true
+      title: "Nama Supplier"
+    - name: phone
+      type: string
+      title: "Telepon"
+    - name: address
+      type: text
+      title: "Alamat"
+    - name: payment_term
+      type: string
+      title: "Termin Pembayaran"
+      description: "Mis. NET 30, CBD"
+    - name: note
+      type: text
+      title: "Catatan"
+  # expose: [] — UI-only.

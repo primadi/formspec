@@ -1,0 +1,21 @@
+apiVersion: formspec.dev/v1
+kind: Report
+metadata:
+  name: loyalty-summary
+  module: cafe-report
+  description: "Saldo & aktivitas poin pelanggan"
+spec:
+  title: "Loyalitas Pelanggan"
+  entity: cafe-loyalty.member-point
+  parameters:
+    - { field: tier, label: "Tingkat", type: select }
+  columns:
+    - { field: member_id, label: "Member" }
+    - { field: points_balance, label: "Saldo Poin", aggregate: sum }
+    - { field: lifetime_points, label: "Total Perolehan", aggregate: sum }
+    - { field: tier, label: "Tingkat" }
+    - { field: last_activity_at, label: "Aktivitas Terakhir", format: datetime }
+  groups:
+    - { field: tier, label: "Tingkat" }
+  totals:
+    - { label: "Total Saldo Poin", field: points_balance, fn: sum }

@@ -1,0 +1,21 @@
+apiVersion: formspec.dev/v1
+kind: Module
+metadata:
+  name: cafe-master
+  description: "Data acuan kafe: cabang, menu, meja, pelanggan, karyawan, promo"
+spec:
+  version: 1.0.0
+  depends:
+    - module: formspec/core
+  menu:
+    - label: "Master Kafe"
+      icon: "database"
+      children:
+        - { label: "Cabang", icon: "store", route: /cafe-master/branches }
+        - { label: "Kategori Menu", icon: "folder-tree", route: /cafe-master/menu-categories }
+        - { label: "Menu", icon: "coffee", route: /cafe-master/menu-items }
+        - { label: "Harga per Cabang", icon: "tag", route: /cafe-master/menu-item-prices }
+        - { label: "Meja", icon: "armchair", route: /cafe-master/dining-tables }
+        - { label: "Pelanggan", icon: "users", route: /cafe-master/members }
+        - { label: "Karyawan", icon: "id-card", route: /cafe-master/employees }
+        - { label: "Promo", icon: "percent", route: /cafe-master/promos }

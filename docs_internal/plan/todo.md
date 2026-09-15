@@ -1,6 +1,6 @@
 # Master Plan: FormSpec Implementation
 
-**Last Updated**: 2026-09-13  
+**Last Updated**: 2026-09-15  
 **Status**: ✅ Fase 0 complete · ✅ Fase 1 (1.1–1.5) · ✅ Fase 2.1 · ✅ Fase 2.2 · ✅ Fase 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6) · ✅ Fase 2.7 (idempotency prepare flow) · ✅ Fase 2.8 (spec.expose) · ✅ Fase 2.9 (2.9.1–2.9.3: ctx.\* primitives + dev auto-provision) · ✅ Fase 5 (5.1–5.4) · ✅ Spec hot-reload · ✅ Fase 11 (review schema↔docs) · ✅ Audit spec↔schema + tambah TODO item · ✅ `formspec validate` (3.1.1, engine+schema) · ✅ Rename forma→formspec (docs_internal/plan/rename-formspec.md) · 🚧 Fase 12 Domain Infrastruktur (docs/architecture/09-domain-map.md) · ✅ Schema registry online (docs_internal/plan/schema-registry-online.md) · ✅ CLI repl/seed/diff (3.4.1, 3.6.2, 3.6.3) · ✅ **Fase 4 (4.1–4.10) complete** (incl. 4.3.1–4.3.5 entity extension, 4.8.3 restore remap) · ✅ Landing page (5.1.3 + 5.13.5, docs_internal/plan/landing-page.md) · ✅ App renderer archetypes (5.1.1–5.1.3: sidebar-nav/topnav/no-nav + access + persist_backend, docs_internal/plan/landing-page.md) · ✅ **Fase 6.1 (6.1.1–6.1.3: login + token, entity-backed auth, external/ merge, generate-auth)** (docs_internal/plan/auth-login-token.md) · ✅ **6.3.1 + 6.3.2 + 5.12.5 (role + role-assignment Entity, materialisasi grant page → permission)** (docs_internal/changelog/2026-08-20-001) · ✅ **6.2.3 (wire permission check semua handler, surface-aware 404)** (docs_internal/changelog/2026-08-20-002) · ✅ **Fase 6 COMPLETE (6.1–6.9, dogfooding auth module)** (docs_internal/plan/fase6-dogfooding-auth-module.md, changelog 2026-08-20-003 s/d 2026-08-21-014) · 📐 **Widget strategy** (docs_internal/plan/widget-strategy.md — sync 5.10, tambah 5.2.7/5.10a, cross-link 7.17.1) · ✅ **Role grants app-scope sync** (docs_internal/plan/role-grants-app-scope.md, changelog 2026-08-26-003) · ✅ **Fase 5 COMPLETE (5.1–5.16)** (docs_internal/plan/fase5-completion.md, changelog 2026-08-24-027 s/d -032; audit sinkronisasi todo 2026-08-27) · ✅ **Fase 7 hampir lengkap** (7.1–7.14, 7.16, 7.17.1–7.17.2 — changelog 2026-08-25-001 s/d 2026-08-26-001; sisa: 7.9.1–7.9.5, 7.15.1, 7.17.3, 7.18, 7.19) · ✅ **Fase 2 COMPLETE (2.9.4 ctx.db module-scoped)** (changelog 2026-08-27-002) · ✅ **3.1.1a honesty scan Starlark** (changelog 2026-08-27-003) · 🚧 **Fase 8 sebagian** (8.1.1–8.1.5, 8.2.1–8.2.6 — docs_internal/plan/fase8-production-serve.md, changelog 2026-08-27-004; sisa: 8.1.6, 8.2.7, 8.3 ⏸️) · ✅ **Fase 10.1 `formspec mcp-serve`** (local MCP tool server — docs_internal/plan/fase10-local-mcp.md, changelog 2026-08-27-005) · ✅ **Fase 10.2 `formspec consult` client (Go)** — docs_internal/plan/fase10-consult-client.md, changelog 2026-08-27-006 (deviasi TS→Go dicatat di docs/ai/01+05; 10.2.7 kompresi riwayat deferred) · ✅ **Fase 10.3/10.4/10.6/10.7 consult completion** — changelog 2026-08-27-007 (10.3.3 & 10.5 deferred; 10.2.7 deferred) · ✅ **Fase 13.1 vendoring** (module install/list/uninstall + verify + boot enforcement — docs_internal/plan/fase13-vendoring.md, changelog 2026-08-28-001; 13.2/13.3 menyusul) · ✅ **Fase 13.2 overrides** (shadow copy adopt/diff/list + whitelist + drift detection — changelog 2026-08-28-002; 13.3 registry menyusul) · ✅ **Fase 13.3 registry loop** (verticals/registry spec + formspec sign/publish + install --from dengan signature verification — changelog 2026-08-28-003; 13.3.3/13.3.5 deferred) · ✅ **Theme switcher + theme_ref binding registry portal** (docs_internal/plan/registry-theme-switcher.md, changelog 2026-08-31-005) · ✅ **Named workspaces (2.11)** (docs_internal/plan/named-workspaces.md, changelog 2026-09-07-004) · ✅ **AppSpec.Workspaces[] allowlist (2.12)** (changelog 2026-09-07-005)
 
 > `⬜` not started · `✅` complete · `⏸️` deferred
@@ -37,6 +37,68 @@ hardcode `formspec init` dipindah ke `cmd/formspec/template_init/`
 (embed `//go:embed all:template_init`). Lihat
 `docs_internal/plan/app-shape-and-init-templates.md` dan
 `docs_internal/changelog/2026-09-13-002-app-shape-and-init-templates.md`.
+
+**Catatan 2026-09-15**: ✅ **S1 digeneralisasi — `picker` pada child field**
+(`examples/kafe/gaps_found/TODO.md` 1.5, gap **#5**). Blok Page `order_builder`
+(versi pertama, changelog `-003`) **dihapus**: terlalu sempit dan menduplikasi
+jalur tulis Form. Konstruk umumnya sekarang `child.picker` — pilih baris dari
+entity sumber + qty + snapshot — sehingga berlaku di **Form mana pun** dan
+submit tetap milik Form (rules, permission, idempotency, lifecycle, event).
+Ditambah tiga primitif umum: `FormField.default_from` (seed dari render
+context), `widget: hidden`, dan `FormRender.picker_panel: inline|aside`.
+Adopsi: kafe (order QR + purchase-order + stock-opname), inventory
+(stock-movement), gl (journal-entry) — lima picker, tiga Form baru. E2E: pesanan
+QR terkirim lewat Form pipe dengan `line_total`/`subtotal` terhitung server.
+Plan: `docs_internal/plan/child-field-picker.md` · changelog: `2026-09-15-004`.
+
+**Catatan 2026-09-15**: ✅ **S1 — blok Page `order_builder`**
+(`examples/kafe/gaps_found/TODO.md` 1.5, menutup gap **#5** untuk sisi
+pelanggan). Blok Page transaksional pertama: `catalog` + `lines` + `checkout`
+(`pkg/spec/order_builder.go`, `PageBlock.OrderBuilder`), renderer
+`kinds/page/blocks/OrderBuilderBlock.tsx` dengan logika murni di
+`lib/orderBuilder.ts` (25 test). Mendukung join harga dari entity terpisah
+(`price_entity` — kafe menyimpan harga per cabang) dan interpolasi `defaults`
+(`{context}`, `{now}`, `{today}`). Blok tidak menghitung total pesanan — itu
+kontrak Entity (`computed`). Adopsi kafe: halaman QR
+`cafe-order/pages/menu-catalog.yaml` + `line_total`/`subtotal` kini `computed`.
+Bukti runtime: anonim baca katalog+harga → keranjang → POST → order dengan
+`line_total`/`subtotal` terhitung server. **Tiga bug "diam-diam salah" ikut
+diperbaiki**: filter boolean `?flag=true` selalu 0 baris; baris tanpa
+`created_by`/`updated_by` membuat list 500; gerbang permission `source: entity`
+makai nama singular sehingga context entity tidak pernah resolve (+ permukaan
+publik kini melewati pra-cek). Plan: `docs_internal/plan/order-builder-block.md`
+· changelog: `2026-09-15-003`.
+
+**Catatan 2026-09-15**: ✅ **S10 — kosakata `widget` jadi himpunan tertutup**
+(`examples/kafe/gaps_found/TODO.md` 1.4, menutup akar gap **#1**). `widget:`
+berhenti jadi string bebas: `pkg/spec/widget.go` mendefinisikan `FormWidget`
+(20 nama) dan `TableCellWidget` (`badge`, `boolean`) sebagai tipe bernama +
+blok `const`, yang oleh `internal/genjsonschema` otomatis jadi enum di JSON
+Schema → `formspec validate` menolak salah ketik (`relaion-picker`) dan editor
+dapat autocomplete. Dua himpunan terpisah per permukaan, sebab widget form pada
+kolom tabel diabaikan renderer sel. Di runtime, `widget:` eksplisit di luar
+katalog merender error yang terlihat, bukan `TextInput` senyap. Paritas
+schema ↔ katalog ↔ implementasi dijaga `src/widgets/catalog.test.tsx` (14 test,
+diuji bisa gagal). Dokumen `07-component-kinds.md` §1 dikoreksi — lima nama di
+dokumen (`textinput`, `numberinput`, `dateinput`, `toggle`, `json-editor`)
+ternyata tidak pernah ada di renderer. Separuh lain gap #1 (widget `MoneyInput`/
+`TimeInput`) kini item **2.14**. Plan: `docs_internal/plan/widget-vocabulary-enum.md`
+· changelog: `2026-09-15-002`.
+
+**Catatan 2026-09-15**: ✅ **S7 — semantik aritmetika & agregasi `money`**
+(`examples/kafe/gaps_found/TODO.md` 1.3, menutup gap **#28**). Bentuk kanonik:
+uang beroperasi langsung (`money - money`, `number * money`, `sum([money…])`
+→ money) — spec yang sudah ada tidak perlu diubah, engine yang menyusul.
+Operand tidak sah (objek non-money, list, teks, angka mentah) **error**, bukan
+`0`; agregasi `money` menjumlahkan `.amount`-nya dan `formspec check` menolak
+agregat non-numerik secara statis. Diimplementasikan serentak di empat jalur:
+server `computed` (`internal/starlark/money.go` — tipe Starlark `moneyValue`
+presisi `math/big.Rat`), klien FormSpecExpr (`eval.ts`), agregasi persist
+(`columnRefExpr` sub-path `.amount` + `requireNumericAggregateField`), dan
+agregasi klien bersama (`src/lib/aggregate.ts`, dipakai Report/Widget/chart).
+Bukti runtime: `payment.change` `{25000 IDR}`, `shift.difference` `{-12500 IDR}`.
+Plan: `docs_internal/plan/money-arithmetic-semantics.md` · changelog:
+`2026-09-15-001`.
 
 **Catatan 2026-09-13**: ✅ **`formspec upgrade` (self-update binary)** — verb
 baru (Fase 3.9) yang mengganti binary dari GitHub Releases tanpa install ulang:

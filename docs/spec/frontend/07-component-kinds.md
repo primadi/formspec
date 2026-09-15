@@ -10,13 +10,41 @@
 
 Shell resmi wajib menyediakan pustaka component dasar yang **closed, themeable**.
 Registry widget dasar adalah **himpunan tertutup yang dienumerasi eksplisit** —
-bukan daftar terbuka yang boleh tumbuh informal. Widget input form yang wajib
-disediakan (kontrak value/validation/permission per field mengikuti field spec
-Entity, [`../backend/01-core-basic.md`](../backend/01-core-basic.md) §1):
+bukan daftar terbuka yang boleh tumbuh informal.
 
-`textinput`, `numberinput`, `decimalinput`, `dateinput`, `datetimeinput`,
-`select`, `relation-picker`, `child-grid`, `fileinput` (§1.1), `toggle`,
-`textarea`, `json-editor`, `richtext` (§1.2).
+Dua himpunan terpisah, sesuai permukaan tempat widget itu dipakai di manifest —
+bukan satu daftar gabungan, sebab widget form pada kolom tabel diabaikan
+renderer sel dan nilainya tercetak mentah:
+
+**Form field** — `FormField.widget` (juga field langkah Wizard):
+
+`input`, `textarea`, `richtext`, `number`, `decimalinput`, `select`, `switch`,
+`radio-group`, `combobox`, `password`, `slider`, `tags`, `uuid`, `json`,
+`fileinput` (§1.1), `relation-picker`, `datepicker`, `datetimeinput`,
+`child-grid`, `grants-editor`.
+
+**Table/Listing cell** — `TableColumn.widget`:
+
+`badge`, `boolean`.
+
+Aturan yang mengikat seluruh himpunan di atas:
+
+- **Setiap nama terimplementasi.** Himpunan ini adalah _enum_ di JSON Schema
+  (`$defs/FormWidget`, `$defs/TableCellWidget`, digenerate dari
+  `pkg/spec/widget.go`), sehingga salah ketik (`relaion-picker`) **gagal**
+  `formspec validate` — bukan lolos lalu diam-diam dirender sebagai input teks.
+  Editor YAML juga memakai enum ini untuk autocomplete.
+- **Satu nama per widget.** Nama tipe field (`relation`, `date`, `child`,
+  `boolean`, …) pernah diterima router sebagai alias; itu **bukan** bagian
+  katalog dan validator menolaknya dengan petunjuk nama kanonik.
+- **`widget` yang dihilangkan itu sah** — renderer menurunkan widget dari tipe
+  field (mis. `enum` → `select`, `relation` → `relation-picker`). Menulis
+  `widget:` hanya perlu untuk _mengganti_ turunan itu.
+- Field type yang **belum** punya widget khusus: `money` dan `time` — keduanya
+  hari ini jatuh ke `input`. `MoneyInput` dan `TimeInput` adalah gap yang
+  tercatat, bukan nama yang boleh ditulis di manifest.
+- Parity katalog ↔ schema ↔ implementasi dijaga test
+  (`renderers/react-shadcn/src/widgets/catalog.test.tsx`).
 
 Di luar widget input, pustaka dasar juga menyediakan tabs, badge, card,
 empty-state, breadcrumb, skeleton/loading, dan pagination. **Himpunan dasar ini

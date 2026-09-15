@@ -414,7 +414,8 @@ func (l *Loader) Validate(raw RawManifest) error {
 	}
 
 	// Form: entity required (or auth_action), auth_action closed set +
-	// mutual exclusion with entity (plan custom-screens-spec-driven Phase 2).
+	// mutual exclusion with entity (plan custom-screens-spec-driven Phase 2)
+	// + field `widget:` closed set (S10).
 	if raw.Kind == "Form" && raw.Spec != nil {
 		formSpec, err := RawSpecTo[spec.FormSpec](raw.Spec.(map[string]any))
 		if err != nil {
@@ -422,6 +423,26 @@ func (l *Loader) Validate(raw RawManifest) error {
 		}
 		if err := spec.ValidateFormSpec(formSpec); err != nil {
 			return fmt.Errorf("%s: %w", raw.Source, err)
+		}
+	}
+
+	// Table / Listing: column `widget:` closed set (S10). A typo used to
+	// validate fine and silently render raw text.
+	if raw.Kind == "Table" && raw.Spec != nil {
+		tableSpec, err := RawSpecTo[spec.TableSpec](raw.Spec.(map[string]any))
+		if err != nil {
+			return fmt.Errorf("%s: invalid spec: %w", raw.Source, err)
+		}
+		if err := spec.ValidateTableColumns(tableSpec.Columns, "table "+raw.Metadata.Name); err != nil {
+			return fmt.Errorf("%s: %w", raw.Source, err)
+		}
+	}
+	if raw.Kind == "Listing" && raw.Spec != nil {
+		listingSpec, err := RawSpecTo[spec.ListingSpec](raw.Spec.(map[string]any))
+		if err != nil {
+			return fmt.Errorf("%s: invalid spec: %w", raw.Source, err)
+		}
+		if err := spec.ValidateTableColumns(listingSpec.Columns, "listing "+raw.Metadata.Name); err != nil {
 		}
 	}
 

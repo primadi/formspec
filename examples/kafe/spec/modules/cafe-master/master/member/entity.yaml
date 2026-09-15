@@ -1,0 +1,40 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: member
+  module: cafe-master
+  description: "Pelanggan terdaftar — dasar perolehan poin loyalty (nomor HP unik)"
+spec:
+  version: v1
+  characteristic: master
+  plural: members
+  display_field: name
+  soft_deactivate: { enabled: true }
+  fields:
+    - name: name
+      type: string
+      required: true
+      title: "Nama Pelanggan"
+    # GAP-06/GAP-07: `member` TIDAK BOLEH di-mount ke App publik sampai
+    # allowlist publik per-entity + `exclude: [public_api]` berfungsi —
+    # anonim hanya boleh baca field yang aman.
+    - name: phone
+      type: string
+      required: true
+      unique: true
+      title: "Nomor HP"
+      description: "Kunci identitas member (aturan bisnis #13)"
+    - name: email
+      type: string
+      title: "Email"
+    - name: birth_date
+      type: date
+      title: "Tanggal Lahir"
+      description: "Dasar promo ulang tahun"
+    - name: joined_at
+      type: datetime
+      title: "Bergabung Sejak"
+    - name: note
+      type: text
+      title: "Catatan"
+  # expose: [] — UI-only.

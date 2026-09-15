@@ -128,6 +128,14 @@ func ExecuteScript(ctx context.Context, scriptPath string, resource *ResourceAPI
 		}),
 	}
 
+	// Money accessors (S7): `resource.total` is the object {amount, currency},
+	// and money supports direct arithmetic (+ - * / and comparisons) so totals
+	// do not need to be unwrapped. amount(x)/currency(x) extract the parts
+	// explicitly when a plain number is wanted.
+	for name, b := range moneyBuiltins() {
+		predeclared[name] = b
+	}
+
 	// Compile (or reuse the cached compiled program for) the .star file, then
 	// initialize it fresh for this call — Init() must run per-invocation to
 	// get a private globals dict, even though the compiled *Program itself

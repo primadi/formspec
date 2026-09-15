@@ -1,0 +1,14 @@
+apiVersion: formspec.dev/v1
+kind: Widget
+metadata:
+  name: stok-kritis
+  module: cafe-report
+  description: "Bahan yang saldonya di bawah stok minimum"
+spec:
+  title: "Stok Kritis"
+  type: table
+  entity: cafe-stock.stock-level
+  query: "is_below_min = true"
+  refresh_secs: 120
+  # Menampilkan stock-level per cabang; `quantity_on_hand` decimal (bukan
+  # money), jadi agregasinya angka biasa.

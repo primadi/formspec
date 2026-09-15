@@ -1,0 +1,29 @@
+apiVersion: formspec.dev/v1
+kind: Module
+metadata:
+  name: cafe-stock
+  description: "Bahan baku, resep/BOM, pembelian, pergerakan stok, dan biaya per porsi (HPP)"
+spec:
+  version: 1.0.0
+  depends:
+    - module: formspec/core
+    - module: cafe-master
+  menu:
+    - label: "Stok & Bahan"
+      icon: "package"
+      children:
+        - { label: "Bahan Baku", icon: "carrot", route: /cafe-stock/ingredients }
+        - { label: "Resep", icon: "book-text", route: /cafe-stock/recipes }
+        - { label: "Level Stok", icon: "gauge", route: /cafe-stock/stock-levels }
+        - { label: "Pergerakan Stok", icon: "arrow-left-right", route: /cafe-stock/stock-movements }
+        - { label: "Stok Opname", icon: "clipboard-check", route: /cafe-stock/stock-opnames }
+        - { label: "Bahan Terbuang", icon: "trash-2", route: /cafe-stock/waste-entries }
+    - label: "Pembelian"
+      icon: "truck"
+      children:
+        - { label: "Supplier", icon: "building-2", route: /cafe-stock/suppliers }
+        - { label: "Pesanan Beli", icon: "file-text", route: /cafe-stock/purchase-orders }
+    - label: "Biaya & Margin"
+      icon: "trending-up"
+      children:
+        - { label: "Biaya per Menu", icon: "calculator", route: /cafe-stock/menu-costs }

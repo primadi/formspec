@@ -1,0 +1,58 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: menu-item-price
+  module: cafe-master
+  description: "Harga menu per cabang (D1) — memungkinkan satu menu beda harga antar cabang"
+spec:
+  version: v1
+  characteristic: master
+  plural: menu-item-prices
+  fields:
+    - name: branch_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-master.branch }
+      required: true
+      title: "Cabang"
+    - name: menu_item_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-master.menu-item }
+      required: true
+      title: "Menu"
+    # GAP-01: `money` belum punya widget input — jatuh ke input teks polos.
+    # GAP-02 (DIPERSEMPIT setelah verifikasi DDL): sisi STORAGE aman — money
+    # hidup di JSONB `data`, bukan kolom text. Yang bermasalah adalah INDEKS:
+    # dengan `index: true`, kolom turunan menjadi `_price text`, sehingga
+    # urutan/rentang atas harga bersifat leksikografis JSON — bukan numerik.
+    # Karena itu `index: true` sengaja TIDAK dipasang di sini. Lihat GAP-23.
+    - name: price
+      type: money
+      required: true
+      title: "Harga Jual"
+    - name: is_active
+      type: boolean
+      default: true
+      title: "Berlaku"
+  indexes:
+    # GAP-22: DIDEKLARASIKAN TAPI TIDAK DIHORMATI. `formspec migrate plan`
+    # menghasilkan NOL index dari blok ini (dan `index: true` pada field
+    # `relation` juga tidak menghasilkan kolom turunan sama sekali).
+    # Akibatnya dua aturan bisnis di bawah TIDAK ditegakkan di database:
+    #   1. satu harga per menu per cabang (entitas ini)
+    #   2. satu stock-level per (cabang, bahan)
+    # Sementara aplikasi harus menjaganya di script. Lihat GAP-22.
+    - fields: [branch_id, menu_item_id]
+      unique: true
+  # GUARD — karena blok `indexes:` di atas tidak ditegakkan (GAP-22).
+  # Dijalankan sebelum create DAN update, dengan mengecualikan baris yang
+  # sedang diedit. Hapus hook ini bersama file script-nya begitu GAP-22 ditutup.
+  # GAP-30: guard memakai ctx.db().query -> deadlock di SQLite (dev), aman di
+  # PostgreSQL (produksi).
+  hooks:
+    - on: before
+      action: create
+      impl: { type: script_ref, ref: cafe-master/guard_menu_item_price_unique }
+    - on: before
+      action: update
+      impl: { type: script_ref, ref: cafe-master/guard_menu_item_price_unique }
+  # expose: [] — UI-only.

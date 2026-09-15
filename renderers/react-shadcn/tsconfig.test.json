@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo",
+    /* Vitest runs test files under Node (jsdom for component tests), and the
+       parity tests read generated artifacts (schemas/formspec.schema.json) from
+       disk — so Node types belong here, not in the browser app config. */
+    "types": ["vite/client", "node"]
+  },
+  "include": ["src/**/*.test.ts", "src/**/*.test.tsx"],
+  /* The base config excludes test files (they are not app code); here they are
+     the entire program. */
+  "exclude": []
+}

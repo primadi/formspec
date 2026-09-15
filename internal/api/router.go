@@ -215,33 +215,85 @@ func (b *RouterBuilder) SetSettings(s *spec.Settings) {
 	b.factory.SetSettings(s)
 }
 
-// publicEntities returns the set of "module/entity" keys mounted by any
-// `access: public` App (frontend/05-app-kinds.md §1). A public App's surface
-// is served anonymously, so the entities it mounts get anonymous read +
-// create on the UI surface.
-func (b *RouterBuilder) publicEntities() map[string]bool {
-	out := map[string]bool{}
+// legacyPublicActions are the actions a public App granted anonymously before
+// `public_entities` existed (module-wide, S3 / gap #6). Kept as the default so
+// Apps that have not declared an allowlist keep working unchanged.
+var legacyPublicActions = map[string]bool{"list": true, "find": true, "create": true}
+
+// publicGrants resolves the anonymous allowlist for every public App, keyed by
+// "module/entity" (or "module/*" for the legacy module-wide grant) and mapping
+// to the set of actions granted on the UI surface (frontend/05-app-kinds.md §1).
+//
+// Per App:
+//   - `public_entities` declared → exactly those entity/action pairs. An
+//     explicitly empty list grants nothing.
+//   - `public_entities` absent → legacy module-wide list/find/create. It also
+//     exposes entities that only share a module with the intended one, so an
+//     App should declare the allowlist (S3, gaps #6/#45).
+func (b *RouterBuilder) publicGrants() map[string]map[string]bool {
+	out := map[string]map[string]bool{}
 	for _, app := range b.apps {
-		if app.Spec.Access != spec.AppAccessPublic {
+		if app.Spec == nil || app.Spec.Access != spec.AppAccessPublic {
+			continue
+		}
+		if pe := app.Spec.PublicEntities; pe != nil {
+			for _, decl := range *pe {
+				// Accepts "module/entity" and "module.entity" — normalized so the
+				// lookup below always compares canonical keys.
+				key, ok := spec.NormalizeEntityRef(decl.Entity)
+				if !ok {
+					continue // validation rejects this; never widen access here
+				}
+				if out[key] == nil {
+					out[key] = map[string]bool{}
+				}
+				for _, act := range decl.Actions {
+					out[key][act] = true
+				}
+			}
 			continue
 		}
 		for module := range app.Modules {
 			// Mark the whole module public — the App author chose
 			// `access: public` knowing the surface is anonymous.
-			out[module+"/*"] = true
+			key := module + "/*"
+			if out[key] == nil {
+				out[key] = map[string]bool{}
+			}
+			for act := range legacyPublicActions {
+				out[key][act] = true
+			}
 		}
 	}
 	return out
 }
 
-// isPublicEntity reports whether module/entity is mounted by a public App
-// (see publicEntities).
+// isPublicAction reports whether anonymous callers may perform `action` on
+// module/entity — the entity/action granularity that makes a public App's
+// surface safe to expose (S3). A module-wide grant ("module/*", legacy) applies
+// only to the legacy action set.
+func (b *RouterBuilder) isPublicAction(module, entity, action string) bool {
+	grants := b.publicGrants()
+	if acts, ok := grants[module+"/"+entity]; ok {
+		return acts[action]
+	}
+	if acts, ok := grants[module+"/*"]; ok {
+		return acts[action]
+	}
+	return false
+}
+
+// isPublicEntity reports whether ANY action of module/entity is anonymous
+// (see publicGrants). Prefer isPublicAction when deciding route access.
 func (b *RouterBuilder) isPublicEntity(module, entity string) bool {
-	pub := b.publicEntities()
-	if pub[module+"/*"] {
+	grants := b.publicGrants()
+	if acts, ok := grants[module+"/"+entity]; ok && len(acts) > 0 {
 		return true
 	}
-	return pub[module+"/"+entity]
+	if acts, ok := grants[module+"/*"]; ok && len(acts) > 0 {
+		return true
+	}
+	return false
 }
 
 // SetWebDir enables static SPA serving from dir (typically renderers/react-shadcn/dist) at
@@ -436,11 +488,12 @@ func (b *RouterBuilder) BuildHTTP() http.Handler {
 					}
 					pattern := strings.TrimPrefix(rd.Path, "/_ui/entity")
 					// Public App entities: anonymous read + create on
-					// the UI surface (frontend/05-app-kinds.md §1). Update/
-					// delete stay permission-gated — they're admin ops that
-					// live in a private App.
-					if b.isPublicEntity(rd.Module, rd.Entity) &&
-						(rd.Action == "list" || rd.Action == "find" || rd.Action == "create") {
+					// the UI surface (frontend/05-app-kinds.md §1). The grant is
+					// per entity+action: a public App declares exactly what it
+					// exposes via `public_entities` (S3). Update/delete are only
+					// anonymous if the App explicitly grants them — they are admin
+					// ops that belong in a private App.
+					if b.isPublicAction(rd.Module, rd.Entity, rd.Action) {
 						rd.RequiredPermission = "public"
 					}
 					b.registerRouteWithPattern(r, rd, pattern)

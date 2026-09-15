@@ -1,0 +1,18 @@
+apiVersion: formspec.dev/v1
+kind: Widget
+metadata:
+  name: omzet-per-hari
+  module: cafe-report
+  description: "Tren omzet per hari"
+spec:
+  title: "Omzet per Hari"
+  type: chart
+  entity: cafe-order.order
+  # Tanpa filter rentang tanggal: `query` hanya mendukung subset FormSpecExpr
+  # (mis. `field = today()`, `field in [...]`), bukan aritmetika tanggal bebas.
+  # Untuk rentang yang bisa dipilih pengguna, pakai kind: Report
+  # `sales-by-period` — itu memang tempatnya.
+  # Sumbu Y memakai `total_amount` (money) — objek {amount, currency}; chart
+  # membaca komponen `.amount`-nya (S7), sama seperti metrik `omzet-hari-ini`.
+  config: { x: transaction_date, y: total_amount }
+  refresh_secs: 300

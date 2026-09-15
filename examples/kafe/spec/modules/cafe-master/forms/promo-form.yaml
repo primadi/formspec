@@ -1,0 +1,48 @@
+apiVersion: formspec.dev/v1
+kind: Form
+metadata:
+  name: promo-form
+  module: cafe-master
+  description: "Form promo — field muncul sesuai jenis & cakupan promo"
+spec:
+  entity: cafe-master.promo
+  mode: edit
+  render: { mode: drawer }
+  sections:
+    - title: "Identitas Promo"
+      columns: 2
+      fields:
+        - { field: code }
+        - { field: name }
+        - { field: type, help: "Menentukan field nilai mana yang dipakai." }
+        - { field: applies_to, help: "Menentukan field cakupan mana yang dipakai." }
+        - { field: branch_id, widget: relation-picker, help: "Kosongkan untuk berlaku di semua cabang." }
+        - { field: priority, help: "Dipakai memilih satu promo terbaik bila beberapa cocok (aturan bisnis #7)." }
+    - title: "Nilai Potongan"
+      columns: 2
+      fields:
+        # Satu promo hanya memakai SATU bentuk nilai. Semua kandidat tetap
+        # dideklarasikan di entity (spec tidak bisa punya field kondisional),
+        # lalu disaring di form lewat visible_when.
+        - { field: percent, visible_when: "fields.type == 'percentage'" }
+        - { field: value, visible_when: "fields.type == 'fixed'" }
+        - { field: buy_qty, visible_when: "fields.type == 'buy_x_get_y'" }
+        - { field: get_qty, visible_when: "fields.type == 'buy_x_get_y'" }
+        - { field: min_purchase }
+    - title: "Cakupan"
+      columns: 2
+      fields:
+        - { field: menu_item_id, widget: relation-picker, visible_when: "fields.applies_to == 'menu_item'" }
+        - { field: menu_category_id, widget: relation-picker, visible_when: "fields.applies_to == 'category'" }
+    - title: "Periode & Batas Pemakaian"
+      columns: 2
+      fields:
+        - { field: start_date }
+        - { field: end_date }
+        - { field: days_of_week, help: "Array angka: 1=Senin .. 7=Minggu. Kosongkan untuk setiap hari." }
+        # GAP-01: `time` juga belum punya widget — sama seperti money. jam happy
+        # hour akan diisi di input teks polos.
+        - { field: time_from, label: "Jam Mulai" }
+        - { field: time_to, label: "Jam Selesai" }
+        - { field: max_uses_per_member }
+        - { field: max_uses_total }

@@ -211,3 +211,73 @@ func TestHonestyFix_RemovesUnused(t *testing.T) {
 		t.Fatalf("expected clean re-scan after fix, got %+v", issues)
 	}
 }
+
+// TestHonestyScan_HookScriptCompileError proves a hook script that cannot be
+// parsed is reported as an error. Hooks previously only produced the
+// ctx.environment warning, so three non-compiling guard scripts on the write
+// path passed `formspec validate` with 0 problems (gap #50).
+func TestHonestyScan_HookScriptCompileError(t *testing.T) {
+	dir := t.TempDir()
+	write := func(rel, content string) {
+		path := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatalf("write %s: %v", rel, err)
+		}
+	}
+
+	write("modules/alpha/module.yaml", `apiVersion: formspec.dev/v1
+kind: Module
+metadata:
+  name: alpha
+spec:
+  version: 1.0.0
+`)
+	write("modules/alpha/master/thing/entity.yaml", `apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: thing
+  module: alpha
+spec:
+  version: v1
+  characteristic: master
+  plural: things
+  fields:
+    - name: name
+      type: string
+  hooks:
+    - on: before
+      action: create
+      impl: { type: script_ref, ref: alpha/broken }
+    - on: before
+      action: update
+      impl: { type: script_ref, ref: alpha/missing }
+`)
+	// Implicit adjacent string-literal concatenation is valid Python but not
+	// Starlark — the exact defect that shipped in the kafe guard scripts.
+	write("modules/alpha/scripts/broken.star", "def execute(resource, params, ctx):\n    rows = ctx.db().query(\n        \"SELECT 1 \"\n        \"FROM t\",\n    )\n    return ok()\n")
+
+	manifests := loadHonestyManifests(t, dir)
+	issues := scanHonesty(manifests, dir)
+
+	var compileErr, notFound bool
+	for _, iss := range issues {
+		if iss.Severity != "error" {
+			continue
+		}
+		if strings.Contains(iss.Message, "failed to compile") {
+			compileErr = true
+		}
+		if strings.Contains(iss.Message, "script not found") {
+			notFound = true
+		}
+	}
+	if !compileErr {
+		t.Errorf("expected a compile error for the broken hook script, got %+v", issues)
+	}
+	if !notFound {
+		t.Errorf("expected a 'script not found' error for the missing hook script, got %+v", issues)
+	}
+}

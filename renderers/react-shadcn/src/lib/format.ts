@@ -30,6 +30,27 @@ export interface Formatter {
   relative: (value: string | Date) => string
 }
 
+/**
+ * Extract a numeric amount from any shape a money value can arrive in: a
+ * number, a numeric string, or the canonical wire shape `{amount, currency}`
+ * produced at the API boundary. Returns undefined when there is no usable
+ * amount, so callers can fall back instead of rendering "NaN".
+ */
+export function moneyAmount(value: unknown): number | undefined {
+  if (typeof value === "number")
+    return Number.isFinite(value) ? value : undefined
+  if (typeof value === "string") {
+    const trimmed = value.trim()
+    if (trimmed === "") return undefined
+    const n = Number(trimmed)
+    return Number.isFinite(n) ? n : undefined
+  }
+  if (value && typeof value === "object" && "amount" in value) {
+    return moneyAmount((value as { amount?: unknown }).amount)
+  }
+  return undefined
+}
+
 /** Rounding modes for money/decimal arithmetic (spec §10). */
 export type RoundingMode = "half_even" | "half_up" | "half_down" | "up" | "down"
 

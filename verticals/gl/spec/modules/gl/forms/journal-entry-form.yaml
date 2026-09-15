@@ -1,0 +1,23 @@
+apiVersion: formspec.dev/v1
+kind: Form
+metadata:
+  name: journal-entry-form
+  module: gl
+  description: "Susun jurnal: pilih akun dari bagan akun, isi debit/kredit"
+spec:
+  entity: gl.journal-entry
+  mode: create
+  render:
+    mode: separate_page
+    # Bagan akun di kolom sendiri; baris (akun + debit/kredit) di sebelahnya.
+    picker_panel: aside
+  sections:
+    - title: "Jurnal"
+      fields:
+        - { field: entry_date, label: "Tanggal" }
+        - { field: reference, label: "Referensi" }
+        - { field: description, widget: textarea, label: "Keterangan" }
+        # `lines` dirender oleh panel picker (kolom kiri). Picker di sini tanpa
+        # `quantity_field`: satu akun dipilih sekali, lalu debit/kredit diisi
+        # per baris.
+        - { field: lines, label: "Akun" }

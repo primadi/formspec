@@ -22,8 +22,22 @@ import { useEffect, useMemo, useState } from "react"
 import { apiGet } from "@/lib/api"
 import { evalFormSpecExpr } from "@/lib/formspec-expr"
 import { subscribeRealtime } from "@/hooks/useRealtime"
+import { useMetaStore } from "@/stores/meta"
 import { useSessionStore } from "@/stores/session"
 import type { ContextDecl } from "@/types/manifest"
+
+/**
+ * Permission required to read an entity record for `source: entity`.
+ *
+ * Registry permissions are `{module}.{plural}.{action}`
+ * (internal/entity/registry.go) — NOT `{module}.{entity}.view`. Using the
+ * singular entity name silently never matched, so every `source: entity`
+ * declaration fell back for callers without `*` (dev seeds `*`, which is why it
+ * went unnoticed).
+ */
+export function entityViewPermission(module: string, plural: string): string {
+  return `${module}.${plural}.view`
+}
 
 // In-memory cache of public config keys per config name (source: config,
 // plan custom-screens-spec-driven Phase 3). Config values are static for the
@@ -54,11 +68,25 @@ export interface RenderContextState {
   error?: string
 }
 
+/** Options for {@link useRenderContext}. */
+export interface RenderContextOptions {
+  /**
+   * The owning page/App is an anonymous surface (`public: true` or
+   * `access: public`). Its `source: entity` reads then skip the client-side
+   * permission pre-check and let the server decide: an anonymous caller has an
+   * empty permission list, so a fail-closed pre-check would make every entity
+   * context entry on a public surface unresolvable — including the guest's own
+   * table session.
+   */
+  publicSurface?: boolean
+}
+
 /** Resolve a single declaration against the current context. */
 async function resolveDecl(
   decl: ContextDecl,
   ctx: Record<string, unknown>,
   getClient: () => import("ky").KyInstance,
+  publicSurface = false,
 ): Promise<unknown> {
   switch (decl.source) {
     case "session":
@@ -75,9 +103,17 @@ async function resolveDecl(
     }
     case "entity": {
       if (!decl.entity) return decl.fallback
-      // Permission ceiling: entity context requires view on the entity.
-      const can = useSessionStore.getState().can
-      if (!can(`${decl.entity}.view`)) return decl.fallback
+      const [module, entity] = decl.entity.split(".")
+      if (!module || !entity) return decl.fallback
+      // Permission ceiling: reading a record requires view on the entity.
+      // Public surfaces skip the pre-check — the server still enforces, and an
+      // anonymous caller has no permissions to check against.
+      if (!publicSurface) {
+        const can = useSessionStore.getState().can
+        const meta = useMetaStore.getState().getEntity(module, entity)
+        const plural = meta?.plural || `${entity}s`
+        if (!can(entityViewPermission(module, plural))) return decl.fallback
+      }
       // Resolve `{token}` in the id against the current context.
       let id = decl.id ?? ""
       const tokenMatch = id.match(/^\{([\w.]+)\}$/)
@@ -89,8 +125,6 @@ async function resolveDecl(
         id = resolved == null ? "" : String(resolved)
       }
       if (!id) return decl.fallback
-      const [module, entity] = decl.entity.split(".")
-      if (!module || !entity) return decl.fallback
       try {
         const client = getClient()
         return await apiGet<Record<string, unknown>>(
@@ -145,8 +179,10 @@ async function resolveDecl(
 export function useRenderContext(
   decls: ContextDecl[] | undefined,
   base: Record<string, unknown>,
+  options: RenderContextOptions = {},
 ): RenderContextState {
   const getClient = useSessionStore((s) => s.getClient)
+  const { publicSurface = false } = options
   const [extra, setExtra] = useState<Record<string, unknown>>({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | undefined>(undefined)
@@ -171,7 +207,12 @@ export function useRenderContext(
     const run = async () => {
       const out: Record<string, unknown> = {}
       for (const decl of decls) {
-        const value = await resolveDecl(decl, { ...base, ...out }, getClient)
+        const value = await resolveDecl(
+          decl,
+          { ...base, ...out },
+          getClient,
+          publicSurface,
+        )
         if (cancelled) return
         out[decl.name] = value
       }
@@ -195,7 +236,12 @@ export function useRenderContext(
         subscribeRealtime(d.entity!, () => {
           if (cancelled) return
           const refresh = async () => {
-            const value = await resolveDecl(d, { ...base, ...extra }, getClient)
+            const value = await resolveDecl(
+              d,
+              { ...base, ...extra },
+              getClient,
+              publicSurface,
+            )
             if (cancelled) return
             setExtra((prev) => ({ ...prev, [d.name]: value }))
           }

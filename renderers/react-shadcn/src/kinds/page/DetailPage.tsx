@@ -21,7 +21,7 @@ import { deriveDetailFields } from "@/engine/derive"
 import { getLifecycle, getAvailableTransitions } from "@/engine/lifecycle"
 import { apiGet } from "@/lib/api"
 import { titleCase } from "@/lib/utils"
-import { createFormatter, type Formatter } from "@/lib/format"
+import { createFormatter, moneyAmount, type Formatter } from "@/lib/format"
 import { sanitizeHTML } from "@/lib/sanitize"
 import { Badge } from "@/widgets/Badge"
 import { Button } from "@/components/ui/button"
@@ -378,6 +378,13 @@ function DetailFieldValue({
 
   if (field.type === "date") {
     return (fmt ?? createFormatter()).date(value as string)
+  }
+
+  if (field.type === "money") {
+    // Canonical wire shape is {amount, currency} — format its amount instead of
+    // falling through to the JSON branch below.
+    const amount = moneyAmount(value)
+    if (amount !== undefined) return (fmt ?? createFormatter()).money(amount)
   }
 
   if (field.type === "decimal" && typeof value === "number") {

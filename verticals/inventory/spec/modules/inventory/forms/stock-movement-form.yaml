@@ -1,0 +1,25 @@
+apiVersion: formspec.dev/v1
+kind: Form
+metadata:
+  name: stock-movement-form
+  module: inventory
+  description: "Catat perpindahan stok: pilih produk, isi jumlah"
+spec:
+  entity: inventory.stock-movement
+  mode: create
+  render:
+    mode: separate_page
+    # Katalog produk + panel baris berdampingan — `picker` pada child field
+    # `lines` yang menyediakannya.
+    picker_panel: aside
+  sections:
+    - title: "Perpindahan"
+      fields:
+        - { field: movement_type, label: "Jenis" }
+        - { field: source_warehouse_id, widget: relation-picker, label: "Dari Gudang" }
+        - { field: target_warehouse_id, widget: relation-picker, label: "Ke Gudang" }
+        - { field: notes, widget: textarea, label: "Catatan" }
+        # `lines` dirender oleh panel picker (kolom kiri). Jumlah per baris
+        # diisi di sana; `unit` mengikuti produk lewat `auto_fill` bila
+        # dideklarasikan.
+        - { field: lines, label: "Produk" }

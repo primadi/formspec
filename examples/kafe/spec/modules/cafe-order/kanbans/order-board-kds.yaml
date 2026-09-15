@@ -1,0 +1,35 @@
+apiVersion: formspec.dev/v1
+kind: Kanban
+metadata:
+  name: order-board-kds
+  module: cafe-order
+  description: "Layar dapur (KDS) — HANYA pesanan yang sudah lunas (aturan bisnis #1)"
+spec:
+  entity: cafe-order.order
+  status_field: status
+  # Realtime Kanban SUDAH berfungsi hari ini (silent refetch saat event
+  # created/updated/action dari klien lain) — jadi KDS tidak terkena GAP-17.
+  # Inilah UI paling siap-pakai di aplikasi ini.
+  realtime: true
+  # Kolom sengaja hanya memuat status SETELAH lunas. Pesanan `draft` /
+  # `awaiting_payment` tidak pernah muncul di dapur.
+  columns:
+    - { status: paid, label: "Baru Masuk", color: red }
+    - { status: in_kitchen, label: "Dikerjakan", color: amber }
+    - { status: ready, label: "Siap Disajikan", color: green }
+  # GAP-08: penyaring cabang bersifat UI-level, BUKAN otorisasi. Tanpa
+  # `fixed_filters` dari sesi pengguna, tablet dapur cabang A bisa memilih
+  # cabang B. Guard server-side belum ada.
+  filters:
+    - { field: branch_id, label: "Cabang", type: select }
+  card_template:
+    title: number
+    subtitle: dining_table_id
+    badge: status
+    fields: [transaction_date, employee_id]
+  search: true
+  # Tanpa `drag_guard`: transisi status sudah dijaga state machine di server.
+  # Menambah drag_guard hanyalah UX pencegahan, bukan pengganti guard server.
+  # GAP-17 catatan: tidak ada heartbeat WebSocket — deteksi putus bergantung
+  # OS/browser. Untuk tablet dapur yang ditinggal berjam-jam, indikator
+  # "koneksi terputus" belum tersedia.

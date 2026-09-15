@@ -22,7 +22,8 @@ import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
 import { resolveEntityRef } from "@/engine/entityRef"
 import { apiList, buildListParams } from "@/lib/api"
-import { createFormatter, type Formatter } from "@/lib/format"
+import { createFormatter, moneyAmount, type Formatter } from "@/lib/format"
+import { computeTotals, type TotalsResult } from "@/lib/aggregate"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { RelationPicker } from "@/widgets/RelationPicker"
@@ -368,8 +369,9 @@ function formatReportValue(
 
   const formatter = fmt ?? createFormatter()
 
-  if (format === "currency" && typeof value === "number") {
-    return formatter.money(value)
+  if (format === "currency") {
+    const amount = moneyAmount(value)
+    if (amount !== undefined) return formatter.money(amount)
   }
 
   if (format === "date" && typeof value === "string") {
@@ -388,58 +390,9 @@ function formatReportValue(
 }
 
 // ── Totals / subtotals (5.13.1) ──
-
-/**
- * Compute aggregate values over a set of rows for the declared `totals`.
- * Shared by the overall totals row and per-group subtotal rows.
- */
-function computeTotals(
-  items: Record<string, unknown>[],
-  totals: ReportTotal[],
-): Record<string, number> {
-  const result: Record<string, number> = {}
-  for (const total of totals) {
-    let sum = 0
-    let count = 0
-    for (const item of items) {
-      const val = Number(item[total.field])
-      if (!isNaN(val)) {
-        sum += val
-        count++
-      }
-    }
-    switch (total.fn) {
-      case "sum":
-        result[total.field] = sum
-        break
-      case "avg":
-        result[total.field] = count > 0 ? sum / count : 0
-        break
-      case "count":
-        result[total.field] = count
-        break
-      case "min": {
-        let min = Infinity
-        for (const item of items) {
-          const val = Number(item[total.field])
-          if (!isNaN(val) && val < min) min = val
-        }
-        result[total.field] = min === Infinity ? 0 : min
-        break
-      }
-      case "max": {
-        let max = -Infinity
-        for (const item of items) {
-          const val = Number(item[total.field])
-          if (!isNaN(val) && val > max) max = val
-        }
-        result[total.field] = max === -Infinity ? 0 : max
-        break
-      }
-    }
-  }
-  return result
-}
+//
+// Aggregation is money-aware and loud about fields it cannot aggregate — see
+// lib/aggregate.ts (S7 / gap #28).
 
 /**
  * Render one totals/subtotal row. The first column carries the label; each
@@ -454,7 +407,7 @@ function TotalsRow({
   formatter,
   label,
 }: {
-  totals: Record<string, number>
+  totals: TotalsResult
   columns: ReportColumn[]
   totalsDef: ReportTotal[]
   formatter: Formatter
@@ -464,11 +417,25 @@ function TotalsRow({
     <tr className="border-t-2 font-medium bg-muted/30">
       {columns.map((col, idx) => {
         const totalDef = totalsDef.find((t) => t.field === col.field)
-        const value = totals[col.field]
+        const value = totals.values[col.field]
+        const error = totals.errors[col.field]
         if (idx === 0) {
           return (
             <td key={col.field} className="p-3 text-sm">
               {label}
+            </td>
+          )
+        }
+        // A total that could not be computed says so, visibly. Never blank,
+        // never 0 (S7).
+        if (totalDef && error) {
+          return (
+            <td
+              key={col.field}
+              className="p-3 text-sm text-destructive"
+              title={error}
+            >
+              ⚠ not aggregatable
             </td>
           )
         }

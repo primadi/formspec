@@ -83,7 +83,7 @@ func newLinkTestHarness(t *testing.T, storageSpec *spec.StorageSpec) *linkTestHa
 		viewer: &auth.Identity{
 			UserID:      "u1",
 			WorkspaceID: "t1",
-			Permissions: []string{"billing.document.update", "billing.document.view"},
+			Permissions: []string{"billing.documents.update", "billing.documents.view"},
 		},
 	}
 }

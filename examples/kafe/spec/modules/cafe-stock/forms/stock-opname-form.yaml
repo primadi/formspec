@@ -1,0 +1,34 @@
+apiVersion: formspec.dev/v1
+kind: Form
+metadata:
+  name: stock-opname-form
+  module: cafe-stock
+  description: "Hitung fisik bahan — stok sistem berdampingan dengan hasil hitung"
+spec:
+  entity: cafe-stock.stock-opname
+  mode: edit
+  # separate_page: child table opname punya banyak kolom (sistem, hitung,
+  # selisih, alasan) sehingga butuh lebar penuh — drawer/modal terlalu sempit.
+  render: { mode: separate_page }
+  sections:
+    - title: "Opname"
+      columns: 2
+      fields:
+        - { field: transaction_date }
+        - { field: branch_id, widget: relation-picker }
+        - { field: counted_by, widget: relation-picker, help: "Karyawan yang menghitung fisik." }
+        - { field: note }
+    - title: "Hasil Hitung Fisik"
+      description: "Isi kolom 'Hasil Hitung Fisik' per bahan. Selisih dihitung otomatis."
+      fields:
+        # Child table: system_qty diisi saat draft dibuat (dari stock-level),
+        # counted_qty diisi manual oleh penghitung, difference = selisih.
+        - { field: lines }
+  actions:
+    - { action: record-count, label: "Simpan Hasil Hitung", style: primary }
+    # Posting mengubah stok, jadi diberi gaya bahaya + butuh hak khusus
+    # (`stock-opnames.post-opname`). Script posting membuat stock-movement
+    # bertipe `adjust` sebesar selisih.
+    - { action: post-opname, label: "Posting ke Stok", style: danger }
+    - { action: reopen, label: "Hitung Ulang" }
+    - { action: cancel-opname, label: "Batalkan" }

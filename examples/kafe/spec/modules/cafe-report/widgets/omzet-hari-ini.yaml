@@ -1,0 +1,17 @@
+apiVersion: formspec.dev/v1
+kind: Widget
+metadata:
+  name: omzet-hari-ini
+  module: cafe-report
+  description: "Omzet hari ini (semua cabang)"
+spec:
+  title: "Omzet Hari Ini"
+  type: metric
+  entity: cafe-order.order
+  # `today()` diselesaikan server-side agar tidak salah hari karena zona waktu
+  # browser (pelajaran dari metrik "Kunjungan Hari Ini" di vertical lain).
+  query: "transaction_date = today()"
+  # `total_amount` bertipe money — objek {amount, currency}. Agregasi `sum`
+  # menjumlahkan komponen `.amount`-nya (S7).
+  config: { field: total_amount, aggregate: sum }
+  refresh_secs: 60

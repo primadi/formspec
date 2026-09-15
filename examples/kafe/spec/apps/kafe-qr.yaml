@@ -1,0 +1,43 @@
+apiVersion: formspec.dev/v1
+kind: App
+metadata:
+  name: kafe-qr
+  description: "Permukaan publik kafe — menu & pemesanan mandiri pelanggan dari QR meja"
+spec:
+  root_url: /
+  access: public
+  app_renderer: no-nav
+  # Anonim hanya boleh menyentuh entity & aksi yang didaftarkan di bawah.
+  # Sebelum `public_entities` ada, `access: public` memberi anonim
+  # `list`/`find`/`create` untuk SELURUH entity di module yang di-mount —
+  # sehingga memount `cafe-order` ikut membuka `shift` dan `cash-movement`
+  # (data kas & shift), dan `cafe-master` ikut membuka `member` (nomor HP
+  # pelanggan) dan `employee`. Itu tertutup oleh daftar ini (GAP-06).
+  #
+  # Pelanggan memesan lewat QR: hanya perlu MELIHAT katalog + MEMBUAT pesanan.
+  # Update/delete tidak pernah anonim — pembatalan lewat approval supervisor
+  # (kind: Workflow), bukan tombol pelanggan.
+  public_entities:
+    - { entity: cafe-master.menu-category, actions: [list, find] }
+    - { entity: cafe-master.menu-item, actions: [list, find] }
+    - { entity: cafe-master.menu-item-price, actions: [list] }
+    # Meja di-resolve dari token QR (find saja — pelanggan tidak perlu list meja).
+    - { entity: cafe-master.dining-table, actions: [find] }
+    # Satu kunjungan per meja; token sesi menjadi kunci akses pelanggan.
+    - { entity: cafe-order.table-session, actions: [create, find] }
+    # Pesanan dibuat anonim; penyelesaiannya (bayar, submit) dilakukan kasir
+    # di kafe-pos — lihat GAP-45 soal kepemilikan record buatan anonim.
+    - { entity: cafe-order.order, actions: [create] }
+  modules:
+    - cafe-master
+    - cafe-order
+  # menu dikosongkan: `no-nav` default tidak merender nav sama sekali.
+  # Halaman pelanggan sudah ada: `cafe-order/pages/menu-catalog.yaml`
+  # (katalog + keranjang + kirim pesanan). UX itu datang dari `picker` pada child
+  # field `order.lines` + `order-form-qr` — bukan dari kind/blok khusus (S1).
+  # Ia mengambil ID sesi dari route; langkah token QR → sesi masih item
+  # terpisah (TODO 2.2).
+  confirm:
+    create: "Kirim pesanan?"
+    update: "Simpan perubahan pesanan?"
+    delete: "Batalkan pesanan?"

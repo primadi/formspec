@@ -17,6 +17,52 @@ func TestValidateEntitySpec_BaseEntity(t *testing.T) {
 	}
 }
 
+// TestValidateEntitySpec_Scope pins the row-scope contract (S2, #6/#9): every
+// entry must name a declared field and a known value source. A scope whose
+// source is not understood would silently not filter — worse than no scope.
+func TestValidateEntitySpec_Scope(t *testing.T) {
+	base := func(scope ...FilterSpec) *EntitySpec {
+		return &EntitySpec{
+			Version: "v1",
+			Fields: []Field{
+				{Name: "branch_id", Type: FieldString},
+				{Name: "guest_token", Type: FieldString},
+			},
+			Scope: scope,
+		}
+	}
+
+	valid := []struct {
+		name  string
+		scope FilterSpec
+	}{
+		{"session with attribute", FilterSpec{Field: "branch_id", From: "session", Attr: "branch_id"}},
+		{"session without attribute (defaults to principal_id)", FilterSpec{Field: "branch_id", From: "session"}},
+		{"route with parameter", FilterSpec{Field: "guest_token", From: "route", Param: "token"}},
+		{"route without parameter (defaults to field name)", FilterSpec{Field: "guest_token", From: "route"}},
+	}
+	for _, c := range valid {
+		if err := ValidateEntitySpec(base(c.scope)); err != nil {
+			t.Errorf("%s: expected no error, got %v", c.name, err)
+		}
+	}
+
+	invalid := []struct {
+		name  string
+		scope FilterSpec
+	}{
+		{"missing field", FilterSpec{From: "session"}},
+		{"unknown field", FilterSpec{Field: "outlet_id", From: "session"}},
+		{"unknown source", FilterSpec{Field: "branch_id", From: "cookie"}},
+		{"missing source", FilterSpec{Field: "branch_id"}},
+	}
+	for _, c := range invalid {
+		if err := ValidateEntitySpec(base(c.scope)); err == nil {
+			t.Errorf("%s: expected an error, got none", c.name)
+		}
+	}
+}
+
 func TestValidateEntitySpec_RenamedFrom(t *testing.T) {
 	// Valid rename.
 	e := &EntitySpec{

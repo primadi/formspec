@@ -74,7 +74,7 @@ func TestFileUploadDownload(t *testing.T) {
 	identity := &auth.Identity{
 		UserID:      "u1",
 		WorkspaceID: "t1",
-		Permissions: []string{"billing.document.update", "billing.document.view"},
+		Permissions: []string{"billing.documents.update", "billing.documents.view"},
 	}
 
 	// ── Upload ──
@@ -141,7 +141,7 @@ func TestFileUploadDownload(t *testing.T) {
 	noPerm := &auth.Identity{
 		UserID:      "u2",
 		WorkspaceID: "t1",
-		Permissions: []string{"billing.document.view"},
+		Permissions: []string{"billing.documents.view"},
 	}
 	denyReq := httptest.NewRequest("POST", "/billing/documents/"+id+"/attachment", &buf)
 	denyReq.Header.Set("Content-Type", mw.FormDataContentType())

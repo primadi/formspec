@@ -581,6 +581,11 @@
             "$ref": "#/$defs/Field"
           }
         },
+        "picker": {
+          "$ref": "#/$defs/PickerDecl",
+          "description": "Picker fills this child field by choosing records from another entity",
+          "nullable": true
+        },
         "sequence_field": {
           "type": "string"
         },
@@ -1334,12 +1339,19 @@
       ]
     },
     "FilterSpec": {
-      "description": "FilterSpec is a generic filter declaration shared by every data kind that\nlists records (Table, Kanban, Listing, ApprovalInbox, …). A filter is used\nin one of two roles:\n  - `filters`: a user-adjustable control rendered in the kind's UI. If\n    `default` is set, the control is pre-seeded with that value (the user\n    can still change or clear it).\n  - `fixed_filters`: an immutable, server-side filter — always merged into\n    the list request, never rendered as a control and not user-clearable.\n\nThe resolved value is sent to the list API as `field[op]=value`, so `op`\ndefaults to \"eq\" and follows the backend filter operator set.\n",
+      "description": "FilterSpec is a generic filter declaration shared by every data kind that\nlists records (Table, Kanban, Listing, ApprovalInbox, …). A filter is used\nin one of two roles:\n  - `filters`: a user-adjustable control rendered in the kind's UI. If\n    `default` is set, the control is pre-seeded with that value (the user\n    can still change or clear it).\n  - `fixed_filters`: an immutable, server-side filter — always merged into\n    the list request, never rendered as a control and not user-clearable.\n\nThe resolved value is sent to the list API as `field[op]=value`, so `op`\ndefaults to \"eq\" and follows the backend filter operator set.\n\nA value can also come from the request context instead of the manifest, via\n`from` (S2/#6): `from: session` takes it from an identity attribute named by\n`attr` and is resolved server-side only (a client cannot supply or widen it),\nwhile `from: route` takes it from the query parameter named by `param` (e.g. an\nunguessable guest token, where the token itself is the credential).\n",
       "type": "object",
       "properties": {
         "all_label": {
           "description": "For select filters: caption of the \\\"All\\\" (clear) option. Default \\\"(ALL)\\\".",
           "type": "string"
+        },
+        "attr": {
+          "description": "Identity attribute for `from: session`: principal_id | username | workspace | an application attribute.",
+          "type": "string",
+          "examples": [
+            "branch_id"
+          ]
         },
         "default": {
           "description": "Pre-set value for a user-adjustable filter. Supports \\\"today\\\" / \\\"today()\\\", resolved by the renderer as the server's current date.",
@@ -1347,6 +1359,14 @@
         },
         "field": {
           "type": "string"
+        },
+        "from": {
+          "description": "Where the value comes from at request time: session (identity attribute in `attr`) or route (query parameter in `param`). Empty = static `default`.",
+          "type": "string",
+          "enum": [
+            "session",
+            "route"
+          ]
         },
         "label": {
           "type": "string"
@@ -1368,6 +1388,13 @@
             "ilike",
             "null",
             "notnull"
+          ]
+        },
+        "param": {
+          "description": "Query parameter name for `from: route`. Defaults to the field name.",
+          "type": "string",
+          "examples": [
+            "token"
           ]
         },
         "show_all": {
@@ -1443,6 +1470,13 @@
         "compute": {
           "type": "string"
         },
+        "default_from": {
+          "description": "DefaultFrom seeds the field's initial value from the render context: a",
+          "type": "string",
+          "examples": [
+            "{session.branch_id}"
+          ]
+        },
         "field": {
           "type": "string"
         },
@@ -1468,7 +1502,7 @@
           "type": "string"
         },
         "widget": {
-          "type": "string"
+          "$ref": "#/$defs/FormWidget"
         }
       },
       "required": [
@@ -1492,6 +1526,15 @@
         "mode": {
           "$ref": "#/$defs/FormRender",
           "description": "@schema {description: \"Render mode: modal (popup dialog), drawer (side panel), separate_page (full page)\", enum: [\"modal\", \"drawer\", \"separate_page\"]}"
+        },
+        "picker_panel": {
+          "description": "PickerPanel places the child-field picker relative to the rest of the",
+          "type": "string",
+          "enum": [
+            "",
+            "inline",
+            "aside"
+          ]
         }
       },
       "required": [
@@ -1542,6 +1585,34 @@
         }
       },
       "additionalProperties": false
+    },
+    "FormWidget": {
+      "title": "Form Widget",
+      "description": "Widget rendering a form field. Closed set — every name is implemented by the renderer; omit to use the default derived from the field type.",
+      "type": "string",
+      "enum": [
+        "input",
+        "textarea",
+        "richtext",
+        "number",
+        "decimalinput",
+        "select",
+        "switch",
+        "radio-group",
+        "combobox",
+        "password",
+        "slider",
+        "tags",
+        "uuid",
+        "json",
+        "fileinput",
+        "relation-picker",
+        "datepicker",
+        "datetimeinput",
+        "child-grid",
+        "grants-editor",
+        "hidden"
+      ]
     },
     "ForwardDatePolicy": {
       "description": "ForwardDatePolicy controls how far forward a transaction_date can be set (§14a).\nDefault max_days_forward = 0 (no forward dating allowed).\n",
@@ -2175,6 +2246,182 @@
       },
       "additionalProperties": false
     },
+    "PickerDecl": {
+      "description": "PickerDecl declares that a child field is filled by picking records from\nanother entity.\n",
+      "type": "object",
+      "properties": {
+        "display": {
+          "$ref": "#/$defs/PickerDisplay",
+          "description": "Display describes how a source record is presented as a tile."
+        },
+        "entity": {
+          "description": "Entity is the source entity rows are picked from (`module.entity` or a",
+          "type": "string",
+          "examples": [
+            "cafe-master.menu-item"
+          ]
+        },
+        "filter": {
+          "description": "Filter is an equality pre-filter applied to the source list request.",
+          "type": "object",
+          "additionalProperties": {},
+          "examples": [
+            "{\\\"is_available\\\": \\\"true\\\"}"
+          ]
+        },
+        "map": {
+          "$ref": "#/$defs/PickerMap",
+          "description": "Map describes what gets written into the row."
+        }
+      },
+      "required": [
+        "entity",
+        "display",
+        "map"
+      ],
+      "additionalProperties": false
+    },
+    "PickerDisplay": {
+      "description": "PickerDisplay is the presentation half of a picker: what the user sees.\n",
+      "type": "object",
+      "properties": {
+        "category_field": {
+          "description": "Source relation/enum field rendered as filter chips.",
+          "type": "string",
+          "examples": [
+            "menu_category_id"
+          ]
+        },
+        "columns": {
+          "description": "Tile grid columns, 2–4 (default 3).",
+          "type": "integer",
+          "examples": [
+            "3"
+          ]
+        },
+        "description_field": {
+          "description": "@schema {example: \"description\"}",
+          "type": "string",
+          "examples": [
+            "description"
+          ]
+        },
+        "empty_text": {
+          "description": "@schema {example: \"Belum ada data\"}",
+          "type": "string",
+          "examples": [
+            "Belum ada data"
+          ]
+        },
+        "image_field": {
+          "description": "Source field holding an image: a file/attachment field (served from the entity file route) or a string URL.",
+          "type": "string",
+          "examples": [
+            "photo"
+          ]
+        },
+        "name_field": {
+          "description": "Source field used as the tile title (default \\\"name\\\").",
+          "type": "string",
+          "examples": [
+            "name"
+          ]
+        },
+        "price_entity": {
+          "description": "PriceEntity reads the price from a separate entity — the per-branch price",
+          "type": "string",
+          "examples": [
+            "cafe-master.menu-item-price"
+          ]
+        },
+        "price_field": {
+          "description": "Money field on `price_entity` (required with price_entity).",
+          "type": "string",
+          "examples": [
+            "price"
+          ]
+        },
+        "price_filter": {
+          "description": "Narrows the price rows (typically the branch). Values interpolate like `filter`.",
+          "type": "object",
+          "additionalProperties": {},
+          "examples": [
+            "{\\\"branch_id\\\": \\\"{session.branch_id}\\\"}"
+          ]
+        },
+        "price_match_field": {
+          "description": "Field on `price_entity` holding the source id (required with price_entity).",
+          "type": "string",
+          "examples": [
+            "menu_item_id"
+          ]
+        },
+        "search": {
+          "description": "Client-side search over the tile title.",
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "PickerMap": {
+      "description": "PickerMap is the write half of a picker: which row field receives what.\n",
+      "type": "object",
+      "properties": {
+        "max_quantity": {
+          "description": "Upper bound per row (default 99).",
+          "type": "integer",
+          "examples": [
+            "20"
+          ]
+        },
+        "name_field": {
+          "description": "NameField receives the source record's display name (snapshot).",
+          "type": "string",
+          "examples": [
+            "name_snapshot"
+          ]
+        },
+        "note_field": {
+          "description": "NoteField is a free-text per-row note (typed by the user, not copied).",
+          "type": "string",
+          "examples": [
+            "note"
+          ]
+        },
+        "price_field": {
+          "description": "PriceField receives the source record's price (snapshot).",
+          "type": "string",
+          "examples": [
+            "unit_price_snapshot"
+          ]
+        },
+        "quantity_field": {
+          "description": "QuantityField accumulates the picked amount. When omitted, a picked row",
+          "type": "string",
+          "examples": [
+            "quantity"
+          ]
+        },
+        "ref_field": {
+          "description": "RefField is the row's relation field pointing back at the source record.",
+          "type": "string",
+          "examples": [
+            "menu_item_id"
+          ]
+        },
+        "source_name_field": {
+          "description": "SourceNameField / SourcePriceField override which *source* field the name",
+          "type": "string",
+          "examples": [
+            "title"
+          ]
+        }
+      },
+      "required": [
+        "ref_field"
+      ],
+      "additionalProperties": false
+    },
     "PolicyApproval": {
       "description": "PolicyApproval declares an approval rule for a class of implementation types.\n",
       "type": "object",
@@ -2365,6 +2612,33 @@
         "grpc",
         "ws"
       ]
+    },
+    "PublicEntityDecl": {
+      "description": "PublicEntityDecl grants anonymous access to one entity's actions on a public\nApp's surface (S3). Entity is \"\u003cmodule\u003e/\u003centity\u003e\"; the module MUST be one of\nthe App's spec.modules, so a grant can never reach outside the App bundle.\n",
+      "type": "object",
+      "properties": {
+        "actions": {
+          "description": "Closed set: list, find, create, update, delete",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "examples": [
+            "[list, find]"
+          ]
+        },
+        "entity": {
+          "description": "@schema {example: \"cafe-master/menu-item\"}",
+          "type": "string",
+          "examples": [
+            "cafe-master/menu-item"
+          ]
+        }
+      },
+      "required": [
+        "entity"
+      ],
+      "additionalProperties": false
     },
     "PublishDecl": {
       "description": "PublishDecl configures how an event is published.\n",
@@ -3041,6 +3315,15 @@
       ],
       "additionalProperties": false
     },
+    "TableCellWidget": {
+      "title": "Table Cell Widget",
+      "description": "Widget rendering a table or listing cell. Closed set — every name is implemented by the cell renderer; omit to render the raw value (optionally via `format`).",
+      "type": "string",
+      "enum": [
+        "badge",
+        "boolean"
+      ]
+    },
     "TableColumn": {
       "description": "TableColumn configures a table column.\n",
       "type": "object",
@@ -3067,8 +3350,7 @@
           "type": "boolean"
         },
         "widget": {
-          "description": "badge | ...",
-          "type": "string"
+          "$ref": "#/$defs/TableCellWidget"
         },
         "width": {
           "type": "string"
@@ -4157,6 +4439,11 @@
             "$ref": "#/$defs/Field"
           }
         },
+        "picker": {
+          "$ref": "#/$defs/PickerDecl",
+          "description": "Picker fills this child field by choosing records from another entity",
+          "nullable": true
+        },
         "sequence_field": {
           "type": "string"
         },
@@ -4910,12 +5197,19 @@
       ]
     },
     "FilterSpec": {
-      "description": "FilterSpec is a generic filter declaration shared by every data kind that\nlists records (Table, Kanban, Listing, ApprovalInbox, …). A filter is used\nin one of two roles:\n  - `filters`: a user-adjustable control rendered in the kind's UI. If\n    `default` is set, the control is pre-seeded with that value (the user\n    can still change or clear it).\n  - `fixed_filters`: an immutable, server-side filter — always merged into\n    the list request, never rendered as a control and not user-clearable.\n\nThe resolved value is sent to the list API as `field[op]=value`, so `op`\ndefaults to \"eq\" and follows the backend filter operator set.\n",
+      "description": "FilterSpec is a generic filter declaration shared by every data kind that\nlists records (Table, Kanban, Listing, ApprovalInbox, …). A filter is used\nin one of two roles:\n  - `filters`: a user-adjustable control rendered in the kind's UI. If\n    `default` is set, the control is pre-seeded with that value (the user\n    can still change or clear it).\n  - `fixed_filters`: an immutable, server-side filter — always merged into\n    the list request, never rendered as a control and not user-clearable.\n\nThe resolved value is sent to the list API as `field[op]=value`, so `op`\ndefaults to \"eq\" and follows the backend filter operator set.\n\nA value can also come from the request context instead of the manifest, via\n`from` (S2/#6): `from: session` takes it from an identity attribute named by\n`attr` and is resolved server-side only (a client cannot supply or widen it),\nwhile `from: route` takes it from the query parameter named by `param` (e.g. an\nunguessable guest token, where the token itself is the credential).\n",
       "type": "object",
       "properties": {
         "all_label": {
           "description": "For select filters: caption of the \\\"All\\\" (clear) option. Default \\\"(ALL)\\\".",
           "type": "string"
+        },
+        "attr": {
+          "description": "Identity attribute for `from: session`: principal_id | username | workspace | an application attribute.",
+          "type": "string",
+          "examples": [
+            "branch_id"
+          ]
         },
         "default": {
           "description": "Pre-set value for a user-adjustable filter. Supports \\\"today\\\" / \\\"today()\\\", resolved by the renderer as the server's current date.",
@@ -4923,6 +5217,14 @@
         },
         "field": {
           "type": "string"
+        },
+        "from": {
+          "description": "Where the value comes from at request time: session (identity attribute in `attr`) or route (query parameter in `param`). Empty = static `default`.",
+          "type": "string",
+          "enum": [
+            "session",
+            "route"
+          ]
         },
         "label": {
           "type": "string"
@@ -4944,6 +5246,13 @@
             "ilike",
             "null",
             "notnull"
+          ]
+        },
+        "param": {
+          "description": "Query parameter name for `from: route`. Defaults to the field name.",
+          "type": "string",
+          "examples": [
+            "token"
           ]
         },
         "show_all": {
@@ -5019,6 +5328,13 @@
         "compute": {
           "type": "string"
         },
+        "default_from": {
+          "description": "DefaultFrom seeds the field's initial value from the render context: a",
+          "type": "string",
+          "examples": [
+            "{session.branch_id}"
+          ]
+        },
         "field": {
           "type": "string"
         },
@@ -5044,7 +5360,7 @@
           "type": "string"
         },
         "widget": {
-          "type": "string"
+          "$ref": "#/$defs/FormWidget"
         }
       },
       "required": [
@@ -5068,6 +5384,15 @@
         "mode": {
           "$ref": "#/$defs/FormRender",
           "description": "@schema {description: \"Render mode: modal (popup dialog), drawer (side panel), separate_page (full page)\", enum: [\"modal\", \"drawer\", \"separate_page\"]}"
+        },
+        "picker_panel": {
+          "description": "PickerPanel places the child-field picker relative to the rest of the",
+          "type": "string",
+          "enum": [
+            "",
+            "inline",
+            "aside"
+          ]
         }
       },
       "required": [
@@ -5118,6 +5443,34 @@
         }
       },
       "additionalProperties": false
+    },
+    "FormWidget": {
+      "title": "Form Widget",
+      "description": "Widget rendering a form field. Closed set — every name is implemented by the renderer; omit to use the default derived from the field type.",
+      "type": "string",
+      "enum": [
+        "input",
+        "textarea",
+        "richtext",
+        "number",
+        "decimalinput",
+        "select",
+        "switch",
+        "radio-group",
+        "combobox",
+        "password",
+        "slider",
+        "tags",
+        "uuid",
+        "json",
+        "fileinput",
+        "relation-picker",
+        "datepicker",
+        "datetimeinput",
+        "child-grid",
+        "grants-editor",
+        "hidden"
+      ]
     },
     "ForwardDatePolicy": {
       "description": "ForwardDatePolicy controls how far forward a transaction_date can be set (§14a).\nDefault max_days_forward = 0 (no forward dating allowed).\n",
@@ -5751,6 +6104,182 @@
       },
       "additionalProperties": false
     },
+    "PickerDecl": {
+      "description": "PickerDecl declares that a child field is filled by picking records from\nanother entity.\n",
+      "type": "object",
+      "properties": {
+        "display": {
+          "$ref": "#/$defs/PickerDisplay",
+          "description": "Display describes how a source record is presented as a tile."
+        },
+        "entity": {
+          "description": "Entity is the source entity rows are picked from (`module.entity` or a",
+          "type": "string",
+          "examples": [
+            "cafe-master.menu-item"
+          ]
+        },
+        "filter": {
+          "description": "Filter is an equality pre-filter applied to the source list request.",
+          "type": "object",
+          "additionalProperties": {},
+          "examples": [
+            "{\\\"is_available\\\": \\\"true\\\"}"
+          ]
+        },
+        "map": {
+          "$ref": "#/$defs/PickerMap",
+          "description": "Map describes what gets written into the row."
+        }
+      },
+      "required": [
+        "entity",
+        "display",
+        "map"
+      ],
+      "additionalProperties": false
+    },
+    "PickerDisplay": {
+      "description": "PickerDisplay is the presentation half of a picker: what the user sees.\n",
+      "type": "object",
+      "properties": {
+        "category_field": {
+          "description": "Source relation/enum field rendered as filter chips.",
+          "type": "string",
+          "examples": [
+            "menu_category_id"
+          ]
+        },
+        "columns": {
+          "description": "Tile grid columns, 2–4 (default 3).",
+          "type": "integer",
+          "examples": [
+            "3"
+          ]
+        },
+        "description_field": {
+          "description": "@schema {example: \"description\"}",
+          "type": "string",
+          "examples": [
+            "description"
+          ]
+        },
+        "empty_text": {
+          "description": "@schema {example: \"Belum ada data\"}",
+          "type": "string",
+          "examples": [
+            "Belum ada data"
+          ]
+        },
+        "image_field": {
+          "description": "Source field holding an image: a file/attachment field (served from the entity file route) or a string URL.",
+          "type": "string",
+          "examples": [
+            "photo"
+          ]
+        },
+        "name_field": {
+          "description": "Source field used as the tile title (default \\\"name\\\").",
+          "type": "string",
+          "examples": [
+            "name"
+          ]
+        },
+        "price_entity": {
+          "description": "PriceEntity reads the price from a separate entity — the per-branch price",
+          "type": "string",
+          "examples": [
+            "cafe-master.menu-item-price"
+          ]
+        },
+        "price_field": {
+          "description": "Money field on `price_entity` (required with price_entity).",
+          "type": "string",
+          "examples": [
+            "price"
+          ]
+        },
+        "price_filter": {
+          "description": "Narrows the price rows (typically the branch). Values interpolate like `filter`.",
+          "type": "object",
+          "additionalProperties": {},
+          "examples": [
+            "{\\\"branch_id\\\": \\\"{session.branch_id}\\\"}"
+          ]
+        },
+        "price_match_field": {
+          "description": "Field on `price_entity` holding the source id (required with price_entity).",
+          "type": "string",
+          "examples": [
+            "menu_item_id"
+          ]
+        },
+        "search": {
+          "description": "Client-side search over the tile title.",
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "PickerMap": {
+      "description": "PickerMap is the write half of a picker: which row field receives what.\n",
+      "type": "object",
+      "properties": {
+        "max_quantity": {
+          "description": "Upper bound per row (default 99).",
+          "type": "integer",
+          "examples": [
+            "20"
+          ]
+        },
+        "name_field": {
+          "description": "NameField receives the source record's display name (snapshot).",
+          "type": "string",
+          "examples": [
+            "name_snapshot"
+          ]
+        },
+        "note_field": {
+          "description": "NoteField is a free-text per-row note (typed by the user, not copied).",
+          "type": "string",
+          "examples": [
+            "note"
+          ]
+        },
+        "price_field": {
+          "description": "PriceField receives the source record's price (snapshot).",
+          "type": "string",
+          "examples": [
+            "unit_price_snapshot"
+          ]
+        },
+        "quantity_field": {
+          "description": "QuantityField accumulates the picked amount. When omitted, a picked row",
+          "type": "string",
+          "examples": [
+            "quantity"
+          ]
+        },
+        "ref_field": {
+          "description": "RefField is the row's relation field pointing back at the source record.",
+          "type": "string",
+          "examples": [
+            "menu_item_id"
+          ]
+        },
+        "source_name_field": {
+          "description": "SourceNameField / SourcePriceField override which *source* field the name",
+          "type": "string",
+          "examples": [
+            "title"
+          ]
+        }
+      },
+      "required": [
+        "ref_field"
+      ],
+      "additionalProperties": false
+    },
     "PolicyApproval": {
       "description": "PolicyApproval declares an approval rule for a class of implementation types.\n",
       "type": "object",
@@ -5941,6 +6470,33 @@
         "grpc",
         "ws"
       ]
+    },
+    "PublicEntityDecl": {
+      "description": "PublicEntityDecl grants anonymous access to one entity's actions on a public\nApp's surface (S3). Entity is \"\u003cmodule\u003e/\u003centity\u003e\"; the module MUST be one of\nthe App's spec.modules, so a grant can never reach outside the App bundle.\n",
+      "type": "object",
+      "properties": {
+        "actions": {
+          "description": "Closed set: list, find, create, update, delete",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "examples": [
+            "[list, find]"
+          ]
+        },
+        "entity": {
+          "description": "@schema {example: \"cafe-master/menu-item\"}",
+          "type": "string",
+          "examples": [
+            "cafe-master/menu-item"
+          ]
+        }
+      },
+      "required": [
+        "entity"
+      ],
+      "additionalProperties": false
     },
     "PublishDecl": {
       "description": "PublishDecl configures how an event is published.\n",
@@ -6617,6 +7173,15 @@
       ],
       "additionalProperties": false
     },
+    "TableCellWidget": {
+      "title": "Table Cell Widget",
+      "description": "Widget rendering a table or listing cell. Closed set — every name is implemented by the cell renderer; omit to render the raw value (optionally via `format`).",
+      "type": "string",
+      "enum": [
+        "badge",
+        "boolean"
+      ]
+    },
     "TableColumn": {
       "description": "TableColumn configures a table column.\n",
       "type": "object",
@@ -6643,8 +7208,7 @@
           "type": "boolean"
         },
         "widget": {
-          "description": "badge | ...",
-          "type": "string"
+          "$ref": "#/$defs/TableCellWidget"
         },
         "width": {
           "type": "string"
@@ -7352,6 +7916,17 @@
                 "jsonb-persist"
               ]
             },
+            "public_entities": {
+              "description": "Allowlist of anonymous entity actions for a public App: absent = legacy module-wide, [] = none, list = exactly those pairs",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/PublicEntityDecl"
+              },
+              "examples": [
+                "[{entity: catalog/product, actions: [list, find]}]"
+              ],
+              "nullable": true
+            },
             "publishes": {
               "description": "cross-app interfaces offered",
               "type": "array",
@@ -7686,6 +8261,13 @@
               "$ref": "#/$defs/RateLimitSpec",
               "description": "1.4.1 resource-level rate limit (02-core-extended.md §17)",
               "nullable": true
+            },
+            "scope": {
+              "description": "Scope declares row-level scoping enforced by the server on every list/",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/FilterSpec"
+              }
             },
             "soft_deactivate": {
               "$ref": "#/$defs/SoftDeactivateDecl",

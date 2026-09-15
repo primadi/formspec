@@ -1,0 +1,45 @@
+apiVersion: formspec.dev/v1
+kind: Wizard
+metadata:
+  name: close-shift-wizard
+  module: cafe-order
+  description: "Tutup shift kasir: periksa kas seharusnya, hitung fisik, konfirmasi selisih"
+spec:
+  title: "Tutup Shift Kasir"
+  entity: cafe-order.shift
+  # Aksi server yang meng-commit seluruh langkah.
+  action: close-shift
+  steps:
+    - title: "Ringkasan Kas"
+      description: "Periksa angka sebelum menghitung uang fisik."
+      fields:
+        - { field: branch_id, read_only: true }
+        - { field: cashier_id, read_only: true, label: "Kasir" }
+        - { field: opening_cash, read_only: true, label: "Kas Awal" }
+        - { field: expected_cash, read_only: true, label: "Kas Seharusnya" }
+    - title: "Hitung Uang Fisik"
+      description: "Hitung uang di laci, lalu masukkan jumlahnya."
+      fields:
+        # GAP-01: `counted_cash` adalah field money tanpa widget uang — kasir
+        # mengetik angka di input teks polos, tanpa format dan tanpa numpad.
+        # Ini titik paling terasa dari GAP-01 di operasional harian.
+        - field: counted_cash
+          label: "Kas Hasil Hitung"
+          help: "Jumlah uang fisik di laci, apa adanya."
+        - field: note
+          label: "Catatan Selisih"
+          help: "Wajib diisi bila ada selisih, mis. uang kembalian kurang."
+    - title: "Konfirmasi"
+      description: "Selisih dihitung otomatis. Periksa sekali lagi sebelum menutup shift."
+      fields:
+        # `difference` = `computed: counted_cash - expected_cash` — money -
+        # money, hasilnya money dan boleh negatif (kas kurang). S7;
+        # terverifikasi runtime: 500000 - 512500 → {-12500 IDR}.
+        - { field: difference, read_only: true, label: "Selisih" }
+        - field: supervisor_id
+          widget: relation-picker
+          label: "Supervisor Penyetuju"
+          help: "Wajib bila ada selisih."
+  # Catatan: aturan bisnis #11 — setelah shift ditutup, transaksi pada shift itu
+  # tidak bisa dibatalkan lagi. Guard-nya ada di action `cancel-order`
+  # (shift harus masih `open`).

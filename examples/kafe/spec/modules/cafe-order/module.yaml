@@ -1,0 +1,28 @@
+apiVersion: formspec.dev/v1
+kind: Module
+metadata:
+  name: cafe-order
+  description: "Transaksi penjualan kafe: sesi meja, pesanan, pembayaran, shift kas"
+spec:
+  version: 1.0.0
+  depends:
+    - module: formspec/core
+    - module: cafe-master
+  menu:
+    - label: "Transaksi"
+      icon: "shopping-cart"
+      children:
+        - { label: "Pesanan", icon: "receipt", route: /cafe-order/orders }
+        - { label: "Sesi Meja", icon: "armchair", route: /cafe-order/table-sessions }
+        - { label: "Pembayaran", icon: "credit-card", route: /cafe-order/payments }
+    - label: "Kas & Shift"
+      icon: "wallet"
+      children:
+        - { label: "Shift Kasir", icon: "clock", route: /cafe-order/shifts }
+        - { label: "Kas Masuk/Keluar", icon: "arrow-left-right", route: /cafe-order/cash-movements }
+    - label: "Dapur"
+      icon: "chef-hat"
+      children:
+        - { label: "Layar Dapur (KDS)", icon: "monitor", view: order-board-kds }
+    # Tahap 3 lanjutan menambahkan:
+    #   { label: "Kasir (POS)", view: pos-workbench }  # + GAP-05 (blok keranjang)

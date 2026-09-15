@@ -1,0 +1,42 @@
+apiVersion: formspec.dev/v1
+kind: Form
+metadata:
+  name: payment-form
+  module: cafe-order
+  description: "Input pembayaran kasir — tunai (dengan kembalian) atau non-tunai"
+spec:
+  entity: cafe-order.payment
+  mode: create
+  render: { mode: drawer }
+  sections:
+    - title: "Pembayaran"
+      columns: 2
+      fields:
+        - { field: order_id, widget: relation-picker, help: "Pesanan yang dibayar." }
+        - { field: method, help: "Menentukan field mana yang muncul di bawah." }
+        # GAP-01: `amount` adalah money tanpa widget uang.
+        # `change` = `computed: tendered - amount` — money - money menghasilkan
+        # money (S7: docs/spec/frontend/08-formspec-expr.md §5). Terverifikasi
+        # runtime: tendered 100000, amount 75000 → change {25000 IDR}.
+        - { field: amount, label: "Jumlah Dibayar" }
+        - field: tendered
+          label: "Uang Diterima"
+          visible_when: "fields.method == 'cash'"
+          help: "Jumlah uang yang diserahkan pelanggan."
+        - field: change
+          label: "Kembalian"
+          read_only: true
+          visible_when: "fields.method == 'cash'"
+        - field: reference_no
+          label: "No. Referensi"
+          visible_when: "fields.method == 'qris' or fields.method == 'card' or fields.method == 'ewallet'"
+          help: "Nomor referensi dari EDC / aplikasi pembayaran."
+    - title: "Penanggung Jawab"
+      columns: 2
+      fields:
+        - { field: branch_id, widget: relation-picker }
+        - { field: shift_id, widget: relation-picker, help: "Shift yang menerima pembayaran ini." }
+        - { field: cashier_id, widget: relation-picker, label: "Kasir" }
+  # CATATAN GAP-05: ini form pembayaran, BUKAN layar pembayaran POS. Layar yang
+  # diinginkan (numpad uang, tombol pecahan, kembalian berjalan) butuh widget
+  # uang (GAP-01) dan blok transaksional (GAP-05) yang belum ada.

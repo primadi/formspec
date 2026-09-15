@@ -1,0 +1,25 @@
+apiVersion: formspec.dev/v1
+kind: Report
+metadata:
+  name: stock-usage
+  module: cafe-report
+  description: "Pemakaian bahan per periode, termasuk bahan terbuang"
+spec:
+  title: "Pemakaian Stok Bahan"
+  entity: cafe-stock.stock-movement
+  parameters:
+    - { field: date_from, label: "Dari Tanggal", type: date, required: true }
+    - { field: date_to, label: "Sampai Tanggal", type: date, required: true }
+    - { field: branch_id, label: "Cabang", type: relation }
+    - { field: direction, label: "Arah", type: select }
+  columns:
+    - { field: transaction_date, label: "Waktu", format: datetime }
+    - { field: ingredient_id, label: "Bahan" }
+    - { field: direction, label: "Arah" }
+    - { field: source, label: "Sumber" }
+    - { field: quantity, label: "Jumlah", aggregate: sum }
+    - { field: total_cost, label: "Biaya", format: currency, aggregate: sum }
+  groups:
+    - { field: ingredient_id, label: "Bahan" }
+  totals:
+    - { label: "Total Biaya Bahan", field: total_cost, fn: sum }

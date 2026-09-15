@@ -1,0 +1,52 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: point-entry
+  module: cafe-loyalty
+  description: "Ledger poin (append-only) — perolehan, pemakaian, kedaluwarsa, penyesuaian"
+spec:
+  version: v1
+  characteristic: transaction
+  plural: point-entries
+  lifecycle: plain_crud
+  fields:
+    - name: transaction_date
+      type: datetime
+      required: true
+      index: true
+      title: "Waktu"
+    - name: member_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-master.member }
+      required: true
+      index: true
+      title: "Member"
+    - name: type
+      type: enum
+      enum_values: [earn, redeem, expire, adjust]
+      required: true
+      index: true
+      title: "Jenis"
+    # Bertanda (+/-). Poin diberikan HANYA setelah pesanan lunas
+    # (aturan bisnis #12) — entri `earn` dibuat pada transisi ke `paid`.
+    - name: points
+      type: integer
+      required: true
+      title: "Poin"
+      description: "Positif untuk perolehan, negatif untuk pemakaian/kedaluwarsa"
+    - name: order_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-order.order }
+      title: "Pesanan"
+      description: "Sumber poin bila berasal dari pembelian"
+    - name: balance_after
+      type: integer
+      title: "Saldo Setelah Entri"
+    - name: note
+      type: string
+      title: "Catatan"
+  actions:
+    # Aturan bisnis #14: ledger poin tidak dihapus — koreksi lewat entri lawan
+    # bertipe `adjust`, sehingga jejak poin pelanggan tetap dapat diaudit.
+    - { name: delete, disabled: true }
+  # expose: [] — UI-only.

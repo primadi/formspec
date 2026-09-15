@@ -1,0 +1,24 @@
+apiVersion: formspec.dev/v1
+kind: Module
+metadata:
+  name: cafe-report
+  description: "Pelaporan & dashboard kafe — tanpa entity, hanya kind visual"
+spec:
+  version: 1.0.0
+  depends:
+    - module: formspec/core
+    - module: cafe-master
+    - module: cafe-order
+    - module: cafe-stock
+    - module: cafe-loyalty
+  menu:
+    - label: "Laporan"
+      icon: "bar-chart-3"
+      children:
+        - { label: "Ringkasan Pemilik", icon: "layout-dashboard", view: owner-overview }
+        - { label: "Penjualan per Periode", icon: "trending-up", view: sales-by-period }
+        - { label: "Profitabilitas Menu", icon: "chart-pie", view: menu-profitability }
+        - { label: "Pemakaian Stok", icon: "package", view: stock-usage }
+        - { label: "Rekap Shift & Kas", icon: "wallet", view: shift-recap }
+        - { label: "Loyalitas Pelanggan", icon: "heart", view: loyalty-summary }
+        - { label: "Pembelian per Supplier", icon: "truck", view: purchase-by-supplier }

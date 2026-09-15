@@ -1,0 +1,14 @@
+apiVersion: formspec.dev/v1
+kind: Widget
+metadata:
+  name: pesanan-menunggu-bayar
+  module: cafe-report
+  description: "Jumlah pesanan yang menunggu pembayaran — antrean kasir"
+spec:
+  title: "Menunggu Bayar"
+  type: metric
+  entity: cafe-order.order
+  query: "status = 'awaiting_payment'"
+  # Hitung baris — tidak menyentuh money.
+  config: { aggregate: count }
+  refresh_secs: 30

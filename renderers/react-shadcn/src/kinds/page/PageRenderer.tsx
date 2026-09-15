@@ -211,9 +211,13 @@ function PageBlocks({ entry }: { entry: Entry<PageSpec> }) {
     [routeParams, searchParams, location.pathname],
   )
   // Phase 2: resolve `spec.context` declarations over the standard slots.
+  // A `public: true` page is an anonymous surface: its entity context reads skip
+  // the client-side permission pre-check (an anonymous caller has no
+  // permissions), and the server remains the authority.
   const { context: pageCtx, loading: ctxLoading } = useRenderContext(
     entry.spec.context,
     { ...routeCtx, ...(userCtx ?? {}) },
+    { publicSurface: entry.spec.public === true },
   )
 
   // Title interpolation (e.g. "Pasien — {patient.name}") needs whichever
@@ -534,6 +538,10 @@ function PageBlockRenderer({
             mode={(block.form?.mode as "create" | "edit" | "view") ?? "view"}
             id={overrideId ?? resolveRouteParam(block.form?.id, routeParams)}
             formRef={block.form?.ref}
+            // The page already resolved `spec.context`; the form reuses it for
+            // `default_from` seeding and picker `{token}` filters instead of
+            // fetching the same records again.
+            context={context}
           />
         </Suspense>,
       )

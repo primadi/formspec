@@ -36,6 +36,8 @@ func (c *Converter) Generate(collect *CollectResult) *GenerateResult {
 		"DeliveryDecl", "PublishDecl", "PayloadDecl", "EventDeliveryDecl", "DeliveryTarget",
 		"RetryDecl", "PageBlock", "PageTab", "BlockRef", "DashboardWidget", "WidgetLayout",
 		"SectionBlock", "SectionCTA", "SectionItem",
+		// Child-field picker (S1 generalized).
+		"PickerDecl", "PickerDisplay", "PickerMap",
 		"ReportParam", "ReportColumn", "ReportGroup", "ReportTotal", "ReportSource", "WizardStep",
 		"WizardOnComplete", "WizardSummaryItem", "KanbanColumn", "KanbanCard",
 		"PrintOutput", "PrintPaper", "PrintCustomPaper", "PrintHeader", "PrintBodyItem",
@@ -49,10 +51,11 @@ func (c *Converter) Generate(collect *CollectResult) *GenerateResult {
 		"AuthSettings", "OAuthProviderSettings", "RegistrationSettings", // settings.auth / settings.registration (auth redesign Fase 4-5)
 		"Dependency",
 		"AiIndexDecl", "AppInterface", "AppConsume",
-		"AppChrome",   // App.spec.chrome — chrome composition (frontend/05 §5)
-		"AppAuth",     // App.spec.auth — auth screen overrides (plan auth-screens-spec-driven)
-		"AppConfirm",  // App.spec.confirm — default confirm dialogs (plan confirm-dialogs)
-		"FormConfirm", // Form.spec.confirm — per-form confirm override (plan confirm-dialogs)
+		"AppChrome",        // App.spec.chrome — chrome composition (frontend/05 §5)
+		"AppAuth",          // App.spec.auth — auth screen overrides (plan auth-screens-spec-driven)
+		"AppConfirm",       // App.spec.confirm — default confirm dialogs (plan confirm-dialogs)
+		"PublicEntityDecl", // App.spec.public_entities — anonymous allowlist (S3, gap #6)
+		"FormConfirm",      // Form.spec.confirm — per-form confirm override (plan confirm-dialogs)
 		"EnvironmentPlane", "PolicyApproval",
 		"IntegratorCall", "IntegratorListen",
 		"KvstoreUseDecl",

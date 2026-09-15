@@ -635,20 +635,55 @@ func (r *MigrationRunner) diffExistingTable(ctx context.Context, ti *TableInfo, 
 		return "", 0, err
 	}
 
+	// Columns that must exist: fields flagged index/unique/natural-key, plus
+	// every field named in a declared index (EntitySpec.Indexes or
+	// PersistSpec.Indexes) — including relation fields, which otherwise get no
+	// derived column at all (gap #22). Field order is preserved so the emitted
+	// DDL (and therefore its checksum) is deterministic.
+	needed := make(map[string]bool)
+	var ordered []spec.Field
+	mark := func(f spec.Field) {
+		if f.Type == spec.FieldChild || needed[f.Name] {
+			return
+		}
+		needed[f.Name] = true
+		ordered = append(ordered, f)
+	}
+
+	indexDecls := append([]spec.IndexDecl{}, entity.Indexes...)
+	if entity.Persist != nil {
+		indexDecls = append(indexDecls, entity.Persist.Indexes...)
+	}
+
+	for _, f := range entity.Fields {
+		if f.Index || f.Unique || f.NaturalKey {
+			mark(f)
+		}
+	}
+	for _, idx := range indexDecls {
+		for _, fn := range idx.Fields {
+			for _, f := range entity.Fields {
+				if f.Name == fn {
+					mark(f)
+					break
+				}
+			}
+		}
+	}
+
 	var alters []string
 	added := 0
-	for _, f := range entity.Fields {
-		if f.Type == spec.FieldChild || f.Type == spec.FieldRelation {
-			continue
-		}
-		if !(f.Index || f.Unique || f.NaturalKey) {
-			continue
-		}
+	for _, f := range ordered {
 		col := generatedColumnName(f.Name)
 		if existing[col] {
 			continue
 		}
-		sqlType := fieldTypeToSQL(f.Type, f.EnumValues)
+		sqlType := fieldTypeToSQLFor(f.Type, f.EnumValues, r.driver)
+		if f.Type == spec.FieldRelation {
+			// Relations live in the JSONB payload; the derived column holds the
+			// reference id as text.
+			sqlType = "text"
+		}
 		// Note: the modernc SQLite driver cannot ALTER TABLE ADD COLUMN with
 		// a GENERATED ALWAYS AS column (it silently no-ops), so the diff adds
 		// a plain column. On Postgres a generated column is used.

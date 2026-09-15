@@ -167,6 +167,73 @@ type AppSpec struct {
 	Menu      []MenuItem     `yaml:"menu,omitempty" json:"menu,omitempty"`
 	Publishes []AppInterface `yaml:"publishes,omitempty" json:"publishes,omitempty"` // cross-app interfaces offered
 	Consumes  []AppConsume   `yaml:"consumes,omitempty" json:"consumes,omitempty"`   // cross-app interfaces needed → grant request
+	// PublicEntities narrows which entities an `access: public` App exposes
+	// anonymously (S3, gaps #6/#45). Three states — the pointer distinguishes
+	// "absent" from "explicitly empty":
+	//   - absent (nil): legacy behavior — EVERY entity of every mounted module
+	//     gets anonymous list/find/create. Deprecated: it also exposes data that
+	//     merely happens to share a module with the intended entity (another
+	//     entity's PII, cash, or shift records).
+	//   - explicitly empty (`public_entities: []`): nothing is anonymous; every
+	//     entity of the App's modules requires authentication.
+	//   - non-empty: exactly these entity/action pairs are anonymous; everything
+	//     else in the same modules requires authentication.
+	// @schema {example: "[{entity: catalog/product, actions: [list, find]}]", description: "Allowlist of anonymous entity actions for a public App: absent = legacy module-wide, [] = none, list = exactly those pairs"}
+	PublicEntities *[]PublicEntityDecl `yaml:"public_entities,omitempty" json:"public_entities,omitempty"`
+}
+
+// PublicEntityDecl grants anonymous access to one entity's actions on a public
+// App's surface (S3). Entity is "<module>/<entity>"; the module MUST be one of
+// the App's spec.modules, so a grant can never reach outside the App bundle.
+type PublicEntityDecl struct {
+	// @schema {example: "cafe-master/menu-item"}
+	Entity string `yaml:"entity" json:"entity"`
+	// @schema {example: "[list, find]", description: "Closed set: list, find, create, update, delete"}
+	Actions []string `yaml:"actions" json:"actions"`
+}
+
+// PublicEntityActions is the closed set of actions a public App may grant to
+// anonymous callers. It matches the standard REST action vocabulary, so a grant
+// always names a route that actually exists.
+var PublicEntityActions = map[string]bool{
+	"list":   true,
+	"find":   true,
+	"create": true,
+	"update": true,
+	"delete": true,
+}
+
+// NormalizeEntityRef converts an entity reference to the canonical
+// "module/entity" form. Both spellings used across manifests are accepted:
+// `module/entity` (Page refs, ExtendStorage.target) and `module.entity`
+// (relation.resource, uses.resources). The LAST separator wins, so a dotted
+// module name such as "formspec.core.workspace" resolves to module
+// "formspec.core", entity "workspace". Returns false when the ref has no
+// separator or an empty side.
+func NormalizeEntityRef(ref string) (string, bool) {
+	if i := strings.LastIndexByte(ref, '/'); i >= 0 {
+		mod, ent := ref[:i], ref[i+1:]
+		if mod != "" && ent != "" {
+			return mod + "/" + ent, true
+		}
+		return "", false
+	}
+	if i := strings.LastIndexByte(ref, '.'); i >= 0 {
+		mod, ent := ref[:i], ref[i+1:]
+		if mod != "" && ent != "" {
+			return mod + "/" + ent, true
+		}
+	}
+	return "", false
+}
+
+// accessLabel renders an App access value for error messages ("" = the default,
+// private).
+func accessLabel(a AppAccess) string {
+	if a == "" {
+		return "private (default)"
+	}
+	return string(a)
 }
 
 // AppConfirm is the App-wide default confirm-dialog configuration
@@ -897,6 +964,41 @@ func ValidateAppSpec(a *AppSpec) error {
 	}
 	if a.Access != "" && a.Access != AppAccessPrivate && a.Access != AppAccessPublic {
 		return fmt.Errorf("access %q is invalid (enum: private, public)", a.Access)
+	}
+	// public_entities (S3): an anonymous allowlist. Validated here so a grant can
+	// never name a module the App does not mount, an unknown action, or an entry
+	// that grants nothing.
+	if a.PublicEntities != nil {
+		if a.Access != AppAccessPublic {
+			return fmt.Errorf("public_entities requires `access: public` (this App's access is %s)", accessLabel(a.Access))
+		}
+		mounted := make(map[string]bool, len(a.Modules))
+		for _, m := range a.Modules {
+			mounted[m] = true
+		}
+		seen := make(map[string]bool, len(*a.PublicEntities))
+		for i, pe := range *a.PublicEntities {
+			canonical, ok := NormalizeEntityRef(pe.Entity)
+			if !ok {
+				return fmt.Errorf("public_entities[%d]: entity %q must be \"<module>/<entity>\" (or \"<module>.<entity>\")", i, pe.Entity)
+			}
+			mod, _, _ := strings.Cut(canonical, "/")
+			if !mounted[mod] {
+				return fmt.Errorf("public_entities[%d]: module %q is not mounted by this App (spec.modules)", i, mod)
+			}
+			if seen[canonical] {
+				return fmt.Errorf("public_entities[%d]: %q is declared more than once", i, pe.Entity)
+			}
+			seen[canonical] = true
+			if len(pe.Actions) == 0 {
+				return fmt.Errorf("public_entities[%d] (%s): actions is required — use `public_entities: []` to grant nothing, or omit the entry", i, pe.Entity)
+			}
+			for _, act := range pe.Actions {
+				if !PublicEntityActions[act] {
+					return fmt.Errorf("public_entities[%d] (%s): unknown action %q (closed set: list, find, create, update, delete)", i, pe.Entity, act)
+				}
+			}
+		}
 	}
 	if a.PersistBackend != "" && !InstalledPersistBackends[a.PersistBackend] {
 		return fmt.Errorf("persist_backend %q is not installed (installed: %s — implements %s)", a.PersistBackend, DefaultPersistBackend, EntityPersistContract)

@@ -1,0 +1,10 @@
+# Named workspace seed — the slug becomes the URL prefix (/{ws}/...)
+# and the tenant scope of all data. Upserted into the workspace registry
+# at boot; additional workspaces via `formspec workspace create`.
+apiVersion: formspec.dev/v1
+kind: Workspace
+metadata:
+  name: kafe
+  description: "Workspace utama kafe"
+spec:
+  display_name: "kafe"

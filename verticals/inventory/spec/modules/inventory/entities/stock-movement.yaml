@@ -45,6 +45,22 @@ spec:
       child:
         storage: table
         sequence_field: line_number
+        # Baris dipilih dari master produk (S1) — pola yang sama dengan keranjang
+        # pesanan dan daftar bahan; berbeda hanya sumbernya.
+        picker:
+          entity: inventory.product
+          filter: { is_active: "true" }
+          display:
+            name_field: name
+            category_field: unit
+            columns: 3
+            search: true
+            empty_text: "Belum ada produk aktif"
+          map:
+            ref_field: product_id
+            quantity_field: quantity
+            note_field: notes
+            max_quantity: 100000
         fields:
           - { name: line_number, type: integer, immutable: true }
           - { name: product_id, type: uuid, rules: [required, {exists: product}] }

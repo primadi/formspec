@@ -1,0 +1,28 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: menu-category
+  module: cafe-master
+  description: "Kategori menu (kopi, non-kopi, makanan, snack)"
+spec:
+  version: v1
+  characteristic: master
+  plural: menu-categories
+  display_field: name
+  soft_deactivate: { enabled: true }
+  fields:
+    - name: name
+      type: string
+      required: true
+      unique: true
+      title: "Nama Kategori"
+    - name: sort_order
+      type: integer
+      default: 0
+      title: "Urutan Tampil"
+    - name: prep_station_default
+      type: enum
+      enum_values: [bar, kitchen, both]
+      default: bar
+      title: "Stasiun Default"
+  # expose: [] — UI-only.

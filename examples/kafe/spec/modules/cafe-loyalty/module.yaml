@@ -1,0 +1,17 @@
+apiVersion: formspec.dev/v1
+kind: Module
+metadata:
+  name: cafe-loyalty
+  description: "Poin pelanggan: ledger perolehan/pemakaian dan saldo per member"
+spec:
+  version: 1.0.0
+  depends:
+    - module: formspec/core
+    - module: cafe-master
+    - module: cafe-order
+  menu:
+    - label: "Loyalitas"
+      icon: "gift"
+      children:
+        - { label: "Riwayat Poin", icon: "history", route: /cafe-loyalty/point-entries }
+        - { label: "Saldo Poin", icon: "coins", route: /cafe-loyalty/member-points }

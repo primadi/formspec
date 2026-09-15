@@ -1,0 +1,23 @@
+apiVersion: formspec.dev/v1
+kind: Report
+metadata:
+  name: menu-profitability
+  module: cafe-report
+  description: "Terjual, harga, biaya bahan, dan margin per menu — inti laporan pemilik"
+spec:
+  title: "Profitabilitas Menu"
+  # Dibaca dari entity summary `menu-cost` yang dihitung script dari
+  # resep x biaya rata-rata bergerak (D3). Ini pengganti metode valuasi
+  # bawaan FormSpec yang tidak ada (GAP-13).
+  entity: cafe-stock.menu-cost
+  parameters:
+    - { field: branch_id, label: "Cabang", type: relation }
+  columns:
+    - { field: menu_item_id, label: "Menu" }
+    - { field: sale_price, label: "Harga Jual", format: currency, aggregate: sum }
+    - { field: cost_per_portion, label: "Biaya per Porsi", format: currency, aggregate: sum }
+    - { field: gross_margin, label: "Margin Kotor", format: currency, aggregate: sum }
+    - { field: gross_margin_percent, label: "Margin (%)" }
+    - { field: calculated_at, label: "Dihitung", format: datetime }
+  totals:
+    - { label: "Total Margin Kotor", field: gross_margin, fn: sum }

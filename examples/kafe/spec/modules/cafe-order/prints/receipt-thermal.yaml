@@ -1,0 +1,42 @@
+apiVersion: formspec.dev/v1
+kind: Print
+metadata:
+  name: receipt-thermal
+  module: cafe-order
+  description: "Struk pelanggan 58mm — dokumen cetak utama kafe"
+spec:
+  entity: cafe-order.order
+  # ⚠️ GAP-10 — FORMAT INI BELUM DIIMPLEMENTASI.
+  # Kontrak menyatakan `thermal` = "server-side ESC/POS byte stream -> printer
+  # mentah" (06-page-kinds.md §8), dan `formspec validate` MENERIMANYA.
+  # Tetapi `internal/api/print.go` hanya punya `renderPrintPDF()` dan handler-nya
+  # SELALU membalas `Content-Type: application/pdf` — tanpa percabangan pada
+  # `output.format`. Jadi manifest ini lolos validasi dan menghasilkan file PDF
+  # bernama .pdf, bukan byte ESC/POS.
+  # Artinya: struk kafe BELUM bisa dicetak ke printer thermal.
+  # Untuk sementara, pakai `receipt-digital` (format: html).
+  output:
+    format: thermal
+    paper: { size: thermal_58mm }
+  header:
+    logo: false
+    title: "KAFE KAMI"
+    # {branch.name} memakai interpolasi dot-path — diresolve server-side.
+    subtitle: "{branch.name}"
+  body:
+    - fields: [number, transaction_date, dining_table_id, employee_id]
+    - separator: "--------------------------------"
+    # child_table memakai baris item pesanan. name_snapshot & unit_price_snapshot
+    # adalah nilai yang DIBEKUKAN saat pesan (D2) — struk lama tidak berubah
+    # bila harga menu naik.
+    - child_table:
+        field: lines
+        columns: [name_snapshot, quantity, unit_price_snapshot, line_total]
+    - separator: "--------------------------------"
+    # Baris pajak & service charge ditampilkan TERPISAH (keputusan D8) — bukan
+    # ditanam di harga, supaya kepatuhan pajak jelas di struk.
+    - fields: [subtotal, discount_amount, service_charge_amount, tax_amount]
+    - totals: { field: total_amount, format: currency }
+    - fields: [paid_amount, change_amount]
+  footer:
+    text: "Terima kasih — {branch.receipt_footer}"

@@ -1,0 +1,34 @@
+apiVersion: formspec.dev/v1
+kind: Form
+metadata:
+  name: menu-item-form
+  module: cafe-master
+  description: "Form menu — foto & pengelompokan field yang jelas"
+spec:
+  entity: cafe-master.menu-item
+  mode: edit
+  # Bentuk objek WAJIB — lihat GAP-37: `render: drawer` (shorthand) disebut
+  # diterima di deskripsi schema, tapi ditolak JSON Schema.
+  render: { mode: drawer }
+  sections:
+    - title: "Identitas Menu"
+      columns: 2
+      fields:
+        - { field: code, help: "Kode unik menu, mis. LAT-001" }
+        - { field: name }
+        - { field: menu_category_id, widget: relation-picker }
+        - { field: prep_station, help: "Menentukan tiket muncul di bar atau dapur." }
+        - { field: sort_order }
+    - title: "Tampilan & Ketersediaan"
+      columns: 2
+      fields:
+        # GAP-04: foto BISA diunggah (FileInput punya preview) tetapi TIDAK
+        # dirender sebagai gambar di Table/Listing/Detail/Print — hanya tampil
+        # sebagai teks/link. Katalog publik karena itu belum bisa bergambar.
+        - { field: photo, help: "JPG/PNG/WebP, maks 2 MB. Rasio disarankan 1:1." }
+        - { field: is_available, help: "Matikan cepat saat bahan habis." }
+        - { field: is_taxable }
+        - { field: description }
+  # Harga TIDAK ada di form ini dengan sengaja: harga disimpan per cabang di
+  # entity `menu-item-price` (keputusan D1), supaya satu menu bisa beda harga
+  # antar cabang tanpa menduplikasi nama, foto, dan resep.

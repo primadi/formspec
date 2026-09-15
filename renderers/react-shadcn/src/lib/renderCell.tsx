@@ -6,7 +6,7 @@
 // render identically to parent-table columns.
 
 import { Badge } from "@/widgets/Badge"
-import { createFormatter, type Formatter } from "@/lib/format"
+import { createFormatter, moneyAmount, type Formatter } from "@/lib/format"
 
 export function renderCellValue(
   value: unknown,
@@ -26,8 +26,11 @@ export function renderCellValue(
 
   const formatter = fmt ?? createFormatter()
 
-  if (format === "currency" && typeof value === "number") {
-    return formatter.money(value)
+  if (format === "currency") {
+    // A money value can be a bare number or the canonical {amount, currency}
+    // object — accept both instead of falling through to JSON.stringify.
+    const amount = moneyAmount(value)
+    if (amount !== undefined) return formatter.money(amount)
   }
 
   if (format === "date" && typeof value === "string") {

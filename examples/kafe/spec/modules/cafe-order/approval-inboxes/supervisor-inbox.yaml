@@ -1,0 +1,24 @@
+apiVersion: formspec.dev/v1
+kind: ApprovalInbox
+metadata:
+  name: supervisor-inbox
+  module: cafe-order
+  description: "Antrean persetujuan supervisor"
+spec:
+  # ZERO-CONFIG by design: schema hanya punya {filters, realtime, search}, tanpa
+  # `title` dan tanpa daftar workflow. Sumbernya diambil otomatis dari langkah
+  # Workflow yang sedang menunggu DAN berhak disetujui pemanggil.
+  # Artinya tidak perlu (dan tidak bisa) mendeklarasikan "workflow mana yang
+  # masuk ke inbox ini" — pemisahannya murni lewat `roles` di tiap step.
+  #
+  # Konsekuensi untuk kafe: supervisor melihat tugas void di sini, dan kasir
+  # TIDAK melihatnya karena bukan anggota role tersebut. Itu perilaku yang benar.
+  realtime: true
+  search: true
+  # Tanpa `filters`: schema membolehkan, tetapi field apa yang bisa disaring
+  # tidak terdokumentasi (sumbernya langkah workflow, bukan entity — jadi
+  # FilterSpec.field tidak jelas merujuk ke apa). Saya tidak menebak.
+  #
+  # GAP-17 catatan: ApprovalInbox memakai WebSocket (realtime tersedia), tetapi
+  # TIDAK ada heartbeat — supervisor yang meninggalkan layar ini tidak akan tahu
+  # koneksinya putus, dan tugas baru tidak muncul.

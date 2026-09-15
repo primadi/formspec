@@ -1,0 +1,39 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: employee
+  module: cafe-master
+  description: "Karyawan kafe — kasir, barista, dapur, pelayan, supervisor, manajer"
+spec:
+  version: v1
+  characteristic: master
+  plural: employees
+  display_field: name
+  soft_deactivate: { enabled: true }
+  fields:
+    - name: name
+      type: string
+      required: true
+      title: "Nama Karyawan"
+    - name: phone
+      type: string
+      title: "Telepon"
+    - name: branch_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-master.branch }
+      required: true
+      title: "Cabang Tugas"
+    - name: position
+      type: enum
+      enum_values: [kasir, barista, dapur, pelayan, supervisor, manajer]
+      required: true
+      title: "Posisi"
+    # Penaut ke pengguna FormSpec (formspec.core.user). GAP-06: pemetaan
+    # user -> cabang inilah yang nantinya menjadi sumber nilai filter scope
+    # otomatis (D10 tingkat 2) — belum ada mekanismenya sekarang.
+    - name: username
+      type: string
+      unique: true
+      title: "Username"
+      description: "Harus sama dengan username akun login FormSpec"
+  # expose: [] — UI-only.

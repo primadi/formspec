@@ -1,0 +1,27 @@
+apiVersion: formspec.dev/v1
+kind: Report
+metadata:
+  name: sales-by-period
+  module: cafe-report
+  description: "Omzet per periode, dikelompokkan per cabang"
+spec:
+  title: "Penjualan per Periode"
+  entity: cafe-order.order
+  parameters:
+    - { field: date_from, label: "Dari Tanggal", type: date, required: true }
+    - { field: date_to, label: "Sampai Tanggal", type: date, required: true }
+    - { field: branch_id, label: "Cabang", type: relation }
+  columns:
+    - { field: number, label: "No. Pesanan" }
+    - { field: branch_id, label: "Cabang" }
+    - { field: transaction_date, label: "Waktu", format: datetime }
+    - { field: channel, label: "Kanal" }
+    - { field: status, label: "Status" }
+    # SUM atas field money menjumlahkan komponen `.amount`-nya (S7).
+    - { field: total_amount, label: "Total", format: currency, aggregate: sum }
+  groups:
+    - { field: branch_id, label: "Cabang" }
+  # ReportTotal wajib {label, field, fn} — `format` TIDAK diizinkan di sini
+  # (berbeda dari TableColumn). fn: sum | avg | count | min | max.
+  totals:
+    - { label: "Total Omzet", field: total_amount, fn: sum }

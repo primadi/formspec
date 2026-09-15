@@ -1,0 +1,312 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: order
+  module: cafe-order
+  description: "Pesanan kafe — inti transaksi. Hanya pesanan LUNAS yang masuk dapur (aturan bisnis #1)."
+spec:
+  version: v1
+  characteristic: transaction
+  plural: orders
+  display_field: number
+  lifecycle: plain_crud
+  fields:
+    # Nomor pesanan per CABANG (scope_field) — bukan deret global.
+    # GAP-09: scope_field HANYA bekerja di jalur otomatis on-create;
+    # ctx.next_key() dari script mengabaikan scope. Jangan buat nomor ini
+    # lewat script selama gap itu belum ditutup.
+    - name: number
+      type: string
+      required: true
+      unique: true
+      natural_key: true
+      natural_key_rule:
+        strategy: sequence
+        format: "ORD-{year}-{seq:05d}"
+        reset: yearly
+        scope_field: branch_id
+      title: "Nomor Pesanan"
+    - name: transaction_date
+      type: datetime
+      required: true
+      index: true
+      title: "Waktu Pesan"
+    - name: branch_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-master.branch }
+      required: true
+      title: "Cabang"
+    - name: channel
+      type: enum
+      enum_values: [qr_table, cashier, takeaway]
+      default: cashier
+      required: true
+      title: "Kanal"
+    - name: table_session_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-order.table-session }
+      index: true
+      title: "Sesi Meja"
+      description: "Wajib bila channel = qr_table"
+    - name: dining_table_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-master.dining-table }
+      title: "Meja"
+      description: "Denormalisasi untuk tampilan cepat"
+    - name: member_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-master.member }
+      title: "Member"
+    - name: employee_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-master.employee }
+      title: "Kasir/Pelayan"
+    - name: shift_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-order.shift }
+      title: "Shift"
+      description: "Wajib bila channel = cashier (aturan bisnis #11)"
+    - name: status
+      type: enum
+      enum_values:
+        [draft, awaiting_payment, paid, in_kitchen, ready, served, completed, cancelled]
+      default: draft
+      index: true
+      title: "Status"
+    # ── Rincian nilai (D8: disimpan terpisah, bukan satu angka) ──
+    # GAP-01: semua money di bawah belum punya widget input (item 2.14).
+    # `subtotal` sudah diturunkan server-side dari baris pesanan (S7 menetapkan
+    # aritmetika money, jadi `sum` atas money sah). Rantai diskon/pajak menuju
+    # `total_amount` BELUM diturunkan: ia butuh `discount_amount`, `tax_amount`
+    # (dari `branch.tax_percent`), `service_charge_amount`, dan `points_value` —
+    # semuanya opsional, sehingga formulanya harus menangani operand kosong
+    # lebih dulu. Dicatat, bukan dikira-kira.
+    - name: subtotal
+      type: money
+      title: "Subtotal"
+      computed:
+        formula: 'sum([i["line_total"] for i in lines])'
+    - name: promo_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-master.promo }
+      title: "Promo"
+    - name: discount_amount
+      type: money
+      title: "Total Diskon"
+    - name: manual_discount_amount
+      type: money
+      title: "Diskon Manual"
+    - name: manual_discount_reason
+      type: string
+      title: "Alasan Diskon Manual"
+      description: "Wajib bila diskon manual melebihi batas di Config (aturan bisnis #8)"
+    - name: points_redeemed
+      type: integer
+      title: "Poin Ditukar"
+    - name: points_value
+      type: money
+      title: "Nilai Poin"
+    - name: service_charge_amount
+      type: money
+      title: "Service Charge"
+      description: "compute dari branch.service_charge_percent"
+    - name: tax_amount
+      type: money
+      title: "Pajak"
+      description: "compute dari branch.tax_percent"
+    - name: total_amount
+      type: money
+      title: "Total"
+    - name: paid_amount
+      type: money
+      title: "Sudah Dibayar"
+    - name: change_amount
+      type: money
+      title: "Kembalian"
+    - name: guest_note
+      type: text
+      title: "Catatan Tamu"
+    - name: void_reason
+      type: string
+      title: "Alasan Void"
+    - name: void_approved_by
+      type: relation
+      relation: { type: belongs_to, resource: cafe-master.employee }
+      title: "Disetujui Oleh"
+    # ── Baris pesanan ──
+    # D2 (denormalisasi finansial): nama & harga DIBEKUKAN saat pesan, supaya
+    # struk lama tidak berubah bila harga menu naik. Wajib per
+    # 02-core-extended.md §1.1.
+    - name: lines
+      type: child
+      child:
+        storage: jsonb
+        sequence_field: line_no
+        # Baris diisi dengan MEMILIH dari katalog menu, bukan mengetik satu per
+        # satu (S1). Deklarasinya ada di sini — di field, bukan di halaman —
+        # sehingga Form mana pun yang mengedit entity ini mendapatkannya, dan
+        # jalur tulis tetap milik Form.
+        picker:
+          entity: cafe-master.menu-item
+          filter: { is_available: "true" }
+          display:
+            name_field: name
+            image_field: photo
+            description_field: description
+            category_field: menu_category_id
+            # Harga per CABANG ada di entity terpisah → join client-side.
+            price_entity: cafe-master.menu-item-price
+            price_match_field: menu_item_id
+            price_field: price
+            price_filter: { branch_id: "{session.branch_id}" }
+            columns: 3
+            search: true
+            empty_text: "Menu belum tersedia"
+          map:
+            ref_field: menu_item_id
+            # Snapshot D2: nama & harga dibekukan saat dipilih.
+            name_field: name_snapshot
+            price_field: unit_price_snapshot
+            quantity_field: quantity
+            note_field: note
+            max_quantity: 20
+        fields:
+          - name: line_no
+            type: integer
+            title: "No."
+          - name: menu_item_id
+            type: relation
+            relation: { type: belongs_to, resource: cafe-master.menu-item }
+            required: true
+            title: "Menu"
+          - name: name_snapshot
+            type: string
+            required: true
+            title: "Nama Menu (beku)"
+          - name: unit_price_snapshot
+            type: money
+            required: true
+            title: "Harga (beku)"
+          - name: quantity
+            type: integer
+            required: true
+            default: 1
+            title: "Qty"
+          - name: prep_station
+            type: enum
+            enum_values: [bar, kitchen, both]
+            default: bar
+            title: "Stasiun"
+          - name: discount_amount
+            type: money
+            title: "Diskon Baris"
+          - name: line_total
+            type: money
+            title: "Subtotal Baris"
+            # Diturunkan server-side: harga BEKU dikali jumlah. Dua operand-nya
+            # wajib, jadi tidak ada operand kosong yang membuat evaluasi gagal.
+            computed:
+              formula: "quantity * unit_price_snapshot"
+          - name: line_status
+            type: enum
+            enum_values: [queued, preparing, ready, served]
+            default: queued
+            title: "Status Baris"
+            description: "Dapur/bar bisa menyelesaikan per item, bukan hanya per pesanan"
+          - name: note
+            type: string
+            title: "Catatan"
+  state_machine:
+    field: status
+    initial: draft
+    states:
+      - { name: draft, label: "Keranjang" }
+      - { name: awaiting_payment, label: "Menunggu Bayar" }
+      - { name: paid, label: "Lunas" }
+      - { name: in_kitchen, label: "Diproses" }
+      - { name: ready, label: "Siap" }
+      - { name: served, label: "Disajikan" }
+      - { name: completed, label: "Selesai" }
+      - { name: cancelled, label: "Dibatalkan" }
+    transitions:
+      - { from: draft, to: awaiting_payment, via: submit-order }
+      - { from: draft, to: cancelled, via: abandon }
+      - { from: awaiting_payment, to: paid, via: confirm-payment }
+      - { from: awaiting_payment, to: cancelled, via: cancel-order }
+      - { from: paid, to: in_kitchen, via: start-preparing }
+      - { from: in_kitchen, to: ready, via: mark-ready }
+      - { from: ready, to: served, via: mark-served }
+      - { from: served, to: completed, via: complete-order }
+      - { from: [paid, in_kitchen, ready, served], to: cancelled, via: void-order }
+  # ── Event — pemicu integrasi lintas-app (stok & jurnal) ──
+  # GAP-40: TIDAK JELAS apakah transisi state machine memancarkan event secara
+  # otomatis. Contoh vertikal di repo FormSpec menyebut event entity dengan nama
+  # STATE (`billing.order.paid`), sementara validator mewajibkan konvensi prefix
+  # (`on_*` = async, `before_*` = sync). Keduanya belum bisa didamaikan.
+  # Karena itu event dideklarasikan eksplisit di sini dengan nama berkonvensi,
+  # dan PEMANCARANNYA masih perlu diverifikasi runtime (terkunci GAP-24).
+  events:
+    - name: on_paid
+      description: "Pesanan lunas — pemicu integrasi stok & jurnal"
+      type: async
+      publish: { durable: true }
+      deliver:
+        # reliable_event = jaminan tertinggi (outbox). Wajib di sini: jurnal
+        # akuntansi tidak boleh hilang, dan pesanan tetap tercatat walau
+        # integrasi gagal (retry + dead-letter menanganinya).
+        - channel: reliable_event
+    # Nama `on_cancel` BUKAN pilihan bebas: `formspec validate` menegakkan aturan
+    # integritas (7.7.2) — Integrator yang mendengarkan `on_paid` WAJIB punya
+    # pasangan cancel, kalau tidak pembatalan di sisi sumber akan diblokir
+    # permanen. Nama yang dikenali validator: `on_cancel` / `before_cancel`.
+    # Ini aturan yang bagus: memaksa pemikirkan pembalikan SEJAK awal, bukan
+    # setelah ada 3.000 jurnal yang tidak bisa dibatalkan.
+    - name: on_cancel
+      description: "Pesanan dibatalkan setelah dibayar — pemicu jurnal pembalik"
+      type: async
+      publish: { durable: true }
+      deliver:
+        - channel: reliable_event
+  actions:
+    # Aturan bisnis #14: data penjualan TIDAK pernah dihapus permanen.
+    # Koreksi lewat pembatalan (cancel-order / void-order), bukan delete.
+    - { name: delete, disabled: true }
+    - { name: submit, disabled: true }
+    - name: submit-order
+      description: "Konfirmasi pesanan & hitung subtotal/pajak/service charge/promo"
+      required_permission: orders.submit-order
+      audit: true
+    - name: abandon
+      description: "Tinggalkan keranjang"
+      required_permission: orders.abandon
+    - name: confirm-payment
+      description: "Pesanan LUNAS — di sinilah pesanan masuk dapur"
+      required_permission: orders.confirm-payment
+      audit: true
+    - name: cancel-order
+      description: "Batal sebelum bayar (aturan bisnis #11: shift harus masih terbuka)"
+      required_permission: orders.cancel-order
+      audit: true
+      conditions:
+        - script: "True"
+          message: "Guard ideal: shift terkait masih berstatus open"
+    - name: start-preparing
+      description: "Dapur/bar mulai mengerjakan"
+      required_permission: orders.start-preparing
+    - name: mark-ready
+      description: "Pesanan siap disajikan"
+      required_permission: orders.mark-ready
+    - name: mark-served
+      description: "Pesanan diantar ke meja"
+      required_permission: orders.mark-served
+    - name: complete-order
+      description: "Pesanan selesai"
+      required_permission: orders.complete-order
+    - name: void-order
+      description: "Batalkan pesanan yang sudah dibayar — WAJIB lewat approval supervisor (D5)"
+      required_permission: orders.void-order
+      audit: true
+      conditions:
+        - script: "len(params.get('void_reason', '')) > 0"
+          message: "Alasan void wajib diisi"
+  # expose: [] — UI-only.

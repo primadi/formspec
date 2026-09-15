@@ -1,0 +1,24 @@
+apiVersion: formspec.dev/v1
+kind: Form
+metadata:
+  name: purchase-order-form
+  module: cafe-stock
+  description: "Susun pesanan pembelian: pilih bahan dari daftar, isi jumlah & harga"
+spec:
+  entity: cafe-stock.purchase-order
+  mode: create
+  render:
+    mode: separate_page
+    # Katalog bahan + panel baris berdampingan: pola entry baris yang sama dengan
+    # form QR pesanan. Yang membuatnya bisa adalah `picker` pada child field
+    # `lines` (entity), bukan blok khusus.
+    picker_panel: aside
+  sections:
+    - title: "Pembelian"
+      fields:
+        - { field: supplier_id, widget: relation-picker, label: "Pemasok" }
+        - { field: transaction_date, label: "Tanggal" }
+        - { field: expected_date, label: "Estimasi Datang" }
+        - { field: note, widget: textarea, label: "Catatan" }
+        # `lines` dirender oleh panel picker (kolom kiri).
+        - { field: lines, label: "Bahan Dipesan" }

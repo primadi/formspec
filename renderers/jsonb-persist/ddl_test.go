@@ -221,6 +221,79 @@ func TestGenerateEntityDDL_ChildTable(t *testing.T) {
 	t.Logf("Child DDL:\n%s", ct.CreateTableSQL)
 }
 
+// TestGenerateEntityDDL_DeclaredIndexes verifies that `indexes:` declared on the
+// entity (top-level EntitySpec.Indexes, not only the legacy PersistSpec.Indexes)
+// produces both the derived columns and the index — including for relation
+// fields, which previously received no derived column at all, so every declared
+// index was silently dropped (gap #22).
+func TestGenerateEntityDDL_DeclaredIndexes(t *testing.T) {
+	meta := spec.Metadata{Name: "menu-item-price", Module: "cafe-master"}
+	entity := &spec.EntitySpec{
+		Version: "v1",
+		Plural:  "menu-item-prices",
+		Fields: []spec.Field{
+			{Name: "branch_id", Type: spec.FieldRelation, Relation: &spec.RelationDecl{Type: "belongs_to", Resource: "cafe-master.branch"}},
+			{Name: "menu_item_id", Type: spec.FieldRelation, Relation: &spec.RelationDecl{Type: "belongs_to", Resource: "cafe-master.menu-item"}},
+			{Name: "price", Type: spec.FieldMoney},
+		},
+		Indexes: []spec.IndexDecl{{Fields: []string{"branch_id", "menu_item_id"}, Unique: true}},
+	}
+
+	ti, err := GenerateEntityDDL(meta, entity, DriverSQLite)
+	if err != nil {
+		t.Fatalf("GenerateEntityDDL: %v", err)
+	}
+
+	// Relation fields must now get a derived column.
+	if !strings.Contains(ti.CreateTableSQL, "_branch_id text GENERATED ALWAYS AS (json_extract(data, '$.branch_id')) STORED") {
+		t.Errorf("missing derived column _branch_id in:\n%s", ti.CreateTableSQL)
+	}
+
+	hasComposite := false
+	for _, idx := range ti.CreateIndexSQL {
+		if strings.Contains(idx, "UNIQUE INDEX") &&
+			strings.Contains(idx, "(_branch_id, _menu_item_id)") {
+			hasComposite = true
+			break
+		}
+	}
+	if !hasComposite {
+		t.Errorf("missing composite UNIQUE INDEX on (_branch_id, _menu_item_id); got %v", ti.CreateIndexSQL)
+	}
+}
+
+// TestGenerateEntityDDL_PersistIndexesStillWorked guards the legacy storage-scoped
+// form: PersistSpec.Indexes must keep producing indexes too.
+func TestGenerateEntityDDL_PersistIndexesStillWorked(t *testing.T) {
+	meta := spec.Metadata{Name: "product", Module: "inventory"}
+	entity := &spec.EntitySpec{
+		Version: "v1",
+		Plural:  "products",
+		Fields: []spec.Field{
+			{Name: "sku", Type: spec.FieldString},
+			{Name: "category", Type: spec.FieldString},
+		},
+		Persist: &spec.PersistSpec{
+			Indexes: []spec.IndexDecl{{Fields: []string{"sku", "category"}}},
+		},
+	}
+
+	ti, err := GenerateEntityDDL(meta, entity, DriverSQLite)
+	if err != nil {
+		t.Fatalf("GenerateEntityDDL: %v", err)
+	}
+	found := false
+	for _, idx := range ti.CreateIndexSQL {
+		if strings.Contains(idx, "(_sku, _category)") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("missing index on (_sku, _category) from PersistSpec.Indexes; got %v", ti.CreateIndexSQL)
+	}
+}
+
 func TestPluralInflection(t *testing.T) {
 	tests := []struct {
 		singular string
@@ -269,6 +342,35 @@ func TestFieldTypeToSQL(t *testing.T) {
 		if got != tt.sql {
 			t.Errorf("fieldTypeToSQL(%q) = %q, want %q", tt.ft, got, tt.sql)
 		}
+	}
+}
+
+// TestFieldTypeToSQLFor_NoPostgresTypesOnSQLite verifies that PostgreSQL-only
+// types (timestamptz, jsonb, uuid, bigint) are mapped to SQLite affinity
+// instead of leaking into the generated DDL (gap #27).
+func TestFieldTypeToSQLFor_NoPostgresTypesOnSQLite(t *testing.T) {
+	pgOnly := []struct {
+		ft   spec.FieldType
+		want string
+	}{
+		{spec.FieldDateTime, "text"}, // timestamptz → text
+		{spec.FieldJSON, "text"},     // jsonb → text
+		{spec.FieldUUID, "text"},     // uuid → text
+		{spec.FieldInteger, "integer"},
+	}
+	for _, tt := range pgOnly {
+		got := fieldTypeToSQLFor(tt.ft, nil, DriverSQLite)
+		if got != tt.want {
+			t.Errorf("fieldTypeToSQLFor(%q, sqlite) = %q, want %q", tt.ft, got, tt.want)
+		}
+	}
+
+	// PostgreSQL keeps its native types.
+	if got := fieldTypeToSQLFor(spec.FieldDateTime, nil, DriverPostgres); got != "timestamptz" {
+		t.Errorf("fieldTypeToSQLFor(datetime, postgres) = %q, want timestamptz", got)
+	}
+	if got := fieldTypeToSQLFor(spec.FieldJSON, nil, DriverPostgres); got != "jsonb" {
+		t.Errorf("fieldTypeToSQLFor(json, postgres) = %q, want jsonb", got)
 	}
 }
 

@@ -54,6 +54,20 @@ spec:
       child:
         storage: table
         sequence_field: line_number
+        # Baris jurnal ditambah dengan memilih AKUN dari bagan akun (S1). Tidak
+        # ada jumlah yang diakumulasi di sini: satu akun dipilih sekali, lalu
+        # debit/kreditnya diisi per baris — jadi `quantity_field` sengaja kosong.
+        picker:
+          entity: gl.account
+          filter: { is_active: "true" }
+          display:
+            name_field: name
+            category_field: type
+            columns: 2
+            search: true
+            empty_text: "Belum ada akun aktif"
+          map:
+            ref_field: account_id
         fields:
           - { name: line_number, type: integer, immutable: true }
           - { name: account_id, type: uuid, rules: [required, {exists: account}] }

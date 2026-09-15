@@ -27,5 +27,8 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  /* Tests are type-checked by tsconfig.test.json (they run under Node and need
+     Node types, which the browser app config deliberately does not load). */
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
 }

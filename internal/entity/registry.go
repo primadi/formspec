@@ -208,6 +208,12 @@ func (r *Registry) registerStandardPermissions(module, entityName string, entity
 			disabled[a.Name] = true
 		}
 	}
+	// Lifecycle-free entities (catalog data / `lifecycle: plain_crud`) expose no
+	// submit/cancel/amend route, so they must not register those permissions
+	// either — registered permissions never drift from actual routes (gap #44).
+	if entitySpec.LifecycleFree() {
+		disabled["submit"] = true
+	}
 	fullDisabled := db.TransitiveDisabled(disabled)
 	isSummary := entitySpec.Characteristic == spec.CharSummary
 

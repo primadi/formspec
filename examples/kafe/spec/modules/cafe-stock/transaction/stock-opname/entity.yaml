@@ -1,0 +1,115 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: stock-opname
+  module: cafe-stock
+  description: "Hitung fisik bahan (stock opname) — koreksi selisih stok per cabang"
+spec:
+  version: v1
+  characteristic: transaction
+  plural: stock-opnames
+  display_field: transaction_date
+  lifecycle: plain_crud
+  fields:
+    - name: transaction_date
+      type: date
+      required: true
+      index: true
+      title: "Tanggal Hitung"
+    - name: branch_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-master.branch }
+      required: true
+      title: "Cabang"
+    - name: status
+      type: enum
+      enum_values: [draft, counted, posted, cancelled]
+      default: draft
+      index: true
+      title: "Status"
+    - name: counted_by
+      type: relation
+      relation: { type: belongs_to, resource: cafe-master.employee }
+      title: "Penghitung"
+    - name: note
+      type: text
+      title: "Catatan"
+    - name: lines
+      type: child
+      child:
+        storage: jsonb
+        sequence_field: line_no
+        # Baris dipilih dari daftar bahan (S1). `quantity_field` menunjuk ke
+        # HASIL HITUNG: yang diakumulasi picker adalah jumlah fisik yang dicatat,
+        # bukan jumlah sistem.
+        picker:
+          entity: cafe-stock.ingredient
+          display:
+            name_field: name
+            columns: 3
+            search: true
+          map:
+            ref_field: ingredient_id
+            quantity_field: counted_qty
+            max_quantity: 10000
+        fields:
+          - name: line_no
+            type: integer
+            title: "No."
+          - name: ingredient_id
+            type: relation
+            relation: { type: belongs_to, resource: cafe-stock.ingredient }
+            required: true
+            title: "Bahan"
+          - name: system_qty
+            type: decimal
+            scale: 3
+            title: "Stok Sistem"
+            description: "Diambil dari stock-level saat draft dibuat"
+          - name: counted_qty
+            type: decimal
+            scale: 3
+            title: "Hasil Hitung Fisik"
+          - name: difference
+            type: decimal
+            scale: 3
+            title: "Selisih"
+          - name: reason
+            type: string
+            title: "Alasan Selisih"
+  state_machine:
+    field: status
+    initial: draft
+    states:
+      - { name: draft, label: "Draft" }
+      - { name: counted, label: "Sudah Dihitung" }
+      - { name: posted, label: "Diposting" }
+      - { name: cancelled, label: "Dibatalkan" }
+    transitions:
+      - { from: draft, to: counted, via: record-count }
+      - { from: counted, to: draft, via: reopen }
+      - { from: counted, to: posted, via: post-opname }
+      - { from: draft, to: cancelled, via: cancel-opname }
+  actions:
+    # Aturan bisnis #14: opname tidak dihapus — koreksi lewat cancel-opname.
+    - { name: delete, disabled: true }
+    - { name: submit, disabled: true }
+    - name: record-count
+      description: "Simpan hasil hitung fisik"
+      required_permission: stock-opnames.record-count
+      audit: true
+    - name: reopen
+      description: "Buka kembali untuk dihitung ulang"
+      required_permission: stock-opnames.reopen
+      audit: true
+    - name: post-opname
+      description: "Posting — script membuat stock-movement (adjust) sebesar selisih"
+      required_permission: stock-opnames.post-opname
+      audit: true
+    - name: cancel-opname
+      description: "Batalkan opname"
+      required_permission: stock-opnames.cancel-opname
+      audit: true
+  indexes:
+    - fields: [branch_id, transaction_date]
+  # expose: [] — UI-only.

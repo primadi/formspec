@@ -1,0 +1,46 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: ingredient
+  module: cafe-stock
+  description: "Bahan baku kafe — satuan gram/ml/pcs, dasar perhitungan biaya per porsi"
+spec:
+  version: v1
+  characteristic: master
+  plural: ingredients
+  display_field: name
+  soft_deactivate: { enabled: true }
+  fields:
+    - name: code
+      type: string
+      required: true
+      unique: true
+      natural_key: true
+      title: "Kode Bahan"
+      description: "Mis. BHN-SUSU-01"
+    - name: name
+      type: string
+      required: true
+      title: "Nama Bahan"
+    - name: unit
+      type: enum
+      enum_values: [gram, ml, pcs]
+      required: true
+      default: gram
+      title: "Satuan Dasar"
+    # Biaya acuan. Dipakai HANYA bila bahan belum punya pergerakan stok.
+    # Setelah ada pergerakan, acuan biaya adalah stock-level.moving_avg_cost (D3).
+    # GAP-01/GAP-02: field uang.
+    - name: cost_per_unit
+      type: money
+      title: "Biaya Acuan per Satuan"
+    - name: min_stock
+      type: decimal
+      scale: 3
+      default: 0
+      title: "Stok Minimum"
+      description: "Ambang peringatan stok kritis"
+    - name: shelf_life_days
+      type: integer
+      title: "Umur Simpan (hari)"
+  # expose: [] — UI-only.

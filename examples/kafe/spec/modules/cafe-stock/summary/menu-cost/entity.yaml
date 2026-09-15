@@ -1,0 +1,45 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: menu-cost
+  module: cafe-stock
+  description: "Biaya per porsi & margin per menu per cabang — DASAR laporan profitabilitas menu"
+spec:
+  version: v1
+  characteristic: summary
+  plural: menu-costs
+  fields:
+    - name: branch_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-master.branch }
+      required: true
+      title: "Cabang"
+    - name: menu_item_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-master.menu-item }
+      required: true
+      title: "Menu"
+    # Σ (qty resep x stock-level.moving_avg_cost bahan) / recipe.yield_quantity
+    - name: cost_per_portion
+      type: money
+      title: "Biaya per Porsi"
+    - name: sale_price
+      type: money
+      title: "Harga Jual"
+      description: "Dari menu-item-price cabang ini"
+    - name: gross_margin
+      type: money
+      title: "Margin Kotor"
+    - name: gross_margin_percent
+      type: decimal
+      scale: 2
+      title: "Margin (%)"
+    - name: calculated_at
+      type: datetime
+      title: "Dihitung Pada"
+  indexes:
+    - fields: [branch_id, menu_item_id]
+      unique: true
+  # Entity `summary` — murni ditulis script.
+  # GAP-13: ini PENGGANTI metode valuasi bawaan FormSpec yang tidak ada.
+  # expose: [] — UI-only.

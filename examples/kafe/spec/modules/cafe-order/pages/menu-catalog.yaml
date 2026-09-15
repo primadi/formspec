@@ -1,0 +1,25 @@
+apiVersion: formspec.dev/v1
+kind: Page
+metadata:
+  name: menu-catalog
+  module: cafe-order
+  description: "Katalog menu + keranjang pelanggan — dibuka dari QR meja"
+spec:
+  # Alur scan QR hari ini DUA LANGKAH, dan halaman ini langkah keduanya:
+  #   1. token QR meja (`dining-table.qr_token`) → sesi tamu dibuat/ditemukan,
+  #      lalu aplikasi mengarahkan ke halaman ini dengan ID sesi;
+  #   2. halaman ini memakai ID sesi itu.
+  # Kenapa bukan `route: /menu/:guest_token` langsung: `GET /entity/{id}`
+  # me-resolve ID dan natural key, sedangkan `guest_token` bukan keduanya.
+  # Menjadikan token sebagai kunci milik tamu = TODO 2.2 (sisa #45).
+  route: /menu/:session_id
+  title: "Menu"
+  icon: "utensils"
+  public: true
+  blocks:
+    # Blok transaksional khusus tidak diperlukan lagi: "pilih baris dari
+    # katalog" dinyatakan sebagai `picker` pada child field `order.lines`
+    # (pkg/spec/picker.go), jadi Form biasa sudah punya UX katalog + keranjang —
+    # dan jalur tulisnya tetap milik Form (validasi rules, idempotency, event,
+    # redirect). Blok `order_builder` yang lebih sempit sudah dihapus.
+    - form: { ref: order-form-qr, mode: create }

@@ -1,0 +1,39 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: member-point
+  module: cafe-loyalty
+  description: "Saldo poin per member (proyeksi) — dasar penukaran poin di kasir"
+spec:
+  version: v1
+  characteristic: summary
+  plural: member-points
+  fields:
+    - name: member_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-master.member }
+      required: true
+      title: "Member"
+    - name: points_balance
+      type: integer
+      default: 0
+      title: "Saldo Poin"
+    - name: lifetime_points
+      type: integer
+      default: 0
+      title: "Total Perolehan"
+      description: "Akumulasi seumur hidup — dasar penentuan tier"
+    - name: tier
+      type: enum
+      enum_values: [basic, silver, gold]
+      default: basic
+      title: "Tingkat"
+      description: "Dihitung dari lifetime_points; ambangnya di Config"
+    - name: last_activity_at
+      type: datetime
+      title: "Aktivitas Terakhir"
+  indexes:
+    - fields: [member_id]
+      unique: true
+  # Entity `summary` — murni ditulis script (upsert memakai ctx.lock).
+  # expose: [] — UI-only.

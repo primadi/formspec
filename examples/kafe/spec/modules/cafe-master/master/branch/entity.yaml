@@ -1,0 +1,64 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: branch
+  module: cafe-master
+  description: "Cabang/outlet kafe — sumber tarif pajak & service charge, dan header struk"
+spec:
+  version: v1
+  characteristic: master
+  plural: branches
+  display_field: name
+  # Soft-deactivation pattern: engine menambahkan field `is_active`
+  # (default true) + action deactivate/reactivate.
+  soft_deactivate: { enabled: true }
+  fields:
+    - name: code
+      type: string
+      required: true
+      unique: true
+      natural_key: true
+      title: "Kode Cabang"
+      description: "Mis. KFE-JKT-01"
+    - name: name
+      type: string
+      required: true
+      title: "Nama Cabang"
+    # Hierarki opsional (region -> cabang). FormSpec tidak punya field type
+    # hierarkis; hierarki dimodelkan sebagai relasi self-referential (GAP-08).
+    - name: parent_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-master.branch }
+      title: "Cabang Induk"
+    - name: address
+      type: text
+      title: "Alamat"
+    - name: phone
+      type: string
+      title: "Telepon"
+    - name: timezone
+      type: string
+      default: "Asia/Jakarta"
+      title: "Zona Waktu"
+    - name: tax_percent
+      type: decimal
+      scale: 2
+      default: 10
+      title: "Pajak (%)"
+      description: "PB1, mis. 10 untuk 10%"
+    - name: service_charge_percent
+      type: decimal
+      scale: 2
+      default: 5
+      title: "Service Charge (%)"
+    - name: apply_service_charge
+      type: boolean
+      default: false
+      title: "Terapkan Service Charge"
+    - name: receipt_header
+      type: text
+      title: "Header Struk"
+    - name: receipt_footer
+      type: text
+      title: "Footer Struk"
+  # expose: [] — UI-only. Cabang tidak perlu API publik (lihat 01-core-basic §8.4).

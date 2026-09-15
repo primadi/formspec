@@ -1,0 +1,24 @@
+apiVersion: formspec.dev/v1
+kind: Dashboard
+metadata:
+  name: owner-overview
+  module: cafe-report
+  description: "Ringkasan pemilik: omzet, antrean bayar, stok kritis, tren omzet"
+spec:
+  title: "Ringkasan Kafe"
+  # Dashboard realtime SUDAH berfungsi (widget metric & chart refetch saat
+  # event entity sumbernya). Tidak terkena GAP-17.
+  realtime: true
+  widgets:
+    - { ref: omzet-hari-ini, layout: { x: 0, y: 0, w: 1, h: 1 } }
+    - { ref: pesanan-menunggu-bayar, layout: { x: 1, y: 0, w: 1, h: 1 } }
+    - { ref: omzet-per-hari, layout: { x: 2, y: 0, w: 2, h: 2 } }
+    - { ref: stok-kritis, layout: { x: 0, y: 1, w: 2, h: 2 } }
+  # GAP-16: `widget.ref` dicocokkan dengan NAMA POLOS (metadata.name), bukan
+  # module-qualified. Dua module yang memakai nama widget sama akan bertabrakan
+  # SENYAP. Semua nama di module ini sengaja khas (`omzet-*`, `stok-kritis`)
+  # agar tidak bertabrakan dengan widget dari vertical pihak ketiga.
+  #
+  # GAP-08: dashboard ini menampilkan SEMUA cabang. Pemilik memang ingin begitu,
+  # tetapi supervisor cabang tidak boleh. Penyaring per-pengguna belum ada —
+  # `fixed_filters` masih UI-level.

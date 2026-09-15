@@ -1,0 +1,45 @@
+apiVersion: formspec.dev/v1
+kind: Table
+metadata:
+  name: order-table-pos
+  module: cafe-order
+  description: "Daftar pesanan untuk kasir — aksi cepat lunas/void"
+spec:
+  entity: cafe-order.order
+  columns:
+    - { field: number, label: "No. Pesanan", sortable: true }
+    - { field: dining_table_id, label: "Meja" }
+    - { field: transaction_date, label: "Waktu", format: relative, sortable: true }
+    - { field: channel, label: "Kanal", widget: badge }
+    - { field: status, label: "Status", widget: badge }
+    # GAP-02/GAP-23: total_amount adalah money; format currency di klien hanya
+    # menangani angka, dan kolom turunan money bertipe text (urutan salah).
+    # Sortir berdasarkan total TIDAK diandalkan sampai kedua gap ditutup.
+    - { field: total_amount, label: "Total", format: currency, align: right }
+  filters:
+    - { field: status, label: "Status", type: select }
+    - { field: branch_id, label: "Cabang", type: select }
+    - { field: transaction_date, label: "Tanggal", type: date_range, default: today }
+  default_sort: -transaction_date
+  search: true
+  # Realtime Table sudah berfungsi: baris ter-patch saat event entity.
+  # Berguna untuk kasir & pelayan (pesanan baru muncul sendiri).
+  realtime: true
+  page_size: 25
+  row_actions:
+    - { action: view, label: "Lihat" }
+    - { action: confirm-payment, label: "Tandai Lunas" }
+    - { action: start-preparing, label: "Mulai Kerjakan" }
+    - { action: mark-ready, label: "Siap" }
+    - { action: mark-served, label: "Disajikan" }
+    - { action: complete-order, label: "Selesai" }
+    - action: void-order
+      label: "Void"
+      confirm_msg: "Batalkan pesanan yang sudah dibayar? Wajib disetujui supervisor."
+  # CATATAN: `delete` sengaja TIDAK ada di row_actions — dan action-nya sudah
+  # dinonaktifkan di entity (aturan bisnis #14: koreksi lewat void, bukan hapus).
+  #
+  # GAP-08: penyaring `branch_id` bersifat UI-level dan nilainya dipilih manual.
+  # Kasir cabang A masih bisa memilih cabang B. `fixed_filters` memang di-merge
+  # server-side (bukan sekadar UI), TAPI nilainya statis dari manifest —
+  # sehingga tidak bisa berarti "cabang milik pengguna yang sedang login".

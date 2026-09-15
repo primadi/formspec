@@ -144,19 +144,11 @@ func (f *HandlerFactory) HandleFileUpload() http.HandlerFunc {
 		id := r.PathValue("id")
 		fieldName := r.PathValue("field")
 
-		if !f.can(ctx, module, entity, "update") {
-			writeError(w, http.StatusForbidden, "FORBIDDEN",
-				"missing permission: "+module+"."+entity+".update")
-			return
-		}
-
-		store, err := f.registry.GetEntityStore(module, entity)
-		if err != nil {
-			writeError(w, http.StatusNotFound, "NOT_FOUND",
-				"entity not found: "+err.Error())
-			return
-		}
-
+		// Resolve the entity/field BEFORE the permission check: this handler sits on
+		// a wildcard path (/{id}/{field}) and therefore also receives unknown action
+		// paths (e.g. /{id}/submit when no action route exists). Answering those with
+		// a permission error hides a routing mistake behind a misleading 403 — for a
+		// non-file path the correct signal is 404 (gap #52).
 		es, ok := f.entitySpec(module, entity)
 		if !ok {
 			writeError(w, http.StatusNotFound, "NOT_FOUND",
@@ -173,8 +165,21 @@ func (f *HandlerFactory) HandleFileUpload() http.HandlerFunc {
 			}
 		}
 		if field == nil || field.Type != spec.FieldFile {
-			writeError(w, http.StatusBadRequest, "INVALID_FIELD",
-				"field is not a file field: "+fieldName)
+			writeError(w, http.StatusNotFound, "NOT_FOUND",
+				"no such file field or action: "+fieldName)
+			return
+		}
+
+		if !f.can(ctx, module, entity, "update") {
+			writeError(w, http.StatusForbidden, "FORBIDDEN",
+				"missing permission: "+f.permName(module, entity, "update"))
+			return
+		}
+
+		store, err := f.registry.GetEntityStore(module, entity)
+		if err != nil {
+			writeError(w, http.StatusNotFound, "NOT_FOUND",
+				"entity not found: "+err.Error())
 			return
 		}
 
@@ -314,6 +319,12 @@ func (f *HandlerFactory) HandleFileDownload() http.HandlerFunc {
 				}
 			}
 		}
+		if field == nil || field.Type != spec.FieldFile {
+			// Wildcard path also receives unknown action paths — 404, not 403 (gap #52).
+			writeError(w, http.StatusNotFound, "NOT_FOUND",
+				"no such file field or action: "+fieldName)
+			return
+		}
 		visibility := "private" // default
 		if field != nil && field.Storage != nil && field.Storage.Visibility != "" {
 			visibility = field.Storage.Visibility
@@ -353,7 +364,7 @@ func (f *HandlerFactory) HandleFileDownload() http.HandlerFunc {
 		default: // "private" or unset
 			if !f.can(ctx, module, entity, "view") {
 				writeError(w, http.StatusForbidden, "FORBIDDEN",
-					"missing permission: "+module+"."+entity+".view")
+					"missing permission: "+f.permName(module, entity, "view"))
 				return
 			}
 		}
@@ -442,13 +453,24 @@ func (f *HandlerFactory) HandleFileDownload() http.HandlerFunc {
 	}
 }
 
-// can reports whether the request identity holds {module}.{entity}.{action}.
+// permName builds the fully qualified permission for an entity action using the
+// entity's plural — the same form the permission registry and the route
+// generator use (D5). Falls back to "{entity}s" when no plural is declared.
+func (f *HandlerFactory) permName(module, entity, action string) string {
+	plural := entity + "s"
+	if es, ok := f.entitySpec(module, entity); ok && es.Plural != "" {
+		plural = es.Plural
+	}
+	return module + "." + plural + "." + action
+}
+
+// can reports whether the request identity holds {module}.{plural}.{action}.
 func (f *HandlerFactory) can(ctx context.Context, module, entity, action string) bool {
 	identity := IdentityFromContext(ctx)
 	if identity == nil {
 		return false
 	}
-	return identity.HasPermission(module + "." + entity + "." + action)
+	return identity.HasPermission(f.permName(module, entity, action))
 }
 
 // entitySpec resolves the entity spec via the wired spec lookup.

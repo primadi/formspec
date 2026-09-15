@@ -1,0 +1,46 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: dining-table
+  module: cafe-master
+  description: "Meja + token QR untuk pemesanan mandiri pelanggan"
+spec:
+  version: v1
+  characteristic: master
+  plural: dining-tables
+  display_field: code
+  soft_deactivate: { enabled: true }
+  fields:
+    - name: branch_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-master.branch }
+      required: true
+      title: "Cabang"
+    - name: code
+      type: string
+      required: true
+      title: "Kode Meja"
+      description: "Mis. A-01"
+    - name: area
+      type: enum
+      enum_values: [indoor, outdoor, smoking, vip]
+      default: indoor
+      title: "Area"
+    - name: seats
+      type: integer
+      default: 2
+      title: "Kapasitas"
+    # Token acak — dasar URL QR meja (aturan bisnis #2).
+    # GAP-03: tidak ada generator QR sama sekali (widget/kind/field type) dan
+    # tidak ada `natural_key_rule` untuk nilai acak (hanya sequence|custom),
+    # jadi token harus diisi script/Service. Halaman QR & kartu cetak meja
+    # belum bisa dinyatakan di spec.
+    - name: qr_token
+      type: string
+      required: true
+      unique: true
+      title: "Token QR"
+  indexes:
+    - fields: [branch_id, code]
+      unique: true
+  # expose: [] — UI-only.

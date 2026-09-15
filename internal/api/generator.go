@@ -37,12 +37,7 @@ func GenerateRoutes(registry *entity.Registry) []RouteDescriptor {
 
 		// Standard actions disabled via `disabled: true` (§11.1) are removed
 		// from every surface, equivalent to never existing.
-		disabled := make(map[string]bool)
-		for _, a := range es.Actions {
-			if a.Disabled {
-				disabled[a.Name] = true
-			}
-		}
+		disabled := disabledActions(es)
 
 		for _, exp := range es.Expose {
 			if exp.Type == spec.ProtocolREST {
@@ -83,17 +78,33 @@ func GenerateUIRoutes(registry *entity.Registry) []RouteDescriptor {
 		isSummary := es.Characteristic == spec.CharSummary
 
 		// Standard actions disabled via `disabled: true` (§11.1)
-		disabled := make(map[string]bool)
-		for _, a := range es.Actions {
-			if a.Disabled {
-				disabled[a.Name] = true
-			}
-		}
+		disabled := disabledActions(es)
 
 		// UI surface uses the same internal logic; expose config is
 		// ignored. All standard CRUD actions (including delete) are available
 		// on the UI surface unless explicitly disabled in entity actions.
 		uiActions := []string{"list", "find", "create", "update", "delete"}
+		if !isSummary {
+			// Lifecycle actions belong on the UI surface too. Without them the
+			// wildcard file route (/{id}/{field}) swallows /{id}/submit|cancel|amend
+			// and answers with a misleading 403 (gap #52). generateRESTRoutes still
+			// skips them for lifecycle-free entities (submit disabled).
+			//
+			// Lifecycle actions that declare a custom `impl` are emitted by
+			// GenerateUICustomActionRoutes (Handler "custom"); adding them here as
+			// well would register the same path twice and shadow the custom handler.
+			implActions := make(map[string]bool)
+			for _, a := range es.Actions {
+				if a.Impl != nil {
+					implActions[a.Name] = true
+				}
+			}
+			for _, a := range []string{"submit", "cancel", "amend"} {
+				if !implActions[a] {
+					uiActions = append(uiActions, a)
+				}
+			}
+		}
 		if es.SoftDeactivate != nil && es.SoftDeactivate.Enabled {
 			uiActions = append(uiActions, "deactivate", "reactivate")
 		}
@@ -112,6 +123,25 @@ func GenerateUIRoutes(registry *entity.Registry) []RouteDescriptor {
 	}
 
 	return routes
+}
+
+// disabledActions collects the standard actions that are explicitly disabled
+// (`disabled: true`) and folds in the entity's lifecycle-free status: a catalog
+// entity (master/reference) or one declared `lifecycle: plain_crud` has no
+// draft→submit workflow, so `submit` — and transitively `cancel`/`amend` — must
+// not exist on any surface. Keeps routes aligned with the store, which leaves
+// doc_status NULL for those entities (gap #44).
+func disabledActions(es *spec.EntitySpec) map[string]bool {
+	disabled := make(map[string]bool)
+	for _, a := range es.Actions {
+		if a.Disabled {
+			disabled[a.Name] = true
+		}
+	}
+	if es.LifecycleFree() {
+		disabled["submit"] = true
+	}
+	return disabled
 }
 
 // generateRESTRoutes creates REST route descriptors for one entity.

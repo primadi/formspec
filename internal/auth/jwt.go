@@ -136,6 +136,23 @@ func (v *JWTValidator) Validate(ctx context.Context, tokenString string) (*Ident
 	// Extract optional display username (UserMenu/avatar identity).
 	username, _ := claims["username"].(string)
 
+	// Extract optional session attributes — consumed by entity `scope` filters
+	// with `from: session` (S2/#6), e.g. {"branch_id": "KFE-JKT-01"}.
+	var attributes map[string]string
+	if attrsRaw, ok := claims["attrs"]; ok {
+		switch a := attrsRaw.(type) {
+		case map[string]any:
+			attributes = make(map[string]string, len(a))
+			for k, v := range a {
+				if s, ok := v.(string); ok {
+					attributes[k] = s
+				}
+			}
+		case map[string]string:
+			attributes = a
+		}
+	}
+
 	return &Identity{
 		UserID:      userID,
 		Username:    username,
@@ -143,6 +160,7 @@ func (v *JWTValidator) Validate(ctx context.Context, tokenString string) (*Ident
 		App:         app,
 		Permissions: permissions,
 		Roles:       roles,
+		Attributes:  attributes,
 	}, nil
 }
 

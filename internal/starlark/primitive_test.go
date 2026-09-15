@@ -63,6 +63,51 @@ func TestCtxDBQuery_ResolvedAndExecuted(t *testing.T) {
 	}
 }
 
+// captureQuerier records the SQL text and bind args it was called with.
+type captureQuerier struct {
+	sql  string
+	args []any
+	rows []map[string]any
+}
+
+func (c *captureQuerier) Query(ctx context.Context, sql string, args ...any) ([]map[string]any, error) {
+	c.sql, c.args = sql, args
+	return c.rows, nil
+}
+
+// TestCtxDBQuery_BindArgs proves ctx.db().query(sql, args) forwards bind
+// parameters to the Querier, matching the documented query(sql, args...)
+// contract. Before this, a second positional argument was rejected with
+// "query: got 2 arguments, want at most 1", which forced script authors to
+// interpolate values into the SQL text.
+func TestCtxDBQuery_BindArgs(t *testing.T) {
+	dir := t.TempDir()
+	scriptPath := filepath.Join(dir, "q.star")
+	script := "def execute(resource, params, ctx):\n    rows = ctx.db().query(\"SELECT id FROM t WHERE a = ? AND b = ?\", [\"x\", 7])\n    return ok({\"n\": len(rows)})\n"
+	if err := os.WriteFile(scriptPath, []byte(script), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cq := &captureQuerier{rows: []map[string]any{}}
+	ctxObj := NewCtxAPI("demo", "", "user", "", nil)
+	ctxObj.Now = now
+	ctxObj.SetDatastoreResolver(func(primitiveType, name, module string) (interface{}, error) {
+		return cq, nil
+	})
+
+	res := NewResourceAPI("cafe-master", "menu-item-price", "", 0, map[string]any{})
+	result, err := ExecuteScript(context.Background(), scriptPath, res, nil, ctxObj)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if !result.OK {
+		t.Fatalf("script failed: %s", result.Error)
+	}
+	if len(cq.args) != 2 || cq.args[0] != "x" || cq.args[1] != int64(7) {
+		t.Fatalf("bind args = %#v, want [\"x\" 7]", cq.args)
+	}
+}
+
 // TestCtxDatastoreAccessDenied proves the uses.datastores gate (plan
 // docs/plan/infra-registry-3-level.md fase B): when the action declares a
 // datastores map, a ctx.<primitive> access not covered by a key fails with

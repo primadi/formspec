@@ -1,0 +1,44 @@
+apiVersion: formspec.dev/v1
+kind: Integrator
+metadata:
+  name: order-cancelled-to-journal-reverse
+  module: cafe-gl-integrator
+  description: "Pesanan dibatalkan setelah lunas -> jurnal pembalik di vertical gl"
+spec:
+  # ── KENAPA FILE INI ADA (dan kenapa tidak digabung) ─────────────────────────
+  #
+  # `IntegratorSpec` hanya punya SATU `listen` — jadi satu manifest = satu arah.
+  # `formspec validate` menegakkan aturan integritas 7.7.2:
+  #
+  #   "integrator listens to cafe-order.order.on_paid but has no symmetric cancel
+  #    handler for cafe-order.order (on_cancel/before_cancel) — cancel on the
+  #    source would be permanently blocked"
+  #
+  # Artinya setiap Integrator yang bereaksi pada `on_paid` WAJIB punya manifest
+  # pasangan yang bereaksi pada `on_cancel`. Kalau tidak, validasi GAGAL — bukan
+  # sekadar diperingatkan.
+  #
+  # Aturan ini bagus dan saya dukung: ia memaksa penulis spec memikirkan JALUR
+  # PEMBALIKAN sejak awal. Tanpa itu, integrasi akuntansi yang sudah berjalan
+  # ribuan transaksi tidak akan bisa dibatalkan lagi di sisi sumber.
+  #
+  # Tapi aturan ini tidak terdokumentasi di tempat yang saya temukan: tidak di
+  # deskripsi `IntegratorSpec`, tidak di atribut `kind: Integrator`, dan tidak di
+  # skill. Yang memberi tahu hanya pesan error validator. Itu gap dokumentasi
+  # (dicatat sebagai GAP-43) — dan sekaligus contoh validator yang bekerja persis
+  # seperti yang seharusnya: menolak, dan menjelaskan alasannya.
+  listen:
+    resource: cafe-order.order
+    event: on_cancel
+  call:
+    resource: gl.journal-entry
+    action: cancel
+  # Tanpa `compensate`: manifest INI adalah jalur pembalikannya. Memberi
+  # `compensate` di sini akan berarti "pembalikan dari pembalikan", dan tidak
+  # jelas apa artinya.
+  #
+  # GAP-41 tetap berlaku: tidak ada pemetaan payload. Jurnal pembalik perlu tahu
+  # jurnal ASAL mana yang dibatalkan (nomor jurnal / referensi pesanan), dan
+  # kaitan itu harus dinyatakan. Dengan `cafe-order.order` sebagai payload,
+  # sisi `gl` harus mencari jurnal berdasarkan referensi pesanan — pencarian
+  # yang tidak terdeklarasi di sini.

@@ -359,6 +359,63 @@ export interface ChildDecl {
   storage: "jsonb" | "table"
   sequence_field?: string
   fields?: Field[]
+  /** Fill this child field by picking records from another entity (S1).
+   *  Declared on the field, not on a page/kind, so any Form editing the entity
+   *  gets the picker — and the write path stays the Form's. */
+  picker?: PickerDecl
+}
+
+/** `ChildDecl.picker` — pick rows from a source entity (mirrors `pkg/spec/picker.go`). */
+export interface PickerDecl {
+  /** Source entity rows are picked from (`module.entity` or bare name). */
+  entity: string
+  /** Equality pre-filter on the source list; values interpolate `{token}`. */
+  filter?: Record<string, string>
+  /** How a source record is presented as a tile. */
+  display: PickerDisplay
+  /** What gets written into the row. */
+  map: PickerMap
+}
+
+export interface PickerDisplay {
+  /** Source field for the tile title (default `name`). */
+  name_field?: string
+  /** Source field holding an image: a file/attachment field (served from the
+   *  entity file route) or a string URL. */
+  image_field?: string
+  description_field?: string
+  /** Source relation/enum field rendered as filter chips. */
+  category_field?: string
+  /** Read the price from a separate entity (per-branch price lists); the client
+   *  joins it onto the source rows. A row without a price cannot be picked. */
+  price_entity?: string
+  /** Field on `price_entity` holding the source id (required with `price_entity`). */
+  price_match_field?: string
+  /** Money field on `price_entity` (required with `price_entity`). */
+  price_field?: string
+  /** Narrows the price rows (typically the branch); values interpolate `{token}`. */
+  price_filter?: Record<string, string>
+  /** Tile grid columns, 2–4 (default 3). */
+  columns?: number
+  search?: boolean
+  empty_text?: string
+}
+
+export interface PickerMap {
+  /** Row field holding the relation back to the source record. */
+  ref_field: string
+  /** Row field receiving the source display name (snapshot). */
+  name_field?: string
+  /** Row field receiving the source price (snapshot). */
+  price_field?: string
+  /** Row field accumulating the picked amount; omit for one row per pick. */
+  quantity_field?: string
+  /** Free-text per-row note (typed, not copied). */
+  note_field?: string
+  /** Upper bound per row (default 99). Required with `quantity_field`. */
+  max_quantity?: number
+  /** Which source field the name snapshot reads (default `name`). */
+  source_name_field?: string
 }
 
 export interface ComputedDecl {
@@ -764,6 +821,10 @@ export interface FormField {
   required_when?: string
   visible_when?: string
   compute?: string
+  /** Seed the initial value from the render context: a literal, or a template
+   *  with `{dotted.path}` (e.g. `{session.branch_id}`) plus `{now}`/`{today}`.
+   *  Pair with `widget: hidden` for values the user must not see. */
+  default_from?: string
 }
 
 export interface FormAction {
@@ -781,6 +842,9 @@ export interface FormSubmit {
 
 export interface FormRender {
   mode: FormRenderMode
+  /** Where a child-field picker renders: `inline` (default, tiles above the
+   *  child grid) or `aside` (its own column beside the selection + submit). */
+  picker_panel?: "inline" | "aside"
 }
 
 // ── Table (Frontend §5) ──

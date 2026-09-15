@@ -1,0 +1,15 @@
+# ── FormSpec Dev Config ──
+# This file configures `formspec dev`, `formspec serve`, and the schema
+# registry. It is NOT a kind: Config manifest — it is CLI tooling config only.
+#
+# See docs/spec/platform/08-project-layout.md for the full reference.
+
+spec: spec
+dsn: sqlite:.formspec/kafe.db
+# schema-registry: https://schemas.formspec.dev   # override dengan FORMSPEC_SCHEMA_REGISTRY
+# Sidecar apps (optional, polyglot) are scaffolded separately via
+# `formspec generate <lang>-app` — then uncomment to point the runtime at it:
+# runtime: node
+# app-dir: app
+# app-entrypoint: src/app.ts
+# dev: true

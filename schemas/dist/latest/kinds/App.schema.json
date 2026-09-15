@@ -97,6 +97,17 @@
         "jsonb-persist"
       ]
     },
+    "public_entities": {
+      "description": "Allowlist of anonymous entity actions for a public App: absent = legacy module-wide, [] = none, list = exactly those pairs",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PublicEntityDecl"
+      },
+      "examples": [
+        "[{entity: catalog/product, actions: [list, find]}]"
+      ],
+      "nullable": true
+    },
     "publishes": {
       "description": "cross-app interfaces offered",
       "type": "array",

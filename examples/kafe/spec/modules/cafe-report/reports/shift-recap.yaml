@@ -1,0 +1,26 @@
+apiVersion: formspec.dev/v1
+kind: Report
+metadata:
+  name: shift-recap
+  module: cafe-report
+  description: "Rekap kas per shift — kas awal, seharusnya, hasil hitung, dan selisih"
+spec:
+  title: "Rekap Shift & Kas"
+  entity: cafe-order.shift
+  parameters:
+    - { field: date_from, label: "Dari Tanggal", type: date, required: true }
+    - { field: date_to, label: "Sampai Tanggal", type: date, required: true }
+    - { field: branch_id, label: "Cabang", type: relation }
+  columns:
+    - { field: transaction_date, label: "Tanggal", format: date }
+    - { field: branch_id, label: "Cabang" }
+    - { field: cashier_id, label: "Kasir" }
+    - { field: opening_cash, label: "Kas Awal", format: currency }
+    - { field: expected_cash, label: "Seharusnya", format: currency }
+    - { field: counted_cash, label: "Hasil Hitung", format: currency }
+    - { field: difference, label: "Selisih", format: currency }
+    - { field: status, label: "Status" }
+  totals:
+    - { label: "Total Selisih", field: difference, fn: sum }
+  # GAP-08: laporan ini menampilkan semua cabang. Supervisor hanya boleh
+  # melihat cabangnya — penyaring per-pengguna belum ada.

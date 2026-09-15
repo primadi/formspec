@@ -1,0 +1,33 @@
+apiVersion: formspec.dev/v1
+kind: Print
+metadata:
+  name: receipt-digital
+  module: cafe-order
+  description: "Struk digital (html) — satu-satunya format Print yang berjalan hari ini"
+spec:
+  entity: cafe-order.order
+  # Format `html` dirender di browser lewat `window.print()` + CSS @media print.
+  # INI SATU-SATUNYA format Print yang benar-benar berfungsi (GAP-10) — jadi ini
+  # jalur yang dipakai sampai ESC/POS thermal tersedia.
+  #
+  # Rencana pemakaian: pelanggan membuka halaman status pesanannya (dengan
+  # guest_token), lalu menekan Print untuk struk digital — tanpa printer thermal.
+  output:
+    format: html
+    paper: { size: A4 }
+  header:
+    title: "KAFE KAMI — {branch.name}"
+    subtitle: "Struk Digital"
+  body:
+    - fields: [number, transaction_date, channel]
+    - child_table:
+        field: lines
+        columns: [name_snapshot, quantity, unit_price_snapshot, line_total]
+    - separator: "-"
+    - fields: [subtotal, discount_amount, service_charge_amount, tax_amount]
+    - totals: { field: total_amount, format: currency }
+    - fields: [paid_amount, change_amount, member_id]
+  footer:
+    text: "Terima kasih — {branch.receipt_footer}"
+  # GAP-03: rencananya ada QR di struk untuk membuka struk digital. Belum bisa —
+  # tidak ada generator QR (widget/kind/field type) di FormSpec.

@@ -142,8 +142,13 @@ func NewEntityStore(db DB, driver DriverType, meta spec.Metadata, entity *spec.E
 		}
 	}
 
-	// Determine if submit is enabled for initial doc_status
-	submitEnabled := true // default: submit is enabled (document participates in lifecycle)
+	// Determine if submit is enabled for initial doc_status.
+	//
+	// Catalog data (characteristic master/reference) and entities declared
+	// `lifecycle: plain_crud` are lifecycle-free: they must be referenceable the
+	// moment they are created, so doc_status stays NULL (gap #44). An explicit
+	// `submit: disabled` declaration disables it too.
+	submitEnabled := !entity.LifecycleFree()
 	for _, a := range entity.Actions {
 		if a.Name == "submit" && a.Disabled {
 			submitEnabled = false
@@ -1440,19 +1445,29 @@ func (s *EntityStore) columnRefExpr(field string) string {
 	if normativeListColumns[field] {
 		return field
 	}
+
+	// Lookup field type for type-aware casting
+	var fieldType spec.FieldType
+	var known bool
+	for _, f := range s.fields {
+		if f.Name == field {
+			fieldType = f.Type
+			known = true
+			break
+		}
+	}
+
+	// A money value is the object {amount, currency}: SQL must reach into
+	// `.amount`, never compare or sum the JSON text of the object (S7/gap #28).
+	// This takes priority over the derived column, which stores the object.
+	if known && fieldType == spec.FieldMoney {
+		return s.moneyAmountExpr(field)
+	}
+
 	// Check if the field has a generated column (index/unique/naturalKey)
 	for _, f := range s.fields {
 		if f.Name == field && (f.Index || f.Unique || f.NaturalKey) {
 			return generatedColumnName(field)
-		}
-	}
-
-	// Lookup field type for type-aware casting
-	var fieldType spec.FieldType
-	for _, f := range s.fields {
-		if f.Name == field {
-			fieldType = f.Type
-			break
 		}
 	}
 
@@ -1473,6 +1488,88 @@ func (s *EntityStore) columnRefExpr(field string) string {
 		return fmt.Sprintf("(%s)::%s", expr, castType)
 	}
 	return fmt.Sprintf("CAST(%s AS %s)", expr, castType)
+}
+
+// moneyAmountExpr returns the SQL expression yielding a money field's numeric
+// amount — the `.amount` component of the {amount, currency} object — cast to a
+// numeric type so SUM/AVG/MIN/MAX and ordered comparisons work.
+func (s *EntityStore) moneyAmountExpr(field string) string {
+	if s.driver == DriverPostgres {
+		return fmt.Sprintf("(data->'%s'->>'amount')::numeric", field)
+	}
+	return fmt.Sprintf("CAST(json_extract(data, '$.%s.amount') AS REAL)", field)
+}
+
+// coerceFilterValue normalizes a filter value into the SQL representation of the
+// field's type.
+//
+// A boolean field is stored as a JSON boolean and compared through a numeric
+// cast, so the natural `?flag=true` — bound as the *string* "true" — matched
+// nothing at all. A filter that silently returns zero rows is worse than one
+// that errors, so `true`/`false` (any case, plus 1/0) are accepted for boolean
+// fields.
+func (s *EntityStore) coerceFilterValue(field string, value any) any {
+	ft, known := s.fieldTypeOf(field)
+	if !known || ft != spec.FieldBoolean {
+		return value
+	}
+	switch v := value.(type) {
+	case bool:
+		if v {
+			return int64(1)
+		}
+		return int64(0)
+	case string:
+		switch strings.ToLower(strings.TrimSpace(v)) {
+		case "true", "1", "yes":
+			return int64(1)
+		case "false", "0", "no":
+			return int64(0)
+		}
+	case int:
+		if v != 0 {
+			return int64(1)
+		}
+		return int64(0)
+	case float64:
+		if v != 0 {
+			return int64(1)
+		}
+		return int64(0)
+	}
+	return value
+}
+
+// fieldTypeOf resolves a field's declared type. The second result reports
+// whether the field exists on the entity at all.
+func (s *EntityStore) fieldTypeOf(field string) (spec.FieldType, bool) {
+	for _, f := range s.fields {
+		if f.Name == field {
+			return f.Type, true
+		}
+	}
+	return "", false
+}
+
+// requireNumericAggregateField rejects an aggregate that cannot mean anything:
+// SUM/AVG/MIN/MAX over a field that is neither numeric nor money (S7 — "field
+// non-numerik ditolak dengan error, bukan diam-diam salah"). COUNT is exempt:
+// it is defined over any field (and over no field at all).
+func (s *EntityStore) requireNumericAggregateField(fn, field string) error {
+	if field == "" || fn == "count" {
+		return nil
+	}
+	ft, known := s.fieldTypeOf(field)
+	if !known {
+		return fmt.Errorf("%s aggregate: unknown field %q on entity %s", fn, field, s.entity)
+	}
+	switch ft {
+	case spec.FieldInteger, spec.FieldDecimal, spec.FieldNumber, spec.FieldMoney:
+		return nil
+	}
+	return fmt.Errorf(
+		"%s aggregate: field %q has type %s, which is not numeric — %s is only defined over integer/decimal/number/money fields",
+		fn, field, ft, fn)
 }
 
 // castTypeForField returns the SQL type keyword to cast a FieldType to its
@@ -1588,6 +1685,7 @@ func (s *EntityStore) List(ctx context.Context, params ListParams) (*ListResult,
 	// Custom filters
 	for field, filter := range params.Filters {
 		col := s.columnRefExpr(field)
+		filter.Value = s.coerceFilterValue(field, filter.Value)
 		switch filter.Op {
 		case "eq":
 			whereClauses = append(whereClauses, fmt.Sprintf("%s = ?", col))
@@ -1795,6 +1893,7 @@ func (s *EntityStore) Aggregate(ctx context.Context, params AggregateParams) (*A
 	}
 	for field, filter := range params.Filters {
 		col := s.columnRefExpr(field)
+		filter.Value = s.coerceFilterValue(field, filter.Value)
 		switch filter.Op {
 		case "eq":
 			whereClauses = append(whereClauses, fmt.Sprintf("%s = ?", col))
@@ -1833,6 +1932,11 @@ func (s *EntityStore) Aggregate(ctx context.Context, params AggregateParams) (*A
 	if fn == "count" && params.Field == "" {
 		aggExpr = "COUNT(*)"
 	} else {
+		// A non-numeric field cannot be summed/averaged; money is aggregated
+		// over its `.amount` component (S7/gap #28).
+		if err := s.requireNumericAggregateField(fn, params.Field); err != nil {
+			return nil, err
+		}
 		aggExpr = fmt.Sprintf("%s(%s)", strings.ToUpper(fn), s.columnRefExpr(params.Field))
 	}
 
@@ -2036,6 +2140,7 @@ func (s *EntityStore) Window(ctx context.Context, params WindowParams) (*WindowR
 	}
 	for field, filter := range params.Filters {
 		col := s.columnRefExpr(field)
+		filter.Value = s.coerceFilterValue(field, filter.Value)
 		switch filter.Op {
 		case "eq":
 			whereClauses = append(whereClauses, fmt.Sprintf("%s = ?", col))
@@ -2060,6 +2165,10 @@ func (s *EntityStore) Window(ctx context.Context, params WindowParams) (*WindowR
 	var winExpr string
 	switch fn {
 	case "running_total":
+		// running_total over a money field sums the amounts.
+		if err := s.requireNumericAggregateField("sum", params.Field); err != nil {
+			return nil, err
+		}
 		winExpr = fmt.Sprintf("SUM(%s) OVER (%s)", s.columnRefExpr(params.Field), s.windowSpec(params))
 	case "rank":
 		winExpr = fmt.Sprintf("RANK() OVER (%s)", s.windowSpec(params))
@@ -2391,7 +2500,12 @@ func (s *EntityStore) scanRecord(ctx context.Context, database DB, query string,
 func scanEntityRecord(row interface {
 	Scan(dest ...any) error
 }) (*EntityRecord, error) {
-	var id, workspaceID, createdBy, updatedBy string
+	var id, workspaceID string
+	// created_by/updated_by are nullable: rows written outside the API (seed
+	// data, migrations, operator SQL) leave them NULL, and scanning those into a
+	// plain string turned every read of that entity into a 500
+	// ("converting NULL to string is unsupported").
+	var createdBy, updatedBy sql.NullString
 	var version int
 	var createdAt, updatedAt string
 	var docStatus sql.NullString // NULL = lifecycle-free
@@ -2416,8 +2530,8 @@ func scanEntityRecord(row interface {
 		Version:     version,
 		CreatedAt:   createdAt,
 		UpdatedAt:   updatedAt,
-		CreatedBy:   createdBy,
-		UpdatedBy:   updatedBy,
+		CreatedBy:   createdBy.String,
+		UpdatedBy:   updatedBy.String,
 		DocStatus:   docStatus.String, // empty string when NULL
 		Data:        data,
 	}, nil

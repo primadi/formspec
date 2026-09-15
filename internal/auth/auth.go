@@ -45,6 +45,11 @@ type Identity struct {
 	App         string   // app scope (empty = workspace-level, e.g. _admin)
 	Permissions []string // granted permissions, e.g. ["billing.invoices.*", "billing.customers.list"]
 	Roles       []string // assigned roles, e.g. ["billing-admin"]
+	// Attributes carries application-defined session attributes (JWT `attrs`
+	// claim), e.g. {"branch_id": "KFE-JKT-01"}. Entity `scope` filters with
+	// `from: session` resolve against these (S2/#6); an attribute that is absent
+	// makes the scoped request fail closed rather than list unscoped rows.
+	Attributes map[string]string
 }
 
 // HasPermission checks whether this identity holds the required permission.

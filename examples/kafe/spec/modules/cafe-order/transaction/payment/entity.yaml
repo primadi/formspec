@@ -1,0 +1,97 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: payment
+  module: cafe-order
+  description: "Pembayaran per pesanan — satu pesanan bisa punya beberapa baris (bayar sebagian / metode gabungan)"
+spec:
+  version: v1
+  characteristic: transaction
+  plural: payments
+  lifecycle: plain_crud
+  fields:
+    - name: transaction_date
+      type: datetime
+      required: true
+      index: true
+      title: "Waktu Bayar"
+    - name: order_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-order.order }
+      required: true
+      index: true
+      title: "Pesanan"
+    - name: branch_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-master.branch }
+      required: true
+      title: "Cabang"
+    - name: method
+      type: enum
+      enum_values: [cash, card, qris, ewallet, points]
+      required: true
+      title: "Metode Bayar"
+    # GAP-01/GAP-02: seluruh field uang di sini.
+    - name: amount
+      type: money
+      required: true
+      title: "Jumlah Dibayar"
+    - name: tendered
+      type: money
+      title: "Uang Diterima"
+      description: "Hanya untuk tunai — dasar hitung kembalian"
+    - name: change
+      type: money
+      title: "Kembalian"
+      computed:
+        formula: "tendered - amount"
+    - name: reference_no
+      type: string
+      title: "No. Referensi"
+      description: "Nomor referensi EDC / QRIS"
+    - name: status
+      type: enum
+      enum_values: [pending, settled, failed, refunded]
+      default: pending
+      index: true
+      title: "Status"
+    - name: shift_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-order.shift }
+      title: "Shift"
+    - name: cashier_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-master.employee }
+      title: "Kasir"
+    - name: refund_reason
+      type: string
+      title: "Alasan Refund"
+  state_machine:
+    field: status
+    initial: pending
+    states:
+      - { name: pending, label: "Menunggu" }
+      - { name: settled, label: "Lunas" }
+      - { name: failed, label: "Gagal" }
+      - { name: refunded, label: "Dikembalikan" }
+    transitions:
+      - { from: pending, to: settled, via: settle }
+      - { from: pending, to: failed, via: fail }
+      - { from: settled, to: refunded, via: refund }
+  actions:
+    # Aturan bisnis #14: jejak pembayaran tidak dihapus — koreksi lewat refund.
+    - { name: delete, disabled: true }
+    - { name: submit, disabled: true }
+    - name: settle
+      description: "Tandai pembayaran lunas"
+      required_permission: payments.settle
+      audit: true
+    - name: fail
+      description: "Tandai pembayaran gagal"
+      required_permission: payments.fail
+      audit: true
+    - name: refund
+      description: "Kembalikan pembayaran — butuh persetujuan supervisor (D5)"
+      required_permission: payments.refund
+      audit: true
+  # expose: [] — UI-only.

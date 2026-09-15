@@ -117,6 +117,12 @@ func scanHonesty(manifests []manifest.RawManifest, specPath string) []honestyIss
 			}
 			path := resolveHonestyScript(specPath, m, a.Impl.Ref)
 			usage := parseScriptUsage(path)
+			if a.Impl.Type == spec.ImplScriptRef {
+				issues = append(issues, scriptLoadIssue(m.Source, path, fmt.Sprintf("action %q", a.Name), usage)...)
+				if path == "" {
+					continue
+				}
+			}
 			issues = append(issues, compareUses(m.Source, path, a.Name, uses, usage, false, "", "")...)
 		}
 
@@ -129,6 +135,14 @@ func scanHonesty(manifests []manifest.RawManifest, specPath string) []honestyIss
 			// ctx.environment warning applies to hooks today.
 			path := resolveHonestyScript(specPath, m, h.Impl.Ref)
 			usage := parseScriptUsage(path)
+			// A hook script that cannot be resolved or parsed is an error, not a
+			// silent no-op: it means the hook fails at runtime, on the write path
+			// it was meant to protect. Reported here for hooks specifically — the
+			// gap that let three non-compiling kafe guard scripts pass validate.
+			if h.Impl.Type == spec.ImplScriptRef {
+				issues = append(issues, scriptLoadIssue(m.Source, path,
+					fmt.Sprintf("hook %s (action %s)", h.On, h.Action), usage)...)
+			}
 			if usage.envBranch {
 				issues = append(issues, honestyIssue{
 					Source: m.Source, Script: path, Severity: "warning",
@@ -146,6 +160,26 @@ func scanHonesty(manifests []manifest.RawManifest, specPath string) []honestyIss
 		return issues[i].Message < issues[j].Message
 	})
 	return issues
+}
+
+// scriptLoadIssue reports a referenced script that cannot be resolved or
+// parsed. Without it, a broken script is only discovered when the action/hook
+// runs — the blind spot behind gap #50 (three non-compiling guard scripts on
+// the write path passed `formspec validate` with 0 problems).
+func scriptLoadIssue(source, path, where string, u *scriptUsage) []honestyIssue {
+	if path == "" {
+		return []honestyIssue{{
+			Source: source, Severity: "error",
+			Message: fmt.Sprintf("%s: script not found (looked for scripts/<ref>.star next to the manifest and in modules/<module>/scripts/)", where),
+		}}
+	}
+	if u == nil || u.parseErr == nil {
+		return nil
+	}
+	return []honestyIssue{{
+		Source: source, Script: path, Severity: "error",
+		Message: fmt.Sprintf("%s: script failed to compile: %v", where, u.parseErr),
+	}}
 }
 
 // compareUses diffs one script's actual usage against its declared uses.

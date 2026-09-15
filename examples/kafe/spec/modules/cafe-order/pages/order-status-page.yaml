@@ -1,0 +1,30 @@
+apiVersion: formspec.dev/v1
+kind: Page
+metadata:
+  name: order-status-page
+  module: cafe-order
+  description: "Halaman status pesanan pelanggan — diakses lewat token tamu di URL"
+spec:
+  # Token tamu ada di URL, bukan di sesi: pelanggan tidak punya akun
+  # (aturan bisnis #3). Lihat catatan GAP-06 di bawah.
+  route: /status/:guest_token
+  title: "Status Pesanan"
+  # `public: true` supaya halaman ini tetap anonim walau App-nya private.
+  public: true
+  blocks:
+    - table:
+        # `param` meneruskan token dari route ke blok sebagai nilai filter.
+        # INI BUKAN OTORISASI — hanya pengisian nilai.
+        ref: order-table-customer
+        param: { table_session_id: ":guest_token" }
+  # ⚠️ GAP-06 — HALAMAN INI BERGANTUNG PADA PENGAMAN APLIKASI, BUKAN ENGINE.
+  #
+  # App `kafe-qr` memakai `access: public`, yang memberi anonim `list`/`find`
+  # untuk SELURUH entity di module yang di-mount. Artinya:
+  #   - anonim bisa memanggil list order TANPA token, dan melihat semua pesanan
+  #   - token di URL hanya menyaring tampilan halaman ini, bukan membatasi API
+  #   - token juga membuka `member` (nomor HP) bila module itu ikut di-mount
+  #
+  # Bentuk ideal yang belum bisa dinyatakan: allowlist publik PER-ENTITY +
+  # scoping per-record (mis. `public_entities` + filter token yang ditegakkan
+  # server). Lihat gaps_found/03-pos-dan-public-ordering.md.

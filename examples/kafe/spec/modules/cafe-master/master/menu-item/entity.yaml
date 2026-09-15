@@ -1,0 +1,65 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: menu-item
+  module: cafe-master
+  description: "Produk jual kafe. Harga TIDAK di sini — harga per cabang ada di menu-item-price (D1)."
+spec:
+  version: v1
+  characteristic: master
+  plural: menu-items
+  display_field: name
+  soft_deactivate: { enabled: true }
+  fields:
+    - name: code
+      type: string
+      required: true
+      unique: true
+      natural_key: true
+      title: "Kode Menu"
+      description: "Mis. LAT-001"
+    - name: name
+      type: string
+      required: true
+      title: "Nama Menu"
+    - name: menu_category_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-master.menu-category }
+      required: true
+      title: "Kategori"
+    - name: description
+      type: text
+      title: "Deskripsi"
+    # GAP-04: upload foto sudah berfungsi (FileInput punya preview + thumbnail),
+    # tetapi foto TIDAK dirender sebagai gambar di Table/Listing/Detail/Print —
+    # hanya tampil sebagai teks/link. Katalog publik belum bisa bergambar.
+    - name: photo
+      type: file
+      title: "Foto Menu"
+      # Catatan: format `allowed_types` ambigu di dokumen FormSpec
+      # (`[jpg, png, webp]`) sementara renderer cocokkan ".ext" atau mime.
+      # Dipakai dua bentuk sekaligus supaya cocok di klien maupun server.
+      storage:
+        allowed_types: [".jpg", ".jpeg", ".png", ".webp", "image/jpeg", "image/png", "image/webp"]
+        max_size_mb: 2
+        max_count: 1
+    - name: prep_station
+      type: enum
+      enum_values: [bar, kitchen, both]
+      default: bar
+      title: "Stasiun Penyiapan"
+      description: "Dasar routing tiket di layar dapur (KDS)"
+    - name: is_available
+      type: boolean
+      default: true
+      title: "Tersedia"
+      description: "Saklar cepat kasir saat bahan habis"
+    - name: is_taxable
+      type: boolean
+      default: true
+      title: "Kena Pajak"
+    - name: sort_order
+      type: integer
+      default: 0
+      title: "Urutan Tampil"
+  # expose: [] — UI-only.

@@ -1,0 +1,64 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: stock-level
+  module: cafe-stock
+  description: "Proyeksi saldo & biaya rata-rata bergerak per (cabang, bahan) — mesin HPP kafe (D3)"
+spec:
+  version: v1
+  characteristic: summary
+  plural: stock-levels
+  fields:
+    - name: branch_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-master.branch }
+      required: true
+      title: "Cabang"
+    - name: ingredient_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-stock.ingredient }
+      required: true
+      title: "Bahan"
+    - name: quantity_on_hand
+      type: decimal
+      scale: 3
+      default: 0
+      title: "Saldo"
+    # D3: biaya rata-rata bergerak, dihitung script saat pergerakan masuk:
+    #   avg = (qty_lama * avg_lama + qty_masuk * biaya_masuk) / (qty_lama + qty_masuk)
+    # FormSpec TIDAK punya metode valuasi bawaan (GAP-13) — aritmetika ini
+    # sengaja dikerjakan di Starlark supaya laporan margin tidak ikut terblokir.
+    # Keterbatasan yang diterima: ini BUKAN FIFO/lapisan.
+    - name: moving_avg_cost
+      type: money
+      title: "Biaya Rata-rata Bergerak"
+    - name: stock_value
+      type: money
+      title: "Nilai Persediaan"
+    - name: last_movement_at
+      type: datetime
+      title: "Pergerakan Terakhir"
+    - name: is_below_min
+      type: boolean
+      default: false
+      index: true
+      title: "Di Bawah Minimum"
+  indexes:
+    - fields: [branch_id, ingredient_id]
+      unique: true
+  # Entity `summary` — create/update/delete permanen dinonaktifkan framework.
+  # Hanya script yang menulis entity ini. Itu justru yang menjaga valuasi
+  # tetap konsisten (tidak bisa "dibetulkan" manual lewat UI).
+  #
+  # ⚠️ GAP-33 — DAN INI PENTING: karena penulisan `summary` TIDAK lewat action
+  # pipeline, `hooks:` dan `conditions:` pada entity ini TIDAK PERNAH DIPANGGIL.
+  # Jadi invarian "satu baris per (cabang, bahan)" (GAP-22 — UNIQUE tidak
+  # ditegakkan DB) TIDAK bisa dijaga dari sini.
+  #
+  # Satu-satunya tempat menegakkannya adalah DI DALAM script yang menulisnya,
+  # memakai pola upsert + ctx.lock. Rumus biaya rata-rata bergerak (D3) dan
+  # pola upsert itu ditulis sebagai rujukan di:
+  #   spec/modules/cafe-stock/scripts/guard_stock_level_unique.star
+  # (file itu sengaja TIDAK dipasang lewat `hooks:` — memasangnya hanya akan
+  # terlihat benar tanpa pernah dieksekusi).
+  # expose: [] — UI-only.

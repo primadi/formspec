@@ -1,0 +1,60 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: recipe
+  module: cafe-stock
+  description: "Resep per menu (1:1) — dasar pemotongan stok bahan dan perhitungan biaya per porsi"
+spec:
+  version: v1
+  characteristic: master
+  plural: recipes
+  display_field: menu_item_id
+  soft_deactivate: { enabled: true }
+  fields:
+    - name: menu_item_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-master.menu-item }
+      required: true
+      unique: true
+      title: "Menu"
+      description: "Satu menu = satu resep"
+    - name: yield_quantity
+      type: decimal
+      scale: 3
+      default: 1
+      title: "Hasil (porsi)"
+      description: "Jumlah porsi yang dihasilkan resep ini"
+    - name: instructions
+      type: text
+      title: "Langkah Pembuatan"
+    # Baris bahan. `storage: jsonb` = bagian dari record resep, bukan entity
+    # terpisah (kepemilikan lifecycle mengikuti parent).
+    - name: lines
+      type: child
+      child:
+        storage: jsonb
+        sequence_field: line_no
+        fields:
+          - name: line_no
+            type: integer
+            title: "No."
+          - name: ingredient_id
+            type: relation
+            relation: { type: belongs_to, resource: cafe-stock.ingredient }
+            required: true
+            title: "Bahan"
+          - name: quantity
+            type: decimal
+            scale: 3
+            required: true
+            title: "Jumlah"
+          - name: unit
+            type: enum
+            enum_values: [gram, ml, pcs]
+            default: gram
+            title: "Satuan"
+            description: "Harus sama dengan ingredient.unit — konversi satuan adalah urusan script, bukan engine"
+          - name: note
+            type: string
+            title: "Catatan"
+  # expose: [] — UI-only.

@@ -35,7 +35,13 @@ import { can as checkPermission } from "@/engine/permissions"
 import { resolveEntityRef } from "@/engine/entityRef"
 import { apiList, buildListParams } from "@/lib/api"
 import { useRealtime } from "@/hooks/useRealtime"
-import { createFormatter, type Formatter } from "@/lib/format"
+import { createFormatter, moneyAmount, type Formatter } from "@/lib/format"
+import {
+  aggregateNumber,
+  aggregateRows,
+  type AggregateFn,
+  type AggregateResult,
+} from "@/lib/aggregate"
 import { Badge } from "@/widgets/Badge"
 import { Select } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
@@ -325,6 +331,9 @@ function MetricWidget({
   const settings = useMetaStore((s) => s.bundle?.settings)
   const formatter = useMemo(() => createFormatter(settings), [settings])
   const [value, setValue] = useState<number | null>(null)
+  // Set when the declared aggregate cannot be computed (e.g. `sum` over a
+  // non-numeric field) — shown instead of a misleading 0 (S7).
+  const [aggError, setAggError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   // Realtime: refetch on matching entity events / reconnect (non-durable).
@@ -356,7 +365,12 @@ function MetricWidget({
           search,
         )
         if (cancelled) return
-        setValue(aggregate(applySimpleQuery(items, spec.query), spec.config))
+        const result = aggregate(
+          applySimpleQuery(items, spec.query),
+          spec.config,
+        )
+        setValue(result.value)
+        setAggError(result.error ?? null)
       } catch {
         if (!cancelled) setValue(null)
       } finally {
@@ -391,42 +405,38 @@ function MetricWidget({
       <p className="text-3xl font-bold tabular-nums">
         {loading ? "…" : formatted}
       </p>
-      <p className="text-xs text-muted-foreground mt-1">
-        {spec.entity ? `${spec.entity}` : "No data source"}
-      </p>
+      {aggError ? (
+        <p className="text-xs text-destructive mt-1" title={aggError}>
+          ⚠ {aggError}
+        </p>
+      ) : (
+        <p className="text-xs text-muted-foreground mt-1">
+          {spec.entity ? `${spec.entity}` : "No data source"}
+        </p>
+      )}
     </div>
   )
 }
 
+/**
+ * Aggregate a metric over the fetched rows (money-aware; see lib/aggregate.ts).
+ *
+ * Returns `{ value: null, error }` when the declared aggregate cannot mean
+ * anything — a widget showing a confident `0` for a mis-declared metric is
+ * worse than one showing nothing, and for money it is plain wrong (S7 /
+ * gap #28).
+ */
 function aggregate(
   items: Record<string, unknown>[],
   config?: Record<string, unknown>,
-): number {
-  const fn = String(config?.aggregate ?? "count")
-  if (fn === "count") return items.length
-
+): AggregateResult {
+  const fn = String(config?.aggregate ?? "count") as AggregateFn
   const field = config?.field ? String(config.field) : undefined
-  if (!field) return items.length
-  const nums = items
-    .map((it) => Number(it[field]))
-    .filter((n) => !Number.isNaN(n))
-
-  switch (fn) {
-    case "sum":
-      return nums.reduce((a, b) => a + b, 0)
-    case "avg":
-      return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : 0
-    case "min":
-      return nums.length ? Math.min(...nums) : 0
-    case "max":
-      return nums.length ? Math.max(...nums) : 0
-    default:
-      return items.length
-  }
+  return aggregateRows(items, fn, field)
 }
 
 function formatMetric(
-  value: number | null,
+  value: unknown,
   config?: Record<string, unknown>,
   fmt?: Formatter,
 ): string {
@@ -434,8 +444,12 @@ function formatMetric(
   const format = config?.format ? String(config.format) : undefined
   const formatter = fmt ?? createFormatter()
   if (format === "currency") {
-    return formatter.money(value)
+    // Aggregate results are numeric, but a widget can also surface a raw money
+    // object ({amount, currency}) — accept both.
+    const amount = moneyAmount(value)
+    return amount === undefined ? "--" : formatter.money(amount)
   }
+  if (typeof value !== "number") return String(value)
   if (format === "percentage") return `${(value * 100).toFixed(1)}%`
   return formatter.number(value)
 }
@@ -670,7 +684,10 @@ function ChartWidget({
       if (!byKey.has(key)) byKey.set(key, { label, points: new Map() })
       const pts = byKey.get(key)!.points
       const x = String(row[xField] ?? "")
-      const y = countMode ? 1 : Number(row[yField]) || 0
+      // `y` may be a money field — its value is the object {amount, currency},
+      // so `Number(row[yField])` is NaN (→ the `|| 0` silently plotted zero).
+      // aggregateNumber() reads the `.amount` component (S7 / gap #28).
+      const y = countMode ? 1 : (aggregateNumber(row[yField]) ?? 0)
       pts.set(x, (pts.get(x) ?? 0) + y)
     }
     return Array.from(byKey.values()).map(({ label, points }) => ({

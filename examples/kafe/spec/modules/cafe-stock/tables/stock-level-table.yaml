@@ -1,0 +1,30 @@
+apiVersion: formspec.dev/v1
+kind: Table
+metadata:
+  name: stock-level-table
+  module: cafe-stock
+  description: "Saldo & biaya rata-rata bahan per cabang — termasuk peringatan stok kritis"
+spec:
+  # Entity `summary` — tabel ini murni baca. Tidak ada row_actions/bulk_actions,
+  # karena create/update/delete memang tidak tersedia (framework menonaktifkannya
+  # untuk summary). Itu disengaja: valuasi hanya boleh diubah script (D3).
+  entity: cafe-stock.stock-level
+  columns:
+    - { field: branch_id, label: "Cabang", sortable: true }
+    - { field: ingredient_id, label: "Bahan", sortable: true }
+    - { field: quantity_on_hand, label: "Saldo", align: right, sortable: true }
+    - { field: moving_avg_cost, label: "Biaya Rata-rata", format: currency, align: right }
+    - { field: stock_value, label: "Nilai Persediaan", format: currency, align: right }
+    - { field: is_below_min, label: "Kritis", widget: boolean }
+    - { field: last_movement_at, label: "Pergerakan Terakhir", format: relative }
+  filters:
+    - { field: branch_id, label: "Cabang", type: select }
+    - { field: is_below_min, label: "Hanya Stok Kritis", type: select }
+  default_sort: is_below_min
+  # Tanpa `search`: tidak ada field teks bermakna di entity summary ini
+  # (semuanya id relasi & angka). Pencarian nama bahan dilakukan di
+  # `ingredient`, bukan di sini.
+  search: false
+  page_size: 50
+  # GAP-01/GAP-02: moving_avg_cost & stock_value adalah money — angka-angka
+  # paling penting di tabel ini, dan justru yang paling terdampak dua gap itu.

@@ -9,18 +9,22 @@ import { useMemo, useState, useEffect, useCallback, useRef, useId } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useAppNavigate } from "@/lib/navigation"
-import { useParams } from "react-router-dom"
+import { useParams, useLocation } from "react-router-dom"
 import { useSurface } from "@/hooks/useSurface"
 import { z } from "zod"
 import { buildZodField } from "@/lib/zod-schema"
 import { toast } from "@/lib/ui"
 import { ArrowLeft, Save, Loader2, AlertTriangle } from "lucide-react"
 
-import type { EntitySchema, FormSpec } from "@/types/manifest"
+import type { EntitySchema, FormField, FormSpec } from "@/types/manifest"
 import { FormaApiError } from "@/types/manifest"
 import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
 import { resolveForm } from "@/engine/derive"
+import { useRenderContext } from "@/hooks/useRenderContext"
+import { seedDefaults } from "@/lib/picker"
+import PickerPanel from "@/kinds/form/PickerPanel"
+import { cn } from "@/lib/utils"
 import { getLifecycle } from "@/engine/lifecycle"
 import {
   evalReadonlyWhen,
@@ -50,6 +54,7 @@ import { Combobox } from "@/widgets/Combobox"
 import { PasswordInput } from "@/widgets/PasswordInput"
 import { SliderInput } from "@/widgets/SliderInput"
 import { TagsInput } from "@/widgets/TagsInput"
+import { isFormWidget, formWidgetNames } from "@/widgets/catalog"
 
 interface FormRendererProps {
   entity: EntitySchema
@@ -69,6 +74,10 @@ interface FormRendererProps {
   inOverlay?: boolean
   // Called after successful save when inOverlay is true.
   onClose?: () => void
+  /** Render context resolved by the embedding block (a Page already resolved
+   *  it). Merged *under* this form's own `spec.context`, so a standalone form
+   *  route works too. Feeds `default_from` and picker `{token}` filters. */
+  context?: Record<string, unknown>
 }
 
 /**
@@ -93,6 +102,7 @@ export default function FormRenderer({
   formRef,
   inOverlay,
   onClose,
+  context,
 }: FormRendererProps) {
   const navigate = useAppNavigate()
   const { workspace = "default", id: routeId } = useParams<{
@@ -122,6 +132,50 @@ export default function FormRenderer({
     () => resolveForm(entity, mode, authoredForms, formRef),
     [entity, mode, authoredForms, formRef],
   )
+
+  // ── Render context ──
+  // The embedding Page already resolved its `context`, so this form only
+  // resolves its *own* `spec.context` declarations (the hook short-circuits on
+  // empty decls) and merges them over the inherited values. A standalone form
+  // route therefore works too, without anything being fetched twice.
+  const routeParamsForCtx = useParams()
+  const location = useLocation()
+  const renderCtx = useMemo(
+    () => ({
+      ...(context ?? {}),
+      route: { params: routeParamsForCtx, path: location.pathname },
+      ...(me ? { user: me } : {}),
+    }),
+    [context, routeParamsForCtx, location.pathname, me],
+  )
+  const { context: ownCtx } = useRenderContext(formSpec.context, renderCtx, {
+    publicSurface: formSpec.public === true,
+  })
+  const ctx = useMemo(() => ({ ...renderCtx, ...ownCtx }), [renderCtx, ownCtx])
+
+  // ── Child-field pickers ──
+  // A child field may declare a `picker` (S1): rows are picked from a source
+  // entity instead of typed in one by one. `render.picker_panel: aside` gives
+  // the tiles their own column and lets the panel replace the child grid.
+  const pickerFields = useMemo(
+    () =>
+      formSpec.sections
+        .flatMap((s) => s.fields)
+        .map((field) => ({
+          field,
+          picker: entity.fields.find((f) => f.name === field.name)?.child
+            ?.picker,
+        }))
+        .filter(
+          (
+            p,
+          ): p is { field: FormField; picker: NonNullable<typeof p.picker> } =>
+            Boolean(p.picker),
+        ),
+    [formSpec, entity],
+  )
+  const pickerAside =
+    formSpec.render?.picker_panel === "aside" && pickerFields.length > 0
 
   const isView = mode === "view"
   const isEdit = mode === "edit"
@@ -173,6 +227,38 @@ export default function FormRenderer({
   // Pending form data awaiting the save-confirmation dialog (plan
   // confirm-dialogs.md). Non-null → the dialog is open.
   const [pendingConfirm, setPendingConfirm] = useState<FormData | null>(null)
+
+  // ── Seed fields from the render context (`default_from`) ──
+  // Values the user does not type (branch, session, timestamp) arrive here.
+  // Only fields that are still unset are seeded: a loaded record always wins,
+  // and a value the user has already edited is never overwritten.
+  const seedKey = useMemo(
+    () =>
+      JSON.stringify(
+        formSpec.sections
+          .flatMap((s) => s.fields)
+          .filter((f) => f.default_from)
+          .map((f) => [f.name, f.default_from] as const),
+      ),
+    [formSpec],
+  )
+  useEffect(() => {
+    if (seedKey === "[]") return
+    const seeds = seedDefaults(
+      formSpec.sections.flatMap((s) => s.fields),
+      ctx,
+    )
+    for (const [name, value] of Object.entries(seeds)) {
+      const current = form.getValues(name as never) as unknown
+      if (current === undefined || current === null || current === "") {
+        form.setValue(name as never, value as never, { shouldDirty: false })
+      }
+    }
+    // `ctx` is intentionally excluded: it is a fresh object each render, and
+    // re-seeding on every resolution pass would fight the user's edits. The
+    // resolved values themselves are covered by `seedKey`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seedKey, form])
 
   // Resolve the effective confirm message for this form's mode (plan
   // confirm-dialogs.md): form override > App default > off. Form value
@@ -436,172 +522,248 @@ export default function FormRenderer({
         autoComplete="off"
         className="space-y-8"
       >
-        {formSpec.sections
-          .filter((section) => {
-            // Section-level visible_when: skip invisible sections
-            const ctx = {
-              fields: formValues as Record<string, unknown>,
-              user: me,
-            }
-            return (
-              !section.visible_when ||
-              evalVisibleWhen(section.visible_when, ctx as any)
-            )
-          })
-          .map((section, sIdx) => (
-            <div key={sIdx} className="space-y-4">
-              {section.title && (
-                <div>
-                  <h3 className="text-lg font-medium">{section.title}</h3>
-                  {section.description && (
-                    <p className="text-sm text-muted-foreground">
-                      {section.description}
-                    </p>
-                  )}
-                </div>
-              )}
-
-              <div
-                className="grid gap-4"
-                style={{
-                  gridTemplateColumns: `repeat(${section.columns || 1}, 1fr)`,
-                }}
-              >
-                {section.fields.map((field) => {
-                  // Stable per-field id so the <label> below can associate
-                  // with the input (a11y — no orphan form fields).
-                  const fieldId = `form-${formIdPrefix}-${field.name}`
-                  const entityField = entity.fields.find(
-                    (f) => f.name === field.name,
-                  )
-                  if (!entityField) return null
-
-                  const fieldContext = {
-                    fields: formValues as Record<string, unknown>,
-                    user: me,
+        <div
+          className={cn(
+            pickerAside && "grid gap-6 lg:grid-cols-[1fr_22rem] lg:items-start",
+          )}
+        >
+          {/* Aside mode: the pickers get their own column, so the catalog is the
+              main surface and the picked rows + submit sit beside it. */}
+          {pickerAside && (
+            <div className="flex flex-col gap-8">
+              {pickerFields.map(({ field, picker }) => (
+                <PickerPanel
+                  key={field.name}
+                  decl={picker}
+                  module={entity.module}
+                  value={
+                    formValues[field.name as keyof FormData] as
+                      | Record<string, unknown>[]
+                      | undefined
                   }
-                  // Strict eval (5.11.3): surface expression failures as a
-                  // visible error state instead of silently failing safe.
-                  const readonlyExpr = evalFieldExpr(
-                    field.readonly_when,
-                    fieldContext,
-                  )
-                  const requiredExpr = evalFieldExpr(
-                    field.required_when,
-                    fieldContext,
-                  )
-                  const visibleExpr = evalFieldExpr(
-                    field.visible_when,
-                    fieldContext,
-                  )
-                  const exprError =
-                    readonlyExpr.error ??
-                    requiredExpr.error ??
-                    visibleExpr.error
-                  const isReadonly =
-                    field.read_only ??
-                    (readonlyExpr.error
-                      ? false
-                      : evalReadonlyWhen(
-                          field.readonly_when,
-                          fieldContext as any,
-                        ))
-                  const isRequired =
-                    entityField.required ||
-                    (requiredExpr.error
-                      ? false
-                      : evalRequiredWhen(
-                          field.required_when,
-                          fieldContext as any,
-                        ))
-                  const isVisible = field.visible_when
-                    ? visibleExpr.error
-                      ? true // keep visible so the error state is shown
-                      : evalVisibleWhen(field.visible_when, fieldContext as any)
-                    : true
-
-                  if (!isVisible) return null
-
-                  // Only widgets that render a native labelable element
-                  // (<input>/<textarea>) may be the target of <label htmlFor>.
-                  // Button-based custom controls (select, switch, combobox,
-                  // radio-group) and composite widgets (child-grid) get their
-                  // accessible name via aria-label / internal labels instead —
-                  // pointing <label for> at a <button> or a missing id is
-                  // flagged as incorrect by a11y checkers. Readonly fields
-                  // render a display <div>, not an input, so they are not
-                  // labelable either.
-                  const widgetName = field.widget ?? entityField.type
-                  const isLabelable =
-                    !isReadonly && !isView && LABELABLE_WIDGETS.has(widgetName)
-
-                  return (
-                    <div key={field.name} className="flex flex-col gap-2">
-                      {exprError && (
-                        <div
-                          className="flex items-start gap-1.5 rounded-md border border-destructive/40 bg-destructive/5 px-2 py-1 text-xs text-destructive"
-                          title={`FormSpecExpr error: ${exprError}`}
-                        >
-                          <AlertTriangle className="size-3.5 mt-0.5 shrink-0" />
-                          <span>Expression error: {exprError}</span>
-                        </div>
-                      )}
-                      {isLabelable ? (
-                        <label
-                          htmlFor={fieldId}
-                          className="text-sm font-medium leading-snug peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                        >
-                          {field.label ?? field.name}
-                          {isRequired && (
-                            <span className="text-destructive ml-0.5">*</span>
-                          )}
-                        </label>
-                      ) : (
-                        <span className="text-sm font-medium leading-snug peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                          {field.label ?? field.name}
-                          {isRequired && (
-                            <span className="text-destructive ml-0.5">*</span>
-                          )}
-                        </span>
-                      )}
-                      <FormFieldWidget
-                        field={field}
-                        entityField={entityField}
-                        id={fieldId}
-                        label={field.label ?? field.name}
-                        value={formValues[field.name as keyof FormData]}
-                        error={
-                          errors[field.name]?.message as string | undefined
-                        }
-                        readonly={isReadonly || isView}
-                        currentModule={entity.module}
-                        entityModule={entity.module}
-                        entityName={entity.name}
-                        recordId={id}
-                        fieldName={field.name}
-                        onChange={(value) =>
-                          form.setValue(field.name as any, value, {
-                            shouldValidate: true,
-                            shouldDirty: true,
-                          })
-                        }
-                      />
-                      {field.help && !isView && (
-                        <p className="text-xs text-muted-foreground">
-                          {field.help}
-                        </p>
-                      )}
-                      {errors[field.name] && (
-                        <p className="text-xs text-destructive">
-                          {errors[field.name]?.message as string}
+                  context={ctx}
+                  showSelection
+                  title={field.label ?? field.name}
+                  onChange={(rows) =>
+                    form.setValue(field.name as never, rows as never, {
+                      shouldValidate: true,
+                      shouldDirty: true,
+                    })
+                  }
+                />
+              ))}
+            </div>
+          )}
+          <div className="space-y-8">
+            {formSpec.sections
+              .filter((section) => {
+                // Section-level visible_when: skip invisible sections
+                const ctx = {
+                  fields: formValues as Record<string, unknown>,
+                  user: me,
+                }
+                return (
+                  !section.visible_when ||
+                  evalVisibleWhen(section.visible_when, ctx as any)
+                )
+              })
+              .map((section, sIdx) => (
+                <div key={sIdx} className="space-y-4">
+                  {section.title && (
+                    <div>
+                      <h3 className="text-lg font-medium">{section.title}</h3>
+                      {section.description && (
+                        <p className="text-sm text-muted-foreground">
+                          {section.description}
                         </p>
                       )}
                     </div>
-                  )
-                })}
-              </div>
-            </div>
-          ))}
+                  )}
+
+                  <div
+                    className="grid gap-4"
+                    style={{
+                      gridTemplateColumns: `repeat(${section.columns || 1}, 1fr)`,
+                    }}
+                  >
+                    {section.fields.map((field) => {
+                      // Stable per-field id so the <label> below can associate
+                      // with the input (a11y — no orphan form fields).
+                      const fieldId = `form-${formIdPrefix}-${field.name}`
+                      const entityField = entity.fields.find(
+                        (f) => f.name === field.name,
+                      )
+                      if (!entityField) return null
+
+                      // `widget: hidden` carries a value (usually seeded by
+                      // `default_from`) without rendering anything — the branch,
+                      // session or timestamp a public surface must not show.
+                      if (field.widget === "hidden") return null
+
+                      // Aside mode: this field's picker owns the editing UI in its
+                      // own column, so the child grid is not rendered twice.
+                      if (pickerAside && entityField.child?.picker) return null
+
+                      const fieldContext = {
+                        fields: formValues as Record<string, unknown>,
+                        user: me,
+                      }
+                      // Strict eval (5.11.3): surface expression failures as a
+                      // visible error state instead of silently failing safe.
+                      const readonlyExpr = evalFieldExpr(
+                        field.readonly_when,
+                        fieldContext,
+                      )
+                      const requiredExpr = evalFieldExpr(
+                        field.required_when,
+                        fieldContext,
+                      )
+                      const visibleExpr = evalFieldExpr(
+                        field.visible_when,
+                        fieldContext,
+                      )
+                      const exprError =
+                        readonlyExpr.error ??
+                        requiredExpr.error ??
+                        visibleExpr.error
+                      const isReadonly =
+                        field.read_only ??
+                        (readonlyExpr.error
+                          ? false
+                          : evalReadonlyWhen(
+                              field.readonly_when,
+                              fieldContext as any,
+                            ))
+                      const isRequired =
+                        entityField.required ||
+                        (requiredExpr.error
+                          ? false
+                          : evalRequiredWhen(
+                              field.required_when,
+                              fieldContext as any,
+                            ))
+                      const isVisible = field.visible_when
+                        ? visibleExpr.error
+                          ? true // keep visible so the error state is shown
+                          : evalVisibleWhen(
+                              field.visible_when,
+                              fieldContext as any,
+                            )
+                        : true
+
+                      if (!isVisible) return null
+
+                      // Only widgets that render a native labelable element
+                      // (<input>/<textarea>) may be the target of <label htmlFor>.
+                      // Button-based custom controls (select, switch, combobox,
+                      // radio-group) and composite widgets (child-grid) get their
+                      // accessible name via aria-label / internal labels instead —
+                      // pointing <label for> at a <button> or a missing id is
+                      // flagged as incorrect by a11y checkers. Readonly fields
+                      // render a display <div>, not an input, so they are not
+                      // labelable either.
+                      const widgetName = field.widget ?? entityField.type
+                      const isLabelable =
+                        !isReadonly &&
+                        !isView &&
+                        LABELABLE_WIDGETS.has(widgetName)
+
+                      return (
+                        <div key={field.name} className="flex flex-col gap-2">
+                          {exprError && (
+                            <div
+                              className="flex items-start gap-1.5 rounded-md border border-destructive/40 bg-destructive/5 px-2 py-1 text-xs text-destructive"
+                              title={`FormSpecExpr error: ${exprError}`}
+                            >
+                              <AlertTriangle className="size-3.5 mt-0.5 shrink-0" />
+                              <span>Expression error: {exprError}</span>
+                            </div>
+                          )}
+                          {isLabelable ? (
+                            <label
+                              htmlFor={fieldId}
+                              className="text-sm font-medium leading-snug peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                            >
+                              {field.label ?? field.name}
+                              {isRequired && (
+                                <span className="text-destructive ml-0.5">
+                                  *
+                                </span>
+                              )}
+                            </label>
+                          ) : (
+                            <span className="text-sm font-medium leading-snug peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                              {field.label ?? field.name}
+                              {isRequired && (
+                                <span className="text-destructive ml-0.5">
+                                  *
+                                </span>
+                              )}
+                            </span>
+                          )}
+                          {entityField.child?.picker && (
+                            <PickerPanel
+                              decl={entityField.child.picker}
+                              module={entity.module}
+                              value={
+                                formValues[field.name as keyof FormData] as
+                                  | Record<string, unknown>[]
+                                  | undefined
+                              }
+                              context={ctx}
+                              showSelection={false}
+                              onChange={(rows) =>
+                                form.setValue(
+                                  field.name as never,
+                                  rows as never,
+                                  {
+                                    shouldValidate: true,
+                                    shouldDirty: true,
+                                  },
+                                )
+                              }
+                            />
+                          )}
+                          <FormFieldWidget
+                            field={field}
+                            entityField={entityField}
+                            id={fieldId}
+                            label={field.label ?? field.name}
+                            value={formValues[field.name as keyof FormData]}
+                            error={
+                              errors[field.name]?.message as string | undefined
+                            }
+                            readonly={isReadonly || isView}
+                            currentModule={entity.module}
+                            entityModule={entity.module}
+                            entityName={entity.name}
+                            recordId={id}
+                            fieldName={field.name}
+                            onChange={(value) =>
+                              form.setValue(field.name as any, value, {
+                                shouldValidate: true,
+                                shouldDirty: true,
+                              })
+                            }
+                          />
+                          {field.help && !isView && (
+                            <p className="text-xs text-muted-foreground">
+                              {field.help}
+                            </p>
+                          )}
+                          {errors[field.name] && (
+                            <p className="text-xs text-destructive">
+                              {errors[field.name]?.message as string}
+                            </p>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
 
         {/* Submit buttons — lifecycle-aware */}
         {!isView && (
@@ -743,7 +905,39 @@ const LABELABLE_WIDGETS = new Set([
   "relation-picker",
 ])
 
-function FormFieldWidget({
+// ── Unknown widget ──
+//
+// `formspec validate` already rejects an unknown `widget:` (closed set, S10), so
+// reaching this component means a stale spec cache or a hand-built manifest.
+// Render an explicit error instead of a plausible-looking text input: a silently
+// ignored widget is what made a typo indistinguishable from an unimplemented
+// feature.
+function UnknownWidget({
+  widget,
+  allowed,
+}: {
+  widget: string
+  allowed: string
+}) {
+  return (
+    <div
+      className="flex items-start gap-1.5 rounded-md border border-destructive/40 bg-destructive/5 px-2 py-1 text-xs text-destructive"
+      title={`Unknown widget: ${widget}. Allowed: ${allowed}`}
+      role="alert"
+    >
+      <AlertTriangle className="size-3.5 mt-0.5 shrink-0" />
+      <span>
+        Unknown widget <code className="font-mono">{widget}</code> — this field
+        is not rendered with a known widget.
+      </span>
+    </div>
+  )
+}
+
+// FormFieldWidget routes one field to its widget. Exported for the widget
+// catalog parity test (src/widgets/catalog.test.tsx), which asserts every
+// catalogued widget name actually renders here.
+export function FormFieldWidget({
   field,
   entityField,
   value,
@@ -774,9 +968,25 @@ function FormFieldWidget({
   label?: string
   onChange: (value: any) => void
 }) {
+  // An explicit manifest `widget:` must be a member of the closed catalog (S10).
+  // Before this guard a typo (`widget: relaion-picker`) silently rendered a
+  // plain text input, which is indistinguishable from "the widget does not
+  // exist yet". The fall-through below (`?? entityField.type`) is different: a
+  // field *type* with no dedicated widget (`money`, `time`) legitimately
+  // renders the default input, and that stays silent until MoneyInput/TimeInput
+  // land.
+  if (field.widget && !isFormWidget(field.widget)) {
+    return <UnknownWidget widget={field.widget} allowed={formWidgetNames()} />
+  }
+
   const widget = field.widget ?? entityField.type
 
   switch (widget) {
+    // Renders nothing but keeps the value in form state (the field loop skips
+    // it entirely, so this is the router's own guarantee).
+    case "hidden":
+      return null
+
     case "radio-group":
       return (
         <RadioGroup

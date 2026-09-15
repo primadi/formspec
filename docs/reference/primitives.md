@@ -30,6 +30,45 @@ Alias teregistrasi di App Registry (`db/analytics: pg-analytics`), wajib
 dideklarasikan di `uses.datastores` action. Unknown → `DATASTORE_NOT_FOUND`;
 tidak dideklarasikan → `DATASTORE_ACCESS_DENIED`.
 
+## Dialek Starlark (script & hook)
+
+Script (`impl: {type: script_ref, …}`) dan `hooks:` dijalankan oleh runtime
+**Starlark** — mirip Python, tetapi bukan Python. Dua batasan yang paling sering
+membuat script gagal di runtime:
+
+| Batasan                                          | Salah                                                           | Benar                         |
+| ------------------------------------------------ | --------------------------------------------------------------- | ----------------------------- |
+| Tidak ada implicit adjacent string concatenation | `"SELECT 1 " "FROM t"` → `got string literal, want ','`         | `"SELECT 1 " + "FROM t"`      |
+| Bind parameter = **satu** argumen list/tuple     | `ctx.db().query(sql, a, b)` → `got 2 arguments, want at most 1` | `ctx.db().query(sql, [a, b])` |
+
+`formspec validate` mengompilasi setiap script yang dirujuk `impl.ref`/`hooks:`
+dan melaporkan script yang gagal kompilasi maupun yang tidak ditemukan.
+
+**Uang (`money`) di script & guard.** Field bertipe `money` bernilai objek
+`{amount, currency}`, tetapi nilainya bisa dihitung **langsung** — tidak perlu
+dibongkar dulu:
+
+```python
+resource.total - resource.discount                      # money - money → money
+resource.quantity * resource.unit_price                 # integer × money → money
+sum([line["line_total"] for line in resource.lines])    # money
+amount(resource.total) / item_count                     # skalar: ekstrak dulu
+resource.difference < resource.limit                    # money vs money (securrency)
+```
+
+| Aturan                                                          | Konsekuensi                                                                   |
+| --------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `money ± money`                                                 | boleh; mata uang harus sama — beda → error                                    |
+| `money × number`, `money / number`                              | boleh (`money / money` → rasio angka)                                         |
+| `money` vs angka mentah (`resource.total > 100`)                | **error** — angkanya tidak punya satuan; pakai `amount(resource.total) > 100` |
+| `sum(list)` atas money                                          | menghasilkan money (semua elemen wajib securrency)                            |
+| Operand bukan angka (objek non-money, list, string non-numerik) | **error**, bukan `0`                                                          |
+
+`amount(x)` dan `currency(x)` mengambil komponen jumlah/kode mata uang; tersedia
+juga sebagai `money_amount(x)`/`money_currency(x)` untuk entity yang punya field
+bernama `amount`/`currency` (nama env menang atas builtin). Aritmetikanya eksak
+(bukan floating point) dan hasilnya dirender pada skala operand.
+
 ## 3-Level Registry
 
 ```mermaid

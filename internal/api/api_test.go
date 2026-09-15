@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -86,6 +87,151 @@ func TestGenerateRoutes_WithExpose(t *testing.T) {
 
 	_ = reg
 	t.Log("Route generation test structure ready")
+}
+
+// writeAPITestFile writes a spec file under dir, creating parent directories.
+func writeAPITestFile(t *testing.T, dir, rel, content string) {
+	t.Helper()
+	path := filepath.Join(dir, rel)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", rel, err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write %s: %v", rel, err)
+	}
+}
+
+// TestGenerateUIRoutes_LifecycleActions covers both halves of the lifecycle
+// contract on the UI surface:
+//
+//   - a transaction entity exposes submit/cancel/amend, with the permission
+//     built from the plural. Without the routes the wildcard file route
+//     (/{id}/{field}) swallows /{id}/submit and answers with a misleading 403
+//     (gap #52);
+//   - a catalog entity (characteristic master) is lifecycle-free — no lifecycle
+//     routes at all, because its records must be referenceable immediately
+//     after create, with no Submit step (gap #44).
+func TestGenerateUIRoutes_LifecycleActions(t *testing.T) {
+	dir := t.TempDir()
+
+	writeAPITestFile(t, dir, "modules/cafe-order/module.yaml", `apiVersion: formspec.dev/v1
+kind: Module
+metadata:
+  name: cafe-order
+spec:
+  version: 1.0.0
+`)
+	writeAPITestFile(t, dir, "modules/cafe-order/transaction/order/entity.yaml", `apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: order
+  module: cafe-order
+spec:
+  version: v1
+  characteristic: transaction
+  plural: orders
+  fields:
+    - name: transaction_date
+      type: date
+      required: true
+    - name: number
+      type: string
+`)
+	writeAPITestFile(t, dir, "modules/cafe-master/module.yaml", `apiVersion: formspec.dev/v1
+kind: Module
+metadata:
+  name: cafe-master
+spec:
+  version: 1.0.0
+`)
+	writeAPITestFile(t, dir, "modules/cafe-master/master/menu-category/entity.yaml", `apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: menu-category
+  module: cafe-master
+spec:
+  version: v1
+  characteristic: master
+  plural: menu-categories
+  fields:
+    - name: name
+      type: string
+`)
+
+	d, err := db.OpenSQLite(filepath.Join(dir, "api_ui_lifecycle.db"), nil)
+	if err != nil {
+		t.Fatalf("OpenSQLite failed: %v", err)
+	}
+	defer d.Close()
+
+	reg := entity.NewRegistry(d, db.DriverSQLite, dir)
+	if errs := reg.LoadEntities(); len(errs) > 0 {
+		t.Fatalf("LoadEntities: %v", errs)
+	}
+	if _, err := reg.SyncSchema(context.Background()); err != nil {
+		t.Fatalf("SyncSchema: %v", err)
+	}
+
+	byEntity := map[string]map[string]RouteDescriptor{}
+	for _, rd := range GenerateUIRoutes(reg) {
+		if byEntity[rd.Entity] == nil {
+			byEntity[rd.Entity] = map[string]RouteDescriptor{}
+		}
+		byEntity[rd.Entity][rd.Action] = rd
+	}
+
+	order := byEntity["order"]
+	for _, action := range []string{"list", "find", "create", "update", "submit", "cancel", "amend"} {
+		if _, ok := order[action]; !ok {
+			t.Errorf("UI surface missing %q route for transaction entity order (gap #52)", action)
+		}
+	}
+	if want := "/_ui/entity/cafe-order/order/{id}/submit"; order["submit"].Path != want {
+		t.Errorf("submit path = %q, want %q", order["submit"].Path, want)
+	}
+	// Permission must use the plural, matching the permission registry (D5).
+	if want := "cafe-order.orders.submit"; order["submit"].RequiredPermission != want {
+		t.Errorf("submit permission = %q, want %q", order["submit"].RequiredPermission, want)
+	}
+
+	mc := byEntity["menu-category"]
+	if _, ok := mc["list"]; !ok {
+		t.Fatalf("UI surface missing list route for catalog entity menu-category")
+	}
+	for _, action := range []string{"submit", "cancel", "amend"} {
+		if _, ok := mc[action]; ok {
+			t.Errorf("catalog entity (characteristic master) must be lifecycle-free: unexpected %q route (gap #44)", action)
+		}
+	}
+}
+
+// TestGenerateUIRoutes_SummaryNoLifecycle verifies that a summary entity exposes
+// no lifecycle routes on the UI surface (summaries are system-maintained).
+func TestGenerateUIRoutes_SummaryNoLifecycle(t *testing.T) {
+	dir := t.TempDir()
+	d, err := db.OpenSQLite(filepath.Join(dir, "api_ui_summary.db"), nil)
+	if err != nil {
+		t.Fatalf("OpenSQLite failed: %v", err)
+	}
+	defer d.Close()
+
+	reg := entity.NewRegistry(d, db.DriverSQLite, "../../examples/kafe/spec")
+	if errs := reg.LoadEntities(); len(errs) > 0 {
+		t.Fatalf("LoadEntities: %v", errs)
+	}
+	if _, err := reg.SyncSchema(context.Background()); err != nil {
+		t.Fatalf("SyncSchema: %v", err)
+	}
+
+	for _, rd := range GenerateUIRoutes(reg) {
+		if rd.Module != "cafe-stock" || rd.Entity != "stock-level" {
+			continue
+		}
+		switch rd.Action {
+		case "submit", "cancel", "amend":
+			t.Errorf("summary entity stock-level must not expose %q route, got %s", rd.Action, rd.Path)
+		}
+	}
 }
 
 // TestRouteDescriptor verifies route descriptor generation.

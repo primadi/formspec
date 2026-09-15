@@ -1,0 +1,93 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: promo
+  module: cafe-master
+  description: "ATURAN promo (bukan pemakaian) — disimpan dan dievaluasi saat pemesanan"
+spec:
+  version: v1
+  characteristic: master
+  plural: promos
+  display_field: name
+  soft_deactivate: { enabled: true }
+  fields:
+    - name: code
+      type: string
+      required: true
+      unique: true
+      natural_key: true
+      title: "Kode Promo"
+      description: "Mis. HAPPY-HOUR-20"
+    - name: name
+      type: string
+      required: true
+      title: "Nama Promo"
+    - name: type
+      type: enum
+      enum_values: [percentage, fixed, buy_x_get_y]
+      required: true
+      title: "Jenis Promo"
+    - name: percent
+      type: decimal
+      scale: 2
+      title: "Persentase (%)"
+    # GAP-01/GAP-02 — seluruh field uang di sini terkena dua gap money.
+    - name: value
+      type: money
+      title: "Nominal Potongan"
+    - name: buy_qty
+      type: integer
+      title: "Beli (qty)"
+    - name: get_qty
+      type: integer
+      title: "Gratis (qty)"
+    - name: applies_to
+      type: enum
+      enum_values: [order, menu_item, category]
+      default: order
+      title: "Berlaku Untuk"
+    - name: menu_item_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-master.menu-item }
+      title: "Menu Spesifik"
+    - name: menu_category_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-master.menu-category }
+      title: "Kategori Spesifik"
+    - name: branch_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-master.branch }
+      title: "Cabang"
+      description: "Kosong = berlaku di semua cabang"
+    - name: min_purchase
+      type: money
+      title: "Minimum Belanja"
+    - name: start_date
+      type: date
+      title: "Mulai Berlaku"
+    - name: end_date
+      type: date
+      title: "Selesai Berlaku"
+    - name: days_of_week
+      type: json
+      title: "Hari Berlaku"
+      description: "Array angka 1=Senin..7=Minggu, mis. [1,2,3,4,5]"
+    # GAP-01: `time` juga belum punya widget (sama seperti money).
+    - name: time_from
+      type: time
+      title: "Jam Mulai"
+    - name: time_to
+      type: time
+      title: "Jam Selesai"
+    - name: max_uses_per_member
+      type: integer
+      title: "Batas per Member"
+    - name: max_uses_total
+      type: integer
+      title: "Batas Total"
+    - name: priority
+      type: integer
+      default: 0
+      title: "Prioritas"
+      description: "Dipakai memilih satu promo terbaik bila beberapa cocok (aturan bisnis #7)"
+  # expose: [] — UI-only.

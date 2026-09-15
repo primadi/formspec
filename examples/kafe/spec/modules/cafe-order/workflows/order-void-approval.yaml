@@ -1,0 +1,53 @@
+apiVersion: formspec.dev/v1
+kind: Workflow
+metadata:
+  name: order-void-approval
+  module: cafe-order
+  description: "Persetujuan supervisor wajib untuk membatalkan pesanan yang sudah dibayar (D5)"
+spec:
+  entity: cafe-order.order
+  # Workflow menempel pada TRANSISI state machine, bukan pada nama action —
+  # dan transisi diidentifikasi lewat pasangan from/to.
+  #
+  # ⚠️ GAP-38 — DI SINI ADA LUBANG PENEGAKAN.
+  # Transisi `void-order` pada entity `order` punya EMPAT state asal:
+  #   from: [paid, in_kitchen, ready, served]  ->  to: cancelled
+  # tetapi `WorkflowTransitionRef.transition.from` di schema bertipe **string
+  # tunggal** (lihat $defs.WorkflowTransitionRef). Jadi satu workflow hanya bisa
+  # mengawal SATU state asal.
+  #
+  # Kalau saya menulis `from: paid` saja (seperti di bawah), maka void dari
+  # `in_kitchen`, `ready`, atau `served` TIDAK melewati approval — padahal itu
+  # justru kasus yang paling sering (makanan sudah dibuat). Penegakannya bocor
+  # tanpa gejala apa pun.
+  #
+  # Untuk menutupnya hari ini butuh EMPAT manifest Workflow identik (satu per
+  # state asal) — diduplikasi, dan muncul sebagai empat jenis tugas terpisah di
+  # ApprovalInbox. Saya sengaja tidak menulis empat file duplikat: itu
+  # menyembunyikan masalahnya alih-alih melaporkannya.
+  # Bentuk yang dibutuhkan: `from` menerima daftar, seperti `TransitionDecl.from`.
+  on:
+    transition:
+      from: paid
+      to: cancelled
+  on_reject:
+    # Ditolak supervisor -> kembali ke state asal, pesanan tetap berjalan.
+    to: paid
+  # GAP-39: `WorkflowStep` TIDAK punya `title`/`description` — schema-nya hanya
+  # {roles, approvers, mode, when, escalation}. Akibatnya tugas approval di
+  # ApprovalInbox supervisor tidak punya label yang menjelaskan APA yang sedang
+  # disetujui; ia hanya tahu "ada tugas menunggu". Padahal untuk memutuskan void,
+  # supervisor perlu melihat nomor pesanan dan nilainya — dan itu tidak bisa
+  # dinyatakan di sini.
+  steps:
+    # Peran, bukan nama pengguna: permission = resource + action; role adalah
+    # konsep IAM. `cafe-order.supervisor` memetakan ke employee berposisi
+    # supervisor/manajer (lihat module cafe-master).
+    - roles: [cafe-order.supervisor]
+      approvers: 1
+      mode: any
+      escalation:
+        # Void yang menggantung berarti status pesanan tidak jelas — layar kasir
+        # dan dapur akan berbeda pendapat. Jadi eskalasi wajib ada.
+        after: "4h"
+        notify_roles: [cafe-order.manajer]

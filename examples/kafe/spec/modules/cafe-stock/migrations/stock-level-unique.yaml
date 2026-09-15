@@ -1,0 +1,30 @@
+apiVersion: formspec.dev/v1
+kind: Migration
+metadata:
+  name: stock-level-unique
+  module: cafe-stock
+  description: "Satu baris saldo stok per (cabang, bahan) (D3) — dasar keandalan HPP"
+spec:
+  module: cafe-stock
+  # Invarian paling penting di module ini: kalau ada DUA baris stock-level untuk
+  # pasangan (cabang, bahan) yang sama, perhitungan biaya rata-rata bergerak
+  # membaca nilai yang salah, dan HPP seluruh menu menjadi salah — tanpa error.
+  #
+  # Entity `stock-level` berkarakteristik `summary` sehingga:
+  #   - tidak punya action create/update  -> `hooks:`/`conditions:` TIDAK
+  #     PERNAH dipanggil (GAP-33)
+  #   - `indexes:` juga tidak dihormati (GAP-22)
+  # Jadi sebelum migration ini, TIDAK ADA satu pun penjaga — deklaratif maupun
+  # di action pipeline. Satu-satunya penjaga adalah disiplin script penulisnya.
+  # Migration ini adalah satu-satunya tempat invarian itu bisa dinyatakan.
+  #
+  # GAP-35: ekspresi JSONB berbeda per driver; MigrationSpec hanya punya satu ddl.
+  # GAP-36: tidak bisa memperbaiki duplikat yang sudah ada (DML ditolak).
+  ddl: >
+    CREATE UNIQUE INDEX idx_uq_cafe_stock_stock_levels_branch_ingredient
+    ON cafe_stock_stock_levels (
+      tenant_id,
+      json_extract(data, '$.branch_id'),
+      json_extract(data, '$.ingredient_id')
+    )
+    WHERE deleted_at IS NULL

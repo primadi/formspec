@@ -1,0 +1,93 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: shift
+  module: cafe-order
+  description: "Shift kasir — kas awal, penjualan, kas masuk/keluar, dan selisih saat tutup"
+spec:
+  version: v1
+  characteristic: transaction
+  plural: shifts
+  lifecycle: plain_crud
+  fields:
+    - name: transaction_date
+      type: date
+      required: true
+      index: true
+      title: "Tanggal Shift"
+    - name: branch_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-master.branch }
+      required: true
+      title: "Cabang"
+    - name: cashier_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-master.employee }
+      required: true
+      title: "Kasir"
+    - name: opened_at
+      type: datetime
+      title: "Waktu Buka"
+    - name: closed_at
+      type: datetime
+      title: "Waktu Tutup"
+    # GAP-01: field uang tanpa widget — titik paling terasa di form tutup shift.
+    - name: opening_cash
+      type: money
+      required: true
+      title: "Kas Awal"
+    - name: expected_cash
+      type: money
+      title: "Kas Seharusnya"
+      description: "compute: kas awal + tunai masuk - kas keluar"
+    - name: counted_cash
+      type: money
+      title: "Kas Hasil Hitung"
+    - name: difference
+      type: money
+      title: "Selisih"
+      computed:
+        formula: "counted_cash - expected_cash"
+    - name: status
+      type: enum
+      enum_values: [open, closed]
+      default: open
+      index: true
+      title: "Status"
+    - name: supervisor_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-master.employee }
+      title: "Supervisor Penyetuju"
+    - name: note
+      type: text
+      title: "Catatan Selisih"
+  state_machine:
+    field: status
+    initial: open
+    states:
+      - { name: open, label: "Terbuka" }
+      - { name: closed, label: "Tutup" }
+    transitions:
+      - { from: open, to: closed, via: close-shift }
+  actions:
+    # Aturan bisnis #14: shift tidak dihapus — rekonsiliasi kas harus utuh.
+    - { name: delete, disabled: true }
+    - { name: submit, disabled: true }
+    - name: close-shift
+      description: "Tutup shift: hitung fisik, tampilkan selisih, konfirmasi (Wizard)"
+      required_permission: shifts.close-shift
+      audit: true
+  indexes:
+    - fields: [branch_id, transaction_date]
+  # ATURAN BISNIS #10 — satu shift terbuka per (cabang, kasir).
+  # Tidak bisa dinyatakan dengan IndexDecl di atas: butuh PARTIAL unique index
+  # (WHERE status = 'open'). Dan GAP-22 membuat `indexes:` diabaikan seluruhnya,
+  # jadi walau predikat parsial didukung pun tetap tidak akan terpasang.
+  # Rencana penutup: `kind: Migration` `shift-open-unique` (D6) di Tahap 3d.
+  # Guard script di bawah adalah penjaga SEMENTARA, bukan pengganti constraint.
+  # GAP-30: deadlock di SQLite (dev).
+  hooks:
+    - on: before
+      action: create
+      impl: { type: script_ref, ref: cafe-order/guard_shift_open_unique }
+  # expose: [] — UI-only.

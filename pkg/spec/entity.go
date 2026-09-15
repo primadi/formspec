@@ -75,16 +75,24 @@ type EntitySpec struct {
 	// @schema {example: "v1"}
 	Version string `yaml:"version" json:"version"`
 	// @schema {example: "invoices"}
-	Plural            string              `yaml:"plural,omitempty" json:"plural,omitempty"`
-	Characteristic    Characteristic      `yaml:"characteristic,omitempty" json:"characteristic,omitempty"`
-	Auth              *EntityAuth         `yaml:"auth,omitempty" json:"auth,omitempty"`
-	Persist           *PersistSpec        `yaml:"persist,omitempty" json:"persist,omitempty"`
-	Fields            []Field             `yaml:"fields" json:"fields"`
-	Actions           []Action            `yaml:"actions" json:"actions"`
-	StateMachine      *StateMachine       `yaml:"state_machine,omitempty" json:"state_machine,omitempty"`
-	Events            []EventDecl         `yaml:"events,omitempty" json:"events,omitempty"`
-	Deliver           []DeliveryDecl      `yaml:"deliver,omitempty" json:"deliver,omitempty"`
-	Indexes           []IndexDecl         `yaml:"indexes,omitempty" json:"indexes,omitempty"`
+	Plural         string         `yaml:"plural,omitempty" json:"plural,omitempty"`
+	Characteristic Characteristic `yaml:"characteristic,omitempty" json:"characteristic,omitempty"`
+	Auth           *EntityAuth    `yaml:"auth,omitempty" json:"auth,omitempty"`
+	Persist        *PersistSpec   `yaml:"persist,omitempty" json:"persist,omitempty"`
+	Fields         []Field        `yaml:"fields" json:"fields"`
+	Actions        []Action       `yaml:"actions" json:"actions"`
+	StateMachine   *StateMachine  `yaml:"state_machine,omitempty" json:"state_machine,omitempty"`
+	Events         []EventDecl    `yaml:"events,omitempty" json:"events,omitempty"`
+	Deliver        []DeliveryDecl `yaml:"deliver,omitempty" json:"deliver,omitempty"`
+	Indexes        []IndexDecl    `yaml:"indexes,omitempty" json:"indexes,omitempty"`
+	// Scope declares row-level scoping enforced by the server on every list/
+	// aggregate read of this entity (S2, #6/#9): `{field, op, from: session|route,
+	// attr|param}`. Unlike a kind's `fixed_filters` — which the browser merges and
+	// a malicious client can simply omit — Scope is resolved server-side from the
+	// request context, so it cannot be widened by editing the query string. Value
+	// sources per entry: `from: session` reads an identity attribute (`attr`);
+	// `from: route` reads the query parameter named by `param`.
+	Scope             []FilterSpec        `yaml:"scope,omitempty" json:"scope,omitempty"`
 	ExtendStorage     *ExtendStorage      `yaml:"extend_storage,omitempty" json:"extend_storage,omitempty"`
 	Expose            []ExposeConfig      `yaml:"expose,omitempty" json:"expose,omitempty"`
 	BackdatePolicy    *BackdatePolicy     `yaml:"backdate_policy,omitempty" json:"backdate_policy,omitempty"`
@@ -330,6 +338,10 @@ type ChildDecl struct {
 	Storage       string  `yaml:"storage" json:"storage"` // "jsonb" or "table"
 	SequenceField string  `yaml:"sequence_field,omitempty" json:"sequence_field,omitempty"`
 	Fields        []Field `yaml:"fields,omitempty" json:"fields,omitempty"`
+	// Picker fills this child field by choosing records from another entity
+	// (S1). Declared here — not on a page/kind — so it works in any Form that
+	// edits the entity, and the write path stays the Form's.
+	Picker *PickerDecl `yaml:"picker,omitempty" json:"picker,omitempty"`
 }
 
 // ComputedDecl defines a computed/derived field.
@@ -386,6 +398,65 @@ func ValidateEntitySpec(d *EntitySpec) error {
 	for _, f := range d.Fields {
 		if IsReservedField(f.Name) {
 			return fmt.Errorf("field %q is a reserved field name and cannot be used as a custom field", f.Name)
+		}
+	}
+
+	// scope (S2, #6/#9): server-enforced row scoping. Every entry must name an
+	// existing field and declare where its value comes from — a scope whose
+	// source is unknown would silently not filter, which is worse than no scope.
+	if len(d.Scope) > 0 {
+		byName := make(map[string]bool, len(d.Fields))
+		for _, f := range d.Fields {
+			byName[f.Name] = true
+		}
+		for i := range d.Scope {
+			sc := &d.Scope[i]
+			if sc.Field == "" {
+				return fmt.Errorf("scope[%d]: field is required", i)
+			}
+			if !byName[sc.Field] && !IsReservedField(sc.Field) {
+				return fmt.Errorf("scope[%d]: field %q is not declared on this entity", i, sc.Field)
+			}
+			switch sc.From {
+			case "session":
+				// `attr` is optional; empty means principal_id.
+			case "route":
+				// `param` is optional; empty means the field name.
+			default:
+				return fmt.Errorf("scope[%d] (%s): from must be \"session\" or \"route\", got %q", i, sc.Field, sc.From)
+			}
+		}
+	}
+
+	// child picker (S1): a child field may be filled by picking from another
+	// entity. Validated here so an unusable picker fails at apply time rather
+	// than rendering a tile grid that cannot write a row.
+	for i := range d.Fields {
+		f := &d.Fields[i]
+		if f.Type == FieldChild && f.Child != nil && f.Child.Picker != nil {
+			if err := ValidatePickerDecl(f.Child.Picker, f.Name, "entity"); err != nil {
+				return err
+			}
+			// The picker writes into fields of this child; naming a field that
+			// does not exist would silently drop the snapshot.
+			rowFields := make(map[string]bool, len(f.Child.Fields))
+			for _, cf := range f.Child.Fields {
+				rowFields[cf.Name] = true
+			}
+			for what, target := range map[string]string{
+				"map.ref_field":      f.Child.Picker.Map.RefField,
+				"map.name_field":     f.Child.Picker.Map.NameField,
+				"map.price_field":    f.Child.Picker.Map.PriceField,
+				"map.quantity_field": f.Child.Picker.Map.QuantityField,
+				"map.note_field":     f.Child.Picker.Map.NoteField,
+			} {
+				if target == "" {
+					continue
+				}
+				if !rowFields[target] {
+					return fmt.Errorf("child field %q picker.%s: %q is not a field of this child (fields: %v)", f.Name, what, target, childFieldNames(f.Child.Fields))
+				}
+			}
 		}
 	}
 
@@ -951,6 +1022,31 @@ func ValidateEventNaming(event EventDecl) error {
 	}
 
 	return nil
+}
+
+// LifecycleFree reports whether the Entity has no document lifecycle, i.e. its
+// records are created directly usable: `doc_status` stays NULL, the lifecycle
+// guards on update/delete are bypassed, and the record can be the target of a
+// `relation` immediately (01-core-basic.md §1.2 referenceability rule).
+//
+// True when:
+//   - `lifecycle: plain_crud` (its literal meaning) or its `none` alias, or
+//   - no explicit lifecycle and characteristic is `master`/`reference` — catalog
+//     data has no draft→submit workflow; the lifecycle is for documents.
+//
+// An explicit `two_step_*` lifecycle always keeps the lifecycle, and an
+// `actions: [{name: submit, disabled: true}]` declaration also disables it.
+func (e *EntitySpec) LifecycleFree() bool {
+	if e == nil {
+		return false
+	}
+	switch e.Lifecycle {
+	case "plain_crud", "none":
+		return true
+	case "":
+		return e.Characteristic == CharMaster || e.Characteristic == CharReference
+	}
+	return false
 }
 
 // PublishDecl configures how an event is published.

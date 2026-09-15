@@ -27,7 +27,7 @@ metadata:
    - `reference` — read-only seed data (provinsi, pajak, COA). Diisi via seeder.
    - `summary` — proyeksi system-managed; tidak ada CUD via API.
 3. **Rancang fields** — lihat tabel tipe di bawah. Setiap field butuh `name`
-   + `type`; `required`, `unique`, `title`, `description` sesuai kebutuhan.
+   - `type`; `required`, `unique`, `title`, `description` sesuai kebutuhan.
 4. **Lifecycle** — `plain_crud` untuk CRUD murni; state machine kalau ada
    alur status (draft → submitted → approved). State machine butuh `states`,
    `initial`, `transitions` (dengan optional `guard`), dan action `submit`.
@@ -39,19 +39,78 @@ metadata:
 
 ## Tipe Field yang Tersedia
 
-| Tipe | Catatan |
-|---|---|
-| `string`, `text` | text = panjang, multiline |
-| `integer`, `decimal` | decimal punya `precision` + `scale` (mis. scale: 2 untuk uang desimal) |
-| `money` | selalu untuk nilai uang — jangan pakai decimal/float |
-| `boolean` | |
-| `date`, `datetime` | |
-| `enum` | wajib `enum_values: [...]` |
-| `relation` | referensi entity lain; wajib `target` |
+| Tipe                 | Catatan                                                                                                                        |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `string`, `text`     | text = panjang, multiline                                                                                                      |
+| `integer`, `decimal` | decimal punya `precision` + `scale` (mis. scale: 2 untuk uang desimal)                                                         |
+| `money`              | selalu untuk nilai uang — jangan pakai decimal/float                                                                           |
+| `boolean`            |                                                                                                                                |
+| `date`, `datetime`   |                                                                                                                                |
+| `enum`               | wajib `enum_values: [...]`                                                                                                     |
+| `relation`           | referensi entity lain — `relation: {type: belongs_to, resource: "<module>.<entity>"}` (key-nya **`resource`**, bukan `target`) |
 
 ## Aturan Penting
 
+- **Baris child diisi dengan memilih, bukan mengetik.** Kalau barisnya
+  mereferensi master data (menu, bahan, produk, akun), deklarasikan `picker:`
+  pada child field — bukan bikin kind/halaman sendiri:
+
+  ```yaml
+  - name: lines
+    type: child
+    child:
+      picker:
+        entity: cafe-master.menu-item
+        filter: { is_available: "true" }
+        display:
+          { name_field: name, image_field: photo, columns: 3, search: true }
+        map:
+          ref_field: menu_item_id # WAJIB
+          name_field: name_snapshot # snapshot
+          price_field: unit_price_snapshot # snapshot
+          quantity_field: quantity
+          max_quantity: 20 # WAJIB bila ada quantity_field
+  ```
+
+  Field di `map` harus ada di `child.fields`. Tanpa `quantity_field`, satu pilih
+  = satu baris (daftar/jurnal). Harga boleh dari entity lain via
+  `display.price_entity` + `price_match_field` + `price_field`. Form menaruhnya
+  dengan `render: { picker_panel: inline | aside }`.
+
+- **Nilai yang tidak diisi user → `default_from` + `widget: hidden`**, bukan
+  field yang tampil terisi. Contoh: `{ field: branch_id, widget: hidden,
+default_from: "{session.branch_id}" }`; token `{now}`/`{today}` juga tersedia.
 - **Uang selalu `money`** — bukan decimal/integer.
+- **`money` berhitung langsung.** Nilainya objek `{amount, currency}`, tetapi
+  `computed`/guard menulisnya sebagai operand biasa; jangan bongkar objeknya:
+
+  ```yaml
+  # BENAR
+  - { name: change, type: money, computed: { formula: "tendered - amount" } }
+  - {
+      name: line_total,
+      type: money,
+      computed: { formula: "quantity * unit_price" },
+    }
+  - {
+      name: total,
+      type: money,
+      computed: { formula: 'sum([i["line_total"] for i in lines])' },
+    }
+  ```
+
+  | Aturan                                            | Konsekuensi                             |
+  | ------------------------------------------------- | --------------------------------------- |
+  | `money ± money`                                   | boleh; mata uang harus sama             |
+  | `money × / number`                                | boleh (`money / money` → rasio angka)   |
+  | `money` vs angka mentah (`total > 100`)           | **error** — pakai `amount(total) > 100` |
+  | Operand bukan angka (objek non-money, list, teks) | **error**, bukan `0`                    |
+
+  Untuk agregasi (`columns[].aggregate`, `totals[].fn`, widget
+  `config.aggregate`): `sum`/`avg`/`min`/`max` atas field `money` menjumlahkan
+  komponen `.amount`-nya; field non-numerik ditolak `formspec check` — bukan
+  total `0`. `count` bebas.
+
 - **`transaction_date` wajib** untuk characteristic `transaction`.
 - **Natural key** (`natural_key: [field]`) untuk kode bisnis unik
   (mis. `INV-2026-001`) — dipakai next_key, bukan ID teknis.
@@ -59,6 +118,21 @@ metadata:
 - **Cross-module reference** harus dideklarasikan di `depends` module.
 - **Reserved fields** tidak boleh dipakai sebagai nama field (id, created_at,
   updated_at, version, dst. — dikelola framework).
+
+## Starlark — Batasan Dialek (script & hook)
+
+Script `impl: {type: script_ref, ref: <module>/<name>}` dan `hooks:` ditulis
+dalam **Starlark**, bukan Python penuh. Dua batasan yang paling sering membuat
+script gagal:
+
+- **Tidak ada implicit string concatenation.** `"a" "b"` adalah _syntax error_
+  (`got string literal, want ','`) — gabungkan dengan `+`.
+- **Query ber-parameter memakai satu argumen list**: `ctx.db().query(sql, [a, b])`,
+  bukan varargs `ctx.db().query(sql, a, b)`.
+
+Jalankan `formspec validate` — script yang dirujuk `impl.ref`/`hooks:`
+dikompilasi, dan script yang gagal kompilasi atau tidak ditemukan dilaporkan
+sebagai error.
 
 ## Validasi
 

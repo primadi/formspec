@@ -210,6 +210,52 @@ penyimpanan jumlah+mata uang, pembulatan, dan format. Menjumlahkan dua `money`
 dengan kode mata uang berbeda tanpa konversi eksplisit adalah error, bukan
 operasi diam-diam.
 
+### 2.1 Aritmetika & agregasi `money` (Normatif)
+
+Nilai `money` di wire dan di penyimpanan selalu objek `{amount, currency}`.
+Operasi atasnya **tidak** butuh sintaks pembungkus: nilai `money` adalah operand
+biasa. Operand diklasifikasikan menjadi **money** atau **skalar** (number,
+string numerik, boolean).
+
+| Ekspresi                   | Hasil   | Syarat                                             |
+| -------------------------- | ------- | -------------------------------------------------- |
+| `m + m`, `m - m`           | `money` | mata uang sama; berbeda → error                    |
+| `m * n`, `n * m`, `m / n`  | `money` | `n` skalar; pembagi 0 → error                      |
+| `m1 / m2`                  | number  | rasio (mis. margin); mata uang sama                |
+| `-m`                       | `money` |                                                    |
+| `m1 <op> m2` (`< <= > >=`) | boolean | mata uang sama                                     |
+| `m1 == m2`, `m1 != m2`     | boolean | kesetaraan **nilai** (deep), bukan identitas objek |
+| `amount(m)`                | number  | ekstraksi eksplisit komponen jumlah                |
+| `currency(m)`              | string  | kode ISO-4217                                      |
+| `sum([m…])`                | `money` | semua elemen money & securrency                    |
+
+**Tidak ada koersi diam-diam.** Operand yang bukan money dan bukan skalar —
+objek non-money, list, atau string non-numerik — **error evaluasi**, bukan `0`.
+Operan `money` yang digabung dengan angka mentah juga error (angkanya tidak punya
+satuan): untuk membandingkan atau mencampurnya dengan skalar, ekstrak dulu
+komponennya (`amount(m)`), supaya perbedaan satuan terlihat di spec, bukan di
+laporan keuangan.
+
+**Presisi.** Aritmetika `money` eksak (desimal), bukan floating point: hasilnya
+dirender pada skala operand tanpa nol tak bermakna di belakang koma
+(`2 × 25000` → `50000`, `0.1 + 0.2` → `0.3`, `25000 * 0.5` → `12500`). Nol
+belakang sengaja dibuang supaya hasil yang eksak tidak "mengaku" punya presisi
+yang lebih tinggi daripada field-nya: `12500.0` akan ditolak field IDR
+(`decimal_places: 0`) padahal nilainya tepat. Hasil yang melebihi
+`decimal_places` field tetap ditolak saat validasi nilai (§3), bukan dipotong
+diam-diam.
+
+**Agregasi.** `sum`/`avg`/`min`/`max` atas field `money`
+(`columns[].aggregate`, `totals[].fn`, widget `config.aggregate`) mengagregasi
+**komponen `.amount`**-nya. Field yang bukan numerik dan bukan money ditolak:
+`formspec check` melaporkannya sebagai error statis, dan runtime menolaknya
+sebagai error — bukan total `0` yang terlihat meyakinkan. `count` bebas (boleh
+atas field apa pun, boleh tanpa field).
+
+Aturan yang sama berlaku di semua tempat ekspresi dievaluasi — guard/when
+Starlark server ([`../runtimes/`](../../runtimes/)), `computed` field, dan
+FormSpecExpr di renderer ([`../frontend/08-formspec-expr.md`](../frontend/08-formspec-expr.md) §5).
+
 ## 3. Validasi Field
 
 `rules` di sebuah field adalah **himpunan tertutup** kosakata di bawah. Rule

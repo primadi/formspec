@@ -319,7 +319,8 @@ var FormAuthActions = map[string]bool{
 
 // ValidateFormSpec validates a FormSpec: `auth_action` (when set) must be a
 // known auth action and is mutually exclusive with `entity`; context
-// declarations are validated.
+// declarations are validated; every field `widget:` is a member of the closed
+// widget set (S10).
 func ValidateFormSpec(f *FormSpec) error {
 	if f.AuthAction != "" {
 		if !FormAuthActions[f.AuthAction] {
@@ -333,6 +334,9 @@ func ValidateFormSpec(f *FormSpec) error {
 	}
 	if err := ValidateContextDecls(f.Context); err != nil {
 		return fmt.Errorf("form: %w", err)
+	}
+	if err := ValidateFormSections(f.Sections, "form"); err != nil {
+		return err
 	}
 	return nil
 }
@@ -350,16 +354,22 @@ type FormSection struct {
 // YAML uses `field:` to reference the Entity field name; JSON serializes as
 // `name:` to match the TypeScript FormField interface.
 type FormField struct {
-	Field        string `yaml:"field" json:"name"`
-	Label        string `yaml:"label,omitempty" json:"label,omitempty"`
-	Placeholder  string `yaml:"placeholder,omitempty" json:"placeholder,omitempty"`
-	Help         string `yaml:"help,omitempty" json:"help,omitempty"`
-	Widget       string `yaml:"widget,omitempty" json:"widget,omitempty"`
-	ReadOnly     bool   `yaml:"read_only,omitempty" json:"read_only,omitempty"`
-	ReadonlyWhen string `yaml:"readonly_when,omitempty" json:"readonly_when,omitempty"`
-	RequiredWhen string `yaml:"required_when,omitempty" json:"required_when,omitempty"`
-	VisibleWhen  string `yaml:"visible_when,omitempty" json:"visible_when,omitempty"`
-	Compute      string `yaml:"compute,omitempty" json:"compute,omitempty"`
+	Field        string     `yaml:"field" json:"name"`
+	Label        string     `yaml:"label,omitempty" json:"label,omitempty"`
+	Placeholder  string     `yaml:"placeholder,omitempty" json:"placeholder,omitempty"`
+	Help         string     `yaml:"help,omitempty" json:"help,omitempty"`
+	Widget       FormWidget `yaml:"widget,omitempty" json:"widget,omitempty"`
+	ReadOnly     bool       `yaml:"read_only,omitempty" json:"read_only,omitempty"`
+	ReadonlyWhen string     `yaml:"readonly_when,omitempty" json:"readonly_when,omitempty"`
+	RequiredWhen string     `yaml:"required_when,omitempty" json:"required_when,omitempty"`
+	VisibleWhen  string     `yaml:"visible_when,omitempty" json:"visible_when,omitempty"`
+	Compute      string     `yaml:"compute,omitempty" json:"compute,omitempty"`
+	// DefaultFrom seeds the field's initial value from the render context: a
+	// literal, or a template with `{dotted.path}` (e.g. `{session.branch_id}`)
+	// plus the block-local `{now}` / `{today}`. Use with `widget: hidden` to
+	// carry values the user must not see (branch, session, timestamp).
+	// @schema {example: "{session.branch_id}"}
+	DefaultFrom string `yaml:"default_from,omitempty" json:"default_from,omitempty"`
 }
 
 // FormAction is a custom action button on a form (Frontend §4).
@@ -388,6 +398,11 @@ type FormRender string
 type FormRenderDecl struct {
 	// @schema {description: "Render mode: modal (popup dialog), drawer (side panel), separate_page (full page)", enum: ["modal", "drawer", "separate_page"]}
 	Mode FormRender `yaml:"mode" json:"mode"`
+	// PickerPanel places the child-field picker relative to the rest of the
+	// form: `inline` (default) renders the tiles above the child grid, `aside`
+	// gives them their own column beside the selection panel and submit.
+	// @schema {enum: ["", "inline", "aside"]}
+	PickerPanel string `yaml:"picker_panel,omitempty" json:"picker_panel,omitempty"`
 }
 
 // UnmarshalYAML accepts either the scalar shorthand ("separate_page") or the
@@ -426,14 +441,14 @@ type TableSpec struct {
 
 // TableColumn configures a table column.
 type TableColumn struct {
-	Field    string `yaml:"field" json:"field"`
-	Label    string `yaml:"label,omitempty" json:"label,omitempty"`
-	Sortable bool   `yaml:"sortable,omitempty" json:"sortable,omitempty"`
-	Width    string `yaml:"width,omitempty" json:"width,omitempty"`
-	Align    string `yaml:"align,omitempty" json:"align,omitempty"`   // left | center | right
-	Link     string `yaml:"link,omitempty" json:"link,omitempty"`     // Page name to navigate to
-	Format   string `yaml:"format,omitempty" json:"format,omitempty"` // currency | date | relative | ...
-	Widget   string `yaml:"widget,omitempty" json:"widget,omitempty"` // badge | ...
+	Field    string          `yaml:"field" json:"field"`
+	Label    string          `yaml:"label,omitempty" json:"label,omitempty"`
+	Sortable bool            `yaml:"sortable,omitempty" json:"sortable,omitempty"`
+	Width    string          `yaml:"width,omitempty" json:"width,omitempty"`
+	Align    string          `yaml:"align,omitempty" json:"align,omitempty"`   // left | center | right
+	Link     string          `yaml:"link,omitempty" json:"link,omitempty"`     // Page name to navigate to
+	Format   string          `yaml:"format,omitempty" json:"format,omitempty"` // currency | date | relative | ...
+	Widget   TableCellWidget `yaml:"widget,omitempty" json:"widget,omitempty"`
 }
 
 // TableAction is a clickable action on a table row or bulk selection.
@@ -455,6 +470,12 @@ type TableAction struct {
 //
 // The resolved value is sent to the list API as `field[op]=value`, so `op`
 // defaults to "eq" and follows the backend filter operator set.
+//
+// A value can also come from the request context instead of the manifest, via
+// `from` (S2/#6): `from: session` takes it from an identity attribute named by
+// `attr` and is resolved server-side only (a client cannot supply or widen it),
+// while `from: route` takes it from the query parameter named by `param` (e.g. an
+// unguessable guest token, where the token itself is the credential).
 type FilterSpec struct {
 	Field string `yaml:"field" json:"field"`
 	Label string `yaml:"label,omitempty" json:"label,omitempty"`
@@ -464,6 +485,12 @@ type FilterSpec struct {
 	Op string `yaml:"op,omitempty" json:"op,omitempty"` // default "eq"
 	// @schema {description: "Pre-set value for a user-adjustable filter. Supports \"today\" / \"today()\", resolved by the renderer as the server's current date."}
 	Default string `yaml:"default,omitempty" json:"default,omitempty"`
+	// @schema {description: "Where the value comes from at request time: session (identity attribute in `attr`) or route (query parameter in `param`). Empty = static `default`.", enum: ["session", "route"]}
+	From string `yaml:"from,omitempty" json:"from,omitempty"`
+	// @schema {description: "Identity attribute for `from: session`: principal_id | username | workspace | an application attribute.", example: "branch_id"}
+	Attr string `yaml:"attr,omitempty" json:"attr,omitempty"`
+	// @schema {description: "Query parameter name for `from: route`. Defaults to the field name.", example: "token"}
+	Param string `yaml:"param,omitempty" json:"param,omitempty"`
 	// @schema {description: "For select filters: show the \"All\" (clear) option. Default true."}
 	ShowAll *bool `yaml:"show_all,omitempty" json:"show_all,omitempty"`
 	// @schema {description: "For select filters: caption of the \"All\" (clear) option. Default \"(ALL)\"."}

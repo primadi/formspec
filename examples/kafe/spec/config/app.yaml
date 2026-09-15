@@ -1,0 +1,26 @@
+# Pengaturan GLOBAL tingkat App/workspace — namespace `settings`.
+#
+# WAJIB ADA untuk aplikasi ini. `pkg/spec/money.go` -> ResolveMoneyCurrency
+# menyelesaikan mata uang dengan urutan: `currency` eksplisit di field ->
+# `settings.currency` -> ERROR ("never guess"). Karena seluruh spec kafe penuh
+# field `money` tanpa `currency` eksplisit, TANPA blok settings ini aplikasi
+# akan gagal saat runtime — bukan saat validasi. Ditemukan lewat verifikasi
+# schema, dicatat sebagai GAP-26.
+apiVersion: formspec.dev/v1
+kind: Config
+metadata:
+  name: app-settings
+  description: "Pengaturan global kafe: mata uang, locale, zona waktu, format"
+spec:
+  settings:
+    currency:
+      code: IDR
+      # Rupiah tidak memakai sen dalam praktik kafe.
+      decimal_places: 0
+      symbol: "Rp"
+    locale: "id-ID"
+    timezone: "Asia/Jakarta"
+    date_format: "DD/MM/YYYY"
+    decimal_scale: 2
+    # Banker's rounding — dipakai semua komponen, tidak ada yang menebak sendiri.
+    rounding: "half_even"

@@ -1,0 +1,52 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: cash-movement
+  module: cafe-order
+  description: "Kas masuk/keluar di luar penjualan (beli bahan, setor bank, kas kecil)"
+spec:
+  version: v1
+  characteristic: transaction
+  plural: cash-movements
+  fields:
+    - name: transaction_date
+      type: datetime
+      required: true
+      index: true
+      title: "Waktu"
+    - name: shift_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-order.shift }
+      required: true
+      title: "Shift"
+    - name: branch_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-master.branch }
+      required: true
+      title: "Cabang"
+    - name: type
+      type: enum
+      enum_values: [in, out]
+      required: true
+      title: "Arah"
+    # GAP-01/GAP-02: field uang.
+    - name: amount
+      type: money
+      required: true
+      title: "Jumlah"
+    - name: reason
+      type: enum
+      enum_values: [drop_to_safe, buy_supplies, petty_cash, bank_deposit, other]
+      required: true
+      title: "Alasan"
+    - name: employee_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-master.employee }
+      title: "Dicatat Oleh"
+    - name: note
+      type: string
+      title: "Catatan"
+  actions:
+    # Aturan bisnis #14: buku kas tidak dihapus — koreksi lewat entri lawan.
+    - { name: delete, disabled: true }
+  # expose: [] — UI-only.

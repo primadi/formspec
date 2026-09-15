@@ -1,0 +1,82 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: table-session
+  module: cafe-order
+  description: "Satu kunjungan pelanggan di satu meja — induk pesanan QR dan pemegang token akses pelanggan"
+spec:
+  version: v1
+  characteristic: transaction
+  plural: table-sessions
+  display_field: guest_token
+  lifecycle: plain_crud
+  fields:
+    - name: transaction_date
+      type: datetime
+      required: true
+      index: true
+      title: "Waktu Mulai Sesi"
+    - name: branch_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-master.branch }
+      required: true
+      title: "Cabang"
+    - name: dining_table_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-master.dining-table }
+      required: true
+      title: "Meja"
+    # GAP-06: ini PENGAMAN PENGGANTI, bukan desain ideal. App `access: public`
+    # memberi anonim `list`/`find` untuk SELURUH entity di module yang di-mount,
+    # sehingga tanpa token ini pelanggan bisa membaca pesanan meja lain.
+    # Idealnya: allowlist publik per-entity + scoping per-record.
+    - name: guest_token
+      type: string
+      required: true
+      unique: true
+      title: "Token Tamu"
+      description: "Token acak — kunci akses pelanggan ke pesanan & struk digitalnya"
+    - name: guest_name
+      type: string
+      title: "Nama Tamu"
+    - name: guest_count
+      type: integer
+      default: 1
+      title: "Jumlah Orang"
+    - name: member_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-master.member }
+      title: "Member"
+      description: "Diisi bila tamu memasukkan nomor HP terdaftar"
+    - name: closed_at
+      type: datetime
+      title: "Waktu Selesai"
+    - name: status
+      type: enum
+      enum_values: [open, closed, abandoned]
+      default: open
+      index: true
+      title: "Status"
+  state_machine:
+    field: status
+    initial: open
+    states:
+      - { name: open, label: "Terbuka" }
+      - { name: closed, label: "Selesai" }
+      - { name: abandoned, label: "Ditinggalkan" }
+    transitions:
+      - { from: open, to: closed, via: close-session }
+      - { from: open, to: abandoned, via: abandon }
+  actions:
+    - { name: submit, disabled: true }
+    - name: close-session
+      description: "Tutup sesi meja (meja jadi kosong)"
+      required_permission: table-sessions.close-session
+      audit: true
+      # Guard ideal: semua order di sesi ini sudah tidak ada yang berstatus
+      # draft/awaiting_payment. Logika lintas-record -> script hook, bukan expr.
+    - name: abandon
+      description: "Tandai sesi ditinggalkan"
+      required_permission: table-sessions.abandon
+      audit: true
+  # expose: [] — UI-only.

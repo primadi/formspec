@@ -1,0 +1,125 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: purchase-order
+  module: cafe-stock
+  description: "Pesanan pembelian bahan dari supplier. Penerimaan barang = transisi status, bukan entity terpisah."
+spec:
+  version: v1
+  characteristic: transaction
+  plural: purchase-orders
+  display_field: number
+  lifecycle: plain_crud
+  fields:
+    - name: number
+      type: string
+      required: true
+      unique: true
+      natural_key: true
+      natural_key_rule:
+        strategy: sequence
+        format: "PO-{year}-{seq:05d}"
+        reset: yearly
+      title: "Nomor PO"
+    - name: transaction_date
+      type: date
+      required: true
+      index: true
+      title: "Tanggal PO"
+    - name: branch_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-master.branch }
+      required: true
+      title: "Cabang Penerima"
+    - name: supplier_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-stock.supplier }
+      required: true
+      title: "Supplier"
+    - name: expected_date
+      type: date
+      title: "Perkiraan Tiba"
+    - name: status
+      type: enum
+      enum_values: [draft, submitted, received, cancelled]
+      default: draft
+      index: true
+      title: "Status"
+    # GAP-01/GAP-02: field uang.
+    - name: total_amount
+      type: money
+      title: "Total"
+    - name: note
+      type: text
+      title: "Catatan"
+    - name: lines
+      type: child
+      child:
+        storage: jsonb
+        sequence_field: line_no
+        # Baris dipilih dari daftar bahan (S1) — pola yang sama dengan keranjang
+        # pesanan; hanya sumbernya berbeda. Tidak ada harga di sini: `unit_cost`
+        # diisi manual karena harga beli berubah-ubah (tidak ada price entity).
+        picker:
+          entity: cafe-stock.ingredient
+          display:
+            name_field: name
+            columns: 3
+            search: true
+          map:
+            ref_field: ingredient_id
+            quantity_field: quantity
+            max_quantity: 10000
+        fields:
+          - name: line_no
+            type: integer
+            title: "No."
+          - name: ingredient_id
+            type: relation
+            relation: { type: belongs_to, resource: cafe-stock.ingredient }
+            required: true
+            title: "Bahan"
+          - name: quantity
+            type: decimal
+            scale: 3
+            required: true
+            title: "Jumlah Dipesan"
+          - name: unit_cost
+            type: money
+            required: true
+            title: "Harga Satuan"
+          - name: subtotal
+            type: money
+            title: "Subtotal"
+          - name: received_quantity
+            type: decimal
+            scale: 3
+            title: "Jumlah Diterima"
+  state_machine:
+    field: status
+    initial: draft
+    states:
+      - { name: draft, label: "Draft" }
+      - { name: submitted, label: "Dikirim" }
+      - { name: received, label: "Diterima" }
+      - { name: cancelled, label: "Dibatalkan" }
+    transitions:
+      - { from: draft, to: submitted, via: submit-po }
+      - { from: draft, to: cancelled, via: cancel-po }
+      - { from: submitted, to: received, via: receive-goods }
+      - { from: submitted, to: cancelled, via: cancel-po }
+  actions:
+    - { name: submit, disabled: true }
+    - name: submit-po
+      description: "Kirim pesanan ke supplier"
+      required_permission: purchase-orders.submit-po
+      audit: true
+    - name: cancel-po
+      description: "Batalkan pesanan beli"
+      required_permission: purchase-orders.cancel-po
+      audit: true
+    - name: receive-goods
+      description: "Terima barang — script membuat stock-movement (in) per baris"
+      required_permission: purchase-orders.receive-goods
+      audit: true
+  # expose: [] — UI-only.

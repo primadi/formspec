@@ -1,0 +1,52 @@
+apiVersion: formspec.dev/v1
+kind: Form
+metadata:
+  name: order-form-qr
+  module: cafe-order
+  description: "Pemesanan mandiri pelanggan dari QR meja — katalog + keranjang + kirim"
+spec:
+  entity: cafe-order.order
+  mode: create
+  # Permukaan publik: pelanggan anonim (aturan bisnis #3).
+  public: true
+  render:
+    mode: separate_page
+    # `aside` memberi katalog kolomnya sendiri — katalog jadi permukaan utama,
+    # panel pilihan + catatan + tombol kirim di sebelahnya. Field child
+    # (`lines`) dirender oleh panel ini, bukan dua kali sebagai child grid.
+    picker_panel: aside
+  # Sesi meja diselesaikan dari ID di route; blok `picker` memakai
+  # `{session.branch_id}` untuk harga per cabang.
+  #
+  # Alur scan QR hari ini DUA LANGKAH: token QR meja → sesi dibuat/ditemukan oleh
+  # aplikasi → halaman ini dibuka dengan ID sesi. Menjadikan token itu sendiri
+  # sebagai kunci milik tamu adalah item tersendiri (TODO 2.2, sisa #45).
+  context:
+    - name: session
+      source: entity
+      entity: cafe-order.table-session
+      id: "{route.params.session_id}"
+  sections:
+    - title: "Pesanan"
+      fields:
+        # Field yang TIDAK boleh dilihat tamu: kanal, waktu, dan identitas sesi.
+        # `widget: hidden` menyimpannya di state form (ikut terkirim) tanpa
+        # merender apa pun; nilainya diisi dari render context.
+        - { field: channel, widget: hidden, default_from: "qr_table" }
+        - { field: transaction_date, widget: hidden, default_from: "{now}" }
+        - { field: table_session_id, widget: hidden, default_from: "{session.id}" }
+        - { field: dining_table_id, widget: hidden, default_from: "{session.dining_table_id}" }
+        - { field: branch_id, widget: hidden, default_from: "{session.branch_id}" }
+        - field: guest_note
+          widget: textarea
+          label: "Catatan untuk dapur"
+          help: "Mis. alergi, tanpa gula, atau permintaan lain."
+        # `lines` dirender oleh panel picker (kolom kiri) karena
+        # `picker_panel: aside` — label di sini yang menjadi judul panel itu.
+        - { field: lines, label: "Keranjang" }
+  # Catatan jangkauan: form ini mengirim PESANAN, bukan pembayaran.
+  #
+  # - `subtotal`/`line_total` dihitung server-side (`computed` pada entity),
+  #   jadi form tidak mengirim angka uang sama sekali.
+  # - Field uang (numpad, kembalian) belum punya widget — TODO 2.14.
+  # - Penyelesaian (bayar tunai/QRIS, void) dilakukan kasir di kafe-pos.

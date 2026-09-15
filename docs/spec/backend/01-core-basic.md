@@ -143,6 +143,83 @@ order. Katalog field-nya sendiri ada di
 `draft`/lifecycle-free) | `set_null` (hanya valid kalau field tidak
 `required`).
 
+**`picker` — mengisi baris dengan memilih, bukan mengetik.** Sebuah `child`
+boleh menetapkan `picker:`, yang membuat barisnya diisi dengan **memilih record
+dari entity lain** alih-alih mengetik satu per satu:
+
+```yaml
+- name: lines
+  type: child
+  child:
+    storage: jsonb
+    sequence_field: line_no
+    picker:
+      entity: cafe-master.menu-item # sumber baris (relatif ke module, atau "module.entity")
+      filter: { is_available: "true" } # pre-filter; nilainya boleh template {token}
+      display: # apa yang dilihat user (tile)
+        name_field: name
+        image_field: photo
+        description_field: description
+        category_field: menu_category_id # chip filter
+        price_entity: cafe-master.menu-item-price # harga dari entity lain (mis. per cabang)
+        price_match_field: menu_item_id
+        price_field: price
+        price_filter: { branch_id: "{session.branch_id}" }
+        columns: 3
+        search: true
+        empty_text: "Menu belum tersedia"
+      map: # apa yang DITULIS ke baris
+        ref_field: menu_item_id # WAJIB — relasi kembali ke record sumber
+        name_field: name_snapshot # snapshot
+        price_field: unit_price_snapshot # snapshot
+        quantity_field: quantity
+        note_field: note
+        max_quantity: 20
+    fields:
+      - {
+          name: menu_item_id,
+          type: relation,
+          relation: { resource: cafe-master.menu-item },
+        }
+      - { name: name_snapshot, type: string }
+      - { name: unit_price_snapshot, type: money }
+      - { name: quantity, type: integer }
+      - { name: note, type: string }
+```
+
+Alasan deklarasinya ada **di field child**, bukan di kind/halaman:
+
+- **Berlaku di mana saja.** Form apa pun (dan langkah Wizard) yang mengedit
+  entity itu mendapatkannya — susunan pesanan, pesanan pembelian, hitung stok,
+  perpindahan stok, jurnal, resep, checklist: semuanya pola "pilih baris dari
+  sumber + bawa jumlah + snapshot".
+- **Jalur tulisnya tetap milik Form.** Baris yang dipilih adalah baris child
+  biasa di state form, jadi submit memakai jalur yang sudah ada — validasi
+  `rules`, permission, idempotency, `action:` lifecycle, redirect, dan event.
+  Tidak ada jalur tulis kedua yang perlu dipelihara.
+
+Aturan normatif:
+
+| Aturan                                                            | Konsekuensi                                                                                                         |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `map.ref_field` wajib                                             | Tanpa relasi kembali ke sumber, baris tidak bisa dipetakan ulang                                                    |
+| Field di `map` wajib ada di `child.fields`                        | Snapshot yang menunjuk field tak ada akan hilang diam-diam — ditolak saat `formspec apply`                          |
+| `quantity_field` wajib disertai `map.max_quantity`                | Batas per baris harus **dipilih**, tidak boleh tak terbatas (salah ketik di perangkat bersama = jumlah tak sengaja) |
+| Tanpa `quantity_field` → satu baris per pilih                     | Kasus daftar (mis. baris jurnal memilih akun; checklist memilih item)                                               |
+| `price_entity` wajib disertai `price_match_field` + `price_field` | Join harga dinyatakan, tidak ditebak                                                                                |
+| Baris tanpa harga → tampil, **tidak bisa dipilih**                | Tidak ada harga = tidak ada yang dijual; lebih baik tidak bisa dipilih daripada terkirim sebagai `0`                |
+| Snapshot (`name_field`/`price_field`)                             | Denormalisasi finansial (D2): record lama tetap terbaca setelah sumber berubah                                      |
+| Nilai `filter`/`price_filter` boleh template                      | `{dotted.path}` dari render context, plus `{now}`/`{today}`; token yang tak terselesaikan dibiarkan verbatim        |
+
+Pickernya **tidak** menghitung atau menyimpan total apa pun: total tetap urusan
+`computed` field entity ([`05-field-types.md`](05-field-types.md) §2.1). Tampilan
+berjalannya (subtotal pilihan) murni UI.
+
+Sisi renderer: Form menempatkannya lewat `render.picker_panel` — `inline`
+(default: tile di atas child grid, grid tetap editor barisnya) atau `aside`
+(tile **dan** editor baris di kolom sendiri; child grid untuk field itu tidak
+dirender dua kali) — lihat [`../frontend/06-page-kinds.md`](../frontend/06-page-kinds.md).
+
 ### 1.4 `spec.auth` — Persyaratan Autentikasi
 
 Entity (dan Service, `pkg/spec/resources.go`) boleh mendeklarasikan

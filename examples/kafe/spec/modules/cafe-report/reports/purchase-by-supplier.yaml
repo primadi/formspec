@@ -1,0 +1,26 @@
+apiVersion: formspec.dev/v1
+kind: Report
+metadata:
+  name: purchase-by-supplier
+  module: cafe-report
+  description: "Pembelian bahan per supplier"
+spec:
+  title: "Pembelian per Supplier"
+  entity: cafe-stock.purchase-order
+  parameters:
+    - { field: date_from, label: "Dari Tanggal", type: date, required: true }
+    - { field: date_to, label: "Sampai Tanggal", type: date, required: true }
+    - { field: branch_id, label: "Cabang", type: relation }
+    - { field: supplier_id, label: "Supplier", type: relation }
+  columns:
+    - { field: number, label: "No. PO" }
+    - { field: transaction_date, label: "Tanggal", format: date }
+    - { field: supplier_id, label: "Supplier" }
+    - { field: status, label: "Status" }
+    - { field: total_amount, label: "Total", format: currency, aggregate: sum }
+  groups:
+    - { field: supplier_id, label: "Supplier" }
+  totals:
+    - { label: "Total Pembelian", field: total_amount, fn: sum }
+  # CATATAN: vertical `purchase` tidak ada di FormSpec (GAP-14) — supplier &
+  # purchase-order dimodelkan sendiri di module cafe-stock.

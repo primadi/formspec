@@ -1,0 +1,76 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: stock-movement
+  module: cafe-stock
+  description: "Ledger pergerakan bahan (append-only) — SUMBER HPP: unit_cost dibekukan di sini"
+spec:
+  version: v1
+  characteristic: transaction
+  plural: stock-movements
+  lifecycle: plain_crud
+  fields:
+    - name: transaction_date
+      type: datetime
+      required: true
+      index: true
+      title: "Waktu Pergerakan"
+    - name: branch_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-master.branch }
+      required: true
+      title: "Cabang"
+    - name: ingredient_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-stock.ingredient }
+      required: true
+      index: true
+      title: "Bahan"
+    - name: direction
+      type: enum
+      enum_values: [in, out, adjust]
+      required: true
+      title: "Arah"
+    - name: quantity
+      type: decimal
+      scale: 3
+      required: true
+      title: "Jumlah"
+    # D3 — INTI perhitungan margin. Nilai dibekukan saat pergerakan:
+    #   masuk  (pembelian) -> harga beli
+    #   keluar (penjualan) -> biaya rata-rata bergerak saat itu
+    # Penjualan TIDAK BOLEH memakai ingredient.cost_per_unit (acuan statis),
+    # karena itu membuat margin historis berubah surut.
+    # GAP-01/GAP-02: field uang.
+    - name: unit_cost
+      type: money
+      required: true
+      title: "Biaya per Satuan (beku)"
+    - name: total_cost
+      type: money
+      title: "Total Biaya"
+    - name: source
+      type: enum
+      enum_values: [purchase, sale, waste, opname, manual]
+      required: true
+      index: true
+      title: "Sumber"
+    - name: source_ref
+      type: string
+      index: true
+      title: "Referensi Sumber"
+      description: "ID pesanan / PO / opname — untuk telusur balik"
+    - name: note
+      type: string
+      title: "Catatan"
+  indexes:
+    - fields: [branch_id, transaction_date]
+    # GAP-11 CATATAN PENTING: JANGAN set `persist.category` berbeda antara
+    # stock-movement (operational) dan menu-cost/journal-entry (financial).
+    # Resolusi relasi lintas kategori DIBLOKIR SENYAP (log warning saja,
+    # bukan error) sehingga label relasi hilang tanpa pesan.
+  actions:
+    # Aturan bisnis #14: ledger stok bersifat append-only — koreksi lewat
+    # pergerakan lawan (adjust), bukan delete.
+    - { name: delete, disabled: true }
+  # expose: [] — UI-only.

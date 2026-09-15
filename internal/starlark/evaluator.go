@@ -10,11 +10,12 @@ package starlark
 import (
 	"fmt"
 	"math"
-	"strconv"
 	"time"
 
 	"go.starlark.net/starlark"
 	"go.starlark.net/syntax"
+
+	"github.com/primadi/formspec/pkg/spec"
 )
 
 // EvalExpr evaluates a Starlark expression with the given environment variables.
@@ -32,17 +33,11 @@ import (
 // is accessible directly (not via `data.subtotal`). Use bracket syntax for computed
 // keys: data["key"].
 func EvalExpr(expr string, env map[string]any) (any, error) {
-	// Build predeclared identifiers from env
-	predeclared := make(starlark.StringDict, len(env)+1)
-	for k, v := range env {
-		sv, err := toStarlark(v)
-		if err != nil {
-			return nil, fmt.Errorf("starlark eval: convert env %q: %w", k, err)
-		}
-		predeclared[k] = sv
-	}
-
-	// Add built-in constants and helpers
+	// Built-in constants and helpers are registered first so that environment
+	// variables always win: a field named `amount` is, first and foremost, that
+	// field. The money accessors it shadows are also available under their
+	// collision-proof aliases (money_amount / money_currency).
+	predeclared := make(starlark.StringDict, len(env)+10)
 	predeclared["math_pi"] = starlark.Float(math.Pi)
 	predeclared["math_e"] = starlark.Float(math.E)
 	predeclared["today"] = starlark.NewBuiltin("today", func(
@@ -88,6 +83,8 @@ func EvalExpr(expr string, env map[string]any) (any, error) {
 		}
 		return starlark.False, nil
 	})
+	// sum() is money-aware: a list of money values sums to money, a list of
+	// numbers to a number, and a mixed/illegal list is an error (S7).
 	predeclared["sum"] = starlark.NewBuiltin("sum", func(
 		thread *starlark.Thread,
 		fn *starlark.Builtin,
@@ -98,21 +95,24 @@ func EvalExpr(expr string, env map[string]any) (any, error) {
 		if err := starlark.UnpackArgs("sum", args, kwargs, "iterable", &iterable); err != nil {
 			return nil, err
 		}
-		var total float64
-		switch x := iterable.(type) {
-		case *starlark.List:
-			for i := 0; i < x.Len(); i++ {
-				total += starlarkNumber(x.Index(i))
-			}
-		case *starlark.Tuple:
-			for i := 0; i < x.Len(); i++ {
-				total += starlarkNumber(x.Index(i))
-			}
-		default:
-			return nil, fmt.Errorf("sum: expected list or tuple, got %s", iterable.Type())
-		}
-		return starlark.Float(total), nil
+		return sumValues(iterable)
 	})
+
+	// amount(x) / currency(x) — explicit scalar extraction from a money value,
+	// plus collision-proof aliases for entities that have a field named
+	// `amount` or `currency`.
+	for name, b := range moneyBuiltins() {
+		predeclared[name] = b
+	}
+
+	// Environment variables last: they shadow any same-named builtin.
+	for k, v := range env {
+		sv, err := toStarlark(v)
+		if err != nil {
+			return nil, fmt.Errorf("starlark eval: convert env %q: %w", k, err)
+		}
+		predeclared[k] = sv
+	}
 
 	// Create a sandboxed thread
 	thread := &starlark.Thread{
@@ -142,6 +142,21 @@ func toStarlark(v any) (starlark.Value, error) {
 		// Already a Starlark value — pass through so dot-notation field
 		// access (resource.amount) keeps working.
 		return x, nil
+	case *moneyValue:
+		// Already a Starlark value (a money field inside a nested record).
+		return x, nil
+	case spec.Money, *spec.Money:
+		// A money field is the object {amount, currency}. Exposed as a plain
+		// dict, `tendered - amount` becomes `dict - dict` — which fails and
+		// silently leaves the computed field absent (S7 / gap #28).
+		m, isMoney, err := asMoneyValue(x)
+		if err != nil {
+			return nil, err
+		}
+		if !isMoney || m == nil {
+			return starlark.None, nil
+		}
+		return m, nil
 	case bool:
 		return starlark.Bool(x), nil
 	case int:
@@ -174,25 +189,46 @@ func toStarlark(v any) (starlark.Value, error) {
 		}
 		return starlark.NewList(elements), nil
 	case map[string]any:
-		d := starlark.NewDict(len(x))
-		for k, val := range x {
-			sv, err := toStarlark(val)
-			if err != nil {
-				return nil, err
+		// JSON-decoded money (e.g. a record read back from the database) is
+		// money-shaped: {amount, currency}. Recognize it so formulas over money
+		// behave identically on create and on read-back.
+		if m, isMoney, err := asMoneyValue(x); err != nil {
+			return nil, err
+		} else if isMoney {
+			if m == nil {
+				return starlark.None, nil
 			}
-			if err := d.SetKey(starlark.String(k), sv); err != nil {
-				return nil, err
-			}
+			return m, nil
 		}
-		return d, nil
+		return toStarlarkMap(x)
 	default:
 		return starlark.String(fmt.Sprintf("%v", x)), nil
 	}
 }
 
+// toStarlarkMap converts a Go map to a Starlark dict, converting any nested
+// money-shaped value along the way.
+func toStarlarkMap(m map[string]any) (starlark.Value, error) {
+	d := starlark.NewDict(len(m))
+	for k, val := range m {
+		sv, err := toStarlark(val)
+		if err != nil {
+			return nil, err
+		}
+		if err := d.SetKey(starlark.String(k), sv); err != nil {
+			return nil, err
+		}
+	}
+	return d, nil
+}
+
 // fromStarlark converts a Starlark value back to a Go value.
 func fromStarlark(v starlark.Value) any {
 	switch x := v.(type) {
+	case *moneyValue:
+		// Back to the canonical wire shape {amount, currency} so the stored
+		// value stays a first-class money object.
+		return x.Money()
 	case starlark.NoneType:
 		return nil
 	case starlark.Bool:
@@ -235,19 +271,4 @@ func fromStarlark(v starlark.Value) any {
 	default:
 		return x.String()
 	}
-}
-
-// starlarkNumber coerces a Starlark value to a float64 for arithmetic
-// (used by the sum builtin). Non-numeric values coerce to 0.
-func starlarkNumber(v starlark.Value) float64 {
-	switch x := v.(type) {
-	case starlark.Int:
-		return float64(x.Float())
-	case starlark.Float:
-		return float64(x)
-	case starlark.String:
-		f, _ := strconv.ParseFloat(string(x), 64)
-		return f
-	}
-	return 0
 }

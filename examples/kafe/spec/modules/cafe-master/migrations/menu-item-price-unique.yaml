@@ -1,0 +1,29 @@
+apiVersion: formspec.dev/v1
+kind: Migration
+metadata:
+  name: menu-item-price-unique
+  module: cafe-master
+  description: "Satu harga per menu per cabang (D1) — menggantikan guard script"
+spec:
+  module: cafe-master
+  # `indexes: [{fields: [branch_id, menu_item_id], unique: true}]` pada entity
+  # TIDAK dihormati (GAP-22): field `relation` tidak menghasilkan kolom turunan,
+  # sehingga tidak ada yang bisa diindeks. Migration ini menutupnya dengan
+  # expression index langsung atas JSONB.
+  #
+  # Setelah ini terpasang, `guard_menu_item_price_unique.star` menjadi lapis
+  # kedua — dan sebaiknya dihapus, karena constraint DB lebih kuat: ia berlaku
+  # juga untuk script dan operator yang menulis langsung.
+  #
+  # GAP-35: `(data ->> 'branch_id')` untuk PostgreSQL, `json_extract(...)` untuk
+  #   SQLite — dan MigrationSpec hanya punya satu string ddl.
+  # GAP-36: baris duplikat yang sudah ada membuat CREATE UNIQUE INDEX gagal, dan
+  #   tidak ada cara memperbaiki data lewat migration (DML ditolak).
+  ddl: >
+    CREATE UNIQUE INDEX idx_uq_cafe_master_menu_item_prices_branch_menu
+    ON cafe_master_menu_item_prices (
+      tenant_id,
+      json_extract(data, '$.branch_id'),
+      json_extract(data, '$.menu_item_id')
+    )
+    WHERE deleted_at IS NULL

@@ -184,7 +184,7 @@ func GenerateEntityDDL(meta spec.Metadata, entity *spec.EntitySpec, driver Drive
 
 		// Indexed fields get generated columns
 		if f.Index || f.Unique || f.NaturalKey {
-			sqlType := fieldTypeToSQL(f.Type, f.EnumValues)
+			sqlType := fieldTypeToSQLFor(f.Type, f.EnumValues, driver)
 			gc := generateGeneratedColumn(f.Name, sqlType, driver)
 			columns = append(columns, gc)
 		}
@@ -239,12 +239,58 @@ func GenerateEntityDDL(meta spec.Metadata, entity *spec.EntitySpec, driver Drive
 		}
 	}
 
-	// 4. Additional indexes from EntitySpec.Indexes
+	// 4. Additional indexes from EntitySpec.Indexes and PersistSpec.Indexes.
+	//
+	// Both locations are honoured: `indexes:` is a top-level Entity key
+	// (pkg/spec/entity.go EntitySpec.Indexes), while PersistSpec.Indexes is the
+	// older storage-scoped form. Reading only the latter silently dropped every
+	// declared index, so composite uniqueness such as
+	// `(branch_id, menu_item_id)` was never enforced (gap #22).
+	indexDecls := append([]spec.IndexDecl{}, entity.Indexes...)
 	if entity.Persist != nil {
-		for _, idx := range entity.Persist.Indexes {
-			var colNames []string
-			for _, f := range idx.Fields {
-				colNames = append(colNames, generatedColumnName(f))
+		indexDecls = append(indexDecls, entity.Persist.Indexes...)
+	}
+	if len(indexDecls) > 0 {
+		// Columns already emitted above (indexed/unique/natural-key fields,
+		// relation foreign keys, tree paths) — never emit one twice.
+		emitted := make(map[string]bool, len(columns))
+		for _, c := range columns {
+			fields := strings.Fields(strings.TrimSpace(c))
+			if len(fields) > 0 {
+				emitted[fields[0]] = true
+			}
+		}
+		fieldByName := make(map[string]spec.Field, len(entity.Fields))
+		for _, f := range entity.Fields {
+			fieldByName[f.Name] = f
+		}
+
+		for _, idx := range indexDecls {
+			colNames := make([]string, 0, len(idx.Fields))
+			ok := true
+			for _, fn := range idx.Fields {
+				col := generatedColumnName(fn)
+				if !emitted[col] {
+					f, found := fieldByName[fn]
+					if !found {
+						// Unknown field: the validator owns that diagnosis; DDL
+						// generation must not emit an index on a missing column.
+						ok = false
+						break
+					}
+					sqlType := fieldTypeToSQLFor(f.Type, f.EnumValues, driver)
+					if f.Type == spec.FieldRelation {
+						// Relations live in the JSONB payload; the derived column
+						// is the reference id as text.
+						sqlType = "text"
+					}
+					columns = append(columns, generateGeneratedColumn(fn, sqlType, driver))
+					emitted[col] = true
+				}
+				colNames = append(colNames, col)
+			}
+			if !ok {
+				continue
 			}
 			idxName := fmt.Sprintf("idx_%s_%s", ti.TableName, strings.Join(idx.Fields, "_"))
 			if idx.Unique {
@@ -341,6 +387,23 @@ func fieldTypeToSQL(ft spec.FieldType, _ []string) string {
 	default:
 		return "text"
 	}
+}
+
+// fieldTypeToSQLFor is the dialect-aware form of fieldTypeToSQL. PostgreSQL
+// native types (timestamptz, jsonb, uuid, bigint) must never leak into SQLite
+// DDL — SQLite has no such types, so the column ends up with the wrong
+// affinity (gap #27).
+func fieldTypeToSQLFor(ft spec.FieldType, enumValues []string, driver DriverType) string {
+	sqlType := fieldTypeToSQL(ft, enumValues)
+	if driver == DriverSQLite {
+		switch sqlType {
+		case "timestamptz", "jsonb", "uuid":
+			return "text"
+		case "bigint":
+			return "integer"
+		}
+	}
+	return sqlType
 }
 
 // generateChildTableDDL generates DDL for a child with storage: table.
@@ -481,7 +544,7 @@ func GenerateExtensionDDL(_ spec.Metadata, entity *spec.EntitySpec, driver Drive
 	// Generate generated columns and indexes for indexed/unique fields
 	for _, f := range entity.Fields {
 		if f.Index || f.Unique || f.NaturalKey {
-			sqlType := fieldTypeToSQL(f.Type, f.EnumValues)
+			sqlType := fieldTypeToSQLFor(f.Type, f.EnumValues, driver)
 			colName := generatedColumnName(f.Name)
 			gc := fmt.Sprintf("%s %s GENERATED ALWAYS AS (%s->>'%s') STORED",
 				colName, sqlType, extCol, f.Name)

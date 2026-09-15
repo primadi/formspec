@@ -1,0 +1,51 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: waste-entry
+  module: cafe-stock
+  description: "Bahan terbuang/rusak — dicatat sebagai kerugian, bukan penjualan"
+spec:
+  version: v1
+  characteristic: transaction
+  plural: waste-entries
+  lifecycle: plain_crud
+  fields:
+    - name: transaction_date
+      type: datetime
+      required: true
+      index: true
+      title: "Waktu"
+    - name: branch_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-master.branch }
+      required: true
+      title: "Cabang"
+    - name: ingredient_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-stock.ingredient }
+      required: true
+      title: "Bahan"
+    - name: quantity
+      type: decimal
+      scale: 3
+      required: true
+      title: "Jumlah Terbuang"
+    # D3: dibekukan dari stock-level.moving_avg_cost saat pencatatan, supaya
+    # nilai kerugian tidak berubah surut bila harga bahan naik.
+    # GAP-01/GAP-02: field uang.
+    - name: unit_cost
+      type: money
+      title: "Biaya per Satuan (beku)"
+    - name: reason
+      type: enum
+      enum_values: [spoilage, spill, expired, staff, other]
+      required: true
+      title: "Alasan"
+    - name: employee_id
+      type: relation
+      relation: { type: belongs_to, resource: cafe-master.employee }
+      title: "Dicatat Oleh"
+    - name: note
+      type: string
+      title: "Catatan"
+  # expose: [] — UI-only.

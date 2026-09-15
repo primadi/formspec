@@ -22,6 +22,7 @@ package spec
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 )
 
@@ -103,6 +104,92 @@ func ValidateMoneyField(f *Field, settings *Settings) error {
 		}
 	}
 	return nil
+}
+
+// NormalizeMoneyValue canonicalizes a money field value at the API boundary
+// (05-field-types.md §2, gap #46). Accepted shapes:
+//
+//	{amount: "...", currency: "IDR"}   canonical object
+//	{amount: "..."}                    currency filled from the field/settings
+//	25000 / "25000"                    amount only, currency from field/settings
+//
+// The stored value is always a Money object, so downstream consumers (renderer,
+// reports, aggregation, scripts) never have to handle three different shapes.
+// A currency that neither the payload, the field, nor settings can supply is an
+// error: silently storing an amount with no unit is unrecoverable data loss.
+func NormalizeMoneyValue(v any, f *Field, settings *Settings) (Money, error) {
+	if f == nil || f.Type != FieldMoney {
+		return Money{}, nil
+	}
+	// Resolution order (7.16.2): field `currency` → settings.currency → error.
+	// The error is deferred until we know the payload itself supplied no code.
+	defCurrency, _, resolveErr := ResolveMoneyCurrency(f, settings)
+
+	var amount, currency string
+	switch val := v.(type) {
+	case string:
+		amount = strings.TrimSpace(val)
+	case float64:
+		amount = strconv.FormatFloat(val, 'f', -1, 64)
+	case int:
+		amount = strconv.Itoa(val)
+	case int64:
+		amount = strconv.FormatInt(val, 10)
+	case map[string]any:
+		if raw, ok := val["amount"]; ok {
+			s, err := moneyAmountString(raw)
+			if err != nil {
+				return Money{}, &MoneyFieldError{Field: f.Name, Message: err.Error()}
+			}
+			amount = s
+		}
+		if c, ok := val["currency"].(string); ok {
+			currency = strings.TrimSpace(c)
+		}
+	default:
+		return Money{}, &MoneyFieldError{
+			Field:   f.Name,
+			Message: fmt.Sprintf("unsupported value for money field (want number, numeric string, or {amount, currency}), got %T", v),
+		}
+	}
+
+	if amount == "" {
+		return Money{}, &MoneyFieldError{Field: f.Name, Message: "money field is missing an amount"}
+	}
+	if _, err := strconv.ParseFloat(amount, 64); err != nil {
+		return Money{}, &MoneyFieldError{
+			Field:   f.Name,
+			Message: fmt.Sprintf("invalid money amount %q — must be a number (no currency symbols or thousands separators)", amount),
+		}
+	}
+	if currency == "" {
+		currency = defCurrency
+	}
+	if currency == "" {
+		if resolveErr != nil {
+			return Money{}, resolveErr
+		}
+		return Money{}, &MoneyFieldError{Field: f.Name, Message: "money field has no currency: declare `currency` on the field or set `settings.currency` (never guess)"}
+	}
+	return Money{Amount: amount, Currency: currency}, nil
+}
+
+// moneyAmountString renders a JSON amount of unknown numeric type as a string.
+func moneyAmountString(v any) (string, error) {
+	switch a := v.(type) {
+	case string:
+		return strings.TrimSpace(a), nil
+	case float64:
+		return strconv.FormatFloat(a, 'f', -1, 64), nil
+	case int:
+		return strconv.Itoa(a), nil
+	case int64:
+		return strconv.FormatInt(a, 10), nil
+	case nil:
+		return "", nil
+	default:
+		return "", fmt.Errorf("unsupported money amount type %T (want number or numeric string)", v)
+	}
 }
 
 // RoundingMode is the rounding strategy for money/decimal arithmetic.

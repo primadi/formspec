@@ -132,4 +132,52 @@ func TestValidateMoneyValue(t *testing.T) {
 	}
 }
 
+// TestNormalizeMoneyValue verifies that the three shapes a client can send are
+// collapsed into one canonical {amount, currency} value at the API boundary,
+// with the currency resolved from the field or settings (gap #46).
+func TestNormalizeMoneyValue(t *testing.T) {
+	settings := &Settings{Currency: &CurrencySettings{Code: "IDR", DecimalPlaces: intPtr(0)}}
+	f := &Field{Name: "value", Type: FieldMoney}
+
+	// Bare number → object with settings currency.
+	got, err := NormalizeMoneyValue(float64(25000), f, settings)
+	if err != nil {
+		t.Fatalf("number: %v", err)
+	}
+	if got.Amount != "25000" || got.Currency != "IDR" {
+		t.Errorf("number: got %+v, want {25000 IDR}", got)
+	}
+
+	// Numeric string → same.
+	if got, err = NormalizeMoneyValue("7000", f, settings); err != nil || got.Currency != "IDR" {
+		t.Errorf("string: got %+v err %v", got, err)
+	}
+
+	// Object without currency → currency filled in.
+	if got, err = NormalizeMoneyValue(map[string]any{"amount": "15000"}, f, settings); err != nil {
+		t.Fatalf("object: %v", err)
+	}
+	if got.Amount != "15000" || got.Currency != "IDR" {
+		t.Errorf("object: got %+v, want {15000 IDR}", got)
+	}
+
+	// Explicit currency in the payload wins.
+	if got, err = NormalizeMoneyValue(map[string]any{"amount": "9", "currency": "USD"}, f, settings); err != nil {
+		t.Fatalf("explicit currency: %v", err)
+	}
+	if got.Currency != "USD" {
+		t.Errorf("explicit currency: got %q, want USD", got.Currency)
+	}
+
+	// Non-numeric amount → error, never stored as-is.
+	if _, err = NormalizeMoneyValue("Rp25.000", f, settings); err == nil {
+		t.Error("expected error for non-numeric amount")
+	}
+
+	// No currency anywhere → error (never guess).
+	if _, err = NormalizeMoneyValue(float64(1), &Field{Name: "value", Type: FieldMoney}, nil); err == nil {
+		t.Error("expected error when no currency can be resolved")
+	}
+}
+
 func intPtr(i int) *int { return &i }

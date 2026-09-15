@@ -1,0 +1,41 @@
+apiVersion: formspec.dev/v1
+kind: Config
+metadata:
+  name: cafe-settings
+  module: cafe-master
+  description: "Kunci konfigurasi kafe yang dapat diubah admin tanpa ubah spec (D7)"
+spec:
+  # ⚠️ DRIFT DOKUMEN (dicatat sebagai GAP-25).
+  # Skill `formspec-kinds` mendokumentasikan bentuk `spec.data:` — schema
+  # MENOLAKNYA (`additionalProperties: false`). Bentuk yang benar adalah
+  # `spec.keys:`, tiap kunci adalah objek {type, default, secret, public}.
+  # Kabar baiknya: berbeda dari GAP-18/GAP-21, kesalahan ini GAGAL KERAS.
+  keys:
+    # ── Pajak & service charge (keputusan user: diatur dari konfigurasi) ──
+    # Nilai per cabang ada di entity `branch`; ini default saat cabang baru.
+    default_tax_percent: { type: decimal, default: 10 }
+    default_service_charge_percent: { type: decimal, default: 5 }
+
+    # ── Loyalitas (keputusan user: harus bisa diatur bebas dari admin panel) ──
+    # 1 poin per Rp10.000 belanja; 1 poin = Rp100 saat ditukar
+    # (sehingga 100 poin = Rp10.000 diskon).
+    points_earn_per_amount: { type: int, default: 10000 }
+    points_redeem_value: { type: int, default: 100 }
+    points_expiry_months: { type: int, default: 12 }
+    points_tier_silver_threshold: { type: int, default: 1000 }
+    points_tier_gold_threshold: { type: int, default: 5000 }
+
+    # ── Diskon manual (aturan bisnis #8) ──
+    # Di bawah salah satu batas ini, kasir boleh tanpa approval supervisor.
+    manual_discount_limit_percent: { type: decimal, default: 10 }
+    manual_discount_limit_amount: { type: int, default: 50000 }
+
+    # ── Struk ──
+    receipt_show_qr: { type: bool, default: true }
+    receipt_footer_default:
+      { type: string, default: "Terima kasih telah berkunjung" }
+
+    # ── Operasional ──
+    order_number_prefix: { type: string, default: "ORD" }
+    auto_close_session_minutes: { type: int, default: 240 }
+    stock_low_alert_enabled: { type: bool, default: true }

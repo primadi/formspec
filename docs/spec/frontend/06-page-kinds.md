@@ -78,6 +78,66 @@ spec:
 `blocks` dan `tabs` mutually exclusive. Renderer memperlakukan tiap tab
 sebagai resource yang di-permission-check independen.
 
+### Entry baris: `picker` pada child field
+
+Blok transaksional khusus **tidak ada** — dan itu disengaja. "Pilih baris dari
+katalog lalu kirim" adalah pola yang sama di banyak domain (pesanan, pesanan
+pembelian, hitung stok, perpindahan stok, jurnal, resep, checklist), jadi
+deklarasinya diletakkan di **field child**-nya, bukan di kind atau halaman:
+
+```yaml
+# entity (cafe-order.order)
+- name: lines
+  type: child
+  child:
+    picker:
+      entity: cafe-master.menu-item
+      display:
+        { name_field: name, image_field: photo, columns: 3, search: true }
+      map:
+        {
+          ref_field: menu_item_id,
+          name_field: name_snapshot,
+          price_field: unit_price_snapshot,
+          quantity_field: quantity,
+          max_quantity: 20,
+        }
+```
+
+Kontraknya (semua aturan, termasuk join harga dari entity lain)
+ada di [`../backend/01-core-basic.md`](../backend/01-core-basic.md) §1.3.
+
+Yang perlu diketahui di sisi **Page/Form**:
+
+- Halaman cukup mereferensikan Form biasa — tidak ada blok khusus:
+  `blocks: [{ form: { ref: order-form-qr, mode: create } }]`.
+- Tata letaknya dinyatakan Form lewat `render.picker_panel`:
+  - `inline` (default) — tile di atas child grid; child grid tetap editor
+    barisnya. Cocok saat menambah baris adalah aksi sesekali.
+  - `aside` — tile **dan** editor baris di kolom sendiri (katalog jadi permukaan
+    utama); child grid untuk field itu tidak dirender dua kali. Cocok untuk entry
+    baris yang intensif (kasir, hitung stok).
+- Nilai yang tidak diisi user (kanal, sesi, waktu) **tidak** lagi lewat
+  kunci `defaults` khusus: field-nya diberi `default_from` dan
+  `widget: hidden` — primitif umum yang berlaku di Form mana pun:
+
+  ```yaml
+  - { field: channel, widget: hidden, default_from: "qr_table" }
+  - { field: transaction_date, widget: hidden, default_from: "{now}" }
+  - { field: branch_id, widget: hidden, default_from: "{session.branch_id}" }
+  ```
+
+  `default_from` menemplat `{dotted.path}` dari render context
+  (`spec.context` + slot `user`/`route`), plus `{now}`/`{today}`. Token yang tak
+  bisa diselesaikan dibiarkan **verbatim** (terlihat di payload) — bukan jadi
+  string kosong yang menyamar sebagai field wajib terisi.
+
+- Submit, label tombol, pesan sukses, redirect, dan event mengikuti
+  `kind: Form` — bukan kosakata sendiri.
+
+Sisi kasir (numpad uang, kembalian, pembayaran gabungan) tetap terbuka: widget
+uang belum ada, dan layar POS sebagai kind tersendiri belum ditetapkan.
+
 **Pola Tabbed Resources:** untuk app dengan banyak master-data kecil (jenis
 kelamin, status pernikahan, spesialisasi), memberi tiap satu entry menu
 sendiri bikin sidebar berantakan. Kelompokkan resource kecil terkait di bawah

@@ -1,0 +1,49 @@
+apiVersion: formspec.dev/v1
+kind: App
+metadata:
+  name: kafe-pos
+  description: "Back-office kafe — kasir/POS, master, stok, kas, laporan, pengaturan"
+spec:
+  root_url: /app/pos
+  access: private
+  app_renderer: sidebar-nav
+  modules:
+    - cafe-order
+    - cafe-stock
+    - cafe-master
+    - cafe-loyalty
+    - cafe-report
+  # Antarmuka lintas-App yang DITAWARKAN. `cafe-gl-integrator` meng-consume ini.
+  #
+  # GAP-41: `AppInterface` hanya menyatakan NAMA service (+ `actions` opsional).
+  # Tidak ada deklarasi event apa yang tercakup, tidak ada skema payload, dan
+  # tidak ada versi kontrak. Jadi pihak peng-consume tidak bisa memeriksa apakah
+  # service ini benar-benar berisi yang ia harapkan — kegagalan muncul saat
+  # runtime, bukan saat validasi.
+  #
+  # GAP-42: DUA App (`kafe-qr` dan `kafe-pos`) sama-sama meng-mount module
+  # `cafe-order`, sehingga keduanya sama-sama MEMPRODUKSI event `on_paid`.
+  # Tidak jelas App mana yang "memiliki" antarmuka ini — dan `publishes`
+  # dideklarasikan per-App. Bila keduanya mendeklarasikan `order-events`,
+  # apakah itu dua antarmuka berbeda atau satu? Grant lintas-app menyasar App
+  # (bukan module), jadi jawabannya menentukan segalanya — dan tidak ada
+  # aturannya.
+  publishes:
+    - service: order-events
+  # Urutan menu = frekuensi akses (Transaksi dulu, Master belakangan).
+  # Adopt node mengambil saran menu default dari tiap module.
+  menu:
+    - type: module
+      module: cafe-order
+    - type: module
+      module: cafe-stock
+    - type: module
+      module: cafe-loyalty
+    - type: module
+      module: cafe-report
+    - type: module
+      module: cafe-master
+  confirm:
+    create: "Buat {name} baru?"
+    update: "Simpan perubahan {name} ini?"
+    delete: "Hapus data {name}?"

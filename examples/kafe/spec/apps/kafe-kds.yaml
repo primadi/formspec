@@ -1,0 +1,25 @@
+apiVersion: formspec.dev/v1
+kind: App
+metadata:
+  name: kafe-kds
+  description: "Layar dapur (KDS) — layar penuh untuk tablet dinding, tanpa navigasi"
+spec:
+  root_url: /app/kds
+  access: private
+  app_renderer: no-nav
+  # Kiosk: tanpa nav, tapi tetap butuh tombol logout.
+  # Skenario ini eksplisit ada di docs/spec/frontend/05-app-kinds.md §5.
+  chrome:
+    auth: button
+  # Hanya module pesanan. Tablet dapur sengaja TIDAK bisa melihat master,
+  # harga, atau laporan — batas keamanan perangkat.
+  modules:
+    - cafe-order
+  # Tanpa menu: `chrome.nav` default `none` pada no-nav.
+  # Papan KDS = kind: Kanban `order-board-kds` (status_field: status,
+  # realtime: true), ditulis di Tahap 3. Realtime Kanban sudah berfungsi hari
+  # ini, jadi KDS tidak terkena GAP-17.
+  confirm:
+    create: "Buat {name} baru?"
+    update: "Simpan perubahan {name} ini?"
+    delete: "Hapus data {name}?"

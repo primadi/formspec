@@ -292,8 +292,26 @@ func (r *primitiveRunner) builtinQuery() *starlark.Builtin {
 		kwargs []starlark.Tuple,
 	) (starlark.Value, error) {
 		var sql string
-		if err := starlark.UnpackArgs("query", args, kwargs, "sql", &sql); err != nil {
+		var paramsVal starlark.Value
+		if err := starlark.UnpackArgs("query", args, kwargs, "sql", &sql, "args?", &paramsVal); err != nil {
 			return nil, err
+		}
+		// Bind parameters are optional but supported: ctx.db().query(sql, [a, b]).
+		// The Querier contract documents query(sql, args...) — without this the
+		// documented form was rejected and callers were forced to interpolate
+		// values into the SQL string.
+		var params []any
+		if paramsVal != nil && paramsVal != starlark.None {
+			iter, ok := paramsVal.(starlark.Iterable)
+			if !ok {
+				return nil, fmt.Errorf("ctx.%s.query: args must be a list or tuple, got %s", r.primType, paramsVal.Type())
+			}
+			it := iter.Iterate()
+			defer it.Done()
+			var item starlark.Value
+			for it.Next(&item) {
+				params = append(params, fromStarlark(item))
+			}
 		}
 		// Sandbox limit (7.14.1): max DB queries per script.
 		if err := threadLimits(thread).CheckQuery(); err != nil {
@@ -303,7 +321,7 @@ func (r *primitiveRunner) builtinQuery() *starlark.Builtin {
 		if !ok {
 			return starlark.None, fmt.Errorf("ctx.%s.query: not yet implemented for this backend (connection=%q)", r.primType, r.name)
 		}
-		rows, err := q.Query(threadContext(thread), sql)
+		rows, err := q.Query(threadContext(thread), sql, params...)
 		if err != nil {
 			return nil, fmt.Errorf("ctx.%s.query: %w", r.primType, err)
 		}
