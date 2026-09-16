@@ -38,6 +38,294 @@ hardcode `formspec init` dipindah ke `cmd/formspec/template_init/`
 `docs_internal/plan/app-shape-and-init-templates.md` dan
 `docs_internal/changelog/2026-09-13-002-app-shape-and-init-templates.md`.
 
+**Catatan 2026-09-16**: ✅ **3.7 / #11+#12 — relasi: guard tidak lagi lolos senyap**
+(`examples/kafe/gaps_found/TODO.md` 3.7). Akarnya satu: relasi yang tidak bisa
+diresolusi diperlakukan sebagai "tidak ada yang perlu diperiksa". (a) **Runtime:**
+`ValidateRelationTargets` dulu `continue` saat target tidak ditemukan **atau**
+tabelnya tidak ada — sehingga referensi menggantung **diterima** dan nama tabel
+yang salah membuat guard-nya dilewati; kini ketiganya dibedakan dan jadi error
+bernama (target tak teresolusi / baris tidak ada / tabel tak terbaca), sementara
+relasi opsional yang tidak diisi tetap lolos. (b) **Statik:** gerbang
+cross-manifest `validateRelations` menolak `relation.resource` yang tidak
+menunjuk entity terdaftar (termasuk di dalam `child`) dan relasi yang melintasi
+`persist.category` — yang di runtime hanya memblokir sambil menulis log. Bukti: 4
+kasus validator + 3 kasus runtime; `go test ./...` hijau; kafe `validate` 0
+problem (seluruh relasi lintas module kafe memang resolve dengan nama). Plan:
+`docs_internal/plan/relation-guard.md` · changelog: `2026-09-16-011`.
+
+**Catatan 2026-09-16**: ✅ **3.6 / #9 — natural key ber-scope: scope menembus
+counter, keunikan, dan DDL** (`examples/kafe/gaps_found/TODO.md` 3.6). Item ini
+melebar dari perkiraan: saat diuji, cabang kedua **gagal 500** `UNIQUE constraint
+failed`. Nilai scope harus menembus **tiga** lapis, bukan satu — (a) counter
+(`ctx.next_key` mengirim scope kosong di jalur script; kini menerima
+`scope=<nilai>` dan **menolak** mencetak nomor tanpa scope saat rule-nya
+ber-`scope_field`), (b) **keunikan** (index uniknya `(tenant_id, _number)` tanpa
+cabang → deret B2 yang mulai dari 1 menabrak B1; kini `(tenant_id, _branch_id,
+_number)`), dan (c) **DDL** (scope field belum punya kolom turunan → index gagal
+dibuat; generator kini membuatnya). Bukti runtime: empat create anonim (B1, B2,
+B1, B2) → `ORD-2026-00001` di **kedua** cabang lalu `00002` di keduanya, semua
+`201`; sebelumnya B2 → `500`. Unit: 3 test counter (+ fixture baru) + 2 test
+Starlark. Plan: `docs_internal/plan/natural-key-scope.md` · changelog:
+`2026-09-16-010`.
+
+**Catatan 2026-09-16**: 📐 **3.8 — konteks sesi `(principal, role, cabang)`**
+(desain disetujui pemilik proyek; belum diimplementasikan). Sesi selalu spesifik:
+siapa, sebagai **role apa**, di **cabang mana** — bukan dua daftar terpisah,
+melainkan satu daftar **pasangan (role, cabang)** (`sales@A`, `admin@B`). Login
+memilih satu (otomatis bila hanya satu); OAuth memakai pilihan **terakhir** yang
+disimpan **per-device di klien**; pengguna bisa pindah kapan saja lewat endpoint
+switch. **Permission = grant role yang dipilih**, bukan union — itulah yang
+membuat boundary-nya spesifik dan audit bisa menjawab "sebagai role apa, di cabang
+mana". Ini **menggantikan** rencana lama untuk sisa 3.5 (daftar nilai + `op: in`):
+pilihan konteks lebih baik karena boundary-nya tunggal, dan ia menutup multi-cabang
+**dan** multi-role sekaligus. Efek samping: nilai cabang dibawa sesi, sehingga
+`row_scope: from session` tidak lagi lewat resolusi `assignments` di jalur kritis
+tiap request (jadi fallback saja). Rencana: `docs_internal/plan/session-context-role-branch.md`
+(model, alur login/OAuth/switch, berkas yang disentuh, 5 tahapan, bukti yang
+diminta) · item ledger: `examples/kafe/gaps_found/TODO.md` **3.8**.
+
+**Catatan 2026-09-16**: ✅ **3.5 / #8+S5 — `row_scope` dinyalakan: isolasi cabang
+ditegakkan engine** (`examples/kafe/gaps_found/TODO.md` 3.5). Konstruknya sudah
+lengkap sejak 1.1 (`row_scope`) dan 1.8 (`assignments` + sumber nilai) plus
+keputusan `read_all`; yang kurang hanya spec kafe belum memasangnya. Kini
+`row_scope: from session` dipasang di **10 entity** yang dibaca hanya lewat
+permukaan terautentikasi (`order`, `payment`, `shift`, `cash-movement`,
+`stock-level`, `stock-movement`, `purchase-order`, `stock-opname`, `waste-entry`,
+`menu-cost`). **Aturan baru yang wajib ada:** `row_scope` menyeluruh mem-403
+anonim (tak punya atribut sesi, dan itu memang fail closed), jadi `applyRowScope`
+melewati permintaan anonim yang datang lewat grant publik **ber-scope** — di situ
+`applyPublicScope` yang membatasi. Celah terakhir ikut ditutup: grant publik
+`menu-item-price` kini ber-scope `branch_id from route` (sebelumnya daftar harga
+anonim mengembalikan **seluruh cabang** tanpa parameter). Bukti runtime (token dev
+asli): kasir B1 → hanya `B1-1`; B1 + `?branch_id[eq]=B2` → **tetap `B1-1`**; kasir
+B2 → hanya `B2-1`; pemilik (`.list`+`.read_all`, tanpa atribut) → **kedua cabang**;
+tanpa atribut → **403**; anonim harga tanpa param → **403**, dengan → `200`.
+Nuansa tercatat: `read_all` **tanpa** `.list` → **404** (gerbang permission, bukan
+scope). Test: 3 test koherensi spec. Plan:
+`docs_internal/plan/row-scope-enforced.md` · changelog: `2026-09-16-009`.
+
+**Catatan 2026-09-16**: ✅ \*\*3.4 / #35+#36 — `kind: Migration`: `ddl_by` per-driver
+
+- `dml` yang dinyatakan** (`examples/kafe/gaps_found/TODO.md` 3.4). Dua celah
+  yang penutupnya sengaja dipisah: (#35) ekspresi JSONB berbeda antar driver —
+  `json_extract(data,'$.x')` vs `data->>'x'` — sehingga satu string `ddl` benar di
+  dev dan **salah di produksi** dengan kegagalan yang baru muncul saat deploy; kini
+  `ddl_by` memuat varian per driver (dialek himpunan tertutup), menulis keduanya
+  ditolak, dan driver tanpa varian melewati migration itu **dengan peringatan**.
+  (#36) `CREATE UNIQUE INDEX` gagal bila duplikat sudah ada — dan duplikat itu
+  muncul justru karena constraint-nya belum ada — sementara perbaikannya butuh DML
+  yang ditolak; kini `dml` boleh dinyatakan dengan **`reason` wajib**, hanya DML,
+  dijalankan **sebelum\*\* DDL, dan diumumkan saat apply/di `plan`. Bukti:
+  `TestApplyCustomMigrations_DataRepairRunsBeforeDDL` (constraint gagal tanpa
+  perbaikan → berhasil setelahnya, 3→2 baris, duplikat berikutnya ditolak),
+  `TestLoadCustomMigrations_PicksDialect`, `TestValidateMigrationSpec` (6 bentuk
+  ditolak), `go test ./...` hijau, kafe `validate` 0 problem. Normatif:
+  `01-core-basic.md` §4.1. Plan: `docs_internal/plan/migration-dialect-and-dml.md` ·
+  changelog: `2026-09-16-008`.
+
+**Catatan 2026-09-16**: ✅ **3.2 / #23 — kolom turunan `money` numerik**
+(`examples/kafe/gaps_found/TODO.md` 3.2, mulai Fase 3). Akarnya bukan sekadar
+tipe kolom: kolom turunan menyimpan **objek** `{amount, currency}` sebagai teks
+JSON, sehingga `"9000"` dianggap lebih besar dari `"10000"` dan index di atasnya
+hanya mempercepat jawaban yang salah. `generateGeneratedColumn` kini menerima
+tipe field; untuk `money` ekspresinya membaca `.amount` dan tipenya
+`numeric(20,8)`; `fieldTypeToSQL` mendapat `case money`; jalur ALTER di
+`migrate.go` ikut konsisten; dan `columnRefExpr` mendahulukan kolom turunan
+sekarang kolomnya numerik (kalau tidak, index tidak akan terpakai). Bukti: DDL
+nyata `_price numeric(20,8) GENERATED ALWAYS AS (CAST(json_extract(data,
+'$.price.amount') AS REAL)) STORED` + index-nya, plus 2 test perilaku (sort naik
+9000 sebelum 10000; `>= 9500` → hanya 10000). Adopsi kafe menghapus workaround:
+`menu-item-price.price` + `order.total_amount` kini `index: true`, kolom Total di
+table POS `sortable`. Normatif `05-field-types.md` §2.2. Plan:
+`docs_internal/plan/money-derived-column-numeric.md` · changelog:
+`2026-09-16-007`.
+
+**Catatan 2026-09-16**: ✅ **2.8 / #48 — workspace aktif: dipakai kalau tunggal,
+diperingatkan kalau ambigu** (`examples/kafe/gaps_found/TODO.md` 2.8).
+`kind: Workspace` adalah _seed declaration_: ia mendaftarkan slug, bukan
+memilihnya — workspace aktif datang dari `--workspace-id`. Salah membacanya tidak
+memunculkan error apa pun: mendeklarasikan `kafe` lalu menjalankan dev tanpa flag
+membuat semua tulisan tersimpan `tenant_id: "default"` sementara `GET /kafe/...`
+menjawab `200` dengan nol baris. Tiga keadaan kini dibedakan: **tepat satu**
+dideklarasikan → dipakai + diumumkan; **lebih dari satu** → tetap `default` plus
+peringatan berisi daftar (memilih diam-diam mengejutkan); **flag yang tidak
+dideklarasikan** → diperingatkan. Pembeda "diberikan pengguna" vs "nilai default"
+ditambahkan sebagai `DevConfig.WorkspaceIDExplicit`. Bukti: dev pada spec kafe
+mencetak `workspace: kafe (the only one declared…)`, 4 kasus
+`TestResolveActiveWorkspace`, `go test ./...` hijau, kafe `validate` 0 problem.
+Dokumen `platform/02-workspace-app-module.md` §1 menyatakan eksplisit
+"mendaftarkan, bukan memilih". Plan:
+`docs_internal/plan/active-workspace-resolution.md` · changelog: `2026-09-16-006`.
+**Dengan ini Fase 2 tuntas.**
+
+**Catatan 2026-09-16**: ✅ **2.7 / #47 — kontrak REST `/_ui/` terdokumentasi**
+(`examples/kafe/gaps_found/TODO.md` 2.7). Surface `/_ui/` adalah kontrak publik
+(SPA bawaan memakainya) tetapi bentuk body/envelope/endpoint-nya hanya ditemukan
+dengan gagal berkali-kali. Dua bagian: halaman
+`docs/runtimes/06-ui-rest-contract.md` (path singular, body flat — envelope
+`{"data": …}` ditolak 400, tiga envelope respons, query list, catatan bahwa
+parameter `row_scope` bukan filter, ringkasan surface publik), dan
+**`formspec describe entity <name>` mencetak kontrak HTTP-nya dari generator yang
+sama dengan server**. Yang kedua menuntut refactor kecil:
+`GenerateUIRoutes`/`GenerateUICustomActionRoutes` dipecah jadi per-entity
+(`UIRoutesForEntity`, `UICustomActionRoutesForEntity`) sehingga CLI bisa
+memakainya tanpa database dan kedua jalur tidak bisa berbeda. Kontrak itu penuh
+pengecualian yang mudah salah ditulis tangan — aksi `disabled` tanpa route,
+lifecycle-free tanpa `submit`/`cancel`/`amend`, `summary` hanya `list`+`find`,
+dan transisi state machine tanpa `impl` **tidak** punya endpoint (lewat `update`).
+Bukti: `describe entity order` mencetak tepat 4 route (sesuai spec kafe yang
+mematikan `delete`+`submit`), 2 test baru, `go test ./...` hijau, kafe `validate`
+0 problem. Plan: `docs_internal/plan/ui-rest-contract.md` · changelog:
+`2026-09-16-005`.
+
+**Catatan 2026-09-16**: ✅ Keputusan untuk **3.5** diambil — `{module}.{plural}.read_all`.
+Pertanyaan "apakah pemilik/super-admin tanpa baris `employee` boleh melihat semua
+cabang" dijawab dengan **permission eksplisit**, bukan bypass `*` implisit dan
+bukan nilai wildcard di atribut. `row_scope` tetap fail closed untuk semua orang
+lain; pemegang `read_all` dilewati dari scope entity itu (atribut yang tak bisa
+diresolusi bukan lagi error, karena bagi mereka itu keadaan normal), permission-nya
+**didaftarkan** sehingga bisa diberikan dan terlihat di audit, `*` juga memenuhi
+(identitas dev tetap hidup), dan cakupannya per entity. Penghambat 3.5 hilang:
+spec kafe bisa memasang `row_scope` dan cukup memberi role pemilik `read_all` per
+entity. Bukti: `TestApplyRowScope_ReadAllPermissionExempts` +
+`TestReadAllPermission`, `go test ./...` hijau, kafe `validate` 0 problem. Plan:
+`docs_internal/plan/read-all-scope-exemption.md` · changelog: `2026-09-16-004`.
+
+**Catatan 2026-09-16**: ✅ **2.14 / #1 — widget `moneyinput` + `timeinput`**
+(`examples/kafe/gaps_found/TODO.md` 2.14, separuh renderer dari gap #1). 1.4
+menutup akarnya (kosakata tertutup) tetapi widget-nya belum ada, jadi `money` dan
+`time` tetap jatuh ke input teks polos. Nama kanonik mengikuti keluarga yang ada
+(`fileinput`/`datetimeinput`/`decimalinput`): **`moneyinput`**, **`timeinput`**.
+Nilai money disimpan sebagai **teks** selama mengetik (uang eksak, tidak pernah
+float) dan dikirim sebagai bentuk kanonik `{amount, currency}`; tampilan ikut
+`settings.currency`/`locale`, override per field (`currency`, `decimal_places`)
+dihormati, `inputMode: decimal` untuk numpad. `timeinput` memakai kontrol
+`type=time` asli dan menyimpan `HH:MM:SS`. **Detail yang membuatnya sampai ke
+kasir:** manifest form tidak menulis `widget:`, dan `FormFieldWidget` memakai
+`field.widget ?? entityField.type` — jadi `money` akan tetap jadi input teks;
+fallback itu kini lewat `implicitWidgetForType` (`money → moneyinput`,
+`time → timeinput`), sengaja sempit. Marker `GAP-01` di seluruh spec kafe ditutup
+(5 entitas + 4 form + 1 wizard), termasuk dibersihkan dari komentar gabungan
+`GAP-01/GAP-02`. Bukti: `vitest` 265 (dari 258), `tsc` bersih, `go test ./...`
+hijau, kafe `validate` 0 problem, FormWidget 24 nilai. Plan:
+`docs_internal/plan/money-time-input-widgets.md` · changelog: `2026-09-16-003`.
+
+**Catatan 2026-09-16**: 🟡 **2.6 / #3+S4 — widget `qrcode`** (sebagian;
+`examples/kafe/gaps_found/TODO.md` 2.6). Keputusan pemilik proyek: jalur termurah
+— widget read-only + dependency klien (`qrcode.react`, MIT, SVG supaya tajam saat
+dicetak), bukan field type baru dan bukan Service engine. `qrcode` masuk **dua**
+kosakata tertutup (S10) dengan nama sama: `FormWidget` (form — menggantikan
+input, sebab nilainya ADALAH payload) dan `TableCellWidget` (sel tabel/listing);
+ditambah komponen `QrCode.tsx`, cabang di `FormFieldWidget` **dan**
+`renderCellValue`, barrel, dan enum schema ter-regenerasi. Bukti: test kosakata
+tertutup + paritas `catalog.test.tsx`, `go test ./...` hijau, `vitest` 258,
+`tsc` bersih. **Sengaja TIDAK ditandai selesai:** accept-nya menuntut "dirender &
+**dicetak**", dan jalur cetak belum ada (`Print` memakai `resolveCellValue()`
+yang menjadikan nilai teks — bagian 7.1), sementara adopsi kafe terhalang hal
+konkret: QR yang bisa dipindai butuh URL absolut, dan `dining-table` hanya
+menyimpan kode meja. Changelog: `2026-09-16-002`.
+
+**Catatan 2026-09-16**: ✅ \*\*2.5 / #4+#4b — gambar tampil di cell/listing/detail
+
+- kanonik `allowed_types`** (`examples/kafe/gaps_found/TODO.md` 2.5). Akarnya
+  adalah #4b: bentuk `allowed_types` yang **didokumentasikan** (ekstensi tanpa
+  titik, `[jpg]`) adalah satu-satunya yang **tidak cocok dengan apa pun\*_ —
+  matcher klien maupun server hanya mengenal `.jpg`, MIME, dan `image/_` — jadi
+spec yang benar menghasilkan "File type not allowed". Kini kanoniknya ekstensi
+tanpa titik, keempat ejaan diperlakukan sama oleh matcher yang sepasang
+(`internal/api/file.go`+`src/lib/media.ts`), dan validator menolak entri di
+luar keempat bentuk itu. Lalu #4: `renderCellValue`punya cabang`widget: image`(nilai file = object key → route unduh sebagai`src`), `image`masuk kosakata tertutup`TableCellWidget`(S10) dengan paritas schema↔katalog↔
+renderer, turunan otomatis untuk field file bergambar, Table/Listing meneruskan
+URL lewat`CellRenderOpts.imageUrl`, DetailPage merender `<img>`, dan satu
+helper `fileDownloadUrl`menggantikan URL yang disusun sendiri oleh`PickerPanel`
+/`FileInput`. Bukti: `pkg/spec`5 test,`TestAllowedFileType`8 case, klien`media.test.ts`8 case,`vitest`258, kafe`validate`0 problem. Sisa:
+verifikasi runtime di browser, Print (butuh URL absolut), dan verifikasi`transform`thumbnail. Plan:`docs_internal/plan/media-image-cells.md`·
+changelog:`2026-09-16-001`.
+
+**Catatan 2026-09-15**: ✅ **2.2 / #45 — `public_entities[].scope`: scoping baris
+per-permukaan** (`examples/kafe/gaps_found/TODO.md` 2.2). Allowlist per-entity
+(1.2) membatasi entity/aksi, bukan baris — sehingga `list` pada `order` tidak
+bisa diberikan sama sekali dan pelanggan tak punya jalan membaca pesanannya
+sendiri. Grant kini bisa mendeklarasikan `scope` (hanya `from: route`, tidak bisa
+digabung `find`) yang nilainya dibaca **server** dari parameter request; parameter
+yang tak ada menolak permintaan, dan nilai menimpa filter klien. **Dua bug ikut
+tertutup** karena jalur ini menyentuhnya: (a) **grant publik adalah bypass
+permission** — route publik menyetel permission `"public"`, sehingga pemanggil
+yang login melewati permission entity di route bersama `/_ui/entity` (memberi
+anonim `list` pada `order` akan mencabut gerbang POS/KDS); kini grant hanya
+mengizinkan anonim, pemanggil terautentikasi tetap wajib ber-permission dan tidak
+terkena scope anonim. (b) parameter scope grant diparse sebagai filter field
+(422), sama seperti perbaikan 1.1 untuk `row_scope`. Adopsi kafe: `order.guest_token`
+(dari sesi meja) + grant `create,list` di `kafe-qr` + halaman status pelanggan;
+komentar GAP-06 di halaman itu dihapus. Bukti runtime: tanpa token → 403; TOKENA →
+hanya TOKENA; TOKENB → hanya TOKENB; TOKENA + `guest_token[eq]=TOKENB` → tetap
+hanya TOKENA; token salah → 0 baris. Plan:
+`docs_internal/plan/public-grant-row-scope.md` · changelog: `2026-09-15-011`.
+
+**Catatan 2026-09-15**: ✅ **1.8 / S5+S11+S12+S14 — konstruk pelengkap**
+(`examples/kafe/gaps_found/TODO.md` 1.8) dan **1.9 — D1–D7 normatif** (item 1.9).
+Tiga konstruk menggantikan satu nama di S5: `scope: {dimension, field, required}`
+(entity dipartisi — fakta data, **tidak** memfilter), **`row_scope`** (nama baru
+untuk filter yang ditegakkan; dulu bernama `scope`, dan rename-nya murah karena
+tak ada spec yang memakainya — satu nama tidak bisa dua bentuk, preseden 1.7),
+dan `assignments: [{dimension, field, principal_field}]` (**dari mana** nilai
+dimensi seorang principal berasal — bagian S5 yang sebelumnya tidak ada).
+Nilai `from: session` kini diselesaikan dari `assignments` bila token tidak
+membawanya (memo 30 detik). **Gerbang validator jadi inti kejujurannya:**
+`formspec validate` menolak `row_scope` `from: session` tanpa `attr` yang
+atributnya tak punya sumber — bentuk yang kalau dibiarkan akan **403 selamanya
+dengan manifest terlihat benar** (kelas #52/#53/GAP-33). S11: tipe field
+`percent` (numerik = decimal, beda interpretasi/rendering). S12:
+`unit: {base, convertible}` divalidasi terhadap `enum_values`; konversi = 4.6.
+S14: `maintained_by` (script wajib ada **dan** bisa dikompilasi) + `invariants`
+(wajib ditopang unique index — jadi database yang menegakkan, bukan disiplin
+script). D1–D7 ditulis normatif di `01-core-basic.md` §1.2/§1.7/§7/§8.6/§11.
+Adopsi kafe: 15 entity `scope`, `employee.assignments`, 3 field `percent`,
+satuan gram/kg, 3 summary ber-`invariants`. Plan:
+`docs_internal/plan/s5-s11-s12-s14-scope-percent-unit-summary.md` · changelog:
+`2026-09-15-010`. **Adopsi `row_scope` kafe ditunda ke 3.5** (menyalakannya
+sekarang mem-403 seluruh list kasir + identitas dev tanpa baris `employee`).
+
+**Catatan 2026-09-15**: ✅ **1.7 / S9 — workflow merujuk nama transisi**
+(`examples/kafe/gaps_found/TODO.md` 1.7, menutup **#38**).
+`WorkflowTransitionRef.Name` + dua bentuk pemicu yang saling eksklusif; index
+`byName` di `internal/workflow` dengan `ForTransition(entity, transition, from,
+to)`; kedua call site API meneruskan `actionName`. **Lubang senyapnya ditutup
+validator**, bukan cuma dilaporkan: Layer 1.5 `validateWorkflows`
+(`cmd/formspec/validate_workflow.go`) menolak pasangan `from`/`to` yang hanya
+mencakup sebagian transisi multi-asal — bentuk yang sebelumnya lolos hijau sambil
+tidak menegakkan apa pun — dan menolak nama transisi yang tidak ada (dengan daftar
+`via` tersedia). Adopsi kafe: `order-void-approval` → `name: void-order`.
+Bukti: 4 state asal lolos interception (unit), 8 sub-test validator, `validate`
+kafe 0 problem. Plan: `docs_internal/plan/s9-workflow-transition-ref.md` ·
+changelog: `2026-09-15-009`.
+
+**Catatan 2026-09-15**: ✅ **1.6 / S8 — index parsial jadi konstruk bahasa**
+(`examples/kafe/gaps_found/TODO.md` 1.6, menutup akar **#22** sisa).
+`IndexDecl.Where` + grammar tertutup (`pkg/spec/indexwhere.go`) → nama field
+divalidasi saat validate dan diterjemahkan ke kolom turunan saat render; tiga
+aturan keunikan kafe kini dinyatakan di manifest dan **ketiga `kind: Migration`
+DDL mentahnya dihapus** (GAP-35 ikut tertutup untuk kasus ini). **Dua bug nyata
+ikut ketemu:** jalur alter tidak pernah membuat index (hanya kolom) sehingga
+`indexes:` yang ditambahkan setelah tabel ada tidak pernah terpasang; dan field
+yang hanya disebut di predikat tidak mendapat kolom turunan → `no such column`.
+Bukti: `migrate plan` memuat index komposit + `WHERE _status = 'open'`; constraint
+terbukti menolak shift `open` kedua tapi membolehkan yang `closed`. Plan:
+`docs_internal/plan/s8-partial-index.md` · changelog: `2026-09-15-008`.
+
+**Catatan 2026-09-15**: ✅ **3.6.4 — `formspec summary rebuild`** (`02-core-extended.md`
+§6). Verb baru + rencana rebuild (`internal/summary/`) + replay lewat jalur
+delivery yang sama dengan live (`internal/subscription/replay.go`, consumer group
+per run → cursor worker live tidak tersentuh). **Bug nyata ikut tertutup:**
+channel `reliable_event` ternyata no-op di runtime (padahal `ValidateEventDurability`
+mewajibkannya) — kini lewat outbox, sehingga proyeksi yang digerakkan event
+durabel benar-benar terisi. Adopsi §6 di tiga proyeksi `kafe`; ketiganya
+dilaporkan `orphaned` karena digerakkan `kind: Integrator` (tidak lewat stream)
+— gap itu kini terlihat sebagai **3.6.6**. Guard baru menolak `schemas/` yang
+stale terhadap `pkg/spec` (kelas kegagalan yang membuat validasi schema gagal
+untuk _semua_ Entity). Kontrak + semantik rebuild: `docs/spec/backend/02-core-extended.md`
+§6 · changelog: `2026-09-15-007`.
+
 **Catatan 2026-09-15**: ✅ **S1 digeneralisasi — `picker` pada child field**
 (`examples/kafe/gaps_found/TODO.md` 1.5, gap **#5**). Blok Page `order_builder`
 (versi pertama, changelog `-003`) **dihapus**: terlalu sempit dan menduplikasi
@@ -457,7 +745,10 @@ closed-set agar custom screen sederhana (login, landing) bisa pure-YAML tanpa
 - [x] 3.6.2 `formspec repl [--environment]` — interactive Starlark console, full `ctx.*` (via `NewCtxPrimitiveResolver` + `App.Database()`); mode one-shot `-e <expr>`; `--environment` diterima (policy Control Plane di-defer). Lihat `docs_internal/plan/formspec-repl-seed-diff.md`. ✅ 2026-08-17
 - [x] 3.6.3 `formspec seed [--module]` — run seeders from YAML seed files (`kind: Seed`, format baru karena `formspec/seed` official module belum ada); idempotent via natural key. Lihat `docs_internal/plan/formspec-repl-seed-diff.md`. ✅ 2026-08-17
 - [x] 3.6.5 DSN relatif di-anchor ke lokasi spec — path SQLite relative pada `--dsn` (dev/migrate/backup/restore/repl/archive) di-anchor ke project root yang di-derive dari `--spec` (bukan CWD), sehingga file db statis di mana pun perintah dijalankan; absolute & postgres tidak diubah. Lihat `docs_internal/plan/dsn-spec-anchored.md`. ✅ 2026-09-06
-- [ ] 3.6.4 `formspec summary rebuild <entity>` — rebuild summary Entity dari replay event durable (`02-core-extended.md` §6) — ⏸️ **butuh design decision**: kontrak `sources`/`join_key`/`rebuild` untuk summary Entity belum dispesifikasikan di `pkg/spec` (tidak ada field `sources`/`join_key`/`rebuild` di `EntitySpec`), dan `docs/renderers/jsonb-persist/04-query-and-keys.md` §4 menyatakan detail populasi summary "mengikuti bagaimana Summary dipopulasikan dari event durable" yang belum ada (projection engine belum ada — lihat `docs_internal/plan/fix-clinic-dashboard-summary.md`). Jangan invent contract; perlu keputusan desain dulu.
+- [x] 3.6.4 `formspec summary rebuild <entity>` — rebuild summary Entity dari replay event durable (`02-core-extended.md` §6). ✅ 2026-09-15 (`docs_internal/changelog/2026-09-15-007-summary-rebuild-command.md`). Kontrak `sources`/`join_key`/`rebuild` ada di canonical `pkg/spec.EntitySpec` + divalidasi (`ValidateEntitySpec`); rencana rebuild di `internal/summary/` (resolve entity → sources → stream durabel, orphaned dilaporkan); replay di `internal/subscription/replay.go` (`ReplayingSummaryProjection`, consumer group per run sehingga cursor worker live tidak tersentuh, filter/transform sama dengan delivery live); CLI `formspec summary list|rebuild` (`cmd/formspec/summary.go`) dengan `--dry-run`/`--reset`/`--subscriber`/`--workspace`/`--json`. **Bug nyata ikut tertutup:** channel `reliable_event` ternyata no-op di runtime (jatuh ke `default:` + warning) padahal `ValidateEventDurability` mewajibkannya — sekarang lewat outbox (`internal/action/deliver.go`); tanpa ini proyeksi yang digerakkan event durabel (jantung kafe) tidak pernah terisi. Adopsi `examples/kafe`: `cafe-stock/stock-level`, `cafe-stock/menu-cost`, `cafe-loyalty/member-point` kini mendeklarasikan §6 (`strategy: full` — biaya rata-rata bergerak & saldo poin bergantung seluruh riwayat). Bukti: `summary list` menampilkan 3 proyeksi + orphaned; `validate --schema schemas` → 72 manifest, 0 problem; `check` → 0 error/0 warning; test `internal/summary` (8), `internal/subscription/replay_test.go` (7), `internal/action/reliable_event_test.go` (2) hijau. **Sisa:** (a) 3.6.6, (b) 3.6.7, (c) 3.6.8.
+- [ ] 3.6.6 Replay untuk proyeksi yang digerakkan `kind: Integrator` — integrator di-dispatch langsung saat delivery (`internal/integrator/dispatch.go`) dan **tidak** melewati stream durabel, jadi ia tidak punya riwayat untuk di-replay. Hari ini **semua** proyeksi `kafe` digerakkan integrator (`cafe-gl-integrator`), sehingga `formspec summary rebuild` melaporkan sumbernya `orphaned`. Pilihan: (a) beri integrator jalur durabel (append ke stream + worker), atau (b) migrasikan proyeksi kafe ke `kind: Subscription` `durability: durable`. Perlu keputusan desain dulu — jangan pilih salah satu tanpa itu.
+- [ ] 3.6.7 Refresh schema registry dengan `sources`/`join_key`/`rebuild` — `formspec validate` tanpa `--schema` masih melaporkan 3 problem untuk ketiga summary kafe karena schema App/Entity di `schemas.formspec.dev` belum memuat field kontrak §6. Tiket yang sama dengan `scope`/`public_entities` (`docs_internal/plan/schema-registry-sync.md`); `make publish-schemas` + push menutup ketiganya sekaligus. Sementara itu: `--schema schemas` → 0 problem.
+- [ ] 3.6.8 `rebuild.strategy: partial` belum benar-benar parsial — `RebuildSpec.Window`/`Since` **dideklarasikan dan dicetak di rencana, tetapi tidak dikonsumsi**: `subscription.ReplayOptions` tidak punya field window/since, dan replay selalu membaca stream dari `earliest`. Jadi `partial` hari ini hanya berarti "menolak `--reset`" (`cmd/formspec/summary.go`), bukan "hanya bangun ulang jendela itu". Dua hal yang harus diputuskan lebih dulu: (a) **format** `window` — docs §6 memakai `"7d"` sementara fixture memakai `"month"`, dan `ValidateEntitySpec` hanya memvalidasi `strategy` sehingga `window: "banana"` pun lolos; (b) **semantik `since`** (batas absolut vs relatif ke kalender bisnis, §9.4). Setelah itu: teruskan ke `ReplayOptions` + filter entri stream (pakai kolom waktu entri, `stream.Entry.Timestamp`/`occurred_at`) + `formspec check` menolak `partial` tanpa `window`/`since`.
 
 ### 3.7 Data lifecycle CLI ops
 
@@ -858,6 +1149,7 @@ mergeable ke project lain via `external/`/`spec/modules/`; middleware tetap Go.
 - [x] 7.4.4 `escalation` — timeout (`after`), notify_roles, reassign_roles — ✅ 2026-08-25 (changelog 015)
 - [x] 7.4.5 Requester can never approve own request — ✅ 2026-08-25 (changelog 012)
 - [x] 7.4.6 Approval = signed statement recorded in audit trail — ✅ 2026-08-25 (changelog 014)
+- [ ] 7.4.7 Test level-API untuk interception approval (belum ada sama sekali) — seluruh Fase 7.4 di atas diverifikasi unit-level (`internal/workflow`), **tidak ada** test yang benar-benar melewati HTTP: harness auth + seed + drive record ke beberapa state belum ada di `internal/api`. Akibatnya regresi di jalur `HandleCustomAction → RequiresApproval → handleWorkflowApproval` tidak tertangkap test. Ditemukan saat S9 (changelog `2026-09-15-009`), di mana bukti yang ada hanya unit-level dan itu dinyatakan apa adanya, bukan diklaim E2E. Effort: medium (harness, bukan fitur).
 
 ### 7.5 State machine engine (basic)
 
@@ -1264,10 +1556,10 @@ auth-dependent; Fase 8 (production serve) untuk deploy nyata ke `registry.formsp
 
 ### 13.4 Docs & tests
 
-- [ ] 13.4.1 Update `docs/spec/platform/08-project-layout.md` §6 (target desain → implemented) + resolve open questions §6.5.
-- [ ] 13.4.2 Update `docs/cli-tools/02-formspec-cli.md` §9.
-- [ ] 13.4.3 Tests: unit (lock/marker/alias/checksum), integration (install→boot), e2e (publish→install).
-- [ ] 13.4.4 Changelog per hari + update todo.
+- [x] 13.4.1 Update `docs/spec/platform/08-project-layout.md` §6 (target desain → implemented) + resolve open questions §6.5.
+- [x] 13.4.2 Update `docs/cli-tools/02-formspec-cli.md` §9.
+- [x] 13.4.3 Tests: unit (lock/marker/alias/checksum), integration (install→boot), e2e (publish→install). — verified via `go test ./internal/vendor/...` on 2026-09-15.
+- [x] 13.4.4 Changelog per hari + update todo. — recorded in `docs_internal/changelog/2026-09-15-005-module-vendoring-tests-todo.md`.
 
 **Dependensi**: Fase 6 (6.2 permission model + 6.4 API keys) wajib selesai untuk bagian
 auth-dependent (13.3.4–13.3.8); Fase 8 (production serve) untuk deploy nyata ke

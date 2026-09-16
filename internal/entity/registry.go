@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io/fs"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -226,6 +227,12 @@ func (r *Registry) registerStandardPermissions(module, entityName string, entity
 		{"create", module + "." + plural + ".create"},
 		{"update", module + "." + plural + ".update"},
 		{"delete", module + "." + plural + ".delete"},
+		// read_all is a POLICY permission, not a route action: it is what
+		// exempts a caller from the entity's `row_scope` (see
+		// api.ReadAllPermission). Registered so it can be granted deliberately —
+		// "who may read across branches" should be answerable from the grant
+		// list, not inferred from a wildcard.
+		{"read_all", module + "." + plural + ".read_all"},
 		{"submit", module + "." + plural + ".submit"},
 		{"cancel", module + "." + plural + ".cancel"},
 		{"amend", module + "." + plural + ".amend"},
@@ -639,7 +646,13 @@ func (r *Registry) GetActionSpec(module, name, actionName string) (*spec.Action,
 // scope to resolve the scope field's value from, only workspaceID/module/name.
 // ctx.next_key() calls therefore always use the workspace-wide scope, same as
 // before ScopeField was introduced.
-func (r *Registry) GenerateNaturalKey(ctx context.Context, workspaceID, module, name, fieldName string) (string, error) {
+// GenerateNaturalKey mints the next natural key for a field.
+//
+// scope is the value of the rule's `scope_field` (e.g. the branch the number
+// belongs to). A scoped counter REFUSES to mint without it: falling back to an
+// unscoped counter would silently produce a global sequence that looks right
+// until two branches collide — the failure the ledger's gap #9 is about.
+func (r *Registry) GenerateNaturalKey(ctx context.Context, workspaceID, module, name, fieldName, scope string) (string, error) {
 	info, ok := r.GetEntity(module, name)
 	if !ok || info.EntitySpec == nil {
 		return "", fmt.Errorf("entity %s/%s not found", module, name)
@@ -655,6 +668,11 @@ func (r *Registry) GenerateNaturalKey(ctx context.Context, workspaceID, module, 
 	if rule == nil {
 		return "", fmt.Errorf("field %q on %s/%s has no natural_key_rule", fieldName, module, name)
 	}
+	if rule.ScopeField != "" && scope == "" {
+		return "", fmt.Errorf(
+			"field %q on %s/%s is scoped by %q — pass the scope value, e.g. ctx.next_key(%q, scope=<%s>)",
+			fieldName, module, name, rule.ScopeField, fieldName, rule.ScopeField)
+	}
 
 	prefix := ""
 	if rule.Prefix != nil {
@@ -666,7 +684,7 @@ func (r *Registry) GenerateNaturalKey(ctx context.Context, workspaceID, module, 
 	}
 
 	counter := db.NewNaturalKeyCounter(r.db, r.driver)
-	return counter.GenerateNaturalKey(ctx, workspaceID, name, fieldName, "", rule.Reset, rule.Format, prefix)
+	return counter.GenerateNaturalKey(ctx, workspaceID, name, fieldName, scope, rule.Reset, rule.Format, prefix)
 }
 
 // ListEntities returns a sorted summary of all registered entities.
@@ -721,6 +739,84 @@ func (r *Registry) GetEntitiesByCharacteristic(char spec.Characteristic) []Entit
 		}
 	}
 	return filtered
+}
+
+// AssignmentSources returns every principal→dimension mapping declared by an
+// `assignments:` block (S5). The API layer resolves `row_scope` attributes with
+// `from: session` against these, so a declaration is enough to make a branch
+// scope resolvable — no token-minting plumbing required.
+func (r *Registry) AssignmentSources() []spec.AssignmentSource {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var out []spec.AssignmentSource
+	for _, si := range r.specs {
+		if si == nil || si.EntitySpec == nil {
+			continue
+		}
+		module := si.Metadata.Module
+		name := si.Metadata.Name
+		for _, a := range si.EntitySpec.Assignments {
+			out = append(out, spec.AssignmentSource{
+				Module:         module,
+				Entity:         name,
+				Dimension:      a.Dimension,
+				Field:          a.Field,
+				PrincipalField: a.PrincipalField,
+			})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Module != out[j].Module {
+			return out[i].Module < out[j].Module
+		}
+		if out[i].Entity != out[j].Entity {
+			return out[i].Entity < out[j].Entity
+		}
+		return out[i].Dimension < out[j].Dimension
+	})
+	return out
+}
+
+// FindAssignmentValue resolves one principal→dimension mapping (S5): it finds the
+// carrier row whose principal field equals `principal` and returns that row's
+// dimension value. Returns "" when the principal has no row (or the row has no
+// value) — callers treat that as fail-closed rather than as "no filter".
+func (r *Registry) FindAssignmentValue(ctx context.Context, src spec.AssignmentSource, workspaceID, principal string) (string, error) {
+	if src.Entity == "" || src.PrincipalField == "" || src.Field == "" || principal == "" {
+		return "", nil
+	}
+	store, err := r.GetEntityStore(src.Module, src.Entity)
+	if err != nil {
+		return "", err
+	}
+	rec, err := store.FindByField(ctx, workspaceID, src.PrincipalField, principal)
+	if err != nil || rec == nil {
+		return "", err
+	}
+	return recordStringField(rec, src.Field), nil
+}
+
+// recordStringField reads a field off an entity record as a string. A relation
+// value may come back as a nested object, so both shapes are accepted; any other
+// shape yields "" (fail closed).
+func recordStringField(rec *db.EntityRecord, field string) string {
+	if rec == nil || rec.Data == nil {
+		return ""
+	}
+	switch v := rec.Data[field].(type) {
+	case string:
+		return v
+	case map[string]any:
+		if id, ok := v["id"].(string); ok {
+			return id
+		}
+	case float64:
+		return strconv.FormatInt(int64(v), 10)
+	case int64:
+		return strconv.FormatInt(v, 10)
+	}
+	return ""
 }
 
 // Count returns the total number of registered entities.

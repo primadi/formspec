@@ -543,7 +543,7 @@ func checkAggregateDecl(
 		return
 	}
 	switch ft {
-	case spec.FieldInteger, spec.FieldDecimal, spec.FieldNumber, spec.FieldMoney:
+	case spec.FieldInteger, spec.FieldDecimal, spec.FieldNumber, spec.FieldPercent, spec.FieldMoney:
 		return
 	}
 	result.add(m.Source, "error",

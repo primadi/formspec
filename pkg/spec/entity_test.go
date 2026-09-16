@@ -28,7 +28,7 @@ func TestValidateEntitySpec_Scope(t *testing.T) {
 				{Name: "branch_id", Type: FieldString},
 				{Name: "guest_token", Type: FieldString},
 			},
-			Scope: scope,
+			RowScope: scope,
 		}
 	}
 
@@ -62,6 +62,238 @@ func TestValidateEntitySpec_Scope(t *testing.T) {
 		}
 	}
 }
+
+// TestValidateEntitySpec_ScopeDimension pins the S5 declaration: a scope names a
+// dimension and the field carrying its value. `required: true` must agree with
+// the field itself, otherwise the declaration claims a guarantee the row shape
+// does not hold.
+func TestValidateEntitySpec_ScopeDimension(t *testing.T) {
+	base := func(mutate func(*EntitySpec)) *EntitySpec {
+		e := &EntitySpec{
+			Version: "v1",
+			Fields: []Field{
+				{Name: "branch_id", Type: FieldRelation, Required: true},
+				{Name: "note", Type: FieldString},
+			},
+		}
+		if mutate != nil {
+			mutate(e)
+		}
+		return e
+	}
+
+	ok := []struct {
+		name string
+		e    *EntitySpec
+	}{
+		{"required dimension", base(func(e *EntitySpec) {
+			e.Scope = &ScopeDecl{Dimension: "branch", Field: "branch_id", Required: true}
+		})},
+		{"optional dimension", base(func(e *EntitySpec) {
+			e.Scope = &ScopeDecl{Dimension: "branch", Field: "note"}
+		})},
+	}
+	for _, c := range ok {
+		if err := ValidateEntitySpec(c.e); err != nil {
+			t.Errorf("%s: expected no error, got %v", c.name, err)
+		}
+	}
+
+	bad := []struct {
+		name string
+		e    *EntitySpec
+	}{
+		{"missing dimension", base(func(e *EntitySpec) {
+			e.Scope = &ScopeDecl{Field: "branch_id"}
+		})},
+		{"bad dimension name", base(func(e *EntitySpec) {
+			e.Scope = &ScopeDecl{Dimension: "Branch", Field: "branch_id"}
+		})},
+		{"missing field", base(func(e *EntitySpec) {
+			e.Scope = &ScopeDecl{Dimension: "branch"}
+		})},
+		{"unknown field", base(func(e *EntitySpec) {
+			e.Scope = &ScopeDecl{Dimension: "branch", Field: "outlet_id"}
+		})},
+		{"required disagrees with the field", base(func(e *EntitySpec) {
+			e.Scope = &ScopeDecl{Dimension: "branch", Field: "note", Required: true}
+		})},
+	}
+	for _, c := range bad {
+		if err := ValidateEntitySpec(c.e); err == nil {
+			t.Errorf("%s: expected an error, got none", c.name)
+		}
+	}
+}
+
+// TestValidateEntitySpec_Assignments pins the S5 principal→dimension mapping.
+func TestValidateEntitySpec_Assignments(t *testing.T) {
+	base := func(a ...AssignmentDecl) *EntitySpec {
+		return &EntitySpec{
+			Version: "v1",
+			Fields: []Field{
+				{Name: "username", Type: FieldString},
+				{Name: "branch_id", Type: FieldRelation},
+				{Name: "region_id", Type: FieldRelation},
+			},
+			Assignments: a,
+		}
+	}
+
+	if err := ValidateEntitySpec(base(AssignmentDecl{
+		Dimension: "branch", Field: "branch_id", PrincipalField: "username",
+	})); err != nil {
+		t.Errorf("valid assignment: expected no error, got %v", err)
+	}
+
+	bad := []struct {
+		name string
+		a    AssignmentDecl
+	}{
+		{"missing dimension", AssignmentDecl{Field: "branch_id", PrincipalField: "username"}},
+		{"bad dimension name", AssignmentDecl{Dimension: "Branch", Field: "branch_id", PrincipalField: "username"}},
+		{"missing field", AssignmentDecl{Dimension: "branch", PrincipalField: "username"}},
+		{"unknown field", AssignmentDecl{Dimension: "branch", Field: "outlet_id", PrincipalField: "username"}},
+		{"missing principal_field", AssignmentDecl{Dimension: "branch", Field: "branch_id"}},
+		{"unknown principal_field", AssignmentDecl{Dimension: "branch", Field: "branch_id", PrincipalField: "login"}},
+	}
+	for _, c := range bad {
+		if err := ValidateEntitySpec(base(c.a)); err == nil {
+			t.Errorf("%s: expected an error, got none", c.name)
+		}
+	}
+
+	// Two mappings for the same dimension would be ambiguous at resolution time.
+	if err := ValidateEntitySpec(base(
+		AssignmentDecl{Dimension: "branch", Field: "branch_id", PrincipalField: "username"},
+		AssignmentDecl{Dimension: "branch", Field: "region_id", PrincipalField: "username"},
+	)); err == nil {
+		t.Error("duplicate dimension: expected an error, got none")
+	}
+}
+
+// TestValidateEntitySpec_Unit pins S12: a unit declaration must agree with the
+// field's own values, so a typo cannot silently disable conversion.
+func TestValidateEntitySpec_Unit(t *testing.T) {
+	base := func(u *UnitDecl) *EntitySpec {
+		return &EntitySpec{
+			Version: "v1",
+			Fields: []Field{{
+				Name:       "unit",
+				Type:       FieldEnum,
+				EnumValues: []string{"gram", "kg", "pcs"},
+				Unit:       u,
+			}},
+		}
+	}
+
+	if err := ValidateEntitySpec(base(&UnitDecl{Base: "gram", Convertible: []string{"kg"}})); err != nil {
+		t.Errorf("valid unit: expected no error, got %v", err)
+	}
+
+	bad := []struct {
+		name string
+		u    *UnitDecl
+	}{
+		{"missing base", &UnitDecl{Convertible: []string{"kg"}}},
+		{"base not in enum_values", &UnitDecl{Base: "ounce"}},
+		{"convertible not in enum_values", &UnitDecl{Base: "gram", Convertible: []string{"ounce"}}},
+		{"convertible repeats base", &UnitDecl{Base: "gram", Convertible: []string{"gram"}}},
+	}
+	for _, c := range bad {
+		if err := ValidateEntitySpec(base(c.u)); err == nil {
+			t.Errorf("%s: expected an error, got none", c.name)
+		}
+	}
+
+	// `unit` describes unit names, so it is meaningless on a numeric field.
+	badType := &EntitySpec{
+		Version: "v1",
+		Fields:  []Field{{Name: "quantity", Type: FieldDecimal, Unit: &UnitDecl{Base: "gram"}}},
+	}
+	if err := ValidateEntitySpec(badType); err == nil {
+		t.Error("unit on a decimal field: expected an error, got none")
+	}
+}
+
+// TestValidateEntitySpec_SummaryInvariants pins S14: `maintained_by` and
+// `invariants` belong to summary projections, name real fields, and — crucially
+// — an invariant must be backed by a unique index. A summary has no action
+// pipeline, so an unbacked invariant would be a claim nothing enforces.
+func TestValidateEntitySpec_SummaryInvariants(t *testing.T) {
+	base := func(mutate func(*EntitySpec)) *EntitySpec {
+		e := &EntitySpec{
+			Version:        "v1",
+			Characteristic: CharSummary,
+			Fields: []Field{
+				{Name: "branch_id", Type: FieldRelation},
+				{Name: "ingredient_id", Type: FieldRelation},
+			},
+			Indexes: []IndexDecl{
+				{Fields: []string{"branch_id", "ingredient_id"}, Unique: true},
+			},
+		}
+		if mutate != nil {
+			mutate(e)
+		}
+		return e
+	}
+
+	ok := base(func(e *EntitySpec) {
+		e.MaintainedBy = "cafe-stock/scripts/stock_level_apply"
+		e.Invariants = []InvariantDecl{{
+			Unique:  []string{"branch_id", "ingredient_id"},
+			Message: "satu saldo per cabang/bahan",
+		}}
+	})
+	if err := ValidateEntitySpec(ok); err != nil {
+		t.Errorf("valid summary contract: expected no error, got %v", err)
+	}
+
+	noIndex := base(func(e *EntitySpec) {
+		e.Indexes = nil
+		e.Invariants = []InvariantDecl{{Unique: []string{"branch_id", "ingredient_id"}}}
+	})
+	if err := ValidateEntitySpec(noIndex); err == nil {
+		t.Error("invariant without a unique index: expected an error, got none")
+	}
+
+	nonSummary := &EntitySpec{
+		Version:        "v1",
+		Characteristic: CharMaster,
+		Fields:         []Field{{Name: "name", Type: FieldString}},
+		MaintainedBy:   "m/scripts/x",
+	}
+	if err := ValidateEntitySpec(nonSummary); err == nil {
+		t.Error("maintained_by on a master entity: expected an error, got none")
+	}
+
+	badRef := base(func(e *EntitySpec) { e.MaintainedBy = "stock_level_apply" })
+	if err := ValidateEntitySpec(badRef); err == nil {
+		t.Error("maintained_by without a module qualifier: expected an error, got none")
+	}
+
+	unknownField := base(func(e *EntitySpec) {
+		e.Invariants = []InvariantDecl{{Unique: []string{"branch_id", "nope"}}}
+	})
+	if err := ValidateEntitySpec(unknownField); err == nil {
+		t.Error("invariant naming an unknown field: expected an error, got none")
+	}
+}
+
+// TestValidateEntitySpec_Percent pins S11: `percent` is a first-class field type
+// that validates like the decimal it numerically is.
+func TestValidateEntitySpec_Percent(t *testing.T) {
+	e := &EntitySpec{
+		Version: "v1",
+		Fields:  []Field{{Name: "tax_percent", Type: FieldPercent, Scale: ptrInt(2)}},
+	}
+	if err := ValidateEntitySpec(e); err != nil {
+		t.Errorf("percent field: expected no error, got %v", err)
+	}
+}
+
+func ptrInt(v int) *int { return &v }
 
 func TestValidateEntitySpec_RenamedFrom(t *testing.T) {
 	// Valid rename.
@@ -219,6 +451,36 @@ func TestValidateEntitySpec_NilExtendStorage(t *testing.T) {
 	}
 	if err := ValidateEntitySpec(e); err != nil {
 		t.Errorf("expected no error for nil extend_storage, got %v", err)
+	}
+}
+
+func TestValidateEntitySpec_SummaryRebuildContract(t *testing.T) {
+	valid := &EntitySpec{
+		Version:        "v1",
+		Characteristic: CharSummary,
+		Fields: []Field{
+			{Name: "customer_id", Type: FieldString},
+			{Name: "order_total", Type: FieldDecimal},
+		},
+		Sources: []SummarySource{
+			{Entity: "sales.order", Alias: "o", Filter: map[string]string{"status": "paid"}},
+			{Entity: "sales.customer", Alias: "c"},
+		},
+		JoinKey: "o.customer_id = c.id",
+		Rebuild: &RebuildSpec{Strategy: "partial"},
+	}
+	if err := ValidateEntitySpec(valid); err != nil {
+		t.Fatalf("expected valid summary rebuild contract, got %v", err)
+	}
+
+	invalid := &EntitySpec{
+		Version:        "v1",
+		Characteristic: CharSummary,
+		Fields:         []Field{{Name: "total", Type: FieldDecimal}},
+		Rebuild:        &RebuildSpec{Strategy: "unknown"},
+	}
+	if err := ValidateEntitySpec(invalid); err == nil {
+		t.Fatal("expected error for invalid summary rebuild strategy")
 	}
 }
 

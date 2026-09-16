@@ -10,16 +10,35 @@
         "CREATE INDEX idx_invoice_date ON invoice(transaction_date)"
       ]
     },
+    "ddl_by": {
+      "description": "DDLByDialect holds per-driver variants of the same statement, for DDL",
+      "type": "object",
+      "additionalProperties": {},
+      "examples": [
+        "{sqlite: \\\"CREATE INDEX …\\\", postgres: \\\"CREATE INDEX …\\\"}"
+      ]
+    },
+    "dml": {
+      "description": "DML is an explicitly declared data repair, run BEFORE the DDL of the same",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "module": {
       "description": "@schema {example: \"billing\"}",
       "type": "string",
       "examples": [
         "billing"
       ]
+    },
+    "reason": {
+      "description": "Reason states why the declared DML is needed (audit trail).",
+      "type": "string",
+      "examples": [
+        "merge duplicate menu prices before the unique index"
+      ]
     }
   },
-  "required": [
-    "ddl"
-  ],
   "additionalProperties": false
 }

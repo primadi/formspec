@@ -19,20 +19,26 @@ func NewEngine(reg *Registry) *Engine {
 }
 
 // RequiresApproval reports whether the given transition is intercepted by at
-// least one workflow. entity is "module.entity" (e.g. "gl.journal-entry").
-func (e *Engine) RequiresApproval(entity, from, to string) bool {
+// least one workflow. entity is "module.entity" (e.g. "gl.journal-entry");
+// transition is the state machine's `via` name for the transition being
+// executed; from/to are the state names.
+//
+// transition is required rather than derived from (from,to): a workflow may
+// select its transition by name (S9), and several different transitions can
+// share the same target state, so the state pair alone cannot identify it.
+func (e *Engine) RequiresApproval(entity, transition, from, to string) bool {
 	if e.reg == nil {
 		return false
 	}
-	return len(e.reg.ForTransition(entity, from, to)) > 0
+	return len(e.reg.ForTransition(entity, transition, from, to)) > 0
 }
 
 // WorkflowsFor returns the workflows intercepting the given transition.
-func (e *Engine) WorkflowsFor(entity, from, to string) []*spec.WorkflowSpec {
+func (e *Engine) WorkflowsFor(entity, transition, from, to string) []*spec.WorkflowSpec {
 	if e.reg == nil {
 		return nil
 	}
-	return e.reg.ForTransition(entity, from, to)
+	return e.reg.ForTransition(entity, transition, from, to)
 }
 
 // ApplicableSteps returns the steps of a workflow that apply to the given

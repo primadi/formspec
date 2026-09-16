@@ -72,7 +72,7 @@ func (e *ScriptExecutor) SetCreateHandler(fn func(ctx context.Context, workspace
 }
 
 // SetNextKeyHandler sets the natural key generation callback.
-func (e *ScriptExecutor) SetNextKeyHandler(fn func(ctx context.Context, workspaceID, module, entity, fieldName string) (string, error)) {
+func (e *ScriptExecutor) SetNextKeyHandler(fn func(ctx context.Context, workspaceID, module, entity, fieldName, scope string) (string, error)) {
 	e.engine.NextKeyHandler = fn
 }
 

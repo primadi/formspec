@@ -65,6 +65,18 @@ const (
 	// submitted payload — for fields seeded from the render context
 	// (`default_from`) that the user must not see.
 	WidgetHidden FormWidget = "hidden"
+	// WidgetQrCode renders the field's value as a QR code (gap #3/S4). The value
+	// IS the payload (a token or URL), so there is nothing to type: the widget
+	// exists so a table card, receipt, or public page can turn a stored string
+	// into something a phone can scan. Read-only.
+	WidgetQrCode FormWidget = "qrcode"
+	// WidgetMoneyInput edits a `money` field (05-field-types.md §2, gap #1): it
+	// keeps the currency alongside the amount, uses a numpad on touch devices,
+	// and shows a formatted preview. Before it, a money field rendered as a
+	// plain text input and the cashier typed an amount as free text.
+	WidgetMoneyInput FormWidget = "moneyinput"
+	// WidgetTimeInput edits a `time` field (time-of-day, `HH:MM[:SS]`).
+	WidgetTimeInput FormWidget = "timeinput"
 )
 
 // TableCellWidget is the manifest name of a table/list cell widget (closed set).
@@ -74,6 +86,15 @@ type TableCellWidget string
 const (
 	WidgetBadge   TableCellWidget = "badge"
 	WidgetBoolean TableCellWidget = "boolean"
+	// WidgetImage renders a `file`/`attachment` cell as an inline image (#4) —
+	// the download route is the `src`, so a thumbnail in a table costs nothing
+	// extra. A non-image value falls back to the download link.
+	WidgetImage TableCellWidget = "image"
+	// WidgetQrCodeCell renders the cell's value as a scannable QR code — the
+	// same `qrcode` name as the form widget, because it means the same thing:
+	// "this string, scannable". Listed in the cell set too so a dining-table
+	// list or a printed card does not need a bespoke kind.
+	WidgetQrCodeCell TableCellWidget = "qrcode"
 )
 
 // formWidgets is the authoritative ordered list (see the const block above).
@@ -99,11 +120,16 @@ var formWidgets = []FormWidget{
 	WidgetChildGrid,
 	WidgetGrantsEditor,
 	WidgetHidden,
+	WidgetQrCode,
+	WidgetMoneyInput,
+	WidgetTimeInput,
 }
-
 var tableCellWidgets = []TableCellWidget{
 	WidgetBadge,
 	WidgetBoolean,
+	WidgetImage,
+	// A QR cell is how a table/card prints a scannable token (gap #3).
+	WidgetQrCodeCell,
 }
 
 // widgetAliasHints maps a field *type* name to the canonical widget an author
@@ -121,10 +147,8 @@ var widgetAliasHints = map[string]FormWidget{
 	"relation": WidgetRelationPicker,
 	"child":    WidgetChildGrid,
 	"file":     WidgetFileInput,
-	// No money/time widget exists yet (known gap: MoneyInput/TimeInput) — the
-	// closest implemented widget is named so the message is still actionable.
-	"money": WidgetDecimalInput,
-	"time":  WidgetDateTimeInput,
+	"money":    WidgetMoneyInput,
+	"time":     WidgetTimeInput,
 }
 
 // AllFormWidgets returns the closed set of form widget names (copy).

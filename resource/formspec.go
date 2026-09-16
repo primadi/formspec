@@ -264,6 +264,14 @@ type App struct {
 	// a ReloadSpec() reuses the same backend (and its consumer groups) while
 	// rebuilding the streaming worker.
 	stream stream.Stream
+	// subReg is the live subscription registry (Tier 1 + Tier 2). Held so
+	// `formspec summary rebuild` can resolve which durable streams feed a
+	// summary projection (todo 3.6.4) without re-parsing manifests.
+	subReg *subscription.Registry
+	// subDispatch is the subscription dispatcher (filter → transform →
+	// handler). Held alongside the streaming worker so a rebuild replays an
+	// event through exactly the path live delivery uses.
+	subDispatch *subscription.Dispatcher
 	// streamingWorker consumes durable (Tier 2) subscriptions from the stream
 	// backend (todo 7.3.2).
 	streamingWorker *subscription.StreamingWorker
@@ -959,6 +967,8 @@ func New(cfg Config) (*App, error) {
 		linkSweeper:      linkSweeper,
 		nativeHandlers:   make(map[string]action.NativeHandler),
 		authSvc:          authSvc,
+		subReg:           subReg,
+		subDispatch:      subDispatch,
 	}
 	// Register native handlers for auth entity hooks (password hashing on
 	// formspec.core.user create/update).
@@ -1047,6 +1057,31 @@ func (a *App) Registry() *entity.Registry {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	return a.reg
+}
+
+// Subscriptions returns the live subscription registry (Tier 1 + Tier 2).
+// Exposed so `formspec summary rebuild` can resolve which durable streams feed
+// a summary projection (todo 3.6.4).
+func (a *App) Subscriptions() *subscription.Registry {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.subReg
+}
+
+// StreamingWorker returns the worker that consumes durable (Tier 2)
+// subscriptions. Exposed so a summary rebuild replays events through the same
+// filter → transform → handler path live delivery uses.
+func (a *App) StreamingWorker() *subscription.StreamingWorker {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.streamingWorker
+}
+
+// Stream returns the Tier 2 durable event-stream backend (todo 7.3.2).
+func (a *App) Stream() stream.Stream {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.stream
 }
 
 // SpecVersion returns the spec version counter. Incremented on every
@@ -1332,8 +1367,9 @@ func (a *App) ReloadSpec() error {
 	// uninterrupted.
 	var newStreamingWorker *subscription.StreamingWorker
 	var newDynamicRefresher *subscription.DynamicRefresher
+	var newSubDispatch *subscription.Dispatcher
 	if a.deliveryHandler != nil {
-		newSubDispatch := subscription.NewDispatcher(newSubReg, newDisp)
+		newSubDispatch = subscription.NewDispatcher(newSubReg, newDisp)
 		newSubDispatch.SetStream(a.stream)
 		newItDispatch := integrator.NewDispatcher(newItReg, newReg, newSvcReg, newDisp, db.NewSagaStore(a.database, a.driver))
 		a.deliveryHandler.Subscriptions = func(ctx context.Context, workspaceID, eventName, resource string, payload map[string]any) error {
@@ -1429,6 +1465,10 @@ func (a *App) ReloadSpec() error {
 	a.nativeEx = newDisp.NativeExecutor()
 	a.streamingWorker = newStreamingWorker
 	a.dynamicRefresher = newDynamicRefresher
+	a.subReg = newSubReg
+	if newSubDispatch != nil {
+		a.subDispatch = newSubDispatch
+	}
 	a.mu.Unlock()
 
 	a.specVersion.Add(1)
@@ -1880,8 +1920,8 @@ func newDispatcher(reg *entity.Registry, svcReg *service.Registry, _ db.DB, cfg 
 			Data:        data,
 		})
 	})
-	scriptEx.SetNextKeyHandler(func(ctx context.Context, workspaceID, module, entityName, fieldName string) (string, error) {
-		return generateNextKey(ctx, reg, workspaceID, module, entityName, fieldName)
+	scriptEx.SetNextKeyHandler(func(ctx context.Context, workspaceID, module, entityName, fieldName, scope string) (string, error) {
+		return generateNextKey(ctx, reg, workspaceID, module, entityName, fieldName, scope)
 	})
 	disp.RegisterExecutor(spec.ImplScript, scriptEx)
 	disp.RegisterExecutor(spec.ImplScriptRef, scriptEx)
@@ -1894,12 +1934,17 @@ func newDispatcher(reg *entity.Registry, svcReg *service.Registry, _ db.DB, cfg 
 	return disp
 }
 
-// generateNextKey is the ctx.next_key(field) backing for scripts — delegates
-// to the entity registry's natural-key counter. Automatic natural-key
+// generateNextKey is the ctx.next_key(field, scope) backing for scripts —
+// delegates to the entity registry's natural-key counter. Automatic natural-key
 // generation on plain Create is separate (wired directly into
 // db.EntityStore.Insert, since it must run before required-field validation).
-func generateNextKey(ctx context.Context, reg *entity.Registry, workspaceID, module, entityName, fieldName string) (string, error) {
-	return reg.GenerateNaturalKey(ctx, workspaceID, module, entityName, fieldName)
+//
+// The scope value comes from the script, mirroring what the automatic path reads
+// off the record (gap #9): a counter whose rule declares `scope_field` must be
+// told which scope it is minting for, and the registry refuses to mint a global
+// key when it is missing.
+func generateNextKey(ctx context.Context, reg *entity.Registry, workspaceID, module, entityName, fieldName, scope string) (string, error) {
+	return reg.GenerateNaturalKey(ctx, workspaceID, module, entityName, fieldName, scope)
 }
 
 // checkCrossModuleUses enforces the uses.resources contract (01-core-basic §5)

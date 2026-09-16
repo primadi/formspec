@@ -9,6 +9,11 @@ spec:
   characteristic: transaction
   plural: payments
   lifecycle: plain_crud
+  # S5: pembayaran mengikuti cabang pesanannya.
+  scope: { dimension: branch, field: branch_id, required: true }
+  # Item 3.5.
+  row_scope:
+    - { field: branch_id, op: eq, from: session }
   fields:
     - name: transaction_date
       type: datetime
@@ -31,7 +36,7 @@ spec:
       enum_values: [cash, card, qris, ewallet, points]
       required: true
       title: "Metode Bayar"
-    # GAP-01/GAP-02: seluruh field uang di sini.
+    # GAP-01 TERTUTUP (2.14) — `moneyinput`. Sisa GAP-02: indeks money.
     - name: amount
       type: money
       required: true

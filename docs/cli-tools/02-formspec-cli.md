@@ -16,7 +16,7 @@
 | **Scaffolding**                | `new <kind>`                                                                               |
 | **Dev loop**                   | `dev`, `repl`                                                                              |
 | **Codegen**                    | `generate`                                                                                 |
-| **Data lifecycle**             | `migrate`, `seed`, `backup create\|inspect`, `restore`                                     |
+| **Data lifecycle**             | `migrate`, `seed`, `summary list\|rebuild`, `backup create\|inspect`, `restore`            |
 | **Data archival**              | `archive run\|view\|restore-batch`                                                         |
 | **Distributed workflow**       | `saga list\|resolve`                                                                       |
 | **Marketplace & signing**      | `module list\|install\|uninstall\|publish`, `sign`, `override adopt\|diff\|list`, `verify` |
@@ -370,6 +370,28 @@ formspec restore --from backup-2026-07-10.tar \
 ```
 
 File storage ikut ter-backup; summary/agregat tidak (bisa dihitung ulang). Transform per-record via script Starlark saat restore. `restore` yang meng-overwrite data yang sudah ada wajib tanda tangan pemilik workspace atau delegasi eksplisit ber-scope `backup.restore`, selalu tercatat di transparency log.
+
+### `formspec summary list|rebuild`
+
+Summary Entity (`characteristic: summary`) tidak ikut ter-backup justru karena ia proyeksi: seluruh isinya bisa dihitung ulang dari data sumber (spec §6). Verb ini membuat janji itu bisa dijalankan — bukan sekadar teori di dokumen.
+
+```bash
+formspec summary list                        # inventaris: mana yang bisa di-rebuild, mana yang tidak
+formspec summary rebuild cafe-stock/stock-level --dry-run
+formspec summary rebuild stock-level --reset # kosongkan proyeksi dulu, lalu replay
+```
+
+Mekanismenya: `rebuild` me-replay stream event durabel dari **awal** untuk setiap Subscription durabel yang mendengarkan event sumber, lewat jalur yang **sama persis** dengan delivery live (filter → transform → handler) — sehingga hasil rebuild identik dengan hasil operasi normal.
+
+Tiga sifat yang perlu diketahui sebelum menjalankannya:
+
+| Sifat                                  | Konsekuensi                                                                                                                                                                                 |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Replay jalan di consumer group sendiri | Cursor dan pending entry worker live **tidak tersentuh** — rebuild aman dijalankan terhadap server yang sedang melayani.                                                                    |
+| Handler durabel wajib idempoten        | Replay mengulang **semua** subscriber durabel dari event sumber, bukan hanya yang mengisi proyeksi itu. Aman menurut kontrak at-least-once, tapi `--subscriber` mempersempitnya bila perlu. |
+| Butuh stream backend bersama           | Redis/Valkey. Backend dev default (in-memory) hidup di dalam proses server, jadi proses CLI terpisah tidak punya riwayat — perintah ini mengatakan itu, bukan melaporkan sukses kosong.     |
+
+Kegagalan handler **dilaporkan, tidak di-retry** oleh rebuild (retry tetap tugas worker live; run yang gagal di-ack di group-nya sendiri supaya tidak menggantung). Perintah keluar dengan status ≠ 0 dan minta dijalankan ulang setelah penyebabnya diperbaiki. Sumber yang dideklarasikan tapi tidak punya subscriber durabel dilaporkan sebagai **orphaned** — gap itu ditampilkan, bukan disembunyikan.
 
 ---
 

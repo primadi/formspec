@@ -30,7 +30,7 @@ type CtxAPI struct {
 	Auth      *authInfo
 	Now       func() time.Time
 	Log       *logAPI
-	NextKey   func(fieldName string) (string, error)
+	NextKey   func(fieldName, scope string) (string, error)
 	Config    *configAPI
 	Secrets   *secretsAPI
 	Job       *jobAPI
@@ -420,7 +420,12 @@ func (c *CtxAPI) builtinNextKey() *starlark.Builtin {
 		kwargs []starlark.Tuple,
 	) (starlark.Value, error) {
 		var fieldName string
-		if err := starlark.UnpackArgs("next_key", args, kwargs, "field", &fieldName); err != nil {
+		var scope string
+		// `scope` is optional, but REQUIRED for a counter whose rule declares
+		// `scope_field` (e.g. an order number per branch): the script passes the
+		// value it is about to write, mirroring what the automatic on-create path
+		// reads off the record (gap #9).
+		if err := starlark.UnpackArgs("next_key", args, kwargs, "field", &fieldName, "scope?", &scope); err != nil {
 			return nil, err
 		}
 
@@ -428,7 +433,7 @@ func (c *CtxAPI) builtinNextKey() *starlark.Builtin {
 			return nil, fmt.Errorf("ctx.next_key: no key generator registered")
 		}
 
-		key, err := c.NextKey(fieldName)
+		key, err := c.NextKey(fieldName, scope)
 		if err != nil {
 			return nil, fmt.Errorf("ctx.next_key: %w", err)
 		}

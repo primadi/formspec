@@ -1,0 +1,22 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: stock-level
+  module: warehouse
+  description: "Projection of stock-movement joined to ingredient"
+spec:
+  version: v1
+  characteristic: summary
+  plural: stock-levels
+  fields:
+    - name: ingredient_id
+      type: string
+      rules: [required]
+    - name: quantity_on_hand
+      type: decimal
+      scale: 3
+  sources:
+    - { entity: warehouse.stock-movement, alias: m }
+    - { entity: ingredient }
+  join_key: "m.ingredient_id = i.id"
+  rebuild: { strategy: partial, window: "month" }

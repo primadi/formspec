@@ -1,0 +1,6 @@
+apiVersion: formspec.dev/v1
+kind: Module
+metadata:
+  name: billing
+spec:
+  description: Scoped natural-key fixture (gap #9)

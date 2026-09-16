@@ -8,6 +8,11 @@ spec:
   version: v1
   characteristic: summary
   plural: menu-costs
+  # S5: biaya & margin dihitung per cabang.
+  scope: { dimension: branch, field: branch_id, required: true }
+  # Item 3.5.
+  row_scope:
+    - { field: branch_id, op: eq, from: session }
   fields:
     - name: branch_id
       type: relation
@@ -42,4 +47,20 @@ spec:
       unique: true
   # Entity `summary` — murni ditulis script.
   # GAP-13: ini PENGGANTI metode valuasi bawaan FormSpec yang tidak ada.
+  # S14: invariannya harus ditopang DB (unique index di atas), bukan
+  # diasumsikan — script pemeliharanya menyusul di item 4.1/4.2.
+  invariants:
+    - unique: [branch_id, menu_item_id]
+      message: "satu baris biaya per (cabang, menu)"
   # expose: [] — UI-only.
+
+  # ── Kontrak rebuild (02-core-extended.md §6) ──
+  # Biaya per porsi = Σ (qty resep × biaya bahan) ÷ yield, jadi sumbernya adalah
+  # resep; harga jual dibaca dari `menu-item-price` cabang yang bersangkutan.
+  sources:
+    - { entity: cafe-stock.recipe, alias: r }
+    - { entity: cafe-stock.ingredient, alias: i }
+  join_key: "r.menu_item_id = menu_item_id"
+  # `full`: proyeksi diturunkan dari keadaan resep & biaya SAAT INI, tidak ada
+  # jendela waktu yang bisa dipakai untuk sebagian saja.
+  rebuild: { strategy: full }

@@ -5,6 +5,18 @@ import (
 	"testing"
 )
 
+func TestValidateModuleSpec_Runtime(t *testing.T) {
+	for _, rt := range []string{"local", "typescript", "node", "php", "python", "go", "java", "dotnet", "ruby", "rust"} {
+		m := &ModuleSpec{Version: "1.0.0", Runtime: rt}
+		if err := ValidateModuleSpec(m); err != nil {
+			t.Fatalf("expected no error for module runtime %q, got %v", rt, err)
+		}
+	}
+	if err := ValidateModuleSpec(&ModuleSpec{Version: "1.0.0", Runtime: "auto"}); err == nil {
+		t.Fatal("expected error for module runtime auto")
+	}
+}
+
 func TestValidateAppSpec_DefaultRenderer(t *testing.T) {
 	// Empty app_renderer is valid (defaults to sidebar-nav at resolve time).
 	a := &AppSpec{RootURL: "/app"}

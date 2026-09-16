@@ -27,7 +27,7 @@ type MigrationRunner struct {
 	// contract (4.1.3). Set via SetRegistry.
 	registry interface {
 		GetEntityStore(module, name string) (*EntityStore, error)
-		GenerateNaturalKey(ctx context.Context, workspaceID, module, name, fieldName string) (string, error)
+		GenerateNaturalKey(ctx context.Context, workspaceID, module, name, fieldName, scope string) (string, error)
 	}
 }
 
@@ -40,7 +40,7 @@ func NewMigrationRunner(db DB, driver DriverType) *MigrationRunner {
 // EntityStore/NextKey parts of the PersistBackend contract (4.1.3).
 func (r *MigrationRunner) SetRegistry(reg interface {
 	GetEntityStore(module, name string) (*EntityStore, error)
-	GenerateNaturalKey(ctx context.Context, workspaceID, module, name, fieldName string) (string, error)
+	GenerateNaturalKey(ctx context.Context, workspaceID, module, name, fieldName, scope string) (string, error)
 }) {
 	r.registry = reg
 }
@@ -60,11 +60,11 @@ func (r *MigrationRunner) DriverName() string { return string(r.driver) }
 
 // NextKey implements PersistBackend.NextKey (4.1.1) — delegates to the
 // registry's natural-key counter (gap-free, atomic).
-func (r *MigrationRunner) NextKey(ctx context.Context, workspaceID, module, entity, field string) (string, error) {
+func (r *MigrationRunner) NextKey(ctx context.Context, workspaceID, module, entity, field, scope string) (string, error) {
 	if r.registry == nil {
 		return "", fmt.Errorf("next_key: no registry wired — call SetRegistry")
 	}
-	return r.registry.GenerateNaturalKey(ctx, workspaceID, module, entity, field)
+	return r.registry.GenerateNaturalKey(ctx, workspaceID, module, entity, field, scope)
 }
 
 // EntityStore implements PersistBackend.EntityStore (4.1.1).
@@ -628,7 +628,8 @@ func (r *MigrationRunner) ApplyMigrations(ctx context.Context, entities []Entity
 
 // diffExistingTable compares an existing table's columns against the desired
 // entity spec and returns ALTER TABLE DDL for missing generated columns
-// (indexed/unique/natural-key fields). Returns the number of columns added.
+// (indexed/unique/natural-key fields) plus CREATE INDEX for declared indexes
+// that may not exist yet. Returns the number of schema changes emitted.
 func (r *MigrationRunner) diffExistingTable(ctx context.Context, ti *TableInfo, entity spec.EntitySpec) (string, int, error) {
 	existing, err := r.existingColumns(ctx, ti.Schema, ti.TableName)
 	if err != nil {
@@ -661,7 +662,14 @@ func (r *MigrationRunner) diffExistingTable(ctx context.Context, ti *TableInfo, 
 		}
 	}
 	for _, idx := range indexDecls {
-		for _, fn := range idx.Fields {
+		// Includes fields named only by the index's partial predicate (S8) —
+		// those need a derived column too, or CREATE INDEX fails on a column
+		// that was never materialized.
+		byName := make(map[string]spec.Field, len(entity.Fields))
+		for _, f := range entity.Fields {
+			byName[f.Name] = f
+		}
+		for _, fn := range indexDeclFields(idx, byName) {
 			for _, f := range entity.Fields {
 				if f.Name == fn {
 					mark(f)
@@ -689,13 +697,48 @@ func (r *MigrationRunner) diffExistingTable(ctx context.Context, ti *TableInfo, 
 		// a plain column. On Postgres a generated column is used.
 		colDef := fmt.Sprintf("%s %s", col, sqlType)
 		if r.driver == DriverPostgres {
-			colDef = generateGeneratedColumn(f.Name, sqlType, r.driver)
+			colDef = generateGeneratedColumn(f.Name, f.Type, sqlType, r.driver)
 		}
 		alters = append(alters, fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s;",
 			qualifiedName(ti.Schema, ti.TableName, r.driver), colDef))
 		added++
 	}
+
+	// Declared indexes on an existing table. Without this, an `indexes:` entry
+	// added to a manifest after the table was created was never actually
+	// created — the diff only ever reconciled *columns*, so composite
+	// uniqueness stayed unenforced on any database already in use.
+	//
+	// Only indexes that are genuinely absent are emitted, so a converged schema
+	// still plans zero migrations (the plan is the gate CI uses). `IF NOT
+	// EXISTS` covers the race where the index appears between the check and the
+	// apply; both SQLite (≥3.8) and PostgreSQL (≥9.5) support it.
+	existingIdx, err := r.existingIndexes(ctx, ti.Schema, ti.TableName)
+	if err != nil {
+		return "", 0, err
+	}
+	for _, idx := range ti.CreateIndexSQL {
+		if name := indexNameOf(idx); name != "" && existingIdx[name] {
+			continue
+		}
+		alters = append(alters, withIfNotExists(idx))
+		added++
+	}
+
 	return strings.Join(alters, "\n"), added, nil
+}
+
+// withIfNotExists rewrites a CREATE INDEX statement into its idempotent form.
+func withIfNotExists(stmt string) string {
+	trimmed := strings.TrimSpace(stmt)
+	upper := strings.ToUpper(trimmed)
+	switch {
+	case strings.HasPrefix(upper, "CREATE UNIQUE INDEX "):
+		return "CREATE UNIQUE INDEX IF NOT EXISTS " + trimmed[len("CREATE UNIQUE INDEX "):]
+	case strings.HasPrefix(upper, "CREATE INDEX "):
+		return "CREATE INDEX IF NOT EXISTS " + trimmed[len("CREATE INDEX "):]
+	}
+	return trimmed
 }
 
 // existingColumns returns the set of column names present in a table.
@@ -729,6 +772,50 @@ func (r *MigrationRunner) existingColumns(ctx context.Context, schema, table str
 		cols[name] = true
 	}
 	return cols, rows.Err()
+}
+
+// existingIndexes returns the set of index names present in a table.
+func (r *MigrationRunner) existingIndexes(ctx context.Context, schema, table string) (map[string]bool, error) {
+	names := make(map[string]bool)
+	var rows *sql.Rows
+	var err error
+
+	if r.driver == DriverPostgres {
+		rows, err = r.db.QueryContext(ctx,
+			"SELECT indexname FROM pg_indexes WHERE schemaname = $1 AND tablename = $2",
+			schema, table)
+	} else {
+		rows, err = r.db.QueryContext(ctx,
+			"SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = ?", table)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("list indexes %s: %w", table, err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, fmt.Errorf("scan index: %w", err)
+		}
+		names[name] = true
+	}
+	return names, rows.Err()
+}
+
+// indexNameOf extracts the index name from a CREATE [UNIQUE] INDEX statement.
+// Returns "" when the statement is not one (in which case the caller emits it
+// unchanged — better an idempotent re-apply than a silently skipped statement).
+func indexNameOf(stmt string) string {
+	trimmed := strings.TrimSpace(stmt)
+	trimmed = strings.TrimSuffix(trimmed, ";")
+	fields := strings.Fields(trimmed)
+	for i, f := range fields {
+		if strings.EqualFold(f, "INDEX") && i+1 < len(fields) {
+			return fields[i+1]
+		}
+	}
+	return ""
 }
 
 // EntityMigration holds an entity manifest for migration.

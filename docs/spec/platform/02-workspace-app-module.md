@@ -68,6 +68,18 @@ Workspace harus **terdaftar** di workspace registry (entity bawaan
 
    (`spec.slug` opsional; default `metadata.name`.)
 
+   **Manifest ini mendaftarkan, bukan memilih.** Workspace yang **aktif** saat
+   runtime ditentukan oleh `--workspace-id` (atau config file) — manifest hanya
+   memastikan slug-nya ada di registry. Salah membaca ini membuat data masuk ke
+   tenant yang tidak diduga: mendeklarasikan `cafe`, menjalankan dev tanpa flag,
+   dan semua tulisan tersimpan dengan `tenant_id: "default"` sementara
+   `GET /cafe/...` menjawab `200` dengan nol baris (terlihat sehat, isinya beda).
+   `formspec dev` menutup kebingungan itu di kedua arah: kalau tree-nya
+   mendeklarasikan **tepat satu** workspace, dev **memakainya** dan
+   mengumumkannya; kalau lebih dari satu, ia tetap memakai `default` dan
+   **memperingatkan** sambil menyebut daftarnya; dan `--workspace-id` yang tidak
+   dideklarasikan juga diperingatkan.
+
 2. **CLI** — penambahan runtime:
    `formspec workspace create <slug> --name "..." --dsn <dsn>`
    (juga `list`, `delete --confirm`).

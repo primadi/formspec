@@ -231,6 +231,29 @@ func AuthMiddleware(next http.Handler) http.Handler {
 //   - If the identity lacks the permission, returns 403 Forbidden.
 //   - Otherwise, passes through to the next handler.
 //
+// RequirePermissionOrAnonymous guards a route a public App exposes to anonymous
+// callers (#45): an anonymous request passes — the public grant IS its
+// authorization, and the grant's row scope constrains which rows it returns —
+// while an authenticated request must still hold `required`.
+//
+// This is deliberately tighter than RequirePermission("public"). A public grant
+// must not double as a permission bypass for signed-in callers that merely hit
+// the same URL; without this, granting anonymous `list` on an entity would
+// silently strip the list permission from every POS/admin surface sharing that
+// route.
+func RequirePermissionOrAnonymous(required string) func(http.Handler) http.Handler {
+	inner := RequirePermission(required)
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if IdentityFromContext(r.Context()) != nil {
+				inner(next).ServeHTTP(w, r)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // RequirePermission returns middleware that enforces a specific permission.
 //
 // Rules:

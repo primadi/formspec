@@ -9,6 +9,11 @@ spec:
   characteristic: transaction
   plural: waste-entries
   lifecycle: plain_crud
+  # S5: bahan terbuang dicatat per cabang.
+  scope: { dimension: branch, field: branch_id, required: true }
+  # Item 3.5.
+  row_scope:
+    - { field: branch_id, op: eq, from: session }
   fields:
     - name: transaction_date
       type: datetime
@@ -32,7 +37,7 @@ spec:
       title: "Jumlah Terbuang"
     # D3: dibekukan dari stock-level.moving_avg_cost saat pencatatan, supaya
     # nilai kerugian tidak berubah surut bila harga bahan naik.
-    # GAP-01/GAP-02: field uang.
+    # GAP-01 TERTUTUP (2.14) — `moneyinput`. Sisa GAP-02: indeks money.
     - name: unit_cost
       type: money
       title: "Biaya per Satuan (beku)"

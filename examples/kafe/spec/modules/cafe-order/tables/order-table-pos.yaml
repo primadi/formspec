@@ -12,10 +12,9 @@ spec:
     - { field: transaction_date, label: "Waktu", format: relative, sortable: true }
     - { field: channel, label: "Kanal", widget: badge }
     - { field: status, label: "Status", widget: badge }
-    # GAP-02/GAP-23: total_amount adalah money; format currency di klien hanya
-    # menangani angka, dan kolom turunan money bertipe text (urutan salah).
-    # Sortir berdasarkan total TIDAK diandalkan sampai kedua gap ditutup.
-    - { field: total_amount, label: "Total", format: currency, align: right }
+    # GAP-23 TERTUTUP (3.2): kolom turunan money kini numerik (membaca
+    # `.amount`), jadi sortir berdasarkan total sah diandalkan.
+    - { field: total_amount, label: "Total", format: currency, align: right, sortable: true }
   filters:
     - { field: status, label: "Status", type: select }
     - { field: branch_id, label: "Cabang", type: select }
@@ -39,7 +38,10 @@ spec:
   # CATATAN: `delete` sengaja TIDAK ada di row_actions — dan action-nya sudah
   # dinonaktifkan di entity (aturan bisnis #14: koreksi lewat void, bukan hapus).
   #
-  # GAP-08: penyaring `branch_id` bersifat UI-level dan nilainya dipilih manual.
+      # S5: `order` sudah menyatakan `scope: {dimension: branch}`; filter di
+      # bawah ini tetap UI-level (pilihan kasir), sedangkan penyaringan yang
+      # MENGIKAT adalah `row_scope` entity + penyalaannya per permukaan
+      # (item 3.5).
   # Kasir cabang A masih bisa memilih cabang B. `fixed_filters` memang di-merge
   # server-side (bukan sekadar UI), TAPI nilainya statis dari manifest —
   # sehingga tidak bisa berarti "cabang milik pengguna yang sedang login".

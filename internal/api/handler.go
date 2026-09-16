@@ -443,11 +443,20 @@ func (f *HandlerFactory) HandleList(module, entity string) http.HandlerFunc {
 		// the client's filters, overriding any client value on a scoped field.
 		// A scoped entity whose scope cannot be resolved fails closed.
 		if es, ok := f.entitySpec(module, entity); ok {
-			filters, err = f.applyRowScope(r, es, filters)
+			filters, err = f.applyRowScope(r, es, module, entity, filters)
 			if err != nil {
 				writeError(w, http.StatusForbidden, "FORBIDDEN", err.Error())
 				return
 			}
+		}
+
+		// Public grant scope (#45): a public App may grant `list` on an entity
+		// only together with a token the caller must present — otherwise an
+		// anonymous caller reads every row. Missing token fails closed.
+		filters, err = f.applyPublicScope(r, filters)
+		if err != nil {
+			writeError(w, http.StatusForbidden, "FORBIDDEN", err.Error())
+			return
 		}
 
 		result, err := store.List(ctx, db.ListParams{
@@ -549,13 +558,27 @@ func (f *HandlerFactory) parseListQuery(r *http.Request, module, entity string) 
 	// filters: `?branch=A` must not be parsed as `filter branch = A` (which would
 	// fail as an unknown field). The scope itself is applied by applyRowScope.
 	scopeParams := map[string]bool{}
-	for i := range es.Scope {
-		if es.Scope[i].From != "route" {
+	for i := range es.RowScope {
+		if es.RowScope[i].From != "route" {
 			continue
 		}
-		p := es.Scope[i].Param
+		p := es.RowScope[i].Param
 		if p == "" {
-			p = es.Scope[i].Field
+			p = es.RowScope[i].Field
+		}
+		scopeParams[p] = true
+	}
+	// A public grant's scope parameter (#45) is request context too, not a field
+	// filter: `?token=abc` must not be parsed as `filter token = abc` (422
+	// unknown field). The value is applied by applyPublicScope.
+	for i := range publicScopeFromContext(r.Context()) {
+		psc := publicScopeFromContext(r.Context())[i]
+		if psc.From != "route" {
+			continue
+		}
+		p := psc.Param
+		if p == "" {
+			p = psc.Field
 		}
 		scopeParams[p] = true
 	}
@@ -1913,10 +1936,13 @@ func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, a
 			}
 			toState, _ := entityengine.NewStateMachineEngine().Transition(entitySpec, currentState, actionName)
 			wfEngine := workflow.NewEngine(f.wfRegistry)
-			if wfEngine.RequiresApproval(module+"."+entity, currentState, toState) {
+			// actionName is the transition's `via` name — required here because a
+			// workflow may select its transition by name (S9), which no state
+			// pair can express when the transition has several origin states.
+			if wfEngine.RequiresApproval(module+"."+entity, actionName, currentState, toState) {
 				// This transition requires approval. Route to the approval
 				// handler instead of executing the transition directly.
-				f.handleWorkflowApproval(w, r, ctx, module, entity, resourceID, currentState, toState, resourceData, resourceVersion, userID, workspaceID, params, wfEngine)
+				f.handleWorkflowApproval(w, r, ctx, module, entity, resourceID, actionName, currentState, toState, resourceData, resourceVersion, userID, workspaceID, params, wfEngine)
 				return
 			}
 		}
@@ -2073,14 +2099,14 @@ func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, a
 // The requester can never approve their own request (7.4.5).
 func (f *HandlerFactory) handleWorkflowApproval(
 	w http.ResponseWriter, r *http.Request, ctx context.Context,
-	module, entity, resourceID, fromState, toState string,
+	module, entity, resourceID, transition, fromState, toState string,
 	resourceData map[string]any, resourceVersion int,
 	userID, workspaceID string, params map[string]any, wfEngine *workflow.Engine,
 ) {
 	// Resolve the intercepting workflow(s). Use the first one for the
 	// approval flow (multiple workflows on the same transition are chained
 	// in a later iteration).
-	wfs := wfEngine.WorkflowsFor(module+"."+entity, fromState, toState)
+	wfs := wfEngine.WorkflowsFor(module+"."+entity, transition, fromState, toState)
 	if len(wfs) == 0 {
 		writeError(w, http.StatusInternalServerError, "WORKFLOW_ERROR", "no workflow for transition")
 		return

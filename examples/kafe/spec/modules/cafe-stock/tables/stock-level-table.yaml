@@ -26,5 +26,6 @@ spec:
   # `ingredient`, bukan di sini.
   search: false
   page_size: 50
-  # GAP-01/GAP-02: moving_avg_cost & stock_value adalah money — angka-angka
+  # GAP-01 TERTUTUP (2.14) — `moneyinput`. Sisa GAP-02: moving_avg_cost &
+  # stock_value adalah money — angka-angka
   # paling penting di tabel ini, dan justru yang paling terdampak dua gap itu.

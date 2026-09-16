@@ -26,6 +26,7 @@ dan protokol; perbedaan hasil antar backend adalah non-konformansi.
 | `richtext` | Teks kaya (markup)                | HTML/Markdown ter-**sanitasi** | Backend/engine **wajib** menyanitasi di server sebelum simpan — payload dari klien tidak pernah dipercaya mentah ([`01-core-basic.md`](01-core-basic.md) §3) |
 | `integer`  | Bilangan bulat 64-bit             | int64                          | Nama kanonik `integer` (bukan `int`)                                                                                                                         |
 | `decimal`  | Bilangan eksak presisi-arbitrer   | string desimal                 | **Wajib** untuk kuantitas numerik non-uang yang butuh eksak; **tidak pernah** float. Semantik `precision`/`scale` — §1.2                                     |
+| `percent`  | Persentase                        | string desimal (0–100)         | Secara numerik = `decimal`; bedanya rendering/format (`10` berarti 10%, bukan 0.1) — §1.5                                                                    |
 | `money`    | Uang = jumlah + mata uang         | `{ amount, currency }`         | Tipe first-class — §2                                                                                                                                        |
 | `boolean`  | `true`/`false`                    | bool                           | —                                                                                                                                                            |
 | `date`     | Tanggal kalender                  | `YYYY-MM-DD` (ISO-8601)        | Tanpa zona waktu                                                                                                                                             |
@@ -129,6 +130,30 @@ ada memakai `POST /:resource/:id/{field}` (di bawah workspace prefix,
 menautkan pointer ke field. Widget frontend yang mengonsumsi konvensi ini adalah
 `fileinput` ([`../frontend/07-component-kinds.md`](../frontend/07-component-kinds.md) §1.1).
 
+**`allowed_types` — bentuk kanonik: ekstensi tanpa titik** (gap #4b). Nilainya
+`[jpg, png, webp]`, bukan `[".jpg"]` dan bukan `["image/jpeg"]`. Tiga bentuk lain
+**diterima** dan diperlakukan sama oleh matcher klien maupun server, supaya spec
+yang sudah ada tetap jalan:
+
+| Bentuk             | Contoh       | Arti                       |
+| ------------------ | ------------ | -------------------------- |
+| ekstensi (kanonik) | `jpg`        | ekstensi file, tanpa titik |
+| ekstensi bertitik  | `.jpg`       | sama, ejaan lama           |
+| MIME type          | `image/jpeg` | tipe konten persis         |
+| MIME wildcard      | `image/*`    | seluruh keluarga tipe      |
+
+Alasan bentuk kanonik ditegaskan: bentuk yang didokumentasikan (`[jpg]`) dulu
+**tidak cocok dengan apa pun** — ia bukan `.jpg`, bukan MIME, bukan wildcard —
+sehingga upload yang seharusnya sah ditolak dengan "File type not allowed".
+`formspec validate` kini menolak entri di luar keempat bentuk itu (mis. `JPG`,
+`*.jpg`, `"jpg, png"`), jadi salah bentuk tertangkap saat validasi, bukan saat
+pengguna memilih file.
+
+**Banyak file** dinyatakan dengan `max_count > 1`, bukan tipe field tersendiri:
+nilainya menjadi array objek key, dan `max_count: 1` (default) berarti satu key
+string. Renderer yang menampilkan gambar memakai `widget: image` —
+[`../frontend/07-component-kinds.md`](../frontend/07-component-kinds.md) §1.
+
 ### 1.4 Tipe Struktural
 
 `relation` dan `child` bukan tipe data biasa — keduanya memodelkan hubungan
@@ -137,6 +162,55 @@ antar-dokumen dan didefinisikan penuh di [`01-core-basic.md`](01-core-basic.md)
 `child.storage`; `child.sequence_field` untuk line-ordering eksplisit). Katalog
 ini tidak mengulanginya; §3 menambahkan satu marker normatif (`tree`) di atas
 `relation` self-referential.
+
+### 1.5 `percent` — Persentase (S11)
+
+`percent` menandai field sebagai **persentase**, bukan rasio. Nilainya adalah
+angka persentase itu sendiri (`10` = 10%), disimpan sebagai `decimal` — jadi
+presisi, `scale`, pembulatan, dan aturan validasi numeriknya identik dengan
+§1.2. Yang berbeda hanya **interpretasi**: tanpa tipe ini, `10` tidak bisa
+dibedakan dari "10×" dan setiap komponen menebak sendiri apakah harus
+mengalikan dengan 100 saat menampilkan atau menghitung.
+
+```yaml
+- { name: tax_percent, type: percent, scale: 2, default: 10 }
+```
+
+Aturan:
+
+- Field `percent` **tidak** menyimpan mata uang dan **tidak** menggantikan
+  `money` untuk nominal.
+- Agregasi numerik (`sum`, `avg`, `min`, `max`) berlaku seperti `decimal`.
+- Renderer menampilkan satuan `%`; format kanoniknya `format: percent`
+  ([`../frontend/07-component-kinds.md`](../frontend/07-component-kinds.md)).
+- Pajak/service charge **belum** punya model tersendiri: tarif dinyatakan
+  sebagai field `percent`, sedangkan dasar pengenaan, apakah harga termasuk
+  pajak, dan pelaporannya masih tanggung jawab spec aplikasi.
+
+### 1.6 `unit` — Dimensi Satuan (S12)
+
+Field yang **namanya adalah nama satuan** (biasanya `enum`) boleh
+declare dimensi satuannya:
+
+```yaml
+- name: unit
+  type: enum
+  enum_values: [gram, kg, ml, pcs]
+  unit: { base: gram, convertible: [kg] }
+```
+
+- `base` — satuan **penyimpanan**. Nilai field ini yang menjadi acuan.
+- `convertible` — satuan lain yang boleh dikonversi ke/dari `base`.
+- Keduanya **wajib** ada di `enum_values` (kalau field-nya `enum`): konversi ke
+  satuan yang tidak bisa dinyatakan field itu adalah salah ketik, bukan fitur.
+- Satuan di luar grup `base`+`convertible` (mis. `ml`, `pcs` di atas) berarti
+  "dimensi lain" — sengaja tidak dikonversi, bukan error.
+
+Deklarasinya ada supaya satuan menjadi **data**, bukan konvensi yang hidup di
+dalam script: tanpa ini, setiap aplikasi memaksa satu satuan dasar dan
+melakukan konversi di Starlark, sehingga hasil (mis. HPP) bergantung pada
+disiplin penulis script, bukan pada data. Konversi gram↔kg untuk quantity dan
+ledakan resep menyusul di renderer/engine.
 
 ## 2. Money (Normatif)
 
@@ -255,6 +329,37 @@ atas field apa pun, boleh tanpa field).
 Aturan yang sama berlaku di semua tempat ekspresi dievaluasi — guard/when
 Starlark server ([`../runtimes/`](../../runtimes/)), `computed` field, dan
 FormSpecExpr di renderer ([`../frontend/08-formspec-expr.md`](../frontend/08-formspec-expr.md) §5).
+
+### 2.2 Kolom turunan `money` (Normatif)
+
+Field `money` yang di-`index: true` (atau `unique`/`natural_key`) mendapat
+**kolom turunan numerik yang membaca `.amount`**, bukan teks dari objeknya:
+
+```sql
+-- SQLite
+_price numeric(20,8) GENERATED ALWAYS AS (CAST(json_extract(data, '$.price.amount') AS REAL)) STORED
+-- PostgreSQL
+_price numeric(20,8) GENERATED ALWAYS AS (data->'price'->>'amount') STORED
+```
+
+Alasannya persis seperti operasi lain atas `money` (§2.1): bandingkan nilainya,
+jangan teks JSON-nya. Kolom turunan yang menyimpan objek membuat `9000` dianggap
+**lebih besar** dari `10000` (perbandingan leksikografis), sehingga sortir harga,
+filter rentang, dan laporan "margin tertinggi" salah **tanpa gejala apa pun** —
+dan index di atasnya hanya mempercepat jawaban yang salah.
+
+Konsekuensi yang perlu diketahui penulis spec:
+
+- Urutan/rentang/sortir atas `money` kini numerik **di kedua driver**, dan
+  `columnRefExpr` memakai kolom turunan itu ketika ada (kalau tidak, index-nya
+  tidak akan terpakai).
+- Nilai kanonik tetap objek `{amount, currency}` di payload; yang dinumerikkan
+  hanya **proyeksi** untuk sortir/agregasi. Pada SQLite cast-nya `REAL`, jadi
+  presisi eksak tetap milik payload — jangan jadikan kolom turunan sebagai
+  sumber kebenaran nilai uang.
+- `money` tanpa index tetap dilayani ekspresi `.amount` saat query (agregasi §2.1
+  dan sortir memakai jalur yang sama), jadi kebenarannya tidak bergantung pada
+  ada-tidaknya kolom turunan.
 
 ## 3. Validasi Field
 

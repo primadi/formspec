@@ -10,6 +10,10 @@ spec:
   plural: table-sessions
   display_field: guest_token
   lifecycle: plain_crud
+  # S5: sesi tamu berjalan di satu cabang. Perhatikan: ini deklarasi dimensi,
+  # BUKAN filter — token tamu tetap `row_scope from: route` (S3/item 2.2),
+  # sedangkan penyaringan otomatis per permukaan adalah item 3.5.
+  scope: { dimension: branch, field: branch_id, required: true }
   fields:
     - name: transaction_date
       type: datetime

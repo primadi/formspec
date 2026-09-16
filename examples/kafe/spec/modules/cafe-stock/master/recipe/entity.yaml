@@ -50,10 +50,11 @@ spec:
             title: "Jumlah"
           - name: unit
             type: enum
-            enum_values: [gram, ml, pcs]
+            enum_values: [gram, kg, ml, pcs]
             default: gram
             title: "Satuan"
-            description: "Harus sama dengan ingredient.unit — konversi satuan adalah urusan script, bukan engine"
+            description: "Satu dimensi dengan ingredient.unit; gram↔kg dikonversi engine (S12), ml/pcs tidak"
+            unit: { base: gram, convertible: [kg] }
           - name: note
             type: string
             title: "Catatan"

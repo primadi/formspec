@@ -35,6 +35,10 @@ spec:
         - { field: channel, widget: hidden, default_from: "qr_table" }
         - { field: transaction_date, widget: hidden, default_from: "{now}" }
         - { field: table_session_id, widget: hidden, default_from: "{session.id}" }
+        # Kunci milik tamu (#45): pesanan membawa token sesi, sehingga pelanggan
+        # bisa membaca pesanannya sendiri lewat `list` yang di-scope token
+        # (bukan lewat filter klien yang bisa dihilangkan).
+        - { field: guest_token, widget: hidden, default_from: "{session.guest_token}" }
         - { field: dining_table_id, widget: hidden, default_from: "{session.dining_table_id}" }
         - { field: branch_id, widget: hidden, default_from: "{session.branch_id}" }
         - field: guest_note

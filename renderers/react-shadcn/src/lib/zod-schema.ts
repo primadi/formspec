@@ -25,6 +25,31 @@ export function buildZodField(entityField: Field): z.ZodTypeAny {
       schema = z.number({ message: "Must be a number" })
       if (!entityField.required) schema = schema.nullable().optional()
       break
+    case "percent":
+      // A percentage is numerically a decimal (S11).
+      schema = z.number({ message: "Must be a number" })
+      if (!entityField.required) schema = schema.nullable().optional()
+      break
+    case "money":
+      // The canonical wire shape is `{amount, currency}` (05-field-types §2),
+      // but a legacy bare number/string is still accepted at the API boundary —
+      // rejecting it here would block a save the server would happily normalize.
+      schema = z.union([
+        z.object({
+          amount: z.union([z.string(), z.number()]),
+          currency: z.string().optional(),
+        }),
+        z.number(),
+        z.string(),
+      ])
+      if (!entityField.required) schema = schema.nullable().optional()
+      break
+    case "time":
+      schema = z
+        .string()
+        .regex(/^\d{2}:\d{2}(:\d{2})?$/, "Use HH:MM or HH:MM:SS")
+      if (!entityField.required) schema = schema.optional().or(z.literal(""))
+      break
     case "boolean":
       schema = z.boolean()
       if (!entityField.required) schema = schema.optional()

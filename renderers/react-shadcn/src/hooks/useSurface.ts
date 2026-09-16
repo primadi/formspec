@@ -15,6 +15,10 @@ export interface SurfaceInfo {
   isAdmin: boolean
   /** Base path for the current surface (includes root_url for app surface) */
   surfacePrefix: string
+  /** Workspace slug from the route (`/{workspace}/_admin|app/...`). Needed to
+   *  build entity-scoped URLs that are not surface paths (e.g. a file
+   *  download: `/{workspace}/_ui/entity/...`). */
+  workspace: string
   /** Build an absolute path within the admin surface */
   adminPath: (...segments: string[]) => string
   /** Build an absolute path within the current surface (admin or app) */
@@ -42,6 +46,7 @@ export function useSurface(): SurfaceInfo {
   return {
     surface: isAdmin ? "admin" : "app",
     isAdmin,
+    workspace,
     surfacePrefix,
     adminPath: (...segments: string[]) => join(adminPrefix, segments),
     surfacePath: (...segments: string[]) => join(surfacePrefix, segments),

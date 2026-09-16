@@ -265,7 +265,7 @@ type ScriptExecutor struct {
 
 	// NextKeyHandler generates natural keys, scoped to the entity that owns
 	// the field (natural key counters are per module/entity/field).
-	NextKeyHandler func(ctx context.Context, workspaceID, module, entity, fieldName string) (string, error)
+	NextKeyHandler func(ctx context.Context, workspaceID, module, entity, fieldName, scope string) (string, error)
 
 	// DatastoreResolver resolves a ctx primitive ("db", "cache", "lock", ...)
 	// and datastore name ("default" or a named datastore) to a live
@@ -401,8 +401,8 @@ func (e *ScriptExecutor) Execute(ctx context.Context, scriptPath string, module,
 		ctxObj.SetDatastoreResolverNamed(e.DatastoreResolverNamed)
 	}
 	if e.NextKeyHandler != nil {
-		ctxObj.NextKey = func(fieldName string) (string, error) {
-			return e.NextKeyHandler(ctx, workspaceID, module, entity, fieldName)
+		ctxObj.NextKey = func(fieldName, scope string) (string, error) {
+			return e.NextKeyHandler(ctx, workspaceID, module, entity, fieldName, scope)
 		}
 	}
 	// ctx.secrets (todo 6.8): only keys declared in uses.secrets are readable.

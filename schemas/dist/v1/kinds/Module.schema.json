@@ -45,6 +45,25 @@
         "$ref": "#/$defs/MenuItem"
       }
     },
+    "runtime": {
+      "description": "Module runtime binding for sidecar/native execution; local means native compiled-in implementation",
+      "type": "string",
+      "enum": [
+        "local",
+        "typescript",
+        "node",
+        "php",
+        "python",
+        "go",
+        "java",
+        "dotnet",
+        "ruby",
+        "rust"
+      ],
+      "examples": [
+        "local"
+      ]
+    },
     "vendor": {
       "description": "@schema {example: \"acme-corp\"}",
       "type": "string",

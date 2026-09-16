@@ -1,0 +1,29 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: stock-movement
+  module: warehouse
+  description: "Durable source transaction feeding the stock-level projection"
+spec:
+  version: v1
+  characteristic: transaction
+  plural: stock-movements
+  fields:
+    - name: transaction_date
+      type: date
+      rules: [required]
+    - name: ingredient_id
+      type: string
+      rules: [required]
+    - name: quantity
+      type: decimal
+      scale: 3
+      rules: [required]
+  events:
+    - name: on_post
+      type: async
+      publish: { durable: true }
+      deliver:
+        - channel: reliable_event
+  actions:
+    - { name: create }

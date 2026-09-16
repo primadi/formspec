@@ -20,6 +20,7 @@ import {
   type MenuItem,
 } from "@/types/manifest"
 import { titleCase } from "@/lib/utils"
+import { storageAllowsImage } from "@/lib/media"
 
 // ── Main derive functions ──
 
@@ -359,6 +360,7 @@ function isSortable(field: Field): boolean {
     "string",
     "integer",
     "decimal",
+    "percent",
     "date",
     "datetime",
     "enum",
@@ -369,12 +371,21 @@ function isSortable(field: Field): boolean {
 function tableWidget(field: Field): string | undefined {
   if (field.type === "enum" || field.name === "doc_status") return "badge"
   if (field.type === "boolean") return "boolean"
+  // Image files render as an inline preview (#4). Non-image files keep the
+  // plain download link, so they get no widget hint here.
+  if (
+    (field.type === "file" || field.type === "attachment") &&
+    storageAllowsImage(field.storage)
+  )
+    return "image"
   return undefined
 }
 
 function tableFormat(field: Field): string | undefined {
   if (field.type === "datetime") return "relative"
   if (field.type === "date") return "date"
+  // A percentage is numerically a decimal (S11); the difference is rendering.
+  if (field.type === "percent") return "percent"
   if (field.type === "decimal") {
     // Check if the field has currency-like rules
     if (
@@ -434,6 +445,14 @@ function formWidget(field: Field): string {
     case "integer":
       return "number"
     case "decimal":
+      return "decimalinput"
+    case "money":
+      return "moneyinput"
+    case "time":
+      return "timeinput"
+    case "percent":
+      // S11: same numeric input as decimal — the `%` is a display concern
+      // (`format: percent`), not a different editing surface.
       return "decimalinput"
     case "boolean":
       return "switch"

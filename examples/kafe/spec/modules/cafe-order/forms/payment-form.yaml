@@ -14,7 +14,7 @@ spec:
       fields:
         - { field: order_id, widget: relation-picker, help: "Pesanan yang dibayar." }
         - { field: method, help: "Menentukan field mana yang muncul di bawah." }
-        # GAP-01: `amount` adalah money tanpa widget uang.
+        # GAP-01 TERTUTUP (2.14): `amount` memakai `moneyinput`.
         # `change` = `computed: tendered - amount` — money - money menghasilkan
         # money (S7: docs/spec/frontend/08-formspec-expr.md §5). Terverifikasi
         # runtime: tendered 100000, amount 75000 → change {25000 IDR}.
@@ -38,5 +38,6 @@ spec:
         - { field: shift_id, widget: relation-picker, help: "Shift yang menerima pembayaran ini." }
         - { field: cashier_id, widget: relation-picker, label: "Kasir" }
   # CATATAN GAP-05: ini form pembayaran, BUKAN layar pembayaran POS. Layar yang
-  # diinginkan (numpad uang, tombol pecahan, kembalian berjalan) butuh widget
-  # uang (GAP-01) dan blok transaksional (GAP-05) yang belum ada.
+  # diinginkan (tombol pecahan, kembalian berjalan) masih butuh kind POS
+  # tersendiri. Widget uangnya sendiri sudah ada sejak 2.14 (`moneyinput`),
+  # jadi gap yang tersisa tinggal bentuk layarnya, bukan cara mengisinya.

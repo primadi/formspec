@@ -9,6 +9,11 @@ spec:
   characteristic: transaction
   plural: shifts
   lifecycle: plain_crud
+  # S5: shift milik satu cabang (dan satu kasir).
+  scope: { dimension: branch, field: branch_id, required: true }
+  # Item 3.5: supervisor hanya melihat shift cabangnya; `read_all` untuk pemilik.
+  row_scope:
+    - { field: branch_id, op: eq, from: session }
   fields:
     - name: transaction_date
       type: date
@@ -31,7 +36,8 @@ spec:
     - name: closed_at
       type: datetime
       title: "Waktu Tutup"
-    # GAP-01: field uang tanpa widget — titik paling terasa di form tutup shift.
+    # GAP-01 TERTUTUP (2.14): kas awal & uang hitung kini pakai `moneyinput` —
+    # form tutup shift bisa diisi tanpa keluar dari numpad.
     - name: opening_cash
       type: money
       required: true
@@ -79,12 +85,19 @@ spec:
       audit: true
   indexes:
     - fields: [branch_id, transaction_date]
-  # ATURAN BISNIS #10 — satu shift terbuka per (cabang, kasir).
-  # Tidak bisa dinyatakan dengan IndexDecl di atas: butuh PARTIAL unique index
-  # (WHERE status = 'open'). Dan GAP-22 membuat `indexes:` diabaikan seluruhnya,
-  # jadi walau predikat parsial didukung pun tetap tidak akan terpasang.
-  # Rencana penutup: `kind: Migration` `shift-open-unique` (D6) di Tahap 3d.
-  # Guard script di bawah adalah penjaga SEMENTARA, bukan pengganti constraint.
+    # ATURAN BISNIS #10 — satu shift terbuka per (cabang, kasir).
+    # Dinyatakan sebagai PARTIAL unique index (S8): hanya baris `status: open`
+    # yang diindeks, jadi satu kasir boleh punya banyak shift tertutup tapi
+    # hanya satu yang terbuka. Sebelumnya ini hanya bisa dinyatakan lewat DDL
+    # mentah (`kind: Migration` shift-open-unique) yang tidak portabel antar
+    # driver; sekarang jadi konstruk bahasa spec dan portabel (SQLite &
+    # PostgreSQL sama-sama mendukung partial index).
+    - fields: [branch_id, cashier_id]
+      unique: true
+      where: "status = 'open'"
+  # Guard script di bawah adalah LAPIS KEDUA: ia memberi pesan error yang ramah
+  # di action pipeline. Constraint database di atas yang berlaku untuk semua
+  # jalur tulis (API, script, seed, operator).
   # GAP-30: deadlock di SQLite (dev).
   hooks:
     - on: before

@@ -1,0 +1,23 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: invoice
+  module: billing
+  description: Nomor invoice per cabang — fixture untuk counter ber-scope (gap #9)
+spec:
+  version: v1
+  characteristic: transaction
+  plural: invoices
+  fields:
+    - name: number
+      type: string
+      natural_key: true
+      natural_key_rule:
+        strategy: sequence
+        format: "INV-{seq:05d}"
+        scope_field: branch_id
+    - name: branch_id
+      type: string
+      required: true
+    - name: transaction_date
+      type: datetime

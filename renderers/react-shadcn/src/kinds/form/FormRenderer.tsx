@@ -54,6 +54,9 @@ import { Combobox } from "@/widgets/Combobox"
 import { PasswordInput } from "@/widgets/PasswordInput"
 import { SliderInput } from "@/widgets/SliderInput"
 import { TagsInput } from "@/widgets/TagsInput"
+import { QrCode } from "@/widgets/QrCode"
+import { MoneyInput } from "@/widgets/MoneyInput"
+import { TimeInput } from "@/widgets/TimeInput"
 import { isFormWidget, formWidgetNames } from "@/widgets/catalog"
 
 interface FormRendererProps {
@@ -937,6 +940,27 @@ function UnknownWidget({
 // FormFieldWidget routes one field to its widget. Exported for the widget
 // catalog parity test (src/widgets/catalog.test.tsx), which asserts every
 // catalogued widget name actually renders here.
+// implicitWidgetForType resolves the widget for a manifest form field that
+// declares no `widget:` — the field's type is used as the widget name.
+//
+// `money` and `time` have a dedicated widget since item 2.14, and a manifest
+// form is exactly where a cashier meets them (payment form, close-shift wizard,
+// promo happy hours): falling through to the type name would keep rendering the
+// plain text input that item exists to remove. Other types keep the previous
+// behaviour on purpose — broadening this table is a separate change with its own
+// blast radius (enum → select, relation → relation-picker, …), and derived forms
+// already go through `derive.formWidget` for those.
+function implicitWidgetForType(type: string): string {
+  switch (type) {
+    case "money":
+      return "moneyinput"
+    case "time":
+      return "timeinput"
+    default:
+      return type
+  }
+}
+
 export function FormFieldWidget({
   field,
   entityField,
@@ -979,13 +1003,43 @@ export function FormFieldWidget({
     return <UnknownWidget widget={field.widget} allowed={formWidgetNames()} />
   }
 
-  const widget = field.widget ?? entityField.type
+  const widget = field.widget ?? implicitWidgetForType(entityField.type)
 
   switch (widget) {
     // Renders nothing but keeps the value in form state (the field loop skips
     // it entirely, so this is the router's own guarantee).
     case "hidden":
       return null
+
+    // Read-only by nature: the value is the payload (a token or URL), so a QR
+    // field shows the code instead of an input the user could type into.
+    case "qrcode":
+      return <QrCode value={(value as string) ?? ""} size={160} />
+
+    // Money keeps its currency and is edited as an amount (numpad on touch).
+    case "moneyinput":
+      return (
+        <MoneyInput
+          value={value}
+          onChange={onChange}
+          readonly={readonly}
+          error={error}
+          id={id}
+          currency={entityField.currency}
+          decimalPlaces={entityField.decimal_places}
+        />
+      )
+
+    case "timeinput":
+      return (
+        <TimeInput
+          value={value}
+          onChange={onChange}
+          readonly={readonly}
+          error={error}
+          id={id}
+        />
+      )
 
     case "radio-group":
       return (

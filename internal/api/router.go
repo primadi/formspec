@@ -283,6 +283,27 @@ func (b *RouterBuilder) isPublicAction(module, entity, action string) bool {
 	return false
 }
 
+// publicScope returns the row filter a public grant declares for anonymous reads
+// of module/entity (#45). It is a per-surface declaration: the same entity read
+// by a cashier on a POS surface is not filtered by it.
+func (b *RouterBuilder) publicScope(module, entity string) []spec.FilterSpec {
+	for _, app := range b.apps {
+		if app.Spec == nil || app.Spec.Access != spec.AppAccessPublic || app.Spec.PublicEntities == nil {
+			continue
+		}
+		for _, decl := range *app.Spec.PublicEntities {
+			key, ok := spec.NormalizeEntityRef(decl.Entity)
+			if !ok || key != module+"/"+entity {
+				continue
+			}
+			if len(decl.Scope) > 0 {
+				return decl.Scope
+			}
+		}
+	}
+	return nil
+}
+
 // isPublicEntity reports whether ANY action of module/entity is anonymous
 // (see publicGrants). Prefer isPublicAction when deciding route access.
 func (b *RouterBuilder) isPublicEntity(module, entity string) bool {
@@ -494,7 +515,15 @@ func (b *RouterBuilder) BuildHTTP() http.Handler {
 					// anonymous if the App explicitly grants them — they are admin
 					// ops that belong in a private App.
 					if b.isPublicAction(rd.Module, rd.Entity, rd.Action) {
-						rd.RequiredPermission = "public"
+						// The grant authorizes ANONYMOUS access; the permission stays on
+						// the route so a signed-in caller cannot use it as a bypass.
+						rd.Public = true
+						// Per-surface row scope (#45): a grant may declare that
+						// anonymous reads must carry a token (e.g. the guest token
+						// of an order). Without it, granting `list` to a public App
+						// exposes every row — the very thing the allowlist exists
+						// to prevent.
+						rd.PublicScope = b.publicScope(rd.Module, rd.Entity)
 					}
 					b.registerRouteWithPattern(r, rd, pattern)
 				}
@@ -802,7 +831,12 @@ func (b *RouterBuilder) registerRoute(r chi.Router, rd RouteDescriptor) {
 
 	// Select the chi sub-router: with or without permission middleware
 	sub := r
-	if rd.RequiredPermission != "" {
+	switch {
+	case rd.Public && rd.RequiredPermission != "":
+		// A public grant authorizes anonymous callers; a signed-in caller on the
+		// same route still needs the permission (#45).
+		sub = r.With(RequirePermissionOrAnonymous(rd.RequiredPermission))
+	case rd.RequiredPermission != "":
 		sub = r.With(RequirePermission(rd.RequiredPermission))
 	}
 
@@ -900,8 +934,20 @@ func (b *RouterBuilder) registerRouteWithPattern(r chi.Router, rd RouteDescripto
 	}
 
 	sub := r
-	if rd.RequiredPermission != "" {
+	switch {
+	case rd.Public && rd.RequiredPermission != "":
+		// A public grant authorizes anonymous callers; a signed-in caller on the
+		// same route still needs the permission (#45).
+		sub = r.With(RequirePermissionOrAnonymous(rd.RequiredPermission))
+	case rd.RequiredPermission != "":
 		sub = r.With(RequirePermission(rd.RequiredPermission))
+	}
+
+	// Anonymous reads on a public surface carry the grant's declared row scope
+	// (#45): the value is read from the request, so the caller cannot widen it,
+	// and a missing value fails closed.
+	if len(rd.PublicScope) > 0 {
+		handler = withPublicScope(handler, rd.PublicScope)
 	}
 
 	switch rd.Method {

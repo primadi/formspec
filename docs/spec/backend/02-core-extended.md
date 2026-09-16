@@ -5,22 +5,23 @@
 > Draft: isi di bawah kontrak yang berlaku.
 
 ## 1. Lifecycle & State Machine
+
 FormSpec punya model status **dua lapis**, independen satu sama lain:
 
 1. **`doc_status`** — lifecycle bawaan, framework-enforced
    ([`01-core-basic.md`](01-core-basic.md) §1.2). Closed set: `draft |
-   submitted | cancelled`. Tidak bisa ditambah nilai baru — kebutuhan proses
+submitted | cancelled`. Tidak bisa ditambah nilai baru — kebutuhan proses
    granular pakai layer kedua.
 2. **State machine bisnis** — didefinisikan developer di field terpisah:
 
 ```yaml
 state_machine:
-  field: fulfillment_stage        # field bisnis, independen dari doc_status
+  field: fulfillment_stage # field bisnis, independen dari doc_status
   initial: awaiting_payment
   transitions:
     - from: awaiting_payment
       to: paid
-      via: mark-paid              # nama action
+      via: mark-paid # nama action
       guard: "doc_status == 'submitted'"
     - from: paid
       to: fulfilled
@@ -52,10 +53,11 @@ boleh** ikut berubah retroaktif. Field non-finansial pada relasi yang sama
 yang dipakai dalam `conditions`/kalkulasi total pada action transaksi
 disalin sebagai field milik Entity transaksi sendiri (konvensi penamaan
 bebas, mis. suffix `_at_transaction`). Ini berbeda dari master snapshot
-saat archiving (§10) — snapshot finansial ini terjadi *setiap transaksi*,
+saat archiving (§10) — snapshot finansial ini terjadi _setiap transaksi_,
 bukan cuma saat archive run.
 
 ## 2. Workflow
+
 Lifecycle sederhana cukup inline di Entity (§1). Approval berbasis role
 hidup di `kind: Workflow` dan **menempel tanpa mengubah Entity** — pola yang
 sama dengan Subscription (§3), diterapkan ke transisi state machine:
@@ -69,8 +71,11 @@ spec:
   on: { transition: { from: draft, to: posted } }
   steps:
     - { roles: [gl.supervisor], approvers: 1 }
-    - { roles: [gl.controller], approvers: 1,
-        when: "resource.amount > 100000000" }
+    - {
+        roles: [gl.controller],
+        approvers: 1,
+        when: "resource.amount > 100000000",
+      }
   on_reject: { to: rejected }
   escalation: { after: 48h, notify_roles: [gl.manager] }
 ```
@@ -82,6 +87,36 @@ pernah bisa menyetujui permintaannya sendiri.** Workflow selalu tampil di
 output gabungan `formspec describe document` — perilaku yang menempel selalu
 ter-compile, tidak pernah tersembunyi.
 
+#### 2.0.1 Merujuk transisi: lewat `name`, bukan pasangan state
+
+Pemicu menerima dua bentuk, dan keduanya **saling eksklusif**:
+
+```yaml
+on:
+  transition: { name: void-order } # disarankan — mengawal SELURUH state asal
+  # transition: { from: paid, to: cancelled }  # bentuk pasangan state (satu state asal)
+```
+
+`name` adalah `via` transisi di state machine entity yang dideklarasikan, jadi
+satu referensi mengawal transisi itu **dari semua state asalnya**. Ini penting
+karena transisi boleh punya banyak state asal:
+
+```yaml
+- { from: [paid, in_kitchen, ready, served], to: cancelled, via: void-order }
+```
+
+Pasangan `from`/`to` hanya bisa menyebut **satu** state asal. Menulis
+`from: paid, to: cancelled` untuk transisi di atas berarti void dari
+`in_kitchen`/`ready`/`served` **tidak melewati approval sama sekali** — tanpa
+error, tanpa log. Karena itu `formspec validate` **menolak** pasangan `from`/`to`
+yang hanya mencakup sebagian transisi, dan menyebutkan `name` sebagai gantinya.
+Nama transisi yang tidak ada di entity juga ditolak — beserta daftar `via` yang
+tersedia — sehingga salah ketik tidak berakhir sebagai workflow yang tidak pernah
+memicu apa pun.
+
+Nama boleh ditulis berkualifikasi (`cafe-order.order.void-order`) dan diterima
+**hanya bila cocok** dengan `spec.entity`.
+
 ### 2.1 Multi-Approver & Percabangan per Step
 
 Satu step mendeklarasikan **berapa banyak** persetujuan yang dibutuhkan dan
@@ -92,11 +127,11 @@ Satu step mendeklarasikan **berapa banyak** persetujuan yang dibutuhkan dan
   `roles`-nya. `quorum` diterima sebagai alias `approvers`.
 - `mode` — cara kuorum dikumpulkan di dalam satu step:
 
-  | `mode` | Arti | Contoh |
-  |---|---|---|
-  | `all` (default) | Semua approver yang berhak wajib menyetujui — kuorum = jumlah yang berhak | Dua direktur wajib tanda tangan bersama |
-  | `any` | Cukup `approvers: N` dari kumpulan yang berhak (mana pun) | Salah satu dari tiga manajer cukup |
-  | `sequential` | Approver menyetujui **berurutan** sesuai urutan `roles`; approver berikutnya baru bisa bertindak setelah yang sebelumnya | Rantai atasan berjenjang |
+  | `mode`          | Arti                                                                                                                     | Contoh                                  |
+  | --------------- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------- |
+  | `all` (default) | Semua approver yang berhak wajib menyetujui — kuorum = jumlah yang berhak                                                | Dua direktur wajib tanda tangan bersama |
+  | `any`           | Cukup `approvers: N` dari kumpulan yang berhak (mana pun)                                                                | Salah satu dari tiga manajer cukup      |
+  | `sequential`    | Approver menyetujui **berurutan** sesuai urutan `roles`; approver berikutnya baru bisa bertindak setelah yang sebelumnya | Rantai atasan berjenjang                |
 
   `mode` mengatur pengumpulan **di dalam** satu step; urutan **antar** step selalu
   berurutan (step 2 tidak mulai sebelum step 1 lolos).
@@ -140,21 +175,22 @@ spec:
 ```
 
 ## 3. Subscription & Event Delivery
+
 `kind: Subscription` ([`01-core-basic.md`](01-core-basic.md) §7) punya dua
 tier:
 
-| | Tier 1 — Core (outbox) | Tier 2 — Streaming |
-|---|---|---|
-| Storage | Outbox PersistBackend | Redis Stream / Kafka |
-| Konsistensi | Transaksional | At-least-once, positioned replay |
-| Fan-out | Satu target per entry | Banyak subscriber |
-| Pemakaian | GL, billing, inventory | Analytics, audit, monitoring |
+|             | Tier 1 — Core (outbox) | Tier 2 — Streaming               |
+| ----------- | ---------------------- | -------------------------------- |
+| Storage     | Outbox PersistBackend  | Redis Stream / Kafka             |
+| Konsistensi | Transaksional          | At-least-once, positioned replay |
+| Fan-out     | Satu target per entry  | Banyak subscriber                |
+| Pemakaian   | GL, billing, inventory | Analytics, audit, monitoring     |
 
 Tier 2 menambah `durability: durable` dengan `store`, `retention`, `position`,
 `max_retry`, `dead_letter`, plus `filter`/`transform` Starlark atas payload
 event (`event.name`, `event.resource_id`, `event.occurred_at`, field payload
 event itu sendiri). **Subscription dinamis** (dibuat runtime lewat API/admin
-panel) adalah *data, bukan manifest* — manifest Subscription mendefinisikan
+panel) adalah _data, bukan manifest_ — manifest Subscription mendefinisikan
 apa yang ikut ter-ship bersama module, subscription dinamis mencatat pilihan
 operator, hidup di `formspec.core`.
 
@@ -175,6 +211,7 @@ bereaksi terhadap peristiwa bisnis bernama tanpa perlu menebak action mana yang
 memicunya.
 
 ## 4. Webhook
+
 `kind: Webhook` — endpoint masuk yang **diverifikasi sebelum handler
 berjalan**; handler cuma pernah melihat payload yang sudah terverifikasi:
 
@@ -183,11 +220,11 @@ apiVersion: formspec.dev/v1
 kind: Webhook
 metadata: { name: midtrans-webhook, module: billing }
 spec:
-  for: payment-gateway.webhook       # Service action yang menangani
+  for: payment-gateway.webhook # Service action yang menangani
   method: POST
-  path: /webhooks/midtrans           # auto-derive kalau tidak diisi
+  path: /webhooks/midtrans # auto-derive kalau tidak diisi
   auth:
-    strategy: signature              # signature | token
+    strategy: signature # signature | token
     signature:
       algorithm: hmac-sha512
       header: X-Midtrans-Signature
@@ -202,6 +239,7 @@ sebelum handler manapun berjalan, terhitung, bisa dialert. Strategi `token`
 untuk webhook internal sederhana; `signature` untuk provider kriptografi.
 
 ## 5. Integrator
+
 `kind: Integrator` menjembatani dua Entity/Module yang **tidak saling kenal
 langsung** — konsisten dengan prinsip "module tidak saling `import` definisi
 satu sama lain":
@@ -215,7 +253,7 @@ listen:
 call:
   resource: gl.journal-entry
   action: cancel
-compensate: recreate_gl_journal   # opsional; framework yang memutuskan kapan dipanggil
+compensate: recreate_gl_journal # opsional; framework yang memutuskan kapan dipanggil
 ```
 
 `listen.resource`/`call.resource` di-resolve lewat registry — Integrator tidak
@@ -244,19 +282,101 @@ bergantung pada channel delivery yang dipilih (durable vs non-durable, §3),
 bukan pada return value.
 
 ## 6. Summary & Multi-Source
+
 Kontrak "gabungkan sources by join_key" — cara memenuhi kontrak ini adalah
 urusan masing-masing PersistBackend (lihat
 [`../../renderers/jsonb-persist/04-query-and-keys.md`](../../renderers/jsonb-persist/04-query-and-keys.md)
 untuk jawaban konkret jsonb-persist).
 
+Summary Entity MAY declare metadata berikut untuk menjelaskan bagaimana
+proyeksi itu dibangun ulang dari sumber durabel:
+
+```yaml
+kind: Entity
+metadata:
+  name: daily-order-summary
+spec:
+  characteristic: summary
+  sources:
+    - entity: sales.order
+      alias: o
+      filter:
+        status: paid
+    - entity: sales.customer
+      alias: c
+  join_key: "o.customer_id = c.id"
+  rebuild:
+    strategy: partial
+    window: "7d"
+```
+
+Semantik minimalnya:
+
+- `sources[]` menggambarkan sumber durabel yang ikut membentuk summary.
+- `join_key` adalah ekspresi join antar sumber yang mendefinisikan anchor
+  relasi proyeksi.
+- `rebuild.strategy` menentukan cara pembaruan kembali: `full`, `partial`, atau
+  `none` untuk summary yang tidak diprogram ulang.
+
 `characteristic: summary` diisi **eksklusif** lewat event durable — bukan
 lewat action call biasa dari luar (`create`/`update`/`delete` permanen
-nonaktif via API, §1 Core Basic). Rebuild: `formspec summary rebuild <document>`
+nonaktif via API, §1 Core Basic). Rebuild: `formspec summary rebuild <entity>`
 me-replay event stream sumbernya ke projeksi baru — inilah alasan backup
 mengecualikan Summary (selalu bisa dihitung ulang selama transaksi sumbernya
 masih queryable, live maupun via archive).
 
+Semantik rebuild yang mengikat:
+
+- Sumber replay adalah **stream durabel** (§3, Tier 2), dibaca dari awal dengan
+  consumer group **milik run rebuild itu sendiri** — cursor worker live tidak
+  tersentuh, sehingga rebuild aman dijalankan pada server yang sedang melayani.
+- Replay menempuh jalur delivery yang sama (filter → transform → handler),
+  jadi proyeksi hasil rebuild identik dengan hasil operasi normal.
+- `rebuild.strategy: none` membuat entity **ditolak** untuk direbuild —
+  proyeksi seperti itu tidak diturunkan dari event, jadi tidak ada yang bisa
+  di-replay dan menganggapnya bisa akan menghasilkan proyeksi kosong yang diam.
+- `sources[]` yang tidak punya subscriber durabel dilaporkan sebagai orphaned:
+  rebuild-nya parsial, dan itu dikatakan, bukan disembunyikan.
+- `rebuild.strategy: partial` melarang reset penuh proyeksi (baris di luar
+  jendela yang dibangun ulang harus tetap ada).
+
+### 6.1 `maintained_by` & `invariants` — Kontrak Pemelihara (S14)
+
+Summary tidak punya action pipeline: `create`/`update`/`delete` permanen
+nonaktif, jadi **`hooks:` dan `conditions:` pada entity summary tidak pernah
+dipanggil**. Karena itu summary punya dua deklarasi sendiri, dan keduanya
+**divalidasi**, bukan sekadar dikomentari:
+
+```yaml
+spec:
+  characteristic: summary
+  maintained_by: cafe-stock/stock_level_apply
+  invariants:
+    - unique: [branch_id, ingredient_id]
+      message: "satu saldo per (cabang, bahan)"
+```
+
+- **`maintained_by`** menyebut script yang memelihara proyeksi ini, dengan
+  bentuk referensi yang sama dengan `impl.ref` (`<module>/<nama>`).
+  `formspec validate` **menolak** referensi yang tidak bisa di-resolve atau
+  tidak bisa dikompilasi — jadi tidak ada lagi summary yang _mengklaim_ punya
+  pemelihara tanpa ada artifact-nya.
+- **`invariants[].unique`** menyatakan properti yang harus berlaku atas baris
+  proyeksi. Ia **wajib** ditopang unique index yang benar-benar dideklarasikan
+  (`indexes:`/`persist.indexes`) atas kolom yang sama; kalau tidak,
+  `formspec validate` menolak. Dengan begitu yang menegakkan invarian adalah
+  **database**, bukan disiplin script — dan memasang hook di summary (yang
+  tidak akan pernah jalan) tidak lagi terlihat sebagai perlindungan.
+- Keduanya **hanya** valid pada `characteristic: summary`; entity lain ditolak,
+  karena di sana `hooks:`/`conditions:` memang jalan dan invariannya sudah
+  punya tempat.
+
+Pola upsert + `ctx.lock` di dalam script pemelihara tetap tanggung jawab script
+itu sendiri: index menjamin keunikan, tetapi urutan baca-lalu-tulis yang rapat
+bukan sesuatu yang bisa dinyatakan di manifest.
+
 ## 7. Named Scripts & Cross-Module Starlark
+
 Script Starlark yang dirujuk lewat `impl.script_ref`/`ref` (mis.
 `ref: billing/invoice_send`) memakai notasi qualifier yang sama dengan
 referensi lintas-module lainnya di spec ini (`module/resource`, konsisten
@@ -278,13 +398,13 @@ Permukaan API yang tersedia di dalam script (entrypoint, objek `resource`,
 Setiap eksekusi Starlark berjalan di dalam sandbox dengan **batas keras** yang
 ditegakkan engine — bukan sekadar rekomendasi:
 
-| Batas | Nilai |
-|---|---|
-| Wall-clock | 5000 ms |
-| Memori | 64 MB |
-| Iterasi | 100.000 |
-| Query DB per eksekusi | maks. 50 |
-| Record dibaca per eksekusi | maks. 1.000 |
+| Batas                              | Nilai               |
+| ---------------------------------- | ------------------- |
+| Wall-clock                         | 5000 ms             |
+| Memori                             | 64 MB               |
+| Iterasi                            | 100.000             |
+| Query DB per eksekusi              | maks. 50            |
+| Record dibaca per eksekusi         | maks. 1.000         |
 | Jaringan / filesystem / subprocess | **tidak ada akses** |
 
 Melewati **salah satu** batas **membatalkan** eksekusi dengan error — **tidak
@@ -319,11 +439,11 @@ Untuk `characteristic: transaction`, field `transaction_date` **wajib**
 dideklarasikan eksplisit ([`01-core-basic.md`](01-core-basic.md) §1.2). Keduanya
 tanggal, perannya berbeda dan tidak boleh tertukar:
 
-| | `created_at` (tanggal sistem) | `transaction_date` (tanggal bisnis) |
-|---|---|---|
-| Fungsi | Urutan kejadian nyata, audit | Periode akuntansi/pelaporan mana yang mengakuinya |
-| Bisa dimanipulasi? | Tidak | Ya, tunduk `backdate_policy`/`forward_date_policy` |
-| Dipakai untuk sequencing/audit? | **Selalu** | **Tidak pernah** |
+|                                 | `created_at` (tanggal sistem) | `transaction_date` (tanggal bisnis)                |
+| ------------------------------- | ----------------------------- | -------------------------------------------------- |
+| Fungsi                          | Urutan kejadian nyata, audit  | Periode akuntansi/pelaporan mana yang mengakuinya  |
+| Bisa dimanipulasi?              | Tidak                         | Ya, tunduk `backdate_policy`/`forward_date_policy` |
+| Dipakai untuk sequencing/audit? | **Selalu**                    | **Tidak pernah**                                   |
 
 Sequencing dan audit **selalu** memakai `created_at`. Memakai
 `transaction_date` untuk sequencing memicu recompute berantai saat backdate —
@@ -340,15 +460,16 @@ settings:
   transaction_defaults:
     backdate_policy:
       max_days_back: 3
-      override_permission: null                 # null = tidak ada yang boleh override
+      override_permission: null # null = tidak ada yang boleh override
     forward_date_policy:
-      max_days_forward: 0                        # default paling konservatif
+      max_days_forward: 0 # default paling konservatif
       override_permission: accounting.post_forward_dated
     period_guard: { enabled: true }
 
 # Override per-resource
 spec:
-  backdate_policy: { max_days_back: 7, override_permission: accounting.post_backdated }
+  backdate_policy:
+    { max_days_back: 7, override_permission: accounting.post_backdated }
 ```
 
 `transaction_date` yang mundur melebihi `max_days_back` → `FORMSPEC.TXN.BACKDATE_EXCEEDED`;
@@ -397,6 +518,7 @@ boleh query DB live. Saat transaksi lama diarsipkan, master yang direferensikan
 di-snapshot "as-of" tanggal arsip dan disimpan bersama transaksinya.
 
 **Apa yang diarsipkan:**
+
 - **Transaksi** (`characteristic: transaction`) — selalu diarsipkan saat umur ≥
   cutoff `retention.archive_after` (dihitung dari `transaction_date`): Invoice,
   Payment, Journal Entry, Purchase Order, Stock Movement, dst.
@@ -431,8 +553,8 @@ didukung (risiko state korup).
 
 ```yaml
 retention:
-  archive_after: "3y"           # dihitung dari transaction_date
-  strategy: cold_storage        # cold_storage | delete
+  archive_after: "3y" # dihitung dari transaction_date
+  strategy: cold_storage # cold_storage | delete
   destination: s3://archive-bucket
 ```
 
@@ -444,9 +566,10 @@ Dokumen boleh opt-out lewat `retention: { disabled: true }`.
 Kontraknya normatif; ini sumber "timeline" per-record yang dilihat pengguna.
 
 **Yang direkam per entri:**
+
 - **Actor** — identitas pemanggil (`ctx.user.id`), tenant, request ID.
 - **Action** — nama action yang dijalankan (bukan "document updated" generik;
-  action bernama tercatat *dengan namanya*, [`01-core-basic.md`](01-core-basic.md)
+  action bernama tercatat _dengan namanya_, [`01-core-basic.md`](01-core-basic.md)
   §1.2).
 - **Timestamp** — waktu kejadian (`created_at`, bukan `transaction_date`, §9.1).
 - **Before/after diff** — untuk action kelas-update, snapshot nilai field
@@ -466,7 +589,7 @@ global; menghapus entri lama tunduk retention, bukan aksi manual sembarang.
 **Berbeda tegas dari transparency log governance.** Audit trail bisnis mencatat
 **data bisnis** (siapa mengubah invoice apa) dan dimiliki Workspace Owner.
 **Transparency log** platform ([`../platform/04-control-plane.md`](../platform/04-control-plane.md)
-§7) adalah Merkle append-only atas peristiwa *governance* (apply, approval,
+§7) adalah Merkle append-only atas peristiwa _governance_ (apply, approval,
 rotasi key, emergency, sesi REPL production) — ia **tidak pernah** memuat data
 bisnis. Keduanya append-only tapi domainnya terpisah dan tidak saling
 menggantikan.
@@ -487,9 +610,9 @@ kind: Api
 metadata: { name: public, module: billing }
 spec:
   rest:
-    base_path: /public              # override prefix di bawah workspace prefix
-    version: v2                     # override {version} route (01 §8)
-    disable: [invoice]              # opt-out per-entity dari permukaan REST ini
+    base_path: /public # override prefix di bawah workspace prefix
+    version: v2 # override {version} route (01 §8)
+    disable: [invoice] # opt-out per-entity dari permukaan REST ini
   grpc:
     enabled: true
     package: billing.public.v2
@@ -497,13 +620,13 @@ spec:
 
 Body override (hanya berlaku untuk permukaan external `/api/v1/`):
 
-| Field | Arti |
-|---|---|
-| `rest.base_path` | Segmen path yang menggantikan `{module}` di route external ([`01-core-basic.md`](01-core-basic.md) §8.2). Tidak memengaruhi `/_ui/entity/`. |
-| `rest.version` | Menyetel `{version}` route untuk permukaan external ini |
-| `rest.disable` | Daftar entity yang **opt-out** dari permukaan external REST ini. Entity tetap bisa diakses via UI (`/_ui/entity/`) selama permission terpenuhi. |
-| `grpc.enabled` | Mengaktifkan permukaan gRPC (external) |
-| `grpc.package` | Nama package proto untuk permukaan gRPC |
+| Field            | Arti                                                                                                                                            |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rest.base_path` | Segmen path yang menggantikan `{module}` di route external ([`01-core-basic.md`](01-core-basic.md) §8.2). Tidak memengaruhi `/_ui/entity/`.     |
+| `rest.version`   | Menyetel `{version}` route untuk permukaan external ini                                                                                         |
+| `rest.disable`   | Daftar entity yang **opt-out** dari permukaan external REST ini. Entity tetap bisa diakses via UI (`/_ui/entity/`) selama permission terpenuhi. |
+| `grpc.enabled`   | Mengaktifkan permukaan gRPC (external)                                                                                                          |
+| `grpc.package`   | Nama package proto untuk permukaan gRPC                                                                                                         |
 
 **Beberapa permukaan Api bernama per module.** Satu module boleh punya lebih dari
 satu `kind: Api` (dibedakan `metadata.name`, mis. `public` vs `partner`), masing
@@ -525,10 +648,10 @@ selesai:
   "data": { "job_id": "job_01H...", "status": "pending" },
   "meta": {
     "track": {
-      "websocket_event": "jobs",             // kanal untuk progres/hasil
-      "poll_url": "/.../jobs/job_01H..."     // alternatif polling
-    }
-  }
+      "websocket_event": "jobs", // kanal untuk progres/hasil
+      "poll_url": "/.../jobs/job_01H...", // alternatif polling
+    },
+  },
 }
 ```
 
@@ -557,9 +680,9 @@ keluar `kind: Webhook` (§4):
 ```yaml
 deliver:
   channel: webhook
-  url_from: header            # URL diambil dari header request
-  header: X-Callback-URL      # header yang membawa URL callback
-  sign: true                  # HMAC-signed, sama seperti webhook keluar (§4)
+  url_from: header # URL diambil dari header request
+  header: X-Callback-URL # header yang membawa URL callback
+  sign: true # HMAC-signed, sama seperti webhook keluar (§4)
   retry: { max: 5, backoff: exponential, initial_delay_ms: 1000 }
 ```
 
@@ -578,11 +701,11 @@ tinggi. Level dievaluasi **berurutan** (level lebih rendah lolos dulu) dan
 di-gate oleh `uses` ([`01-core-basic.md`](01-core-basic.md) §5) — akses yang
 dibutuhkan tiap level wajib dideklarasikan:
 
-| Level | Nama | Cakupan | Butuh |
-|---|---|---|---|
-| L4 | `business_rules` | Batasan bisnis yang dievaluasi script atas satu record (mis. "diskon ≤ plafon peran") | — (kalau murni atas record & config) |
-| L5 | `cross_validate` | Validasi yang menjangkau **beberapa field / child record** dalam record yang sama | — |
-| L6 | `consistency` | Konsistensi **lintas-entity** (mis. saldo agregat harus cocok dengan buku besar) | `uses: db` untuk membaca entity terkait |
+| Level | Nama             | Cakupan                                                                               | Butuh                                   |
+| ----- | ---------------- | ------------------------------------------------------------------------------------- | --------------------------------------- |
+| L4    | `business_rules` | Batasan bisnis yang dievaluasi script atas satu record (mis. "diskon ≤ plafon peran") | — (kalau murni atas record & config)    |
+| L5    | `cross_validate` | Validasi yang menjangkau **beberapa field / child record** dalam record yang sama     | —                                       |
+| L6    | `consistency`    | Konsistensi **lintas-entity** (mis. saldo agregat harus cocok dengan buku besar)      | `uses: db` untuk membaca entity terkait |
 
 L4–L6 dievaluasi **server-side, selalu** ([`01-core-basic.md`](01-core-basic.md)
 §3), setelah L1–L3 lolos dan sebelum handler action berjalan. L6 boleh membaca
@@ -604,7 +727,7 @@ spec:
   hooks:
     - point: before
       action: submit
-      run: check_credit_limit       # ref script (§7)
+      run: check_credit_limit # ref script (§7)
       priority: 10
     - point: before_deliver
       channel: webhook
@@ -614,13 +737,13 @@ spec:
 
 **Titik hook:**
 
-| Titik | Kapan | Kemampuan |
-|---|---|---|
-| `before` | Sebelum handler action | Boleh **mengubah params** action atau memanggil `fail()` untuk membatalkan |
-| `after` | Setelah handler sukses | Efek samping pasca-aksi |
-| `on_error` | Saat handler gagal | Kompensasi/pembersihan |
-| `before_deliver` | Sebelum sebuah delivery dikirim (§3, §4) | Boleh **menekan** delivery (suppress) atau memperkaya payload |
-| `after_deliver` | Setelah delivery terkirim | Efek samping pasca-kirim |
+| Titik            | Kapan                                    | Kemampuan                                                                  |
+| ---------------- | ---------------------------------------- | -------------------------------------------------------------------------- |
+| `before`         | Sebelum handler action                   | Boleh **mengubah params** action atau memanggil `fail()` untuk membatalkan |
+| `after`          | Setelah handler sukses                   | Efek samping pasca-aksi                                                    |
+| `on_error`       | Saat handler gagal                       | Kompensasi/pembersihan                                                     |
+| `before_deliver` | Sebelum sebuah delivery dikirim (§3, §4) | Boleh **menekan** delivery (suppress) atau memperkaya payload              |
+| `after_deliver`  | Setelah delivery terkirim                | Efek samping pasca-kirim                                                   |
 
 **Priority ordering.** Bila beberapa hook menempel di titik yang sama, urutan
 eksekusi mengikuti `priority` (kecil dijalankan lebih dulu) — konsisten dengan
@@ -641,14 +764,14 @@ Di atas filter/sort dasar ([`01-core-basic.md`](01-core-basic.md) §6), Query
 Builder adalah kemampuan agregasi normatif yang wajib disediakan setiap
 PersistBackend dengan semantik identik:
 
-| Kemampuan | Cakupan |
-|---|---|
-| Fungsi agregat | `sum`, `count`, `avg`, `min`, `max` |
-| `group_by` | Satu atau **beberapa** field pengelompokan |
-| `having` | Filter atas hasil agregat (post-aggregation) |
-| `date_trunc` | Pembucketan waktu (hari/minggu/bulan/kuartal/tahun) |
-| Window function | Running total, ranking, dan sejenisnya |
-| `include()` batched | Eager-load relasi ter-batch untuk menghindari N+1 |
+| Kemampuan           | Cakupan                                             |
+| ------------------- | --------------------------------------------------- |
+| Fungsi agregat      | `sum`, `count`, `avg`, `min`, `max`                 |
+| `group_by`          | Satu atau **beberapa** field pengelompokan          |
+| `having`            | Filter atas hasil agregat (post-aggregation)        |
+| `date_trunc`        | Pembucketan waktu (hari/minggu/bulan/kuartal/tahun) |
+| Window function     | Running total, ranking, dan sejenisnya              |
+| `include()` batched | Eager-load relasi ter-batch untuk menghindari N+1   |
 
 **Larangan lintas-schema/lintas-kategori mutlak.** Query Builder **tidak pernah**
 boleh menjangkau lintas `category` ([`01-core-basic.md`](01-core-basic.md) §3 —
@@ -677,12 +800,12 @@ spec:
       rate_limit: { max: 5, per: 1m, scope: user, strategy: token_bucket }
 ```
 
-| Field | Arti |
-|---|---|
-| `max` | Jumlah pemanggilan maksimum dalam jendela `per` |
-| `per` | Panjang jendela (mis. `1s`, `1m`, `1h`) |
-| `scope` | Apa yang dibatasi bersama: `tenant` \| `user` \| `ip` \| `global` |
-| `strategy` | Algoritma: `sliding_window` \| `token_bucket` |
+| Field      | Arti                                                              |
+| ---------- | ----------------------------------------------------------------- |
+| `max`      | Jumlah pemanggilan maksimum dalam jendela `per`                   |
+| `per`      | Panjang jendela (mis. `1s`, `1m`, `1h`)                           |
+| `scope`    | Apa yang dibatasi bersama: `tenant` \| `user` \| `ip` \| `global` |
+| `strategy` | Algoritma: `sliding_window` \| `token_bucket`                     |
 
 `scope` menentukan **kunci** penghitungan (mis. `tenant` = kuota per tenant,
 `ip` = per alamat IP, `global` = satu kuota lintas semua pemanggil). Rate limit
@@ -698,7 +821,7 @@ consent footprint action lewat `uses`:
 
 ```yaml
 uses:
-  secrets: [midtrans.server_key]     # muncul di consent footprint (01 §5)
+  secrets: [midtrans.server_key] # muncul di consent footprint (01 §5)
 ```
 
 Kontrak normatif:
@@ -714,7 +837,7 @@ Kontrak normatif:
 - **Penyimpanan** secret itu sendiri (env var, file, Vault, KMS) adalah
   **konfigurasi deployment** yang digovern Control Plane
   ([`../platform/04-control-plane.md`](../platform/04-control-plane.md) §2),
-  bukan bagian kontrak ini — kontrak ini hanya mengatur *jalur baca* dari dalam
+  bukan bagian kontrak ini — kontrak ini hanya mengatur _jalur baca_ dari dalam
   action.
 
 ## 19. Soft-Deactivation (`is_active`)

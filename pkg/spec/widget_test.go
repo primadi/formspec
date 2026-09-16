@@ -28,8 +28,10 @@ func TestFormWidgets_ClosedSet(t *testing.T) {
 		"hidden",
 		"input",
 		"json",
+		"moneyinput",
 		"number",
 		"password",
+		"qrcode",
 		"radio-group",
 		"relation-picker",
 		"richtext",
@@ -38,6 +40,7 @@ func TestFormWidgets_ClosedSet(t *testing.T) {
 		"switch",
 		"tags",
 		"textarea",
+		"timeinput",
 		"uuid",
 	}
 	got := SortedFormWidgets()
@@ -53,10 +56,14 @@ func TestFormWidgets_ClosedSet(t *testing.T) {
 
 // TestTableCellWidgets_ClosedSet — table cells are their own (much smaller)
 // surface; a form widget there is silently ignored by the cell renderer.
+// `image` (gap #4) renders a file cell as an inline preview, `qrcode` (gap #3)
+// makes a token scannable in a list/printout; the cell renderer has a branch
+// for both, enforced by renderers/react-shadcn/src/widgets/catalog.test.tsx.
 func TestTableCellWidgets_ClosedSet(t *testing.T) {
 	got := AllTableCellWidgets()
-	if len(got) != 2 || got[0] != WidgetBadge || got[1] != WidgetBoolean {
-		t.Fatalf("table cell widget set: want [badge boolean], got %v", got)
+	if len(got) != 4 || got[0] != WidgetBadge || got[1] != WidgetBoolean ||
+		got[2] != WidgetImage || got[3] != WidgetQrCodeCell {
+		t.Fatalf("table cell widget set: want [badge boolean image qrcode], got %v", got)
 	}
 }
 
@@ -181,12 +188,14 @@ func TestValidateFormSections(t *testing.T) {
 		t.Fatalf("valid sections: %v", err)
 	}
 
-	bad := []FormSection{{Fields: []FormField{{Field: "total", Widget: "moneyinput"}}}}
+	// `moneyinput` used to be the example of an unknown widget; it is a real
+	// widget now (gap #1), so the example has to be something that stays wrong.
+	bad := []FormSection{{Fields: []FormField{{Field: "total", Widget: "monei-nput"}}}}
 	err := ValidateFormSections(bad, "form")
 	if err == nil {
 		t.Fatal("want an error for the unknown field widget")
 	}
-	if !strings.Contains(err.Error(), `field "total"`) || !strings.Contains(err.Error(), "moneyinput") {
+	if !strings.Contains(err.Error(), `field "total"`) || !strings.Contains(err.Error(), "monei-nput") {
 		t.Errorf("want the field located in the message, got: %v", err)
 	}
 

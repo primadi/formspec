@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"regexp"
@@ -1187,8 +1188,12 @@ func (s *EntityStore) ValidateRelationTargets(ctx context.Context, database DB, 
 		if s.targetTableResolver != nil {
 			resolved, err := s.targetTableResolver(targetModule, targetEntity)
 			if err != nil {
-				// Resolver failed — skip guard (best-effort)
-				continue
+				// A relation whose target entity cannot be resolved is a defect in
+				// the spec, not a soft miss: skipping the guard here is how a
+				// dangling reference used to pass silently (gap #12).
+				return fmt.Errorf(
+					"%w: relation %s targets %q, which does not resolve to a registered entity: %v",
+					ErrValidationRule, f.Name, f.Relation.Resource, err)
 			}
 			tbl = resolved
 		} else {
@@ -1202,8 +1207,20 @@ func (s *EntityStore) ValidateRelationTargets(ctx context.Context, database DB, 
 		var docStatus *string
 		err := database.QueryRowContext(ctx, query, targetIDStr, workspaceID).Scan(&docStatus)
 		if err != nil {
-			// Target not found or table doesn't exist — skip guard
-			continue
+			if errors.Is(err, sql.ErrNoRows) {
+				// No such row = the reference is dangling (never existed, or the
+				// target was hard-deleted). Rejecting is the point of the guard:
+				// silently accepting it produces a record pointing at nothing.
+				return fmt.Errorf(
+					"%w: relation %s points to %s[%s], which does not exist",
+					ErrValidationRule, f.Name, f.Relation.Resource, targetIDStr)
+			}
+			// The table itself is missing or unreadable — the naive fallback was
+			// wrong (cross-module target, irregular plural), and swallowing the
+			// error would leave the reference unvalidated.
+			return fmt.Errorf(
+				"%w: cannot validate relation %s to %q (table %q): %v",
+				ErrValidationRule, f.Name, f.Relation.Resource, tbl, err)
 		}
 
 		if docStatus != nil {
@@ -1457,18 +1474,21 @@ func (s *EntityStore) columnRefExpr(field string) string {
 		}
 	}
 
-	// A money value is the object {amount, currency}: SQL must reach into
-	// `.amount`, never compare or sum the JSON text of the object (S7/gap #28).
-	// This takes priority over the derived column, which stores the object.
-	if known && fieldType == spec.FieldMoney {
-		return s.moneyAmountExpr(field)
-	}
-
-	// Check if the field has a generated column (index/unique/naturalKey)
+	// Check if the field has a generated column (index/unique/naturalKey).
+	// Checked before the money branch: a money field's derived column now reads
+	// `.amount` and is numeric (#23), so it is both correct and indexed — using
+	// the expression instead would leave the index unused on every sort/filter.
 	for _, f := range s.fields {
 		if f.Name == field && (f.Index || f.Unique || f.NaturalKey) {
 			return generatedColumnName(field)
 		}
+	}
+
+	// A money value is the object {amount, currency}: SQL must reach into
+	// `.amount`, never compare or sum the JSON text of the object (S7/gap #28).
+	// This covers money fields that have no derived column.
+	if known && fieldType == spec.FieldMoney {
+		return s.moneyAmountExpr(field)
 	}
 
 	// Fallback: use JSONB path expression
@@ -1564,11 +1584,11 @@ func (s *EntityStore) requireNumericAggregateField(fn, field string) error {
 		return fmt.Errorf("%s aggregate: unknown field %q on entity %s", fn, field, s.entity)
 	}
 	switch ft {
-	case spec.FieldInteger, spec.FieldDecimal, spec.FieldNumber, spec.FieldMoney:
+	case spec.FieldInteger, spec.FieldDecimal, spec.FieldNumber, spec.FieldPercent, spec.FieldMoney:
 		return nil
 	}
 	return fmt.Errorf(
-		"%s aggregate: field %q has type %s, which is not numeric — %s is only defined over integer/decimal/number/money fields",
+		"%s aggregate: field %q has type %s, which is not numeric — %s is only defined over integer/decimal/number/percent/money fields",
 		fn, field, ft, fn)
 }
 
@@ -1582,7 +1602,7 @@ func castTypeForField(ft spec.FieldType, driver DriverType) string {
 	switch ft {
 	case spec.FieldInteger:
 		return "integer"
-	case spec.FieldDecimal, spec.FieldNumber:
+	case spec.FieldDecimal, spec.FieldNumber, spec.FieldPercent:
 		if driver == DriverSQLite {
 			return "REAL"
 		}

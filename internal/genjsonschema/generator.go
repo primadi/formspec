@@ -29,6 +29,15 @@ func (c *Converter) Generate(collect *CollectResult) *GenerateResult {
 		"ChildDecl", "ComputedDecl", "AutoFillDecl", "IndexDecl", "UsesDecl",
 		"ParamsDecl", "ConditionDecl", "HookDecl", "IdempotencyDecl",
 		"EntityAuth", "ExposeConfig", "RateLimitSpec", "CacheSpec",
+		// Summary projection contract (Core Extended §6, todo 3.6.4) — these
+		// MUST be listed, or Entity.schema.json emits "$ref: #/$defs/RebuildSpec"
+		// with no matching definition and every Entity fails to compile.
+		"SummarySource", "RebuildSpec",
+		// S5 / S11 / S12 / S14 constructs (kafe ledger 1.8) — these MUST be
+		// listed for the same reason as the summary contract above: a field
+		// rendered as "$ref" with no matching definition breaks every Entity
+		// schema in the tree.
+		"ScopeDecl", "AssignmentDecl", "UnitDecl", "InvariantDecl",
 		"ActionUIHint", "FilterSpec", "FormSection", "FormField", "FormAction", "FormSubmit", "FormRenderDecl",
 		"TableColumn", "TableAction", "BackdatePolicy", "ForwardDatePolicy",
 		"SoftDeactivateDecl", "PersistSpec", "ExtendStorage",

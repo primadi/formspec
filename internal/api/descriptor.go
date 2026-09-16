@@ -33,6 +33,12 @@ type RouteDescriptor struct {
 	// App (frontend/05-app-kinds.md §1). Read (list/find) + create are
 	// public; update/delete stay permission-gated.
 	Public bool
+	// PublicScope is the row filter the grant declares for anonymous reads on
+	// this surface (#45) — e.g. `guest_token = ?token`. It is resolved from the
+	// route parameter and injected into the request context, so anonymous
+	// `list` returns the caller's own rows instead of every row. Empty for
+	// grants without a scope, and for every non-public route.
+	PublicScope []spec.FilterSpec
 }
 
 // StandardRESTActions is the set of auto-generated REST actions for entities.

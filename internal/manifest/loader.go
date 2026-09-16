@@ -379,6 +379,35 @@ func (l *Loader) Validate(raw RawManifest) error {
 		}
 	}
 
+	// Workflow trigger contract (S9, kafe 1.7): the trigger must pick exactly
+	// one form. Whether the referenced transition actually exists is checked in
+	// the cross-manifest layer (`formspec validate`), which can see the target
+	// Entity's state machine — this layer only owns the manifest's own shape.
+	if raw.Kind == "Workflow" && raw.Spec != nil {
+		specMap, ok := raw.Spec.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%s: workflow spec must be a mapping", raw.Source)
+		}
+		wf, err := RawSpecToWorkflowSpec(specMap)
+		if err != nil {
+			return fmt.Errorf("%s: invalid spec: %w", raw.Source, err)
+		}
+		if err := spec.ValidateWorkflowSpec(wf); err != nil {
+			return fmt.Errorf("%s: %w", raw.Source, err)
+		}
+	}
+
+	// Module: runtime must be a valid closed-set value.
+	if raw.Kind == "Module" && raw.Spec != nil {
+		moduleSpec, err := RawSpecTo[spec.ModuleSpec](raw.Spec.(map[string]any))
+		if err != nil {
+			return fmt.Errorf("%s: invalid spec: %w", raw.Source, err)
+		}
+		if err := spec.ValidateModuleSpec(moduleSpec); err != nil {
+			return fmt.Errorf("%s: %w", raw.Source, err)
+		}
+	}
+
 	// App: app_renderer must be a known App renderer (closed set).
 	if raw.Kind == "App" && raw.Spec != nil {
 		appSpec, err := RawSpecToAppSpec(raw.Spec.(map[string]any))

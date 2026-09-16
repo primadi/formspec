@@ -294,6 +294,85 @@ func TestGenerateEntityDDL_PersistIndexesStillWorked(t *testing.T) {
 	}
 }
 
+// TestGenerateEntityDDL_PartialIndex covers S8: the `where:` predicate must be
+// rendered against derived columns (the index is on `_status`, not `status`) and
+// appended as a WHERE clause. Without the rewrite the index would name a column
+// that does not exist; without the predicate the rule would apply to every row,
+// so a cashier could never keep two closed shifts.
+//
+// The predicate is asserted verbatim from the plan output a manifest author
+// checks (`formspec migrate plan`), which is the artifact the kafe ledger's
+// acceptance criterion names.
+func TestGenerateEntityDDL_PartialIndex(t *testing.T) {
+	meta := spec.Metadata{Name: "shift", Module: "cafe-order"}
+	entity := &spec.EntitySpec{
+		Version: "v1",
+		Plural:  "shifts",
+		Fields: []spec.Field{
+			{Name: "branch_id", Type: spec.FieldRelation, Relation: &spec.RelationDecl{Type: "belongs_to", Resource: "cafe-master.branch"}},
+			{Name: "cashier_id", Type: spec.FieldRelation, Relation: &spec.RelationDecl{Type: "belongs_to", Resource: "cafe-master.employee"}},
+			{Name: "status", Type: spec.FieldEnum, EnumValues: []string{"open", "closed"}},
+		},
+		Indexes: []spec.IndexDecl{{
+			Fields: []string{"branch_id", "cashier_id"},
+			Unique: true,
+			Where:  "status = 'open'",
+		}},
+	}
+
+	ti, err := GenerateEntityDDL(meta, entity, DriverSQLite)
+	if err != nil {
+		t.Fatalf("GenerateEntityDDL: %v", err)
+	}
+
+	const want = "CREATE UNIQUE INDEX idx_cafe_order_shifts_branch_id_cashier_id ON cafe_order_shifts (_branch_id, _cashier_id) WHERE _status = 'open';"
+	if !containsIndex(ti.CreateIndexSQL, want) {
+		t.Errorf("missing partial unique index\ngot:  %v\nwant: %s", ti.CreateIndexSQL, want)
+	}
+
+	// The same predicate must be portable: PostgreSQL renders it identically
+	// because only the derived-column expression differs, not the predicate.
+	pgTI, err := GenerateEntityDDL(meta, entity, DriverPostgres)
+	if err != nil {
+		t.Fatalf("GenerateEntityDDL(postgres): %v", err)
+	}
+	if !containsIndex(pgTI.CreateIndexSQL, want) {
+		t.Errorf("postgres: missing partial unique index\ngot: %v", pgTI.CreateIndexSQL)
+	}
+}
+
+// TestGenerateEntityDDL_PartialIndexSystemColumn pins that a predicate may target
+// a real system column without being rewritten to a derived column — `deleted_at`
+// exists on the table, so `_deleted_at` would be wrong.
+func TestGenerateEntityDDL_PartialIndexSystemColumn(t *testing.T) {
+	meta := spec.Metadata{Name: "coupon", Module: "promo"}
+	entity := &spec.EntitySpec{
+		Version: "v1",
+		Plural:  "coupons",
+		Fields:  []spec.Field{{Name: "code", Type: spec.FieldString}},
+		Indexes: []spec.IndexDecl{{Fields: []string{"code"}, Unique: true, Where: "deleted_at IS NULL"}},
+	}
+
+	ti, err := GenerateEntityDDL(meta, entity, DriverSQLite)
+	if err != nil {
+		t.Fatalf("GenerateEntityDDL: %v", err)
+	}
+	const want = "CREATE UNIQUE INDEX idx_promo_coupons_code ON promo_coupons (_code) WHERE deleted_at IS NULL;"
+	if !containsIndex(ti.CreateIndexSQL, want) {
+		t.Errorf("missing partial index\ngot:  %v\nwant: %s", ti.CreateIndexSQL, want)
+	}
+}
+
+// containsIndex reports whether the index list contains stmt verbatim.
+func containsIndex(indexes []string, stmt string) bool {
+	for _, idx := range indexes {
+		if idx == stmt {
+			return true
+		}
+	}
+	return false
+}
+
 func TestPluralInflection(t *testing.T) {
 	tests := []struct {
 		singular string

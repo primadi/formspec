@@ -24,13 +24,17 @@ spec:
       title: "Nama Bahan"
     - name: unit
       type: enum
-      enum_values: [gram, ml, pcs]
+      enum_values: [gram, kg, ml, pcs]
       required: true
       default: gram
       title: "Satuan Dasar"
+      # S12: nilai gram/kg satu dimensi (massa) dengan basis gram — konversi
+      # gram↔kg kini DATA, bukan kesepakatan di dalam script (engine-nya item
+      # 4.6). `ml` dan `pcs` berdimensi lain, jadi sengaja tidak dikonversi.
+      unit: { base: gram, convertible: [kg] }
     # Biaya acuan. Dipakai HANYA bila bahan belum punya pergerakan stok.
     # Setelah ada pergerakan, acuan biaya adalah stock-level.moving_avg_cost (D3).
-    # GAP-01/GAP-02: field uang.
+    # GAP-01 TERTUTUP (2.14) — `moneyinput`. Sisa GAP-02: indeks money.
     - name: cost_per_unit
       type: money
       title: "Biaya Acuan per Satuan"

@@ -2,20 +2,18 @@
 # GUARD: satu shift terbuka per (cabang, kasir)
 # ─────────────────────────────────────────────────────────────────────────────
 #
-# Aturan bisnis #10. Sama kelasnya dengan GAP-22: constraint-nya TIDAK bisa
-# dinyatakan di YAML dan tidak ditegakkan database.
-#
-# Kenapa tidak bisa di YAML: butuh PARTIAL unique index —
+# Aturan bisnis #10 — kini DITEGAKKAN DATABASE sebagai partial unique index (S8):
 #     UNIQUE (branch_id, cashier_id) WHERE status = 'open'
-# `IndexDecl` hanya mendukung {fields, unique}, tanpa predikat parsial. Dan
-# bahkan kalau didukung pun, GAP-22 membuat `indexes:` diabaikan seluruhnya.
+# dinyatakan langsung di `shift/entity.yaml`:
+#     - fields: [branch_id, cashier_id]
+#       unique: true
+#       where: "status = 'open'"
+# Predikat itu portabel (SQLite & PostgreSQL sama-sama mendukung partial index),
+# jadi penutup lama berupa `kind: Migration` DDL mentah sudah dihapus — bersama
+# GAP-35 yang tidak lagi berlaku untuk kasus ini.
 #
-# PENUTUP SUDAH DITULIS DAN TERVERIFIKASI:
-#   spec/modules/cafe-order/migrations/shift-open-unique.yaml
-# (`CREATE UNIQUE INDEX ... WHERE status = 'open'`) — ter-apply lewat
-# `formspec migrate apply` ("3 custom migration(s)").
-# Guard ini sekarang LAPIS KEDUA. Hapus setelah migration terbukti berjalan di
-# produksi — dan itu belum pasti, karena GAP-35 (ddl tidak portabel ke PostgreSQL).
+# Guard ini LAPIS KEDUA yang memberi pesan error ramah di action pipeline.
+# Constraint database-lah yang berlaku untuk semua jalur tulis.
 #
 # GAP-30 — ctx.db().query() deadlock di SQLite dalam transaksi aksi (lihat
 #   catatan lengkap di cafe-master/scripts/guard_menu_item_price_unique.star).

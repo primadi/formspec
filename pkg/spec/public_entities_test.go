@@ -88,6 +88,64 @@ func TestValidateAppSpec_PublicEntities_Rejects(t *testing.T) {
 	}
 }
 
+// TestValidateAppSpec_PublicEntities_Scope pins the per-surface row scope on a
+// public grant (#45): it exists to make "anonymous may list" mean "may list the
+// row carrying the token they present". Two shapes are refused because they
+// would look guarded without being it.
+func TestValidateAppSpec_PublicEntities_Scope(t *testing.T) {
+	ok := publicApp(PublicEntityDecl{
+		Entity:  "cafe-order/order",
+		Actions: []string{"create", "list"},
+		Scope:   []FilterSpec{{Field: "guest_token", Op: "eq", From: "route", Param: "token"}},
+	})
+	if err := ValidateAppSpec(ok); err != nil {
+		t.Errorf("token-scoped public list: expected no error, got %v", err)
+	}
+
+	rejects := []struct {
+		name    string
+		decl    PublicEntityDecl
+		wantSub string
+	}{
+		{
+			name: "session scope on a public surface",
+			decl: PublicEntityDecl{
+				Entity: "cafe-order/order", Actions: []string{"list"},
+				Scope: []FilterSpec{{Field: "branch_id", From: "session"}},
+			},
+			wantSub: "from: route",
+		},
+		{
+			name: "scope without a field",
+			decl: PublicEntityDecl{
+				Entity: "cafe-order/order", Actions: []string{"list"},
+				Scope: []FilterSpec{{From: "route", Param: "token"}},
+			},
+			wantSub: "field is required",
+		},
+		{
+			// find resolves by id; a scope cannot guard it, so granting both
+			// would read as filtered while any id still returns its record.
+			name: "find granted together with a scope",
+			decl: PublicEntityDecl{
+				Entity: "cafe-order/order", Actions: []string{"find", "list"},
+				Scope: []FilterSpec{{Field: "guest_token", From: "route", Param: "token"}},
+			},
+			wantSub: "cannot grant `find` together with `scope`",
+		},
+	}
+	for _, c := range rejects {
+		err := ValidateAppSpec(publicApp(c.decl))
+		if err == nil {
+			t.Errorf("%s: expected an error", c.name)
+			continue
+		}
+		if !strings.Contains(err.Error(), c.wantSub) {
+			t.Errorf("%s: error %q does not contain %q", c.name, err.Error(), c.wantSub)
+		}
+	}
+}
+
 // TestNormalizeEntityRef pins the ref forms shared by public_entities and the
 // router lookup. A dotted module name must not be split at the wrong dot.
 func TestNormalizeEntityRef(t *testing.T) {

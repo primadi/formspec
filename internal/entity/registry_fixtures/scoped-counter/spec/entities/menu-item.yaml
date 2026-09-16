@@ -1,0 +1,17 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: menu-item
+  module: billing
+  description: Counter tanpa scope — kontrol bahwa guard-nya hanya untuk rule ber-scope
+spec:
+  version: v1
+  characteristic: master
+  plural: menu-items
+  fields:
+    - name: code
+      type: string
+      natural_key: true
+      natural_key_rule:
+        strategy: sequence
+        format: "MI-{seq:05d}"

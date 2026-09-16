@@ -8,6 +8,11 @@ spec:
   version: v1
   characteristic: transaction
   plural: cash-movements
+  # S5: kas masuk/keluar selalu milik satu cabang.
+  scope: { dimension: branch, field: branch_id, required: true }
+  # Item 3.5: data kas adalah yang paling tidak boleh bocor antar cabang.
+  row_scope:
+    - { field: branch_id, op: eq, from: session }
   fields:
     - name: transaction_date
       type: datetime
@@ -29,7 +34,7 @@ spec:
       enum_values: [in, out]
       required: true
       title: "Arah"
-    # GAP-01/GAP-02: field uang.
+    # GAP-01 TERTUTUP (2.14) — `moneyinput`. Sisa GAP-02: indeks money.
     - name: amount
       type: money
       required: true

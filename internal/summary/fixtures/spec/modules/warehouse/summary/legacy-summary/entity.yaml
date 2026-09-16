@@ -1,0 +1,14 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: legacy-summary
+  module: warehouse
+  description: "Summary written by events but declaring no sources — nothing to replay"
+spec:
+  version: v1
+  characteristic: summary
+  plural: legacy-summaries
+  fields:
+    - name: ingredient_id
+      type: string
+      rules: [required]

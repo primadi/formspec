@@ -22,6 +22,7 @@ import { getLifecycle, getAvailableTransitions } from "@/engine/lifecycle"
 import { apiGet } from "@/lib/api"
 import { titleCase } from "@/lib/utils"
 import { createFormatter, moneyAmount, type Formatter } from "@/lib/format"
+import { isImageFile } from "@/lib/media"
 import { sanitizeHTML } from "@/lib/sanitize"
 import { Badge } from "@/widgets/Badge"
 import { Button } from "@/components/ui/button"
@@ -357,8 +358,27 @@ function DetailFieldValue({
   }
 
   if (field.type === "file") {
-    const key = String(value)
+    const key = Array.isArray(value) ? String(value[0] ?? "") : String(value)
     const name = key.split("/").pop()
+    // An image renders as an image (#4) — the download route serves the bytes,
+    // so the detail page needs no separate preview widget. Non-images keep the
+    // download link.
+    if (isImageFile(key) && fileUrl) {
+      return (
+        <a
+          href={fileUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-block"
+        >
+          <img
+            src={fileUrl}
+            alt={name ?? "image"}
+            className="max-h-64 rounded border object-contain"
+          />
+        </a>
+      )
+    }
     return (
       <a
         href={fileUrl ?? "#"}

@@ -24,6 +24,7 @@ import { useMetaStore } from "@/stores/meta"
 import { useSessionStore } from "@/stores/session"
 import { apiList } from "@/lib/api"
 import { renderCellValue } from "@/lib/renderCell"
+import { fileDownloadUrl } from "@/lib/media"
 import { createFormatter } from "@/lib/format"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -191,6 +192,18 @@ export default function ListingRenderer({
                         col.widget,
                         col.format,
                         formatter,
+                        {
+                          // Image cells (#4) need the file's download URL;
+                          // the cell renderer only has the stored object key.
+                          imageUrl: fileDownloadUrl(
+                            workspace,
+                            String(entity?.module ?? ""),
+                            entity?.name ?? "",
+                            String(row.id),
+                            col.field,
+                          ),
+                          alt: String(row[col.field] ?? ""),
+                        },
                       )}
                     </td>
                   ))}

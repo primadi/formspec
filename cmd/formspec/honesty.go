@@ -91,6 +91,15 @@ func scanHonesty(manifests []manifest.RawManifest, specPath string) []honestyIss
 			}
 			actions = es.Actions
 			hooks = es.Hooks
+			// maintained_by (S14): a summary projection names the script that
+			// writes it. The declaration is the only statement of "who maintains
+			// this" a summary has — summaries never run the action pipeline — so a
+			// reference that does not resolve must be an error, not a comment.
+			if es.MaintainedBy != "" {
+				path := resolveHonestyScript(specPath, m, es.MaintainedBy)
+				issues = append(issues, scriptLoadIssue(m.Source, path,
+					fmt.Sprintf("maintained_by %q", es.MaintainedBy), parseScriptUsage(path))...)
+			}
 		case spec.KindService:
 			ss, err := manifest.RawSpecTo[spec.ServiceSpec](sm)
 			if err != nil {

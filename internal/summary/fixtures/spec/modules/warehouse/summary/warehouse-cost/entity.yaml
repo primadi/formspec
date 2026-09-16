@@ -1,0 +1,20 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: warehouse-cost
+  module: warehouse
+  description: "Projection whose declared source has no durable subscriber"
+spec:
+  version: v1
+  characteristic: summary
+  plural: warehouse-costs
+  fields:
+    - name: ingredient_id
+      type: string
+      rules: [required]
+    - name: moving_avg_cost
+      type: decimal
+  sources:
+    - { entity: warehouse.ingredient }
+  join_key: "i.id = ingredient_id"
+  rebuild: { strategy: full }

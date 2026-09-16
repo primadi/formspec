@@ -10,6 +10,9 @@ spec:
   plural: promos
   display_field: name
   soft_deactivate: { enabled: true }
+  # S5: promo boleh berlaku di semua cabang (branch_id kosong = global), jadi
+  # dimensinya tidak `required`.
+  scope: { dimension: branch, field: branch_id }
   fields:
     - name: code
       type: string
@@ -28,10 +31,10 @@ spec:
       required: true
       title: "Jenis Promo"
     - name: percent
-      type: decimal
+      type: percent
       scale: 2
       title: "Persentase (%)"
-    # GAP-01/GAP-02 — seluruh field uang di sini terkena dua gap money.
+    # GAP-01 TERTUTUP (2.14) — `moneyinput`. GAP-02 (indeks money) masih terbuka.
     - name: value
       type: money
       title: "Nominal Potongan"
@@ -72,7 +75,8 @@ spec:
       type: json
       title: "Hari Berlaku"
       description: "Array angka 1=Senin..7=Minggu, mis. [1,2,3,4,5]"
-    # GAP-01: `time` juga belum punya widget (sama seperti money).
+    # GAP-01 TERTUTUP (2.14): `time` kini punya `timeinput` — jam happy hour
+    # diisi lewat kontrol waktu, bukan teks bebas.
     - name: time_from
       type: time
       title: "Jam Mulai"

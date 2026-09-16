@@ -41,13 +41,13 @@ spec:
       default: "Asia/Jakarta"
       title: "Zona Waktu"
     - name: tax_percent
-      type: decimal
+      type: percent
       scale: 2
       default: 10
       title: "Pajak (%)"
       description: "PB1, mis. 10 untuk 10%"
     - name: service_charge_percent
-      type: decimal
+      type: percent
       scale: 2
       default: 5
       title: "Service Charge (%)"

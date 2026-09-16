@@ -40,8 +40,8 @@ spec:
         - { field: start_date }
         - { field: end_date }
         - { field: days_of_week, help: "Array angka: 1=Senin .. 7=Minggu. Kosongkan untuk setiap hari." }
-        # GAP-01: `time` juga belum punya widget — sama seperti money. jam happy
-        # hour akan diisi di input teks polos.
+        # GAP-01 TERTUTUP (2.14): `time` memakai `timeinput` — jam happy hour
+        # diisi lewat kontrol waktu, bukan teks bebas.
         - { field: time_from, label: "Jam Mulai" }
         - { field: time_to, label: "Jam Selesai" }
         - { field: max_uses_per_member }

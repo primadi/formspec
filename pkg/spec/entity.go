@@ -2,6 +2,9 @@ package spec
 
 import (
 	"fmt"
+	"regexp"
+	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -70,6 +73,51 @@ const (
 	OnDeleteSetNull  OnDelete = "set_null" // set FK to NULL
 )
 
+// ScopeDecl declares that an entity's rows are partitioned along a named
+// dimension (S5). `Field` is the field on this entity that carries the dimension
+// value; `Required` asserts that every row carries one.
+type ScopeDecl struct {
+	// @schema {description: "Dimension name, e.g. branch / tenant / region", pattern: "^[a-z][a-z0-9_]*$"}
+	Dimension string `yaml:"dimension" json:"dimension"`
+	// @schema {description: "Field on this entity carrying the dimension value"}
+	Field string `yaml:"field" json:"field"`
+	// @schema {description: "Every row must carry a dimension value; requires the field itself to be required"}
+	Required bool `yaml:"required,omitempty" json:"required,omitempty"`
+}
+
+// AssignmentDecl declares that an entity records a principal→dimension mapping
+// (S5): a row of this entity links the principal identified by `PrincipalField`
+// to the dimension value held in `Field`. The server resolves `from: session`
+// row-scope attributes from these declarations.
+type AssignmentDecl struct {
+	// @schema {description: "Scope dimension this assignment provides a value for", pattern: "^[a-z][a-z0-9_]*$"}
+	Dimension string `yaml:"dimension" json:"dimension"`
+	// @schema {description: "Field on this entity holding the dimension value"}
+	Field string `yaml:"field" json:"field"`
+	// @schema {description: "Field on this entity identifying the principal; matched against the authenticated username", example: "username"}
+	PrincipalField string `yaml:"principal_field" json:"principal_field"`
+}
+
+// AssignmentSource is a resolved AssignmentDecl: which entity carries it, and
+// which fields link the principal to the dimension value.
+type AssignmentSource struct {
+	Module         string
+	Entity         string
+	Dimension      string
+	Field          string
+	PrincipalField string
+}
+
+// InvariantDecl declares a property a summary projection must satisfy (S14).
+// Only `unique` is defined: it is validated against the declared indexes, so
+// the database — not discipline — keeps the property true.
+type InvariantDecl struct {
+	// @schema {description: "Columns that must be unique together on this projection", minItems: 1}
+	Unique []string `yaml:"unique,omitempty" json:"unique,omitempty"`
+	// @schema {description: "Human-readable statement of the invariant"}
+	Message string `yaml:"message,omitempty" json:"message,omitempty"`
+}
+
 // EntitySpec defines a stateful, persisted business data resource (Core §4.1).
 type EntitySpec struct {
 	// @schema {example: "v1"}
@@ -85,14 +133,47 @@ type EntitySpec struct {
 	Events         []EventDecl    `yaml:"events,omitempty" json:"events,omitempty"`
 	Deliver        []DeliveryDecl `yaml:"deliver,omitempty" json:"deliver,omitempty"`
 	Indexes        []IndexDecl    `yaml:"indexes,omitempty" json:"indexes,omitempty"`
-	// Scope declares row-level scoping enforced by the server on every list/
-	// aggregate read of this entity (S2, #6/#9): `{field, op, from: session|route,
-	// attr|param}`. Unlike a kind's `fixed_filters` — which the browser merges and
-	// a malicious client can simply omit — Scope is resolved server-side from the
-	// request context, so it cannot be widened by editing the query string. Value
-	// sources per entry: `from: session` reads an identity attribute (`attr`);
+	// RowScope declares the row-level filters the server enforces on every read
+	// of this entity (S2, #6/#9): `{field, op, from: session|route, attr|param}`.
+	// Unlike a kind's `fixed_filters` — which the browser merges and a malicious
+	// client can simply omit — RowScope is resolved server-side from the request
+	// context, so it cannot be widened by editing the query string. Value sources
+	// per entry: `from: session` reads an identity attribute (`attr`);
 	// `from: route` reads the query parameter named by `param`.
-	Scope             []FilterSpec        `yaml:"scope,omitempty" json:"scope,omitempty"`
+	//
+	// Renamed from `scope` when S5 (item 1.8) introduced the `scope:` dimension
+	// descriptor — one name cannot be both a filter list and a declaration.
+	RowScope []FilterSpec `yaml:"row_scope,omitempty" json:"row_scope,omitempty"`
+	// Scope declares that this entity's rows are partitioned along a named
+	// dimension (S5) — e.g. `{dimension: branch, field: branch_id}`. It states a
+	// fact about the data (consumed by natural-key scoping and, from item 3.5, by
+	// automatic filtering); it does not by itself filter reads — that is
+	// `row_scope`. `required: true` asserts every row carries a dimension value,
+	// and is rejected unless the field itself is `required: true`.
+	Scope *ScopeDecl `yaml:"scope,omitempty" json:"scope,omitempty"`
+	// Assignments declares that this entity records which principal is assigned
+	// to a value of a scope dimension (S5) — e.g. the employee entity maps a
+	// login (`principal_field: username`) to a branch (`field: branch_id`). This
+	// is the source of the `from: session` attribute values that `row_scope`
+	// resolves against.
+	Assignments []AssignmentDecl `yaml:"assignments,omitempty" json:"assignments,omitempty"`
+	// MaintainedBy names the script that keeps a `characteristic: summary`
+	// projection up to date (S14) — `module/path/to/script`. Summary entities
+	// never run the action pipeline, so hooks/conditions do not apply; this
+	// declaration says who writes the rows, and is validated to exist.
+	MaintainedBy string `yaml:"maintained_by,omitempty" json:"maintained_by,omitempty"`
+	// Invariants declares properties that must hold for a `characteristic:
+	// summary` projection (S14). Each invariant is validated against the DDL:
+	// `unique: [a, b]` is rejected unless a unique index over exactly those
+	// columns is declared, so the guarantee is enforced by the database rather
+	// than merely asserted in YAML.
+	Invariants []InvariantDecl `yaml:"invariants,omitempty" json:"invariants,omitempty"`
+	// Summary-source contract for Entity characteristic: summary (Core Extended
+	// §6, "gabungkan sources by join_key"). These fields describe how a
+	// summary projection is rebuilt from durable source data.
+	Sources           []SummarySource     `yaml:"sources,omitempty" json:"sources,omitempty"`
+	JoinKey           string              `yaml:"join_key,omitempty" json:"join_key,omitempty"`
+	Rebuild           *RebuildSpec        `yaml:"rebuild,omitempty" json:"rebuild,omitempty"`
 	ExtendStorage     *ExtendStorage      `yaml:"extend_storage,omitempty" json:"extend_storage,omitempty"`
 	Expose            []ExposeConfig      `yaml:"expose,omitempty" json:"expose,omitempty"`
 	BackdatePolicy    *BackdatePolicy     `yaml:"backdate_policy,omitempty" json:"backdate_policy,omitempty"`
@@ -241,6 +322,23 @@ type Field struct {
 	// default (no currency catalog to look it up from).
 	Currency      string `yaml:"currency,omitempty" json:"currency,omitempty"`
 	DecimalPlaces *int   `yaml:"decimal_places,omitempty" json:"decimal_places,omitempty"`
+
+	// Unit (S12) — declares the unit dimension of a field naming/conversion
+	// unit, e.g. `unit: {base: gram, convertible: [kg, ounce]}`. Conversion is
+	// the engine's job from item 4.6; the declaration exists so units are data,
+	// not a naming convention baked into scripts.
+	Unit *UnitDecl `yaml:"unit,omitempty" json:"unit,omitempty"`
+}
+
+// UnitDecl declares the unit dimension of a field (S12): `Base` is the unit
+// values are stored in, `Convertible` lists the units callers may convert
+// to/from. Both are validated against the field's enum values, so a typo cannot
+// silently disable conversion.
+type UnitDecl struct {
+	// @schema {description: "Base (storage) unit, e.g. gram", minLength: 1}
+	Base string `yaml:"base" json:"base"`
+	// @schema {description: "Units convertible to/from the base unit"}
+	Convertible []string `yaml:"convertible,omitempty" json:"convertible,omitempty"`
 }
 
 // FieldType is the data type of a field (Core §10.1, 05-field-types.md §1.1).
@@ -265,6 +363,9 @@ const (
 	FieldAttachment FieldType = "attachment" // alias for FieldFile (05-field-types.md §1.3) — normalized to FieldFile at validate time
 	FieldRelation   FieldType = "relation"
 	FieldChild      FieldType = "child"
+	// FieldPercent is a percentage (S11): numerically a decimal, but it is
+	// stored, rendered, and formatted as a percentage rather than a bare ratio.
+	FieldPercent FieldType = "percent"
 
 	// Deprecated: FieldNumber predates the spec's integer/decimal split (Core §10.1).
 	// It is kept for backward compatibility and maps to the same storage as decimal.
@@ -373,6 +474,34 @@ func ValidateEvents(events []EventDecl) error {
 	return nil
 }
 
+// identifierRe matches the lowercase snake_case identifiers used for field
+// names, and now also for scope dimensions.
+var identifierRe = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+
+// hasUniqueIndexOver reports whether the entity declares a unique index over
+// exactly the given fields. Order-insensitive; only non-partial unique indexes
+// count, since a partial index does not hold the invariant for every row.
+func hasUniqueIndexOver(d *EntitySpec, fields []string) bool {
+	want := append([]string(nil), fields...)
+	sort.Strings(want)
+
+	decls := append([]IndexDecl(nil), d.Indexes...)
+	if d.Persist != nil {
+		decls = append(decls, d.Persist.Indexes...)
+	}
+	for _, idx := range decls {
+		if !idx.Unique || idx.Where != "" || len(idx.Fields) != len(want) {
+			continue
+		}
+		got := append([]string(nil), idx.Fields...)
+		sort.Strings(got)
+		if slices.Equal(got, want) {
+			return true
+		}
+	}
+	return false
+}
+
 // ValidateEntitySpec validates an EntitySpec, returning an error if any constraint is violated.
 // In addition to extension validation, it enforces:
 //   - Reserved field names MUST NOT be reused.
@@ -401,30 +530,150 @@ func ValidateEntitySpec(d *EntitySpec) error {
 		}
 	}
 
-	// scope (S2, #6/#9): server-enforced row scoping. Every entry must name an
-	// existing field and declare where its value comes from — a scope whose
-	// source is unknown would silently not filter, which is worse than no scope.
-	if len(d.Scope) > 0 {
-		byName := make(map[string]bool, len(d.Fields))
-		for _, f := range d.Fields {
-			byName[f.Name] = true
+	// File fields (05-field-types.md §1.3, gap #4b): `allowed_types` must use a
+	// form the matchers actually understand. The documented bare-extension form
+	// (`[jpg]`) used to match nothing on either side, so a correct-looking
+	// manifest rejected every upload — the failure to avoid is silence, not
+	// strictness.
+	for i := range d.Fields {
+		f := &d.Fields[i]
+		if f.Type != FieldFile || f.Storage == nil {
+			continue
 		}
-		for i := range d.Scope {
-			sc := &d.Scope[i]
+		if err := ValidateStorageSpec(f.Name, f.Storage); err != nil {
+			return err
+		}
+	}
+
+	// Partial-index predicates (S8): validate both declaration sites, since
+	// `indexes:` exists both at the Entity top level and under persist.
+	whereFields := IndexWhereFieldNames(d)
+	if err := validateIndexDecls("indexes", d.Indexes, whereFields); err != nil {
+		return err
+	}
+	if d.Persist != nil {
+		if err := validateIndexDecls("persist.indexes", d.Persist.Indexes, whereFields); err != nil {
+			return err
+		}
+	}
+
+	// Field index by name — shared by the row_scope / scope / assignments /
+	// invariants validations below.
+	byName := make(map[string]*Field, len(d.Fields))
+	for i := range d.Fields {
+		byName[d.Fields[i].Name] = &d.Fields[i]
+	}
+
+	// row_scope (S2, #6/#9): server-enforced row scoping. Every entry must name
+	// an existing field and declare where its value comes from — a scope whose
+	// source is unknown would silently not filter, which is worse than no scope.
+	if len(d.RowScope) > 0 {
+		for i := range d.RowScope {
+			sc := &d.RowScope[i]
 			if sc.Field == "" {
-				return fmt.Errorf("scope[%d]: field is required", i)
+				return fmt.Errorf("row_scope[%d]: field is required", i)
 			}
-			if !byName[sc.Field] && !IsReservedField(sc.Field) {
-				return fmt.Errorf("scope[%d]: field %q is not declared on this entity", i, sc.Field)
+			if byName[sc.Field] == nil && !IsReservedField(sc.Field) {
+				return fmt.Errorf("row_scope[%d]: field %q is not declared on this entity", i, sc.Field)
 			}
 			switch sc.From {
 			case "session":
-				// `attr` is optional; empty means principal_id.
+				// `attr` is optional; empty means the entity's scope field (when
+				// declared) or principal_id.
 			case "route":
 				// `param` is optional; empty means the field name.
 			default:
-				return fmt.Errorf("scope[%d] (%s): from must be \"session\" or \"route\", got %q", i, sc.Field, sc.From)
+				return fmt.Errorf("row_scope[%d] (%s): from must be \"session\" or \"route\", got %q", i, sc.Field, sc.From)
 			}
+		}
+	}
+
+	// scope (S5): the entity is partitioned along a named dimension. This is a
+	// statement about the data, not a filter — `row_scope` is what filters. It is
+	// validated tightly because a scoped-looking entity without a dimension
+	// value per row is how multi-outlet isolation silently leaks.
+	if d.Scope != nil {
+		if d.Scope.Dimension == "" {
+			return fmt.Errorf("scope: dimension is required")
+		}
+		if !identifierRe.MatchString(d.Scope.Dimension) {
+			return fmt.Errorf("scope: dimension %q must match ^[a-z][a-z0-9_]*$", d.Scope.Dimension)
+		}
+		if d.Scope.Field == "" {
+			return fmt.Errorf("scope: field is required")
+		}
+		f := byName[d.Scope.Field]
+		if f == nil {
+			return fmt.Errorf("scope: field %q is not declared on this entity", d.Scope.Field)
+		}
+		if d.Scope.Required && !f.Required {
+			return fmt.Errorf("scope: dimension %q is declared required, but field %q is not required — every row would still be allowed to omit it",
+				d.Scope.Dimension, d.Scope.Field)
+		}
+	}
+
+	// assignments (S5): this entity maps a principal to a dimension value. That
+	// mapping is what `from: session` row-scope attributes resolve against, so a
+	// malformed declaration would make every scoped read fail closed forever.
+	if len(d.Assignments) > 0 {
+		seen := make(map[string]bool, len(d.Assignments))
+		for i := range d.Assignments {
+			a := &d.Assignments[i]
+			if a.Dimension == "" {
+				return fmt.Errorf("assignments[%d]: dimension is required", i)
+			}
+			if !identifierRe.MatchString(a.Dimension) {
+				return fmt.Errorf("assignments[%d]: dimension %q must match ^[a-z][a-z0-9_]*$", i, a.Dimension)
+			}
+			if seen[a.Dimension] {
+				return fmt.Errorf("assignments[%d]: dimension %q declared twice — one principal cannot have two values for the same dimension", i, a.Dimension)
+			}
+			seen[a.Dimension] = true
+			if a.Field == "" {
+				return fmt.Errorf("assignments[%d] (%s): field is required", i, a.Dimension)
+			}
+			if byName[a.Field] == nil {
+				return fmt.Errorf("assignments[%d] (%s): field %q is not declared on this entity", i, a.Dimension, a.Field)
+			}
+			if a.PrincipalField == "" {
+				return fmt.Errorf("assignments[%d] (%s): principal_field is required", i, a.Dimension)
+			}
+			if byName[a.PrincipalField] == nil {
+				return fmt.Errorf("assignments[%d] (%s): principal_field %q is not declared on this entity", i, a.Dimension, a.PrincipalField)
+			}
+		}
+	}
+
+	// maintained_by + invariants (S14). Both are only meaningful on a summary
+	// projection — those entities never run the action pipeline, so hooks and
+	// conditions cannot protect them. Saying "maintained by X" and asserting
+	// uniqueness is only honest when X exists and the database enforces it.
+	if d.MaintainedBy != "" || len(d.Invariants) > 0 {
+		if d.Characteristic != CharSummary {
+			return fmt.Errorf("maintained_by/invariants are only valid on characteristic: summary (this entity is %q)", d.Characteristic)
+		}
+	}
+	if d.MaintainedBy != "" {
+		if !strings.Contains(d.MaintainedBy, "/") || strings.HasPrefix(d.MaintainedBy, "/") {
+			return fmt.Errorf("maintained_by %q must be a script reference \"<module>/<path>\"", d.MaintainedBy)
+		}
+	}
+	for i := range d.Invariants {
+		inv := &d.Invariants[i]
+		if len(inv.Unique) == 0 {
+			return fmt.Errorf("invariants[%d]: no supported invariant — declare `unique: [field, ...]`", i)
+		}
+		cols := make([]string, 0, len(inv.Unique))
+		for _, name := range inv.Unique {
+			if byName[name] == nil {
+				return fmt.Errorf("invariants[%d]: field %q is not declared on this entity", i, name)
+			}
+			cols = append(cols, name)
+		}
+		if !hasUniqueIndexOver(d, cols) {
+			return fmt.Errorf(
+				"invariants[%d]: unique(%s) is not backed by a unique index — add `indexes: [{fields: [%s], unique: true}]` (a summary projection has no action pipeline, so only the database can hold this invariant)",
+				i, strings.Join(cols, ", "), strings.Join(cols, ", "))
 		}
 	}
 
@@ -561,6 +810,41 @@ func ValidateEntitySpec(d *EntitySpec) error {
 		}
 	}
 
+	// Unit declarations (S12): a field that names a unit may declare the unit
+	// dimension it belongs to. Both `base` and every `convertible` entry must be
+	// one of the field's own values — otherwise conversion silently cannot
+	// resolve, which reads as "conversion is broken" rather than "typo".
+	for i := range d.Fields {
+		f := &d.Fields[i]
+		if f.Unit == nil {
+			continue
+		}
+		switch f.Type {
+		case FieldEnum, FieldString:
+			// The declared units must be values of this field.
+		default:
+			return fmt.Errorf("field %q: `unit` is only valid on a field whose values are unit names (enum or string), not %q", f.Name, f.Type)
+		}
+		if f.Unit.Base == "" {
+			return fmt.Errorf("field %q: unit.base is required", f.Name)
+		}
+		allowed := make(map[string]bool, len(f.EnumValues))
+		for _, v := range f.EnumValues {
+			allowed[v] = true
+		}
+		if f.Type == FieldEnum && !allowed[f.Unit.Base] {
+			return fmt.Errorf("field %q: unit.base %q is not among enum_values %v", f.Name, f.Unit.Base, f.EnumValues)
+		}
+		for _, u := range f.Unit.Convertible {
+			if u == f.Unit.Base {
+				return fmt.Errorf("field %q: unit.convertible must not repeat the base unit %q", f.Name, u)
+			}
+			if f.Type == FieldEnum && !allowed[u] {
+				return fmt.Errorf("field %q: unit.convertible %q is not among enum_values %v", f.Name, u, f.EnumValues)
+			}
+		}
+	}
+
 	// Soft-deactivation pattern (1.4.10 / 4.10.2, 02-core-extended.md §19):
 	// soft_deactivate: {enabled: true} adds an `is_active` boolean field
 	// (default true) plus deactivate/reactivate actions. Inject the field if
@@ -650,6 +934,35 @@ func ValidateEntitySpec(d *EntitySpec) error {
 	// Hooks spec validation (Core Extended §8)
 	if err := ValidateHooks(d.Hooks, d.Actions); err != nil {
 		return err
+	}
+
+	// Summary projection contract (Core Extended §6): if a summary entity
+	// declares a rebuild plan, it must name its sources and provide a valid
+	// strategy. The framework may also accept summary entities without explicit
+	// rebuild metadata until a projection engine is wired up.
+	if d.Characteristic == CharSummary {
+		if len(d.Sources) > 0 && d.JoinKey == "" {
+			return fmt.Errorf("summary entity sources declared without join_key")
+		}
+		if d.JoinKey != "" && len(d.Sources) == 0 {
+			return fmt.Errorf("summary entity join_key declared without sources")
+		}
+		if d.Rebuild != nil {
+			switch d.Rebuild.Strategy {
+			case "", "full", "partial", "none":
+			default:
+				return fmt.Errorf("summary entity rebuild.strategy must be one of full|partial|none, got %q", d.Rebuild.Strategy)
+			}
+			if len(d.Sources) == 0 {
+				return fmt.Errorf("summary entity rebuild requires at least one source")
+			}
+			if d.JoinKey == "" {
+				return fmt.Errorf("summary entity rebuild requires join_key")
+			}
+		}
+	}
+	if !(d.Characteristic == CharSummary) && (len(d.Sources) > 0 || d.JoinKey != "" || d.Rebuild != nil) {
+		return fmt.Errorf("sources/join_key/rebuild are only valid on summary entities")
 	}
 
 	return nil
@@ -1107,8 +1420,17 @@ type DeliveryDecl struct {
 
 // IndexDecl declares a database index.
 type IndexDecl struct {
+	// @schema {description: "Fields covered by the index; may name relation fields"}
 	Fields []string `yaml:"fields" json:"fields"`
 	Unique bool     `yaml:"unique,omitempty" json:"unique,omitempty"`
+	// Where makes the index partial (S8): only rows matching the predicate are
+	// indexed. Written against field names, e.g. `where: "status = 'open'"` —
+	// a closed grammar (see indexwhere.go), not free-form SQL, because the text
+	// is rendered into DDL and must be validatable. Both SQLite and PostgreSQL
+	// support partial indexes, so expressing uniqueness this way stays portable
+	// (unlike the raw-DDL migration it replaces).
+	// @schema {example: "status = 'open'", description: "Partial index predicate over field names: '<field> <op> <literal>' and/or '<field> IS [NOT] NULL', joined by AND"}
+	Where string `yaml:"where,omitempty" json:"where,omitempty"`
 }
 
 // RelationDecl defines a relation to another entity.
@@ -1187,6 +1509,24 @@ type BackdatePolicy struct {
 type ForwardDatePolicy struct {
 	MaxDaysForward     int    `yaml:"max_days_forward,omitempty" json:"max_days_forward,omitempty"`
 	OverridePermission string `yaml:"override_permission,omitempty" json:"override_permission,omitempty"`
+}
+
+// SummarySource describes one durable source entity used to rebuild a summary
+// projection. The concrete join semantics are implementation-defined but the
+// contract is the same across backends: combine these sources by join_key.
+// See docs/spec/backend/02-core-extended.md §6.
+type SummarySource struct {
+	Entity string            `yaml:"entity" json:"entity"`
+	Alias  string            `yaml:"alias,omitempty" json:"alias,omitempty"`
+	Filter map[string]string `yaml:"filter,omitempty" json:"filter,omitempty"`
+}
+
+// RebuildSpec describes how a summary entity is rebuilt from its durable
+// source event/record stream.
+type RebuildSpec struct {
+	Strategy string `yaml:"strategy,omitempty" json:"strategy,omitempty"` // full | partial | none
+	Window   string `yaml:"window,omitempty" json:"window,omitempty"`
+	Since    string `yaml:"since,omitempty" json:"since,omitempty"`
 }
 
 // PersistSpec controls how an entity is stored (Core §19).

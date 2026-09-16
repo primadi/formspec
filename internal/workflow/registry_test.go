@@ -48,13 +48,13 @@ func TestRegistry_ForTransition(t *testing.T) {
 		On:     &spec.WorkflowTrigger{Transition: &spec.WorkflowTransitionRef{From: "draft", To: "cancelled"}},
 	})
 
-	if len(reg.ForTransition("gl.journal-entry", "draft", "posted")) != 2 {
+	if len(reg.ForTransition("gl.journal-entry", "post", "draft", "posted")) != 2 {
 		t.Fatal("ForTransition(draft->posted): want 2")
 	}
-	if len(reg.ForTransition("gl.journal-entry", "draft", "cancelled")) != 1 {
+	if len(reg.ForTransition("gl.journal-entry", "cancel", "draft", "cancelled")) != 1 {
 		t.Fatal("ForTransition(draft->cancelled): want 1")
 	}
-	if len(reg.ForTransition("gl.journal-entry", "posted", "draft")) != 0 {
+	if len(reg.ForTransition("gl.journal-entry", "post", "posted", "draft")) != 0 {
 		t.Fatal("ForTransition(posted->draft): want 0")
 	}
 }
@@ -71,11 +71,71 @@ func TestRegistry_ReAddReplacesIndex(t *testing.T) {
 		On:     &spec.WorkflowTrigger{Transition: &spec.WorkflowTransitionRef{From: "draft", To: "cancelled"}},
 	})
 
-	if len(reg.ForTransition("gl.journal-entry", "draft", "posted")) != 0 {
+	if len(reg.ForTransition("gl.journal-entry", "post", "draft", "posted")) != 0 {
 		t.Fatal("old transition index should be removed on re-registration")
 	}
-	if len(reg.ForTransition("gl.journal-entry", "draft", "cancelled")) != 1 {
+	if len(reg.ForTransition("gl.journal-entry", "cancel", "draft", "cancelled")) != 1 {
 		t.Fatal("new transition index should be present after re-registration")
+	}
+}
+
+// TestRegistry_ForTransitionByName covers S9: a workflow naming its transition
+// must intercept it from EVERY origin state. A state pair can only ever describe
+// one origin, which is how `void-order` (reachable from paid/in_kitchen/ready/
+// served) previously left three of its four origins unguarded.
+func TestRegistry_ForTransitionByName(t *testing.T) {
+	reg := NewRegistry()
+	reg.Add("cafe-order", "order-void-approval", &spec.WorkflowSpec{
+		Entity: "cafe-order.order",
+		On:     &spec.WorkflowTrigger{Transition: &spec.WorkflowTransitionRef{Name: "void-order"}},
+	})
+
+	for _, from := range []string{"paid", "in_kitchen", "ready", "served"} {
+		if got := reg.ForTransition("cafe-order.order", "void-order", from, "cancelled"); len(got) != 1 {
+			t.Errorf("void-order from %s: want 1 workflow, got %d", from, len(got))
+		}
+	}
+
+	// A different transition on the same entity must not be intercepted, even
+	// though it shares the target state.
+	if got := reg.ForTransition("cafe-order.order", "cancel-order", "awaiting_payment", "cancelled"); len(got) != 0 {
+		t.Errorf("cancel-order must not be intercepted by the void workflow, got %d", len(got))
+	}
+
+	// And the same transition name on another entity must not match either.
+	if got := reg.ForTransition("cafe-stock.order", "void-order", "paid", "cancelled"); len(got) != 0 {
+		t.Errorf("entity is part of the key, got %d", len(got))
+	}
+}
+
+// TestRegistry_ListExposesTransitionName keeps `formspec describe`/admin output
+// honest about which form a workflow uses.
+func TestRegistry_ListExposesTransitionName(t *testing.T) {
+	reg := NewRegistry()
+	reg.Add("cafe-order", "by-name", &spec.WorkflowSpec{
+		Entity: "cafe-order.order",
+		On:     &spec.WorkflowTrigger{Transition: &spec.WorkflowTransitionRef{Name: "void-order"}},
+	})
+	reg.Add("gl", "by-pair", &spec.WorkflowSpec{
+		Entity: "gl.journal-entry",
+		On:     &spec.WorkflowTrigger{Transition: &spec.WorkflowTransitionRef{From: "draft", To: "posted"}},
+	})
+
+	infos := reg.List()
+	if len(infos) != 2 {
+		t.Fatalf("List: got %d, want 2", len(infos))
+	}
+	for _, info := range infos {
+		switch info.Name {
+		case "by-name":
+			if info.Transition != "void-order" || info.From != "" || info.To != "" {
+				t.Errorf("by-name info: %+v", info)
+			}
+		case "by-pair":
+			if info.Transition != "" || info.From != "draft" || info.To != "posted" {
+				t.Errorf("by-pair info: %+v", info)
+			}
+		}
 	}
 }
 
@@ -87,10 +147,10 @@ func TestEngine_RequiresApproval(t *testing.T) {
 	})
 	e := NewEngine(reg)
 
-	if !e.RequiresApproval("gl.journal-entry", "draft", "posted") {
+	if !e.RequiresApproval("gl.journal-entry", "post", "draft", "posted") {
 		t.Fatal("expected approval required for draft->posted")
 	}
-	if e.RequiresApproval("gl.journal-entry", "draft", "cancelled") {
+	if e.RequiresApproval("gl.journal-entry", "cancel", "draft", "cancelled") {
 		t.Fatal("expected no approval for draft->cancelled")
 	}
 }

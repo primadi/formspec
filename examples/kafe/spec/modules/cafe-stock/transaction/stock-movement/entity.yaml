@@ -9,6 +9,11 @@ spec:
   characteristic: transaction
   plural: stock-movements
   lifecycle: plain_crud
+  # S5: pergerakan stok per cabang.
+  scope: { dimension: branch, field: branch_id, required: true }
+  # Item 3.5.
+  row_scope:
+    - { field: branch_id, op: eq, from: session }
   fields:
     - name: transaction_date
       type: datetime
@@ -41,7 +46,7 @@ spec:
     #   keluar (penjualan) -> biaya rata-rata bergerak saat itu
     # Penjualan TIDAK BOLEH memakai ingredient.cost_per_unit (acuan statis),
     # karena itu membuat margin historis berubah surut.
-    # GAP-01/GAP-02: field uang.
+    # GAP-01 TERTUTUP (2.14) — `moneyinput`. Sisa GAP-02: indeks money.
     - name: unit_cost
       type: money
       required: true

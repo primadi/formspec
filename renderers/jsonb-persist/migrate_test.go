@@ -527,8 +527,100 @@ func TestMigrationRunner_FieldAddDiff(t *testing.T) {
 	}
 }
 
-func TestMigrationRunner_EnumChangeNoDuplicateColumn(t *testing.T) {
-	// Regression: changing an enum value list changes the DDL checksum (the
+// TestMigrationRunner_NewDeclaredIndexReachesExistingTable covers the S8 half
+// that is easy to miss: adding `indexes:` to a manifest whose table already
+// exists must actually create the index.
+//
+// The diff path only ever reconciled *columns*, so a uniqueness rule declared
+// after the table was created was silently never enforced on any database in
+// use — the manifest looked correct and `formspec validate` passed, while the
+// business rule did not exist. The test also pins convergence: a second plan
+// must be empty, or every `formspec migrate plan` would emit the same index
+// forever.
+func TestMigrationRunner_NewDeclaredIndexReachesExistingTable(t *testing.T) {
+	dir := t.TempDir()
+	d, err := OpenSQLite(filepath.Join(dir, "migrate_index.db"), nil)
+	if err != nil {
+		t.Fatalf("OpenSQLite failed: %v", err)
+	}
+	defer d.Close()
+
+	r := NewMigrationRunner(d, DriverSQLite)
+	ctx := context.Background()
+
+	mk := func(indexes []spec.IndexDecl) []EntityMigration {
+		return []EntityMigration{{
+			Metadata: spec.Metadata{Name: "shift", Module: "cafe-order"},
+			EntitySpec: spec.EntitySpec{
+				Version: "v1",
+				Plural:  "shifts",
+				Fields: []spec.Field{
+					{Name: "branch_id", Type: spec.FieldRelation, Relation: &spec.RelationDecl{Type: "belongs_to", Resource: "cafe-master.branch"}},
+					{Name: "cashier_id", Type: spec.FieldRelation, Relation: &spec.RelationDecl{Type: "belongs_to", Resource: "cafe-master.employee"}},
+					{Name: "status", Type: spec.FieldEnum, EnumValues: []string{"open", "closed"}},
+				},
+				Indexes: indexes,
+			},
+		}}
+	}
+
+	// Table created without the rule.
+	if _, err := r.ApplyMigrations(ctx, mk(nil)); err != nil {
+		t.Fatalf("initial apply: %v", err)
+	}
+	if indexExists(t, d, "idx_cafe_order_shifts_branch_id_cashier_id") {
+		t.Fatal("index should not exist before it is declared")
+	}
+
+	// The rule is declared: partial unique index, exactly as the partial-index
+	// construct renders it.
+	withIndex := mk([]spec.IndexDecl{{
+		Fields: []string{"branch_id", "cashier_id"},
+		Unique: true,
+		Where:  "status = 'open'",
+	}})
+
+	results, err := r.PlanMigrations(ctx, withIndex)
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	if len(results) == 0 {
+		t.Fatal("expected a migration for the newly declared index, got none")
+	}
+	const want = "CREATE UNIQUE INDEX IF NOT EXISTS idx_cafe_order_shifts_branch_id_cashier_id ON cafe_order_shifts (_branch_id, _cashier_id) WHERE _status = 'open';"
+	if !strings.Contains(results[0].DDL, want) {
+		t.Errorf("plan DDL should contain %q\ngot: %s", want, results[0].DDL)
+	}
+
+	if _, err := r.ApplyMigrations(ctx, withIndex); err != nil {
+		t.Fatalf("apply with index: %v", err)
+	}
+	if !indexExists(t, d, "idx_cafe_order_shifts_branch_id_cashier_id") {
+		t.Fatal("index was not created on the existing table")
+	}
+
+	// Converged: the index now exists, so nothing more to plan.
+	results, err = r.PlanMigrations(ctx, withIndex)
+	if err != nil {
+		t.Fatalf("plan after apply: %v", err)
+	}
+	if len(results) != 0 {
+		t.Errorf("expected 0 migrations once converged, got %d: %q", len(results), results[0].DDL)
+	}
+}
+
+// indexExists reports whether the SQLite table has an index with the given name.
+func indexExists(t *testing.T, d DB, name string) bool {
+	t.Helper()
+	var found int
+	if err := d.QueryRowContext(context.Background(),
+		"SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = ?", name).Scan(&found); err != nil {
+		t.Fatalf("query sqlite_master: %v", err)
+	}
+	return found > 0
+}
+
+func TestMigrationRunner_EnumChangeNoDuplicateColumn(t *testing.T) { // Regression: changing an enum value list changes the DDL checksum (the
 	// CHECK constraint), which triggers diffExistingTable. The indexed enum
 	// field's generated column (_status) must be detected as already present
 	// via table_xinfo; otherwise the diff tries to ADD COLUMN it again and

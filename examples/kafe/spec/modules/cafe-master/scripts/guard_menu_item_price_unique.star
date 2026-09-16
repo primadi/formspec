@@ -4,31 +4,24 @@
 #
 # KENAPA SCRIPT INI ADA
 #
-# `indexes: [{fields: [branch_id, menu_item_id], unique: true}]` pada entity ini
-# TIDAK menghasilkan index apa pun — terbukti lewat `formspec migrate plan`:
-# tabel `cafe_master_menu_item_prices` sama sekali tidak punya index komposit,
-# dan `index: true` pada field `relation` juga tidak menghasilkan kolom turunan
-# (GAP-22). Jadi UNIQUE (branch_id, menu_item_id) tidak ada di database.
+# Aturan ini kini DITEGAKKAN DATABASE. GAP-22 sudah ditutup: `indexes:` dihormati,
+# dan menyebut field `relation` di dalamnya menghasilkan kolom turunan
+# (`_branch_id`, `_menu_item_id`). Terbukti lewat `formspec migrate plan`:
+#     CREATE UNIQUE INDEX idx_cafe_master_menu_item_prices_branch_id_menu_item_id
+#       ON cafe_master_menu_item_prices (_branch_id, _menu_item_id);
+# Penutup lama berupa `kind: Migration` DDL mentah (`menu-item-price-unique`)
+# sudah dihapus karena tidak lagi diperlukan — dan karena DDL itu tidak portabel
+# (GAP-35).
 #
-# Tanpa guard ini, dua baris harga untuk menu yang sama di cabang yang sama
-# bisa masuk. Akibatnya omzet dan HPP salah TANPA gejala — bukan error.
+# STATUS: LAPIS KEDUA — bukan pengaman utama.
 #
-# STATUS: LAPIS KEDUA — bukan lagi pengaman utama.
+# Guard ini tetap dipertahankan untuk satu alasan yang masih nyata:
+#   - GAP-36: constraint hanya menolak baris BARU; ia tidak bisa merapikan
+#     duplikat yang sudah ada (DML ditolak di `kind: Migration`), sementara guard
+#     memberi pesan yang jelas ke pengguna.
 #
-# Penutup utamanya sudah ditulis sebagai `kind: Migration`:
-#   spec/modules/cafe-master/migrations/menu-item-price-unique.yaml
-# (`CREATE UNIQUE INDEX` atas ekspresi JSONB) — jalan keluar GAP-22 tanpa
-# menunggu engine diperbaiki. Sudah terverifikasi ter-apply.
-#
-# Guard ini tetap dipertahankan karena dua alasan nyata:
-#   - GAP-35: DDL migration TIDAK PORTABEL (json_extract di SQLite vs ->> di
-#     PostgreSQL), jadi index bisa ada di dev tapi belum tentu di produksi.
-#   - GAP-36: migration tidak bisa merapikan duplikat yang sudah ada (DML
-#     ditolak), sementara guard memberi pesan yang jelas ke pengguna.
-#
-# Hapus guard ini + hook-nya setelah migration terbukti terpasang di SEMUA
-# environment. Constraint database selalu lebih kuat: ia berlaku untuk semua
-# jalur tulis (API, script, seed, operator), guard hanya pada jalur yang lewat.
+# Constraint database selalu lebih kuat: ia berlaku untuk semua jalur tulis
+# (API, script, seed, operator), guard hanya pada jalur yang melewatinya.
 #
 # ─── GAP YANG MEMPENGARUHI SCRIPT INI ───
 #

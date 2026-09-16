@@ -10,6 +10,9 @@ spec:
   plural: dining-tables
   display_field: code
   soft_deactivate: { enabled: true }
+  # S5: meja milik satu cabang — dimensi ini punya sumbernya di
+  # `cafe-master.employee.assignments` (username → branch_id).
+  scope: { dimension: branch, field: branch_id, required: true }
   fields:
     - name: branch_id
       type: relation

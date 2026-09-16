@@ -1,0 +1,7 @@
+apiVersion: formspec.dev/v1
+kind: Module
+metadata:
+  name: warehouse
+  description: "Fixture module — summary rebuild contract tests"
+spec:
+  version: "1.0.0"

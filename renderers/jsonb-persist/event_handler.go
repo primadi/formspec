@@ -89,11 +89,16 @@ func (h *DeliveryEventHandler) HandleEvent(ctx context.Context, workspaceID, eve
 					return fmt.Errorf("pubsub delivery: %w", err)
 				}
 			}
+		case "reliable_event":
+			// Durable delivery: the outbox entry *is* the guarantee — retry and
+			// dead-letter are the worker's job, so there is nothing extra to do
+			// here. The event still reaches its subscribers through the
+			// subscription dispatch at the end of HandleEvent (which appends to
+			// the Tier 2 stream for durable subscriptions).
 		default:
-			// reliable_event, queue, webhook, notification: not yet
-			// implemented. Treated as delivered (no error) so the worker
-			// doesn't retry forever on a channel this pass never promised
-			// to support.
+			// queue, webhook, notification: not yet implemented. Treated as
+			// delivered (no error) so the worker doesn't retry forever on a
+			// channel this pass never promised to support.
 		}
 	}
 

@@ -10,6 +10,11 @@ spec:
   plural: stock-opnames
   display_field: transaction_date
   lifecycle: plain_crud
+  # S5: hitung fisik dilakukan per cabang.
+  scope: { dimension: branch, field: branch_id, required: true }
+  # Item 3.5.
+  row_scope:
+    - { field: branch_id, op: eq, from: session }
   fields:
     - name: transaction_date
       type: date

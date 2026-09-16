@@ -57,6 +57,7 @@ spec:
 |---|---|---|---|---|
 | `version` | `string` | ✅ | 1.0.0 |  |
 | `vendor` | `string` | — | acme-corp |  |
+| `runtime` | enum (local · typescript · node · php · python · go · java · dotnet · …) | — | local | Module runtime binding for sidecar/native execution; local means native compiled-in implementation |
 | `depends` | []`Dependency` | — | formspec/core | Module dependencies — array of {module, version?} |
 | `datastore` | `string` | — | default | Datastore binds the module to a named kind: Datastore for ctx.db() |
 | `datastores` | map | — | db: pg-main | Datastores overrides the App-level datastore selection for this module |

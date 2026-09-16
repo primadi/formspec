@@ -16,11 +16,13 @@ import (
 )
 
 // Registry maps {module}.{name} → WorkflowSpec for the runtime, and indexes
-// workflows by the transition they intercept ({entity}.{from}.{to}).
+// workflows by what they intercept: either the transition's name
+// ({entity}.{transition}, S9) or its from/to state pair ({entity}.{from}.{to}).
 type Registry struct {
 	mu           sync.RWMutex
 	workflows    map[string]*spec.WorkflowSpec // key = "module/name"
 	byTransition map[string][]*spec.WorkflowSpec
+	byName       map[string][]*spec.WorkflowSpec
 }
 
 // NewRegistry creates an empty Workflow registry.
@@ -28,6 +30,7 @@ func NewRegistry() *Registry {
 	return &Registry{
 		workflows:    make(map[string]*spec.WorkflowSpec),
 		byTransition: make(map[string][]*spec.WorkflowSpec),
+		byName:       make(map[string][]*spec.WorkflowSpec),
 	}
 }
 
@@ -45,21 +48,40 @@ func (r *Registry) Add(module, name string, wf *spec.WorkflowSpec) {
 		if t := transitionKey(old); t != "" {
 			r.byTransition[t] = removeWorkflow(r.byTransition[t], old)
 		}
+		if n := transitionNameKey(old); n != "" {
+			r.byName[n] = removeWorkflow(r.byName[n], old)
+		}
 	}
 
 	r.workflows[key] = wf
 	if t := transitionKey(wf); t != "" {
 		r.byTransition[t] = append(r.byTransition[t], wf)
 	}
+	if n := transitionNameKey(wf); n != "" {
+		r.byName[n] = append(r.byName[n], wf)
+	}
 }
 
-// transitionKey builds the index key "{entity}.{from}.{to}" for a workflow,
-// or "" when the workflow has no transition trigger.
+// transitionKey builds the from/to index key "{entity}.{from}.{to}" for a
+// workflow, or "" when the workflow does not use the state-pair form.
 func transitionKey(wf *spec.WorkflowSpec) string {
 	if wf == nil || wf.On == nil || wf.On.Transition == nil {
 		return ""
 	}
-	return wf.Entity + "." + wf.On.Transition.From + "." + wf.On.Transition.To
+	ref := wf.On.Transition
+	if ref.ByName() || ref.From == "" || ref.To == "" {
+		return ""
+	}
+	return wf.Entity + "." + ref.From + "." + ref.To
+}
+
+// transitionNameKey builds the name index key "{entity}.{transition}" for a
+// workflow, or "" when the workflow does not use the name form.
+func transitionNameKey(wf *spec.WorkflowSpec) string {
+	if wf == nil || wf.On == nil || wf.On.Transition == nil || !wf.On.Transition.ByName() {
+		return ""
+	}
+	return wf.Entity + "." + wf.On.Transition.Name
 }
 
 // removeWorkflow returns list without the given workflow pointer.
@@ -82,14 +104,34 @@ func (r *Registry) Get(module, name string) (*spec.WorkflowSpec, bool) {
 }
 
 // ForTransition returns all workflows that intercept the given transition.
-// entity is "module.entity" (e.g. "gl.journal-entry"); from/to are the state
-// names. The returned slice is a copy; callers must not mutate it.
-func (r *Registry) ForTransition(entity, from, to string) []*spec.WorkflowSpec {
+//
+// entity is "module.entity" (e.g. "gl.journal-entry"); transition is the state
+// machine's `via` name for the transition being executed; from/to are the state
+// names. Workflows written in the name form (S9) match on the transition name
+// and therefore apply from **every** origin state, which is the point: a
+// transition such as `void-order` can be reachable from four states, and the
+// state-pair form can only ever describe one of them.
+//
+// The returned slice is a copy; callers must not mutate it.
+func (r *Registry) ForTransition(entity, transition, from, to string) []*spec.WorkflowSpec {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	list := r.byTransition[entity+"."+from+"."+to]
-	out := make([]*spec.WorkflowSpec, len(list))
-	copy(out, list)
+
+	var out []*spec.WorkflowSpec
+	seen := make(map[*spec.WorkflowSpec]bool)
+	appendAll := func(list []*spec.WorkflowSpec) {
+		for _, wf := range list {
+			if seen[wf] {
+				continue
+			}
+			seen[wf] = true
+			out = append(out, wf)
+		}
+	}
+	appendAll(r.byTransition[entity+"."+from+"."+to])
+	if transition != "" {
+		appendAll(r.byName[entity+"."+transition])
+	}
 	return out
 }
 
@@ -110,11 +152,12 @@ func (r *Registry) NameFor(wf *spec.WorkflowSpec) string {
 
 // WorkflowInfo is a lightweight summary of a registered Workflow.
 type WorkflowInfo struct {
-	Name   string `json:"name"`
-	Module string `json:"module"`
-	Entity string `json:"entity"`
-	From   string `json:"from"`
-	To     string `json:"to"`
+	Name       string `json:"name"`
+	Module     string `json:"module"`
+	Entity     string `json:"entity"`
+	Transition string `json:"transition,omitempty"` // name form (S9)
+	From       string `json:"from,omitempty"`
+	To         string `json:"to,omitempty"`
 }
 
 // List returns a sorted summary of all registered Workflows.
@@ -126,6 +169,7 @@ func (r *Registry) List() []WorkflowInfo {
 		module, name := splitKey(key)
 		info := WorkflowInfo{Module: module, Name: name, Entity: wf.Entity}
 		if wf.On != nil && wf.On.Transition != nil {
+			info.Transition = wf.On.Transition.Name
 			info.From = wf.On.Transition.From
 			info.To = wf.On.Transition.To
 		}

@@ -6,32 +6,25 @@ metadata:
   description: "Persetujuan supervisor wajib untuk membatalkan pesanan yang sudah dibayar (D5)"
 spec:
   entity: cafe-order.order
-  # Workflow menempel pada TRANSISI state machine, bukan pada nama action —
-  # dan transisi diidentifikasi lewat pasangan from/to.
+  # Workflow menempel pada TRANSISI state machine, dan transisi dirujuk lewat
+  # NAMANYA (`via`), bukan lewat pasangan from/to.
   #
-  # ⚠️ GAP-38 — DI SINI ADA LUBANG PENEGAKAN.
-  # Transisi `void-order` pada entity `order` punya EMPAT state asal:
+  # ✅ GAP-38 TERTUTUP (S9). Transisi `void-order` punya EMPAT state asal:
   #   from: [paid, in_kitchen, ready, served]  ->  to: cancelled
-  # tetapi `WorkflowTransitionRef.transition.from` di schema bertipe **string
-  # tunggal** (lihat $defs.WorkflowTransitionRef). Jadi satu workflow hanya bisa
-  # mengawal SATU state asal.
+  # Bentuk lama (`from: paid, to: cancelled`) hanya mengawal SATU state asal —
+  # void dari `in_kitchen`/`ready`/`served` lolos approval tanpa error dan tanpa
+  # log, padahal itu kasus tersering (makanan sudah dibuat). Satu referensi nama
+  # mengawal SELURUH state asal transisi itu sekaligus.
   #
-  # Kalau saya menulis `from: paid` saja (seperti di bawah), maka void dari
-  # `in_kitchen`, `ready`, atau `served` TIDAK melewati approval — padahal itu
-  # justru kasus yang paling sering (makanan sudah dibuat). Penegakannya bocor
-  # tanpa gejala apa pun.
-  #
-  # Untuk menutupnya hari ini butuh EMPAT manifest Workflow identik (satu per
-  # state asal) — diduplikasi, dan muncul sebagai empat jenis tugas terpisah di
-  # ApprovalInbox. Saya sengaja tidak menulis empat file duplikat: itu
-  # menyembunyikan masalahnya alih-alih melaporkannya.
-  # Bentuk yang dibutuhkan: `from` menerima daftar, seperti `TransitionDecl.from`.
+  # `formspec validate` kini menolak pasangan from/to yang hanya mencakup
+  # sebagian transisi — jadi bentuk lama itu tidak bisa kembali tanpa ketahuan.
   on:
     transition:
-      from: paid
-      to: cancelled
+      name: void-order
   on_reject:
     # Ditolak supervisor -> kembali ke state asal, pesanan tetap berjalan.
+    # `on_reject.to` menerima state tunggal: workflow ini mengawal empat state
+    # asal, dan FormSpec memulihkan state asal aslinya otomatis.
     to: paid
   # GAP-39: `WorkflowStep` TIDAK punya `title`/`description` — schema-nya hanya
   # {roles, approvers, mode, when, escalation}. Akibatnya tugas approval di

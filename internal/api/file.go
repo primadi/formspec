@@ -499,27 +499,44 @@ func sanitizeFilename(name string) string {
 	return name
 }
 
-// allowedFileType matches an allowed_types entry against the MIME type and
-// file extension. Entries may be extensions (".pdf") or MIME types with
-// optional wildcard ("image/*").
+// allowedFileType reports whether an upload satisfies the field's
+// `storage.allowed_types` (05-field-types.md §1.3, gap #4b).
+//
+// The canonical form is a bare extension without the dot (`jpg`, `png`, `pdf`).
+// Three other spellings are accepted and treated as the same thing:
+//
+//	.jpg        → dotted extension
+//	image/jpeg  → exact MIME type
+//	image/*     → MIME wildcard
+//
+// The bare form used to match nothing at all: `allowed_types: [jpg]`, which is
+// what the spec documents, fell through every branch and rejected legitimate
+// uploads. Normalizing here (and in the client's matcher, which must agree) is
+// what makes one canonical spelling sufficient.
 func allowedFileType(allowed []string, contentType, filename string) bool {
-	ext := strings.ToLower(filepath.Ext(filename))
+	ext := strings.ToLower(filepath.Ext(filename)) // ".jpg"
 	for _, a := range allowed {
 		a = strings.ToLower(strings.TrimSpace(a))
 		if a == "" {
 			continue
 		}
-		if strings.HasPrefix(a, ".") {
+		switch {
+		case strings.HasPrefix(a, "."):
 			if ext == a {
 				return true
 			}
-			continue
-		}
-		if a == contentType {
-			return true
-		}
-		if strings.HasSuffix(a, "/*") && strings.HasPrefix(contentType, strings.TrimSuffix(a, "*")) {
-			return true
+		case strings.Contains(a, "/"):
+			if a == contentType {
+				return true
+			}
+			if strings.HasSuffix(a, "/*") && strings.HasPrefix(contentType, strings.TrimSuffix(a, "*")) {
+				return true
+			}
+		default:
+			// Bare extension (canonical) — the form the spec documents.
+			if ext != "" && ext[1:] == a {
+				return true
+			}
 		}
 	}
 	return false

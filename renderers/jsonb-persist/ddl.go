@@ -164,7 +164,7 @@ func GenerateEntityDDL(meta spec.Metadata, entity *spec.EntitySpec, driver Drive
 			// Relation fields: store foreign key in data JSONB
 			// unless belongs_to with explicit foreign_key
 			if f.Relation != nil && f.Relation.ForeignKey != "" {
-				gc := generateGeneratedColumn(f.Name, "uuid", driver)
+				gc := generateGeneratedColumn(f.Name, f.Type, "uuid", driver)
 				columns = append(columns, gc)
 				if f.Index || f.Unique {
 					idx := generateIndexConstraint(ti.TableName, f.Name, f.Unique)
@@ -185,7 +185,7 @@ func GenerateEntityDDL(meta spec.Metadata, entity *spec.EntitySpec, driver Drive
 		// Indexed fields get generated columns
 		if f.Index || f.Unique || f.NaturalKey {
 			sqlType := fieldTypeToSQLFor(f.Type, f.EnumValues, driver)
-			gc := generateGeneratedColumn(f.Name, sqlType, driver)
+			gc := generateGeneratedColumn(f.Name, f.Type, sqlType, driver)
 			columns = append(columns, gc)
 		}
 
@@ -194,27 +194,37 @@ func GenerateEntityDDL(meta spec.Metadata, entity *spec.EntitySpec, driver Drive
 			colName := generatedColumnName(f.Name)
 			idxName := fmt.Sprintf("idx_uq_%s_%s", ti.TableName, f.Name)
 
+			// A scoped natural key (rule `scope_field`) restarts per scope, so its
+			// uniqueness must be scoped too: `(tenant_id, branch_id, _number)`.
+			// Without the scope column, the second branch's `ORD-…-00001` collides
+			// with the first branch's — the sequence is right, the guarantee is
+			// not, and the insert dies on a UNIQUE violation (gap #9).
+			keyCols := "tenant_id, " + colName
+			if f.NaturalKey && f.NaturalKeyRule != nil && f.NaturalKeyRule.ScopeField != "" {
+				keyCols = "tenant_id, " + generatedColumnName(f.NaturalKeyRule.ScopeField) + ", " + colName
+			}
+
 			if driver == DriverSQLite {
 				// SQLite: partial unique constraints must be CREATE UNIQUE INDEX.
 				// Natural key uniqueness is scoped per tenant (tenant_id, _field)
 				// per 01-core-basic.md §2: "unique constraint per tenant".
 				if softDelete {
 					indexes = append(indexes,
-						fmt.Sprintf("CREATE UNIQUE INDEX %s ON %s (tenant_id, %s) WHERE deleted_at IS NULL;",
-							idxName, ti.TableName, colName))
+						fmt.Sprintf("CREATE UNIQUE INDEX %s ON %s (%s) WHERE deleted_at IS NULL;",
+							idxName, ti.TableName, keyCols))
 				} else {
 					indexes = append(indexes,
-						fmt.Sprintf("CREATE UNIQUE INDEX %s ON %s (tenant_id, %s);",
-							idxName, ti.TableName, colName))
+						fmt.Sprintf("CREATE UNIQUE INDEX %s ON %s (%s);",
+							idxName, ti.TableName, keyCols))
 				}
 			} else {
 				// PostgreSQL: inline UNIQUE constraint with WHERE
 				if softDelete {
 					constraints = append(constraints,
-						fmt.Sprintf("UNIQUE (tenant_id, %s) WHERE deleted_at IS NULL", colName))
+						fmt.Sprintf("UNIQUE (%s) WHERE deleted_at IS NULL", keyCols))
 				} else {
 					constraints = append(constraints,
-						fmt.Sprintf("UNIQUE (tenant_id, %s)", colName))
+						fmt.Sprintf("UNIQUE (%s)", keyCols))
 				}
 			}
 		}
@@ -250,9 +260,50 @@ func GenerateEntityDDL(meta spec.Metadata, entity *spec.EntitySpec, driver Drive
 	if entity.Persist != nil {
 		indexDecls = append(indexDecls, entity.Persist.Indexes...)
 	}
+	fieldByName := make(map[string]spec.Field, len(entity.Fields))
+	for _, f := range entity.Fields {
+		fieldByName[f.Name] = f
+	}
+
+	// A scope field named by a natural_key_rule needs a derived column of its own:
+	// the scoped unique index reads it (`tenant_id, _branch_id, _number`), and
+	// referencing a column that was never materialized fails at CREATE INDEX with
+	// "no such column: _branch_id" — the field itself lives inside the JSONB
+	// payload (gap #9).
+	{
+		emitted := make(map[string]bool, len(columns))
+		for _, c := range columns {
+			if fields := strings.Fields(strings.TrimSpace(c)); len(fields) > 0 {
+				emitted[fields[0]] = true
+			}
+		}
+		for _, f := range entity.Fields {
+			if !f.NaturalKey || f.NaturalKeyRule == nil || f.NaturalKeyRule.ScopeField == "" {
+				continue
+			}
+			scopeField, ok := fieldByName[f.NaturalKeyRule.ScopeField]
+			if !ok {
+				continue
+			}
+			col := generatedColumnName(scopeField.Name)
+			if emitted[col] {
+				continue
+			}
+			sqlType := fieldTypeToSQLFor(scopeField.Type, scopeField.EnumValues, driver)
+			if scopeField.Type == spec.FieldRelation {
+				// Relations live in the JSONB payload; the derived column holds the
+				// reference id as text.
+				sqlType = "text"
+			}
+			columns = append(columns, generateGeneratedColumn(scopeField.Name, scopeField.Type, sqlType, driver))
+			emitted[col] = true
+		}
+	}
+
 	if len(indexDecls) > 0 {
 		// Columns already emitted above (indexed/unique/natural-key fields,
-		// relation foreign keys, tree paths) — never emit one twice.
+		// relation foreign keys, tree paths, natural-key scope fields) — never
+		// emit one twice.
 		emitted := make(map[string]bool, len(columns))
 		for _, c := range columns {
 			fields := strings.Fields(strings.TrimSpace(c))
@@ -260,46 +311,62 @@ func GenerateEntityDDL(meta spec.Metadata, entity *spec.EntitySpec, driver Drive
 				emitted[fields[0]] = true
 			}
 		}
-		fieldByName := make(map[string]spec.Field, len(entity.Fields))
-		for _, f := range entity.Fields {
-			fieldByName[f.Name] = f
-		}
 
 		for _, idx := range indexDecls {
+			// A partial index depends on two sets of fields: the indexed ones
+			// and the ones its predicate compares. Both need a derived column —
+			// a predicate on a column that was never materialized fails at
+			// CREATE INDEX time ("no such column: _status"), because the field
+			// itself lives inside the JSONB payload.
+			for _, fn := range indexDeclFields(idx, fieldByName) {
+				col := generatedColumnName(fn)
+				if emitted[col] {
+					continue
+				}
+				f, found := fieldByName[fn]
+				if !found {
+					continue
+				}
+				sqlType := fieldTypeToSQLFor(f.Type, f.EnumValues, driver)
+				if f.Type == spec.FieldRelation {
+					// Relations live in the JSONB payload; the derived column
+					// is the reference id as text.
+					sqlType = "text"
+				}
+				columns = append(columns, generateGeneratedColumn(fn, f.Type, sqlType, driver))
+				emitted[col] = true
+			}
+
 			colNames := make([]string, 0, len(idx.Fields))
 			ok := true
 			for _, fn := range idx.Fields {
-				col := generatedColumnName(fn)
-				if !emitted[col] {
-					f, found := fieldByName[fn]
-					if !found {
-						// Unknown field: the validator owns that diagnosis; DDL
-						// generation must not emit an index on a missing column.
-						ok = false
-						break
-					}
-					sqlType := fieldTypeToSQLFor(f.Type, f.EnumValues, driver)
-					if f.Type == spec.FieldRelation {
-						// Relations live in the JSONB payload; the derived column
-						// is the reference id as text.
-						sqlType = "text"
-					}
-					columns = append(columns, generateGeneratedColumn(fn, sqlType, driver))
-					emitted[col] = true
+				if _, found := fieldByName[fn]; !found {
+					// Unknown field: the validator owns that diagnosis; DDL
+					// generation must not emit an index on a missing column.
+					ok = false
+					break
 				}
-				colNames = append(colNames, col)
+				colNames = append(colNames, generatedColumnName(fn))
 			}
 			if !ok {
 				continue
 			}
 			idxName := fmt.Sprintf("idx_%s_%s", ti.TableName, strings.Join(idx.Fields, "_"))
-			if idx.Unique {
-				indexes = append(indexes,
-					fmt.Sprintf("CREATE UNIQUE INDEX %s ON %s (%s);", idxName, ti.TableName, strings.Join(colNames, ", ")))
-			} else {
-				indexes = append(indexes,
-					fmt.Sprintf("CREATE INDEX %s ON %s (%s);", idxName, ti.TableName, strings.Join(colNames, ", ")))
+			// Partial index (S8): the predicate is written in field names and
+			// rendered against the derived columns, exactly like idx.Fields.
+			where, err := renderIndexWhere(idx.Where, fieldByName)
+			if err != nil {
+				// Validated upstream (ValidateEntitySpec) — reaching here means
+				// the caller bypassed validation, so report rather than emit a
+				// silently different index.
+				return nil, fmt.Errorf("index %s on %s: %w", idxName, ti.TableName, err)
 			}
+			unique := ""
+			if idx.Unique {
+				unique = "UNIQUE "
+			}
+			indexes = append(indexes,
+				fmt.Sprintf("CREATE %sINDEX %s ON %s (%s)%s;", unique, idxName, ti.TableName, strings.Join(colNames, ", "), where))
 		}
 	}
 
@@ -333,8 +400,24 @@ func GenerateEntityDDL(meta spec.Metadata, entity *spec.EntitySpec, driver Drive
 
 // generateGeneratedColumn creates a generated column for indexed/unique fields.
 // PostgreSQL: data->>'field'  —  SQLite: json_extract(data, '$.field')
-func generateGeneratedColumn(fieldName string, sqlType string, driver DriverType) string {
+func generateGeneratedColumn(fieldName string, ft spec.FieldType, sqlType string, driver DriverType) string {
 	colName := generatedColumnName(fieldName)
+
+	// A money value is the object {amount, currency} (05-field-types.md §2).
+	// Indexing the JSON text of that object is what made `9000` sort after
+	// `10000` — the derived column must reach into `.amount` and be numeric, or
+	// sorting, ranges, and aggregates silently compare JSON strings (#23).
+	if ft == spec.FieldMoney {
+		var moneyExpr string
+		if driver == DriverPostgres {
+			moneyExpr = fmt.Sprintf("data->'%s'->>'amount'", fieldName)
+		} else {
+			moneyExpr = fmt.Sprintf("CAST(json_extract(data, '$.%s.amount') AS REAL)", fieldName)
+		}
+		return fmt.Sprintf("%s %s GENERATED ALWAYS AS (%s) STORED",
+			colName, sqlType, moneyExpr)
+	}
+
 	var expr string
 	if driver == DriverPostgres {
 		expr = fmt.Sprintf("data->>'%s'", fieldName)
@@ -348,6 +431,79 @@ func generateGeneratedColumn(fieldName string, sqlType string, driver DriverType
 // generatedColumnName returns the generated column name for a field.
 func generatedColumnName(fieldName string) string {
 	return "_" + fieldName
+}
+
+// renderIndexWhere renders a partial-index predicate (S8) against the entity's
+// physical columns, returning " WHERE <predicate>" or "" when the index is not
+// partial.
+//
+// The predicate is authored in field names (`status = 'open'`) because that is
+// what a manifest author sees. Physical storage keeps every field inside the
+// JSONB payload and indexes derived columns, so the predicate must be rewritten
+// the same way idx.Fields is — otherwise the index would be created with a
+// predicate referring to a column that does not exist.
+//
+// fieldByName doubles as the "is this a field or a system column?" test: names
+// present there map to `_name`; anything else (deleted_at, tenant_id, …) is a
+// real column and is emitted unchanged. That mirrors how the index column list
+// is built just above.
+func renderIndexWhere(where string, fieldByName map[string]spec.Field) (string, error) {
+	if strings.TrimSpace(where) == "" {
+		return "", nil
+	}
+	terms, err := spec.ParseIndexWhere(where, fieldNamesOf(fieldByName))
+	if err != nil {
+		return "", err
+	}
+	columnOf := func(field string) string {
+		if _, ok := fieldByName[field]; ok {
+			return generatedColumnName(field)
+		}
+		return field
+	}
+	predicate := spec.RenderIndexWhereTerms(terms, columnOf)
+	if predicate == "" {
+		return "", nil
+	}
+	return " WHERE " + predicate, nil
+}
+
+// indexDeclFields returns every entity field an index depends on: the indexed
+// fields plus any field its partial predicate compares.
+//
+// Both need a derived column. The indexed fields already did; predicate fields
+// did not, which made `where: "status = 'open'"` fail with "no such column:
+// _status" because `status` itself only exists inside the JSONB payload.
+// Names that are not entity fields (system columns such as `deleted_at`) are
+// skipped — those are real columns and must not be shadowed by a `_`-prefixed
+// duplicate.
+func indexDeclFields(idx spec.IndexDecl, fieldByName map[string]spec.Field) []string {
+	fields := append([]string{}, idx.Fields...)
+	if strings.TrimSpace(idx.Where) == "" {
+		return fields
+	}
+	terms, err := spec.ParseIndexWhere(idx.Where, fieldNamesOf(fieldByName))
+	if err != nil {
+		// Validated upstream; without a parseable predicate the caller reports
+		// it when rendering. Do not guess which columns are needed.
+		return fields
+	}
+	for _, t := range terms {
+		if _, ok := fieldByName[t.Field]; ok {
+			fields = append(fields, t.Field)
+		}
+	}
+	return fields
+}
+
+// fieldNamesOf projects a field map onto the name set the predicate parser
+// validates against.
+func fieldNamesOf(fieldByName map[string]spec.Field) map[string]bool {
+	names := make(map[string]bool, len(fieldByName))
+	for name := range fieldByName {
+		names[name] = true
+	}
+	return names
 }
 
 // GenerateIndexConstraint generates a CREATE INDEX statement for a single field.
@@ -369,6 +525,15 @@ func fieldTypeToSQL(ft spec.FieldType, _ []string) string {
 	case spec.FieldInteger:
 		return "bigint"
 	case spec.FieldDecimal, spec.FieldNumber:
+		return "numeric(20,8)"
+	case spec.FieldMoney:
+		// Stored as {amount, currency}; the derived column extracts `.amount`
+		// (see generateGeneratedColumn) and must be numeric so comparisons are
+		// numeric, not lexicographic (#23).
+		return "numeric(20,8)"
+	case spec.FieldPercent:
+		// A percentage is numerically a decimal (S11) — only its rendering and
+		// formatting differ, so it stores in the same class.
 		return "numeric(20,8)"
 	case spec.FieldBoolean:
 		return "boolean"

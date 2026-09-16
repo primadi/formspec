@@ -10,11 +10,11 @@ Semua bukti di bawah adalah keluaran nyata CLI pada spec ini.
 
 ## Ringkasan
 
-| # | Temuan | Dampak |
-| --- | --- | --- |
-| **22** | `indexes:` (IndexDecl) **tidak menghasilkan index apa pun**; `index: true` pada field `relation` juga tidak menghasilkan kolom | **HIGH** — dua aturan bisnis tidak ditegakkan DB |
-| **23** | Kolom turunan untuk `money` bertipe `text` → urutan/rentang atas uang **leksikografis**, bukan numerik | **HIGH** — sortir & laporan berbasis uang tidak andal |
-| **24** | `formspec dev` **menolak start di Windows** meski port bebas; `--force` tidak menembus | **HIGH (DX)** — verifikasi runtime mustahil lewat dev server |
+| #      | Temuan                                                                                                                         | Dampak                                                       |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------ |
+| **22** | `indexes:` (IndexDecl) **tidak menghasilkan index apa pun**; `index: true` pada field `relation` juga tidak menghasilkan kolom | **HIGH** — dua aturan bisnis tidak ditegakkan DB             |
+| **23** | Kolom turunan untuk `money` bertipe `text` → urutan/rentang atas uang **leksikografis**, bukan numerik                         | **HIGH** — sortir & laporan berbasis uang tidak andal        |
+| **24** | `formspec dev` **menolak start di Windows** meski port bebas; `--force` tidak menembus                                         | **HIGH (DX)** — verifikasi runtime mustahil lewat dev server |
 
 ---
 
@@ -67,10 +67,10 @@ mustahil dinyatakan.
 Dua aturan bisnis yang **bergantung pada keunikan komposit atas relasi** tidak
 ditegakkan di database:
 
-| Aturan | Deklarasi di spec | Kenyataan di DB |
-| --- | --- | --- |
-| Satu harga per menu per cabang (D1) | `menu-item-price` — `indexes: [branch_id, menu_item_id] unique` | **Tidak ada unique index** |
-| Satu baris stok per (cabang, bahan) (D3) | `stock-level` — `indexes: [branch_id, ingredient_id] unique` | **Tidak ada unique index** |
+| Aturan                                   | Deklarasi di spec                                               | Kenyataan di DB            |
+| ---------------------------------------- | --------------------------------------------------------------- | -------------------------- |
+| Satu harga per menu per cabang (D1)      | `menu-item-price` — `indexes: [branch_id, menu_item_id] unique` | **Tidak ada unique index** |
+| Satu baris stok per (cabang, bahan) (D3) | `stock-level` — `indexes: [branch_id, ingredient_id] unique`    | **Tidak ada unique index** |
 
 Konsekuensinya: dua baris harga untuk menu yang sama di cabang yang sama **bisa
 masuk**, dan `stock-level` bisa terduplikasi. Keduanya merusak perhitungan HPP
@@ -93,7 +93,18 @@ baru insert/update) — race-prone tanpa `ctx.lock`.
 
 ---
 
-## Gap #23 — Kolom turunan `money` bertipe `text` ✅ Pasti
+## Gap #23 — Kolom turunan `money` bertipe `text` ✅ CLOSED (2026-09-16, TODO 3.2)
+
+> **Ditutup 2026-09-16 (3.2).** Kolom turunan `money` kini membaca **`.amount`**
+> dan bertipe `numeric(20,8)` di kedua driver:
+> `_price numeric(20,8) GENERATED ALWAYS AS (CAST(json_extract(data,
+'$.price.amount') AS REAL)) STORED`. Akar tambahannya yang ikut ditutup:
+> `fieldTypeToSQL` memang tidak punya `case money` (jatuh ke `text`), dan
+> `columnRefExpr` dulu mendahulukan ekspresi `.amount` di atas kolom turunan —
+> sehingga index pada money tidak akan terpakai. Urutan/rentang sekarang numerik
+> (dibuktikan: sort naik memberi 9000 sebelum 10000; `price >= 9500` hanya
+> 10000), dan workaround "harga sengaja tidak diindeks" di spec kafe dihapus.
+> Normatif: `docs/spec/backend/05-field-types.md` §2.2.
 
 ### Bukti
 
@@ -163,7 +174,7 @@ bukan DDL.
 > subscription-stream, subscription-dynamic).
 >
 > **Yang tetap berlaku — severity turun ke LOW:** pesan errornya tidak
-> menuntun. *"cannot identify the owner"* tidak menyebut "coba port lain",
+> menuntun. _"cannot identify the owner"_ tidak menyebut "coba port lain",
 > tidak menyertakan flag, dan tidak menyebutkan port mana yang bebas.
 >
 > **Pelajaran metodologis:** ini klaim "bug framework" ketiga yang gugur
@@ -196,7 +207,7 @@ penolakan ini — pesannya identik.
 
 Pola yang terbaca: deteksi pemilik port gagal di Windows (kemungkinan butuh
 `netstat`/API yang tidak tersedia atau butuh elevasi), lalu gagal-ke-aman dengan
-menganggap port terpakai. Pesannya sendiri mengaku: *"cannot determine owner"* —
+menganggap port terpakai. Pesannya sendiri mengaku: _"cannot determine owner"_ —
 artinya "saya tidak bisa membuktikan ini bebas", bukan "ini terpakai".
 
 ### Dampak ke aplikasi kafe: **HIGH** untuk DX, BLOCKER untuk verifikasi
@@ -207,10 +218,10 @@ Kanban KDS live-update) — **tidak bisa dijalankan di Windows**.
 
 Yang **masih bisa** dipakai sebagai gantinya (terverifikasi jalan):
 
-| Perintah | Hasil pada spec ini |
-| --- | --- |
-| `formspec validate --spec spec` | 29 manifest, 0 problem |
-| `formspec check -f spec` | 0 error, 0 warning |
+| Perintah                            | Hasil pada spec ini                  |
+| ----------------------------------- | ------------------------------------ |
+| `formspec validate --spec spec`     | 29 manifest, 0 problem               |
+| `formspec check -f spec`            | 0 error, 0 warning                   |
 | `formspec migrate plan --spec spec` | 22 tabel + index (lihat Gap #22/#23) |
 
 Jadi verifikasi bisa dilakukan sampai lapisan **DDL & statik**, tapi tidak
@@ -233,16 +244,16 @@ sampai lapisan **HTTP & UI**.
 
 Verifikasi runtime juga mengonfirmasi banyak hal berjalan benar:
 
-| Aspek | Bukti |
-| --- | --- |
-| DDL tergenerate untuk seluruh 22 entity | 22 `CREATE TABLE` |
-| Enum ditegakkan di DB | `CHECK (json_extract(data, '$.prep_station') IN ('bar','kitchen','both'))` |
-| `unique` / `natural_key` jalan | `idx_uq_..._code`, `_phone`, `_qr_token`, `_number`, `_username` |
-| `index: true` pada field skalar jalan | `idx_cafe_order_orders_status`, `_transaction_date`, dll. |
-| Composite `unique` pada field skalar (per-field) jalan | `(tenant_id, _code) WHERE deleted_at IS NULL` |
-| Hanya `tenant_id` yang auto-inject | Setiap tabel punya `tenant_id`, **tidak ada** `branch_id` — bukti langsung Gap #8 |
-| Strategi JSONB hybrid konsisten | Bisnis data di `data`; kolom turunan hanya untuk yang diindeks |
-| `formspec check` bersih | 0 error, 0 warning — termasuk untuk `computed` aritmetika money (`tendered - amount`) |
+| Aspek                                                  | Bukti                                                                                 |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| DDL tergenerate untuk seluruh 22 entity                | 22 `CREATE TABLE`                                                                     |
+| Enum ditegakkan di DB                                  | `CHECK (json_extract(data, '$.prep_station') IN ('bar','kitchen','both'))`            |
+| `unique` / `natural_key` jalan                         | `idx_uq_..._code`, `_phone`, `_qr_token`, `_number`, `_username`                      |
+| `index: true` pada field skalar jalan                  | `idx_cafe_order_orders_status`, `_transaction_date`, dll.                             |
+| Composite `unique` pada field skalar (per-field) jalan | `(tenant_id, _code) WHERE deleted_at IS NULL`                                         |
+| Hanya `tenant_id` yang auto-inject                     | Setiap tabel punya `tenant_id`, **tidak ada** `branch_id` — bukti langsung Gap #8     |
+| Strategi JSONB hybrid konsisten                        | Bisnis data di `data`; kolom turunan hanya untuk yang diindeks                        |
+| `formspec check` bersih                                | 0 error, 0 warning — termasuk untuk `computed` aritmetika money (`tendered - amount`) |
 
 ---
 
@@ -274,8 +285,8 @@ _status           varchar(50)  GENERATED ALWAYS AS (json_extract(data,'$.status'
 
 ### Dampak ke aplikasi kafe: **LOW–MEDIUM**
 
-SQLite bertipe dinamis dan menerima nama tipe apa pun (dipetakan ke *type
-affinity*), jadi DDL-nya **tetap jalan** — `formspec migrate plan` dan
+SQLite bertipe dinamis dan menerima nama tipe apa pun (dipetakan ke _type
+affinity_), jadi DDL-nya **tetap jalan** — `formspec migrate plan` dan
 `migrate apply` tidak gagal. Yang dirugikan:
 
 - **Kebingungan pembaca.** DDL untuk SQLite yang menyebut `timestamptz`
@@ -288,7 +299,7 @@ affinity*), jadi DDL-nya **tetap jalan** — `formspec migrate plan` dan
 ### Usulan
 
 - Berikan `driver` ke `fieldTypeToSQL()` (atau pindahkan pemetaan ke
-dialect/dialect-per-driver), lalu pakai tipe yang benar per driver:
+  dialect/dialect-per-driver), lalu pakai tipe yang benar per driver:
   SQLite `text`/`integer`/`real`/`numeric`; PostgreSQL `timestamptz`,
   `varchar`, `numeric`.
 - Tambahkan tes DDL yang memeriksa **tidak ada tipe PostgreSQL** muncul di
@@ -299,7 +310,7 @@ dialect/dialect-per-driver), lalu pakai tipe yang benar per driver:
 ## ✅ UPDATE GAP #22 — ada jalan keluar yang bekerja: `kind: Migration`
 
 Saat menulis `kind: Migration` untuk aturan bisnis #10, ternyata **GAP-22 bisa
- ditutup hari ini tanpa menunggu engine diperbaiki.**
+ditutup hari ini tanpa menunggu engine diperbaiki.**
 
 `MigrationSpec` (`schemas/v1/kinds/Migration.schema.json`) menerima DDL mentah:
 
@@ -344,11 +355,11 @@ Ketiga migration juga lolos `formspec validate` (50 manifest, 0 problem).
 
 ### Tiga keunikan yang sekarang punya penutup
 
-| Aturan | Migration | Termasuk partial? |
-| --- | --- | --- |
-| Satu harga per menu per cabang (D1) | `menu-item-price-unique` | — |
-| Satu baris stok per (cabang, bahan) (D3) | `stock-level-unique` | — |
-| Satu shift terbuka per (cabang, kasir) (#10) | `shift-open-unique` | ✅ `WHERE status = 'open'` |
+| Aturan                                       | Migration                | Termasuk partial?          |
+| -------------------------------------------- | ------------------------ | -------------------------- |
+| Satu harga per menu per cabang (D1)          | `menu-item-price-unique` | —                          |
+| Satu baris stok per (cabang, bahan) (D3)     | `stock-level-unique`     | —                          |
+| Satu shift terbuka per (cabang, kasir) (#10) | `shift-open-unique`      | ✅ `WHERE status = 'open'` |
 
 > **Konsekuensi untuk guard script:** ketiganya berpindah status menjadi
 > **lapis kedua**, bukan pengaman utama. Constraint database lebih kuat karena
@@ -356,24 +367,31 @@ Ketiga migration juga lolos `formspec validate` (50 manifest, 0 problem).
 > guard hanya berlaku pada jalur yang melewatinya. Rencana: hapus guard setelah
 > migration terbukti terpasang di semua environment.
 
-> **Yang belum terverifikasi:** DDL-nya di-*apply* tanpa error, tapi apakah
+> **Yang belum terverifikasi:** DDL-nya di-_apply_ tanpa error, tapi apakah
 > constraint benar-benar **menolak** baris duplikat saat runtime belum diuji —
 > butuh jalur tulis. Uji termurah: `kind: Seed` dengan dua baris duplikat, karena
 > `formspec seed` menulis lewat EntityStore yang sama tanpa butuh HTTP.
 
 ---
 
-## Gap #35 — `MigrationSpec.ddl` hanya satu string: DDL tidak bisa portabel ✅ Terverifikasi
+## Gap #35 — `MigrationSpec.ddl` hanya satu string: DDL tidak bisa portabel ✅ CLOSED (2026-09-16, TODO 3.4)
+
+> **Ditutup 2026-09-16 (3.4).** `ddl_by` memuat varian per driver (dialek himpunan
+> tertutup: `sqlite`, `postgres`), `ddl` tetap untuk statement portabel, menulis
+> keduanya ditolak supaya maksudnya tidak ambigu, dan driver tanpa varian
+> melewati migration itu **dengan peringatan** — bukan menjalankan SQL driver
+> lain, yang justru kegagalan yang gap ini khawatirkan. Normatif:
+> `docs/spec/backend/01-core-basic.md` §4.1.
 
 ### Bukti
 
 `MigrationSpec` punya **satu** field `ddl` bertipe string — tidak ada peta
 per-driver. Padahal ekspresi untuk membaca JSONB berbeda antar driver:
 
-| Driver | Ekspresi untuk `data.branch_id` |
-| --- | --- |
-| SQLite (dev) | `json_extract(data, '$.branch_id')` |
-| PostgreSQL (produksi) | `(data ->> 'branch_id')` |
+| Driver                | Ekspresi untuk `data.branch_id`     |
+| --------------------- | ----------------------------------- |
+| SQLite (dev)          | `json_extract(data, '$.branch_id')` |
+| PostgreSQL (produksi) | `(data ->> 'branch_id')`            |
 
 Jadi DDL di atas **benar untuk dev dan salah untuk produksi**. Ini bukan kasus
 tepi: setiap migration yang menyentuh kolom `data` (yang berarti **semua**
@@ -400,7 +418,17 @@ Aplikasi ini secara eksplisit menargetkan **SQLite dev + PostgreSQL produksi**
 
 ---
 
-## Gap #36 — Hanya DDL yang diizinkan: migration tidak bisa merapikan data ✅ Terverifikasi
+## Gap #36 — Hanya DDL yang diizinkan: migration tidak bisa merapikan data ✅ CLOSED (2026-09-16, TODO 3.4)
+
+> **Ditutup 2026-09-16 (3.4).** `kind: Migration` kini boleh menyatakan
+> perbaikan data lewat **`dml`**, dengan **`reason` wajib** (audit: kenapa, bukan
+> hanya apa), hanya INSERT/UPDATE/DELETE/WITH (perubahan skema tetap milik
+> `ddl`/`ddl_by`), dijalankan **sebelum** DDL dalam satu manifest, dan
+> **diumumkan** saat `migrate apply` serta dicetak `migrate plan`. Bukti:
+> `TestApplyCustomMigrations_DataRepairRunsBeforeDDL` mengulang skenario gap ini
+> utuh — 3 baris dengan 1 duplikat, `CREATE UNIQUE INDEX` gagal, lalu berhasil
+> setelah perbaikan (2 baris) dan menolak insert duplikat berikutnya.
+> Normatif: `docs/spec/backend/01-core-basic.md` §4.1.
 
 ### Bukti
 
@@ -423,7 +451,7 @@ Skenario nyata:
    **tidak ada yang mencegah**.
 3. Migration di-deploy → `CREATE UNIQUE INDEX` gagal.
 4. Diperlukan `UPDATE`/`DELETE` untuk merapikan duplikat — yaitu **DML, yang
-ditolak** oleh migration.
+   ditolak** oleh migration.
 
 Jadi perbaikan data harus dilakukan di luar migration (SQL manual oleh operator),
 dan tidak ada jejaknya di spec. Untuk audit, itu lubang.

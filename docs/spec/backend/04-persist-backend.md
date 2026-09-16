@@ -7,6 +7,7 @@
 > kontrak.
 
 ## 1. Kedudukan
+
 PersistBackend adalah seam penyimpanan **setara Shell di sisi visual**: satu
 implementasi resmi (jsonb-persist, hybrid JSONB, Postgres/SQLite) dipakai
 lama, tapi seluruh framework wajib bicara ke interface ini — tidak ada
@@ -16,12 +17,13 @@ formal, satu per deployment scope.
 Prinsip yang mengikat: kalau PersistBackend kedua suatu saat ingin
 dimungkinkan (mis. strategi fully-relational — tiap field jadi kolom nyata,
 lihat [`../../renderers/jsonb-persist/02-schema-strategies.md`](../../renderers/jsonb-persist/02-schema-strategies.md)),
-*seam*-nya harus sudah ada sejak PersistBackend pertama dibangun — bukan
+_seam_-nya harus sudah ada sejak PersistBackend pertama dibangun — bukan
 ditambal belakangan. Retrofit setelah kode inti terlanjur mengasumsikan satu
 implementasi berarti membongkar migration engine, query resolution, dan
 `ctx.next_key` sekaligus, bukan menambah modul baru.
 
 ## 2. Interface Wajib
+
 Kemampuan minimal setiap backend, dirumuskan sebagai kontrak (bukan signature
 Go tertentu — tiap PersistBackend bebas menerjemahkannya ke mekanisme
 internalnya):
@@ -45,7 +47,13 @@ internalnya):
   terjadi kecuali document mendeklarasikan mode gap-free (lock ditahan sampai
   commit). `scope_field` (opsional) membuat sequence terpisah per nilai field
   itu (mis. satu sequence per `branch_id`) alih-alih satu sequence per
-  tenant/resource/field/period.
+  tenant/resource/field/period. **Pencacah ber-`scope_field` wajib diberi nilai
+  scope-nya**: nomor pesanan per cabang tidak boleh jatuh ke deret global — itu
+  terlihat benar sampai dua cabang bertabrakan. Jalur otomatis (`create`)
+  membaca scope dari record yang sedang ditulis; jalur script menyebutkannya
+  eksplisit lewat `ctx.next_key(field, scope=<nilai>)`, dan backend **menolak**
+  alokasi tanpa scope saat rule-nya ber-scope, bukan diam-diam membuat deret
+  global.
 - **Index generation** — memenuhi `persist.indexes`.
 - **Uninstall extension bersih** — tanpa sisa (lihat §6 soal mekanisme
   konkretnya sebagai detail implementasi, bukan kontrak).
@@ -76,6 +84,7 @@ wajib menjawab query resolution dengan hasil yang identik terhadap kontrak
 tersebut, terlepas mekanisme internalnya (SQL, dokumen, dll).
 
 ## 5. `ctx.db` — Escape Hatch yang Mengorbankan Portabilitas
+
 Akses SQL mentah sengaja backend-coupled: resource yang memakainya terkunci ke
 PersistBackend berdialek itu. Bukan bug — konsekuensi yang harus disadari saat
 memilihnya. Ini **satu-satunya** primitive `ctx.*` yang boleh backend-coupled;
@@ -94,15 +103,17 @@ module lewat `kind: Migration` — struktur bebas, tapi **wajib** kolom
 langsung ke module.
 
 ## 6. Batas dengan Spec Resolution API
+
 Bentuk data yang diserahkan ke Shell tidak boleh membocorkan detail backend
 (nama kolom fisik, path JSONB) — lihat
 [`../frontend/04-spec-resolution-api.md`](../frontend/04-spec-resolution-api.md)
 §3. Mekanisme kolom per-extension (mis. `ALTER TABLE DROP COLUMN` di backend
 JSONB) adalah detail implementasi backend tertentu — kontraknya cuma
-"extension harus bisa di-uninstall bersih tanpa sisa" (§2); *cara* mencapainya
+"extension harus bisa di-uninstall bersih tanpa sisa" (§2); _cara_ mencapainya
 urusan masing-masing PersistBackend.
 
 ## 7. Menambah PersistBackend Baru
+
 Alur: (1) implementasikan seluruh kemampuan wajib §2 dan jaminan §3; (2)
 daftarkan sebagai kind `PersistBackend` dengan `trust_tier` yang sama
 (`official | verified | community`) dengan Renderer visual
@@ -120,6 +131,7 @@ atomik/gap-free, backup/restore format normatif, uninstall extension bersih)
 muncul di consent footprint.
 
 ## 8. Status Implementasi Hari Ini (Gap)
+
 `internal/db.DB`/`Tx` (implementasi resmi jsonb-persist) **belum** jadi
 interface PersistBackend yang bersih terhadap kontrak §2 — ia bocor semantik
 SQL langsung ke pemanggil (`ExecContext`, `QueryContext`, `Driver() *sql.DB`),

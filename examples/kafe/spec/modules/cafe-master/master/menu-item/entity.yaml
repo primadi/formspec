@@ -36,11 +36,12 @@ spec:
     - name: photo
       type: file
       title: "Foto Menu"
-      # Catatan: format `allowed_types` ambigu di dokumen FormSpec
-      # (`[jpg, png, webp]`) sementara renderer cocokkan ".ext" atau mime.
-      # Dipakai dua bentuk sekaligus supaya cocok di klien maupun server.
+      # Bentuk kanonik `allowed_types` adalah ekstensi tanpa titik (#4b, item
+      # 2.5). Bentuk lain (`.jpg`, `image/jpeg`, `image/*`) diterima dan
+      # dinormalisasi oleh klien maupun server, tetapi tidak perlu ditulis
+      # dua kali — validator menolak entri yang tidak berbentuk salah satunya.
       storage:
-        allowed_types: [".jpg", ".jpeg", ".png", ".webp", "image/jpeg", "image/png", "image/webp"]
+        allowed_types: [jpg, jpeg, png, webp]
         max_size_mb: 2
         max_count: 1
     - name: prep_station

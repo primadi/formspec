@@ -20,14 +20,41 @@ spec:
   public_entities:
     - { entity: cafe-master.menu-category, actions: [list, find] }
     - { entity: cafe-master.menu-item, actions: [list, find] }
-    - { entity: cafe-master.menu-item-price, actions: [list] }
+    # Harga per cabang: daftar anonim hanya boleh dibaca BERSAMA cabang yang
+    # diminta (`?branch_id=…`, diisi picker dari sesi meja). Sebelumnya daftar
+    # ini terbuka tanpa syarat, sehingga satu permintaan tanpa parameter
+    # mengembalikan harga SELURUH cabang (item 3.5).
+    - entity: cafe-master.menu-item-price
+      actions: [list]
+      scope:
+        - { field: branch_id, op: eq, from: route }
     # Meja di-resolve dari token QR (find saja — pelanggan tidak perlu list meja).
     - { entity: cafe-master.dining-table, actions: [find] }
     # Satu kunjungan per meja; token sesi menjadi kunci akses pelanggan.
     - { entity: cafe-order.table-session, actions: [create, find] }
     # Pesanan dibuat anonim; penyelesaiannya (bayar, submit) dilakukan kasir
-    # di kafe-pos — lihat GAP-45 soal kepemilikan record buatan anonim.
-    - { entity: cafe-order.order, actions: [create] }
+    # di kafe-pos.
+    #
+    # `list` untuk anonim hanya diberikan BERSAMA scope (#45): tanpa scope itu,
+    # "anonim boleh list" berarti seluruh pesanan kafe — termasuk meja dan tamu
+    # lain — dan itulah yang membuat grant ini berbahaya sebelum 2.2. Dengan
+    # scope, pelanggan hanya menerima baris yang token tamunya cocok dengan
+    # token di URL, dan permintaan tanpa token **ditolak** (bukan berarti
+    # "tanpa filter"). Nilainya dibaca engine dari query, jadi klien tidak bisa
+    # melebarkannya.
+    #
+    # `create` tetap terbuka (pelanggan anonim memesan); `find` sengaja TIDAK
+    # diberikan: ia men-resolve lewat id dan scope tidak bisa menjaganya
+    # (validator menolak kombinasi itu).
+    #
+    # Catatan: grant ini TIDAK melebarkan akses kasir. Route `/_ui/entity`
+    # dipakai bersama oleh kafe-pos; permintaan yang sudah terautentikasi tetap
+    # wajib punya `cafe-order.orders.list`, dan scope anonim tidak berlaku
+    # untuknya (kalau berlaku, table POS yang tidak membawa token akan 403).
+    - entity: cafe-order.order
+      actions: [create, list]
+      scope:
+        - { field: guest_token, op: eq, from: route }
   modules:
     - cafe-master
     - cafe-order

@@ -10,11 +10,25 @@ spec:
   plural: orders
   display_field: number
   lifecycle: plain_crud
+  # S5: pesanan milik satu cabang. Ini juga yang membuat `scope_field` di
+  # natural_key_rule punya acuan generik (item 3.6).
+  scope: { dimension: branch, field: branch_id, required: true }
+  # Item 3.5: penyaringan dinyalakan. Kasir hanya melihat pesanan cabangnya,
+  # nilainya diselesaikan server dari `employee.branch_id` (TIDAK bisa
+  # dilebarkan lewat query string), dan pemegang
+  # `cafe-order.orders.read_all` (pemilik/auditor) sengaja dilewati.
+  # Permukaan publik (halaman status tamu) TIDAK terpengaruh: permintaan
+  # anonim di route itu memakai scope milik grant `public_entities` — lihat
+  # `api.applyRowScope`.
+  row_scope:
+    - { field: branch_id, op: eq, from: session }
   fields:
     # Nomor pesanan per CABANG (scope_field) — bukan deret global.
-    # GAP-09: scope_field HANYA bekerja di jalur otomatis on-create;
-    # ctx.next_key() dari script mengabaikan scope. Jangan buat nomor ini
-    # lewat script selama gap itu belum ditutup.
+    # GAP-09 TERTUTUP (3.6): jalur script kini juga ber-scope
+    # (`ctx.next_key("number", scope=branch_id)`), dan keunikannya ikut ber-scope
+    # (`tenant_id, _branch_id, _number`), sehingga `ORD-…-00001` sah ada di dua
+    # cabang sekaligus. Sebelumnya index uniknya tanpa cabang → cabang kedua
+    # gagal 500.
     - name: number
       type: string
       required: true
@@ -48,6 +62,16 @@ spec:
       index: true
       title: "Sesi Meja"
       description: "Wajib bila channel = qr_table"
+    # Kunci milik tamu (#45): disalin dari sesi meja saat pesanan dibuat anonim,
+    # lalu dipakai `public_entities[].scope` pada App publik untuk membatasi
+    # `list` anonim ke baris ini saja. Tanpa field ini, "anonim boleh list"
+    # berarti seluruh pesanan kafe — dan itulah kenapa `list` publik dulu tidak
+    # diberikan sama sekali.
+    - name: guest_token
+      type: string
+      index: true
+      title: "Token Tamu"
+      description: "Kunci akses pesanan bagi pelanggan anonim (ikut sesi meja)"
     - name: dining_table_id
       type: relation
       relation: { type: belongs_to, resource: cafe-master.dining-table }
@@ -74,7 +98,8 @@ spec:
       index: true
       title: "Status"
     # ── Rincian nilai (D8: disimpan terpisah, bukan satu angka) ──
-    # GAP-01: semua money di bawah belum punya widget input (item 2.14).
+    # GAP-01 TERTUTUP (2.14): seluruh money di bawah kini memakai widget
+    # `moneyinput` (numpad, mata uang ikut terbawa).
     # `subtotal` sudah diturunkan server-side dari baris pesanan (S7 menetapkan
     # aritmetika money, jadi `sum` atas money sah). Rantai diskon/pajak menuju
     # `total_amount` BELUM diturunkan: ia butuh `discount_amount`, `tax_amount`
@@ -116,6 +141,9 @@ spec:
       description: "compute dari branch.tax_percent"
     - name: total_amount
       type: money
+      # GAP-23 TERTUTUP (3.2): kolom turunan money numerik (membaca `.amount`),
+      # jadi sortir/rentang atas total sah diandalkan.
+      index: true
       title: "Total"
     - name: paid_amount
       type: money

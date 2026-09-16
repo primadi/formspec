@@ -85,6 +85,27 @@ func runValidate(args []string) {
 	// symmetric cancel handler; the target action must be idempotent.
 	integratorRejects := validateIntegrators(res.Manifests)
 
+	// ── Layer 1.5: cross-manifest workflow validation (S9, kafe 1.7) ──
+	// A Workflow's trigger must resolve to a real transition. This is the only
+	// layer that can check it: it needs the Workflow and the target Entity's
+	// state machine in the same view. Without it, a mistyped transition name —
+	// or worse, a state pair that covers only ONE origin state of a
+	// multi-origin transition — validates green while enforcing nothing.
+	workflowRejects := validateWorkflows(res.Manifests)
+
+	// ── Layer 1.5: cross-manifest scope-source validation (S5, kafe 1.8) ──
+	// `row_scope: {from: session}` without an explicit `attr` resolves to the
+	// entity's declared scope field. If nothing in the spec can ever produce that
+	// value, every read fails closed 403 forever — with the manifest looking
+	// correct. This layer is the only one that can tell the two apart.
+	scopeRejects := validateScopeSources(res.Manifests)
+
+	// ── Layer 1.5: cross-manifest relation validation (gaps #11/#12, kafe 3.7) ──
+	// A relation whose target is unregistered (or in another persist category)
+	// cannot resolve, and the runtime guard used to *skip* such a reference
+	// instead of rejecting it — so a dangling reference passed silently.
+	relationRejects := validateRelations(res.Manifests)
+
 	// ── Layer 1.6: Starlark honesty scan (todo 3.1.1a) ──
 	// Static analysis of script impls vs their declared `uses:` block:
 	// undeclared usage → error, declared-but-unused → warning,
@@ -174,6 +195,15 @@ func runValidate(args []string) {
 		}
 		if errMsg, ok := integratorRejects[m.Source]; ok {
 			msgs = append(msgs, "integrator: "+errMsg)
+		}
+		if errMsg, ok := workflowRejects[m.Source]; ok {
+			msgs = append(msgs, "workflow: "+errMsg)
+		}
+		if errMsg, ok := scopeRejects[m.Source]; ok {
+			msgs = append(msgs, "scope: "+errMsg)
+		}
+		if errMsg, ok := relationRejects[m.Source]; ok {
+			msgs = append(msgs, "relation: "+errMsg)
 		}
 		for _, iss := range honestyIssues {
 			if iss.Source == m.Source && iss.Severity == "error" {

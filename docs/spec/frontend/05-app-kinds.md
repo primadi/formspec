@@ -28,6 +28,52 @@ workspace (`/`, `/barbershop`, `/app/kafe`, …) — server me-mount SPA shell
 dinamis di setiap `root_url`; `access` tidak lagi membatasi pilihan prefix.
 `app_renderer` hanya memilih chrome — tidak menyiratkan public/private.
 
+### 1.1 `public_entities` — allowlist anonim, dan scope-nya
+
+`access: public` **tidak** berarti "seluruh module terbuka". App publik
+mendeklarasikan tepat apa yang boleh disentuh anonim:
+
+```yaml
+spec:
+  access: public
+  public_entities:
+    # Katalog: boleh dibaca anonim, tanpa syarat tambahan.
+    - { entity: cafe-master.menu-item, actions: [list, find] }
+    # Pesanan: `create` terbuka (pelanggan memesan), `list` hanya BERSAMA
+    # token tamu — nilai token dibaca server dari query, bukan dari klien.
+    - entity: cafe-order.order
+      actions: [create, list]
+      scope:
+        - { field: guest_token, op: eq, from: route }
+```
+
+`actions` adalah himpunan tertutup (`list`, `find`, `create`, `update`,
+`delete`). Entri kosong (`actions: []`) ditolak; `public_entities: []` berarti
+"tidak ada yang anonim"; **absen** mempertahankan perilaku lama (list/find/create
+seluruh module) — deklarasikan allowlist-nya.
+
+**`scope` adalah otorisasi per baris untuk pembacaan anonim.** Tanpa scope,
+"anonim boleh `list`" berarti anonim membaca **setiap baris** entity itu — itulah
+sebabnya grant semacam ini berbahaya, dan sebabnya scope ada:
+
+- Nilainya diambil dari **parameter request** (`param`, default nama field), jadi
+  klien tidak bisa melebarkannya — bukan `fixed_filters` yang di-merge browser.
+- Parameter yang tidak ada **menolak permintaan** (403). Tidak pernah berarti
+  "tanpa filter".
+- Nilai scope **menimpa** filter klien pada field yang sama.
+- Hanya `from: route` diterima. Permukaan publik tidak punya identitas sesi, jadi
+  scope `from: session` tidak akan pernah resolve dan akan menolak semua bacaan —
+  itu ditolak saat validasi, bukan dibiarkan jadi 403 tanpa gejala.
+- **`scope` tidak bisa digabung dengan `find`.** `find` me-resolve lewat id dan
+  scope tidak bisa menjaganya, jadi kombinasi itu akan terlihat terfilter padahal
+  mengembalikan record apa pun yang id-nya diketahui — validator menolaknya.
+
+**Grant berlaku untuk anonim, bukan sebagai bypass permission.** Pada route yang
+sama, permintaan yang **sudah terautentikasi** tetap wajib memegang permission
+entity tersebut (`{module}.{plural}.{action}`), dan scope anonim **tidak**
+diterapkan padanya. Ini penting karena `/_ui/entity` dipakai bersama: surface POS
+kasir yang tidak membawa token tamu tidak boleh ikut terfilter.
+
 Navigasi App sendiri (`App.spec.menu`/`Module.spec.menu`, bentuk `MenuItem`,
 batas nesting 3 level) adalah kontrak `kind: App`/`kind: Module` — didokumentasikan
 di [`../platform/02-workspace-app-module.md`](../platform/02-workspace-app-module.md)

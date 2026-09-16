@@ -67,54 +67,69 @@ func GenerateUIRoutes(registry *entity.Registry) []RouteDescriptor {
 		if !ok || specInfo.EntitySpec == nil {
 			continue
 		}
-
-		es := specInfo.EntitySpec
-
-		plural := es.Plural
-		if plural == "" {
-			plural = info.Name + "s"
-		}
-
-		isSummary := es.Characteristic == spec.CharSummary
-
-		// Standard actions disabled via `disabled: true` (§11.1)
-		disabled := disabledActions(es)
-
-		// UI surface uses the same internal logic; expose config is
-		// ignored. All standard CRUD actions (including delete) are available
-		// on the UI surface unless explicitly disabled in entity actions.
-		uiActions := []string{"list", "find", "create", "update", "delete"}
-		if !isSummary {
-			// Lifecycle actions belong on the UI surface too. Without them the
-			// wildcard file route (/{id}/{field}) swallows /{id}/submit|cancel|amend
-			// and answers with a misleading 403 (gap #52). generateRESTRoutes still
-			// skips them for lifecycle-free entities (submit disabled).
-			//
-			// Lifecycle actions that declare a custom `impl` are emitted by
-			// GenerateUICustomActionRoutes (Handler "custom"); adding them here as
-			// well would register the same path twice and shadow the custom handler.
-			implActions := make(map[string]bool)
-			for _, a := range es.Actions {
-				if a.Impl != nil {
-					implActions[a.Name] = true
-				}
-			}
-			for _, a := range []string{"submit", "cancel", "amend"} {
-				if !implActions[a] {
-					uiActions = append(uiActions, a)
-				}
-			}
-		}
-		if es.SoftDeactivate != nil && es.SoftDeactivate.Enabled {
-			uiActions = append(uiActions, "deactivate", "reactivate")
-		}
-		uiExp := spec.ExposeConfig{Type: spec.ProtocolREST, Actions: uiActions}
-		routes = append(routes, generateRESTRoutes(info.Module, info.Name, plural, uiExp, isSummary, disabled, es.SoftDeactivate != nil && es.SoftDeactivate.Enabled)...)
-
-		// Two-step idempotency prepare (todo 2.7.1) on the UI surface too —
-		// the primary use case is browser double-submit on create.
-		routes = append(routes, generatePrepareRoutes(info.Module, info.Name, plural, es, isSummary, disabled)...)
+		routes = append(routes, UIRoutesForEntity(info.Module, info.Name, specInfo.EntitySpec)...)
 	}
+
+	return routes
+}
+
+// UIRoutesForEntity produces the `/_ui/entity/...` RouteDescriptors for ONE
+// entity, using the same generator the server registers routes with.
+//
+// It exists so the contract can be *printed* (formspec describe, docs) without
+// a database and without hand-maintained documentation that drifts: a docs page
+// or CLI output built from a copy of these rules is exactly the failure gap #47
+// is about — the REST contract was the one surface nobody could look up.
+func UIRoutesForEntity(module, name string, es *spec.EntitySpec) []RouteDescriptor {
+	if es == nil {
+		return nil
+	}
+	var routes []RouteDescriptor
+
+	plural := es.Plural
+	if plural == "" {
+		plural = name + "s"
+	}
+
+	isSummary := es.Characteristic == spec.CharSummary
+
+	// Standard actions disabled via `disabled: true` (§11.1)
+	disabled := disabledActions(es)
+
+	// UI surface uses the same internal logic; expose config is
+	// ignored. All standard CRUD actions (including delete) are available
+	// on the UI surface unless explicitly disabled in entity actions.
+	uiActions := []string{"list", "find", "create", "update", "delete"}
+	if !isSummary {
+		// Lifecycle actions belong on the UI surface too. Without them the
+		// wildcard file route (/{id}/{field}) swallows /{id}/submit|cancel|amend
+		// and answers with a misleading 403 (gap #52). generateRESTRoutes still
+		// skips them for lifecycle-free entities (submit disabled).
+		//
+		// Lifecycle actions that declare a custom `impl` are emitted by
+		// GenerateUICustomActionRoutes (Handler "custom"); adding them here as
+		// well would register the same path twice and shadow the custom handler.
+		implActions := make(map[string]bool)
+		for _, a := range es.Actions {
+			if a.Impl != nil {
+				implActions[a.Name] = true
+			}
+		}
+		for _, a := range []string{"submit", "cancel", "amend"} {
+			if !implActions[a] {
+				uiActions = append(uiActions, a)
+			}
+		}
+	}
+	if es.SoftDeactivate != nil && es.SoftDeactivate.Enabled {
+		uiActions = append(uiActions, "deactivate", "reactivate")
+	}
+	uiExp := spec.ExposeConfig{Type: spec.ProtocolREST, Actions: uiActions}
+	routes = append(routes, generateRESTRoutes(module, name, plural, uiExp, isSummary, disabled, es.SoftDeactivate != nil && es.SoftDeactivate.Enabled)...)
+
+	// Two-step idempotency prepare (todo 2.7.1) on the UI surface too —
+	// the primary use case is browser double-submit on create.
+	routes = append(routes, generatePrepareRoutes(module, name, plural, es, isSummary, disabled)...)
 
 	// Rewrite path prefixes from /api/v1/... to /_ui/entity/...
 	for i := range routes {
@@ -368,41 +383,58 @@ func GenerateUICustomActionRoutes(registry *entity.Registry) []RouteDescriptor {
 		if !ok || specInfo.EntitySpec == nil {
 			continue
 		}
+		routes = append(routes, UICustomActionRoutesForEntity(info.Module, info.Name, specInfo.EntitySpec)...)
+	}
 
-		es := specInfo.EntitySpec
-		plural := es.Plural
-		if plural == "" {
-			plural = info.Name + "s"
+	return routes
+}
+
+// UICustomActionRoutesForEntity is the per-entity form of
+// GenerateUICustomActionRoutes, for callers that print or document the contract
+// without a registry (formspec describe).
+//
+// Only actions with a custom `impl` get a route: a state-machine transition with
+// no impl is applied through `update` (the guard validates the move) and has no
+// endpoint of its own — printing one would document a route the server never
+// serves, which is the failure this whole "generate, don't transcribe" approach
+// exists to prevent.
+func UICustomActionRoutesForEntity(module, name string, es *spec.EntitySpec) []RouteDescriptor {
+	if es == nil {
+		return nil
+	}
+	plural := es.Plural
+	if plural == "" {
+		plural = name + "s"
+	}
+
+	var routes []RouteDescriptor
+	for _, action := range es.Actions {
+		// Standard CRUD actions (list/find/create/update/delete) are handled
+		// by generateRESTRoutes. Lifecycle actions (submit/cancel/amend) with
+		// a custom impl constitute custom actions and are generated here.
+		if isStandardCrudAction(action.Name) {
+			continue
+		}
+		if action.Disabled || action.Impl == nil {
+			continue
 		}
 
-		for _, action := range es.Actions {
-			// Standard CRUD actions (list/find/create/update/delete) are handled
-			// by generateRESTRoutes. Lifecycle actions (submit/cancel/amend) with
-			// a custom impl constitute custom actions and are generated here.
-			if isStandardCrudAction(action.Name) {
-				continue
-			}
-			if action.Disabled || action.Impl == nil {
-				continue
-			}
-
-			perm := action.RequiredPermission
-			if perm == "" {
-				perm = info.Module + "." + plural + "." + action.Name
-			}
-
-			routes = append(routes, RouteDescriptor{
-				Module:             info.Module,
-				Entity:             info.Name,
-				Plural:             plural,
-				Action:             action.Name,
-				Method:             "POST",
-				Path:               "/_ui/entity/" + info.Module + "/" + info.Name + "/{id}/" + action.Name,
-				Protocol:           spec.ProtocolREST,
-				Handler:            "custom",
-				RequiredPermission: perm,
-			})
+		perm := action.RequiredPermission
+		if perm == "" {
+			perm = module + "." + plural + "." + action.Name
 		}
+
+		routes = append(routes, RouteDescriptor{
+			Module:             module,
+			Entity:             name,
+			Plural:             plural,
+			Action:             action.Name,
+			Method:             "POST",
+			Path:               "/_ui/entity/" + module + "/" + name + "/{id}/" + action.Name,
+			Protocol:           spec.ProtocolREST,
+			Handler:            "custom",
+			RequiredPermission: perm,
+		})
 	}
 
 	return routes

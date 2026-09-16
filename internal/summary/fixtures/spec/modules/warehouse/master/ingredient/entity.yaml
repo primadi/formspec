@@ -1,0 +1,14 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: ingredient
+  module: warehouse
+  description: "Master source for the projection's join"
+spec:
+  version: v1
+  characteristic: master
+  plural: ingredients
+  fields:
+    - name: name
+      type: string
+      rules: [required]

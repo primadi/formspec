@@ -14,17 +14,13 @@ spec:
   blocks:
     - table:
         # `param` meneruskan token dari route ke blok sebagai nilai filter.
-        # INI BUKAN OTORISASI — hanya pengisian nilai.
+        # Sejak 2.2 nilai ini BUKAN lagi satu-satunya pengaman: App `kafe-qr`
+        # mendeklarasikan `public_entities[].scope` pada `order`, jadi engine
+        # sendiri yang membatasi `list` anonim ke baris dengan token itu —
+        # klien tidak bisa menghilangkannya, dan permintaan tanpa token ditolak.
         ref: order-table-customer
-        param: { table_session_id: ":guest_token" }
-  # ⚠️ GAP-06 — HALAMAN INI BERGANTUNG PADA PENGAMAN APLIKASI, BUKAN ENGINE.
-  #
-  # App `kafe-qr` memakai `access: public`, yang memberi anonim `list`/`find`
-  # untuk SELURUH entity di module yang di-mount. Artinya:
-  #   - anonim bisa memanggil list order TANPA token, dan melihat semua pesanan
-  #   - token di URL hanya menyaring tampilan halaman ini, bukan membatasi API
-  #   - token juga membuka `member` (nomor HP) bila module itu ikut di-mount
-  #
-  # Bentuk ideal yang belum bisa dinyatakan: allowlist publik PER-ENTITY +
-  # scoping per-record (mis. `public_entities` + filter token yang ditegakkan
-  # server). Lihat gaps_found/03-pos-dan-public-ordering.md.
+        param: { guest_token: ":guest_token" }
+  # GAP-06 TERTUTUP untuk halaman ini (2.2): allowlist publik per-entity (1.2)
+  # + scoping per-record yang ditegakkan server. Sebelumnya token di URL hanya
+  # menyaring tampilan, sementara API-nya terbuka; sekarang nilai token dibaca
+  # engine dari query dan baris di luar token itu tidak pernah terkirim.

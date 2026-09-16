@@ -97,6 +97,15 @@ sebagai nama action, bukan "document updated").
 `'submitted'` yang boleh jadi target field `relation` — `draft`/`cancelled`
 ditolak sebagai target relation saat runtime.
 
+**`lifecycle:` adalah hint UI, bukan penentu (D2).** Nilai `two_step_autosave` /
+`two_step_manual` / `plain_crud` **tidak** dibaca untuk memutuskan apakah sebuah
+Entity punya lifecycle. Yang menentukan adalah **aksi mana yang aktif**: kalau
+`submit`, `cancel`, dan `amend` semuanya nonaktif (eksplisit atau lewat gating
+transitif di atas), Entity itu lifecycle-free — `doc_status` selalu `null` dan
+barisnya langsung bisa direferensikan. Konsekuensinya: mendeklarasikan
+`lifecycle: plain_crud` dan tidak mendeklarasikan `lifecycle` sama sekali
+memberi hasil yang sama; `lifecycle:` hanya menyetel perilaku form di klien.
+
 ### 1.3 `child` vs `relation`
 
 Garis pembeda adalah **kepemilikan lifecycle**, bukan bentuk penyimpanan:
@@ -267,6 +276,9 @@ Atribut wajib ditandai **\[wajib\]**.
 | `auth`            | object | —      | `{ required: true }`   | `{ required, strategies[] }` — persyaratan autentikasi (§1.4).                                                                    |
 | `events`          | array  | —      | reserved events        | Event custom di luar `before_*`/`on_*` reserved. (§7).                                                                            |
 | `indexes`         | array  | —      | `[]`                   | Indeks tambahan: `[{ fields: [...], unique: true/false }]`.                                                                       |
+| `scope`           | object | —      | —                      | `{ dimension, field, required }` — Entity ini dipartisi per dimensi (§1.7).                                                       |
+| `row_scope`       | array  | —      | `[]`                   | Filter yang **ditegakkan server** pada setiap baca: `[{ field, op, from: session\|route, attr\|param }]` (§1.7).                  |
+| `assignments`     | array  | —      | `[]`                   | `[{ dimension, field, principal_field }]` — Entity ini memetakan principal ke nilai dimensi (§1.7).                               |
 
 ### 1.6 `doc_status` vs `state_machine` — Dua Lapis State
 
@@ -317,6 +329,99 @@ spec:
 
 Untuk Workflow (approval multi-level yang meng-intercept transition
 state_machine), lihat [`02-core-extended.md`](02-core-extended.md) §2.
+
+### 1.7 `scope` / `row_scope` / `assignments` — Isolasi Baris (Normatif)
+
+Tiga konstruk terpisah menjawab tiga pertanyaan berbeda. Ketiganya **tidak bisa
+digantikan** satu sama lain, dan mencampurnya adalah sumber kebocoran
+multi-outlet:
+
+| Konstruk      | Menjawab                         | Sifat                                  |
+| ------------- | -------------------------------- | -------------------------------------- |
+| `scope`       | "Entity ini dipartisi oleh apa?" | Fakta model data — **tidak** memfilter |
+| `row_scope`   | "Apa yang ditegakkan saat baca?" | Ditegakkan server-side, fail closed    |
+| `assignments` | "Dari mana nilai itu berasal?"   | Sumber nilai untuk `from: session`     |
+
+```yaml
+# Pada entity yang dipartisi (mis. order)
+spec:
+  scope: { dimension: branch, field: branch_id, required: true }
+  row_scope:
+    - { field: branch_id, op: eq, from: session }
+
+# Pada entity yang mencatat penugasan (mis. employee)
+spec:
+  assignments:
+    - { dimension: branch, field: branch_id, principal_field: username }
+```
+
+**`scope` — deklarasi, bukan filter.** `dimension` menamai dimensi partisi
+(`^[a-z][a-z0-9_]*$`), `field` menunjuk field pembawa nilainya, dan
+`required: true` menyatakan setiap baris wajib punya nilai dimensi —
+`required: true` ditolak kalau field-nya sendiri tidak `required: true`, supaya
+deklarasinya tidak menjanjikan lebih dari yang dipaksakan bentuk datanya.
+`scope` juga memberi `natural_key_rule.scope_field` acuan generik (§2) dan
+dipakai untuk menurunkan penyaringan otomatis di renderer/permukaan.
+
+**`row_scope` — otorisasi, bukan kenyamanan UI.** Berbeda dari `fixed_filters`
+pada Table/Kanban — yang di-merge di browser dan bisa dihilangkan klien mana
+pun — `row_scope` dibaca server dan **tidak bisa dilebarkan lewat query string**:
+
+| `from`    | Sumber nilai                                                                      | Kalau tak terselesaikan |
+| --------- | --------------------------------------------------------------------------------- | ----------------------- |
+| `session` | atribut identitas: `attr` eksplisit, atau field dari `scope`, atau `principal_id` | **403** (fail closed)   |
+| `route`   | parameter query yang dideklarasikan (`param`, default nama field)                 | **403** (fail closed)   |
+
+Nilai `from: session` **menimpa** filter klien pada field yang sama. Aturan
+mutlaknya: nilai yang tidak bisa diselesaikan **tidak boleh** berubah menjadi
+"tanpa filter" — permintaan gagal, bukan melebar.
+
+**`assignments` — dari mana nilai atribut berasal.** Token boleh membawa atribut
+langsung di klaim `attrs`. Kalau tidak, server menyelesaikannya dari entity yang
+mendeklarasikan `assignments`: baris yang `principal_field`-nya sama dengan
+username pemanggil menentukan nilainya. Inilah sebabnya `row_scope: {from:
+session}` cukup ditulis **tanpa** `attr` pada entity yang punya `scope` — nama
+atributnya = `scope.field`. Hasilnya di-memo sesaat (atribut yang berubah saat
+sesi berjalan berlaku tanpa login ulang).
+
+**Gerbang validasi (anti "hijau tapi tak pernah jalan").** `formspec validate`
+menolak `row_scope` `from: session` tanpa `attr` yang atributnya tidak punya
+sumber: bukan atribut identitas bawaan, bukan `scope.field`, dan tidak ada
+`assignments` untuk dimensinya. Tanpa gerbang ini, bentuk tersebut selalu 403
+untuk semua orang tanpa gejala apa pun di manifest — kelas kegagalan yang paling
+mahal karena terlihat benar. Penulis yang tahu nilainya datang dari token di
+luar spec tree menuliskan `attr:` eksplisit, dan tidak diusik.
+
+**Pengecualian: `{module}.{plural}.read_all`.** Sebagian pemanggil **tidak punya
+dimensi sama sekali** — pemilik workspace, auditor lintas cabang, atau
+super-admin di dev. Untuk mereka, `row_scope` akan fail closed di **setiap**
+pembacaan, sehingga aplikasi mati justru bagi orang yang memang seharusnya
+melihat semuanya. Karena itu "boleh melihat semua baris" dinyatakan sebagai
+**permission eksplisit**, bukan aturan implisit:
+
+```yaml
+# role pemilik — grant-nya terlihat di daftar permission, bisa diaudit
+permissions:
+  - cafe-order.orders.read_all
+  - cafe-order.shifts.read_all
+```
+
+Aturannya:
+
+- Nama mengikuti bentuk kanonik `{module}.{plural}.read_all` (§8.6), plural dari
+  `spec.plural` entity (fallback `<name>s`).
+- Pemegangnya **dilewati dari `row_scope` entity itu** — tidak ada filter yang
+  dipasang, dan atribut yang tak bisa diselesaikan bukan lagi error (bagi
+  pemanggil ini, "tidak punya cabang" adalah keadaan normal).
+- Permission ini **tidak punya route sendiri**: ia kebijakan, bukan aksi. Ia
+  tetap **didaftarkan** bersama permission standar supaya bisa diberikan dan
+  terlihat di audit — "siapa yang boleh membaca lintas cabang" harus bisa
+  dijawab dari daftar grant, bukan disimpulkan dari wildcard.
+- `*` juga memenuhi pemeriksaan ini (super-wildcard), sehingga identitas dev
+  tetap berfungsi; kasir yang hanya memegang `{module}.{plural}.list` **tetap
+  ter-scope**.
+- Ruang lingkupnya **per entity**: `read_all` pada `order` tidak memberi akses
+  lintas cabang pada `shift`. Pemberiannya harus disengaja per entity.
 
 ## 2. Primary Key & Natural Key
 
@@ -389,8 +494,28 @@ persist:
   soft_delete: true
   category: operational # operational | financial | compliance | analytics | master | archive
   indexes:
-    - { field: status, type: btree }
+    - { fields: [status], unique: false }
 ```
+
+`indexes` boleh juga ditulis di tingkat Entity (bentuk yang dipakai contoh),
+dan boleh menyebut **field relasi** — baik sebagai kolom yang diindeks maupun di
+predikat. Index bisa **parsial** lewat `where:`, yang menutup keunikan
+bersyarat seperti "satu shift terbuka per kasir":
+
+```yaml
+indexes:
+  - fields: [branch_id, menu_item_id]
+    unique: true
+  - fields: [branch_id, cashier_id]
+    unique: true
+    where: "status = 'open'" # index parsial
+```
+
+Predikat memakai **nama field**, bukan SQL bebas — grammar tertutup
+(`<field> <op> <literal>` dan `<field> IS [NOT] NULL`, digabung `AND`) supaya
+salah ketik ditolak saat validate, bukan berakhir sebagai DDL. Index parsial
+didukung SQLite maupun PostgreSQL, jadi aturannya portabel; DDL yang benar-benar
+di luar bahasa tetap tempatnya di `kind: Migration`.
 
 `category` adalah pengelompokan data yang framework jamin **tidak boleh
 di-join lintas kategori** (isolasi, bukan sekadar performa) — cara sebuah
@@ -412,6 +537,48 @@ pernah ditulis tangan), **custom DDL** (`kind: Migration` — index, function,
 trigger, extension, materialized view; DML ditolak saat runtime), **data
 migration** (script ber-versi, run/rollback manual — backfill masuk sini,
 bukan structural diff).
+
+### 4.1 `kind: Migration` — DDL portabel, dan perbaikan data yang dinyatakan
+
+Dua hal membuat custom DDL tidak bisa selalu ditulis sebagai satu string
+(gap #35/#36):
+
+```yaml
+kind: Migration
+metadata: { name: menu-price-unique }
+spec:
+  reason: "dua harga untuk menu yang sama muncul selagi unique index belum ada"
+  dml:
+    - "DELETE FROM menu_prices WHERE rowid NOT IN (SELECT MIN(rowid) FROM menu_prices GROUP BY menu_id)"
+  ddl_by:
+    sqlite: "CREATE UNIQUE INDEX … ON menu_prices (_menu_id)"
+    postgres: "CREATE UNIQUE INDEX … ON menu_prices ((data->>'menu_item_id'))"
+```
+
+**DDL yang tidak portabel.** Ekspresi untuk membaca payload JSONB berbeda antar
+driver — `json_extract(data, '$.x')` di SQLite, `data->>'x'` di PostgreSQL —
+sehingga satu string benar untuk dev dan salah untuk produksi, dan kegagalannya
+baru muncul **saat deploy**. Karena itu: `ddl` adalah satu statement untuk semua
+driver (kasus umum), sedangkan `ddl_by` memuat varian per driver dengan kunci
+tertutup (`sqlite`, `postgres`). **Salah satu**, bukan keduanya: menulis dua-duanya
+ditolak supaya maksudnya tidak ambigu, dan driver yang tidak punya varian
+melewati migration itu **dengan peringatan** — bukan menjalankan SQL driver lain.
+
+**Perbaikan data yang dinyatakan.** Sebuah constraint hanya bisa ditambahkan
+setelah datanya memenuhi syarat — dan duplikat yang menghalangi biasanya muncul
+justru **karena** constraint-nya belum ada. Menolak DML sepenuhnya membuat
+perbaikan itu dilakukan manual di luar spec, tanpa jejak. Karena itu `dml`
+dizinkan dengan aturan yang menjaga niatnya:
+
+| Aturan                                                            | Alasan                                                                          |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `reason` **wajib** bila `dml` ada                                 | perubahan data harus bisa diaudit: kenapa, bukan hanya apa                      |
+| `dml` hanya boleh INSERT/UPDATE/DELETE/WITH                       | perubahan skema tetap milik `ddl`/`ddl_by`; dua kanal itu tidak boleh bercampur |
+| `dml` dijalankan **sebelum** `ddl` dalam satu manifest            | urutan itulah yang membuat "rapikan lalu batasi" bisa dinyatakan sekali jalan   |
+| `dml` diumumkan saat `migrate apply` (dan dicetak `migrate plan`) | menyentuh data, jadi tidak boleh senyap                                         |
+
+Backfill besar tetap milik `kind: DataMigration` (script ber-versi dengan
+rollback); `dml` untuk perbaikan yang tidak terpisahkan dari perubahan skema.
 
 ## 5. Action
 
@@ -529,6 +696,21 @@ eksplisit. `formspec apply` menolak event yang `type`-nya kontradiktif dengan
 prefix-nya. Aturan ini otomatis berlaku untuk kedelapan reserved action (§1.2)
 — tiap reserved action punya `before_{action}` (sync) dan `on_{action}`
 (async) berpasangan tanpa perlu dideklarasikan manual.
+
+**Nama state polos bukan konvensi (D4).** `order.paid` — nama event yang sama
+dengan nama state — **tidak** punya arti khusus dan **tidak** diperlakukan
+sebagai konvensi yang ditegakkan: tanpa prefix `before_*`/`on_*` ia tetap wajib
+mendeklarasikan `type`. Dokumen vertical yang menulis `billing.order.paid`
+mengikuti kebiasaan penamaan, bukan kontrak.
+
+**Transisi tidak memancarkan event secara otomatis (D3).** Event terikat pada
+**aksi/hook**, bukan pada transisi: `TransitionDecl` hanya punya
+`from`/`to`/`via`/`guard`, dan tidak ada field `emit`. Mengubah state lewat
+`via` mentransisikan state machine-nya, tetapi **tidak** memancarkan
+`on_paid`/`on_*` kecuali ada aksi atau hook yang memang memancarkannya. Karena
+itu integrasi lintas-resource tidak boleh mengandalkan asosiasi "nama event =
+nama state" — keterkaitan eksplisit transisi ↔ event adalah item
+`02-core-extended.md` §1.
 
 **Prioritas handler** (event sync): urutan `priority` (kecil dijalankan
 duluan) — kelipatan 10 supaya handler baru bisa disisipkan tanpa
@@ -671,6 +853,35 @@ Kedua permukaan **wajib** mematuhi kontrak yang sama untuk:
 | Query & filter ([§6](#6-query--filter-operator)) | `?page&per_page&sort&direction&fields&filter[...]&search&include`                                                                                                                                                             |
 | Optimistic concurrency (`version`)               | Update wajib membawa `version`; mismatch → `409 CONFLICT`                                                                                                                                                                     |
 
+### 8.6 Permission — `{module}.{plural}.{action}` (Normatif)
+
+Permission adalah **resource + action**, tidak pernah nama role. Bentuk kanonik
+satu-satunya adalah:
+
+```
+{module}.{plural}.{action}     # mis. cafe-master.menu-item-prices.update
+```
+
+`{plural}` adalah `spec.plural` Entity (§1.5), fallback `<name>s`. Bentuk
+**singular** (`{module}.{entity}.{action}`) **bukan** varian yang setara dan
+tidak pernah cocok — registry mendaftarkan plural, jadi permission berbentuk
+singular hanya menghasilkan 403 yang sulit dilacak. Tooling yang menyusun nama
+permission wajib menurunkan plural dari metadata.
+
+**Setiap action punya permission sendiri (D6).** `submit` memakai
+`{module}.{plural}.submit`, bukan `update`; berlaku juga untuk `cancel`,
+`amend`, `delete`, dan setiap custom action. Jadi "siapa yang boleh
+menyelesaikan record" adalah pertanyaan terpisah dari "siapa yang boleh
+mengubahnya" — dan permission `update` **tidak** memberi hak `submit`.
+
+**`read_all` — permission kebijakan, bukan aksi.** `{module}.{plural}.read_all`
+mengecualikan pemegangnya dari `row_scope` entity itu (§1.7). Ia tidak punya
+route sendiri karena tidak ada operasi yang dijalankannya; ia menjawab "siapa
+boleh membaca lintas baris/cabang". Nama dan granularitasnya mengikuti bentuk
+kanonik di atas supaya bisa digabungkan dengan grant lain tanpa aturan khusus —
+dan supaya pertanyaan audit "siapa yang bisa melihat semua cabang" dijawab oleh
+daftar grant, bukan oleh penafsiran wildcard.
+
 ## 9. Error Model
 
 Kode kanonik berformat `FORMSPEC.{DOMAIN}.{REASON}` (mis.
@@ -749,6 +960,15 @@ ditebak per komponen:
   eksplisit di manifest. Setting yang dibutuhkan tapi tidak tersedia dan
   tidak punya default standar adalah **error**, bukan tebakan diam-diam —
   menebak membuat default tiap komponen berbeda dan perilaku tidak konsisten.
+
+**`settings` dibaca framework, bukan hanya renderer (D7).** `settings` hidup di
+`kind: Config` level **App** — satu tempat, bukan per-komponen. Script membacanya
+lewat `ctx.config.get("settings.…")`; framework membacanya untuk keputusan yang
+tidak boleh ditebak. Yang paling terlihat: field `money` menyimpan
+`{amount, currency}`, dan bila `currency` tidak dinyatakan di field, nilainya
+diambil dari `settings.default_currency`. Bila tetap tidak bisa ditentukan,
+runtime **menolak** penulisan itu — data uang tanpa mata uang bukan data
+([`05-field-types.md`](05-field-types.md) §2).
 
 Contoh konkret namespace `settings.*` di workspace Config:
 

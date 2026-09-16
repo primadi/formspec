@@ -114,6 +114,7 @@ spec:
 | `menu` | []`MenuItem` | — |  |  |
 | `publishes` | []`AppInterface` | — |  | cross-app interfaces offered |
 | `consumes` | []`AppConsume` | — |  | cross-app interfaces needed → grant request |
+| `public_entities` | — | — | [{entity: catalog/product, actions: [list, find]}] | Allowlist of anonymous entity actions for a public App: absent = legacy module-wide, [] = none, list = exactly those pairs |
 
 <!-- /generated:attributes -->
 

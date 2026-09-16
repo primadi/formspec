@@ -52,18 +52,22 @@ type DevConfig struct {
 	ListenURL      string // override resolved listen URL
 	AppEndpointURL string // override resolved app endpoint URL
 	WorkspaceID    string
-	Runtime        string
-	StateDir       string
-	DevMode        bool
-	DevUI          bool
-	JWTSecret      string // HMAC secret for JWT signing (persist across restarts)
-	Force          bool
-	WebDir         string
-	InvokeTimeout  time.Duration
-	AppDir         string
-	AppEntrypoint  string
-	ControlURL     string
-	ThemeDirs      []string // additional directories containing theme manifests
+	// WorkspaceIDExplicit records whether WorkspaceID came from the user (flag
+	// or config file) rather than from the `default` fallback. The two are
+	// treated differently when the spec tree declares workspaces (#48).
+	WorkspaceIDExplicit bool
+	Runtime             string
+	StateDir            string
+	DevMode             bool
+	DevUI               bool
+	JWTSecret           string // HMAC secret for JWT signing (persist across restarts)
+	Force               bool
+	WebDir              string
+	InvokeTimeout       time.Duration
+	AppDir              string
+	AppEntrypoint       string
+	ControlURL          string
+	ThemeDirs           []string // additional directories containing theme manifests
 }
 
 // ─── Flag defaults ───
@@ -110,6 +114,13 @@ func runDev(args []string) {
 	if cfg.AppDir == "" {
 		cfg.AppDir = filepath.Join(cfg.StateDir, "app")
 	}
+
+	// ── 3b. Resolve the active workspace against the declared ones (#48) ──
+	// A `kind: Workspace` manifest registers a slug; it does not select one.
+	// Without this, declaring `kafe` and running dev stores everything under the
+	// default tenant while `GET /kafe/...` answers 200 with zero rows — healthy
+	// looking, different from what the manifest implies.
+	cfg = resolveActiveWorkspace(cfg)
 
 	// ── 4. Auto-detect runtime (scoped to app directory) ──
 	if cfg.Runtime == "auto" {
@@ -474,18 +485,22 @@ func parseDevFlags(args []string) DevConfig {
 		ListenURL:      *listenURL,
 		AppEndpointURL: *appEndpointURL,
 		WorkspaceID:    orDefault(*workspaceID, defaultWorkspaceID),
-		Runtime:        orDefault(*runtime, defaultRuntime),
-		StateDir:       orDefault(*stateDir, defaultStateDir),
-		DevMode:        *devMode || *devUI,
-		DevUI:          *devUI,
-		JWTSecret:      *jwtSecret,
-		Force:          *force,
-		WebDir:         *webDir,
-		InvokeTimeout:  *invokeTimeout,
-		AppDir:         *appDir,
-		AppEntrypoint:  *appEntrypoint,
-		ControlURL:     *controlURL,
-		ThemeDirs:      splitAndClean(*themeDirs),
+		// Whether the id came from the user (flag or config file) or is merely the
+		// fallback: the two are treated differently when the spec tree declares
+		// workspaces (#48).
+		WorkspaceIDExplicit: *workspaceID != "",
+		Runtime:             orDefault(*runtime, defaultRuntime),
+		StateDir:            orDefault(*stateDir, defaultStateDir),
+		DevMode:             *devMode || *devUI,
+		DevUI:               *devUI,
+		JWTSecret:           *jwtSecret,
+		Force:               *force,
+		WebDir:              *webDir,
+		InvokeTimeout:       *invokeTimeout,
+		AppDir:              *appDir,
+		AppEntrypoint:       *appEntrypoint,
+		ControlURL:          *controlURL,
+		ThemeDirs:           splitAndClean(*themeDirs),
 	}
 
 	// AppDir default is applied AFTER config file merge (in runDev),

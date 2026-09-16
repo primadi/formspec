@@ -8,6 +8,11 @@ spec:
   version: v1
   characteristic: summary
   plural: stock-levels
+  # S5: saldo stok per cabang (dimensi yang sama dengan `stock-movement`).
+  scope: { dimension: branch, field: branch_id, required: true }
+  # Item 3.5.
+  row_scope:
+    - { field: branch_id, op: eq, from: session }
   fields:
     - name: branch_id
       type: relation
@@ -50,15 +55,34 @@ spec:
   # Hanya script yang menulis entity ini. Itu justru yang menjaga valuasi
   # tetap konsisten (tidak bisa "dibetulkan" manual lewat UI).
   #
-  # ⚠️ GAP-33 — DAN INI PENTING: karena penulisan `summary` TIDAK lewat action
-  # pipeline, `hooks:` dan `conditions:` pada entity ini TIDAK PERNAH DIPANGGIL.
-  # Jadi invarian "satu baris per (cabang, bahan)" (GAP-22 — UNIQUE tidak
-  # ditegakkan DB) TIDAK bisa dijaga dari sini.
+  # S14 — kontrak pemelihara. Sebelum ini, entity `summary` hanya bisa
+  # MENGKLAIM bahwa seseorang menjaganya: tidak ada tempat menyebutkan SIAPA,
+  # dan tidak ada cara memvalidasi klaimnya. Sekarang dua-duanya dinyatakan:
+  #   * `maintained_by` menyebut script pemeliharanya, dan validator menolak
+  #     referensi yang tidak bisa di-resolve/dikompilasi (bukan komentar).
+  #   * `invariants` menyatakan properti yang harus berlaku, dan validator
+  #     menolaknya kecuali ada unique index yang benar-benar menopangnya —
+  #     jadi yang menegakkan adalah DATABASE, bukan disiplin script.
   #
-  # Satu-satunya tempat menegakkannya adalah DI DALAM script yang menulisnya,
-  # memakai pola upsert + ctx.lock. Rumus biaya rata-rata bergerak (D3) dan
-  # pola upsert itu ditulis sebagai rujukan di:
-  #   spec/modules/cafe-stock/scripts/guard_stock_level_unique.star
-  # (file itu sengaja TIDAK dipasang lewat `hooks:` — memasangnya hanya akan
-  # terlihat benar tanpa pernah dieksekusi).
+  # ⚠️ GAP-33 tetap terbuka (item 4.2): karena penulisan `summary` TIDAK lewat
+  # action pipeline, `hooks:` dan `conditions:` pada entity ini TIDAK PERNAH
+  # DIPANGGIL. Konsekuensinya invarian di bawah dijaga index (DB), sedangkan
+  # pola upsert + ctx.lock di script pemelihara adalah urusan script itu
+  # sendiri. Jangan pasang hook di sini — ia akan terlihat melindungi padahal
+  # tidak pernah dieksekusi.
+  maintained_by: cafe-stock/stock_level_apply
+  invariants:
+    - unique: [branch_id, ingredient_id]
+      message: "satu saldo per (cabang, bahan)"
   # expose: [] — UI-only.
+
+  # ── Kontrak rebuild (02-core-extended.md §6) ──
+  # Proyeksi ini adalah turunan: saldo & biaya rata-rata bergerak dihitung dari
+  # pergerakan stok yang digabung ke master bahan.
+  sources:
+    - { entity: cafe-stock.stock-movement, alias: m }
+    - { entity: cafe-stock.ingredient, alias: i }
+  join_key: "m.ingredient_id = i.id"
+  # `full`: biaya rata-rata bergerak bergantung pada SELURUH riwayat, bukan
+  # hanya periode berjalan — rebuild tidak boleh dibatasi jendela sebagian.
+  rebuild: { strategy: full }

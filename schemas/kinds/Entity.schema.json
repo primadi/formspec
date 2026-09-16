@@ -9,6 +9,13 @@
         "$ref": "#/$defs/Action"
       }
     },
+    "assignments": {
+      "description": "Assignments declares that this entity records which principal is assigned",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/AssignmentDecl"
+      }
+    },
     "auth": {
       "$ref": "#/$defs/EntityAuth",
       "nullable": true
@@ -76,6 +83,16 @@
         "$ref": "#/$defs/IndexDecl"
       }
     },
+    "invariants": {
+      "description": "Invariants declares properties that must hold for a `characteristic:",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/InvariantDecl"
+      }
+    },
+    "join_key": {
+      "type": "string"
+    },
     "lifecycle": {
       "description": "@schema {example: \"plain_crud\", enum: [\"two_step_autosave\", \"two_step_manual\", \"plain_crud\"]}",
       "type": "string",
@@ -87,6 +104,10 @@
       "examples": [
         "plain_crud"
       ]
+    },
+    "maintained_by": {
+      "description": "MaintainedBy names the script that keeps a `characteristic: summary`",
+      "type": "string"
     },
     "persist": {
       "$ref": "#/$defs/PersistSpec",
@@ -104,17 +125,33 @@
       "description": "1.4.1 resource-level rate limit (02-core-extended.md §17)",
       "nullable": true
     },
-    "scope": {
-      "description": "Scope declares row-level scoping enforced by the server on every list/",
+    "rebuild": {
+      "$ref": "#/$defs/RebuildSpec",
+      "nullable": true
+    },
+    "row_scope": {
+      "description": "RowScope declares the row-level filters the server enforces on every read",
       "type": "array",
       "items": {
         "$ref": "#/$defs/FilterSpec"
       }
     },
+    "scope": {
+      "$ref": "#/$defs/ScopeDecl",
+      "description": "Scope declares that this entity's rows are partitioned along a named",
+      "nullable": true
+    },
     "soft_deactivate": {
       "$ref": "#/$defs/SoftDeactivateDecl",
       "description": "1.4.10",
       "nullable": true
+    },
+    "sources": {
+      "description": "Summary-source contract for Entity characteristic: summary (Core Extended",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SummarySource"
+      }
     },
     "state_machine": {
       "$ref": "#/$defs/StateMachine",

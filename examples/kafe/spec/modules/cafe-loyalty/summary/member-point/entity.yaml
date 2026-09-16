@@ -36,4 +36,17 @@ spec:
     - fields: [member_id]
       unique: true
   # Entity `summary` — murni ditulis script (upsert memakai ctx.lock).
+  # S14: invariannya ditopang DB (unique index di atas).
+  invariants:
+    - unique: [member_id]
+      message: "satu baris poin per member"
   # expose: [] — UI-only.
+
+  # ── Kontrak rebuild (02-core-extended.md §6) ──
+  # Saldo poin adalah akumulasi entri buku besar poin per member.
+  sources:
+    - { entity: cafe-loyalty.point-entry, alias: p }
+    - { entity: cafe-master.member, alias: m }
+  join_key: "p.member_id = m.id"
+  # `full`: saldo & lifetime_points bergantung pada seluruh riwayat entri poin.
+  rebuild: { strategy: full }

@@ -1,0 +1,18 @@
+apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: frozen-snapshot
+  module: warehouse
+  description: "Projection declared as not recomputed — rebuild must refuse it"
+spec:
+  version: v1
+  characteristic: summary
+  plural: frozen-snapshots
+  fields:
+    - name: ingredient_id
+      type: string
+      rules: [required]
+  sources:
+    - { entity: warehouse.stock-movement }
+  join_key: "m.ingredient_id = ingredient_id"
+  rebuild: { strategy: none }

@@ -2,10 +2,16 @@
 # GUARD: satu baris stock-level per (cabang, bahan)
 # ─────────────────────────────────────────────────────────────────────────────
 #
-# STATUS: DITULIS TAPI **SENGAJA TIDAK DIPASANG** lewat `hooks:`.
+# STATUS: DITULIS TAPI **SENGAJA TIDAK DIPASANG** lewat `hooks:`. Lihat GAP-33
+# di bawah — pada entity `summary`, hook memang tidak pernah dipanggil.
 #
-# Penutup resmi invarian ini sudah ada:
-#   spec/modules/cafe-stock/migrations/stock-level-unique.yaml
+# Invarian ini kini DITEGAKKAN DATABASE lewat `indexes:` pada entity
+# `stock-level` (GAP-22 sudah ditutup):
+#     - fields: [branch_id, ingredient_id]
+#       unique: true
+# Penutup lama berupa `kind: Migration` DDL mentah (`stock-level-unique`) sudah
+# dihapus: DDL itu tidak portabel antar-driver, sementara index yang dihasilkan
+# engine portabel.
 # File ini tetap berguna sebagai RUJUKAN RUMUS biaya rata-rata bergerak (D3)
 # untuk script penulis stock-level.
 #

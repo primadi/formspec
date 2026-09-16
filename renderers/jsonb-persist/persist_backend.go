@@ -26,7 +26,13 @@ type PersistBackend interface {
 	// NextKey allocates a gap-free, duplicate-free sequence value for a
 	// natural_key_rule field. The increment is atomic and happens under the
 	// same lock as the insert/update transaction.
-	NextKey(ctx context.Context, workspaceID, module, entity, field string) (string, error)
+	//
+	// `scope` is the value of the rule's `scope_field` (e.g. the branch a number
+	// belongs to — gap #9). A counter whose rule declares a scope MUST be given
+	// one: minting without it starts a global sequence that looks correct until
+	// two scopes collide, so implementations reject the empty case instead of
+	// guessing.
+	NextKey(ctx context.Context, workspaceID, module, entity, field, scope string) (string, error)
 
 	// UninstallExtension drops an extension column and locks its namespace so
 	// it is never reused.

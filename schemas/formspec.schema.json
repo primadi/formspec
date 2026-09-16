@@ -410,6 +410,34 @@
       ],
       "additionalProperties": false
     },
+    "AssignmentDecl": {
+      "description": "AssignmentDecl declares that an entity records a principal→dimension mapping\n(S5): a row of this entity links the principal identified by `PrincipalField`\nto the dimension value held in `Field`. The server resolves `from: session`\nrow-scope attributes from these declarations.\n",
+      "type": "object",
+      "properties": {
+        "dimension": {
+          "description": "Scope dimension this assignment provides a value for",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "field": {
+          "description": "Field on this entity holding the dimension value",
+          "type": "string"
+        },
+        "principal_field": {
+          "description": "Field on this entity identifying the principal; matched against the authenticated username",
+          "type": "string",
+          "examples": [
+            "username"
+          ]
+        }
+      },
+      "required": [
+        "dimension",
+        "field",
+        "principal_field"
+      ],
+      "additionalProperties": false
+    },
     "AuthSettings": {
       "description": "AuthSettings configures external authentication (OAuth/OIDC) providers\n(auth redesign Fase 5). Providers are declared by name under\n`settings.auth.providers`; well-known presets (google, github, microsoft)\nfill in the endpoint URLs, custom providers declare them explicitly.\n",
       "type": "object",
@@ -1276,6 +1304,11 @@
         "unique": {
           "type": "boolean"
         },
+        "unit": {
+          "$ref": "#/$defs/UnitDecl",
+          "description": "Unit (S12) — declares the unit dimension of a field naming/conversion",
+          "nullable": true
+        },
         "visible_when": {
           "description": "Client-behavior vocabulary (FormSpecExpr, frontend 08-formspec-expr.md).",
           "type": "string"
@@ -1335,6 +1368,7 @@
         "attachment",
         "relation",
         "child",
+        "percent",
         "number"
       ]
     },
@@ -1611,7 +1645,10 @@
         "datetimeinput",
         "child-grid",
         "grants-editor",
-        "hidden"
+        "hidden",
+        "qrcode",
+        "moneyinput",
+        "timeinput"
       ]
     },
     "ForwardDatePolicy": {
@@ -1736,6 +1773,7 @@
       "type": "object",
       "properties": {
         "fields": {
+          "description": "Fields covered by the index; may name relation fields",
           "type": "array",
           "items": {
             "type": "string"
@@ -1743,6 +1781,13 @@
         },
         "unique": {
           "type": "boolean"
+        },
+        "where": {
+          "description": "Partial index predicate over field names: '\u003cfield\u003e \u003cop\u003e \u003cliteral\u003e' and/or '\u003cfield\u003e IS [NOT] NULL', joined by AND",
+          "type": "string",
+          "examples": [
+            "status = 'open"
+          ]
         }
       },
       "additionalProperties": false
@@ -1795,6 +1840,24 @@
         "resource",
         "event"
       ],
+      "additionalProperties": false
+    },
+    "InvariantDecl": {
+      "description": "InvariantDecl declares a property a summary projection must satisfy (S14).\nOnly `unique` is defined: it is validated against the declared indexes, so\nthe database — not discipline — keeps the property true.\n",
+      "type": "object",
+      "properties": {
+        "message": {
+          "description": "Human-readable statement of the invariant",
+          "type": "string"
+        },
+        "unique": {
+          "description": "Columns that must be unique together on this projection",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
       "additionalProperties": false
     },
     "KanbanCard": {
@@ -2633,6 +2696,13 @@
           "examples": [
             "cafe-master/menu-item"
           ]
+        },
+        "scope": {
+          "description": "Scope is the row filter anonymous reads of this entity must satisfy on",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FilterSpec"
+          }
         }
       },
       "required": [
@@ -2674,6 +2744,23 @@
         "max",
         "per"
       ],
+      "additionalProperties": false
+    },
+    "RebuildSpec": {
+      "description": "RebuildSpec describes how a summary entity is rebuilt from its durable\nsource event/record stream.\n",
+      "type": "object",
+      "properties": {
+        "since": {
+          "type": "string"
+        },
+        "strategy": {
+          "description": "full | partial | none",
+          "type": "string"
+        },
+        "window": {
+          "type": "string"
+        }
+      },
       "additionalProperties": false
     },
     "RegistrationSettings": {
@@ -2869,6 +2956,30 @@
         "up",
         "down"
       ]
+    },
+    "ScopeDecl": {
+      "description": "ScopeDecl declares that an entity's rows are partitioned along a named\ndimension (S5). `Field` is the field on this entity that carries the dimension\nvalue; `Required` asserts that every row carries one.\n",
+      "type": "object",
+      "properties": {
+        "dimension": {
+          "description": "Dimension name, e.g. branch / tenant / region",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "field": {
+          "description": "Field on this entity carrying the dimension value",
+          "type": "string"
+        },
+        "required": {
+          "description": "Every row must carry a dimension value; requires the field itself to be required",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "dimension",
+        "field"
+      ],
+      "additionalProperties": false
     },
     "SectionBlock": {
       "description": "SectionBlock is a declarative presentation section inside a Page\n(frontend/06-page-kinds.md §1). Sections are generic — reusable in any App\n(marketing/hero, no-nav, sidebar-nav, ...): pure presentation, no data\nbinding, no auth, and zero styling fields — every visual token lives in\nkind: Theme (frontend/05-app-kinds.md §5), never inline.\n",
@@ -3292,6 +3403,26 @@
       ],
       "additionalProperties": false
     },
+    "SummarySource": {
+      "description": "SummarySource describes one durable source entity used to rebuild a summary\nprojection. The concrete join semantics are implementation-defined but the\ncontract is the same across backends: combine these sources by join_key.\nSee docs/spec/backend/02-core-extended.md §6.\n",
+      "type": "object",
+      "properties": {
+        "alias": {
+          "type": "string"
+        },
+        "entity": {
+          "type": "string"
+        },
+        "filter": {
+          "type": "object",
+          "additionalProperties": {}
+        }
+      },
+      "required": [
+        "entity"
+      ],
+      "additionalProperties": false
+    },
     "TableAction": {
       "description": "TableAction is a clickable action on a table row or bulk selection.\n",
       "type": "object",
@@ -3321,7 +3452,9 @@
       "type": "string",
       "enum": [
         "badge",
-        "boolean"
+        "boolean",
+        "image",
+        "qrcode"
       ]
     },
     "TableColumn": {
@@ -3416,6 +3549,28 @@
       "required": [
         "to",
         "via"
+      ],
+      "additionalProperties": false
+    },
+    "UnitDecl": {
+      "description": "UnitDecl declares the unit dimension of a field (S12): `Base` is the unit\nvalues are stored in, `Convertible` lists the units callers may convert\nto/from. Both are validated against the field's enum values, so a typo cannot\nsilently disable conversion.\n",
+      "type": "object",
+      "properties": {
+        "base": {
+          "description": "Base (storage) unit, e.g. gram",
+          "type": "string",
+          "minLength": 1
+        },
+        "convertible": {
+          "description": "Units convertible to/from the base unit",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "base"
       ],
       "additionalProperties": false
     },
@@ -3822,7 +3977,7 @@
       "additionalProperties": false
     },
     "WorkflowTransitionRef": {
-      "description": "WorkflowTransitionRef identifies the intercepted transition by its\nfrom/to states.\n",
+      "description": "WorkflowTransitionRef identifies the intercepted transition. Two forms exist\nand are mutually exclusive (S9, kafe 1.7):\n\n\ttransition: { name: void-order }            # by transition name — preferred\n\ttransition: { from: draft, to: posted }     # by state pair (legacy)\n\nThe name form is preferred because a transition may have **several** origin\nstates (`from: [paid, in_kitchen, ready, served]`). A state pair can only\ndescribe one of them, so a workflow written as `from: paid` silently does not\ncover the other three — a hole with no error and no log. Naming the transition\ncovers all of its origin states at once, and the name can be validated against\nthe entity's state machine.\n",
       "type": "object",
       "properties": {
         "from": {
@@ -3830,6 +3985,13 @@
           "type": "string",
           "examples": [
             "draft"
+          ]
+        },
+        "name": {
+          "description": "Name is the transition's `via` name in the entity's state machine,",
+          "type": "string",
+          "examples": [
+            "void-order"
           ]
         },
         "to": {
@@ -3840,10 +4002,6 @@
           ]
         }
       },
-      "required": [
-        "from",
-        "to"
-      ],
       "additionalProperties": false
     },
     "WorkflowTrigger": {
@@ -4268,6 +4426,34 @@
       ],
       "additionalProperties": false
     },
+    "AssignmentDecl": {
+      "description": "AssignmentDecl declares that an entity records a principal→dimension mapping\n(S5): a row of this entity links the principal identified by `PrincipalField`\nto the dimension value held in `Field`. The server resolves `from: session`\nrow-scope attributes from these declarations.\n",
+      "type": "object",
+      "properties": {
+        "dimension": {
+          "description": "Scope dimension this assignment provides a value for",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "field": {
+          "description": "Field on this entity holding the dimension value",
+          "type": "string"
+        },
+        "principal_field": {
+          "description": "Field on this entity identifying the principal; matched against the authenticated username",
+          "type": "string",
+          "examples": [
+            "username"
+          ]
+        }
+      },
+      "required": [
+        "dimension",
+        "field",
+        "principal_field"
+      ],
+      "additionalProperties": false
+    },
     "AuthSettings": {
       "description": "AuthSettings configures external authentication (OAuth/OIDC) providers\n(auth redesign Fase 5). Providers are declared by name under\n`settings.auth.providers`; well-known presets (google, github, microsoft)\nfill in the endpoint URLs, custom providers declare them explicitly.\n",
       "type": "object",
@@ -5134,6 +5320,11 @@
         "unique": {
           "type": "boolean"
         },
+        "unit": {
+          "$ref": "#/$defs/UnitDecl",
+          "description": "Unit (S12) — declares the unit dimension of a field naming/conversion",
+          "nullable": true
+        },
         "visible_when": {
           "description": "Client-behavior vocabulary (FormSpecExpr, frontend 08-formspec-expr.md).",
           "type": "string"
@@ -5193,6 +5384,7 @@
         "attachment",
         "relation",
         "child",
+        "percent",
         "number"
       ]
     },
@@ -5469,7 +5661,10 @@
         "datetimeinput",
         "child-grid",
         "grants-editor",
-        "hidden"
+        "hidden",
+        "qrcode",
+        "moneyinput",
+        "timeinput"
       ]
     },
     "ForwardDatePolicy": {
@@ -5594,6 +5789,7 @@
       "type": "object",
       "properties": {
         "fields": {
+          "description": "Fields covered by the index; may name relation fields",
           "type": "array",
           "items": {
             "type": "string"
@@ -5601,6 +5797,13 @@
         },
         "unique": {
           "type": "boolean"
+        },
+        "where": {
+          "description": "Partial index predicate over field names: '\u003cfield\u003e \u003cop\u003e \u003cliteral\u003e' and/or '\u003cfield\u003e IS [NOT] NULL', joined by AND",
+          "type": "string",
+          "examples": [
+            "status = 'open"
+          ]
         }
       },
       "additionalProperties": false
@@ -5653,6 +5856,24 @@
         "resource",
         "event"
       ],
+      "additionalProperties": false
+    },
+    "InvariantDecl": {
+      "description": "InvariantDecl declares a property a summary projection must satisfy (S14).\nOnly `unique` is defined: it is validated against the declared indexes, so\nthe database — not discipline — keeps the property true.\n",
+      "type": "object",
+      "properties": {
+        "message": {
+          "description": "Human-readable statement of the invariant",
+          "type": "string"
+        },
+        "unique": {
+          "description": "Columns that must be unique together on this projection",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
       "additionalProperties": false
     },
     "KanbanCard": {
@@ -6491,6 +6712,13 @@
           "examples": [
             "cafe-master/menu-item"
           ]
+        },
+        "scope": {
+          "description": "Scope is the row filter anonymous reads of this entity must satisfy on",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FilterSpec"
+          }
         }
       },
       "required": [
@@ -6532,6 +6760,23 @@
         "max",
         "per"
       ],
+      "additionalProperties": false
+    },
+    "RebuildSpec": {
+      "description": "RebuildSpec describes how a summary entity is rebuilt from its durable\nsource event/record stream.\n",
+      "type": "object",
+      "properties": {
+        "since": {
+          "type": "string"
+        },
+        "strategy": {
+          "description": "full | partial | none",
+          "type": "string"
+        },
+        "window": {
+          "type": "string"
+        }
+      },
       "additionalProperties": false
     },
     "RegistrationSettings": {
@@ -6727,6 +6972,30 @@
         "up",
         "down"
       ]
+    },
+    "ScopeDecl": {
+      "description": "ScopeDecl declares that an entity's rows are partitioned along a named\ndimension (S5). `Field` is the field on this entity that carries the dimension\nvalue; `Required` asserts that every row carries one.\n",
+      "type": "object",
+      "properties": {
+        "dimension": {
+          "description": "Dimension name, e.g. branch / tenant / region",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "field": {
+          "description": "Field on this entity carrying the dimension value",
+          "type": "string"
+        },
+        "required": {
+          "description": "Every row must carry a dimension value; requires the field itself to be required",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "dimension",
+        "field"
+      ],
+      "additionalProperties": false
     },
     "SectionBlock": {
       "description": "SectionBlock is a declarative presentation section inside a Page\n(frontend/06-page-kinds.md §1). Sections are generic — reusable in any App\n(marketing/hero, no-nav, sidebar-nav, ...): pure presentation, no data\nbinding, no auth, and zero styling fields — every visual token lives in\nkind: Theme (frontend/05-app-kinds.md §5), never inline.\n",
@@ -7150,6 +7419,26 @@
       ],
       "additionalProperties": false
     },
+    "SummarySource": {
+      "description": "SummarySource describes one durable source entity used to rebuild a summary\nprojection. The concrete join semantics are implementation-defined but the\ncontract is the same across backends: combine these sources by join_key.\nSee docs/spec/backend/02-core-extended.md §6.\n",
+      "type": "object",
+      "properties": {
+        "alias": {
+          "type": "string"
+        },
+        "entity": {
+          "type": "string"
+        },
+        "filter": {
+          "type": "object",
+          "additionalProperties": {}
+        }
+      },
+      "required": [
+        "entity"
+      ],
+      "additionalProperties": false
+    },
     "TableAction": {
       "description": "TableAction is a clickable action on a table row or bulk selection.\n",
       "type": "object",
@@ -7179,7 +7468,9 @@
       "type": "string",
       "enum": [
         "badge",
-        "boolean"
+        "boolean",
+        "image",
+        "qrcode"
       ]
     },
     "TableColumn": {
@@ -7274,6 +7565,28 @@
       "required": [
         "to",
         "via"
+      ],
+      "additionalProperties": false
+    },
+    "UnitDecl": {
+      "description": "UnitDecl declares the unit dimension of a field (S12): `Base` is the unit\nvalues are stored in, `Convertible` lists the units callers may convert\nto/from. Both are validated against the field's enum values, so a typo cannot\nsilently disable conversion.\n",
+      "type": "object",
+      "properties": {
+        "base": {
+          "description": "Base (storage) unit, e.g. gram",
+          "type": "string",
+          "minLength": 1
+        },
+        "convertible": {
+          "description": "Units convertible to/from the base unit",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "base"
       ],
       "additionalProperties": false
     },
@@ -7680,7 +7993,7 @@
       "additionalProperties": false
     },
     "WorkflowTransitionRef": {
-      "description": "WorkflowTransitionRef identifies the intercepted transition by its\nfrom/to states.\n",
+      "description": "WorkflowTransitionRef identifies the intercepted transition. Two forms exist\nand are mutually exclusive (S9, kafe 1.7):\n\n\ttransition: { name: void-order }            # by transition name — preferred\n\ttransition: { from: draft, to: posted }     # by state pair (legacy)\n\nThe name form is preferred because a transition may have **several** origin\nstates (`from: [paid, in_kitchen, ready, served]`). A state pair can only\ndescribe one of them, so a workflow written as `from: paid` silently does not\ncover the other three — a hole with no error and no log. Naming the transition\ncovers all of its origin states at once, and the name can be validated against\nthe entity's state machine.\n",
       "type": "object",
       "properties": {
         "from": {
@@ -7688,6 +8001,13 @@
           "type": "string",
           "examples": [
             "draft"
+          ]
+        },
+        "name": {
+          "description": "Name is the transition's `via` name in the entity's state machine,",
+          "type": "string",
+          "examples": [
+            "void-order"
           ]
         },
         "to": {
@@ -7698,10 +8018,6 @@
           ]
         }
       },
-      "required": [
-        "from",
-        "to"
-      ],
       "additionalProperties": false
     },
     "WorkflowTrigger": {
@@ -8091,6 +8407,25 @@
                 "$ref": "#/$defs/MenuItem"
               }
             },
+            "runtime": {
+              "description": "Module runtime binding for sidecar/native execution; local means native compiled-in implementation",
+              "type": "string",
+              "enum": [
+                "local",
+                "typescript",
+                "node",
+                "php",
+                "python",
+                "go",
+                "java",
+                "dotnet",
+                "ruby",
+                "rust"
+              ],
+              "examples": [
+                "local"
+              ]
+            },
             "vendor": {
               "description": "@schema {example: \"acme-corp\"}",
               "type": "string",
@@ -8167,6 +8502,13 @@
                 "$ref": "#/$defs/Action"
               }
             },
+            "assignments": {
+              "description": "Assignments declares that this entity records which principal is assigned",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/AssignmentDecl"
+              }
+            },
             "auth": {
               "$ref": "#/$defs/EntityAuth",
               "nullable": true
@@ -8234,6 +8576,16 @@
                 "$ref": "#/$defs/IndexDecl"
               }
             },
+            "invariants": {
+              "description": "Invariants declares properties that must hold for a `characteristic:",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/InvariantDecl"
+              }
+            },
+            "join_key": {
+              "type": "string"
+            },
             "lifecycle": {
               "description": "@schema {example: \"plain_crud\", enum: [\"two_step_autosave\", \"two_step_manual\", \"plain_crud\"]}",
               "type": "string",
@@ -8245,6 +8597,10 @@
               "examples": [
                 "plain_crud"
               ]
+            },
+            "maintained_by": {
+              "description": "MaintainedBy names the script that keeps a `characteristic: summary`",
+              "type": "string"
             },
             "persist": {
               "$ref": "#/$defs/PersistSpec",
@@ -8262,17 +8618,33 @@
               "description": "1.4.1 resource-level rate limit (02-core-extended.md §17)",
               "nullable": true
             },
-            "scope": {
-              "description": "Scope declares row-level scoping enforced by the server on every list/",
+            "rebuild": {
+              "$ref": "#/$defs/RebuildSpec",
+              "nullable": true
+            },
+            "row_scope": {
+              "description": "RowScope declares the row-level filters the server enforces on every read",
               "type": "array",
               "items": {
                 "$ref": "#/$defs/FilterSpec"
               }
             },
+            "scope": {
+              "$ref": "#/$defs/ScopeDecl",
+              "description": "Scope declares that this entity's rows are partitioned along a named",
+              "nullable": true
+            },
             "soft_deactivate": {
               "$ref": "#/$defs/SoftDeactivateDecl",
               "description": "1.4.10",
               "nullable": true
+            },
+            "sources": {
+              "description": "Summary-source contract for Entity characteristic: summary (Core Extended",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/SummarySource"
+              }
             },
             "state_machine": {
               "$ref": "#/$defs/StateMachine",
@@ -8489,17 +8861,36 @@
                 "CREATE INDEX idx_invoice_date ON invoice(transaction_date)"
               ]
             },
+            "ddl_by": {
+              "description": "DDLByDialect holds per-driver variants of the same statement, for DDL",
+              "type": "object",
+              "additionalProperties": {},
+              "examples": [
+                "{sqlite: \\\"CREATE INDEX …\\\", postgres: \\\"CREATE INDEX …\\\"}"
+              ]
+            },
+            "dml": {
+              "description": "DML is an explicitly declared data repair, run BEFORE the DDL of the same",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
             "module": {
               "description": "@schema {example: \"billing\"}",
               "type": "string",
               "examples": [
                 "billing"
               ]
+            },
+            "reason": {
+              "description": "Reason states why the declared DML is needed (audit trail).",
+              "type": "string",
+              "examples": [
+                "merge duplicate menu prices before the unique index"
+              ]
             }
           },
-          "required": [
-            "ddl"
-          ],
           "additionalProperties": false
         }
       },

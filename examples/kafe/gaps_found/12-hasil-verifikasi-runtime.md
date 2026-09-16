@@ -21,7 +21,7 @@ Severity turun dari **HIGH (DX)** menjadi **LOW (pesan error)**.
 
 **Yang saya lakukan salah:**
 
-1. Mencoba port 18080 → ditolak dengan *"port in use but cannot identify the owner"*.
+1. Mencoba port 18080 → ditolak dengan _"port in use but cannot identify the owner"_.
 2. Memeriksa dengan `Get-NetTCPConnection -LocalPort 18080` → kosong.
 3. **Menyimpulkan dari nol hasil itu bahwa port bebas, lalu menuduh CLI-nya salah.**
 
@@ -44,7 +44,7 @@ foreach ($p in 18100..18120) {
 Port 18100 lolos cara itu, dan dev server langsung naik tanpa keluhan.
 
 **Yang tetap berlaku dari #24** (dan hanya ini): pesan errornya tidak memberi
-tahu apa yang harus dilakukan. *"cannot identify the owner"* tidak menyebut
+tahu apa yang harus dilakukan. _"cannot identify the owner"_ tidak menyebut
 "coba port lain" maupun menyertakan flag. Itu masalah DX kecil, bukan blocker.
 
 **Pelajaran yang saya tulis besar-besaran:** ini kali **ketiga** saya mengklaim
@@ -86,11 +86,11 @@ POST /default/_ui/entity/cafe-master/menu-category/<uuid>/submit
 
 Jadi rantainya:
 
-| Langkah | Hasil |
-| --- | --- |
-| `create` menu-category | ✅ berhasil, `doc_status: draft` |
-| `submit` menu-category | ❌ 403 — butuh permission `update` |
-| referensikan dari entity lain | ❌ ditolak selama masih `draft` |
+| Langkah                       | Hasil                              |
+| ----------------------------- | ---------------------------------- |
+| `create` menu-category        | ✅ berhasil, `doc_status: draft`   |
+| `submit` menu-category        | ❌ 403 — butuh permission `update` |
+| referensikan dari entity lain | ❌ ditolak selama masih `draft`    |
 
 ### Dampak ke aplikasi kafe: **BLOCKER**
 
@@ -117,7 +117,7 @@ pembayaran **tidak akan pernah bisa dicatat**.
 ### Usulan
 
 1. Tegaskan di dokumentasi bahwa `create` **selalu** menghasilkan `doc_status:
-   draft`, dan bahwa `submit` adalah langkah wajib sebelum bisa direferensikan —
+draft`, dan bahwa `submit` adalah langkah wajib sebelum bisa direferensikan —
    saat ini itu hanya tersirat di komentar kode dan pesan error.
 2. Sediakan cara menyatakan "entity ini tidak ber-lifecycle" secara tegas
    (mis. `lifecycle: none`) supaya record-nya langsung referenceable —
@@ -128,18 +128,30 @@ pembayaran **tidak akan pernah bisa dicatat**.
 
 ---
 
-## Gap #45 — Permukaan publik bisa `create` tapi tidak bisa `submit` 🔴 BLOCKER (konsekuensi #06/#44)
+## Gap #45 — Permukaan publik bisa `create` tapi tidak bisa `submit` ✅ CLOSED (2026-09-15, TODO 2.2)
+
+> **Ditutup 2026-09-15 (TODO 2.2).** Tiga bagiannya: (1) `submit` tidak lagi
+> relevan karena katalog & `order` **lifecycle-free** (#44/2.1) sehingga record
+> anonim langsung referenceable oleh `payment`, dan rute aksi lifecycle sudah ada
+> di surface UI (#52/2.12) — kasir memang bisa melanjutkan; (2) allowlist publik
+> per-entity (#6/1.2) menghentikan "anonim boleh apa saja di module"; (3)
+> **kepemilikan token tamu** kini dinyatakan: `public_entities[].scope` membatasi
+> `list` anonim ke baris yang tokennya cocok, dibaca server dari parameter request
+> (tanpa token → 403, dan klien tidak bisa melebarkannya). Bukti runtime ada di
+> TODO 2.2; adopsi kafe: `order.guest_token` + grant `create,list` di `kafe-qr`.
+> **Sisa:** alur scan QR masih dua langkah (token → sesi → ID) karena `find`
+> tidak bisa di-scope.
 
 ### Bukti
 
 Terhadap workspace yang sama, sebagai anonim:
 
-| Entity | Module di-mount App publik? | Hasil anonim |
-| --- | --- | --- |
-| `cafe-master/branch` | ✅ (`kafe-qr`) | `create` **berhasil** |
-| `cafe-master/menu-category` | ✅ | `create` **berhasil**, `submit` **403** |
-| `cafe-master/promo` | ✅ | `create` **berhasil** |
-| `cafe-stock/ingredient` | ❌ (hanya `kafe-pos`) | `create` **401 Unauthorized** |
+| Entity                      | Module di-mount App publik? | Hasil anonim                            |
+| --------------------------- | --------------------------- | --------------------------------------- |
+| `cafe-master/branch`        | ✅ (`kafe-qr`)              | `create` **berhasil**                   |
+| `cafe-master/menu-category` | ✅                          | `create` **berhasil**, `submit` **403** |
+| `cafe-master/promo`         | ✅                          | `create` **berhasil**                   |
+| `cafe-stock/ingredient`     | ❌ (hanya `kafe-pos`)       | `create` **401 Unauthorized**           |
 
 Ini memperlihatkan **Gap #06 persis seperti yang didokumentasikan** — dan lebih
 tajam dari perkiraan: persoalannya bukan hanya "anonim bisa membaca lebih banyak
@@ -175,11 +187,11 @@ lebih aman: izin eksplisit per-entity **plus** pernyataan langkah penyelesaianny
 
 Tiga bentuk dikirim ke field `money`, **ketiganya diterima apa adanya**:
 
-| Dikirim | Tersimpan |
-| --- | --- |
-| `{ amount: "50000", currency: "IDR" }` | `{ "amount": "50000", "currency": "IDR" }` |
+| Dikirim                                | Tersimpan                                          |
+| -------------------------------------- | -------------------------------------------------- |
+| `{ amount: "50000", currency: "IDR" }` | `{ "amount": "50000", "currency": "IDR" }`         |
 | `{ amount: "15000" }` (tanpa currency) | `{ "amount": "15000" }` — **currency tidak diisi** |
-| `25000` (angka polos) | `25000` — **angka, bukan objek** |
+| `25000` (angka polos)                  | `25000` — **angka, bukan objek**                   |
 
 Padahal kontraknya tegas. `pkg/spec/money.go`:
 
@@ -191,7 +203,7 @@ type Money struct {
 ```
 
 Dan `ResolveMoneyCurrency` didokumentasikan menyelesaikan dengan urutan
-*"explicit field currency -> settings.currency.code -> **error (never guess)**"*.
+_"explicit field currency -> settings.currency.code -> **error (never guess)**"_.
 
 **Yang diamati: tidak ada error, dan `settings.currency` tidak dipakai.**
 Kemungkinan: jalur API ini tidak melewati resolusi itu, atau `spec/config/app.yaml`
@@ -237,17 +249,17 @@ tanpa mata uang tidak.
 
 ## Yang Terverifikasi **Bekerja**
 
-| Aspek | Bukti |
-| --- | --- |
-| `formspec dev` jalan (port bebas) | 155 route, SPA embedded, 4 worker aktif |
-| UI surface entity | `GET/POST /{ws}/_ui/entity/{module}/{entity}` berfungsi |
-| Bentuk request create | **flat** (bukan dibungkus `data`); error menuntun: `unknown field: "data"` |
-| Envelope respons | `{ data, meta: { request_id, timestamp } }`; list: `{ data, meta: { page, per_page, total }, links }` |
-| `soft_deactivate` bekerja | `is_active: true` otomatis ada di record baru |
-| Guard referenceability relasi **bekerja** | Menolak target `draft` dengan pesan jelas (lihat #44) |
-| Permission ditolak dengan jelas | `403 missing permission: cafe-master.menu-category.update` |
-| Module non-publik terlindungi | `401 authentication required` untuk `cafe-stock` |
-| Pesan error informatif | `unknown field`, `is draft (must be submitted or lifecycle-free)` |
+| Aspek                                     | Bukti                                                                                                 |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `formspec dev` jalan (port bebas)         | 155 route, SPA embedded, 4 worker aktif                                                               |
+| UI surface entity                         | `GET/POST /{ws}/_ui/entity/{module}/{entity}` berfungsi                                               |
+| Bentuk request create                     | **flat** (bukan dibungkus `data`); error menuntun: `unknown field: "data"`                            |
+| Envelope respons                          | `{ data, meta: { request_id, timestamp } }`; list: `{ data, meta: { page, per_page, total }, links }` |
+| `soft_deactivate` bekerja                 | `is_active: true` otomatis ada di record baru                                                         |
+| Guard referenceability relasi **bekerja** | Menolak target `draft` dengan pesan jelas (lihat #44)                                                 |
+| Permission ditolak dengan jelas           | `403 missing permission: cafe-master.menu-category.update`                                            |
+| Module non-publik terlindungi             | `401 authentication required` untuk `cafe-stock`                                                      |
+| Pesan error informatif                    | `unknown field`, `is draft (must be submitted or lifecycle-free)`                                     |
 
 > **Catatan #46 soal penamaan permission:** engine menghasilkan
 > `cafe-master.menu-category.update` — memakai **nama entity (singular)**.
@@ -265,11 +277,11 @@ tanpa mata uang tidak.
 
 Satu-satunya cara saya mengetahui bentuk request adalah **gagal berkali-kali**:
 
-| Yang saya coba | Hasil | Pelajaran |
-| --- | --- | --- |
-| `POST { "data": { ... } }` | `400 unknown field: "data"` | body harus **flat** |
-| `POST { code, name, ... }` | ✅ | bentuk yang benar |
-| aksi | `POST /{ws}/_ui/entity/{module}/{entity}/{id}/{action}` | saya coba-coba |
+| Yang saya coba             | Hasil                                                   | Pelajaran           |
+| -------------------------- | ------------------------------------------------------- | ------------------- |
+| `POST { "data": { ... } }` | `400 unknown field: "data"`                             | body harus **flat** |
+| `POST { code, name, ... }` | ✅                                                      | bentuk yang benar   |
+| aksi                       | `POST /{ws}/_ui/entity/{module}/{entity}/{id}/{action}` | saya coba-coba      |
 
 Bentuk yang akhirnya diketahui:
 
@@ -292,8 +304,8 @@ memakainya. Tetapi tidak ada satu halaman dokumentasi pun yang menjelaskan
 bentuk request, envelope respons, atau endpoint aksi. Setiap klien baru harus
 menemukannya dengan trial-and-error.
 
-Ironisnya, untuk project yang menjanjikan *"manifest sebagai satu-satunya sumber
-kebenaran"*, kontrak HTTP-nya justru permukaan yang paling tidak terdokumentasi.
+Ironisnya, untuk project yang menjanjikan _"manifest sebagai satu-satunya sumber
+kebenaran"_, kontrak HTTP-nya justru permukaan yang paling tidak terdokumentasi.
 
 ### Usulan
 
@@ -310,21 +322,21 @@ kebenaran"*, kontrak HTTP-nya justru permukaan yang paling tidak terdokumentasi.
 
 ### Bukti
 
-| Pengamatan | Hasil |
-| --- | --- |
-| `spec/workspaces/kafe.yaml` ada | **lulus validasi** (`[OK] spec\workspaces\kafe.yaml#0`) |
-| Pengumuman `formspec dev` | `SPA embedded — open http://localhost:18100/**default**/_admin` |
-| `POST /default/...` | tersimpan dengan `tenant_id: "default"` |
-| `GET /kafe/...` | **200 OK tapi kosong** (`total=0`) |
-| `formspec dev --help` | `-workspace-id string` · *Workspace ID (default: default)* |
+| Pengamatan                      | Hasil                                                           |
+| ------------------------------- | --------------------------------------------------------------- |
+| `spec/workspaces/kafe.yaml` ada | **lulus validasi** (`[OK] spec\workspaces\kafe.yaml#0`)         |
+| Pengumuman `formspec dev`       | `SPA embedded — open http://localhost:18100/**default**/_admin` |
+| `POST /default/...`             | tersimpan dengan `tenant_id: "default"`                         |
+| `GET /kafe/...`                 | **200 OK tapi kosong** (`total=0`)                              |
+| `formspec dev --help`           | `-workspace-id string` · _Workspace ID (default: default)_      |
 
 ### ⚠️ Bukan bug — tapi ekspektasinya menyesatkan
 
 Flag `--workspace-id` **ada** dan defaultnya memang `default`. Jadi perilakunya
 sesuai desain. Yang menjadi gap adalah **apa yang pembaca dokumen simpulkan**:
 
-> *"Workspace manifests are **seed declarations**: the slug becomes (**and must
-> equal**) the workspace ID used in URLs"*
+> _"Workspace manifests are **seed declarations**: the slug becomes (**and must
+> equal**) the workspace ID used in URLs"_
 
 Kalimat itu mudah dibaca sebagai "mendeklarasikan workspace berarti memakainya".
 Akibat praktisnya:

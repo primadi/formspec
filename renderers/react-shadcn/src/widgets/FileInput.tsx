@@ -9,6 +9,7 @@ import { useParams } from "react-router-dom"
 import { Upload, X, FileText, Loader2 } from "lucide-react"
 import { useSessionStore } from "@/stores/session"
 import { cn } from "@/lib/utils"
+import { allowedFileType, fileDownloadUrl, isImageFile } from "@/lib/media"
 
 interface FileInputProps {
   value?: string // object key
@@ -21,25 +22,6 @@ interface FileInputProps {
   fieldName?: string
   maxSizeMB?: number
   allowedTypes?: string[]
-}
-
-function allowedFileType(
-  allowed: string[],
-  contentType: string,
-  filename: string,
-): boolean {
-  const ext = filename.toLowerCase().split(".").pop() ?? ""
-  for (const a of allowed) {
-    const t = a.trim().toLowerCase()
-    if (!t) continue
-    if (t.startsWith(".")) {
-      if (ext === t.slice(1)) return true
-      continue
-    }
-    if (t === contentType) return true
-    if (t.endsWith("/*") && contentType.startsWith(t.slice(0, -1))) return true
-  }
-  return false
 }
 
 export function FileInput({
@@ -64,10 +46,16 @@ export function FileInput({
     !readonly && !!entityModule && !!entityName && !!recordId && !!fieldName
   const downloadUrl =
     entityModule && entityName && recordId && fieldName
-      ? `/${workspace}/_ui/entity/${entityModule}/${entityName}/${recordId}/${fieldName}`
+      ? fileDownloadUrl(
+          workspace,
+          entityModule,
+          entityName,
+          recordId,
+          fieldName,
+        )
       : null
 
-  const isImage = value ? /\.(png|jpe?g|gif|webp|svg)$/i.test(value) : false
+  const isImage = value ? isImageFile(value) : false
 
   const handleFile = async (file: File) => {
     if (!canUpload) return

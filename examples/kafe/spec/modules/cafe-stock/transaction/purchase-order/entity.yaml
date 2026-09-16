@@ -10,6 +10,11 @@ spec:
   plural: purchase-orders
   display_field: number
   lifecycle: plain_crud
+  # S5: pembelian dipesan oleh satu cabang.
+  scope: { dimension: branch, field: branch_id, required: true }
+  # Item 3.5.
+  row_scope:
+    - { field: branch_id, op: eq, from: session }
   fields:
     - name: number
       type: string
@@ -45,7 +50,7 @@ spec:
       default: draft
       index: true
       title: "Status"
-    # GAP-01/GAP-02: field uang.
+    # GAP-01 TERTUTUP (2.14) — `moneyinput`. Sisa GAP-02: indeks money.
     - name: total_amount
       type: money
       title: "Total"

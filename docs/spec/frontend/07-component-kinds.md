@@ -21,11 +21,32 @@ renderer sel dan nilainya tercetak mentah:
 `input`, `textarea`, `richtext`, `number`, `decimalinput`, `select`, `switch`,
 `radio-group`, `combobox`, `password`, `slider`, `tags`, `uuid`, `json`,
 `fileinput` (§1.1), `relation-picker`, `datepicker`, `datetimeinput`,
-`child-grid`, `grants-editor`.
+`child-grid`, `grants-editor`, `qrcode`, `moneyinput`, `timeinput`.
 
 **Table/Listing cell** — `TableColumn.widget`:
 
-`badge`, `boolean`.
+`badge`, `boolean`, `image`, `qrcode`.
+
+`image` merender nilai `file`/`attachment` sebagai **gambar inline**; `src`-nya
+adalah route unduh entity (lihat §1.1), jadi kolom tabel tidak butuh widget
+preview tersendiri. Nilai bukan-gambar (PDF, dokumen) jatuh ke tautan unduh —
+perilaku yang sama seperti sebelum widget ini ada. Renderer juga menurunkan
+`image` secara otomatis untuk field file yang `storage.allowed_types`-nya
+memuat gambar, sehingga spec tidak wajib menulisnya.
+
+Halaman detail memperlakukan hal yang sama: nilai gambar dirender sebagai
+`<img>`, dan hanya file non-gambar yang tampil sebagai tautan berikon.
+
+**`qrcode`** (gap #3/S4) merender nilai field sebagai QR yang bisa dipindai —
+tersedia di **kedua** permukaan dengan nama yang sama, karena artinya sama:
+"string ini, scannable". Nilainya ADALAH payload, jadi widget ini selalu
+read-only: di form ia menggantikan input (tidak ada yang bisa diketik), di sel
+tabel/listing ia menggantikan teks. Yang perlu diperhatikan penulis spec:
+QR berisi **string apa adanya**, sehingga QR yang bisa dipindai ponsel
+memerlukan **URL absolut** (mis. `https://kafe.example/app/menu/meja-a01`).
+Menyusun URL absolut itu — termasuk menyuntikkan origin aplikasi saat cetak —
+adalah pekerjaan pemanggil, bukan widget. Renderer memakai SVG (bukan canvas)
+supaya tajam saat dicetak di struk thermal atau kartu meja.
 
 Aturan yang mengikat seluruh himpunan di atas:
 
@@ -40,9 +61,23 @@ Aturan yang mengikat seluruh himpunan di atas:
 - **`widget` yang dihilangkan itu sah** — renderer menurunkan widget dari tipe
   field (mis. `enum` → `select`, `relation` → `relation-picker`). Menulis
   `widget:` hanya perlu untuk _mengganti_ turunan itu.
-- Field type yang **belum** punya widget khusus: `money` dan `time` — keduanya
-  hari ini jatuh ke `input`. `MoneyInput` dan `TimeInput` adalah gap yang
-  tercatat, bukan nama yang boleh ditulis di manifest.
+- Field type yang **belum** punya widget khusus: tidak ada lagi — `money` dan
+  `time`, dua yang terakhir, kini punya `moneyinput` dan `timeinput` (§1.2).
+
+### 1.2 `moneyinput` / `timeinput`
+
+Dua widget yang menutup kelas gap "field-nya ada, tapi yang bisa dilakukan
+hanyalah mengetik teks bebas":
+
+- **`moneyinput`** untuk `type: money` (05-field-types.md §2). Yang dijaga:
+  mata uang ikut terbawa — nilai yang dikirim adalah bentuk kanonik
+  `{amount, currency}`, bukan angka telanjang; jumlahnya disimpan sebagai
+  **teks** selama mengetik, sehingga tidak dibulatkan diam-diam sebelum
+  pengguna selesai (uang eksak, tidak pernah float — §2.1); dan tampilannya
+  mengikuti `settings.currency`/`settings.locale` (tidak menebak simbol atau
+  skala). `inputMode: decimal` memberi numpad di perangkat sentuh, dengan
+  pratinjau terformat di bawahnya. Skala/mata uang dapat dioverride per field
+  (`currency`, `decimal_places` pada field) sebagaimana §2.
 - Parity katalog ↔ schema ↔ implementasi dijaga test
   (`renderers/react-shadcn/src/widgets/catalog.test.tsx`).
 

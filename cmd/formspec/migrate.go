@@ -71,7 +71,6 @@ func runMigrate(args []string) {
 	}
 
 	entities := loadEntityMigrations(specPath)
-	customMigrations := loadCustomMigrations(specPath)
 
 	database, err := db.Open(dsn)
 	if err != nil {
@@ -84,6 +83,9 @@ func runMigrate(args []string) {
 	if database.DriverName() == "postgres" {
 		driver = db.DriverPostgres
 	}
+	// Loaded after the driver is known: `ddl_by` variants are selected per driver
+	// (gap #35).
+	customMigrations := loadCustomMigrations(specPath, driver)
 	runner := db.NewMigrationRunner(database, driver)
 
 	ctx := context.Background()
@@ -110,6 +112,12 @@ func runMigrate(args []string) {
 			fmt.Printf("── %s ──\n%s\n\n", r.Description, r.DDL)
 		}
 		for _, cm := range customMigrations {
+			if len(cm.DML) > 0 {
+				fmt.Printf("── custom: %s — data repair first (%s) ──\n", cm.Name, cm.Reason)
+				for _, stmt := range cm.DML {
+					fmt.Printf("%s\n", stmt)
+				}
+			}
 			fmt.Printf("── custom: %s ──\n%s\n\n", cm.Name, cm.DDL)
 		}
 		return
@@ -134,11 +142,22 @@ func runMigrate(args []string) {
 // customMigration is a loaded kind: Migration manifest.
 type customMigration struct {
 	Name string
-	DDL  string
+	// DDL is the statement to run on this driver's dialect, already resolved
+	// from `ddl` / `ddl_by` (gap #35).
+	DDL string
+	// DML is the declared data repair that runs BEFORE DDL (gap #36), together
+	// with the reason it exists.
+	DML    []string
+	Reason string
 }
 
 // loadCustomMigrations loads all kind: Migration manifests from the spec tree.
-func loadCustomMigrations(specPath string) []customMigration {
+//
+// driver selects the `ddl_by` variant when the manifest declares per-dialect
+// DDL: the same JSONB read is spelled `json_extract(data, '$.x')` on SQLite and
+// `data->>'x'` on PostgreSQL, so a single string would be correct for dev and
+// wrong for production (gap #35).
+func loadCustomMigrations(specPath string, driver db.DriverType) []customMigration {
 	loader := manifest.NewLoader(specPath)
 	res, err := loader.LoadAll()
 	if err != nil {
@@ -159,20 +178,44 @@ func loadCustomMigrations(specPath string) []customMigration {
 			fmt.Fprintf(os.Stderr, "Warning: skip %s: %v\n", m.Source, err)
 			continue
 		}
-		if ms.DDL == "" {
-			fmt.Fprintf(os.Stderr, "Warning: skip %s: empty ddl\n", m.Source)
+		if err := spec.ValidateMigrationSpec(&ms); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: skip %s: %v\n", m.Source, err)
 			continue
 		}
-		out = append(out, customMigration{Name: m.Metadata.Name, DDL: ms.DDL})
+		ddl, ok := ms.DDLForDialect(string(driver))
+		if !ok {
+			// Declared per-dialect but silent for this driver: skipping loudly
+			// beats running the other driver's SQL (which would fail at deploy
+			// time, the exact failure #35 is about).
+			fmt.Fprintf(os.Stderr, "Warning: skip %s: no ddl_by entry for driver %q\n", m.Source, driver)
+			continue
+		}
+		out = append(out, customMigration{Name: m.Metadata.Name, DDL: ddl, DML: ms.DML, Reason: ms.Reason})
 	}
 	return out
 }
 
-// applyCustomMigrations validates each DDL is DDL-only (rejects DML) and
-// executes it. Returns the number applied.
+// applyCustomMigrations runs each migration's declared data repair (DML) first,
+// then its DDL, and executes both only after the statement kind has been
+// checked. The order is what makes a constraint addable: duplicates that
+// appeared while the constraint was missing must be merged before
+// `CREATE UNIQUE INDEX` can succeed (gap #36).
+//
+// Returns the number applied.
 func applyCustomMigrations(ctx context.Context, database db.DB, migrations []customMigration) (int, error) {
 	applied := 0
 	for _, cm := range migrations {
+		for i, stmt := range cm.DML {
+			if err := validateDMLOnly(stmt); err != nil {
+				return applied, fmt.Errorf("%s (dml[%d]): %w", cm.Name, i, err)
+			}
+			// Announced, not silent: the repair is applied data, and that is worth
+			// seeing in the output even on success.
+			fmt.Printf("  %s: data repair — %s\n", cm.Name, cm.Reason)
+			if _, err := database.ExecContext(ctx, stmt); err != nil {
+				return applied, fmt.Errorf("%s (dml[%d]): %w", cm.Name, i, err)
+			}
+		}
 		if err := validateDDLOnly(cm.DDL); err != nil {
 			return applied, fmt.Errorf("%s: %w", cm.Name, err)
 		}
@@ -182,6 +225,18 @@ func applyCustomMigrations(ctx context.Context, database db.DB, migrations []cus
 		applied++
 	}
 	return applied, nil
+}
+
+// validateDMLOnly rejects schema changes in a migration's declared data repair:
+// the two channels stay separate, so `dml` cannot smuggle in what `ddl` is for.
+func validateDMLOnly(stmt string) error {
+	upper := strings.ToUpper(strings.TrimSpace(stmt))
+	for _, prefix := range []string{"CREATE", "ALTER", "DROP", "TRUNCATE", "PRAGMA"} {
+		if strings.HasPrefix(upper, prefix) {
+			return fmt.Errorf("schema change rejected in `dml` (got %q) — put it in `ddl`/`ddl_by`", prefix)
+		}
+	}
+	return nil
 }
 
 // validateDDLOnly rejects DML statements (INSERT/UPDATE/DELETE/SELECT) in a

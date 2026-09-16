@@ -22,6 +22,8 @@ type ModuleSpec struct {
 	Version string `yaml:"version" json:"version"`
 	// @schema {example: "acme-corp"}
 	Vendor string `yaml:"vendor,omitempty" json:"vendor,omitempty"` // publishing vendor (platform/02-workspace-app-module.md §2)
+	// @schema {example: "local", enum: ["local", "typescript", "node", "php", "python", "go", "java", "dotnet", "ruby", "rust"], description: "Module runtime binding for sidecar/native execution; local means native compiled-in implementation"}
+	Runtime string `yaml:"runtime,omitempty" json:"runtime,omitempty"`
 	// @schema {example: "formspec/core", description: "Module dependencies — array of {module, version?}"}
 	Depends []Dependency `yaml:"depends,omitempty" json:"depends,omitempty"`
 	// Datastore binds the module to a named kind: Datastore for ctx.db()
@@ -190,6 +192,16 @@ type PublicEntityDecl struct {
 	Entity string `yaml:"entity" json:"entity"`
 	// @schema {example: "[list, find]", description: "Closed set: list, find, create, update, delete"}
 	Actions []string `yaml:"actions" json:"actions"`
+	// Scope is the row filter anonymous reads of this entity must satisfy on
+	// THIS surface (#45) — e.g. `[{field: guest_token, op: eq, from: route,
+	// param: token}]`, which turns "anonymous may list" into "anonymous may list
+	// the row carrying the token they present". It is declared per grant, not
+	// per entity, because the same entity is read differently on a POS surface
+	// (cashier, authenticated) and on a public surface.
+	//
+	// Only `from: route` is accepted: a public surface has no session identity,
+	// so a session-scoped grant could never resolve and would deny every read.
+	Scope []FilterSpec `yaml:"scope,omitempty" json:"scope,omitempty"`
 }
 
 // PublicEntityActions is the closed set of actions a public App may grant to
@@ -651,9 +663,110 @@ type SubDeliveryDecl struct {
 // Only DDL statements are allowed — DML is rejected at runtime.
 type MigrationSpec struct {
 	// @schema {example: "CREATE INDEX idx_invoice_date ON invoice(transaction_date)"}
-	DDL string `yaml:"ddl" json:"ddl"`
+	DDL string `yaml:"ddl,omitempty" json:"ddl,omitempty"`
 	// @schema {example: "billing"}
 	Module string `yaml:"module,omitempty" json:"module,omitempty"` // owning module for table-level DDL
+	// DDLByDialect holds per-driver variants of the same statement, for DDL
+	// that cannot be written portably. Reading a JSONB field differs by driver:
+	// `json_extract(data, '$.branch_id')` on SQLite vs `data->>'branch_id'` on
+	// PostgreSQL — a single string is then correct for dev and wrong for
+	// production, and the failure only appears at deploy time (gap #35).
+	//
+	// Exactly one of `ddl` / `ddl_by` must be present; unknown dialects are
+	// rejected so a typo cannot silently skip a variant.
+	// @schema {example: "{sqlite: \"CREATE INDEX …\", postgres: \"CREATE INDEX …\"}"}
+	DDLByDialect map[string]string `yaml:"ddl_by,omitempty" json:"ddl_by,omitempty"`
+	// DML is an explicitly declared data repair, run BEFORE the DDL of the same
+	// migration (gap #36). It exists because a constraint can only be added once
+	// the data satisfies it: `CREATE UNIQUE INDEX` fails on a table that already
+	// contains duplicates, and those duplicates appeared while the constraint was
+	// missing. Refusing DML meant the repair happened by hand, outside the spec,
+	// with no trace — declaring it here keeps the fix auditable and ordered.
+	//
+	// `reason` is REQUIRED alongside DML, and the statements must be real DML
+	// (DDL belongs in `ddl`/`ddl_by`).
+	DML []string `yaml:"dml,omitempty" json:"dml,omitempty"`
+	// Reason states why the declared DML is needed (audit trail).
+	// @schema {example: "merge duplicate menu prices before the unique index"}
+	Reason string `yaml:"reason,omitempty" json:"reason,omitempty"`
+}
+
+// DDLForDialect resolves the statement to run on a given driver: the
+// dialect-specific variant when the migration declares `ddl_by`, otherwise the
+// portable `ddl`. Returns false when the migration declares only variants and
+// none for this driver — the caller must skip it out loud rather than run
+// another driver's SQL (gap #35).
+func (m *MigrationSpec) DDLForDialect(driver string) (string, bool) {
+	if m == nil {
+		return "", false
+	}
+	if len(m.DDLByDialect) > 0 {
+		stmt, ok := m.DDLByDialect[driver]
+		if !ok || strings.TrimSpace(stmt) == "" {
+			return "", false
+		}
+		return stmt, true
+	}
+	if m.DDL == "" {
+		return "", false
+	}
+	return m.DDL, true
+}
+
+// MigrationDialects is the closed set of dialects `ddl_by` may name. It matches
+// the installed persist backends: a variant for a driver nobody runs would be
+// dead weight, and a misspelled key would silently fall back to nothing.
+var MigrationDialects = map[string]bool{"sqlite": true, "postgres": true}
+
+// ValidateMigrationSpec validates a `kind: Migration` spec (gaps #35/#36).
+func ValidateMigrationSpec(m *MigrationSpec) error {
+	if m == nil {
+		return nil
+	}
+	if m.DDL == "" && len(m.DDLByDialect) == 0 {
+		return fmt.Errorf("migration declares no DDL — set `ddl` (one statement for every driver) or `ddl_by` (per-driver variants)")
+	}
+	if m.DDL != "" && len(m.DDLByDialect) > 0 {
+		return fmt.Errorf("migration declares both `ddl` and `ddl_by` — pick one: `ddl` when the statement is portable, `ddl_by` when each driver needs its own")
+	}
+	for dialect, stmt := range m.DDLByDialect {
+		if !MigrationDialects[dialect] {
+			return fmt.Errorf("ddl_by: unknown dialect %q (known: postgres, sqlite)", dialect)
+		}
+		if strings.TrimSpace(stmt) == "" {
+			return fmt.Errorf("ddl_by.%s is empty — remove the entry or give it a statement", dialect)
+		}
+	}
+	if len(m.DML) > 0 && strings.TrimSpace(m.Reason) == "" {
+		return fmt.Errorf("migration declares `dml` without `reason` — a data repair must state why it is needed, so the change is auditable")
+	}
+	for i, stmt := range m.DML {
+		if strings.TrimSpace(stmt) == "" {
+			return fmt.Errorf("dml[%d] is empty", i)
+		}
+		if !statementStartsWithDML(stmt) {
+			return fmt.Errorf("dml[%d]: %q is not a data statement (INSERT/UPDATE/DELETE) — schema changes belong in `ddl`/`ddl_by`", i, firstWord(stmt))
+		}
+	}
+	return nil
+}
+
+// statementStartsWithDML reports whether a statement is a data manipulation,
+// mirroring the runtime guard in the other direction.
+func statementStartsWithDML(stmt string) bool {
+	switch firstWord(stmt) {
+	case "INSERT", "UPDATE", "DELETE", "WITH":
+		return true
+	}
+	return false
+}
+
+func firstWord(stmt string) string {
+	fields := strings.Fields(strings.TrimSpace(stmt))
+	if len(fields) == 0 {
+		return ""
+	}
+	return strings.ToUpper(fields[0])
 }
 
 // ─── 4.2.5 DataMigrationSpec ───
@@ -691,13 +804,77 @@ type WorkflowTrigger struct {
 	Transition *WorkflowTransitionRef `yaml:"transition,omitempty" json:"transition,omitempty"`
 }
 
-// WorkflowTransitionRef identifies the intercepted transition by its
-// from/to states.
+// WorkflowTransitionRef identifies the intercepted transition. Two forms exist
+// and are mutually exclusive (S9, kafe 1.7):
+//
+//	transition: { name: void-order }            # by transition name — preferred
+//	transition: { from: draft, to: posted }     # by state pair (legacy)
+//
+// The name form is preferred because a transition may have **several** origin
+// states (`from: [paid, in_kitchen, ready, served]`). A state pair can only
+// describe one of them, so a workflow written as `from: paid` silently does not
+// cover the other three — a hole with no error and no log. Naming the transition
+// covers all of its origin states at once, and the name can be validated against
+// the entity's state machine.
 type WorkflowTransitionRef struct {
+	// Name is the transition's `via` name in the entity's state machine,
+	// scoped to the Workflow's `spec.entity`. A fully-qualified
+	// "{module}.{entity}.{transition}" is accepted only when it matches that
+	// entity.
+	// @schema {example: "void-order"}
+	Name string `yaml:"name,omitempty" json:"name,omitempty"`
 	// @schema {example: "draft"}
-	From string `yaml:"from" json:"from"`
+	From string `yaml:"from,omitempty" json:"from,omitempty"`
 	// @schema {example: "posted"}
-	To string `yaml:"to" json:"to"`
+	To string `yaml:"to,omitempty" json:"to,omitempty"`
+}
+
+// ByName reports whether the reference selects the transition by name rather
+// than by a from/to state pair.
+func (r *WorkflowTransitionRef) ByName() bool {
+	return r != nil && r.Name != ""
+}
+
+// ValidateWorkflowSpec checks the Workflow contract (02-core-extended.md §2).
+//
+// The transition trigger must pick exactly one form. Accepting both would make
+// the runtime silently prefer one of them, and accepting neither would leave a
+// workflow that never intercepts anything — both are the "looks configured,
+// enforces nothing" failure the ledger keeps finding.
+func ValidateWorkflowSpec(wf *WorkflowSpec) error {
+	if wf == nil {
+		return nil
+	}
+	if wf.Entity == "" {
+		return fmt.Errorf("workflow requires `entity` (module.entity)")
+	}
+	if wf.On == nil || wf.On.Transition == nil {
+		return fmt.Errorf("workflow requires `on.transition`")
+	}
+
+	ref := wf.On.Transition
+	byName := ref.Name != ""
+	byPair := ref.From != "" || ref.To != ""
+
+	switch {
+	case byName && byPair:
+		return fmt.Errorf("workflow on.transition declares both `name` and `from`/`to` — pick one: `name` covers every origin state of the transition, `from`/`to` covers exactly one")
+	case byName:
+		if len(wf.Steps) == 0 {
+			return fmt.Errorf("workflow has no `steps` — an approval chain with no step can never reach quorum")
+		}
+		return nil
+	case byPair:
+		if ref.From == "" || ref.To == "" {
+			return fmt.Errorf("workflow on.transition needs both `from` and `to` (or use `name`)")
+		}
+		if len(wf.Steps) == 0 {
+			return fmt.Errorf("workflow has no `steps` — an approval chain with no step can never reach quorum")
+		}
+		return nil
+	default:
+		return fmt.Errorf("workflow on.transition must name the transition (`name:`) or its state pair (`from:`/`to:`)")
+	}
 }
 
 // WorkflowStep is one approval step in the workflow chain.
@@ -872,6 +1049,25 @@ var appVersionPattern = regexp.MustCompile(`^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?(\+[
 // DefaultAppRenderer is applied when App.spec.app_renderer is empty.
 const DefaultAppRenderer = "sidebar-nav"
 
+// ModuleRuntimeNames is the closed set of valid module runtimes.
+// "local" means native compiled-in implementation; the others map to
+// runtime-specific child processes or sidecars.
+var ModuleRuntimeNames = map[string]bool{
+	"local":      true,
+	"typescript": true,
+	"node":       true,
+	"php":        true,
+	"python":     true,
+	"go":         true,
+	"java":       true,
+	"dotnet":     true,
+	"ruby":       true,
+	"rust":       true,
+}
+
+// DefaultModuleRuntime is applied when Module.spec.runtime is omitted.
+const DefaultModuleRuntime = "local"
+
 // Page transition values (App.spec.page_transition). "fade" is the default
 // when omitted; "none" disables page-transition animation entirely.
 const (
@@ -936,6 +1132,16 @@ var InstalledPersistBackends = map[string]bool{
 //     is a hard error (not a warning).
 //   - chrome values, when set, must be from their enum (frontend/
 //     05-app-kinds.md §4.1).
+func ValidateModuleSpec(m *ModuleSpec) error {
+	if m == nil {
+		return nil
+	}
+	if m.Runtime != "" && !ModuleRuntimeNames[m.Runtime] {
+		return fmt.Errorf("runtime %q is invalid (enum: local, typescript, node, php, python, go, java, dotnet, ruby, rust)", m.Runtime)
+	}
+	return nil
+}
+
 func ValidateAppSpec(a *AppSpec) error {
 	// version, when set, must be semver (MAJOR.MINOR.PATCH with optional
 	// prerelease) — it is publish metadata (07-marketplace.md), never
@@ -996,6 +1202,28 @@ func ValidateAppSpec(a *AppSpec) error {
 			for _, act := range pe.Actions {
 				if !PublicEntityActions[act] {
 					return fmt.Errorf("public_entities[%d] (%s): unknown action %q (closed set: list, find, create, update, delete)", i, pe.Entity, act)
+				}
+			}
+			// Per-surface row scope (#45). Anonymous reads are the reason a
+			// grant needs one; and a grant that declares a scope while also
+			// granting `find` would look guarded while it is not — find
+			// resolves by id, which this mechanism cannot check.
+			for j := range pe.Scope {
+				sc := &pe.Scope[j]
+				if sc.Field == "" {
+					return fmt.Errorf("public_entities[%d] (%s): scope[%d]: field is required", i, pe.Entity, j)
+				}
+				if sc.From != "route" {
+					return fmt.Errorf(
+						"public_entities[%d] (%s): scope[%d] (%s) must use `from: route` — a public surface has no session identity, so a session-scoped grant would deny every read instead of filtering it",
+						i, pe.Entity, j, sc.Field)
+				}
+				for _, act := range pe.Actions {
+					if act == "find" {
+						return fmt.Errorf(
+							"public_entities[%d] (%s): cannot grant `find` together with `scope` — find resolves by id and the scope cannot guard it, so the grant would look filtered while returning any record by id",
+							i, pe.Entity)
+					}
 				}
 			}
 		}

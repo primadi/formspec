@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/primadi/formspec/internal/api"
 	"github.com/primadi/formspec/internal/manifest"
 	"github.com/primadi/formspec/pkg/spec"
 )
@@ -246,6 +247,63 @@ func describeEntity(m *manifest.RawManifest) {
 	for _, e := range es.Expose {
 		fmt.Printf("  %-6s actions=[%s]\n", e.Type, strings.Join(e.Actions, ", "))
 	}
+
+	describeEntityHTTP(m.Metadata.Module, m.Metadata.Name, es)
+}
+
+// describeEntityHTTP prints the REST contract for one entity on the UI surface
+// (gap #47). The routes come from `api.UIRoutesForEntity` — the same generator
+// the server registers with — so this cannot describe a route that does not
+// exist, nor miss one that does. The prose around them (body shape, envelopes,
+// query vocabulary) is the part every client used to discover by failing.
+func describeEntityHTTP(module, name string, es *spec.EntitySpec) {
+	routes := api.UIRoutesForEntity(module, name, es)
+	// Custom actions with their own `impl` get a route too; a state-machine
+	// transition without one is applied through `update`, so it must NOT appear
+	// here with an endpoint the server does not serve.
+	routes = append(routes, api.UICustomActionRoutesForEntity(module, name, es)...)
+
+	base := "{workspace}/_ui/entity/" + module + "/" + name
+	fmt.Printf("\nHTTP contract (UI surface, §8.1):\n")
+	fmt.Printf("  base: /%s\n", base)
+	fmt.Printf("  %-7s %-52s %-22s %s\n", "METHOD", "PATH (relatif ke /{workspace})", "ACTION", "PERMISSION")
+	for _, rd := range routes {
+		path := strings.TrimPrefix(rd.Path, "/_ui/entity/")
+		if rd.Handler == "prepare" {
+			// Idempotency prepare (todo 2.7.1): same record shape as create,
+			// but it returns a reserved id the client may submit against.
+			path = rd.Path
+		}
+		perm := rd.RequiredPermission
+		if perm == "" {
+			perm = "(internal)"
+		}
+		fmt.Printf("  %-7s %-52s %-22s %s\n", rd.Method, path, rd.Action, perm)
+	}
+
+	fmt.Printf(`
+  Request bodies (flat JSON — an envelope is REJECTED):
+    create/update/action  {"field": value, ...}          %s
+    list/find             (none)                          %s
+
+  Response envelopes:
+    list    {"data": [...], "meta": {page, per_page, total, total_pages}, "links": {...}}
+    single  {"data": {...}, "meta": {request_id, timestamp}}
+    error   {"error": {code, message, details?}, "meta": {timestamp}}
+    codes   VALIDATION_ERROR 422, UNAUTHORIZED 401, FORBIDDEN 403,
+            NOT_FOUND 404, CONFLICT 409, STATE_TRANSITION_ERROR 422
+
+  List query (01-core-basic.md §6):
+    ?page&per_page(max 100)&sort&direction&fields&search
+    ?filter[field][op]=value   op: eq neq gt gte lt lte between in nin like ilike null notnull
+    Declared row_scope parameters are request context, not filters.
+
+  State-machine transitions without an impl have NO endpoint of their own:
+  they are applied through update (the transition guard validates the move).
+
+  File field: POST %s (multipart) · GET the same path to download; the
+  download URL is also what <img> uses when the field holds an image.
+`, "// e.g. a money field: {\"amount\": \"25000\", \"currency\": \"IDR\"}", "// filter/sort/search go in the query string", "/"+base+"/{id}/{field}")
 }
 
 func stateNames(states []spec.StateDecl) []string {

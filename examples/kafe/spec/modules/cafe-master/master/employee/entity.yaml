@@ -10,6 +10,11 @@ spec:
   plural: employees
   display_field: name
   soft_deactivate: { enabled: true }
+  # S5: di sinilah nilai dimensi `branch` berasal. Server membacanya saat
+  # menyelesaikan `row_scope: {from: session}` — baris yang `username`-nya sama
+  # dengan pemanggil menentukan `branch_id` yang dipakai memfilter.
+  assignments:
+    - { dimension: branch, field: branch_id, principal_field: username }
   fields:
     - name: name
       type: string
@@ -28,9 +33,11 @@ spec:
       enum_values: [kasir, barista, dapur, pelayan, supervisor, manajer]
       required: true
       title: "Posisi"
-    # Penaut ke pengguna FormSpec (formspec.core.user). GAP-06: pemetaan
-    # user -> cabang inilah yang nantinya menjadi sumber nilai filter scope
-    # otomatis (D10 tingkat 2) — belum ada mekanismenya sekarang.
+    # Penaut ke pengguna FormSpec (formspec.core.user). Di sinilah nilai
+    # dimensi `branch` berasal: `assignments` di atas dipakai server untuk
+    # mengisi atribut sesi `branch_id`, yang kemudian dikonsumsi
+    # `row_scope: {from: session}` pada entity ter-scope (S5). Nilai ini juga
+    # boleh datang langsung dari klaim `attrs` token.
     - name: username
       type: string
       unique: true

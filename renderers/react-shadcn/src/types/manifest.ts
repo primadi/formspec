@@ -96,6 +96,7 @@ export type FieldType =
   | "richtext"
   | "integer"
   | "decimal"
+  | "percent"
   | "money"
   | "boolean"
   | "enum"
@@ -301,6 +302,12 @@ export interface Field {
    *  after the decimal point (drives client-side input limiting). */
   precision?: number
   scale?: number
+  /** Money (backend 05-field-types.md §2) — only for type: money. Explicit
+   *  ISO-4217 currency for this field (empty = settings.currency), and the
+   *  fixed minor-unit scale. Both are optional; the MoneyInput widget falls
+   *  back to the resolved global settings when they are absent. */
+  currency?: string
+  decimal_places?: number
   /** Client-side behavior vocabulary (FormSpecExpr) — on entity fields these
    *  act as defaults, and are the only way to configure per-column behavior
    *  on child fields (ChildTable reads child.fields from the entity). */

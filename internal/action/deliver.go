@@ -145,9 +145,25 @@ func DeliverEvents(ctx context.Context, deps DeliveryDeps, workspaceID, resource
 						deps.logger().Error("event.audit_log_write_failed", map[string]any{"event": ev.Name, "error": err.Error()})
 					}
 				}
+			case "reliable_event":
+				// Durable delivery with the strongest guarantee (Core Extended
+				// §12.1, §17): the event goes through the outbox, so the worker
+				// retries it at-least-once and a crash between the action commit
+				// and delivery cannot drop it. ValidateEventDurability already
+				// requires publish.durable: true for this channel.
+				//
+				// Before this case existed the channel fell through to the
+				// not-implemented default and was silently discarded — so every
+				// subscription and summary projection fed by `reliable_event`
+				// stayed empty while validation reported the manifest as valid.
+				if deps.Outbox != nil && !outboxAlreadyEnqueued {
+					if _, err := deps.Outbox.Enqueue(ctx, workspaceID, ev.Name, resource, string(payloadJSON)); err != nil {
+						deps.logger().Error("event.outbox_enqueue_failed", map[string]any{"event": ev.Name, "channel": ch.Channel, "error": err.Error()})
+					}
+				}
 			default:
-				// reliable_event, queue, webhook, notification, pubsub —
-				// explicitly out of scope for this pass (see plan notes).
+				// queue, webhook, notification — explicitly out of scope for
+				// this pass (see plan notes).
 				deps.logger().Warn("event.channel_not_implemented", map[string]any{"event": ev.Name, "channel": ch.Channel})
 			}
 		}

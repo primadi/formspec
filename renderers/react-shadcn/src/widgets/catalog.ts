@@ -41,12 +41,20 @@ export const FORM_WIDGETS = [
   "child-grid",
   "grants-editor",
   "hidden",
+  "qrcode",
+  "moneyinput",
+  "timeinput",
 ] as const
 
 export type FormWidgetName = (typeof FORM_WIDGETS)[number]
 
 /** Widget names a table/listing column may declare. */
-export const TABLE_CELL_WIDGETS = ["badge", "boolean"] as const
+export const TABLE_CELL_WIDGETS = [
+  "badge",
+  "boolean",
+  "image",
+  "qrcode",
+] as const
 
 export type TableCellWidgetName = (typeof TABLE_CELL_WIDGETS)[number]
 

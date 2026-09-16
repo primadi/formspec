@@ -8,6 +8,8 @@ spec:
   version: v1
   characteristic: master
   plural: menu-item-prices
+  # S5: harga berlaku per cabang — satu menu boleh beda harga antar cabang.
+  scope: { dimension: branch, field: branch_id, required: true }
   fields:
     - name: branch_id
       type: relation
@@ -19,14 +21,15 @@ spec:
       relation: { type: belongs_to, resource: cafe-master.menu-item }
       required: true
       title: "Menu"
-    # GAP-01: `money` belum punya widget input — jatuh ke input teks polos.
-    # GAP-02 (DIPERSEMPIT setelah verifikasi DDL): sisi STORAGE aman — money
-    # hidup di JSONB `data`, bukan kolom text. Yang bermasalah adalah INDEKS:
-    # dengan `index: true`, kolom turunan menjadi `_price text`, sehingga
-    # urutan/rentang atas harga bersifat leksikografis JSON — bukan numerik.
-    # Karena itu `index: true` sengaja TIDAK dipasang di sini. Lihat GAP-23.
+    # GAP-01 TERTUTUP (2.14): `money` punya widget `moneyinput` — mata uang ikut
+    # terbawa dan jumlahnya tidak dibulatkan saat diketik.
+    # GAP-02 TERTUTUP (3.2): kolom turunan `money` kini membaca `.amount` dan
+    # bertipe numerik, jadi `index: true` aman — urutan/rentang atas harga
+    # membandingkan angka, bukan teks JSON. Sebelumnya index sengaja tidak
+    # dipasang karena `_price text` membuat "9000" > "10000" (gap #23).
     - name: price
       type: money
+      index: true
       required: true
       title: "Harga Jual"
     - name: is_active
@@ -34,13 +37,11 @@ spec:
       default: true
       title: "Berlaku"
   indexes:
-    # GAP-22: DIDEKLARASIKAN TAPI TIDAK DIHORMATI. `formspec migrate plan`
-    # menghasilkan NOL index dari blok ini (dan `index: true` pada field
-    # `relation` juga tidak menghasilkan kolom turunan sama sekali).
-    # Akibatnya dua aturan bisnis di bawah TIDAK ditegakkan di database:
+    # Dua aturan bisnis di bawah DITEGAKKAN database: GAP-22 ditutup (indexes:
+    # dihormati) dan field `relation` kini menghasilkan kolom turunan saat
+    # disebut di sini:
     #   1. satu harga per menu per cabang (entitas ini)
     #   2. satu stock-level per (cabang, bahan)
-    # Sementara aplikasi harus menjaganya di script. Lihat GAP-22.
     - fields: [branch_id, menu_item_id]
       unique: true
   # GUARD — karena blok `indexes:` di atas tidak ditegakkan (GAP-22).

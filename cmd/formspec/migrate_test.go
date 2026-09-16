@@ -189,7 +189,7 @@ spec:
 		t.Fatal(err)
 	}
 
-	migrations := loadCustomMigrations(dir)
+	migrations := loadCustomMigrations(dir, db.DriverSQLite)
 	if len(migrations) != 1 {
 		t.Fatalf("expected 1 custom migration, got %d", len(migrations))
 	}

@@ -35,6 +35,7 @@ import {
   setQuantity,
   type PickedRow,
 } from "@/lib/picker"
+import { fileDownloadUrl } from "@/lib/media"
 import { resolveEntityRef } from "@/engine/entityRef"
 import { useMetaStore } from "@/stores/meta"
 import { useSessionStore } from "@/stores/session"
@@ -242,7 +243,13 @@ export default function PickerPanel({
     if (imageFieldType === "file" || imageFieldType === "attachment") {
       // A file/attachment value is an object key served by the *source*
       // entity's file route.
-      return `/${workspace}/_ui/entity/${sourceModule}/${sourceEntity}/${String(row.id)}/${display.image_field}`
+      return fileDownloadUrl(
+        workspace,
+        sourceModule,
+        sourceEntity,
+        String(row.id),
+        display.image_field,
+      )
     }
     return String(raw)
   }

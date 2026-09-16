@@ -13,13 +13,14 @@
 
 ## Komponen
 
-| #   | Komponen              | Wujud                                                        | Lisensi           | Dokumen                                                |
-| --- | --------------------- | ------------------------------------------------------------ | ----------------- | ------------------------------------------------------ |
-| 1   | **FormSpec Control**  | Binary (3 mode: region/cluster/standalone)                   | FSL (open source) | [`01-formspec-ctl.md`](./01-formspec-ctl.md)           |
-| 2   | **FormSpec Resource** | Go library (`import "github.com/primadi/formspec/resource"`) | FSL (open source) | [`02-formspec-resource.md`](./02-formspec-resource.md) |
-| 3   | **FormSpec Operator** | Binary (K8s CRD controller)                                  | **Closed source** | [`03-formspec-operator.md`](./03-formspec-operator.md) |
-| 4   | **FormSpec Sidecar**  | Binary (embed FormSpec Resource + socket listener)           | FSL (open source) | [`04-formspec-sidecar.md`](./04-formspec-sidecar.md)   |
-| 5   | **Engine API Layer**  | Lapisan HTTP runtime engine (`internal/api`)                 | FSL (open source) | [`05-engine-api-layer.md`](./05-engine-api-layer.md)   |
+| #   | Komponen                 | Wujud                                                        | Lisensi              | Dokumen                                                |
+| --- | ------------------------ | ------------------------------------------------------------ | -------------------- | ------------------------------------------------------ |
+| 1   | **FormSpec Control**     | Binary (3 mode: region/cluster/standalone)                   | FSL (open source)    | [`01-formspec-ctl.md`](./01-formspec-ctl.md)           |
+| 2   | **FormSpec Resource**    | Go library (`import "github.com/primadi/formspec/resource"`) | FSL (open source)    | [`02-formspec-resource.md`](./02-formspec-resource.md) |
+| 3   | **FormSpec Operator**    | Binary (K8s CRD controller)                                  | **Closed source**    | [`03-formspec-operator.md`](./03-formspec-operator.md) |
+| 4   | **FormSpec Sidecar**     | Binary (embed FormSpec Resource + socket listener)           | FSL (open source)    | [`04-formspec-sidecar.md`](./04-formspec-sidecar.md)   |
+| 5   | **Engine API Layer**     | Lapisan HTTP runtime engine (`internal/api`)                 | FSL (open source)    | [`05-engine-api-layer.md`](./05-engine-api-layer.md)   |
+| 6   | **Kontrak REST `/_ui/`** | Dokumentasi permukaan API yang dipakai setiap klien          | Creative Commons CC0 | [`06-ui-rest-contract.md`](./06-ui-rest-contract.md)   |
 
 ```
                     ┌─────────────────┐

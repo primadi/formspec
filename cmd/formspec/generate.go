@@ -283,7 +283,7 @@ func tsFieldType(f spec.Field) string {
 	switch f.Type {
 	case spec.FieldString, spec.FieldUUID, spec.FieldDate, spec.FieldDateTime:
 		return "string"
-	case spec.FieldDecimal, spec.FieldNumber:
+	case spec.FieldDecimal, spec.FieldNumber, spec.FieldPercent:
 		return "string"
 	case spec.FieldInteger:
 		return "number"

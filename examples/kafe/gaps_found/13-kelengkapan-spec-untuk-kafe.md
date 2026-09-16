@@ -235,6 +235,19 @@ fields:
 
 ### S5 — Scope cabang deklaratif
 
+> **✅ Selesai 2026-09-15 (TODO 1.8).** Tiga konstruk menggantikan satu: `scope:
+{dimension, field, required}` (entity **dipartisi** — fakta data, tidak
+> memfilter), `row_scope` (filter yang **ditegakkan server**; nama ini dulunya
+> `scope`, diganti karena satu nama tidak bisa dua bentuk), dan `assignments:
+[{dimension, field, principal_field}]` (**dari mana** nilai dimensi seorang
+> principal berasal — inilah "pengguna ini bertugas di cabang X" yang
+> sebelumnya tidak bisa dinyatakan). Nilai `from: session` diselesaikan dari
+> `assignments` bila token tidak membawanya, dan `formspec validate` menolak
+> `row_scope` yang atributnya tak punya sumber — mencegah bentuk yang 403
+> selamanya sementara manifest terlihat benar. Penyalaan penyaringan otomatis
+> tetap item **3.5**, sesuai urutan. Normatif:
+> `docs/spec/backend/01-core-basic.md` §1.7.
+
 **Kebutuhan kafe.** Satu kafe, banyak cabang. Harga beda per cabang, stok per
 cabang, nomor pesanan per cabang, kasir hanya cabangnya.
 
@@ -504,6 +517,15 @@ implementasi tidak bisa berbeda.
 
 ### S11 — Tidak ada model pajak / service charge
 
+> **🟡 Sebagian 2026-09-15 (TODO 1.8, versi minimal).** Yang ditambahkan: field
+> type **`percent`** — secara numerik `decimal`, tetapi ditandai sebagai
+> persentase sehingga renderer/format menampilkannya sebagai `%` alih-alih
+> menebak. `branch.tax_percent`, `branch.service_charge_percent`, dan
+> `promo.percent` di kafe kini memakainya. **Belum** ada model pajak penuh
+> (dasar pengenaan, harga-termasuk-pajak, pembulatan pajak, pelaporan) — itu
+> tetap tanggung jawab spec aplikasi. Normatif:
+> `docs/spec/backend/05-field-types.md` §1.5.
+
 **Kebutuhan kafe.** PB1 10% dapat diatur, service charge opsional per cabang,
 ditampilkan terpisah di struk.
 
@@ -521,6 +543,15 @@ Alternatif yang lebih sederhana: setidaknya **field type `percent`** dan cara
 menyatakan "field ini pajak" agar renderer/report memperlakukannya konsisten.
 
 ### S12 — Satuan dan konversi
+
+> **✅ Sebagian 2026-09-15 (TODO 1.8).** Deklarasi satuan kini ada:
+> `unit: {base, convertible}` pada field yang nilainya adalah nama satuan,
+> dengan `base`/`convertible` divalidasi terhadap `enum_values` — jadi satuan
+> menjadi **data**, bukan konvensi di dalam script. Di kafe,
+> `ingredient.unit` dan `recipe.lines[].unit` menyatakan grup gram↔kg (`ml` dan
+> `pcs` sengaja di luar grup: dimensi lain, bukan error). **Konversi dan
+> ledakan resep belum dihitung engine** — itu item **4.6**. Normatif:
+> `docs/spec/backend/05-field-types.md` §1.6.
 
 **Kebutuhan kafe.** Resep dalam **gram**; pembelian dalam **kg**; sebagian bahan
 dalam **pcs** dan isi per kemasan (mis. "1 dus = 24 pcs").
@@ -565,6 +596,17 @@ transitions:
 ```
 
 ### S14 — `summary` tanpa kontrak pemelihara
+
+> **✅ Selesai 2026-09-15 (TODO 1.8).** `maintained_by` menyebut script
+> pemelihara (validator menolak referensi yang tak bisa di-resolve/dikompilasi,
+> dicek bersama `impl.ref`), dan `invariants: [{unique, message}]` menyatakan
+> invarian yang **wajib** ditopang unique index yang benar-benar dideklarasikan
+> — jadi yang menegakkan adalah database, bukan disiplin script. Efek
+> sampingnya penting: memasang `hooks:` di entity `summary` (yang tidak pernah
+> dipanggil) tidak lagi bisa terlihat sebagai perlindungan, karena invariannya
+> harus punya penopang nyata. Tiga summary kafe kini menyatakan invariannya.
+> **Sisa:** `hooks`/`conditions` pada `summary` tetap tidak dipanggil — item
+> **4.2**. Normatif: `docs/spec/backend/02-core-extended.md` §6.1.
 
 **Tersedia sekarang.** `characteristic: summary` menonaktifkan create/update/delete
 permanen. Tetapi tidak ada cara menyatakan **siapa** yang memeliharanya.
@@ -678,6 +720,16 @@ spec **tidak bisa menebak** dan validasi tetap hijau.
 permukaan publik tidak akan pernah bisa direferensikan — dan itu belum
 dinyatakan di mana pun.
 
+> **✅ Semuanya dijawab 2026-09-15.** Jawabannya diambil dari kode
+> (`decisions-needed.md`, Fase 0) lalu **ditulis normatif** di
+> `docs/spec/backend/01-core-basic.md` — D1/D2 di §1.2, D3/D4 di §7, D5/D6 di
+> §8.6, D7 di §11. Ringkas: `create` → `draft` kecuali entity lifecycle-free
+> (dan `lifecycle:` adalah hint UI, bukan penentu); transisi **tidak**
+> memancarkan event otomatis; nama state polos bukan konvensi; permission
+> `{module}.{plural}.{action}` dengan `submit` ber-permission sendiri; `settings`
+> hidup di Config level App dan dibaca framework (mata uang `money`; ragu =
+> tolak, bukan tebak).
+
 ---
 
 ## §E. Bukan gap spec (perbaikan di project FormSpec)
@@ -697,15 +749,15 @@ Dikeluarkan dari fokus dokumen ini, dicatat supaya tidak hilang:
 
 Berdasarkan "berapa banyak aplikasi yang terbuka":
 
-| Prioritas | Item                                                                                                                                      | Membuka apa                                                         |
-| --------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| **1**     | **S2** filter bernilai dari sesi/route ✅                                                                                                 | Multi-outlet **dan** akses pelanggan — satu konstruk, dua kebutuhan |
-| **2**     | **S3** akses publik per-entity + `exclude` ditegakkan ✅                                                                                  | Aplikasi publik yang aman                                           |
-| **3**     | **S7** semantik `money` ✅                                                                                                                | Semua aplikasi transaksional: POS, kas, laporan                     |
-| **4**     | **S10** kosakata `widget` jadi enum                                                                                                       | Menghentikan kelas bug "salah ketik == fitur belum ada"             |
-| **5**     | **S1** blok/kind transaksional                                                                                                            | Pemesanan mandiri pelanggan                                         |
-| **6**     | **S8** unique parsial + index relasi                                                                                                      | Integritas data tanpa keluar ke DDL mentah                          |
-| **7**     | **S9** workflow atas nama transisi                                                                                                        | Approval yang tidak bisa dilewati                                   |
-| **8**     | **D1–D7** tetapkan semantik                                                                                                               | Menghilangkan tebakan yang berujung data rusak                      |
-| **9**     | **S5** scope cabang deklaratif                                                                                                            | Multi-cabang yang dijamin, bukan didisiplinkan                      |
-| **10**    | **S6** pemetaan Integrator, **S11** pajak, **S12** satuan, **S13** event↔transisi, **S14** summary, **S15** label approval, **S16** kolom | Melengkapi                                                          |
+| Prioritas | Item                                                                                                                                                                                 | Membuka apa                                                         |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------- |
+| **1**     | **S2** filter bernilai dari sesi/route ✅                                                                                                                                            | Multi-outlet **dan** akses pelanggan — satu konstruk, dua kebutuhan |
+| **2**     | **S3** akses publik per-entity + `exclude` ditegakkan ✅                                                                                                                             | Aplikasi publik yang aman                                           |
+| **3**     | **S7** semantik `money` ✅                                                                                                                                                           | Semua aplikasi transaksional: POS, kas, laporan                     |
+| **4**     | **S10** kosakata `widget` jadi enum                                                                                                                                                  | Menghentikan kelas bug "salah ketik == fitur belum ada"             |
+| **5**     | **S1** blok/kind transaksional                                                                                                                                                       | Pemesanan mandiri pelanggan                                         |
+| **6**     | **S8** unique parsial + index relasi                                                                                                                                                 | Integritas data tanpa keluar ke DDL mentah                          |
+| **7**     | **S9** workflow atas nama transisi                                                                                                                                                   | Approval yang tidak bisa dilewati                                   |
+| **8**     | **D1–D7** tetapkan semantik ✅                                                                                                                                                       | Menghilangkan tebakan yang berujung data rusak                      |
+| **9**     | **S5** scope cabang deklaratif ✅ (konstruk; penyalaan = 3.5)                                                                                                                        | Multi-cabang yang dijamin, bukan didisiplinkan                      |
+| **10**    | **S6** pemetaan Integrator, **S11** pajak 🟡 (tipe `percent`), **S12** satuan ✅ (konversi = 4.6), **S13** event↔transisi, **S14** summary ✅, **S15** label approval, **S16** kolom | Melengkapi                                                          |
