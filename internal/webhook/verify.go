@@ -137,7 +137,7 @@ func computeHMAC(algorithm, secret, body string) string {
 		h = sha256.New
 	}
 	mac := hmac.New(h, []byte(secret))
-	mac.Write([]byte(body))
+	_, _ = mac.Write([]byte(body))
 	return hex.EncodeToString(mac.Sum(nil))
 }
 

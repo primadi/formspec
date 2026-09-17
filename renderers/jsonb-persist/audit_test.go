@@ -13,7 +13,7 @@ func TestAuditStore_WriteAndListByEntity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -63,7 +63,7 @@ func TestAuditStore_ListByTenant(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -103,7 +103,7 @@ func TestAuditStore_TenantIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -141,7 +141,7 @@ func TestWriteAuditLog_ErrorOnNilDB(t *testing.T) {
 	if err := NewMigrationRunner(d, DriverSQLite).EnsureSystemTables(ctx); err != nil {
 		t.Fatalf("EnsureSystemTables failed: %v", err)
 	}
-	d.Close()
+	_ = d.Close()
 
 	err = writeAuditLog(ctx, d, DriverSQLite, "t1", "test/entity", "id-1", "create", "u1", `{}`, "")
 	if err == nil {

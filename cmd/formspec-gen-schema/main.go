@@ -34,7 +34,7 @@ func main() {
 	flag.Parse()
 
 	if err := run(*outDir, *pkgPath); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 }
@@ -84,12 +84,12 @@ func run(outDir, pkgPath string) error {
 		schema := result.KindSchemas[name]
 		data, err := json.MarshalIndent(schema, "", "  ")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "   ⚠️  Error marshaling %s schema: %v\n", name, err)
+			_, _ = fmt.Fprintf(os.Stderr, "   ⚠️  Error marshaling %s schema: %v\n", name, err)
 			continue
 		}
 		kindPath := filepath.Join(kindsDir, name+".schema.json")
 		if err := os.WriteFile(kindPath, data, 0644); err != nil {
-			fmt.Fprintf(os.Stderr, "   ⚠️  Error writing %s schema: %v\n", name, err)
+			_, _ = fmt.Fprintf(os.Stderr, "   ⚠️  Error writing %s schema: %v\n", name, err)
 			continue
 		}
 		fmt.Printf("   ✅ Kind schema: %s\n", kindPath)

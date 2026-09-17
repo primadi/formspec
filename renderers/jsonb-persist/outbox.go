@@ -140,7 +140,7 @@ func (s *OutboxStore) Dequeue(ctx context.Context, batchSize int) ([]OutboxRecor
 	if err != nil {
 		return nil, fmt.Errorf("outbox dequeue: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var records []OutboxRecord
 	for rows.Next() {
@@ -232,7 +232,7 @@ func (s *OutboxStore) CountByStatus(ctx context.Context) (map[string]int, error)
 	if err != nil {
 		return nil, fmt.Errorf("outbox count: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	result := make(map[string]int)
 	for rows.Next() {
@@ -273,7 +273,7 @@ func (s *OutboxStore) Peek(ctx context.Context, limit int) ([]OutboxRecord, erro
 	if err != nil {
 		return nil, fmt.Errorf("outbox peek: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var records []OutboxRecord
 	for rows.Next() {

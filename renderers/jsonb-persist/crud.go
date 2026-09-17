@@ -1875,7 +1875,7 @@ func (s *EntityStore) List(ctx context.Context, params ListParams) (*ListResult,
 	if err != nil {
 		return nil, fmt.Errorf("%s list: %w", s.entity, err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var records []EntityRecord
 	for rows.Next() {
@@ -2079,7 +2079,7 @@ func (s *EntityStore) Aggregate(ctx context.Context, params AggregateParams) (*A
 	if err != nil {
 		return nil, fmt.Errorf("%s aggregate: %w", s.entity, err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	result := &AggregateResult{}
 	for rows.Next() {
@@ -2251,7 +2251,7 @@ func (s *EntityStore) Window(ctx context.Context, params WindowParams) (*WindowR
 	if err != nil {
 		return nil, fmt.Errorf("%s window: %w", s.entity, err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	result := &WindowResult{}
 	for rows.Next() {
@@ -2412,7 +2412,7 @@ func (s *EntityStore) resolveRelations(ctx context.Context, records []EntityReco
 			data["id"] = relID // include id so frontend can reference it
 			relatedData[relID] = data
 		}
-		rows.Close()
+		_ = rows.Close()
 
 		if err := rows.Err(); err != nil {
 			log.Printf("[WARN] resolve relation %s: rows iteration: %v", f.Name, err)
@@ -2657,13 +2657,13 @@ func writeJSONValue(b *strings.Builder, v any) {
 		}
 		b.WriteByte('"')
 	case float64:
-		fmt.Fprintf(b, "%g", val)
+		_, _ = fmt.Fprintf(b, "%g", val)
 	case int:
-		fmt.Fprintf(b, "%d", val)
+		_, _ = fmt.Fprintf(b, "%d", val)
 	case int64:
-		fmt.Fprintf(b, "%d", val)
+		_, _ = fmt.Fprintf(b, "%d", val)
 	case bool:
-		fmt.Fprintf(b, "%t", val)
+		_, _ = fmt.Fprintf(b, "%t", val)
 	case nil:
 		b.WriteString("null")
 	case map[string]any:
@@ -2703,7 +2703,7 @@ func writeJSONValue(b *strings.Builder, v any) {
 			b.WriteString("null")
 			return
 		}
-		b.Write(enc)
+		_, _ = b.Write(enc)
 	}
 }
 
@@ -2927,7 +2927,7 @@ func (s *EntityStore) validateUnique(ctx context.Context, database DB, fieldName
 	if err != nil {
 		return fmt.Errorf("%w: %q: unique check failed: %v", ErrValidationRule, fieldName, err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var id string
 		if err := rows.Scan(&id); err != nil {
@@ -3177,7 +3177,9 @@ func toInt(v any) int {
 	case string:
 		// Try to parse as number string from YAML
 		var f float64
-		fmt.Sscanf(n, "%f", &f)
+		if _, err := fmt.Sscanf(n, "%f", &f); err != nil {
+			return 0
+		}
 		return int(f)
 	default:
 		return 0
@@ -3195,7 +3197,9 @@ func toFloat(v any) float64 {
 		return float64(n)
 	case string:
 		var f float64
-		fmt.Sscanf(n, "%f", &f)
+		if _, err := fmt.Sscanf(n, "%f", &f); err != nil {
+			return 0
+		}
 		return f
 	default:
 		return 0

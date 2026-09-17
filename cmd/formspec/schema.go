@@ -53,7 +53,7 @@ func copySchemas(srcDir, destDir string) error {
 		if err := os.WriteFile(dst, data, 0o644); err != nil {
 			return fmt.Errorf("write %s: %w", rel, err)
 		}
-		fmt.Fprintf(os.Stderr, "  ✓ schemas/%s\n", rel)
+		_, _ = fmt.Fprintf(os.Stderr, "  ✓ schemas/%s\n", rel)
 	}
 	return nil
 }
@@ -81,18 +81,18 @@ func runSchema(args []string) {
 			*version = fs.Arg(0)
 		}
 		if err := reg.EnsureFull(*version, force); err != nil {
-			fmt.Fprintf(os.Stderr, "formspec schema %s: %v\n", sub, err)
+			_, _ = fmt.Fprintf(os.Stderr, "formspec schema %s: %v\n", sub, err)
 			os.Exit(1)
 		}
 		dir, err := reg.VersionDir(*version)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "formspec schema %s: %v\n", sub, err)
+			_, _ = fmt.Fprintf(os.Stderr, "formspec schema %s: %v\n", sub, err)
 			os.Exit(1)
 		}
 		fmt.Printf("schema %s %s → %s\n", sub, *version, dir)
 		if *out != "" {
 			if err := copySchemas(dir, *out); err != nil {
-				fmt.Fprintf(os.Stderr, "formspec schema %s: %v\n", sub, err)
+				_, _ = fmt.Fprintf(os.Stderr, "formspec schema %s: %v\n", sub, err)
 				os.Exit(1)
 			}
 		}
@@ -100,7 +100,7 @@ func runSchema(args []string) {
 	case "list":
 		versions, err := reg.List()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "formspec schema list: %v\n", err)
+			_, _ = fmt.Fprintf(os.Stderr, "formspec schema list: %v\n", err)
 			os.Exit(1)
 		}
 		if len(versions) == 0 {
@@ -113,7 +113,7 @@ func runSchema(args []string) {
 
 	case "clear":
 		if err := reg.Clear(); err != nil {
-			fmt.Fprintf(os.Stderr, "formspec schema clear: %v\n", err)
+			_, _ = fmt.Fprintf(os.Stderr, "formspec schema clear: %v\n", err)
 			os.Exit(1)
 		}
 		fmt.Println("schema cache cleared")
@@ -125,12 +125,12 @@ func runSchema(args []string) {
 }
 
 func schemaUsage() {
-	fmt.Fprintf(os.Stderr, "Usage: formspec schema <fetch|update|list|clear> [flags]\n\n")
-	fmt.Fprintf(os.Stderr, "Manage the locally cached JSON Schema versions.\n")
-	fmt.Fprintf(os.Stderr, "  fetch [version]   fetch/cache a schema version (default v1)\n")
-	fmt.Fprintf(os.Stderr, "    --out <dir>     also copy schemas into a dir (e.g. ./schemas)\n")
-	fmt.Fprintf(os.Stderr, "  update [version]  force re-fetch a version from the registry\n")
-	fmt.Fprintf(os.Stderr, "  list              list cached versions\n")
-	fmt.Fprintf(os.Stderr, "  clear             remove the whole schema cache\n")
-	fmt.Fprintf(os.Stderr, "\nRegistry: %s (override: FORMSPEC_SCHEMA_REGISTRY or schema-registry: in formspec-app.yaml)\n", schemaregistry.DefaultBaseURL)
+	_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec schema <fetch|update|list|clear> [flags]\n\n")
+	_, _ = fmt.Fprintf(os.Stderr, "Manage the locally cached JSON Schema versions.\n")
+	_, _ = fmt.Fprintf(os.Stderr, "  fetch [version]   fetch/cache a schema version (default v1)\n")
+	_, _ = fmt.Fprintf(os.Stderr, "    --out <dir>     also copy schemas into a dir (e.g. ./schemas)\n")
+	_, _ = fmt.Fprintf(os.Stderr, "  update [version]  force re-fetch a version from the registry\n")
+	_, _ = fmt.Fprintf(os.Stderr, "  list              list cached versions\n")
+	_, _ = fmt.Fprintf(os.Stderr, "  clear             remove the whole schema cache\n")
+	_, _ = fmt.Fprintf(os.Stderr, "\nRegistry: %s (override: FORMSPEC_SCHEMA_REGISTRY or schema-registry: in formspec-app.yaml)\n", schemaregistry.DefaultBaseURL)
 }

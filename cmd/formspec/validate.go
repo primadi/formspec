@@ -55,7 +55,7 @@ func runValidate(args []string) {
 		os.Exit(2)
 	}
 	if fs.NArg() > 0 {
-		fmt.Fprintf(os.Stderr, "formspec validate: unexpected argument %q\n", fs.Arg(0))
+		_, _ = fmt.Fprintf(os.Stderr, "formspec validate: unexpected argument %q\n", fs.Arg(0))
 		os.Exit(2)
 	}
 
@@ -65,7 +65,7 @@ func runValidate(args []string) {
 	// ── Layer 1: engine loader (discovery + parse + Entity deep validation) ──
 	res, err := loader.LoadAll()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec validate: load error: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec validate: load error: %v\n", err)
 		os.Exit(2)
 	}
 	for _, pe := range res.Errors {
@@ -134,7 +134,7 @@ func runValidate(args []string) {
 		if *schemaDir != "" {
 			c, err := newKindSchemaCompiler(*schemaDir)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "formspec validate: schema: %v\n", err)
+				_, _ = fmt.Fprintf(os.Stderr, "formspec validate: schema: %v\n", err)
 				os.Exit(2)
 			}
 			compilers["*"] = c
@@ -167,17 +167,17 @@ func runValidate(args []string) {
 				}
 				sort.Strings(kinds)
 				if err := reg.Ensure(v, kinds, *refresh); err != nil {
-					fmt.Fprintf(os.Stderr, "formspec validate: schema %s: %v\n", v, err)
+					_, _ = fmt.Fprintf(os.Stderr, "formspec validate: schema %s: %v\n", v, err)
 					os.Exit(2)
 				}
 				dir, err := reg.VersionDir(v)
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "formspec validate: schema %s: %v\n", v, err)
+					_, _ = fmt.Fprintf(os.Stderr, "formspec validate: schema %s: %v\n", v, err)
 					os.Exit(2)
 				}
 				c, err := newKindSchemaCompiler(dir)
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "formspec validate: schema %s: %v\n", v, err)
+					_, _ = fmt.Fprintf(os.Stderr, "formspec validate: schema %s: %v\n", v, err)
 					os.Exit(2)
 				}
 				compilers[v] = c
@@ -526,7 +526,7 @@ func formatValidationError(ve *jsonschema.ValidationError) string {
 			if e.Error != nil {
 				msg = e.Error.String()
 			}
-			fmt.Fprintf(&sb, "%s: %s; ", loc, msg)
+			_, _ = fmt.Fprintf(&sb, "%s: %s; ", loc, msg)
 		}
 	}
 	walk(ve.BasicOutput())

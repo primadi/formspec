@@ -233,7 +233,7 @@ func newTestRunner(t *testing.T) (*MigrationRunner, DB, context.Context) {
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
-	t.Cleanup(func() { d.Close() })
+	t.Cleanup(func() { _ = d.Close() })
 	return NewMigrationRunner(d, DriverSQLite), d, context.Background()
 }
 

@@ -24,7 +24,7 @@ func setupMoneyAggregateStore(t *testing.T) *EntityStore {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	t.Cleanup(func() { d.Close() })
+	t.Cleanup(func() { _ = d.Close() })
 
 	meta := spec.Metadata{Name: "order", Module: "kafe"}
 	entity := &spec.EntitySpec{
@@ -165,7 +165,7 @@ func TestAggregate_MoneyComputedOverChildren(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	t.Cleanup(func() { d.Close() })
+	t.Cleanup(func() { _ = d.Close() })
 
 	meta := spec.Metadata{Name: "order", Module: "cafe-order"}
 	entity := &spec.EntitySpec{
@@ -248,7 +248,7 @@ func TestList_BooleanFilterAcceptsTrueString(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	t.Cleanup(func() { d.Close() })
+	t.Cleanup(func() { _ = d.Close() })
 
 	meta := spec.Metadata{Name: "menu-item", Module: "cafe-master"}
 	entity := &spec.EntitySpec{

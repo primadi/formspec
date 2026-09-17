@@ -19,7 +19,7 @@ func TestEntityStore_ExtensionReadWrite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	ctx := context.Background()
 

@@ -434,7 +434,7 @@ func New(cfg Config) (*App, error) {
 	// changed since its shadow copy was adopted — never a hard failure.
 	if drifts, err := vendor.CheckDrift(projectRoot); err == nil && len(drifts) > 0 {
 		for _, d := range drifts {
-			fmt.Fprintf(os.Stderr, "formspec: ⚠ drift: overrides for %s/%s (module %s): %s\n",
+			_, _ = fmt.Fprintf(os.Stderr, "formspec: ⚠ drift: overrides for %s/%s (module %s): %s\n",
 				strings.ToLower(d.Kind), d.Name, d.Module, d.Detail)
 		}
 	}
@@ -455,7 +455,7 @@ func New(cfg Config) (*App, error) {
 		return nil, fmt.Errorf("register period core entities: %w", err)
 	}
 	for _, loadErr := range reg.LoadEntities() {
-		fmt.Fprintf(os.Stderr, "formspec: load warning: %v\n", loadErr)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec: load warning: %v\n", loadErr)
 	}
 
 	permReg := reg.GetPermissionRegistry()
@@ -477,12 +477,12 @@ func New(cfg Config) (*App, error) {
 	// Frontend UI kinds (Page/Form/Table/... — Frontend Spec §2) + Meta API.
 	uiReg := ui.NewRegistry()
 	for _, loadErr := range uiReg.LoadDir(cfg.SpecPath) {
-		fmt.Fprintf(os.Stderr, "formspec: ui load warning: %v\n", loadErr)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec: ui load warning: %v\n", loadErr)
 	}
 	// Load framework-bundled UI manifests (auth module forms/pages/tables) so
 	// the admin surface gets the friendlier access-management forms.
 	for _, loadErr := range uiReg.LoadEmbedded(auth.ModuleFS()) {
-		fmt.Fprintf(os.Stderr, "formspec: ui load warning (auth module): %v\n", loadErr)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec: ui load warning (auth module): %v\n", loadErr)
 	}
 	// Load additional theme directories (Frontend Spec §10).
 	// These share the same registry, so theme names must be unique
@@ -494,7 +494,7 @@ func New(cfg Config) (*App, error) {
 			resolved = filepath.Join(wd, themeDir)
 		}
 		for _, loadErr := range uiReg.LoadDir(resolved) {
-			fmt.Fprintf(os.Stderr, "formspec: ui load warning (theme %s): %v\n", themeDir, loadErr)
+			_, _ = fmt.Fprintf(os.Stderr, "formspec: ui load warning (theme %s): %v\n", themeDir, loadErr)
 		}
 	}
 	resolveEntity := func(module, name string) (*spec.EntitySpec, bool) {
@@ -505,7 +505,7 @@ func New(cfg Config) (*App, error) {
 		return info.EntitySpec, true
 	}
 	for _, valErr := range uiReg.Validate(resolveEntity) {
-		fmt.Fprintf(os.Stderr, "formspec: ui validate warning: %v\n", valErr)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec: ui validate warning: %v\n", valErr)
 	}
 
 	// Resolve kind: App / kind: Module manifests (Core §4.4/§4.5). A
@@ -526,7 +526,7 @@ func New(cfg Config) (*App, error) {
 		return nil, fmt.Errorf("resolve apps: %w", err)
 	}
 	if len(resolvedApps) == 0 {
-		fmt.Fprintf(os.Stderr, "formspec: warning: no kind: App manifest found under %s — /_meta/ui will 400 until one is added\n", cfg.SpecPath)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec: warning: no kind: App manifest found under %s — /_meta/ui will 400 until one is added\n", cfg.SpecPath)
 	}
 
 	// Config registry (todo 7.2.1): load kind: Config manifests and resolve
@@ -731,11 +731,11 @@ func New(cfg Config) (*App, error) {
 
 	appAuths, authErrs := auth.ResolveAppAuth(resolvedApps, configs)
 	for _, e := range authErrs {
-		fmt.Fprintf(os.Stderr, "formspec: auth config warning: %v\n", e)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec: auth config warning: %v\n", e)
 	}
 	for _, ac := range appAuths {
 		if ac.Strategy != auth.StrategyBasicAuth {
-			fmt.Fprintf(os.Stderr, "formspec: app %q auth strategy %q — not implemented in single-server (basic-auth only); login falls back to basic-auth\n", ac.App, ac.Strategy)
+			_, _ = fmt.Fprintf(os.Stderr, "formspec: app %q auth strategy %q — not implemented in single-server (basic-auth only); login falls back to basic-auth\n", ac.App, ac.Strategy)
 		}
 		for role, ref := range ac.Overrides {
 			authRoles.SetOverride(role, ref)
@@ -796,7 +796,7 @@ func New(cfg Config) (*App, error) {
 	if resolvedSettings := spec.ResolveSettings(declaredSettings); resolvedSettings.Auth != nil {
 		providers, errs := buildOAuthProviders(resolvedSettings.Auth, cfg.WorkspaceID)
 		for _, err := range errs {
-			fmt.Fprintf(os.Stderr, "formspec: oauth provider: %v\n", err)
+			_, _ = fmt.Fprintf(os.Stderr, "formspec: oauth provider: %v\n", err)
 		}
 		if len(providers) > 0 {
 			authSvc.SetOAuthProviders(providers)
@@ -914,7 +914,7 @@ func New(cfg Config) (*App, error) {
 	dynamicRefresher := subscription.NewDynamicRefresher(subReg, dynamicSource, cfg.WorkspaceID)
 	// Load dynamic subscriptions once at boot (before the first poll).
 	if err := dynamicRefresher.Refresh(context.Background()); err != nil {
-		fmt.Fprintf(os.Stderr, "formspec: warning: load dynamic subscriptions: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec: warning: load dynamic subscriptions: %v\n", err)
 	}
 	// Integrator dispatch (todo 7.7.1): bridge emitted events to matching
 	// kind: Integrator target actions. Saga store (todo 7.7.4) records
@@ -1182,16 +1182,16 @@ func (a *App) ReloadSpec() error {
 		newReg.AddManifestRoot(a.cfg.ExternalDir)
 	}
 	if err := auth.RegisterCoreEntities(newReg); err != nil {
-		fmt.Fprintf(os.Stderr, "formspec: reload register core entities: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec: reload register core entities: %v\n", err)
 	}
 	if err := subscription.RegisterCoreEntities(newReg); err != nil {
-		fmt.Fprintf(os.Stderr, "formspec: reload register subscription core entities: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec: reload register subscription core entities: %v\n", err)
 	}
 	if err := period.RegisterCoreEntities(newReg); err != nil {
-		fmt.Fprintf(os.Stderr, "formspec: reload register period core entities: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec: reload register period core entities: %v\n", err)
 	}
 	for _, loadErr := range newReg.LoadEntities() {
-		fmt.Fprintf(os.Stderr, "formspec: reload: %v\n", loadErr)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec: reload: %v\n", loadErr)
 	}
 
 	permReg := newReg.GetPermissionRegistry()
@@ -1210,10 +1210,10 @@ func (a *App) ReloadSpec() error {
 	// ── 2. Build fresh UI registry ──
 	newUIReg := ui.NewRegistry()
 	for _, loadErr := range newUIReg.LoadDir(a.cfg.SpecPath) {
-		fmt.Fprintf(os.Stderr, "formspec: reload ui: %v\n", loadErr)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec: reload ui: %v\n", loadErr)
 	}
 	for _, loadErr := range newUIReg.LoadEmbedded(auth.ModuleFS()) {
-		fmt.Fprintf(os.Stderr, "formspec: reload ui (auth module): %v\n", loadErr)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec: reload ui (auth module): %v\n", loadErr)
 	}
 	for _, themeDir := range a.cfg.ThemeDirs {
 		resolved := themeDir
@@ -1222,7 +1222,7 @@ func (a *App) ReloadSpec() error {
 			resolved = filepath.Join(wd, themeDir)
 		}
 		for _, loadErr := range newUIReg.LoadDir(resolved) {
-			fmt.Fprintf(os.Stderr, "formspec: reload ui (theme %s): %v\n", themeDir, loadErr)
+			_, _ = fmt.Fprintf(os.Stderr, "formspec: reload ui (theme %s): %v\n", themeDir, loadErr)
 		}
 	}
 	resolveEntity := func(module, name string) (*spec.EntitySpec, bool) {
@@ -1233,20 +1233,20 @@ func (a *App) ReloadSpec() error {
 		return info.EntitySpec, true
 	}
 	for _, valErr := range newUIReg.Validate(resolveEntity) {
-		fmt.Fprintf(os.Stderr, "formspec: reload ui validate: %v\n", valErr)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec: reload ui validate: %v\n", valErr)
 	}
 
 	// ── 3. Re-resolve App/Module manifests ──
 	specManifests, err := manifest.NewLoader(a.cfg.SpecPath).LoadAll()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec: reload app resolution: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec: reload app resolution: %v\n", err)
 	}
 	resolvedApps, err := formspec_app.Resolve(specManifests.Manifests, newUIReg)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec: reload resolve apps: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec: reload resolve apps: %v\n", err)
 	}
 	if len(resolvedApps) == 0 {
-		fmt.Fprintf(os.Stderr, "formspec: reload warning: no kind: App manifest found\n")
+		_, _ = fmt.Fprintf(os.Stderr, "formspec: reload warning: no kind: App manifest found\n")
 	}
 
 	// ── 4. Build fresh router, dispatcher, and handler ──
@@ -1339,7 +1339,7 @@ func (a *App) ReloadSpec() error {
 	if resolvedSettings := spec.ResolveSettings(declaredSettings); resolvedSettings.Auth != nil {
 		providers, errs := buildOAuthProviders(resolvedSettings.Auth, a.cfg.WorkspaceID)
 		for _, err := range errs {
-			fmt.Fprintf(os.Stderr, "formspec: oauth provider: %v\n", err)
+			_, _ = fmt.Fprintf(os.Stderr, "formspec: oauth provider: %v\n", err)
 		}
 		if len(providers) > 0 {
 			a.authSvc.SetOAuthProviders(providers)
@@ -1423,7 +1423,7 @@ func (a *App) ReloadSpec() error {
 			a.dynamicRefresher.Stop()
 			newDynamicRefresher = subscription.NewDynamicRefresher(newSubReg, newDynamicSource, a.cfg.WorkspaceID)
 			if err := newDynamicRefresher.Refresh(context.Background()); err != nil {
-				fmt.Fprintf(os.Stderr, "formspec: warning: reload dynamic subscriptions: %v\n", err)
+				_, _ = fmt.Fprintf(os.Stderr, "formspec: warning: reload dynamic subscriptions: %v\n", err)
 			}
 			if wasRunning {
 				newDynamicRefresher.Start(context.Background())
@@ -1473,7 +1473,7 @@ func (a *App) ReloadSpec() error {
 
 	a.specVersion.Add(1)
 
-	fmt.Fprintf(os.Stderr, "formspec: reload complete — %d routes, %d entities (v%d)\n",
+	_, _ = fmt.Fprintf(os.Stderr, "formspec: reload complete — %d routes, %d entities (v%d)\n",
 		len(newRB.Routes()), newReg.Count(), a.specVersion.Load())
 	return nil
 }
@@ -1607,14 +1607,14 @@ func buildServiceRegistry(manifests []manifest.RawManifest) *service.Registry {
 func syncWorkspaceRegistry(reg *entity.Registry, manifests []manifest.RawManifest) {
 	store, err := reg.GetEntityStore(auth.CoreModule, auth.CoreWorkspaceEntity)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec: workspace registry: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec: workspace registry: %v\n", err)
 		return
 	}
 	wsReg := auth.NewWorkspaceRegistry(store)
 	ctx := context.Background()
 	for _, seed := range collectWorkspaceSeeds(manifests) {
 		if _, err := wsReg.Ensure(ctx, seed); err != nil {
-			fmt.Fprintf(os.Stderr, "formspec: workspace seed %q: %v\n", seed.Slug, err)
+			_, _ = fmt.Fprintf(os.Stderr, "formspec: workspace seed %q: %v\n", seed.Slug, err)
 		}
 	}
 	// The default workspace is always registered (idempotent upsert): the
@@ -1623,7 +1623,7 @@ func syncWorkspaceRegistry(reg *entity.Registry, manifests []manifest.RawManifes
 		Slug:        spec.DefaultWorkspaceSlug,
 		DisplayName: "Default Workspace",
 	}); err != nil {
-		fmt.Fprintf(os.Stderr, "formspec: workspace seed %q: %v\n", spec.DefaultWorkspaceSlug, err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec: workspace seed %q: %v\n", spec.DefaultWorkspaceSlug, err)
 	}
 	api.SetWorkspaceResolver(wsReg)
 }
@@ -1644,11 +1644,11 @@ func collectWorkspaceSeeds(manifests []manifest.RawManifest) []auth.WorkspaceInf
 		}
 		ws, err := manifest.RawSpecTo[spec.WorkspaceSpec](specMap)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "formspec: workspace manifest %s: %v\n", raw.Source, err)
+			_, _ = fmt.Fprintf(os.Stderr, "formspec: workspace manifest %s: %v\n", raw.Source, err)
 			continue
 		}
 		if err := spec.ValidateWorkspaceSpec(ws, raw.Metadata.Name); err != nil {
-			fmt.Fprintf(os.Stderr, "formspec: workspace manifest %s: %v\n", raw.Source, err)
+			_, _ = fmt.Fprintf(os.Stderr, "formspec: workspace manifest %s: %v\n", raw.Source, err)
 			continue
 		}
 		out = append(out, auth.WorkspaceInfo{
@@ -2062,7 +2062,7 @@ func newSidecarExecutor(cfg Config) action.Executor {
 	}
 	ex, err := action.NewSidecarExecutorWithEndpoint(cfg.SidecarEndpoint, cfg.SidecarInvokeTimeout)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec: invalid SidecarEndpoint %q (%v) — sidecar actions will fail\n", cfg.SidecarEndpoint, err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec: invalid SidecarEndpoint %q (%v) — sidecar actions will fail\n", cfg.SidecarEndpoint, err)
 		return action.NewSidecarExecutor()
 	}
 	return ex

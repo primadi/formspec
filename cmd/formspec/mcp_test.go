@@ -150,7 +150,7 @@ func startMCPServer(t *testing.T, specDir, projectDir string) *mcp.ClientSession
 	if err != nil {
 		t.Fatalf("connect MCP server: %v", err)
 	}
-	t.Cleanup(func() { session.Close() })
+	t.Cleanup(func() { _ = session.Close() })
 	return session
 }
 

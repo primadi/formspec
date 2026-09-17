@@ -152,7 +152,7 @@ func runDev(args []string) {
 	// ── 8. Port conflict resolution ──
 	// Main REST API port: always resolve (auto-kill previous formspec instance)
 	if err := ensurePort(cfg.Addr, "formspec"); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 	// Extra listen/app ports: only resolve with --force
@@ -166,7 +166,7 @@ func runDev(args []string) {
 		}
 		for _, a := range addrs {
 			if err := ensurePort(a, "formspec"); err != nil {
-				fmt.Fprintln(os.Stderr, err)
+				_, _ = fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
 		}
@@ -381,10 +381,12 @@ func runDev(args []string) {
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	restSrv.Shutdown(shutdownCtx)
+	_ = restSrv.Shutdown(shutdownCtx)
 	if socketSrv != nil {
-		socketSrv.Shutdown(shutdownCtx)
+		_ = socketSrv.Shutdown(shutdownCtx)
 	}
+	// appProc/viteProc are the child-process wrappers (dev_vite.go); their
+	// Shutdown returns nothing, unlike the http.Server.Shutdown calls above.
 	if appProc != nil {
 		appProc.Shutdown(5 * time.Second)
 	}
@@ -473,7 +475,9 @@ func parseDevFlags(args []string) DevConfig {
 	controlURL := fs.String("control-cluster-url", "", "Control Plane URL (artifact pull mode)")
 	themeDirs := fs.String("theme-dir", "", "Additional theme directory (repeatable, comma-separated)")
 
-	fs.Parse(args)
+	// The FlagSet is ExitOnError — Parse prints usage and exits on a bad flag,
+	// so there is no error to handle here.
+	_ = fs.Parse(args)
 
 	// Apply defaults for empty flags
 	cfg := DevConfig{
@@ -643,7 +647,7 @@ func watchSpecForChanges(ctx context.Context, app *formspec.App, specPath string
 			if resp, err := http.Get(viteHMRURL); err != nil {
 				log.Printf("[formspec] vite hmr notify: %v", err)
 			} else {
-				resp.Body.Close()
+				_ = resp.Body.Close()
 			}
 		}
 	}

@@ -211,7 +211,7 @@ func TestRegistry_MultipleModules(t *testing.T) {
 func TestRegistry_CrossModuleWriteDetection(t *testing.T) {
 	r := NewRegistry()
 
-	r.RegisterAction("billing", "order", "checkout",
+	if err := r.RegisterAction("billing", "order", "checkout",
 		"billing.orders.checkout",
 		&UsesEntry{
 			Module: "billing",
@@ -222,7 +222,9 @@ func TestRegistry_CrossModuleWriteDetection(t *testing.T) {
 			},
 		},
 		"order.yaml", false,
-	)
+	); err != nil {
+		t.Fatal(err)
+	}
 
 	fp, ok := r.GetModuleFootprint("billing")
 	if !ok {
@@ -241,7 +243,7 @@ func TestRegistry_CrossModuleWriteDetection(t *testing.T) {
 func TestRegistry_UsesFor(t *testing.T) {
 	r := NewRegistry()
 
-	r.RegisterAction("billing", "invoice", "send",
+	if err := r.RegisterAction("billing", "invoice", "send",
 		"billing.invoices.send",
 		&UsesEntry{
 			Module:     "billing",
@@ -250,7 +252,9 @@ func TestRegistry_UsesFor(t *testing.T) {
 			Primitives: []string{"queue"},
 		},
 		"inv.yaml", false,
-	)
+	); err != nil {
+		t.Fatal(err)
+	}
 
 	uses := r.UsesFor("billing", "invoice")
 	if len(uses) != 1 {
@@ -401,8 +405,10 @@ func TestValidateAction(t *testing.T) {
 
 func TestAuthChecker(t *testing.T) {
 	r := NewRegistry()
-	r.RegisterAction("billing", "invoice", "list",
-		"billing.invoices.list", nil, "inv.yaml", false)
+	if err := r.RegisterAction("billing", "invoice", "list",
+		"billing.invoices.list", nil, "inv.yaml", false); err != nil {
+		t.Fatal(err)
+	}
 
 	checker := NewAuthChecker(r)
 
@@ -454,8 +460,10 @@ func TestModuleFootprint_String(t *testing.T) {
 
 func TestAuthChecker_CtxAuthHas(t *testing.T) {
 	r := NewRegistry()
-	r.RegisterAction("billing", "invoice", "list",
-		"billing.invoices.list", nil, "inv.yaml", false)
+	if err := r.RegisterAction("billing", "invoice", "list",
+		"billing.invoices.list", nil, "inv.yaml", false); err != nil {
+		t.Fatal(err)
+	}
 
 	// Dev mode identity with wildcard
 	devID := &mockIdentity{perms: []string{"*"}}

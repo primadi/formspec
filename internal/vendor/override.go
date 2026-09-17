@@ -341,7 +341,7 @@ func ValidateOverridesDir(projectRoot string) error {
 		return nil
 	}
 	var errs []string
-	filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
+	if err := filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
 		}
@@ -368,7 +368,9 @@ func ValidateOverridesDir(projectRoot string) error {
 			}
 		}
 		return nil
-	})
+	}); err != nil {
+		return fmt.Errorf("validate overrides: %w", err)
+	}
 	if len(errs) > 0 {
 		return fmt.Errorf("overrides/ whitelist violation:\n  %s", strings.Join(errs, "\n  "))
 	}

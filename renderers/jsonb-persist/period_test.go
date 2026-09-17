@@ -18,7 +18,7 @@ func setupPeriodEnv(t *testing.T, guard func(ctx context.Context, workspaceID, p
 	if err != nil {
 		t.Fatalf("OpenSQLite: %v", err)
 	}
-	t.Cleanup(func() { d.Close() })
+	t.Cleanup(func() { _ = d.Close() })
 
 	meta := spec.Metadata{Name: "journal-entry", Module: "gl"}
 	entity := &spec.EntitySpec{
@@ -109,7 +109,7 @@ func TestPeriodGuard_NonTransactionIgnored(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite: %v", err)
 	}
-	t.Cleanup(func() { d.Close() })
+	t.Cleanup(func() { _ = d.Close() })
 
 	meta := spec.Metadata{Name: "product", Module: "inv"}
 	entity := &spec.EntitySpec{

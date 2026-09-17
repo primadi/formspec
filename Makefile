@@ -1,4 +1,4 @@
-.PHONY: all build clean test lint deps-warm run-example registry-dev dev web-deps web-dev web-build web-typecheck site-deps site-dev site-build site-typecheck apply build-spa build-registry install release release-upload
+.PHONY: all build clean test lint deps-warm run-example registry-dev dev web-deps web-dev web-build web-typecheck site-deps site-dev site-build site-typecheck apply build-spa build-registry install release release-upload release-version check-release-version check-upload-version
 
 # Build all binaries
 all: build
@@ -145,9 +145,19 @@ deps:
 # {linux,darwin,windows} × {amd64,arm64} dengan CGO_ENABLED=0 (SQLite pakai
 # driver pure-Go modernc.org/sqlite).
 #
-#   make release                        # VERSION otomatis dari git describe
-#   make release VERSION=v1.2.3         # override manual
-#   make release-upload VERSION=v1.2.3  # upload dist/release/* ke GitHub Releases (draft)
+#   make release-version                # tampilkan versi yang akan dipakai rilis
+#   make release                        # versi auto: patch-bump tag semver tertinggi
+#   make release VERSION=v1.2.3         # override manual (bump minor/major)
+#   make release-upload                 # upload dist/release/* ke GitHub Releases (draft)
+#
+# Versi rilis tidak boleh berupa string git-describe (mis. `v0.0.8-4-gceaaf2a`):
+# komparator `formspec upgrade` membacanya sebagai *prerelease v0.0.8*, sehingga
+# rilis yang isinya justru lebih baru tampak sebagai rollback di mata user.
+# Karena itu `release` menolak VERSION non-semver dan — bila VERSION tidak diisi
+# — memakai patch-bump dari tag semver tertinggi (scripts/next-version.sh).
+# `release-upload` memakai versi yang sudah TERTANAM di artifact dist/release/,
+# bukan di-derive ulang: tag yang dibuat di antara dua perintah akan menggeser
+# hasil auto-bump dan upload mencampur dua versi.
 #
 # release-upload idempotent: boleh diulang. Bila upload terputus di tengah
 # (asset baru sebagian naik), jalankan perintah yang sama lagi — draft release
@@ -155,10 +165,35 @@ deps:
 #
 # Output: dist/release/formspec-<os>-<arch>.tar.gz|.zip + SHA256SUMS.txt
 # Prosedur lengkap (prasyarat, tag, upload, verifikasi): docs/guides/releasing.md
+# Rincian desain: docs_internal/plan/release-version-auto.md
 # ---------------------------------------------------------------------------
 
-VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+# Stamp build dev (`make build` / `make build-formspec`) — git describe agar
+# binary lokal menunjuk commit. Ini BUKAN versi rilis (lihat blok di atas).
+DEV_VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+
 RELEASE_DIR := dist/release
+
+# Versi yang tertanam di artifact dist/release/ (dibaca dari nama
+# `spa-<versi>.tar.gz`). Sengaja RECURSIVE (`=`, bukan `:=`): ekspansinya
+# terjadi saat resep dijalankan, jadi `make release release-upload` dalam satu
+# invokasi tetap membaca artifact yang baru saja dibangun (bukan dist lama).
+DIST_VERSION = $(shell ls $(RELEASE_DIR)/spa-*.tar.gz 2>/dev/null | sed -n 's|.*/spa-\(.*\)\.tar\.gz$$|\1|p' | head -n 1)
+
+# VERSION = versi rilis. Nilai eksplisit (`make release VERSION=v0.2.0`, atau env
+# VERSION) selalu menang; tanpa itu versi diturunkan per-goal:
+#   release / release-version → patch-bump dari tag semver tertinggi
+#   release-upload            → versi artifact yang sudah dibangun
+#   goal lain (build dev)     → stamp git describe
+ifeq ($(origin VERSION),undefined)
+  ifneq ($(filter release release-version,$(MAKECMDGOALS)),)
+    VERSION := $(shell bash scripts/next-version.sh)
+  else ifneq ($(filter release-upload,$(MAKECMDGOALS)),)
+    VERSION = $(DIST_VERSION)
+  else
+    VERSION := $(DEV_VERSION)
+  endif
+endif
 
 # Pairs "<os>/<arch>:<ext>" — ext = packaging (tar.gz | zip)
 RELEASE_TARGETS := \
@@ -169,7 +204,22 @@ RELEASE_TARGETS := \
 	windows/amd64:zip \
 	windows/arm64:zip
 
-release: build-spa
+# Versi yang akan dipakai target rilis (tanpa build apa pun). Ikut menjalankan
+# guard, jadi `make release-version VERSION=vX.Y.Z` sekaligus memvalidasi input.
+release-version: check-release-version
+	@echo "versi rilis: $(VERSION)"
+
+# Guard versi rilis — semver murni saja, dijalankan SEBELUM build SPA yang mahal.
+check-release-version:
+	@bash scripts/check-semver.sh "$(VERSION)"
+
+# Guard upload: artifact dist/release/ harus ada dan berstamp VERSION yang sama.
+check-upload-version:
+	@test -n "$(DIST_VERSION)" || (echo "❌ $(RELEASE_DIR)/ tidak berisi artifact spa-<versi>.tar.gz — jalankan 'make release' dulu." >&2; exit 1)
+	@bash scripts/check-semver.sh "$(VERSION)"
+	@test "$(VERSION)" = "$(DIST_VERSION)" || (echo "❌ Artifact di $(RELEASE_DIR)/ berstamp $(DIST_VERSION), bukan $(VERSION) — jalankan 'make release VERSION=$(VERSION)' dulu; upload harus memakai artifact yang cocok dengan tag." >&2; exit 1)
+
+release: check-release-version build-spa
 	@rm -rf cmd/formspec/dist
 	@mkdir -p cmd/formspec/dist
 	cp -r renderers/react-shadcn/dist/* cmd/formspec/dist/
@@ -211,12 +261,9 @@ release: build-spa
 # release" — artifact sudah tersebar ke user, isinya tidak boleh berubah).
 # Asset di-upload satu per file (bukan paralel): progres lebih granular, dan
 # file yang sudah naik dengan ukuran sama dilewati saat target diulang.
-release-upload:
-	@test -n "$(VERSION)" || (echo "❌ Set VERSION, mis. make release-upload VERSION=v0.1.0 (jangan mengandalkan git describe — lihat docs/guides/releasing.md)" && exit 1)
-	@printf '%s' "$(VERSION)" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+' || (echo "❌ VERSION='$(VERSION)' bukan semver (format: v<major>.<minor>.patch>). Rilis pertama juga harus tag semver yang dipilih sadar." && exit 1)
+release-upload: check-upload-version
 	@git rev-parse "$(VERSION)^{commit}" >/dev/null 2>&1 || (echo "❌ Tag $(VERSION) belum ada lokal — buat dulu: git tag $(VERSION) && git push origin $(VERSION)" && exit 1)
 	@command -v gh >/dev/null 2>&1 || (echo "❌ 'gh' CLI tidak ditemukan — upload manual via https://github.com/primadi/formspec/releases/new" && exit 1)
-	@test -d $(RELEASE_DIR) && ls $(RELEASE_DIR)/* >/dev/null 2>&1 || (echo "❌ $(RELEASE_DIR)/ kosong — jalankan 'make release VERSION=$(VERSION)' dulu" && exit 1)
 	@gh release upload --help 2>&1 | grep -q -- --clobber || (echo "❌ 'gh' terlalu tua: butuh >= 2.18 ('gh release upload --clobber') — upgrade gh atau upload manual" && exit 1)
 	@state="$$(gh release view $(VERSION) --json isDraft --jq '.isDraft' 2>/dev/null || echo missing)"; \
 	if [ "$$state" = "false" ]; then \

@@ -16,7 +16,7 @@ func TestEntityStore_InsertAndGetByID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	// Create table via migration
 	meta := spec.Metadata{Name: "customer", Module: "billing"}
@@ -65,14 +65,14 @@ func TestEntityStore_Update(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "product", Module: "inventory"}
 	entity := &spec.EntitySpec{
 		Version: "v1",
 		Fields: []spec.Field{
 			{Name: "name", Type: spec.FieldString},
-			{Name: "price", Type: spec.FieldNumber},
+			{Name: "price", Type: spec.FieldDecimal},
 		},
 	}
 
@@ -122,7 +122,7 @@ func TestEntityStore_Update_VersionConflict(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "item", Module: "test"}
 	entity := &spec.EntitySpec{Version: "v1", Fields: []spec.Field{{Name: "name", Type: spec.FieldString}}}
@@ -156,7 +156,7 @@ func TestEntityStore_SoftDelete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "customer", Module: "billing"}
 	entity := &spec.EntitySpec{
@@ -195,13 +195,13 @@ func TestEntityStore_List(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "order", Module: "billing"}
 	entity := &spec.EntitySpec{
 		Version: "v1",
 		Fields: []spec.Field{
-			{Name: "total", Type: spec.FieldNumber},
+			{Name: "total", Type: spec.FieldDecimal},
 			{Name: "status", Type: spec.FieldEnum, EnumValues: []string{"draft", "paid"}},
 		},
 	}
@@ -251,7 +251,7 @@ func TestEntityStore_List_FilterByField(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "customer", Module: "billing"}
 	entity := &spec.EntitySpec{
@@ -307,7 +307,7 @@ func TestEntityStore_FindByField(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "customer", Module: "billing"}
 	entity := &spec.EntitySpec{
@@ -349,7 +349,7 @@ func TestEntityStore_TenantIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "customer", Module: "billing"}
 	entity := &spec.EntitySpec{
@@ -399,14 +399,14 @@ func TestEntityStore_DefaultValue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "product", Module: "inventory"}
 	entity := &spec.EntitySpec{
 		Version: "v1",
 		Fields: []spec.Field{
 			{Name: "name", Type: spec.FieldString},
-			{Name: "price", Type: spec.FieldNumber, Default: float64(0.99)},
+			{Name: "price", Type: spec.FieldDecimal, Default: float64(0.99)},
 			{Name: "active", Type: spec.FieldBoolean, Default: true},
 			{Name: "tier", Type: spec.FieldString, Default: "standard"},
 		},
@@ -475,7 +475,7 @@ func TestEntityStore_RequiredField(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "customer", Module: "billing"}
 	entity := &spec.EntitySpec{
@@ -526,7 +526,7 @@ func TestEntityStore_ImmutableField(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "order", Module: "billing"}
 	entity := &spec.EntitySpec{
@@ -589,7 +589,7 @@ func TestEntityStore_StateMachineTransition(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "order", Module: "billing"}
 	entity := &spec.EntitySpec{
@@ -667,14 +667,14 @@ func TestEntityStore_StateMachineGuard_Passes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "order", Module: "billing"}
 	entity := &spec.EntitySpec{
 		Version: "v1",
 		Fields: []spec.Field{
 			{Name: "status", Type: spec.FieldString},
-			{Name: "total", Type: spec.FieldNumber},
+			{Name: "total", Type: spec.FieldDecimal},
 		},
 		StateMachine: &spec.StateMachine{
 			Field:   "status",
@@ -732,14 +732,14 @@ func TestEntityStore_StateMachineGuard_Rejects(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "order", Module: "billing"}
 	entity := &spec.EntitySpec{
 		Version: "v1",
 		Fields: []spec.Field{
 			{Name: "status", Type: spec.FieldString},
-			{Name: "total", Type: spec.FieldNumber},
+			{Name: "total", Type: spec.FieldDecimal},
 		},
 		StateMachine: &spec.StateMachine{
 			Field:   "status",
@@ -800,7 +800,7 @@ func TestEntityStore_FieldRules_Email(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "customer", Module: "billing"}
 	entity := &spec.EntitySpec{
@@ -863,7 +863,7 @@ func TestEntityStore_FieldRules_MinMax(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "product", Module: "inventory"}
 	entity := &spec.EntitySpec{
@@ -871,7 +871,7 @@ func TestEntityStore_FieldRules_MinMax(t *testing.T) {
 		Fields: []spec.Field{
 			{Name: "name", Type: spec.FieldString},
 			{
-				Name: "price", Type: spec.FieldNumber,
+				Name: "price", Type: spec.FieldDecimal,
 				Rules: []spec.ValidationRule{
 					{Name: "positive"},
 					{Name: "min", Value: float64(0.01)},
@@ -948,17 +948,17 @@ func TestEntityStore_ComputedField(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "invoice", Module: "billing"}
 	entity := &spec.EntitySpec{
 		Version: "v1",
 		Fields: []spec.Field{
-			{Name: "subtotal", Type: spec.FieldNumber},
-			{Name: "tax_rate", Type: spec.FieldNumber},
+			{Name: "subtotal", Type: spec.FieldDecimal},
+			{Name: "tax_rate", Type: spec.FieldDecimal},
 			{
 				Name: "total",
-				Type: spec.FieldNumber,
+				Type: spec.FieldDecimal,
 				Computed: &spec.ComputedDecl{
 					Formula: "subtotal * (1 + tax_rate / 100)",
 				},
@@ -1027,7 +1027,7 @@ func TestEntityStore_ChildComputedField(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "order", Module: "cafe"}
 	entity := &spec.EntitySpec{
@@ -1039,11 +1039,11 @@ func TestEntityStore_ChildComputedField(t *testing.T) {
 				Child: &spec.ChildDecl{
 					Storage: "jsonb",
 					Fields: []spec.Field{
-						{Name: "quantity", Type: spec.FieldNumber},
-						{Name: "unit_price", Type: spec.FieldNumber},
+						{Name: "quantity", Type: spec.FieldDecimal},
+						{Name: "unit_price", Type: spec.FieldDecimal},
 						{
 							Name: "line_total",
-							Type: spec.FieldNumber,
+							Type: spec.FieldDecimal,
 							Computed: &spec.ComputedDecl{
 								Formula: "quantity * unit_price",
 							},
@@ -1053,7 +1053,7 @@ func TestEntityStore_ChildComputedField(t *testing.T) {
 			},
 			{
 				Name: "total_amount",
-				Type: spec.FieldNumber,
+				Type: spec.FieldDecimal,
 				Computed: &spec.ComputedDecl{
 					Formula: `sum([i["line_total"] for i in items])`,
 				},
@@ -1124,14 +1124,14 @@ func TestEntityStore_FieldRule_Positive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "product", Module: "inventory"}
 	entity := &spec.EntitySpec{
 		Version: "v1",
 		Fields: []spec.Field{
 			{Name: "name", Type: spec.FieldString},
-			{Name: "price", Type: spec.FieldNumber, Rules: []spec.ValidationRule{{Name: "positive"}}},
+			{Name: "price", Type: spec.FieldDecimal, Rules: []spec.ValidationRule{{Name: "positive"}}},
 		},
 	}
 
@@ -1181,7 +1181,7 @@ func TestEntityStore_FieldRule_URL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "link", Module: "content"}
 	entity := &spec.EntitySpec{
@@ -1226,14 +1226,14 @@ func TestEntityStore_FieldRule_Precision(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "invoice", Module: "billing"}
 	entity := &spec.EntitySpec{
 		Version: "v1",
 		Fields: []spec.Field{
 			{Name: "number", Type: spec.FieldString},
-			{Name: "amount", Type: spec.FieldNumber, Rules: []spec.ValidationRule{{Name: "precision", Value: 2}}},
+			{Name: "amount", Type: spec.FieldDecimal, Rules: []spec.ValidationRule{{Name: "precision", Value: 2}}},
 		},
 	}
 
@@ -1280,7 +1280,7 @@ func TestEntityStore_FieldRule_Future(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "event", Module: "calendar"}
 	entity := &spec.EntitySpec{
@@ -1325,7 +1325,7 @@ func TestEntityStore_FieldRule_MinMaxItems(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "config", Module: "core"}
 	entity := &spec.EntitySpec{
@@ -1388,12 +1388,12 @@ func TestEntityStore_Submit_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "order", Module: "billing"}
 	entity := &spec.EntitySpec{
 		Version: "v1",
-		Fields:  []spec.Field{{Name: "total", Type: spec.FieldNumber}},
+		Fields:  []spec.Field{{Name: "total", Type: spec.FieldDecimal}},
 	}
 
 	r := NewMigrationRunner(d, DriverSQLite)
@@ -1437,12 +1437,12 @@ func TestEntityStore_Submit_AlreadySubmitted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "order", Module: "billing"}
 	entity := &spec.EntitySpec{
 		Version: "v1",
-		Fields:  []spec.Field{{Name: "total", Type: spec.FieldNumber}},
+		Fields:  []spec.Field{{Name: "total", Type: spec.FieldDecimal}},
 	}
 
 	r := NewMigrationRunner(d, DriverSQLite)
@@ -1457,7 +1457,9 @@ func TestEntityStore_Submit_AlreadySubmitted(t *testing.T) {
 		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"total": float64(100)},
 	})
-	store.Submit(ctx, "t1", id, "u1")
+	if err := store.Submit(ctx, "t1", id, "u1"); err != nil {
+		t.Fatal(err)
+	}
 
 	// Second submit should fail
 	err = store.Submit(ctx, "t1", id, "u1")
@@ -1472,12 +1474,12 @@ func TestEntityStore_Cancel_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "order", Module: "billing"}
 	entity := &spec.EntitySpec{
 		Version: "v1",
-		Fields:  []spec.Field{{Name: "total", Type: spec.FieldNumber}},
+		Fields:  []spec.Field{{Name: "total", Type: spec.FieldDecimal}},
 	}
 
 	r := NewMigrationRunner(d, DriverSQLite)
@@ -1492,7 +1494,9 @@ func TestEntityStore_Cancel_Success(t *testing.T) {
 		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"total": float64(100)},
 	})
-	store.Submit(ctx, "t1", id, "u1")
+	if err := store.Submit(ctx, "t1", id, "u1"); err != nil {
+		t.Fatal(err)
+	}
 
 	// Cancel: submitted → cancelled
 	if err := store.Cancel(ctx, "t1", id, "u1"); err != nil {
@@ -1500,7 +1504,7 @@ func TestEntityStore_Cancel_Success(t *testing.T) {
 	}
 
 	var docStatus string
-	d.QueryRowContext(ctx,
+	_ = d.QueryRowContext(ctx,
 		"SELECT doc_status FROM billing_orders WHERE id = ? AND tenant_id = ?",
 		id, "t1").Scan(&docStatus)
 	if docStatus != "cancelled" {
@@ -1514,12 +1518,12 @@ func TestEntityStore_Cancel_NotSubmitted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "order", Module: "billing"}
 	entity := &spec.EntitySpec{
 		Version: "v1",
-		Fields:  []spec.Field{{Name: "total", Type: spec.FieldNumber}},
+		Fields:  []spec.Field{{Name: "total", Type: spec.FieldDecimal}},
 	}
 
 	r := NewMigrationRunner(d, DriverSQLite)
@@ -1548,12 +1552,12 @@ func TestEntityStore_Amend_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "order", Module: "billing"}
 	entity := &spec.EntitySpec{
 		Version: "v1",
-		Fields:  []spec.Field{{Name: "total", Type: spec.FieldNumber}},
+		Fields:  []spec.Field{{Name: "total", Type: spec.FieldDecimal}},
 	}
 
 	r := NewMigrationRunner(d, DriverSQLite)
@@ -1569,7 +1573,9 @@ func TestEntityStore_Amend_Success(t *testing.T) {
 		WorkspaceID: "t1", CreatedBy: "u1",
 		Data: map[string]any{"total": float64(100)},
 	})
-	store.Submit(ctx, "t1", origID, "u1")
+	if err := store.Submit(ctx, "t1", origID, "u1"); err != nil {
+		t.Fatal(err)
+	}
 
 	// Amend: creates new doc, cancels original, links both
 	newID, err := store.Amend(ctx, "t1", origID, "u1", map[string]any{"total": float64(200)})
@@ -1585,7 +1591,7 @@ func TestEntityStore_Amend_Success(t *testing.T) {
 
 	// Verify original is cancelled
 	var origStatus string
-	d.QueryRowContext(ctx,
+	_ = d.QueryRowContext(ctx,
 		"SELECT doc_status FROM billing_orders WHERE id = ? AND tenant_id = ?",
 		origID, "t1").Scan(&origStatus)
 	if origStatus != "cancelled" {
@@ -1594,7 +1600,7 @@ func TestEntityStore_Amend_Success(t *testing.T) {
 
 	// Verify new doc has amends set
 	var amends string
-	d.QueryRowContext(ctx,
+	_ = d.QueryRowContext(ctx,
 		"SELECT amends FROM billing_orders WHERE id = ? AND tenant_id = ?",
 		newID, "t1").Scan(&amends)
 	if amends != origID {
@@ -1603,7 +1609,7 @@ func TestEntityStore_Amend_Success(t *testing.T) {
 
 	// Verify original has amended_by set
 	var amendedBy string
-	d.QueryRowContext(ctx,
+	_ = d.QueryRowContext(ctx,
 		"SELECT amended_by FROM billing_orders WHERE id = ? AND tenant_id = ?",
 		origID, "t1").Scan(&amendedBy)
 	if amendedBy != newID {
@@ -1617,7 +1623,7 @@ func TestEntityStore_LifecycleFree_NoDocStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "customer", Module: "billing"}
 	entity := &spec.EntitySpec{
@@ -1646,7 +1652,7 @@ func TestEntityStore_LifecycleFree_NoDocStatus(t *testing.T) {
 
 	// Verify doc_status is NULL (lifecycle-free)
 	var docStatus *string
-	d.QueryRowContext(ctx,
+	_ = d.QueryRowContext(ctx,
 		"SELECT doc_status FROM billing_customers WHERE id = ? AND tenant_id = ?",
 		id, "t1").Scan(&docStatus)
 	if docStatus != nil {
@@ -1666,7 +1672,7 @@ func TestEntityStore_BackdatePolicy_Blocked(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "visit", Module: "clinic"}
 	oldDate := timeNow().Add(-10 * 24 * time.Hour).Format("2006-01-02")
@@ -1712,7 +1718,7 @@ func TestEntityStore_BackdatePolicy_Override(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "visit", Module: "clinic"}
 	oldDate := timeNow().Add(-10 * 24 * time.Hour).Format("2006-01-02")
@@ -1754,7 +1760,7 @@ func TestEntityStore_IsStale_Computed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "visit", Module: "clinic"}
 	entity := &spec.EntitySpec{
@@ -1851,7 +1857,7 @@ func TestEntityStore_InsertUnknownField(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "task", Module: "project"}
 	entity := &spec.EntitySpec{
@@ -1904,7 +1910,7 @@ func TestEntityStore_UpdateUnknownField(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "note", Module: "project"}
 	entity := &spec.EntitySpec{
@@ -1973,7 +1979,7 @@ func TestEntityStore_ReservedFieldRejected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "widget", Module: "factory"}
 	entity := &spec.EntitySpec{
@@ -2019,7 +2025,7 @@ func TestEntityStore_FieldRules_LengthInScript(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "product", Module: "inventory"}
 	entity := &spec.EntitySpec{
@@ -2035,7 +2041,7 @@ func TestEntityStore_FieldRules_LengthInScript(t *testing.T) {
 				Rules: []spec.ValidationRule{{Name: "in", Value: []any{"active", "inactive"}}},
 			},
 			{
-				Name: "qty", Type: spec.FieldNumber,
+				Name: "qty", Type: spec.FieldDecimal,
 				Rules: []spec.ValidationRule{{Name: "script", Value: "value > 0"}},
 			},
 		},
@@ -2090,7 +2096,7 @@ func TestEntityStore_FieldRules_Unique(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "customer", Module: "crm"}
 	entity := &spec.EntitySpec{

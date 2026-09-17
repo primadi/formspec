@@ -48,7 +48,7 @@ func OpenPostgres(connString, schema string) (DB, error) {
 	p := &PostgresDB{db: sqldb, dsn: connString, schema: schema}
 
 	if err := p.Ping(context.Background()); err != nil {
-		sqldb.Close()
+		_ = sqldb.Close()
 		return nil, fmt.Errorf("postgres ping: %w", err)
 	}
 

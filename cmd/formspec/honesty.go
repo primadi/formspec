@@ -576,11 +576,11 @@ func applyHonestyFix(_ []manifest.RawManifest, issues []honestyIssue) (removed i
 		docIdx := 0
 		if idx := strings.LastIndex(src, "#"); idx >= 0 {
 			file = src[:idx]
-			fmt.Sscanf(src[idx+1:], "%d", &docIdx)
+			_, _ = fmt.Sscanf(src[idx+1:], "%d", &docIdx)
 		}
 		n, err := fixManifestFile(file, docIdx, bySource[src])
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "[FIX FAILED] %s: %v\n", src, err)
+			_, _ = fmt.Fprintf(os.Stderr, "[FIX FAILED] %s: %v\n", src, err)
 			continue
 		}
 		removed += n

@@ -126,18 +126,18 @@ func (c *Change) Measure(rows int, remedy string) {
 // String renders one line for `migrate plan` / `migrate apply` output.
 func (c Change) String() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "[%s] %s", c.Class, c.Kind)
+	_, _ = fmt.Fprintf(&b, "[%s] %s", c.Class, c.Kind)
 	if c.Name != "" {
-		fmt.Fprintf(&b, " %s", c.Name)
+		_, _ = fmt.Fprintf(&b, " %s", c.Name)
 	}
 	if c.Detail != "" {
-		fmt.Fprintf(&b, ": %s", c.Detail)
+		_, _ = fmt.Fprintf(&b, ": %s", c.Detail)
 	}
 	if c.Rows > 0 && c.Counted {
-		fmt.Fprintf(&b, " (%d row(s) affected)", c.Rows)
+		_, _ = fmt.Fprintf(&b, " (%d row(s) affected)", c.Rows)
 	}
 	if c.Declared {
-		fmt.Fprintf(&b, " — declared: %s", c.Reason)
+		_, _ = fmt.Fprintf(&b, " — declared: %s", c.Reason)
 	}
 	return b.String()
 }
@@ -542,7 +542,7 @@ func RefuseUndeclared(changes []Change) error {
 	}
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "%d destructive change(s) refused", len(refused))
+	_, _ = fmt.Fprintf(&b, "%d destructive change(s) refused", len(refused))
 	for _, c := range refused {
 		b.WriteString("\n  - ")
 		b.WriteString(c.String())

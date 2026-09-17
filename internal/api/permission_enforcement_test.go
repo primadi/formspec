@@ -24,7 +24,7 @@ func setupEnforcementEnv(t *testing.T) http.Handler {
 	if err != nil {
 		t.Fatalf("OpenSQLite: %v", err)
 	}
-	t.Cleanup(func() { d.Close() })
+	t.Cleanup(func() { _ = d.Close() })
 
 	reg := entity.NewRegistry(d, db.DriverSQLite, "")
 	// Register an exposed entity (non-internal) so routes are generated.

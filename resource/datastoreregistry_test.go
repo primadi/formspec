@@ -104,7 +104,7 @@ func TestDatastoreRegistry_PlainCall_ModuleBound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open %s: %v", alphaPath, err)
 	}
-	defer alphaDB.Close()
+	defer func() { _ = alphaDB.Close() }()
 	if ok, _ := alphaDB.HasTable(ctx, "", "probe_alpha"); !ok {
 		t.Fatalf("probe_alpha table not found in ds-alpha db — plain call did not resolve to the bound datastore")
 	}
@@ -430,7 +430,7 @@ func TestDatastoreRegistry_SetDefaultOverride(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open %s: %v", betaPath, err)
 	}
-	defer betaDB.Close()
+	defer func() { _ = betaDB.Close() }()
 	if ok, _ := betaDB.HasTable(ctx, "", "probe_beta"); !ok {
 		t.Fatalf("probe_beta table not found in ds-beta db — default override not applied")
 	}
@@ -568,7 +568,7 @@ func TestDatastoreRegistry_ModuleOverride(t *testing.T) {
 		if err != nil {
 			t.Fatalf("open pg-main: %v", err)
 		}
-		defer mainDB.Close()
+		defer func() { _ = mainDB.Close() }()
 		if ok, _ := mainDB.HasTable(ctx, "", "probe_mod"); ok {
 			t.Fatalf("probe_mod leaked into pg-main — module override ignored")
 		}

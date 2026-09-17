@@ -20,7 +20,7 @@ func newTestEntityRegistry(t *testing.T, module, name string, es *spec.EntitySpe
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	t.Cleanup(func() { d.Close() })
+	t.Cleanup(func() { _ = d.Close() })
 
 	r := db.NewMigrationRunner(d, db.DriverSQLite)
 	if err := r.EnsureSystemTables(context.Background()); err != nil {

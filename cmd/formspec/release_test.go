@@ -91,8 +91,9 @@ func TestLatestTagFrom(t *testing.T) {
 			http.NotFound(w, r)
 			return
 		}
-		fmt.Fprint(w, `{"tag_name":"v9.9.9","name":"release"}`)
+		_, _ = fmt.Fprint(w, `{"tag_name":"v9.9.9","name":"release"}`)
 	}))
+	// httptest.Server.Close returns no error — nothing to ignore here.
 	defer srv.Close()
 
 	got, err := latestTagFrom(srv.URL + "/repos/o/r")

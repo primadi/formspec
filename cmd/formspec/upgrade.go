@@ -33,18 +33,18 @@ func runUpgrade(args []string) {
 		os.Exit(2)
 	}
 	if fs.NArg() > 0 {
-		fmt.Fprintf(os.Stderr, "❌ Argumen tidak dikenal: %s\n\n", strings.Join(fs.Args(), " "))
+		_, _ = fmt.Fprintf(os.Stderr, "❌ Argumen tidak dikenal: %s\n\n", strings.Join(fs.Args(), " "))
 		upgradeUsage()
 		os.Exit(2)
 	}
 	if err := upgradeRun(*target, *check, *dryRun, *force, *yes); err != nil {
-		fmt.Fprintf(os.Stderr, "❌ %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "❌ %v\n", err)
 		os.Exit(1)
 	}
 }
 
 func upgradeUsage() {
-	fmt.Fprint(os.Stderr, `Usage: formspec upgrade [flags]
+	_, _ = fmt.Fprint(os.Stderr, `Usage: formspec upgrade [flags]
 
 Self-update binary dari GitHub Releases (tanpa install ulang).
 
@@ -148,7 +148,7 @@ Untuk install rilis resmi: curl -fsSL https://formspec.dev/install.sh | sh`)
 	if err != nil {
 		return err
 	}
-	defer os.Remove(newPath)
+	defer func() { _ = os.Remove(newPath) }()
 
 	if err := smokeTestVersion(newPath, target); err != nil {
 		return err
@@ -215,8 +215,8 @@ func ensureWritableDir(dir string) error {
      - bila dikelola package manager, upgrade lewat package manager Anda`, dir)
 	}
 	name := f.Name()
-	f.Close()
-	os.Remove(name)
+	_ = f.Close()
+	_ = os.Remove(name)
 	return nil
 }
 
@@ -228,9 +228,14 @@ func isTTY(f *os.File) bool {
 
 // confirm meminta konfirmasi y/N dari stdin.
 func confirm(prompt string) bool {
-	fmt.Fprintf(os.Stderr, "%s [y/N]: ", prompt)
+	_, _ = fmt.Fprintf(os.Stderr, "%s [y/N]: ", prompt)
 	var ans string
-	fmt.Scanln(&ans)
+	if _, err := fmt.Scanln(&ans); err != nil {
+		// stdin tertutup / EOF: perlakukan sebagai "tidak". Langkah yang meminta
+		// konfirmasi bersifat destruktif, jadi prompt yang gagal dibaca tidak
+		// boleh berubah menjadi persetujuan.
+		return false
+	}
 	ans = strings.ToLower(strings.TrimSpace(ans))
 	return ans == "y" || ans == "yes"
 }

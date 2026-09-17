@@ -48,7 +48,7 @@ type BackupTable struct {
 
 func runBackup(args []string) {
 	if len(args) < 1 {
-		fmt.Fprintf(os.Stderr, "Usage: formspec backup <create|inspect> [flags]\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec backup <create|inspect> [flags]\n")
 		os.Exit(2)
 	}
 	switch args[0] {
@@ -57,7 +57,7 @@ func runBackup(args []string) {
 	case "inspect":
 		runBackupInspect(args[1:])
 	default:
-		fmt.Fprintf(os.Stderr, "formspec backup: unknown action %q (want create|inspect)\n", args[0])
+		_, _ = fmt.Fprintf(os.Stderr, "formspec backup: unknown action %q (want create|inspect)\n", args[0])
 		os.Exit(2)
 	}
 }
@@ -93,10 +93,10 @@ func runBackupCreate(args []string) {
 		case "--full":
 			full = true
 		case "--help", "-h":
-			fmt.Fprintf(os.Stderr, "Usage: formspec backup create --full [--out <file>] [--filter <module|module/entity>] [--spec <path>] [--dsn <dsn>]\n")
+			_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec backup create --full [--out <file>] [--filter <module|module/entity>] [--spec <path>] [--dsn <dsn>]\n")
 			os.Exit(0)
 		default:
-			fmt.Fprintf(os.Stderr, "formspec backup create: unknown flag %q\n", args[i])
+			_, _ = fmt.Fprintf(os.Stderr, "formspec backup create: unknown flag %q\n", args[i])
 			os.Exit(2)
 		}
 	}
@@ -105,7 +105,7 @@ func runBackupCreate(args []string) {
 	dsn = resolveDSN(dsn, specPath)
 
 	if !full {
-		fmt.Fprintf(os.Stderr, "formspec backup create: --full is required (incremental not yet implemented)\n")
+		_, _ = fmt.Fprintf(os.Stderr, "formspec backup create: --full is required (incremental not yet implemented)\n")
 		os.Exit(2)
 	}
 	if out == "" {
@@ -113,20 +113,26 @@ func runBackupCreate(args []string) {
 	}
 
 	reg, database, driver := loadRegistry(specPath, dsn)
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	ctx := context.Background()
 	manifest := BackupManifest{CreatedAt: time.Now().UTC().Format(time.RFC3339), Driver: driver}
 
 	f, err := os.Create(out)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: create %s: %v\n", out, err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: create %s: %v\n", out, err)
 		os.Exit(1)
 	}
-	defer f.Close()
 
+	// The writers are closed explicitly on the success path, not deferred: every
+	// failure below exits via os.Exit, which skips defers anyway, so a deferred
+	// close only ever ran when there was nothing left to do — and then discarded
+	// its error. The archive is not on disk until both return, and the "written"
+	// message below must not be printed before that.
 	tw := tar.NewWriter(f)
-	defer tw.Close()
+	closeAll := func() error {
+		return closeInto(closeInto(nil, tw), f)
+	}
 
 	for _, info := range reg.ListEntities() {
 		// Filterable backup (4.8.2): --filter <module> or <module/entity>.
@@ -135,12 +141,12 @@ func runBackupCreate(args []string) {
 		}
 		store, err := reg.GetEntityStore(info.Module, info.Name)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: store %s.%s: %v\n", info.Module, info.Name, err)
+			_, _ = fmt.Fprintf(os.Stderr, "Error: store %s.%s: %v\n", info.Module, info.Name, err)
 			os.Exit(1)
 		}
 		records, err := listAll(ctx, store, "demo")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: list %s.%s: %v\n", info.Module, info.Name, err)
+			_, _ = fmt.Fprintf(os.Stderr, "Error: list %s.%s: %v\n", info.Module, info.Name, err)
 			os.Exit(1)
 		}
 		manifest.Tables = append(manifest.Tables, BackupTable{
@@ -150,14 +156,14 @@ func runBackupCreate(args []string) {
 			continue
 		}
 		if err := writeJSONL(tw, info.Module+"_"+info.Name+".jsonl", records); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: write %s: %v\n", info.Module+"_"+info.Name, err)
+			_, _ = fmt.Fprintf(os.Stderr, "Error: write %s: %v\n", info.Module+"_"+info.Name, err)
 			os.Exit(1)
 		}
 	}
 
 	mb, _ := json.MarshalIndent(manifest, "", "  ")
 	if err := writeBytes(tw, "manifest.json", mb); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: write manifest: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: write manifest: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -165,7 +171,12 @@ func runBackupCreate(args []string) {
 	// {state}/storage are added under storage/ in the archive.
 	storageDir := filepath.Join(formspec.StateDirFromDSN(dsn), "storage")
 	if err := writeDirToTar(tw, storageDir, "storage"); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: write storage: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: write storage: %v\n", err)
+		os.Exit(1)
+	}
+
+	if err := closeAll(); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "Error: finalize %s: %v\n", out, err)
 		os.Exit(1)
 	}
 
@@ -198,17 +209,17 @@ func writeDirToTar(tw *tar.Writer, dir, prefix string) error {
 
 func runBackupInspect(args []string) {
 	if len(args) < 1 {
-		fmt.Fprintf(os.Stderr, "Usage: formspec backup inspect <file>\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec backup inspect <file>\n")
 		os.Exit(2)
 	}
 	file := args[0]
 
 	f, err := os.Open(file)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: open %s: %v\n", file, err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: open %s: %v\n", file, err)
 		os.Exit(1)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	tr := tar.NewReader(f)
 	var manifest BackupManifest
@@ -218,20 +229,20 @@ func runBackupInspect(args []string) {
 			break
 		}
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: read tar: %v\n", err)
+			_, _ = fmt.Fprintf(os.Stderr, "Error: read tar: %v\n", err)
 			os.Exit(1)
 		}
 		if hdr.Name == "manifest.json" {
 			b, _ := io.ReadAll(tr)
 			if err := json.Unmarshal(b, &manifest); err != nil {
-				fmt.Fprintf(os.Stderr, "Error: parse manifest: %v\n", err)
+				_, _ = fmt.Fprintf(os.Stderr, "Error: parse manifest: %v\n", err)
 				os.Exit(1)
 			}
 		}
 	}
 
 	if manifest.CreatedAt == "" {
-		fmt.Fprintf(os.Stderr, "Error: %s is not a valid formspec backup (no manifest.json)\n", file)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: %s is not a valid formspec backup (no manifest.json)\n", file)
 		os.Exit(1)
 	}
 	fmt.Printf("Backup: %s\n", file)
@@ -261,7 +272,7 @@ func matchesFilter(module, entity, filter string) bool {
 func loadRegistry(specPath, dsn string) (*entity.Registry, db.DB, string) {
 	database, err := db.Open(dsn)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: open database: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: open database: %v\n", err)
 		os.Exit(1)
 	}
 	driver := db.DriverSQLite
@@ -270,10 +281,10 @@ func loadRegistry(specPath, dsn string) (*entity.Registry, db.DB, string) {
 	}
 	reg := entity.NewRegistry(database, driver, specPath)
 	for _, loadErr := range reg.LoadEntities() {
-		fmt.Fprintf(os.Stderr, "formspec: load warning: %v\n", loadErr)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec: load warning: %v\n", loadErr)
 	}
 	if _, err := reg.SyncSchema(context.Background()); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: sync schema: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: sync schema: %v\n", err)
 		os.Exit(1)
 	}
 	return reg, database, string(driver)
@@ -361,10 +372,10 @@ func runRestore(args []string) {
 		case "--dry-run":
 			dryRun = true
 		case "--help", "-h":
-			fmt.Fprintf(os.Stderr, "Usage: formspec restore --from <file> [--conflict skip|overwrite|remap] [--dry-run] [--spec <path>] [--dsn <dsn>]\n")
+			_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec restore --from <file> [--conflict skip|overwrite|remap] [--dry-run] [--spec <path>] [--dsn <dsn>]\n")
 			os.Exit(0)
 		default:
-			fmt.Fprintf(os.Stderr, "formspec restore: unknown flag %q\n", args[i])
+			_, _ = fmt.Fprintf(os.Stderr, "formspec restore: unknown flag %q\n", args[i])
 			os.Exit(2)
 		}
 	}
@@ -373,16 +384,16 @@ func runRestore(args []string) {
 	dsn = resolveDSN(dsn, specPath)
 
 	if from == "" {
-		fmt.Fprintf(os.Stderr, "formspec restore: --from <file> is required\n")
+		_, _ = fmt.Fprintf(os.Stderr, "formspec restore: --from <file> is required\n")
 		os.Exit(2)
 	}
 	if conflict != "skip" && conflict != "overwrite" && conflict != "remap" {
-		fmt.Fprintf(os.Stderr, "formspec restore: --conflict must be skip|overwrite|remap\n")
+		_, _ = fmt.Fprintf(os.Stderr, "formspec restore: --conflict must be skip|overwrite|remap\n")
 		os.Exit(2)
 	}
 
 	reg, database, _ := loadRegistry(specPath, dsn)
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	ctx := context.Background()
 	report := restoreFrom(ctx, reg, from, conflict, dryRun)
@@ -423,7 +434,7 @@ func reconcileOutbox(ctx context.Context, database db.DB) {
 	store := db.NewOutboxStore(database, driver)
 	counts, err := store.CountByStatus(ctx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec restore: warning: outbox reconciliation failed: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec restore: warning: outbox reconciliation failed: %v\n", err)
 		return
 	}
 	pending := counts["pending"]
@@ -462,10 +473,10 @@ func restoreFrom(ctx context.Context, reg *entity.Registry, from, conflict strin
 	var report RestoreReport
 	f, err := os.Open(from)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: open %s: %v\n", from, err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: open %s: %v\n", from, err)
 		os.Exit(1)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	tr := tar.NewReader(f)
 	for {
@@ -474,7 +485,7 @@ func restoreFrom(ctx context.Context, reg *entity.Registry, from, conflict strin
 			break
 		}
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: read tar: %v\n", err)
+			_, _ = fmt.Fprintf(os.Stderr, "Error: read tar: %v\n", err)
 			report.Failed++
 			continue
 		}
@@ -489,7 +500,7 @@ func restoreFrom(ctx context.Context, reg *entity.Registry, from, conflict strin
 		}
 		store, err := reg.GetEntityStore(module, entityName)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: store %s.%s: %v\n", module, entityName, err)
+			_, _ = fmt.Fprintf(os.Stderr, "Error: store %s.%s: %v\n", module, entityName, err)
 			report.Failed++
 			continue
 		}
@@ -509,7 +520,7 @@ func restoreFrom(ctx context.Context, reg *entity.Registry, from, conflict strin
 			}
 			var rec map[string]any
 			if err := json.Unmarshal(line, &rec); err != nil {
-				fmt.Fprintf(os.Stderr, "Error: parse record in %s: %v\n", hdr.Name, err)
+				_, _ = fmt.Fprintf(os.Stderr, "Error: parse record in %s: %v\n", hdr.Name, err)
 				report.Failed++
 				entityReport.Failed++
 				continue
@@ -528,7 +539,7 @@ func restoreFrom(ctx context.Context, reg *entity.Registry, from, conflict strin
 						// overwrite: update the existing record's data
 						if !dryRun {
 							if err := updateByNaturalKey(ctx, store, "demo", nkField, data[nkField], data); err != nil {
-								fmt.Fprintf(os.Stderr, "Error: overwrite %s.%s %s=%v: %v\n", module, entityName, nkField, data[nkField], err)
+								_, _ = fmt.Fprintf(os.Stderr, "Error: overwrite %s.%s %s=%v: %v\n", module, entityName, nkField, data[nkField], err)
 								report.Failed++
 								entityReport.Failed++
 								continue
@@ -543,14 +554,14 @@ func restoreFrom(ctx context.Context, reg *entity.Registry, from, conflict strin
 						if !dryRun {
 							newKey, err := remapNaturalKey(ctx, store, "demo", nkField, data[nkField])
 							if err != nil {
-								fmt.Fprintf(os.Stderr, "Error: remap %s.%s %s=%v: %v\n", module, entityName, nkField, data[nkField], err)
+								_, _ = fmt.Fprintf(os.Stderr, "Error: remap %s.%s %s=%v: %v\n", module, entityName, nkField, data[nkField], err)
 								report.Failed++
 								entityReport.Failed++
 								continue
 							}
 							data[nkField] = newKey
 							if _, err := store.Insert(ctx, db.InsertParams{WorkspaceID: "demo", CreatedBy: "restore", Data: data}); err != nil {
-								fmt.Fprintf(os.Stderr, "Error: insert (remap) %s.%s: %v\n", module, entityName, err)
+								_, _ = fmt.Fprintf(os.Stderr, "Error: insert (remap) %s.%s: %v\n", module, entityName, err)
 								report.Failed++
 								entityReport.Failed++
 								continue
@@ -568,7 +579,7 @@ func restoreFrom(ctx context.Context, reg *entity.Registry, from, conflict strin
 				continue
 			}
 			if _, err := store.Insert(ctx, db.InsertParams{WorkspaceID: "demo", CreatedBy: "restore", Data: data}); err != nil {
-				fmt.Fprintf(os.Stderr, "Error: insert %s.%s: %v\n", module, entityName, err)
+				_, _ = fmt.Fprintf(os.Stderr, "Error: insert %s.%s: %v\n", module, entityName, err)
 				report.Failed++
 				entityReport.Failed++
 				continue
@@ -577,7 +588,7 @@ func restoreFrom(ctx context.Context, reg *entity.Registry, from, conflict strin
 			entityReport.Restored++
 		}
 		if err := sc.Err(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: read %s: %v\n", hdr.Name, err)
+			_, _ = fmt.Fprintf(os.Stderr, "Error: read %s: %v\n", hdr.Name, err)
 			report.Failed++
 			entityReport.Failed++
 		}

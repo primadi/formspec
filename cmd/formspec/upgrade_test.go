@@ -53,11 +53,11 @@ func releaseServer(t *testing.T, tag, asset string, member string, binary []byte
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/releases/latest":
-			fmt.Fprintf(w, `{"tag_name":%q}`, tag)
+			_, _ = fmt.Fprintf(w, `{"tag_name":%q}`, tag)
 		case "/" + tag + "/" + asset:
-			w.Write(payload)
+			_, _ = w.Write(payload)
 		case "/" + tag + "/SHA256SUMS.txt":
-			fmt.Fprint(w, sums)
+			_, _ = fmt.Fprint(w, sums)
 		default:
 			http.NotFound(w, r)
 		}
@@ -86,8 +86,9 @@ func TestUpgradeRunRejectsDevBuild(t *testing.T) {
 
 func TestUpgradeRunCheckOnly(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, `{"tag_name":"v9.9.9"}`)
+		_, _ = fmt.Fprint(w, `{"tag_name":"v9.9.9"}`)
 	}))
+	// httptest.Server.Close returns no error — nothing to ignore here.
 	defer srv.Close()
 	t.Setenv("FORMSPEC_RELEASE_API", srv.URL)
 
@@ -171,11 +172,12 @@ func TestDownloadVerifiedBinaryChecksumMismatch(t *testing.T) {
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "SHA256SUMS.txt") {
-			fmt.Fprintf(w, "deadbeef  %s\n", asset)
+			_, _ = fmt.Fprintf(w, "deadbeef  %s\n", asset)
 			return
 		}
-		fmt.Fprint(w, "garbage-archive")
+		_, _ = fmt.Fprint(w, "garbage-archive")
 	}))
+	// httptest.Server.Close returns no error — nothing to ignore here.
 	defer srv.Close()
 
 	dir := t.TempDir()
@@ -285,7 +287,7 @@ func TestEnsureWritableDirRejectsReadOnly(t *testing.T) {
 	if err := os.Chmod(dir, 0o555); err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chmod(dir, 0o755)
+	defer func() { _ = os.Chmod(dir, 0o755) }()
 
 	err := ensureWritableDir(dir)
 	if err == nil {

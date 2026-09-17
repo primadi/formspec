@@ -59,10 +59,10 @@ func runRepl(args []string) {
 				i++
 			}
 		case "--help", "-h":
-			fmt.Fprintf(os.Stderr, "Usage: formspec repl [--spec <path>] [--dsn <dsn>] [--environment <env>] [-e <expr> | -f <script.star>]\n")
+			_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec repl [--spec <path>] [--dsn <dsn>] [--environment <env>] [-e <expr> | -f <script.star>]\n")
 			os.Exit(0)
 		default:
-			fmt.Fprintf(os.Stderr, "formspec repl: unknown flag %q\n", args[i])
+			_, _ = fmt.Fprintf(os.Stderr, "formspec repl: unknown flag %q\n", args[i])
 			os.Exit(2)
 		}
 	}
@@ -72,10 +72,10 @@ func runRepl(args []string) {
 
 	app, err := formspec.New(formspec.Config{SpecPath: specPath, DSN: dsn})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
-	defer app.Close(context.Background())
+	defer func() { _ = app.Close(context.Background()) }()
 
 	// Build the ctx object with the same live datastore resolver the action
 	// dispatcher wires into scripts, so ctx.db()/ctx.cache()/... resolve to
@@ -86,7 +86,7 @@ func runRepl(args []string) {
 	if environment != "" {
 		// Control Plane environment policy (platform/04 §7) is deferred; the
 		// flag is accepted for forward-compat but has no effect yet.
-		fmt.Fprintf(os.Stderr, "formspec repl: note: --environment %q accepted; environment policy is deferred (Control Plane)\n", environment)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec repl: note: --environment %q accepted; environment policy is deferred (Control Plane)\n", environment)
 	}
 
 	// Predeclare the same helpers action scripts get.
@@ -103,7 +103,7 @@ func runRepl(args []string) {
 	if expr != "" {
 		// One-shot evaluation (scriptable / testable).
 		if err := replEval(thread, predeclared, expr); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 		return
@@ -116,11 +116,11 @@ func runRepl(args []string) {
 		// about being out-of-band, not a kind that pretends to declare them.
 		src, err := os.ReadFile(scriptFile)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: read %s: %v\n", scriptFile, err)
+			_, _ = fmt.Fprintf(os.Stderr, "Error: read %s: %v\n", scriptFile, err)
 			os.Exit(1)
 		}
 		if err := replEval(thread, predeclared, string(src)); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %s: %v\n", scriptFile, err)
+			_, _ = fmt.Fprintf(os.Stderr, "Error: %s: %v\n", scriptFile, err)
 			os.Exit(1)
 		}
 		fmt.Printf("Ran %s.\n", scriptFile)

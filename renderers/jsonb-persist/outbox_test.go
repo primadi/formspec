@@ -13,7 +13,7 @@ func TestOutboxStore_Enqueue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -56,7 +56,7 @@ func TestOutboxStore_Dequeue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -67,9 +67,15 @@ func TestOutboxStore_Dequeue(t *testing.T) {
 	store := NewOutboxStore(d, DriverSQLite)
 
 	// Enqueue 3 events
-	store.Enqueue(ctx, "t1", "event.a", "order", `{"a":1}`)
-	store.Enqueue(ctx, "t1", "event.b", "order", `{"b":2}`)
-	store.Enqueue(ctx, "t1", "event.c", "order", `{"c":3}`)
+	if _, err := store.Enqueue(ctx, "t1", "event.a", "order", `{"a":1}`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Enqueue(ctx, "t1", "event.b", "order", `{"b":2}`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Enqueue(ctx, "t1", "event.c", "order", `{"c":3}`); err != nil {
+		t.Fatal(err)
+	}
 
 	// Dequeue 2
 	records, err := store.Dequeue(ctx, 2)
@@ -102,7 +108,7 @@ func TestOutboxStore_MarkCompleted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -136,7 +142,7 @@ func TestOutboxStore_MarkFailed_Retries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -162,9 +168,15 @@ func TestOutboxStore_MarkFailed_Retries(t *testing.T) {
 	}
 
 	// Fail again
-	store.MarkFailed(ctx, id, 3)
-	store.MarkFailed(ctx, id, 3)
-	store.MarkFailed(ctx, id, 3)
+	if err := store.MarkFailed(ctx, id, 3); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.MarkFailed(ctx, id, 3); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.MarkFailed(ctx, id, 3); err != nil {
+		t.Fatal(err)
+	}
 
 	// 4th failure → max retries exceeded → failed permanently
 	rec2, _ := store.GetByID(ctx, id)
@@ -182,7 +194,7 @@ func TestOutboxStore_MarkFailed_ExponentialBackoff(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -196,7 +208,9 @@ func TestOutboxStore_MarkFailed_ExponentialBackoff(t *testing.T) {
 
 	// Fail with specific retry counts and check backoff
 	for i := 1; i <= 5; i++ {
-		store.MarkFailed(ctx, id, 10)
+		if err := store.MarkFailed(ctx, id, 10); err != nil {
+			t.Fatal(err)
+		}
 		rec, _ := store.GetByID(ctx, id)
 
 		if rec.RetryCount != i {
@@ -211,7 +225,7 @@ func TestOutboxStore_Peek(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -221,9 +235,15 @@ func TestOutboxStore_Peek(t *testing.T) {
 
 	store := NewOutboxStore(d, DriverSQLite)
 
-	store.Enqueue(ctx, "t1", "a", "order", `{}`)
-	store.Enqueue(ctx, "t1", "b", "order", `{}`)
-	store.Enqueue(ctx, "t1", "c", "order", `{}`)
+	if _, err := store.Enqueue(ctx, "t1", "a", "order", `{}`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Enqueue(ctx, "t1", "b", "order", `{}`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Enqueue(ctx, "t1", "c", "order", `{}`); err != nil {
+		t.Fatal(err)
+	}
 
 	records, err := store.Peek(ctx, 2)
 	if err != nil {
@@ -244,7 +264,7 @@ func TestOutboxStore_CountByStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -254,12 +274,18 @@ func TestOutboxStore_CountByStatus(t *testing.T) {
 
 	store := NewOutboxStore(d, DriverSQLite)
 
-	store.Enqueue(ctx, "t1", "a", "order", `{}`)
-	store.Enqueue(ctx, "t1", "b", "order", `{}`)
+	if _, err := store.Enqueue(ctx, "t1", "a", "order", `{}`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Enqueue(ctx, "t1", "b", "order", `{}`); err != nil {
+		t.Fatal(err)
+	}
 
 	// Dequeue + complete one (other stays "delivering")
 	records, _ := store.Dequeue(ctx, 10)
-	store.MarkCompleted(ctx, records[0].ID)
+	if err := store.MarkCompleted(ctx, records[0].ID); err != nil {
+		t.Fatal(err)
+	}
 
 	counts, err := store.CountByStatus(ctx)
 	if err != nil {
@@ -280,7 +306,7 @@ func TestOutboxStore_Cleanup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -293,7 +319,9 @@ func TestOutboxStore_Cleanup(t *testing.T) {
 	// Enqueue + complete
 	id, _ := store.Enqueue(ctx, "t1", "old", "order", `{}`)
 	records, _ := store.Dequeue(ctx, 10)
-	store.MarkCompleted(ctx, records[0].ID)
+	if err := store.MarkCompleted(ctx, records[0].ID); err != nil {
+		t.Fatal(err)
+	}
 
 	// Cleanup with zero duration → should delete everything older than now
 	deleted, err := store.Cleanup(ctx, 1*time.Nanosecond)
@@ -316,7 +344,7 @@ func TestOutboxStore_EnqueueMultipleTenants(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -326,8 +354,12 @@ func TestOutboxStore_EnqueueMultipleTenants(t *testing.T) {
 
 	store := NewOutboxStore(d, DriverSQLite)
 
-	store.Enqueue(ctx, "ta", "event", "order", `{}`)
-	store.Enqueue(ctx, "tb", "event", "order", `{}`)
+	if _, err := store.Enqueue(ctx, "ta", "event", "order", `{}`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Enqueue(ctx, "tb", "event", "order", `{}`); err != nil {
+		t.Fatal(err)
+	}
 
 	records, _ := store.Dequeue(ctx, 10)
 	if len(records) != 2 {
@@ -341,7 +373,7 @@ func TestOutboxStore_Dequeue_Empty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()

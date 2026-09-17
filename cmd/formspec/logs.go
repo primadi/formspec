@@ -46,7 +46,7 @@ func runLogs(args []string) {
 			}
 		case "--limit", "-limit":
 			if i+1 < len(args) {
-				fmt.Sscanf(args[i+1], "%d", &limit)
+				_, _ = fmt.Sscanf(args[i+1], "%d", &limit)
 				i++
 			}
 		case "--output", "-output":
@@ -60,24 +60,24 @@ func runLogs(args []string) {
 				i++
 			}
 		case "--help", "-h":
-			fmt.Fprintf(os.Stderr, "Usage: formspec logs [--workspace <ws>] [--module <m>] [--entity <e>] [--limit <n>] [--output pretty|json] [--dsn <dsn>]\n")
+			_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec logs [--workspace <ws>] [--module <m>] [--entity <e>] [--limit <n>] [--output pretty|json] [--dsn <dsn>]\n")
 			os.Exit(0)
 		default:
-			fmt.Fprintf(os.Stderr, "formspec logs: unknown flag %q\n", args[i])
+			_, _ = fmt.Fprintf(os.Stderr, "formspec logs: unknown flag %q\n", args[i])
 			os.Exit(2)
 		}
 	}
 	if output != "pretty" && output != "json" {
-		fmt.Fprintf(os.Stderr, "formspec logs: --output must be pretty|json\n")
+		_, _ = fmt.Fprintf(os.Stderr, "formspec logs: --output must be pretty|json\n")
 		os.Exit(2)
 	}
 
 	database, err := db.Open(dsn)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: open database: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: open database: %v\n", err)
 		os.Exit(1)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	driver := db.DriverSQLite
 	if database.DriverName() == "postgres" {
@@ -87,7 +87,7 @@ func runLogs(args []string) {
 	// Ensure the event log system table exists.
 	runner := db.NewMigrationRunner(database, driver)
 	if err := runner.EnsureSystemTables(context.Background()); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: ensure system tables: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: ensure system tables: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -104,7 +104,7 @@ func runLogs(args []string) {
 
 	records, err := store.ListByWorkspace(context.Background(), workspace, resource, limit, 0)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: list logs: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: list logs: %v\n", err)
 		os.Exit(1)
 	}
 

@@ -20,7 +20,7 @@ func TestValidateRelationTargets_RefusesDanglingAndUnresolvable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "payment", Module: "cafe-order"}
 	entity := &spec.EntitySpec{

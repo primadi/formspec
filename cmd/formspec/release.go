@@ -60,7 +60,7 @@ func releaseGet(url string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("download gagal: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	switch {
 	case resp.StatusCode == 404:
 		return nil, fmt.Errorf("artifact tidak ditemukan (404): %s", url)
@@ -149,7 +149,7 @@ func extractTarGz(data []byte, dest, stripPrefix string) error {
 	if err != nil {
 		return err
 	}
-	defer gz.Close()
+	defer func() { _ = gz.Close() }()
 
 	tr := tar.NewReader(gz)
 	for {
@@ -186,10 +186,14 @@ func extractTarGz(data []byte, dest, stripPrefix string) error {
 				return err
 			}
 			if _, err := io.Copy(out, tr); err != nil {
-				out.Close()
+				_ = out.Close()
 				return err
 			}
-			out.Close()
+			// Flush before declaring success: an unchecked close reports a
+			// truncated extraction as a completed one.
+			if err := out.Close(); err != nil {
+				return fmt.Errorf("write %s: %w", target, err)
+			}
 		}
 	}
 }
@@ -224,7 +228,7 @@ func tarGzMember(data []byte, member string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer gz.Close()
+	defer func() { _ = gz.Close() }()
 
 	tr := tar.NewReader(gz)
 	for {
@@ -258,7 +262,7 @@ func zipMember(data []byte, member string) ([]byte, error) {
 			return nil, err
 		}
 		content, err := io.ReadAll(rc)
-		rc.Close()
+		_ = rc.Close()
 		if err != nil {
 			return nil, err
 		}

@@ -70,7 +70,7 @@ func TestArchiveTransactions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	reg := entity.NewRegistry(database, db.DriverSQLite, dir)
 	for _, loadErr := range reg.LoadEntities() {

@@ -166,7 +166,7 @@ func TestCtxDB_ModuleScoped_EndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open ds-alpha db: %v", err)
 	}
-	defer alphaDB.Close()
+	defer func() { _ = alphaDB.Close() }()
 	ctx := context.Background()
 	if ok, _ := alphaDB.HasTable(ctx, "", "probe_alpha"); !ok {
 		t.Fatalf("probe_alpha not found in ds-alpha db — alpha's ctx.db() did not resolve to its bound datastore")
@@ -176,7 +176,7 @@ func TestCtxDB_ModuleScoped_EndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open main db: %v", err)
 	}
-	defer mainDB.Close()
+	defer func() { _ = mainDB.Close() }()
 	if ok, _ := mainDB.HasTable(ctx, "", "probe_alpha"); ok {
 		t.Fatalf("probe_alpha leaked into the main database — cross-datastore isolation broken")
 	}

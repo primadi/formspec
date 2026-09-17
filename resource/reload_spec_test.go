@@ -27,7 +27,7 @@ func TestReloadSpec_PreservesEmbeddedCoreEntities(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	defer app.Close(context.Background())
+	defer func() { _ = app.Close(context.Background()) }()
 
 	// Embedded core entities must be present before reload.
 	for _, name := range []string{"user", "role", "session", "api-key"} {

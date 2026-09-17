@@ -523,7 +523,7 @@ func sortedKeys(m map[string]bool) []string {
 // findAppManifest locates the first kind: App manifest under specPath.
 func findAppManifest(specPath string) (string, error) {
 	var found string
-	filepath.WalkDir(specPath, func(p string, d os.DirEntry, err error) error {
+	if err := filepath.WalkDir(specPath, func(p string, d os.DirEntry, err error) error {
 		if err != nil || found != "" || d.IsDir() {
 			return err
 		}
@@ -544,7 +544,9 @@ func findAppManifest(specPath string) (string, error) {
 			}
 		}
 		return nil
-	})
+	}); err != nil {
+		return "", fmt.Errorf("find app manifest: %w", err)
+	}
 	if found == "" {
 		return "", fmt.Errorf("no kind: App manifest found under %s (pass --app)", specPath)
 	}

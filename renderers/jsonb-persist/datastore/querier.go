@@ -31,7 +31,7 @@ func (q *DBQuerier) Query(ctx context.Context, sql string, args ...any) ([]map[s
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	cols, err := rows.Columns()
 	if err != nil {

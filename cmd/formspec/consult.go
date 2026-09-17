@@ -58,12 +58,14 @@ func runConsult(args []string) {
 	specPath := fs.String("spec", "spec", "spec directory (forwarded to mcp-serve)")
 	schemaDir := fs.String("schema", "", "local schemas/ dir (forwarded to mcp-serve)")
 	allowUnvalidated := fs.Bool("allow-unvalidated", false, "allow providers outside the validated list (warning only)")
-	fs.Parse(args)
+	// The FlagSet is ExitOnError — Parse prints usage and exits on a bad flag,
+	// so there is no error to handle here.
+	_ = fs.Parse(args)
 
 	// ── Provider setup (todo 10.2.3/10.2.4) ──
 	cfg, ok := validatedProviders[*providerName]
 	if !ok && !*allowUnvalidated {
-		fmt.Fprintf(os.Stderr, "formspec consult: provider %q is not in the validated list (%s) — pass --allow-unvalidated to proceed\n",
+		_, _ = fmt.Fprintf(os.Stderr, "formspec consult: provider %q is not in the validated list (%s) — pass --allow-unvalidated to proceed\n",
 			*providerName, strings.Join(validatedProviderNames(), ", "))
 		os.Exit(1)
 	}
@@ -74,7 +76,7 @@ func runConsult(args []string) {
 		cfg.Model = *model
 	}
 	if cfg.Model == "" {
-		fmt.Fprintln(os.Stderr, "formspec consult: --model is required for custom providers")
+		_, _ = fmt.Fprintln(os.Stderr, "formspec consult: --model is required for custom providers")
 		os.Exit(1)
 	}
 
@@ -86,7 +88,7 @@ func runConsult(args []string) {
 	}
 	apiKey, err := creds.GetAPIKey()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec consult: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec consult: %v\n", err)
 		os.Exit(1)
 	}
 	cfg.APIKey = apiKey
@@ -95,7 +97,7 @@ func runConsult(args []string) {
 	// ── MCP server (boundary identik dengan client eksternal) ──
 	exe, err := os.Executable()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec consult: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec consult: %v\n", err)
 		os.Exit(1)
 	}
 	mcpArgs := []string{"--spec", *specPath}
@@ -105,10 +107,10 @@ func runConsult(args []string) {
 	ctx := context.Background()
 	mcpClient, err := consult.StartMCPServer(ctx, exe, mcpArgs)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec consult: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec consult: %v\n", err)
 		os.Exit(1)
 	}
-	defer mcpClient.Close()
+	defer func() { _ = mcpClient.Close() }()
 
 	// ── Session (todo 10.2.8 — transcript ke file untuk review) ──
 	consultDir := filepath.Join(".formspec", "consult")
@@ -123,15 +125,15 @@ func runConsult(args []string) {
 		session, err = consult.NewSession(consultDir, id, provider.Name(), cfg.Model)
 	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec consult: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec consult: %v\n", err)
 		os.Exit(1)
 	}
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	// ── Tools dari MCP → LLM tool definitions ──
 	tools, err := mcpClient.ListTools(ctx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec consult: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec consult: %v\n", err)
 		os.Exit(1)
 	}
 	var defs []llm.ToolDefinition
@@ -152,14 +154,14 @@ func runConsult(args []string) {
 		Tools:    defs,
 		Cfg: consult.LoopConfig{
 			OnAssistant: func(msg llm.Message) {
-				fmt.Fprintf(os.Stdout, "\nconsultant>\n%s\n", msg.Content)
+				_, _ = fmt.Fprintf(os.Stdout, "\nconsultant>\n%s\n", msg.Content)
 			},
 			OnToolCall: func(name string, args map[string]any, result string, err error) {
 				status := "ok"
 				if err != nil {
 					status = "ERROR: " + err.Error()
 				}
-				fmt.Fprintf(os.Stdout, "  [tool] %s (%s)\n", name, status)
+				_, _ = fmt.Fprintf(os.Stdout, "  [tool] %s (%s)\n", name, status)
 				session.RecordTool(name, args, result, err)
 			},
 		},
@@ -171,10 +173,10 @@ func runConsult(args []string) {
 		WorkspaceContext: workspaceCtx,
 	}
 	if err := repl.Run(ctx); err != nil {
-		fmt.Fprintf(os.Stderr, "formspec consult: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec consult: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Fprintf(os.Stdout, "\ntranscript: %s\n", session.TranscriptPath())
+	_, _ = fmt.Fprintf(os.Stdout, "\ntranscript: %s\n", session.TranscriptPath())
 }
 
 // autoInvokeContext calls the grounding tools deterministically at session
@@ -185,10 +187,10 @@ func autoInvokeContext(ctx context.Context, c *consult.MCPClient) string {
 	for _, name := range []string{"read_workspace_manifest", "list_installed_modules", "list_skills"} {
 		result, err := c.CallTool(ctx, name, map[string]any{})
 		if err != nil {
-			fmt.Fprintf(&b, "### %s\n(unavailable: %v)\n\n", name, err)
+			_, _ = fmt.Fprintf(&b, "### %s\n(unavailable: %v)\n\n", name, err)
 			continue
 		}
-		fmt.Fprintf(&b, "### %s\n%s\n\n", name, truncateStr(result, 3000))
+		_, _ = fmt.Fprintf(&b, "### %s\n%s\n\n", name, truncateStr(result, 3000))
 	}
 	return b.String()
 }
@@ -201,12 +203,12 @@ func runConsultDiff(args []string) {
 		os.Exit(2)
 	}
 	if *sessionID == "" {
-		fmt.Fprintln(os.Stderr, "formspec consult diff: --session is required")
+		_, _ = fmt.Fprintln(os.Stderr, "formspec consult diff: --session is required")
 		os.Exit(2)
 	}
 	diffs, err := consult.DiffDrafts(filepath.Join(".formspec", "consult", *sessionID))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec consult diff: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec consult diff: %v\n", err)
 		os.Exit(1)
 	}
 	if len(diffs) == 0 {

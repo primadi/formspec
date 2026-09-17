@@ -39,7 +39,7 @@ func (c *ArtifactClient) FetchEnvelope(artifactID artifact.ArtifactID) (*artifac
 	if err != nil {
 		return nil, fmt.Errorf("fetch artifact %s: %w", artifactID, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)

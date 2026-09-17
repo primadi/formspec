@@ -81,7 +81,7 @@ func runMcpServe(args []string) {
 	// Stdio transport: stdout is the protocol channel — nothing else may
 	// write there. Diagnostics go to stderr.
 	if err := srv.Run(context.Background(), &mcp.StdioTransport{}); err != nil {
-		fmt.Fprintf(os.Stderr, "[formspec-mcp] server error: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "[formspec-mcp] server error: %v\n", err)
 		os.Exit(1)
 	}
 }

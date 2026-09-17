@@ -47,7 +47,7 @@ func runMigrate(args []string) {
 				i++
 			}
 		case "--help", "-h":
-			fmt.Fprintf(os.Stderr, "Usage: formspec migrate <plan|apply> [--spec <path>] [--dsn <dsn>]\n")
+			_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec migrate <plan|apply> [--spec <path>] [--dsn <dsn>]\n")
 			os.Exit(0)
 		default:
 			positional = append(positional, args[i])
@@ -58,12 +58,12 @@ func runMigrate(args []string) {
 	dsn = resolveDSN(dsn, specPath)
 
 	if len(positional) < 1 {
-		fmt.Fprintf(os.Stderr, "Usage: formspec migrate <plan|apply> [--spec <path>] [--dsn <dsn>]\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec migrate <plan|apply> [--spec <path>] [--dsn <dsn>]\n")
 		os.Exit(2)
 	}
 	action := positional[0]
 	if action != "plan" && action != "apply" {
-		fmt.Fprintf(os.Stderr, "formspec migrate: unknown action %q (want plan|apply)\n", action)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec migrate: unknown action %q (want plan|apply)\n", action)
 		os.Exit(2)
 	}
 
@@ -71,10 +71,10 @@ func runMigrate(args []string) {
 
 	database, err := db.Open(dsn)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: open database: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: open database: %v\n", err)
 		os.Exit(1)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	driver := db.DriverSQLite
 	if database.DriverName() == "postgres" {
@@ -86,14 +86,14 @@ func runMigrate(args []string) {
 	// PlanMigrations reads formspec_schema_migrations, so system tables must
 	// exist first (they are created idempotently).
 	if err := runner.EnsureSystemTables(ctx); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: ensure system tables: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: ensure system tables: %v\n", err)
 		os.Exit(1)
 	}
 
 	if action == "plan" {
 		plans, err := runner.PlanSpecSet(ctx, entities)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: plan migrations: %v\n", err)
+			_, _ = fmt.Fprintf(os.Stderr, "Error: plan migrations: %v\n", err)
 			os.Exit(1)
 		}
 		changes := collectChanges(plans)
@@ -112,7 +112,7 @@ func runMigrate(args []string) {
 		// `apply` would stop on it, so pretending the plan is fine would only
 		// move the surprise to deployment.
 		if err := db.RefuseUndeclared(changes); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 		return
@@ -120,7 +120,7 @@ func runMigrate(args []string) {
 
 	res, err := runner.ApplySpecSetDetailed(ctx, entities)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -156,7 +156,7 @@ func loadEntityMigrations(specPath string) []db.EntityMigration {
 	loader := manifest.NewLoader(specPath)
 	res, err := loader.LoadAll()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: load manifests: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: load manifests: %v\n", err)
 		os.Exit(1)
 	}
 	var entities []db.EntityMigration
@@ -170,7 +170,7 @@ func loadEntityMigrations(specPath string) []db.EntityMigration {
 		}
 		es, err := manifest.RawSpecToEntitySpec(sm)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: skip %s: %v\n", m.Source, err)
+			_, _ = fmt.Fprintf(os.Stderr, "Warning: skip %s: %v\n", m.Source, err)
 			continue
 		}
 		entities = append(entities, db.EntityMigration{

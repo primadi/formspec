@@ -46,7 +46,7 @@ func main() {
 	case "serve":
 		runServe(os.Args[2:])
 	case "freeze", "revoke", "key", "policy", "log":
-		fmt.Fprintf(os.Stderr, "formspec-ctl %s: not implemented yet — see docs/cli-tools/02-formspec-ctl.md §5\n", os.Args[1])
+		_, _ = fmt.Fprintf(os.Stderr, "formspec-ctl %s: not implemented yet — see docs/cli-tools/02-formspec-ctl.md §5\n", os.Args[1])
 		os.Exit(1)
 	default:
 		usage()
@@ -55,11 +55,11 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "Usage: formspec-ctl <command> [flags]\n\n")
-	fmt.Fprintf(os.Stderr, "Commands:\n")
-	fmt.Fprintf(os.Stderr, "  serve    Run the Control Plane server (region/cluster/standalone)\n")
-	fmt.Fprintf(os.Stderr, "\nNot yet implemented (see docs/cli-tools/02-formspec-ctl.md):\n")
-	fmt.Fprintf(os.Stderr, "  freeze, revoke sessions, key rotate, policy test, log verify\n")
+	_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec-ctl <command> [flags]\n\n")
+	_, _ = fmt.Fprintf(os.Stderr, "Commands:\n")
+	_, _ = fmt.Fprintf(os.Stderr, "  serve    Run the Control Plane server (region/cluster/standalone)\n")
+	_, _ = fmt.Fprintf(os.Stderr, "\nNot yet implemented (see docs/cli-tools/02-formspec-ctl.md):\n")
+	_, _ = fmt.Fprintf(os.Stderr, "  freeze, revoke sessions, key rotate, policy test, log verify\n")
 }
 
 func runServe(args []string) {
@@ -67,7 +67,7 @@ func runServe(args []string) {
 	devMode := fs.Bool("dev", false, "Run in development mode")
 	port := fs.Int("port", 8443, "HTTP listen port")
 	controlDB := fs.String("control-db", ".formspec/control.db", "Path to control database")
-	fs.Parse(args)
+	_ = fs.Parse(args) // FlagSet is ExitOnError — Parse exits on a bad flag.
 
 	if *devMode {
 		log.Println("[formspec-ctl] Starting in DEVELOPMENT mode")
@@ -79,7 +79,7 @@ func runServe(args []string) {
 
 	// Ensure data directory exists
 	if err := os.MkdirAll(".formspec", 0755); err != nil {
-		fmt.Fprintf(os.Stderr, "Error creating .formspec directory: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error creating .formspec directory: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -90,7 +90,7 @@ func runServe(args []string) {
 	// Initialize signer
 	signer, err := artifact.NewDevSigner()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error creating signer: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error creating signer: %v\n", err)
 		os.Exit(1)
 	}
 	log.Printf("[formspec-ctl] Signing key: %s (public: %x)",
@@ -106,13 +106,13 @@ func runServe(args []string) {
 	go func() {
 		<-sigCh
 		log.Println("[formspec-ctl] Shutting down...")
-		svr.Stop(context.Background())
+		_ = svr.Stop(context.Background())
 	}()
 
 	log.Printf("[formspec-ctl] Listening on :%d", *port)
 
 	if err := svr.Start(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 }

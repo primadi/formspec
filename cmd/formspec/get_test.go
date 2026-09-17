@@ -100,7 +100,7 @@ spec:
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 	describeEntity(m)
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 	var buf bytes.Buffer
 	_, _ = buf.ReadFrom(r)

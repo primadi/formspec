@@ -14,7 +14,7 @@ func TestLogsEventLogRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	runner := db.NewMigrationRunner(database, db.DriverSQLite)
 	if err := runner.EnsureSystemTables(context.Background()); err != nil {

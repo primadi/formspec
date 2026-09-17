@@ -177,10 +177,10 @@ func ComputeSHA256(files []FileManifest) string {
 
 	h := sha256.New()
 	for _, f := range sorted {
-		h.Write([]byte(f.Path))
-		h.Write([]byte{0})
-		h.Write(f.Content)
-		h.Write([]byte{0})
+		_, _ = h.Write([]byte(f.Path))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write(f.Content)
+		_, _ = h.Write([]byte{0})
 	}
 	return hex.EncodeToString(h.Sum(nil))
 }

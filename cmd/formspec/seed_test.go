@@ -55,7 +55,7 @@ func TestSeedInsertsAndSkips(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	reg := entity.NewRegistry(database, db.DriverSQLite, dir)
 	for _, loadErr := range reg.LoadEntities() {
@@ -98,7 +98,7 @@ func TestSeedModuleFilter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	reg := entity.NewRegistry(database, db.DriverSQLite, dir)
 	for _, loadErr := range reg.LoadEntities() {

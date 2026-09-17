@@ -68,10 +68,10 @@ func runSeed(args []string) {
 				i++
 			}
 		case "--help", "-h":
-			fmt.Fprintf(os.Stderr, "Usage: formspec seed [--spec <path>] [--dsn <dsn>] [--module <module>]\n")
+			_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec seed [--spec <path>] [--dsn <dsn>] [--module <module>]\n")
 			os.Exit(0)
 		default:
-			fmt.Fprintf(os.Stderr, "formspec seed: unknown flag %q\n", args[i])
+			_, _ = fmt.Fprintf(os.Stderr, "formspec seed: unknown flag %q\n", args[i])
 			os.Exit(2)
 		}
 	}
@@ -79,16 +79,16 @@ func runSeed(args []string) {
 	loader := manifest.NewLoader(specPath)
 	res, err := loader.LoadAll()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: load manifests: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: load manifests: %v\n", err)
 		os.Exit(1)
 	}
 
 	database, err := db.Open(dsn)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: open database: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: open database: %v\n", err)
 		os.Exit(1)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	driver := db.DriverSQLite
 	if database.DriverName() == "postgres" {
@@ -97,10 +97,10 @@ func runSeed(args []string) {
 
 	reg := entity.NewRegistry(database, driver, specPath)
 	for _, loadErr := range reg.LoadEntities() {
-		fmt.Fprintf(os.Stderr, "formspec seed: load warning: %v\n", loadErr)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec seed: load warning: %v\n", loadErr)
 	}
 	if _, err := reg.SyncSchema(context.Background()); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: sync schema: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: sync schema: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -125,20 +125,20 @@ func seedAll(ctx context.Context, res *manifest.LoadResult, reg *entity.Registry
 		}
 		var seed SeedSpec
 		if err := reparseSpec(m.Spec, &seed); err != nil {
-			fmt.Fprintf(os.Stderr, "formspec seed: %s: invalid seed spec: %v\n", m.Source, err)
+			_, _ = fmt.Fprintf(os.Stderr, "formspec seed: %s: invalid seed spec: %v\n", m.Source, err)
 			failed++
 			continue
 		}
 		for _, se := range seed.Entities {
 			store, err := reg.GetEntityStore(m.Metadata.Module, se.Entity)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "formspec seed: %s: entity %s.%s: %v\n", m.Source, m.Metadata.Module, se.Entity, err)
+				_, _ = fmt.Fprintf(os.Stderr, "formspec seed: %s: entity %s.%s: %v\n", m.Source, m.Metadata.Module, se.Entity, err)
 				failed++
 				continue
 			}
 			info, ok := reg.GetEntity(m.Metadata.Module, se.Entity)
 			if !ok || info.EntitySpec == nil {
-				fmt.Fprintf(os.Stderr, "formspec seed: %s: entity %s.%s not found\n", m.Source, m.Metadata.Module, se.Entity)
+				_, _ = fmt.Fprintf(os.Stderr, "formspec seed: %s: entity %s.%s not found\n", m.Source, m.Metadata.Module, se.Entity)
 				failed++
 				continue
 			}
@@ -146,7 +146,7 @@ func seedAll(ctx context.Context, res *manifest.LoadResult, reg *entity.Registry
 			for _, rec := range se.Records {
 				if nkField != "" {
 					if exists, err := naturalKeyExists(ctx, store, "demo", nkField, rec[nkField]); err == nil && exists {
-						fmt.Fprintf(os.Stderr, "formspec seed: skip %s.%s %s=%v (already exists)\n",
+						_, _ = fmt.Fprintf(os.Stderr, "formspec seed: skip %s.%s %s=%v (already exists)\n",
 							m.Metadata.Module, se.Entity, nkField, rec[nkField])
 						skipped++
 						continue
@@ -157,7 +157,7 @@ func seedAll(ctx context.Context, res *manifest.LoadResult, reg *entity.Registry
 					CreatedBy:   "seed",
 					Data:        rec,
 				}); err != nil {
-					fmt.Fprintf(os.Stderr, "formspec seed: %s.%s insert %v: %v\n", m.Metadata.Module, se.Entity, rec, err)
+					_, _ = fmt.Fprintf(os.Stderr, "formspec seed: %s.%s insert %v: %v\n", m.Metadata.Module, se.Entity, rec, err)
 					failed++
 					continue
 				}

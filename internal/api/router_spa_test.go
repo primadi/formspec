@@ -31,7 +31,7 @@ func setupSPARouter(t *testing.T, rootURL string) *RouterBuilder {
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
-	t.Cleanup(func() { d.Close() })
+	t.Cleanup(func() { _ = d.Close() })
 	reg := entity.NewRegistry(d, db.DriverSQLite, dir)
 	b := NewRouterBuilder(reg)
 	b.SetUIRegistry(ui.NewRegistry())

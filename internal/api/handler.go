@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -1693,7 +1694,7 @@ func WithRequestID(ctx context.Context, requestID string) context.Context {
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
+	_ = json.NewEncoder(w).Encode(v)
 }
 
 func writeError(w http.ResponseWriter, status int, code, message string) {
@@ -1999,14 +2000,21 @@ func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, a
 		// "own impl" (unlike create/update) — Dispatch already executes it;
 		// passing it here too would run it twice.
 		if err := action.RunBeforePhase(ctx, f.dispatcher, hooks, nil, actionName, &execParams); err != nil {
-			scope.Rollback()
+			// A rollback that itself fails leaves the scope's connection busy; the
+			// client still gets the hook error, but the operator needs to see why
+			// the transaction did not unwind.
+			if rbErr := scope.Rollback(); rbErr != nil {
+				log.Printf("formspec: rollback scope for %s: %v", actionName, rbErr)
+			}
 			writeError(w, http.StatusUnprocessableEntity, "HOOK_ABORTED", err.Error())
 			return
 		}
 
 		result, err := f.dispatcher.Dispatch(ctx, actionSpec, execParams)
 		if err != nil {
-			scope.Rollback()
+			if rbErr := scope.Rollback(); rbErr != nil {
+				log.Printf("formspec: rollback scope for %s: %v", actionName, rbErr)
+			}
 			if eb, jerr := json.Marshal(ErrorResponse{
 				Error: ErrorDetail{Code: "ACTION_ERROR", Message: err.Error()},
 				Meta:  MetaSingle{Timestamp: time.Now().UTC().Format(time.RFC3339)},
@@ -2039,7 +2047,9 @@ func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, a
 				if txdb, ok := scope.Peek(store.BaseDB()); ok {
 					if payloadJSON, err := action.BuildEventMessage(module+"/"+entity, *emitted); err == nil {
 						if _, err := db.EnqueueOutboxTx(ctx, txdb, workspaceID, emitted.Name, module+"/"+entity, string(payloadJSON)); err != nil {
-							scope.Rollback()
+							if rbErr := scope.Rollback(); rbErr != nil {
+								log.Printf("formspec: rollback scope for %s: %v", actionName, rbErr)
+							}
 							writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "enqueue outbox: "+err.Error())
 							return
 						}

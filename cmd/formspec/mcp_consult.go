@@ -194,7 +194,7 @@ func (e *mcpEnv) validateSpecYAML(_ context.Context, _ *mcp.CallToolRequest, arg
 	if err != nil {
 		return nil, nil, err
 	}
-	defer os.RemoveAll(tmp)
+	defer func() { _ = os.RemoveAll(tmp) }()
 
 	if err := copySpecTree(e.specPath, tmp); err != nil {
 		return errResult("copy spec tree: " + err.Error())
@@ -449,7 +449,7 @@ func (e *mcpEnv) validateWithOverlay(relPath, content string) (*SpecValidation, 
 	if err != nil {
 		return nil, err
 	}
-	defer os.RemoveAll(tmp)
+	defer func() { _ = os.RemoveAll(tmp) }()
 	if err := copySpecTree(e.specPath, tmp); err != nil {
 		return nil, err
 	}
@@ -585,7 +585,7 @@ func (e *mcpEnv) serverHealth() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 	return string(b), nil
 }
@@ -611,17 +611,17 @@ func (e *mcpEnv) stopServer(_ context.Context, _ *mcp.CallToolRequest, _ serverC
 	}
 	proc, err := os.FindProcess(pid)
 	if err == nil {
-		proc.Signal(syscallSIGTERM())
+		_ = proc.Signal(syscallSIGTERM())
 		deadline := time.Now().Add(8 * time.Second)
 		for time.Now().Before(deadline) && processAlive(pid) {
 			time.Sleep(150 * time.Millisecond)
 		}
 		if processAlive(pid) {
 			killDescendants(pid)
-			proc.Signal(os.Kill)
+			_ = proc.Signal(os.Kill)
 		}
 	}
-	os.Remove(filepath.Join(e.projectRoot, ".formspec", "dev.pid"))
+	_ = os.Remove(filepath.Join(e.projectRoot, ".formspec", "dev.pid"))
 	return textResult(map[string]any{"running": false, "stopped": true, "pid": pid})
 }
 
@@ -646,17 +646,17 @@ func (e *mcpEnv) restartServer(_ context.Context, _ *mcp.CallToolRequest, _ rest
 	// Stop the current instance (if any).
 	if pid, ok := e.devPID(); ok && processAlive(pid) {
 		if proc, err := os.FindProcess(pid); err == nil {
-			proc.Signal(syscallSIGTERM())
+			_ = proc.Signal(syscallSIGTERM())
 			deadline := time.Now().Add(8 * time.Second)
 			for time.Now().Before(deadline) && processAlive(pid) {
 				time.Sleep(150 * time.Millisecond)
 			}
 			if processAlive(pid) {
 				killDescendants(pid)
-				proc.Signal(os.Kill)
+				_ = proc.Signal(os.Kill)
 			}
 		}
-		os.Remove(filepath.Join(e.projectRoot, ".formspec", "dev.pid"))
+		_ = os.Remove(filepath.Join(e.projectRoot, ".formspec", "dev.pid"))
 	}
 
 	// Spawn `formspec dev` detached, logs captured for boot-failure reporting.
@@ -676,10 +676,10 @@ func (e *mcpEnv) restartServer(_ context.Context, _ *mcp.CallToolRequest, _ rest
 	cmd.Dir = e.projectRoot
 	cmd.SysProcAttr = detachedSysProcAttr()
 	if err := cmd.Start(); err != nil {
-		logFile.Close()
+		_ = logFile.Close()
 		return errResult("start formspec dev: " + err.Error())
 	}
-	go cmd.Wait() // reap when it exits; the PID file tracks liveness
+	go func() { _ = cmd.Wait() }() // reap when it exits; the PID file tracks liveness
 
 	// Poll /health until the server answers (or the boot window expires).
 	deadline := time.Now().Add(30 * time.Second)

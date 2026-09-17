@@ -51,6 +51,7 @@ usage() {
   echo "  --skip-doc-kind  lewati generate kind reference docs (docs/kind)" >&2
   echo "  --skip-release   lewati make release + release-upload (hanya tag + push)" >&2
   echo "  contoh: $0 v0.0.2" >&2
+  echo "  versi berikutnya: scripts/next-version.sh" >&2
   exit 1
 }
 
@@ -75,11 +76,16 @@ for arg in "$@"; do
 done
 
 # --- Validasi (fail cepat sebelum menyentuh apapun) ---------------------------
-if [ -z "$VERSION" ]; then usage; fi
-printf '%s' "$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' || {
-  echo "❌ VERSION='$VERSION' bukan semver (format: v<major>.<minor>.patch>)" >&2
-  exit 1
-}
+# Tag harus dipilih sadar (script ini TIDAK meng-auto-bump) — versi semver murni,
+# bukan string git-describe: `formspec upgrade` membacanya sebagai prerelease →
+# rilis tampak rollback. Guard yang sama dipakai target Makefile rilis
+# (scripts/check-semver.sh); docs_internal/plan/release-version-auto.md.
+if [ -z "$VERSION" ]; then
+  echo "❌ VERSION wajib (script ini tidak meng-auto-bump)." >&2
+  echo "   Usulan: bash scripts/next-version.sh" >&2
+  usage
+fi
+bash scripts/check-semver.sh "$VERSION" || exit 1
 
 if [ -n "$(git status --porcelain)" ]; then
   echo "❌ Working tree tidak bersih — commit dulu semua perubahan." >&2
@@ -103,11 +109,12 @@ if git ls-remote --tags origin | grep -q "refs/tags/${VERSION}$"; then
   exit 1
 fi
 
-# Guard versi mundur: VERSION harus lebih tinggi dari tag tertinggi yang ada.
-# Tanpa ini, release semver lebih rendah (mis. v0.0.10 setelah v0.1.0) tetap
-# terbuat dan — karena GitHub 'latest' = release terakhir di-publish — installer
-# akan men-downgrade user.
-LATEST_TAG="$(git tag --sort=-v:refname | head -n 1)"
+# Guard versi mundur: VERSION harus lebih tinggi dari tag SEMVER tertinggi yang
+# ada (tag non-semver seperti `docs-*` / string git-describe diabaikan — dasar
+# yang sama dengan scripts/next-version.sh). Tanpa ini, release semver lebih
+# rendah (mis. v0.0.10 setelah v0.1.0) tetap terbuat dan — karena GitHub
+# 'latest' = release terakhir di-publish — installer akan men-downgrade user.
+LATEST_TAG="$(git tag --list | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1 || true)"
 if [ -n "$LATEST_TAG" ]; then
   HIGHEST="$(printf '%s\n%s\n' "$LATEST_TAG" "$VERSION" | sort -V | tail -n 1)"
   if [ "$HIGHEST" = "$LATEST_TAG" ]; then

@@ -1522,6 +1522,24 @@ Setup domain, landing, docs site, dan schema hosting. Referensi:
 > Draft `v0.0.7` sudah dibuat dan lengkap (8 asset) — sisa 12.15: review lalu
 > klik **Publish** di GitHub Releases, kemudian lanjut 12.16.
 
+> **Catatan 2026-09-17** — versi rilis tidak lagi diambil dari `git describe`:
+> `make release` tanpa `VERSION=` memakai patch-bump tag semver tertinggi
+> (`scripts/next-version.sh`), `make release-upload` memakai versi artifact di
+> `dist/release/`, dan guard `scripts/check-semver.sh` menolak string
+> git-describe (mis. `v0.0.8-4-gceaaf2a`) yang membuat `formspec upgrade`
+> menampilkan prompt rollback palsu. Komparator semver `cmd/formspec/semver.go`
+> kini mengenali suffix describe sebagai post-release. Lihat
+> `docs_internal/plan/release-version-auto.md` + changelog
+> `docs_internal/changelog/2026-09-17-002-versi-rilis-otomatis-anti-git-describe.md`.
+>
+> ⚠️ **Temuan menyertai**: `go test ./cmd/formspec` **gagal build** sejak commit
+> `2d816b4` ("update cafe2", 2026-09-16) — `cmd/formspec/migrate_dialect_test.go`
+> memanggil `loadCustomMigrations` dan field `spec.MigrationSpec.DDLByDialect` /
+> `.DML` yang tidak ada (produksi menyimpannya di `pkg/spec/entity.go` dengan
+> bentuk lain; terkait changelog `2026-09-16-008-migration-dialect-and-dml.md`).
+> Artinya `make test` (dan gate test di `scripts/git-push-and-tag.sh`) merah
+> untuk paket itu; perlu diselaraskan sebelum rilis berikutnya.
+
 ## Fase 13: Module Registry & Vendoring (npm-like) 🚧 (2026-08-20, planned; 13.1–13.2 ✅, 13.3 sebagian ✅ 2026-08-28)
 
 **Goal**: Ekosistem module registry — `formspec module install/publish/list/uninstall`,

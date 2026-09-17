@@ -169,7 +169,7 @@ func (r *Registry) String() string {
 	defer r.mu.RUnlock()
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "Permission Registry: %d modules, %d permissions\n",
+	_, _ = fmt.Fprintf(&b, "Permission Registry: %d modules, %d permissions\n",
 		len(r.modules), len(r.permIndex))
 	for _, m := range r.AllFootprints() {
 		b.WriteString(m.String())

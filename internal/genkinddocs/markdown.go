@@ -199,11 +199,11 @@ func renderFresh(entry genjsonschema.KindEntry, meta, attrs string) string {
 func renderMeta(entry genjsonschema.KindEntry, group GroupInfo) string {
 	var b strings.Builder
 	b.WriteString("| | |\n|---|---|\n")
-	fmt.Fprintf(&b, "| Grup | `%s` |\n", group.Group)
-	fmt.Fprintf(&b, "| Plane | `%s` |\n", group.Plane)
-	fmt.Fprintf(&b, "| Spec struct | `%s` |\n", entry.SpecStruct)
+	_, _ = fmt.Fprintf(&b, "| Grup | `%s` |\n", group.Group)
+	_, _ = fmt.Fprintf(&b, "| Plane | `%s` |\n", group.Plane)
+	_, _ = fmt.Fprintf(&b, "| Spec struct | `%s` |\n", entry.SpecStruct)
 	if len(entry.Aliases) > 0 {
-		fmt.Fprintf(&b, "| Alias | `%s` |\n", strings.Join(entry.Aliases, "`, `"))
+		_, _ = fmt.Fprintf(&b, "| Alias | `%s` |\n", strings.Join(entry.Aliases, "`, `"))
 	}
 	if entry.Deprecated {
 		b.WriteString("| Deprecated | ✅ |\n")
@@ -229,7 +229,7 @@ func renderAttributes(td *genjsonschema.TypeDef, collect *genjsonschema.CollectR
 			req = "✅"
 		}
 		ex, desc := fieldText(fd)
-		fmt.Fprintf(&b, "| `%s` | %s | %s | %s | %s |\n",
+		_, _ = fmt.Fprintf(&b, "| `%s` | %s | %s | %s | %s |\n",
 			fd.Name, fieldType(fd, collect), req, ex, desc)
 	}
 	return b.String()

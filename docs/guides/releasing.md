@@ -74,21 +74,39 @@ curl -fsSL https://api.github.com/repos/primadi/formspec/releases/latest \
 formspec version
 ```
 
+Versi rilis berikutnya (dan validasinya) bisa dilihat langsung:
+
+```bash
+make release-version                        # versi hasil auto-bump
+make release-version VERSION=v0.1.0         # validasi versi eksplisit
+```
+
 Catatan: repo tidak menyimpan file `VERSION` — angka versi di-stamp saat build
 dari tag (`-ldflags -X main.version=`), jadi tidak ada angka versi yang bisa
-stale di source code. `make release-upload` tanpa `VERSION=` pun otomatis pakai
-`git describe --tags`, dan guard-nya menolak bila tag sudah punya release
-**published** (satu tag = satu release; draft yang belum lengkap justru
-di-resume — lihat §4).
+stale di source code. `VERSION=` **opsional** di target rilis:
 
-> **Status repo saat ini**: belum ada tag semver — satu-satunya tag adalah
-> `docs-pre-restructure-2026-07-15` (marker internal restrukturisasi docs,
-> bukan rilis). Jadi: belum ada versi yang pernah di-release. **Rilis pertama
-> harus memilih tag semver secara sadar** (mis. `v0.4.1`) — jangan jalankan
-> `make release-upload` tanpa `VERSION=` sebelum tag semver pertama ada, karena
-> `git describe` akan jatuh ke tag marker dan version stamp/URL download jadi
-> memakai nama itu. Setelah tag semver pertama dibuat, semua perintah di atas
-> otomatis benar (`sort -V` selalu menempatkan `v*` setelah `docs-*`).
+- `make release` tanpa `VERSION=` memakai patch-bump dari tag semver tertinggi
+  (`scripts/next-version.sh`; tag tertinggi `v0.0.8` → `v0.0.9`). Hitungannya
+  terhadap tag **lokal** — jalankan `git fetch --tags` dulu bila tag terbaru
+  hanya ada di remote. Bump minor/major tetap eksplisit:
+  `make release VERSION=v0.1.0`;
+- `make release-upload` memakai versi yang sudah tertanam di `dist/release/`,
+  bukan di-derive ulang — kalau tidak, tag yang dibuat di antara dua perintah
+  akan menggeser hasil auto-bump dan upload mencampur dua versi. `VERSION=`
+  eksplisit harus sama dengan versi artifact tersebut;
+- guard-nya menolak bila tag sudah punya release **published** (satu tag = satu
+  release; draft yang belum lengkap justru di-resume — lihat §4).
+
+> **Versi rilis wajib semver murni** (`v<major>.<minor>.<patch>`). String
+> git-describe seperti `v0.0.8-4-gceaaf2a` ditolak guard
+> (`scripts/check-semver.sh`): `formspec upgrade` membacanya sebagai
+> *prerelease v0.0.8*, sehingga rilis yang isinya justru lebih baru tampak
+> sebagai rollback bagi user. Karena itu `VERSION` untuk target rilis tidak
+> diambil dari `git describe` — `git describe` hanya menjadi stamp build dev
+> (`make build` / `make build-formspec`).
+>
+> Sebelum ada tag semver sama sekali, auto-bump gagal dan versi harus ditentukan
+> eksplisit (rilis pertama dipilih sadar, mis. `v0.1.0`).
 
 ## 1. Pastikan state siap rilis
 
@@ -101,7 +119,8 @@ go test ./...            # semua hijau
 ## 2. Tentukan & push tag versi
 
 Tag meng-embed ke URL download (`.../download/<tag>/formspec-<os>-<arch>.tar.gz`),
-sehingga **satu tag = satu release** dan tidak bisa dipakai ulang:
+sehingga **satu tag = satu release** dan tidak bisa dipakai ulang. Nama tag harus
+sama persis dengan versi yang dipakai build (`make release-version`):
 
 ```bash
 git tag v0.4.2
@@ -111,7 +130,7 @@ git push origin main --tags
 ## 3. Build semua artifact
 
 ```bash
-make release VERSION=v0.4.2
+make release VERSION=v0.4.2      # tanpa VERSION= → patch-bump tag tertinggi
 ```
 
 Yang dilakukan target ini:
@@ -144,7 +163,7 @@ tar -xzf formspec-darwin-arm64.tar.gz -C /tmp && /tmp/formspec version   # → f
 ## 4. Upload ke GitHub Releases
 
 ```bash
-make release-upload VERSION=v0.4.2
+make release-upload VERSION=v0.4.2      # tanpa VERSION= → versi artifact dist/release/
 ```
 
 Membuat **draft** release dengan semua artifact + `SHA256SUMS.txt` + generated
@@ -169,6 +188,12 @@ granular dan file yang gagal bisa diulang tanpa mengulang yang sudah naik. Bila
 satu asset gagal, target berhenti dengan pesan yang menyuruh mengulang perintah
 yang sama. Di akhir, jumlah asset di GitHub diverifikasi sama dengan jumlah file
 di `dist/release/`.
+
+Versi yang di-upload adalah versi yang tertanam di `dist/release/`
+(`spa-<versi>.tar.gz`). Kalau `VERSION=` diberikan tapi tidak cocok dengan
+artifact di sana, target berhenti dengan pesan yang menyuruh menjalankan ulang
+`make release VERSION=…` lebih dulu — supaya upload tidak mencampur artifact
+dari dua build.
 
 Guard ini mengecek status **release**, bukan status tag (push tag di langkah 2
 memang mendahului upload) — jadi tag yang sudah di-push tapi belum punya

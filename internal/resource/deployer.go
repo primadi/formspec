@@ -96,7 +96,7 @@ func (d *Deployer) RunOnce(ctx context.Context) (bool, error) {
 	}
 
 	// Step 3: Flush evidence
-	d.evidenceSender.Flush()
+	_ = d.evidenceSender.Flush()
 
 	return changesDeployed, nil
 }

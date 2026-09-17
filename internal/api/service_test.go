@@ -25,11 +25,13 @@ func TestServiceAction_HTTP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := db.NewMigrationRunner(d, db.DriverSQLite)
 	ctx := context.Background()
-	r.EnsureSystemTables(ctx)
+	if err := r.EnsureSystemTables(ctx); err != nil {
+		t.Fatal(err)
+	}
 
 	reg := entity.NewRegistry(d, db.DriverSQLite, dir)
 	reg.LoadEntities()
@@ -118,11 +120,13 @@ func TestServiceAction_Async(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := db.NewMigrationRunner(d, db.DriverSQLite)
 	ctx := context.Background()
-	r.EnsureSystemTables(ctx)
+	if err := r.EnsureSystemTables(ctx); err != nil {
+		t.Fatal(err)
+	}
 
 	reg := entity.NewRegistry(d, db.DriverSQLite, dir)
 	reg.LoadEntities()

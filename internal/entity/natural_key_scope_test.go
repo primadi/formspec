@@ -16,7 +16,7 @@ import (
 // scoped counter refuses to mint without one.
 func TestGenerateNaturalKey_ScopedPerBranch(t *testing.T) {
 	reg, d := setupTestRegistry(t, "registry_fixtures/scoped-counter/spec")
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	if errs := reg.LoadEntities(); len(errs) > 0 {
 		t.Fatalf("load entities: %v", errs)
 	}
@@ -46,7 +46,7 @@ func TestGenerateNaturalKey_ScopedPerBranch(t *testing.T) {
 // as a duplicate number.
 func TestGenerateNaturalKey_ScopedCounterRefusesEmptyScope(t *testing.T) {
 	reg, d := setupTestRegistry(t, "registry_fixtures/scoped-counter/spec")
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	if errs := reg.LoadEntities(); len(errs) > 0 {
 		t.Fatalf("load entities: %v", errs)
 	}
@@ -67,7 +67,7 @@ func TestGenerateNaturalKey_ScopedCounterRefusesEmptyScope(t *testing.T) {
 // that declare one, not about the call shape.
 func TestGenerateNaturalKey_UnscopedUnaffected(t *testing.T) {
 	reg, d := setupTestRegistry(t, "registry_fixtures/scoped-counter/spec")
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 	if errs := reg.LoadEntities(); len(errs) > 0 {
 		t.Fatalf("load entities: %v", errs)
 	}

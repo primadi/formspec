@@ -123,24 +123,24 @@ func runSummary(args []string) {
 	case "help", "--help", "-h":
 		summaryUsage()
 	default:
-		fmt.Fprintf(os.Stderr, "formspec summary: unknown subcommand %q\n", args[0])
+		_, _ = fmt.Fprintf(os.Stderr, "formspec summary: unknown subcommand %q\n", args[0])
 		summaryUsage()
 		os.Exit(2)
 	}
 }
 
 func summaryUsage() {
-	fmt.Fprintf(os.Stderr, "Usage: formspec summary <list|rebuild> [flags]\n\n")
-	fmt.Fprintf(os.Stderr, "  list                   list summary entities and their rebuild contract\n")
-	fmt.Fprintf(os.Stderr, "  rebuild <entity>       replay the durable event stream into the projection\n")
-	fmt.Fprintf(os.Stderr, "\nFlags:\n")
-	fmt.Fprintf(os.Stderr, "  --spec <path>          spec directory (default: spec)\n")
-	fmt.Fprintf(os.Stderr, "  --dsn <dsn>            database DSN (default: sqlite:.formspec/data.db)\n")
-	fmt.Fprintf(os.Stderr, "  --workspace <slug>     limit replay to one workspace (default: all)\n")
-	fmt.Fprintf(os.Stderr, "  --subscriber <m/n>     replay only this subscription (repeatable)\n")
-	fmt.Fprintf(os.Stderr, "  --reset                delete existing projection rows before replay\n")
-	fmt.Fprintf(os.Stderr, "  --dry-run              print the plan without touching the stream\n")
-	fmt.Fprintf(os.Stderr, "  --json                 machine-readable output\n")
+	_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec summary <list|rebuild> [flags]\n\n")
+	_, _ = fmt.Fprintf(os.Stderr, "  list                   list summary entities and their rebuild contract\n")
+	_, _ = fmt.Fprintf(os.Stderr, "  rebuild <entity>       replay the durable event stream into the projection\n")
+	_, _ = fmt.Fprintf(os.Stderr, "\nFlags:\n")
+	_, _ = fmt.Fprintf(os.Stderr, "  --spec <path>          spec directory (default: spec)\n")
+	_, _ = fmt.Fprintf(os.Stderr, "  --dsn <dsn>            database DSN (default: sqlite:.formspec/data.db)\n")
+	_, _ = fmt.Fprintf(os.Stderr, "  --workspace <slug>     limit replay to one workspace (default: all)\n")
+	_, _ = fmt.Fprintf(os.Stderr, "  --subscriber <m/n>     replay only this subscription (repeatable)\n")
+	_, _ = fmt.Fprintf(os.Stderr, "  --reset                delete existing projection rows before replay\n")
+	_, _ = fmt.Fprintf(os.Stderr, "  --dry-run              print the plan without touching the stream\n")
+	_, _ = fmt.Fprintf(os.Stderr, "  --json                 machine-readable output\n")
 }
 
 // openSummaryApp boots the engine so the CLI sees the same registry, stream
@@ -160,17 +160,17 @@ func openSummaryApp(f *summaryFlags) (*formspec.App, error) {
 func runSummaryList(args []string) {
 	f, err := parseSummaryFlags("list", args, false)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec summary list: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec summary list: %v\n", err)
 		os.Exit(2)
 	}
 
 	ctx := context.Background()
 	app, err := openSummaryApp(f)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec summary list: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec summary list: %v\n", err)
 		os.Exit(1)
 	}
-	defer app.Close(ctx)
+	defer func() { _ = app.Close(ctx) }()
 
 	reg := app.Registry()
 	subReg := app.Subscriptions()
@@ -226,21 +226,21 @@ func runSummaryList(args []string) {
 func runSummaryRebuild(args []string) {
 	f, err := parseSummaryFlags("rebuild", args, true)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec summary rebuild: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec summary rebuild: %v\n", err)
 		os.Exit(2)
 	}
 
 	ctx := context.Background()
 	app, err := openSummaryApp(f)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec summary rebuild: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec summary rebuild: %v\n", err)
 		os.Exit(1)
 	}
-	defer app.Close(ctx)
+	defer func() { _ = app.Close(ctx) }()
 
 	plan, err := summary.PlanRebuild(app.Registry(), app.Subscriptions(), f.entityRef)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec summary rebuild: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec summary rebuild: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -255,9 +255,9 @@ func runSummaryRebuild(args []string) {
 	}
 
 	if len(plan.Streams) == 0 {
-		fmt.Fprintf(os.Stderr, "formspec summary rebuild: no durable subscription feeds %s/%s — nothing to replay\n", plan.Module, plan.Entity)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec summary rebuild: no durable subscription feeds %s/%s — nothing to replay\n", plan.Module, plan.Entity)
 		if len(plan.Orphaned) > 0 {
-			fmt.Fprintf(os.Stderr, "  sources without a durable subscriber: %s\n", strings.Join(plan.Orphaned, ", "))
+			_, _ = fmt.Fprintf(os.Stderr, "  sources without a durable subscriber: %s\n", strings.Join(plan.Orphaned, ", "))
 		}
 		os.Exit(1)
 	}
@@ -266,18 +266,18 @@ func runSummaryRebuild(args []string) {
 	if f.reset {
 		resetRows, err = resetSummaryProjection(ctx, app, plan, f.workspace)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "formspec summary rebuild: reset: %v\n", err)
+			_, _ = fmt.Fprintf(os.Stderr, "formspec summary rebuild: reset: %v\n", err)
 			os.Exit(1)
 		}
 	}
 
 	worker := app.StreamingWorker()
 	if worker == nil {
-		fmt.Fprintf(os.Stderr, "formspec summary rebuild: engine has no streaming worker\n")
+		_, _ = fmt.Fprintf(os.Stderr, "formspec summary rebuild: engine has no streaming worker\n")
 		os.Exit(1)
 	}
 	if app.Stream() == nil || isMemoryStream(app) {
-		fmt.Fprintf(os.Stderr, "formspec summary rebuild: warning: stream backend is in-memory — a separate process has no durable history to replay. Configure a Redis/Valkey datastore (kind: Datastore) for the event stream.\n")
+		_, _ = fmt.Fprintf(os.Stderr, "formspec summary rebuild: warning: stream backend is in-memory — a separate process has no durable history to replay. Configure a Redis/Valkey datastore (kind: Datastore) for the event stream.\n")
 	}
 
 	runID := time.Now().UTC().Format("20060102T150405Z")
@@ -315,7 +315,7 @@ func runSummaryRebuild(args []string) {
 	}
 
 	if res.Incomplete() {
-		fmt.Fprintln(os.Stderr, "\nformspec summary rebuild: incomplete — fix the failures above and re-run (the live worker owns retry; this run acked failures in its own group).")
+		_, _ = fmt.Fprintln(os.Stderr, "\nformspec summary rebuild: incomplete — fix the failures above and re-run (the live worker owns retry; this run acked failures in its own group).")
 		os.Exit(1)
 	}
 }
@@ -411,7 +411,7 @@ func writeJSON(v any) {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(v); err != nil {
-		fmt.Fprintf(os.Stderr, "formspec: encode json: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec: encode json: %v\n", err)
 		os.Exit(1)
 	}
 }

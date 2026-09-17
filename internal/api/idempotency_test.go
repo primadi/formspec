@@ -26,7 +26,7 @@ func setupIdempotencyEnv(t *testing.T) (*entity.Registry, db.DB, *HandlerFactory
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	t.Cleanup(func() { d.Close() })
+	t.Cleanup(func() { _ = d.Close() })
 
 	reg := entity.NewRegistry(d, db.DriverSQLite, dir)
 

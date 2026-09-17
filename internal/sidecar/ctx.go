@@ -515,11 +515,11 @@ func boolPtr(b bool) *bool { return &b }
 
 func writeCtxJSON(w http.ResponseWriter, resp ctxResponse) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 func writeCtxError(w http.ResponseWriter, code int, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(ctxResponse{Error: msg})
+	_ = json.NewEncoder(w).Encode(ctxResponse{Error: msg})
 }

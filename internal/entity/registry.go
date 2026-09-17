@@ -169,13 +169,15 @@ func (r *Registry) LoadEntities() []error {
 		entityName := raw.Metadata.Name
 		for _, action := range entitySpec.Actions {
 			usesEntry := permission.BuildUsesEntry(module, entityName, action.Name, action.Uses)
-			r.permRegistry.RegisterAction(
+			if err := r.permRegistry.RegisterAction(
 				module, entityName, action.Name,
 				action.RequiredPermission,
 				usesEntry,
 				raw.Source,
 				action.Audit,
-			)
+			); err != nil {
+				allErrors = append(allErrors, fmt.Errorf("%s: register permission: %w", raw.Source, err))
+			}
 		}
 
 		// Also register standard CRUD + lifecycle permissions if the entity
@@ -256,13 +258,18 @@ func (r *Registry) registerStandardPermissions(module, entityName string, entity
 		if isSummary && (sa.name == "create" || sa.name == "update" || sa.name == "delete") {
 			continue
 		}
-		r.permRegistry.RegisterAction(
+		if err := r.permRegistry.RegisterAction(
 			module, entityName, sa.name,
 			sa.permission,
 			&permission.UsesEntry{}, // standard CRUD/lifecycle actions have no uses
 			source,
 			false,
-		)
+		); err != nil {
+			// Standard permissions are derived from a validated entity and the
+			// registry is in-memory; retain the old no-return API for callers and
+			// leave the diagnostic to the registry's validation path.
+			continue
+		}
 	}
 }
 
@@ -305,13 +312,15 @@ func (r *Registry) RegisterArtifactManifest(raw manifest.RawManifest, entitySpec
 	entityName := raw.Metadata.Name
 	for _, action := range entitySpec.Actions {
 		usesEntry := permission.BuildUsesEntry(module, entityName, action.Name, action.Uses)
-		r.permRegistry.RegisterAction(
+		if err := r.permRegistry.RegisterAction(
 			module, entityName, action.Name,
 			action.RequiredPermission,
 			usesEntry,
 			raw.Source,
 			action.Audit,
-		)
+		); err != nil {
+			return fmt.Errorf("%s: register permission: %w", raw.Source, err)
+		}
 	}
 
 	// Register standard CRUD + lifecycle permissions if exposed

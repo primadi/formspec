@@ -109,7 +109,7 @@ func (s *WorkflowApprovalStore) ListPending(ctx context.Context, limit int) ([]W
 	if err != nil {
 		return nil, fmt.Errorf("approval list pending: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []WorkflowApprovalRow
 	for rows.Next() {

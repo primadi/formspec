@@ -58,7 +58,7 @@ func (s *AuditStore) ListByEntity(ctx context.Context, workspaceID, entity, enti
 	if err != nil {
 		return nil, fmt.Errorf("audit list: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var records []AuditRecord
 	for rows.Next() {
@@ -104,7 +104,7 @@ func (s *AuditStore) ListByWorkspace(ctx context.Context, workspaceID, entity st
 	if err != nil {
 		return nil, fmt.Errorf("audit list workspace: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var records []AuditRecord
 	for rows.Next() {

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/primadi/formspec/renderers/jsonb-persist"
 	"github.com/primadi/formspec/pkg/spec"
+	"github.com/primadi/formspec/renderers/jsonb-persist"
 )
 
 // TestCtxHandler_ScopeIdJoinsSameTransaction proves the cross-process
@@ -25,7 +25,7 @@ func TestCtxHandler_ScopeIdJoinsSameTransaction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "order", Module: "billing"}
 	entitySpec := &spec.EntitySpec{
@@ -108,7 +108,7 @@ func TestCtxHandler_NoScopeIdCommitsIndependently(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "order", Module: "billing"}
 	entitySpec := &spec.EntitySpec{

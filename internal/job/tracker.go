@@ -148,7 +148,7 @@ func (t *Tracker) deliverCallback(ctx context.Context, jobID, status string, res
 		req.Header.Set("Content-Type", "application/json")
 		if t.callbackSecret != "" {
 			mac := hmac.New(sha256.New, []byte(t.callbackSecret))
-			mac.Write(body)
+			_, _ = mac.Write(body)
 			req.Header.Set("X-FormSpec-Signature", hex.EncodeToString(mac.Sum(nil)))
 		}
 		resp, err := t.httpClient.Do(req)

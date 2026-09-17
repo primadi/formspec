@@ -12,14 +12,14 @@ import (
 // PascalCase struct with a nested "Data" key.
 func TestEntityRecord_MarshalJSON_FlattensAndUsesSnakeCase(t *testing.T) {
 	rec := EntityRecord{
-		ID:        "inv-1",
-		WorkspaceID:  "acme",
-		Version:   3,
-		CreatedAt: "2026-07-11T00:00:00Z",
-		UpdatedAt: "2026-07-11T01:00:00Z",
-		CreatedBy: "u1",
-		UpdatedBy: "u2",
-		Data:      map[string]any{"status": "draft", "total": 150000.0},
+		ID:          "inv-1",
+		WorkspaceID: "acme",
+		Version:     3,
+		CreatedAt:   "2026-07-11T00:00:00Z",
+		UpdatedAt:   "2026-07-11T01:00:00Z",
+		CreatedBy:   "u1",
+		UpdatedBy:   "u2",
+		Data:        map[string]any{"status": "draft", "total": 150000.0},
 	}
 
 	raw, err := json.Marshal(rec)
@@ -71,7 +71,7 @@ func TestEntityRecord_MarshalJSON_ReservedNameWins(t *testing.T) {
 		t.Fatalf("marshal: %v", err)
 	}
 	var out map[string]any
-	json.Unmarshal(raw, &out)
+	_ = json.Unmarshal(raw, &out)
 	if out["id"] != "inv-1" {
 		t.Errorf(`reserved "id" = %v, want the record ID to win over a same-named field`, out["id"])
 	}

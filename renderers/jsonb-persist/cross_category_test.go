@@ -14,7 +14,7 @@ func TestCrossCategoryJoinBlock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()

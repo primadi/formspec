@@ -17,7 +17,7 @@ func TestDiffReportsDifferences(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	runner := db.NewMigrationRunner(database, db.DriverSQLite)
 	ctx := context.Background()

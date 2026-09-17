@@ -39,7 +39,7 @@ func (r *MigrationRunner) AllSnapshots(ctx context.Context, q snapshotQuerier) (
 	if err != nil {
 		return nil, fmt.Errorf("list snapshots: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	out := map[string]snapshotRow{}
 	for rows.Next() {

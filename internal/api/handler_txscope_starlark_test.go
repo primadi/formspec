@@ -46,7 +46,7 @@ def execute(resource, params, ctx):
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	reg := entity.NewRegistry(d, db.DriverSQLite, dbDir)
 	orderSpec := spec.EntitySpec{

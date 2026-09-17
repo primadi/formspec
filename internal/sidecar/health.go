@@ -86,7 +86,7 @@ func (m *AppMonitor) pingOnce(ctx context.Context) {
 		m.record(false)
 		return
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	m.record(resp.StatusCode < 500)
 }
 

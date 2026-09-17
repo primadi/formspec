@@ -19,7 +19,7 @@ func setupApiKeyStore(t *testing.T) (*ApiKeyStore, *entity.Registry, db.DB) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	t.Cleanup(func() { d.Close() })
+	t.Cleanup(func() { _ = d.Close() })
 
 	reg := entity.NewRegistry(d, db.DriverSQLite, "")
 	if err := RegisterCoreEntities(reg); err != nil {

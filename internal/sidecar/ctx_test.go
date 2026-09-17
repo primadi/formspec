@@ -41,7 +41,7 @@ func postCtx(t *testing.T, h http.Handler, path, body string) (*httptest.Respons
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	var resp ctxResponse
-	json.Unmarshal(rec.Body.Bytes(), &resp)
+	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
 	return rec, resp
 }
 

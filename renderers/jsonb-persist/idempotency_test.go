@@ -13,7 +13,7 @@ func TestIdempotencyStore_TryClaim_NewKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -42,7 +42,7 @@ func TestIdempotencyStore_RecordAndReplay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -91,7 +91,7 @@ func TestIdempotencyStore_RetryPending(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -102,7 +102,9 @@ func TestIdempotencyStore_RetryPending(t *testing.T) {
 	store := NewIdempotencyStore(d, DriverSQLite)
 
 	// Claim
-	store.TryClaim(ctx, "t1", "checkout", "key-001")
+	if _, _, err := store.TryClaim(ctx, "t1", "checkout", "key-001"); err != nil {
+		t.Fatal(err)
+	}
 
 	// Claim again before recording → pending exists, should allow retry
 	claimed, existing, err := store.TryClaim(ctx, "t1", "checkout", "key-001")
@@ -123,7 +125,7 @@ func TestIdempotencyStore_RecordFailed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -134,7 +136,9 @@ func TestIdempotencyStore_RecordFailed(t *testing.T) {
 	store := NewIdempotencyStore(d, DriverSQLite)
 
 	// Claim
-	store.TryClaim(ctx, "t1", "checkout", "key-001")
+	if _, _, err := store.TryClaim(ctx, "t1", "checkout", "key-001"); err != nil {
+		t.Fatal(err)
+	}
 
 	// Record failed
 	if err := store.RecordFailed(ctx, "t1", "checkout", "key-001", `{"error":"timeout"}`); err != nil {
@@ -160,7 +164,7 @@ func TestIdempotencyStore_GetResult(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -180,8 +184,12 @@ func TestIdempotencyStore_GetResult(t *testing.T) {
 	}
 
 	// Claim + complete
-	store.TryClaim(ctx, "t1", "checkout", "key-001")
-	store.RecordCompleted(ctx, "t1", "checkout", "key-001", `{"ok":true}`)
+	if _, _, err := store.TryClaim(ctx, "t1", "checkout", "key-001"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RecordCompleted(ctx, "t1", "checkout", "key-001", `{"ok":true}`); err != nil {
+		t.Fatal(err)
+	}
 
 	// GetResult → should return record
 	result2, err := store.GetResult(ctx, "t1", "checkout", "key-001")
@@ -202,7 +210,7 @@ func TestIdempotencyStore_TenantIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -213,8 +221,12 @@ func TestIdempotencyStore_TenantIsolation(t *testing.T) {
 	store := NewIdempotencyStore(d, DriverSQLite)
 
 	// Tenant A completes key-001
-	store.TryClaim(ctx, "ta", "checkout", "key-001")
-	store.RecordCompleted(ctx, "ta", "checkout", "key-001", `{"a":true}`)
+	if _, _, err := store.TryClaim(ctx, "ta", "checkout", "key-001"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RecordCompleted(ctx, "ta", "checkout", "key-001", `{"a":true}`); err != nil {
+		t.Fatal(err)
+	}
 
 	// Tenant B should get a fresh claim
 	claimed, _, err := store.TryClaim(ctx, "tb", "checkout", "key-001")
@@ -232,7 +244,7 @@ func TestIdempotencyStore_CleanupExpired(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -244,8 +256,12 @@ func TestIdempotencyStore_CleanupExpired(t *testing.T) {
 	store := NewIdempotencyStore(d, DriverSQLite).WithTTL(1 * time.Millisecond)
 
 	// Claim and complete
-	store.TryClaim(ctx, "t1", "checkout", "key-001")
-	store.RecordCompleted(ctx, "t1", "checkout", "key-001", `{"done":true}`)
+	if _, _, err := store.TryClaim(ctx, "t1", "checkout", "key-001"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RecordCompleted(ctx, "t1", "checkout", "key-001", `{"done":true}`); err != nil {
+		t.Fatal(err)
+	}
 
 	// Wait for expiry
 	time.Sleep(50 * time.Millisecond)
@@ -275,7 +291,7 @@ func TestIdempotencyStore_RecordCompleted_DifferentAction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -286,8 +302,12 @@ func TestIdempotencyStore_RecordCompleted_DifferentAction(t *testing.T) {
 	store := NewIdempotencyStore(d, DriverSQLite)
 
 	// Same key, different actions → independent
-	store.TryClaim(ctx, "t1", "checkout", "shared-key")
-	store.RecordCompleted(ctx, "t1", "checkout", "shared-key", `{"checkout":true}`)
+	if _, _, err := store.TryClaim(ctx, "t1", "checkout", "shared-key"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RecordCompleted(ctx, "t1", "checkout", "shared-key", `{"checkout":true}`); err != nil {
+		t.Fatal(err)
+	}
 
 	claimed, _, _ := store.TryClaim(ctx, "t1", "refund", "shared-key")
 	if !claimed {

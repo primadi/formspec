@@ -55,16 +55,16 @@ func runServe(args []string) {
 		corsOrigins   = &repeatableFlag{}
 	)
 	fs.Var(corsOrigins, "cors-origin", "allowed CORS origin (repeatable, mandatory in production)")
-	fs.Parse(args)
+	_ = fs.Parse(args) // FlagSet is ExitOnError — Parse exits on a bad flag.
 
 	if *mode != "production" {
-		fmt.Fprintf(os.Stderr, "formspec serve: unsupported mode %q (want production; use `formspec dev` for development)\n", *mode)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec serve: unsupported mode %q (want production; use `formspec dev` for development)\n", *mode)
 		os.Exit(2)
 	}
 
 	// ── Production constraints (todo 8.1.1) ──
 	fail := func(format string, a ...any) {
-		fmt.Fprintf(os.Stderr, "formspec serve: "+format+"\n", a...)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec serve: "+format+"\n", a...)
 		os.Exit(1)
 	}
 
@@ -157,7 +157,7 @@ func runServe(args []string) {
 				log.Printf("[formspec] admin listener error: %v", err)
 			}
 		}()
-		defer adminSrv.Shutdown(context.Background())
+		defer func() { _ = adminSrv.Shutdown(context.Background()) }()
 	}
 
 	// ── Serve ──
@@ -198,7 +198,7 @@ func runServe(args []string) {
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	srv.Shutdown(shutdownCtx)
+	_ = srv.Shutdown(shutdownCtx)
 }
 
 // repeatableFlag collects repeated --flag values (stdlib flag keeps only

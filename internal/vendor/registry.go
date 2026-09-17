@@ -70,7 +70,7 @@ func (c *RegistryClient) do(ctx context.Context, method, path string, body io.Re
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
 	if err != nil {
 		return nil, err
@@ -166,7 +166,7 @@ func (c *RegistryClient) UploadTarball(ctx context.Context, versionID, tarballPa
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	var buf bytes.Buffer
 	w := multipart.NewWriter(&buf)
@@ -185,7 +185,12 @@ func (c *RegistryClient) UploadTarball(ctx context.Context, versionID, tarballPa
 	if _, err := io.Copy(part, f); err != nil {
 		return err
 	}
-	w.Close()
+	// Closing the multipart writer is what appends the closing boundary to the
+	// body. Ignoring it would send a truncated upload that the server rejects —
+	// or worse, accepts partially — while this reports success.
+	if err := w.Close(); err != nil {
+		return fmt.Errorf("finalize multipart body: %w", err)
+	}
 
 	path := fmt.Sprintf("/registry/module-version/%s/tarball", versionID)
 	_, err = c.do(ctx, "POST", path, &buf, w.FormDataContentType())
@@ -230,7 +235,7 @@ func (c *RegistryClient) DownloadTarball(ctx context.Context, versionID, destPat
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("download tarball: %d", resp.StatusCode)
 	}

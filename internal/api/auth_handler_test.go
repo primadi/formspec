@@ -24,7 +24,7 @@ func setupAuthAPIEnv(t *testing.T) http.Handler {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	t.Cleanup(func() { d.Close() })
+	t.Cleanup(func() { _ = d.Close() })
 
 	reg := entity.NewRegistry(d, db.DriverSQLite, "")
 	if err := auth.RegisterCoreEntities(reg); err != nil {

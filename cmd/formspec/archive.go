@@ -25,7 +25,7 @@ import (
 
 func runArchive(args []string) {
 	if len(args) < 1 {
-		fmt.Fprintf(os.Stderr, "Usage: formspec archive <run|view|restore-batch> [flags]\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec archive <run|view|restore-batch> [flags]\n")
 		os.Exit(2)
 	}
 	switch args[0] {
@@ -34,10 +34,10 @@ func runArchive(args []string) {
 	case "view":
 		runArchiveView(args[1:])
 	case "restore-batch":
-		fmt.Fprintf(os.Stderr, "formspec archive restore-batch: not implemented yet\n")
+		_, _ = fmt.Fprintf(os.Stderr, "formspec archive restore-batch: not implemented yet\n")
 		os.Exit(1)
 	default:
-		fmt.Fprintf(os.Stderr, "formspec archive: unknown action %q (want run|view|restore-batch)\n", args[0])
+		_, _ = fmt.Fprintf(os.Stderr, "formspec archive: unknown action %q (want run|view|restore-batch)\n", args[0])
 		os.Exit(2)
 	}
 }
@@ -61,10 +61,10 @@ func runArchiveView(args []string) {
 				i++
 			}
 		case "--help", "-h":
-			fmt.Fprintf(os.Stderr, "Usage: formspec archive view --batch-id <id> [--dsn <dsn>]\n")
+			_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec archive view --batch-id <id> [--dsn <dsn>]\n")
 			os.Exit(0)
 		default:
-			fmt.Fprintf(os.Stderr, "formspec archive view: unknown flag %q\n", args[i])
+			_, _ = fmt.Fprintf(os.Stderr, "formspec archive view: unknown flag %q\n", args[i])
 			os.Exit(2)
 		}
 	}
@@ -74,21 +74,21 @@ func runArchiveView(args []string) {
 	dsn = resolveDSN(dsn, "spec")
 
 	if batchID == "" {
-		fmt.Fprintf(os.Stderr, "formspec archive view: --batch-id is required\n")
+		_, _ = fmt.Fprintf(os.Stderr, "formspec archive view: --batch-id is required\n")
 		os.Exit(2)
 	}
 
 	database, err := db.Open(dsn)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: open database: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: open database: %v\n", err)
 		os.Exit(1)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	archiveDir := filepath.Join(formspec.StateDirFromDSN(dsn), "archive", batchID)
 	entries, err := os.ReadDir(archiveDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: read archive batch %q: %v\n", batchID, err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: read archive batch %q: %v\n", batchID, err)
 		os.Exit(1)
 	}
 	total := 0
@@ -99,7 +99,7 @@ func runArchiveView(args []string) {
 		path := filepath.Join(archiveDir, e.Name())
 		data, err := os.ReadFile(path)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: read %s: %v\n", path, err)
+			_, _ = fmt.Fprintf(os.Stderr, "Error: read %s: %v\n", path, err)
 			os.Exit(1)
 		}
 		lines := 0
@@ -139,10 +139,10 @@ func runArchiveRun(args []string) {
 		case "--dry-run":
 			dryRun = true
 		case "--help", "-h":
-			fmt.Fprintf(os.Stderr, "Usage: formspec archive run --max-age <dur> [--dry-run] [--spec <path>] [--dsn <dsn>]\n")
+			_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec archive run --max-age <dur> [--dry-run] [--spec <path>] [--dsn <dsn>]\n")
 			os.Exit(0)
 		default:
-			fmt.Fprintf(os.Stderr, "formspec archive run: unknown flag %q\n", args[i])
+			_, _ = fmt.Fprintf(os.Stderr, "formspec archive run: unknown flag %q\n", args[i])
 			os.Exit(2)
 		}
 	}
@@ -151,22 +151,22 @@ func runArchiveRun(args []string) {
 	dsn = resolveDSN(dsn, specPath)
 
 	if maxAge == "" {
-		fmt.Fprintf(os.Stderr, "formspec archive run: --max-age is required (e.g. 3y, 180d)\n")
+		_, _ = fmt.Fprintf(os.Stderr, "formspec archive run: --max-age is required (e.g. 3y, 180d)\n")
 		os.Exit(2)
 	}
 	cutoff, err := parseDuration(maxAge)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec archive run: invalid --max-age %q: %v\n", maxAge, err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec archive run: invalid --max-age %q: %v\n", maxAge, err)
 		os.Exit(2)
 	}
 
 	reg, database, _ := loadRegistry(specPath, dsn)
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	ctx := context.Background()
 	archived, err := archiveTransactions(ctx, reg, database, cutoff, dryRun)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 	if dryRun {
@@ -228,15 +228,19 @@ func archiveTransactions(ctx context.Context, reg *entity.Registry, database db.
 		for _, rec := range res.Data {
 			b, err := json.Marshal(rec)
 			if err != nil {
-				f.Close()
+				_ = f.Close()
 				return archived, err
 			}
 			if _, err := f.Write(append(b, '\n')); err != nil {
-				f.Close()
+				_ = f.Close()
 				return archived, err
 			}
 		}
-		f.Close()
+		// The archive must actually be on disk before the source rows are deleted
+		// below: a failed flush here would leave the data with no copy at all.
+		if err := f.Close(); err != nil {
+			return archived, fmt.Errorf("finalize archive %s: %w", archiveFile, err)
+		}
 
 		// Delete the archived transaction rows.
 		for _, rec := range res.Data {
@@ -306,11 +310,11 @@ func snapshotMasters(ctx context.Context, reg *entity.Registry, archiveDir strin
 			}
 			b, err := json.Marshal(rec)
 			if err != nil {
-				f.Close()
+				_ = f.Close()
 				return err
 			}
 			if _, err := f.Write(append(b, '\n')); err != nil {
-				f.Close()
+				_ = f.Close()
 				return err
 			}
 			// Flag locked_for_deletion (4.9.3).
@@ -324,7 +328,9 @@ func snapshotMasters(ctx context.Context, reg *entity.Registry, archiveDir strin
 				UpdatedBy: "archive", Data: data,
 			})
 		}
-		f.Close()
+		if err := f.Close(); err != nil {
+			return fmt.Errorf("finalize master archive %s: %w", masterFile, err)
+		}
 	}
 	return nil
 }

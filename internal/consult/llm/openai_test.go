@@ -47,6 +47,7 @@ func TestOpenAIProvider_Generate(t *testing.T) {
 			"usage": map[string]any{"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
 		})
 	}))
+	// httptest.Server.Close returns no error — nothing to ignore here.
 	defer srv.Close()
 
 	p := NewOpenAI(OpenAIConfig{

@@ -13,7 +13,7 @@ import (
 // diffs, not arbitrary named business events.
 type EventLogRecord struct {
 	ID          string `json:"id"`
-	WorkspaceID    string `json:"tenant_id"`
+	WorkspaceID string `json:"tenant_id"`
 	EventName   string `json:"event_name"`
 	Resource    string `json:"resource"` // "module/entity", e.g. "clinic/visit"
 	Payload     string `json:"payload"`  // JSON
@@ -85,7 +85,7 @@ func (s *EventLogStore) ListByWorkspace(ctx context.Context, workspaceID, resour
 	if err != nil {
 		return nil, fmt.Errorf("event log list: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var records []EventLogRecord
 	for rows.Next() {

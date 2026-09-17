@@ -72,7 +72,7 @@ func main() {
 	// yields a descriptive error. /proc/<pid>/comm truncates to 15 chars
 	// ("formspec-regist"), so match that too.
 	if err := devserver.EnsurePort(*addr, "formspec-regist"); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 

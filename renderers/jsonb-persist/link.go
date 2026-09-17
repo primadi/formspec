@@ -166,7 +166,7 @@ func (s *StorageLinkStore) ListExpired(ctx context.Context, now time.Time, limit
 	if err != nil {
 		return nil, fmt.Errorf("link list expired: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []LinkRow
 	for rows.Next() {

@@ -82,7 +82,7 @@ func (b *RouterBuilder) HandlePrint() http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/pdf")
 		w.Header().Set("Content-Disposition",
 			fmt.Sprintf("attachment; filename=%q", name+".pdf"))
-		w.Write(pdf)
+		_, _ = w.Write(pdf)
 	}
 }
 

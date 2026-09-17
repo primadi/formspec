@@ -85,7 +85,7 @@ func buildMessage(from, to, subject, text, html string) []byte {
 		b.WriteString(text)
 	} else {
 		boundary := "formspec-boundary-7f4a"
-		fmt.Fprintf(&b, "Content-Type: multipart/alternative; boundary=\"%s\"\r\n", boundary)
+		_, _ = fmt.Fprintf(&b, "Content-Type: multipart/alternative; boundary=\"%s\"\r\n", boundary)
 		b.WriteString("\r\n")
 		b.WriteString("--")
 		b.WriteString(boundary)

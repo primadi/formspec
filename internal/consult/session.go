@@ -46,8 +46,11 @@ func NewSession(baseDir, id, provider, model string) (*Session, error) {
 		return nil, err
 	}
 	s.transcript = f
-	fmt.Fprintf(f, "# Consult Session %s\n\n- **Started**: %s\n- **Provider**: %s / %s\n\n---\n\n",
-		s.ID, s.StartedAt.Format(time.RFC3339), s.Provider, s.Model)
+	if _, err := fmt.Fprintf(f, "# Consult Session %s\n\n- **Started**: %s\n- **Provider**: %s / %s\n\n---\n\n",
+		s.ID, s.StartedAt.Format(time.RFC3339), s.Provider, s.Model); err != nil {
+		_ = f.Close()
+		return nil, fmt.Errorf("write transcript header: %w", err)
+	}
 	return s, nil
 }
 
@@ -107,7 +110,7 @@ func (s *Session) writeTurn(role, content string) {
 		return
 	}
 	s.turn++
-	fmt.Fprintf(s.transcript, "## Turn %d — %s\n\n%s\n\n", s.turn, role, strings.TrimRight(content, "\n"))
+	_, _ = fmt.Fprintf(s.transcript, "## Turn %d — %s\n\n%s\n\n", s.turn, role, strings.TrimRight(content, "\n"))
 }
 
 // Resume rebuilds a session from its transcript (best-effort: the in-memory
@@ -125,7 +128,7 @@ func Resume(baseDir, id string) (*Session, error) {
 		return nil, err
 	}
 	s.transcript = f
-	fmt.Fprintf(f, "\n---\n\n# Resumed %s\n\n", s.StartedAt.Format(time.RFC3339))
+	_, _ = fmt.Fprintf(f, "\n---\n\n# Resumed %s\n\n", s.StartedAt.Format(time.RFC3339))
 
 	// Rebuild history from recorded turns (assistant/user only — tool
 	// summaries are context for the human, not replayed into the model).

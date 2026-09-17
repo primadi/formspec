@@ -60,13 +60,13 @@ func (p *appProcess) Shutdown(timeout time.Duration) {
 	// that child dies, its own children are reparented to init and no longer
 	// show up as its descendants, so this order matters, not just timing.
 	killDescendants(pid)
-	p.cmd.Process.Signal(syscall.SIGTERM)
+	_ = p.cmd.Process.Signal(syscall.SIGTERM)
 
 	select {
 	case <-p.done:
 	case <-time.After(timeout):
 		killDescendants(pid)
-		p.cmd.Process.Kill()
+		_ = p.cmd.Process.Kill()
 		<-p.done
 	}
 }
@@ -366,7 +366,7 @@ type vitePortSniffer struct {
 func (w *vitePortSniffer) Write(p []byte) (int, error) {
 	n, err := w.out.Write(p)
 	if !w.sent {
-		w.buf.Write(p)
+		_, _ = w.buf.Write(p)
 		if m := viteLocalURLRe.FindStringSubmatch(w.buf.String()); m != nil {
 			w.sent = true
 			w.portCh <- m[1]

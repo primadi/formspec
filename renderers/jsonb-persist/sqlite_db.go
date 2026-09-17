@@ -51,7 +51,7 @@ func OpenSQLite(dbPath string, extraPragmas map[string]string) (DB, error) {
 	s := &SQLiteDB{db: sqldb, dsn: dsn, dbPath: dbPath}
 
 	if err := s.applyPragmas(context.Background()); err != nil {
-		sqldb.Close()
+		_ = sqldb.Close()
 		return nil, fmt.Errorf("sqlite pragmas: %w", err)
 	}
 

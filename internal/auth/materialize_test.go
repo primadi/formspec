@@ -22,7 +22,7 @@ func setupMaterializer(t *testing.T) (*Materializer, *entity.Registry) {
 	if err != nil {
 		t.Fatalf("OpenSQLite: %v", err)
 	}
-	t.Cleanup(func() { d.Close() })
+	t.Cleanup(func() { _ = d.Close() })
 
 	reg := entity.NewRegistry(d, db.DriverSQLite, "")
 	// Register entities so the materializer can resolve plurals. Uses

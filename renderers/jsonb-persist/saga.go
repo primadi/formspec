@@ -90,7 +90,7 @@ func (s *SagaStore) ListPending(ctx context.Context, limit int) ([]SagaEntry, er
 	if err != nil {
 		return nil, fmt.Errorf("saga list pending: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []SagaEntry
 	for rows.Next() {

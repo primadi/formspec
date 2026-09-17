@@ -41,19 +41,19 @@ func runWorkspace(args []string) {
 	case "delete":
 		runWorkspaceDelete(args[1:])
 	default:
-		fmt.Fprintf(os.Stderr, "Error: unknown workspace subcommand %q\n\n", args[0])
+		_, _ = fmt.Fprintf(os.Stderr, "Error: unknown workspace subcommand %q\n\n", args[0])
 		usageWorkspace()
 		os.Exit(1)
 	}
 }
 
 func usageWorkspace() {
-	fmt.Fprintf(os.Stderr, "Usage: formspec workspace <subcommand> [flags]\n\n")
-	fmt.Fprintf(os.Stderr, "Subcommands:\n")
-	fmt.Fprintf(os.Stderr, "  create <slug>            Register a workspace (--name display name)\n")
-	fmt.Fprintf(os.Stderr, "  list                     List registered workspaces\n")
-	fmt.Fprintf(os.Stderr, "  delete <slug>            Remove a workspace registration (--confirm)\n")
-	fmt.Fprintf(os.Stderr, "\nFlags: --dsn (required) --spec (optional, entity registry root)\n")
+	_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec workspace <subcommand> [flags]\n\n")
+	_, _ = fmt.Fprintf(os.Stderr, "Subcommands:\n")
+	_, _ = fmt.Fprintf(os.Stderr, "  create <slug>            Register a workspace (--name display name)\n")
+	_, _ = fmt.Fprintf(os.Stderr, "  list                     List registered workspaces\n")
+	_, _ = fmt.Fprintf(os.Stderr, "  delete <slug>            Remove a workspace registration (--confirm)\n")
+	_, _ = fmt.Fprintf(os.Stderr, "\nFlags: --dsn (required) --spec (optional, entity registry root)\n")
 }
 
 // workspaceRegistry opens the DSN, registers the embedded formspec.core
@@ -61,7 +61,7 @@ func usageWorkspace() {
 func workspaceRegistry(dsn, specPath string) (*auth.WorkspaceRegistry, func()) {
 	database, err := db.Open(dsn)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: open database: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: open database: %v\n", err)
 		os.Exit(1)
 	}
 	driver := db.DriverSQLite
@@ -70,19 +70,19 @@ func workspaceRegistry(dsn, specPath string) (*auth.WorkspaceRegistry, func()) {
 	}
 	reg := entity.NewRegistry(database, driver, specPath)
 	if err := auth.RegisterCoreEntities(reg); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: register core entities: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: register core entities: %v\n", err)
 		os.Exit(1)
 	}
 	if _, err := reg.SyncSchema(context.Background()); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: sync schema: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: sync schema: %v\n", err)
 		os.Exit(1)
 	}
 	store, err := reg.GetEntityStore(auth.CoreModule, auth.CoreWorkspaceEntity)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: resolve workspace entity store: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: resolve workspace entity store: %v\n", err)
 		os.Exit(1)
 	}
-	return auth.NewWorkspaceRegistry(store), func() { database.Close() }
+	return auth.NewWorkspaceRegistry(store), func() { _ = database.Close() }
 }
 
 // parseFlagsFirst parses flags that may appear after positional arguments
@@ -113,7 +113,7 @@ func runWorkspaceCreate(args []string) {
 	name := fs.String("name", "", "human-readable display name (default: slug)")
 	positional := parseFlagsFirst(fs, args)
 	if len(positional) < 1 {
-		fmt.Fprintln(os.Stderr, "Error: workspace slug is required")
+		_, _ = fmt.Fprintln(os.Stderr, "Error: workspace slug is required")
 		os.Exit(1)
 	}
 	slug := positional[0]
@@ -122,11 +122,11 @@ func runWorkspaceCreate(args []string) {
 		display = *name
 	}
 	if err := spec.ValidateWorkspaceSpec(&spec.WorkspaceSpec{}, slug); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 	if *dsn == "" {
-		fmt.Fprintln(os.Stderr, "Error: --dsn is required")
+		_, _ = fmt.Fprintln(os.Stderr, "Error: --dsn is required")
 		os.Exit(1)
 	}
 	reg, closeDB := workspaceRegistry(*dsn, *specPath)
@@ -136,7 +136,7 @@ func runWorkspaceCreate(args []string) {
 		DisplayName: display,
 	})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 	if created {
@@ -152,14 +152,14 @@ func runWorkspaceList(args []string) {
 	specPath := fs.String("spec", "", "spec root (optional)")
 	parseFlagsFirst(fs, args)
 	if *dsn == "" {
-		fmt.Fprintln(os.Stderr, "Error: --dsn is required")
+		_, _ = fmt.Fprintln(os.Stderr, "Error: --dsn is required")
 		os.Exit(1)
 	}
 	reg, closeDB := workspaceRegistry(*dsn, *specPath)
 	defer closeDB()
 	list, err := reg.List(context.Background())
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Printf("%-24s %s\n", "SLUG", "NAME")
@@ -176,26 +176,26 @@ func runWorkspaceDelete(args []string) {
 	confirm := fs.Bool("confirm", false, "actually delete (required)")
 	positional := parseFlagsFirst(fs, args)
 	if len(positional) < 1 {
-		fmt.Fprintln(os.Stderr, "Error: workspace slug is required")
+		_, _ = fmt.Fprintln(os.Stderr, "Error: workspace slug is required")
 		os.Exit(1)
 	}
 	slug := positional[0]
 	if !*confirm {
-		fmt.Fprintf(os.Stderr, "Error: deleting workspace %q requires --confirm\n", slug)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: deleting workspace %q requires --confirm\n", slug)
 		os.Exit(1)
 	}
 	if slug == spec.DefaultWorkspaceSlug {
-		fmt.Fprintln(os.Stderr, "Error: the default workspace cannot be deleted")
+		_, _ = fmt.Fprintln(os.Stderr, "Error: the default workspace cannot be deleted")
 		os.Exit(1)
 	}
 	if *dsn == "" {
-		fmt.Fprintln(os.Stderr, "Error: --dsn is required")
+		_, _ = fmt.Fprintln(os.Stderr, "Error: --dsn is required")
 		os.Exit(1)
 	}
 	reg, closeDB := workspaceRegistry(*dsn, *specPath)
 	defer closeDB()
 	if err := reg.Delete(context.Background(), slug); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Printf("Workspace deleted: %s\n", slug)

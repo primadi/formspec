@@ -15,7 +15,7 @@ func TestOpen_SQLite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	if d.DriverName() != "sqlite" {
 		t.Errorf("expected sqlite, got %s", d.DriverName())
@@ -50,7 +50,7 @@ func TestSQLite_Ping(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	if err := d.Ping(context.Background()); err != nil {
 		t.Fatalf("Ping failed: %v", err)
@@ -63,7 +63,7 @@ func TestSQLite_ExecAndQuery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	ctx := context.Background()
 
@@ -81,7 +81,7 @@ func TestSQLite_ExecAndQuery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Query failed: %v", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	if !rows.Next() {
 		t.Fatal("expected at least one row")
@@ -102,7 +102,7 @@ func TestSQLite_HasTable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	ctx := context.Background()
 
@@ -134,7 +134,7 @@ func TestSQLite_TransactionCommit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	ctx := context.Background()
 
@@ -150,7 +150,7 @@ func TestSQLite_TransactionCommit(t *testing.T) {
 
 	_, err = tx.ExecContext(ctx, "INSERT INTO tx_test (val) VALUES (?)", "tx-value")
 	if err != nil {
-		tx.Rollback()
+		_ = tx.Rollback()
 		t.Fatalf("Insert in tx failed: %v", err)
 	}
 
@@ -174,7 +174,7 @@ func TestSQLite_TransactionRollback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	ctx := context.Background()
 

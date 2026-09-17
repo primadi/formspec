@@ -44,20 +44,20 @@ func AutoKillPrevious(pidFile string) {
 	oldPID, err := strconv.Atoi(strings.TrimSpace(string(data)))
 	if err != nil {
 		fmt.Printf("[formspec] warning: invalid PID in %s, removing...\n", pidFile)
-		os.Remove(pidFile)
+		_ = os.Remove(pidFile)
 		return
 	}
 
 	proc, err := os.FindProcess(oldPID)
 	if err != nil {
 		// Process not found — clean up stale PID file.
-		os.Remove(pidFile)
+		_ = os.Remove(pidFile)
 		return
 	}
 
 	// Send SIGTERM; if it fails, the process is already dead.
 	if err := proc.Signal(syscall.SIGTERM); err != nil {
-		os.Remove(pidFile)
+		_ = os.Remove(pidFile)
 		return
 	}
 
@@ -73,11 +73,11 @@ func AutoKillPrevious(pidFile string) {
 	if ProcessAlive(oldPID) {
 		fmt.Printf("[formspec] previous instance (PID %d) did not exit gracefully — forcing\n", oldPID)
 		KillDescendants(oldPID)
-		proc.Signal(syscall.SIGKILL)
+		_ = proc.Signal(syscall.SIGKILL)
 		time.Sleep(200 * time.Millisecond)
 	}
 
-	os.Remove(pidFile)
+	_ = os.Remove(pidFile)
 }
 
 // WritePIDFile writes the current PID to the given PID file (creating the
@@ -122,7 +122,7 @@ func EnsurePort(addr, ownProcessName string) error {
 
 	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 	if err == nil {
-		ln.Close()
+		_ = ln.Close()
 		return nil
 	}
 
@@ -132,12 +132,12 @@ func EnsurePort(addr, ownProcessName string) error {
 	}
 
 	if procName == ownProcessName || procName == "exe" || strings.Contains(procName, ownProcessName) {
-		fmt.Fprintf(os.Stderr, "port %d is held by a previous %s (PID %d) — killing it...\n", port, ownProcessName, pid)
+		_, _ = fmt.Fprintf(os.Stderr, "port %d is held by a previous %s (PID %d) — killing it...\n", port, ownProcessName, pid)
 		proc, err := os.FindProcess(pid)
 		if err != nil {
 			return nil
 		}
-		proc.Signal(syscall.SIGTERM)
+		_ = proc.Signal(syscall.SIGTERM)
 
 		// Give the old instance a real chance to run its own graceful
 		// shutdown instead of racing it with a fixed short sleep — that
@@ -146,7 +146,7 @@ func EnsurePort(addr, ownProcessName string) error {
 		deadline := time.Now().Add(8 * time.Second)
 		for time.Now().Before(deadline) {
 			if ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port)); err == nil {
-				ln.Close()
+				_ = ln.Close()
 				return nil
 			}
 			time.Sleep(150 * time.Millisecond)
@@ -154,9 +154,9 @@ func EnsurePort(addr, ownProcessName string) error {
 
 		// Still holding the port after a generous wait — force it, and
 		// sweep any children it leaked so they don't accumulate.
-		fmt.Fprintf(os.Stderr, "port %d: previous instance (PID %d) did not exit gracefully — forcing\n", port, pid)
+		_, _ = fmt.Fprintf(os.Stderr, "port %d: previous instance (PID %d) did not exit gracefully — forcing\n", port, pid)
 		KillDescendants(pid)
-		proc.Signal(syscall.SIGKILL)
+		_ = proc.Signal(syscall.SIGKILL)
 		time.Sleep(200 * time.Millisecond)
 		return nil
 	}
@@ -179,7 +179,7 @@ func KillDescendants(pid int) {
 		}
 		KillDescendants(childPid)
 		if proc, err := os.FindProcess(childPid); err == nil {
-			proc.Signal(syscall.SIGKILL)
+			_ = proc.Signal(syscall.SIGKILL)
 		}
 	}
 }
@@ -252,10 +252,13 @@ func WatchSpec(ctx context.Context, app *formspec.App, specPath string, onReload
 		fmt.Printf("[formspec] spec watcher: %v (hot-reload disabled)\n", err)
 		return
 	}
-	defer watcher.Close()
+	defer func() { _ = watcher.Close() }()
 
-	// Add the spec directory and all subdirectories recursively.
-	filepath.Walk(specPath, func(path string, info os.FileInfo, err error) error {
+	// Add the spec directory and all subdirectories recursively. A walk that
+	// fails partway leaves hot-reload watching only part of the tree, so it is
+	// reported instead of passed over — a silently partial watcher looks
+	// identical to a working one until an edit is missed.
+	if err := filepath.Walk(specPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -269,7 +272,9 @@ func WatchSpec(ctx context.Context, app *formspec.App, specPath string, onReload
 			}
 		}
 		return nil
-	})
+	}); err != nil {
+		fmt.Printf("[formspec] spec watcher: %v (hot-reload may be incomplete)\n", err)
+	}
 
 	fmt.Printf("[formspec] watching %s for spec changes (hot-reload)\n", specPath)
 
@@ -296,7 +301,9 @@ func WatchSpec(ctx context.Context, app *formspec.App, specPath string, onReload
 				if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
 					base := filepath.Base(event.Name)
 					if !strings.HasPrefix(base, ".") && base != "node_modules" && base != "impl" {
-						watcher.Add(event.Name)
+						if addErr := watcher.Add(event.Name); addErr != nil {
+							fmt.Printf("[formspec] spec watcher: cannot watch new dir %s: %v\n", event.Name, addErr)
+						}
 					}
 				}
 			}

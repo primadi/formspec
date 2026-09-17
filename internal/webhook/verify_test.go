@@ -26,7 +26,7 @@ func TestVerifySignature(t *testing.T) {
 
 	// Compute a valid HMAC-SHA256 over the raw body.
 	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write([]byte(body))
+	_, _ = mac.Write([]byte(body))
 	valid := hex.EncodeToString(mac.Sum(nil))
 
 	wh := &spec.WebhookSpec{

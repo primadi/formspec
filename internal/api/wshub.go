@@ -263,7 +263,7 @@ func (b *RouterBuilder) HandleWS() http.HandlerFunc {
 		if err != nil {
 			return
 		}
-		defer c.CloseNow()
+		defer func() { _ = c.CloseNow() }()
 
 		conn := &wsConn{id: nextConnID(), workspace: workspaceID, identity: identity, conn: c, send: make(chan events.EventMessage, 32)}
 		b.hub.register(conn)

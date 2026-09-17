@@ -37,49 +37,49 @@ func runModulePublish(args []string) {
 	specPath := fs.String("spec", "spec", "spec directory (module name resolution fallback)")
 	positional := reorderFlags(fs, args, nil)
 	if len(positional) < 1 || *vendorName == "" || *key == "" || *version == "" {
-		fmt.Fprintln(os.Stderr, "formspec module publish: usage: module publish <module-dir> --vendor <name> --key <private.key> --version <semver>")
+		_, _ = fmt.Fprintln(os.Stderr, "formspec module publish: usage: module publish <module-dir> --vendor <name> --key <private.key> --version <semver>")
 		os.Exit(2)
 	}
 
 	// ── Checksum + signature ──
 	checksum, err := vendor.TreeChecksum(positional[0])
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec module publish: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec module publish: %v\n", err)
 		os.Exit(1)
 	}
 	priv, err := vendor.LoadKeyFile(*key)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec module publish: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec module publish: %v\n", err)
 		os.Exit(1)
 	}
 	signature, err := vendor.SignChecksum(priv, checksum)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec module publish: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec module publish: %v\n", err)
 		os.Exit(1)
 	}
 	publicKey, err := derivePublicKey(priv)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec module publish: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec module publish: %v\n", err)
 		os.Exit(1)
 	}
 
 	// ── Tarball ──
 	tmp, err := os.MkdirTemp("", "formspec-publish-*")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec module publish: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec module publish: %v\n", err)
 		os.Exit(1)
 	}
-	defer os.RemoveAll(tmp)
+	defer func() { _ = os.RemoveAll(tmp) }()
 	tarball := filepath.Join(tmp, fmt.Sprintf("%s-%s.tar.gz", filepath.Base(positional[0]), *version))
 	if err := createTarball(positional[0], tarball); err != nil {
-		fmt.Fprintf(os.Stderr, "formspec module publish: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec module publish: %v\n", err)
 		os.Exit(1)
 	}
 
 	// ── Module name: from module.yaml (via the vendor package's parser) ──
 	moduleName, err := readPublishModuleName(positional[0], *specPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec module publish: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec module publish: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -94,7 +94,7 @@ func runModulePublish(args []string) {
 		TarballPath: tarball,
 	})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec module publish: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec module publish: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Printf("published: %s@%s\n", moduleName, *version)
@@ -128,7 +128,7 @@ func runModuleInstallFrom(args []string) {
 		registryURL = registryDefault()
 	}
 	if moduleRef == "" {
-		fmt.Fprintln(os.Stderr, "formspec module install: usage: module install --from <registry> <module>[@<version>]")
+		_, _ = fmt.Fprintln(os.Stderr, "formspec module install: usage: module install --from <registry> <module>[@<version>]")
 		os.Exit(2)
 	}
 	moduleName, version := splitModuleRef(moduleRef)
@@ -142,24 +142,24 @@ func runModuleInstallFrom(args []string) {
 	// ── Lookup + download ──
 	versionID, checksum, signature, publicKey, err := client.LookupVersion(ctx, moduleName, version)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec module install: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec module install: %v\n", err)
 		os.Exit(1)
 	}
 	tmp, err := os.MkdirTemp("", "formspec-fetch-*")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec module install: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec module install: %v\n", err)
 		os.Exit(1)
 	}
-	defer os.RemoveAll(tmp)
+	defer func() { _ = os.RemoveAll(tmp) }()
 	tarball := filepath.Join(tmp, "module.tar.gz")
 	if err := client.DownloadTarball(ctx, versionID, tarball); err != nil {
-		fmt.Fprintf(os.Stderr, "formspec module install: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec module install: %v\n", err)
 		os.Exit(1)
 	}
 
 	// ── Verify signature BEFORE trusting the tarball (13.3.8) ──
 	if err := verifyTarballSignature(tarball, checksum, signature, publicKey); err != nil {
-		fmt.Fprintf(os.Stderr, "formspec module install: REFUSED — %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec module install: REFUSED — %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Printf("signature verified (registry vendor key)\n")
@@ -175,7 +175,7 @@ func runModuleInstallFrom(args []string) {
 		TrustTier:      "community",
 	})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec module install: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec module install: %v\n", err)
 		os.Exit(1)
 	}
 	state := "inactive"
@@ -197,7 +197,7 @@ func verifyTarballSignature(tarball, checksum, signature, publicKey string) erro
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(tmp)
+	defer func() { _ = os.RemoveAll(tmp) }()
 	if err := extractTarballTo(tarball, tmp); err != nil {
 		return err
 	}
@@ -237,16 +237,21 @@ func derivePublicKey(privateKeyB64 string) (string, error) {
 }
 
 // createTarball gzips a directory tree (module root at the archive root).
-func createTarball(src, dest string) error {
+//
+// The three writers are closed via closeInto rather than plain defer: the
+// archive only reaches disk when they flush, so a close error means publish
+// produced a corrupt tarball — reporting that as success is the one outcome
+// this must not do.
+func createTarball(src, dest string) (err error) {
 	out, err := os.Create(dest)
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	defer func() { err = closeInto(err, out) }()
 	gz := gzip.NewWriter(out)
-	defer gz.Close()
+	defer func() { err = closeInto(err, gz) }()
 	tw := tar.NewWriter(gz)
-	defer tw.Close()
+	defer func() { err = closeInto(err, tw) }()
 
 	return filepath.WalkDir(src, func(p string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -302,12 +307,12 @@ func extractTarballTo(tarball, dest string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	gz, err := gzip.NewReader(f)
 	if err != nil {
 		return fmt.Errorf("gzip: %w", err)
 	}
-	defer gz.Close()
+	defer func() { _ = gz.Close() }()
 	tr := tar.NewReader(gz)
 	for {
 		hdr, err := tr.Next()
@@ -335,10 +340,15 @@ func extractTarballTo(tarball, dest string) error {
 				return err
 			}
 			if _, err := io.Copy(out, tr); err != nil {
-				out.Close()
+				_ = out.Close()
 				return err
 			}
-			out.Close()
+			// The extracted file is only complete once the write buffer is
+			// flushed; a silent failure here yields a truncated file that looks
+			// like a successful extraction.
+			if err := out.Close(); err != nil {
+				return fmt.Errorf("write %s: %w", target, err)
+			}
 		}
 	}
 }

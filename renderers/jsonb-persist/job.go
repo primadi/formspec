@@ -126,7 +126,7 @@ func (s *JobStore) ListByWorkspace(ctx context.Context, tenantID string, limit i
 	if err != nil {
 		return nil, fmt.Errorf("job list: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []JobRow
 	for rows.Next() {

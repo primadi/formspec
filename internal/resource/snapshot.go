@@ -60,7 +60,7 @@ func (f *SnapshotFetcher) Fetch() (*FetchResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("http get: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// 304 = no changes
 	if resp.StatusCode == http.StatusNotModified {

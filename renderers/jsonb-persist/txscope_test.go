@@ -14,7 +14,7 @@ func newScopeTestDB(t *testing.T, name string) DB {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	t.Cleanup(func() { d.Close() })
+	t.Cleanup(func() { _ = d.Close() })
 
 	if _, err := d.ExecContext(context.Background(),
 		`CREATE TABLE items (id text PRIMARY KEY, val text NOT NULL)`); err != nil {

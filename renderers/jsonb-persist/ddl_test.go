@@ -52,7 +52,7 @@ func orderEntity() (spec.Metadata, *spec.EntitySpec) {
 					Name: "items", Type: spec.FieldChild,
 					Child: &spec.ChildDecl{Storage: "jsonb"},
 				},
-				{Name: "total", Type: spec.FieldNumber, Required: true},
+				{Name: "total", Type: spec.FieldDecimal, Required: true},
 				{Name: "member_tier", Type: spec.FieldEnum, EnumValues: []string{"regular", "silver", "gold"}},
 				{
 					Name: "status", Type: spec.FieldEnum,
@@ -407,7 +407,7 @@ func TestFieldTypeToSQL(t *testing.T) {
 		sql string
 	}{
 		{spec.FieldString, "text"},
-		{spec.FieldNumber, "numeric(20,8)"},
+		{spec.FieldDecimal, "numeric(20,8)"},
 		{spec.FieldBoolean, "boolean"},
 		{spec.FieldDate, "date"},
 		{spec.FieldDateTime, "timestamptz"},
@@ -460,7 +460,7 @@ func TestGenerateEntityDDL_VerifiesBuild(t *testing.T) {
 		Version: "v1",
 		Fields: []spec.Field{
 			{Name: "str_field", Type: spec.FieldString, Index: true},
-			{Name: "num_field", Type: spec.FieldNumber, Index: true},
+			{Name: "num_field", Type: spec.FieldDecimal, Index: true},
 			{Name: "bool_field", Type: spec.FieldBoolean, Index: true},
 			{Name: "date_field", Type: spec.FieldDate},
 			{Name: "dt_field", Type: spec.FieldDateTime},
@@ -508,7 +508,7 @@ func TestGenerateExtensionDDL(t *testing.T) {
 		Fields: []spec.Field{
 			{Name: "membership_level", Type: spec.FieldString, Default: "regular"},
 			{Name: "referral_code", Type: spec.FieldString, Unique: true},
-			{Name: "lifetime_value", Type: spec.FieldNumber, Index: true},
+			{Name: "lifetime_value", Type: spec.FieldDecimal, Index: true},
 		},
 		ExtendStorage: &spec.ExtendStorage{
 			Target:    "billing/customer",

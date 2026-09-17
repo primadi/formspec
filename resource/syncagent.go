@@ -129,7 +129,7 @@ func (a *SyncAgent) Run(ctx context.Context) error {
 	go a.deployer.RunLoop(ctx)
 
 	<-ctx.Done()
-	a.evidence.Flush()
+	_ = a.evidence.Flush()
 	return nil
 }
 
@@ -150,7 +150,7 @@ func (a *SyncAgent) startDevPollListener(port int) {
 		a.deployer.ForcePoll(context.Background())
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `{"status":"ok","triggered":true}`)
+		_, _ = fmt.Fprintf(w, `{"status":"ok","triggered":true}`)
 	})
 
 	server := &http.Server{Addr: fmt.Sprintf(":%d", port), Handler: mux}

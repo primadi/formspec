@@ -40,14 +40,14 @@ func runGet(args []string) {
 				i++
 			}
 		case "--help", "-h":
-			fmt.Fprintf(os.Stderr, "Usage: formspec get <kind> [name] [--spec <path>] [--output table|json]\n")
+			_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec get <kind> [name] [--spec <path>] [--output table|json]\n")
 			os.Exit(0)
 		default:
 			positional = append(positional, args[i])
 		}
 	}
 	if len(positional) < 1 {
-		fmt.Fprintf(os.Stderr, "Usage: formspec get <kind> [name] [--spec <path>] [--output table|json]\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec get <kind> [name] [--spec <path>] [--output table|json]\n")
 		os.Exit(2)
 	}
 	kind := positional[0]
@@ -71,11 +71,11 @@ func runGet(args []string) {
 	}
 
 	if len(matches) == 0 {
-		fmt.Fprintf(os.Stderr, "No resources found for kind %q", kind)
+		_, _ = fmt.Fprintf(os.Stderr, "No resources found for kind %q", kind)
 		if name != "" {
-			fmt.Fprintf(os.Stderr, " name %q", name)
+			_, _ = fmt.Fprintf(os.Stderr, " name %q", name)
 		}
-		fmt.Fprintf(os.Stderr, " under %s\n", specPath)
+		_, _ = fmt.Fprintf(os.Stderr, " under %s\n", specPath)
 		os.Exit(1)
 	}
 
@@ -113,14 +113,14 @@ func runDescribe(args []string) {
 				i++
 			}
 		case "--help", "-h":
-			fmt.Fprintf(os.Stderr, "Usage: formspec describe <kind> <name> [--spec <path>]\n")
+			_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec describe <kind> <name> [--spec <path>]\n")
 			os.Exit(0)
 		default:
 			positional = append(positional, args[i])
 		}
 	}
 	if len(positional) < 2 {
-		fmt.Fprintf(os.Stderr, "Usage: formspec describe <kind> <name> [--spec <path>]\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec describe <kind> <name> [--spec <path>]\n")
 		os.Exit(2)
 	}
 	kind := positional[0]
@@ -137,7 +137,7 @@ func runDescribe(args []string) {
 		}
 	}
 	if match == nil {
-		fmt.Fprintf(os.Stderr, "No resource found for kind %q name %q under %s\n", kind, name, specPath)
+		_, _ = fmt.Fprintf(os.Stderr, "No resource found for kind %q name %q under %s\n", kind, name, specPath)
 		os.Exit(1)
 	}
 
@@ -172,7 +172,7 @@ func describeEntity(m *manifest.RawManifest) {
 	}
 	es, err := manifest.RawSpecToEntitySpec(sm)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "  (cannot parse entity spec: %v)\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "  (cannot parse entity spec: %v)\n", err)
 		return
 	}
 
@@ -342,7 +342,7 @@ func loadManifestsOrExit(specPath string) []manifest.RawManifest {
 	loader := manifest.NewLoader(specPath)
 	res, err := loader.LoadAll()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec: load error: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec: load error: %v\n", err)
 		os.Exit(2)
 	}
 	manifests := res.Manifests

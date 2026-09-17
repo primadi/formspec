@@ -67,7 +67,7 @@ func resolveActiveWorkspace(cfg DevConfig) DevConfig {
 
 	if cfg.WorkspaceIDExplicit {
 		if !containsString(declared, cfg.WorkspaceID) {
-			fmt.Fprintf(os.Stderr,
+			_, _ = fmt.Fprintf(os.Stderr,
 				"[formspec] warning: workspace %q is not declared by this spec tree (declared: %s) — everything will be stored under tenant %q. Workspace manifests register slugs; --workspace-id selects one.\n",
 				cfg.WorkspaceID, declaredList, cfg.WorkspaceID)
 		}
@@ -80,7 +80,7 @@ func resolveActiveWorkspace(cfg DevConfig) DevConfig {
 		return cfg
 	}
 
-	fmt.Fprintf(os.Stderr,
+	_, _ = fmt.Fprintf(os.Stderr,
 		"[formspec] warning: this spec tree declares %d workspaces (%s) but the active one is %q — pass --workspace-id to choose; workspace manifests register slugs, they do not select one.\n",
 		len(declared), declaredList, cfg.WorkspaceID)
 	return cfg

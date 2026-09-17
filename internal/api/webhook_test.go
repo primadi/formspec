@@ -29,11 +29,13 @@ func newWebhookTestHarness(t *testing.T) *HandlerFactory {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	t.Cleanup(func() { d.Close() })
+	t.Cleanup(func() { _ = d.Close() })
 
 	r := db.NewMigrationRunner(d, db.DriverSQLite)
 	ctx := context.Background()
-	r.EnsureSystemTables(ctx)
+	if err := r.EnsureSystemTables(ctx); err != nil {
+		t.Fatal(err)
+	}
 
 	reg := entity.NewRegistry(d, db.DriverSQLite, dir)
 	reg.LoadEntities()
@@ -97,7 +99,7 @@ func TestWebhook_Signature(t *testing.T) {
 
 	body := `{"transaction_id":"T-123","amount":100}`
 	mac := hmac.New(sha256.New, []byte("s3cret"))
-	mac.Write([]byte(body))
+	_, _ = mac.Write([]byte(body))
 	valid := hex.EncodeToString(mac.Sum(nil))
 
 	// Valid signature → 200 + dispatched.
@@ -161,11 +163,13 @@ func TestWebhook_RouteRegistered(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := db.NewMigrationRunner(d, db.DriverSQLite)
 	ctx := context.Background()
-	r.EnsureSystemTables(ctx)
+	if err := r.EnsureSystemTables(ctx); err != nil {
+		t.Fatal(err)
+	}
 
 	reg := entity.NewRegistry(d, db.DriverSQLite, dir)
 	reg.LoadEntities()

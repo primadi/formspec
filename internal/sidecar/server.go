@@ -70,7 +70,7 @@ func (s *Server) Listen() error {
 		// The app container runs as a different user; the shared emptyDir
 		// mount is the access boundary, not socket permissions.
 		if err := os.Chmod(socketPath, 0666); err != nil {
-			ln.Close()
+			_ = ln.Close()
 			return fmt.Errorf("chmod socket: %w", err)
 		}
 		s.listener = ln
@@ -150,5 +150,5 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(payload)
+	_ = json.NewEncoder(w).Encode(payload)
 }

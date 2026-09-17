@@ -32,38 +32,38 @@ func runGenerate(args []string) {
 	lang := fs.String("lang", "typescript", "Target language(s), comma-separated")
 	out := fs.String("out", "./formspec-client.generated.ts", "Output file path")
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: formspec generate [flags]\n\n")
-		fmt.Fprintf(os.Stderr, "Derive a typed TypeScript client from entity manifests.\n\n")
-		fmt.Fprintf(os.Stderr, "Flags:\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec generate [flags]\n\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Derive a typed TypeScript client from entity manifests.\n\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Flags:\n")
 		fs.PrintDefaults()
 	}
-	fs.Parse(args)
+	_ = fs.Parse(args) // FlagSet is ExitOnError — Parse exits on a bad flag.
 
 	for _, l := range strings.Split(*lang, ",") {
 		if strings.TrimSpace(l) != "typescript" {
-			fmt.Fprintf(os.Stderr, "formspec generate: unsupported --lang %q — only \"typescript\" is implemented today (Go/OpenAPI are speced in docs/cli-tools/01-formspec-cli.md §5 but not built)\n", l)
+			_, _ = fmt.Fprintf(os.Stderr, "formspec generate: unsupported --lang %q — only \"typescript\" is implemented today (Go/OpenAPI are speced in docs/cli-tools/01-formspec-cli.md §5 but not built)\n", l)
 			os.Exit(1)
 		}
 	}
 
 	reg, err := loadRegistryForCodegen(*specPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 
 	ts, err := generateTypeScript(reg)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 
 	if err := os.MkdirAll(filepath.Dir(*out), 0755); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: create output dir: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: create output dir: %v\n", err)
 		os.Exit(1)
 	}
 	if err := os.WriteFile(*out, []byte(ts), 0644); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: write %s: %v\n", *out, err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: write %s: %v\n", *out, err)
 		os.Exit(1)
 	}
 
@@ -82,7 +82,7 @@ func loadRegistryForCodegen(specPath string) (*entity.Registry, error) {
 
 	reg := entity.NewRegistry(database, db.DriverSQLite, specPath)
 	for _, loadErr := range reg.LoadEntities() {
-		fmt.Fprintf(os.Stderr, "formspec generate: load warning: %v\n", loadErr)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec generate: load warning: %v\n", loadErr)
 	}
 	return reg, nil
 }
@@ -161,7 +161,7 @@ func generateTypeScript(reg *entity.Registry) (string, error) {
 		byModule[g.module] = append(byModule[g.module], key)
 	}
 	for _, module := range moduleOrder {
-		fmt.Fprintf(&b, "    %s: {\n", tsIdent(module))
+		_, _ = fmt.Fprintf(&b, "    %s: {\n", tsIdent(module))
 		for _, key := range byModule[module] {
 			writeEntityApi(&b, groups[key])
 		}
@@ -178,15 +178,15 @@ func generateTypeScript(reg *entity.Registry) (string, error) {
 func writeEntityTypes(b *strings.Builder, g *entityGroup) {
 	typeName := pascalCase(g.module) + pascalCase(g.entity)
 
-	fmt.Fprintf(b, "// %s.%s — table %q\n", g.module, g.entity, g.plural)
-	fmt.Fprintf(b, "export interface %s {\n", typeName)
+	_, _ = fmt.Fprintf(b, "// %s.%s — table %q\n", g.module, g.entity, g.plural)
+	_, _ = fmt.Fprintf(b, "export interface %s {\n", typeName)
 	for _, f := range g.spec.Fields {
 		writeField(b, f, false)
 	}
 	b.WriteString("}\n\n")
 
 	if g.standardActions["create"] {
-		fmt.Fprintf(b, "export interface %sCreateInput {\n", typeName)
+		_, _ = fmt.Fprintf(b, "export interface %sCreateInput {\n", typeName)
 		for _, f := range g.spec.Fields {
 			if f.Computed != nil {
 				continue // derived server-side — not part of create input
@@ -197,7 +197,7 @@ func writeEntityTypes(b *strings.Builder, g *entityGroup) {
 	}
 	if g.standardActions["update"] {
 		// All fields optional — PATCH sends only what changed (§16).
-		fmt.Fprintf(b, "export type %sUpdateInput = Partial<%sCreateInput>;\n\n", typeName, typeName)
+		_, _ = fmt.Fprintf(b, "export type %sUpdateInput = Partial<%sCreateInput>;\n\n", typeName, typeName)
 	}
 
 	for _, action := range g.customActions {
@@ -208,11 +208,11 @@ func writeEntityTypes(b *strings.Builder, g *entityGroup) {
 func writeActionParamsType(b *strings.Builder, entityTypeName string, action spec.Action) {
 	paramsTypeName := entityTypeName + pascalCase(action.Name) + "Params"
 	if action.Params == nil || len(action.Params.Validate) == 0 {
-		fmt.Fprintf(b, "export type %s = Record<string, unknown>;\n\n", paramsTypeName)
+		_, _ = fmt.Fprintf(b, "export type %s = Record<string, unknown>;\n\n", paramsTypeName)
 		return
 	}
 
-	fmt.Fprintf(b, "export interface %s {\n", paramsTypeName)
+	_, _ = fmt.Fprintf(b, "export interface %s {\n", paramsTypeName)
 	for _, p := range action.Params.Validate {
 		required := false
 		for _, r := range p.Rules {
@@ -225,7 +225,7 @@ func writeActionParamsType(b *strings.Builder, entityTypeName string, action spe
 		// parameter for autocomplete without asserting a type we can't verify.
 		// Quoted literal key, same reasoning as writeField: this must match the
 		// JSON body key the server decodes, not a camelCased rename.
-		fmt.Fprintf(b, "  %q%s: unknown;\n", p.Field, optionalMark(!required))
+		_, _ = fmt.Fprintf(b, "  %q%s: unknown;\n", p.Field, optionalMark(!required))
 	}
 	b.WriteString("}\n\n")
 }
@@ -243,9 +243,9 @@ func writeField(b *strings.Builder, f spec.Field, forceOptional bool) {
 		nullable = " | null"
 	}
 	if f.Description != "" {
-		fmt.Fprintf(b, "  /** %s */\n", strings.ReplaceAll(f.Description, "\n", " "))
+		_, _ = fmt.Fprintf(b, "  /** %s */\n", strings.ReplaceAll(f.Description, "\n", " "))
 	}
-	fmt.Fprintf(b, "  %q%s: %s%s;\n", f.Name, optionalMark(optional), tsType, nullable)
+	_, _ = fmt.Fprintf(b, "  %q%s: %s%s;\n", f.Name, optionalMark(optional), tsType, nullable)
 }
 
 // fieldIsRequired checks both ways a manifest can declare a field required:
@@ -280,16 +280,20 @@ func optionalMark(optional bool) string {
 // so until that lands server-side this type is aspirational, not a
 // guarantee — see docs/cli-tools/03-formspec-generate.md client-generation notes.
 func tsFieldType(f spec.Field) string {
-	switch {
-	case spec.IsNumericField(f.Type) && f.Type != spec.FieldInteger:
-		// Decimal-family values cross the wire as strings so precision survives
-		// the trip through a JSON number.
+	// money is checked before the numeric family, which it is also a member of:
+	// it is a first-class {amount, currency} pair (05-field-types.md §2), not a
+	// bare number.
+	if f.Type == spec.FieldMoney {
+		return "{ amount: string; currency: string }"
+	}
+	// The rest of the numeric family that is not integer — including the
+	// deprecated `number` alias — crosses the wire as a string so precision
+	// survives the trip through a JSON number.
+	if spec.IsNumericField(f.Type) && f.Type != spec.FieldInteger {
 		return "string"
 	}
 	switch f.Type {
 	case spec.FieldString, spec.FieldUUID, spec.FieldDate, spec.FieldDateTime:
-		return "string"
-	case spec.FieldDecimal, spec.FieldPercent:
 		return "string"
 	case spec.FieldInteger:
 		return "number"
@@ -306,10 +310,6 @@ func tsFieldType(f spec.Field) string {
 		return strings.Join(quoted, " | ")
 	case spec.FieldJSON:
 		return "unknown"
-	case spec.FieldMoney:
-		// money is a first-class {amount, currency} pair (05-field-types.md §2).
-		// amount is arbitrary-precision decimal → string, never number.
-		return "{ amount: string; currency: string }"
 	case spec.FieldFile, spec.FieldAttachment:
 		// file/attachment is a pointer to a ctx.storage object with canonical
 		// metadata (05-field-types.md §1.3): key, filename, content_type, size, checksum.
@@ -334,7 +334,7 @@ func tsFieldType(f spec.Field) string {
 			if cfOptional {
 				nullable = " | null"
 			}
-			fmt.Fprintf(&inline, "%q%s: %s%s;", cf.Name, opt, tsFieldType(cf), nullable)
+			_, _ = fmt.Fprintf(&inline, "%q%s: %s%s;", cf.Name, opt, tsFieldType(cf), nullable)
 		}
 		inline.WriteString(" }>")
 		return inline.String()
@@ -345,31 +345,31 @@ func tsFieldType(f spec.Field) string {
 
 func writeEntityApi(b *strings.Builder, g *entityGroup) {
 	typeName := pascalCase(g.module) + pascalCase(g.entity)
-	fmt.Fprintf(b, "      %s: {\n", tsIdent(g.plural))
+	_, _ = fmt.Fprintf(b, "      %s: {\n", tsIdent(g.plural))
 
 	if g.standardActions["list"] {
-		fmt.Fprintf(b, "        list: (opts?: ListOptions): Promise<ListResult<FormaRecord<%s>>> =>\n", typeName)
-		fmt.Fprintf(b, "          client.list<FormaRecord<%s>>(%q, %q, opts),\n", typeName, g.module, g.plural)
+		_, _ = fmt.Fprintf(b, "        list: (opts?: ListOptions): Promise<ListResult<FormaRecord<%s>>> =>\n", typeName)
+		_, _ = fmt.Fprintf(b, "          client.list<FormaRecord<%s>>(%q, %q, opts),\n", typeName, g.module, g.plural)
 	}
 	if g.standardActions["find"] {
-		fmt.Fprintf(b, "        find: (id: string): Promise<FormaRecord<%s>> =>\n", typeName)
-		fmt.Fprintf(b, "          client.find<FormaRecord<%s>>(%q, %q, id),\n", typeName, g.module, g.plural)
+		_, _ = fmt.Fprintf(b, "        find: (id: string): Promise<FormaRecord<%s>> =>\n", typeName)
+		_, _ = fmt.Fprintf(b, "          client.find<FormaRecord<%s>>(%q, %q, id),\n", typeName, g.module, g.plural)
 	}
 	if g.standardActions["create"] {
-		fmt.Fprintf(b, "        create: (input: %sCreateInput): Promise<FormaRecord<%s>> =>\n", typeName, typeName)
-		fmt.Fprintf(b, "          client.create<FormaRecord<%s>>(%q, %q, input),\n", typeName, g.module, g.plural)
+		_, _ = fmt.Fprintf(b, "        create: (input: %sCreateInput): Promise<FormaRecord<%s>> =>\n", typeName, typeName)
+		_, _ = fmt.Fprintf(b, "          client.create<FormaRecord<%s>>(%q, %q, input),\n", typeName, g.module, g.plural)
 	}
 	if g.standardActions["update"] {
-		fmt.Fprintf(b, "        update: (id: string, patch: %sUpdateInput): Promise<FormaRecord<%s>> =>\n", typeName, typeName)
-		fmt.Fprintf(b, "          client.update<FormaRecord<%s>>(%q, %q, id, patch),\n", typeName, g.module, g.plural)
+		_, _ = fmt.Fprintf(b, "        update: (id: string, patch: %sUpdateInput): Promise<FormaRecord<%s>> =>\n", typeName, typeName)
+		_, _ = fmt.Fprintf(b, "          client.update<FormaRecord<%s>>(%q, %q, id, patch),\n", typeName, g.module, g.plural)
 	}
 	if g.standardActions["delete"] {
-		fmt.Fprintf(b, "        delete: (id: string): Promise<void> => client.delete(%q, %q, id),\n", g.module, g.plural)
+		_, _ = fmt.Fprintf(b, "        delete: (id: string): Promise<void> => client.delete(%q, %q, id),\n", g.module, g.plural)
 	}
 	for _, action := range g.customActions {
 		paramsTypeName := typeName + pascalCase(action.Name) + "Params"
-		fmt.Fprintf(b, "        %s: (id: string, params: %s): Promise<unknown> =>\n", tsIdent(action.Name), paramsTypeName)
-		fmt.Fprintf(b, "          client.action(%q, %q, id, %q, params),\n", g.module, g.plural, action.Name)
+		_, _ = fmt.Fprintf(b, "        %s: (id: string, params: %s): Promise<unknown> =>\n", tsIdent(action.Name), paramsTypeName)
+		_, _ = fmt.Fprintf(b, "          client.action(%q, %q, id, %q, params),\n", g.module, g.plural, action.Name)
 	}
 
 	b.WriteString("      },\n")

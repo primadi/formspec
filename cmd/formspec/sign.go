@@ -36,10 +36,10 @@ func runSign(args []string) {
 }
 
 func usageSign() {
-	fmt.Fprintf(os.Stderr, "Usage:\n")
-	fmt.Fprintf(os.Stderr, "  formspec sign keygen --out <dir> --name <vendor>\n")
-	fmt.Fprintf(os.Stderr, "  formspec sign <module-dir> --key <private.key> [--out <sig-file>]\n")
-	fmt.Fprintf(os.Stderr, "  formspec sign verify <module-dir> --signature <b64|file> --public-key <pub.file>\n")
+	_, _ = fmt.Fprintf(os.Stderr, "Usage:\n")
+	_, _ = fmt.Fprintf(os.Stderr, "  formspec sign keygen --out <dir> --name <vendor>\n")
+	_, _ = fmt.Fprintf(os.Stderr, "  formspec sign <module-dir> --key <private.key> [--out <sig-file>]\n")
+	_, _ = fmt.Fprintf(os.Stderr, "  formspec sign verify <module-dir> --signature <b64|file> --public-key <pub.file>\n")
 }
 
 func runSignKeygen(args []string) {
@@ -47,16 +47,16 @@ func runSignKeygen(args []string) {
 	fs.SetOutput(os.Stderr)
 	out := fs.String("out", ".", "output directory")
 	name := fs.String("name", "vendor", "key file base name")
-	fs.Parse(args)
+	_ = fs.Parse(args) // FlagSet is ExitOnError — Parse exits on a bad flag.
 
 	kp, err := vendor.GenerateKeyPair()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec sign keygen: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec sign keygen: %v\n", err)
 		os.Exit(1)
 	}
 	privPath, pubPath, err := vendor.SaveKeyPair(*out, *name, kp)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec sign keygen: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec sign keygen: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Printf("keypair generated:\n")
@@ -77,29 +77,29 @@ func runSignModule(args []string) {
 
 	checksum, err := vendor.TreeChecksum(positional[0])
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec sign: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec sign: %v\n", err)
 		os.Exit(1)
 	}
 	priv, err := vendor.LoadKeyFile(*key)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec sign: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec sign: %v\n", err)
 		os.Exit(1)
 	}
 	sig, err := vendor.SignChecksum(priv, checksum)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec sign: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec sign: %v\n", err)
 		os.Exit(1)
 	}
 	if *out != "" {
 		if err := os.WriteFile(*out, []byte(sig+"\n"), 0644); err != nil {
-			fmt.Fprintf(os.Stderr, "formspec sign: %v\n", err)
+			_, _ = fmt.Fprintf(os.Stderr, "formspec sign: %v\n", err)
 			os.Exit(1)
 		}
 		fmt.Printf("signature written to %s\n", *out)
 	} else {
 		fmt.Println(sig)
 	}
-	fmt.Fprintf(os.Stderr, "checksum: %s\n", checksum)
+	_, _ = fmt.Fprintf(os.Stderr, "checksum: %s\n", checksum)
 }
 
 func runSignVerify(args []string) {
@@ -115,7 +115,7 @@ func runSignVerify(args []string) {
 
 	checksum, err := vendor.TreeChecksum(positional[0])
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec sign verify: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec sign verify: %v\n", err)
 		os.Exit(1)
 	}
 	signature := *sig
@@ -124,11 +124,11 @@ func runSignVerify(args []string) {
 	}
 	publicKey, err := vendor.LoadKeyFile(*pub)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec sign verify: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec sign verify: %v\n", err)
 		os.Exit(1)
 	}
 	if err := vendor.VerifyChecksum(publicKey, checksum, signature); err != nil {
-		fmt.Fprintf(os.Stderr, "formspec sign verify: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec sign verify: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Printf("signature OK — %s\n", checksum)

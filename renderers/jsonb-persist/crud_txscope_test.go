@@ -26,7 +26,7 @@ func TestEntityStore_ResolveRelations_NoDeadlockUnderTxScope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	custMeta, custEntity := customerEntity()
 	orderMeta, orderEnt := orderEntity()
@@ -104,12 +104,12 @@ func TestEntityStore_ListAndSubmit_NoDeadlockUnderTxScope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "invoice", Module: "billing"}
 	entity := &spec.EntitySpec{
 		Version: "v1",
-		Fields:  []spec.Field{{Name: "total", Type: spec.FieldNumber}},
+		Fields:  []spec.Field{{Name: "total", Type: spec.FieldDecimal}},
 	}
 
 	r := NewMigrationRunner(d, DriverSQLite)

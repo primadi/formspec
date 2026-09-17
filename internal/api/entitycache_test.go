@@ -24,7 +24,7 @@ func setupCacheTestEntity(t *testing.T) (factory *HandlerFactory, backend *memor
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	t.Cleanup(func() { d.Close() })
+	t.Cleanup(func() { _ = d.Close() })
 
 	reg := entity.NewRegistry(d, db.DriverSQLite, dir)
 	orderSpec := spec.EntitySpec{

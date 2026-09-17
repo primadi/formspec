@@ -34,21 +34,21 @@ func runDelete(args []string) {
 		case "--confirm", "-confirm":
 			confirm = true
 		case "--help", "-h":
-			fmt.Fprintf(os.Stderr, "Usage: formspec delete <kind> <name> --confirm [--spec <path>]\n")
+			_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec delete <kind> <name> --confirm [--spec <path>]\n")
 			os.Exit(0)
 		default:
 			positional = append(positional, args[i])
 		}
 	}
 	if len(positional) < 2 {
-		fmt.Fprintf(os.Stderr, "Usage: formspec delete <kind> <name> --confirm [--spec <path>]\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec delete <kind> <name> --confirm [--spec <path>]\n")
 		os.Exit(2)
 	}
 	kind := positional[0]
 	name := positional[1]
 
 	if !confirm {
-		fmt.Fprintf(os.Stderr, "Error: --confirm is required to delete %s %q (destructive)\n", kind, name)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: --confirm is required to delete %s %q (destructive)\n", kind, name)
 		os.Exit(1)
 	}
 
@@ -64,27 +64,27 @@ func runDelete(args []string) {
 		}
 	}
 	if match == nil {
-		fmt.Fprintf(os.Stderr, "No resource found for kind %q name %q under %s\n", kind, name, specPath)
+		_, _ = fmt.Fprintf(os.Stderr, "No resource found for kind %q name %q under %s\n", kind, name, specPath)
 		os.Exit(1)
 	}
 
 	file := strings.SplitN(match.Source, "#", 2)[0]
 	docIndex := 0
 	if len(strings.SplitN(match.Source, "#", 2)) == 2 {
-		fmt.Sscanf(strings.SplitN(match.Source, "#", 2)[1], "%d", &docIndex)
+		_, _ = fmt.Sscanf(strings.SplitN(match.Source, "#", 2)[1], "%d", &docIndex)
 	}
 
 	// Count documents in the file.
 	docCount, err := countYAMLDocs(file)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 
 	if docCount <= 1 {
 		// Single-document file — delete the whole file.
 		if err := os.Remove(file); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: cannot delete %s: %v\n", file, err)
+			_, _ = fmt.Fprintf(os.Stderr, "Error: cannot delete %s: %v\n", file, err)
 			os.Exit(1)
 		}
 		fmt.Printf("Deleted %s %q (%s)\n", match.Kind, name, file)
@@ -93,7 +93,7 @@ func runDelete(args []string) {
 
 	// Multi-document file — remove only the matching document.
 	if err := removeYAMLDoc(file, docIndex); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Printf("Deleted %s %q (document %d of %s)\n", match.Kind, name, docIndex, file)
@@ -155,7 +155,7 @@ func removeYAMLDoc(file string, index int) error {
 		if err != nil {
 			return err
 		}
-		out.Write(b)
+		_, _ = out.Write(b)
 	}
 	return os.WriteFile(file, []byte(out.String()), 0644)
 }

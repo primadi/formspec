@@ -34,10 +34,10 @@ func runDiff(args []string) {
 				i++
 			}
 		case "--help", "-h":
-			fmt.Fprintf(os.Stderr, "Usage: formspec diff -f <path> [--dsn <dsn>]\n")
+			_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec diff -f <path> [--dsn <dsn>]\n")
 			os.Exit(0)
 		default:
-			fmt.Fprintf(os.Stderr, "formspec diff: unknown flag %q\n", args[i])
+			_, _ = fmt.Fprintf(os.Stderr, "formspec diff: unknown flag %q\n", args[i])
 			os.Exit(2)
 		}
 	}
@@ -46,10 +46,10 @@ func runDiff(args []string) {
 
 	database, err := db.Open(dsn)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: open database: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: open database: %v\n", err)
 		os.Exit(1)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	driver := db.DriverSQLite
 	if database.DriverName() == "postgres" {
@@ -59,13 +59,13 @@ func runDiff(args []string) {
 
 	ctx := context.Background()
 	if err := runner.EnsureSystemTables(ctx); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: ensure system tables: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: ensure system tables: %v\n", err)
 		os.Exit(1)
 	}
 
 	results, err := computeDiff(ctx, runner, entities)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: plan migrations: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: plan migrations: %v\n", err)
 		os.Exit(1)
 	}
 

@@ -28,14 +28,14 @@ func runGenerateAuth(args []string) {
 	fs := flag.NewFlagSet("generate auth", flag.ExitOnError)
 	to := fs.String("to", "external/auth", "target directory for the auth module")
 	force := fs.Bool("force", false, "overwrite existing files")
-	fs.Parse(args)
+	_ = fs.Parse(args) // FlagSet is ExitOnError — Parse exits on a bad flag.
 
 	if err := generateAuthModule(*to, *force); err != nil {
-		fmt.Fprintf(os.Stderr, "formspec generate auth: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec generate auth: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Fprintf(os.Stderr, "formspec: auth module scaffolded at %s\n", *to)
-	fmt.Fprintf(os.Stderr, "  - customize the entities there, then set Config.ExternalDir (or auth_config_ref) to use them\n")
+	_, _ = fmt.Fprintf(os.Stderr, "formspec: auth module scaffolded at %s\n", *to)
+	_, _ = fmt.Fprintf(os.Stderr, "  - customize the entities there, then set Config.ExternalDir (or auth_config_ref) to use them\n")
 }
 
 // generateAuthModule copies the bundled auth module (embedded in the auth
@@ -60,7 +60,7 @@ func generateAuthModule(dir string, force bool) error {
 		if err != nil {
 			return fmt.Errorf("open embedded %s: %w", path, err)
 		}
-		defer src.Close()
+		defer func() { _ = src.Close() }()
 
 		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 			return fmt.Errorf("mkdir %s: %w", filepath.Dir(dst), err)
@@ -70,7 +70,7 @@ func generateAuthModule(dir string, force bool) error {
 			return fmt.Errorf("create %s: %w", dst, err)
 		}
 		if _, err := io.Copy(out, src); err != nil {
-			out.Close()
+			_ = out.Close()
 			return fmt.Errorf("copy %s: %w", dst, err)
 		}
 		if err := out.Close(); err != nil {

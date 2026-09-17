@@ -34,13 +34,13 @@ func runOverride(args []string) {
 	case "list":
 		runOverrideList(args[1:])
 	default:
-		fmt.Fprintf(os.Stderr, "formspec override: unknown action %q (want adopt|diff|list)\n", args[0])
+		_, _ = fmt.Fprintf(os.Stderr, "formspec override: unknown action %q (want adopt|diff|list)\n", args[0])
 		os.Exit(2)
 	}
 }
 
 func usageOverride() {
-	fmt.Fprintf(os.Stderr, "Usage: formspec override <adopt|diff|list> [flags]\n")
+	_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec override <adopt|diff|list> [flags]\n")
 }
 
 func runOverrideAdopt(args []string) {
@@ -50,13 +50,13 @@ func runOverrideAdopt(args []string) {
 	projectRoot := fs.String("project", ".", "project root (formspec.lock, overrides/)")
 	positional := reorderFlags(fs, args, nil)
 	if len(positional) < 3 {
-		fmt.Fprintln(os.Stderr, "formspec override adopt: usage: override adopt <module> <kind> <name>")
+		_, _ = fmt.Fprintln(os.Stderr, "formspec override adopt: usage: override adopt <module> <kind> <name>")
 		os.Exit(2)
 	}
 
 	res, err := vendor.Adopt(*projectRoot, *specPath, positional[0], positional[1], positional[2])
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec override adopt: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec override adopt: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Printf("adopted: %s/%s (module %s)\n", res.Kind, res.Name, res.Module)
@@ -73,13 +73,13 @@ func runOverrideDiff(args []string) {
 	specPath := fs.String("spec", "spec", "spec directory")
 	positional := reorderFlags(fs, args, nil)
 	if len(positional) < 3 {
-		fmt.Fprintln(os.Stderr, "formspec override diff: usage: override diff <module> <kind> <name>")
+		_, _ = fmt.Fprintln(os.Stderr, "formspec override diff: usage: override diff <module> <kind> <name>")
 		os.Exit(2)
 	}
 
 	diff, err := vendor.DiffOverride(*projectRoot, *specPath, positional[0], positional[1], positional[2])
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec override diff: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec override diff: %v\n", err)
 		os.Exit(1)
 	}
 	if diff.Drift {
@@ -102,19 +102,24 @@ func runOverrideList(args []string) {
 
 	lock, err := vendor.LoadLock(filepath.Join(*projectRoot, "formspec.lock"))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec override list: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec override list: %v\n", err)
 		os.Exit(1)
 	}
 	count := 0
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "MODULE\tKIND\tNAME\tORIGIN\tADOPTED")
+	_, _ = fmt.Fprintln(w, "MODULE\tKIND\tNAME\tORIGIN\tADOPTED")
 	for _, m := range lock.Modules {
 		for _, ov := range m.Overrides {
 			count++
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", m.EffectiveName(), ov.Kind, ov.Name, ov.Origin, ov.AdoptedAt)
+			_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", m.EffectiveName(), ov.Kind, ov.Name, ov.Origin, ov.AdoptedAt)
 		}
 	}
-	w.Flush()
+	// tabwriter only emits on Flush: a failed flush means the table never
+	// reached stdout, which must not pass as a successful listing.
+	if err := w.Flush(); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "formspec override list: %v\n", err)
+		os.Exit(1)
+	}
 	if count == 0 {
 		fmt.Println("tidak ada shadow copy (formspec override adopt <module> <kind> <name>).")
 	}

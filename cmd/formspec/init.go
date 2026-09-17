@@ -48,27 +48,27 @@ func runInit(args []string) {
 	moduleName := fs.String("module", "", "Module name (default: project name, kebab-case)")
 	force := fs.Bool("force", false, "Overwrite existing directory without prompt")
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: formspec init [project-name] [flags]\n\n")
-		fmt.Fprintf(os.Stderr, "Scaffold a new FormSpec project with the standard layout.\n\n")
-		fmt.Fprintf(os.Stderr, "Without arguments, initializes the current directory.\n")
-		fmt.Fprintf(os.Stderr, "With a project name, creates a new subdirectory.\n\n")
-		fmt.Fprintf(os.Stderr, "The project includes:\n")
-		fmt.Fprintf(os.Stderr, "  - Standard directory structure (spec/)\n")
-		fmt.Fprintf(os.Stderr, "  - formspec-app.yaml configuration\n")
-		fmt.Fprintf(os.Stderr, "  - spec/apps/<module>.yaml — kind: App scaffold (with default confirm dialogs)\n")
-		fmt.Fprintf(os.Stderr, "  - spec/workspaces/<module>.yaml — kind: Workspace seed\n")
-		fmt.Fprintf(os.Stderr, "  - .vscode/settings.json registering yaml.schemas\n")
-		fmt.Fprintf(os.Stderr, "    → yaml.schemas points to %s (no local schemas/ copy)\n", schemaURL)
-		fmt.Fprintf(os.Stderr, "  - .agents/skills/ with AI skills for coding agents\n")
-		fmt.Fprintf(os.Stderr, "  - AGENTS.md (+ .github/copilot-instructions.md pointer)\n\n")
-		fmt.Fprintf(os.Stderr, "Flags:\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec init [project-name] [flags]\n\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Scaffold a new FormSpec project with the standard layout.\n\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Without arguments, initializes the current directory.\n")
+		_, _ = fmt.Fprintf(os.Stderr, "With a project name, creates a new subdirectory.\n\n")
+		_, _ = fmt.Fprintf(os.Stderr, "The project includes:\n")
+		_, _ = fmt.Fprintf(os.Stderr, "  - Standard directory structure (spec/)\n")
+		_, _ = fmt.Fprintf(os.Stderr, "  - formspec-app.yaml configuration\n")
+		_, _ = fmt.Fprintf(os.Stderr, "  - spec/apps/<module>.yaml — kind: App scaffold (with default confirm dialogs)\n")
+		_, _ = fmt.Fprintf(os.Stderr, "  - spec/workspaces/<module>.yaml — kind: Workspace seed\n")
+		_, _ = fmt.Fprintf(os.Stderr, "  - .vscode/settings.json registering yaml.schemas\n")
+		_, _ = fmt.Fprintf(os.Stderr, "    → yaml.schemas points to %s (no local schemas/ copy)\n", schemaURL)
+		_, _ = fmt.Fprintf(os.Stderr, "  - .agents/skills/ with AI skills for coding agents\n")
+		_, _ = fmt.Fprintf(os.Stderr, "  - AGENTS.md (+ .github/copilot-instructions.md pointer)\n\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Flags:\n")
 		fs.PrintDefaults()
 	}
-	fs.Parse(args)
+	_ = fs.Parse(args) // FlagSet is ExitOnError — Parse exits on a bad flag.
 
 	cwd, err := os.Getwd()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: cannot determine current directory: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: cannot determine current directory: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -94,14 +94,14 @@ func runInit(args []string) {
 	if targetDir != cwd {
 		if info, err := os.Stat(targetDir); err == nil {
 			if !info.IsDir() {
-				fmt.Fprintf(os.Stderr, "Error: %s exists and is not a directory\n", projectName)
+				_, _ = fmt.Fprintf(os.Stderr, "Error: %s exists and is not a directory\n", projectName)
 				os.Exit(1)
 			}
 			if !*force {
-				fmt.Fprintf(os.Stderr, "Directory %s already exists. Use --force to overwrite.\n", projectName)
+				_, _ = fmt.Fprintf(os.Stderr, "Directory %s already exists. Use --force to overwrite.\n", projectName)
 				os.Exit(1)
 			}
-			fmt.Fprintf(os.Stderr, "Overwriting existing directory %s (--force)\n", projectName)
+			_, _ = fmt.Fprintf(os.Stderr, "Overwriting existing directory %s (--force)\n", projectName)
 		}
 	}
 
@@ -117,7 +117,7 @@ func runInit(args []string) {
 
 	for _, d := range dirs {
 		if err := os.MkdirAll(d, 0755); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: cannot create directory %s: %v\n", d, err)
+			_, _ = fmt.Fprintf(os.Stderr, "Error: cannot create directory %s: %v\n", d, err)
 			os.Exit(1)
 		}
 	}
@@ -135,24 +135,24 @@ func runInit(args []string) {
 		Module:      modName,
 		SchemaURL:   schemaURL,
 	}); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: cannot write project files: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: cannot write project files: %v\n", err)
 		os.Exit(1)
 	}
 
 	// Write embedded AI skills to .agents/skills/
-	fmt.Fprintf(os.Stderr, "Extracting AI skills...\n")
+	_, _ = fmt.Fprintf(os.Stderr, "Extracting AI skills...\n")
 	if err := extractSkills(targetDir); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: cannot extract skills: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: cannot extract skills: %v\n", err)
 		os.Exit(1)
 	}
 
 	// .vscode/settings.json is never clobbered (extractTemplates skips it when
 	// present) — report the manual step in that case.
 	if settingsExisted {
-		fmt.Fprintf(os.Stderr, "  ⚠️  .vscode/settings.json already exists — add yaml.schemas manually:\n")
-		fmt.Fprintf(os.Stderr, "     \"yaml.schemas\": {\"%s\": [\"spec/**/*.yaml\", \"spec/**/*.yml\"]}\n", schemaURL)
+		_, _ = fmt.Fprintf(os.Stderr, "  ⚠️  .vscode/settings.json already exists — add yaml.schemas manually:\n")
+		_, _ = fmt.Fprintf(os.Stderr, "     \"yaml.schemas\": {\"%s\": [\"spec/**/*.yaml\", \"spec/**/*.yml\"]}\n", schemaURL)
 	} else {
-		fmt.Fprintf(os.Stderr, "  ✓ .vscode/settings.json (yaml.schemas → %s)\n", schemaURL)
+		_, _ = fmt.Fprintf(os.Stderr, "  ✓ .vscode/settings.json (yaml.schemas → %s)\n", schemaURL)
 	}
 
 	// ── Success ─────────────────────────────────────────────────────
@@ -216,7 +216,7 @@ func extractSkills(targetDir string) error {
 			return fmt.Errorf("write %s: %w", destPath, err)
 		}
 
-		fmt.Fprintf(os.Stderr, "  ✓ .agents/skills/%s\n", relPath)
+		_, _ = fmt.Fprintf(os.Stderr, "  ✓ .agents/skills/%s\n", relPath)
 		return nil
 	})
 }

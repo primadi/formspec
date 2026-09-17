@@ -28,7 +28,7 @@ func setupMetaTestRouter(t *testing.T) *RouterBuilder {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	t.Cleanup(func() { d.Close() })
+	t.Cleanup(func() { _ = d.Close() })
 
 	reg := entity.NewRegistry(d, db.DriverSQLite, dir)
 	b := NewRouterBuilder(reg)
@@ -58,7 +58,7 @@ func TestHandleMetaUI_AdminMode_RequiresPermission(t *testing.T) {
 	}
 
 	var errResp ErrorResponse
-	json.NewDecoder(rec.Body).Decode(&errResp)
+	_ = json.NewDecoder(rec.Body).Decode(&errResp)
 	if errResp.Error.Code != "FORBIDDEN" {
 		t.Errorf("expected FORBIDDEN, got %s", errResp.Error.Code)
 	}

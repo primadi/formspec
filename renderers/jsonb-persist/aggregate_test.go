@@ -17,13 +17,13 @@ func setupAggregateStore(t *testing.T) *EntityStore {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	t.Cleanup(func() { d.Close() })
+	t.Cleanup(func() { _ = d.Close() })
 
 	meta := spec.Metadata{Name: "sale", Module: "agg"}
 	entity := &spec.EntitySpec{
 		Version: "v1",
 		Fields: []spec.Field{
-			{Name: "amount", Type: spec.FieldNumber},
+			{Name: "amount", Type: spec.FieldDecimal},
 			{Name: "category", Type: spec.FieldString},
 		},
 	}
@@ -138,13 +138,13 @@ func setupDateAggregateStore(t *testing.T) *EntityStore {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	t.Cleanup(func() { d.Close() })
+	t.Cleanup(func() { _ = d.Close() })
 
 	meta := spec.Metadata{Name: "sale", Module: "agg"}
 	entity := &spec.EntitySpec{
 		Version: "v1",
 		Fields: []spec.Field{
-			{Name: "amount", Type: spec.FieldNumber},
+			{Name: "amount", Type: spec.FieldDecimal},
 			{Name: "sale_date", Type: spec.FieldDate},
 		},
 	}

@@ -30,7 +30,7 @@ func newEventLogStore(t *testing.T) *EventLogStore {
 	if err != nil {
 		t.Fatalf("OpenSQLite: %v", err)
 	}
-	t.Cleanup(func() { d.Close() })
+	t.Cleanup(func() { _ = d.Close() })
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	if err := r.EnsureSystemTables(context.Background()); err != nil {

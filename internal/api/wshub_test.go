@@ -22,7 +22,7 @@ func newTestRouterServer(t *testing.T) (*httptest.Server, *RouterBuilder) {
 	if err != nil {
 		t.Fatalf("OpenSQLite: %v", err)
 	}
-	t.Cleanup(func() { database.Close() })
+	t.Cleanup(func() { _ = database.Close() })
 
 	reg := entity.NewRegistry(database, db.DriverSQLite, dir)
 	rb := NewRouterBuilder(reg)
@@ -41,7 +41,7 @@ func dialWS(t *testing.T, srv *httptest.Server, workspace string) *websocket.Con
 	if err != nil {
 		t.Fatalf("dial %s: %v", url, err)
 	}
-	t.Cleanup(func() { conn.CloseNow() })
+	t.Cleanup(func() { _ = conn.CloseNow() })
 	return conn
 }
 

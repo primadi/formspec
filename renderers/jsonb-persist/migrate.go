@@ -370,7 +370,7 @@ func (r *MigrationRunner) AppliedMigrations(ctx context.Context) (map[string]str
 	if err != nil {
 		return nil, fmt.Errorf("query migrations: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	result := make(map[string]string)
 	for rows.Next() {
@@ -932,7 +932,7 @@ func (r *MigrationRunner) existingColumns(ctx context.Context, schema, table str
 	if err != nil {
 		return nil, fmt.Errorf("list columns %s: %w", table, err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
 		var name string
@@ -961,7 +961,7 @@ func (r *MigrationRunner) existingIndexes(ctx context.Context, schema, table str
 	if err != nil {
 		return nil, fmt.Errorf("list indexes %s: %w", table, err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
 		var name string

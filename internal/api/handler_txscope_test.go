@@ -47,7 +47,7 @@ func TestHandleCustomAction_RollsBackBothWritesOnFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	reg := entity.NewRegistry(d, db.DriverSQLite, dir)
 	orderSpec := spec.EntitySpec{
@@ -151,14 +151,14 @@ func TestHandleCustomAction_CrossStoreErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	otherDir := t.TempDir()
 	otherD, err := db.OpenSQLite(filepath.Join(otherDir, "txscope_cross_b.db"), nil)
 	if err != nil {
 		t.Fatalf("OpenSQLite failed (other store): %v", err)
 	}
-	defer otherD.Close()
+	defer func() { _ = otherD.Close() }()
 
 	reg := entity.NewRegistry(d, db.DriverSQLite, dir)
 	orderSpec := spec.EntitySpec{
@@ -261,7 +261,7 @@ func setupCrossModuleSameStore(t *testing.T) (reg *entity.Registry, orderStore, 
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	t.Cleanup(func() { d.Close() })
+	t.Cleanup(func() { _ = d.Close() })
 
 	reg = entity.NewRegistry(d, db.DriverSQLite, dir)
 	registerTestEntity(t, d, reg, "billing", "order", spec.EntitySpec{

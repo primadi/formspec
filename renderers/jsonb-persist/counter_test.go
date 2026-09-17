@@ -13,7 +13,7 @@ func TestNaturalKeyCounter_NextSequence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -60,7 +60,7 @@ func TestNaturalKeyCounter_TenantIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -91,7 +91,7 @@ func TestNaturalKeyCounter_ScopeIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -119,7 +119,7 @@ func TestNaturalKeyCounter_ResetPeriod(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -181,7 +181,7 @@ func TestNaturalKeyCounter_GenerateNaturalKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -280,7 +280,7 @@ func TestNaturalKeyCounter_GenerateNaturalKey_Sequential(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -311,7 +311,7 @@ func TestNaturalKeyCounter_PeekCounter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -352,7 +352,7 @@ func TestNaturalKeyCounter_ResetCounter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -363,9 +363,15 @@ func TestNaturalKeyCounter_ResetCounter(t *testing.T) {
 	c := NewNaturalKeyCounter(d, DriverSQLite)
 
 	// Generate some keys
-	c.GenerateNaturalKey(ctx, "t1", "invoice", "number", "", "never", "INV-{counter:05d}", "")
-	c.GenerateNaturalKey(ctx, "t1", "invoice", "number", "", "never", "INV-{counter:05d}", "")
-	c.GenerateNaturalKey(ctx, "t1", "invoice", "number", "", "never", "INV-{counter:05d}", "")
+	if _, err := c.GenerateNaturalKey(ctx, "t1", "invoice", "number", "", "never", "INV-{counter:05d}", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.GenerateNaturalKey(ctx, "t1", "invoice", "number", "", "never", "INV-{counter:05d}", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.GenerateNaturalKey(ctx, "t1", "invoice", "number", "", "never", "INV-{counter:05d}", ""); err != nil {
+		t.Fatal(err)
+	}
 
 	// Peek → should be 3
 	val, _, _ := c.PeekCounter(ctx, "t1", "invoice", "number", "", "never")

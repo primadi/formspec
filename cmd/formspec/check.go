@@ -141,14 +141,14 @@ func runCheck(args []string) {
 		os.Exit(2)
 	}
 	if fs.NArg() > 0 {
-		fmt.Fprintf(os.Stderr, "formspec check: unexpected argument %q\n", fs.Arg(0))
+		_, _ = fmt.Fprintf(os.Stderr, "formspec check: unexpected argument %q\n", fs.Arg(0))
 		os.Exit(2)
 	}
 
 	loader := manifest.NewLoader(*specPath)
 	res, err := loader.LoadAll()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec check: load error: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec check: load error: %v\n", err)
 		os.Exit(2)
 	}
 
@@ -728,7 +728,7 @@ func applyUsesFix(broken []brokenRef) []brokenRef {
 	for _, k := range order {
 		refs := byAction[k]
 		if err := removeUsesResources(k.file, k.action, refs); err != nil {
-			fmt.Fprintf(os.Stderr, "  ⚠️  cannot fix %s action %q: %v\n", k.file, k.action, err)
+			_, _ = fmt.Fprintf(os.Stderr, "  ⚠️  cannot fix %s action %q: %v\n", k.file, k.action, err)
 			continue
 		}
 		for _, r := range refs {

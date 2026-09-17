@@ -44,19 +44,19 @@ func runNew(args []string) {
 	case "module":
 		runNewModule(args[1:])
 	default:
-		fmt.Fprintf(os.Stderr, "formspec new: unknown kind %q\n", args[0])
+		_, _ = fmt.Fprintf(os.Stderr, "formspec new: unknown kind %q\n", args[0])
 		newUsage()
 		os.Exit(1)
 	}
 }
 
 func newUsage() {
-	fmt.Fprintf(os.Stderr, "Usage: formspec new <kind> [name] [flags]\n\n")
-	fmt.Fprintf(os.Stderr, "Scaffold boilerplate YAML for a kind.\n\n")
-	fmt.Fprintf(os.Stderr, "Kinds:\n")
-	fmt.Fprintf(os.Stderr, "  app tokoku          Scaffold a TypeScript sidecar app\n")
-	fmt.Fprintf(os.Stderr, "  module cafe-master  Scaffold a Module manifest\n")
-	fmt.Fprintf(os.Stderr, "  entity menu-item    Scaffold an Entity manifest + basic fields\n")
+	_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec new <kind> [name] [flags]\n\n")
+	_, _ = fmt.Fprintf(os.Stderr, "Scaffold boilerplate YAML for a kind.\n\n")
+	_, _ = fmt.Fprintf(os.Stderr, "Kinds:\n")
+	_, _ = fmt.Fprintf(os.Stderr, "  app tokoku          Scaffold a TypeScript sidecar app\n")
+	_, _ = fmt.Fprintf(os.Stderr, "  module cafe-master  Scaffold a Module manifest\n")
+	_, _ = fmt.Fprintf(os.Stderr, "  entity menu-item    Scaffold an Entity manifest + basic fields\n")
 }
 
 // runNewModule scaffolds a Module manifest at spec/modules/{module}/module.yaml.
@@ -68,8 +68,8 @@ func runNewModule(args []string) {
 		case "--force", "-force":
 			force = true
 		case "--help", "-h":
-			fmt.Fprintf(os.Stderr, "Usage: formspec new module <name> [--force]\n\n")
-			fmt.Fprintf(os.Stderr, "Scaffold a Module manifest at spec/modules/{name}/module.yaml\n")
+			_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec new module <name> [--force]\n\n")
+			_, _ = fmt.Fprintf(os.Stderr, "Scaffold a Module manifest at spec/modules/{name}/module.yaml\n")
 			os.Exit(0)
 		default:
 			positional = append(positional, args[i])
@@ -77,24 +77,24 @@ func runNewModule(args []string) {
 	}
 
 	if len(positional) < 1 {
-		fmt.Fprintf(os.Stderr, "Usage: formspec new module <name> [--force]\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec new module <name> [--force]\n")
 		os.Exit(1)
 	}
 	module := toKebabCase(positional[0])
 	if module == "" {
-		fmt.Fprintf(os.Stderr, "Error: module name cannot be empty\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Error: module name cannot be empty\n")
 		os.Exit(1)
 	}
 
 	dir := filepath.Join("spec", "modules", module)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: cannot create directory %s: %v\n", dir, err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: cannot create directory %s: %v\n", dir, err)
 		os.Exit(1)
 	}
 
 	path := filepath.Join(dir, "module.yaml")
 	if _, err := os.Stat(path); err == nil && !force {
-		fmt.Fprintf(os.Stderr, "Error: %s already exists. Use --force to overwrite.\n", path)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: %s already exists. Use --force to overwrite.\n", path)
 		os.Exit(1)
 	}
 
@@ -109,12 +109,12 @@ spec:
 `, module, titleCase(module))
 
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: cannot write %s: %v\n", path, err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: cannot write %s: %v\n", path, err)
 		os.Exit(1)
 	}
-	fmt.Fprintf(os.Stderr, "  ✓ %s\n", path)
-	fmt.Fprintf(os.Stderr, "\nNext: add an entity with:\n")
-	fmt.Fprintf(os.Stderr, "  formspec new entity <name> --module %s\n", module)
+	_, _ = fmt.Fprintf(os.Stderr, "  ✓ %s\n", path)
+	_, _ = fmt.Fprintf(os.Stderr, "\nNext: add an entity with:\n")
+	_, _ = fmt.Fprintf(os.Stderr, "  formspec new entity <name> --module %s\n", module)
 }
 
 // runNewEntity scaffolds an Entity manifest at
@@ -140,12 +140,12 @@ func runNewEntity(args []string) {
 		case "--force", "-force":
 			force = true
 		case "--help", "-h":
-			fmt.Fprintf(os.Stderr, "Usage: formspec new entity <name> [--module <module>] [--characteristic <kind>] [--force]\n\n")
-			fmt.Fprintf(os.Stderr, "Scaffold an Entity manifest + basic fields.\n\n")
-			fmt.Fprintf(os.Stderr, "Flags:\n")
-			fmt.Fprintf(os.Stderr, "  --module <name>          Owning module (default: detect from CWD)\n")
-			fmt.Fprintf(os.Stderr, "  --characteristic <kind>  master|transaction|reference|summary (default: master)\n")
-			fmt.Fprintf(os.Stderr, "  --force                  Overwrite existing file\n")
+			_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec new entity <name> [--module <module>] [--characteristic <kind>] [--force]\n\n")
+			_, _ = fmt.Fprintf(os.Stderr, "Scaffold an Entity manifest + basic fields.\n\n")
+			_, _ = fmt.Fprintf(os.Stderr, "Flags:\n")
+			_, _ = fmt.Fprintf(os.Stderr, "  --module <name>          Owning module (default: detect from CWD)\n")
+			_, _ = fmt.Fprintf(os.Stderr, "  --characteristic <kind>  master|transaction|reference|summary (default: master)\n")
+			_, _ = fmt.Fprintf(os.Stderr, "  --force                  Overwrite existing file\n")
 			os.Exit(0)
 		default:
 			positional = append(positional, args[i])
@@ -153,18 +153,18 @@ func runNewEntity(args []string) {
 	}
 
 	if len(positional) < 1 {
-		fmt.Fprintf(os.Stderr, "Usage: formspec new entity <name> [--module <module>] [--characteristic <kind>] [--force]\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec new entity <name> [--module <module>] [--characteristic <kind>] [--force]\n")
 		os.Exit(1)
 	}
 	entity := toKebabCase(positional[0])
 	if entity == "" {
-		fmt.Fprintf(os.Stderr, "Error: entity name cannot be empty\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Error: entity name cannot be empty\n")
 		os.Exit(1)
 	}
 
 	// Validate characteristic (closed set).
 	if !validCharacteristics[characteristic] {
-		fmt.Fprintf(os.Stderr, "Error: invalid characteristic %q (must be one of: master, transaction, reference, summary)\n", characteristic)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: invalid characteristic %q (must be one of: master, transaction, reference, summary)\n", characteristic)
 		os.Exit(1)
 	}
 
@@ -175,19 +175,19 @@ func runNewEntity(args []string) {
 	}
 	mod = toKebabCase(mod)
 	if mod == "" {
-		fmt.Fprintf(os.Stderr, "Error: cannot determine module — pass --module <name>\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Error: cannot determine module — pass --module <name>\n")
 		os.Exit(1)
 	}
 
 	dir := filepath.Join("spec", "modules", mod, characteristic, entity)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: cannot create directory %s: %v\n", dir, err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: cannot create directory %s: %v\n", dir, err)
 		os.Exit(1)
 	}
 
 	path := filepath.Join(dir, "entity.yaml")
 	if _, err := os.Stat(path); err == nil && !force {
-		fmt.Fprintf(os.Stderr, "Error: %s already exists. Use --force to overwrite.\n", path)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: %s already exists. Use --force to overwrite.\n", path)
 		os.Exit(1)
 	}
 
@@ -224,12 +224,12 @@ spec:
 `, entity, mod, titleCase(entity), characteristic, plural, strings.ToUpper(entity))
 
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: cannot write %s: %v\n", path, err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: cannot write %s: %v\n", path, err)
 		os.Exit(1)
 	}
-	fmt.Fprintf(os.Stderr, "  ✓ %s\n", path)
-	fmt.Fprintf(os.Stderr, "\nNext: edit fields, then validate with:\n")
-	fmt.Fprintf(os.Stderr, "  formspec validate --spec spec\n")
+	_, _ = fmt.Fprintf(os.Stderr, "  ✓ %s\n", path)
+	_, _ = fmt.Fprintf(os.Stderr, "\nNext: edit fields, then validate with:\n")
+	_, _ = fmt.Fprintf(os.Stderr, "  formspec validate --spec spec\n")
 }
 
 // detectModule tries to infer the owning module from the current working

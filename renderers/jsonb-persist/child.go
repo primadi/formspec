@@ -235,7 +235,7 @@ func (c *ChildStore) GetChildren(ctx context.Context, parentID string) ([]map[st
 		}
 		return nil, fmt.Errorf("get children from %s: %w", c.childTable, err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var children []map[string]any
 	for rows.Next() {

@@ -126,7 +126,7 @@ func (s *EvidenceSender) enqueue(record artifact.EvidenceRecord) {
 
 	// Auto-flush if buffer is large enough
 	if len(s.buffer) >= 10 {
-		s.Flush()
+		_ = s.Flush()
 	}
 }
 
@@ -158,7 +158,7 @@ func (s *EvidenceSender) sendBatch(records []artifact.EvidenceRecord) (int, erro
 	if err != nil {
 		return 0, fmt.Errorf("http post: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return 0, fmt.Errorf("evidence POST returned HTTP %d", resp.StatusCode)
@@ -217,7 +217,7 @@ func (s *EvidenceSender) HealthTicker(interval time.Duration, stop chan struct{}
 		select {
 		case <-ticker.C:
 			s.SubmitHealth(time.Since(startTime), 0)
-			s.Flush()
+			_ = s.Flush()
 		case <-stop:
 			return
 		}

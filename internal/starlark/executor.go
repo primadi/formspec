@@ -177,7 +177,9 @@ func ExecuteScript(ctx context.Context, scriptPath string, resource *ResourceAPI
 		if err != nil {
 			return nil, fmt.Errorf("convert param %q: %w", k, err)
 		}
-		paramsDict.SetKey(starlark.String(k), sv)
+		if err := paramsDict.SetKey(starlark.String(k), sv); err != nil {
+			return nil, fmt.Errorf("set param %q: %w", k, err)
+		}
 	}
 
 	// Call execute(resource, params, ctx)

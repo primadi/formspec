@@ -16,14 +16,14 @@ func TestChildStorage_JSONB(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "invoice", Module: "billing"}
 	entity := &spec.EntitySpec{
 		Version: "v1",
 		Fields: []spec.Field{
 			{Name: "invoice_number", Type: spec.FieldString, Unique: true},
-			{Name: "total", Type: spec.FieldNumber},
+			{Name: "total", Type: spec.FieldDecimal},
 			{
 				Name: "line_items",
 				Type: spec.FieldChild,
@@ -53,9 +53,9 @@ func TestChildStorage_JSONB(t *testing.T) {
 	}
 
 	id, err := store.Insert(ctx, InsertParams{
-		WorkspaceID:  "tenant-1",
-		CreatedBy: "user-1",
-		Data:      data,
+		WorkspaceID: "tenant-1",
+		CreatedBy:   "user-1",
+		Data:        data,
 	})
 	if err != nil {
 		t.Fatalf("Insert failed: %v", err)
@@ -100,7 +100,7 @@ func TestChildStorage_Table(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "order", Module: "sales"}
 	entity := &spec.EntitySpec{
@@ -137,9 +137,9 @@ func TestChildStorage_Table(t *testing.T) {
 	}
 
 	id, err := store.Insert(ctx, InsertParams{
-		WorkspaceID:  "tenant-1",
-		CreatedBy: "user-1",
-		Data:      data,
+		WorkspaceID: "tenant-1",
+		CreatedBy:   "user-1",
+		Data:        data,
 	})
 	if err != nil {
 		t.Fatalf("Insert failed: %v", err)
@@ -181,11 +181,11 @@ func TestChildStorage_Table(t *testing.T) {
 	}
 
 	newVersion, err := store.Update(ctx, UpdateParams{
-		WorkspaceID:  "tenant-1",
-		ID:        id,
-		Version:   rec.Version,
-		UpdatedBy: "user-1",
-		Data:      updatedData,
+		WorkspaceID: "tenant-1",
+		ID:          id,
+		Version:     rec.Version,
+		UpdatedBy:   "user-1",
+		Data:        updatedData,
 	})
 	if err != nil {
 		t.Fatalf("Update failed: %v", err)
@@ -234,7 +234,7 @@ func TestChildStorage_Table_SequenceField(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "purchase_order", Module: "procurement"}
 	entity := &spec.EntitySpec{
@@ -270,9 +270,9 @@ func TestChildStorage_Table_SequenceField(t *testing.T) {
 	}
 
 	id, err := store.Insert(ctx, InsertParams{
-		WorkspaceID:  "tenant-1",
-		CreatedBy: "user-1",
-		Data:      data,
+		WorkspaceID: "tenant-1",
+		CreatedBy:   "user-1",
+		Data:        data,
 	})
 	if err != nil {
 		t.Fatalf("Insert failed: %v", err)
@@ -299,7 +299,7 @@ func TestChildStorage_MultipleChildren(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "contract", Module: "legal"}
 	entity := &spec.EntitySpec{
@@ -340,9 +340,9 @@ func TestChildStorage_MultipleChildren(t *testing.T) {
 	}
 
 	id, err := store.Insert(ctx, InsertParams{
-		WorkspaceID:  "tenant-1",
-		CreatedBy: "user-1",
-		Data:      data,
+		WorkspaceID: "tenant-1",
+		CreatedBy:   "user-1",
+		Data:        data,
 	})
 	if err != nil {
 		t.Fatalf("Insert failed: %v", err)
@@ -383,7 +383,7 @@ func TestChildStorage_EmptyChildren(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "note", Module: "general"}
 	entity := &spec.EntitySpec{
@@ -411,9 +411,9 @@ func TestChildStorage_EmptyChildren(t *testing.T) {
 		"title": "Empty note",
 	}
 	id, err := store.Insert(ctx, InsertParams{
-		WorkspaceID:  "tenant-1",
-		CreatedBy: "user-1",
-		Data:      data,
+		WorkspaceID: "tenant-1",
+		CreatedBy:   "user-1",
+		Data:        data,
 	})
 	if err != nil {
 		t.Fatalf("Insert failed: %v", err)
@@ -441,7 +441,7 @@ func TestChildStorage_ChildStore_Standalone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	// Create parent + child table manually
 	ctx := context.Background()

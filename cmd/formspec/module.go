@@ -50,14 +50,14 @@ func runModule(args []string) {
 	case "uninstall":
 		runModuleUninstall(args[1:])
 	default:
-		fmt.Fprintf(os.Stderr, "formspec module: unknown action %q (want install|publish|list|uninstall)\n", args[0])
+		_, _ = fmt.Fprintf(os.Stderr, "formspec module: unknown action %q (want install|publish|list|uninstall)\n", args[0])
 		os.Exit(2)
 	}
 }
 
 func usageModule() {
-	fmt.Fprintf(os.Stderr, "Usage: formspec module <install|list|uninstall> [flags]\n")
-	fmt.Fprintf(os.Stderr, "       formspec verify\n")
+	_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec module <install|list|uninstall> [flags]\n")
+	_, _ = fmt.Fprintf(os.Stderr, "       formspec verify\n")
 }
 
 func moduleFlags(fs *flag.FlagSet) (*string, *string) {
@@ -88,7 +88,7 @@ func reorderFlags(fs *flag.FlagSet, args []string, boolFlags map[string]bool) []
 			flags = append(flags, args[i])
 		}
 	}
-	fs.Parse(flags)
+	_ = fs.Parse(flags) // FlagSet is ExitOnError — Parse exits on a bad flag.
 	return pos
 }
 
@@ -100,7 +100,7 @@ func runModuleInstall(args []string) {
 	use := fs.Bool("use", false, "activate the module immediately (uncomment the marker entry)")
 	positional := reorderFlags(fs, args, map[string]bool{"use": true})
 	if len(positional) < 1 {
-		fmt.Fprintln(os.Stderr, "formspec module install: source is required (git URL, folder, or .tar.gz)")
+		_, _ = fmt.Fprintln(os.Stderr, "formspec module install: source is required (git URL, folder, or .tar.gz)")
 		os.Exit(2)
 	}
 
@@ -111,7 +111,7 @@ func runModuleInstall(args []string) {
 		Use:         *use,
 	})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec module install: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec module install: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -143,12 +143,12 @@ func runModuleList(args []string) {
 
 	lock, err := vendor.LoadLock(filepath.Join(*projectRoot, "formspec.lock"))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec module list: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec module list: %v\n", err)
 		os.Exit(1)
 	}
 	active, err := vendor.ActiveModules(*projectRoot, *specPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec module list: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec module list: %v\n", err)
 		os.Exit(1)
 	}
 	isActive := map[string]bool{}
@@ -161,15 +161,20 @@ func runModuleList(args []string) {
 		return
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tVERSION\tTRUST\tSTATE\tSOURCE")
+	_, _ = fmt.Fprintln(w, "NAME\tVERSION\tTRUST\tSTATE\tSOURCE")
 	for _, m := range lock.Modules {
 		state := "inactive"
 		if isActive[m.EffectiveName()] {
 			state = "active"
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", m.EffectiveName(), m.Version, m.TrustTier, state, m.Source)
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", m.EffectiveName(), m.Version, m.TrustTier, state, m.Source)
 	}
-	w.Flush()
+	// tabwriter only emits on Flush: a failed flush means the table never
+	// reached stdout, which must not pass as a successful listing.
+	if err := w.Flush(); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "formspec module list: %v\n", err)
+		os.Exit(1)
+	}
 }
 
 func runModuleUninstall(args []string) {
@@ -178,17 +183,17 @@ func runModuleUninstall(args []string) {
 	specPath, projectRoot := moduleFlags(fs)
 	positional := reorderFlags(fs, args, nil)
 	if len(positional) < 1 {
-		fmt.Fprintln(os.Stderr, "formspec module uninstall: effective name is required (lihat formspec module list)")
+		_, _ = fmt.Fprintln(os.Stderr, "formspec module uninstall: effective name is required (lihat formspec module list)")
 		os.Exit(2)
 	}
 
 	removed, err := vendor.Uninstall(*projectRoot, *specPath, positional[0])
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec module uninstall: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec module uninstall: %v\n", err)
 		os.Exit(1)
 	}
 	if !removed {
-		fmt.Fprintf(os.Stderr, "formspec module uninstall: module %q tidak terpasang\n", fs.Arg(0))
+		_, _ = fmt.Fprintf(os.Stderr, "formspec module uninstall: module %q tidak terpasang\n", fs.Arg(0))
 		os.Exit(1)
 	}
 	fmt.Printf("uninstalled: %s (vendors/ + lock + marker dibersihkan)\n", fs.Arg(0))
@@ -204,7 +209,7 @@ func runVerify(args []string) {
 
 	results, err := vendor.Verify(*projectRoot)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "formspec verify: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "formspec verify: %v\n", err)
 		os.Exit(1)
 	}
 	if len(results) == 0 {

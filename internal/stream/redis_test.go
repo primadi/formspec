@@ -29,7 +29,7 @@ func TestRedis_AppendReadAck(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }()
 	ctx := context.Background()
 
 	const streamName = "test.demo.products.on_create"
@@ -79,7 +79,7 @@ func TestRedis_AtLeastOnceRetry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }()
 	ctx := context.Background()
 
 	const streamName = "test.demo.products.on_create"
@@ -113,7 +113,7 @@ func TestRedis_Trim(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }()
 	ctx := context.Background()
 
 	const streamName = "test.demo.products.on_create"

@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/primadi/formspec/renderers/jsonb-persist"
 	"github.com/primadi/formspec/pkg/spec"
+	"github.com/primadi/formspec/renderers/jsonb-persist"
 )
 
 // startAppListener runs a minimal lib-formspec-style /invoke listener on a
@@ -24,8 +24,8 @@ func startAppListener(t *testing.T, handler http.HandlerFunc) string {
 		t.Fatalf("listen: %v", err)
 	}
 	srv := &http.Server{Handler: handler}
-	go srv.Serve(ln)
-	t.Cleanup(func() { srv.Close() })
+	go func() { _ = srv.Serve(ln) }()
+	t.Cleanup(func() { _ = srv.Close() })
 	return "unix://" + socketPath
 }
 
@@ -35,8 +35,11 @@ func TestSidecarExecutor_InvokeRoundTrip(t *testing.T) {
 
 	endpoint := startAppListener(t, func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
-		json.NewDecoder(r.Body).Decode(&gotReq)
-		json.NewEncoder(w).Encode(sidecarInvokeResponse{
+		if err := json.NewDecoder(r.Body).Decode(&gotReq); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(sidecarInvokeResponse{
 			Data:     map[string]any{"approved_at": "2026-07-10T10:00:00Z"},
 			NewState: "approved",
 			Events:   []sidecarEventEmission{{Name: "invoice.approved", Payload: map[string]any{"id": "inv-001"}}},
@@ -79,7 +82,7 @@ func TestSidecarExecutor_InvokeRoundTrip(t *testing.T) {
 func TestSidecarExecutor_AppError(t *testing.T) {
 	endpoint := startAppListener(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(sidecarInvokeResponse{Error: "handler exploded"})
+		_ = json.NewEncoder(w).Encode(sidecarInvokeResponse{Error: "handler exploded"})
 	})
 
 	ex, err := NewSidecarExecutorWithEndpoint(endpoint, 5*time.Second)
@@ -128,7 +131,7 @@ func TestSidecarExecutor_ForwardsScopeIdHeader(t *testing.T) {
 	var gotHeader string
 	endpoint := startAppListener(t, func(w http.ResponseWriter, r *http.Request) {
 		gotHeader = r.Header.Get("X-FormSpec-Scope-Id")
-		json.NewEncoder(w).Encode(sidecarInvokeResponse{Data: map[string]any{}})
+		_ = json.NewEncoder(w).Encode(sidecarInvokeResponse{Data: map[string]any{}})
 	})
 
 	ex, err := NewSidecarExecutorWithEndpoint(endpoint, 5*time.Second)
@@ -161,7 +164,7 @@ func TestSidecarExecutor_NoScopeMeansNoHeader(t *testing.T) {
 	var sawHeader bool
 	endpoint := startAppListener(t, func(w http.ResponseWriter, r *http.Request) {
 		_, sawHeader = r.Header[http.CanonicalHeaderKey("X-FormSpec-Scope-Id")]
-		json.NewEncoder(w).Encode(sidecarInvokeResponse{Data: map[string]any{}})
+		_ = json.NewEncoder(w).Encode(sidecarInvokeResponse{Data: map[string]any{}})
 	})
 
 	ex, err := NewSidecarExecutorWithEndpoint(endpoint, 5*time.Second)

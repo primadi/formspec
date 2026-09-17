@@ -7,23 +7,38 @@ import (
 	"testing"
 )
 
+func mustFixtureDir(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func mustFixtureFile(t *testing.T, path string, data []byte) {
+	t.Helper()
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // Fixture: project with a vendored module containing a Form (whitelisted)
 // and an Entity (not whitelisted).
 func setupOverrideFixture(t *testing.T) (project, specDir, vendorSrc string) {
 	t.Helper()
 	project = t.TempDir()
 	specDir = filepath.Join(project, "spec")
-	os.MkdirAll(filepath.Join(specDir, "modules", "shop"), 0755)
-	os.WriteFile(filepath.Join(specDir, "app.yaml"), []byte(appFixture), 0644)
+	mustFixtureDir(t, filepath.Join(specDir, "modules", "shop"))
+	mustFixtureFile(t, filepath.Join(specDir, "app.yaml"), []byte(appFixture))
 
 	vendorSrc = t.TempDir()
-	os.MkdirAll(filepath.Join(vendorSrc, "forms"), 0755)
-	os.WriteFile(filepath.Join(vendorSrc, "module.yaml"), []byte(
-		"apiVersion: formspec.dev/v1\nkind: Module\nmetadata:\n  name: billing\n  description: test\nspec:\n  version: 1.0.0\n"), 0644)
-	os.WriteFile(filepath.Join(vendorSrc, "forms", "checkout.yaml"), []byte(
-		"apiVersion: formspec.dev/v1\nkind: Form\nmetadata:\n  name: checkout\n  module: billing\nspec:\n  version: v1\n  entity: billing/invoice\n  layout:\n    mode: modal\n"), 0644)
-	os.WriteFile(filepath.Join(vendorSrc, "entity", "invoice.yaml"), []byte(
-		"apiVersion: formspec.dev/v1\nkind: Entity\nmetadata:\n  name: invoice\n  module: billing\nspec:\n  version: v1\n  characteristic: master\n  lifecycle: plain_crud\n  plural: invoices\n  fields:\n    - name: number\n      type: string\n      required: true\n"), 0644)
+	mustFixtureDir(t, filepath.Join(vendorSrc, "forms"))
+	mustFixtureFile(t, filepath.Join(vendorSrc, "module.yaml"), []byte(
+		"apiVersion: formspec.dev/v1\nkind: Module\nmetadata:\n  name: billing\n  description: test\nspec:\n  version: 1.0.0\n"))
+	mustFixtureFile(t, filepath.Join(vendorSrc, "forms", "checkout.yaml"), []byte(
+		"apiVersion: formspec.dev/v1\nkind: Form\nmetadata:\n  name: checkout\n  module: billing\nspec:\n  version: v1\n  entity: billing/invoice\n  layout:\n    mode: modal\n"))
+	mustFixtureDir(t, filepath.Join(vendorSrc, "entity"))
+	mustFixtureFile(t, filepath.Join(vendorSrc, "entity", "invoice.yaml"), []byte(
+		"apiVersion: formspec.dev/v1\nkind: Entity\nmetadata:\n  name: invoice\n  module: billing\nspec:\n  version: v1\n  characteristic: master\n  lifecycle: plain_crud\n  plural: invoices\n  fields:\n    - name: number\n      type: string\n      required: true\n"))
 	return
 }
 
@@ -69,8 +84,8 @@ func TestAdopt_WhitelistedKind(t *testing.T) {
 	}
 
 	// Upstream changes → drift detected (§5.3).
-	os.WriteFile(filepath.Join(vendorSrc, "forms", "checkout.yaml"), []byte(
-		"apiVersion: formspec.dev/v1\nkind: Form\nmetadata:\n  name: checkout\n  module: billing\nspec:\n  version: v2\n  entity: billing/invoice\n  layout:\n    mode: drawer\n"), 0644)
+	mustFixtureFile(t, filepath.Join(vendorSrc, "forms", "checkout.yaml"), []byte(
+		"apiVersion: formspec.dev/v1\nkind: Form\nmetadata:\n  name: checkout\n  module: billing\nspec:\n  version: v2\n  entity: billing/invoice\n  layout:\n    mode: drawer\n"))
 	// Re-install to bring the new upstream into vendors/.
 	if _, err := Install(t.Context(), vendorSrc, Options{ProjectRoot: project, SpecPath: specDir, Use: true}); err != nil {
 		t.Fatal(err)
@@ -115,15 +130,15 @@ func TestValidateOverridesDir(t *testing.T) {
 	}
 	// Whitelisted kind → OK.
 	ovDir := filepath.Join(project, "overrides", "billing")
-	os.MkdirAll(ovDir, 0755)
-	os.WriteFile(filepath.Join(ovDir, "form.checkout.yaml"), []byte(
-		"apiVersion: formspec.dev/v1\nkind: Form\nmetadata:\n  name: checkout\n  module: billing\nspec: {version: v1, entity: billing/invoice}\n"), 0644)
+	mustFixtureDir(t, ovDir)
+	mustFixtureFile(t, filepath.Join(ovDir, "form.checkout.yaml"), []byte(
+		"apiVersion: formspec.dev/v1\nkind: Form\nmetadata:\n  name: checkout\n  module: billing\nspec: {version: v1, entity: billing/invoice}\n"))
 	if err := ValidateOverridesDir(project); err != nil {
 		t.Fatalf("whitelisted kind rejected: %v", err)
 	}
 	// Entity → boot refusal.
-	os.WriteFile(filepath.Join(ovDir, "entity.invoice.yaml"), []byte(
-		"apiVersion: formspec.dev/v1\nkind: Entity\nmetadata:\n  name: invoice\n  module: billing\nspec: {version: v1}\n"), 0644)
+	mustFixtureFile(t, filepath.Join(ovDir, "entity.invoice.yaml"), []byte(
+		"apiVersion: formspec.dev/v1\nkind: Entity\nmetadata:\n  name: invoice\n  module: billing\nspec: {version: v1}\n"))
 	err := ValidateOverridesDir(project)
 	if err == nil || !strings.Contains(err.Error(), "not shadow-copyable") {
 		t.Errorf("Entity under overrides/ must refuse boot, got: %v", err)

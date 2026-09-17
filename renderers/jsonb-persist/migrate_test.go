@@ -15,7 +15,7 @@ func TestMigrationRunner_EnsureSystemTables(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -51,7 +51,7 @@ func TestMigrationRunner_ApplyMigrations_NewEntity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -103,7 +103,7 @@ func TestMigrationRunner_ApplyMigrations_Idempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -146,7 +146,7 @@ func TestMigrationRunner_MultipleEntities(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -166,7 +166,7 @@ func TestMigrationRunner_MultipleEntities(t *testing.T) {
 			EntitySpec: spec.EntitySpec{
 				Version: "v1",
 				Fields: []spec.Field{
-					{Name: "total", Type: spec.FieldNumber, Required: true},
+					{Name: "total", Type: spec.FieldDecimal, Required: true},
 					{Name: "status", Type: spec.FieldEnum, EnumValues: []string{"draft", "paid"}},
 				},
 			},
@@ -230,7 +230,7 @@ func TestMigrationRunner_ExtensionMigration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -320,7 +320,7 @@ func TestMigrationRunner_UninstallExtension(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -400,7 +400,7 @@ func TestMigrationRunner_ChecksumChange(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -468,7 +468,7 @@ func TestMigrationRunner_FieldAddDiff(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -532,10 +532,10 @@ func TestMigrationRunner_FieldAddDiff(t *testing.T) {
 		var names []string
 		for rows.Next() {
 			var n string
-			rows.Scan(&n)
+			_ = rows.Scan(&n)
 			names = append(names, n)
 		}
-		rows.Close()
+		_ = rows.Close()
 		t.Fatalf("expected _code column added, got %d; columns: %v", colCount, names)
 	}
 }
@@ -556,7 +556,7 @@ func TestMigrationRunner_NewDeclaredIndexReachesExistingTable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -643,7 +643,7 @@ func TestMigrationRunner_EnumChangeNoDuplicateColumn(t *testing.T) { // Regressi
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := NewMigrationRunner(d, DriverSQLite)
 	ctx := context.Background()
@@ -696,7 +696,7 @@ func TestMigrationRunner_OutputDDL(t *testing.T) {
 		Version: "v1",
 		Fields: []spec.Field{
 			{Name: "number", Type: spec.FieldString, Required: true, NaturalKey: true},
-			{Name: "total", Type: spec.FieldNumber, Required: true},
+			{Name: "total", Type: spec.FieldDecimal, Required: true},
 			{Name: "status", Type: spec.FieldEnum, EnumValues: []string{"draft", "sent", "paid"}},
 		},
 	}

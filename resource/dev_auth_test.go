@@ -26,7 +26,7 @@ func TestUserPasswordHashHook(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	defer app.Close(context.Background())
+	defer func() { _ = app.Close(context.Background()) }()
 
 	// Auth is uniform across dev and prod — no auto-seeding. Create the
 	// first admin the way production does (or via direct insert, as here).
@@ -95,7 +95,7 @@ func TestAuth_ValidatorSelection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New(dev): %v", err)
 	}
-	defer app.Close(context.Background())
+	defer func() { _ = app.Close(context.Background()) }()
 	if _, ok := api.GetAuthValidator().(*auth.JWTValidator); !ok {
 		t.Fatalf("expected JWTValidator after New(dev), got %T", api.GetAuthValidator())
 	}
@@ -118,7 +118,7 @@ func TestAuth_LoginFlow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	defer app.Close(context.Background())
+	defer func() { _ = app.Close(context.Background()) }()
 
 	// No auto-seeding — create the first admin via the setup endpoint,
 	// exactly like the first-run wizard does.

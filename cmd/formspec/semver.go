@@ -3,7 +3,12 @@
 // golang.org/x/mod tidak ada di go.mod dan menambah dependency hanya untuk
 // 40 baris ini tidak sepadan.
 //
-// Plan: docs_internal/plan/formspec-upgrade-command.md §Fase 2.
+// Kekhususan FormSpec: string git-describe (`v0.0.8-4-gceaaf2a`, 4 commit
+// setelah tag v0.0.8) dikenali TERPISAH dari prerelease semver — snapshot itu
+// lebih baru dari rilis core-nya, bukan lebih lama. Lihat classifyPre().
+//
+// Plan: docs_internal/plan/formspec-upgrade-command.md §Fase 2,
+// docs_internal/plan/release-version-auto.md.
 package main
 
 import (
@@ -15,9 +20,11 @@ import (
 type semver struct {
 	major, minor, patch int
 	pre                 []string // identifier prerelease, kosong = release
+	post                int      // >0 = suffix git-describe "-<n>-g<hash>": n commit SETELAH tag core
 }
 
-// parseSemver mem-parse "v1.2.3", "1.2.3", "v1.2.3-rc.1", "v1.2.3+build".
+// parseSemver mem-parse "v1.2.3", "1.2.3", "v1.2.3-rc.1", "v1.2.3+build",
+// serta output `git describe --tags` ("v1.2.3-4-gceaaf2a", "…-dirty").
 func parseSemver(s string) (semver, error) {
 	var v semver
 	orig := s
@@ -44,9 +51,45 @@ func parseSemver(s string) (semver, error) {
 	}
 	v.major, v.minor, v.patch = nums[0], nums[1], nums[2]
 	if pre != "" {
-		v.pre = strings.Split(pre, ".")
+		v.pre, v.post = classifyPre(pre)
 	}
 	return v, nil
+}
+
+// classifyPre memisahkan suffix git-describe dari prerelease semver biasa.
+//
+// `v0.0.8-4-gceaaf2a` bukan prerelease v0.0.8: artinya "4 commit setelah tag
+// v0.0.8", jadi urutannya SETELAH v0.0.8 (dan setelah v0.0.8-rc.1). Dibaca
+// sebagai prerelease, rilis yang isinya lebih baru justru tampak rollback —
+// pernah terjadi saat tag describe ikut ter-publish
+// (docs_internal/plan/release-version-auto.md).
+//
+// Pemisah identifier describe adalah '-' (bukan '.') sehingga "<n>-g<hash>"
+// tidak bisa dikenali setelah pre di-split per titik.
+func classifyPre(pre string) (ids []string, post int) {
+	trimmed := strings.TrimSuffix(pre, "-dirty")
+	if i := strings.LastIndexByte(trimmed, '-'); i > 0 {
+		if count, err := strconv.Atoi(trimmed[:i]); err == nil && isShortHash(trimmed[i+1:]) {
+			return nil, count
+		}
+	}
+	if trimmed == "dirty" { // worktree kotor tidak mengubah urutan versi
+		return nil, 0
+	}
+	return strings.Split(pre, "."), 0
+}
+
+// isShortHash mengenali identifier "g<hex>" — prefix yang dipakai git describe.
+func isShortHash(s string) bool {
+	if len(s) < 5 || s[0] != 'g' {
+		return false
+	}
+	for _, c := range s[1:] {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 // compareVersions mengembalikan -1 bila a<b, 0 bila sama, +1 bila a>b.
@@ -69,7 +112,28 @@ func compareVersions(a, b string) (int, error) {
 	if c := compareInt(va.patch, vb.patch); c != 0 {
 		return c, nil
 	}
+	// Snapshot git-describe berada SETELAH rilis core-nya (dan setelah
+	// prerelease-nya): v0.0.8-4-gceaaf2a > v0.0.8 > v0.0.8-rc.1.
+	if va.post != 0 || vb.post != 0 {
+		return comparePost(va.post, vb.post), nil
+	}
 	return comparePre(va.pre, vb.pre), nil
+}
+
+// comparePost mengurutkan snapshot git-describe pada core versi yang sama:
+// non-snapshot lebih rendah dari snapshot, antar-snapshot dibanding jumlah
+// commit-nya.
+func comparePost(a, b int) int {
+	switch {
+	case a == b:
+		return 0
+	case a == 0:
+		return -1
+	case b == 0:
+		return 1
+	default:
+		return compareInt(a, b)
+	}
 }
 
 // isNewer melaporkan apakah candidate lebih baru dari current.

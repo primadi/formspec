@@ -18,7 +18,7 @@ func TestRunNewModule_ScaffoldsModule(t *testing.T) {
 	if err := os.Chdir(work); err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(oldWD)
+	defer func() { _ = os.Chdir(oldWD) }()
 
 	runNewModule([]string{"cafe-master"})
 
@@ -49,7 +49,7 @@ func TestRunNewEntity_ScaffoldsEntity(t *testing.T) {
 	if err := os.Chdir(work); err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(oldWD)
+	defer func() { _ = os.Chdir(oldWD) }()
 
 	runNewEntity([]string{"menu-item", "--module", "cafe-master"})
 
@@ -87,7 +87,7 @@ func TestRunNewEntity_InvalidCharacteristic(t *testing.T) {
 	if err := os.Chdir(work); err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(oldWD)
+	defer func() { _ = os.Chdir(oldWD) }()
 
 	// Should exit(1) — capture via a subprocess-free check: runNewEntity
 	// calls os.Exit on invalid characteristic, so we can't call it directly
@@ -112,7 +112,7 @@ func TestDetectModule(t *testing.T) {
 	if err := os.Chdir(work); err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(oldWD)
+	defer func() { _ = os.Chdir(oldWD) }()
 
 	// Create a nested path under spec/modules/alpha/...
 	nested := filepath.Join("spec", "modules", "alpha", "master", "thing")

@@ -37,16 +37,16 @@ func runApply(args []string) {
 	appName := fs.String("app", "default", "App name")
 	watchMode := fs.Bool("watch", false, "Watch for file changes and auto-register")
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: formspec apply [flags] <spec-directory>\n\n")
-		fmt.Fprintf(os.Stderr, "Register YAML manifests to the Control Plane.\n\n")
-		fmt.Fprintf(os.Stderr, "Flags:\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec apply [flags] <spec-directory>\n\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Register YAML manifests to the Control Plane.\n\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Flags:\n")
 		fs.PrintDefaults()
 	}
-	fs.Parse(args)
+	_ = fs.Parse(args) // FlagSet is ExitOnError — Parse exits on a bad flag.
 
 	specArgs := fs.Args()
 	if len(specArgs) == 0 {
-		fmt.Fprintf(os.Stderr, "Error: spec directory is required\n\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Error: spec directory is required\n\n")
 		fs.Usage()
 		os.Exit(1)
 	}
@@ -54,7 +54,7 @@ func runApply(args []string) {
 	specDir := specArgs[0]
 
 	if err := registerDirectory(*controlURL, *appName, specDir); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -131,7 +131,7 @@ func registerDirectory(controlURL, appName, specDir string) error {
 	if err != nil {
 		return fmt.Errorf("http post: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, _ := io.ReadAll(resp.Body)
 
@@ -162,21 +162,26 @@ func watchForChanges(controlURL, appName, specDir string) {
 	if err != nil {
 		log.Fatalf("Error creating watcher: %v", err)
 	}
-	defer watcher.Close()
+	defer func() { _ = watcher.Close() }()
 
-	// Add directory and subdirectories
-	filepath.Walk(specDir, func(path string, info os.FileInfo, err error) error {
+	// Add directory and subdirectories. A partial walk or a refused watch would
+	// leave --watch silently watching less than the whole spec tree.
+	if err := filepath.Walk(specDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 		if info.IsDir() {
 			base := filepath.Base(path)
 			if !strings.HasPrefix(base, ".") && base != "node_modules" && base != "impl" {
-				watcher.Add(path)
+				if addErr := watcher.Add(path); addErr != nil {
+					log.Printf("formspec apply --watch: cannot watch %s: %v", path, addErr)
+				}
 			}
 		}
 		return nil
-	})
+	}); err != nil {
+		log.Printf("formspec apply --watch: %v (watching may be incomplete)", err)
+	}
 
 	fmt.Printf("\n👀 Watching %s for changes...\n", specDir)
 	fmt.Println("   (Press Ctrl+C to stop)")
@@ -217,7 +222,7 @@ func triggerPoll(controlURL string) {
 		// Poll endpoint may not be available — that's fine
 		return
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	if resp.StatusCode == http.StatusOK {
 		fmt.Println("   🔄 Resource Plane notified (fast refresh)")

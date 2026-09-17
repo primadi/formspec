@@ -974,17 +974,6 @@ func (b *RouterBuilder) RouteCount() int {
 	return len(b.routes)
 }
 
-// sortedStrings returns the map keys in deterministic order (SPA mounts are
-// registered in a stable order so router rebuilds are reproducible).
-func sortedStrings(m map[string]bool) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
-}
-
 // sortedAppMounts returns the SPA mount prefixes in deterministic order
 // (router rebuilds are reproducible).
 func sortedAppMounts(m map[string]*formspec_app.ResolvedApp) []string {
@@ -1063,7 +1052,7 @@ func serveFileFS(w http.ResponseWriter, _ *http.Request, spaFS fs.FS, name strin
 	// Guess content type based on extension
 	ct := mimeTypeByExtension(name)
 	w.Header().Set("Content-Type", ct)
-	w.Write(data)
+	_, _ = w.Write(data)
 }
 
 // mimeTypeByExtension returns a MIME type for common web file extensions.

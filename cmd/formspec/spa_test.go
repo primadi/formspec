@@ -78,9 +78,9 @@ func TestSpaExtractRejectsTraversal(t *testing.T) {
 	if err := tw.WriteHeader(&tar.Header{Name: "spa/../../evil.txt", Size: int64(len(payload))}); err != nil {
 		t.Fatal(err)
 	}
-	tw.Write([]byte(payload))
-	tw.Close()
-	gz.Close()
+	_, _ = tw.Write([]byte(payload))
+	_ = tw.Close()
+	_ = gz.Close()
 
 	dest := t.TempDir()
 	if err := extractTarGz(buf.Bytes(), dest, "spa/"); err == nil {

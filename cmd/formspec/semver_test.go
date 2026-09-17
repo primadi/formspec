@@ -23,6 +23,16 @@ func TestCompareVersions(t *testing.T) {
 		{"v1.0.0-rc.1", "v1.0.0-alpha.1", 1},
 		{"v1.0.0-1", "v1.0.0-alpha", -1}, // numerik < alfanumerik
 		{"v1.2.3+build.1", "v1.2.3+build.2", 0},
+		// String git-describe = snapshot N commit SETELAH tag core-nya, bukan
+		// prerelease — lihat docs_internal/plan/release-version-auto.md.
+		{"v0.0.8", "v0.0.8-4-gceaaf2a", -1},
+		{"v0.0.8-4-gceaaf2a", "v0.0.8", 1},
+		{"v0.0.8-4-gceaaf2a", "v0.0.8-4-gceaaf2a", 0},
+		{"v0.0.8-4-gceaaf2a", "v0.0.8-5-gabc1234", -1},
+		{"v0.0.8-4-gceaaf2a", "v0.0.9", -1},
+		{"v0.0.8-rc.1", "v0.0.8-4-gceaaf2a", -1}, // prerelease < release < snapshot
+		{"v0.0.8-4-gceaaf2a-dirty", "v0.0.8", 1}, // suffix -dirty diabaikan
+		{"v0.0.8-dirty", "v0.0.8", 0},
 	}
 	for _, c := range cases {
 		got, err := compareVersions(c.a, c.b)
@@ -53,6 +63,7 @@ func TestIsNewer(t *testing.T) {
 		{"v0.0.7", "v0.0.7", false},
 		{"v0.0.8", "v0.0.7", false},
 		{"v1.0.0-rc.1", "v1.0.0", true},
+		{"v0.0.8", "v0.0.8-4-gceaaf2a", true}, // rilis describe = lebih baru, bukan rollback
 	}
 	for _, c := range cases {
 		got, err := isNewer(c.current, c.candidate)

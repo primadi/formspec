@@ -15,7 +15,7 @@ func TestSoftDelete_ArchiveLocked(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	meta := spec.Metadata{Name: "customer", Module: "billing"}
 	entity := &spec.EntitySpec{

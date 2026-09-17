@@ -38,9 +38,9 @@ func TestLockRoundTrip(t *testing.T) {
 
 func TestTreeChecksum(t *testing.T) {
 	dir := t.TempDir()
-	os.MkdirAll(filepath.Join(dir, "impl"), 0755)
-	os.WriteFile(filepath.Join(dir, "module.yaml"), []byte("a: 1\n"), 0644)
-	os.WriteFile(filepath.Join(dir, "impl", "x.star"), []byte("def f():\n    pass\n"), 0644)
+	_ = os.MkdirAll(filepath.Join(dir, "impl"), 0755)
+	_ = os.WriteFile(filepath.Join(dir, "module.yaml"), []byte("a: 1\n"), 0644)
+	_ = os.WriteFile(filepath.Join(dir, "impl", "x.star"), []byte("def f():\n    pass\n"), 0644)
 
 	c1, err := TreeChecksum(dir)
 	if err != nil {
@@ -55,7 +55,7 @@ func TestTreeChecksum(t *testing.T) {
 		t.Error("checksum not deterministic")
 	}
 	// Content change → different checksum.
-	os.WriteFile(filepath.Join(dir, "module.yaml"), []byte("a: 2\n"), 0644)
+	_ = os.WriteFile(filepath.Join(dir, "module.yaml"), []byte("a: 2\n"), 0644)
 	c3, _ := TreeChecksum(dir)
 	if c3 == c1 {
 		t.Error("content change not detected")
@@ -167,10 +167,10 @@ func TestRemoveMarker(t *testing.T) {
 func writeVendorSource(t *testing.T) string {
 	t.Helper()
 	src := t.TempDir()
-	os.MkdirAll(filepath.Join(src, "entity"), 0755)
-	os.WriteFile(filepath.Join(src, "module.yaml"), []byte(
+	_ = os.MkdirAll(filepath.Join(src, "entity"), 0755)
+	_ = os.WriteFile(filepath.Join(src, "module.yaml"), []byte(
 		"apiVersion: formspec.dev/v1\nkind: Module\nmetadata:\n  name: billing\n  description: test\n"), 0644)
-	os.WriteFile(filepath.Join(src, "entity", "invoice.yaml"), []byte(
+	_ = os.WriteFile(filepath.Join(src, "entity", "invoice.yaml"), []byte(
 		"apiVersion: formspec.dev/v1\nkind: Entity\nmetadata:\n  name: invoice\n  module: billing\nspec:\n  version: v1\n  characteristic: transaction\n  lifecycle: plain_crud\n  plural: invoices\n  transaction_date: issued_at\n  fields:\n    - name: issued_at\n      type: date\n      required: true\n"), 0644)
 	return src
 }
@@ -179,8 +179,8 @@ func TestInstall_Flow(t *testing.T) {
 	src := writeVendorSource(t)
 	project := t.TempDir()
 	specDir := filepath.Join(project, "spec")
-	os.MkdirAll(specDir, 0755)
-	os.WriteFile(filepath.Join(specDir, "app.yaml"), []byte(appFixture), 0644)
+	_ = os.MkdirAll(specDir, 0755)
+	_ = os.WriteFile(filepath.Join(specDir, "app.yaml"), []byte(appFixture), 0644)
 
 	res, err := Install(t.Context(), src, Options{
 		ProjectRoot: project, SpecPath: specDir, Use: false,
@@ -237,7 +237,7 @@ func TestInstall_Flow(t *testing.T) {
 	}
 
 	// Tamper → verify fails (13.1.6).
-	os.WriteFile(filepath.Join(res.Dir, "module.yaml"), []byte("tampered: true\n"), 0644)
+	_ = os.WriteFile(filepath.Join(res.Dir, "module.yaml"), []byte("tampered: true\n"), 0644)
 	results, _ = Verify(project)
 	if results[0].OK {
 		t.Error("tampered vendors/ must fail verify")
@@ -265,8 +265,8 @@ func TestInstall_AliasOnConflict(t *testing.T) {
 	src := writeVendorSource(t)
 	project := t.TempDir()
 	specDir := filepath.Join(project, "spec")
-	os.MkdirAll(filepath.Join(specDir, "modules", "billing"), 0755) // local module named billing
-	os.WriteFile(filepath.Join(specDir, "app.yaml"), []byte(appFixture), 0644)
+	_ = os.MkdirAll(filepath.Join(specDir, "modules", "billing"), 0755) // local module named billing
+	_ = os.WriteFile(filepath.Join(specDir, "app.yaml"), []byte(appFixture), 0644)
 
 	res, err := Install(t.Context(), src, Options{ProjectRoot: project, SpecPath: specDir})
 	if err != nil {
@@ -288,8 +288,8 @@ func TestInstall_AliasOnConflict(t *testing.T) {
 func TestActiveModules(t *testing.T) {
 	project := t.TempDir()
 	specDir := filepath.Join(project, "spec")
-	os.MkdirAll(specDir, 0755)
-	os.WriteFile(filepath.Join(specDir, "app.yaml"), []byte(appFixture), 0644)
+	_ = os.MkdirAll(specDir, 0755)
+	_ = os.WriteFile(filepath.Join(specDir, "app.yaml"), []byte(appFixture), 0644)
 
 	// Nothing installed → empty, no error.
 	active, err := ActiveModules(project, specDir)

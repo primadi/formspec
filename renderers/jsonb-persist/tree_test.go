@@ -18,7 +18,7 @@ func setupTreeStore(t *testing.T) *EntityStore {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	t.Cleanup(func() { d.Close() })
+	t.Cleanup(func() { _ = d.Close() })
 
 	meta := spec.Metadata{Name: "category", Module: "catalog"}
 	entity := &spec.EntitySpec{
@@ -74,7 +74,7 @@ func TestTree_MaterializedPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("query paths: %v", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var id, path string
 		if err := rows.Scan(&id, &path); err != nil {

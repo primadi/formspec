@@ -148,10 +148,10 @@ func TreeChecksum(dir string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		h.Write([]byte(filepath.ToSlash(rel)))
-		h.Write([]byte{0})
-		h.Write(data)
-		h.Write([]byte{0})
+		_, _ = h.Write([]byte(filepath.ToSlash(rel)))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write(data)
+		_, _ = h.Write([]byte{0})
 	}
 	return "sha256:" + hex.EncodeToString(h.Sum(nil)), nil
 }

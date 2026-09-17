@@ -184,7 +184,7 @@ func (c *DBConfigLog) Get(ctx context.Context, key string) (any, error) {
 	if err != nil {
 		return nil, nil // table may not exist yet — treat as miss
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	if !rows.Next() {
 		return nil, nil
 	}

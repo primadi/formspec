@@ -66,7 +66,7 @@ func TestEntityStore_MoneySortAndRangeAreNumeric(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	t.Cleanup(func() { d.Close() })
+	t.Cleanup(func() { _ = d.Close() })
 
 	ctx := context.Background()
 	meta := spec.Metadata{Name: "menu-item-price", Module: "cafe-master"}

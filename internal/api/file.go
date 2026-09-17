@@ -202,7 +202,7 @@ func (f *HandlerFactory) HandleFileUpload() http.HandlerFunc {
 				"missing file part: "+err.Error())
 			return
 		}
-		defer file.Close()
+		defer func() { _ = file.Close() }()
 		data, err := io.ReadAll(file)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "BAD_REQUEST",

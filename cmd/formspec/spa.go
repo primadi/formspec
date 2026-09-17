@@ -36,14 +36,14 @@ func runSpa(args []string) {
 	case "-h", "--help", "help":
 		spaUsage()
 	default:
-		fmt.Fprintf(os.Stderr, "❌ Subcommand spa tidak dikenal: %s\n\n", args[0])
+		_, _ = fmt.Fprintf(os.Stderr, "❌ Subcommand spa tidak dikenal: %s\n\n", args[0])
 		spaUsage()
 		os.Exit(1)
 	}
 }
 
 func spaUsage() {
-	fmt.Fprint(os.Stderr, `Usage: formspec spa <subcommand>
+	_, _ = fmt.Fprint(os.Stderr, `Usage: formspec spa <subcommand>
 
 Subcommands:
   install          Download & verify SPA artifact versi binary ini ke cache
@@ -93,13 +93,13 @@ func runSpaInstall(args []string) {
 		if a == "--force" {
 			force = true
 		} else {
-			fmt.Fprintf(os.Stderr, "❌ Flag tidak dikenal: %s\n", a)
+			_, _ = fmt.Fprintf(os.Stderr, "❌ Flag tidak dikenal: %s\n", a)
 			os.Exit(1)
 		}
 	}
 
 	if version == "dev" {
-		fmt.Fprint(os.Stderr, `❌ Binary ini adalah build "dev" (go run / go build tanpa ldflags).
+		_, _ = fmt.Fprint(os.Stderr, `❌ Binary ini adalah build "dev" (go run / go build tanpa ldflags).
 
 Build dev tidak punya versi rilis untuk di-match. Untuk UI saat development:
   - jalankan dari repo checkout — auto-detect renderers/react-shadcn/dist, atau
@@ -111,7 +111,7 @@ Build dev tidak punya versi rilis untuk di-match. Untuk UI saat development:
 
 	dir := spaCacheDirFor()
 	if dir == "" {
-		fmt.Fprintln(os.Stderr, "❌ Tidak bisa resolve home directory")
+		_, _ = fmt.Fprintln(os.Stderr, "❌ Tidak bisa resolve home directory")
 		os.Exit(1)
 	}
 
@@ -135,36 +135,36 @@ Build dev tidak punya versi rilis untuk di-match. Untuk UI saat development:
 	fmt.Printf("⬇️  Download %s\n", artifactURL)
 	artifact, err := releaseGet(artifactURL)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "❌ %v\n", err)
-		fmt.Fprintf(os.Stderr, "   (versi %s mungkin belum punya spa artifact —\n", version)
-		fmt.Fprintf(os.Stderr, "    cek https://github.com/primadi/formspec/releases/tag/%s)\n", version)
+		_, _ = fmt.Fprintf(os.Stderr, "❌ %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "   (versi %s mungkin belum punya spa artifact —\n", version)
+		_, _ = fmt.Fprintf(os.Stderr, "    cek https://github.com/primadi/formspec/releases/tag/%s)\n", version)
 		os.Exit(1)
 	}
 
 	fmt.Printf("⬇️  Download %s\n", sumsURL)
 	sums, err := releaseGet(sumsURL)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "❌ %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "❌ %v\n", err)
 		os.Exit(1)
 	}
 
 	// Verify checksum terhadap SHA256SUMS.txt (baris spa-<v>.tar.gz).
 	if err := verifyArtifact(artifact, string(sums), artifactName); err != nil {
-		fmt.Fprintf(os.Stderr, "❌ %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "❌ %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Println("🔒 Checksum SHA256 OK")
 
 	if err := os.RemoveAll(dir); err != nil {
-		fmt.Fprintf(os.Stderr, "❌ bersihkan cache lama: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "❌ bersihkan cache lama: %v\n", err)
 		os.Exit(1)
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		fmt.Fprintf(os.Stderr, "❌ %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "❌ %v\n", err)
 		os.Exit(1)
 	}
 	if err := extractTarGz(artifact, dir, "spa/"); err != nil {
-		fmt.Fprintf(os.Stderr, "❌ extract: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "❌ extract: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Printf("✅ SPA %s ter-install di %s\n", version, dir)
@@ -174,12 +174,12 @@ Build dev tidak punya versi rilis untuk di-match. Untuk UI saat development:
 func runSpaPath() {
 	dir := spaCacheDirFor()
 	if dir == "" {
-		fmt.Fprintln(os.Stderr, "❌ Tidak bisa resolve home directory")
+		_, _ = fmt.Fprintln(os.Stderr, "❌ Tidak bisa resolve home directory")
 		os.Exit(1)
 	}
 	fmt.Println(dir)
 	if spaCacheDir() == "" {
-		fmt.Fprintln(os.Stderr, "   (belum ter-install — jalankan: formspec spa install)")
+		_, _ = fmt.Fprintln(os.Stderr, "   (belum ter-install — jalankan: formspec spa install)")
 	}
 }
 
@@ -189,13 +189,13 @@ func runSpaRemove(args []string) {
 		if a == "--all" {
 			all = true
 		} else {
-			fmt.Fprintf(os.Stderr, "❌ Flag tidak dikenal: %s\n", a)
+			_, _ = fmt.Fprintf(os.Stderr, "❌ Flag tidak dikenal: %s\n", a)
 			os.Exit(1)
 		}
 	}
 	spaBase := spaCacheBaseDir()
 	if spaBase == "" {
-		fmt.Fprintln(os.Stderr, "❌ Tidak bisa resolve home directory")
+		_, _ = fmt.Fprintln(os.Stderr, "❌ Tidak bisa resolve home directory")
 		os.Exit(1)
 	}
 	target := filepath.Join(spaBase, version)
@@ -209,7 +209,7 @@ func runSpaRemove(args []string) {
 		return
 	}
 	if err := os.RemoveAll(target); err != nil {
-		fmt.Fprintf(os.Stderr, "❌ remove: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "❌ remove: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Printf("✅ Cache SPA %s dihapus: %s\n", label, target)

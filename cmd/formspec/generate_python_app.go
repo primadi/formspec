@@ -16,20 +16,20 @@ func runGeneratePythonApp(args []string) {
 	entityName := fs.String("entity", "myentity", "Entity name for the example handler")
 	actionName := fs.String("action", "process", "Action name for the example handler")
 	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: formspec generate python-app [flags]\n\n")
-		fmt.Fprintf(os.Stderr, "Scaffold a Python sidecar app for a FormSpec project.\n\n")
-		fmt.Fprintf(os.Stderr, "Flags:\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec generate python-app [flags]\n\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Scaffold a Python sidecar app for a FormSpec project.\n\n")
+		_, _ = fmt.Fprintf(os.Stderr, "Flags:\n")
 		fs.PrintDefaults()
 	}
-	fs.Parse(args)
+	_ = fs.Parse(args) // FlagSet is ExitOnError — Parse exits on a bad flag.
 
 	absDir, err := filepath.Abs(*dir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 	if _, err := os.Stat(absDir); err == nil {
-		fmt.Fprintf(os.Stderr, "Error: target %s already exists\n", absDir)
+		_, _ = fmt.Fprintf(os.Stderr, "Error: target %s already exists\n", absDir)
 		os.Exit(1)
 	}
 
@@ -41,18 +41,18 @@ func runGeneratePythonApp(args []string) {
 		"pyproject.toml":                scaffoldPythonPyproject(),
 		"app.py":                        scaffoldPythonApp(ent, act),
 		filepath.Join("src", act+".py"): scaffoldPythonHandler(mod, ent, act),
-		"formspec-app.yaml":                scaffoldPythonAppYAML(),
+		"formspec-app.yaml":             scaffoldPythonAppYAML(),
 		".gitignore":                    scaffoldPythonGitignore(),
 	}
 
 	for relPath, content := range files {
 		fullPath := filepath.Join(absDir, relPath)
 		if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: create dir for %s: %v\n", relPath, err)
+			_, _ = fmt.Fprintf(os.Stderr, "Error: create dir for %s: %v\n", relPath, err)
 			os.Exit(1)
 		}
 		if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: write %s: %v\n", fullPath, err)
+			_, _ = fmt.Fprintf(os.Stderr, "Error: write %s: %v\n", fullPath, err)
 			os.Exit(1)
 		}
 	}

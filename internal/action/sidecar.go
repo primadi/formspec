@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/primadi/formspec/renderers/jsonb-persist"
 	"github.com/primadi/formspec/pkg/spec"
+	"github.com/primadi/formspec/renderers/jsonb-persist"
 )
 
 // DefaultSidecarInvokeTimeout is how long the executor waits for the app
@@ -170,7 +170,7 @@ func (e *SidecarExecutor) Execute(ctx context.Context, action spec.Action, param
 		}
 		return nil, fmt.Errorf("sidecar invoke %s.%s: %w", params.Module, params.ActionName, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 16<<20))
 	if err != nil {

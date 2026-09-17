@@ -91,7 +91,7 @@ func TestBackupCreateInspectRestore(t *testing.T) {
 	if manifest.Tables[0].Count != 2 {
 		t.Fatalf("expected 2 records, got %d", manifest.Tables[0].Count)
 	}
-	database.Close()
+	_ = database.Close()
 
 	// Inspect should report the same.
 	inspected := inspectBackup(t, backupFile)
@@ -101,7 +101,7 @@ func TestBackupCreateInspectRestore(t *testing.T) {
 
 	// Restore into a fresh DB.
 	reg2, database2 := loadRegistryForTest(t, dir)
-	defer database2.Close()
+	defer func() { _ = database2.Close() }()
 	rpt := restoreFrom(context.Background(), reg2, backupFile, "skip", false)
 	if rpt.Restored != 2 || rpt.Skipped != 0 || rpt.Failed != 0 {
 		t.Fatalf("expected 2/0/0, got %d/%d/%d", rpt.Restored, rpt.Skipped, rpt.Failed)
@@ -121,10 +121,10 @@ func TestBackupRestoreDryRun(t *testing.T) {
 	reg, database := seedRegistry(t, dir)
 	backupFile := filepath.Join(t.TempDir(), "backup.tar")
 	createBackup(t, reg, backupFile)
-	database.Close()
+	_ = database.Close()
 
 	reg2, database2 := loadRegistryForTest(t, dir)
-	defer database2.Close()
+	defer func() { _ = database2.Close() }()
 
 	// Dry-run should report restored but not actually insert.
 	rpt := restoreFrom(context.Background(), reg2, backupFile, "skip", true)
@@ -152,10 +152,10 @@ func TestBackupRestoreRemap(t *testing.T) {
 	reg, database := seedRegistry(t, dir)
 	backupFile := filepath.Join(t.TempDir(), "backup.tar")
 	createBackup(t, reg, backupFile)
-	database.Close()
+	_ = database.Close()
 
 	reg2, database2 := loadRegistryForTest(t, dir)
-	defer database2.Close()
+	defer func() { _ = database2.Close() }()
 
 	// First restore inserts both records.
 	rpt := restoreFrom(context.Background(), reg2, backupFile, "skip", false)
@@ -231,9 +231,9 @@ func createBackup(t *testing.T, reg *entity.Registry, out string) BackupManifest
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	tw := tar.NewWriter(f)
-	defer tw.Close()
+	defer func() { _ = tw.Close() }()
 	for _, info := range reg.ListEntities() {
 		store, err := reg.GetEntityStore(info.Module, info.Name)
 		if err != nil {
@@ -264,7 +264,7 @@ func inspectBackup(t *testing.T, file string) BackupManifest {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	tr := tar.NewReader(f)
 	var m BackupManifest
 	for {

@@ -30,7 +30,7 @@ func TestEntityStore_SanitizesRichTextOnInsert(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite: %v", err)
 	}
-	t.Cleanup(func() { d.Close() })
+	t.Cleanup(func() { _ = d.Close() })
 
 	entity := &spec.EntitySpec{
 		Version: "v1", Plural: "posts", Characteristic: spec.CharMaster,

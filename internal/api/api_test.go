@@ -41,7 +41,9 @@ func TestGenerateRoutes_NoExpose(t *testing.T) {
 	// Load from the billing vertical spec, none of whose entities declare expose
 	reg := entity.NewRegistry(d, db.DriverSQLite, "../../verticals/billing/spec")
 	reg.LoadEntities()
-	reg.SyncSchema(context.Background())
+	if _, err := reg.SyncSchema(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 
 	routes := GenerateRoutes(reg)
 	if len(routes) != 0 {
@@ -57,12 +59,14 @@ func TestGenerateRoutes_WithExpose(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	// Create registry and manually load entities through migration
 	r := db.NewMigrationRunner(d, db.DriverSQLite)
 	ctx := context.Background()
-	r.EnsureSystemTables(ctx)
+	if err := r.EnsureSystemTables(ctx); err != nil {
+		t.Fatal(err)
+	}
 
 	meta := spec.Metadata{Name: "product", Module: "inventory"}
 	entitySpec := spec.EntitySpec{
@@ -75,9 +79,11 @@ func TestGenerateRoutes_WithExpose(t *testing.T) {
 			{Type: spec.ProtocolREST, Actions: []string{"list", "find", "create"}},
 		},
 	}
-	r.ApplyMigrations(ctx, []db.EntityMigration{
+	if _, err := r.ApplyMigrations(ctx, []db.EntityMigration{
 		{Metadata: meta, EntitySpec: entitySpec},
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	// Register via registry
 	reg := entity.NewRegistry(d, db.DriverSQLite, dir)
@@ -164,7 +170,7 @@ spec:
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	reg := entity.NewRegistry(d, db.DriverSQLite, dir)
 	if errs := reg.LoadEntities(); len(errs) > 0 {
@@ -215,7 +221,7 @@ func TestGenerateUIRoutes_SummaryNoLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	reg := entity.NewRegistry(d, db.DriverSQLite, "../../examples/kafe/spec")
 	if errs := reg.LoadEntities(); len(errs) > 0 {
@@ -351,11 +357,13 @@ func TestHTTPRouter_HealthCheck(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := db.NewMigrationRunner(d, db.DriverSQLite)
 	ctx := context.Background()
-	r.EnsureSystemTables(ctx)
+	if err := r.EnsureSystemTables(ctx); err != nil {
+		t.Fatal(err)
+	}
 
 	reg := entity.NewRegistry(d, db.DriverSQLite, dir)
 	reg.LoadEntities()
@@ -374,7 +382,7 @@ func TestHTTPRouter_HealthCheck(t *testing.T) {
 	}
 
 	var body map[string]string
-	json.NewDecoder(rec.Body).Decode(&body)
+	_ = json.NewDecoder(rec.Body).Decode(&body)
 	if body["status"] != "ok" {
 		t.Errorf("expected status=ok, got %s", body["status"])
 	}
@@ -387,11 +395,13 @@ func TestHTTPRouter_404OnUnexposed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	r := db.NewMigrationRunner(d, db.DriverSQLite)
 	ctx := context.Background()
-	r.EnsureSystemTables(ctx)
+	if err := r.EnsureSystemTables(ctx); err != nil {
+		t.Fatal(err)
+	}
 
 	reg := entity.NewRegistry(d, db.DriverSQLite, dir)
 	reg.LoadEntities()
@@ -417,11 +427,13 @@ func TestHTTPRouter_WithExposedEntity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSQLite failed: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	ctx := context.Background()
 	r := db.NewMigrationRunner(d, db.DriverSQLite)
-	r.EnsureSystemTables(ctx)
+	if err := r.EnsureSystemTables(ctx); err != nil {
+		t.Fatal(err)
+	}
 
 	meta := spec.Metadata{Name: "item", Module: "warehouse"}
 	entitySpec := spec.EntitySpec{
@@ -435,9 +447,11 @@ func TestHTTPRouter_WithExposedEntity(t *testing.T) {
 			{Type: spec.ProtocolREST, Actions: []string{"list", "find", "create", "update", "delete"}},
 		},
 	}
-	r.ApplyMigrations(ctx, []db.EntityMigration{
+	if _, err := r.ApplyMigrations(ctx, []db.EntityMigration{
 		{Metadata: meta, EntitySpec: entitySpec},
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	// We need to register this entity in the registry
 	// Since LoadEntities reads from disk, we manually prime the registry
@@ -534,7 +548,7 @@ func TestResponseEnvelopes(t *testing.T) {
 	}
 
 	var errResp ErrorResponse
-	json.NewDecoder(rec.Body).Decode(&errResp)
+	_ = json.NewDecoder(rec.Body).Decode(&errResp)
 	if errResp.Error.Code != "NOT_FOUND" {
 		t.Errorf("expected error code NOT_FOUND, got %s", errResp.Error.Code)
 	}
@@ -553,7 +567,7 @@ func TestResponseEnvelopes(t *testing.T) {
 	}
 
 	var singleResp SingleResponse
-	json.NewDecoder(rec2.Body).Decode(&singleResp)
+	_ = json.NewDecoder(rec2.Body).Decode(&singleResp)
 	data, ok := singleResp.Data.(map[string]interface{})
 	if !ok {
 		t.Fatal("expected data map")
@@ -622,7 +636,7 @@ func TestRequirePermission_Unauthenticated(t *testing.T) {
 	}
 
 	var errResp ErrorResponse
-	json.NewDecoder(rec.Body).Decode(&errResp)
+	_ = json.NewDecoder(rec.Body).Decode(&errResp)
 	if errResp.Error.Code != "UNAUTHORIZED" {
 		t.Errorf("expected UNAUTHORIZED, got %s", errResp.Error.Code)
 	}
@@ -651,7 +665,7 @@ func TestRequirePermission_Forbidden(t *testing.T) {
 	}
 
 	var errResp ErrorResponse
-	json.NewDecoder(rec.Body).Decode(&errResp)
+	_ = json.NewDecoder(rec.Body).Decode(&errResp)
 	if errResp.Error.Code != "FORBIDDEN" {
 		t.Errorf("expected FORBIDDEN, got %s", errResp.Error.Code)
 	}

@@ -14,7 +14,7 @@ import (
 // actually require.
 func TestRegisterStandardPermissions_LifecycleEnabled(t *testing.T) {
 	reg, d := setupTestRegistry(t, "registry_fixtures/customer/spec")
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	es := &spec.EntitySpec{
 		Plural: "invoices",
@@ -41,7 +41,7 @@ func TestRegisterStandardPermissions_LifecycleEnabled(t *testing.T) {
 // routes that don't exist.
 func TestRegisterStandardPermissions_SubmitDisabled(t *testing.T) {
 	reg, d := setupTestRegistry(t, "registry_fixtures/customer/spec")
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	es := &spec.EntitySpec{
 		Plural: "notes",
@@ -71,7 +71,7 @@ func TestRegisterStandardPermissions_SubmitDisabled(t *testing.T) {
 // actions (lifecycle gating is independent, via TransitiveDisabled).
 func TestRegisterStandardPermissions_Summary(t *testing.T) {
 	reg, d := setupTestRegistry(t, "registry_fixtures/customer/spec")
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	es := &spec.EntitySpec{
 		Plural:         "balances",
