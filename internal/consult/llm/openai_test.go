@@ -24,7 +24,9 @@ func TestOpenAIProvider_Generate(t *testing.T) {
 			t.Errorf("decode request: %v", err)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
+		// Test handler: the client decodes this body, so a write failure here
+		// surfaces as a decode error on the other side.
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"id": "cmpl-1", "object": "chat.completion", "model": "glm-5.3-flash",
 			"choices": []map[string]any{{
 				"index": 0,

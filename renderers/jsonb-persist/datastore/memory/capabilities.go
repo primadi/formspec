@@ -138,7 +138,9 @@ func (s *Storage) CompleteChunkUpload(_ context.Context, uploadID string) (strin
 	if err != nil {
 		return "", fmt.Errorf("complete_upload: create %s: %w", target, err)
 	}
-	defer out.Close()
+	// The close error is returned explicitly below (rather than deferred) so a
+	// failed flush cannot look like a successful assembled upload.
+	defer func() { _ = out.Close() }()
 	for _, p := range parts {
 		data, err := os.ReadFile(p)
 		if err != nil {

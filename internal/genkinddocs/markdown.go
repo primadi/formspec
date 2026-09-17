@@ -53,7 +53,6 @@ var kindGroups = map[string]GroupInfo{
 	"Entity":         {Group: "data", Plane: "resource"},
 	"Service":        {Group: "data", Plane: "resource"},
 	"Config":         {Group: "data", Plane: "resource"},
-	"Migration":      {Group: "data", Plane: "resource"},
 	"Subscription":   {Group: "data", Plane: "resource"},
 	"Workflow":       {Group: "data", Plane: "resource"},
 	"Api":            {Group: "data", Plane: "resource"},
@@ -173,7 +172,9 @@ func replaceRegion(doc, start, end, content string) string {
 // narrative sections left as TODO placeholders for the author to fill.
 func renderFresh(entry genjsonschema.KindEntry, meta, attrs string) string {
 	var b strings.Builder
-	b.WriteString("# " + entry.Kind + "\n\n")
+	b.WriteString("# ")
+	b.WriteString(entry.Kind)
+	b.WriteString("\n\n")
 	b.WriteString("<!-- generated:meta -->\n")
 	b.WriteString(meta)
 	b.WriteString("<!-- /generated:meta -->\n\n")
@@ -181,7 +182,9 @@ func renderFresh(entry genjsonschema.KindEntry, meta, attrs string) string {
 	b.WriteString("_TODO: tulis kapan kind ini dipakai, kapan TIDAK dipakai, dan pola desain yang relevan._\n\n")
 	b.WriteString("## Contoh Manifest\n\n")
 	b.WriteString("```yaml\n")
-	b.WriteString("# TODO: tulis contoh YAML valid untuk kind " + entry.Kind + "\n")
+	b.WriteString("# TODO: tulis contoh YAML valid untuk kind ")
+	b.WriteString(entry.Kind)
+	b.WriteString("\n")
 	b.WriteString("```\n\n")
 	b.WriteString("## Atribut\n\n")
 	b.WriteString("<!-- generated:attributes -->\n")
@@ -196,11 +199,11 @@ func renderFresh(entry genjsonschema.KindEntry, meta, attrs string) string {
 func renderMeta(entry genjsonschema.KindEntry, group GroupInfo) string {
 	var b strings.Builder
 	b.WriteString("| | |\n|---|---|\n")
-	b.WriteString(fmt.Sprintf("| Grup | `%s` |\n", group.Group))
-	b.WriteString(fmt.Sprintf("| Plane | `%s` |\n", group.Plane))
-	b.WriteString(fmt.Sprintf("| Spec struct | `%s` |\n", entry.SpecStruct))
+	fmt.Fprintf(&b, "| Grup | `%s` |\n", group.Group)
+	fmt.Fprintf(&b, "| Plane | `%s` |\n", group.Plane)
+	fmt.Fprintf(&b, "| Spec struct | `%s` |\n", entry.SpecStruct)
 	if len(entry.Aliases) > 0 {
-		b.WriteString(fmt.Sprintf("| Alias | `%s` |\n", strings.Join(entry.Aliases, "`, `")))
+		fmt.Fprintf(&b, "| Alias | `%s` |\n", strings.Join(entry.Aliases, "`, `"))
 	}
 	if entry.Deprecated {
 		b.WriteString("| Deprecated | ✅ |\n")
@@ -226,8 +229,8 @@ func renderAttributes(td *genjsonschema.TypeDef, collect *genjsonschema.CollectR
 			req = "✅"
 		}
 		ex, desc := fieldText(fd)
-		b.WriteString(fmt.Sprintf("| `%s` | %s | %s | %s | %s |\n",
-			fd.Name, fieldType(fd, collect), req, ex, desc))
+		fmt.Fprintf(&b, "| `%s` | %s | %s | %s | %s |\n",
+			fd.Name, fieldType(fd, collect), req, ex, desc)
 	}
 	return b.String()
 }

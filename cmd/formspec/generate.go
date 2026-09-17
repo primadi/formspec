@@ -280,10 +280,16 @@ func optionalMark(optional bool) string {
 // so until that lands server-side this type is aspirational, not a
 // guarantee — see docs/cli-tools/03-formspec-generate.md client-generation notes.
 func tsFieldType(f spec.Field) string {
+	switch {
+	case spec.IsNumericField(f.Type) && f.Type != spec.FieldInteger:
+		// Decimal-family values cross the wire as strings so precision survives
+		// the trip through a JSON number.
+		return "string"
+	}
 	switch f.Type {
 	case spec.FieldString, spec.FieldUUID, spec.FieldDate, spec.FieldDateTime:
 		return "string"
-	case spec.FieldDecimal, spec.FieldNumber, spec.FieldPercent:
+	case spec.FieldDecimal, spec.FieldPercent:
 		return "string"
 	case spec.FieldInteger:
 		return "number"

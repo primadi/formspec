@@ -190,7 +190,11 @@ func TestTsFieldType_DecimalNeverNumber(t *testing.T) {
 	if got := tsFieldType(spec.Field{Type: spec.FieldDecimal}); got != "string" {
 		t.Errorf("decimal -> %q, want string (money must never be a JS number)", got)
 	}
-	if got := tsFieldType(spec.Field{Type: spec.FieldNumber}); got != "string" {
+	// The deprecated `number` alias is named on purpose: manifests in the wild
+	// still declare it, and it must map exactly like decimal.
+	//nolint:staticcheck // SA1019: exercising the alias is the point of this case.
+	deprecatedAlias := spec.FieldNumber
+	if got := tsFieldType(spec.Field{Type: deprecatedAlias}); got != "string" {
 		t.Errorf("number (deprecated decimal alias) -> %q, want string", got)
 	}
 }

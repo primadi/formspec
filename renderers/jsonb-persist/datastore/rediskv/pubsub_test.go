@@ -18,7 +18,7 @@ func TestPubSub_PublishSubscribe(t *testing.T) {
 	if err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	defer p.Close()
+	defer func() { _ = p.Close() }()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

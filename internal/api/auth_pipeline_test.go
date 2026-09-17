@@ -10,7 +10,10 @@ import (
 
 func TestRateLimiter_Allow(t *testing.T) {
 	rl := newRateLimiter(1, 2) // burst 2, refill 1/s
-	if !rl.Allow("k") || !rl.Allow("k") {
+	// Two calls on purpose: each Allow consumes a token, so this drains the
+	// burst rather than repeating one expression.
+	firstAllowed, secondAllowed := rl.Allow("k"), rl.Allow("k")
+	if !firstAllowed || !secondAllowed {
 		t.Fatal("expected first 2 requests allowed")
 	}
 	if rl.Allow("k") {

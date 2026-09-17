@@ -72,7 +72,7 @@ func Install(ctx context.Context, source string, opts Options) (*InstallResult, 
 	if err != nil {
 		return nil, err
 	}
-	defer os.RemoveAll(stage)
+	defer func() { _ = os.RemoveAll(stage) }()
 	version := opts.Version
 	switch {
 	case isGitURL(source):
@@ -368,12 +368,12 @@ func extractTarball(path, dest string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	gz, err := gzip.NewReader(f)
 	if err != nil {
 		return fmt.Errorf("gzip: %w", err)
 	}
-	defer gz.Close()
+	defer func() { _ = gz.Close() }()
 	tr := tar.NewReader(gz)
 	for {
 		hdr, err := tr.Next()
@@ -402,10 +402,15 @@ func extractTarball(path, dest string) error {
 				return err
 			}
 			if _, err := io.Copy(out, tr); err != nil {
-				out.Close()
+				_ = out.Close()
 				return err
 			}
-			out.Close()
+			// The copy's own error is reported above; a close error here would
+			// mean the file was not flushed, which the next step would surface
+			// as a corrupt install — so it is worth reporting.
+			if err := out.Close(); err != nil {
+				return fmt.Errorf("write %s: %w", target, err)
+			}
 		}
 	}
 }

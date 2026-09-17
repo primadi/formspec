@@ -312,7 +312,16 @@ Console Starlark interaktif dengan akses `ctx.*` penuh — fitur first-class (bu
 formspec repl --environment staging
 >>> invoice.load("inv-001")
 >>> ctx.db.query("...")
+
+formspec repl -e 'ctx.config.get("currency")'     # one-shot expression
+formspec repl -f migrations/dedupe.star           # one-shot script file
 ```
+
+`-f` adalah permukaan resmi untuk **perbaikan data sekali jalan**: migrasi yang
+ditolak karena datanya belum memenuhi syarat (mis. masih ada duplikat) tidak
+menyediakan tempat untuk DML di spec, jadi repair dijalankan operator di sini,
+lalu `formspec migrate apply` diulang — lihat
+[`../spec/backend/01-core-basic.md`](../spec/backend/01-core-basic.md) §4.4.
 
 Scope environment policy (tabel akses per profil environment, jaminan "bukan superuser shell"): [`docs/spec/platform/04-control-plane.md`](../spec/platform/04-control-plane.md) §7.
 
@@ -338,14 +347,16 @@ formspec generate --openapi > api-spec.json                             # not im
 
 ### `formspec migrate`
 
-Verb CLI untuk migrasi structural — migrasi sendiri **fully automatic dari Document diff** (bukan hand-written); `formspec migrate` adalah cara memicu/inspeksi proses itu, bukan tempat menulis migrasi (migrasi custom pakai `kind: Migration`, DDL-only, DML ditolak runtime).
+Verb CLI untuk migrasi structural — migrasi sendiri **sepenuhnya otomatis dari diff Entity** (bukan hand-written), dan tidak ada manifest migrasi: DDL di luar bahasa spec dinyatakan sebagai `persist.raw_ddl` pada Entity-nya.
 
 ```bash
-formspec migrate plan     # tampilkan DDL yang akan dijalankan, tanpa eksekusi
-formspec migrate apply    # eksekusi (biasanya otomatis lewat formspec apply)
+formspec migrate plan     # tampilkan perubahan berklasifikasi + jumlah baris, tanpa eksekusi
+formspec migrate apply    # eksekusi (biasanya otomatis lewat formspec dev / apply)
 ```
 
-Rename field wajib dideklarasikan lewat `renamed_from` pada field — kalau tidak, diff menafsirkannya sebagai drop+add; penghapusan field butuh dua langkah (deprecate, lalu remove) lintas dua versi apply. Backfill data adalah urusan migrasi tipe data (scripted, run/rollback per versi), bukan migrasi structural.
+Setiap perubahan dinilai sebelum dieksekusi: **aditif** dan **derived** (kolom turunan dibangun ulang, index dihapus) berjalan otomatis; yang **lossy** — field dihapus, type change yang nilainya gagal cast, unique index sementara duplikat masih ada — ditolak sampai manifest menyatakannya (`removed: true` / `accept_data_loss: true` + `reason`). **Tabel tidak pernah di-drop dari manifest**: backup, drop manual, lalu hapus manifest-nya.
+
+Perbaikan data (duplikat sebelum constraint, backfill) dijalankan operator **sekali** di luar spec lewat `formspec repl -f repair.star` — bukan bagian dari migrasi. Alasan dan aturan lengkap: [`docs/spec/backend/01-core-basic.md`](../spec/backend/01-core-basic.md) §4.
 
 ### `formspec seed`
 

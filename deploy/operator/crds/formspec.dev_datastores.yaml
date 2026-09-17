@@ -39,7 +39,7 @@ spec:
               properties:
                 driver:
                   type: string
-                  enum: [sqlite, postgres, valkey, redis, s3, minio, nats, memory, fs]
+                  enum: [sqlite, postgres, valkey, redis, s3, garage, minio, nats, memory, fs]
                 endpointSecretRef:
                   type: object
                   required: [name, key]

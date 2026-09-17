@@ -1,6 +1,6 @@
 # Master Plan: FormSpec Implementation
 
-**Last Updated**: 2026-09-15  
+**Last Updated**: 2026-09-17  
 **Status**: ✅ Fase 0 complete · ✅ Fase 1 (1.1–1.5) · ✅ Fase 2.1 · ✅ Fase 2.2 · ✅ Fase 2.6 (2.6.1–2.6.3, 2.6.5–2.6.6) · ✅ Fase 2.7 (idempotency prepare flow) · ✅ Fase 2.8 (spec.expose) · ✅ Fase 2.9 (2.9.1–2.9.3: ctx.\* primitives + dev auto-provision) · ✅ Fase 5 (5.1–5.4) · ✅ Spec hot-reload · ✅ Fase 11 (review schema↔docs) · ✅ Audit spec↔schema + tambah TODO item · ✅ `formspec validate` (3.1.1, engine+schema) · ✅ Rename forma→formspec (docs_internal/plan/rename-formspec.md) · 🚧 Fase 12 Domain Infrastruktur (docs/architecture/09-domain-map.md) · ✅ Schema registry online (docs_internal/plan/schema-registry-online.md) · ✅ CLI repl/seed/diff (3.4.1, 3.6.2, 3.6.3) · ✅ **Fase 4 (4.1–4.10) complete** (incl. 4.3.1–4.3.5 entity extension, 4.8.3 restore remap) · ✅ Landing page (5.1.3 + 5.13.5, docs_internal/plan/landing-page.md) · ✅ App renderer archetypes (5.1.1–5.1.3: sidebar-nav/topnav/no-nav + access + persist_backend, docs_internal/plan/landing-page.md) · ✅ **Fase 6.1 (6.1.1–6.1.3: login + token, entity-backed auth, external/ merge, generate-auth)** (docs_internal/plan/auth-login-token.md) · ✅ **6.3.1 + 6.3.2 + 5.12.5 (role + role-assignment Entity, materialisasi grant page → permission)** (docs_internal/changelog/2026-08-20-001) · ✅ **6.2.3 (wire permission check semua handler, surface-aware 404)** (docs_internal/changelog/2026-08-20-002) · ✅ **Fase 6 COMPLETE (6.1–6.9, dogfooding auth module)** (docs_internal/plan/fase6-dogfooding-auth-module.md, changelog 2026-08-20-003 s/d 2026-08-21-014) · 📐 **Widget strategy** (docs_internal/plan/widget-strategy.md — sync 5.10, tambah 5.2.7/5.10a, cross-link 7.17.1) · ✅ **Role grants app-scope sync** (docs_internal/plan/role-grants-app-scope.md, changelog 2026-08-26-003) · ✅ **Fase 5 COMPLETE (5.1–5.16)** (docs_internal/plan/fase5-completion.md, changelog 2026-08-24-027 s/d -032; audit sinkronisasi todo 2026-08-27) · ✅ **Fase 7 hampir lengkap** (7.1–7.14, 7.16, 7.17.1–7.17.2 — changelog 2026-08-25-001 s/d 2026-08-26-001; sisa: 7.9.1–7.9.5, 7.15.1, 7.17.3, 7.18, 7.19) · ✅ **Fase 2 COMPLETE (2.9.4 ctx.db module-scoped)** (changelog 2026-08-27-002) · ✅ **3.1.1a honesty scan Starlark** (changelog 2026-08-27-003) · 🚧 **Fase 8 sebagian** (8.1.1–8.1.5, 8.2.1–8.2.6 — docs_internal/plan/fase8-production-serve.md, changelog 2026-08-27-004; sisa: 8.1.6, 8.2.7, 8.3 ⏸️) · ✅ **Fase 10.1 `formspec mcp-serve`** (local MCP tool server — docs_internal/plan/fase10-local-mcp.md, changelog 2026-08-27-005) · ✅ **Fase 10.2 `formspec consult` client (Go)** — docs_internal/plan/fase10-consult-client.md, changelog 2026-08-27-006 (deviasi TS→Go dicatat di docs/ai/01+05; 10.2.7 kompresi riwayat deferred) · ✅ **Fase 10.3/10.4/10.6/10.7 consult completion** — changelog 2026-08-27-007 (10.3.3 & 10.5 deferred; 10.2.7 deferred) · ✅ **Fase 13.1 vendoring** (module install/list/uninstall + verify + boot enforcement — docs_internal/plan/fase13-vendoring.md, changelog 2026-08-28-001; 13.2/13.3 menyusul) · ✅ **Fase 13.2 overrides** (shadow copy adopt/diff/list + whitelist + drift detection — changelog 2026-08-28-002; 13.3 registry menyusul) · ✅ **Fase 13.3 registry loop** (verticals/registry spec + formspec sign/publish + install --from dengan signature verification — changelog 2026-08-28-003; 13.3.3/13.3.5 deferred) · ✅ **Theme switcher + theme_ref binding registry portal** (docs_internal/plan/registry-theme-switcher.md, changelog 2026-08-31-005) · ✅ **Named workspaces (2.11)** (docs_internal/plan/named-workspaces.md, changelog 2026-09-07-004) · ✅ **AppSpec.Workspaces[] allowlist (2.12)** (changelog 2026-09-07-005)
 
 > `⬜` not started · `✅` complete · `⏸️` deferred
@@ -241,6 +241,21 @@ helper `fileDownloadUrl`menggantikan URL yang disusun sendiri oleh`PickerPanel`
 /`FileInput`. Bukti: `pkg/spec`5 test,`TestAllowedFileType`8 case, klien`media.test.ts`8 case,`vitest`258, kafe`validate`0 problem. Sisa:
 verifikasi runtime di browser, Print (butuh URL absolut), dan verifikasi`transform`thumbnail. Plan:`docs_internal/plan/media-image-cells.md`·
 changelog:`2026-09-16-001`.
+
+**Catatan 2026-09-16**: ✅ **7.17.8 — object storage pindah ke Garage (driver
+default), MinIO tetap didukung.** MinIO digantikan Garage sebagai object store
+bawaan dev container (`dxflrs/garage:v2.4.1` + `--single-node --default-bucket`,
+S3 di `:3900`, `garage.toml` baru, kredensial `GARAGE_DEFAULT_*` di `.env`,
+port forward 19000/19003), dan driver `garage` menjadi default
+(`spec.DefaultStorageDriver`). Karena Garage/MinIO/S3 berbicara API yang sama,
+client S3 diekstrak ke `datastore/s3store` (beserta `Stat`/`Delete`/`Link`/
+`ChunkUploader`) dan `datastore/garage` + `datastore/minio` menjadi wrapper
+tipis yang hanya mem-pin default endpoint/port/bucket/region — perbedaan
+driver jadi satu field `spec.driver`. `go.mod` tetap memakai `minio-go` (SDK
+client S3, bukan server MinIO). Bukti: `go build ./...` bersih,
+`TestDatastoreRegistry_ObjectStorageDrivers` (3 subtest) + suite
+`./resource/` hijau. Plan:`docs_internal/plan/garage-object-storage-driver.md`·
+changelog:`2026-09-16-013`.
 
 **Catatan 2026-09-15**: ✅ **2.2 / #45 — `public_entities[].scope`: scoping baris
 per-permukaan** (`examples/kafe/gaps_found/TODO.md` 2.2). Allowlist per-entity
@@ -1246,6 +1261,7 @@ mergeable ke project lain via `external/`/`spec/modules/`; middleware tetap Go.
 - [x] 7.17.5 Chunked upload — routes `upload/init` / `upload/{uid}/part/{n}` / `upload/{uid}/complete`; capability `ChunkUploader`; MinIO via S3 multipart (`minio.Core`), fs/memory via parts-dir + concat; `ctx.storage().init_upload/put_chunk/complete_upload` — ✅ 2026-09-04 (changelog 2026-09-04-003)
 - [x] 7.17.6 1x download + TTL — `StorageSpec.one_time` (delete-after-download, atomic budget via tabel `formspec_storage_link`), `StorageSpec.ttl` + sweeper worker (`internal/api/storage_sweeper.go`); `ctx.storage().delete` — ✅ 2026-09-04 (changelog 2026-09-04-003)
 - [x] 7.17.7 Size limit — global `FORMSPEC_UPLOAD_MAX_MB` (100) / `FORMSPEC_DOWNLOAD_MAX_MB` (200) + per-field `max_size_mb` / `max_download_mb`; download over-limit → `413 FILE_TOO_LARGE` via `Stat` sebelum memuat objek; `ctx.storage().stat` — ✅ 2026-09-04 (changelog 2026-09-04-003)
+- [x] 7.17.8 Driver object storage `garage` (default) — MinIO digantikan Garage sebagai object store bawaan dev container (`.devcontainer/garage.toml` + service `garage` di compose, port S3 3900); driver `garage` jadi default (`spec.DefaultStorageDriver`), `minio`/`s3` tetap didukung; client S3-compatible diekstrak ke `datastore/s3store` (dipakai bersama oleh wrapper `garage`/`minio`), `Stat`/`Delete`/`Link`/`ChunkUploader` ikut pindah; `validateDatastoreServes` + regenerasi schema/kind-docs memuat `garage`; `go.mod` tetap `minio-go` (SDK client S3, bukan server). ✅ 2026-09-16 (changelog 2026-09-16-013, plan garage-object-storage-driver.md)
 
 ### 7.18 `kind: KindDefinition` runtime
 
@@ -1612,6 +1628,43 @@ sampai itu, validasi pakai `--schema schemas`.
 - [x] Frontend — komponen bersama `AuthArea`; `NoNavShell` tanpa hardcode auth/nav/footer; `SideNavShell`/`TopNavShell` hormati override breadcrumbs/theme_switcher/auth. ✅ 2026-08-29
 - [x] `registry.yaml` — `chrome: {nav: menu, auth: links}` eksplisit (perilaku portal tetap). ✅ 2026-08-29
 - [x] Docs — `05-app-kinds.md` §4 rewrite + §5 Chrome Composition (renumber §5→§6, §6→§7 + cross-ref), `03-kind-renderers.md`, glossary. ✅ 2026-08-29
+
+## Fase 15: Migrasi Otomatis + Gerbang Perubahan Destruktif ✅ (2026-09-16)
+
+**Goal**: `kind: Migration`/`DataMigration` dicabut; migrasi struktural murni
+otomatis dari diff Entity, tapi setiap perubahan **dinilai** — lossy ditolak
+sampai manifest menyatakannya.
+**Plan**: `docs_internal/plan/migration-destruktif-otomatis.md` · **Changelog**:
+`docs_internal/changelog/2026-09-16-012-migrasi-otomatis-dan-gerbang-destruktif.md`
+**Keputusan (2026-09-16)**: flag `removed` (bukan `deleted`); tabel **tanpa**
+jalur otomatis (backup → drop manual → hapus manifest); hapus index otomatis +
+notice; perbaikan data di luar spec sekali jalan.
+
+- [x] 15.1 Klasifikasi diff + snapshot — `ChangeClass` (`additive`/`derived`/`lossy`/`never`), `DiffShapes`, `DesiredSnapshot`, tabel sistem `formspec_schema_snapshot`, `entityChecksum` (bentuk + deklarasi), bootstrap adopsi baseline. ✅ 2026-09-16
+- [x] 15.2 Deklarasi destruktif — `Field.removed` + `reason`, `Field.accept_data_loss` + `reason`, validasi (alasan wajib, mutually exclusive dengan `renamed_from`, tidak boleh `required`); runtime membersihkan tombstone pada baca+tulis. ✅ 2026-09-16
+- [x] 15.3 `persist.raw_ddl` — `RawDDLDecl` (`ddl` | `ddl_by`, `reason`), DDL-only, checksum-recorded, forward-only, ikut jalur sync otomatis. ✅ 2026-09-16
+- [x] 15.4 Gerbang + preflight — refus**a**l sebelum pernyataan pertama (dev & prod sama), hitungan baris/grup duplikat/baris gagal cast, `never` untuk DROP TABLE, prune snapshot `ForgetOnly`. ✅ 2026-09-16
+- [x] 15.5 Cabut kind — `MigrationSpec`, `DataMigrationSpec`, `ValidateMigrationSpec`, `MigrationDialects`, loader/schema/kind-doc/genjsonschema/genkinddocs, verb `migrate data`; tambah `formspec repl -f`. ✅ 2026-09-16
+- [x] 15.6 Dokumen & artefak — `01-core-basic.md` §4 ditulis ulang (§4.1–§4.4), `04-persist-backend.md`, `03-kind-system.md` (11 → 10), cli-tools, glossary, `03-migration-engine.md` (Outline → Draft), `ai_skills` + vendored, `.github/skills/backend`, example kafe, schema diregenerasi. ✅ 2026-09-16
+- [ ] 15.7 **Gap ditemukan saat 15.4 (belum diperbaiki).** Kolom turunan yang ditambahkan **setelah** tabel dibuat di SQLite adalah kolom biasa yang tidak pernah terisi: modernc tidak bisa `ALTER TABLE ADD COLUMN ... GENERATED ALWAYS`, jadi `diffExistingTable` menambah kolom polos. Akibatnya index atas kolom itu tidak menegakkan apa pun sampai baris ditulis ulang — dan unique index yang baru dibuat bisa lolos dari duplikat lama. Preflight **tidak** terpengaruh (ia menghitung payload lewat `json_extract`), jadi penolakannya benar; yang belum benar adalah penegakan sesudahnya.
+      _Accept:_ salah satu — (a) isi kolom turunan dari payload saat kolom ditambahkan (`UPDATE ... SET _f = json_extract(data,'$.f')`), atau (b) buat ulang tabel bila perlu, atau (c) nyatakan batasannya di validate/docs dan tolak index unik atas kolom yang belum materialized. Bukti: `TestMigrate_UniqueIndexBlockedByDuplicates` (komentar "Not asserted here").
+- [ ] 15.8 **Verifikasi PostgreSQL jalur baru** — preflight (`data ? 'x'`), strip (`data - 'x'`), `DROP COLUMN`, `DROP INDEX <schema>.<name>`, dan varian `ddl_by: postgres` belum pernah dijalankan di DB nyata; dev hanya SQLite.
+- [x] 15.9 **Adopsi di aplikasi nyata** — pada spec kafe (69 manifest, tanpa manifest Migration): `formspec validate --schema schemas` **0 problem**; `migrate plan` → 24 perubahan aditif; `migrate apply` → 24 diterapkan; `migrate plan` lagi → **No pending migrations** (konvergen). Gerbangnya diuji pada salinan spec di `/tmp`: hapus field `sort_order` tanpa deklarasi → plan **exit 1** dengan pesan `field_removed`; setelah `removed: true` + `reason` → apply mencetak `(1 row(s) affected)` dan `data` benar-benar menjadi `{"name":"Kopi"}`. Sisa (walkthrough 9.4 penuh 9 skenario) tetap di Fase 9 kafe. ✅ 2026-09-16
+
+## Fase 16: DX Dev Container — Lint & Cache Go ✅ (2026-09-17)
+
+**Goal**: target yang harus me-load seluruh package graph (`lint`, dan nanti `test`)
+tidak lagi tampak freeze setelah Rebuild Container.
+**Plan**: `docs_internal/plan/devcontainer-go-cache-lint.md` · **Changelog**:
+`docs_internal/changelog/2026-09-17-001-lint-warmup-dan-cache-go-persisten.md`
+**Akar**: `golangci-lint` me-load package graph lewat `go list` sebelum menganalisis dan
+**tidak mencetak apa pun** selama itu, sementara cache modul container cold (~200 MB,
+≈1 GB setelah ekstrak) dan unduhannya bisa stall tanpa timeout — tampak seperti hang.
+
+- [x] 16.1 Warm-up + batas waktu — target `deps-warm` (`go mod download`, progress `go: downloading …` terlihat) sebagai prerequisite `lint`; `golangci-lint run --timeout 10m ./...` (v2: `--timeout` disabled by default). ✅ 2026-09-17
+- [x] 16.2 Cache Go persisten — named volume `go-mod-cache` → `/go/pkg/mod` + `go-build-cache` → `/home/vscode/.cache/go-build` di `.devcontainer/compose.yaml`; aktif setelah *Rebuild and Reopen in Container*. ✅ 2026-09-17
+- [ ] 16.3 **Working tree tidak bisa di-build — WIP di `pkg/spec` menghapus API yang masih dipakai (bukan soal cache).** `go build ./...` gagal: `internal/manifest/loader.go:395,406` memanggil `spec.ValidateWorkflowSpec`/`spec.ValidateModuleSpec`, dan `internal/workflow/registry.go:72,81,84,172` memakai `WorkflowTransitionRef.ByName()`/`.Name` — semuanya hilang dari `pkg/spec` working tree (`resources.go` +5/−233, termasuk `ModuleSpec.Runtime` dan `MigrationSpec.DDLForDialect`). Di HEAD API itu ada (`pkg/spec/resources.go:834,844,1135`) dan build sehat; `pkg/spec/frontend_test.go` & `workflow_test.go` **tidak** diubah WIP dan masih menguji kontrak HEAD — jadi keduanya gagal juga, dan test itu **bukan** usang. `ModuleSpec.Runtime` juga masih didokumentasikan di `docs/spec/platform/08-project-layout.md:107,244,253`.
+      _Accept:_ tentukan sadar — (a) kembalikan API yang hilang ke `pkg/spec` (WIP-nya lanjut apa adanya), atau (b) migrasikan pemakainya (`internal/manifest`, `internal/workflow`, plus test) bila penghapusan itu memang disengaja. Bukti: `go build ./...` exit 1; `git diff --numstat pkg/spec` → `resources.go 5 233`.
 
 ## Deferred (Cloud Phase)
 

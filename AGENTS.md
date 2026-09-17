@@ -21,22 +21,22 @@ Tiga tipe file: `yaml` (deskripsi), `script` (Starlark logic), `asset` (static/c
 
 ## Stack
 
-| Layer          | Teknologi                                     |
-| -------------- | --------------------------------------------- |
-| Backend        | Go 1.26, module `github.com/primadi/formspec` |
-| YAML           | `gopkg.in/yaml.v3`                            |
-| Frontend       | React 19 + TypeScript 6 + Vite 8              |
-| UI             | shadcn/ui (Nova preset) + Tailwind CSS v4     |
-| Routing        | react-router-dom                              |
-| State          | zustand                                       |
-| Form           | react-hook-form + zod                         |
-| HTTP client    | ky                                            |
-| Table          | @tanstack/react-table                         |
-| DnD            | @dnd-kit/core + @dnd-kit/sortable             |
-| Icons          | lucide-react                                  |
-| Toast          | sonner                                        |
-| Database       | PostgreSQL                                    |
-| Object Storage | MinIO                                         |
+| Layer          | Teknologi                                      |
+| -------------- | ---------------------------------------------- |
+| Backend        | Go 1.26, module `github.com/primadi/formspec`  |
+| YAML           | `gopkg.in/yaml.v3`                             |
+| Frontend       | React 19 + TypeScript 6 + Vite 8               |
+| UI             | shadcn/ui (Nova preset) + Tailwind CSS v4      |
+| Routing        | react-router-dom                               |
+| State          | zustand                                        |
+| Form           | react-hook-form + zod                          |
+| HTTP client    | ky                                             |
+| Table          | @tanstack/react-table                          |
+| DnD            | @dnd-kit/core + @dnd-kit/sortable              |
+| Icons          | lucide-react                                   |
+| Toast          | sonner                                         |
+| Database       | PostgreSQL                                     |
+| Object Storage | Garage (S3-compatible; MinIO/S3 juga didukung) |
 
 ---
 

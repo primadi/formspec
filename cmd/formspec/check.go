@@ -542,8 +542,7 @@ func checkAggregateDecl(
 	if fn == "count" {
 		return
 	}
-	switch ft {
-	case spec.FieldInteger, spec.FieldDecimal, spec.FieldNumber, spec.FieldPercent, spec.FieldMoney:
+	if spec.IsNumericField(ft) {
 		return
 	}
 	result.add(m.Source, "error",

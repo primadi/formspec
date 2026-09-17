@@ -42,7 +42,9 @@ func StartMCPServer(ctx context.Context, exe string, args []string) (*MCPClient,
 // Close terminates the server session and child process.
 func (c *MCPClient) Close() error {
 	if c.session != nil {
-		c.session.Close()
+		// The session close error is unactionable — the process kill below is
+		// what actually tears the server down.
+		_ = c.session.Close()
 	}
 	if c.cmd != nil && c.cmd.Process != nil {
 		return c.cmd.Process.Kill()

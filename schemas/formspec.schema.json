@@ -860,6 +860,7 @@
         "valkey",
         "redis",
         "s3",
+        "garage",
         "minio",
         "nats",
         "memory",
@@ -1173,6 +1174,10 @@
       "description": "Field defines a data field on an Entity.\n@schema {title: \"Field Definition\"}\n",
       "type": "object",
       "properties": {
+        "accept_data_loss": {
+          "description": "AcceptDataLoss consents to a lossy type change (01-core-basic.md §4.2):",
+          "type": "boolean"
+        },
         "audited": {
           "type": "boolean"
         },
@@ -1257,9 +1262,20 @@
         "readonly_when": {
           "type": "string"
         },
+        "reason": {
+          "description": "Reason states why a destructive declaration is intended (audit trail).",
+          "type": "string",
+          "examples": [
+            "digantikan branch_id pada 2026-09"
+          ]
+        },
         "relation": {
           "$ref": "#/$defs/RelationDecl",
           "nullable": true
+        },
+        "removed": {
+          "description": "Removed is the tombstone that lets a field be dropped at all (01-core-basic.md",
+          "type": "boolean"
         },
         "renamed_from": {
           "description": "4.2.2 RenamedFrom — declares that this field was renamed from the given",
@@ -1922,7 +1938,6 @@
         "Document",
         "Service",
         "Config",
-        "Migration",
         "Subscription",
         "Workflow",
         "Api",
@@ -2296,6 +2311,13 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/IndexDecl"
+          }
+        },
+        "raw_ddl": {
+          "description": "RawDDL holds storage-level DDL the spec language does not express —",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RawDDLDecl"
           }
         },
         "soft_delete": {
@@ -2743,6 +2765,44 @@
       "required": [
         "max",
         "per"
+      ],
+      "additionalProperties": false
+    },
+    "RawDDLDecl": {
+      "description": "RawDDLDecl is one storage-level DDL statement declared on an Entity\n(01-core-basic.md §4.3).\n",
+      "type": "object",
+      "properties": {
+        "ddl": {
+          "description": "DDL is one statement valid on every driver.",
+          "type": "string",
+          "examples": [
+            "CREATE INDEX idx_invoice_date ON invoice(transaction_date)"
+          ]
+        },
+        "ddl_by": {
+          "description": "DDLByDialect holds per-driver variants, for DDL that cannot be written",
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "name": {
+          "description": "Name identifies the statement for recording and reporting.",
+          "type": "string",
+          "examples": [
+            "menu-price-unique"
+          ],
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$"
+        },
+        "reason": {
+          "description": "Reason states why the DDL is needed (audit trail).",
+          "type": "string",
+          "examples": [
+            "satu harga per menu per cabang"
+          ]
+        }
+      },
+      "required": [
+        "name"
       ],
       "additionalProperties": false
     },
@@ -4876,6 +4936,7 @@
         "valkey",
         "redis",
         "s3",
+        "garage",
         "minio",
         "nats",
         "memory",
@@ -5189,6 +5250,10 @@
       "description": "Field defines a data field on an Entity.\n@schema {title: \"Field Definition\"}\n",
       "type": "object",
       "properties": {
+        "accept_data_loss": {
+          "description": "AcceptDataLoss consents to a lossy type change (01-core-basic.md §4.2):",
+          "type": "boolean"
+        },
         "audited": {
           "type": "boolean"
         },
@@ -5273,9 +5338,20 @@
         "readonly_when": {
           "type": "string"
         },
+        "reason": {
+          "description": "Reason states why a destructive declaration is intended (audit trail).",
+          "type": "string",
+          "examples": [
+            "digantikan branch_id pada 2026-09"
+          ]
+        },
         "relation": {
           "$ref": "#/$defs/RelationDecl",
           "nullable": true
+        },
+        "removed": {
+          "description": "Removed is the tombstone that lets a field be dropped at all (01-core-basic.md",
+          "type": "boolean"
         },
         "renamed_from": {
           "description": "4.2.2 RenamedFrom — declares that this field was renamed from the given",
@@ -5938,7 +6014,6 @@
         "Document",
         "Service",
         "Config",
-        "Migration",
         "Subscription",
         "Workflow",
         "Api",
@@ -6312,6 +6387,13 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/IndexDecl"
+          }
+        },
+        "raw_ddl": {
+          "description": "RawDDL holds storage-level DDL the spec language does not express —",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RawDDLDecl"
           }
         },
         "soft_delete": {
@@ -6759,6 +6841,44 @@
       "required": [
         "max",
         "per"
+      ],
+      "additionalProperties": false
+    },
+    "RawDDLDecl": {
+      "description": "RawDDLDecl is one storage-level DDL statement declared on an Entity\n(01-core-basic.md §4.3).\n",
+      "type": "object",
+      "properties": {
+        "ddl": {
+          "description": "DDL is one statement valid on every driver.",
+          "type": "string",
+          "examples": [
+            "CREATE INDEX idx_invoice_date ON invoice(transaction_date)"
+          ]
+        },
+        "ddl_by": {
+          "description": "DDLByDialect holds per-driver variants, for DDL that cannot be written",
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "name": {
+          "description": "Name identifies the statement for recording and reporting.",
+          "type": "string",
+          "examples": [
+            "menu-price-unique"
+          ],
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$"
+        },
+        "reason": {
+          "description": "Reason states why the DDL is needed (audit trail).",
+          "type": "string",
+          "examples": [
+            "satu harga per menu per cabang"
+          ]
+        }
+      },
+      "required": [
+        "name"
       ],
       "additionalProperties": false
     },
@@ -8059,7 +8179,6 @@
         "Kanban",
         "KindDefinition",
         "Listing",
-        "Migration",
         "Mockup",
         "Module",
         "NotificationCenter",
@@ -8800,95 +8919,6 @@
               "$ref": "#/$defs/Settings",
               "description": "Settings is the typed global presentation/config namespace (spec §10).",
               "nullable": true
-            }
-          },
-          "additionalProperties": false
-        }
-      },
-      "required": [
-        "apiVersion",
-        "kind",
-        "metadata",
-        "spec"
-      ]
-    },
-    {
-      "properties": {
-        "apiVersion": {
-          "type": "string",
-          "const": "formspec.dev/v1"
-        },
-        "kind": {
-          "type": "string",
-          "const": "Migration"
-        },
-        "metadata": {
-          "description": "Metadata is common to all FormSpec resources.\n",
-          "type": "object",
-          "properties": {
-            "annotations": {
-              "type": "object",
-              "additionalProperties": {}
-            },
-            "description": {
-              "type": "string"
-            },
-            "labels": {
-              "type": "object",
-              "additionalProperties": {}
-            },
-            "module": {
-              "type": "string"
-            },
-            "name": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "name"
-          ],
-          "additionalProperties": false
-        },
-        "spec": {
-          "title": "Migration Spec",
-          "description": "MigrationSpec defines a custom DDL migration (01-core-basic.md §4).\nOnly DDL statements are allowed — DML is rejected at runtime.\n",
-          "type": "object",
-          "properties": {
-            "ddl": {
-              "description": "@schema {example: \"CREATE INDEX idx_invoice_date ON invoice(transaction_date)\"}",
-              "type": "string",
-              "examples": [
-                "CREATE INDEX idx_invoice_date ON invoice(transaction_date)"
-              ]
-            },
-            "ddl_by": {
-              "description": "DDLByDialect holds per-driver variants of the same statement, for DDL",
-              "type": "object",
-              "additionalProperties": {},
-              "examples": [
-                "{sqlite: \\\"CREATE INDEX …\\\", postgres: \\\"CREATE INDEX …\\\"}"
-              ]
-            },
-            "dml": {
-              "description": "DML is an explicitly declared data repair, run BEFORE the DDL of the same",
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "module": {
-              "description": "@schema {example: \"billing\"}",
-              "type": "string",
-              "examples": [
-                "billing"
-              ]
-            },
-            "reason": {
-              "description": "Reason states why the declared DML is needed (audit trail).",
-              "type": "string",
-              "examples": [
-                "merge duplicate menu prices before the unique index"
-              ]
             }
           },
           "additionalProperties": false

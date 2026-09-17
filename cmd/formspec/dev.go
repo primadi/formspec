@@ -262,7 +262,7 @@ func runDev(args []string) {
 		for _, driver := range []spec.DatastoreDriver{
 			spec.DatastoreDriverSQLite, spec.DatastoreDriverPostgres,
 			spec.DatastoreDriverValkey, spec.DatastoreDriverRedis,
-			spec.DatastoreDriverS3, spec.DatastoreDriverMinio,
+			spec.DatastoreDriverS3, spec.DatastoreDriverGarage, spec.DatastoreDriverMinio,
 			spec.DatastoreDriverNATS, spec.DatastoreDriverMemory, spec.DatastoreDriverFS,
 		} {
 			if f, err := datastore.NewFactory(driver); err == nil {

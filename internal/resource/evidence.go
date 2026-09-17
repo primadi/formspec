@@ -190,7 +190,9 @@ func (s *EvidenceSender) saveBuffer() {
 	defer s.mu.Unlock()
 
 	if len(s.buffer) == 0 {
-		os.Remove(s.bufferPath)
+		// Best-effort cleanup: a missing or unremovable buffer file is harmless,
+		// since an empty buffer is never read back.
+		_ = os.Remove(s.bufferPath)
 		return
 	}
 

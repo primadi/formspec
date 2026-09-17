@@ -519,22 +519,17 @@ func generateIndexConstraint(table, field string, unique bool) string {
 // fieldTypeToSQL maps a FormSpec FieldType to SQL type.
 // params: enumValues for FieldEnum
 func fieldTypeToSQL(ft spec.FieldType, _ []string) string {
+	// Every numeric-but-not-integer type shares one column type: integer is the
+	// only one with a distinct SQL type, so the numeric family is handled here
+	// rather than enumerated case by case.
+	if spec.IsNumericField(ft) && ft != spec.FieldInteger {
+		return "numeric(20,8)"
+	}
 	switch ft {
 	case spec.FieldString:
 		return "text"
 	case spec.FieldInteger:
 		return "bigint"
-	case spec.FieldDecimal, spec.FieldNumber:
-		return "numeric(20,8)"
-	case spec.FieldMoney:
-		// Stored as {amount, currency}; the derived column extracts `.amount`
-		// (see generateGeneratedColumn) and must be numeric so comparisons are
-		// numeric, not lexicographic (#23).
-		return "numeric(20,8)"
-	case spec.FieldPercent:
-		// A percentage is numerically a decimal (S11) — only its rendering and
-		// formatting differ, so it stores in the same class.
-		return "numeric(20,8)"
 	case spec.FieldBoolean:
 		return "boolean"
 	case spec.FieldEnum:

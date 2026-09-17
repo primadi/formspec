@@ -160,7 +160,7 @@ func TestSidecarExecutor_ForwardsScopeIdHeader(t *testing.T) {
 func TestSidecarExecutor_NoScopeMeansNoHeader(t *testing.T) {
 	var sawHeader bool
 	endpoint := startAppListener(t, func(w http.ResponseWriter, r *http.Request) {
-		_, sawHeader = r.Header["X-FormSpec-Scope-Id"]
+		_, sawHeader = r.Header[http.CanonicalHeaderKey("X-FormSpec-Scope-Id")]
 		json.NewEncoder(w).Encode(sidecarInvokeResponse{Data: map[string]any{}})
 	})
 

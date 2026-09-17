@@ -99,7 +99,9 @@ func writeHealthJSON(w http.ResponseWriter, rep Report) {
 	if err != nil {
 		b = []byte(`{"status":"unhealthy","reasons":["datastore_unreachable"],"checked_at":""}`)
 	}
-	w.Write(b)
+	// The probe's status code is what the caller acts on; a broken connection
+	// surfaces there, and there is no recovery to attempt from here.
+	_, _ = w.Write(b)
 }
 
 // Handler serves GET /health with the machine-readable report. The same

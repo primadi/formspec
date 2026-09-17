@@ -144,7 +144,10 @@ func (r *Reporter) post(ctx context.Context, path string, payload any) {
 		r.logFailure(path, err)
 		return
 	}
-	resp.Body.Close()
+	// Drain-free close: the response body is not read, so a close error carries
+	// no information worth propagating to a telemetry loop that must never block
+	// reconciliation.
+	_ = resp.Body.Close()
 }
 
 func (r *Reporter) logFailure(path string, err error) {

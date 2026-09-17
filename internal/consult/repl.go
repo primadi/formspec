@@ -27,6 +27,15 @@ type REPL struct {
 	WorkspaceContext string
 }
 
+// say writes console output, ignoring the write error: a failed write to the
+// operator's terminal is not actionable, and a session must not abort over it.
+func say(out io.Writer, args ...any) { _, _ = fmt.Fprint(out, args...) }
+
+// sayf is say with formatting; sayln is say with a trailing newline.
+func sayf(out io.Writer, format string, args ...any) { _, _ = fmt.Fprintf(out, format, args...) }
+
+func sayln(out io.Writer, args ...any) { _, _ = fmt.Fprintln(out, args...) }
+
 // Run drives the read-eval loop until EOF, "/quit", or context cancellation.
 func (r *REPL) Run(ctx context.Context) error {
 	in := r.Cfg.In
@@ -38,14 +47,16 @@ func (r *REPL) Run(ctx context.Context) error {
 		out = osStdout()
 	}
 
-	fmt.Fprintln(out, "FormSpec Consult — Discovery → Proposal → Draft")
-	fmt.Fprintln(out, "Perintah: /diff /apply [path] /reject <path> /summary /status /quit")
-	fmt.Fprintln(out)
+	// Console output: a failed write to the terminal is not actionable, and the
+	// REPL must not abort a session over it.
+	sayln(out, "FormSpec Consult — Discovery → Proposal → Draft")
+	sayln(out, "Perintah: /diff /apply [path] /reject <path> /summary /status /quit")
+	sayln(out)
 
 	scanner := bufio.NewScanner(in)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for {
-		fmt.Fprint(out, "\nyou> ")
+		say(out, "\nyou> ")
 		if !scanner.Scan() {
 			return nil // EOF
 		}
@@ -57,7 +68,7 @@ func (r *REPL) Run(ctx context.Context) error {
 		case input == "/quit" || input == "/exit":
 			return nil
 		case input == "/status":
-			fmt.Fprintf(out, "session: %s\ntranscript: %s\nturns: %d\n",
+			sayf(out, "session: %s\ntranscript: %s\nturns: %d\n",
 				r.Session.ID, r.Session.TranscriptPath(), len(r.Session.History))
 			continue
 		case input == "/diff":
@@ -81,7 +92,7 @@ func (r *REPL) Run(ctx context.Context) error {
 		r.Session.RecordUser(input)
 		final, err := r.Loop.Run(ctx, &r.Session.History, input)
 		if err != nil {
-			fmt.Fprintf(out, "[error] %v\n", err)
+			sayf(out, "[error] %v\n", err)
 			continue
 		}
 		r.Session.RecordAssistant(final)
@@ -89,9 +100,9 @@ func (r *REPL) Run(ctx context.Context) error {
 		// Option picker (keputusan desain): detect A/B/C blocks and offer
 		// single-letter selection; free text always allowed.
 		if opts := DetectOptions(final.Content); opts != nil {
-			fmt.Fprintf(out, "\n[pilihan terdeteksi: %s — ketik huruf untuk memilih, atau teks bebas]\n",
+			sayf(out, "\n[pilihan terdeteksi: %s — ketik huruf untuk memilih, atau teks bebas]\n",
 				strings.Join(opts.Labels, "/"))
-			fmt.Fprint(out, "pilih> ")
+			say(out, "pilih> ")
 			if !scanner.Scan() {
 				return nil
 			}
@@ -101,10 +112,10 @@ func (r *REPL) Run(ctx context.Context) error {
 				if picked {
 					sel := SelectionMessage(label, text)
 					r.Session.RecordUser(sel)
-					fmt.Fprintf(out, "\n[memilih %s]\n", label)
+					sayf(out, "\n[memilih %s]\n", label)
 					final, err = r.Loop.Run(ctx, &r.Session.History, sel)
 					if err != nil {
-						fmt.Fprintf(out, "[error] %v\n", err)
+						sayf(out, "[error] %v\n", err)
 						continue
 					}
 					r.Session.RecordAssistant(final)
@@ -113,7 +124,7 @@ func (r *REPL) Run(ctx context.Context) error {
 					r.Session.RecordUser(answer)
 					final, err = r.Loop.Run(ctx, &r.Session.History, answer)
 					if err != nil {
-						fmt.Fprintf(out, "[error] %v\n", err)
+						sayf(out, "[error] %v\n", err)
 						continue
 					}
 					r.Session.RecordAssistant(final)
@@ -128,15 +139,15 @@ func (r *REPL) Run(ctx context.Context) error {
 func (r *REPL) showDiff(out io.Writer) {
 	diffs, err := DiffDrafts(r.Session.Dir)
 	if err != nil {
-		fmt.Fprintf(out, "[error] diff: %v\n", err)
+		sayf(out, "[error] diff: %v\n", err)
 		return
 	}
 	if len(diffs) == 0 {
-		fmt.Fprintln(out, "tidak ada draft.")
+		sayln(out, "tidak ada draft.")
 		return
 	}
 	for _, d := range diffs {
-		fmt.Fprintf(out, "--- %s\n%s\n", d.Path, d.Unified)
+		sayf(out, "--- %s\n%s\n", d.Path, d.Unified)
 	}
 }
 
@@ -146,7 +157,7 @@ func (r *REPL) showDiff(out io.Writer) {
 func (r *REPL) applyDrafts(ctx context.Context, out io.Writer, pathFilter string) {
 	diffs, err := DiffDrafts(r.Session.Dir)
 	if err != nil {
-		fmt.Fprintf(out, "[error] diff: %v\n", err)
+		sayf(out, "[error] diff: %v\n", err)
 		return
 	}
 	applied := 0
@@ -159,14 +170,14 @@ func (r *REPL) applyDrafts(ctx context.Context, out io.Writer, pathFilter string
 			"file":    d.Path,
 		})
 		if err != nil {
-			fmt.Fprintf(out, "[error] apply %s: %v\n%s\n", d.Path, err, result)
+			sayf(out, "[error] apply %s: %v\n%s\n", d.Path, err, result)
 			continue
 		}
-		fmt.Fprintf(out, "applied: %s\n", d.Path)
+		sayf(out, "applied: %s\n", d.Path)
 		applied++
 	}
 	if pathFilter != "" && applied == 0 {
-		fmt.Fprintf(out, "draft tidak ditemukan: %s (lihat /diff)\n", pathFilter)
+		sayf(out, "draft tidak ditemukan: %s (lihat /diff)\n", pathFilter)
 	}
 }
 
@@ -174,15 +185,15 @@ func (r *REPL) applyDrafts(ctx context.Context, out io.Writer, pathFilter string
 // spec tree is untouched; only the session draft is discarded.
 func (r *REPL) rejectDraft(out io.Writer, path string) {
 	if path == "" {
-		fmt.Fprintln(out, "usage: /reject <path> (lihat /diff)")
+		sayln(out, "usage: /reject <path> (lihat /diff)")
 		return
 	}
 	draftPath := filepath.Join(r.Session.Dir, "draft", filepath.FromSlash(path))
 	if err := os.Remove(draftPath); err != nil {
-		fmt.Fprintf(out, "[error] reject %s: %v\n", path, err)
+		sayf(out, "[error] reject %s: %v\n", path, err)
 		return
 	}
-	fmt.Fprintf(out, "rejected: %s\n", path)
+	sayf(out, "rejected: %s\n", path)
 }
 
 // writeDiscoverySummary asks the model to summarize the discovery phase in
@@ -195,14 +206,14 @@ func (r *REPL) writeDiscoverySummary(ctx context.Context, out io.Writer) {
 		"terstruktur — output ini akan dikonfirmasi ke business owner."
 	final, err := r.Loop.Run(ctx, &r.Session.History, prompt)
 	if err != nil {
-		fmt.Fprintf(out, "[error] summary: %v\n", err)
+		sayf(out, "[error] summary: %v\n", err)
 		return
 	}
 	r.Session.RecordAssistant(final)
 	path, err := r.Session.WriteDiscoverySummary(final.Content)
 	if err != nil {
-		fmt.Fprintf(out, "[error] write summary: %v\n", err)
+		sayf(out, "[error] write summary: %v\n", err)
 		return
 	}
-	fmt.Fprintf(out, "%s\n\ndiscovery summary: %s\n", final.Content, path)
+	sayf(out, "%s\n\ndiscovery summary: %s\n", final.Content, path)
 }

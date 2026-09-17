@@ -61,7 +61,7 @@ func dialRedis(addr string) (*redis.Client, error) {
 // quietly when the client is closed.
 func (k *KV) subscribeInvalidate() {
 	sub := k.client.Subscribe(context.Background(), invalidateChannel)
-	defer sub.Close()
+	defer func() { _ = sub.Close() }()
 	for msg := range sub.Channel() {
 		if msg.Payload == "" {
 			continue

@@ -160,15 +160,19 @@ func (d *Deployer) convergeArtifact(ctx context.Context, dep *artifact.Deploymen
 		}
 	}
 
-	// Step 5: Update local manifest
-	d.localManifest.SetArtifactState(key, artifact.LocalArtifactState{
+	// Step 5: Update local manifest. A failure here is not fatal — the deploy
+	// already succeeded, and the manifest is a local cache whose staleness is
+	// recoverable by the next reconcile.
+	if err := d.localManifest.SetArtifactState(key, artifact.LocalArtifactState{
 		ArtifactID: dep.ArtifactID,
 		App:        dep.App,
 		Version:    dep.Version,
 		SHA256:     dep.SHA256,
 		LoadedAt:   time.Now().UTC(),
 		Status:     "active",
-	})
+	}); err != nil {
+		log.Printf("[resource] Warning: failed to record local artifact state for %s: %v", key, err)
+	}
 
 	// Step 6: Emit loaded evidence
 	d.evidenceSender.SubmitDeployStatus(&artifact.DeployStatusPayload{

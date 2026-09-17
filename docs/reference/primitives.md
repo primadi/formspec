@@ -74,7 +74,7 @@ bernama `amount`/`currency` (nama env menang atas builtin). Aritmetikanya eksak
 ```mermaid
 flowchart TB
     subgraph L1["1. Infra Registry — cloud control"]
-        S["Service fisik: pg-main · pg-analytics · valkey-1 · minio-assets"]
+        S["Service fisik: pg-main · pg-analytics · valkey-1 · garage-objects"]
     end
     subgraph L2["2. App Registry — per kind: App"]
         A["datastores: {db: pg-main, db/analytics: pg-analytics}"]
@@ -95,7 +95,8 @@ mempersempit, tidak melebar.
 | -------------------- | -------------------------------------------------------------- |
 | `sqlite`, `postgres` | `db`, `kvstore`, `config`, `log`                               |
 | `valkey`, `redis`    | `cache`, `lock`, `kvstore`, `queue`, `pubsub`, `config`, `log` |
-| `s3`, `minio`        | `storage`                                                      |
+| `garage`, `s3`       | `storage`                                                      |
+| `minio`              | `storage`                                                      |
 | `nats`               | `queue`, `pubsub`                                              |
 | `memory`             | `cache`, `lock`, `queue`, `pubsub`, `kvstore`, `config`, `log` |
 | `fs`                 | `storage`, `log`                                               |

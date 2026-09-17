@@ -6,6 +6,15 @@ import (
 	"github.com/primadi/formspec/pkg/spec"
 )
 
+// mustRegisterAction registers an action fixture, failing the test on error —
+// registration problems are the thing under test elsewhere, not here.
+func mustRegisterAction(t *testing.T, r *Registry, module, entity, action, perm string) {
+	t.Helper()
+	if err := r.RegisterAction(module, entity, action, perm, nil, entity+".yaml", false); err != nil {
+		t.Fatalf("register %s.%s.%s: %v", module, entity, action, err)
+	}
+}
+
 // mockHasPermission is a simple implementation of the HasPermission interface
 // for testing purposes.
 type mockIdentity struct {
@@ -183,13 +192,9 @@ func TestRegistry_RegisterAndQuery(t *testing.T) {
 func TestRegistry_MultipleModules(t *testing.T) {
 	r := NewRegistry()
 
-	r.RegisterAction("billing", "invoice", "list",
-		"billing.invoices.list", nil, "inv.yaml", false)
-	r.RegisterAction("gl", "journal", "create",
-		"gl.journals.create", nil, "journal.yaml", false)
-	r.RegisterAction("billing", "customer", "view",
-		"billing.customers.view", nil, "cust.yaml", false)
-
+	mustRegisterAction(t, r, "billing", "invoice", "list", "billing.invoices.list")
+	mustRegisterAction(t, r, "gl", "journal", "create", "gl.journals.create")
+	mustRegisterAction(t, r, "billing", "customer", "view", "billing.customers.view")
 	modules := r.ListModules()
 	if len(modules) != 2 {
 		t.Fatalf("expected 2 modules, got %d: %v", len(modules), modules)

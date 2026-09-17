@@ -526,8 +526,7 @@ func formatValidationError(ve *jsonschema.ValidationError) string {
 			if e.Error != nil {
 				msg = e.Error.String()
 			}
-			sb.WriteString(fmt.Sprintf("%s: %s", loc, msg))
-			sb.WriteString("; ")
+			fmt.Fprintf(&sb, "%s: %s; ", loc, msg)
 		}
 	}
 	walk(ve.BasicOutput())

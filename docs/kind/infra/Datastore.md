@@ -1,10 +1,11 @@
 # Datastore
 
 <!-- generated:meta -->
-| | |
-|---|---|
-| Grup | `infra` |
-| Plane | `control` |
+
+|             |                 |
+| ----------- | --------------- |
+| Grup        | `infra`         |
+| Plane       | `control`       |
 | Spec struct | `DatastoreSpec` |
 
 <!-- /generated:meta -->
@@ -12,16 +13,18 @@
 ## Kapan Memakai
 
 `kind: Datastore` adalah **registrasi service infrastruktur fisik** di Infra
-Registry (level 1) — satu instance nyata (Postgres, Valkey, MinIO, SQLite,
+Registry (level 1) — satu instance nyata (Postgres, Valkey, Garage, SQLite,
 filesystem) dengan logical name, yang melayani satu atau lebih `ctx.*`
 primitive.
 
 **Kapan memakai Datastore:**
+
 - Meregistrasi service infrastruktur (db, cache, storage, dst) dengan logical name
 - Menyediakan banyak service untuk primitive yang sama (mis. 2 database: `pg-main` + `pg-analytics`)
 - Menjadi target seleksi App Registry (`App.spec.datastores` / `Module.spec.datastores`)
 
 **Kapan TIDAK pakai Datastore:**
+
 - Menyusun data bisnis → `kind: Entity`
 - Implementasi penyimpanan → `kind: PersistBackend`
 
@@ -37,7 +40,7 @@ kind: Datastore
 metadata:
   name: pg-analytics
 spec:
-  serves: [db, kvstore]   # primitive ctx.* yang dilayani service ini
+  serves: [db, kvstore] # primitive ctx.* yang dilayani service ini
   driver: postgres
   connection:
     host: pg-analytics.internal
@@ -52,20 +55,41 @@ Seleksi di App/Module (level 2):
 # kind: App
 spec:
   datastores:
-    db: pg-main              # default db App ini
-    db/analytics: pg-analytics   # named primitive → ctx.db.named("analytics")
+    db: pg-main # default db App ini
+    db/analytics: pg-analytics # named primitive → ctx.db.named("analytics")
+```
+
+Object storage — `garage` adalah driver default (Garage, MinIO, dan S3
+berbagi client S3 yang sama, jadi berpindah cukup mengganti `driver`):
+
+```yaml
+apiVersion: formspec.dev/v1
+kind: Datastore
+metadata:
+  name: objects
+spec:
+  serves: [storage]
+  driver: garage # default; alternatif: minio, s3
+  connection:
+    host: garage # dev container: service `garage`
+    port: 3900 # Garage S3 API
+    database: formspec # bucket
+    extra:
+      region: us-east-1 # harus sama dengan `[s3_api] s3_region`
+  credential_ref: kms://prod/objects
 ```
 
 ## Atribut
 
 <!-- generated:attributes -->
-| Atribut | Tipe | Wajib | Contoh | Deskripsi |
-|---|---|---|---|---|
-| `serves` | []enum (db · cache · lock · queue · pubsub · storage · config · kvstore · …) | — | [db] | Serves lists which ctx.* primitives this datastore backs. |
-| `driver` | enum (sqlite · postgres · valkey · redis · s3 · minio · nats · memory · …) | ✅ | postgres | Driver identifies the backend technology. |
-| `connection` | `DatastoreConnection` | ✅ |  | Connection holds connection parameters for the backend. |
-| `credential_ref` | `string` | — | kms://workspace-default | CredentialRef is a reference to KMS/Vault for credentials. |
-| `access` | `DatastoreAccess` | — |  | Access controls who (filter) can use this datastore and what |
+
+| Atribut          | Tipe                                                                         | Wajib | Contoh                  | Deskripsi                                                    |
+| ---------------- | ---------------------------------------------------------------------------- | ----- | ----------------------- | ------------------------------------------------------------ |
+| `serves`         | []enum (db · cache · lock · queue · pubsub · storage · config · kvstore · …) | —     | [db]                    | Serves lists which ctx.\* primitives this datastore backs.   |
+| `driver`         | enum (sqlite · postgres · valkey · redis · s3 · garage · minio · nats · …)   | ✅    | postgres                | Driver identifies the backend technology.                    |
+| `connection`     | `DatastoreConnection`                                                        | ✅    |                         | Connection holds connection parameters for the backend.      |
+| `credential_ref` | `string`                                                                     | —     | kms://workspace-default | CredentialRef is a reference to KMS/Vault for credentials.   |
+| `access`         | `DatastoreAccess`                                                            | —     |                         | Access controls who (filter) can use this datastore and what |
 
 <!-- /generated:attributes -->
 

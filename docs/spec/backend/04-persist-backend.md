@@ -31,11 +31,22 @@ internalnya):
 - **Structural diff apply.** Framework menghasilkan diff skema dari
   perbandingan Entity manifest versi lama vs baru (field ditambah/dihapus/
   di-`renamed_from`, index berubah); PersistBackend menerima diff itu dan
-  menerjemahkannya ke storage-nya sendiri. Field rename **wajib** dideklarasi
-  lewat `renamed_from` — tanpa itu, diff membacanya sebagai drop+add. Field
-  removal butuh dua tahap (deprecate lalu remove) lintas dua versi ter-apply.
-  Migrasi data (backfill) adalah tipe terpisah — script data-migration
-  ber-versi, run/rollback manual — bukan bagian structural diff.
+  menerjemahkannya ke storage-nya sendiri. Diff-nya **berklasifikasi**
+  ([`01-core-basic.md`](01-core-basic.md) §4.1): perubahan aditif dan derived
+  diterapkan otomatis, sedangkan yang lossy — nilai field dibuang, type change
+  yang nilainya gagal di-cast, unique index sementara duplikat masih ada —
+  ditolak sampai manifest menyatakannya (`removed` / `accept_data_loss` +
+  `reason`). Field rename **wajib** dideklarasi lewat `renamed_from` — tanpa itu,
+  diff membacanya sebagai drop+add, dan drop+add yang tidak dideklarasikan
+  ditolak. Penghapusan tabel tidak punya jalur otomatis sama sekali.
+  PersistBackend menyimpan **bentuk** schema ter-apply (bukan hanya
+  checksum-nya), karena dari checksum saja tidak bisa dibedakan "field dihapus"
+  dan "field belum pernah ada".
+
+  Perbaikan data (backfill, dedupe sebelum constraint) **bukan** bagian
+  structural diff dan bukan pula tipe manifest: ia tindakan operasional sekali
+  jalan di luar spec (`formspec repl -f`).
+
 - **Query resolution.** Memenuhi seluruh filter operator kontrak (`eq`, `gt`,
   `between`, dst. — [`01-core-basic.md`](01-core-basic.md) §6) identik antar
   backend; hasilnya tidak boleh berbeda perilaku tergantung backend yang
@@ -96,8 +107,9 @@ PersistBackend.
 primitive `ctx.*` keluar diam-diam dari seluruh jaminan framework (backup §3,
 credible exit, isolasi tenant). Tangga resmi untuk kebutuhan lanjutan di luar
 Document/Entity biasa: (1) `ctx.db` mentah (bagian ini); (2) tabel milik
-module lewat `kind: Migration` — struktur bebas, tapi **wajib** kolom
-`tenant_id` dan tetap tunduk backup/isolasi/audit; (3) engine eksotik
+module lewat `persist.raw_ddl` pada Entity
+([`01-core-basic.md`](01-core-basic.md) §4.3) — struktur bebas, tapi **wajib**
+kolom `tenant_id` dan tetap tunduk backup/isolasi/audit; (3) engine eksotik
 (search/vector/graph) lewat provider app yang dimiliki vendor, atau dibungkus
 `kind: Service`. Workspace Owner tidak pernah menyediakan storage mentah
 langsung ke module.

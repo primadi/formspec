@@ -26,6 +26,8 @@ func NewFactory(driver spec.DatastoreDriver) (ConnectionFactory, error) {
 		return &redisFactory{}, nil
 	case spec.DatastoreDriverS3:
 		return &s3Factory{}, nil
+	case spec.DatastoreDriverGarage:
+		return &garageFactory{}, nil
 	case spec.DatastoreDriverMinio:
 		return &minioFactory{}, nil
 	case spec.DatastoreDriverNATS:
@@ -103,6 +105,18 @@ func (f *s3Factory) Open(ds spec.DatastoreSpec) (*ConnectionPool, error) {
 	return NewConnectionPool(ConnectionConfig{
 		Driver:  "s3",
 		DSN:     fmt.Sprintf("s3://%s", ds.Connection.Database),
+		MaxOpen: getMaxOpen(ds.Connection.Pool),
+		MaxIdle: getMaxIdle(ds.Connection.Pool),
+	}), nil
+}
+
+// garageFactory creates Garage connection pools.
+type garageFactory struct{}
+
+func (f *garageFactory) Open(ds spec.DatastoreSpec) (*ConnectionPool, error) {
+	return NewConnectionPool(ConnectionConfig{
+		Driver:  "garage",
+		DSN:     fmt.Sprintf("%s:%d/%s", ds.Connection.Host, ds.Connection.Port, ds.Connection.Database),
 		MaxOpen: getMaxOpen(ds.Connection.Pool),
 		MaxIdle: getMaxIdle(ds.Connection.Pool),
 	}), nil

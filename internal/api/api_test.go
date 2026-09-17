@@ -33,11 +33,13 @@ func setupTestRegistryWithExpose(t *testing.T) (*entity.Registry, db.DB) {
 
 // TestGenerateRoutes_NoExpose verifies that entities without expose produce zero routes.
 func TestGenerateRoutes_NoExpose(t *testing.T) {
-	reg, d := setupTestRegistryWithExpose(t)
-	defer d.Close()
+	// The helper's registry is only here for its database; the registry under
+	// test is built below with the billing vertical's spec.
+	_, d := setupTestRegistryWithExpose(t)
+	defer func() { _ = d.Close() }()
 
 	// Load from the billing vertical spec, none of whose entities declare expose
-	reg = entity.NewRegistry(d, db.DriverSQLite, "../../verticals/billing/spec")
+	reg := entity.NewRegistry(d, db.DriverSQLite, "../../verticals/billing/spec")
 	reg.LoadEntities()
 	reg.SyncSchema(context.Background())
 

@@ -1,6 +1,6 @@
 ---
 name: formspec-kinds
-description: Catalog of all FormSpec resource kinds grouped in 4 categories — Curation (App, Module, Workspace), Data (Entity, Service, Config, Migration, Subscription, Workflow, Api, Webhook, Mockup, Integrator, KindDefinition), UI (Page, Form, Table, Dashboard, Widget, Report, Wizard, Kanban, Timeline, Calendar, Listing, ApprovalInbox, NotificationCenter, Print, Theme), Infra (Renderer, PersistBackend, Environment, Policy, Datastore). Use when the user asks about FormSpec kinds, needs to choose the right kind for a task, asks how to declare a YAML manifest, or mentions specific kinds by name. Also use when creating a new FormSpec app to understand which kinds to declare.
+description: Catalog of all FormSpec resource kinds grouped in 4 categories — Curation (App, Module, Workspace), Data (Entity, Service, Config, Subscription, Workflow, Api, Webhook, Mockup, Integrator, KindDefinition), UI (Page, Form, Table, Dashboard, Widget, Report, Wizard, Kanban, Timeline, Calendar, Listing, ApprovalInbox, NotificationCenter, Print, Theme), Infra (Renderer, PersistBackend, Environment, Policy, Datastore). Use when the user asks about FormSpec kinds, needs to choose the right kind for a task, asks how to declare a YAML manifest, or mentions specific kinds by name. Also use when creating a new FormSpec app to understand which kinds to declare.
 metadata:
   version: "2.0"
   source: docs/spec/platform/03-kind-system.md + schemas/kinds/
@@ -19,7 +19,7 @@ This catalog groups all 34 built-in kinds into **4 categories**:
 | #            | Group | Count                                                                                                                                                                    | Contains              | Mirrors |
 | ------------ | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------- | ------- |
 | **Curation** | 3     | `App`, `Module`, `Workspace`                                                                                                                                             | `docs/spec/platform/` |
-| **Data**     | 11    | `Entity`, `Service`, `Config`, `Migration`, `Subscription`, `Workflow`, `Api`, `Webhook`, `Mockup`, `Integrator`, `KindDefinition`                                       | `docs/spec/backend/`  |
+| **Data**     | 10    | `Entity`, `Service`, `Config`, `Subscription`, `Workflow`, `Api`, `Webhook`, `Mockup`, `Integrator`, `KindDefinition`                                                    | `docs/spec/backend/`  |
 | **UI**       | 15    | `Page`, `Form`, `Table`, `Dashboard`, `Widget`, `Report`, `Wizard`, `Kanban`, `Timeline`, `Calendar`, `Listing`, `ApprovalInbox`, `NotificationCenter`, `Print`, `Theme` | `docs/spec/frontend/` |
 | **Infra**    | 5     | `Renderer`, `PersistBackend`, `Environment`, `Policy`, `Datastore`                                                                                                       | `docs/spec/platform/` |
 
@@ -494,22 +494,67 @@ spec:
     currency: IDR
 ```
 
-### Migration — DDL-Only Structural Changes
+### DDL di Luar Bahasa Spec — `persist.raw_ddl`
 
-For custom indexes, triggers, or other DDL that Entity field definitions
-don't cover. The framework computes structural diffs automatically — use
-Migration only when you need something beyond what fields express.
+Tidak ada `kind: Migration`. Trigger, function, materialized view, atau index
+atas ekspresi JSONB dinyatakan di dalam Entity-nya, supaya berjalan di jalur sync
+yang sama (bukan menunggu perintah CLI terpisah):
 
 ```yaml
 apiVersion: formspec.dev/v1
-kind: Migration
-metadata:
-  name: add-invoice-index
-  module: billing
+kind: Entity
+metadata: { name: menu-price, module: cafe-master }
 spec:
-  up: "CREATE INDEX idx_invoice_date ON invoice(transaction_date)"
-  down: "DROP INDEX idx_invoice_date"
+  version: v1
+  fields:
+    - {
+        name: menu_item_id,
+        type: relation,
+        relation: { type: belongs_to, resource: "cafe-master.menu-item" },
+      }
+    - { name: price, type: money }
+  persist:
+    raw_ddl:
+      - name: menu-price-unique
+        reason: "satu harga per menu per cabang"
+        ddl_by: # atau `ddl:` bila statement-nya portabel
+          sqlite: "CREATE UNIQUE INDEX idx_menu_price ON cafe_master_menu_prices (json_extract(data, '$.menu_item_id'))"
+          postgres: "CREATE UNIQUE INDEX idx_menu_price ON cafe_master_menu_prices ((data->>'menu_item_id'))"
 ```
+
+Aturan: `ddl` **atau** `ddl_by` (bukan keduanya), dialek hanya `sqlite`/`postgres`,
+hanya DDL (data statement dan `DROP` ditolak saat validate), `reason` wajib, dan
+**forward-only** — menghapus deklarasi tidak menjatuhkan apa yang sudah dibuat.
+
+### Perubahan Destruktif — Harus Dinyatakan
+
+Migrasi berjalan otomatis: menambah field, menambah index, membangun ulang kolom
+turunan, rename via `renamed_from`. Yang **tidak** otomatis adalah perubahan yang
+menghilangkan nilai — dan itu ditolak sampai manifest menyatakannya:
+
+```yaml
+fields:
+  - name: old_branch_code
+    type: string
+    removed: true # nilainya dibuang dari data pada apply
+    reason: "digantikan branch_id"
+  - name: amount_cents
+    type: integer
+    accept_data_loss: true # type change: baris yang gagal cast kehilangan nilainya
+    reason: "dipindah dari text ke integer"
+```
+
+- `reason` **wajib** untuk keduanya.
+- Namanya `removed`, bukan `deleted` — `soft_delete`/`deleted_at` sudah berarti
+  soft delete.
+- Tombstone hidup **satu kali apply**; setelah itu barisnya boleh dihapus.
+- Menghapus baris field **tanpa** tombstone → migrasi gagal (itu gunanya:
+  membedakan penghapusan yang disengaja dari salah ketik).
+- **Tabel tidak pernah di-drop dari manifest** — backup, drop manual, lalu hapus
+  manifest-nya.
+- Duplikat yang menghalangi unique index: perbaiki sekali lewat
+  `formspec repl -f repair.star`, lalu apply lagi. Spec tidak punya tempat untuk
+  DML.
 
 ### Subscription — Cross-Module Event Reaction
 
@@ -748,7 +793,7 @@ Declares governance rules (security, compliance, resource limits).
 
 ### Datastore — Infra Service Registration
 
-Registers a named physical infrastructure service (Postgres, Valkey, MinIO,
+Registers a named physical infrastructure service (Postgres, Valkey, Garage,
 SQLite, filesystem) in the Infra Registry, serving one or more `ctx.*`
 primitives (`serves: [db, cache, ...]` — closed set of 9: db, cache, lock,
 queue, pubsub, storage, kvstore, config, log). Multiple services per
@@ -783,7 +828,7 @@ binding → service. See `docs/spec/platform/06-datastore.md` and
 | System-managed aggregates          | `Entity` (`characteristic: summary`)     |
 | Computation without state          | `Service`                                |
 | Module-level configuration         | `Config`                                 |
-| Custom DDL (index, trigger)        | `Migration`                              |
+| Custom DDL (index, trigger)        | `persist.raw_ddl` pada `Entity`          |
 | React to another resource's events | `Subscription`                           |
 | Approval-based state transitions   | `Workflow`                               |
 | Override external API surface      | `Api`                                    |

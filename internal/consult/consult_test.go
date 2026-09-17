@@ -89,7 +89,9 @@ func TestSessionTranscriptAndResume(t *testing.T) {
 			t.Errorf("transcript missing %q", want)
 		}
 	}
-	s.Close()
+	if err := s.Close(); err != nil {
+		t.Fatalf("close session: %v", err)
+	}
 
 	// Resume rebuilds history from user/assistant turns (tool summaries
 	// are not replayed into the model).
@@ -97,7 +99,7 @@ func TestSessionTranscriptAndResume(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }()
 	if len(r.History) != 2 {
 		t.Fatalf("resumed history len = %d, want 2 (user+assistant)", len(r.History))
 	}
@@ -114,7 +116,7 @@ func TestWriteDiscoverySummary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	path, err := s.WriteDiscoverySummary("Tujuan: aplikasi arisan.\nAlur: setor iuran → undian.")
 	if err != nil {
@@ -137,7 +139,7 @@ func TestRejectDraft(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 	draftPath := filepathJoin(s.Dir, "draft", "modules", "shop", "entity.yaml")
 	if err := osMkdirAll(filepath.Dir(draftPath)); err != nil {
 		t.Fatal(err)

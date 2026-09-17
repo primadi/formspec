@@ -35,7 +35,9 @@ func TestResourceRateLimiter_SlidingWindow(t *testing.T) {
 	rl := NewResourceRateLimiter()
 	rs := &spec.RateLimitSpec{Max: 2, Per: "1s", Strategy: "sliding_window"}
 
-	if !rl.Allow(rs, "k") || !rl.Allow(rs, "k") {
+	// Two calls on purpose: each Allow consumes a token from the window.
+	firstAllowed, secondAllowed := rl.Allow(rs, "k"), rl.Allow(rs, "k")
+	if !firstAllowed || !secondAllowed {
 		t.Fatal("first two should be allowed")
 	}
 	if rl.Allow(rs, "k") {

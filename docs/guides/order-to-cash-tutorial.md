@@ -12,18 +12,18 @@
 
 Our Order-to-Cash flow: customer checkout → pay via payment gateway → after successful payment: PDF receipt generated, receipt emailed, WA notification sent, accounting journal automatically created, admin dashboard shows live payments.
 
-| # | Requirement | Why it's hard without conventions |
-|---|---|---|
-| FR1 | Sequential order numbers (`ORD-2026-000123`), no duplicates under concurrency | Classic race condition |
-| FR2 | Payment gateway (Midtrans/Xendit) with simulation mode in dev | No standard pattern for external integrations |
-| FR3 | Webhook may be sent multiple times — must not process twice | Persistent idempotency, not cache |
-| FR4 | After payment, journal entry **must** exist — no loss, no duplicates | Transactional outbox, not fire-and-forget |
-| FR5 | Email + WA may be delayed, must not silently fail | Reliable background jobs with retry |
-| FR6 | Dashboard live payment ticker | Loss acceptable if admin is offline |
-| FR7 | Membership tier discount cached, invalidated on rule change | Volatile cache + manual invalidation |
-| FR8 | Number prefix & notification template per workspace, no redeploy | Dynamic config |
-| FR9 | All steps logged with structure, one correlation ID | Consistent observability |
-| FR10 | PDF receipt stored, re-downloadable | Object storage, not container filesystem |
+| #    | Requirement                                                                   | Why it's hard without conventions             |
+| ---- | ----------------------------------------------------------------------------- | --------------------------------------------- |
+| FR1  | Sequential order numbers (`ORD-2026-000123`), no duplicates under concurrency | Classic race condition                        |
+| FR2  | Payment gateway (Midtrans/Xendit) with simulation mode in dev                 | No standard pattern for external integrations |
+| FR3  | Webhook may be sent multiple times — must not process twice                   | Persistent idempotency, not cache             |
+| FR4  | After payment, journal entry **must** exist — no loss, no duplicates          | Transactional outbox, not fire-and-forget     |
+| FR5  | Email + WA may be delayed, must not silently fail                             | Reliable background jobs with retry           |
+| FR6  | Dashboard live payment ticker                                                 | Loss acceptable if admin is offline           |
+| FR7  | Membership tier discount cached, invalidated on rule change                   | Volatile cache + manual invalidation          |
+| FR8  | Number prefix & notification template per workspace, no redeploy              | Dynamic config                                |
+| FR9  | All steps logged with structure, one correlation ID                           | Consistent observability                      |
+| FR10 | PDF receipt stored, re-downloadable                                           | Object storage, not container filesystem      |
 
 ---
 
@@ -93,8 +93,8 @@ spec:
   version: v1
   characteristics: [master]
   fields:
-    - { name: name,           type: string,  rules: [required] }
-    - { name: email,          type: string }
+    - { name: name, type: string, rules: [required] }
+    - { name: email, type: string }
     - { name: is_blacklisted, type: boolean, default: false }
 ```
 
@@ -137,9 +137,9 @@ spec:
         sequence_field: line_number
         fields:
           - { name: line_number, type: integer, immutable: true }
-          - { name: product_id,  type: uuid, rules: [required] }
-          - { name: quantity,    type: integer, rules: [required, positive] }
-          - { name: price,       type: decimal, rules: [required, positive] }
+          - { name: product_id, type: uuid, rules: [required] }
+          - { name: quantity, type: integer, rules: [required, positive] }
+          - { name: price, type: decimal, rules: [required, positive] }
 
     - name: total
       type: decimal
@@ -164,10 +164,14 @@ spec:
     field: status
     initial: draft
     transitions:
-      - { from: draft,            to: awaiting_payment, via: checkout,
-          guard: "len(resource.items) > 0 and resource.total > 0" }
-      - { from: awaiting_payment, to: paid,             via: mark-paid }
-      - { from: [draft, awaiting_payment], to: void,    via: void }
+      - {
+          from: draft,
+          to: awaiting_payment,
+          via: checkout,
+          guard: "len(resource.items) > 0 and resource.total > 0",
+        }
+      - { from: awaiting_payment, to: paid, via: mark-paid }
+      - { from: [draft, awaiting_payment], to: void, via: void }
 
   actions:
     - name: update
@@ -176,11 +180,11 @@ spec:
           message: "Checked-out orders cannot be edited — use 'void'"
 
     - name: delete
-      disabled: true              # Transaction records must keep audit trail
+      disabled: true # Transaction records must keep audit trail
 
     - name: checkout
       description: Generate order number & create payment session
-      required_permission: orders.checkout       # → billing.orders.checkout
+      required_permission: orders.checkout # → billing.orders.checkout
       audit: true
       conditions:
         - script: "not customer.load(resource.customer_id).is_blacklisted"
@@ -195,7 +199,7 @@ spec:
     - name: mark-paid
       description: Transition to paid — called by payment gateway webhook
       required_permission: orders.mark-paid
-      idempotent: true            # FR3 — framework-enforced
+      idempotent: true # FR3 — framework-enforced
       idempotency_key: { from: param, field: event_id }
       audit: true
       emits: paid
@@ -208,17 +212,17 @@ spec:
     - name: paid
       description: Order successfully paid
       publish:
-        durable: true             # FR4 — mandatory for financial events
+        durable: true # FR4 — mandatory for financial events
       payload:
         fields: [id, number, total, customer_id, paid_at]
       deliver:
         - channel: audit_log
         - channel: websocket
-          target: { scope: tenant }               # FR6 — dashboard ticker
-        - { channel: queue, job: generate-receipt }        # FR10 + FR7
-        - { channel: queue, job: send-receipt-email }      # FR5 — receipt = billing promise
-        - channel: reliable_event                 # FR4 — journal, no loss
-          target: { resource: gl.journal-entry, action: create }   # defined in Step 6
+          target: { scope: tenant } # FR6 — dashboard ticker
+        - { channel: queue, job: generate-receipt } # FR10 + FR7
+        - { channel: queue, job: send-receipt-email } # FR5 — receipt = billing promise
+        - channel: reliable_event # FR4 — journal, no loss
+          target: { resource: gl.journal-entry, action: create } # defined in Step 6
           retry: { max: 10, backoff: exponential, initial_delay_ms: 1000 }
           # failed-event is the built-in formspec.core dead-letter entity
           # (Core Basic §22) — nothing to define in this tutorial
@@ -227,6 +231,7 @@ spec:
 ```
 
 **What's happening here:**
+
 - FR1 (sequential numbers): `natural_key_rule` with `strategy: sequence` and `ctx.next_key()` — the framework handles locking, reset periods, and formatting. No `MAX()+1` ever.
 - FR3 (idempotency): `idempotent: true` on the `mark-paid` action. The framework maintains an idempotency store and replays the original response on duplicates.
 - FR4 (reliable events): `publish.durable: true` + `deliver.reliable_event`. The contract requires the order `paid` event (outbox write) and the entity mutation to be atomic — same DB transaction ([Core Basic §3, §7](../spec/backend/01-core-basic.md)). The outbox worker delivers idempotently. **Implementation status:** the reference jsonb-persist implementation does not yet wrap the outbox write in the mutation's transaction — see [jsonb-persist gap notes](../renderers/jsonb-persist/01-architecture.md) §3; until that lands, a crash between commit and enqueue can drop the event.
@@ -327,14 +332,14 @@ spec:
   version: v1
   characteristics: [transaction]
   fields:
-    - { name: source,     type: string, immutable: true, index: true }
-    - { name: source_id,  type: uuid,   immutable: true, index: true }
-    - { name: amount,     type: decimal, rules: [required] }
-    - { name: entry_date, type: date,    rules: [required] }
+    - { name: source, type: string, immutable: true, index: true }
+    - { name: source_id, type: uuid, immutable: true, index: true }
+    - { name: amount, type: decimal, rules: [required] }
+    - { name: entry_date, type: date, rules: [required] }
   actions:
     - name: create
       required_permission: journal-entries.create
-      idempotent: true      # Outbox worker may retry — duplicates rejected here too
+      idempotent: true # Outbox worker may retry — duplicates rejected here too
       # §11.3: idempotent requires a key source. The outbox worker passes the
       # publisher's delivery key ("order.paid.{id}") as the source_ref param.
       idempotency_key: { from: param, field: source_ref }
@@ -376,7 +381,7 @@ The dividing line (D35): journal stays in `order`'s `deliver` because it's a bil
 formspec dev
 ```
 
-This starts the complete local environment: Postgres, Valkey, Mailpit, MinIO, `formspec-control` (dev/relaxed policy), and `formspec-resource` with hot reload.
+This starts the complete local environment: Postgres, Valkey, Mailpit, Garage, `formspec-control` (dev/relaxed policy), and `formspec-resource` with hot reload.
 
 - Visit `http://localhost:8080/_admin` — the admin panel is derived automatically from your entities
 - Create a customer, create an order, checkout → the payment gateway auto-routes to the mockup in dev
@@ -386,19 +391,19 @@ This starts the complete local environment: Postgres, Valkey, Mailpit, MinIO, `f
 
 ## 11. What Just Happened — Concept Map
 
-| Requirement | FormSpec Construct | Why It Works |
-|---|---|---|
-| FR1 — Sequential numbers | `natural_key_rule` + `ctx.next_key()` | Locking, reset, formatting handled by framework |
-| FR2 — Payment gateway | `kind: Service` | External integration wrapped; mockup in dev via config |
-| FR3 — Webhook idempotency | `idempotent: true` | Framework-enforced store + response replay |
-| FR4 — Reliable journal | `publish.durable` + `deliver.reliable_event` | Outbox in same DB transaction, sync delivery with idempotency |
-| FR5 — Email reliability | publisher `deliver channel: queue` | Background job with retry — email is a billing promise, so it lives in `order`'s deliver |
-| FR5 — WA reliability | `kind: Subscription` (Step 7) | Same queue-with-retry guarantee, added later without touching `order.yaml` |
-| FR6 — Live dashboard | `deliver channel: websocket` | Non-durable — loss acceptable |
-| FR7 — Cached discount | `ctx.cache` + manual invalidation | Cache is volatile by contract — a discount rule change explicitly invalidates, so stale tiers never linger |
-| FR8 — Config per workspace | `kind: Config` + `ctx.config()` | Values are read per workspace at runtime — prefix and templates change without redeploy |
-| FR9 — Structured logging | `ctx.log` — tenant/request/user auto-injected | One correlation ID follows the whole flow — nothing to wire by hand |
-| FR10 — PDF storage | `ctx.storage.write()` | Object storage, not filesystem |
+| Requirement                | FormSpec Construct                            | Why It Works                                                                                               |
+| -------------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| FR1 — Sequential numbers   | `natural_key_rule` + `ctx.next_key()`         | Locking, reset, formatting handled by framework                                                            |
+| FR2 — Payment gateway      | `kind: Service`                               | External integration wrapped; mockup in dev via config                                                     |
+| FR3 — Webhook idempotency  | `idempotent: true`                            | Framework-enforced store + response replay                                                                 |
+| FR4 — Reliable journal     | `publish.durable` + `deliver.reliable_event`  | Outbox in same DB transaction, sync delivery with idempotency                                              |
+| FR5 — Email reliability    | publisher `deliver channel: queue`            | Background job with retry — email is a billing promise, so it lives in `order`'s deliver                   |
+| FR5 — WA reliability       | `kind: Subscription` (Step 7)                 | Same queue-with-retry guarantee, added later without touching `order.yaml`                                 |
+| FR6 — Live dashboard       | `deliver channel: websocket`                  | Non-durable — loss acceptable                                                                              |
+| FR7 — Cached discount      | `ctx.cache` + manual invalidation             | Cache is volatile by contract — a discount rule change explicitly invalidates, so stale tiers never linger |
+| FR8 — Config per workspace | `kind: Config` + `ctx.config()`               | Values are read per workspace at runtime — prefix and templates change without redeploy                    |
+| FR9 — Structured logging   | `ctx.log` — tenant/request/user auto-injected | One correlation ID follows the whole flow — nothing to wire by hand                                        |
+| FR10 — PDF storage         | `ctx.storage.write()`                         | Object storage, not filesystem                                                                             |
 
 ---
 

@@ -66,6 +66,17 @@ type EntityStore struct {
 	// (4.3.1/4.3.2). When set, extension data is merged into reads and split
 	// out on writes.
 	extensions map[string]string
+
+	// retired holds the names of fields whose tombstone (`removed: true`) the
+	// manifest carries. They are not part of the schema any more: they are
+	// stripped from reads and from any incoming payload, and they are accepted
+	// (and ignored) on write instead of rejected as unknown.
+	//
+	// Accepted-and-ignored, not rejected, is the deliberate half: during the
+	// rollout an old client can still send the field, and the alternative — a
+	// 422 on every write of a record that predates the removal — is the exact
+	// breakage the tombstone exists to prevent.
+	retired map[string]bool
 }
 
 // SetExtensions registers extension columns (namespace → ext_{namespace}) so
@@ -135,9 +146,17 @@ func NewEntityStore(db DB, driver DriverType, meta spec.Metadata, entity *spec.E
 		sm = entity.StateMachine
 	}
 
-	// Collect computed fields
+	// Collect computed fields. A tombstoned field is dead: keeping it here would
+	// let a removed computed field keep writing itself back into every record.
 	var computedFields []spec.Field
+	retired := map[string]bool{}
+	fields := make([]spec.Field, 0, len(entity.Fields))
 	for _, f := range entity.Fields {
+		if f.Removed {
+			retired[f.Name] = true
+			continue
+		}
+		fields = append(fields, f)
 		if f.Computed != nil {
 			computedFields = append(computedFields, f)
 		}
@@ -165,7 +184,8 @@ func NewEntityStore(db DB, driver DriverType, meta spec.Metadata, entity *spec.E
 		tableName:         tableName,
 		schema:            schema,
 		softDelete:        softDelete,
-		fields:            entity.Fields,
+		fields:            fields,
+		retired:           retired,
 		naturalKeyField:   entity.NaturalKeyField,
 		children:          collectChildFields(db, driver, tableName, entity.Fields),
 		stateMachine:      sm,
@@ -313,6 +333,12 @@ func (s *EntityStore) validateKnownFields(data map[string]any) error {
 
 	for key := range data {
 		if !known[key] {
+			// A retired field is known, just dead: `stripRetired` removes it from
+			// the payload, so reaching here means a caller built its own map. It is
+			// still not an unknown field, and reporting it as one would be a lie.
+			if s.retired[key] {
+				continue
+			}
 			return fmt.Errorf("%w: %q", ErrUnknownField, key)
 		}
 	}
@@ -400,6 +426,20 @@ func (s *EntityStore) stripEnrichedRelations(data map[string]any) {
 	}
 }
 
+// stripRetired removes tombstoned fields from a payload — on the way in and on
+// the way out. On the way in it is what keeps an old client (or a script that
+// re-saves a fetched record) from writing a dead field back; on the way out it
+// keeps the API surface honest while the migration that purges the stored values
+// has not run yet.
+func (s *EntityStore) stripRetired(data map[string]any) {
+	if len(s.retired) == 0 || len(data) == 0 {
+		return
+	}
+	for name := range s.retired {
+		delete(data, name)
+	}
+}
+
 // InsertParams holds the data for creating a new entity record.
 type InsertParams struct {
 	WorkspaceID   string
@@ -433,6 +473,11 @@ func (s *EntityStore) Insert(ctx context.Context, params InsertParams) (string, 
 	// resolveRelations) before validation — a script resource.create() may
 	// re-persist a fetched record that carries relation aliases.
 	s.stripEnrichedRelations(params.Data)
+
+	// Tombstoned fields are dead: drop them before validation so an old client
+	// sending one gets its write applied (minus the dead field) instead of a
+	// 422 that would strand every record created before the removal.
+	s.stripRetired(params.Data)
 
 	// Sanitize richtext fields server-side (todo 6.9.1) — client HTML is
 	// never trusted raw.
@@ -756,6 +801,11 @@ func (s *EntityStore) Update(ctx context.Context, params UpdateParams) (int, err
 	// Data and script resource.save() re-persists the whole loaded record,
 	// so both can carry relation aliases that are never legitimate writes.
 	s.stripEnrichedRelations(params.Data)
+
+	// Tombstoned fields are dropped for the same reason, and for one more: the
+	// fetched record may still hold the key until the migration purges it, and
+	// writing it back would reintroduce values the manifest declared gone.
+	s.stripRetired(params.Data)
 
 	// Sanitize richtext fields server-side (todo 6.9.1) — client HTML is
 	// never trusted raw.
@@ -1259,13 +1309,6 @@ func (s *EntityStore) Submit(ctx context.Context, workspaceID, id, userID string
 	}
 
 	tbl := s.qualifiedTable()
-	query := fmt.Sprintf(
-		`UPDATE %s SET doc_status = 'submitted', version = version + 1, updated_at = %s, updated_by = ? WHERE id = ? AND tenant_id = ? AND doc_status = 'draft'`,
-		tbl, currentTimestampExpr(s.driver))
-
-	if s.softDelete {
-		query += " AND deleted_at IS NULL"
-	}
 
 	database, err := writeDB(ctx, s.db)
 	if err != nil {
@@ -1279,11 +1322,14 @@ func (s *EntityStore) Submit(ctx context.Context, workspaceID, id, userID string
 	if err := s.applyFinancialSnapshot(ctx, database, workspaceID, rec.Data); err != nil {
 		return fmt.Errorf("%s submit: snapshot: %w", s.entity, err)
 	}
+
 	dataJSON, err := json.Marshal(rec.Data)
 	if err != nil {
 		return fmt.Errorf("%s submit: marshal data: %w", s.entity, err)
 	}
-	query = fmt.Sprintf(
+	// One statement, carrying the snapshot `data` written above: an earlier
+	// version built (and then discarded) a data-less UPDATE first.
+	query := fmt.Sprintf(
 		`UPDATE %s SET doc_status = 'submitted', data = ?, version = version + 1, updated_at = %s, updated_by = ? WHERE id = ? AND tenant_id = ? AND doc_status = 'draft'`,
 		tbl, currentTimestampExpr(s.driver))
 	if s.softDelete {
@@ -1583,8 +1629,7 @@ func (s *EntityStore) requireNumericAggregateField(fn, field string) error {
 	if !known {
 		return fmt.Errorf("%s aggregate: unknown field %q on entity %s", fn, field, s.entity)
 	}
-	switch ft {
-	case spec.FieldInteger, spec.FieldDecimal, spec.FieldNumber, spec.FieldPercent, spec.FieldMoney:
+	if spec.IsNumericField(ft) {
 		return nil
 	}
 	return fmt.Errorf(
@@ -1599,14 +1644,17 @@ func (s *EntityStore) requireNumericAggregateField(fn, field string) error {
 // For SQLite, date/time types are stored as ISO-8601 text and sort correctly
 // lexicographically without explicit cast.
 func castTypeForField(ft spec.FieldType, driver DriverType) string {
-	switch ft {
-	case spec.FieldInteger:
-		return "integer"
-	case spec.FieldDecimal, spec.FieldNumber, spec.FieldPercent:
+	// Numeric-but-not-integer shares one cast: REAL on SQLite (which has no
+	// numeric type), numeric elsewhere.
+	if spec.IsNumericField(ft) && ft != spec.FieldInteger {
 		if driver == DriverSQLite {
 			return "REAL"
 		}
 		return "numeric"
+	}
+	switch ft {
+	case spec.FieldInteger:
+		return "integer"
 	case spec.FieldBoolean:
 		if driver == DriverSQLite {
 			return "INTEGER"
@@ -1835,6 +1883,7 @@ func (s *EntityStore) List(ctx context.Context, params ListParams) (*ListResult,
 		if err != nil {
 			return nil, fmt.Errorf("%s list scan: %w", s.entity, err)
 		}
+		s.stripRetired(rec.Data)
 		s.evaluateComputed(rec.Data)
 		records = append(records, *rec)
 	}
@@ -2513,7 +2562,12 @@ func (r EntityRecord) MarshalJSON() ([]byte, error) {
 // scanRecord scans a single entity record from a query.
 func (s *EntityStore) scanRecord(ctx context.Context, database DB, query string, args ...any) (*EntityRecord, error) {
 	row := database.QueryRowContext(ctx, query, args...)
-	return scanEntityRecord(row)
+	rec, err := scanEntityRecord(row)
+	if err != nil {
+		return nil, err
+	}
+	s.stripRetired(rec.Data)
+	return rec, nil
 }
 
 // scanEntityRecord scans a row into an EntityRecord.

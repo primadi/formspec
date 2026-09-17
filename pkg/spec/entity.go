@@ -315,6 +315,32 @@ type Field struct {
 	// removal) instead of drop+add (01-core-basic.md §4).
 	RenamedFrom string `yaml:"renamed_from,omitempty" json:"renamed_from,omitempty"`
 
+	// Removed is the tombstone that lets a field be dropped at all (01-core-basic.md
+	// §4.2). Deleting the field line outright is refused, because the diff cannot
+	// tell an intended removal from a typo — and the data loss is real: the key
+	// stays in `data` on every existing row, which then fails writes as an unknown
+	// field. Declaring the removal is therefore the consent, and the engine strips
+	// the key and drops the derived column.
+	//
+	// The tombstone only has to survive one apply: afterwards the applied snapshot
+	// no longer contains the field, so the line can be deleted from the manifest.
+	//
+	// Named `removed`, not `deleted`, on purpose — `deleted_at` and
+	// `persist.soft_delete` already mean soft delete in this spec.
+	Removed bool `yaml:"removed,omitempty" json:"removed,omitempty"`
+
+	// AcceptDataLoss consents to a lossy type change (01-core-basic.md §4.2):
+	// rows whose stored value cannot be cast to the new type are the loss. The raw
+	// JSON is preserved for non-derived fields, but the derived column is rebuilt,
+	// so the engine refuses the change until a manifest says the loss is intended.
+	AcceptDataLoss bool `yaml:"accept_data_loss,omitempty" json:"accept_data_loss,omitempty"`
+
+	// Reason states why a destructive declaration is intended (audit trail).
+	// REQUIRED whenever `removed` or `accept_data_loss` is set: a flag alone
+	// records what happened, never whether it was meant.
+	// @schema {example: "digantikan branch_id pada 2026-09"}
+	Reason string `yaml:"reason,omitempty" json:"reason,omitempty"`
+
 	// Money (05-field-types.md §2) — only meaningful for type: money.
 	// Currency is the explicit ISO-4217 code for this field; when empty the
 	// field inherits settings.currency (never guessed). DecimalPlaces is the
@@ -371,6 +397,20 @@ const (
 	// It is kept for backward compatibility and maps to the same storage as decimal.
 	FieldNumber FieldType = "number"
 )
+
+// IsNumericField reports whether a field type stores a number — the storage
+// class shared by integer, decimal, money, and percent (Core §10.1).
+//
+// It exists so callers can ask the question without naming the deprecated
+// NumberType alias: a manifest may still say `type: number`, and every "is this
+// numeric?" switch otherwise has to mention it.
+func IsNumericField(ft FieldType) bool {
+	switch ft {
+	case FieldInteger, FieldDecimal, FieldMoney, FieldPercent, FieldNumber:
+		return true
+	}
+	return false
+}
 
 // ValidationRule is a validation constraint on a field.
 // @schema {description: "Validation constraint. Supports 4 YAML formats: string (\"required\"), colon (\"after:end_date\"), map-shorthand ({min_length: 1}), or full ({name: \"min_length\", value: 1})"}
@@ -555,6 +595,12 @@ func ValidateEntitySpec(d *EntitySpec) error {
 		if err := validateIndexDecls("persist.indexes", d.Persist.Indexes, whereFields); err != nil {
 			return err
 		}
+		// raw_ddl (01-core-basic.md §4.3) — validated here, not only at apply
+		// time, so a malformed declaration fails `formspec validate` instead of
+		// being skipped with a warning during a deploy.
+		if err := ValidateRawDDL(d.Persist.RawDDL); err != nil {
+			return err
+		}
 	}
 
 	// Field index by name — shared by the row_scope / scope / assignments /
@@ -724,6 +770,34 @@ func ValidateEntitySpec(d *EntitySpec) error {
 		}
 		if seen[f.RenamedFrom] {
 			return fmt.Errorf("field %q: renamed_from %q collides with an existing field", f.Name, f.RenamedFrom)
+		}
+	}
+
+	// Destructive declarations (01-core-basic.md §4.2). A lossy change is refused
+	// by default — removing a field strips stored values, and changing a type can
+	// discard values that do not cast. `removed` / `accept_data_loss` are how a
+	// manifest states the loss is intended, and `reason` is what makes the
+	// statement auditable: a flag alone records what happened, never whether it
+	// was meant.
+	for _, f := range d.Fields {
+		if !f.Removed && !f.AcceptDataLoss {
+			continue
+		}
+		if f.Removed && f.AcceptDataLoss {
+			return fmt.Errorf("field %q: declares both `removed` and `accept_data_loss` — a removed field has no data left to keep", f.Name)
+		}
+		if strings.TrimSpace(f.Reason) == "" {
+			what := "removed"
+			if f.AcceptDataLoss {
+				what = "accept_data_loss"
+			}
+			return fmt.Errorf("field %q: `%s` requires `reason` — a destructive change must state why it is intended", f.Name, what)
+		}
+		if f.Removed && f.RenamedFrom != "" {
+			return fmt.Errorf("field %q: `removed` and `renamed_from` are mutually exclusive — a rename keeps the data, a removal discards it", f.Name)
+		}
+		if f.Removed && f.Required {
+			return fmt.Errorf("field %q: a `removed` field cannot be required — the tombstone is dead, so nothing can be required to supply it", f.Name)
 		}
 	}
 
@@ -907,10 +981,12 @@ func ValidateEntitySpec(d *EntitySpec) error {
 			return fmt.Errorf("extend_storage.namespace must be 3-32 characters, got %d", len(ns))
 		}
 		for i, r := range ns {
-			if i == 0 && !(r >= 'a' && r <= 'z') {
+			isLower := r >= 'a' && r <= 'z'
+			isDigit := r >= '0' && r <= '9'
+			if i == 0 && (r < 'a' || r > 'z') {
 				return fmt.Errorf("extend_storage.namespace must start with a lowercase letter")
 			}
-			if !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_') {
+			if !isLower && !isDigit && r != '_' {
 				return fmt.Errorf("extend_storage.namespace must contain only lowercase letters, digits, and underscores")
 			}
 		}
@@ -961,7 +1037,7 @@ func ValidateEntitySpec(d *EntitySpec) error {
 			}
 		}
 	}
-	if !(d.Characteristic == CharSummary) && (len(d.Sources) > 0 || d.JoinKey != "" || d.Rebuild != nil) {
+	if d.Characteristic != CharSummary && (len(d.Sources) > 0 || d.JoinKey != "" || d.Rebuild != nil) {
 		return fmt.Errorf("sources/join_key/rebuild are only valid on summary entities")
 	}
 
@@ -1262,7 +1338,7 @@ func ValidateActionEmits(actions []Action, events []EventDecl) error {
 			}
 		}
 		if !found {
-			return fmt.Errorf("action %q emits %q, which is not declared in events:", a.Name, a.Emits)
+			return fmt.Errorf("action %q emits %q, which is not declared in events", a.Name, a.Emits)
 		}
 	}
 	return nil
@@ -1537,6 +1613,136 @@ type PersistSpec struct {
 	SoftDelete *bool       `yaml:"soft_delete,omitempty" json:"soft_delete,omitempty"`
 	Category   string      `yaml:"category,omitempty" json:"category,omitempty"` // operational | financial | compliance | analytics | master | archive
 	Indexes    []IndexDecl `yaml:"indexes,omitempty" json:"indexes,omitempty"`
+	// RawDDL holds storage-level DDL the spec language does not express —
+	// triggers, functions, materialized views, indexes over JSONB expressions
+	// (01-core-basic.md §4.3). It lives inside the Entity, not in a separate
+	// manifest kind, so it travels the same automatic sync path as the rest of
+	// the schema instead of waiting for someone to remember a CLI verb.
+	//
+	// Forward-only: removing an entry does NOT drop what it created. A
+	// declaration is not a resource to be garbage-collected, and guessing the
+	// inverse of arbitrary DDL would be worse than leaving it alone.
+	RawDDL []RawDDLDecl `yaml:"raw_ddl,omitempty" json:"raw_ddl,omitempty"`
+}
+
+// RawDDLDecl is one storage-level DDL statement declared on an Entity
+// (01-core-basic.md §4.3).
+type RawDDLDecl struct {
+	// Name identifies the statement for recording and reporting.
+	// @schema {minLength: 1, pattern: "^[a-z][a-z0-9_-]*$", example: "menu-price-unique"}
+	Name string `yaml:"name" json:"name"`
+	// DDL is one statement valid on every driver.
+	// @schema {example: "CREATE INDEX idx_invoice_date ON invoice(transaction_date)"}
+	DDL string `yaml:"ddl,omitempty" json:"ddl,omitempty"`
+	// DDLByDialect holds per-driver variants, for DDL that cannot be written
+	// portably: reading JSONB is `json_extract(data, '$.x')` on SQLite and
+	// `data->>'x'` on PostgreSQL, so one string is correct for dev and wrong for
+	// production — and the failure only appears at deploy time (gap #35).
+	DDLByDialect map[string]string `yaml:"ddl_by,omitempty" json:"ddl_by,omitempty"`
+	// Reason states why the DDL is needed (audit trail).
+	// @schema {example: "satu harga per menu per cabang"}
+	Reason string `yaml:"reason,omitempty" json:"reason,omitempty"`
+}
+
+// RawDDLDialects is the closed set of dialects `ddl_by` may name. It matches the
+// installed persist backends: a variant for a driver nobody runs would be dead
+// weight, and a misspelled key would silently fall back to nothing.
+var RawDDLDialects = map[string]bool{"sqlite": true, "postgres": true}
+
+// ValidateRawDDL validates one Entity's `persist.raw_ddl` declarations
+// (01-core-basic.md §4.3).
+func ValidateRawDDL(decls []RawDDLDecl) error {
+	seen := make(map[string]bool, len(decls))
+	for i, d := range decls {
+		if strings.TrimSpace(d.Name) == "" {
+			return fmt.Errorf("raw_ddl[%d]: name is required", i)
+		}
+		if seen[d.Name] {
+			return fmt.Errorf("raw_ddl[%d]: duplicate name %q", i, d.Name)
+		}
+		seen[d.Name] = true
+
+		if d.DDL == "" && len(d.DDLByDialect) == 0 {
+			return fmt.Errorf("raw_ddl %q: declares no DDL — set `ddl` (one statement for every driver) or `ddl_by` (per-driver variants)", d.Name)
+		}
+		if d.DDL != "" && len(d.DDLByDialect) > 0 {
+			return fmt.Errorf("raw_ddl %q: declares both `ddl` and `ddl_by` — pick one: `ddl` when the statement is portable, `ddl_by` when each driver needs its own", d.Name)
+		}
+		if strings.TrimSpace(d.Reason) == "" {
+			return fmt.Errorf("raw_ddl %q: `reason` is required — storage-level DDL must state why it is needed, so the change is auditable", d.Name)
+		}
+
+		statements := []string{d.DDL}
+		for dialect, stmt := range d.DDLByDialect {
+			if !RawDDLDialects[dialect] {
+				return fmt.Errorf("raw_ddl %q: ddl_by has unknown dialect %q (known: postgres, sqlite)", d.Name, dialect)
+			}
+			if strings.TrimSpace(stmt) == "" {
+				return fmt.Errorf("raw_ddl %q: ddl_by.%s is empty — remove the entry or give it a statement", d.Name, dialect)
+			}
+			statements = append(statements, stmt)
+		}
+		for _, stmt := range statements {
+			if err := ValidateDDLOnly(stmt, "raw_ddl "+d.Name); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// DDLForDialect resolves a raw_ddl statement for a driver: the dialect-specific
+// variant when declared, otherwise the portable statement. Returns false when
+// only variants are declared and none matches this driver — the caller must skip
+// it out loud rather than run another driver's SQL (gap #35).
+func (d *RawDDLDecl) DDLForDialect(driver string) (string, bool) {
+	if d == nil {
+		return "", false
+	}
+	if len(d.DDLByDialect) > 0 {
+		stmt, ok := d.DDLByDialect[driver]
+		if !ok || strings.TrimSpace(stmt) == "" {
+			return "", false
+		}
+		return stmt, true
+	}
+	if d.DDL == "" {
+		return "", false
+	}
+	return d.DDL, true
+}
+
+// ValidateDDLOnly rejects data statements and table drops in a declaration that
+// may only hold schema DDL. `where` names the declaration for the message.
+//
+// DROP TABLE is refused alongside DML because this platform never drops a table
+// from a manifest: a whole entity's data disappearing as a side effect of an
+// edit is the one operation whose blast radius cannot be reviewed from a diff.
+func ValidateDDLOnly(stmt, where string) error {
+	first := firstStatementWord(stmt)
+	for _, prefix := range []string{"INSERT", "UPDATE", "DELETE", "SELECT", "TRUNCATE"} {
+		if first == prefix {
+			return fmt.Errorf("%s: %q is a data statement — a manifest declares schema only (data repairs are run once, outside the spec)", where, prefix)
+		}
+	}
+	if strings.HasPrefix(first, "DROP") {
+		return fmt.Errorf("%s: %q is not allowed — a manifest never drops storage; back up, drop by hand, then remove the manifest", where, first)
+	}
+	return nil
+}
+
+// firstStatementWord returns the first keyword of a statement, uppercased, and
+// handles a leading pair like "DROP TABLE" by returning both words.
+func firstStatementWord(stmt string) string {
+	fields := strings.Fields(strings.TrimSpace(stmt))
+	if len(fields) == 0 {
+		return ""
+	}
+	first := strings.ToUpper(fields[0])
+	if first == "DROP" && len(fields) > 1 {
+		return first + " " + strings.ToUpper(fields[1])
+	}
+	return first
 }
 
 // ─── 1.4 Extended Field Type Structs ───

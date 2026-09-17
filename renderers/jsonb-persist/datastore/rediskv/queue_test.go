@@ -20,7 +20,7 @@ func TestQueue_FIFO(t *testing.T) {
 	if err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	defer q.Close()
+	defer func() { _ = q.Close() }()
 	ctx := context.Background()
 
 	// Empty dequeue → (nil, nil), no error.

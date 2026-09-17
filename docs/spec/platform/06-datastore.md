@@ -10,7 +10,7 @@
 
 `kind: Datastore` adalah resource **Control Plane** yang meregistrasikan
 **service infrastruktur fisik** — satu instance nyata (Postgres, Valkey,
-MinIO, NATS, SQLite, filesystem) dengan logical name. Semua definisi backend
+Garage, NATS, SQLite, filesystem) dengan logical name. Semua definisi backend
 berasal dari Control Plane; Resource Plane tidak punya mekanisme membuat atau
 mengubah definisi backend sendiri, ia menerima service yang sudah
 diotorisasi untuk workspace-nya lewat snapshot Plane Protocol
@@ -40,22 +40,22 @@ kind: Datastore
 metadata:
   name: pg-analytics
 spec:
-  serves: [db, kvstore]        # primitive ctx.* yang dilayani service ini
+  serves: [db, kvstore] # primitive ctx.* yang dilayani service ini
   driver: postgres
   connection:
     host: pg-analytics.internal
     port: 5432
     database: formspec_analytics
     pool: { max_open: 100, max_idle: 20, max_lifetime: 1h }
-    lazy: false                # true = connect saat pemakaian pertama
+    lazy: false # true = connect saat pemakaian pertama
   credential_ref: kms://prod/pg-analytics
   access:
-    filter:                    # opsional — kosong = semua workspace
+    filter: # opsional — kosong = semua workspace
       environment: production
       workspaces: [corp-456]
       labels: { tier: enterprise }
-    permission:                 # opsional — kosong = read_write
-      default: read             # ceiling untuk seluruh operasi
+    permission: # opsional — kosong = read_write
+      default: read # ceiling untuk seluruh operasi
       rules:
         - { scope: "store.*", access: read_write }
         - { scope: "billing.invoice", access: write }
@@ -70,26 +70,26 @@ Setiap mapping menghasilkan **logical name** yang dipakai kode aplikasi.
 Deklarasi di `kind: App` (`spec.datastores`) dan `kind: Module`
 (`spec.datastores`) — map dengan dua bentuk key:
 
-| Key | Arti | Diakses lewat |
-|---|---|---|
-| `db` | default service untuk primitive `db` milik App/Module ini | `ctx.db()` |
-| `db/analytics` | **named logical primitive** `analytics` untuk `db` | `ctx.db.named("analytics")` |
+| Key            | Arti                                                      | Diakses lewat               |
+| -------------- | --------------------------------------------------------- | --------------------------- |
+| `db`           | default service untuk primitive `db` milik App/Module ini | `ctx.db()`                  |
+| `db/analytics` | **named logical primitive** `analytics` untuk `db`        | `ctx.db.named("analytics")` |
 
 ```yaml
 # kind: App
 spec:
   modules: [billing, reporting]
   datastores:
-    db: pg-main              # default db App ini (App lain boleh beda)
-    db/analytics: pg-analytics   # named logical primitive
+    db: pg-main # default db App ini (App lain boleh beda)
+    db/analytics: pg-analytics # named logical primitive
 ```
 
 ```yaml
 # kind: Module — override per module
 spec:
   datastores:
-    db: pg-analytics         # module ini pakai db berbeda dari App
-    db/rollup: pg-main       # named primitive milik module (butuh App)
+    db: pg-analytics # module ini pakai db berbeda dari App
+    db/rollup: pg-main # named primitive milik module (butuh App)
 ```
 
 **Chain resolusi** (dari paling spesifik ke paling umum):
@@ -131,14 +131,18 @@ backend fisik boleh melayani banyak primitive.
 
 `spec.driver` — kompatibilitas dengan `serves` divalidasi `formspec apply`:
 
-| Driver | Kompatibel `serves` |
-|---|---|
-| `sqlite`, `postgres` | `db`, `kvstore`, `config`, `log` |
-| `valkey`, `redis` | `cache`, `lock`, `kvstore`, `queue`, `pubsub`, `config`, `log` |
-| `s3`, `minio` | `storage` |
-| `nats` | `queue`, `pubsub` |
-| `memory` | `cache`, `lock`, `queue`, `pubsub`, `kvstore`, `config`, `log` |
-| `fs` | `storage`, `log` |
+| Driver                  | Kompatibel `serves`                                            |
+| ----------------------- | -------------------------------------------------------------- |
+| `sqlite`, `postgres`    | `db`, `kvstore`, `config`, `log`                               |
+| `valkey`, `redis`       | `cache`, `lock`, `kvstore`, `queue`, `pubsub`, `config`, `log` |
+| `garage`, `s3`, `minio` | `storage`                                                      |
+| `nats`                  | `queue`, `pubsub`                                              |
+| `memory`                | `cache`, `lock`, `queue`, `pubsub`, `kvstore`, `config`, `log` |
+| `fs`                    | `storage`, `log`                                               |
+
+`garage`, `s3`, dan `minio` berbagi satu client S3 (bedanya hanya default
+endpoint/bucket), jadi berpindah di antara ketiganya cukup mengganti
+`spec.driver` — object-nya tetap diakses lewat `ctx.storage` yang sama.
 
 `spec.connection` — `host`/`port`/`database` (driver-dependent), `pool.{
 max_open (default 10), max_idle (default 5), max_lifetime}`, `lazy`
@@ -148,11 +152,11 @@ spesifik-driver).
 `spec.credential_ref` — URI `kms://{provider}/{path}`. **Normatif:**
 kredensial tidak boleh inline di YAML. Standar lanjutannya: **tidak ada DSN
 statis berumur panjang** untuk datastore produksi — kredensial per-koneksi
-bersifat *short-lived* dan ber-TTL, diterbitkan dinamis oleh backend di
+bersifat _short-lived_ dan ber-TTL, diterbitkan dinamis oleh backend di
 balik `credential_ref`, tiap penerbitan diaudit individual, dan kredensial
 kedaluwarsa lalu rotate otomatis.
 
-**Set primitive tertutup.** Daftar 9 primitive di atas adalah *closed set* —
+**Set primitive tertutup.** Daftar 9 primitive di atas adalah _closed set_ —
 app developer **tidak boleh** mendefinisikan primitive infrastruktur baru
 sendiri. Kebutuhan yang tampak seperti primitive baru (scheduler, mail,
 notification, seeder/factory) diwujudkan sebagai **module resmi di atas
@@ -160,6 +164,7 @@ primitive yang ada** (mail → `ctx.queue`, notification → `ctx.pubsub`),
 bukan sebagai primitive tambahan.
 
 ## 3. Relasi dengan PersistBackend
+
 Datastore menyediakan **koneksi**; PersistBackend
 ([`../backend/04-persist-backend.md`](../backend/04-persist-backend.md))
 adalah implementasi kontrak penyimpanan entity yang **mengonsumsi** sebuah
@@ -173,7 +178,7 @@ yang sama dengan module lain yang pakai `ctx.db` mentah).
 workspace, dihasilkan Control Plane saat membangun snapshot:
 
 - `access.filter` (**siapa** — environment/workspaces/labels, AND logic)
-  menentukan service mana yang *terlihat* oleh workspace; yang tidak cocok
+  menentukan service mana yang _terlihat_ oleh workspace; yang tidak cocok
   tidak muncul sama sekali di snapshot-nya.
 - `access.permission` (**boleh apa** — ceiling operasi `read`/`write`/
   `read_write` dengan rules glob per scope, longest match menang) menjadi
@@ -206,15 +211,17 @@ tiap tipe primitive yang dipakai, dan default-nya dideklarasikan eksplisit
 (App Registry / workspace binding) — tidak ada backend implisit.
 
 ## 6. Kode Error
-| Kode | Kondisi |
-|---|---|
-| `DATASTORE_NOT_FOUND` | Service atau named alias tidak ditemukan di registry |
-| `DATASTORE_ACCESS_DENIED` | Service/alias tidak dideklarasikan di `uses.datastores` |
-| `DATASTORE_PERMISSION_DENIED` | Operasi melampaui ceiling `access.permission` |
+
+| Kode                            | Kondisi                                                    |
+| ------------------------------- | ---------------------------------------------------------- |
+| `DATASTORE_NOT_FOUND`           | Service atau named alias tidak ditemukan di registry       |
+| `DATASTORE_ACCESS_DENIED`       | Service/alias tidak dideklarasikan di `uses.datastores`    |
+| `DATASTORE_PERMISSION_DENIED`   | Operasi melampaui ceiling `access.permission`              |
 | `DATASTORE_DRIVER_INCOMPATIBLE` | `serves` tidak kompatibel `driver` (saat `formspec apply`) |
-| `DATASTORE_CREDENTIAL_MISSING` | `credential_ref` wajib tapi tidak diisi |
+| `DATASTORE_CREDENTIAL_MISSING`  | `credential_ref` wajib tapi tidak diisi                    |
 
 ## 7. Lifecycle dan Kredensial
+
 Registrasi Datastore murni tindakan Control Plane (§1) — didistribusikan ke
 Resource Plane lewat snapshot Plane Protocol, tidak pernah lewat jalur lain.
 Rotasi kredensial terjadi di balik `credential_ref` (KMS/Vault) tanpa
@@ -222,6 +229,7 @@ mengubah manifest Datastore itu sendiri. Health/konektivitas adalah urusan
 `ConnectionPool` di sisi Resource Plane, di luar cakupan kontrak ini.
 
 ## 8. Peran Operasional Database (Normatif)
+
 Koneksi operator/platform-managed ke datastore produksi memakai role
 **least-privilege**, bukan superuser manusia:
 

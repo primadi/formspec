@@ -131,11 +131,13 @@ component`, menentukan di mana sebuah kind boleh dipakai/dikomposisi — dasar
   snapshot Plane Protocol, tidak bisa membuat/mengubah definisi backend
   sendiri.
 - **structural diff** — Kontrak migrasi skema: framework menghasilkan diff
-  dari perbandingan manifest Document versi lama vs baru (field
+  dari perbandingan manifest Entity versi lama vs baru (field
   ditambah/dihapus/`renamed_from`, index berubah), lalu tiap PersistBackend
   menerjemahkan diff itu ke storage-nya sendiri — bukan framework yang
-  generate SQL. Salah satu dari tiga jenis migrasi, berbeda dari custom DDL
-  (`kind: Migration`) dan data migration (backfill manual).
+  generate SQL. Diff-nya berklasifikasi: aditif/derived otomatis, lossy
+  ditolak kecuali dinyatakan di manifest. Tidak ada manifest migrasi; DDL di
+  luar bahasa spec dinyatakan sebagai `persist.raw_ddl` pada Entity, dan
+  perbaikan data dijalankan sekali di luar spec.
 - **natural key** — Unique constraint per tenant pada Document (mis. nomor
   invoice) yang tidak pernah menjadi primary key — primary key selalu UUID
   v7. Generasinya (gap-free, atomik, duplicate-free) diatur lewat

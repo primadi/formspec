@@ -11,9 +11,11 @@ import (
 	"github.com/primadi/formspec/internal/artifact"
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
 	"github.com/primadi/formspec/renderers/jsonb-persist/datastore"
+	"github.com/primadi/formspec/renderers/jsonb-persist/datastore/garage"
 	"github.com/primadi/formspec/renderers/jsonb-persist/datastore/memory"
 	"github.com/primadi/formspec/renderers/jsonb-persist/datastore/minio"
 	"github.com/primadi/formspec/renderers/jsonb-persist/datastore/rediskv"
+	"github.com/primadi/formspec/renderers/jsonb-persist/datastore/s3store"
 
 	"github.com/primadi/formspec/internal/manifest"
 	"github.com/primadi/formspec/pkg/spec"
@@ -41,9 +43,9 @@ import (
 //
 // Named services come from `kind: Datastore` manifests. Single-server
 // supports drivers: sqlite, postgres, memory, fs, valkey/redis (cache,
-// kvstore, lock, queue, pubsub), minio/s3 (storage). NATS fails loudly at
-// resolve time — it requires the Control Plane snapshot with real
-// credentials (fase E).
+// kvstore, lock, queue, pubsub), garage (default storage) and minio/s3
+// (storage). NATS fails loudly at resolve time — it requires the Control
+// Plane snapshot with real credentials (fase E).
 
 // serviceEntry is one registered infra service: its spec (nil for the
 // built-in 'default' service) plus lazily-opened connections.
@@ -246,40 +248,75 @@ func (e *serviceEntry) open(stateDir string, pt spec.PrimitiveType) (interface{}
 		default:
 			return nil, fmt.Errorf("driver %q does not serve primitive %q (supported: cache, kvstore, lock, queue, pubsub, config, log)", drv, pt)
 		}
-	case spec.DatastoreDriverMinio, spec.DatastoreDriverS3:
-		// Object storage driver (plan fase A2): MinIO/S3 via named
-		// Datastore — endpoint/bucket dari spec.connection, kredensial dari
-		// spec.connection.extra dengan fallback env FORMSPEC_MINIO_*.
+	case spec.DatastoreDriverGarage, spec.DatastoreDriverMinio, spec.DatastoreDriverS3:
+		// Object storage driver (plan fase A2): S3-compatible object store via
+		// named Datastore — endpoint/bucket dari spec.connection, kredensial
+		// dari spec.connection.extra dengan fallback env (FORMSPEC_GARAGE_*
+		// untuk garage, FORMSPEC_MINIO_* untuk minio/s3). `garage` adalah
+		// driver default; `minio`/`s3` tetap didukung. Ketiganya memakai
+		// client S3 yang sama (datastore/s3store) dengan default berbeda.
 		if pt != spec.PrimitiveStorage {
 			return nil, fmt.Errorf("driver %q does not serve primitive %q", drv, pt)
 		}
+		isGarage := drv == spec.DatastoreDriverGarage
 		conn := e.spec.Connection
 		endpoint := conn.Host
-		if endpoint == "" {
-			endpoint = "minio:9000"
-		} else if conn.Port > 0 {
+		switch {
+		case endpoint == "" && isGarage:
+			endpoint = garage.DefaultEndpoint
+		case endpoint == "":
+			endpoint = minio.DefaultEndpoint
+		case conn.Port > 0:
 			endpoint = fmt.Sprintf("%s:%d", conn.Host, conn.Port)
 		}
 		bucket := conn.Database
 		if bucket == "" {
-			bucket = "formspec"
+			if isGarage {
+				bucket = garage.DefaultBucket
+			} else {
+				bucket = minio.DefaultBucket
+			}
 		}
 		accessKey := conn.Extra["access_key"]
-		if accessKey == "" {
-			accessKey = os.Getenv("FORMSPEC_MINIO_ACCESS_KEY")
-		}
 		secretKey := conn.Extra["secret_key"]
-		if secretKey == "" {
-			secretKey = os.Getenv("FORMSPEC_MINIO_SECRET_KEY")
+		if isGarage {
+			if accessKey == "" {
+				accessKey = os.Getenv("FORMSPEC_GARAGE_ACCESS_KEY")
+			}
+			if secretKey == "" {
+				secretKey = os.Getenv("FORMSPEC_GARAGE_SECRET_KEY")
+			}
+		} else {
+			if accessKey == "" {
+				accessKey = os.Getenv("FORMSPEC_MINIO_ACCESS_KEY")
+			}
+			if secretKey == "" {
+				secretKey = os.Getenv("FORMSPEC_MINIO_SECRET_KEY")
+			}
 		}
-		useSSL := conn.Extra["use_ssl"] == "true"
-		s, err := minio.NewStorage(endpoint, accessKey, secretKey, bucket, useSSL)
+		cfg := s3store.Config{
+			Endpoint:  endpoint,
+			AccessKey: accessKey,
+			SecretKey: secretKey,
+			Bucket:    bucket,
+			Region:    conn.Extra["region"],
+			UseSSL:    conn.Extra["use_ssl"] == "true",
+		}
+		var (
+			s   *s3store.Storage
+			err error
+		)
+		if isGarage {
+			s, err = garage.NewStorage(cfg)
+		} else {
+			s, err = minio.NewStorage(cfg)
+		}
 		if err != nil {
-			return nil, fmt.Errorf("datastore %q: minio backend: %w", e.name, err)
+			return nil, fmt.Errorf("datastore %q: %s backend: %w", e.name, drv, err)
 		}
 		return s, nil
 	default:
-		return nil, fmt.Errorf("datastore %q: driver %q is not supported in single-server mode yet (supported: sqlite, postgres, memory, fs, valkey, redis, minio, s3)", e.name, drv)
+		return nil, fmt.Errorf("datastore %q: driver %q is not supported in single-server mode yet (supported: sqlite, postgres, memory, fs, valkey, redis, garage, minio, s3)", e.name, drv)
 	}
 }
 

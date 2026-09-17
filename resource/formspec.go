@@ -675,8 +675,8 @@ func New(cfg Config) (*App, error) {
 
 	// Object store for file fields (todo 7.17.1). Resolved via the datastore
 	// registry (plan fase E — env-var implicit path removed): a module bound
-	// to a service serving `storage` backed by minio/s3 provides the object
-	// store; otherwise filesystem under the state dir (.formspec/storage).
+	// to a service serving `storage` backed by garage/minio/s3 provides the
+	// object store; otherwise filesystem under the state dir (.formspec/storage).
 	storageResolved := false
 	var storageFn func() (api.Storage, error)
 	for _, name := range sortedServiceNames(dsReg) {
@@ -685,7 +685,7 @@ func New(cfg Config) (*App, error) {
 			continue
 		}
 		drv := e.spec.Driver
-		if drv != spec.DatastoreDriverMinio && drv != spec.DatastoreDriverS3 {
+		if drv != spec.DatastoreDriverGarage && drv != spec.DatastoreDriverMinio && drv != spec.DatastoreDriverS3 {
 			continue
 		}
 		servesStorage := false

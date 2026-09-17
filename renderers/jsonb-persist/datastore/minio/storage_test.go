@@ -7,12 +7,16 @@ import (
 )
 
 // TestStorageUploadDownload verifies the MinIO-backed Storage against a live
-// MinIO (devContainer: minio:9000, minioadmin/minioadmin). Skips when MinIO
-// is not reachable so CI without MinIO stays green.
+// MinIO (minio:9000, minioadmin/minioadmin). Skips when MinIO is not
+// reachable so CI without MinIO stays green.
+//
+// MinIO is no longer part of the dev container (Garage replaced it as the
+// default object storage service), so this test skips unless a MinIO is
+// reachable via FORMSPEC_MINIO_ENDPOINT.
 func TestStorageUploadDownload(t *testing.T) {
 	endpoint := os.Getenv("FORMSPEC_MINIO_ENDPOINT")
 	if endpoint == "" {
-		endpoint = "minio:9000"
+		endpoint = DefaultEndpoint
 	}
 	accessKey := os.Getenv("FORMSPEC_MINIO_ACCESS_KEY")
 	if accessKey == "" {
@@ -27,7 +31,12 @@ func TestStorageUploadDownload(t *testing.T) {
 		bucket = "formspec-test"
 	}
 
-	s, err := NewStorage(endpoint, accessKey, secretKey, bucket, false)
+	s, err := NewStorage(Config{
+		Endpoint:  endpoint,
+		AccessKey: accessKey,
+		SecretKey: secretKey,
+		Bucket:    bucket,
+	})
 	if err != nil {
 		t.Skipf("minio not reachable, skipping: %v", err)
 	}

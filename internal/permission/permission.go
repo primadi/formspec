@@ -90,16 +90,16 @@ type ModuleFootprint struct {
 // String returns a human-readable summary of the footprint.
 func (f *ModuleFootprint) String() string {
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("Module: %s\n", f.Module))
-	b.WriteString(fmt.Sprintf("  Required permissions: %d\n", len(f.Permissions)))
-	b.WriteString(fmt.Sprintf("  Uses declarations:    %d\n", len(f.Uses)))
+	fmt.Fprintf(&b, "Module: %s\n", f.Module)
+	fmt.Fprintf(&b, "  Required permissions: %d\n", len(f.Permissions))
+	fmt.Fprintf(&b, "  Uses declarations:    %d\n", len(f.Uses))
 	for _, p := range f.Permissions {
-		b.WriteString(fmt.Sprintf("    - %s (on %s.%s)\n", p.Key, p.Entity, p.Action))
+		fmt.Fprintf(&b, "    - %s (on %s.%s)\n", p.Key, p.Entity, p.Action)
 	}
 	if len(f.CrossModuleWrites) > 0 {
 		b.WriteString("  ⚠ Cross-module writes (high-risk):\n")
 		for _, cm := range f.CrossModuleWrites {
-			b.WriteString(fmt.Sprintf("    - %s\n", cm))
+			fmt.Fprintf(&b, "    - %s\n", cm)
 		}
 	}
 	return b.String()

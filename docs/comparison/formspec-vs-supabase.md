@@ -15,24 +15,26 @@ These two projects approach the same problem (building applications faster) from
 ## 1. Overview
 
 ### FormSpec
-A spec-first, declarative framework where YAML manifests define entities, state machines, permissions, and UI. Runs as a Go binary (self-hosted or cloud). Business logic via Go native, Starlark scripting, or sidecar. Two-process architecture with governance Control Plane. PostgreSQL + Valkey + MinIO.
+
+A spec-first, declarative framework where YAML manifests define entities, state machines, permissions, and UI. Runs as a Go binary (self-hosted or cloud). Business logic via Go native, Starlark scripting, or sidecar. Two-process architecture with governance Control Plane. PostgreSQL + Valkey + Garage.
 
 ### Supabase
+
 An open-source Firebase alternative. Provides managed PostgreSQL (with Row-Level Security), Auth (built-in providers + JWT), Realtime (broadcast/presence/postgres changes), Storage (S3-compatible), and Edge Functions (Deno/TypeScript). Accessed via client SDKs that call the API directly. Self-hostable, but primarily used as a cloud service.
 
 ---
 
 ## 2. Philosophy
 
-| | FormSpec | Supabase |
-|---|---|---|
-| **Approach** | Framework — you run it, it runs your logic | BaaS — you connect to it, your client talks to it |
-| **Where logic lives** | Server-side (Go, Starlark, sidecar) | Client-side (JS/TS SDK) or Edge Functions (Deno) |
-| **API generation** | From YAML manifests — structured, declarative | From database schema (Postgres introspection) |
-| **Authorization** | Server-enforced `required_permission` | PostgreSQL Row-Level Security (RLS policies) |
-| **Source of truth** | YAML manifests (durable, git-versioned) | Database schema + client code |
-| **Self-hosted** | ✅ Yes — single binary or Docker | ✅ Yes (Docker Compose, self-hosted Supabase) |
-| **Target user** | Go developers building business applications | Full-stack JS developers, startups, mobile apps |
+|                       | FormSpec                                      | Supabase                                          |
+| --------------------- | --------------------------------------------- | ------------------------------------------------- |
+| **Approach**          | Framework — you run it, it runs your logic    | BaaS — you connect to it, your client talks to it |
+| **Where logic lives** | Server-side (Go, Starlark, sidecar)           | Client-side (JS/TS SDK) or Edge Functions (Deno)  |
+| **API generation**    | From YAML manifests — structured, declarative | From database schema (Postgres introspection)     |
+| **Authorization**     | Server-enforced `required_permission`         | PostgreSQL Row-Level Security (RLS policies)      |
+| **Source of truth**   | YAML manifests (durable, git-versioned)       | Database schema + client code                     |
+| **Self-hosted**       | ✅ Yes — single binary or Docker              | ✅ Yes (Docker Compose, self-hosted Supabase)     |
+| **Target user**       | Go developers building business applications  | Full-stack JS developers, startups, mobile apps   |
 
 ---
 
@@ -56,11 +58,12 @@ FormSpec:                              Supabase:
 │  Admin Panel          │              │  + Realtime    │
 │                       │              │  + Storage     │
 │  PostgreSQL           │              │  + Edge Fns    │
-│  Valkey + MinIO       │              └───────────────┘
+│  Valkey + Garage       │              └───────────────┘
 └──────────────────────┘
 ```
 
 **Key differences:**
+
 - FormSpec runs your business logic server-side. Supabase expects business logic in **client code** or **edge functions** (with their limitations).
 - FormSpec enforces permissions server-side via `required_permission`. Supabase uses **PostgreSQL Row-Level Security** — powerful but requires writing SQL policies.
 - FormSpec generates API from YAML. Supabase generates API from **database introspection** (schema-based).
@@ -69,33 +72,33 @@ FormSpec:                              Supabase:
 
 ## 4. Feature Comparison
 
-| Dimension | FormSpec | Supabase |
-|---|---|---|
-| **Paradigm** | Spec-first application framework | Backend-as-a-Service |
-| **Backend language** | Go (native) + Starlark (script) + sidecar (any) | Client-side (JS/TS, Dart, Swift, Kotlin) + Edge Functions (Deno/TypeScript) |
-| **Frontend approach** | Manifest-driven renderer (YAML → React SPA) | Any — client talks to Supabase SDK directly |
-| **State Machine** | ✅ Built-in — define in YAML | ❌ Not available — implement client-side or in Edge Functions |
-| **Idempotency** | ✅ Enforced by framework | ❌ Not available — implement manually in Edge Functions or client |
-| **Outbox / Reliable Events** | ✅ Built-in at-least-once delivery | ❌ Not available — use Realtime (no delivery guarantee) + manual outbox |
-| **Multi-tenancy** | ✅ Workspace model — automatic, tenancy-blind apps | ❌ DIY — RLS policies with `tenant_id` column + separate schemas |
-| **Permission Model** | ✅ Declarative `required_permission` + `uses`, server-enforced | ⚠️ Row-Level Security (RLS) — powerful SQL-based, but must be written and maintained per-table |
-| **Governance / Policy** | ✅ Control Plane with OPA/Rego | ❌ Not available |
-| **Artifact Signing** | ✅ Ed25519 signing | ❌ Not available |
-| **Audit Trail** | ✅ Write-once immutable audit log | ❌ Not available — use PostgreSQL audit extensions manually |
-| **Database** | PostgreSQL (managed or self-hosted) via `ctx.db` — raw SQL | PostgreSQL (managed) — direct access via SQL or client SDK |
-| **Realtime** | WebSocket via `ctx.pubsub` — permission-filtered | ✅ Built-in Realtime (broadcast, presence, Postgres changes) |
-| **File Storage** | ✅ `ctx.storage` (MinIO/S3) | ✅ Supabase Storage (S3-compatible) |
-| **Authentication** | Built-in JWT (extensible providers) | ✅ Built-in (email/password, OAuth2, phone, anonymous, multi-factor) |
-| **Edge Functions** | ❌ Not needed (server-side runtime handles all logic) | ✅ Edge Functions (Deno/TypeScript, global edge deployment) |
-| **Scripting / Hot Reload** | ✅ Starlark (`script_ref`) — runtime-editable | ❌ Not available — edge functions require redeploy |
-| **Polyglot Logic** | ✅ Sidecar container (PHP, Python, Node, Java) | ❌ Edge Functions run TypeScript only |
-| **Built-in Admin Panel** | ✅ Auto-generated from Entity manifests | ✅ Supabase Studio (table browser, SQL editor, schema designer) |
-| **Auto-generated API** | ✅ REST API from YAML manifests | ✅ REST + GraphQL API from database schema (via PostgREST) |
-| **Local Development** | `formspec dev` (one command, Docker Compose) | ✅ Supabase CLI (`supabase start` — local Docker stack) |
-| **Hosting** | Self-host + FormSpec Cloud | Supabase Cloud (managed) + self-host option |
-| **Pricing** | FSL (free self-hosted) + FormSpec Cloud (paid tiers) | Free tier (generous) + paid plans (usage-based) |
-| **Open Source** | FSL (source available → Apache 2.0 after 2 years). Spec is CC0. | ✅ Apache 2.0 (fully open source) |
-| **Learning Curve** | Medium — YAML + Go + Starlark + 2-plane architecture | Low-Medium — if you know JS/SQL, Supabase is easy to start |
+| Dimension                    | FormSpec                                                        | Supabase                                                                                       |
+| ---------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| **Paradigm**                 | Spec-first application framework                                | Backend-as-a-Service                                                                           |
+| **Backend language**         | Go (native) + Starlark (script) + sidecar (any)                 | Client-side (JS/TS, Dart, Swift, Kotlin) + Edge Functions (Deno/TypeScript)                    |
+| **Frontend approach**        | Manifest-driven renderer (YAML → React SPA)                     | Any — client talks to Supabase SDK directly                                                    |
+| **State Machine**            | ✅ Built-in — define in YAML                                    | ❌ Not available — implement client-side or in Edge Functions                                  |
+| **Idempotency**              | ✅ Enforced by framework                                        | ❌ Not available — implement manually in Edge Functions or client                              |
+| **Outbox / Reliable Events** | ✅ Built-in at-least-once delivery                              | ❌ Not available — use Realtime (no delivery guarantee) + manual outbox                        |
+| **Multi-tenancy**            | ✅ Workspace model — automatic, tenancy-blind apps              | ❌ DIY — RLS policies with `tenant_id` column + separate schemas                               |
+| **Permission Model**         | ✅ Declarative `required_permission` + `uses`, server-enforced  | ⚠️ Row-Level Security (RLS) — powerful SQL-based, but must be written and maintained per-table |
+| **Governance / Policy**      | ✅ Control Plane with OPA/Rego                                  | ❌ Not available                                                                               |
+| **Artifact Signing**         | ✅ Ed25519 signing                                              | ❌ Not available                                                                               |
+| **Audit Trail**              | ✅ Write-once immutable audit log                               | ❌ Not available — use PostgreSQL audit extensions manually                                    |
+| **Database**                 | PostgreSQL (managed or self-hosted) via `ctx.db` — raw SQL      | PostgreSQL (managed) — direct access via SQL or client SDK                                     |
+| **Realtime**                 | WebSocket via `ctx.pubsub` — permission-filtered                | ✅ Built-in Realtime (broadcast, presence, Postgres changes)                                   |
+| **File Storage**             | ✅ `ctx.storage` (Garage/MinIO/S3)                              | ✅ Supabase Storage (S3-compatible)                                                            |
+| **Authentication**           | Built-in JWT (extensible providers)                             | ✅ Built-in (email/password, OAuth2, phone, anonymous, multi-factor)                           |
+| **Edge Functions**           | ❌ Not needed (server-side runtime handles all logic)           | ✅ Edge Functions (Deno/TypeScript, global edge deployment)                                    |
+| **Scripting / Hot Reload**   | ✅ Starlark (`script_ref`) — runtime-editable                   | ❌ Not available — edge functions require redeploy                                             |
+| **Polyglot Logic**           | ✅ Sidecar container (PHP, Python, Node, Java)                  | ❌ Edge Functions run TypeScript only                                                          |
+| **Built-in Admin Panel**     | ✅ Auto-generated from Entity manifests                         | ✅ Supabase Studio (table browser, SQL editor, schema designer)                                |
+| **Auto-generated API**       | ✅ REST API from YAML manifests                                 | ✅ REST + GraphQL API from database schema (via PostgREST)                                     |
+| **Local Development**        | `formspec dev` (one command, Docker Compose)                    | ✅ Supabase CLI (`supabase start` — local Docker stack)                                        |
+| **Hosting**                  | Self-host + FormSpec Cloud                                      | Supabase Cloud (managed) + self-host option                                                    |
+| **Pricing**                  | FSL (free self-hosted) + FormSpec Cloud (paid tiers)            | Free tier (generous) + paid plans (usage-based)                                                |
+| **Open Source**              | FSL (source available → Apache 2.0 after 2 years). Spec is CC0. | ✅ Apache 2.0 (fully open source)                                                              |
+| **Learning Curve**           | Medium — YAML + Go + Starlark + 2-plane architecture            | Low-Medium — if you know JS/SQL, Supabase is easy to start                                     |
 
 ---
 
@@ -141,6 +144,7 @@ Client App ──► formspec-resource (Go binary)
 ## 6. When to Choose Which
 
 ### Choose FormSpec when:
+
 - You are building a **business application** with complex server-side logic (state machines, approval workflows, multi-step transactions).
 - You need **enterprise patterns by default** — idempotency, outbox, locking, audit trail.
 - You prefer **server-side logic** over client-side or edge functions.
@@ -150,6 +154,7 @@ Client App ──► formspec-resource (Go binary)
 - Your permission model is complex (role hierarchies, delegated admin, cross-app grants).
 
 ### Choose Supabase when:
+
 - You are building a **real-time application**, mobile app backend, or startup MVP.
 - You prefer **client-side logic** with a managed backend.
 - You want **RLS** (Row-Level Security) — database-level permissions are sufficient for your needs.
@@ -164,14 +169,14 @@ Client App ──► formspec-resource (Go binary)
 
 FormSpec and Supabase approach the same goal from different directions:
 
-| Supabase's approach | FormSpec's approach |
-|---|---|
-| Managed BaaS (you connect to it) | Self-hosted framework (you run it) |
+| Supabase's approach                | FormSpec's approach                       |
+| ---------------------------------- | ----------------------------------------- |
+| Managed BaaS (you connect to it)   | Self-hosted framework (you run it)        |
 | Client-side logic + Edge Functions | Server-side logic (Go, Starlark, sidecar) |
-| RLS policies in SQL | Declarative `required_permission` in YAML |
-| Schema-first (introspect DB) | Spec-first (YAML generates schema) |
-| Startups, mobile, real-time apps | Enterprise business applications |
-| No enterprise patterns built-in | Enterprise patterns by default |
+| RLS policies in SQL                | Declarative `required_permission` in YAML |
+| Schema-first (introspect DB)       | Spec-first (YAML generates schema)        |
+| Startups, mobile, real-time apps   | Enterprise business applications          |
+| No enterprise patterns built-in    | Enterprise patterns by default            |
 
 **They are not mutually exclusive.** A forward-looking architecture could use **FormSpec for the backend business logic** (entity engine, state machine, events) and **Supabase for the client-facing realtime layer** (realtime subscriptions, storage, auth providers) — though this duplicates some functionality.
 

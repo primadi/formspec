@@ -29,7 +29,7 @@ func TestKV_SetGetDelete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	defer kv.Close()
+	defer func() { _ = kv.Close() }()
 	ctx := context.Background()
 
 	// Miss → (nil, nil), no error.
@@ -85,12 +85,12 @@ func TestKV_BroadcastInvalidate_TwoInstances(t *testing.T) {
 	if err != nil {
 		t.Fatalf("connect A: %v", err)
 	}
-	defer a.Close()
+	defer func() { _ = a.Close() }()
 	b, err := New(addr, "test")
 	if err != nil {
 		t.Fatalf("connect B: %v", err)
 	}
-	defer b.Close()
+	defer func() { _ = b.Close() }()
 	ctx := context.Background()
 
 	// Both instances hold the same key.

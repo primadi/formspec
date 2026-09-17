@@ -309,7 +309,7 @@ type KindSet map[string]bool
 var KnownKinds = KindSet{
 	// Core Basic
 	"App": true, "Module": true, "Document": true, "Entity": true, "Service": true,
-	"Config": true, "Migration": true, "Subscription": true,
+	"Config": true, "Subscription": true,
 	// Core Extended
 	"Workflow": true, "Api": true, "Webhook": true, "Mockup": true, "KindDefinition": true, "Integrator": true,
 	// Renderer / meta-kinds
@@ -472,6 +472,7 @@ func (l *Loader) Validate(raw RawManifest) error {
 			return fmt.Errorf("%s: invalid spec: %w", raw.Source, err)
 		}
 		if err := spec.ValidateTableColumns(listingSpec.Columns, "listing "+raw.Metadata.Name); err != nil {
+			return fmt.Errorf("%s: %w", raw.Source, err)
 		}
 	}
 

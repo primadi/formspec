@@ -22,12 +22,12 @@ func TestLock_AcquireRelease(t *testing.T) {
 	if err != nil {
 		t.Fatalf("connect l1: %v", err)
 	}
-	defer l1.Close()
+	defer func() { _ = l1.Close() }()
 	l2, err := NewLock(addr, ns)
 	if err != nil {
 		t.Fatalf("connect l2: %v", err)
 	}
-	defer l2.Close()
+	defer func() { _ = l2.Close() }()
 	ctx := context.Background()
 
 	// First acquirer wins.
@@ -60,7 +60,9 @@ func TestLock_AcquireRelease(t *testing.T) {
 	}
 
 	// TTL expiry: a lock with a short TTL becomes re-acquirable.
-	l2.Release(ctx, "job")
+	if err := l2.Release(ctx, "job"); err != nil {
+		t.Fatalf("release after re-acquire: %v", err)
+	}
 	if ok, _ := l1.Acquire(ctx, "ttl", 30*time.Millisecond); !ok {
 		t.Fatalf("ttl acquire: want true")
 	}

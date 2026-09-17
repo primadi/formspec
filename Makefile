@@ -1,4 +1,4 @@
-.PHONY: all build clean test lint run-example registry-dev dev web-deps web-dev web-build web-typecheck site-deps site-dev site-build site-typecheck apply build-spa build-registry install release release-upload
+.PHONY: all build clean test lint deps-warm run-example registry-dev dev web-deps web-dev web-build web-typecheck site-deps site-dev site-build site-typecheck apply build-spa build-registry install release release-upload
 
 # Build all binaries
 all: build
@@ -41,6 +41,15 @@ build-spa: web-deps
 # binary — see docs/runtimes/02-formspec-resource.md. examples/reference-app
 # demonstrates embedding it.
 
+# Warm the Go module cache. Idempotent — hampir no-op kalau cache sudah hangat.
+# Dipakai sebagai prerequisite target yang harus me-load seluruh package graph:
+# golangci-lint tidak mencetak apa pun selama fase load itu, sementara Go bisa
+# menghabiskan menit-menit menunggu download (cold cache setelah Rebuild
+# Container) — hasilnya tampak seperti freeze. `go mod download` menampilkan
+# progress "go: downloading …" sehingga keadaannya terbaca.
+deps-warm:
+	go mod download
+
 # Run tests
 test:
 	go test ./...
@@ -48,9 +57,10 @@ test:
 test-verbose:
 	go test -v ./...
 
-# Lint
-lint:
-	golangci-lint run ./...
+# Lint. `--timeout` tidak aktif secara default di golangci-lint v2 — pasang batas
+# atas supaya hang (download atau analisis) gagal dengan pesan, bukan diam.
+lint: deps-warm
+	golangci-lint run --timeout 10m ./...
 
 # Run dev environment — starts both planes + watcher
 # Usage:

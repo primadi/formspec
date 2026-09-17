@@ -1,5 +1,13 @@
 volumes:
-  minio-data:
+  garage-data:
+  # Cache Go di-persist supaya `Rebuild Container` tidak mengosongkannya.
+  # GOMODCACHE sendiri di layer container: cold cache memaksa download ~200 MB
+  # zip modul (≈1 GB setelah diekstrak) plus cache build ~1.3 GB, dan fase
+  # download itu yang membuat `make lint` / `go build ./...` pertama tampak
+  # freeze (golangci-lint tidak mencetak apa pun sementara Go menunggu).
+  # Hapus kapan saja: docker volume rm <project>_go-mod-cache <project>_go-build-cache
+  go-mod-cache:
+  go-build-cache:
 
 networks:
   formspec-net:
@@ -14,6 +22,11 @@ services:
       - .env
     volumes:
       - ../..:/workspaces:cached
+      # Cache Go persisten antar-rebuild — lihat docs_internal/plan/devcontainer-go-cache-lint.md.
+      # Docker menyalin isi + ownership (vscode:golang) dari image saat volume
+      # pertama kali dibuat, jadi cache hangat di image tidak hilang.
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/home/vscode/.cache/go-build
     command: sleep infinity
     ports:
       - "18080:8080"
@@ -21,28 +34,32 @@ services:
       - formspec-net
     depends_on:
       - valkey
-      - minio
+      - garage
 
   mailpit:
     image: axllent/mailpit:latest
     restart: unless-stopped
     ports:
-      - "11025:1025"   # SMTP
-      - "18025:8025"   # Web UI
+      - "11025:1025" # SMTP
+      - "18025:8025" # Web UI
     networks:
       - formspec-net
 
-  minio:
-    image: quay.io/minio/minio:latest
+  # Object storage (S3-compatible) — the default `garage` datastore driver.
+  # `--single-node --default-bucket` sets up the cluster layout and creates the
+  # access key + bucket from the GARAGE_DEFAULT_* vars in .env on first boot.
+  garage:
+    image: dxflrs/garage:v2.4.1
     restart: unless-stopped
     ports:
-      - "19000:9000"   # API
-      - "19001:9001"   # Console
+      - "19000:3900" # S3 API
+      - "19003:3903" # Admin API + Prometheus metrics
     volumes:
-      - minio-data:/data
+      - garage-data:/var/lib/garage
+      - ./garage.toml:/etc/garage.toml:ro
     env_file:
       - .env
-    command: server /data --console-address ":9001"
+    command: /garage server --single-node --default-bucket
     networks:
       - formspec-net
 

@@ -173,7 +173,7 @@ func (r *Redis) Close() error {
 // earliest, or a concrete ID). A BUSYGROUP error means the group already
 // exists — its own cursor is kept.
 func (r *Redis) ensureGroup(ctx context.Context, stream, group, position string) error {
-	start := "0"
+	var start string
 	switch position {
 	case "latest":
 		start = "$"

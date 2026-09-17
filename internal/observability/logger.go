@@ -143,7 +143,9 @@ func (l *Logger) Log(level Level, f Fields) {
 		line = []byte(fmt.Sprintf(`{"level":"error","error_code":"LOG_MARSHAL_FAILED","message":%q}`,
 			err.Error()))
 	}
-	l.w.Write(append(line, '\n'))
+	// Never fail on logging (see the marshal fallback above): a failed write to
+	// the log sink must not take down the request that produced it.
+	_, _ = l.w.Write(append(line, '\n'))
 }
 
 // Debug logs at debug level (business values allowed per §2.2).

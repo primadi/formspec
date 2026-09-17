@@ -17,8 +17,8 @@ import (
 
 // Storage is the minimal object-store contract used by the file upload and
 // download routes (todo 7.17.1). It mirrors the ctx.storage() primitive
-// (Upload/Download) so any backend that implements it — filesystem, MinIO/S3,
-// etc. — can be wired via SetStorageResolver.
+// (Upload/Download) so any backend that implements it — filesystem,
+// Garage/MinIO/S3, etc. — can be wired via SetStorageResolver.
 type Storage interface {
 	Upload(ctx context.Context, path string, data []byte) error
 	Download(ctx context.Context, path string) ([]byte, error)

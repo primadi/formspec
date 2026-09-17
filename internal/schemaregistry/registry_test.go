@@ -48,10 +48,10 @@ func newTestServer(t *testing.T) (*httptest.Server, *Client) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/formspec.schema.json", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"$schema":"http://json-schema.org/draft-07/schema#","$defs":{}}`))
+		_, _ = w.Write([]byte(`{"$schema":"http://json-schema.org/draft-07/schema#","$defs":{}}`))
 	})
 	mux.HandleFunc("/v1/kinds/Entity.schema.json", func(w http.ResponseWriter, _ *http.Request) {
-		w.Write([]byte(`{"type":"object"}`))
+		_, _ = w.Write([]byte(`{"type":"object"}`))
 	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)

@@ -372,7 +372,7 @@ func parseScriptUsage(path string) *scriptUsage {
 		u.parseErr = err
 		return u
 	}
-	f, err := syntax.Parse(path, src, 0)
+	f, err := syntax.LegacyFileOptions().Parse(path, src, 0)
 	if err != nil {
 		u.parseErr = err
 		return u

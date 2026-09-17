@@ -425,7 +425,7 @@ func TestMigrationRunner_ChecksumChange(t *testing.T) {
 		t.Errorf("expected 1 migration, got %d", applied)
 	}
 
-	// Now simulate a modified entity (different fields)
+	// Now simulate a modified entity (a new payload field).
 	entities2 := []EntityMigration{
 		{
 			Metadata: spec.Metadata{Name: "item", Module: "test"},
@@ -439,13 +439,26 @@ func TestMigrationRunner_ChecksumChange(t *testing.T) {
 		},
 	}
 
-	// In v1, modified entities are skipped (add-only migration)
+	// The change is recorded even though it needs no DDL: a payload-only field
+	// lives inside `data`, so the storage statement set is identical — but the
+	// entity's *contract* changed, and the migration record is what makes
+	// `formspec diff` able to say so. The old behaviour (silently skipping any
+	// change that needed no DDL) is exactly what hid removed fields.
 	applied2, err := r.ApplyMigrations(ctx, entities2)
 	if err != nil {
 		t.Fatalf("second apply failed: %v", err)
 	}
-	if applied2 != 0 {
-		t.Errorf("expected 0 migrations (add-only), got %d", applied2)
+	if applied2 != 1 {
+		t.Errorf("expected 1 migration for the changed contract, got %d", applied2)
+	}
+
+	// Applying the same spec again is a no-op.
+	applied3, err := r.ApplyMigrations(ctx, entities2)
+	if err != nil {
+		t.Fatalf("third apply failed: %v", err)
+	}
+	if applied3 != 0 {
+		t.Errorf("expected 0 migrations after convergence, got %d", applied3)
 	}
 }
 

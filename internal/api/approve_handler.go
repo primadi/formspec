@@ -43,10 +43,10 @@ func (b *RouterBuilder) HandleApproveUser() http.HandlerFunc {
 		if err := authService.ApproveUser(r.Context(), workspaceID, req.Username, req.Roles); err != nil {
 			status := http.StatusInternalServerError
 			code := "INTERNAL"
-			switch {
-			case err == auth.ErrUserNotFound:
+			switch err {
+			case auth.ErrUserNotFound:
 				status, code = http.StatusNotFound, "USER_NOT_FOUND"
-			case err == auth.ErrNotPending:
+			case auth.ErrNotPending:
 				status, code = http.StatusConflict, "NOT_PENDING"
 			}
 			writeError(w, status, code, err.Error())

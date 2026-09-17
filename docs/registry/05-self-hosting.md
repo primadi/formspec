@@ -58,7 +58,7 @@ Redis cache (`ctx.cache`) untuk MRU modules — lihat `docs_internal/plan/` untu
 ## Catatan Operasional
 
 - Tarball disimpan via `ctx.storage` — untuk production gunakan object store
-  (MinIO/S3); tarball immutable sehingga aman di-depan CDN.
+  (Garage/S3); tarball immutable sehingga aman di-depan CDN.
 - Backup: `formspec backup create` (4.8.x); jadwal otomatis masih deferred (8.3).
 - Skalabilitas: app stateless (state di Postgres + storage) — replikasi instance
   di belakang load balancer; audit multi-instance (rate limiter shared,

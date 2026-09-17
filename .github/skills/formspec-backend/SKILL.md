@@ -8,6 +8,7 @@ description: "Use when: working on FormSpec Go backend code — Entity, Service,
 Context for AI coding agents working on the FormSpec backend (Go, Starlark, YAML).
 
 ## Key paths
+
 - `pkg/spec/` — Go types that ARE the contract (entity.go, frontend.go, resources.go, datastore.go)
 - `renderers/jsonb-persist/` — PersistBackend renderer (db, datastore, crud, ddl, migrate, outbox, extension)
 - `internal/api/` — HTTP router, handlers, meta API, middleware, WebSocket hub
@@ -24,17 +25,19 @@ Context for AI coding agents working on the FormSpec backend (Go, Starlark, YAML
 - `cmd/formspec/` — CLI binary (apply, dev, generate, dev_vite, dev_runtime)
 
 ## Kind system
+
 - `kind: Entity` — stateful resource (was "Document") with characteristic: master|transaction|reference|summary
 - `kind: Service` — stateless computation
 - `kind: Config` — module configuration (read via ctx.config)
 - `kind: Subscription` — cross-module event reaction
-- `kind: Migration` — DDL-only structural changes
+- `kind: Entity` `persist.raw_ddl` — DDL di luar bahasa spec (trigger, function, index ekspresi); migrasi struktural sendiri otomatis + berklasifikasi
 - `kind: Workflow` — approval-based state machine transitions
 - `kind: Api` — external API surface override
 - `kind: Webhook` — verified inbound endpoints
 - `kind: Integrator` — cross-module bridge
 
 ## Implementation types
+
 - `impl.native` — Go (ref: "{Type}.{Method}")
 - `impl.script` — inline Starlark
 - `impl.script_ref` — named script (ref: "module/script-name")
@@ -42,6 +45,7 @@ Context for AI coding agents working on the FormSpec backend (Go, Starlark, YAML
 - `impl.sidecar` — external process (deferred)
 
 ## Key design rules
+
 - All mutations MUST be in a transaction (mutation + outbox + counter atomic)
 - PK MUST be UUID v7
 - Filter operators: eq, neq, gt, gte, lt, lte, between, in, nin, like, ilike, null, notnull

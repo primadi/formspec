@@ -40,7 +40,7 @@ func (c *Converter) Generate(collect *CollectResult) *GenerateResult {
 		"ScopeDecl", "AssignmentDecl", "UnitDecl", "InvariantDecl",
 		"ActionUIHint", "FilterSpec", "FormSection", "FormField", "FormAction", "FormSubmit", "FormRenderDecl",
 		"TableColumn", "TableAction", "BackdatePolicy", "ForwardDatePolicy",
-		"SoftDeactivateDecl", "PersistSpec", "ExtendStorage",
+		"SoftDeactivateDecl", "PersistSpec", "ExtendStorage", "RawDDLDecl",
 		"NaturalKeyRuleDecl", "NaturalKeyPrefix", "StorageSpec", "FieldRef",
 		"DeliveryDecl", "PublishDecl", "PayloadDecl", "EventDeliveryDecl", "DeliveryTarget",
 		"RetryDecl", "PageBlock", "PageTab", "BlockRef", "DashboardWidget", "WidgetLayout",

@@ -118,13 +118,13 @@ Karena itu mekanismenya ditetapkan sekarang:
 
 ### Modul baru milik kafe (`spec/modules/`)
 
-| Module         | Konteks                        | Kinds                               | Isi                                                                                                                                 |
-| -------------- | ------------------------------ | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `cafe-master`  | Data acuan yang jarang berubah | Module, Entity, Config              | `branch`, `menu-category`, `menu-item`, `menu-item-price`, `dining-table`, `member`, `employee`, `promo` + `Config` pengaturan kafe |
-| `cafe-stock`   | Bahan baku, resep, produksi    | Module, Entity, Service             | `ingredient`, `recipe`, `supplier`, `purchase-order`, `stock-movement`, `stock-level`, `stock-opname`, `waste-entry`, `menu-cost`   |
-| `cafe-order`   | Transaksi penjualan & kas      | Module, Entity, Workflow, Migration | `table-session`, `order`, `payment`, `shift`, `cash-movement`                                                                       |
-| `cafe-loyalty` | Kesetiaan pelanggan            | Module, Entity                      | `point-entry`, `member-point`                                                                                                       |
-| `cafe-report`  | Pelaporan & dashboard          | Module, Dashboard, Widget, Report   | 1 dashboard, 4 widget, 6 report                                                                                                     |
+| Module         | Konteks                        | Kinds                             | Isi                                                                                                                                 |
+| -------------- | ------------------------------ | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `cafe-master`  | Data acuan yang jarang berubah | Module, Entity, Config            | `branch`, `menu-category`, `menu-item`, `menu-item-price`, `dining-table`, `member`, `employee`, `promo` + `Config` pengaturan kafe |
+| `cafe-stock`   | Bahan baku, resep, produksi    | Module, Entity, Service           | `ingredient`, `recipe`, `supplier`, `purchase-order`, `stock-movement`, `stock-level`, `stock-opname`, `waste-entry`, `menu-cost`   |
+| `cafe-order`   | Transaksi penjualan & kas      | Module, Entity, Workflow          | `table-session`, `order`, `payment`, `shift`, `cash-movement`                                                                       |
+| `cafe-loyalty` | Kesetiaan pelanggan            | Module, Entity                    | `point-entry`, `member-point`                                                                                                       |
+| `cafe-report`  | Pelaporan & dashboard          | Module, Dashboard, Widget, Report | 1 dashboard, 4 widget, 6 report                                                                                                     |
 
 ### App pihak ketiga yang dipakai (vertical FormSpec)
 
@@ -361,10 +361,11 @@ _Alasan:_ aturan bisnis #10. Kalau hanya dicek di script, dua permintaan
 bersamaan bisa membuat dua shift terbuka. Constraint database berlaku untuk
 semua jalur tulis, guard script hanya pada jalur yang melewatinya.
 
-_Catatan:_ sebelumnya ini hanya bisa dinyatakan lewat `kind: Migration` DDL
-mentah yang tidak portabel antar-driver (GAP-35). Predikat parsial kini
-konstruk bahasa spec; `kind: Migration` tetap tersedia untuk DDL yang benar-
-benar di luar bahasa.
+_Catatan:_ sebelumnya ini hanya bisa dinyatakan lewat DDL mentah yang tidak
+portabel antar-driver (GAP-35). Predikat parsial dan kolom turunan untuk field
+`relation` kini konstruk bahasa spec, jadi aturan ini dinyatakan deklaratif di
+manifest — DDL di luar bahasa, kalau nanti diperlukan, tempatnya
+`persist.raw_ddl` pada Entity-nya.
 
 ### D7 — Batas diskon manual ada di `Config`, bukan di kode
 
@@ -527,7 +528,7 @@ niat.
 | 7   | Maks 1 promo otomatis + 1 penukaran poin     | Script evaluasi promo: pilih satu kandidat terbaik; `points_value` field terpisah   | dapat dijalankan                          |
 | 8   | Diskon manual di luar batas perlu supervisor | Guard action + `Workflow` + batas dari `Config`                                     | dapat dijalankan                          |
 | 9   | Stok per cabang                              | Semua entity stok memuat `branch_id`; `stock-level` unik per (cabang, bahan)        | **GAP-08** (tidak ada row-scope otomatis) |
-| 10  | Satu shift terbuka per kasir per outlet      | `Migration` partial unique index (D6)                                               | dapat dijalankan                          |
+| 10  | Satu shift terbuka per kasir per outlet      | `indexes:` partial unique (D6)                                                      | dapat dijalankan                          |
 | 11  | Void setelah shift tutup ditolak             | Guard pada `cancel`: shift terkait harus `open`                                     | dapat dijalankan                          |
 | 12  | Poin diberi setelah lunas                    | `point-entry` dibuat oleh action `settle` / Subscription pada `order.paid`          | dapat dijalankan                          |
 | 13  | Nomor HP member unik                         | `member.phone` `unique`                                                             | dapat dijalankan                          |

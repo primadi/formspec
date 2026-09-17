@@ -30,6 +30,21 @@ var OverrideWhitelist = map[string]bool{
 	"VisualSpecKind": true,
 }
 
+// isShadowCopyableKind reports whether a kind is on the whitelist, matching
+// case-insensitively: manifests spell a kind exactly, but a hand-written
+// override file may not, and a rejected-but-legal kind is a confusing failure.
+func isShadowCopyableKind(kind string) bool {
+	if OverrideWhitelist[kind] {
+		return true
+	}
+	for allowed := range OverrideWhitelist {
+		if strings.EqualFold(allowed, kind) {
+			return true
+		}
+	}
+	return false
+}
+
 // OverrideEntry records one adopted shadow copy on the module's lock entry.
 type OverrideEntry struct {
 	// Kind/Name identify the adopted manifest.
@@ -346,8 +361,7 @@ func ValidateOverridesDir(projectRoot string) error {
 			return nil
 		}
 		for _, doc := range docs {
-			if !OverrideWhitelist[strings.Title(strings.ToLower(doc.Kind))] &&
-				!OverrideWhitelist[doc.Kind] {
+			if !isShadowCopyableKind(doc.Kind) {
 				errs = append(errs, fmt.Sprintf(
 					"%s: kind %q is not shadow-copyable (whitelist: Form, VisualSpecKind) — "+
 						"remove the file or use Entity Extension / Integrator pattern", p, doc.Kind))

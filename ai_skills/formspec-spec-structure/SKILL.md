@@ -51,15 +51,15 @@ sub-folders, each with its own `README.md` as the entry point:
 
 ## Backend Docs (Data & Behavior)
 
-| File                     | Covers                                                                                                                                                 |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `01-core-basic.md`       | Entity (characteristic, lifecycle doc_status, fields, child vs relation), Service, Config, Migration, Subscription, expose, permission model, REST API |
-| `02-core-extended.md`    | Workflow (multi-approver), Api, Webhook, Mockup, Integrator, async actions, validation levels 4-6, hooks, query builder, rate limiting, audit trail    |
-| `03-entity-extension.md` | Entity extension by other modules; clean uninstall contract                                                                                            |
-| `04-persist-backend.md`  | PersistBackend interface — storage seam equivalent to Shell                                                                                            |
-| `05-field-types.md`      | Normative field type catalog, `money` type, validation vocabulary, tree/hierarchy support                                                              |
-| `06-script-runtime.md`   | Script handler API — `execute` entrypoint, `resource` object, cross-entity access, `ok`/`fail` return contract, native `ref` resolution                |
-| `error-glossary.yaml`    | Canonical `FORMSPEC.*` error codes                                                                                                                     |
+| File                     | Covers                                                                                                                                                                                                  |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `01-core-basic.md`       | Entity (characteristic, lifecycle doc_status, fields, child vs relation), Service, Config, Subscription, migrasi otomatis + deklarasi destruktif, `persist.raw_ddl`, expose, permission model, REST API |
+| `02-core-extended.md`    | Workflow (multi-approver), Api, Webhook, Mockup, Integrator, async actions, validation levels 4-6, hooks, query builder, rate limiting, audit trail                                                     |
+| `03-entity-extension.md` | Entity extension by other modules; clean uninstall contract                                                                                                                                             |
+| `04-persist-backend.md`  | PersistBackend interface — storage seam equivalent to Shell                                                                                                                                             |
+| `05-field-types.md`      | Normative field type catalog, `money` type, validation vocabulary, tree/hierarchy support                                                                                                               |
+| `06-script-runtime.md`   | Script handler API — `execute` entrypoint, `resource` object, cross-entity access, `ok`/`fail` return contract, native `ref` resolution                                                                 |
+| `error-glossary.yaml`    | Canonical `FORMSPEC.*` error codes                                                                                                                                                                      |
 
 ## Frontend Docs (Visual)
 

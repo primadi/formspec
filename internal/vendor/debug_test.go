@@ -8,16 +8,32 @@ import (
 	"github.com/primadi/formspec/internal/manifest"
 )
 
+// mustMkdirAll / mustWriteFile keep the fixture setup readable: a failure to
+// create the fixture is a test failure, not something to carry on from.
+func mustMkdirAll(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", path, err)
+	}
+}
+
+func mustWriteFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
 func TestDebugFindUpstream(t *testing.T) {
 	// Recreate the smoke layout.
 	project := t.TempDir()
 	specDir := filepath.Join(project, "spec")
-	os.MkdirAll(specDir, 0755)
-	os.WriteFile(filepath.Join(specDir, "app.yaml"), []byte(appFixture), 0644)
+	mustMkdirAll(t, specDir)
+	mustWriteFile(t, filepath.Join(specDir, "app.yaml"), appFixture)
 	src := t.TempDir()
-	os.MkdirAll(filepath.Join(src, "forms"), 0755)
-	os.WriteFile(filepath.Join(src, "module.yaml"), []byte("apiVersion: formspec.dev/v1\nkind: Module\nmetadata:\n  name: billing\nspec:\n  version: 1.0.0\n"), 0644)
-	os.WriteFile(filepath.Join(src, "forms", "checkout.yaml"), []byte("apiVersion: formspec.dev/v1\nkind: Form\nmetadata:\n  name: checkout\n  module: billing\nspec:\n  version: v1\n"), 0644)
+	mustMkdirAll(t, filepath.Join(src, "forms"))
+	mustWriteFile(t, filepath.Join(src, "module.yaml"), "apiVersion: formspec.dev/v1\nkind: Module\nmetadata:\n  name: billing\nspec:\n  version: 1.0.0\n")
+	mustWriteFile(t, filepath.Join(src, "forms", "checkout.yaml"), "apiVersion: formspec.dev/v1\nkind: Form\nmetadata:\n  name: checkout\n  module: billing\nspec:\n  version: v1\n")
 
 	if _, err := Install(t.Context(), src, Options{ProjectRoot: project, SpecPath: specDir, Use: true}); err != nil {
 		t.Fatal(err)

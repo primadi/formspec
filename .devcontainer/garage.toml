@@ -1,0 +1,46 @@
+# FormSpec dev container — single-node Garage (S3-compatible object storage).
+# Docs: https://garagehq.deuxfleurs.fr/documentation/quick-start/
+#
+# Garage is the default object storage backend (driver `garage`). It is started
+# with `--single-node --default-bucket`, so the cluster layout is set up
+# automatically and the access key + bucket below are created on boot.
+#
+# All paths live inside the container; the `garage-data` volume is mounted at
+# /var/lib/garage so buckets survive a container rebuild.
+
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+
+# Dev only: single node, so LMDB's crash-recovery concerns do not apply and
+# SQLite keeps the metadata readable/inspectable.
+db_engine = "sqlite"
+
+# Single node — no redundancy by design. Do not copy this to production.
+replication_factor = 1
+
+rpc_bind_addr = "[::]:3901"
+rpc_public_addr = "127.0.0.1:3901"
+
+# Fixed dev secret (must be 32 bytes hex). Safe to commit: dev-only cluster.
+rpc_secret = "a90b98c1d25d2dccccdd1dbf7a4542df848a0a820af8c33397385f8cdc32bd81"
+
+# The mounted config is world-readable, which Garage's secret-permission check
+# rejects. Dev-only cluster with dev-only credentials.
+allow_world_readable_secrets = true
+
+[s3_api]
+# Must match the object store client's region (datastore/s3store DefaultRegion).
+s3_region = "us-east-1"
+api_bind_addr = "[::]:3900"
+# root_domain is intentionally omitted: path-style addressing only. Garage
+# always accepts path-style requests and the Go client uses BucketLookupPath,
+# so no wildcard DNS entry is needed for the dev container.
+
+[s3_web]
+bind_addr = "[::]:3902"
+root_domain = ".web.garage.localhost"
+
+[admin]
+api_bind_addr = "[::]:3903"
+admin_token = "YvHCn75UhqS2Yoyt3jHMcu2xF8Aip72wxwaj0F6bfD8="
+metrics_token = "o6iByHe+AyHI79l85zgAHtqfn+iNkFL4DINZBLwMRW4="

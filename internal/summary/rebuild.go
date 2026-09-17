@@ -64,7 +64,7 @@ func Resolve(reg *entity.Registry, ref string) (module, name string, es *spec.En
 			return "", "", nil, fmt.Errorf("no Entity %q in the spec tree", ref)
 		}
 		if info.EntitySpec == nil {
-			return "", "", nil, fmt.Errorf("Entity %q has no parsed spec", ref)
+			return "", "", nil, fmt.Errorf("entity %q has no parsed spec", ref)
 		}
 		return m, n, info.EntitySpec, nil
 	}

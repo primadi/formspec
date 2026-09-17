@@ -515,7 +515,7 @@ Predikat memakai **nama field**, bukan SQL bebas — grammar tertutup
 (`<field> <op> <literal>` dan `<field> IS [NOT] NULL`, digabung `AND`) supaya
 salah ketik ditolak saat validate, bukan berakhir sebagai DDL. Index parsial
 didukung SQLite maupun PostgreSQL, jadi aturannya portabel; DDL yang benar-benar
-di luar bahasa tetap tempatnya di `kind: Migration`.
+di luar bahasa tempatnya di `persist.raw_ddl` (§4.3).
 
 `category` adalah pengelompokan data yang framework jamin **tidak boleh
 di-join lintas kategori** (isolasi, bukan sekadar performa) — cara sebuah
@@ -529,56 +529,109 @@ terpisah, dll.) adalah detail implementasinya, lihat
 Framework menghasilkan structural diff dari perubahan spec; PersistBackend
 menerima diff dan menerjemahkannya ke storage-nya sendiri. Tidak ada asumsi
 "framework generate SQL" — lihat [`04-persist-backend.md`](04-persist-backend.md)
-§2 untuk kontrak lengkapnya (aturan `renamed_from`, dua tahap untuk field
-removal, dll).
+§2 untuk kontrak lengkapnya (aturan `renamed_from`, dll).
 
-Tiga jenis migrasi: **structural** (otomatis penuh dari diff Entity, tidak
-pernah ditulis tangan), **custom DDL** (`kind: Migration` — index, function,
-trigger, extension, materialized view; DML ditolak saat runtime), **data
-migration** (script ber-versi, run/rollback manual — backfill masuk sini,
-bukan structural diff).
+Migrasi **tidak pernah ditulis tangan** dan tidak punya manifest sendiri: tidak
+ada `kind: Migration`. Sebuah perubahan skema dinyatakan dengan mengubah Entity —
+menambah field, menandai field `removed`, menyatakan `persist.raw_ddl` — dan
+engine menerapkannya otomatis saat spec dimuat (`formspec dev`, `formspec
+migrate apply`). Yang ditulis tangan hanyalah **izinnya**, bukan SQL-nya.
 
-### 4.1 `kind: Migration` — DDL portabel, dan perbaikan data yang dinyatakan
+### 4.1 Klasifikasi perubahan
 
-Dua hal membuat custom DDL tidak bisa selalu ditulis sebagai satu string
-(gap #35/#36):
+Setiap perbedaan antara spec dan schema ter-apply dinilai sebelum dieksekusi:
+
+| Tingkat     | Contoh                                                                                                                         | Perlakuan                          |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------- |
+| **aditif**  | tabel, kolom turunan, atau index baru                                                                                          | otomatis, senyap                   |
+| **derived** | kolom turunan dibangun ulang; rename via `renamed_from`; index dihapus (termasuk unique)                                       | otomatis, diumumkan                |
+| **lossy**   | nilai field dihapus dari payload; type change pada kolom turunan yang nilainya gagal cast; unique index sementara duplikat ada | **ditolak** kecuali dideklarasikan |
+| **never**   | tabel dihapus (Entity hilang dari manifest)                                                                                    | selalu ditolak                     |
+
+Pembeda `derived` dan `lossy` bukan besar-kecilnya perubahan, melainkan **bisa
+tidaknya nilai dipulihkan**. Kolom turunan dan index dihitung ulang dari payload
+`data`, jadi menyatakan ulang spec memulihkannya. Field yang dihapus dan nilai
+yang gagal di-cast tidak bisa dihitung ulang dari apa pun — hanya penyimpanan
+yang menahannya, dan menghapusnya berarti hilang.
+
+Alasan tidak ada lagi kind untuk migrasi custom: diff otomatis yang hanya bisa
+**menambah** — dan diam untuk sisanya — adalah bentuk yang paling berbahaya.
+Field yang dihapus tidak dimigrasikan, tidak dilaporkan, tetapi tetap merusak
+penulisan record lama karena key-nya masih ada di `data`. Kondisi itu sekarang
+**gagal keras** dengan jumlah barisnya, bukan lewat senyap.
+
+### 4.2 Deklarasi perubahan destruktif
+
+Deklarasi ditulis pada field yang bersangkutan, dan `reason` wajib — flag tanpa
+alasan hanya mencatat apa yang terjadi, bukan apakah itu memang dikehendaki:
 
 ```yaml
-kind: Migration
-metadata: { name: menu-price-unique }
-spec:
-  reason: "dua harga untuk menu yang sama muncul selagi unique index belum ada"
-  dml:
-    - "DELETE FROM menu_prices WHERE rowid NOT IN (SELECT MIN(rowid) FROM menu_prices GROUP BY menu_id)"
-  ddl_by:
-    sqlite: "CREATE UNIQUE INDEX … ON menu_prices (_menu_id)"
-    postgres: "CREATE UNIQUE INDEX … ON menu_prices ((data->>'menu_item_id'))"
+fields:
+  - name: old_branch_code
+    type: string
+    removed: true # tombstone: nilainya dibuang dari data
+    reason: "digantikan branch_id"
+  - name: amount_cents
+    type: integer
+    accept_data_loss: true # type change: baris yang gagal cast kehilangan nilainya
+    reason: "dipindah dari text bebas ke integer pada 2026-09"
 ```
 
-**DDL yang tidak portabel.** Ekspresi untuk membaca payload JSONB berbeda antar
-driver — `json_extract(data, '$.x')` di SQLite, `data->>'x'` di PostgreSQL —
-sehingga satu string benar untuk dev dan salah untuk produksi, dan kegagalannya
-baru muncul **saat deploy**. Karena itu: `ddl` adalah satu statement untuk semua
-driver (kasus umum), sedangkan `ddl_by` memuat varian per driver dengan kunci
-tertutup (`sqlite`, `postgres`). **Salah satu**, bukan keduanya: menulis dua-duanya
-ditolak supaya maksudnya tidak ambigu, dan driver yang tidak punya varian
-melewati migration itu **dengan peringatan** — bukan menjalankan SQL driver lain.
+| Aturan                                                                 | Alasan                                                                            |
+| ---------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| namanya `removed`, bukan `deleted`                                     | `deleted_at`/`soft_delete` sudah berarti soft delete di spec ini                  |
+| tombstone tetap mendeklarasikan `name` + `type`                        | keduanya wajib di Field; tombstone mendeskripsikan apa yang sedang dibuang        |
+| tombstone hidup **satu kali apply**; barisnya boleh dihapus sesudahnya | setelah diterapkan, field itu tidak ada lagi di baseline — tidak ada yang tersisa |
+| baris field dihapus **tanpa** tombstone → error                        | membedakan penghapusan yang disengaja dari salah ketik                            |
+| `removed` dan `renamed_from` saling eksklusif                          | rename menyimpan datanya, removal membuangnya                                     |
+| tabel **tidak** punya tombstone                                        | blast radius-nya seluruh entity; jalur resminya `formspec backup` → drop manual   |
 
-**Perbaikan data yang dinyatakan.** Sebuah constraint hanya bisa ditambahkan
-setelah datanya memenuhi syarat — dan duplikat yang menghalangi biasanya muncul
-justru **karena** constraint-nya belum ada. Menolak DML sepenuhnya membuat
-perbaikan itu dilakukan manual di luar spec, tanpa jejak. Karena itu `dml`
-dizinkan dengan aturan yang menjaga niatnya:
+`accept_data_loss` hanya relevan untuk field yang punya kolom turunan (`index`,
+`unique`, `natural_key`, atau disebut sebuah `indexes:`): nilai field biasa
+disimpan apa adanya di dalam `data`, sehingga mengubah tipenya tidak menjatuhkan
+nilai apa pun dan tidak memerlukan izin.
 
-| Aturan                                                            | Alasan                                                                          |
-| ----------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `reason` **wajib** bila `dml` ada                                 | perubahan data harus bisa diaudit: kenapa, bukan hanya apa                      |
-| `dml` hanya boleh INSERT/UPDATE/DELETE/WITH                       | perubahan skema tetap milik `ddl`/`ddl_by`; dua kanal itu tidak boleh bercampur |
-| `dml` dijalankan **sebelum** `ddl` dalam satu manifest            | urutan itulah yang membuat "rapikan lalu batasi" bisa dinyatakan sekali jalan   |
-| `dml` diumumkan saat `migrate apply` (dan dicetak `migrate plan`) | menyentuh data, jadi tidak boleh senyap                                         |
+### 4.3 `persist.raw_ddl` — DDL di luar bahasa spec
 
-Backfill besar tetap milik `kind: DataMigration` (script ber-versi dengan
-rollback); `dml` untuk perbaikan yang tidak terpisahkan dari perubahan skema.
+Trigger, function, materialized view, atau index atas ekspresi JSONB tidak
+terekspresi oleh field. Itu tempatnya `persist.raw_ddl`, **di dalam** Entity —
+bukan manifest kind terpisah — supaya ia berjalan di jalur sync yang sama:
+
+```yaml
+kind: Entity
+spec:
+  persist:
+    raw_ddl:
+      - name: menu-price-unique
+        reason: "satu harga per menu per cabang"
+        ddl_by:
+          sqlite: "CREATE UNIQUE INDEX idx_menu_price ON menu_prices (json_extract(data, '$.menu_item_id'))"
+          postgres: "CREATE UNIQUE INDEX idx_menu_price ON menu_prices ((data->>'menu_item_id'))"
+```
+
+| Aturan                                                                  | Alasan                                                                       |
+| ----------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `ddl` (portabel) **atau** `ddl_by` (per driver) — bukan keduanya        | maksud yang ambigu lebih buruk daripada pilihan yang tegas                   |
+| dialek himpunan tertutup (`sqlite`, `postgres`)                         | salah ketik tidak boleh berarti "varian itu dilewati"                        |
+| driver tanpa varian dilewati **dengan peringatan**                      | menjalankan SQL driver lain adalah kegagalan yang ingin dihindari            |
+| `reason` wajib                                                          | perubahan di lapisan storage harus bisa diaudit: _kenapa_, bukan hanya _apa_ |
+| hanya DDL — data statement dan `DROP` ditolak saat validate             | data dan penghapusan storage bukan urusan manifest                           |
+| **forward-only**: menghapus deklarasi tidak menjatuhkan apa yang dibuat | menebak invers dari DDL bebas lebih buruk daripada meninggalkannya           |
+| checksum per pernyataan dicatat                                         | pernyataan yang tidak berubah tidak dijalankan ulang                         |
+
+### 4.4 Perbaikan data & backfill — di luar spec, dijalankan sekali
+
+Sebuah constraint hanya bisa ditambahkan setelah datanya memenuhi syarat, dan
+duplikat muncul justru **karena** constraint-nya belum ada. Spec tidak
+menyediakan tempat untuk DML: kalau masih ada duplikat, migrasi **ditolak dengan
+hitungannya** ("3 grup duplikat"), operator merapikan datanya sekali lewat
+`formspec repl -f repair.star`, lalu apply dijalankan lagi. Backfill besar
+berjalan lewat jalur yang sama.
+
+Pemisahan ini disengaja: spec menyatakan **bentuk storage**, sedangkan perbaikan
+data adalah tindakan operasional yang jejaknya ada di riwayat shell/ops, bukan di
+manifest. Yang tidak boleh terjadi — dan karena itu ditolak — adalah apply
+setengah jalan yang gagal setelah sebagian perubahan ter-commit.
 
 ## 5. Action
 

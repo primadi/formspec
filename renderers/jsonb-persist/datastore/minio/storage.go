@@ -1,80 +1,68 @@
-// Package minio provides a MinIO/S3-backed object store implementing the
-// same Upload/Download contract as ctx.storage() (and api.Storage). It is
-// used for file fields (todo 7.17.1) when FORMSPEC_STORAGE=minio.
+// Package minio provides a MinIO-backed object store implementing the same
+// Upload/Download contract as ctx.storage() (and api.Storage), used for file
+// fields when a `kind: Datastore` declares `driver: minio`.
+//
+// Garage (`driver: garage`) is the default object storage driver; this driver
+// stays for deployments that already run MinIO. MinIO speaks the S3 API, so
+// the client is the shared datastore/s3store implementation — this package
+// pins the MinIO defaults on top of it.
 package minio
 
 import (
-	"bytes"
-	"context"
 	"fmt"
-	"io"
-	"mime"
-	"path/filepath"
 
-	"github.com/minio/minio-go/v7"
-	"github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/primadi/formspec/renderers/jsonb-persist/datastore/s3store"
 )
 
-// Storage is a MinIO/S3-backed object store.
-type Storage struct {
-	client *minio.Client
-	core   minio.Core // multipart upload API (PutObjectPart lives on Core)
-	bucket string
+const (
+	// DefaultHost is the dev container service name.
+	DefaultHost = "minio"
+
+	// DefaultS3Port is MinIO's S3 API port.
+	DefaultS3Port = 9000
+
+	// DefaultEndpoint is MinIO's dev container S3 endpoint.
+	DefaultEndpoint = "minio:9000"
+
+	// DefaultBucket is used when a Datastore declares no bucket.
+	DefaultBucket = "formspec"
+
+	// DefaultRegion must match MinIO's configured region.
+	DefaultRegion = "us-east-1"
+)
+
+// Config / Storage mirror the shared S3 client.
+type (
+	// Config holds the connection parameters.
+	Config = s3store.Config
+	// Storage is a MinIO-backed object store; it carries the full S3
+	// capability set (Stat/Delete/Link/ChunkUpload).
+	Storage = s3store.Storage
+)
+
+// DefaultLinkTTL is used when a link request carries no explicit TTL.
+const DefaultLinkTTL = s3store.DefaultLinkTTL
+
+// Endpoint builds an S3 endpoint from a host and port, falling back to the
+// MinIO dev defaults.
+func Endpoint(host string, port int) string {
+	if host == "" {
+		host = DefaultHost
+	}
+	if port <= 0 {
+		port = DefaultS3Port
+	}
+	return fmt.Sprintf("%s:%d", host, port)
 }
 
-// NewStorage creates a MinIO client, ensures the bucket exists, and returns
-// a Storage rooted at that bucket. useSSL selects https vs http.
-func NewStorage(endpoint, accessKey, secretKey, bucket string, useSSL bool) (*Storage, error) {
-	client, err := minio.New(endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
-		Secure: useSSL,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("minio client: %w", err)
+// NewStorage opens a MinIO-backed object store, applying the MinIO defaults
+// for Region and Bucket when the caller leaves them empty.
+func NewStorage(cfg Config) (*Storage, error) {
+	if cfg.Region == "" {
+		cfg.Region = DefaultRegion
 	}
-
-	ctx := context.Background()
-	exists, err := client.BucketExists(ctx, bucket)
-	if err != nil {
-		return nil, fmt.Errorf("minio bucket check %q: %w", bucket, err)
+	if cfg.Bucket == "" {
+		cfg.Bucket = DefaultBucket
 	}
-	if !exists {
-		if err := client.MakeBucket(ctx, bucket, minio.MakeBucketOptions{}); err != nil {
-			return nil, fmt.Errorf("minio make bucket %q: %w", bucket, err)
-		}
-	}
-
-	return &Storage{client: client, core: minio.Core{Client: client}, bucket: bucket}, nil
-}
-
-// Upload writes data to path.
-func (s *Storage) Upload(ctx context.Context, path string, data []byte) error {
-	_, err := s.client.PutObject(ctx, s.bucket, path, bytes.NewReader(data),
-		int64(len(data)), minio.PutObjectOptions{ContentType: contentTypeFor(path)})
-	if err != nil {
-		return fmt.Errorf("minio upload %s: %w", path, err)
-	}
-	return nil
-}
-
-// Download reads data from path.
-func (s *Storage) Download(ctx context.Context, path string) ([]byte, error) {
-	obj, err := s.client.GetObject(ctx, s.bucket, path, minio.GetObjectOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("minio download %s: %w", path, err)
-	}
-	defer obj.Close()
-	data, err := io.ReadAll(obj)
-	if err != nil {
-		return nil, fmt.Errorf("minio read %s: %w", path, err)
-	}
-	return data, nil
-}
-
-// contentTypeFor maps a path's extension to a MIME type for object metadata.
-func contentTypeFor(path string) string {
-	if ct := mime.TypeByExtension(filepath.Ext(path)); ct != "" {
-		return ct
-	}
-	return "application/octet-stream"
+	return s3store.New(cfg)
 }

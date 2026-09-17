@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"go.starlark.net/starlark"
+	"go.starlark.net/syntax"
 )
 
 type cachedProgram struct {
@@ -54,7 +55,7 @@ func (c *programCache) getProgram(path string, isPredeclared func(name string) b
 		return cached.prog, nil
 	}
 
-	_, prog, err := starlark.SourceProgram(path, nil, isPredeclared)
+	_, prog, err := starlark.SourceProgramOptions(syntax.LegacyFileOptions(), path, nil, isPredeclared)
 	if err != nil {
 		return nil, err
 	}

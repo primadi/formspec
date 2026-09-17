@@ -1,4 +1,4 @@
-package minio
+package s3store
 
 // Extended Storage capabilities (plan: storage-links-plan.md Fase 2):
 // Stater (object size), Deleter (object removal), Linker (presigned URL),
@@ -16,9 +16,9 @@ import (
 	"github.com/minio/minio-go/v7"
 )
 
-// chunkSession tracks an in-flight multipart upload. MinIO's multipart
-// upload id is server-side; we keep the object path and the completed parts
-// so CompleteChunkUpload can submit them in order.
+// chunkSession tracks an in-flight multipart upload. The multipart upload id
+// is server-side; we keep the object path and the completed parts so
+// CompleteChunkUpload can submit them in order.
 type chunkSession struct {
 	path  string
 	parts []minio.CompletePart
@@ -26,8 +26,8 @@ type chunkSession struct {
 
 // multipartSessions is process-local state for chunked uploads. The sidecar
 // callback runs in the same process (cmd/formspec/dev.go), so an in-memory
-// map is sufficient; an orphaned session expires server-side via MinIO's
-// lifecycle (IncompleteUploadAbortDays) and the sweeper can abort it.
+// map is sufficient; an orphaned session expires server-side via the
+// server's incomplete-upload lifecycle and the sweeper can abort it.
 type multipartSessions struct {
 	mu       sync.Mutex
 	sessions map[string]*chunkSession
@@ -59,7 +59,7 @@ func (m *multipartSessions) remove(id string) {
 func (s *Storage) Stat(ctx context.Context, path string) (int64, error) {
 	info, err := s.client.StatObject(ctx, s.bucket, path, minio.StatObjectOptions{})
 	if err != nil {
-		return 0, fmt.Errorf("minio stat %s: %w", path, err)
+		return 0, fmt.Errorf("object store stat %s: %w", path, err)
 	}
 	return info.Size, nil
 }
@@ -68,14 +68,14 @@ func (s *Storage) Stat(ctx context.Context, path string) (int64, error) {
 // and TTL sweep).
 func (s *Storage) Delete(ctx context.Context, path string) error {
 	if err := s.client.RemoveObject(ctx, s.bucket, path, minio.RemoveObjectOptions{}); err != nil {
-		return fmt.Errorf("minio delete %s: %w", path, err)
+		return fmt.Errorf("object store delete %s: %w", path, err)
 	}
 	return nil
 }
 
 // Link returns a presigned GET URL valid for ttl (todo 7.17.4). This is the
 // `visibility: signed` path — permission is checked at link-generation time,
-// then MinIO serves the bytes directly.
+// then the object store serves the bytes directly.
 func (s *Storage) Link(ctx context.Context, path string, ttl time.Duration) (string, error) {
 	if ttl <= 0 {
 		ttl = DefaultLinkTTL
@@ -86,7 +86,7 @@ func (s *Storage) Link(ctx context.Context, path string, ttl time.Duration) (str
 	}
 	u, err := s.client.PresignedGetObject(ctx, s.bucket, path, ttl, nil)
 	if err != nil {
-		return "", fmt.Errorf("minio presign %s: %w", path, err)
+		return "", fmt.Errorf("object store presign %s: %w", path, err)
 	}
 	return u.String(), nil
 }
@@ -101,7 +101,7 @@ func (s *Storage) InitChunkUpload(ctx context.Context, path string) (string, err
 		ContentType: contentTypeFor(path),
 	})
 	if err != nil {
-		return "", fmt.Errorf("minio init multipart %s: %w", path, err)
+		return "", fmt.Errorf("object store init multipart %s: %w", path, err)
 	}
 	id := uploadID // S3's upload id is already globally unique
 	sessions.put(id, &chunkSession{path: path})
@@ -112,14 +112,14 @@ func (s *Storage) InitChunkUpload(ctx context.Context, path string) (string, err
 func (s *Storage) PutChunk(ctx context.Context, uploadID string, partNo int, data []byte) error {
 	sess, ok := sessions.get(uploadID)
 	if !ok {
-		return fmt.Errorf("minio put_chunk: unknown upload id %q", uploadID)
+		return fmt.Errorf("object store put_chunk: unknown upload id %q", uploadID)
 	}
 	// Part numbers are 1-based; PutObjectPart lives on minio.Core.
 	partNumber := partNo + 1
 	obj, err := s.core.PutObjectPart(ctx, s.bucket, sess.path, uploadID,
 		partNumber, bytes.NewReader(data), int64(len(data)), minio.PutObjectPartOptions{})
 	if err != nil {
-		return fmt.Errorf("minio put part %d %s: %w", partNumber, sess.path, err)
+		return fmt.Errorf("object store put part %d %s: %w", partNumber, sess.path, err)
 	}
 	sess.parts = append(sess.parts, minio.CompletePart{
 		PartNumber: partNumber,
@@ -133,10 +133,10 @@ func (s *Storage) PutChunk(ctx context.Context, uploadID string, partNo int, dat
 func (s *Storage) CompleteChunkUpload(ctx context.Context, uploadID string) (string, error) {
 	sess, ok := sessions.get(uploadID)
 	if !ok {
-		return "", fmt.Errorf("minio complete_upload: unknown upload id %q", uploadID)
+		return "", fmt.Errorf("object store complete_upload: unknown upload id %q", uploadID)
 	}
 	if len(sess.parts) == 0 {
-		return "", fmt.Errorf("minio complete_upload %s: no parts uploaded", sess.path)
+		return "", fmt.Errorf("object store complete_upload %s: no parts uploaded", sess.path)
 	}
 	sort.Slice(sess.parts, func(i, j int) bool {
 		return sess.parts[i].PartNumber < sess.parts[j].PartNumber
@@ -144,7 +144,7 @@ func (s *Storage) CompleteChunkUpload(ctx context.Context, uploadID string) (str
 	_, err := s.core.CompleteMultipartUpload(ctx, s.bucket, sess.path, uploadID,
 		sess.parts, minio.PutObjectOptions{})
 	if err != nil {
-		return "", fmt.Errorf("minio complete multipart %s: %w", sess.path, err)
+		return "", fmt.Errorf("object store complete multipart %s: %w", sess.path, err)
 	}
 	sessions.remove(uploadID)
 	return sess.path, nil

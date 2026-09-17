@@ -82,7 +82,9 @@ func TestLogger_Overrides(t *testing.T) {
 	log.Warn(Fields{"environment": "staging", "error_code": "X"})
 
 	var rec map[string]any
-	json.Unmarshal(buf.Bytes(), &rec)
+	if err := json.Unmarshal(buf.Bytes(), &rec); err != nil {
+		t.Fatalf("decode log record: %v", err)
+	}
 	if rec["environment"] != "staging" {
 		t.Errorf("environment = %v, want staging (per-call override)", rec["environment"])
 	}

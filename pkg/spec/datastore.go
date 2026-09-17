@@ -9,7 +9,7 @@
 package spec
 
 // DatastoreDriver identifies the backend technology.
-// @schema {description: "Backend database/driver technology", enum: ["sqlite", "postgres", "valkey", "redis", "s3", "minio", "nats", "memory", "fs"]}
+// @schema {description: "Backend database/driver technology", enum: ["sqlite", "postgres", "valkey", "redis", "s3", "garage", "minio", "nats", "memory", "fs"]}
 type DatastoreDriver string
 
 const (
@@ -18,11 +18,21 @@ const (
 	DatastoreDriverValkey   DatastoreDriver = "valkey"
 	DatastoreDriverRedis    DatastoreDriver = "redis"
 	DatastoreDriverS3       DatastoreDriver = "s3"
-	DatastoreDriverMinio    DatastoreDriver = "minio"
-	DatastoreDriverNATS     DatastoreDriver = "nats"
-	DatastoreDriverMemory   DatastoreDriver = "memory"
-	DatastoreDriverFS       DatastoreDriver = "fs"
+	// DatastoreDriverGarage is the default S3-compatible object storage
+	// driver: Garage (self-hosted, geo-distributed). Dev container ships a
+	// single-node Garage on :3900.
+	DatastoreDriverGarage DatastoreDriver = "garage"
+	// DatastoreDriverMinio is the MinIO S3-compatible object storage driver
+	// — kept for deployments that already run MinIO.
+	DatastoreDriverMinio  DatastoreDriver = "minio"
+	DatastoreDriverNATS   DatastoreDriver = "nats"
+	DatastoreDriverMemory DatastoreDriver = "memory"
+	DatastoreDriverFS     DatastoreDriver = "fs"
 )
+
+// DefaultStorageDriver is the object-storage driver used when a deployment
+// does not pick one explicitly (dev container default).
+const DefaultStorageDriver = DatastoreDriverGarage
 
 // PrimitiveType identifies which ctx.* primitive a datastore backs.
 // @schema {description: "ctx.* primitive type this datastore backs", enum: ["db", "cache", "lock", "queue", "pubsub", "storage", "config", "kvstore", "log"]}
@@ -192,7 +202,7 @@ func (d DatastoreDriver) Serves() []PrimitiveType {
 		return []PrimitiveType{PrimitiveDB, PrimitiveKVStore, PrimitiveConfig, PrimitiveLog}
 	case DatastoreDriverValkey, DatastoreDriverRedis:
 		return []PrimitiveType{PrimitiveCache, PrimitiveLock, PrimitiveKVStore, PrimitiveQueue, PrimitivePubSub, PrimitiveConfig, PrimitiveLog}
-	case DatastoreDriverS3, DatastoreDriverMinio:
+	case DatastoreDriverS3, DatastoreDriverGarage, DatastoreDriverMinio:
 		return []PrimitiveType{PrimitiveStorage}
 	case DatastoreDriverNATS:
 		return []PrimitiveType{PrimitiveQueue, PrimitivePubSub}

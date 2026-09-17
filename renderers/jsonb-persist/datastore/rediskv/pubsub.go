@@ -52,7 +52,7 @@ func (p *PubSub) Publish(ctx context.Context, channel string, payload any) error
 func (p *PubSub) Subscribe(ctx context.Context, channel string, cb func(payload any)) error {
 	sub := p.client.Subscribe(ctx, p.channel(channel))
 	go func() {
-		defer sub.Close()
+		defer func() { _ = sub.Close() }()
 		for {
 			select {
 			case <-ctx.Done():

@@ -54,7 +54,8 @@ func parsePer(per string) float64 {
 	if per == "" {
 		return 0
 	}
-	mult := 1.0
+	// Seconds multiplier for the unit suffix; a bare number means seconds.
+	var mult float64
 	switch per[len(per)-1] {
 	case 's':
 		mult = 1
@@ -65,7 +66,6 @@ func parsePer(per string) float64 {
 	case 'd':
 		mult = 86400
 	default:
-		// bare number → seconds
 		mult = 1
 	}
 	n, err := strconv.ParseFloat(strings.TrimRight(per, "smhd"), 64)

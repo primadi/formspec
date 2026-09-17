@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/primadi/formspec/internal/manifest"
@@ -12,73 +13,6 @@ import (
 )
 
 func newManifestLoader(path string) *manifest.Loader { return manifest.NewLoader(path) }
-
-func TestResolveDataMigrationScript(t *testing.T) {
-	dir := t.TempDir()
-	// Create a script under modules/alpha/migrations/.
-	path := filepath.Join(dir, "modules", "alpha", "migrations", "backfill.star")
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte("def run():\n  pass\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	got := resolveDataMigrationScript(dir, "alpha", "backfill")
-	if got == "" {
-		t.Fatal("expected script to resolve")
-	}
-	if got != path {
-		t.Fatalf("expected %q, got %q", path, got)
-	}
-
-	// Unknown script → empty.
-	if got := resolveDataMigrationScript(dir, "alpha", "nope"); got != "" {
-		t.Fatalf("expected empty for unknown script, got %q", got)
-	}
-}
-
-func TestLoadDataMigrationManifest(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "migration.yaml")
-	content := `apiVersion: formspec.dev/v1
-kind: DataMigration
-metadata: { name: backfill-2026, module: alpha }
-spec:
-  version: 1
-  run: backfill
-  rollback: undo-backfill
-`
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	loader := newManifestLoader(dir)
-	res, err := loader.LoadAll()
-	if err != nil {
-		t.Fatalf("load: %v", err)
-	}
-	found := false
-	for _, m := range res.Manifests {
-		if m.Kind == "DataMigration" && m.Metadata.Name == "backfill-2026" {
-			found = true
-			sm, ok := m.Spec.(map[string]any)
-			if !ok {
-				t.Fatal("spec not a map")
-			}
-			var dms spec.DataMigrationSpec
-			if err := reparseAny(sm, &dms); err != nil {
-				t.Fatalf("parse: %v", err)
-			}
-			if dms.Version != 1 || dms.Run != "backfill" || dms.Rollback != "undo-backfill" {
-				t.Fatalf("unexpected spec: %+v", dms)
-			}
-		}
-	}
-	if !found {
-		t.Fatal("DataMigration manifest not found")
-	}
-}
 
 func writeMigrateSpec(t *testing.T, dir string) {
 	t.Helper()
@@ -165,37 +99,58 @@ func TestMigratePlanAndApply(t *testing.T) {
 
 func TestValidateDDLOnly(t *testing.T) {
 	// DDL is allowed.
-	if err := validateDDLOnly("CREATE INDEX idx_x ON t(c)"); err != nil {
+	if err := spec.ValidateDDLOnly("CREATE INDEX idx_x ON t(c)", "test"); err != nil {
 		t.Fatalf("expected DDL allowed, got %v", err)
 	}
-	// DML is rejected.
-	for _, dml := range []string{"INSERT INTO t VALUES (1)", "UPDATE t SET c=1", "DELETE FROM t", "SELECT * FROM t"} {
-		if err := validateDDLOnly(dml); err == nil {
-			t.Fatalf("expected %q rejected as DML", dml)
+	// Data statements are rejected: a manifest declares schema, and a repair
+	// that touches rows is run once, outside the spec.
+	for _, dml := range []string{"INSERT INTO t VALUES (1)", "UPDATE t SET c=1", "DELETE FROM t", "SELECT * FROM t", "TRUNCATE t"} {
+		if err := spec.ValidateDDLOnly(dml, "test"); err == nil {
+			t.Fatalf("expected %q rejected as a data statement", dml)
+		}
+	}
+	// Dropping storage is rejected too — the one operation whose blast radius a
+	// diff cannot show.
+	for _, drop := range []string{"DROP TABLE t", "DROP DATABASE d", "DROP INDEX idx_x"} {
+		if err := spec.ValidateDDLOnly(drop, "test"); err == nil {
+			t.Fatalf("expected %q rejected as a drop", drop)
 		}
 	}
 }
 
-func TestLoadAndApplyCustomMigrations(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "migration.yaml")
+// writeMigrateSpecWithFields rewrites the entity manifest with the given field
+// block, so a test can walk a manifest through a schema change.
+func writeMigrateSpecWithFields(t *testing.T, dir, fields string) {
+	t.Helper()
+	path := filepath.Join(dir, "modules", "alpha", "master", "item.yaml")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	content := `apiVersion: formspec.dev/v1
-kind: Migration
-metadata: { name: add-index }
+kind: Entity
+metadata: { name: item, module: alpha }
 spec:
-  ddl: "CREATE INDEX idx_customer_code ON alpha_customers(code)"
-`
+  version: v1
+  characteristic: master
+  fields:
+` + fields
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
+}
 
-	migrations := loadCustomMigrations(dir, db.DriverSQLite)
-	if len(migrations) != 1 {
-		t.Fatalf("expected 1 custom migration, got %d", len(migrations))
-	}
-	if migrations[0].Name != "add-index" {
-		t.Fatalf("unexpected name: %s", migrations[0].Name)
-	}
+// TestMigrateRefusesUndeclaredRemoval is the end-to-end contract for a
+// destructive change, driven entirely through YAML:
+//
+//  1. a field disappears from the manifest — refused, because the diff cannot
+//     tell an intended removal from a typo;
+//  2. the manifest declares it (`removed: true` + `reason`) — applied, and the
+//     stored values go with it;
+//  3. the tombstone is deleted — the next apply is clean, because there is
+//     nothing left to remove.
+func TestMigrateRefusesUndeclaredRemoval(t *testing.T) {
+	dir := t.TempDir()
+	writeMigrateSpecWithFields(t, dir, "    - { name: code, type: string, unique: true }\n    - { name: legacy_code, type: string }\n")
 
 	database, err := db.Open("sqlite::memory:")
 	if err != nil {
@@ -203,31 +158,99 @@ spec:
 	}
 	defer database.Close()
 
-	// Create the target table first so the index DDL succeeds.
-	if _, err := database.ExecContext(context.Background(), "CREATE TABLE alpha_customers (id text, code text)"); err != nil {
-		t.Fatalf("create table: %v", err)
+	runner := db.NewMigrationRunner(database, db.DriverSQLite)
+	ctx := context.Background()
+
+	if _, err := runner.ApplySpecSet(ctx, loadEntityMigrations(dir)); err != nil {
+		t.Fatalf("first apply: %v", err)
+	}
+	// A row that still holds the field about to be removed.
+	if _, err := database.ExecContext(ctx,
+		`INSERT INTO alpha_items (id, tenant_id, version, created_at, updated_at, doc_status, data) `+
+			`VALUES ('11111111-1111-7111-8111-111111111111', 'demo', 1, '2026-09-16', '2026-09-16', NULL, `+
+			`'{"code": "A-1", "legacy_code": "OLD"}')`); err != nil {
+		t.Fatalf("seed row: %v", err)
 	}
 
-	applied, err := applyCustomMigrations(context.Background(), database, migrations)
-	if err != nil {
-		t.Fatalf("apply custom: %v", err)
+	// 1. Removed without a declaration.
+	writeMigrateSpecWithFields(t, dir, "    - { name: code, type: string, unique: true }\n")
+	_, err = runner.ApplySpecSet(ctx, loadEntityMigrations(dir))
+	if err == nil {
+		t.Fatal("expected an undeclared field removal to be refused")
 	}
-	if applied != 1 {
-		t.Fatalf("expected 1 applied, got %d", applied)
+	msg := err.Error()
+	for _, want := range []string{"field_removed", "legacy_code", "removed: true"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("refusal %q does not mention %q", msg, want)
+		}
+	}
+
+	// 2. Declared.
+	writeMigrateSpecWithFields(t, dir,
+		"    - { name: code, type: string, unique: true }\n"+
+			"    - { name: legacy_code, type: string, removed: true, reason: \"digantikan code\" }\n")
+	if _, err := runner.ApplySpecSet(ctx, loadEntityMigrations(dir)); err != nil {
+		t.Fatalf("declared removal must apply: %v", err)
+	}
+
+	var leftover int
+	if err := database.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM alpha_items WHERE json_extract(data, '$.legacy_code') IS NOT NULL").Scan(&leftover); err != nil {
+		t.Fatalf("count leftovers: %v", err)
+	}
+	if leftover != 0 {
+		t.Errorf("expected the stored values to be stripped, %d row(s) still hold them", leftover)
+	}
+
+	// 3. The tombstone is no longer needed.
+	writeMigrateSpecWithFields(t, dir, "    - { name: code, type: string, unique: true }\n")
+	if _, err := runner.ApplySpecSet(ctx, loadEntityMigrations(dir)); err != nil {
+		t.Fatalf("apply after dropping the tombstone: %v", err)
 	}
 }
 
-func TestApplyCustomMigrations_RejectsDML(t *testing.T) {
+// TestMigrateRefusesDroppedEntity: a manifest that no longer declares an entity
+// whose table still exists is refused, and no declaration exists that could make
+// it acceptable.
+func TestMigrateRefusesDroppedEntity(t *testing.T) {
+	dir := t.TempDir()
+	writeMigrateSpecWithFields(t, dir, "    - { name: code, type: string }\n")
+
 	database, err := db.Open("sqlite::memory:")
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
 	defer database.Close()
 
-	_, err = applyCustomMigrations(context.Background(), database, []customMigration{
-		{Name: "bad", DDL: "DELETE FROM t"},
-	})
+	runner := db.NewMigrationRunner(database, db.DriverSQLite)
+	ctx := context.Background()
+
+	if _, err := runner.ApplySpecSet(ctx, loadEntityMigrations(dir)); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+
+	// The manifest is gone; the table is not. Only the Entity is removed here, so
+	// the dropped table is the only pending change.
+	if err := os.Remove(filepath.Join(dir, "modules", "alpha", "master", "item.yaml")); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = runner.ApplySpecSet(ctx, loadEntityMigrations(dir))
 	if err == nil {
-		t.Fatal("expected DML to be rejected")
+		t.Fatal("expected a dropped entity to be refused")
+	}
+	for _, want := range []string{"alpha_items", "drop it by hand"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("refusal %q does not mention %q", err.Error(), want)
+		}
+	}
+
+	// The table was removed by hand: now the stale snapshot is cleared instead of
+	// refusing the same deployment forever.
+	if _, err := database.ExecContext(ctx, "DROP TABLE alpha_items"); err != nil {
+		t.Fatalf("drop table by hand: %v", err)
+	}
+	if _, err := runner.ApplySpecSet(ctx, loadEntityMigrations(dir)); err != nil {
+		t.Fatalf("apply after the manual drop: %v", err)
 	}
 }

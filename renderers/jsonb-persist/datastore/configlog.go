@@ -153,7 +153,7 @@ func (l *FileLog) Log(_ context.Context, level, event string, meta map[string]an
 	if err != nil {
 		return fmt.Errorf("file log open: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	if _, err := f.Write(append(data, '\n')); err != nil {
 		return fmt.Errorf("file log write: %w", err)
 	}

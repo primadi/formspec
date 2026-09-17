@@ -77,8 +77,9 @@ type (
 		Stat(ctx context.Context, path string) (int64, error)
 	}
 	// Linker serves ctx.storage().link(path, ttl=) — a time-limited download
-	// URL. MinIO/S3 backends return a presigned URL; app-route backends
-	// return a link-token URL handled by the api link routes.
+	// URL. S3-compatible backends (garage/minio) return a presigned URL;
+	// app-route backends return a link-token URL handled by the api link
+	// routes.
 	Linker interface {
 		Link(ctx context.Context, path string, ttl time.Duration) (string, error)
 	}

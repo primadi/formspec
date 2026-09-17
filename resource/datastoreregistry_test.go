@@ -216,6 +216,65 @@ func TestDatastoreRegistry_LoadErrors(t *testing.T) {
 	}
 }
 
+// TestDatastoreRegistry_ObjectStorageDrivers proves the S3-compatible storage
+// drivers (`garage` — the default — plus `minio`/`s3`) all validate as
+// `storage` providers, reject other primitives, and resolve through the same
+// S3 client (plan: object storage via named Datastore).
+func TestDatastoreRegistry_ObjectStorageDrivers(t *testing.T) {
+	stateDir := t.TempDir()
+	mainDB, err := db.OpenSQLite(filepath.Join(stateDir, "main.db"), nil)
+	if err != nil {
+		t.Fatalf("open main db: %v", err)
+	}
+	t.Cleanup(func() { _ = mainDB.Close() })
+
+	for _, drv := range []spec.DatastoreDriver{
+		spec.DatastoreDriverGarage, spec.DatastoreDriverMinio, spec.DatastoreDriverS3,
+	} {
+		t.Run(string(drv), func(t *testing.T) {
+			serves := drv.Serves()
+			if len(serves) != 1 || serves[0] != spec.PrimitiveStorage {
+				t.Fatalf("driver %q serves %v, want [storage]", drv, serves)
+			}
+
+			// `serves: [storage]` is accepted. The endpoint points at an
+			// unresolvable host so the probe is deterministic: the failure
+			// must come from connecting, never from driver validation.
+			ok := newDSRegistryForTest(t, []manifest.RawManifest{{
+				Kind:     "Datastore",
+				Metadata: manifest.RawMetadata{Name: "objects-" + string(drv)},
+				Spec: map[string]any{
+					"serves": []any{"storage"},
+					"driver": string(drv),
+					"connection": map[string]any{
+						"host":     "object-store.invalid",
+						"port":     9000,
+						"database": "formspec-test",
+					},
+				},
+			}})
+			if _, err := ok.Resolve("storage", "objects-"+string(drv), ""); err == nil {
+				t.Fatalf("driver %q: want connection error (unresolvable endpoint), got nil", drv)
+			} else if strings.Contains(err.Error(), "not supported in single-server mode") {
+				t.Fatalf("driver %q should be supported, got %v", drv, err)
+			} else if strings.Contains(err.Error(), "does not serve primitive") {
+				t.Fatalf("driver %q should serve storage, got %v", drv, err)
+			}
+
+			// Any other primitive is rejected.
+			bad := []manifest.RawManifest{{
+				Kind:     "Datastore",
+				Metadata: manifest.RawMetadata{Name: "bad-" + string(drv)},
+				Spec:     map[string]any{"serves": []any{"db"}, "driver": string(drv)},
+			}}
+			badReg := NewDatastoreRegistry(mainDB, stateDir, nil)
+			if err := badReg.LoadManifests(bad); err == nil || !strings.Contains(err.Error(), "cannot serve primitive") {
+				t.Fatalf("driver %q × db: want error, got %v", drv, err)
+			}
+		})
+	}
+}
+
 // TestDatastoreRegistry_PrimitiveFallback proves a bound module whose
 // datastore doesn't serve a primitive falls back to 'default' for that
 // primitive (e.g. db-only binding; ctx.cache() still works).
@@ -276,8 +335,9 @@ func TestDatastoreRegistry_UnsupportedDriver(t *testing.T) {
 	_, err = reg.Resolve("cache", "cloud-cache", "cloud-mod")
 	// Plan C batch 2: valkey/redis now RESOLVE for KV primitives — the
 	// error is a connection failure (no Redis server in the test env), not
-	// "unsupported driver". Remaining cloud drivers (s3/minio/nats) still
-	// fail as unsupported.
+	// "unsupported driver". Storage drivers (garage/minio/s3) are wired the
+	// same way (see TestDatastoreRegistry_ObjectStorageDrivers); NATS still
+	// fails as unsupported.
 	if err == nil {
 		t.Fatalf("valkey driver: want connection error (no redis server), got nil")
 	}
@@ -380,10 +440,11 @@ func TestDatastoreRegistry_SetDefaultOverride(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve alpha plain after override: %v", err)
 	}
-	if dq, ok = conn.(*datastore.DBQuerier); ok {
-		if _, err := os.Stat(filepath.Join(reg.stateDir, "datastores", "ds-alpha.db")); err != nil {
-			t.Fatalf("bound module should still resolve to ds-alpha: %v", err)
-		}
+	if _, isQuerier := conn.(*datastore.DBQuerier); !isQuerier {
+		t.Fatalf("alpha conn = %T, want *datastore.DBQuerier", conn)
+	}
+	if _, err := os.Stat(filepath.Join(reg.stateDir, "datastores", "ds-alpha.db")); err != nil {
+		t.Fatalf("bound module should still resolve to ds-alpha: %v", err)
 	}
 
 	// Other primitives unaffected.

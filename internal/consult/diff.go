@@ -75,10 +75,12 @@ func findSpecRoot(sessionDir string) string {
 	return ""
 }
 
-// hasYAML reports whether dir contains at least one .yaml/.yml file.
+// hasYAML reports whether dir contains at least one .yaml/.yml file. Walk
+// errors (including a missing dir) mean "no YAML here" — the caller falls back
+// to its next candidate.
 func hasYAML(dir string) bool {
 	found := false
-	filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
+	_ = filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
 		}

@@ -229,11 +229,10 @@ func (a *Approval) Reject(userID string) {
 }
 
 // Advance moves to the next step (called when the active step reaches quorum).
+// Approvals is indexed by step, so ActiveStep simply moves past the current one;
+// running off the end is normal (the caller tracks the workflow's step count).
 func (a *Approval) Advance() {
 	a.ActiveStep++
-	if a.ActiveStep >= len(a.Approvals) {
-		// No more steps recorded — the caller tracks step count separately.
-	}
 }
 
 // ToRow converts an Approval into a persistence row. The row's ID/tenant/

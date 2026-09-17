@@ -42,7 +42,6 @@ const (
 	KindDocument     Kind = "Document" // deprecated alias for KindEntity (kept for backward compatibility)
 	KindService      Kind = "Service"
 	KindConfig       Kind = "Config"
-	KindMigration    Kind = "Migration"
 	KindSubscription Kind = "Subscription"
 )
 
@@ -132,7 +131,7 @@ const (
 // IsValidKind returns true if k is a known FormSpec kind.
 func IsValidKind(k Kind) bool {
 	switch k {
-	case KindApp, KindModule, KindDocument, KindEntity, KindService, KindConfig, KindMigration, KindSubscription,
+	case KindApp, KindModule, KindDocument, KindEntity, KindService, KindConfig, KindSubscription,
 		KindWorkflow, KindApi, KindKindDefinition, KindWebhook, KindMockup, KindIntegrator,
 		KindEnvironment, KindPolicy, KindDatastore,
 		KindRenderer, KindVisualSpecKind, KindPersistBackend,

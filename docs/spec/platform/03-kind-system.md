@@ -19,7 +19,7 @@ dikelompokkan dalam **4 grup** yang mencerminkan struktur `docs/spec/`:
 | #            | Grup | Jumlah                                                                                                                                                                                                              | Definisi    | Mirror `docs/spec/` |
 | ------------ | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------------------- |
 | **Curation** | 2    | `App`, `Module` — struktur workspace, kurasi module, menu                                                                                                                                                           | `platform/` |
-| **Data**     | 11   | `Entity`, `Service`, `Config`, `Migration`, `Subscription`, `Workflow`, `Api`, `Webhook`, `Mockup`, `Integrator`, `KindDefinition` — model domain, behaviour, integrasi                                             | `backend/`  |
+| **Data**     | 10   | `Entity`, `Service`, `Config`, `Subscription`, `Workflow`, `Api`, `Webhook`, `Mockup`, `Integrator`, `KindDefinition` — model domain, behaviour, integrasi                                                          | `backend/`  |
 | **UI**       | 15   | `Page`, `Form`, `Table`, `Dashboard`, `Widget`, `Report`, `Wizard`, `Kanban`, `Timeline`, `Calendar`, `Listing`, `ApprovalInbox`, `NotificationCenter`, `Print`, `Theme` — presentasi visual, override auto-derived | `frontend/` |
 | **Infra**    | 5    | `Renderer`, `PersistBackend`, `Environment`, `Policy`, `Datastore` — runtime infrastructure, renderer, storage, governance                                                                                          | `platform/` |
 
@@ -37,7 +37,6 @@ dikelompokkan dalam **4 grup** yang mencerminkan struktur `docs/spec/`:
 | `Entity` | `spec/backend/01-core-basic.md` §1 |
 | `Service` | `spec/backend/01-core-basic.md` §1 |
 | `Config` | `spec/backend/01-core-basic.md` §10 |
-| `Migration` | `spec/backend/01-core-basic.md` §4 |
 | `Subscription` | `spec/backend/01-core-basic.md` §7 |
 | `Workflow` | `spec/backend/02-core-extended.md` §2 |
 | `Api` | `spec/backend/02-core-extended.md` §12 |
@@ -122,37 +121,37 @@ Tiga meta-kind lain, masing-masing dijelaskan penuh di spec-nya sendiri:
 
 ## 3. Katalog Concern → Kind
 
-| Kebutuhan aplikasi bisnis                       | Kind yang menjawab                       |
-| ----------------------------------------------- | ---------------------------------------- |
-| Simpan & kelola data bertransaksi               | `Entity` (`characteristic: transaction`) |
-| Data referensi stabil                           | `Entity` (`characteristic: master`)      |
-| Data seed read-only                             | `Entity` (`characteristic: reference`)   |
-| Projeksi/agregat sistem                         | `Entity` (`characteristic: summary`)     |
-| Komputasi tanpa state                           | `Service`                                |
-| Approval berbasis role atas transisi            | `Workflow`                               |
-| Endpoint masuk terverifikasi (webhook provider) | `Webhook`                                |
-| Simulasi integrasi pihak ketiga                 | `Mockup`                                 |
-| Jembatan reaktif antar-module                   | `Integrator`                             |
-| Reaksi ke event resource lain                   | `Subscription`                           |
-| Override permukaan API yang sudah exposed       | `Api`                                    |
-| DDL custom (index, trigger)                     | `Migration`                              |
-| Layar/route                                     | `Page`                                   |
-| Input/edit satu Entity                          | `Form`                                   |
-| List/browse                                     | `Table`                                  |
-| Proses multi-step                               | `Wizard`                                 |
-| Board status drag-drop                          | `Kanban`                                 |
-| Feed kronologis append-only                     | `Timeline`                               |
-| Dashboard + widget                              | `Dashboard`, `Widget`                    |
-| Laporan terparameterisasi                       | `Report`                                 |
-| Dokumen cetak                                   | `Print`                                  |
-| Tampilan & rasa                                 | `Theme`                                  |
-| View kalender                                   | `Calendar`                               |
-| Katalog publik                                  | `Listing`                                |
-| Inbox approval                                  | `ApprovalInbox`                          |
-| Pusat notifikasi                                | `NotificationCenter`                     |
-| Koneksi infrastruktur bernama                   | `Datastore`                              |
-| Target deployment                               | `Environment`                            |
-| Aturan governance                               | `Policy`                                 |
+| Kebutuhan aplikasi bisnis                       | Kind yang menjawab                                 |
+| ----------------------------------------------- | -------------------------------------------------- |
+| Simpan & kelola data bertransaksi               | `Entity` (`characteristic: transaction`)           |
+| Data referensi stabil                           | `Entity` (`characteristic: master`)                |
+| Data seed read-only                             | `Entity` (`characteristic: reference`)             |
+| Projeksi/agregat sistem                         | `Entity` (`characteristic: summary`)               |
+| Komputasi tanpa state                           | `Service`                                          |
+| Approval berbasis role atas transisi            | `Workflow`                                         |
+| Endpoint masuk terverifikasi (webhook provider) | `Webhook`                                          |
+| Simulasi integrasi pihak ketiga                 | `Mockup`                                           |
+| Jembatan reaktif antar-module                   | `Integrator`                                       |
+| Reaksi ke event resource lain                   | `Subscription`                                     |
+| Override permukaan API yang sudah exposed       | `Api`                                              |
+| DDL custom (index, trigger)                     | `persist.raw_ddl` pada `Entity` (§4.3, bukan kind) |
+| Layar/route                                     | `Page`                                             |
+| Input/edit satu Entity                          | `Form`                                             |
+| List/browse                                     | `Table`                                            |
+| Proses multi-step                               | `Wizard`                                           |
+| Board status drag-drop                          | `Kanban`                                           |
+| Feed kronologis append-only                     | `Timeline`                                         |
+| Dashboard + widget                              | `Dashboard`, `Widget`                              |
+| Laporan terparameterisasi                       | `Report`                                           |
+| Dokumen cetak                                   | `Print`                                            |
+| Tampilan & rasa                                 | `Theme`                                            |
+| View kalender                                   | `Calendar`                                         |
+| Katalog publik                                  | `Listing`                                          |
+| Inbox approval                                  | `ApprovalInbox`                                    |
+| Pusat notifikasi                                | `NotificationCenter`                               |
+| Koneksi infrastruktur bernama                   | `Datastore`                                        |
+| Target deployment                               | `Environment`                                      |
+| Aturan governance                               | `Policy`                                           |
 
 ## 4. Lampiran: Pemetaan Kind → Plane
 
@@ -168,7 +167,7 @@ Resource Plane.
 
 | Kind                                                                                                                                                                     | Plane                                                                                                   |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
-| `App`, `Module`, `Entity`, `Service`, `Config`, `Migration`, `Subscription`                                                                                              | Resource                                                                                                |
+| `App`, `Module`, `Entity`, `Service`, `Config`, `Subscription`                                                                                                           | Resource                                                                                                |
 | `Workflow`, `Api`, `Webhook`, `Mockup`, `Integrator`, `KindDefinition`                                                                                                   | Resource                                                                                                |
 | `Page`, `Form`, `Table`, `Dashboard`, `Widget`, `Report`, `Wizard`, `Kanban`, `Timeline`, `Calendar`, `Listing`, `ApprovalInbox`, `NotificationCenter`, `Print`, `Theme` | Resource                                                                                                |
 | `VisualSpecKind`, `Renderer`                                                                                                                                             | Resource (dideklarasikan bersama artifact visual; distribusi lewat marketplace §7)                      |

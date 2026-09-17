@@ -69,7 +69,9 @@ func TestCtxHandler_QueryAndLock(t *testing.T) {
 	if rec.Code != http.StatusOK || resp.OK == nil || !*resp.OK {
 		t.Fatalf("acquire failed: %d %s", rec.Code, rec.Body)
 	}
-	rec, resp = postCtx(t, h, "/ctx/lock/acquire", `{"key":"workspace:X"}`)
+	// Second acquire with the same key: the response is what matters, the
+	// request recorder is not read again.
+	_, resp = postCtx(t, h, "/ctx/lock/acquire", `{"key":"workspace:X"}`)
 	if resp.OK == nil || *resp.OK {
 		t.Error("second acquire should report ok=false")
 	}

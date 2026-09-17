@@ -16,7 +16,7 @@ func TestDBQuerier_QueryAgainstSQLite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	if _, err := database.ExecContext(context.Background(), "CREATE TABLE t (id INTEGER, name TEXT)"); err != nil {
 		t.Fatalf("create table: %v", err)
@@ -47,7 +47,7 @@ func TestDBQuerier_QueryError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	q := &DBQuerier{DB: database}
 	if _, err := q.Query(context.Background(), "SELECT * FROM does_not_exist"); err == nil {

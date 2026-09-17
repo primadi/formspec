@@ -3,7 +3,8 @@
 // one-off debug tool — also the surface for AI Agent Skill debugging.
 //
 //	formspec repl [--spec <path>] [--dsn <dsn>] [--environment <env>]
-//	formspec repl -e 'ctx.db().query("SELECT 1")'   # one-shot (scriptable)
+//	formspec repl -e 'ctx.db().query("SELECT 1")'    # one-shot expression (scriptable)
+//	formspec repl -f migrations/dedupe.star         # one-shot script file
 //
 // The console predeclares `ctx` (CtxAPI wired to the app's live datastore
 // resolver — todo 2.9.1–2.9.3), `resource` (an empty ResourceAPI), and the
@@ -29,6 +30,7 @@ func runRepl(args []string) {
 	dsn := "sqlite:.formspec/data.db"
 	environment := ""
 	expr := ""
+	scriptFile := ""
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--spec", "-spec":
@@ -51,8 +53,13 @@ func runRepl(args []string) {
 				expr = args[i+1]
 				i++
 			}
+		case "-f", "--file":
+			if i+1 < len(args) {
+				scriptFile = args[i+1]
+				i++
+			}
 		case "--help", "-h":
-			fmt.Fprintf(os.Stderr, "Usage: formspec repl [--spec <path>] [--dsn <dsn>] [--environment <env>] [-e <expr>]\n")
+			fmt.Fprintf(os.Stderr, "Usage: formspec repl [--spec <path>] [--dsn <dsn>] [--environment <env>] [-e <expr> | -f <script.star>]\n")
 			os.Exit(0)
 		default:
 			fmt.Fprintf(os.Stderr, "formspec repl: unknown flag %q\n", args[i])
@@ -99,6 +106,24 @@ func runRepl(args []string) {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
+		return
+	}
+
+	if scriptFile != "" {
+		// One-shot script file. This is the sanctioned surface for a data repair
+		// that a migration refused: repairs are run once, by an operator, and are
+		// not part of the manifest — so they need a way to run that is honest
+		// about being out-of-band, not a kind that pretends to declare them.
+		src, err := os.ReadFile(scriptFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: read %s: %v\n", scriptFile, err)
+			os.Exit(1)
+		}
+		if err := replEval(thread, predeclared, string(src)); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %s: %v\n", scriptFile, err)
+			os.Exit(1)
+		}
+		fmt.Printf("Ran %s.\n", scriptFile)
 		return
 	}
 

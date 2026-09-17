@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -47,7 +48,7 @@ func (r *MigrationRunner) SetRegistry(reg interface {
 
 // SyncSchema implements PersistBackend.SyncSchema (4.1.1).
 func (r *MigrationRunner) SyncSchema(ctx context.Context, entities []EntityMigration) (int, error) {
-	return r.ApplyMigrations(ctx, entities)
+	return r.ApplySpecSet(ctx, entities)
 }
 
 // PlanSchema implements PersistBackend.PlanSchema (4.1.1).
@@ -90,6 +91,21 @@ func SystemTableDDLs(driver DriverType) []string {
 			"description text        NOT NULL",
 			"checksum    text        NOT NULL",
 			fmt.Sprintf("applied_at  %s NOT NULL DEFAULT %s", ts, ts),
+		),
+
+		// formspec_schema_snapshot — the applied storage shape of each entity
+		// (see EntitySnapshot). Records what the schema *was*, not only a
+		// checksum of it: telling a removed field from one that never existed is
+		// impossible from a checksum alone, and the migration gate has to know
+		// which one it is looking at before it can refuse anything.
+		createTableSQL(driver, SnapshotTable,
+			"module      text NOT NULL",
+			"entity      text NOT NULL",
+			"driver      text NOT NULL DEFAULT ''",
+			"checksum    text NOT NULL",
+			"shape       text NOT NULL",
+			fmt.Sprintf("updated_at  %s NOT NULL DEFAULT %s", ts, ts),
+			"PRIMARY KEY (module, entity)",
 		),
 
 		// formspec_natural_key_counters
@@ -271,7 +287,7 @@ func idColumn(driver DriverType) string {
 func (r *MigrationRunner) EnsureSystemTables(ctx context.Context) error {
 	ddls := SystemTableDDLs(r.driver)
 	ddlNames := []string{
-		"formspec_schema_migrations", "formspec_natural_key_counters",
+		"formspec_schema_migrations", SnapshotTable, "formspec_natural_key_counters",
 		"formspec_idempotency_keys", "formspec_outbox",
 		"formspec_extensions", "formspec_audit_log", "formspec_event_log",
 		"formspec_workflow_approval", "formspec_saga_log", "formspec_job",
@@ -384,9 +400,95 @@ type DDLResult struct {
 	Description string     // Migration description (e.g. "entity:billing/invoice" or "extension:billing/invoice-ext->custext")
 }
 
-// PlanMigrations compares desired schema against existing tables and returns DDL to apply.
-func (r *MigrationRunner) PlanMigrations(ctx context.Context, entities []EntityMigration) ([]DDLResult, error) {
-	var results []DDLResult
+// MigrationPlan is the pending work for one entity, together with the rated
+// differences that justify it (see DiffShapes).
+type MigrationPlan struct {
+	Result DDLResult
+	// Changes are the rated differences. A plan with no changes is either a
+	// brand-new table or a baseline adoption.
+	Changes []Change
+	// Snapshot is the shape to record once this plan has been applied — the
+	// baseline the next plan will be diffed against.
+	Snapshot *EntitySnapshot
+	// Bootstrap marks a plan that adopts the current manifest as the baseline
+	// because nothing was recorded for it (a database created before snapshots
+	// existed). It must not refuse anything: there is no earlier shape to have
+	// changed away from.
+	Bootstrap bool
+	// Module and Entity identify the manifest this plan belongs to, so the
+	// snapshot can be written or forgotten without re-deriving them.
+	Module, Entity string
+	// ForgetOnly marks a plan whose whole job is to drop a stale snapshot: the
+	// manifests no longer declare the entity and its table is gone too, so the
+	// operator already did both steps by hand.
+	ForgetOnly bool
+}
+
+// ApplyResult reports what an apply did.
+type ApplyResult struct {
+	Applied int
+	// Forgotten counts stale snapshots dropped because the entity (and its
+	// table) had already been removed by hand.
+	Forgotten int
+	// Changes lists every rated difference the run considered — the additive
+	// ones it applied, the derived ones it rebuilt, and the declared lossy ones
+	// it executed. An undeclared lossy change never reaches ApplyResult: it is
+	// returned as an error instead.
+	Changes []Change
+}
+
+// entityChecksum fingerprints everything about an entity that the storage layer
+// cares about: the desired shape (fields, indexes, raw_ddl) *and* the manifest's
+// declarations. The declarations belong in the fingerprint because adding a
+// tombstone changes the work to do (payload cleanup) while leaving the generated
+// DDL identical — a checksum over DDL alone would call that "unchanged" and skip
+// the cleanup forever.
+func entityChecksum(driver DriverType, desired *EntitySnapshot, decls Declarations) string {
+	shape, _ := json.Marshal(desired)
+	return checksumDDL(string(shape) + "|" + declarationSignature(decls) + "|" + string(driver))
+}
+
+// declarationSignature renders declarations in a stable order so the checksum
+// depends on their content, never on map iteration order.
+func declarationSignature(decls Declarations) string {
+	var b strings.Builder
+	for _, key := range []string{"removed", "accept_data_loss"} {
+		set := decls.Removed
+		if key == "accept_data_loss" {
+			set = decls.AcceptDataLoss
+		}
+		names := make([]string, 0, len(set))
+		for name := range set {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			b.WriteString(key)
+			b.WriteString(":")
+			b.WriteString(name)
+			b.WriteString("=")
+			b.WriteString(set[name])
+			b.WriteString(";")
+		}
+	}
+	return b.String()
+}
+
+// PlanDetailed compares the desired schema against what is actually applied and
+// returns one plan per entity, each carrying the rated differences behind it.
+//
+// The entity list is treated as partial: a caller may legitimately apply a
+// subset (one module, or a single extension on top of an entity applied in an
+// earlier call), so an entity with a recorded snapshot that is absent from this
+// list is not reported. Use PlanSpecSet when the list is the whole spec, where
+// that absence means the entity was removed from the manifests.
+//
+// The classification is the point. A checksum can only say *that* something
+// changed, and the additive-only diff silently ignored everything it could not
+// add — which is how a removed field ended up neither migrated nor reported,
+// while it kept breaking writes as an unknown field.
+func (r *MigrationRunner) PlanDetailed(ctx context.Context, entities []EntityMigration) ([]MigrationPlan, error) {
+	var plans []MigrationPlan
 
 	applied, err := r.AppliedMigrations(ctx)
 	if err != nil {
@@ -428,11 +530,13 @@ func (r *MigrationRunner) PlanMigrations(ctx context.Context, entities []EntityM
 				continue
 			}
 
-			results = append(results, DDLResult{
-				DDL:         extDDL,
-				Checksum:    extChecksum,
-				IsNew:       true,
-				Description: extDesc,
+			plans = append(plans, MigrationPlan{
+				Result: DDLResult{
+					DDL:         extDDL,
+					Checksum:    extChecksum,
+					IsNew:       true,
+					Description: extDesc,
+				},
 			})
 			continue
 		}
@@ -443,42 +547,37 @@ func (r *MigrationRunner) PlanMigrations(ctx context.Context, entities []EntityM
 		}
 
 		desc := fmt.Sprintf("entity:%s/%s", em.Metadata.Module, em.Metadata.Name)
-		ddl := ti.CreateTableSQL
 
-		// Include child table DDLs
-		for _, ct := range ti.ChildTables {
-			ddl += "\n\n" + ct.CreateTableSQL
-		}
-
-		// Include index DDLs
-		for _, idx := range ti.CreateIndexSQL {
-			ddl += "\n" + idx
-		}
-
-		checksum := checksumDDL(ddl)
+		// The desired shape and the manifest's declarations are what the diff
+		// compares; the create DDL is only needed when the table is new.
+		desired, decls := DesiredSnapshot(ti, &em.EntitySpec, r.driver)
+		checksum := entityChecksum(r.driver, desired, decls)
 
 		// Check if already applied with same checksum
 		if existingChecksum, ok := applied[desc]; ok {
 			if existingChecksum == checksum {
-				continue // Already applied, unchanged
+				// Unchanged. The snapshot should already exist; when it does not
+				// (a database created before snapshots existed), adopt the manifest
+				// as the baseline now rather than refusing over a shape nobody
+				// recorded.
+				_, _, found, err := r.LoadSnapshot(ctx, r.db, em.Metadata.Module, em.Metadata.Name)
+				if err != nil {
+					return nil, err
+				}
+				if !found {
+					plans = append(plans, MigrationPlan{
+						Result:    DDLResult{TableInfo: ti, Checksum: checksum, Description: desc},
+						Snapshot:  desired,
+						Bootstrap: true,
+					})
+				}
+				continue
 			}
-			// Checksum mismatch — the entity changed. Diff the existing table
-			// to add generated columns for new indexed/unique/natural-key
-			// fields (4.2.1). Field removal/type-change is two-phase (4.2.2)
-			// and not auto-applied here.
-			alterDDL, added, err := r.diffExistingTable(ctx, ti, em.EntitySpec)
+			plan, err := r.planEntityChange(ctx, em, ti, desc, checksum, desired, decls)
 			if err != nil {
-				return nil, fmt.Errorf("plan migrations: diff %s: %w", ti.TableName, err)
+				return nil, err
 			}
-			if added > 0 {
-				results = append(results, DDLResult{
-					TableInfo:   ti,
-					DDL:         alterDDL,
-					Checksum:    checksumDDL(alterDDL),
-					IsNew:       false,
-					Description: desc,
-				})
-			}
+			plans = append(plans, plan)
 			continue
 		}
 
@@ -489,101 +588,207 @@ func (r *MigrationRunner) PlanMigrations(ctx context.Context, entities []EntityM
 		}
 
 		if exists {
-			// Table exists but migration not recorded — diff columns (4.2.1):
-			// add generated columns for indexed/unique/natural-key fields that
-			// are missing. Field removal/type-change is two-phase (4.2.2) and
-			// not auto-applied here.
-			alterDDL, added, err := r.diffExistingTable(ctx, ti, em.EntitySpec)
+			plan, err := r.planEntityChange(ctx, em, ti, desc, checksum, desired, decls)
 			if err != nil {
-				return nil, fmt.Errorf("plan migrations: diff %s: %w", ti.TableName, err)
+				return nil, err
 			}
-			if added > 0 {
-				results = append(results, DDLResult{
-					TableInfo:   ti,
-					DDL:         alterDDL,
-					Checksum:    checksumDDL(alterDDL),
-					IsNew:       false,
-					Description: desc,
-				})
-			}
+			plans = append(plans, plan)
 			continue
 		}
 
-		results = append(results, DDLResult{
-			TableInfo:   ti,
-			DDL:         ddl,
-			Checksum:    checksum,
-			IsNew:       true,
-			Description: desc,
+		// New table: everything it needs is additive.
+		plans = append(plans, MigrationPlan{
+			Result: DDLResult{
+				TableInfo:   ti,
+				DDL:         createDDLFor(ti, &em.EntitySpec, r.driver),
+				Checksum:    checksum,
+				IsNew:       true,
+				Description: desc,
+			},
+			Changes: []Change{{
+				Class:  ClassAdditive,
+				Kind:   ChangeTableAdded,
+				Entity: desc,
+				Name:   ti.TableName,
+				Detail: "table does not exist yet",
+			}},
+			Snapshot: desired,
 		})
 	}
 
 	// Sort for deterministic order
-	sort.Slice(results, func(i, j int) bool {
+	sort.Slice(plans, func(i, j int) bool {
+		a, b := plans[i].Result, plans[j].Result
 		// Extensions (nil TableInfo) go after regular entities
-		if results[i].TableInfo == nil && results[j].TableInfo == nil {
-			return results[i].Description < results[j].Description
+		if a.TableInfo == nil && b.TableInfo == nil {
+			return a.Description < b.Description
 		}
-		if results[i].TableInfo == nil {
+		if a.TableInfo == nil {
 			return false
 		}
-		if results[j].TableInfo == nil {
+		if b.TableInfo == nil {
 			return true
 		}
-		return results[i].TableInfo.TableName < results[j].TableInfo.TableName
+		return a.TableInfo.TableName < b.TableInfo.TableName
 	})
 
+	return plans, nil
+}
+
+// PlanSpecSet plans against the complete spec set: entities recorded in the
+// database whose manifest is gone are reported too. That is the only place a
+// table drop can be detected, and a table drop is the one change no declaration
+// can make acceptable.
+func (r *MigrationRunner) PlanSpecSet(ctx context.Context, entities []EntityMigration) ([]MigrationPlan, error) {
+	plans, err := r.PlanDetailed(ctx, entities)
+	if err != nil {
+		return nil, err
+	}
+	forgotten, err := r.planForgotten(ctx, entities)
+	if err != nil {
+		return nil, err
+	}
+	return append(plans, forgotten...), nil
+}
+
+// PlanMigrations returns only the statements to run, without the classification
+// that justifies them. It is the compatibility shape for callers that just want
+// DDL text (`formspec diff` and the older CLI path).
+func (r *MigrationRunner) PlanMigrations(ctx context.Context, entities []EntityMigration) ([]DDLResult, error) {
+	plans, err := r.PlanSpecSet(ctx, entities)
+	if err != nil {
+		return nil, err
+	}
+	results := make([]DDLResult, 0, len(plans))
+	for _, p := range plans {
+		results = append(results, p.Result)
+	}
 	return results, nil
 }
 
 // ApplyMigrations plans and applies all pending migrations.
 // Returns the number of migrations applied.
 func (r *MigrationRunner) ApplyMigrations(ctx context.Context, entities []EntityMigration) (int, error) {
+	res, err := r.ApplyDetailed(ctx, entities)
+	return res.Applied, err
+}
+
+// ApplySpecSet applies a plan over the complete spec set — the entry point for
+// the normal paths (dev startup, `formspec migrate`), where an entity whose
+// manifest disappeared must be refused rather than ignored. The entity list is
+// authoritative here, so a missing manifest is a removed entity.
+func (r *MigrationRunner) ApplySpecSet(ctx context.Context, entities []EntityMigration) (int, error) {
+	res, err := r.ApplySpecSetDetailed(ctx, entities)
+	return res.Applied, err
+}
+
+// ApplySpecSetDetailed is ApplySpecSet with the rated changes it considered, so
+// a CLI can report what it did instead of only how many records it wrote.
+func (r *MigrationRunner) ApplySpecSetDetailed(ctx context.Context, entities []EntityMigration) (ApplyResult, error) {
+	return r.applyPlans(ctx, entities, true)
+}
+
+// ApplyDetailed plans, refuses, and applies — in that order.
+//
+// The refusal happens before any statement runs, over the whole plan: a run that
+// applies the safe half of a change set and then stops has left the database in
+// a state no manifest describes, which is worse than refusing up front.
+func (r *MigrationRunner) ApplyDetailed(ctx context.Context, entities []EntityMigration) (ApplyResult, error) {
+	return r.applyPlans(ctx, entities, false)
+}
+
+func (r *MigrationRunner) applyPlans(ctx context.Context, entities []EntityMigration, completeSpecSet bool) (ApplyResult, error) {
 	// First ensure system tables
 	if err := r.EnsureSystemTables(ctx); err != nil {
-		return 0, fmt.Errorf("apply migrations: ensure system tables: %w", err)
+		return ApplyResult{}, fmt.Errorf("apply migrations: ensure system tables: %w", err)
+	}
+
+	plan := r.PlanDetailed
+	if completeSpecSet {
+		plan = r.PlanSpecSet
+	}
+	plans, err := plan(ctx, entities)
+	if err != nil {
+		return ApplyResult{}, fmt.Errorf("apply migrations: plan: %w", err)
+	}
+
+	// Gate: refuse undeclared lossy changes (field removals, unverifiable type
+	// changes, unique indexes blocked by duplicates) and table drops. This is
+	// the same in dev and in production — a rule that bends under convenience is
+	// the rule that silently eats data.
+	var allChanges []Change
+	for _, plan := range plans {
+		allChanges = append(allChanges, plan.Changes...)
+	}
+	if err := RefuseUndeclared(allChanges); err != nil {
+		return ApplyResult{Changes: allChanges}, fmt.Errorf("apply migrations: %w", err)
 	}
 
 	// Get current migration count for versioning
 	var currentVersion int
-	err := r.db.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM formspec_schema_migrations").Scan(&currentVersion)
-	if err != nil {
-		return 0, fmt.Errorf("apply migrations: get current version: %w", err)
-	}
-
-	plans, err := r.PlanMigrations(ctx, entities)
-	if err != nil {
-		return 0, fmt.Errorf("apply migrations: plan: %w", err)
+	if err := r.db.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM formspec_schema_migrations").Scan(&currentVersion); err != nil {
+		return ApplyResult{}, fmt.Errorf("apply migrations: get current version: %w", err)
 	}
 
 	applied := 0
+	forgotten := 0
 	for _, plan := range plans {
-		desc := plan.Description
-		if desc == "" && plan.TableInfo != nil {
-			desc = fmt.Sprintf("entity:%s/%s", plan.TableInfo.Module, plan.TableInfo.Entity)
+		res := plan.Result
+		desc := res.Description
+		if desc == "" && res.TableInfo != nil {
+			desc = fmt.Sprintf("entity:%s/%s", res.TableInfo.Module, res.TableInfo.Entity)
 		}
 
-		// Per-entity migration in one transaction (4.2.3): the DDL and its
-		// migration record commit together or not at all — a failure rolls
-		// back the whole entity migration.
+		// A stale snapshot with no table left behind it: the operator removed
+		// the manifest and dropped the table by hand, so there is nothing to
+		// migrate — only bookkeeping to clear so the next plan is not refused
+		// over work that no longer exists.
+		if plan.ForgetOnly {
+			if err := r.ForgetSnapshot(ctx, r.db, plan.Module, plan.Entity); err != nil {
+				return ApplyResult{Applied: applied, Forgotten: forgotten, Changes: allChanges}, err
+			}
+			forgotten++
+			continue
+		}
+
+		// Per-entity migration in one transaction (4.2.3): the DDL, its
+		// migration record, and the new snapshot commit together or not at all
+		// — a failure rolls back the whole entity migration. A snapshot that
+		// survived a rolled-back migration would claim a shape the database
+		// never had, and the next run would trust it.
 		tx, err := r.db.BeginTx(ctx, nil)
 		if err != nil {
-			return applied, fmt.Errorf("apply migrations: begin tx for %s: %w", desc, err)
+			return ApplyResult{Applied: applied, Changes: allChanges}, fmt.Errorf("apply migrations: begin tx for %s: %w", desc, err)
 		}
 
-		// Execute DDL
-		if _, err := tx.ExecContext(ctx, plan.DDL); err != nil {
-			_ = tx.Rollback()
-			return applied, fmt.Errorf("apply migrations: execute DDL for %s: %w\nDDL: %s", desc, err, plan.DDL)
+		// Execute DDL. A plan can carry no statement at all — a bootstrap that
+		// only adopts a baseline, or a change whose only effect is a notice.
+		if strings.TrimSpace(res.DDL) != "" {
+			if _, err := tx.ExecContext(ctx, res.DDL); err != nil {
+				_ = tx.Rollback()
+				return ApplyResult{Applied: applied, Changes: allChanges},
+					fmt.Errorf("apply migrations: execute DDL for %s: %w\nDDL: %s", desc, err, res.DDL)
+			}
 		}
 
 		// Record migration
 		currentVersion++
 		if _, err := tx.ExecContext(ctx,
 			"INSERT INTO formspec_schema_migrations (version, description, checksum) VALUES (?, ?, ?)",
-			currentVersion, desc, plan.Checksum); err != nil {
+			currentVersion, desc, res.Checksum); err != nil {
 			_ = tx.Rollback()
-			return applied, fmt.Errorf("apply migrations: record %s: %w", desc, err)
+			return ApplyResult{Applied: applied, Changes: allChanges}, fmt.Errorf("apply migrations: record %s: %w", desc, err)
+		}
+
+		// Record the shape this entity now has — the baseline the next plan
+		// diffs against.
+		if plan.Snapshot != nil && plan.Result.TableInfo != nil {
+			module := plan.Result.TableInfo.Module
+			entity := plan.Result.TableInfo.Entity
+			if err := r.SaveSnapshot(ctx, tx, module, entity, res.Checksum, plan.Snapshot); err != nil {
+				_ = tx.Rollback()
+				return ApplyResult{Applied: applied, Changes: allChanges}, fmt.Errorf("apply migrations: %w", err)
+			}
 		}
 
 		// If this is an extension migration, record namespace reservation
@@ -617,13 +822,13 @@ func (r *MigrationRunner) ApplyMigrations(ctx context.Context, entities []Entity
 		}
 
 		if err := tx.Commit(); err != nil {
-			return applied, fmt.Errorf("apply migrations: commit %s: %w", desc, err)
+			return ApplyResult{Applied: applied, Changes: allChanges}, fmt.Errorf("apply migrations: commit %s: %w", desc, err)
 		}
 
 		applied++
 	}
 
-	return applied, nil
+	return ApplyResult{Applied: applied, Forgotten: forgotten, Changes: allChanges}, nil
 }
 
 // diffExistingTable compares an existing table's columns against the desired
@@ -636,47 +841,23 @@ func (r *MigrationRunner) diffExistingTable(ctx context.Context, ti *TableInfo, 
 		return "", 0, err
 	}
 
-	// Columns that must exist: fields flagged index/unique/natural-key, plus
-	// every field named in a declared index (EntitySpec.Indexes or
-	// PersistSpec.Indexes) — including relation fields, which otherwise get no
-	// derived column at all (gap #22). Field order is preserved so the emitted
-	// DDL (and therefore its checksum) is deterministic.
+	// Columns that must exist: every field the DDL generation projects into a
+	// real column. `derivedColumnFields` is the single definition of that rule —
+	// the snapshot uses it too, and two copies would eventually disagree about
+	// which fields have a column.
 	needed := make(map[string]bool)
 	var ordered []spec.Field
-	mark := func(f spec.Field) {
-		if f.Type == spec.FieldChild || needed[f.Name] {
-			return
-		}
-		needed[f.Name] = true
-		ordered = append(ordered, f)
-	}
-
-	indexDecls := append([]spec.IndexDecl{}, entity.Indexes...)
-	if entity.Persist != nil {
-		indexDecls = append(indexDecls, entity.Persist.Indexes...)
-	}
-
+	byName := make(map[string]spec.Field, len(entity.Fields))
 	for _, f := range entity.Fields {
-		if f.Index || f.Unique || f.NaturalKey {
-			mark(f)
-		}
+		byName[f.Name] = f
 	}
-	for _, idx := range indexDecls {
-		// Includes fields named only by the index's partial predicate (S8) —
-		// those need a derived column too, or CREATE INDEX fails on a column
-		// that was never materialized.
-		byName := make(map[string]spec.Field, len(entity.Fields))
-		for _, f := range entity.Fields {
-			byName[f.Name] = f
+	for _, name := range derivedColumnFields(&entity) {
+		f, ok := byName[name]
+		if !ok || needed[name] {
+			continue
 		}
-		for _, fn := range indexDeclFields(idx, byName) {
-			for _, f := range entity.Fields {
-				if f.Name == fn {
-					mark(f)
-					break
-				}
-			}
-		}
+		needed[name] = true
+		ordered = append(ordered, f)
 	}
 
 	var alters []string
@@ -686,21 +867,10 @@ func (r *MigrationRunner) diffExistingTable(ctx context.Context, ti *TableInfo, 
 		if existing[col] {
 			continue
 		}
-		sqlType := fieldTypeToSQLFor(f.Type, f.EnumValues, r.driver)
-		if f.Type == spec.FieldRelation {
-			// Relations live in the JSONB payload; the derived column holds the
-			// reference id as text.
-			sqlType = "text"
-		}
 		// Note: the modernc SQLite driver cannot ALTER TABLE ADD COLUMN with
-		// a GENERATED ALWAYS AS column (it silently no-ops), so the diff adds
-		// a plain column. On Postgres a generated column is used.
-		colDef := fmt.Sprintf("%s %s", col, sqlType)
-		if r.driver == DriverPostgres {
-			colDef = generateGeneratedColumn(f.Name, f.Type, sqlType, r.driver)
-		}
-		alters = append(alters, fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s;",
-			qualifiedName(ti.Schema, ti.TableName, r.driver), colDef))
+		// a GENERATED ALWAYS AS column (it silently no-ops), so SQLite gets a
+		// plain column and PostgreSQL a generated one — see addDerivedColumnSQL.
+		alters = append(alters, addDerivedColumnSQL(ti, f, r.driver))
 		added++
 	}
 

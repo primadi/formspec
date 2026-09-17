@@ -9,7 +9,6 @@ func KindMapping() []KindEntry {
 		{Kind: "Entity", SpecStruct: "EntitySpec"},
 		{Kind: "Service", SpecStruct: "ServiceSpec"},
 		{Kind: "Config", SpecStruct: "ConfigSpec"},
-		{Kind: "Migration", SpecStruct: "MigrationSpec"},
 		{Kind: "Subscription", SpecStruct: "SubscriptionSpec"},
 
 		// — Core Extended —

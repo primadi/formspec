@@ -213,7 +213,7 @@ func (p *provider) fetchUserInfo(ctx context.Context, tok *oauth2.Token) (*UserI
 	if err != nil {
 		return nil, fmt.Errorf("oauth: %s userinfo: %w", p.cfg.Name, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		return nil, fmt.Errorf("oauth: %s userinfo: status %d: %s", p.cfg.Name, resp.StatusCode, strings.TrimSpace(string(body)))
@@ -290,7 +290,7 @@ func discover(issuer string) (*discoveryDoc, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("discovery %s: status %d", url, resp.StatusCode)
 	}
