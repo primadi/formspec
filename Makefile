@@ -1,4 +1,4 @@
-.PHONY: all build clean test lint deps-warm run-example registry-dev dev web-deps web-dev web-build web-typecheck site-deps site-dev site-build site-typecheck apply build-spa build-registry install release release-upload release-version check-release-version check-upload-version
+.PHONY: all build clean test lint deps-warm run-example registry-dev dev web-deps web-dev web-build web-typecheck site-deps site-dev site-build site-typecheck apply build-spa build-registry install release release-upload release-version check-release-version check-release-tag check-upload-version
 
 # Build all binaries
 all: build
@@ -163,6 +163,12 @@ deps:
 # (asset baru sebagian naik), jalankan perintah yang sama lagi — draft release
 # di-resume, asset yang sudah lengkap dilewati.
 #
+# `release` TIDAK membuat tag (tag = keputusan sadar maintainer, lihat
+# docs_internal/plan/release-version-auto.md §Keputusan), tapi statusnya dicetak
+# sebelum build SPA + sekali lagi di ringkasan akhir via
+# scripts/release-tag-status.sh — supaya kebutuhan tag tidak baru terasa sebagai
+# error di `release-upload` setelah build mahal selesai.
+#
 # Output: dist/release/formspec-<os>-<arch>.tar.gz|.zip + SHA256SUMS.txt
 # Prosedur lengkap (prasyarat, tag, upload, verifikasi): docs/guides/releasing.md
 # Rincian desain: docs_internal/plan/release-version-auto.md
@@ -213,13 +219,18 @@ release-version: check-release-version
 check-release-version:
 	@bash scripts/check-semver.sh "$(VERSION)"
 
+# Status tag rilis — INFO saja (selalu sukses; guard-nya ada di `release-upload`).
+# Direprequisite SEBELUM `build-spa` agar langkah tag terbaca lebih awal.
+check-release-tag:
+	@bash scripts/release-tag-status.sh "$(VERSION)"
+
 # Guard upload: artifact dist/release/ harus ada dan berstamp VERSION yang sama.
 check-upload-version:
 	@test -n "$(DIST_VERSION)" || (echo "❌ $(RELEASE_DIR)/ tidak berisi artifact spa-<versi>.tar.gz — jalankan 'make release' dulu." >&2; exit 1)
 	@bash scripts/check-semver.sh "$(VERSION)"
 	@test "$(VERSION)" = "$(DIST_VERSION)" || (echo "❌ Artifact di $(RELEASE_DIR)/ berstamp $(DIST_VERSION), bukan $(VERSION) — jalankan 'make release VERSION=$(VERSION)' dulu; upload harus memakai artifact yang cocok dengan tag." >&2; exit 1)
 
-release: check-release-version build-spa
+release: check-release-version check-release-tag build-spa
 	@rm -rf cmd/formspec/dist
 	@mkdir -p cmd/formspec/dist
 	cp -r renderers/react-shadcn/dist/* cmd/formspec/dist/
@@ -255,6 +266,8 @@ release: check-release-version build-spa
 	@cd $(RELEASE_DIR) && shasum -a 256 *.tar.gz *.zip > SHA256SUMS.txt
 	@echo "✅ Release artifacts siap di $(RELEASE_DIR)/"
 	@ls -lh $(RELEASE_DIR)
+	@echo ""
+	@bash scripts/release-tag-status.sh "$(VERSION)"
 
 # Create-or-resume: pembuatan draft dipisah dari upload asset supaya upload
 # bisa diulang. Release yang sudah PUBLISHED tetap ditolak ("satu tag = satu

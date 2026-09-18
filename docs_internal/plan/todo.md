@@ -1525,6 +1525,23 @@ Setup domain, landing, docs site, dan schema hosting. Referensi:
 > Draft `v0.0.7` sudah dibuat dan lengkap (8 asset) — sisa 12.15: review lalu
 > klik **Publish** di GitHub Releases, kemudian lanjut 12.16.
 
+> **Catatan 2026-09-18** — langkah tag di alur rilis dibuat terbaca. `make release`
+> sukses (auto-bump `v0.0.9`) tapi `make release-upload` gagal "Tag v0.0.9 belum ada
+> lokal": guard-nya benar (tag tidak pernah dibuat otomatis — keputusan di
+> `docs_internal/plan/release-version-auto.md` §Keputusan), tapi `make release`
+> tidak menyebut langkah tag sama sekali sehingga kebutuhannya baru terasa setelah
+> SPA build + 6 cross-compile selesai. Perbaikan (opsi A — guard tidak diubah):
+> target `check-release-tag` direprequisite **sebelum** `build-spa` + dicetak lagi
+> di ringkasan akhir via `scripts/release-tag-status.sh` (baru; info-only, sekaligus
+> memperingatkan bila tag menunjuk commit selain HEAD), dan §2
+> `docs/guides/releasing.md` merekonsiliasi urutan tag ↔ build (dua urutan sah,
+> syaratnya tag di commit yang dibangun). Changelog
+> `docs_internal/changelog/2026-09-18-002-visibilitas-langkah-tag-rilis.md`.
+>
+> 📌 Rilis `v0.0.9` sedang berjalan: tag sudah di-push ke `origin` (commit
+> `71bf2fa`), artifact 8 file siap di `dist/release/` — sisa 12.15: `make
+> release-upload`, review draft, lalu **Publish**.
+
 > **Catatan 2026-09-17** — versi rilis tidak lagi diambil dari `git describe`:
 > `make release` tanpa `VERSION=` memakai patch-bump tag semver tertinggi
 > (`scripts/next-version.sh`), `make release-upload` memakai versi artifact di

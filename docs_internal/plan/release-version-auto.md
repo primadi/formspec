@@ -66,3 +66,31 @@ Guard `release-upload` tidak menangkapnya karena regex-nya tidak di-anchor `$`
 - Release `v0.0.8-4-gceaaf2a` yang sudah published tidak dihapus/di-retag
   (satu tag = satu release). Rilis patch semver berikutnya (`v0.0.9`) akan
   mengambil alih label "Latest" di GitHub.
+
+## Lanjutan 2026-09-18 — langkah tag tidak terbaca di `make release`
+
+**Gejala**: `make release` sukses (auto-bump `v0.0.9` + 8 artifact di
+`dist/release/`), lalu `make release-upload` gagal `Tag v0.0.9 belum ada lokal`.
+Guard-nya benar (keputusan di atas: tag tidak pernah dibuat otomatis), tapi
+`make release` tidak menyebut langkah tag sama sekali — kebutuhannya baru terasa
+setelah SPA build + 6 cross-compile selesai. Temuan menyertai: `docs/guides/
+releasing.md` §2 menaruh tag **sebelum** build, sedangkan keputusan plan menaruh
+`git tag` **sesudah** `make release`.
+
+**Perbaikan (opsi A — guard tidak diubah, tag tetap manual)**:
+
+| File                        | Aksi | Isi                                                                                  | Effort |
+| --------------------------- | ---- | ------------------------------------------------------------------------------------ | ------ |
+| `scripts/release-tag-status.sh` | baru | Status tag: belum ada / ada tapi bukan di HEAD / OK — selalu exit 0 (info, bukan guard) | small  |
+| `Makefile`                  | ubah | Target `check-release-tag` sebagai prereq **sebelum** `build-spa` + dipanggil lagi di ringkasan akhir | small  |
+| `docs/guides/releasing.md`  | ubah | §2: urutan tag ↔ build direkonsiliasi (dua-duanya sah, syaratnya tag di commit yang dibangun) | small  |
+
+**Keputusan**: gate tag tetap manual dan `release` tetap tidak menyentuh git ref;
+yang diperbaiki hanya **visibilitas** (status tag terbaca sebelum build mahal)
+dan **konsistensi dokumen**. Opsi yang ditolak: `release` auto-create tag (menyimpang
+dari §Keputusan di atas) dan `release-upload` push tag sendiri (mutasi publik
+diam-diam di dalam target upload).
+
+**Verifikasi**: `./scripts/release-tag-status.sh` untuk tiga kasus (tag di HEAD,
+tag belum ada, tag di commit lain) + versi kosong; `bash -n` script; `make -n release`.
+Changelog `docs_internal/changelog/2026-09-18-002-visibilitas-langkah-tag-rilis.md`.

@@ -127,6 +127,31 @@ git tag v0.4.2
 git push origin main --tags
 ```
 
+`make release` **tidak membuat tag** — ia hanya build artifact dan tidak menyentuh
+git ref. Tag dipilih sadar oleh maintainer (auto-bump versi ≠ otorisasi publish;
+lihat `docs_internal/plan/release-version-auto.md` §Keputusan). Karena itu urutan
+tag ↔ build tidak saling bergantung — `make release` tidak membaca tag (versi
+di-stamp dari `VERSION`), dan dua urutan ini sama sahnya:
+
+```bash
+git tag v0.4.2 && git push origin main --tags   # tag dulu → build
+make release
+
+make release                                     # build dulu → tag menyusul
+# (setelah build:) git tag v0.4.2 && git push origin main --tags
+```
+
+Syaratnya cuma satu: tag harus menunjuk **commit yang dibangun**. Kalau `HEAD`
+bergerak setelah `make release` (mis. ada commit susulan), tag di commit baru tidak
+lagi mewakili artifact di `dist/release/` — pindahkan tag ke commit yang dibangun
+atau ulangi `make release` dari commit yang di-tag.
+
+Agar langkah ini tidak muncul mendadak sebagai error di §4, `make release`
+mencetak status tag — sebelum build SPA dan sekali lagi di ringkasan akhir —
+via `scripts/release-tag-status.sh` (info saja, tidak pernah menggagalkan build).
+Tag juga harus **sudah di-push**: URL download release meng-embed tag, jadi
+`release-upload` menolak bila tag baru ada lokal.
+
 ## 3. Build semua artifact
 
 ```bash

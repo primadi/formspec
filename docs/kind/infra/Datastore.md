@@ -1,11 +1,10 @@
 # Datastore
 
 <!-- generated:meta -->
-
-|             |                 |
-| ----------- | --------------- |
-| Grup        | `infra`         |
-| Plane       | `control`       |
+| | |
+|---|---|
+| Grup | `infra` |
+| Plane | `control` |
 | Spec struct | `DatastoreSpec` |
 
 <!-- /generated:meta -->
@@ -82,14 +81,13 @@ spec:
 ## Atribut
 
 <!-- generated:attributes -->
-
-| Atribut          | Tipe                                                                         | Wajib | Contoh                  | Deskripsi                                                    |
-| ---------------- | ---------------------------------------------------------------------------- | ----- | ----------------------- | ------------------------------------------------------------ |
-| `serves`         | []enum (db · cache · lock · queue · pubsub · storage · config · kvstore · …) | —     | [db]                    | Serves lists which ctx.\* primitives this datastore backs.   |
-| `driver`         | enum (sqlite · postgres · valkey · redis · s3 · garage · minio · nats · …)   | ✅    | postgres                | Driver identifies the backend technology.                    |
-| `connection`     | `DatastoreConnection`                                                        | ✅    |                         | Connection holds connection parameters for the backend.      |
-| `credential_ref` | `string`                                                                     | —     | kms://workspace-default | CredentialRef is a reference to KMS/Vault for credentials.   |
-| `access`         | `DatastoreAccess`                                                            | —     |                         | Access controls who (filter) can use this datastore and what |
+| Atribut | Tipe | Wajib | Contoh | Deskripsi |
+|---|---|---|---|---|
+| `serves` | []enum (db · cache · lock · queue · pubsub · storage · config · kvstore · …) | — | [db] | Serves lists which ctx.* primitives this datastore backs. |
+| `driver` | enum (sqlite · postgres · valkey · redis · s3 · garage · minio · nats · …) | ✅ | postgres | Driver identifies the backend technology. |
+| `connection` | `DatastoreConnection` | ✅ |  | Connection holds connection parameters for the backend. |
+| `credential_ref` | `string` | — | kms://workspace-default | CredentialRef is a reference to KMS/Vault for credentials. |
+| `access` | `DatastoreAccess` | — |  | Access controls who (filter) can use this datastore and what |
 
 <!-- /generated:attributes -->
 
