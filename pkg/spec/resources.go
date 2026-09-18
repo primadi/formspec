@@ -1102,6 +1102,28 @@ func ValidateAppSpec(a *AppSpec) error {
 					return fmt.Errorf("public_entities[%d] (%s): unknown action %q (closed set: list, find, create, update, delete)", i, pe.Entity, act)
 				}
 			}
+			// Per-surface row scope (#45). Anonymous reads are the reason a
+			// grant needs one; and a grant that declares a scope while also
+			// granting `find` would look guarded while it is not — find
+			// resolves by id, which this mechanism cannot check.
+			for j := range pe.Scope {
+				sc := &pe.Scope[j]
+				if sc.Field == "" {
+					return fmt.Errorf("public_entities[%d] (%s): scope[%d]: field is required", i, pe.Entity, j)
+				}
+				if sc.From != "route" {
+					return fmt.Errorf(
+						"public_entities[%d] (%s): scope[%d] (%s) must use `from: route` — a public surface has no session identity, so a session-scoped grant would deny every read instead of filtering it",
+						i, pe.Entity, j, sc.Field)
+				}
+				for _, act := range pe.Actions {
+					if act == "find" {
+						return fmt.Errorf(
+							"public_entities[%d] (%s): cannot grant `find` together with `scope` — find resolves by id and the scope cannot guard it, so the grant would look filtered while returning any record by id",
+							i, pe.Entity)
+					}
+				}
+			}
 		}
 	}
 	if a.PersistBackend != "" && !InstalledPersistBackends[a.PersistBackend] {
