@@ -34,7 +34,7 @@ spec:
       enum_values: [in, out]
       required: true
       title: "Arah"
-    # GAP-01 TERTUTUP (2.14) — `moneyinput`. Sisa GAP-02: indeks money.
+    # Memakai `moneyinput`. Sisa GAP-02: indeks money.
     - name: amount
       type: money
       required: true

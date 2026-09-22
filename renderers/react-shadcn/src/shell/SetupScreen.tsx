@@ -131,6 +131,10 @@ export function SetupScreen() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Hidden context for password managers (Chromium "Create Amazing
+              Password Forms"): the workspace comes from the URL and is never
+              typed here, but it scopes the saved credential to the account. */}
+          <input type="hidden" name="workspace" value={workspace} />
           <div className="space-y-2.5">
             <label
               htmlFor="setup-username"
@@ -140,6 +144,7 @@ export function SetupScreen() {
             </label>
             <Input
               id="setup-username"
+              name="username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               placeholder="mis. admin"
@@ -156,9 +161,11 @@ export function SetupScreen() {
             </label>
             <Input
               id="setup-display"
+              name="display_name"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder="Nama tampilan (opsional)"
+              autoComplete="name"
             />
           </div>
 
@@ -171,6 +178,7 @@ export function SetupScreen() {
             </label>
             <Input
               id="setup-password"
+              name="password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -188,6 +196,7 @@ export function SetupScreen() {
             </label>
             <Input
               id="setup-confirm"
+              name="confirm-password"
               type="password"
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}

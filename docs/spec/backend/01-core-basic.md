@@ -517,6 +517,16 @@ salah ketik ditolak saat validate, bukan berakhir sebagai DDL. Index parsial
 didukung SQLite maupun PostgreSQL, jadi aturannya portabel; DDL yang benar-benar
 di luar bahasa tempatnya di `persist.raw_ddl` (§4.3).
 
+**Keunikan adalah urusan database, bukan script.** Aturan "satu baris per kunci"
+dinyatakan sebagai `unique: true` (dengan `where:` bila bersyarat) — **bukan**
+sebagai guard script yang melakukan SELECT-lalu-INSERT. Alasannya: index berlaku
+untuk **semua** jalur tulis (API, script, seed, operator) dan atomik di level
+database, sedangkan guard hanya berjalan pada jalur yang melewatinya dan rentan
+race (dua permintaan bersamaan sama-sama lolos SELECT). Guard script tetap boleh
+ada sebagai **lapis kedua** untuk memberi pesan yang lebih ramah, tetapi ia
+tidak boleh menjadi satu-satunya penegak. `resource.find()` (§9.3 platform)
+adalah cara guard mengecek tanpa SQL mentah.
+
 `category` adalah pengelompokan data yang framework jamin **tidak boleh
 di-join lintas kategori** (isolasi, bukan sekadar performa) — cara sebuah
 PersistBackend mewujudkan batas ini (schema Postgres terpisah, database
@@ -756,14 +766,26 @@ sebagai konvensi yang ditegakkan: tanpa prefix `before_*`/`on_*` ia tetap wajib
 mendeklarasikan `type`. Dokumen vertical yang menulis `billing.order.paid`
 mengikuti kebiasaan penamaan, bukan kontrak.
 
-**Transisi tidak memancarkan event secara otomatis (D3).** Event terikat pada
-**aksi/hook**, bukan pada transisi: `TransitionDecl` hanya punya
-`from`/`to`/`via`/`guard`, dan tidak ada field `emit`. Mengubah state lewat
-`via` mentransisikan state machine-nya, tetapi **tidak** memancarkan
-`on_paid`/`on_*` kecuali ada aksi atau hook yang memang memancarkannya. Karena
-itu integrasi lintas-resource tidak boleh mengandalkan asosiasi "nama event =
-nama state" — keterkaitan eksplisit transisi ↔ event adalah item
-`02-core-extended.md` §1.
+**Transisi memancarkan event lewat `emit:` (S13).** Event terikat pada
+**aksi/hook** dan pada **transisi**. `TransitionDecl` punya
+`from`/`to`/`via`/`guard`/`emit`: mengubah state lewat `via` mentransisikan
+state machine-nya, dan bila transisi itu mendeklarasikan `emit`, event yang
+disebut dipancarkan. Keterkaitannya **eksplisit** — bukan asosiasi "nama event =
+nama state" — sehingga `formspec validate` bisa memastikan `emit` menunjuk event
+yang benar-benar dideklarasikan, dan integrasi lintas-resource tidak perlu
+menebak.
+
+```yaml
+state_machine:
+  field: status
+  transitions:
+    - { from: awaiting_payment, to: paid, via: confirm-payment, emit: on_paid }
+    - { from: [paid, in_kitchen, ready, served], to: cancelled, via: void-order, emit: on_cancel }
+```
+
+Transisi tanpa `emit` tidak memancarkan apa pun (default). Konvensi penamaan
+event (`on_*` = async, `before_*` = sync) tetap berlaku dan **terpisah** dari
+keterkaitan ini — keduanya kini terverifikasi sendiri-sendiri.
 
 **Prioritas handler** (event sync): urutan `priority` (kecil dijalankan
 duluan) — kelipatan 10 supaya handler baru bisa disisipkan tanpa
@@ -934,6 +956,48 @@ boleh membaca lintas baris/cabang". Nama dan granularitasnya mengikuti bentuk
 kanonik di atas supaya bisa digabungkan dengan grant lain tanpa aturan khusus —
 dan supaya pertanyaan audit "siapa yang bisa melihat semua cabang" dijawab oleh
 daftar grant, bukan oleh penafsiran wildcard.
+
+### 8.7 Konteks sesi — (principal, role, cabang) (Normatif)
+
+Sesi selalu **spesifik**: siapa, sebagai **role apa**, di **cabang mana**. Tidak
+ada sesi yang memegang "semua role yang dimiliki principal" sekaligus.
+
+**`assignments` hidup di principal.** `formspec.core.user.spec.assignments`
+adalah daftar `{role, dimension, value}` — ketiganya wajib. `dimension` adalah
+**nama field** yang dibandingkan `row_scope.field` (mis. `branch_id`), bukan
+nama dimensi dekoratif `scope.dimension` (`branch`), karena
+`row_scope: {from: session}` membaca nilai itu dengan kunci tersebut.
+
+**Login memilih satu.** Aturan pemilihan, dan tidak ada varian lain:
+
+| Keadaan | Hasil |
+| --- | --- |
+| 0 assignment | sesi **tanpa boundary** — perilaku principal tanpa konteks (pemilik/service account): permission = union role, bacaan lintas cabang lewat `read_all` |
+| tepat 1 | dipakai otomatis |
+| >1 tanpa `assignment` | **409 `CONTEXT_REQUIRED`** + `choices[{id, role, dimension, value}]`; **tidak ada token** |
+| `assignment` yang tidak ada / sudah dicabut | **409 `CONTEXT_REQUIRED`** juga — fail closed, minta pilih ulang |
+
+Server **tidak pernah** memilih boundary atas nama pemanggil, dan tidak pernah
+menurunkan "tidak tahu" menjadi "tanpa boundary".
+
+**Token.** Sesi ber-konteks membawa klaim `role` (tunggal) + `attrs` (dimension →
+value). Bila `role` ada, klaim `roles` **diabaikan** — daftar role yang basi atau
+ditempel tidak bisa melebarkan sesi.
+
+**Permission.** Materialisasi memakai grant **role yang dipilih saja** (+
+permission langsung principal). Union dari seluruh role tidak pernah dipakai
+untuk sesi ber-konteks; itulah yang membuat audit bisa menjawab "sebagai role
+apa, di cabang mana" untuk setiap aksi.
+
+**Refresh & pencabutan.** Sesi ber-konteks divalidasi ulang saat refresh:
+assignment-nya harus masih ada **dan** role-nya masih terdaftar. Bila tidak,
+refresh dijawab **409 `CONTEXT_REQUIRED`** — bukan token baru dengan boundary
+lama, dan bukan 401 yang membuat klien mengulang selamanya.
+
+**Pindah konteks.** `POST /_ui/auth/switch` (`refresh_token` + `assignment`)
+menerbitkan pair baru untuk konteks yang diminta **dan me-revoke sesi lama**:
+tidak pernah ada dua konteks hidup dari satu pemilihan. `assignment` wajib di
+endpoint ini — pindah tanpa menyebut boundary bukan operasi yang sah.
 
 ## 9. Error Model
 

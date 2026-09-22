@@ -1,0 +1,31 @@
+apiVersion: formspec.dev/v1
+kind: Subscription
+metadata:
+  name: sales-to-journal
+  module: gl
+  description: "Pesanan lunas → jurnal double-entry; pembalikan saat dibatalkan"
+spec:
+  # Event PEMANCAR dideklarasikan di module cafe-order (transisi `confirm-
+  # payment` memancarkan `on_paid` dengan publish.durable — outbox + retry +
+  # dead-letter). gl TIDAK mengubah module pemesanan sama sekali: ia hanya
+  # mendengarkan nama event yang sepenuhnya terkualifikasi ini.
+  #
+  # Kenapa pemetaan akunnya DI SINI (keputusan pemilik, 2026-09-21): jurnal dan
+  # bagan akun adalah milik gl — module pemesanan tidak boleh tahu kode akun,
+  # dan logika akuntansi harus bisa diganti tanpa menyentuh cafe-order.
+  # Jurnal tidak seimbang = setting akun gl belum lengkap = error milik gl
+  # (FORMSPEC.GL.* di journalize.star), bukan error module pemesanan.
+  #
+  # Ini jalur satu-server (subscription registry dimuat dari seluruh spec
+  # tree, bukan per-App). Jalur lintas-App (kind: Integrator + cross-app
+  # grant) tetap deferred ke Control Plane (ledger 6.3) — manifest Integrator
+  # lama dihapus karena jalan dua-duanya berarti jurnal ganda.
+  #
+  # on_cancel ikut didengarkan karena aturan simetri cancel (7.7.2): satu
+  # pemicu yang menulis jurnal wajib menyatakan pembalikannya sejak awal.
+  events:
+    - cafe-order.order.on_paid
+    - cafe-order.order.on_cancel
+  handler:
+    type: script_ref
+    ref: gl/journalize

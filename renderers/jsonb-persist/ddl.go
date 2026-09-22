@@ -46,6 +46,45 @@ var CategorySchema = map[string]string{
 // DefaultSchema is used when no category is specified.
 const DefaultSchema = "operational"
 
+// CategorySchemaValues returns the schema names in a stable order — the
+// connection's default search_path (config.go) must include every schema an
+// entity can live in, so unqualified SQL references resolve.
+func CategorySchemaValues() []string {
+	return []string{"operational", "financial", "compliance", "analytics", "master", "archive"}
+}
+
+// GeneratedColumnFunction is a PostgreSQL helper function generated columns
+// depend on (see GeneratedColumnFunctions).
+type GeneratedColumnFunction struct {
+	Name string
+	DDL  string
+}
+
+// GeneratedColumnFunctions are the IMMUTABLE SQL wrappers generated columns
+// need for date/time payload text. PostgreSQL marks text→timestamp/date as
+// mutable (the parse consults the DateStyle GUC), so a generated column
+// refuses `data->>'x'::timestamp` with "generation expression is not
+// immutable". The wrappers pin the parse to UTC — the app layer writes UTC
+// ISO text — and declare IMMUTABLE explicitly. Numeric, boolean, and uuid
+// casts are already immutable and stay inline (verified on PG 17). Created
+// idempotently by EnsureSystemTables (master todo 15.8).
+var GeneratedColumnFunctions = []GeneratedColumnFunction{
+	{
+		Name: "formspec_to_timestamptz",
+		DDL: `CREATE OR REPLACE FUNCTION formspec_to_timestamptz(v text) RETURNS timestamptz
+LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $fn$
+	SELECT (v)::timestamp AT TIME ZONE 'UTC'
+$fn$;`,
+	},
+	{
+		Name: "formspec_to_date",
+		DDL: `CREATE OR REPLACE FUNCTION formspec_to_date(v text) RETURNS date
+LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $fn$
+	SELECT v::date
+$fn$;`,
+	},
+}
+
 // dialect provides SQL type names for the target database.
 type dialect struct {
 	uuid        string
@@ -116,9 +155,16 @@ func GenerateEntityDDL(meta spec.Metadata, entity *spec.EntitySpec, driver Drive
 	var indexes []string
 
 	// 1. Normative columns (§19)
+	//
+	// tenant_id / created_by / updated_by are app-layer strings, NOT UUIDs:
+	// tenant_id carries the workspace slug ("kafe"), and anonymous creates
+	// write "anonymous" into created_by. Declaring them uuid in PostgreSQL
+	// made every insert fail with "invalid input syntax for type uuid"
+	// (master todo 15.8); SQLite never showed the problem because text is
+	// its only type.
 	columns = append(columns,
 		fmt.Sprintf("id          %s", dl.uuidPK),
-		fmt.Sprintf("tenant_id   %s   NOT NULL", dl.uuid),
+		"tenant_id   text   NOT NULL",
 		fmt.Sprintf("version     %s   NOT NULL DEFAULT 1", dl.bigint),
 		fmt.Sprintf("created_at  %s   NOT NULL DEFAULT %s", dl.timestamptz, dl.nowFn),
 		fmt.Sprintf("updated_at  %s   NOT NULL DEFAULT %s", dl.timestamptz, dl.nowFn),
@@ -134,8 +180,8 @@ func GenerateEntityDDL(meta spec.Metadata, entity *spec.EntitySpec, driver Drive
 	}
 
 	columns = append(columns,
-		fmt.Sprintf("created_by  %s", dl.uuid),
-		fmt.Sprintf("updated_by  %s", dl.uuid),
+		"created_by  text",
+		"updated_by  text",
 	)
 
 	// 1b. Document Model reserved columns (v0.3.0)
@@ -150,6 +196,14 @@ func GenerateEntityDDL(meta spec.Metadata, entity *spec.EntitySpec, driver Drive
 
 	// 3. User-defined fields
 	for _, f := range entity.Fields {
+		// A tombstoned field generates nothing — no derived column, no index,
+		// no CHECK. Keeping it here made the CREATE/ALTER projection disagree
+		// with the tombstone removal (which drops the column) and the plan
+		// oscillated: apply dropped the column, the additive step re-added it
+		// (master todo 15.8).
+		if f.Removed {
+			continue
+		}
 		switch f.Type {
 		case spec.FieldChild:
 			// Child fields are stored in JSONB or separate table
@@ -170,6 +224,15 @@ func GenerateEntityDDL(meta spec.Metadata, entity *spec.EntitySpec, driver Drive
 					idx := generateIndexConstraint(ti.TableName, f.Name, f.Unique)
 					indexes = append(indexes, idx)
 				}
+			} else if f.Index || f.Unique {
+				// An indexed relation stores the reference id inside `data`, so
+				// it needs the same derived column every other indexed field
+				// gets. Skipping it made CREATE and ALTER disagree about which
+				// fields have a column: the snapshot said the field is derived,
+				// the table never had the column, and every migration plan
+				// stayed non-convergent (`storage_drift` on a fresh database).
+				columns = append(columns, generateGeneratedColumn(f.Name, f.Type, "text", driver))
+				indexes = append(indexes, generateIndexConstraint(ti.TableName, f.Name, f.Unique))
 			}
 			// Tree/hierarchy (4.6.1): a self-referential relation marked
 			// tree: true gets a materialized-path column _tpath_{field}.
@@ -217,15 +280,20 @@ func GenerateEntityDDL(meta spec.Metadata, entity *spec.EntitySpec, driver Drive
 						fmt.Sprintf("CREATE UNIQUE INDEX %s ON %s (%s);",
 							idxName, ti.TableName, keyCols))
 				}
+			} else if softDelete {
+				// PostgreSQL cannot declare a *partial* unique constraint
+				// inline in CREATE TABLE — the WHERE clause is a syntax error
+				// there ("syntax error at or near WHERE", first real PG run,
+				// master todo 15.8). A partial unique index is the equivalent
+				// construction and is what the partial declared-index path
+				// (S8) already emits.
+				indexes = append(indexes,
+					fmt.Sprintf("CREATE UNIQUE INDEX %s ON %s (%s) WHERE deleted_at IS NULL;",
+						idxName, ti.TableName, keyCols))
 			} else {
-				// PostgreSQL: inline UNIQUE constraint with WHERE
-				if softDelete {
-					constraints = append(constraints,
-						fmt.Sprintf("UNIQUE (%s) WHERE deleted_at IS NULL", keyCols))
-				} else {
-					constraints = append(constraints,
-						fmt.Sprintf("UNIQUE (%s)", keyCols))
-				}
+				// PostgreSQL: inline UNIQUE constraint (no predicate).
+				constraints = append(constraints,
+					fmt.Sprintf("UNIQUE (%s)", keyCols))
 			}
 		}
 
@@ -237,15 +305,20 @@ func GenerateEntityDDL(meta spec.Metadata, entity *spec.EntitySpec, driver Drive
 			indexes = append(indexes, idx)
 		}
 
-		// Enum CHECK constraint — use json_extract since the generated column
-		// may not exist if the field isn't indexed
+		// Enum CHECK constraint — evaluates the value in the JSONB payload,
+		// since the derived column may not exist when the field is not
+		// indexed. The payload expression is driver-aware: SQLite reads it
+		// with json_extract, PostgreSQL with data->>. Using the SQLite form
+		// unconditionally produced DDL PostgreSQL rejected on the first real
+		// run (`function json_extract(jsonb, unknown) does not exist`,
+		// master todo 15.8).
 		if f.Type == spec.FieldEnum && len(f.EnumValues) > 0 {
 			var vals []string
 			for _, v := range f.EnumValues {
 				vals = append(vals, fmt.Sprintf("'%s'", v))
 			}
 			constraints = append(constraints,
-				fmt.Sprintf("CHECK (json_extract(data, '$.%s') IN (%s))", f.Name, strings.Join(vals, ", ")))
+				fmt.Sprintf("CHECK (%s IN (%s))", payloadExpr(driver, f.Name), strings.Join(vals, ", ")))
 		}
 	}
 
@@ -398,34 +471,60 @@ func GenerateEntityDDL(meta spec.Metadata, entity *spec.EntitySpec, driver Drive
 	return ti, nil
 }
 
-// generateGeneratedColumn creates a generated column for indexed/unique fields.
-// PostgreSQL: data->>'field'  —  SQLite: json_extract(data, '$.field')
-func generateGeneratedColumn(fieldName string, ft spec.FieldType, sqlType string, driver DriverType) string {
-	colName := generatedColumnName(fieldName)
-
+// generatedColumnExpr returns the SQL expression a derived column computes from
+// the JSONB payload. Shared by the CREATE TABLE path and the ALTER path
+// (addDerivedColumnSQL), because a column added later must compute exactly the
+// same value as one created with the table — otherwise the two disagree and
+// indexes over the ALTER-ed one enforce a different rule (kafe TODO 3.11).
+func generatedColumnExpr(fieldName string, ft spec.FieldType, driver DriverType) string {
 	// A money value is the object {amount, currency} (05-field-types.md §2).
 	// Indexing the JSON text of that object is what made `9000` sort after
 	// `10000` — the derived column must reach into `.amount` and be numeric, or
 	// sorting, ranges, and aggregates silently compare JSON strings (#23).
 	if ft == spec.FieldMoney {
-		var moneyExpr string
 		if driver == DriverPostgres {
-			moneyExpr = fmt.Sprintf("data->'%s'->>'amount'", fieldName)
-		} else {
-			moneyExpr = fmt.Sprintf("CAST(json_extract(data, '$.%s.amount') AS REAL)", fieldName)
+			return fmt.Sprintf("data->'%s'->>'amount'", fieldName)
 		}
-		return fmt.Sprintf("%s %s GENERATED ALWAYS AS (%s) STORED",
-			colName, sqlType, moneyExpr)
+		return fmt.Sprintf("CAST(json_extract(data, '$.%s.amount') AS REAL)", fieldName)
 	}
-
-	var expr string
 	if driver == DriverPostgres {
-		expr = fmt.Sprintf("data->>'%s'", fieldName)
-	} else {
-		expr = fmt.Sprintf("json_extract(data, '$.%s')", fieldName)
+		return fmt.Sprintf("data->>'%s'", fieldName)
+	}
+	return fmt.Sprintf("json_extract(data, '$.%s')", fieldName)
+}
+
+// generateGeneratedColumn creates a generated column for indexed/unique fields.
+// PostgreSQL: data->>'field'  —  SQLite: json_extract(data, '$.field')
+//
+// Only usable where the table is created: SQLite refuses to add a STORED
+// generated column with ALTER TABLE, so late columns go through
+// addDerivedColumnSQL instead.
+//
+// The payload expression always yields text (`data->>`), so when the column's
+// SQL type is anything other than text the expression must be cast to the
+// column type — PostgreSQL refuses a generated column whose expression does
+// not match its type ("column _transaction_date is of type timestamptz but
+// default expression is of type text"), which no one had ever seen because
+// this path had never run against PostgreSQL (master todo 15.8).
+func generateGeneratedColumn(fieldName string, ft spec.FieldType, sqlType string, driver DriverType) string {
+	expr := generatedColumnExpr(fieldName, ft, driver)
+	if driver == DriverPostgres && sqlType != "text" && sqlType != "varchar(50)" {
+		// date/time payload text cannot cast inline: the parse depends on the
+		// DateStyle GUC, so the cast is not immutable and generated columns
+		// refuse it. The IMMUTABLE wrappers (GeneratedColumnFunctions, created
+		// by EnsureSystemTables) pin the parse to UTC. Numeric, boolean, and
+		// uuid casts are already immutable and stay inline.
+		switch sqlType {
+		case "timestamptz":
+			expr = fmt.Sprintf("formspec_to_timestamptz(%s)", expr)
+		case "date":
+			expr = fmt.Sprintf("formspec_to_date(%s)", expr)
+		default:
+			expr = fmt.Sprintf("(%s)::%s", expr, sqlType)
+		}
 	}
 	return fmt.Sprintf("%s %s GENERATED ALWAYS AS (%s) STORED",
-		colName, sqlType, expr)
+		generatedColumnName(fieldName), sqlType, expr)
 }
 
 // generatedColumnName returns the generated column name for a field.

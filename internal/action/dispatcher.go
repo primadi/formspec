@@ -105,6 +105,20 @@ type Executor interface {
 type Dispatcher struct {
 	executors map[spec.ImplType]Executor
 	nativeEx  *NativeExecutor // exposed via NativeExecutor() for public registration
+
+	// EventEmitter, when set, publishes an action's declared events for actions
+	// reached through resource.call() from a script. The HTTP path resolves
+	// emissions in internal/api/handler.go; without a counterpart on this path
+	// an event declared by an action (journal-posted) was simply never
+	// published — the action ran, the journal posted, and its downstream
+	// projection stayed empty. Nil = no publication (unchanged behavior).
+	EventEmitter func(ctx context.Context, workspaceID, resource string, ev EventEmission)
+}
+
+// SetEventEmitter wires the callback used to publish events for actions invoked
+// through resource.call(). See Dispatcher.EventEmitter.
+func (d *Dispatcher) SetEventEmitter(fn func(ctx context.Context, workspaceID, resource string, ev EventEmission)) {
+	d.EventEmitter = fn
 }
 
 // NativeExecutor returns the native executor, allowing external callers to

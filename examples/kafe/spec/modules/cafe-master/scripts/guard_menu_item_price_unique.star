@@ -4,7 +4,7 @@
 #
 # KENAPA SCRIPT INI ADA
 #
-# Aturan ini kini DITEGAKKAN DATABASE. GAP-22 sudah ditutup: `indexes:` dihormati,
+# Aturan ini kini DITEGAKKAN DATABASE: `indexes:` dihormati,
 # dan menyebut field `relation` di dalamnya menghasilkan kolom turunan
 # (`_branch_id`, `_menu_item_id`). Terbukti lewat `formspec migrate plan`:
 #     CREATE UNIQUE INDEX idx_cafe_master_menu_item_prices_branch_id_menu_item_id
@@ -23,33 +23,22 @@
 # Constraint database selalu lebih kuat: ia berlaku untuk semua jalur tulis
 # (API, script, seed, operator), guard hanya pada jalur yang melewatinya.
 #
-# ─── GAP YANG MEMPENGARUHI SCRIPT INI ───
+# ─── GAP YANG DULU MEMPENGARUHI SCRIPT INI (kini tertutup) ───
 #
-# GAP-30 — `ctx.db().query()` di dalam transaksi aksi DEADLOCK di SQLite
-#   (koneksi tunggal sementara transaksi aksi masih dipegang). Ini terdokumentasi
-#   langsung sebagai komentar di examples/arisan/.../validate.star:
-#     "Di SQLite (dev) ini DEADLOCK karena koneksi tunggal sedang dipegang
-#      transaksi aksi. Di PostgreSQL (produksi) tidak deadlock."
-#   Konsekuensi untuk kafe: guard ini aman di produksi (PostgreSQL) tapi
-#   MEMBUAT DEV SQLITE GAGAL — dan yang gagal justru jalur yang ingin dijaga.
-#   Ini memperburuk GAP-24: dev server mati, dan kalau hidup pun guard ini
-#   akan deadlock pada driver dev.
+# ✅ GAP-31 (item 4.3) — dulu tidak ada API "find by field value", sehingga
+#   script ini terpaksa memakai `ctx.db().query` (melanggar konvensi "never raw
+#   SQL"). Sekarang ada `resource.find(entity, {field: value, ...})` yang
+#   mencari lewat lapisan entity — jadi tenant isolation & row scope berlaku,
+#   dan nama tabel/kolom fisik tidak perlu diketahui script.
 #
-# GAP-31 — tidak ada API Starlark "find by field value". `resource.fetch(entity,
-#   id)` butuh ID, bukan filter; itu tidak menolong untuk cek keunikan. Karena
-#   itu script ini terpaksa memakai `ctx.db().query` — padahal konvensi proyek
-#   (AGENTS.md) menyatakan "never raw SQL". Jadi kita harus memilih antara
-#   melanggar konvensi atau membiarkan aturan bisnis tidak dijaga.
-#   API yang dibutuhkan: sesuatu seperti
-#     resource.find("cafe-master/menu-item-price", {"branch_id": b, "menu_item_id": m})
-#   sehingga `uses.resources: [menu-item-price.find]` cukup, tanpa SQL.
+# ✅ GAP-30 (item 4.5) — `ctx.db().query()` di dalam transaksi aksi dulu
+#   DEADLOCK di SQLite (koneksi tunggal). `resource.find` memakai jalur baca
+#   store yang sudah scope-aware (`txReadDB`), jadi tidak ada koneksi kedua.
 #
-# GAP-32 — guard ini memakai SELECT-then-act (bukan transaksi atomik). Dua
-#   permintaan bersamaan bisa sama-sama lolos SELECT lalu sama-sama INSERT.
-#   Menutupnya butuh `ctx.lock` mengelilingi cek+simpan. Artinya: untuk
-#   menegakkan satu UNIQUE constraint, kita menulis lock + query + insert/update
-#   manual — reimplementasi yang lebih rapuh daripada constraint yang tidak
-#   dihormati engine.
+# ⚠️ GAP-32 (item 4.4) — guard ini masih SELECT-then-act (bukan transaksi
+#   atomik). Dua permintaan bersamaan bisa sama-sama lolos SELECT lalu
+#   sama-sama INSERT. Yang menutupnya adalah UNIQUE index di atas (database),
+#   bukan guard ini — guard hanya memberi pesan yang lebih baik.
 #
 # Dipasang lewat `hooks:` pada entity `menu-item-price` (on: before, action:
 # create dan update).
@@ -62,26 +51,21 @@ def execute(resource, params, ctx):
 
     if not branch_id or not menu_item_id:
         # Validasi field wajib sudah ditangani entity; ini hanya sabuk pengaman
-        # supaya query di bawah tidak pernah dijalankan dengan filter kosong
+        # supaya pencarian di bawah tidak pernah dijalankan dengan filter kosong
         # (filter kosong = "cocok dengan apa pun", bahaya untuk cek keunikan).
         return fail("Cabang dan Menu wajib diisi sebelum menyimpan harga.")
 
-    # Saat UPDATE, baris yang sedang diedit tidak boleh dianggap sebagai
-    # duplikat dirinya sendiri. `resource.id` kosong pada create → "" tidak
-    # cocok dengan id mana pun, jadi perilakunya benar untuk kedua kasus.
-    exclude_id = resource.id or ""
-
-    rows = ctx.db().query(
-        "SELECT id FROM cafe_master_menu_item_prices "
-        + "WHERE branch_id = ? "
-        + "  AND menu_item_id = ? "
-        + "  AND deleted_at IS NULL "
-        + "  AND id != ? "
-        + "LIMIT 1",
-        [branch_id, menu_item_id, exclude_id],
+    # Cari harga yang sudah ada untuk (cabang, menu) ini. `resource.find`
+    # mengembalikan resource atau None — tanpa SQL, tanpa nama tabel fisik.
+    existing = resource.find(
+        "cafe-master.menu-item-price",
+        {"branch_id": branch_id, "menu_item_id": menu_item_id},
     )
 
-    if len(rows) > 0:
+    # Saat UPDATE, baris yang sedang diedit tidak boleh dianggap sebagai
+    # duplikat dirinya sendiri. `resource.id` kosong pada create → tidak cocok
+    # dengan id mana pun, jadi perilakunya benar untuk kedua kasus.
+    if existing != None and existing.id != resource.id:
         # Pesan menyebut CABANG dan MENU, bukan "duplikat" saja — supaya
         # kasir/admin tahu baris mana yang harus diubah, bukan harus menebak.
         return fail(

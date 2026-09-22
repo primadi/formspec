@@ -54,7 +54,7 @@ spec:
             default: gram
             title: "Satuan"
             description: "Satu dimensi dengan ingredient.unit; gram↔kg dikonversi engine (S12), ml/pcs tidak"
-            unit: { base: gram, convertible: [kg] }
+            unit: { base: gram, convertible: [kg], factors: { kg: 1000 } }
           - name: note
             type: string
             title: "Catatan"

@@ -333,6 +333,41 @@ File utama: `docs_internal/plan/todo.md`.
 | Task baru ditemukan          | Tambahkan ke fase yang sesuai, jangan hapus task lama     |
 | Update `Last Updated`        | Selalu update tanggal di header todo.md                   |
 
+**Pekerjaan terbuka WAJIB jadi item `[⏸️]` bernomor — bukan prosa.** Saat sebuah
+task selesai sebagian (ada gap, fitur ditunda, limitasi yang sengaja tidak
+ditutup), sisa itu **harus** menjadi item tersendiri bernomor di fase yang tepat:
+
+```markdown
+- [⏸️] 7.7.5 <apa yang terbuka> — <kenapa terbuka> + <bagaimana teramati>.
+  Effort: small | medium | large.
+```
+
+Dilarang: menuliskan sisa itu **hanya** di dalam teks item yang sudah `[x]`, atau
+di section "Sisa" changelog, tanpa item `[⏸️]` yang bisa ditunjuk. Alasannya
+konkret: pembaca melihat `[x]` lalu berhenti — sisa berbentuk prosa tidak bisa
+dibedakan dari pekerjaan selesai, tidak bisa di-grep sebagai pekerjaan terbuka,
+dan **menjadi misinformasi begitu ada entry lain menutupnya** (prosa lama tetap
+mengumumkan sesuatu sebagai rusak padahal sudah jalan).
+
+Aturan turunannya:
+
+1. Sisa mendapat **nomor sendiri** di fase yang sesuai — bukan indent di bawah
+   item `[x]` yang sudah ada.
+2. Setiap baris "Sisa" di changelog **menyebut nomor item todo**-nya
+   (mis. `→ 7.7.5 ⏸️`). Tidak ada itemnya = belum tercatat; buat itemnya.
+3. **Baris status tidak boleh melebih-lebihkan.** Kalau sebuah item mengklaim
+   selesai padahal baru sebagian yang landing (satu channel dari tiga, satu
+   jalur dari dua, satu kelas test), sebut bagian yang landing dan tunjuk item
+   `⏸️` untuk sisanya. `✅` untuk `webhook` + `notification` + `pubsub` saat dua
+   di antaranya belum ada adalah **klaim palsu**, bukan ringkasan.
+4. Sertakan **bukti pengamatan** yang membuatnya nyata (pengukuran, kasus yang
+   gagal) — bukan sekadar pernyataan. "belum idempoten" itu lemah;
+   "requeue event yang sama → 143750 → 287500" itu bisa diperiksa.
+
+Saat menutup sebuah sisa: **perbarui juga item/prosa lama yang menyebutnya**
+(tandai tertutup + rujuk changelog), supaya tidak ada dua dokumen yang saling
+bertentangan tentang status yang sama.
+
 ### 4. Code → Plan Traceability
 
 Setiap perubahan code **harus mereferensi `docs_internal/plan/`**:

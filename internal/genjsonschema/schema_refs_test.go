@@ -62,6 +62,63 @@ func TestGeneratedKindSchemas_HaveNoDanglingRefs(t *testing.T) {
 				entry.Kind, strings.Join(missing, ", "))
 		}
 	}
+
+	// Walk the root schema too. A `$ref` inside a **shared def** (for example
+	// `PrintBodyItem.qrcode → #/$defs/PrintQrcode`) never appears in a kind
+	// schema file — the kind schema only names the def — so a guard that walks
+	// kind schemas alone cannot see it. That blind spot let a missing
+	// `sharedTypes` entry reach runtime as
+	//
+	//	schema: internal: compile Print schema: json-pointer in
+	//	"…/kind-schema.json#/$defs/PrintQrcode" not found
+	//
+	// for every Print manifest in the tree.
+	rootRaw, err := json.Marshal(result.RootSchema)
+	if err != nil {
+		t.Fatalf("marshal root schema: %v", err)
+	}
+	if missing := danglingRefs(rootRaw, rootDefs); len(missing) > 0 {
+		t.Errorf("root $defs: refs with no matching $defs entry: %s (add the type to `sharedTypes` in generator.go)",
+			strings.Join(missing, ", "))
+	}
+}
+
+// TestFormRenderDecl_AcceptsShorthandAndObject pins kafe ledger #37 (item 5.4):
+// FormRenderDecl has a custom UnmarshalYAML that accepts both the scalar
+// shorthand (`render: drawer`) and the object form (`render: {mode: drawer}`).
+// The generated schema must accept both too — otherwise the loader accepts a
+// manifest the editor/schema rejects, a divergence that reads as "the spec is
+// wrong" when it is the schema that is stale.
+func TestFormRenderDecl_AcceptsShorthandAndObject(t *testing.T) {
+	converter := New(pkgPath)
+	collect, err := converter.Collect()
+	if err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+	result := converter.Generate(collect)
+
+	def, ok := result.RootSchema.Defs["FormRenderDecl"]
+	if !ok {
+		t.Fatal("root schema has no FormRenderDecl definition")
+	}
+	if len(def.OneOf) != 2 {
+		t.Fatalf("FormRenderDecl should be oneOf [string, object], got %d branches", len(def.OneOf))
+	}
+	var hasString, hasObject bool
+	for _, branch := range def.OneOf {
+		switch branch.Type {
+		case "string":
+			hasString = true
+		case "object":
+			hasObject = true
+		}
+	}
+	if !hasString {
+		t.Error("FormRenderDecl oneOf is missing the string shorthand branch")
+	}
+	if !hasObject {
+		t.Error("FormRenderDecl oneOf is missing the object branch")
+	}
 }
 
 // TestDanglingRefs_DetectsMissingDefinition proves the checker above can fail —

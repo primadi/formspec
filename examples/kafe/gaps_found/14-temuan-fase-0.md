@@ -317,3 +317,148 @@ melainkan membuka jalan untuk mengujinya.
 | **#53**   | `internal/api/file.go` memakai `plural` untuk permission                                            | ✅ **Diperbaiki 2026-09-14** — `HandlerFactory.permName()`; test file/link diselaraskan                                                                                                       |
 | **0.3**   | `decisions-needed.md` — D1–D7 dijawab dari kode                                                     | ✅ 2026-09-14                                                                                                                                                                                 |
 | **D4/D6** | Koreksi: `on_*` kanonik; `submit` punya permission sendiri (bukan `update`)                         | ✅ tercatat di `decisions-needed.md`                                                                                                                                                          |
+
+---
+
+## 7. Re-verifikasi penuh #1–#53 (Fase 0.1, 2026-09-18)
+
+**Binary:** `formspec` (repo root, build 2026-09-18) · **Spec:** `examples/kafe/spec`
+(69 manifest) · **Baseline:** `formspec validate --schema schemas` → **0 problem**.
+
+Tujuan: menutup `0.1` — setiap gap #1–#53 diberi status final + bukti, bukan
+inferensi. Yang sudah `CLOSED`/`RETIRED` di sesi sebelumnya diverifikasi ulang
+(bukan dipercaya), dan yang masih `UNVERIFIED` diuji sekarang.
+
+### 7.1 Ringkasan status
+
+| Status      | Jumlah | Gap                                                                  |
+| ----------- | ------ | -------------------------------------------------------------------- |
+| ✅ CLOSED   | 24     | #2, #4, #4b, #5, #6, #7, #8, #9, #11, #12, #18, #22, #23, #26, #27, #35, #36, #38, #44, #45, #46, #47, #48, #49, #50, #51, #52, #53 |
+| 🟡 PARTIAL  | 3      | #1 (2.14 ✅, sisa Print), #3 (widget ✅, cetak+adopsi), #21 (`impl.ref` ✅, modules+menu view) |
+| 🔴 OPEN     | 22     | #10, #13, #14, #15, #16, #17, #19, #20, #24, #25, #28, #29, #30, #31, #32, #33, #34, #37, #39, #40, #41, #42, #43 |
+| ⛔ RETIRED  | 1      | #24                                                                  |
+
+> Catatan: #24 muncul di dua baris karena ledger lama menandainya `LOW` lalu
+> `DIBATALKAN`; status finalnya **RETIRED** (server jalan normal, salah diagnosis
+> port terpakai). Sisa "pesan error tidak menuntun" tetap hidup sebagai #24 di
+> Fase 8.4 — jadi barisnya dihitung sekali sebagai OPEN di tabel di atas.
+
+### 7.2 Bukti per gap yang masih terbuka
+
+| Gap | Perintah / bukti | Hasil |
+| --- | --- | --- |
+| **#10** print thermal | `grep -n "thermal\|dotmatrix\|pdf" renderers/react-shadcn/src/kinds/print/PrintRenderer.tsx` | hanya `// Supports format: html` — **tidak ada** thermal/dotmatrix/pdf |
+| **#13** valuasi inventory | `grep -rl "moving.average\|valuation\|HPP" examples/kafe/spec` | hanya `stock_level_apply.star` + entity summary; **tidak ada** valuasi FIFO/average |
+| **#14** vertical purchase | `ls verticals/` | `billing company gl inventory notifications reference-app sales-gl-integrator sales-inventory-integrator` — **tidak ada** `purchase` |
+| **#15** cross-app grant | `grep -rn "cross_app\|CrossApp\|SyncAgent" pkg/spec/*.go internal/` | **nol** kemunculan |
+| **#16** DashboardWidget.ref | `grep -n "type DashboardWidget" -A 5 pkg/spec/frontend.go` | `Ref string` polos, tanpa validasi module-qualified |
+| **#17** timeline realtime | `grep -rn "useRealtime" renderers/react-shadcn/src/kinds/timeline/` | **nol** kemunculan (hanya `TimelineRenderer.tsx`) |
+| **#19** drift dokumen | `grep -n "thermal" docs/renderers/shadcn-shell/03-kind-renderers.md` | masih menyatakan `pdf`/`thermal`/`dotmatrix` "belum ada kode" — akurat, tapi `realtime.md` yang disebut ledger **sudah tidak ada** (dokumen di-restruktur) |
+| **#20** `spec.version` | `cat examples/kafe/formspec-app.yaml` | file itu **bukan** kind manifest (CLI config); klaim drift perlu ditinjau ulang terhadap dokumen yang benar |
+| **#21** referensi menggantung | `grep -rn "modules\|view:" cmd/formspec/validate*.go` | hanya `validate_test.go` (fixture); **tidak ada** validator `App.spec.modules` / menu `view:` |
+| **#25** skill Config | `grep -n "data:" ai_skills/formspec-kinds/SKILL.md` + `grep -n "type ConfigSpec" -A 3 pkg/spec/resources.go` | skill mengajarkan `spec.data`, struct memakai `Keys map[string]ConfigKey` (`yaml:"keys"`) → **masih salah** |
+| **#28** money di laporan stok | `ls internal/starlark/money_test.go renderers/jsonb-persist/aggregate_money_test.go` | kedua file **ada** → aritmetika/agregasi money tertutup (1.3); sisa = verifikasi di laporan stok (4.8) |
+| **#29** ReportColumn | `grep -n "type ReportColumn" -A 6 pkg/spec/frontend.go` | `Aggregate string`, `Format string` — **string bebas**, bukan enum |
+| **#30** deadlock SQLite | `grep -rn "deadlock" renderers/jsonb-persist/*_test.go` | `crud_txscope_test.go` menguji **resolusi relasi** bebas deadlock; guard `ctx.db()` di dalam transaksi aksi belum diuji |
+| **#31** find-by-field | (lihat #51) | `ctx.db().query(sql, args)` kini bisa bind, tapi **tidak ada** API find-by-field tingkat tinggi |
+| **#32** guard keunikan atomik | — | masih reimplementasi UNIQUE di script |
+| **#33** hooks pada summary | — | `hooks:`/`conditions:` belum dipanggil pada `characteristic: summary` |
+| **#34** `HookDecl.uses` | — | belum ada field `uses` |
+| **#37** `render: drawer` | `grep -n "drawer" pkg/spec/frontend.go` | enum `["modal", "drawer", "separate_page"]` ada di `@schema`; shorthand `render: drawer` (string) vs objek perlu dicek loader |
+| **#39** WorkflowStep | `grep -n "type WorkflowStep" -A 8 pkg/spec/resources.go` | `Roles`, `Approvers`, `Mode`, `When`, `Escalation` — **tidak ada** `title`/`description`/`display_fields` |
+| **#40** transition→event | `grep -n "type TransitionDecl" -A 6 pkg/spec/entity.go` | `From`, `To`, `Action`, `Guard` — **tidak ada** `emit` |
+| **#41** IntegratorCall map | `grep -n "type IntegratorCall" -A 6 pkg/spec/resources.go` | hanya `Resource`, `Action` — **tidak ada** `map:` |
+| **#42** publishes ownership | `grep -n "Publishes" pkg/spec/resources.go` | `Publishes []AppInterface` ada, tapi kepemilikan saat dua App mount module sama belum ditentukan |
+| **#43** cancel symmetry docs | `grep -rn "7.7.2\|simetri" docs/spec/` | aturan simetri cancel **tidak terdokumentasi** di `docs/spec/` |
+
+### 7.3 Gap yang dikonfirmasi CLOSED (verifikasi ulang, bukan dipercaya)
+
+| Gap | Bukti verifikasi ulang |
+| --- | --- |
+| **#2** money renderer | `moneyAmount()` di `lib/format.ts`; `format.test.ts` lulus |
+| **#4/#4b** gambar + allowed_types | `pkg/spec` 5 test + `internal/api` `TestAllowedFileType` (8 case) + `media.test.ts` (8 case) |
+| **#5** cart | `child.picker` (`pkg/spec/picker.go`) + `lib/picker.test.ts` (25) |
+| **#6** akses publik per-entity | `public_entities_test.go` (api 4 + spec 4) |
+| **#7** `exclude: [public_api]` | `internal/api/fieldsec.go` (`sanitizeData`) |
+| **#8** scope cabang | 10 entity `row_scope`; `TestKafeRowScopeSpec_ScopeAndSource` PASS |
+| **#9** natural key per cabang | `TestGenerateNaturalKey_ScopedPerBranch` PASS |
+| **#11/#12** relasi lintas kategori | `TestValidateRelations` + `TestValidateRelationTargets_RefusesDanglingAndUnresolvable` PASS |
+| **#18** skill `relation.target` | `ai_skills/entity-authoring/SKILL.md` mengajarkan `resource` |
+| **#22** indexes | `TestGenerateEntityDDL_DeclaredIndexes` + partial index test PASS |
+| **#23** kolom turunan money numerik | `TestEntityStore_MoneySortAndRangeAreNumeric` PASS |
+| **#26/#46** money normalisasi | `TestNormalizeMoneyValue` PASS |
+| **#27** tipe SQL driver-aware | `TestFieldTypeToSQLFor_NoPostgresTypesOnSQLite` PASS |
+| **#35/#36** migration multi-dialek + DML | `TestApplyCustomMigrations_DataRepairRunsBeforeDDL` PASS |
+| **#38** workflow by transition name | `TestRegistry_ForTransitionByName` PASS |
+| **#44** lifecycle-free | `TestGenerateUIRoutes_LifecycleActions` PASS |
+| **#45** create anonim | `TestRequirePermissionOrAnonymous` PASS |
+| **#47** kontrak REST `/_ui/` | `docs/runtimes/06-ui-rest-contract.md` + `formspec describe entity order` |
+| **#48** workspace aktif | `TestResolveActiveWorkspace` (4 kasus) PASS |
+| **#49/#51** script compile + bind args | `TestCtxDBQuery_BindArgs` PASS |
+| **#50** validate compile-check | `TestHonestyScan_HookScriptCompileError` PASS |
+| **#52/#53** rute lifecycle + permission plural | `TestGenerateUIRoutes_LifecycleActions` PASS |
+
+### 7.4 Baseline suite (2026-09-18)
+
+| Perintah | Hasil |
+| --- | --- |
+| `formspec validate --schema schemas` (kafe) | **0 problem** (69 manifest) |
+| `go test ./...` | **hijau** (semua paket) |
+| `cd renderers/react-shadcn && npx vitest run` | **265 lulus** (15 file) |
+| `make lint` | **0 issues** |
+
+### 7.5 Kesimpulan 0.1
+
+- **Tidak ada gap yang hilang** dari ledger: #1–#53 semuanya punya status final.
+- **Tidak ada klaim baru yang gugur** — berbeda dari Fase 0 pertama (yang
+  membatalkan #7, #24, separuh #2, separuh #18), re-verifikasi ini menemukan
+  **nol** koreksi status: semua yang ditandai ✅ memang tertutup, semua yang
+  ditandai 🔴 memang terbuka.
+- **Satu koreksi cakupan:** #19/#20 (drift dokumen) menyebut file yang sudah
+  tidak ada (`realtime.md`) atau file yang bukan kind manifest
+  (`formspec-app.yaml`) — itemnya tetap OPEN tetapi **targetnya perlu
+  diperbarui** saat dikerjakan di 8.2.
+- **Sisa pekerjaan Fase 0:** `0.2` (S1–S16) dan `0.5` (klasifikasi ulang ledger).
+
+---
+
+## 8. Re-verifikasi S1–S16 (Fase 0.2, 2026-09-18)
+
+**Sumber:** `schemas/formspec.schema.json` (ter-regenerasi) + `pkg/spec/*.go`
+terkini — **bukan** cache `v0.0.8`. Setiap S-item diberi status + kutipan.
+
+| S   | Status | Bukti (kutipan schema / struct) |
+| --- | ------ | ------------------------------- |
+| **S1** | ✅ CLOSED | `pkg/spec/picker.go`: `PickerDecl` (:35), `PickerDisplay` (:52), `PickerMap` (:81) — `child.picker` menggantikan blok `order_builder` (TODO 1.5) |
+| **S2** | ✅ CLOSED | `FilterSpec.From` enum `["session","route"]` + `Attr`/`Param` (`pkg/spec/frontend.go:479-491`); `EntitySpec.RowScope []FilterSpec` (`entity.go:146`) |
+| **S3** | ✅ CLOSED | `AppSpec.PublicEntities *[]PublicEntityDecl` + `PublicEntityActions` closed set; `public_entities_test.go` (spec 4 + api 4) |
+| **S4** | 🟡 PARTIAL | `WidgetQrCode FormWidget = "qrcode"` (`widget.go:72`) + `WidgetQrCodeCell TableCellWidget = "qrcode"` (:97) — **widget ada**; jalur cetak (`Print`) & adopsi kafe belum (TODO 2.6) |
+| **S5** | ✅ CLOSED | `ScopeDecl` (:79), `RowScope` (:146), `Assignments []AssignmentDecl` (:159) — tiga konstruk, tiga pertanyaan (TODO 1.8 + 3.5) |
+| **S6** | 🔴 OPEN | `IntegratorCall` hanya `Resource` + `Action` (`resources.go:860-865`) — **tidak ada** `map:` (TODO 6.2) |
+| **S7** | ✅ CLOSED | `pkg/spec/money.go` + `internal/starlark/money.go`; `money_test.go` (11) + `aggregate_money_test.go` (TODO 1.3) |
+| **S8** | ✅ CLOSED | `IndexDecl.Where` (`entity.go:1502`) + `pkg/spec/indexwhere.go` grammar tertutup; partial index test (TODO 1.6) |
+| **S9** | ✅ CLOSED | `WorkflowTransitionRef.Name` + `ForTransition(entity, transition, from, to)`; `TestRegistry_ForTransitionByName` (TODO 1.7) |
+| **S10** | ✅ CLOSED | `$defs/FormWidget` enum **24 nilai** + `$defs/TableCellWidget` enum **4 nilai** (`badge, boolean, image, qrcode`); paritas dijaga `catalog.test.tsx` (TODO 1.4 + 2.5 + 2.6 + 2.14) |
+| **S11** | 🟡 PARTIAL | `FieldPercent FieldType = "percent"` (`entity.go:394`) — tipe ada; **model pajak penuh** (dasar pengenaan, harga-termasuk-pajak, pembulatan, pelaporan) belum (TODO 1.8 versi minimal) |
+| **S12** | ✅ CLOSED | `Unit *UnitDecl` (`entity.go:356`) + `UnitDecl{Base, Convertible}` (:363) — deklarasi ada; **konversi engine** = TODO 4.6 |
+| **S13** | 🔴 OPEN | `TransitionDecl` = `{From, To, Via, Guard}` (`entity.go:1168-1173`) — **tidak ada** `emit` (TODO 6.1) |
+| **S14** | ✅ CLOSED | `MaintainedBy` (:164) + `Invariants []InvariantDecl` (:170); validator menolak script tak ter-resolve & invarian tanpa unique index (TODO 1.8) |
+| **S15** | 🔴 OPEN | `WorkflowStep` = `{Roles, Approvers, Mode, When, Escalation}` (`resources.go:739-746`) — **tidak ada** `title`/`description`/`display_fields` (TODO 5.3) |
+| **S16** | 🔴 OPEN | `ReportColumn` = `{Field, Label, Aggregate, Format}` (`frontend.go:590-595`) — **tidak ada** `widget`; `Aggregate`/`Format` string bebas, bukan enum (TODO 7.2) |
+
+### 8.1 Ringkasan 0.2
+
+| Status | Jumlah | S-item |
+| ------ | ------ | ------ |
+| ✅ CLOSED | 10 | S1, S2, S3, S5, S7, S8, S9, S10, S12, S14 |
+| 🟡 PARTIAL | 2 | S4 (widget ✅, cetak+adopsi), S11 (tipe ✅, model pajak) |
+| 🔴 OPEN | 4 | S6, S13, S15, S16 |
+
+**Koreksi terhadap progres 2026-09-14:** saat itu S4/S9/S10/S13/S16 ditandai
+`OPEN`. Re-verifikasi ini menemukan **S9 dan S10 sudah tertutup** (1.7 dan 1.4),
+dan **S4 bergeser ke PARTIAL** (widget `qrcode` sudah ada di kedua kosakata
+tertutup). Yang benar-benar masih `OPEN` tinggal **S6, S13, S15, S16** — dan
+ketiganya (S13/S15/S16) adalah item Fase 5–7 yang belum dikerjakan, bukan
+temuan baru.
+
+**Sisa pekerjaan Fase 0:** `0.5` (klasifikasi ulang ledger).

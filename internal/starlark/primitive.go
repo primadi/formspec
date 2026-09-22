@@ -345,33 +345,45 @@ func (r *primitiveRunner) builtinGet() *starlark.Builtin {
 		if err := starlark.UnpackArgs("get", args, kwargs, "key", &key); err != nil {
 			return nil, err
 		}
-		// Fase D: the config primitive accepts both KVGetter (KV-backed
-		// config store) and the Config capability (SQL-backed store).
-		if r.primType == "config" {
-			if cfg, ok := r.conn.(Config); ok {
-				val, err := cfg.Get(threadContext(thread), key)
-				if err != nil {
-					return nil, fmt.Errorf("ctx.%s.get: %w", r.primType, err)
-				}
-				if val == nil {
-					return starlark.None, nil
-				}
-				return toStarlark(val)
-			}
-		}
-		g, ok := r.conn.(KVGetter)
-		if !ok {
-			return starlark.None, fmt.Errorf("ctx.%s.get: not yet implemented for this backend (connection=%q)", r.primType, r.name)
-		}
-		val, err := g.Get(threadContext(thread), key)
-		if err != nil {
-			return nil, fmt.Errorf("ctx.%s.get: %w", r.primType, err)
-		}
-		if val == nil {
-			return starlark.None, nil
-		}
-		return toStarlark(val)
+		return r.getRaw(thread, key)
 	})
+}
+
+// getRaw reads one key from the backend this runner wraps, returning None when
+// the key is absent. It is the body of `.get()` split out so a caller that
+// already has the key in hand (a layered config that consults this store and
+// then falls back to manifest defaults) can read the raw value without going
+// through argument unpacking twice.
+//
+// A backend that does not implement any readable store reports "not yet
+// implemented"; every other failure propagates as an error.
+func (r *primitiveRunner) getRaw(thread *starlark.Thread, key string) (starlark.Value, error) {
+	// Fase D: the config primitive accepts both KVGetter (KV-backed
+	// config store) and the Config capability (SQL-backed store).
+	if r.primType == "config" {
+		if cfg, ok := r.conn.(Config); ok {
+			val, err := cfg.Get(threadContext(thread), key)
+			if err != nil {
+				return nil, fmt.Errorf("ctx.%s.get: %w", r.primType, err)
+			}
+			if val == nil {
+				return starlark.None, nil
+			}
+			return toStarlark(val)
+		}
+	}
+	g, ok := r.conn.(KVGetter)
+	if !ok {
+		return starlark.None, fmt.Errorf("ctx.%s.get: not yet implemented for this backend (connection=%q)", r.primType, r.name)
+	}
+	val, err := g.Get(threadContext(thread), key)
+	if err != nil {
+		return nil, fmt.Errorf("ctx.%s.get: %w", r.primType, err)
+	}
+	if val == nil {
+		return starlark.None, nil
+	}
+	return toStarlark(val)
 }
 
 // builtinLog serves ctx.log.info/warn/error when the log primitive is

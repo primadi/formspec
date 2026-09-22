@@ -34,6 +34,11 @@ type CtxAPI struct {
 	Config    *configAPI
 	Secrets   *secretsAPI
 	Job       *jobAPI
+	// UnitConvert converts a value between units of a field's declared unit
+	// dimension (S12, item 4.6). entity/field identify which declaration to
+	// use; from/to are unit names. Returns an error for units outside the
+	// declared group (a different dimension, not a silent no-op).
+	UnitConvert func(entity, field string, value float64, from, to string) (float64, error)
 
 	// RequestID is the correlation ID of the originating HTTP request
 	// (todo 8.2.3, spec platform/09-observability.md §2.3). Read-only in
@@ -278,18 +283,36 @@ func (c *CtxAPI) Attr(name string) (starlark.Value, error) {
 		return c.Log, nil
 	case "next_key":
 		return c.builtinNextKey(), nil
+	case "unit":
+		return c.builtinUnit(), nil
 	case "config":
 		// Fase D: when a service serves `config`, route through the resolver
-		// (centralized store); otherwise the builtin Config store. The
-		// resolved runner is returned directly — it exposes .get.
+		// (centralized store); otherwise the builtin Config store.
+		//
+		// The resolved store is an OVERRIDE layer, not a replacement: Config
+		// manifests declare the keys and their standard defaults
+		// (platform/02-workspace-app-module.md §10, "spec wajib menetapkan
+		// default standar"), while the centralized store holds values an
+		// operator set later. Returning the runner alone made every declared
+		// default invisible — ctx.config.get("gl_journal_account_kas") answered
+		// None even though the manifest declared "1-1000", so a script whose
+		// whole job is reading those settings could never see them. Layering
+		// keeps both: the override wins, the manifest default fills the gap.
+		var override *primitiveRunner
 		if c.configPrim != nil {
 			if runner, err := c.configPrim.CallInternal(nil, nil, nil); err == nil && runner != nil {
 				if pr, ok := runner.(*primitiveRunner); ok && pr.conn != nil {
-					return runner, nil
+					override = pr
 				}
 			}
 		}
-		return c.Config, nil
+		if override == nil {
+			return c.Config, nil
+		}
+		if c.Config == nil {
+			return override, nil
+		}
+		return &layeredConfigAPI{override: override, defaults: c.Config}, nil
 	case "job":
 		if c.Job == nil {
 			return starlark.None, fmt.Errorf("ctx.job: not inside a tracked async job (call: async + track: true)")
@@ -438,6 +461,41 @@ func (c *CtxAPI) builtinNextKey() *starlark.Builtin {
 			return nil, fmt.Errorf("ctx.next_key: %w", err)
 		}
 		return starlark.String(key), nil
+	})
+}
+
+// builtinUnit serves ctx.unit.convert(entity, field, value, from, to) — unit
+// conversion within a field's declared dimension (S12, item 4.6). The
+// declaration lives on the entity field (`unit: {base, convertible, factors}`),
+// so the conversion is data, not a convention baked into the script.
+func (c *CtxAPI) builtinUnit() *starlark.Builtin {
+	return starlark.NewBuiltin("ctx.unit.convert", func(
+		thread *starlark.Thread,
+		fn *starlark.Builtin,
+		args starlark.Tuple,
+		kwargs []starlark.Tuple,
+	) (starlark.Value, error) {
+		var entity, field, from, to string
+		var value float64
+		if err := starlark.UnpackArgs("convert", args, kwargs,
+			"entity", &entity,
+			"field", &field,
+			"value", &value,
+			"from", &from,
+			"to", &to,
+		); err != nil {
+			return nil, err
+		}
+
+		if c.UnitConvert == nil {
+			return nil, fmt.Errorf("ctx.unit.convert: no unit resolver registered")
+		}
+
+		result, err := c.UnitConvert(entity, field, value, from, to)
+		if err != nil {
+			return nil, fmt.Errorf("ctx.unit.convert: %w", err)
+		}
+		return starlark.Float(result), nil
 	})
 }
 
@@ -710,8 +768,72 @@ func (c *configAPI) builtinGet() *starlark.Builtin {
 	})
 }
 
-// ─── ctx.secrets ───
+// layeredConfigAPI serves ctx.config when a datastore-resolver-backed config
+// store is present alongside the Config-manifest store. The two answer
+// different questions — "did an operator override this?" and "what did the
+// manifest declare?" — so get() consults the override first and falls back to
+// the declared value (which for an unset key is its standard default, or nil
+// when the manifest declared none).
+type layeredConfigAPI struct {
+	override *primitiveRunner
+	defaults *configAPI
+}
 
+var _ starlark.Value = (*layeredConfigAPI)(nil)
+
+func (c *layeredConfigAPI) String() string        { return "<config>" }
+func (c *layeredConfigAPI) Type() string          { return "config" }
+func (c *layeredConfigAPI) Freeze()               {}
+func (c *layeredConfigAPI) Truth() starlark.Bool  { return starlark.True }
+func (c *layeredConfigAPI) Hash() (uint32, error) { return 0, fmt.Errorf("config is not hashable") }
+
+func (c *layeredConfigAPI) Attr(name string) (starlark.Value, error) {
+	if name == "get" {
+		return c.builtinGet(), nil
+	}
+	return nil, starlark.NoSuchAttrError(fmt.Sprintf("config has no .%s", name))
+}
+
+func (c *layeredConfigAPI) AttrNames() []string { return []string{"get"} }
+
+func (c *layeredConfigAPI) builtinGet() *starlark.Builtin {
+	return starlark.NewBuiltin("config.get", func(
+		thread *starlark.Thread,
+		fn *starlark.Builtin,
+		args starlark.Tuple,
+		kwargs []starlark.Tuple,
+	) (starlark.Value, error) {
+		var key string
+		var defaultVal starlark.Value = starlark.None
+		if err := starlark.UnpackArgs("get", args, kwargs,
+			"key", &key,
+			"default?", &defaultVal,
+		); err != nil {
+			return nil, err
+		}
+
+		// Operator override first. A backend that cannot answer for this key
+		// returns None (absent), which is not an error — the manifest default
+		// takes over. A genuine backend failure is reported rather than
+		// silently degraded.
+		val, err := c.override.getRaw(thread, key)
+		if err != nil {
+			return nil, err
+		}
+		if val != nil && val != starlark.None {
+			return val, nil
+		}
+
+		if c.defaults != nil {
+			if declared, ok := c.defaults.store[key]; ok {
+				return toStarlark(declared)
+			}
+		}
+		return defaultVal, nil
+	})
+}
+
+// ─── ctx.secrets ───
 // secretsAPI serves ctx.secrets().get(key) — the ONLY path for reading
 // `secret: true` Config keys (todo 6.8.1). It enforces that the key is
 // declared in the caller action's uses.secrets (todo 6.8.2), never logs the

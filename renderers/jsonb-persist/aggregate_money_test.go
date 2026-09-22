@@ -125,6 +125,88 @@ func TestAggregate_NonNumericFieldRejected(t *testing.T) {
 	}
 }
 
+// TestAggregate_StockReportShape pins item 4.8: the kafe stock-usage report
+// aggregates a money field (`total_cost`) grouped by ingredient, alongside a
+// decimal quantity. This mirrors the real report shape so the money semantics
+// are verified against what the application actually asks for — not just a
+// synthetic single-field case.
+func TestAggregate_StockReportShape(t *testing.T) {
+	dir := t.TempDir()
+	d, err := OpenSQLite(filepath.Join(dir, "stock.db"), nil)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	t.Cleanup(func() { _ = d.Close() })
+
+	meta := spec.Metadata{Name: "stock-movement", Module: "cafe-stock"}
+	entity := &spec.EntitySpec{
+		Version: "v1",
+		Fields: []spec.Field{
+			{Name: "ingredient_id", Type: spec.FieldString},
+			{Name: "quantity", Type: spec.FieldDecimal},
+			{Name: "total_cost", Type: spec.FieldMoney},
+		},
+	}
+	r := NewMigrationRunner(d, DriverSQLite)
+	ctx := context.Background()
+	if _, err := r.ApplyMigrations(ctx, []EntityMigration{{Metadata: meta, EntitySpec: *entity}}); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	store := NewEntityStore(d, DriverSQLite, meta, entity)
+
+	rows := []map[string]any{
+		{"ingredient_id": "kopi", "quantity": 2.0, "total_cost": spec.Money{Amount: "50000", Currency: "IDR"}},
+		{"ingredient_id": "kopi", "quantity": 1.0, "total_cost": spec.Money{Amount: "25000", Currency: "IDR"}},
+		{"ingredient_id": "susu", "quantity": 3.0, "total_cost": spec.Money{Amount: "30000", Currency: "IDR"}},
+	}
+	for _, row := range rows {
+		if _, err := store.Insert(ctx, InsertParams{WorkspaceID: "kafe", Data: row}); err != nil {
+			t.Fatalf("insert: %v", err)
+		}
+	}
+
+	// SUM(total_cost) grouped by ingredient — the report's core aggregation.
+	res, err := store.Aggregate(ctx, AggregateParams{
+		WorkspaceID: "kafe", Func: "sum", Field: "total_cost", GroupBy: []string{"ingredient_id"},
+	})
+	if err != nil {
+		t.Fatalf("grouped sum: %v", err)
+	}
+	got := map[string]float64{}
+	for _, g := range res.Groups {
+		key, _ := g.Key["ingredient_id"].(string)
+		got[key] = g.Value
+	}
+	if got["kopi"] != 75000 {
+		t.Errorf("SUM(total_cost) for kopi = %v, want 75000", got["kopi"])
+	}
+	if got["susu"] != 30000 {
+		t.Errorf("SUM(total_cost) for susu = %v, want 30000", got["susu"])
+	}
+
+	// The grand total (report `totals:`) is the sum of all money amounts.
+	total, err := store.Aggregate(ctx, AggregateParams{
+		WorkspaceID: "kafe", Func: "sum", Field: "total_cost",
+	})
+	if err != nil {
+		t.Fatalf("total sum: %v", err)
+	}
+	if total.Groups[0].Value != 105000 {
+		t.Errorf("grand total = %v, want 105000", total.Groups[0].Value)
+	}
+
+	// Quantity (decimal) aggregates independently and correctly.
+	qty, err := store.Aggregate(ctx, AggregateParams{
+		WorkspaceID: "kafe", Func: "sum", Field: "quantity",
+	})
+	if err != nil {
+		t.Fatalf("quantity sum: %v", err)
+	}
+	if qty.Groups[0].Value != 6 {
+		t.Errorf("SUM(quantity) = %v, want 6", qty.Groups[0].Value)
+	}
+}
+
 // TestWindow_RunningTotalMoney — running_total over a money field sums amounts.
 func TestWindow_RunningTotalMoney(t *testing.T) {
 	store := setupMoneyAggregateStore(t)

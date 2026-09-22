@@ -84,6 +84,10 @@ export function ChangePasswordPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Hidden context for password managers (Chromium "Create Amazing
+              Password Forms"): the workspace comes from the URL and is never
+              typed here, but it scopes the credential to the right account. */}
+          <input type="hidden" name="workspace" value={workspace} />
           <div className="space-y-2">
             <label
               htmlFor="current-password"
@@ -93,6 +97,7 @@ export function ChangePasswordPage() {
             </label>
             <Input
               id="current-password"
+              name="current-password"
               type="password"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
@@ -110,6 +115,7 @@ export function ChangePasswordPage() {
             </label>
             <Input
               id="new-password"
+              name="new-password"
               type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
@@ -127,6 +133,7 @@ export function ChangePasswordPage() {
             </label>
             <Input
               id="confirm-password"
+              name="confirm-password"
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}

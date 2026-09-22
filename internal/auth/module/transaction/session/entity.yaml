@@ -27,6 +27,23 @@ spec:
     - name: app
       type: string
       index: true
+    # ─── Konteks sesi (TODO 3.8) ───
+    # Sesi selalu spesifik: siapa, sebagai role apa, di cabang mana. Ketiganya
+    # kosong untuk sesi tanpa boundary (akun tanpa assignment — pemilik/service
+    # account, yang tetap lintas cabang lewat `read_all`). Diisi dari assignment
+    # yang dipilih saat login, dan dipakai ulang saat refresh: bila assignment
+    # sudah dicabut (atau role-nya dihapus), refresh fail closed dengan 409
+    # CONTEXT_REQUIRED — bukan lanjut dengan konteks lama.
+    - name: role
+      type: string
+      index: true
+      description: "Role yang sedang dipakai sesi ini (tunggal) — kosong = sesi tanpa boundary"
+    - name: scope_dimension
+      type: string
+      description: "Nama dimensi boundary (mis. branch) — kosong = sesi tanpa boundary"
+    - name: scope_value
+      type: string
+      description: "Nilai dimensi boundary (mis. KFE-JKT-01) — kosong = sesi tanpa boundary"
     - name: ip
       type: string
     - name: user_agent

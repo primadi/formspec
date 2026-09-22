@@ -12,7 +12,7 @@ spec:
     - { field: transaction_date, label: "Waktu", format: relative, sortable: true }
     - { field: channel, label: "Kanal", widget: badge }
     - { field: status, label: "Status", widget: badge }
-    # GAP-23 TERTUTUP (3.2): kolom turunan money kini numerik (membaca
+    # Kolom turunan money kini numerik (membaca
     # `.amount`), jadi sortir berdasarkan total sah diandalkan.
     - { field: total_amount, label: "Total", format: currency, align: right, sortable: true }
   filters:

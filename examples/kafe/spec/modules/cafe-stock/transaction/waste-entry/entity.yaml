@@ -37,7 +37,7 @@ spec:
       title: "Jumlah Terbuang"
     # D3: dibekukan dari stock-level.moving_avg_cost saat pencatatan, supaya
     # nilai kerugian tidak berubah surut bila harga bahan naik.
-    # GAP-01 TERTUTUP (2.14) — `moneyinput`. Sisa GAP-02: indeks money.
+    # Memakai `moneyinput`. Sisa GAP-02: indeks money.
     - name: unit_cost
       type: money
       title: "Biaya per Satuan (beku)"

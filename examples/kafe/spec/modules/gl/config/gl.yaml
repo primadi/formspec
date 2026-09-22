@@ -1,0 +1,41 @@
+apiVersion: formspec.dev/v1
+kind: Config
+metadata:
+  name: gl
+  module: gl
+  description: Konfigurasi General Ledger
+spec:
+  keys:
+    default_currency:
+      type: string
+      default: "IDR"
+    fiscal_year_start:
+      type: string
+      default: "01-01"
+
+    # ── Pemetaan komponen penjualan → kode akun (keputusan pemilik, 2026-09-21)
+    # ──
+    # Jurnal penjualan DIBANGUN module gl dari event `cafe-order.order.on_paid`
+    # (kind: Subscription di bawah). Akun kas/omzet/pajak/service-charge/
+    # discount masing-masing dibaca dari sini — setting akun adalah TANGGUNG
+    # JAWAB GL, bukan module pemesanan. Kunci kosong berarti komponen itu
+    # belum diatur: script journalize menolak jurnal yang tidak seimbang dan
+    # menyebut setting yang kurang, bukan menebak.
+    gl_journal_account_kas:
+      type: string
+      default: "1-1000"
+    gl_journal_account_omzet:
+      type: string
+      default: "4-1000"
+    gl_journal_account_pajak:
+      type: string
+      default: "2-2000"
+    # Kosong = BELUM DIATUR. Jika pesanan punya service charge tapi kunci ini
+    # kosong, jurnal tidak seimbang → script gagal dengan pesan yang menunjuk
+    # kunci ini (FORMSPEC.GL.ACCOUNT_NOT_SET).
+    gl_journal_account_service_charge:
+      type: string
+      default: "2-1000"
+    gl_journal_account_diskon:
+      type: string
+      default: "5-1000"

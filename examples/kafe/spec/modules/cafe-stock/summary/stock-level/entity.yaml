@@ -64,12 +64,13 @@ spec:
   #     menolaknya kecuali ada unique index yang benar-benar menopangnya —
   #     jadi yang menegakkan adalah DATABASE, bukan disiplin script.
   #
-  # ⚠️ GAP-33 tetap terbuka (item 4.2): karena penulisan `summary` TIDAK lewat
+  # ✅ GAP-33 tertutup (item 4.2): karena penulisan `summary` TIDAK lewat
   # action pipeline, `hooks:` dan `conditions:` pada entity ini TIDAK PERNAH
-  # DIPANGGIL. Konsekuensinya invarian di bawah dijaga index (DB), sedangkan
-  # pola upsert + ctx.lock di script pemelihara adalah urusan script itu
-  # sendiri. Jangan pasang hook di sini — ia akan terlihat melindungi padahal
-  # tidak pernah dieksekusi.
+  # DIPANGGIL — dan sekarang `formspec validate` MENOLAK keduanya di entity
+  # `summary` dengan pesan yang menunjuk ke sini. Jadi invarian di bawah dijaga
+  # index (DB), sedangkan pola upsert + ctx.lock di script pemelihara adalah
+  # urusan script itu sendiri. Kontrak yang didukung: `maintained_by` +
+  # `invariants`.
   maintained_by: cafe-stock/stock_level_apply
   invariants:
     - unique: [branch_id, ingredient_id]

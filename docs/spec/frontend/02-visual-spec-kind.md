@@ -11,7 +11,7 @@ inti: skema instance + kontrak yang wajib dipenuhi renderernya. Precedent-nya
 `MockupModule` kind — pola meta-kind yang sama, diterapkan ke lapisan visual.
 
 ```yaml
-apiVersion: formspec/v1
+apiVersion: formspec.dev/v1
 kind: VisualSpecKind
 metadata:
   name: kanban
@@ -55,7 +55,7 @@ sebagai **slot**: lubang dengan kontrak data-shape, bukan referensi ke
 komponen bernama spesifik.
 
 ```yaml
-apiVersion: formspec/v1
+apiVersion: formspec.dev/v1
 kind: VisualSpecKind
 metadata:
   name: dashboard
@@ -70,7 +70,7 @@ spec:
 ```
 
 ```yaml
-apiVersion: formspec/v1
+apiVersion: formspec.dev/v1
 kind: VisualSpecKind
 metadata:
   name: kpi-widget

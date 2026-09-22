@@ -132,6 +132,77 @@ var tableCellWidgets = []TableCellWidget{
 	WidgetQrCodeCell,
 }
 
+// ReportAggregate is the closed set of aggregation functions a ReportColumn may
+// declare (S16). It mirrors the Query Builder's aggregate functions
+// (02-core-extended.md §16) so a report column cannot name an aggregate the
+// engine does not implement.
+// @schema {title: "Report Aggregate", description: "Aggregation applied to a report column. Closed set — mirrors the Query Builder's aggregate functions."}
+type ReportAggregate string
+
+const (
+	AggSum   ReportAggregate = "sum"
+	AggAvg   ReportAggregate = "avg"
+	AggCount ReportAggregate = "count"
+	AggMin   ReportAggregate = "min"
+	AggMax   ReportAggregate = "max"
+)
+
+var reportAggregates = []ReportAggregate{AggSum, AggAvg, AggCount, AggMin, AggMax}
+
+// ReportFormat is the closed set of value formatters a ReportColumn may declare
+// (S16). It mirrors what the report renderer actually implements, so a format
+// the renderer does not know cannot be written (it would silently print the raw
+// value).
+// @schema {title: "Report Format", description: "Value formatter for a report column. Closed set — every name is implemented by the report renderer."}
+type ReportFormat string
+
+const (
+	FormatCurrency   ReportFormat = "currency"
+	FormatDate       ReportFormat = "date"
+	FormatDateTime   ReportFormat = "datetime"
+	FormatPercentage ReportFormat = "percentage"
+)
+
+var reportFormats = []ReportFormat{FormatCurrency, FormatDate, FormatDateTime, FormatPercentage}
+
+// IsReportAggregate reports whether v is a declared aggregate.
+func IsReportAggregate(v string) bool {
+	for _, a := range reportAggregates {
+		if string(a) == v {
+			return true
+		}
+	}
+	return false
+}
+
+// IsReportFormat reports whether v is a declared format.
+func IsReportFormat(v string) bool {
+	for _, f := range reportFormats {
+		if string(f) == v {
+			return true
+		}
+	}
+	return false
+}
+
+// ReportAggregateValues returns the aggregate names (for error messages).
+func ReportAggregateValues() []string {
+	out := make([]string, len(reportAggregates))
+	for i, a := range reportAggregates {
+		out[i] = string(a)
+	}
+	return out
+}
+
+// ReportFormatValues returns the format names (for error messages).
+func ReportFormatValues() []string {
+	out := make([]string, len(reportFormats))
+	for i, f := range reportFormats {
+		out[i] = string(f)
+	}
+	return out
+}
+
 // widgetAliasHints maps a field *type* name to the canonical widget an author
 // most likely meant, so the validation error is actionable rather than just
 // "unknown value".
@@ -275,5 +346,122 @@ func SortedFormWidgets() []string {
 		out = append(out, string(w))
 	}
 	sort.Strings(out)
+	return out
+}
+
+// ─── S10 lanjutan (item 8.5): closed sets for the remaining free-string
+// properties. Each mirrors what the engine/renderer actually implements, so a
+// typo cannot silently do nothing. ───
+
+// ReportParamType is the closed set of report parameter input types (S10).
+// @schema {title: "Report Param Type", description: "Input type for a report parameter. Closed set — every name is implemented by the report renderer."}
+type ReportParamType string
+
+const (
+	ParamText     ReportParamType = "text"
+	ParamDate     ReportParamType = "date"
+	ParamDateTime ReportParamType = "datetime"
+	ParamSelect   ReportParamType = "select"
+	ParamRelation ReportParamType = "relation"
+)
+
+var reportParamTypes = []ReportParamType{ParamText, ParamDate, ParamDateTime, ParamSelect, ParamRelation}
+
+// EventChannel is the closed set of event delivery channels (S10).
+// @schema {title: "Event Channel", description: "Delivery channel for an event. Closed set — every name is implemented by the delivery pipeline."}
+type EventChannel string
+
+const (
+	ChannelAuditLog      EventChannel = "audit_log"
+	ChannelWebsocket     EventChannel = "websocket"
+	ChannelQueue         EventChannel = "queue"
+	ChannelReliableEvent EventChannel = "reliable_event"
+)
+
+var eventChannels = []EventChannel{ChannelAuditLog, ChannelWebsocket, ChannelQueue, ChannelReliableEvent}
+
+// PrintFormat is the closed set of print output formats (S10).
+// @schema {title: "Print Format", description: "Output format for a Print document. Closed set — pdf/thermal are served server-side, html client-side; dotmatrix is not implemented and is rejected."}
+type PrintFormat string
+
+const (
+	PrintPDF       PrintFormat = "pdf"
+	PrintThermal   PrintFormat = "thermal"
+	PrintDotMatrix PrintFormat = "dotmatrix"
+	PrintHTML      PrintFormat = "html"
+)
+
+var printFormats = []PrintFormat{PrintPDF, PrintThermal, PrintDotMatrix, PrintHTML}
+
+// WorkflowStepMode is the closed set of approval quorum modes (S10).
+// @schema {title: "Workflow Step Mode", description: "How a step's quorum is collected. Closed set."}
+type WorkflowStepMode string
+
+const (
+	StepModeAll        WorkflowStepMode = "all"
+	StepModeAny        WorkflowStepMode = "any"
+	StepModeSequential WorkflowStepMode = "sequential"
+)
+
+var workflowStepModes = []WorkflowStepMode{StepModeAll, StepModeAny, StepModeSequential}
+
+// IsReportParamType reports whether v is a declared report parameter type.
+func IsReportParamType(v string) bool {
+	for _, t := range reportParamTypes {
+		if string(t) == v {
+			return true
+		}
+	}
+	return false
+}
+
+// IsEventChannel reports whether v is a declared event channel.
+func IsEventChannel(v string) bool {
+	for _, c := range eventChannels {
+		if string(c) == v {
+			return true
+		}
+	}
+	return false
+}
+
+// IsPrintFormat reports whether v is a declared print format.
+func IsPrintFormat(v string) bool {
+	for _, f := range printFormats {
+		if string(f) == v {
+			return true
+		}
+	}
+	return false
+}
+
+// IsWorkflowStepMode reports whether v is a declared workflow step mode.
+func IsWorkflowStepMode(v string) bool {
+	for _, m := range workflowStepModes {
+		if string(m) == v {
+			return true
+		}
+	}
+	return false
+}
+
+// ReportParamTypeValues returns the parameter type names (for error messages).
+func ReportParamTypeValues() []string { return stringifyAll(reportParamTypes) }
+
+// EventChannelValues returns the channel names (for error messages).
+func EventChannelValues() []string { return stringifyAll(eventChannels) }
+
+// PrintFormatValues returns the print format names (for error messages).
+func PrintFormatValues() []string { return stringifyAll(printFormats) }
+
+// WorkflowStepModeValues returns the step mode names (for error messages).
+func WorkflowStepModeValues() []string { return stringifyAll(workflowStepModes) }
+
+// stringifyAll renders a slice of string-kinded values as []string.
+func stringifyAll[T ~string](vals []T) []string {
+	out := make([]string, len(vals))
+	for i, v := range vals {
+		out[i] = string(v)
+	}
 	return out
 }

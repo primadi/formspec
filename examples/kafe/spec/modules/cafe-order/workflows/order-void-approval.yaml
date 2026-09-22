@@ -9,7 +9,7 @@ spec:
   # Workflow menempel pada TRANSISI state machine, dan transisi dirujuk lewat
   # NAMANYA (`via`), bukan lewat pasangan from/to.
   #
-  # ✅ GAP-38 TERTUTUP (S9). Transisi `void-order` punya EMPAT state asal:
+  # Transisi `void-order` punya EMPAT state asal:
   #   from: [paid, in_kitchen, ready, served]  ->  to: cancelled
   # Bentuk lama (`from: paid, to: cancelled`) hanya mengawal SATU state asal —
   # void dari `in_kitchen`/`ready`/`served` lolos approval tanpa error dan tanpa
@@ -26,17 +26,20 @@ spec:
     # `on_reject.to` menerima state tunggal: workflow ini mengawal empat state
     # asal, dan FormSpec memulihkan state asal aslinya otomatis.
     to: paid
-  # GAP-39: `WorkflowStep` TIDAK punya `title`/`description` — schema-nya hanya
-  # {roles, approvers, mode, when, escalation}. Akibatnya tugas approval di
-  # ApprovalInbox supervisor tidak punya label yang menjelaskan APA yang sedang
-  # disetujui; ia hanya tahu "ada tugas menunggu". Padahal untuk memutuskan void,
-  # supervisor perlu melihat nomor pesanan dan nilainya — dan itu tidak bisa
-  # dinyatakan di sini.
+  # `WorkflowStep` kini punya `title`,
+  # `description`, dan `display_fields` — jadi tugas approval punya label yang
+  # menjelaskan APA yang sedang disetujui, dan field pendukung yang approver
+  # butuhkan untuk memutuskan (nomor pesanan, total, alasan void) tanpa membuka
+  # record sendiri. `formspec validate` menolak `display_fields` yang menunjuk
+  # field yang tidak ada di entity.
   steps:
     # Peran, bukan nama pengguna: permission = resource + action; role adalah
     # konsep IAM. `cafe-order.supervisor` memetakan ke employee berposisi
     # supervisor/manajer (lihat module cafe-master).
-    - roles: [cafe-order.supervisor]
+    - title: "Persetujuan Void Pesanan"
+      description: "Periksa nomor pesanan, total, dan alasan void sebelum menyetujui. Void dari dapur/ready/served berarti makanan sudah dibuat."
+      display_fields: [number, total_amount, void_reason]
+      roles: [cafe-order.supervisor]
       approvers: 1
       mode: any
       escalation:

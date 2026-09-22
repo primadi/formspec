@@ -24,12 +24,26 @@ type Registry struct {
 	mu            sync.RWMutex
 	byEvent       map[string][]*spec.SubscriptionSpec
 	subscriptions map[string]*spec.SubscriptionSpec // key = "module/name"
+	// byEventOwned is the same index carrying each subscription's owning
+	// module — the dispatch layer needs it to run the handler AS its module:
+	// a script handler's own-module resource access (gl reading gl.account)
+	// must not become a USES_VIOLATION just because the dispatch layer did
+	// not know who owns the subscription.
+	byEventOwned map[string][]OwnedSub
+}
+
+// OwnedSub is a subscription plus the module that declared it.
+type OwnedSub struct {
+	Module string
+	Name   string
+	Spec   *spec.SubscriptionSpec
 }
 
 // NewRegistry creates an empty Subscription registry.
 func NewRegistry() *Registry {
 	return &Registry{
 		byEvent:       make(map[string][]*spec.SubscriptionSpec),
+		byEventOwned:  make(map[string][]OwnedSub),
 		subscriptions: make(map[string]*spec.SubscriptionSpec),
 	}
 }
@@ -47,13 +61,27 @@ func (r *Registry) Add(module, name string, sub *spec.SubscriptionSpec) {
 	if old, ok := r.subscriptions[key]; ok {
 		for _, ev := range old.Events {
 			r.byEvent[ev] = removeSub(r.byEvent[ev], old)
+			r.byEventOwned[ev] = removeOwned(r.byEventOwned[ev], key)
 		}
 	}
 
 	r.subscriptions[key] = sub
+	owned := OwnedSub{Module: module, Name: name, Spec: sub}
 	for _, ev := range sub.Events {
 		r.byEvent[ev] = append(r.byEvent[ev], sub)
+		r.byEventOwned[ev] = append(r.byEventOwned[ev], owned)
 	}
+}
+
+// removeOwned returns the owned list without the given key.
+func removeOwned(list []OwnedSub, key string) []OwnedSub {
+	out := list[:0]
+	for _, o := range list {
+		if o.Module+"/"+o.Name != key {
+			out = append(out, o)
+		}
+	}
+	return out
 }
 
 // removeSub returns list without the given subscription pointer.
@@ -82,6 +110,18 @@ func (r *Registry) ForEvent(eventName string) []*spec.SubscriptionSpec {
 	defer r.mu.RUnlock()
 	list := r.byEvent[eventName]
 	out := make([]*spec.SubscriptionSpec, len(list))
+	copy(out, list)
+	return out
+}
+
+// ForEventOwned returns the subscriptions subscribed to the given event
+// together with the module each was declared in — what the dispatch layer
+// needs to run a handler as its owning module.
+func (r *Registry) ForEventOwned(eventName string) []OwnedSub {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	list := r.byEventOwned[eventName]
+	out := make([]OwnedSub, len(list))
 	copy(out, list)
 	return out
 }

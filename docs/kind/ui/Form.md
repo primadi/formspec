@@ -95,10 +95,20 @@ payload auth: `username`, `password`, `current_password`, `new_password`,
 redirect `{route.query.returnTo}` (same-origin guard). `forgot_password` dan
 `reset_password` cocok untuk halaman public (`Page.public: true`).
 
+Tiap field juga mendapat atribut `autocomplete` **konvensional** dari pasangan
+`auth_action` × nama field: `username` → `username`, `password` pada `login` →
+`current-password`, `password` pada `register`/`reset_password` →
+`new-password`, `email` → `email`, `display_name` → `name`; sisanya `off`.
+Tanpa token ini password manager tidak bisa memasangkan, mengisi, atau
+menyimpan kredensial dengan benar — guidance:
+[Chromium — Create Amazing Password Forms](https://www.chromium.org/developers/design-documents/create-amazing-password-forms/).
+Karena konvensional, tidak ada properti YAML baru untuk ini.
+
 ## Gotchas
 
 - **Tiap `field` wajib ada di Entity**; tiap `action` wajib ada + permission-gated otomatis.
 - **Vocabulary perilaku client TERTUTUP**: `visible_when`, `readonly_when`, `required_when`, `compute` — butuh efek imperatif → custom widget (`asset`), bukan FormSpecExpr.
+- **Form auth wajib token `autocomplete` standar** (`username`, `current-password`, `new-password`) — jangan `"nope"` (token tidak valid) atau `"off"` pada field kredensial; password manager berhenti bisa memasangkan/menyimpan.
 - **`render` = keputusan container design-time**, bukan runtime. `modal` (≤5 field), `drawer` (5–12), `separate_page` (12+ field / child table / butuh deep-link). Form kedua dengan render lain = deklarasi terpisah.
 - **Validasi server tetap otoritas** — `rules` di client untuk UX, bukan keamanan.
 - **`public: false`** → embed-only (no route); hanya tampil di Page authored.

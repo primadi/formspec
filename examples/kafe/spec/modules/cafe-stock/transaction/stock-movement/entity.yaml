@@ -46,7 +46,7 @@ spec:
     #   keluar (penjualan) -> biaya rata-rata bergerak saat itu
     # Penjualan TIDAK BOLEH memakai ingredient.cost_per_unit (acuan statis),
     # karena itu membuat margin historis berubah surut.
-    # GAP-01 TERTUTUP (2.14) — `moneyinput`. Sisa GAP-02: indeks money.
+    # Memakai `moneyinput`. Sisa GAP-02: indeks money.
     - name: unit_cost
       type: money
       required: true
@@ -78,4 +78,18 @@ spec:
     # Aturan bisnis #14: ledger stok bersifat append-only — koreksi lewat
     # pergerakan lawan (adjust), bukan delete.
     - { name: delete, disabled: true }
+  # Pemelihara proyeksi `stock-level` (item 4.1). Setiap pergerakan stok
+  # memicu script pemelihara, yang meng-upsert saldo & biaya rata-rata
+  # bergerak lewat `resource.upsert` (satu-satunya jalur tulis summary).
+  # `after` (bukan `before`): baris pergerakan sudah tersimpan, jadi script
+  # membaca nilai final (termasuk `unit_cost` yang dibekukan).
+  hooks:
+    - on: after
+      action: create
+      impl: { type: script_ref, ref: cafe-stock/stock_level_apply }
+      # #34: akses script harus terlihat di consent footprint. Script pemelihara
+      # membaca `ingredient.min_stock` (lintas entity satu module) untuk
+      # menghitung `is_below_min` — dinyatakan eksplisit di sini.
+      uses:
+        resources: [cafe-stock.ingredient]
   # expose: [] — UI-only.

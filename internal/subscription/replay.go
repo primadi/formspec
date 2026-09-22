@@ -214,7 +214,7 @@ func (w *StreamingWorker) replayEntry(ctx context.Context, sub DurableSub, rs Re
 		}
 	}
 
-	if err := w.dispatcher.dispatchOne(ctx, workspaceID, rs.EventName, resource, payload, sub.Spec); err != nil {
+	if err := w.dispatcher.dispatchOne(ctx, workspaceID, rs.EventName, resource, payload, OwnedSub(sub)); err != nil {
 		log.Printf("[summary-rebuild] %s/%s entry %s failed: %v", sub.Module, sub.Name, e.ID, err)
 		_ = w.stream.Ack(ctx, streamName, group, e.ID)
 		sr.Failed++

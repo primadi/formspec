@@ -130,6 +130,14 @@ func (v *JWTValidator) Validate(ctx context.Context, tokenString string) (*Ident
 		}
 	}
 
+	// A context-scoped session (TODO 3.8) carries a single `role` instead of a
+	// role list: the session acts as exactly that role, never as the union of
+	// everything the principal holds. It supersedes `roles` when both are
+	// present, so a poisoned/stale list cannot widen the session.
+	if role, ok := claims["role"].(string); ok && role != "" {
+		roles = []string{role}
+	}
+
 	// Extract optional app scope (empty = workspace-level, e.g. _admin).
 	app, _ := claims["app"].(string)
 

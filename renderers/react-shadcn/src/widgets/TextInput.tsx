@@ -15,6 +15,10 @@ interface TextInputProps {
   error?: string
   /** id forwarded to the input so <label htmlFor> can target it */
   id?: string
+  /** name forwarded to the input — autofill hints rely on it */
+  name?: string
+  /** autocomplete token (Chromium password-form guidance) */
+  autoComplete?: string
 }
 
 export function TextInput({
@@ -26,6 +30,8 @@ export function TextInput({
   maxLength,
   error,
   id,
+  name,
+  autoComplete,
 }: TextInputProps) {
   const isTextarea = maxLength != null && maxLength > 120
 
@@ -45,6 +51,8 @@ export function TextInput({
       <div>
         <Textarea
           id={id}
+          name={name}
+          autoComplete={autoComplete}
           value={value}
           onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
             onChange?.(e.target.value)
@@ -60,6 +68,8 @@ export function TextInput({
   return (
     <Input
       id={id}
+      name={name}
+      autoComplete={autoComplete}
       value={value}
       onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
         onChange?.(e.target.value)

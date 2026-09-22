@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"testing"
+	"time"
 
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
 )
@@ -52,5 +53,51 @@ func TestDBQuerier_QueryError(t *testing.T) {
 	q := &DBQuerier{DB: database}
 	if _, err := q.Query(context.Background(), "SELECT * FROM does_not_exist"); err == nil {
 		t.Fatalf("expected error for missing table, got nil")
+	}
+}
+
+// TestDBQuerier_QueryInsideTxScopeNoDeadlock pins #30 (TODO 4.5): a ctx.db()
+// query issued while an action's request-scoped transaction is open must run on
+// that transaction's connection, not the pool. SQLite is opened with
+// SetMaxOpenConns(1), so a query against the pool while the action holds the
+// only connection would block forever. The scoped context carries a deadline so
+// a regression fails fast instead of hanging the suite.
+func TestDBQuerier_QueryInsideTxScopeNoDeadlock(t *testing.T) {
+	database, err := db.OpenSQLite(filepath.Join(t.TempDir(), "q.db"), nil)
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	defer func() { _ = database.Close() }()
+
+	if _, err := database.ExecContext(context.Background(), "CREATE TABLE t (id INTEGER)"); err != nil {
+		t.Fatalf("create table: %v", err)
+	}
+
+	scope := db.NewTxScope()
+	ctx, cancel := context.WithTimeout(db.WithTxScope(context.Background(), scope, ""), 5*time.Second)
+	defer cancel()
+
+	// Open the scope's transaction by joining it (the write path an action
+	// takes), then insert a row through it — the query below must see it
+	// (read-your-own-writes) and must not deadlock.
+	txdb, err := scope.Join(ctx, database)
+	if err != nil {
+		t.Fatalf("join scope: %v", err)
+	}
+	if _, err := txdb.ExecContext(ctx, "INSERT INTO t (id) VALUES (42)"); err != nil {
+		t.Fatalf("insert in tx: %v", err)
+	}
+
+	q := &DBQuerier{DB: database}
+	rows, err := q.Query(ctx, "SELECT id FROM t")
+	if err != nil {
+		t.Fatalf("query inside open TxScope failed (deadlock regression?): %v", err)
+	}
+	if len(rows) != 1 || rows[0]["id"] != int64(42) {
+		t.Fatalf("rows = %v, want one row {id:42} (read-your-own-writes)", rows)
+	}
+
+	if err := scope.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
 	}
 }

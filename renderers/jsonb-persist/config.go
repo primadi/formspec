@@ -105,7 +105,20 @@ func ParseDSN(dsn string) (*Config, error) {
 		if cfg.Database == "" {
 			return nil, fmt.Errorf("db config: missing database name in postgres DSN")
 		}
-
+		// Entities live in per-category schemas (ddl.go CategorySchema), but
+		// several generated SQL references are deliberately unqualified —
+		// CREATE INDEX statements, the child-table paths, and any caller that
+		// passes only a table name. With PostgreSQL's default search_path
+		// (`"$user", public`) none of the category schemas are visible, which
+		// is why the first real PostgreSQL migration run failed with
+		// `relation "cafe_loyalty_member_points" does not exist` right after
+		// its schema-qualified CREATE TABLE succeeded (master todo 15.8).
+		// The session default makes every unqualified reference resolve; a
+		// caller that wants a narrower scope sets search_path explicitly in
+		// its DSN.
+		if _, ok := u.Query()["search_path"]; !ok {
+			cfg.Extra["search_path"] = strings.Join(append([]string{"public"}, CategorySchemaValues()...), ",")
+		}
 	default:
 		return nil, fmt.Errorf("db config: unsupported scheme %q (supported: sqlite, postgres)", scheme)
 	}

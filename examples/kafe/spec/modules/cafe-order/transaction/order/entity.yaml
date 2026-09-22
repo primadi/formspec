@@ -24,7 +24,7 @@ spec:
     - { field: branch_id, op: eq, from: session }
   fields:
     # Nomor pesanan per CABANG (scope_field) — bukan deret global.
-    # GAP-09 TERTUTUP (3.6): jalur script kini juga ber-scope
+    # Jalur script kini juga ber-scope
     # (`ctx.next_key("number", scope=branch_id)`), dan keunikannya ikut ber-scope
     # (`tenant_id, _branch_id, _number`), sehingga `ORD-…-00001` sah ada di dua
     # cabang sekaligus. Sebelumnya index uniknya tanpa cabang → cabang kedua
@@ -98,7 +98,7 @@ spec:
       index: true
       title: "Status"
     # ── Rincian nilai (D8: disimpan terpisah, bukan satu angka) ──
-    # GAP-01 TERTUTUP (2.14): seluruh money di bawah kini memakai widget
+    # Seluruh money di bawah kini memakai widget
     # `moneyinput` (numpad, mata uang ikut terbawa).
     # `subtotal` sudah diturunkan server-side dari baris pesanan (S7 menetapkan
     # aritmetika money, jadi `sum` atas money sah). Rantai diskon/pajak menuju
@@ -141,7 +141,7 @@ spec:
       description: "compute dari branch.tax_percent"
     - name: total_amount
       type: money
-      # GAP-23 TERTUTUP (3.2): kolom turunan money numerik (membaca `.amount`),
+      # Kolom turunan money numerik (membaca `.amount`),
       # jadi sortir/rentang atas total sah diandalkan.
       index: true
       title: "Total"
@@ -259,20 +259,23 @@ spec:
     transitions:
       - { from: draft, to: awaiting_payment, via: submit-order }
       - { from: draft, to: cancelled, via: abandon }
-      - { from: awaiting_payment, to: paid, via: confirm-payment }
-      - { from: awaiting_payment, to: cancelled, via: cancel-order }
+      # Keterkaitan transisi↔event kini
+      # DINYATAKAN EKSPLISIT lewat `emit:` — bukan disimpulkan dari penamaan.
+      # `formspec validate` menolak `emit` yang menunjuk event yang tidak
+      # dideklarasikan, jadi tidak ada lagi "nama event = nama state" yang
+      # hanya kebetulan.
+      - { from: awaiting_payment, to: paid, via: confirm-payment, emit: on_paid }
+      - { from: awaiting_payment, to: cancelled, via: cancel-order, emit: on_cancel }
       - { from: paid, to: in_kitchen, via: start-preparing }
       - { from: in_kitchen, to: ready, via: mark-ready }
       - { from: ready, to: served, via: mark-served }
       - { from: served, to: completed, via: complete-order }
-      - { from: [paid, in_kitchen, ready, served], to: cancelled, via: void-order }
+      - { from: [paid, in_kitchen, ready, served], to: cancelled, via: void-order, emit: on_cancel }
   # ── Event — pemicu integrasi lintas-app (stok & jurnal) ──
-  # GAP-40: TIDAK JELAS apakah transisi state machine memancarkan event secara
-  # otomatis. Contoh vertikal di repo FormSpec menyebut event entity dengan nama
-  # STATE (`billing.order.paid`), sementara validator mewajibkan konvensi prefix
-  # (`on_*` = async, `before_*` = sync). Keduanya belum bisa didamaikan.
-  # Karena itu event dideklarasikan eksplisit di sini dengan nama berkonvensi,
-  # dan PEMANCARANNYA masih perlu diverifikasi runtime (terkunci GAP-24).
+  # Transisi memancarkan event lewat `emit:`
+  # yang DINYATAKAN di state machine di atas. Nama event tetap berkonvensi
+  # (`on_*` = async, `before_*` = sync) — konvensi penamaan dan keterkaitan
+  # eksplisit kini dua hal yang terpisah dan keduanya terverifikasi.
   events:
     - name: on_paid
       description: "Pesanan lunas — pemicu integrasi stok & jurnal"

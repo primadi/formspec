@@ -128,7 +128,9 @@ func EnsurePort(addr, ownProcessName string) error {
 
 	pid, procName, err := FindProcessOnPort(port)
 	if err != nil {
-		return fmt.Errorf("port %d is in use but cannot identify the owner: %w", port, err)
+		return fmt.Errorf("port %d is in use by another process, but its owner could not be identified (%v).\n"+
+			"       Stop that process, or run formspec on a different port: --addr :%d",
+			port, err, port+1)
 	}
 
 	if procName == ownProcessName || procName == "exe" || strings.Contains(procName, ownProcessName) {
@@ -161,7 +163,9 @@ func EnsurePort(addr, ownProcessName string) error {
 		return nil
 	}
 
-	return fmt.Errorf("port %d is already in use by %q (PID %d). Stop it manually first", port, procName, pid)
+	return fmt.Errorf("port %d is already in use by %q (PID %d) — it is not a previous %s instance, so it is left alone.\n"+
+		"       Stop it (kill %d) or run formspec on a different port: --addr :%d",
+		port, procName, pid, ownProcessName, pid, port+1)
 }
 
 // KillDescendants force-kills every descendant of pid (depth-first) so that

@@ -284,6 +284,40 @@ Field/validation changes?
 - `NNN` = 3-digit sequence number, resets per day
 - Content: what changed, which layer(s), why, files affected
 - Example: `docs_internal/changelog/2026-08-10-001-add-discount-field-to-invoice.md`
+- **No status marker exists on a changelog entry.** An entry records what WAS
+  done. Leftover work does **not** belong in it as prose — see the next rule.
+
+**Leftover work → a tracked todo item, never prose.**
+
+When an iteration finishes but something is still open (a gap, a deferred
+feature, a limitation you chose not to close), that leftover MUST become its own
+numbered item in `docs_internal/plan/todo.md` carrying `⏸️`:
+
+```markdown
+- [⏸️] 7.7.5 <what is open> — <why it is open> + <how it was observed>.
+  Effort: small | medium | large.
+```
+
+Forbidden: describing the leftover only inside the finished item's text, or in
+the changelog's "Sisa" section, with no `[⏸️]` item to point at. A prose leftover
+cannot be told apart from finished work once the parent item is marked `[x]` —
+the reader sees `[x]` and stops. Worse, it goes stale silently: a later entry
+closes the gap and the earlier prose keeps announcing it as broken.
+
+Rules:
+
+1. The item gets its **own number** in the right phase — do not append it as an
+   indent under an existing `[x]` item.
+2. Every "Sisa" line in a changelog **names the todo item** it became
+   (e.g. `→ 7.7.5 ⏸️`). No item, no leftover — create it.
+3. **A status line may never overstate.** If an item claims completion while
+   only one channel / one path / one test-class landed, say which part landed
+   and point at the deferred item for the rest (a bare `✅` for
+   `webhook` + `notification` + `pubsub` while two are absent is a false claim,
+   not a summary).
+4. Include the **observation** that makes it real (a measurement, a failing
+   case) — not just an assertion. "Belum idempoten" is weak; "requeue event yang
+   sama → saldo 143750 → 287500" is checkable.
 
 **Consistency check** (run after every iteration):
 
@@ -291,6 +325,8 @@ Field/validation changes?
 2. Does `domain-model.md` still list all entities with correct characteristics?
 3. Does `formspec validate --spec spec` pass?
 4. Is the changelog entry written?
+5. **Is every leftover this iteration produced a tracked `[⏸️]` item?**
+   (grep the todo for the number you cited; if you cited none, you missed one)
 
 ---
 

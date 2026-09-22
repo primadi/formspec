@@ -1,6 +1,81 @@
 package starlark
 
-import "fmt"
+import (
+	"fmt"
+
+	"go.starlark.net/starlark"
+)
+
+// childRows normalizes a child collection value to []any, reporting whether it
+// was a collection at all.
+//
+// A child field reaches a guard in one of two shapes depending on which side of
+// the persistence layer produced it:
+//   - []any            — the shape a client sends and the shape that lives in
+//     the parent's JSONB
+//   - []map[string]any — the shape ChildStore.Hydrate produces when children
+//     live in their own table (storage: table)
+//
+// Both are ordinary child collections to a guard, so both must be accepted.
+// Accepting only []any made every guard over a table-stored child silently sum
+// to zero — the type assertion failed, the pre-computed helpers were never
+// injected, and the guard reported "not balanced" for data that balanced.
+func childRows(v any) ([]any, bool) {
+	switch rows := v.(type) {
+	case []any:
+		return rows, true
+	case []map[string]any:
+		out := make([]any, len(rows))
+		for i, r := range rows {
+			out[i] = r
+		}
+		return out, true
+	default:
+		return nil, false
+	}
+}
+
+// newSumLineBuiltin builds the `sum_line(field)` aggregate available in guard
+// expressions. It sums one field across the record's `lines` child collection,
+// money-aware: a column of money values totals to money (so debit can be
+// compared with credit), a column of plain numbers totals to a number. A
+// missing field and an empty collection both sum to 0 — a guard asking for a
+// sum that isn't there should see zero, not an error.
+func newSumLineBuiltin(resourceData map[string]any) *starlark.Builtin {
+	return starlark.NewBuiltin("sum_line", func(
+		_ *starlark.Thread,
+		_ *starlark.Builtin,
+		args starlark.Tuple,
+		kwargs []starlark.Tuple,
+	) (starlark.Value, error) {
+		var field string
+		if err := starlark.UnpackArgs("sum_line", args, kwargs, "field", &field); err != nil {
+			return nil, err
+		}
+
+		lines, _ := childRows(resourceData["lines"])
+		values := make([]starlark.Value, 0, len(lines))
+		for _, l := range lines {
+			line, ok := l.(map[string]any)
+			if !ok {
+				continue
+			}
+			raw, ok := line[field]
+			if !ok || raw == nil {
+				continue
+			}
+			sv, err := toStarlark(raw)
+			if err != nil {
+				return nil, fmt.Errorf("sum_line(%q): %w", field, err)
+			}
+			values = append(values, sv)
+		}
+		if len(values) == 0 {
+			return starlark.Float(0), nil
+		}
+		return sumValues(starlark.NewList(values))
+	})
+}
 
 // EvaluateGuard evaluates a state-machine guard expression against resource
 // data, returning whether the guard passed and an optional failure message.
@@ -16,9 +91,13 @@ import "fmt"
 //
 // The guard expression has access to resource data fields directly, plus
 // pre-computed helpers:
-//   - `resource` / `data` — the resource data map
-//   - `sum_line_<field>` — per-field sums over the `lines` child array
-//   - `item_count` / `line_count` — lengths of the `items` / `lines` arrays
+//   - `resource` / `data` — the resource data map, so both dot notation
+//     (resource.amount) and bracket notation (resource["amount"]) work
+//   - `sum_line(field)` — sums one numeric/money field over the `lines` child
+//     collection (the documented form, 02-core-extended.md §1); `sum_line_<field>`
+//     is the equivalent pre-computed identifier
+//   - `len(resource.items)` / `len(resource.lines)` — child-collection sizes,
+//     also available as `item_count` / `line_count`
 //
 // A nil guard or empty expression passes trivially.
 func EvaluateGuard(expression string, resourceData map[string]any) (bool, string, error) {
@@ -37,25 +116,26 @@ func EvaluateGuard(expression string, resourceData map[string]any) (bool, string
 	env["resource"] = NewFieldMap(resourceData)
 	env["data"] = NewFieldMap(resourceData)
 
+	// `sum_line(field)` — the documented aggregate builtin over the `lines`
+	// child collection (02-core-extended.md §1). It sums whole money values
+	// money-aware (a list of money sums to money, so `sum_line('debit') ==
+	// sum_line('credit')` compares money to money), falling back to a plain
+	// field walk when the collection holds scalars.
+	env["sum_line"] = newSumLineBuiltin(resourceData)
+
 	// Pre-compute sum_line helpers for GL-style guards.
-	if lines, ok := resourceData["lines"]; ok {
-		if lineList, ok := lines.([]any); ok {
-			for field, total := range computeSums(lineList) {
-				env["sum_line_"+field] = total
-			}
+	if lineList, ok := childRows(resourceData["lines"]); ok {
+		for field, total := range computeSums(lineList) {
+			env["sum_line_"+field] = total
 		}
 	}
 
 	// Pre-compute len() helpers.
-	if v, ok := resourceData["items"]; ok {
-		if items, ok := v.([]any); ok {
-			env["item_count"] = int64(len(items))
-		}
+	if items, ok := childRows(resourceData["items"]); ok {
+		env["item_count"] = int64(len(items))
 	}
-	if v, ok := resourceData["lines"]; ok {
-		if lines, ok := v.([]any); ok {
-			env["line_count"] = int64(len(lines))
-		}
+	if lines, ok := childRows(resourceData["lines"]); ok {
+		env["line_count"] = int64(len(lines))
 	}
 
 	result, err := EvalExpr(expression, env)

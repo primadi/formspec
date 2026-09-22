@@ -30,13 +30,13 @@ type IdempotencyStore struct {
 
 // IdempotencyRecord represents a row in formspec_idempotency_keys.
 type IdempotencyRecord struct {
-	WorkspaceID  string
-	Action    string
-	Key       string
-	Status    string // pending | completed | failed
-	Response  string // JSON response body
-	ExpiresAt string
-	CreatedAt string
+	WorkspaceID string
+	Action      string
+	Key         string
+	Status      string // pending | completed | failed
+	Response    string // JSON response body
+	ExpiresAt   string
+	CreatedAt   string
 }
 
 // NewIdempotencyStore creates a new idempotency store with DefaultIdempotencyTTL.

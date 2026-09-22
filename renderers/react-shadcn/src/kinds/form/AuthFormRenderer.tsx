@@ -41,6 +41,38 @@ const DEFAULT_SUCCESS: Record<string, string> = {
   reset_password: "Password reset — you can sign in now",
 }
 
+// Chromium "Create Amazing Password Forms": password managers need explicit
+// autocomplete tokens to know whether a field holds an existing credential
+// (current-password) or a new one (new-password). Like the auth field names,
+// this mapping is conventional rather than declared in YAML — so a custom
+// `auth_action` form gets correct autofill for free. Fields we don't know
+// default to "off" so Chrome stops guessing (address/payment dropdowns).
+const AUTOCOMPLETE_BY_ACTION: Record<string, Record<string, string>> = {
+  login: {
+    username: "username",
+    email: "username",
+    password: "current-password",
+  },
+  register: {
+    username: "username",
+    email: "email",
+    display_name: "name",
+    password: "new-password",
+  },
+  change_password: {
+    username: "username",
+    current_password: "current-password",
+    new_password: "new-password",
+    password: "new-password",
+  },
+  forgot_password: { username: "username", email: "email" },
+  reset_password: { password: "new-password", new_password: "new-password" },
+}
+
+function autocompleteFor(action: string | undefined, field: string) {
+  return AUTOCOMPLETE_BY_ACTION[action ?? ""]?.[field] ?? "off"
+}
+
 function fieldWidget(field: FormField) {
   if (field.widget === "password" || field.name.includes("password")) {
     return "password" as const
@@ -162,7 +194,7 @@ export default function AuthFormRenderer({ spec }: { spec: FormSpec }) {
   }
 
   return (
-    <form onSubmit={onSubmit} autoComplete="off" className="space-y-6">
+    <form onSubmit={onSubmit} autoComplete="on" className="space-y-6">
       {spec.sections
         .filter(
           (section) => !section.visible_when || section.visible_when === "true",
@@ -185,6 +217,10 @@ export default function AuthFormRenderer({ spec }: { spec: FormSpec }) {
             >
               {section.fields.map((field) => {
                 const widget = fieldWidget(field)
+                const autoComplete = autocompleteFor(
+                  spec.auth_action,
+                  field.name,
+                )
                 return (
                   <div key={field.name} className="space-y-1">
                     <label className="text-sm font-medium" htmlFor={field.name}>
@@ -192,6 +228,9 @@ export default function AuthFormRenderer({ spec }: { spec: FormSpec }) {
                     </label>
                     {widget === "password" ? (
                       <PasswordInput
+                        id={field.name}
+                        name={field.name}
+                        autoComplete={autoComplete}
                         value={values[field.name] ?? ""}
                         onChange={(v) => set(field.name, v)}
                         placeholder={field.placeholder}
@@ -199,6 +238,9 @@ export default function AuthFormRenderer({ spec }: { spec: FormSpec }) {
                       />
                     ) : (
                       <TextInput
+                        id={field.name}
+                        name={field.name}
+                        autoComplete={autoComplete}
                         value={values[field.name] ?? ""}
                         onChange={(v) => set(field.name, v)}
                         placeholder={field.placeholder}

@@ -1,47 +1,25 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# GUARD: satu baris stock-level per (cabang, bahan)
+# PEMELIHARA: proyeksi `stock-level` (saldo & biaya rata-rata bergerak)
 # ─────────────────────────────────────────────────────────────────────────────
 #
-# STATUS: DITULIS TAPI **SENGAJA TIDAK DIPASANG** lewat `hooks:`. Lihat GAP-33
-# di bawah — pada entity `summary`, hook memang tidak pernah dipanggil.
+# Script ini adalah `maintained_by` dari entity `stock-level` (summary). Ia
+# dipanggil lewat hook `after create` pada `stock-movement`, dan menulis
+# proyeksi lewat `resource.upsert` — SATU-SATUNYA jalur tulis summary yang
+# didukung (item 4.1, Opsi A).
 #
-# Invarian ini kini DITEGAKKAN DATABASE lewat `indexes:` pada entity
-# `stock-level` (GAP-22 sudah ditutup):
+# Invarian "satu baris per (cabang, bahan)" DITEGAKKAN DATABASE lewat
+# `indexes:` pada entity `stock-level`:
 #     - fields: [branch_id, ingredient_id]
 #       unique: true
-# Penutup lama berupa `kind: Migration` DDL mentah (`stock-level-unique`) sudah
-# dihapus: DDL itu tidak portabel antar-driver, sementara index yang dihasilkan
-# engine portabel.
-# File ini tetap berguna sebagai RUJUKAN RUMUS biaya rata-rata bergerak (D3)
-# untuk script penulis stock-level.
+# `resource.upsert` mencari baris dengan `match` yang sama lalu update, atau
+# insert bila belum ada — dan unique index adalah jaring pengaman terakhir.
 #
-# ─── KENAPA TIDAK DIPASANG — dan ini temuan baru (GAP-33) ───
+# ─── KENAPA `resource.upsert`, BUKAN `resource.create`/`save` ───
 #
-# `stock-level` berkarakteristik `summary`. FormSpec menonaktifkan
-# create/update/delete permanen untuk summary — entity jenis ini HANYA ditulis
-# oleh script, dan penulisan itu TIDAK lewat action pipeline.
-#
-# Akibatnya: `hooks:` dan `conditions:` pada entity `summary` TIDAK PERNAH
-# DIPANGGIL. Jadi guard ini akan terlihat terpasang dan tidak melakukan apa pun
-# — persis pola gagal-senyap yang sedang kita kejar di seluruh catatan gap.
-#
-# Menyadari ini penting: untuk entity `summary`, satu-satunya tempat menegakkan
-# invarian adalah DI DALAM script yang menulisnya. Tidak ada titik intersepsi
-# deklaratif.
-#
-# ─── MAKA: INVARIANNYA HARUS DIPEgang OLEH PENULIS ───
-#
-# Setiap script yang menulis `stock-level` (penerimaan barang, pemakaian saat
-# pesanan lunas, bahan terbuang, posting opname) WAJIB memakai pola upsert:
-#
-#   1. baca baris yang ada untuk (branch_id, ingredient_id)
-#   2. kalau ada  -> update  (rumus rata-rata bergerak di bawah)
-#   3. kalau tidak -> create
-#
-# dan WAJIB membungkusnya dengan `ctx.lock` pada kunci
-# `stock-level:{branch_id}:{ingredient_id}`, karena pola baca-lalu-tulis tidak
-# atomik (GAP-32). Dua pergerakan bersamaan tanpa lock bisa menghasilkan dua
-# baris untuk pasangan yang sama.
+# Entity `summary` menolak create/update/delete lewat API maupun lewat
+# `resource.create`/`save` (guard store yang sama). Satu-satunya jalur tulis
+# adalah `resource.upsert`, dan ia hanya mengizinkan script yang disebut
+# `maintained_by` entity itu. Script lain → error.
 #
 # ─── RUMUS BIAYA RATA-RATA BERGERAK (D3) ───
 #
@@ -57,15 +35,14 @@
 # pertahankan avg lama (jangan hasilkan NaN — NaN akan menyebar diam-diam ke
 # seluruh laporan margin).
 #
-# ─── GAP TERKAIT ───
+# ─── GAP TERKAIT (kini tertutup) ───
 #
-# GAP-13  metode valuasi tidak ada di engine -> D3 mengerjakannya di Starlark.
-# GAP-22  UNIQUE (branch_id, ingredient_id) tidak ditegakkan database.
-# GAP-30  ctx.db().query() deadlock di SQLite dalam transaksi aksi.
-# GAP-31  tidak ada API find-by-field; terpaksa raw SQL.
-# GAP-32  butuh ctx.lock; tanpa itu upsert tidak rapat.
-# GAP-33  hooks/conditions tidak berlaku untuk entity `summary`.
-# GAP-28  money adalah objek {amount, currency} -> aritmetika avg belum teruji.
+# ✅ GAP-13  valuasi inventory — dijalankan lewat jalur tulis summary (4.1).
+# ✅ GAP-22  UNIQUE (branch_id, ingredient_id) ditegakkan database (1.6).
+# ✅ GAP-30  ctx.db() deadlock di SQLite — tidak lagi dipakai (4.5).
+# ✅ GAP-31  find-by-field — `resource.find` (4.3).
+# ✅ GAP-32  upsert atomik — `resource.upsert` + unique index (4.4).
+# ✅ GAP-33  hooks pada summary — pemelihara dipanggil dari hook `stock-movement`.
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -79,67 +56,136 @@ def moving_average(qty_lama, avg_lama, qty_masuk, biaya_masuk):
     return (qty_lama * avg_lama + qty_masuk * biaya_masuk) / total_qty
 
 
+def money_amount(value, default):
+    """Angka dari nilai `money` (objek {amount, currency}) atau skalar.
+
+    `unit_cost`/`moving_avg_cost` adalah nilai `money`; `float()` menolak
+    objek seperti itu (S7/1.3 — operand tidak sah = error, bukan 0).
+    Kegagalannya SENYAP bagi pemanggil: hook `after` tidak membatalkan
+    respons, jadi error hanya tercatat di log engine.
+    """
+    if value == None:
+        return default
+    return float(amount(value))
+
+
+def money_like(angka, sumber, default_currency):
+    """Bentuk kanonik `money` untuk ditulis ke proyeksi.
+
+    Mata uang ikut sumber bila ada, supaya proyeksi tidak menebak mata uang
+    (spec §10: ragu = tolak/pertahankan, bukan tebak). Nilai bulat ditulis
+    tanpa `.0` supaya bentuk tersimpannya sama dengan nilai money lain di app
+    (mis. `{"amount": "60", "currency": "IDR"}`).
+    """
+    if angka == int(angka):
+        amount_str = str(int(angka))
+    else:
+        amount_str = str(angka)
+    if sumber == None:
+        return {"amount": amount_str, "currency": default_currency}
+    return {"amount": amount_str, "currency": currency(sumber)}
+
+
+def min_stock_of(resource, ingredient_id):
+    """Batas minimum stok dari entity `ingredient`, 0 bila tidak dideklarasikan."""
+    ing = resource.fetch("cafe-stock.ingredient", ingredient_id)
+    if ing == None:
+        return 0
+    return float(ing.field.min_stock or 0)
+
+
+def below_min(resource, ingredient_id, qty_on_hand):
+    """is_below_min: dipicu dari ingredient.min_stock (bukan di-update manual)."""
+    return qty_on_hand < min_stock_of(resource, ingredient_id)
+
+
 def execute(resource, params, ctx):
     # `resource` di sini adalah stock-movement yang sedang diproses.
-    # Catatan: aritmetika di bawah memakai angka, BUKAN objek money — lihat
-    # GAP-28. Idealnya unit_cost diambil sebagai `resource.field.unit_cost.amount`.
+    # Script ini adalah `maintained_by` dari entity `stock-level`, jadi ia
+    # boleh memanggil `resource.upsert` (satu-satunya jalur tulis summary).
     branch_id = resource.field.branch_id
     ingredient_id = resource.field.ingredient_id
     direction = resource.field.direction
     qty = float(resource.field.quantity or 0)
+    # `last_movement_at` diambil dari tanggal transaksi pergerakan (field yang
+    # tersedia di record) — `created_at` engine tidak diekspos ke script.
+    now = resource.field.transaction_date
 
-    exclude_id = resource.id or ""
-
-    rows = ctx.db().query(
-        "SELECT id, quantity_on_hand, moving_avg_cost FROM cafe_stock_stock_levels "
-        + "WHERE branch_id = ? "
-        + "  AND ingredient_id = ? "
-        + "  AND deleted_at IS NULL "
-        + "  AND id != ? "
-        + "LIMIT 1",
-        [branch_id, ingredient_id, exclude_id],
+    # Baca saldo yang ada lewat lapisan entity (bukan SQL). `resource.find`
+    # mengembalikan resource atau None.
+    current = resource.find(
+        "cafe-stock.stock-level",
+        {"branch_id": branch_id, "ingredient_id": ingredient_id},
     )
 
-    if len(rows) == 0:
-        # Belum ada baris saldo -> buat.
-        # Bungkus dengan ctx.lock di pemanggil (GAP-32).
+    if current == None:
+        # Belum ada baris saldo -> buat dengan qty awal.
+        # Pergerakan masuk pertama: avg = biaya masuk (tidak ada dasar lain).
+        if direction == "in":
+            avg_awal = money_amount(resource.field.unit_cost, 0)
+        else:
+            avg_awal = 0
+        resource.upsert(
+            "cafe-stock.stock-level",
+            {"branch_id": branch_id, "ingredient_id": ingredient_id},
+            {
+                "quantity_on_hand": qty,
+                "moving_avg_cost": money_like(avg_awal, resource.field.unit_cost, "IDR"),
+                "stock_value": money_like(qty * avg_awal, resource.field.unit_cost, "IDR"),
+                "last_movement_at": now,
+                "is_below_min": below_min(resource, ingredient_id, qty),
+            },
+        )
         return ok({"action": "create", "quantity_on_hand": qty})
 
-    current = rows[0]
-    qty_lama = float(current["quantity_on_hand"] or 0)
-    avg_lama = float(current["moving_avg_cost"] or 0)
+    qty_lama = float(current.field.quantity_on_hand or 0)
+    avg_lama = money_amount(current.field.moving_avg_cost, 0)
 
     if direction == "in":
         avg_baru = moving_average(
-            qty_lama, avg_lama, qty, float(resource.field.unit_cost or 0)
+            qty_lama, avg_lama, qty, money_amount(resource.field.unit_cost, 0)
         )
-        return ok(
+        qty_baru = qty_lama + qty
+        resource.upsert(
+            "cafe-stock.stock-level",
+            {"branch_id": branch_id, "ingredient_id": ingredient_id},
             {
-                "action": "update",
-                "stock_level_id": current["id"],
-                "quantity_on_hand": qty_lama + qty,
-                "moving_avg_cost": avg_baru,
-            }
+                "quantity_on_hand": qty_baru,
+                "moving_avg_cost": money_like(avg_baru, resource.field.unit_cost, "IDR"),
+                "stock_value": money_like(qty_baru * avg_baru, resource.field.unit_cost, "IDR"),
+                "last_movement_at": now,
+                "is_below_min": below_min(resource, ingredient_id, qty_baru),
+            },
         )
+        return ok({"action": "update", "quantity_on_hand": qty_baru})
 
     if direction == "out":
         # Keluar: qty berkurang, avg TIDAK berubah (nilai dibekukan ke
         # stock-movement oleh pemanggil).
-        return ok(
+        qty_baru = qty_lama - qty
+        resource.upsert(
+            "cafe-stock.stock-level",
+            {"branch_id": branch_id, "ingredient_id": ingredient_id},
             {
-                "action": "update",
-                "stock_level_id": current["id"],
-                "quantity_on_hand": qty_lama - qty,
-                "moving_avg_cost": avg_lama,
-            }
+                "quantity_on_hand": qty_baru,
+                "moving_avg_cost": money_like(avg_lama, current.field.moving_avg_cost, "IDR"),
+                "stock_value": money_like(qty_baru * avg_lama, current.field.moving_avg_cost, "IDR"),
+                "last_movement_at": now,
+                "is_below_min": below_min(resource, ingredient_id, qty_baru),
+            },
         )
+        return ok({"action": "update", "quantity_on_hand": qty_baru})
 
     # adjust (opname): qty disetel ke hasil hitung fisik, avg dipertahankan.
-    return ok(
+    resource.upsert(
+        "cafe-stock.stock-level",
+        {"branch_id": branch_id, "ingredient_id": ingredient_id},
         {
-            "action": "update",
-            "stock_level_id": current["id"],
             "quantity_on_hand": qty,
-            "moving_avg_cost": avg_lama,
-        }
+            "moving_avg_cost": money_like(avg_lama, current.field.moving_avg_cost, "IDR"),
+            "stock_value": money_like(qty * avg_lama, current.field.moving_avg_cost, "IDR"),
+            "last_movement_at": now,
+            "is_below_min": below_min(resource, ingredient_id, qty),
+        },
     )
+    return ok({"action": "update", "quantity_on_hand": qty})

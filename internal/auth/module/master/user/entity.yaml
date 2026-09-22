@@ -47,6 +47,9 @@ spec:
       type: json
     - name: permissions
       type: json
+    - name: assignments
+      type: json
+      description: "Konteks sesi yang boleh dipilih principal ini — daftar {role, dimension, value} (ketiganya required). `dimension` adalah NAMA FIELD yang dibandingkan `row_scope.field` (mis. branch_id), bukan nama dimensi dekoratif; nilainya mengisi klaim `attrs` token dengan kunci itu. Contoh: {role: sales, dimension: branch_id, value: <id cabang>}. Login tanpa `assignment` memakai perilaku lama (union role) BILA daftar kosong; bila ada >1 baris, login balas 409 CONTEXT_REQUIRED + choices. Permission sesi = grant role yang dipilih saja."
     - name: active
       type: boolean
       default: true

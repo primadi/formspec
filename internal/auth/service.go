@@ -914,6 +914,24 @@ func mergeStrings(base, extra []string) []string {
 //
 // On success it records a session (refresh jti) for rotation (todo 6.1.3).
 func (s *Service) Login(ctx context.Context, workspaceID, app, username, password string) (*TokenPair, error) {
+	return s.LoginWithContext(ctx, workspaceID, app, username, password, "")
+}
+
+// LoginWithContext is Login plus the session-context choice (TODO 3.8).
+//
+// assignmentID is the client's pick from a previous ContextRequiredError
+// (`<role>@<value>`), or empty to let the service decide:
+//
+//   - the principal has no assignments → boundary-less session (owner / service
+//     account): permissions come from the union of roles, reads may span every
+//     branch via `read_all`. This is the legacy behavior and stays supported.
+//   - exactly one assignment → chosen automatically, no extra round-trip.
+//   - more than one, none chosen → ErrContextRequired carrying the choices; no
+//     token is issued. A session must never pick a boundary on the caller's
+//     behalf, and must never fall back to "no boundary".
+//   - an id that no longer exists (revoked assignment) → ErrContextRequired
+//     too: fail closed, ask again.
+func (s *Service) LoginWithContext(ctx context.Context, workspaceID, app, username, password, assignmentID string) (*TokenPair, error) {
 	// Reject empty password at the service layer (defense in depth — the
 	// HTTP handler also checks). This also blocks OAuth-created users whose
 	// password_hash is a bcrypt hash of "" from logging in with an empty
@@ -938,8 +956,61 @@ func (s *Service) Login(ctx context.Context, workspaceID, app, username, passwor
 		return nil, ErrInvalidCredentials
 	}
 
+	assignment, err := resolveAssignment(user, assignmentID)
+	if err != nil {
+		return nil, err
+	}
 	user.App = app
+	user.Context = assignment
 	return s.issuePair(ctx, user)
+}
+
+// SwitchContext re-issues a token pair for the same principal under a different
+// session context (TODO 3.8) — "switch branch" without logging out.
+//
+// currentJTI is the refresh jti of the session being replaced: it is revoked
+// first, so a context switch never leaves two live contexts behind. The new
+// pair records a fresh session carrying the new role/scope.
+func (s *Service) SwitchContext(ctx context.Context, workspaceID, app, userID, currentJTI, assignmentID string) (*TokenPair, error) {
+	user, err := s.users.GetByID(ctx, workspaceID, userID)
+	if err != nil {
+		return nil, ErrInvalidCredentials
+	}
+	if !user.Active || user.Status == UserStatusPending {
+		return nil, ErrInvalidCredentials
+	}
+	// Switching must name a context explicitly: the whole point is that the
+	// caller states which boundary it wants, and an unknown id fails closed.
+	assignment, err := resolveAssignment(user, assignmentID)
+	if err != nil {
+		return nil, err
+	}
+	if currentJTI != "" {
+		if err := s.session.Delete(ctx, workspaceID, currentJTI); err != nil {
+			return nil, fmt.Errorf("auth: revoke previous session: %w", err)
+		}
+	}
+	user.App = app
+	user.Context = assignment
+	return s.issuePair(ctx, user)
+}
+
+// SwitchContextByToken is SwitchContext for an HTTP caller: the refresh token
+// identifies the session being replaced (workspace, principal, app, jti), so
+// the handler never has to trust a client-supplied user id.
+func (s *Service) SwitchContextByToken(ctx context.Context, refreshToken, app, assignmentID string) (*TokenPair, error) {
+	claims, err := s.issuer.ParseRefreshToken(refreshToken)
+	if err != nil {
+		return nil, ErrInvalidRefreshToken
+	}
+	sess, ok := s.session.Get(ctx, claims.Workspace, claims.ID)
+	if !ok || sess.UserID != claims.Subject {
+		return nil, ErrSessionRevoked
+	}
+	if app == "" {
+		app = claims.App
+	}
+	return s.SwitchContext(ctx, claims.Workspace, app, claims.Subject, claims.ID, assignmentID)
 }
 
 // ChangePassword updates the caller's own password (self-service, profile).
@@ -1097,6 +1168,17 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (*TokenPair,
 	// Re-scope to the same App the refresh token was issued for.
 	user.App = claims.App
 
+	// Restore the session context (TODO 3.8). A context-scoped session is only
+	// renewed while the exact assignment is still on the principal and its role
+	// still exists: a revoked assignment (or a deleted role) must fail closed
+	// with "choose again", never silently continue with the old boundary.
+	if sess.Role != "" || sess.ScopeDimension != "" || sess.ScopeValue != "" {
+		if !s.contextStillValid(ctx, sess.WorkspaceID, user, sess.Role, sess.ScopeDimension, sess.ScopeValue) {
+			return nil, &ContextRequiredError{Choices: choicesFor(user)}
+		}
+		user.Context = &Assignment{Role: sess.Role, Dimension: sess.ScopeDimension, Value: sess.ScopeValue}
+	}
+
 	// Rotate: invalidate the old session, then issue a new pair.
 	if err := s.session.Delete(ctx, claims.Workspace, claims.ID); err != nil {
 		return nil, fmt.Errorf("auth: rotate session: %w", err)
@@ -1106,6 +1188,30 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (*TokenPair,
 
 // issuePair issues an access + refresh token pair and records the session.
 func (s *Service) issuePair(ctx context.Context, user *User) (*TokenPair, error) {
+	// No context decided yet (OAuth login, or a refresh of a boundary-less
+	// session): apply the automatic rule — none = no boundary, exactly one =
+	// that one, more than one = ErrContextRequired. OAuth has no step where the
+	// caller could choose, so this is where a principal with several contexts
+	// gets sent to the picker instead of silently receiving the union.
+	if user.Context == nil {
+		assignment, err := resolveAssignment(user, "")
+		if err != nil {
+			return nil, err
+		}
+		user.Context = assignment
+	}
+
+	// A context-scoped session acts as ONE role (TODO 3.8): its grants are the
+	// grants of that role, never the union of every role the principal holds.
+	// The resolver reads User.Roles, so the selected role replaces the list for
+	// the duration of this resolution — the alternative (a parallel resolver
+	// path) would be a second place where "which roles apply" is decided.
+	if user.Context != nil {
+		all := user.Roles
+		user.Roles = []string{user.Context.Role}
+		defer func() { user.Roles = all }()
+	}
+
 	// Materialize the user's effective permissions (direct + role grants,
 	// app-scoped) so the access token carries the concrete permission strings
 	// (5.12.5).
@@ -1138,6 +1244,11 @@ func (s *Service) issuePair(ctx context.Context, user *User) (*TokenPair, error)
 		App:         user.App,
 		ExpiresAt:   claims.ExpiresAt.Time,
 		CreatedAt:   now,
+	}
+	if user.Context != nil {
+		sess.Role = user.Context.Role
+		sess.ScopeDimension = user.Context.Dimension
+		sess.ScopeValue = user.Context.Value
 	}
 	if err := s.session.Create(ctx, sess); err != nil {
 		return nil, fmt.Errorf("auth: record session: %w", err)

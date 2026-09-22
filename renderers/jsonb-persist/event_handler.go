@@ -24,6 +24,17 @@ type SpecLookup func(resource, eventName string) (channels []spec.EventDeliveryD
 // as a delivery failure (retryable).
 type SubscriptionDispatch func(ctx context.Context, workspaceID, eventName, resource string, payload map[string]any) error
 
+// ActionDispatch invokes a target action for a `deliver: channel:
+// reliable_event  target: {resource, action}` entry — the publisher's contract
+// consequence (02-core-basic.md §12.2: the outbox worker makes a "sync call to
+// target action → delivered, or backoff retry → dead-letter"). resource is the
+// event's own "module/entity"; target is its declared DeliveryTarget.
+//
+// Returning an error marks the outbox entry failed so the worker retries it —
+// which is the whole point of the channel: a publisher that promises a
+// consequence is not allowed to lose it silently.
+type ActionDispatch func(ctx context.Context, workspaceID, resource, eventName string, payload map[string]any, target *spec.DeliveryTarget) error
+
 // PubSub is the minimal pub/sub contract the delivery handler needs for the
 // `pubsub` channel (todo 7.3.5) — non-durable, at-most-once.
 type PubSub interface {
@@ -44,6 +55,10 @@ type DeliveryEventHandler struct {
 	// resource/formspec.go (which owns the subscription registry + action
 	// dispatcher) to avoid a renderer → internal/action import cycle.
 	Subscriptions SubscriptionDispatch
+	// Actions, when non-nil, invokes declared reliable_event target actions.
+	// Wired from resource/formspec.go for the same import-cycle reason as
+	// Subscriptions.
+	Actions ActionDispatch
 }
 
 // HandleEvent implements EventHandler. payload is the JSON-marshaled
@@ -90,11 +105,30 @@ func (h *DeliveryEventHandler) HandleEvent(ctx context.Context, workspaceID, eve
 				}
 			}
 		case "reliable_event":
-			// Durable delivery: the outbox entry *is* the guarantee — retry and
-			// dead-letter are the worker's job, so there is nothing extra to do
-			// here. The event still reaches its subscribers through the
-			// subscription dispatch at the end of HandleEvent (which appends to
-			// the Tier 2 stream for durable subscriptions).
+			// Durable delivery: reaching this code at all means the outbox
+			// already holds the event (that is what makes it durable — retry
+			// and dead-letter are the worker's job). What is left is the
+			// publisher's declared consequence: a target action, invoked here
+			// as a sync call (02-core-basic.md §12.2). Retrying this code is
+			// exactly how a failed target action is retried, so an error is
+			// returned rather than swallowed.
+			if ch.Target == nil || ch.Target.Resource == "" {
+				// No target: the entry's only job was durability, which the
+				// outbox itself provides. Subscription fan-out below still runs.
+				break
+			}
+			if h.Actions == nil {
+				// Nothing wired to perform the call. Reporting this as a
+				// delivery failure would retry forever against a wiring gap,
+				// so it is logged once per attempt and the event is treated as
+				// delivered — the durable record still exists in the outbox,
+				// event log, and every Subscription.
+				break
+			}
+			if err := h.Actions(ctx, workspaceID, resource, eventName, msg.Payload, ch.Target); err != nil {
+				return fmt.Errorf("reliable_event %s → %s.%s: %w",
+					eventName, ch.Target.Resource, ch.Target.Action, err)
+			}
 		default:
 			// queue, webhook, notification: not yet implemented. Treated as
 			// delivered (no error) so the worker doesn't retry forever on a

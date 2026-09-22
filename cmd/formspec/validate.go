@@ -93,18 +93,37 @@ func runValidate(args []string) {
 	// multi-origin transition — validates green while enforcing nothing.
 	workflowRejects := validateWorkflows(res.Manifests)
 
-	// ── Layer 1.5: cross-manifest scope-source validation (S5, kafe 1.8) ──
-	// `row_scope: {from: session}` without an explicit `attr` resolves to the
-	// entity's declared scope field. If nothing in the spec can ever produce that
-	// value, every read fails closed 403 forever — with the manifest looking
-	// correct. This layer is the only one that can tell the two apart.
-	scopeRejects := validateScopeSources(res.Manifests)
+// ── Layer 1.5: cross-manifest scope-source validation (S5, kafe 1.8) ──
+		// `row_scope: {from: session}` without an explicit `attr` resolves to the
+		// entity's declared scope field. If nothing in the spec can ever produce
+		// that value, every read fails closed 403 forever — with the manifest
+		// looking correct. This layer is the only one that can tell the two apart.
+		scopeRejects := validateScopeSources(res.Manifests)
+
+		// ── Layer 1.5: cross-manifest event deliver-target validation ──
+	// A `deliver: channel: reliable_event` names an action the outbox worker
+	// must call. A target that does not resolve validates green and then
+	// retries to dead-letter at runtime, so the consequence silently never
+	// happens (kafe's journal-reversed → gl-balance.reverse did exactly
+	// that).
+	eventTargetRejects := validateEventTargets(res.Manifests)
+	for src, msg := range eventTargetRejects {
+		if _, exists := integratorRejects[src]; !exists {
+			integratorRejects[src] = msg
+		}
+	}
 
 	// ── Layer 1.5: cross-manifest relation validation (gaps #11/#12, kafe 3.7) ──
 	// A relation whose target is unregistered (or in another persist category)
 	// cannot resolve, and the runtime guard used to *skip* such a reference
 	// instead of rejecting it — so a dangling reference passed silently.
 	relationRejects := validateRelations(res.Manifests)
+
+	// ── Layer 1.5: cross-manifest dangling-reference validation (gap #21, kafe 8.3) ──
+	// `App.spec.modules` must name declared modules, and `MenuItem.view` must
+	// name a registered view — otherwise the App mounts nothing / the menu
+	// navigates nowhere, silently.
+	danglingRejects := validateDanglingRefs(res.Manifests)
 
 	// ── Layer 1.6: Starlark honesty scan (todo 3.1.1a) ──
 	// Static analysis of script impls vs their declared `uses:` block:
@@ -204,6 +223,9 @@ func runValidate(args []string) {
 		}
 		if errMsg, ok := relationRejects[m.Source]; ok {
 			msgs = append(msgs, "relation: "+errMsg)
+		}
+		if errMsg, ok := danglingRejects[m.Source]; ok {
+			msgs = append(msgs, "reference: "+errMsg)
 		}
 		for _, iss := range honestyIssues {
 			if iss.Source == m.Source && iss.Severity == "error" {

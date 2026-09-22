@@ -365,6 +365,52 @@ type UnitDecl struct {
 	Base string `yaml:"base" json:"base"`
 	// @schema {description: "Units convertible to/from the base unit"}
 	Convertible []string `yaml:"convertible,omitempty" json:"convertible,omitempty"`
+	// Factors maps each convertible unit to how many base units one of it is
+	// (S12, item 4.6): `{kg: 1000}` means 1 kg = 1000 gram when base is gram.
+	// Without it, conversion cannot be computed — the declaration would say
+	// "these units are related" without saying how, which is exactly the
+	// "convention living in a script" the declaration exists to remove.
+	// Every `convertible` entry must have a factor, and the base unit must not.
+	Factors map[string]float64 `yaml:"factors,omitempty" json:"factors,omitempty"`
+}
+
+// Convert converts value from one unit to another within this declaration's
+// dimension (S12, item 4.6). Both units must be the base or a declared
+// convertible unit; a unit outside the group is an error (a different
+// dimension, not a silent no-op). The conversion goes through the base unit:
+// value_in_base = value * factor(from); result = value_in_base / factor(to).
+func (u *UnitDecl) Convert(value float64, from, to string) (float64, error) {
+	if u == nil {
+		return 0, fmt.Errorf("no unit declaration")
+	}
+	factorOf := func(unit string) (float64, error) {
+		if unit == u.Base {
+			return 1, nil
+		}
+		if f, ok := u.Factors[unit]; ok {
+			return f, nil
+		}
+		return 0, fmt.Errorf("unit %q is not convertible to/from base %q (declared: %v)", unit, u.Base, u.Convertible)
+	}
+	fromF, err := factorOf(from)
+	if err != nil {
+		return 0, err
+	}
+	toF, err := factorOf(to)
+	if err != nil {
+		return 0, err
+	}
+	return value * fromF / toF, nil
+}
+
+// containsString reports whether s is in list.
+func containsString(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }
 
 // FieldType is the data type of a field (Core §10.1, 05-field-types.md §1.1).
@@ -916,6 +962,23 @@ func ValidateEntitySpec(d *EntitySpec) error {
 			if f.Type == FieldEnum && !allowed[u] {
 				return fmt.Errorf("field %q: unit.convertible %q is not among enum_values %v", f.Name, u, f.EnumValues)
 			}
+			// S12 (item 4.6): every convertible unit needs a factor, otherwise
+			// conversion cannot be computed and the declaration is a claim
+			// nothing can act on.
+			if _, ok := f.Unit.Factors[u]; !ok {
+				return fmt.Errorf("field %q: unit.convertible %q has no factor — add unit.factors: {%s: <how many %s one %s is>}", f.Name, u, u, f.Unit.Base, u)
+			}
+		}
+		if _, ok := f.Unit.Factors[f.Unit.Base]; ok {
+			return fmt.Errorf("field %q: unit.factors must not include the base unit %q (its factor is 1 by definition)", f.Name, f.Unit.Base)
+		}
+		for u, factor := range f.Unit.Factors {
+			if factor <= 0 {
+				return fmt.Errorf("field %q: unit.factors[%q] must be positive, got %v", f.Name, u, factor)
+			}
+			if !containsString(f.Unit.Convertible, u) {
+				return fmt.Errorf("field %q: unit.factors[%q] is not listed in unit.convertible %v", f.Name, u, f.Unit.Convertible)
+			}
 		}
 	}
 
@@ -1012,11 +1075,32 @@ func ValidateEntitySpec(d *EntitySpec) error {
 		return err
 	}
 
+	// Transition→event link (S13): a transition's `emit` must name a declared
+	// event, so the link is verifiable rather than implied by naming.
+	if err := ValidateTransitionEmits(d.StateMachine, d.Events); err != nil {
+		return err
+	}
+
 	// Summary projection contract (Core Extended §6): if a summary entity
 	// declares a rebuild plan, it must name its sources and provide a valid
 	// strategy. The framework may also accept summary entities without explicit
 	// rebuild metadata until a projection engine is wired up.
 	if d.Characteristic == CharSummary {
+		// GAP-33 (TODO 4.2): summary entities are written by their maintainer
+		// script, never through the action pipeline — so `hooks:` and
+		// `conditions:` declared here would never run. Rejecting them is the
+		// honest answer: a manifest that *looks* protected but is not is worse
+		// than one that fails validation. The supported contract is
+		// `maintained_by` (who writes it) + `invariants` (what must hold, backed
+		// by a real unique index).
+		if len(d.Hooks) > 0 {
+			return fmt.Errorf("summary entity declares hooks, but summary writes never pass through the action pipeline so hooks would never run; use maintained_by + invariants instead (Core Extended §6.1)")
+		}
+		for _, a := range d.Actions {
+			if len(a.Conditions) > 0 {
+				return fmt.Errorf("summary entity action %q declares conditions, but summary writes never pass through the action pipeline so conditions would never run; use maintained_by + invariants instead (Core Extended §6.1)", a.Name)
+			}
+		}
 		if len(d.Sources) > 0 && d.JoinKey == "" {
 			return fmt.Errorf("summary entity sources declared without join_key")
 		}
@@ -1170,6 +1254,12 @@ type TransitionDecl struct {
 	To     string     `yaml:"to" json:"to"`
 	Action string     `yaml:"via" json:"via"`
 	Guard  *GuardDecl `yaml:"guard,omitempty" json:"guard,omitempty"`
+	// Emit names the event this transition publishes when it fires (S13). It
+	// makes the transition↔event link explicit instead of implied by naming:
+	// without it, nothing can verify that `order.paid` is actually emitted when
+	// the state machine reaches `paid` — including `formspec validate`. The
+	// name must reference a declared event on the same entity.
+	Emit string `yaml:"emit,omitempty" json:"emit,omitempty"`
 }
 
 // UnmarshalYAML accepts both the canonical `via:` key and the legacy `action:` alias.
@@ -1180,6 +1270,13 @@ func (t *TransitionDecl) UnmarshalYAML(value *yaml.Node) error {
 		Via    string     `yaml:"via"`
 		Action string     `yaml:"action"`
 		Guard  *GuardDecl `yaml:"guard"`
+		// Emit must be carried through this custom unmarshaler: without it, the
+		// S13 transition→event link silently vanished at load time — the
+		// manifest declared `emit: on_paid`, validate accepted it, and the
+		// runtime published nothing, because every load went through this
+		// method and dropped the field (found via the scenario-8 journal chain:
+		// the durable on_paid never reached the outbox).
+		Emit string `yaml:"emit"`
 	}
 	if err := value.Decode(&raw); err != nil {
 		return err
@@ -1187,6 +1284,7 @@ func (t *TransitionDecl) UnmarshalYAML(value *yaml.Node) error {
 	t.From = raw.From
 	t.To = raw.To
 	t.Guard = raw.Guard
+	t.Emit = raw.Emit
 	t.Action = raw.Via
 	if t.Action == "" {
 		t.Action = raw.Action
@@ -1276,6 +1374,11 @@ type HookDecl struct {
 	Event    string     `yaml:"event,omitempty" json:"event,omitempty"`   // event name or "*" — before_deliver/after_deliver only
 	Impl     *ImplDecl  `yaml:"impl" json:"impl"`
 	Priority int        `yaml:"priority,omitempty" json:"priority,omitempty"` // 0 → default 10
+	// Uses declares the hook script's own access (db, resources, config,
+	// primitives) — the same shape as an action's `uses` (Core Extended §8).
+	// Without it, a hook's access is invisible in the consent footprint, so a
+	// script could read/write resources the manifest never declared (#34).
+	Uses *UsesDecl `yaml:"uses,omitempty" json:"uses,omitempty"`
 }
 
 // ValidateHooks checks each hook's on/action/event shape against actions.
@@ -1344,8 +1447,34 @@ func ValidateActionEmits(actions []Action, events []EventDecl) error {
 	return nil
 }
 
+// ValidateTransitionEmits checks that every state-machine transition's `emit`
+// (if set) names a declared event on the same entity (S13). Without this the
+// transition↔event link is only implied by naming, so nothing — including
+// `formspec validate` — can confirm that `order.paid` is actually emitted when
+// the machine reaches `paid`.
+func ValidateTransitionEmits(sm *StateMachine, events []EventDecl) error {
+	if sm == nil {
+		return nil
+	}
+	for _, t := range sm.Transitions {
+		if t.Emit == "" {
+			continue
+		}
+		found := false
+		for _, e := range events {
+			if e.Name == t.Emit {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("transition %s->%s emits %q, which is not declared in events", t.From, t.To, t.Emit)
+		}
+	}
+	return nil
+}
+
 // ValidateEventDurability checks durability contract (2.4.3):
-// publisher non-durable + subscriber durable = validation error.
 // A subscriber is durable if any of its deliver channels use durable delivery
 // (reliable_event, queue, or websocket when the event is durable).
 func ValidateEventDurability(events []EventDecl) error {
@@ -1450,7 +1579,7 @@ type PayloadDecl struct {
 
 // EventDeliveryDecl is one delivery target of an event — its "consequence map" entry (§12).
 type EventDeliveryDecl struct {
-	Channel        string          `yaml:"channel" json:"channel"` // audit_log | websocket | queue | reliable_event
+	Channel        EventChannel    `yaml:"channel" json:"channel"` // audit_log | websocket | queue | reliable_event
 	Target         *DeliveryTarget `yaml:"target,omitempty" json:"target,omitempty"`
 	Job            string          `yaml:"job,omitempty" json:"job,omitempty"`
 	Retry          *RetryDecl      `yaml:"retry,omitempty" json:"retry,omitempty"`

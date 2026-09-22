@@ -36,7 +36,7 @@ spec:
     - name: closed_at
       type: datetime
       title: "Waktu Tutup"
-    # GAP-01 TERTUTUP (2.14): kas awal & uang hitung kini pakai `moneyinput` —
+    # Kas awal & uang hitung kini pakai `moneyinput` —
     # form tutup shift bisa diisi tanpa keluar dari numpad.
     - name: opening_cash
       type: money

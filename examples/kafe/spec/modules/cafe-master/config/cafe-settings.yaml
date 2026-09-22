@@ -5,11 +5,9 @@ metadata:
   module: cafe-master
   description: "Kunci konfigurasi kafe yang dapat diubah admin tanpa ubah spec (D7)"
 spec:
-  # ⚠️ DRIFT DOKUMEN (dicatat sebagai GAP-25).
-  # Skill `formspec-kinds` mendokumentasikan bentuk `spec.data:` — schema
-  # MENOLAKNYA (`additionalProperties: false`). Bentuk yang benar adalah
-  # `spec.keys:`, tiap kunci adalah objek {type, default, secret, public}.
-  # Kabar baiknya: berbeda dari GAP-18/GAP-21, kesalahan ini GAGAL KERAS.
+  # Bentuk yang benar adalah `spec.keys:` — tiap
+  # kunci adalah objek {type, default, secret, public}. Skill `formspec-kinds`
+  # dulu mendokumentasikan `spec.data:` (ditolak schema); kini dikoreksi.
   keys:
     # ── Pajak & service charge (keputusan user: diatur dari konfigurasi) ──
     # Nilai per cabang ada di entity `branch`; ini default saat cabang baru.

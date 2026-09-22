@@ -130,6 +130,32 @@ func (e *StateMachineEngine) findTransition(sm *spec.StateMachine, currentState,
 	return nil
 }
 
+// FindTransitionByStates locates the transition that leads from `fromState`
+// to `toState`, regardless of which state name it is declared with. It is the
+// reverse of the `via`-named lookup: the standard update path (PATCH) carries
+// the *target* state in the payload rather than a transition name, yet the
+// workflow engine selects its intercepts by transition name (S9) — and a
+// transition can have several origin states, so neither state nor name alone
+// identifies it. Without this reverse lookup, a workflow-guarded transition
+// reached via PATCH bypasses approval entirely (kafe TODO 9.4 scenario 6:
+// void of a paid order executed straight to `cancelled` with no 202).
+//
+// Returns nil when no transition connects the two states; the caller then
+// falls through to normal update handling, where the store's transition
+// validation produces the accurate error.
+func (e *StateMachineEngine) FindTransitionByStates(entitySpec *spec.EntitySpec, fromState, toState string) *spec.TransitionDecl {
+	if entitySpec == nil || entitySpec.StateMachine == nil {
+		return nil
+	}
+	for i := range entitySpec.StateMachine.Transitions {
+		t := &entitySpec.StateMachine.Transitions[i]
+		if t.To == toState && t.From.Matches(fromState) {
+			return t
+		}
+	}
+	return nil
+}
+
 // evaluateGuard evaluates a guard condition using the shared guard evaluator
 // (internal/starlark.EvaluateGuard — todo 7.5.4). The guard expression has
 // access to resource data fields directly, plus pre-computed sum_line_* /

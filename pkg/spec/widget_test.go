@@ -176,9 +176,85 @@ func TestValidateTableColumns(t *testing.T) {
 	}
 }
 
+// TestReportColumn_ClosedSets pins S16 (item 7.2): ReportColumn's aggregate and
+// format are closed sets, and it now carries a `widget` from the same set as
+// TableColumn — so a report can render a badge/boolean/image/qrcode, and a
+// format/aggregate the engine does not implement cannot be written.
+func TestReportColumn_ClosedSets(t *testing.T) {
+	// The declared sets are non-empty and match what the renderer implements.
+	if len(ReportAggregateValues()) == 0 || len(ReportFormatValues()) == 0 {
+		t.Fatal("aggregate/format sets must not be empty")
+	}
+	for _, a := range []string{"sum", "avg", "count", "min", "max"} {
+		if !IsReportAggregate(a) {
+			t.Errorf("IsReportAggregate(%q) = false, want true", a)
+		}
+	}
+	if IsReportAggregate("median") {
+		t.Error("IsReportAggregate(\"median\") = true, want false (not in the closed set)")
+	}
+	for _, f := range []string{"currency", "date", "datetime", "percentage"} {
+		if !IsReportFormat(f) {
+			t.Errorf("IsReportFormat(%q) = false, want true", f)
+		}
+	}
+	if IsReportFormat("relative") {
+		t.Error("IsReportFormat(\"relative\") = true, want false (not in the closed set)")
+	}
+
+	// ReportColumn now accepts a widget from the table-cell set.
+	col := ReportColumn{Field: "status", Label: "Status", Widget: WidgetBadge}
+	if col.Widget != WidgetBadge {
+		t.Errorf("ReportColumn.Widget = %q, want badge", col.Widget)
+	}
+}
+
+// TestS10_RemainingClosedSets pins item 8.5: the remaining free-string
+// properties are now closed sets, so a typo cannot silently do nothing.
+func TestS10_RemainingClosedSets(t *testing.T) {
+	// ReportParam.type
+	for _, v := range []string{"text", "date", "datetime", "select", "relation"} {
+		if !IsReportParamType(v) {
+			t.Errorf("IsReportParamType(%q) = false, want true", v)
+		}
+	}
+	if IsReportParamType("daterange") {
+		t.Error("IsReportParamType(\"daterange\") = true, want false")
+	}
+
+	// EventDeliveryDecl.channel
+	for _, v := range []string{"audit_log", "websocket", "queue", "reliable_event"} {
+		if !IsEventChannel(v) {
+			t.Errorf("IsEventChannel(%q) = false, want true", v)
+		}
+	}
+	if IsEventChannel("sms") {
+		t.Error("IsEventChannel(\"sms\") = true, want false")
+	}
+
+	// PrintOutput.format
+	for _, v := range []string{"pdf", "thermal", "dotmatrix", "html"} {
+		if !IsPrintFormat(v) {
+			t.Errorf("IsPrintFormat(%q) = false, want true", v)
+		}
+	}
+	if IsPrintFormat("docx") {
+		t.Error("IsPrintFormat(\"docx\") = true, want false")
+	}
+
+	// WorkflowStep.mode
+	for _, v := range []string{"all", "any", "sequential"} {
+		if !IsWorkflowStepMode(v) {
+			t.Errorf("IsWorkflowStepMode(%q) = false, want true", v)
+		}
+	}
+	if IsWorkflowStepMode("quorum") {
+		t.Error("IsWorkflowStepMode(\"quorum\") = true, want false")
+	}
+}
+
 func TestValidateFormSections(t *testing.T) {
-	sections := []FormSection{{
-		Title: "Main",
+	sections := []FormSection{{Title: "Main",
 		Fields: []FormField{
 			{Field: "code", Widget: WidgetInput},
 			{Field: "status", Widget: WidgetSelect},

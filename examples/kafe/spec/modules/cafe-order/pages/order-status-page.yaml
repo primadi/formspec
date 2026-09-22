@@ -6,7 +6,7 @@ metadata:
   description: "Halaman status pesanan pelanggan — diakses lewat token tamu di URL"
 spec:
   # Token tamu ada di URL, bukan di sesi: pelanggan tidak punya akun
-  # (aturan bisnis #3). Lihat catatan GAP-06 di bawah.
+  # (aturan bisnis #3). Lihat catatan di bawah.
   route: /status/:guest_token
   title: "Status Pesanan"
   # `public: true` supaya halaman ini tetap anonim walau App-nya private.
@@ -20,7 +20,7 @@ spec:
         # klien tidak bisa menghilangkannya, dan permintaan tanpa token ditolak.
         ref: order-table-customer
         param: { guest_token: ":guest_token" }
-  # GAP-06 TERTUTUP untuk halaman ini (2.2): allowlist publik per-entity (1.2)
+  # Allowlist publik per-entity (1.2)
   # + scoping per-record yang ditegakkan server. Sebelumnya token di URL hanya
   # menyaring tampilan, sementara API-nya terbuka; sekarang nilai token dibaca
   # engine dari query dan baris di luar token itu tidak pernah terkirim.

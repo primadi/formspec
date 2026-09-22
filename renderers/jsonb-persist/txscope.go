@@ -40,6 +40,13 @@ func (s *TxScope) Peek(base DB) (DB, bool) {
 	return s.peek(base)
 }
 
+// Join is the exported form of join, for callers outside this package that
+// need to open (or reuse) the scope's transaction — e.g. tests, and any
+// adapter that must run on the action's connection rather than the pool.
+func (s *TxScope) Join(ctx context.Context, base DB) (DB, error) {
+	return s.join(ctx, base)
+}
+
 // join is the WRITE path: lazily opens a transaction on base on first
 // call; a later call with the SAME base reuses it. A call with a
 // DIFFERENT base returns ErrCrossStoreTx.

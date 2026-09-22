@@ -224,3 +224,56 @@ func TestStateField(t *testing.T) {
 		t.Errorf("expected '' for nil spec, got %q", f)
 	}
 }
+
+// TestFindTransitionByStates pins the reverse lookup used by the standard
+// update path (PATCH): a transition is identified by its `via` name in
+// workflows (S9), but the update payload carries only the target state — and a
+// transition may declare several origin states, so neither name nor state
+// alone identifies it. Without this lookup a workflow guarding such a
+// transition is never consulted on PATCH (kafe TODO 9.4 scenario 6).
+func TestFindTransitionByStates(t *testing.T) {
+	e := &StateMachineEngine{}
+	spec2 := &spec.EntitySpec{
+		StateMachine: &spec.StateMachine{
+			Field:   "status",
+			Initial: "draft",
+			Transitions: []spec.TransitionDecl{
+				{From: spec.StateList{"draft"}, To: "awaiting_payment", Action: "submit-order"},
+				{From: spec.StateList{"awaiting_payment"}, To: "paid", Action: "confirm-payment"},
+				// Multi-origin transition: void from four different states.
+				{From: spec.StateList{"paid", "in_kitchen", "ready", "served"}, To: "cancelled", Action: "void-order"},
+			},
+		},
+	}
+
+	cases := []struct {
+		from, to, want string
+	}{
+		{"paid", "cancelled", "void-order"},
+		// S9's reason for existing: void from ANY origin state resolves to the
+		// same named transition.
+		{"in_kitchen", "cancelled", "void-order"},
+		{"served", "cancelled", "void-order"},
+		{"awaiting_payment", "paid", "confirm-payment"},
+		// Not a transition at all → nil, falls through to the store's accurate
+		// transition error.
+		{"completed", "cancelled", ""},
+		{"paid", "in_kitchen", ""},
+	}
+	for _, c := range cases {
+		got := e.FindTransitionByStates(spec2, c.from, c.to)
+		if c.want == "" {
+			if got != nil {
+				t.Errorf("FindTransitionByStates(%s, %s) = %s, want nil", c.from, c.to, got.Action)
+			}
+			continue
+		}
+		if got == nil || got.Action != c.want {
+			t.Errorf("FindTransitionByStates(%s, %s) = %v, want %q", c.from, c.to, got, c.want)
+		}
+	}
+
+	if got := e.FindTransitionByStates(nil, "paid", "cancelled"); got != nil {
+		t.Errorf("nil spec must yield nil, got %v", got)
+	}
+}

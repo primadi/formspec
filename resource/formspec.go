@@ -30,6 +30,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io/fs"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -944,8 +945,13 @@ func New(cfg Config) (*App, error) {
 		Lookup:        eventChannelLookup,
 		PubSub:        sharedPubSub,
 		Subscriptions: composedDispatch,
+		Actions:       newTargetActionDispatch(reg, svcReg, disp),
 	}
 	outboxWorker := db.NewOutboxWorker(outboxStore, deliveryHandler)
+	// Actions reached through resource.call() (a subscription handler calling
+	// another module's action) publish their declared events through the outbox
+	// — the HTTP path's emission resolution has no counterpart on that path.
+	disp.SetEventEmitter((&eventWiring{store: outboxStore}).emit)
 
 	idempotencyStore := db.NewIdempotencyStore(database, driver).WithTTL(cfg.IdempotencyTTL)
 	// Wire the idempotency store into the router so idempotent actions are
@@ -1360,9 +1366,9 @@ func (a *App) ReloadSpec() error {
 	outboxStore := db.NewOutboxStore(a.database, a.driver)
 	eventLogStore := db.NewEventLogStore(a.database, a.driver)
 	newRB.SetDeliveryDeps(action.DeliveryDeps{Hub: oldHub, Outbox: outboxStore, EventLog: eventLogStore})
-
-	// Re-point the outbox worker's subscription + integrator dispatch (todo
-	// 7.3.1/7.7.1) to dispatchers built from the freshly reloaded registries —
+	// Keep resource.call()-driven event publication alive across a reload
+	// (see the boot-path comment on the same call).
+	newDisp.SetEventEmitter((&eventWiring{store: outboxStore}).emit)
 	// without recreating the worker, so in-flight outbox draining is
 	// uninterrupted.
 	var newStreamingWorker *subscription.StreamingWorker
@@ -1385,6 +1391,10 @@ func (a *App) ReloadSpec() error {
 			}
 			return nil
 		}
+		// Re-point reliable_event target-action dispatch at the freshly reloaded
+		// registries, so a changed `deliver: target` (and any action it names)
+		// takes effect without a restart.
+		a.deliveryHandler.Actions = newTargetActionDispatch(newReg, newSvcReg, newDisp)
 		// Rebuild the streaming worker (todo 7.3.2) so new durable
 		// subscriptions take effect. The stream backend is reused — its
 		// consumer groups and pending entries persist across reloads.
@@ -1873,7 +1883,7 @@ func newDispatcher(reg *entity.Registry, svcReg *service.Registry, _ db.DB, cfg 
 		})
 		return err
 	})
-	scriptEx.SetCallHandler(func(ctx context.Context, workspaceID, fromModule, targetModule, targetEntity, actionName string, params map[string]any, callerResources []string) (any, error) {
+	scriptEx.SetCallHandler(func(ctx context.Context, workspaceID, fromModule, targetModule, targetEntity, targetID, actionName string, params map[string]any, callerResources []string) (any, error) {
 		if targetModule == "" {
 			targetModule = fromModule
 		}
@@ -1887,24 +1897,72 @@ func newDispatcher(reg *entity.Registry, svcReg *service.Registry, _ db.DB, cfg 
 				return invokeServiceAction(ctx, svcReg, disp, workspaceID, targetModule, targetEntity, actionName, params)
 			}
 		}
-		return invokeAction(ctx, reg, disp, workspaceID, targetModule, targetEntity, actionName, "", params)
+		return invokeAction(ctx, reg, disp, workspaceID, targetModule, targetEntity, actionName, targetID, params)
 	})
-	scriptEx.SetLoadHandler(func(ctx context.Context, workspaceID, fromModule, module, entityName, id string, callerResources []string) (map[string]any, int, error) {
+	scriptEx.SetLoadHandler(func(ctx context.Context, workspaceID, fromModule, module, entityName, id string, callerResources []string) (map[string]any, int, string, error) {
 		if err := checkCrossModuleUses(fromModule, module, entityName, callerResources); err != nil {
-			return nil, 0, err
+			return nil, 0, "", err
 		}
 		store, err := reg.GetEntityStore(module, entityName)
 		if err != nil {
-			return nil, 0, fmt.Errorf("get store: %w", err)
+			return nil, 0, "", fmt.Errorf("get store: %w", err)
 		}
 		rec, err := store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: id})
 		if err != nil {
-			return nil, 0, err
+			return nil, 0, "", err
 		}
 		if rec == nil {
-			return nil, 0, fmt.Errorf("record not found")
+			return nil, 0, "", fmt.Errorf("record not found")
 		}
-		return rec.Data, rec.Version, nil
+		// Return the resolved record ID: a request by natural key comes back
+		// with the record's real UUID identity, which the data map does not
+		// carry (the id is a table column, not a field).
+		return rec.Data, rec.Version, rec.ID, nil
+	})
+	scriptEx.SetFindHandler(func(ctx context.Context, workspaceID, fromModule, module, entityName string, match map[string]any, callerResources []string) (map[string]any, int, string, error) {
+		if err := checkCrossModuleUses(fromModule, module, entityName, callerResources); err != nil {
+			return nil, 0, "", err
+		}
+		store, err := reg.GetEntityStore(module, entityName)
+		if err != nil {
+			return nil, 0, "", fmt.Errorf("get store: %w", err)
+		}
+		rec, err := store.FindByFields(ctx, workspaceID, match)
+		if err != nil {
+			return nil, 0, "", err
+		}
+		if rec == nil {
+			return nil, 0, "", nil // no match — resource.find() returns None
+		}
+		// Same as above: the caller addresses this record by its id (e.g.
+		// resource.call("gl.journal-entry.<id>", "post")), so hand back the
+		// real column value rather than expecting it in Data.
+		return rec.Data, rec.Version, rec.ID, nil
+	})
+	scriptEx.SetUpsertHandler(func(ctx context.Context, workspaceID, fromModule, module, entityName string, match, data map[string]any, callerResources []string) (string, bool, error) {
+		if err := checkCrossModuleUses(fromModule, module, entityName, callerResources); err != nil {
+			return "", false, err
+		}
+		info, ok := reg.GetEntity(module, entityName)
+		if !ok || info.EntitySpec == nil {
+			return "", false, fmt.Errorf("entity %s.%s is not registered", module, entityName)
+		}
+		// The ONE authorization rule for writing a summary projection: the
+		// running script must be the entity's declared maintainer. Any other
+		// script (or a non-script caller) is refused — summary stays read-only
+		// for everyone else (02-core-extended.md §6.1).
+		maintainer := info.EntitySpec.MaintainedBy
+		if maintainer == "" {
+			return "", false, fmt.Errorf("summary entity %s.%s declares no maintained_by — resource.upsert is only for maintained projections", module, entityName)
+		}
+		if scriptEx.MaintainerRef() != maintainer {
+			return "", false, fmt.Errorf("resource.upsert(%s.%s): only the maintainer script %q may write this projection (caller is %q)", module, entityName, maintainer, scriptEx.MaintainerRef())
+		}
+		store, err := reg.GetEntityStore(module, entityName)
+		if err != nil {
+			return "", false, fmt.Errorf("get store: %w", err)
+		}
+		return store.UpsertProjection(ctx, workspaceID, match, data)
 	})
 	scriptEx.SetCreateHandler(func(ctx context.Context, workspaceID, fromModule, module, entityName string, data map[string]any, callerResources []string) (string, error) {
 		if err := checkCrossModuleUses(fromModule, module, entityName, callerResources); err != nil {
@@ -1922,6 +1980,23 @@ func newDispatcher(reg *entity.Registry, svcReg *service.Registry, _ db.DB, cfg 
 	})
 	scriptEx.SetNextKeyHandler(func(ctx context.Context, workspaceID, module, entityName, fieldName, scope string) (string, error) {
 		return generateNextKey(ctx, reg, workspaceID, module, entityName, fieldName, scope)
+	})
+	scriptEx.SetUnitConvertHandler(func(ctx context.Context, workspaceID, fromModule, entityName, field string, value float64, from, to string) (float64, error) {
+		info, ok := reg.GetEntity(fromModule, entityName)
+		if !ok {
+			return 0, fmt.Errorf("ctx.unit.convert: entity %s.%s is not registered", fromModule, entityName)
+		}
+		for i := range info.EntitySpec.Fields {
+			f := &info.EntitySpec.Fields[i]
+			if f.Name != field {
+				continue
+			}
+			if f.Unit == nil {
+				return 0, fmt.Errorf("ctx.unit.convert: field %q on %s.%s declares no unit dimension", field, fromModule, entityName)
+			}
+			return f.Unit.Convert(value, from, to)
+		}
+		return 0, fmt.Errorf("ctx.unit.convert: field %q not found on %s.%s", field, fromModule, entityName)
 	})
 	disp.RegisterExecutor(spec.ImplScript, scriptEx)
 	disp.RegisterExecutor(spec.ImplScriptRef, scriptEx)
@@ -2015,6 +2090,15 @@ func invokeAction(ctx context.Context, reg *entity.Registry, disp *action.Dispat
 		}
 	}
 
+	// Capture the state BEFORE dispatch: the action's script typically sets the
+	// target state, and a transition-declared `emit` only fires when the state
+	// actually crossed (S13) — reading it afterwards would compare `to` with
+	// itself and publish nothing.
+	preState := ""
+	if spec := entitySpecOrNil(reg, module, entityName); spec != nil && spec.StateMachine != nil {
+		preState = stateFieldValue(spec.StateMachine, resourceData)
+	}
+
 	result, err := disp.Dispatch(ctx, *actionSpec, action.ExecuteParams{
 		Module:          module,
 		Entity:          entityName,
@@ -2028,7 +2112,161 @@ func invokeAction(ctx context.Context, reg *entity.Registry, disp *action.Dispat
 	if err != nil {
 		return nil, err
 	}
+
+	// Publish the events this action declares. Without this, an event
+	// (journal-posted) emitted by an action reached through resource.call was
+	// simply never published: the HTTP path resolves emissions in
+	// internal/api/handler.go, and that resolution had no counterpart here, so
+	// the journal posted successfully while its gl-balance projection silently
+	// never updated.
+	if disp.EventEmitter != nil {
+		if spec := entitySpecOrNil(reg, module, entityName); spec != nil {
+			postState := preState
+			if spec.StateMachine != nil {
+				postState = stateFieldValue(spec.StateMachine, resourceData)
+			}
+			// A transition that declares `emit` publishes when the state
+			// crossed; an action that declares `emits` publishes when it ran.
+			var emitted *action.EventEmission
+			if spec.StateMachine != nil && preState != postState {
+				if e := action.ResolveTransitionEmission(spec.StateMachine, spec.Events, preState, postState, resourceID, resourceData); e != nil {
+					emitted = e
+				}
+			}
+			if emitted == nil {
+				emitted = action.ResolveEmission(spec.Events, actionSpec.Emits, resourceID, resourceData)
+			}
+			if emitted != nil {
+				// The record id belongs in the payload: it lives in its own
+				// column, so a subscriber cannot otherwise tell which record the
+				// event is about (the GL journal stores it as source_id).
+				if resourceID != "" {
+					body := make(map[string]any, len(emitted.Payload)+1)
+					for k, v := range emitted.Payload {
+						body[k] = v
+					}
+					if _, ok := body["id"]; !ok {
+						body["id"] = resourceID
+					}
+					emitted.Payload = body
+				}
+				disp.EventEmitter(ctx, workspaceID, module+"/"+entityName, *emitted)
+			}
+		}
+	}
 	return result.Data, nil
+}
+
+// eventWiring publishes events for actions invoked through resource.call() —
+// the dispatch path a subscription handler uses when it calls another module's
+// action (gl/journalize → gl.journal-entry.post). The HTTP path publishes
+// through the handler factory; this path has no handler, so it writes each
+// durable emission to the outbox, which already retries, backs off, and
+// dead-letters.
+//
+// Publication is best-effort BY DESIGN: the action has already committed. A
+// publish failure is logged rather than returned, because returning it would
+// tell the caller their action failed when nothing rolled back.
+type eventWiring struct {
+	store *db.OutboxStore
+}
+
+// emit queues one emission. The outbox worker (already running) delivers it on
+// its next poll, so there is no separate delivery path to keep in sync.
+func (w *eventWiring) emit(ctx context.Context, workspaceID, resource string, ev action.EventEmission) {
+	if w == nil || w.store == nil {
+		return
+	}
+	if !ev.Durable {
+		// Non-durable events have no outbox contract (publish.durable is what
+		// makes an event outlive the process). They are pushed by the HTTP
+		// path's best-effort fan-out; from here, skipping is honest — the
+		// consumer-facing guarantee for a non-durable event is at-most-once.
+		return
+	}
+	msg, err := action.BuildEventMessage(resource, ev)
+	if err != nil {
+		log.Printf("[event] build message for %s/%s failed: %v", resource, ev.Name, err)
+		return
+	}
+	if _, err := w.store.Enqueue(ctx, workspaceID, ev.Name, resource, string(msg)); err != nil {
+		log.Printf("[event] enqueue %s/%s failed: %v", resource, ev.Name, err)
+	}
+}
+
+// newTargetActionDispatch performs the `deliver: channel: reliable_event
+// target: {resource, action}` call — the publisher's declared consequence
+// (02-core-basic.md §12.2: "poll pending → idempotency check → sync call to
+// target action → delivered, or backoff retry → dead-letter").
+//
+// A target's resource is written "module.entity" in the manifest, while the
+// action dispatcher addresses entities as (module, entity); both spellings are
+// accepted, and a bare name is resolved as a same-module target (the event's
+// own module) so a manifest need not repeat it.
+//
+// The payload is passed as the action's params unchanged: the publisher
+// declared `payload.fields`, so what a consequence receives is exactly the
+// projection the publisher promised — nothing is inferred from the record.
+func newTargetActionDispatch(reg *entity.Registry, svcReg *service.Registry, disp *action.Dispatcher) db.ActionDispatch {
+	return func(ctx context.Context, workspaceID, resource, eventName string, payload map[string]any, target *spec.DeliveryTarget) error {
+		if target == nil || target.Resource == "" || target.Action == "" {
+			return fmt.Errorf("reliable_event target needs both `resource` and `action`")
+		}
+
+		module, entityName := splitResourceRef(target.Resource, resource)
+
+		// A target may be either a Service (stateless) or an Entity action —
+		// the same two shapes resource.call() resolves, resolved the same way.
+		if svcReg != nil {
+			if _, ok := svcReg.Get(module, entityName); ok {
+				_, err := invokeServiceAction(ctx, svcReg, disp, workspaceID, module, entityName, target.Action, payload)
+				return err
+			}
+		}
+		// No resourceID: the consequence addresses the collection, since a
+		// payload carries an id but not necessarily the record the action
+		// should run against. An action needing one reads it from params.
+		_, err := invokeAction(ctx, reg, disp, workspaceID, module, entityName, target.Action, "", payload)
+		return err
+	}
+}
+
+// splitResourceRef resolves a declared target resource ("module.entity") to
+// (module, entity). The event's own resource ("module/entity") supplies the
+// module for a bare name, and is the fallback when the reference carries no
+// dot — so `target: {resource: journal-entry}` means the event's own module.
+func splitResourceRef(ref, eventResource string) (module, entity string) {
+	eventModule, _, _ := strings.Cut(eventResource, "/")
+	if i := strings.IndexByte(ref, '.'); i >= 0 {
+		return ref[:i], ref[i+1:]
+	}
+	return eventModule, ref
+}
+
+// entitySpecOrNil looks up an entity's spec, returning nil when the registry
+// cannot supply one.
+func entitySpecOrNil(reg *entity.Registry, module, entityName string) *spec.EntitySpec {
+	info, ok := reg.GetEntity(module, entityName)
+	if !ok || info.EntitySpec == nil {
+		return nil
+	}
+	return info.EntitySpec
+}
+
+// stateFieldValue reads the state machine's field out of record data as a
+// string ("" when unset). Mirrors the same-named helper in
+// internal/api/handler.go — the two packages cannot share it without an
+// import cycle, and it is small enough that duplicating it is cheaper than
+// moving it into a third package.
+func stateFieldValue(sm *spec.StateMachine, data map[string]any) string {
+	if sm == nil || data == nil {
+		return ""
+	}
+	v, ok := data[sm.Field]
+	if !ok || v == nil {
+		return ""
+	}
+	return fmt.Sprintf("%v", v)
 }
 
 // invokeServiceAction dispatches a stateless Service action (todo 7.1.2/7.1.3).

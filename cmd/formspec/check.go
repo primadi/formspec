@@ -478,7 +478,7 @@ func checkAggregates(result *checkResult, idx *entityIndex, manifests []manifest
 					continue
 				}
 				where := fmt.Sprintf("Report %q column %q", m.Metadata.Name, col.Field)
-				checkAggregateDecl(result, idx, m, entityRef, where, col.Aggregate, col.Field)
+				checkAggregateDecl(result, idx, m, entityRef, where, string(col.Aggregate), col.Field)
 			}
 			for _, total := range rs.Totals {
 				where := fmt.Sprintf("Report %q total %q", m.Metadata.Name, total.Label)

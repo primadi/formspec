@@ -60,6 +60,13 @@ const (
 	ChangeRawDDLAdded     ChangeKind = "raw_ddl_added"
 	ChangeRawDDLChanged   ChangeKind = "raw_ddl_changed"
 	ChangeRawDDLRemoved   ChangeKind = "raw_ddl_removed"
+	// ChangeStorageDrift marks a database whose *storage* no longer matches the
+	// manifest while the manifest itself is unchanged — an index whose
+	// definition was never rebuilt after it changed (kafe TODO 3.9), or a
+	// derived column that exists as a plain column instead of a generated one
+	// (kafe TODO 3.11). It is not a difference in the snapshot diff at all; it
+	// is discovered by looking at the database.
+	ChangeStorageDrift ChangeKind = "storage_drift"
 )
 
 // Change is one difference between the applied schema and the manifest, rated
@@ -238,19 +245,37 @@ func derivedColumnFields(entity *spec.EntitySpec) []string {
 		indexDecls = append(indexDecls, entity.Persist.Indexes...)
 	}
 
+	byName := make(map[string]spec.Field, len(entity.Fields))
 	for _, f := range entity.Fields {
+		byName[f.Name] = f
+	}
+
+	for _, f := range entity.Fields {
+		// A tombstoned field is being removed on purpose: keeping it in the
+		// derived-column set makes the additive step re-add its column right
+		// after the removal step dropped it, and the plan never converges
+		// (observed on the PG round-trip: apply → drop, plan → re-add).
+		if f.Removed {
+			continue
+		}
 		if f.Index || f.Unique || f.NaturalKey {
 			mark(f)
 		}
 		if f.Relation != nil && f.Relation.ForeignKey != "" && (f.Index || f.Unique) {
 			mark(f)
 		}
+		// A scoped natural key restarts per scope, so its uniqueness index
+		// covers the scope column too: `(tenant_id, _branch_id, _number)` (3.6).
+		// The scope field therefore needs a real column of its own — without
+		// this, a table created before the scope was declared fails the index
+		// rebuild with `no such column: _branch_id` (kafe TODO 3.9).
+		if f.NaturalKey && f.NaturalKeyRule != nil && f.NaturalKeyRule.ScopeField != "" {
+			if scope, ok := byName[f.NaturalKeyRule.ScopeField]; ok {
+				mark(scope)
+			}
+		}
 	}
 
-	byName := make(map[string]spec.Field, len(entity.Fields))
-	for _, f := range entity.Fields {
-		byName[f.Name] = f
-	}
 	for _, idx := range indexDecls {
 		for _, fn := range indexDeclFields(idx, byName) {
 			if f, ok := byName[fn]; ok {

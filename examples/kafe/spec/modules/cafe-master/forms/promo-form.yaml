@@ -40,7 +40,7 @@ spec:
         - { field: start_date }
         - { field: end_date }
         - { field: days_of_week, help: "Array angka: 1=Senin .. 7=Minggu. Kosongkan untuk setiap hari." }
-        # GAP-01 TERTUTUP (2.14): `time` memakai `timeinput` — jam happy hour
+        # `time` memakai `timeinput` — jam happy hour
         # diisi lewat kontrol waktu, bukan teks bebas.
         - { field: time_from, label: "Jam Mulai" }
         - { field: time_to, label: "Jam Selesai" }

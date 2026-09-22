@@ -99,6 +99,50 @@ func TestValidateWorkflows_RejectsPartialStatePair(t *testing.T) {
 	}
 }
 
+// TestValidateWorkflows_DisplayFieldsMustExist pins S15 (item 5.3): a step's
+// display_fields must name real fields of the workflow's entity. A typo would
+// render an empty column in the ApprovalInbox — the approver sees nothing to
+// decide on, which reads as "no data" rather than "typo".
+func TestValidateWorkflows_DisplayFieldsMustExist(t *testing.T) {
+	withDisplay := func(fields ...string) manifest.RawManifest {
+		raw := make([]any, 0, len(fields))
+		for _, f := range fields {
+			raw = append(raw, f)
+		}
+		return manifest.RawManifest{
+			APIVersion: "formspec.dev/v1",
+			Kind:       "Workflow",
+			Source:     "void.yaml",
+			Metadata:   manifest.RawMetadata{Name: "order-void-approval", Module: "cafe-order"},
+			Spec: map[string]any{
+				"entity": "cafe-order.order",
+				"on":     map[string]any{"transition": map[string]any{"name": "void-order"}},
+				"steps": []any{map[string]any{
+					"roles":          []any{"cafe-order.supervisor"},
+					"display_fields": raw,
+				}},
+			},
+		}
+	}
+
+	// `status` and `transaction_date` are declared on the entity — accepted.
+	ok := []manifest.RawManifest{multiOriginEntity(), withDisplay("status", "transaction_date")}
+	if rejects := validateWorkflows(ok); len(rejects) != 0 {
+		t.Fatalf("expected declared display_fields to be accepted, got %v", rejects)
+	}
+
+	// `void_reason` is not declared — rejected, naming the field.
+	bad := []manifest.RawManifest{multiOriginEntity(), withDisplay("void_reason")}
+	rejects := validateWorkflows(bad)
+	msg, found := rejects["void.yaml"]
+	if !found {
+		t.Fatalf("expected rejection of an unknown display field, got %v", rejects)
+	}
+	if !strings.Contains(msg, "void_reason") {
+		t.Errorf("error %q should name the unknown field", msg)
+	}
+}
+
 // TestValidateWorkflows_AcceptsSingleOriginStatePair guards against
 // over-rejection: the majority of existing workflows use from/to legitimately.
 func TestValidateWorkflows_AcceptsSingleOriginStatePair(t *testing.T) {

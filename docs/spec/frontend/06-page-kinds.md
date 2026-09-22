@@ -756,6 +756,26 @@ PersistBackend, [`../backend/02-core-extended.md`](../backend/02-core-extended.m
 ([`../backend/01-core-basic.md`](../backend/01-core-basic.md) §5 `call:
 async`); file mendarat di download tray.
 
+**`ReportColumn` vs `TableColumn` (S16).** Keduanya menggambarkan satu kolom,
+tetapi hidup di kind yang berbeda dan **tidak** saling menyalin. Perbedaannya
+dinyatakan berdampingan supaya penulis spec tidak menyalin bentuk satu ke yang
+lain:
+
+| Properti                             | `TableColumn` | `ReportColumn` |
+| ------------------------------------ | ------------- | -------------- |
+| `field`, `label`                     | ✅            | ✅             |
+| `format`                             | ✅ (bebas)    | ✅ **enum** (`currency`/`date`/`datetime`/`percentage`) |
+| `aggregate`                          | —             | ✅ **enum** (`sum`/`avg`/`count`/`min`/`max`) |
+| `widget`                             | ✅            | ✅ (set yang sama) |
+| `sortable`, `width`, `align`, `link` | ✅            | —              |
+
+`ReportColumn.aggregate` dan `.format` adalah **himpunan tertutup** — setiap
+nama diimplementasikan engine/renderer, jadi agregat atau format yang tidak
+dikenal tidak bisa ditulis (dulu string bebas, sehingga salah ketik lolos dan
+mencetak nilai mentah). `ReportColumn.widget` memakai set yang sama dengan
+`TableColumn.widget` (`badge`/`boolean`/`image`/`qrcode`), sehingga laporan bisa
+menampilkan badge atau QR, bukan hanya nilai mentah.
+
 > **Open — `source.filter`.** Filter parameterized deklaratif (`source:
 { entity, filter }` dengan `":param"` placeholder) belum didukung skema —
 > parameter saat ini dikirim sebagai filter query `?<field>=<value>` per
@@ -796,6 +816,44 @@ stylesheet `@media print` disuntik renderer (menyembunyikan navigasi global);
 kertas custom (`custom: { width, height, unit }`) divalidasi saat `formspec
 validate`. Print programatik: `ctx.print(entity_id, "receipt")` — pemilihan
 format per-manifest Print, bukan per-panggilan.
+
+#### Body item `qrcode`
+
+Dokumen cetak bisa memuat QR — kartu meja, struk digital, tiket antrean:
+
+```yaml
+body:
+  - totals: { field: total_amount, format: currency }
+  - qrcode:
+      payload: "/status/{guest_token}" # `{dotted.path}` — sama seperti header/footer
+      label: "Scan untuk struk digital"
+      absolute: true # origin dokumen ditambahkan di depan
+      size_mm: 30 # default 30
+```
+
+- **`payload` adalah payload, bukan nama field.** Boleh satu token
+  (`"{qr_token}"`) atau URL relatif; token `{dotted.path}` diinterpolasi dari
+  record yang dicetak.
+- **`absolute: true`** menambahkan **origin dokumen yang sedang dicetak** —
+  browser memakai origin halaman (`format: html`), pipeline server memakai
+  scheme+host permintaan (header `X-Forwarded-Proto`/`-Host` dihormati). Origin
+  adalah pengetahuan deployment, bukan data record, jadi ia tidak disimpan di
+  entity; payload yang sudah berupa URL absolut dibiarkan apa adanya.
+- **Token yang tidak ter-resolve = elemen dihilangkan.** Order yang dibuat di
+  kasir tidak punya token tamu, jadi struknya tercetak tanpa QR — lebih baik
+  daripada mencetak kode yang menuju `/status/` dan tampak berfungsi. `payload`
+  yang kosong secara literal ditolak schema (`minLength: 1`), karena itu cacat
+  manifest, bukan cacat data.
+- Ketiga pipeline merender: `html` (klien, SVG), `pdf` (PNG ditanam di halaman),
+  `thermal` (perintah QR native ESC/POS `GS ( k` — bukan raster, jadi tetap
+  tajam). Di thermal, `size_mm` dipetakan ke **module size** (dot per modul),
+  karena kertas 58mm tidak punya presisi milimeter.
+
+**Nilai `money` diformat, bukan di-stringify.** Field dan `totals` bertipe money
+adalah objek `{amount, currency}`; dokumen cetak menampilkannya sebagai
+`Rp62.500` — simbol dan pengelompokan mengikuti `settings.currency` +
+`settings.locale`, sama seperti permukaan lain. Angka biasa (mis. `quantity`)
+tidak pernah diperlakukan sebagai uang.
 
 ## 9. `timeline` / `timeseries`
 

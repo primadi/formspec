@@ -828,7 +828,10 @@ func (f *HandlerFactory) HandleCreate(module, entity string) http.HandlerFunc {
 		// row — see db.PendingEvent's doc comment.
 		var pendingEvents []db.PendingEvent
 		if entitySpec != nil {
-			if emitted := action.ResolveEmission(entitySpec.Events, emitsOf(actionSpec), execParams.Resource); emitted != nil && emitted.Durable {
+			// The record has no id yet — it is assigned inside Insert, and the
+			// envelope's id is filled at enqueue time (see jsonb-persist's
+			// withRecordID).
+			if emitted := action.ResolveEmission(entitySpec.Events, emitsOf(actionSpec), "", execParams.Resource); emitted != nil && emitted.Durable {
 				if payloadJSON, err := action.BuildEventMessage(module+"/"+entity, *emitted); err == nil {
 					pendingEvents = append(pendingEvents, db.PendingEvent{Name: emitted.Name, Payload: string(payloadJSON)})
 				}
@@ -869,7 +872,7 @@ func (f *HandlerFactory) HandleCreate(module, entity string) http.HandlerFunc {
 				Resource: rec.Data, WorkspaceID: workspaceID, UserID: createdBy,
 			})
 			if entitySpec != nil {
-				if emitted := action.ResolveEmission(entitySpec.Events, emitsOf(actionSpec), rec.Data); emitted != nil {
+				if emitted := action.ResolveEmission(entitySpec.Events, emitsOf(actionSpec), emissionRecordID(id, rec.Data), rec.Data); emitted != nil {
 					// outboxAlreadyEnqueued=true: a durable emission was
 					// already enqueued atomically above; this call only
 					// handles the immediate best-effort parts (websocket
@@ -966,6 +969,18 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 			return
 		}
 
+		// State BEFORE the merge below. `merged := current.Data` is not a copy:
+		// the merge loop mutates current.Data in place, so any state value read
+		// after the merge loop is already the target state and both the
+		// transition-emission link and the workflow interception would see
+		// from == to (15.10: "state crossed" detection never fired).
+		preUpdateState := ""
+		if f.specLookup != nil {
+			if es, _ := f.specLookup(module, entity); es != nil && es.StateMachine != nil {
+				preUpdateState = stateFieldValue(es.StateMachine, current.Data)
+			}
+		}
+
 		merged := current.Data
 		if merged == nil {
 			merged = make(map[string]any, len(body))
@@ -998,6 +1013,33 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 			WorkspaceID: workspaceID, UserID: updatedBy,
 			SpecDir: f.entitySpecDir(module, entity),
 		}
+		// Workflow interception on the update path (todo 7.4; kafe TODO 9.4
+		// scenario 6). A state-machine transition reached via PATCH carries the
+		// *target* state in the payload, not a transition name -- the only path
+		// transitions without an `impl` can take (2.7: `/{id}/{action}` routes
+		// exist solely for impl actions). Without this check, a workflow
+		// guarding such a transition (S9 name reference, e.g. `void-order`
+		// covering four origin states) was never consulted: the PATCH went
+		// straight to the target state and the approval requirement silently
+		// did not exist.
+		if entitySpec != nil && entitySpec.StateMachine != nil && f.wfRegistry != nil && f.wfApprovals != nil {
+			sm := entitySpec.StateMachine
+			fromState := preUpdateState
+			toState := stateFieldValue(sm, merged)
+			if fromState != "" && toState != "" && fromState != toState {
+				if trans := entityengine.NewStateMachineEngine().FindTransitionByStates(entitySpec, fromState, toState); trans != nil {
+					wfEngine := workflow.NewEngine(f.wfRegistry)
+					if wfEngine.RequiresApproval(module+"."+entity, trans.Action, fromState, toState) {
+						// `decision` is an approval-flow verb, not an entity field:
+						// it rides in the same PATCH body as the target state, but
+						// the record must never store it.
+						delete(merged, "decision")
+						f.handleWorkflowApproval(w, r, ctx, module, entity, id, trans.Action, fromState, toState, merged, current.Version, updatedBy, workspaceID, body, wfEngine)
+						return
+					}
+				}
+			}
+		}
 		if err := action.RunBeforePhase(ctx, f.dispatcher, hooks, actionSpec, "update", execParams); err != nil {
 			writeError(w, http.StatusUnprocessableEntity, "HOOK_ABORTED", err.Error())
 			return
@@ -1009,9 +1051,23 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 		// as the row — see db.PendingEvent's doc comment.
 		var pendingEvents []db.PendingEvent
 		if entitySpec != nil {
-			if emitted := action.ResolveEmission(entitySpec.Events, emitsOf(actionSpec), execParams.Resource); emitted != nil && emitted.Durable {
+			if emitted := action.ResolveEmission(entitySpec.Events, emitsOf(actionSpec), emissionRecordID(id, execParams.Resource), execParams.Resource); emitted != nil && emitted.Durable {
 				if payloadJSON, err := action.BuildEventMessage(module+"/"+entity, *emitted); err == nil {
 					pendingEvents = append(pendingEvents, db.PendingEvent{Name: emitted.Name, Payload: string(payloadJSON)})
+				}
+			}
+			// Transition->event link (S13): if this update crosses a state-machine
+			// transition that declares `emit`, that event is published too.
+			// oldState is `preUpdateState`, captured BEFORE the merge:
+			// `current.Data` is aliased by `merged`, so reading the state from it
+			// here would answer with the *target* state and the transition would
+			// never be found -- a PATCH-driven `emit` (on_paid, on_cancel)
+			// silently published nothing (found via scenario 8's journal chain).
+			if entitySpec.StateMachine != nil {
+				if emitted := action.ResolveTransitionEmission(entitySpec.StateMachine, entitySpec.Events, preUpdateState, stateFieldValue(entitySpec.StateMachine, execParams.Resource), emissionRecordID(id, execParams.Resource), execParams.Resource); emitted != nil && emitted.Durable {
+					if payloadJSON, err := action.BuildEventMessage(module+"/"+entity, *emitted); err == nil {
+						pendingEvents = append(pendingEvents, db.PendingEvent{Name: emitted.Name, Payload: string(payloadJSON)})
+					}
 				}
 			}
 		}
@@ -1043,9 +1099,18 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 				Resource: rec.Data, WorkspaceID: workspaceID, UserID: updatedBy,
 			})
 			if entitySpec != nil {
-				if emitted := action.ResolveEmission(entitySpec.Events, emitsOf(actionSpec), rec.Data); emitted != nil {
+				if emitted := action.ResolveEmission(entitySpec.Events, emitsOf(actionSpec), emissionRecordID(id, rec.Data), rec.Data); emitted != nil {
 					// outboxAlreadyEnqueued=true — see HandleCreate.
 					action.DeliverEvents(ctx, f.deliveryDepsFor(module, entity), workspaceID, module+"/"+entity, []action.EventEmission{*emitted}, true)
+					// Transition->event link (S13): deliver the transition event's
+					// best-effort channels when the update crossed a transition that
+					// declares `emit`. The durable part was enqueued atomically
+					// above via PendingEvents.
+					if entitySpec.StateMachine != nil {
+						if emitted := action.ResolveTransitionEmission(entitySpec.StateMachine, entitySpec.Events, preUpdateState, stateFieldValue(entitySpec.StateMachine, rec.Data), emissionRecordID(id, rec.Data), rec.Data); emitted != nil {
+							action.DeliverEvents(ctx, f.deliveryDepsFor(module, entity), workspaceID, module+"/"+entity, []action.EventEmission{*emitted}, true)
+						}
+					}
 				}
 			}
 		}
@@ -1199,7 +1264,7 @@ func (f *HandlerFactory) HandleSubmit(module, entity string) http.HandlerFunc {
 
 			// Emit on_submit event
 			if entitySpec != nil {
-				emitted := action.ResolveEmission(entitySpec.Events, emitsOf(actionSpec), rec.Data)
+				emitted := action.ResolveEmission(entitySpec.Events, emitsOf(actionSpec), emissionRecordID(id, rec.Data), rec.Data)
 				if emitted != nil {
 					action.DeliverEvents(ctx, f.deliveryDepsFor(module, entity), workspaceID, module+"/"+entity, []action.EventEmission{*emitted}, false)
 				}
@@ -1276,7 +1341,7 @@ func (f *HandlerFactory) HandleCancel(module, entity string) http.HandlerFunc {
 			})
 
 			if entitySpec != nil {
-				emitted := action.ResolveEmission(entitySpec.Events, emitsOf(actionSpec), rec.Data)
+				emitted := action.ResolveEmission(entitySpec.Events, emitsOf(actionSpec), emissionRecordID(id, rec.Data), rec.Data)
 				if emitted != nil {
 					action.DeliverEvents(ctx, f.deliveryDepsFor(module, entity), workspaceID, module+"/"+entity, []action.EventEmission{*emitted}, false)
 				}
@@ -1370,7 +1435,7 @@ func (f *HandlerFactory) HandleAmend(module, entity string) http.HandlerFunc {
 			})
 
 			if entitySpec != nil {
-				emitted := action.ResolveEmission(entitySpec.Events, emitsOf(actionSpec), newRec.Data)
+				emitted := action.ResolveEmission(entitySpec.Events, emitsOf(actionSpec), newRec.ID, newRec.Data)
 				if emitted != nil {
 					action.DeliverEvents(ctx, f.deliveryDepsFor(module, entity), workspaceID, module+"/"+entity, []action.EventEmission{*emitted}, false)
 				}
@@ -1641,6 +1706,35 @@ func workspaceFromContext(ctx context.Context) string {
 		return spec.DefaultWorkspaceSlug
 	}
 	return v
+}
+
+// stateFieldValue reads the state-machine's state field value from record
+// data — "" when the machine or value is absent.
+// emissionRecordID resolves the id an event payload should carry.
+//
+// A record's id lives in its own table column, so it is never in the data map —
+// but an event consumer needs it to address the record (gl-balance's update
+// action does `resource.fetch("gl.journal-entry", params.id)`). The id is taken
+// from the handler's own `id` when it holds one, and from the data map only as a
+// fallback: after a create the freshly fetched record is the authoritative
+// source, and a natural-key request resolves to a different UUID identity than
+// the value the caller used.
+func emissionRecordID(handlerID string, data map[string]any) string {
+	if v, ok := data["id"].(string); ok && v != "" {
+		return v
+	}
+	return handlerID
+}
+
+func stateFieldValue(sm *spec.StateMachine, data map[string]any) string {
+	if sm == nil || data == nil {
+		return ""
+	}
+	v, ok := data[sm.Field]
+	if !ok || v == nil {
+		return ""
+	}
+	return fmt.Sprintf("%v", v)
 }
 
 // userFromContext extracts the user ID from the request context.
@@ -2042,7 +2136,7 @@ func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, a
 		var emitted *action.EventEmission
 		enqueuedAtomically := false
 		if entitySpec != nil {
-			emitted = action.ResolveEmission(entitySpec.Events, actionSpec.Emits, execParams.Resource)
+			emitted = action.ResolveEmission(entitySpec.Events, actionSpec.Emits, emissionRecordID(resourceID, execParams.Resource), execParams.Resource)
 			if emitted != nil && emitted.Durable && store != nil {
 				if txdb, ok := scope.Peek(store.BaseDB()); ok {
 					if payloadJSON, err := action.BuildEventMessage(module+"/"+entity, *emitted); err == nil {

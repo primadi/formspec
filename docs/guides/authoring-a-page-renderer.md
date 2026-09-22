@@ -73,7 +73,7 @@ membaca spec saat runtime.
 
 ## 5. Registrasi dan Distribusi
 ```yaml
-apiVersion: formspec/v1
+apiVersion: formspec.dev/v1
 kind: Renderer
 metadata:
   name: kanban-vue-community

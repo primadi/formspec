@@ -69,7 +69,14 @@ type accessClaims struct {
 	Username  string   `json:"username,omitempty"` // display identity (UserMenu/avatar)
 	Roles     []string `json:"roles,omitempty"`
 	Perms     []string `json:"perms,omitempty"`
-	Type      string   `json:"typ"`
+	// Role/Attrs carry the selected session context (TODO 3.8). `Role` is a
+	// single role — the one the session acts as, never a union — and `Attrs`
+	// holds the chosen dimension values (e.g. {"branch": "KFE-JKT-01"}), which
+	// is what `row_scope: {from: session}` reads. Both empty = boundary-less
+	// session (owner / service account).
+	Role  string            `json:"role,omitempty"`
+	Attrs map[string]string `json:"attrs,omitempty"`
+	Type  string            `json:"typ"`
 	jwt.RegisteredClaims
 }
 
@@ -84,12 +91,23 @@ type refreshClaims struct {
 // IssueAccessToken signs a short-lived access token for the user.
 func (t *TokenIssuer) IssueAccessToken(u *User) (string, error) {
 	now := time.Now()
+	// A session with a selected context (TODO 3.8) carries its single role and
+	// the dimension values it is scoped to; every other session keeps the
+	// legacy role list.
+	var role string
+	var attrs map[string]string
+	if u.Context != nil {
+		role = u.Context.Role
+		attrs = u.Context.Attrs()
+	}
 	claims := accessClaims{
 		Workspace: u.WorkspaceID,
 		App:       u.App,
 		Username:  u.Username,
 		Roles:     u.Roles,
 		Perms:     u.Permissions,
+		Role:      role,
+		Attrs:     attrs,
 		Type:      TokenTypeAccess,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   u.ID,

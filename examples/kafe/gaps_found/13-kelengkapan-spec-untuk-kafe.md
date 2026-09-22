@@ -198,6 +198,14 @@ entity ke module lain:
 
 ### S4 — QR code
 
+> **🟡 Sebagian 2026-09-16 (TODO 2.6).** Widget `qrcode` kini ada di **dua**
+> kosakata tertutup (S10): `FormWidget` dan `TableCellWidget` — komponen
+> `src/widgets/QrCode.tsx` (SVG, tajam saat dicetak), cabang di `FormFieldWidget`
+> **dan** `renderCellValue`, enum schema ter-regenerasi. **Belum:** jalur cetak
+> (`Print` memakai `resolveCellValue()` yang mengubah nilai jadi teks) dan adopsi
+> di spec kafe (QR yang bisa dipindai butuh URL absolut, sedangkan `dining-table`
+> hanya menyimpan kode meja). Scanning (barcode/QRIS) di luar cakupan.
+
 **Kebutuhan kafe.** QR per meja (untuk dicetak dan ditempel), dan QR di struk
 untuk membuka struk digital.
 
@@ -432,6 +440,12 @@ indexes:
 
 ### S9 — Workflow pada transisi dengan banyak state asal
 
+> **✅ Selesai 2026-09-15 (TODO 1.7).** Pemicu workflow merujuk transisi lewat
+> `name:` (`via`), sehingga satu workflow mengawal **seluruh** state asal;
+> pasangan `from`/`to` yang hanya mencakup sebagian transisi kini **ditolak**
+> `formspec validate` dengan pesan yang menyebut `name:`. Normatif:
+> `docs/spec/backend/02-core-extended.md` §6.
+
 **Kebutuhan kafe.** Void pesanan yang sudah dibayar butuh persetujuan supervisor,
 dan void bisa terjadi dari 4 status: `paid`, `in_kitchen`, `ready`, `served`.
 
@@ -462,6 +476,13 @@ Alternatif minimal: `from` menerima daftar seperti `TransitionDecl.from`.
 ---
 
 ### S10 — Kosakata `widget` tidak divalidasi
+
+> **✅ Selesai 2026-09-15 (TODO 1.4).** Dua himpunan tertutup, satu per permukaan:
+> `FormWidget` (**24 nilai**) dan `TableCellWidget` (**4 nilai**: `badge`,
+> `boolean`, `image`, `qrcode`). Sumber kebenaran `pkg/spec/widget.go`; enum masuk
+> schema sebagai `$defs/FormWidget`/`$defs/TableCellWidget`. Anti-drift dijaga
+> `src/widgets/catalog.test.tsx`. Menutup akar #1 ("salah ketik == fitur belum
+> ada").
 
 > **✅ Selesai 2026-09-15 (TODO 1.4).** Dua himpunan tertutup menggantikan string
 > bebas: `FormWidget` (20 nama) dan `TableCellWidget` (`badge`, `boolean`) di
@@ -575,6 +596,11 @@ script**, bukan pada data.
 
 ### S13 — Event tidak terikat pada transisi
 
+> **🔴 Masih terbuka (2026-09-18).** `TransitionDecl` = `{From, To, Via, Guard}`
+> (`pkg/spec/entity.go:1168`) — **tidak ada** `emit`. D3 (transisi tidak
+> memancarkan event otomatis) sudah ditetapkan normatif, tetapi keterkaitan
+> eksplisit transisi↔event belum bisa dinyatakan. Item **6.1**.
+
 **Tersedia sekarang.** `EventDecl` ada di entity (`name`, `type`, `publish`,
 `deliver`, `payload`). Tetapi **tidak ada cara menyatakan** "transisi X
 memancarkan event Y" — keterkaitannya hanya tersirat dari penamaan
@@ -661,6 +687,10 @@ steps:
 ```
 
 ### S16 — Kolom: dua konsep dengan kemampuan berbeda
+
+> **🔴 Masih terbuka (2026-09-18).** `ReportColumn` = `{Field, Label, Aggregate,
+> Format}` (`pkg/spec/frontend.go:590`) — **tidak ada** `widget`, dan
+> `Aggregate`/`Format` masih string bebas (bukan enum). Item **7.2**.
 
 Terverifikasi:
 
@@ -754,10 +784,10 @@ Berdasarkan "berapa banyak aplikasi yang terbuka":
 | **1**     | **S2** filter bernilai dari sesi/route ✅                                                                                                                                            | Multi-outlet **dan** akses pelanggan — satu konstruk, dua kebutuhan |
 | **2**     | **S3** akses publik per-entity + `exclude` ditegakkan ✅                                                                                                                             | Aplikasi publik yang aman                                           |
 | **3**     | **S7** semantik `money` ✅                                                                                                                                                           | Semua aplikasi transaksional: POS, kas, laporan                     |
-| **4**     | **S10** kosakata `widget` jadi enum                                                                                                                                                  | Menghentikan kelas bug "salah ketik == fitur belum ada"             |
-| **5**     | **S1** blok/kind transaksional                                                                                                                                                       | Pemesanan mandiri pelanggan                                         |
-| **6**     | **S8** unique parsial + index relasi                                                                                                                                                 | Integritas data tanpa keluar ke DDL mentah                          |
-| **7**     | **S9** workflow atas nama transisi                                                                                                                                                   | Approval yang tidak bisa dilewati                                   |
+| **4**     | **S10** kosakata `widget` jadi enum ✅                                                                                                                                                  | Menghentikan kelas bug "salah ketik == fitur belum ada"             |
+| **5**     | **S1** blok/kind transaksional ✅                                                                                                                                                       | Pemesanan mandiri pelanggan                                         |
+| **6**     | **S8** unique parsial + index relasi ✅                                                                                                                                                 | Integritas data tanpa keluar ke DDL mentah                          |
+| **7**     | **S9** workflow atas nama transisi ✅                                                                                                                                                   | Approval yang tidak bisa dilewati                                   |
 | **8**     | **D1–D7** tetapkan semantik ✅                                                                                                                                                       | Menghilangkan tebakan yang berujung data rusak                      |
-| **9**     | **S5** scope cabang deklaratif ✅ (konstruk; penyalaan = 3.5)                                                                                                                        | Multi-cabang yang dijamin, bukan didisiplinkan                      |
-| **10**    | **S6** pemetaan Integrator, **S11** pajak 🟡 (tipe `percent`), **S12** satuan ✅ (konversi = 4.6), **S13** event↔transisi, **S14** summary ✅, **S15** label approval, **S16** kolom | Melengkapi                                                          |
+| **9**     | **S5** scope cabang deklaratif ✅ (konstruk; penyalaan = 3.5 ✅)                                                                                                                        | Multi-cabang yang dijamin, bukan didisiplinkan                      |
+| **10**    | **S6** pemetaan Integrator 🔴, **S11** pajak 🟡 (tipe `percent`), **S12** satuan ✅ (konversi = 4.6), **S13** event↔transisi 🔴, **S14** summary ✅, **S15** label approval 🔴, **S16** kolom 🔴 | Melengkapi                                                          |

@@ -183,6 +183,12 @@ export function LoginScreen({
 
         {forgotMode ? (
           <form onSubmit={handleForgotSubmit} className="space-y-4">
+            {/* Hidden context for password managers (Chromium "Create Amazing
+                Password Forms"): the workspace is not a credential, but it
+                tells the manager which account set a saved password belongs to. */}
+            {workspaceProp && (
+              <input type="hidden" name="workspace" value={workspaceProp} />
+            )}
             {!workspaceProp && (
               <div className="space-y-2.5">
                 <label
@@ -193,6 +199,7 @@ export function LoginScreen({
                 </label>
                 <Input
                   id="forgot-workspace"
+                  name="workspace"
                   placeholder="acme"
                   value={workspace}
                   onChange={(e) => setWorkspace(e.target.value)}
@@ -210,6 +217,7 @@ export function LoginScreen({
               </label>
               <Input
                 id="forgot-email"
+                name="email"
                 type="email"
                 placeholder="you@example.com"
                 value={email}
@@ -247,7 +255,17 @@ export function LoginScreen({
           </form>
         ) : (
           <>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            {/* key={mode} keeps login and register as distinct <form>
+                elements — never one form serving two auth processes. */}
+            <form key={mode} onSubmit={handleSubmit} className="space-y-4">
+              {/* Hidden context for password managers (Chromium "Create
+                  Amazing Password Forms"): workspace/app are not credentials,
+                  but they disambiguate which account a saved password belongs
+                  to (role management is per-App). */}
+              {workspaceProp && (
+                <input type="hidden" name="workspace" value={workspaceProp} />
+              )}
+              {app && <input type="hidden" name="app" value={app} />}
               {!workspaceProp && (
                 <div className="space-y-2.5">
                   <label
@@ -258,6 +276,7 @@ export function LoginScreen({
                   </label>
                   <Input
                     id="workspace"
+                    name="workspace"
                     placeholder="acme"
                     value={workspace}
                     onChange={(e) => setWorkspace(e.target.value)}
@@ -277,6 +296,7 @@ export function LoginScreen({
                   </label>
                   <Input
                     id="display_name"
+                    name="display_name"
                     placeholder="Your Name"
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value)}
@@ -296,6 +316,7 @@ export function LoginScreen({
                   </label>
                   <Input
                     id="email"
+                    name="email"
                     type="email"
                     placeholder="you@example.com"
                     value={email}
@@ -319,6 +340,7 @@ export function LoginScreen({
                 </label>
                 <Input
                   id="username"
+                  name="username"
                   placeholder="admin"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
@@ -333,14 +355,20 @@ export function LoginScreen({
                 >
                   Password
                 </label>
+                {/* Register sets a new password, login supplies an existing
+                    one. `new-password` also stops Chrome from autofilling the
+                    old credential into the sign-up form. */}
                 <Input
                   id="password"
+                  name="password"
                   type="password"
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={loading}
-                  autoComplete="current-password"
+                  autoComplete={
+                    mode === "register" ? "new-password" : "current-password"
+                  }
                 />
               </div>
 

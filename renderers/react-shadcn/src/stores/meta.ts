@@ -112,11 +112,30 @@ export interface MetaState {
   getSettings: () => Settings | undefined
 }
 
-function createLookups(bundle: MetaBundle) {
+// createLookups builds the name→entry maps for every kind. Exported for tests
+// (the widget map is module-qualified — gap #16 / item 7.3).
+export function createLookups(bundle: MetaBundle) {
   const byName = <T>(items: Entry<T>[]) => {
     const map = new Map<string, Entry<T>>()
     for (const item of items) {
       map.set(item.name, item)
+    }
+    return map
+  }
+
+  // byQualified keys entries by BOTH the bare name and the module-qualified
+  // form (`module/name` and `module.name`), so a reference like
+  // `cafe-report/omzet-hari-ini` resolves to the right widget even when two
+  // modules declare a widget with the same bare name (gap #16 / item 7.3).
+  // The bare name is kept as a fallback for existing manifests.
+  const byQualified = <T>(items: Entry<T>[]) => {
+    const map = new Map<string, Entry<T>>()
+    for (const item of items) {
+      map.set(item.name, item)
+      if (item.module) {
+        map.set(`${item.module}/${item.name}`, item)
+        map.set(`${item.module}.${item.name}`, item)
+      }
     }
     return map
   }
@@ -132,7 +151,7 @@ function createLookups(bundle: MetaBundle) {
   const forms = byName(bundle.forms)
   const tables = byName(bundle.tables)
   const dashboards = byName(bundle.dashboards)
-  const widgets = byName(bundle.widgets)
+  const widgets = byQualified(bundle.widgets)
   const reports = byName(bundle.reports)
   const wizards = byName(bundle.wizards)
   const kanbans = byName(bundle.kanbans)

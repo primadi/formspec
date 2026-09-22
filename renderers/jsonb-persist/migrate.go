@@ -30,11 +30,33 @@ type MigrationRunner struct {
 		GetEntityStore(module, name string) (*EntityStore, error)
 		GenerateNaturalKey(ctx context.Context, workspaceID, module, name, fieldName, scope string) (string, error)
 	}
+	// frameworkModules are module names whose entities the runner must not
+	// treat as "declared and then removed" (see IgnoreModules).
+	frameworkModules map[string]bool
 }
 
 // NewMigrationRunner creates a new migration runner.
 func NewMigrationRunner(db DB, driver DriverType) *MigrationRunner {
 	return &MigrationRunner{db: db, driver: driver}
+}
+
+// IgnoreModules names modules whose snapshots must never be reported as a
+// removed entity when the caller's entity list does not mention them.
+//
+// It exists for framework-owned modules (`formspec.core`: auth, subscription,
+// period). The server registers those entities at runtime and mounts them into
+// every workspace, so any database the server touched has their tables and
+// snapshots. A caller that only loads the user's spec tree (the CLI) would
+// otherwise report each one as "the manifests no longer declare this entity,
+// but its table still exists" — a `[never]` change no manifest can declare,
+// refusing the entire run with no way forward (kafe TODO 3.10).
+func (r *MigrationRunner) IgnoreModules(modules ...string) {
+	if r.frameworkModules == nil {
+		r.frameworkModules = make(map[string]bool, len(modules))
+	}
+	for _, m := range modules {
+		r.frameworkModules[m] = true
+	}
 }
 
 // SetRegistry wires an entity registry so the runner can satisfy the
@@ -83,6 +105,14 @@ var _ PersistBackend = (*MigrationRunner)(nil)
 // Uses dialect-aware SQL that works on both SQLite and PostgreSQL.
 func SystemTableDDLs(driver DriverType) []string {
 	ts := currentTimestamp(driver)
+	// The DEFAULT expression must be the dialect's clock function, not the
+	// type name. Passing the type name as the default worked only because
+	// SQLite tolerates `DEFAULT text` (and then stores the literal string
+	// "text" as the timestamp — every system table's created_at/updated_at in
+	// existing SQLite databases holds the word "text", not a time); PostgreSQL
+	// rejects it outright with "cannot use column reference in DEFAULT
+	// expression", which is how the bug surfaced at all (master todo 15.8).
+	now := currentTimestampFn(driver)
 
 	return []string{
 		// formspec_schema_migrations
@@ -90,7 +120,7 @@ func SystemTableDDLs(driver DriverType) []string {
 			"version     integer     PRIMARY KEY",
 			"description text        NOT NULL",
 			"checksum    text        NOT NULL",
-			fmt.Sprintf("applied_at  %s NOT NULL DEFAULT %s", ts, ts),
+			fmt.Sprintf("applied_at  %s NOT NULL DEFAULT %s", ts, now),
 		),
 
 		// formspec_schema_snapshot — the applied storage shape of each entity
@@ -104,7 +134,7 @@ func SystemTableDDLs(driver DriverType) []string {
 			"driver      text NOT NULL DEFAULT ''",
 			"checksum    text NOT NULL",
 			"shape       text NOT NULL",
-			fmt.Sprintf("updated_at  %s NOT NULL DEFAULT %s", ts, ts),
+			fmt.Sprintf("updated_at  %s NOT NULL DEFAULT %s", ts, now),
 			"PRIMARY KEY (module, entity)",
 		),
 
@@ -127,7 +157,7 @@ func SystemTableDDLs(driver DriverType) []string {
 			"status      text    NOT NULL DEFAULT 'pending'",
 			"response    text",
 			fmt.Sprintf("expires_at  %s NOT NULL", ts),
-			fmt.Sprintf("created_at  %s NOT NULL DEFAULT %s", ts, ts),
+			fmt.Sprintf("created_at  %s NOT NULL DEFAULT %s", ts, now),
 			"PRIMARY KEY (tenant_id, action, key)",
 		),
 
@@ -143,8 +173,8 @@ func SystemTableDDLs(driver DriverType) []string {
 			"max_retries     integer NOT NULL DEFAULT 10",
 			"backoff         text    NOT NULL DEFAULT 'exponential'", // exponential | linear | fixed (2.4.4)
 			"initial_delay_ms integer NOT NULL DEFAULT 1000",         // ms before first retry (2.4.4)
-			fmt.Sprintf("created_at      %s NOT NULL DEFAULT %s", ts, ts),
-			fmt.Sprintf("next_retry_at   %s NOT NULL DEFAULT %s", ts, ts),
+			fmt.Sprintf("created_at      %s NOT NULL DEFAULT %s", ts, now),
+			fmt.Sprintf("next_retry_at   %s NOT NULL DEFAULT %s", ts, now),
 		),
 
 		// formspec_extensions — namespace reservation for entity extensions
@@ -167,7 +197,7 @@ func SystemTableDDLs(driver DriverType) []string {
 			"actor       text    NOT NULL DEFAULT 'system'",
 			"changes     text    NOT NULL DEFAULT '{}'",
 			"request_id  text    NOT NULL DEFAULT ''",
-			fmt.Sprintf("created_at  %s NOT NULL DEFAULT %s", ts, ts),
+			fmt.Sprintf("created_at  %s NOT NULL DEFAULT %s", ts, now),
 		),
 
 		// formspec_event_log — durable record of delivered declared business
@@ -179,7 +209,7 @@ func SystemTableDDLs(driver DriverType) []string {
 			"event_name   text    NOT NULL",
 			"resource     text    NOT NULL",
 			"payload      text    NOT NULL DEFAULT '{}'",
-			fmt.Sprintf("delivered_at %s NOT NULL DEFAULT %s", ts, ts),
+			fmt.Sprintf("delivered_at %s NOT NULL DEFAULT %s", ts, now),
 		),
 
 		// formspec_workflow_approval — pending/active approval requests for
@@ -201,8 +231,8 @@ func SystemTableDDLs(driver DriverType) []string {
 			"rejected_by     text    NOT NULL DEFAULT ''",
 			"reject_step     integer NOT NULL DEFAULT -1",
 			"escalated_steps text    NOT NULL DEFAULT '{}'", // stepIdx -> reassign_roles (7.4.4)
-			fmt.Sprintf("created_at      %s NOT NULL DEFAULT %s", ts, ts),
-			fmt.Sprintf("updated_at      %s NOT NULL DEFAULT %s", ts, ts),
+			fmt.Sprintf("created_at      %s NOT NULL DEFAULT %s", ts, now),
+			fmt.Sprintf("updated_at      %s NOT NULL DEFAULT %s", ts, now),
 		),
 
 		// formspec_saga_log — records cross-boundary integrator calls and
@@ -217,8 +247,8 @@ func SystemTableDDLs(driver DriverType) []string {
 			"compensate   text    NOT NULL DEFAULT ''",        // compensate action ref
 			"status       text    NOT NULL DEFAULT 'pending'", // pending | compensated | completed
 			"error        text    NOT NULL DEFAULT ''",
-			fmt.Sprintf("created_at   %s NOT NULL DEFAULT %s", ts, ts),
-			fmt.Sprintf("updated_at   %s NOT NULL DEFAULT %s", ts, ts),
+			fmt.Sprintf("created_at   %s NOT NULL DEFAULT %s", ts, now),
+			fmt.Sprintf("updated_at   %s NOT NULL DEFAULT %s", ts, now),
 		),
 
 		// formspec_job — async job tracking (02-core-extended.md §13, todo
@@ -237,8 +267,8 @@ func SystemTableDDLs(driver DriverType) []string {
 			"result        text    NOT NULL DEFAULT '{}'",
 			"error         text    NOT NULL DEFAULT ''",
 			"callback_url  text    NOT NULL DEFAULT ''", // optional callback webhook (7.13.4)
-			fmt.Sprintf("created_at    %s NOT NULL DEFAULT %s", ts, ts),
-			fmt.Sprintf("updated_at    %s NOT NULL DEFAULT %s", ts, ts),
+			fmt.Sprintf("created_at    %s NOT NULL DEFAULT %s", ts, now),
+			fmt.Sprintf("updated_at    %s NOT NULL DEFAULT %s", ts, now),
 		),
 
 		// formspec_storage_link — download-link tokens for file fields
@@ -257,7 +287,7 @@ func SystemTableDDLs(driver DriverType) []string {
 			"delete_on_download  integer NOT NULL DEFAULT 0",        // one_time
 			"delete_if_untouched integer NOT NULL DEFAULT 0",        // ttl sweeper
 			"downloaded_at       text",
-			fmt.Sprintf("created_at         %s NOT NULL DEFAULT %s", ts, ts),
+			fmt.Sprintf("created_at         %s NOT NULL DEFAULT %s", ts, now),
 		),
 	}
 }
@@ -267,7 +297,9 @@ func createTableSQL(_ DriverType, name string, columns ...string) string {
 	return fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (\n\t%s\n);", name, strings.Join(columns, ",\n\t"))
 }
 
-// currentTimestamp returns the dialect-appropriate current timestamp expression.
+// currentTimestamp returns the dialect-appropriate timestamp *column type*.
+// The DEFAULT expression is a different thing entirely — see
+// currentTimestampFn.
 func currentTimestamp(driver DriverType) string {
 	if driver == DriverSQLite {
 		return "text"
@@ -275,12 +307,27 @@ func currentTimestamp(driver DriverType) string {
 	return "timestamptz"
 }
 
+// currentTimestampFn returns the dialect-appropriate DEFAULT expression for a
+// timestamp column: SQLite has no current timestamp function of its own at
+// this layer's conventions, so it uses the same expression the entity DDL
+// uses (ddl.go's nowFn); PostgreSQL uses now().
+func currentTimestampFn(driver DriverType) string {
+	if driver == DriverSQLite {
+		return "(datetime('now'))"
+	}
+	return "now()"
+}
+
 // idColumn returns the dialect-appropriate primary key column.
+// PostgreSQL: gen_random_uuid() (built-in since PG 13) — NOT gen_uuid_v7(),
+// which exists only on PG 18+ or with an extension; the entity DDL already
+// documents the same constraint (ddl.go dialect.uuidPK). System-table inserts
+// that rely on the default (audit, outbox) therefore work on any supported PG.
 func idColumn(driver DriverType) string {
 	if driver == DriverSQLite {
 		return "id  integer PRIMARY KEY AUTOINCREMENT"
 	}
-	return "id  uuid PRIMARY KEY DEFAULT gen_uuid_v7()"
+	return "id  uuid PRIMARY KEY DEFAULT gen_random_uuid()"
 }
 
 // EnsureSystemTables creates all FormSpec system tables needed for runtime.
@@ -300,6 +347,35 @@ func (r *MigrationRunner) EnsureSystemTables(ctx context.Context) error {
 				name = ddlNames[i]
 			}
 			return fmt.Errorf("create system table %s: %w", name, err)
+		}
+	}
+
+	// PostgreSQL stores entities in per-category schemas (ddl.go
+	// CategorySchema: operational/financial/compliance/analytics/master/archive).
+	// SQLite ignores them (single namespace), so nothing ever had to create
+	// them — which is why the very first PostgreSQL migration run failed with
+	// `schema "operational" does not exist` (master todo 15.8). Creating them
+	// idempotently here means every entry point that touches the DB has them
+	// before any entity DDL runs.
+	if r.driver == DriverPostgres {
+		for _, s := range CategorySchema {
+			if _, err := r.db.ExecContext(ctx,
+				fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", s)); err != nil {
+				return fmt.Errorf("create schema %s: %w", s, err)
+			}
+		}
+		// Generated columns over date/time payload text need immutable casts,
+		// but PostgreSQL marks text→timestamp/date as mutable (the parse can
+		// depend on the DateStyle GUC), so a generated column refuses them
+		// ("generation expression is not immutable"). The wrappers declare the
+		// trust explicitly: the payload is written by the app layer as UTC ISO
+		// text, so the parse is pinned to UTC and never depends on session
+		// settings. Other casts (numeric, boolean, uuid, text) are already
+		// immutable and stay inline.
+		for _, fnd := range GeneratedColumnFunctions {
+			if _, err := r.db.ExecContext(ctx, fnd.DDL); err != nil {
+				return fmt.Errorf("create function %s: %w", fnd.Name, err)
+			}
 		}
 	}
 
@@ -556,6 +632,39 @@ func (r *MigrationRunner) PlanDetailed(ctx context.Context, entities []EntityMig
 		// Check if already applied with same checksum
 		if existingChecksum, ok := applied[desc]; ok {
 			if existingChecksum == checksum {
+				// The manifest is unchanged — but the *storage* may still differ
+				// from it. The checksum fingerprints the manifest, so a database
+				// that kept an old index definition (3.9) or a derived column
+				// that was never actually generated (3.11) looks identical to a
+				// converged one: the plan would answer "nothing to do" while the
+				// database keeps enforcing the old rule. Reconciling storage is
+				// a couple of queries per entity, and it is the only way such a
+				// database ever gets repaired.
+				storageDDL, storageChanges, err := r.diffExistingTable(ctx, ti, em.EntitySpec, nil)
+				if err != nil {
+					return nil, err
+				}
+				if storageChanges > 0 {
+					plans = append(plans, MigrationPlan{
+						Result: DDLResult{
+							TableInfo:   ti,
+							Checksum:    checksum,
+							Description: desc,
+							DDL:         storageDDL,
+						},
+						Changes: []Change{{
+							Class:  ClassDerived,
+							Kind:   ChangeStorageDrift,
+							Entity: em.Metadata.Module + "/" + em.Metadata.Name,
+							Detail: "storage drifted from the manifest — columns and indexes rebuilt",
+						}},
+						Snapshot: desired,
+						Module:   em.Metadata.Module,
+						Entity:   em.Metadata.Name,
+					})
+					continue
+				}
+
 				// Unchanged. The snapshot should already exist; when it does not
 				// (a database created before snapshots existed), adopt the manifest
 				// as the baseline now rather than refusing over a shape nobody
@@ -835,10 +944,26 @@ func (r *MigrationRunner) applyPlans(ctx context.Context, entities []EntityMigra
 // entity spec and returns ALTER TABLE DDL for missing generated columns
 // (indexed/unique/natural-key fields) plus CREATE INDEX for declared indexes
 // that may not exist yet. Returns the number of schema changes emitted.
-func (r *MigrationRunner) diffExistingTable(ctx context.Context, ti *TableInfo, entity spec.EntitySpec) (string, int, error) {
+//
+// It also reconciles *storage* drift, which the snapshot diff cannot see: an
+// index whose definition changed since it was created (kafe TODO 3.9) and a
+// derived column that exists as a plain column instead of a generated one
+// (kafe TODO 3.11). Reconciling storage is the only thing that repairs those —
+// the manifest is unchanged and the checksum agrees with it.
+//
+// `alreadyRebuilt` names derived columns the caller has already dropped and
+// re-added (the retype path in buildChangeDDL). They are left alone here so the
+// same column is not dropped twice in one plan.
+func (r *MigrationRunner) diffExistingTable(ctx context.Context, ti *TableInfo, entity spec.EntitySpec, alreadyRebuilt map[string]bool) (string, int, error) {
 	existing, err := r.existingColumns(ctx, ti.Schema, ti.TableName)
 	if err != nil {
 		return "", 0, err
+	}
+	if len(existing) == 0 {
+		// No table here: nothing to reconcile. Creating it is the create path's
+		// job, and emitting ALTERs for a table that does not exist would only
+		// fail at apply time.
+		return "", 0, nil
 	}
 
 	// Columns that must exist: every field the DDL generation projects into a
@@ -862,16 +987,65 @@ func (r *MigrationRunner) diffExistingTable(ctx context.Context, ti *TableInfo, 
 
 	var alters []string
 	added := 0
+
+	// A derived column can exist *without* being generated. SQLite refuses to
+	// add a STORED generated column with ALTER TABLE, and the fallback used to
+	// be a plain column — which nothing writes, because INSERT stores only
+	// `(id, tenant_id, version, data)` and relies on the column computing
+	// itself. The column then stayed NULL on every row, and since NULLs never
+	// collide in a unique index, a rule that looked declared enforced nothing
+	// (kafe TODO 3.11: a second open shift for the same cashier was accepted).
+	// Such a column is rebuilt below rather than trusted.
+	generated, err := r.generatedColumns(ctx, ti.Schema, ti.TableName)
+	if err != nil {
+		return "", 0, err
+	}
+
+	stale := map[string]spec.Field{}
 	for _, f := range ordered {
 		col := generatedColumnName(f.Name)
 		if existing[col] {
+			if !generated[col] && !alreadyRebuilt[col] {
+				stale[col] = f
+			}
 			continue
 		}
-		// Note: the modernc SQLite driver cannot ALTER TABLE ADD COLUMN with
-		// a GENERATED ALWAYS AS column (it silently no-ops), so SQLite gets a
-		// plain column and PostgreSQL a generated one — see addDerivedColumnSQL.
 		alters = append(alters, addDerivedColumnSQL(ti, f, r.driver))
 		added++
+	}
+
+	// The existing index set is read once, before any rebuild: an index that is
+	// dropped below must be remembered as absent so the reconciliation at the
+	// end re-creates it instead of reading it back as "already there".
+	existingIdx, err := r.existingIndexDefs(ctx, ti.Schema, ti.TableName)
+	if err != nil {
+		return "", 0, err
+	}
+	rebuiltIndexes := map[string]bool{}
+	if len(stale) > 0 {
+		affected := map[string]bool{}
+		for col := range stale {
+			affected[col] = true
+		}
+		// SQLite refuses to drop a column an index still references, so the
+		// dependent indexes go first and are re-created at the end.
+		for _, idx := range ti.CreateIndexSQL {
+			name := indexNameOf(idx)
+			if name == "" || !indexTouchesColumns(idx, affected) {
+				continue
+			}
+			if _, present := existingIdx[name]; !present {
+				continue
+			}
+			alters = append(alters, r.dropIndexSQL(ti.Schema, name))
+			rebuiltIndexes[name] = true
+			added++
+		}
+		for col, f := range stale {
+			alters = append(alters, dropColumnSQL(ti, col, r.driver))
+			alters = append(alters, addDerivedColumnSQL(ti, f, r.driver))
+			added++
+		}
 	}
 
 	// Declared indexes on an existing table. Without this, an `indexes:` entry
@@ -883,19 +1057,53 @@ func (r *MigrationRunner) diffExistingTable(ctx context.Context, ti *TableInfo, 
 	// still plans zero migrations (the plan is the gate CI uses). `IF NOT
 	// EXISTS` covers the race where the index appears between the check and the
 	// apply; both SQLite (≥3.8) and PostgreSQL (≥9.5) support it.
-	existingIdx, err := r.existingIndexes(ctx, ti.Schema, ti.TableName)
-	if err != nil {
-		return "", 0, err
-	}
 	for _, idx := range ti.CreateIndexSQL {
-		if name := indexNameOf(idx); name != "" && existingIdx[name] {
+		name := indexNameOf(idx)
+		if name == "" {
+			// Not a CREATE INDEX we can introspect — emit it idempotently rather
+			// than skipping it silently.
+			alters = append(alters, withIfNotExists(idx))
+			added++
 			continue
 		}
-		alters = append(alters, withIfNotExists(idx))
+		existingSQL, present := existingIdx[name]
+		if present && rebuiltIndexes[name] {
+			// Dropped above to free a stale column; its definition is unchanged,
+			// so re-create it as declared.
+			alters = append(alters, withIfNotExists(idx))
+			added++
+			continue
+		}
+		if !present {
+			alters = append(alters, withIfNotExists(idx))
+			added++
+			continue
+		}
+		// The index exists — but its *definition* may still be wrong. When a
+		// manifest changes what an index covers (3.6 changed the natural-key
+		// index from `(tenant_id, _number)` to `(tenant_id, _branch_id,
+		// _number)`), the old index keeps enforcing the old rule: the database
+		// then rejects rows the manifest says are valid, and no amount of
+		// re-planning fixes it because "the index is already there". Comparing
+		// shapes — not names — is what catches that.
+		if indexShapesEqual(indexShapeOf(existingSQL), indexShapeOf(idx)) {
+			continue // converged
+		}
+		alters = append(alters, r.dropIndexSQL(ti.Schema, name), idx)
 		added++
 	}
 
 	return strings.Join(alters, "\n"), added, nil
+}
+
+// dropIndexSQL renders the DROP for a rebuilt index. PostgreSQL needs the
+// schema-qualified name (the index lives in the entity's schema, which is not
+// necessarily on the caller's search_path); SQLite has a single namespace.
+func (r *MigrationRunner) dropIndexSQL(schema, name string) string {
+	if r.driver == DriverPostgres && schema != "" {
+		return "DROP INDEX IF EXISTS " + schema + "." + name + ";"
+	}
+	return "DROP INDEX IF EXISTS " + name + ";"
 }
 
 // withIfNotExists rewrites a CREATE INDEX statement into its idempotent form.
@@ -918,8 +1126,16 @@ func (r *MigrationRunner) existingColumns(ctx context.Context, schema, table str
 	var err error
 
 	if r.driver == DriverPostgres {
+		// System tables are created in the caller's default schema and their
+		// calls pass an empty schema. `table_schema = ''` matches nothing, so
+		// the column set came back empty and every "does this column exist"
+		// check answered no — the escalated_steps ALTER then failed with
+		// "column already exists" on a table it could not see (master todo
+		// 15.8). Resolving the empty schema to the session's current_schema()
+		// matches what the session actually created.
 		rows, err = r.db.QueryContext(ctx,
-			"SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2",
+			"SELECT column_name FROM information_schema.columns "+
+				"WHERE table_schema = COALESCE(NULLIF($1, ''), current_schema()) AND table_name = $2",
 			schema, table)
 	} else {
 		// Use table_xinfo, not table_info: SQLite's table_info hides generated
@@ -944,19 +1160,59 @@ func (r *MigrationRunner) existingColumns(ctx context.Context, schema, table str
 	return cols, rows.Err()
 }
 
-// existingIndexes returns the set of index names present in a table.
-func (r *MigrationRunner) existingIndexes(ctx context.Context, schema, table string) (map[string]bool, error) {
-	names := make(map[string]bool)
+// generatedColumns returns the columns of a table that are real *generated*
+// columns — the database computes their value from `data`. Knowing this is what
+// separates a correctly materialized derived column from a stale plain column
+// that happens to share its name (kafe TODO 3.11).
+func (r *MigrationRunner) generatedColumns(ctx context.Context, schema, table string) (map[string]bool, error) {
+	cols := make(map[string]bool)
 	var rows *sql.Rows
 	var err error
 
 	if r.driver == DriverPostgres {
 		rows, err = r.db.QueryContext(ctx,
-			"SELECT indexname FROM pg_indexes WHERE schemaname = $1 AND tablename = $2",
+			"SELECT column_name FROM information_schema.columns "+
+				"WHERE table_schema = $1 AND table_name = $2 AND is_generated = 'ALWAYS'",
 			schema, table)
 	} else {
+		// `hidden`: 0 = ordinary column, 2 = VIRTUAL generated, 3 = STORED
+		// generated. Only 2 and 3 mean the database computes the value.
 		rows, err = r.db.QueryContext(ctx,
-			"SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = ?", table)
+			"SELECT name FROM pragma_table_xinfo(?) WHERE hidden IN (2, 3)", table)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("list generated columns %s: %w", table, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, fmt.Errorf("scan generated column: %w", err)
+		}
+		cols[name] = true
+	}
+	return cols, rows.Err()
+}
+
+// existingIndexDefs returns the indexes present in a table, mapped to the SQL
+// that defines them (empty when the engine does not expose it). The definition
+// is what lets the diff notice an index whose *shape* changed, not just one
+// that is missing.
+func (r *MigrationRunner) existingIndexDefs(ctx context.Context, schema, table string) (map[string]string, error) {
+	defs := make(map[string]string)
+	var rows *sql.Rows
+	var err error
+
+	if r.driver == DriverPostgres {
+		rows, err = r.db.QueryContext(ctx,
+			"SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = $1 AND tablename = $2",
+			schema, table)
+	} else {
+		// `sql IS NULL` are SQLite's own auto-indexes (UNIQUE/PK constraints),
+		// which are not ours to rebuild.
+		rows, err = r.db.QueryContext(ctx,
+			"SELECT name, COALESCE(sql, '') FROM sqlite_master WHERE type = 'index' AND tbl_name = ?", table)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("list indexes %s: %w", table, err)
@@ -964,13 +1220,119 @@ func (r *MigrationRunner) existingIndexes(ctx context.Context, schema, table str
 	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
+		var name, def string
+		if err := rows.Scan(&name, &def); err != nil {
 			return nil, fmt.Errorf("scan index: %w", err)
 		}
-		names[name] = true
+		defs[name] = def
 	}
-	return names, rows.Err()
+	return defs, rows.Err()
+}
+
+// indexShape is the comparable essence of a CREATE [UNIQUE] INDEX statement:
+// uniqueness, the columns covered, and the partial predicate. The index *name*
+// is deliberately absent — it is the key the index was looked up by.
+type indexShape struct {
+	Unique bool
+	Cols   []string
+	Where  string
+}
+
+// indexShapeOf parses the parts of an index definition that make an existing
+// index wrong when they change.
+//
+// It tolerates the cosmetic differences between what we generate and what an
+// engine reports back (PostgreSQL rewrites the statement: `USING btree`,
+// schema-qualified tables, parenthesised predicates, `::text` casts), because a
+// comparison that fires on formatting would drop and rebuild the same index on
+// every run — and a plan that is never empty is a plan nobody can gate on.
+func indexShapeOf(stmt string) indexShape {
+	s := strings.Join(strings.Fields(strings.TrimSpace(stmt)), " ")
+	shape := indexShape{Unique: strings.Contains(strings.ToLower(s), "create unique index")}
+
+	open := strings.Index(s, "(")
+	if open < 0 {
+		return shape
+	}
+	depth, closeAt := 0, -1
+	for i := open; i < len(s); i++ {
+		switch s[i] {
+		case '(':
+			depth++
+		case ')':
+			depth--
+			if depth == 0 {
+				closeAt = i
+			}
+		}
+		if closeAt >= 0 {
+			break
+		}
+	}
+	if closeAt < 0 {
+		return shape
+	}
+
+	for _, col := range strings.Split(s[open+1:closeAt], ",") {
+		if norm := normalizeIndexTerm(col); norm != "" {
+			shape.Cols = append(shape.Cols, norm)
+		}
+	}
+	rest := strings.TrimSpace(s[closeAt+1:])
+	if len(rest) >= 5 && strings.EqualFold(rest[:5], "where") {
+		shape.Where = normalizeIndexTerm(rest[5:])
+	}
+	return shape
+}
+
+// indexShapesEqual reports whether two shapes describe the same index.
+func indexShapesEqual(a, b indexShape) bool {
+	if a.Unique != b.Unique || a.Where != b.Where || len(a.Cols) != len(b.Cols) {
+		return false
+	}
+	for i := range a.Cols {
+		if a.Cols[i] != b.Cols[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// normalizeIndexTerm strips the quoting, sort direction and type-cast noise
+// that does not change which values an index covers.
+func normalizeIndexTerm(term string) string {
+	term = strings.ToLower(strings.TrimSpace(term))
+	term = strings.TrimSuffix(term, ";")
+	for _, q := range []string{"\"", "`", "[", "]"} {
+		term = strings.ReplaceAll(term, q, "")
+	}
+	// PostgreSQL appends explicit casts to literals in index predicates:
+	// `_status = 'open'::text`. Removing only the cast TOKEN (not everything
+	// after the cast marker) preserves the quoted literal — the first real PG
+	// run compared `_status = 'open'` against `_status = 'open` and reported
+	// every enum-predicate index as drifted on every run (master todo 15.8).
+	for _, cast := range []string{
+		"::timestamp with time zone", "::timestamp without time zone",
+		"::character varying", "::timestamp", "::text", "::integer",
+		"::bigint", "::smallint", "::numeric", "::boolean", "::date",
+		"::time", "::uuid", "::jsonb",
+	} {
+		term = strings.ReplaceAll(term, cast, "")
+	}
+	// Sort direction changes which plan is chosen, not which rows collide.
+	term = strings.TrimSuffix(term, " desc")
+	term = strings.TrimSuffix(term, " asc")
+	term = strings.Join(strings.Fields(term), " ")
+	// PostgreSQL parenthesises predicates and casts the columns within them:
+	// `((_status)::text = 'open'::text)` reads back with grouping parens the
+	// generated form does not have. Grouping does not change which rows the
+	// predicate selects here (the grammar is `field <op> literal` — see
+	// spec.ParseIndexWhere), so removing parens entirely is a comparison of
+	// the same shape on both sides.
+	term = strings.ReplaceAll(term, "(", "")
+	term = strings.ReplaceAll(term, ")", "")
+	term = strings.Join(strings.Fields(term), " ")
+	return term
 }
 
 // indexNameOf extracts the index name from a CREATE [UNIQUE] INDEX statement.

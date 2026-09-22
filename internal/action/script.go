@@ -53,15 +53,39 @@ func (e *ScriptExecutor) SetSaveHandler(fn func(ctx context.Context, workspaceID
 
 // SetCallHandler sets the cross-resource call callback. callerResources is
 // the calling action's declared uses.resources (nil-safe) — the framework
-// checks cross-module calls against it (todo 2.6.4).
-func (e *ScriptExecutor) SetCallHandler(fn func(ctx context.Context, workspaceID, fromModule, targetModule, targetEntity, action string, params map[string]any, callerResources []string) (any, error)) {
+// checks cross-module calls against it (todo 2.6.4). targetID is the target
+// record ID from resource.call("module.entity.<id>", ...), "" for a
+// collection-level call.
+func (e *ScriptExecutor) SetCallHandler(fn func(ctx context.Context, workspaceID, fromModule, targetModule, targetEntity, targetID, action string, params map[string]any, callerResources []string) (any, error)) {
 	e.engine.CallHandler = fn
 }
 
 // SetLoadHandler sets the entity load callback. callerResources is the
 // calling action's declared uses.resources (todo 2.6.4).
-func (e *ScriptExecutor) SetLoadHandler(fn func(ctx context.Context, workspaceID, fromModule, module, entity, id string, callerResources []string) (map[string]any, int, error)) {
+func (e *ScriptExecutor) SetLoadHandler(fn func(ctx context.Context, workspaceID, fromModule, module, entity, id string, callerResources []string) (map[string]any, int, string, error)) {
 	e.engine.LoadHandler = fn
+}
+
+// SetFindHandler sets the entity find-by-field callback used by
+// resource.find() in scripts (#31). callerResources is the calling action's
+// declared uses.resources (todo 2.6.4).
+func (e *ScriptExecutor) SetFindHandler(fn func(ctx context.Context, workspaceID, fromModule, module, entity string, match map[string]any, callerResources []string) (map[string]any, int, string, error)) {
+	e.engine.FindHandler = fn
+}
+
+// SetUpsertHandler sets the summary-projection upsert callback used by
+// resource.upsert() in scripts (item 4.1). callerResources is the calling
+// action's declared uses.resources (todo 2.6.4).
+func (e *ScriptExecutor) SetUpsertHandler(fn func(ctx context.Context, workspaceID, fromModule, module, entity string, match, data map[string]any, callerResources []string) (string, bool, error)) {
+	e.engine.UpsertHandler = fn
+}
+
+// MaintainerRef returns the ref of the script currently executing (set by
+// Execute from action.Impl.Ref), or "" when no script is running. The wiring
+// layer compares it against a summary entity's `maintained_by` to authorize
+// resource.upsert (item 4.1).
+func (e *ScriptExecutor) MaintainerRef() string {
+	return e.engine.MaintainerRef
 }
 
 // SetCreateHandler sets the entity create callback used by resource.create()
@@ -74,6 +98,12 @@ func (e *ScriptExecutor) SetCreateHandler(fn func(ctx context.Context, workspace
 // SetNextKeyHandler sets the natural key generation callback.
 func (e *ScriptExecutor) SetNextKeyHandler(fn func(ctx context.Context, workspaceID, module, entity, fieldName, scope string) (string, error)) {
 	e.engine.NextKeyHandler = fn
+}
+
+// SetUnitConvertHandler sets the unit conversion callback used by
+// ctx.unit.convert() in scripts (S12, item 4.6).
+func (e *ScriptExecutor) SetUnitConvertHandler(fn func(ctx context.Context, workspaceID, fromModule, entity, field string, value float64, from, to string) (float64, error)) {
+	e.engine.UnitConvertHandler = fn
 }
 
 // SetDatastoreResolver wires the ctx.* primitive resolver into the engine so
@@ -149,6 +179,10 @@ func (e *ScriptExecutor) Execute(ctx context.Context, action spec.Action, params
 	}
 
 	// Execute the script
+	// The running script's ref authorizes resource.upsert() against a summary
+	// entity whose `maintained_by` names it (item 4.1). Set on the engine
+	// before Execute so the wiring layer can compare it.
+	e.engine.MaintainerRef = action.Impl.Ref
 	result, err := e.engine.Execute(
 		ctx,
 		scriptPath,

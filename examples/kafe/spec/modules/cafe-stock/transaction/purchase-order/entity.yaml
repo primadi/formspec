@@ -50,7 +50,7 @@ spec:
       default: draft
       index: true
       title: "Status"
-    # GAP-01 TERTUTUP (2.14) — `moneyinput`. Sisa GAP-02: indeks money.
+    # Memakai `moneyinput`. Sisa GAP-02: indeks money.
     - name: total_amount
       type: money
       title: "Total"

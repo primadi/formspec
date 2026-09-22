@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -22,8 +23,28 @@ const (
 	UserStatusDisabled = "disabled"
 )
 
-// User represents an authenticated principal with credentials and grants.
+// Assignment is one session context a principal may act in (TODO 3.8): a role,
+// the scope dimension it is bound to, and the value of that dimension —
+// `{role: sales, dimension: branch, value: KFE-JKT-01}`. A session is always
+// specific: who, acting as which role, in which branch. All three parts are
+// required; an incomplete entry is not a usable context.
 //
+// The session context decides two things at once: which role's grants the
+// session materializes (the selected one only — never the union) and which
+// dimension value the token carries in its `attrs` claim for `row_scope:
+// {from: session}`.
+type Assignment struct {
+	Role string `json:"role"`
+	// Dimension is the attribute key the session carries, i.e. the entity field
+	// that `row_scope.field` compares (e.g. "branch_id") — not the decorative
+	// `scope.dimension` name ("branch"). `row_scope: {from: session}` looks the
+	// value up under exactly this key.
+	Dimension string `json:"dimension"`
+	// Value is the dimension value for this context (e.g. "KFE-JKT-01").
+	Value string `json:"value"`
+}
+
+// User represents an authenticated principal with credentials and grants.
 // PasswordHash holds a bcrypt hash of the user's password — never the plaintext.
 // Permissions and Roles are the effective grants used to build JWT claims
 // (todo 6.1.2). WorkspaceID scopes the user to a single workspace (tenancy §1).
@@ -53,8 +74,20 @@ type User struct {
 	App         string
 	Roles       []string
 	Permissions []string
-	Active      bool
-	Status      string
+	// Assignments lists the contexts (role × dimension value) this principal
+	// may act in (TODO 3.8). Empty = no boundary: the session resolves the
+	// union of Roles and stays unscoped (owner / service account). One entry =
+	// chosen automatically. More than one = the caller must choose, or the
+	// login fails closed with ErrContextRequired.
+	Assignments []Assignment
+	// Context is the assignment the current session acts under (transient — set
+	// during login/switch, carried into the token, not persisted on the user).
+	// Nil = no boundary. Its Role **replaces** Roles when resolving
+	// permissions: a session never gets the union of every role the principal
+	// holds, only the grants of the role it is acting as.
+	Context *Assignment
+	Active  bool
+	Status  string
 }
 
 // UserStore resolves a user by username or ID within a workspace.
@@ -172,6 +205,7 @@ func (s *EntityUserStore) LinkOAuthIdentity(ctx context.Context, workspaceID, us
 			"oauth_sub":      sub,
 			"roles":          stringSliceField(rec.Data, "roles"),
 			"permissions":    stringSliceField(rec.Data, "permissions"),
+			"assignments":    assignmentSliceField(rec.Data, "assignments"),
 			"active":         boolField(rec.Data, "active", true),
 			"status":         stringField(rec.Data, "status"),
 		},
@@ -202,6 +236,42 @@ func (s *EntityUserStore) UnlinkOAuthIdentity(ctx context.Context, workspaceID, 
 			"oauth_sub":      "",
 			"roles":          stringSliceField(rec.Data, "roles"),
 			"permissions":    stringSliceField(rec.Data, "permissions"),
+			"assignments":    assignmentSliceField(rec.Data, "assignments"),
+			"active":         boolField(rec.Data, "active", true),
+			"status":         stringField(rec.Data, "status"),
+		},
+	})
+	return err
+}
+
+// SetAssignments replaces the principal's session-context list (TODO 3.8). An
+// admin changes a cashier's contexts here; an empty list returns the principal
+// to the boundary-less behavior (union of roles).
+//
+// Removing an assignment does not revoke live sessions by itself: the next
+// refresh re-checks it and fails closed with ErrContextRequired, which is what
+// makes revocation effective without hunting down open sessions.
+func (s *EntityUserStore) SetAssignments(ctx context.Context, workspaceID, userID string, assignments []Assignment) error {
+	rec, err := s.store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: userID})
+	if err != nil {
+		return err
+	}
+	_, err = s.store.Update(ctx, db.UpdateParams{
+		WorkspaceID: workspaceID,
+		ID:          userID,
+		Version:     rec.Version,
+		UpdatedBy:   stringField(rec.Data, "username"),
+		Data: map[string]any{
+			"username":       stringField(rec.Data, "username"),
+			"password_hash":  stringField(rec.Data, "password_hash"),
+			"email":          stringField(rec.Data, "email"),
+			"email_verified": boolField(rec.Data, "email_verified", false),
+			"display_name":   stringField(rec.Data, "display_name"),
+			"oauth_provider": stringField(rec.Data, "oauth_provider"),
+			"oauth_sub":      stringField(rec.Data, "oauth_sub"),
+			"roles":          stringSliceField(rec.Data, "roles"),
+			"permissions":    stringSliceField(rec.Data, "permissions"),
+			"assignments":    assignments,
 			"active":         boolField(rec.Data, "active", true),
 			"status":         stringField(rec.Data, "status"),
 		},
@@ -231,6 +301,7 @@ func (s *EntityUserStore) SetEmailVerified(ctx context.Context, workspaceID, use
 			"oauth_sub":      stringField(rec.Data, "oauth_sub"),
 			"roles":          stringSliceField(rec.Data, "roles"),
 			"permissions":    stringSliceField(rec.Data, "permissions"),
+			"assignments":    assignmentSliceField(rec.Data, "assignments"),
 			"active":         boolField(rec.Data, "active", true),
 			"status":         stringField(rec.Data, "status"),
 		},
@@ -271,6 +342,7 @@ func (s *EntityUserStore) TakeoverUnverifiedEmail(ctx context.Context, workspace
 			"oauth_sub":      sub,
 			"roles":          stringSliceField(rec.Data, "roles"),
 			"permissions":    stringSliceField(rec.Data, "permissions"),
+			"assignments":    assignmentSliceField(rec.Data, "assignments"),
 			"active":         boolField(rec.Data, "active", true),
 			"status":         stringField(rec.Data, "status"),
 		},
@@ -296,6 +368,7 @@ func userFromRecord(rec *db.EntityRecord, workspaceID string) *User {
 		OAuthSub:      stringField(rec.Data, "oauth_sub"),
 		Roles:         stringSliceField(rec.Data, "roles"),
 		Permissions:   stringSliceField(rec.Data, "permissions"),
+		Assignments:   assignmentSliceField(rec.Data, "assignments"),
 		Active:        boolField(rec.Data, "active", true),
 		Status:        status,
 	}
@@ -329,6 +402,7 @@ func (s *EntityUserStore) CreateUser(ctx context.Context, workspaceID string, u 
 			"oauth_sub":      u.OAuthSub,
 			"roles":          u.Roles,
 			"permissions":    u.Permissions,
+			"assignments":    u.Assignments,
 			"active":         u.Active,
 			"status":         status,
 		},
@@ -378,6 +452,7 @@ func (s *EntityUserStore) UpdateUser(ctx context.Context, workspaceID string, u 
 			"oauth_sub":      u.OAuthSub,
 			"roles":          u.Roles,
 			"permissions":    u.Permissions,
+			"assignments":    u.Assignments,
 			"active":         u.Active,
 			"status":         u.Status,
 		},
@@ -413,11 +488,42 @@ func (s *EntityUserStore) SetPassword(ctx context.Context, workspaceID, userID, 
 			"oauth_sub":      stringField(rec.Data, "oauth_sub"),
 			"roles":          stringSliceField(rec.Data, "roles"),
 			"permissions":    stringSliceField(rec.Data, "permissions"),
+			"assignments":    assignmentSliceField(rec.Data, "assignments"),
 			"active":         boolField(rec.Data, "active", true),
 			"status":         stringField(rec.Data, "status"),
 		},
 	})
 	return err
+}
+
+// assignmentSliceField extracts the `assignments` list from record data,
+// tolerating the JSON round-trip shapes ([]any of map[string]any / []Assignment)
+// and nil. Incomplete entries (missing role/dimension/value) are dropped — the
+// entity declares all three as required, and an incomplete row is not a usable
+// session context.
+func assignmentSliceField(data map[string]any, key string) []Assignment {
+	v, ok := data[key]
+	if !ok || v == nil {
+		return nil
+	}
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return nil
+	}
+	var parsed []Assignment
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return nil
+	}
+	out := make([]Assignment, 0, len(parsed))
+	for _, a := range parsed {
+		if a.Complete() {
+			out = append(out, a)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // stringSliceField extracts a []string field from record data, tolerating

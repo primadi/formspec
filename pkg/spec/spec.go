@@ -8,8 +8,11 @@
 // and docs_old/spec/04-control-plane.md (pending migration).
 package spec
 
-// APIVersion is the current FormSpec API version string.
-const APIVersion = "formspec.dev/v1alpha1"
+// APIVersion is the current FormSpec API version string. Only **stable**
+// versions are accepted: `internal/schemaregistry.ParseVersion` rejects
+// pre-stable ones such as `formspec.dev/v1alpha1`, and every manifest in this
+// repository declares `formspec.dev/v1`.
+const APIVersion = "formspec.dev/v1"
 
 // Manifest is the top-level structure of every FormSpec YAML document.
 // It contains exactly four top-level keys: apiVersion, kind, metadata, spec.

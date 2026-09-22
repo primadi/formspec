@@ -11,7 +11,7 @@ Implementasi konkret sebuah `VisualSpecKind`
 punya banyak Renderer — filosofi UX berbeda, stack berbeda:
 
 ```yaml
-apiVersion: formspec/v1
+apiVersion: formspec.dev/v1
 kind: Renderer
 metadata:
   name: kanban-vue-community

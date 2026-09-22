@@ -36,7 +36,7 @@ spec:
       enum_values: [cash, card, qris, ewallet, points]
       required: true
       title: "Metode Bayar"
-    # GAP-01 TERTUTUP (2.14) — `moneyinput`. Sisa GAP-02: indeks money.
+    # Memakai `moneyinput`. Sisa GAP-02: indeks money.
     - name: amount
       type: money
       required: true

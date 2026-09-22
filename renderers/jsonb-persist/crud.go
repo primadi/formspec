@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -626,7 +628,8 @@ func (s *EntityStore) Insert(ctx context.Context, params InsertParams) (string, 
 		// durable publisher's contract requires the mutation and its
 		// outbox entry to commit together or not at all.
 		for _, ev := range params.PendingEvents {
-			if _, err := enqueueOutbox(ctx, txdb, params.WorkspaceID, ev.Name, resource, ev.Payload); err != nil {
+			payload := withRecordID(ev.Payload, id)
+			if _, err := enqueueOutbox(ctx, txdb, params.WorkspaceID, ev.Name, resource, payload); err != nil {
 				return fmt.Errorf("enqueue pending event %q: %w", ev.Name, err)
 			}
 		}
@@ -638,6 +641,48 @@ func (s *EntityStore) Insert(ctx context.Context, params InsertParams) (string, 
 	}
 
 	return id, nil
+}
+
+// withRecordID merges the mutated record's id into an already-encoded outbox
+// event message (the JSON a PendingEvent carries — see action.BuildEventMessage).
+//
+// The record's id lives in its own table column, not in the data map, so it is
+// never part of the payload a spec author can select with payload.fields. A
+// subscriber that cannot see which record an event is about cannot react to it:
+// the GL journal handler needs the order id both to store as `source_id` and to
+// make its own work idempotent per source. Injecting it here, at the single
+// point where the payload is written to the outbox, means every durable event
+// carries its subject's identity regardless of which code path emitted it.
+//
+// The message keeps its shape: only the nested "payload" object is touched. A
+// payload that already carries an "id" field keeps it — an entity that really
+// does declare an `id` field wins over the framework column. Malformed JSON is
+// passed through untouched, since the outbox's own encoding contract is
+// enforced elsewhere and a silent drop here would be worse than a downstream
+// decode error.
+func withRecordID(payloadJSON, recordID string) string {
+	if recordID == "" || payloadJSON == "" {
+		return payloadJSON
+	}
+	var msg map[string]any
+	if err := json.Unmarshal([]byte(payloadJSON), &msg); err != nil {
+		return payloadJSON
+	}
+	// A non-object payload (or one without the expected envelope) is not ours
+	// to reshape.
+	body, ok := msg["payload"].(map[string]any)
+	if !ok {
+		return payloadJSON
+	}
+	if _, exists := body["id"]; exists {
+		return payloadJSON
+	}
+	body["id"] = recordID
+	reencoded, err := json.Marshal(msg)
+	if err != nil {
+		return payloadJSON
+	}
+	return string(reencoded)
 }
 
 // GetByIDParams holds the data for fetching an entity record.
@@ -975,7 +1020,8 @@ func (s *EntityStore) Update(ctx context.Context, params UpdateParams) (int, err
 		// Enqueue any durable events atomically with the row update that
 		// produced them — see Insert's doc comment.
 		for _, ev := range params.PendingEvents {
-			if _, err := enqueueOutbox(ctx, txdb, params.WorkspaceID, ev.Name, resource, ev.Payload); err != nil {
+			payload := withRecordID(ev.Payload, resolvedID)
+			if _, err := enqueueOutbox(ctx, txdb, params.WorkspaceID, ev.Name, resource, payload); err != nil {
 				return fmt.Errorf("enqueue pending event %q: %w", ev.Name, err)
 			}
 		}
@@ -2494,8 +2540,13 @@ func splitRelationResource(module, resource string) (string, string) {
 	return module, resource
 }
 
-// FindByField finds a single entity record by a specific field value.
-func (s *EntityStore) FindByField(ctx context.Context, workspaceID, field, value string) (*EntityRecord, error) {
+// FindByField finds a single entity record by a specific field value. The value
+// is passed as `any` so callers (e.g. resource.find() from Starlark, #31) can
+// look up non-string fields — booleans, numbers, and money objects — without
+// stringifying them first. It runs on the request-scoped transaction when one is
+// active (txReadDB), so a guard inside an action sees its own writes and does
+// not deadlock on SQLite.
+func (s *EntityStore) FindByField(ctx context.Context, workspaceID, field string, value any) (*EntityRecord, error) {
 	tbl := s.qualifiedTable()
 	col := generatedColumnName(field)
 
@@ -2515,6 +2566,210 @@ func (s *EntityStore) FindByField(ctx context.Context, workspaceID, field, value
 	// Evaluate computed fields
 	s.evaluateComputed(rec.Data)
 
+	return rec, nil
+}
+
+// FindByFields finds a single entity record matching ALL given field values
+// (AND). It is the multi-field form of FindByField, used by resource.find()
+// from Starlark (#31) so a uniqueness guard can match on a composite key
+// (e.g. branch_id + menu_item_id) without raw SQL. Values are passed as `any`
+// so non-string fields work. It runs on the request-scoped transaction when one
+// is active (txReadDB), so a guard inside an action sees its own writes and does
+// not deadlock on SQLite.
+func (s *EntityStore) FindByFields(ctx context.Context, workspaceID string, match map[string]any) (*EntityRecord, error) {
+	if len(match) == 0 {
+		return nil, fmt.Errorf("FindByFields: match must not be empty")
+	}
+	tbl := s.qualifiedTable()
+
+	// Deterministic column order so the query is stable across calls.
+	fields := make([]string, 0, len(match))
+	for f := range match {
+		fields = append(fields, f)
+	}
+	sort.Strings(fields)
+
+	conds := make([]string, 0, len(fields)+1)
+	args := make([]any, 0, len(fields)+1)
+	for _, f := range fields {
+		conds = append(conds, generatedColumnName(f)+" = ?")
+		args = append(args, match[f])
+	}
+	conds = append(conds, "tenant_id = ?")
+	args = append(args, workspaceID)
+
+	query := fmt.Sprintf(
+		`SELECT id, tenant_id, version, created_at, updated_at, created_by, updated_by, doc_status, data FROM %s WHERE %s`,
+		tbl, strings.Join(conds, " AND "))
+	if s.softDelete {
+		query += " AND deleted_at IS NULL"
+	}
+	query += " LIMIT 1"
+
+	rec, err := s.scanRecord(ctx, txReadDB(ctx, s.db), query, args...)
+	if err != nil {
+		// "No row matched" is not an error for a find — callers (resource.find
+		// from Starlark) treat it as None. Only a real scan failure propagates.
+		if errors.Is(err, ErrNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	s.evaluateComputed(rec.Data)
+
+	return rec, nil
+}
+
+// UpsertProjection writes a row of a `characteristic: summary` projection,
+// matching on `match` (all pairs, AND) and merging `data` onto the existing row
+// or inserting a new one. It is the ONE supported write path for summary
+// entities (02-core-extended.md §6.1): the API-facing Insert/Update/SoftDelete
+// reject summary outright, and this method exists so a maintainer script named
+// by `maintained_by` can keep its projection current.
+//
+// It is deliberately NOT exposed to the API surface — callers reach it only
+// through resource.upsert() from Starlark, and the caller-identity check (that
+// the running script IS the entity's maintained_by) lives in the wiring layer
+// (resource/formspec.go), not here. This method enforces the remaining
+// invariants: it refuses non-summary entities, validates known/required fields,
+// and runs inside one transaction so the read-then-write is atomic.
+//
+// Returns the row id and whether a new row was created.
+func (s *EntityStore) UpsertProjection(ctx context.Context, workspaceID string, match, data map[string]any) (string, bool, error) {
+	if s.characteristic != spec.CharSummary {
+		return "", false, fmt.Errorf("%w: UpsertProjection is only valid for summary entities, %s/%s is %q",
+			ErrValidationRule, s.module, s.entity, s.characteristic)
+	}
+	if len(match) == 0 {
+		return "", false, fmt.Errorf("%w: UpsertProjection requires a non-empty match", ErrValidationRule)
+	}
+
+	// Merge match into data so the matched columns are always written (a new
+	// row must carry them; an existing row keeps them consistent).
+	merged := make(map[string]any, len(data)+len(match))
+	for k, v := range data {
+		merged[k] = v
+	}
+	for k, v := range match {
+		merged[k] = v
+	}
+
+	s.applyDefaults(merged)
+	s.stripEnrichedRelations(merged)
+	s.stripRetired(merged)
+	s.sanitizeRichText(merged)
+
+	if err := s.validateKnownFields(merged); err != nil {
+		return "", false, fmt.Errorf("%s upsert: %w", s.entity, err)
+	}
+	if err := s.validateRequired(merged); err != nil {
+		return "", false, fmt.Errorf("%s upsert: %w", s.entity, err)
+	}
+
+	tbl := s.qualifiedTable()
+	var id string
+	var created bool
+
+	err := runTx(ctx, s.db, func(txdb DB) error {
+		// Find the existing row by match, inside the transaction so the
+		// read-then-write is atomic (no two concurrent movements can both
+		// insert a row for the same key — the unique index is the backstop).
+		existing, err := s.findByFieldsTx(ctx, txdb, workspaceID, match)
+		if err != nil {
+			return err
+		}
+
+		if existing != nil {
+			id = existing.ID
+			created = false
+			// Merge onto the existing data so a partial update (e.g. only
+			// quantity_on_hand + moving_avg_cost) does not wipe other fields.
+			next := make(map[string]any, len(existing.Data)+len(merged))
+			for k, v := range existing.Data {
+				next[k] = v
+			}
+			for k, v := range merged {
+				next[k] = v
+			}
+			if err := s.validateFieldRules(ctx, txdb, next, workspaceID, id); err != nil {
+				return err
+			}
+			query := fmt.Sprintf(
+				`UPDATE %s SET data = ?, version = version + 1, updated_at = %s WHERE id = ? AND tenant_id = ?`,
+				tbl, currentTimestampExpr(s.driver))
+			if s.softDelete {
+				query += " AND deleted_at IS NULL"
+			}
+			if _, err := txdb.ExecContext(ctx, query, toJSONString(next), id, workspaceID); err != nil {
+				return err
+			}
+			return nil
+		}
+
+		// Insert a new projection row.
+		id = NewUUIDv7()
+		created = true
+		if err := s.validateFieldRules(ctx, txdb, merged, workspaceID, ""); err != nil {
+			return err
+		}
+		// `is_active` (soft-deactivate) is a field inside `data`, injected by
+		// applyDefaults when the entity opts in — it is NOT a table column.
+		// `deleted_at` (soft delete) is the table column, and a fresh row is
+		// simply not deleted, so neither needs an explicit column here.
+		cols := []string{"id", "tenant_id", "version", "data"}
+		vals := []any{id, workspaceID, 1, toJSONString(merged)}
+		placeholders := make([]string, len(cols))
+		for i := range cols {
+			placeholders[i] = "?"
+		}
+		query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
+			tbl, strings.Join(cols, ", "), strings.Join(placeholders, ", "))
+		if _, err := txdb.ExecContext(ctx, query, vals...); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return "", false, fmt.Errorf("%s upsert: %w", s.entity, err)
+	}
+	return id, created, nil
+}
+
+// findByFieldsTx is the transaction-scoped form of FindByFields, used by
+// UpsertProjection so the lookup runs on the same connection as the write.
+func (s *EntityStore) findByFieldsTx(ctx context.Context, txdb DB, workspaceID string, match map[string]any) (*EntityRecord, error) {
+	tbl := s.qualifiedTable()
+	fields := make([]string, 0, len(match))
+	for f := range match {
+		fields = append(fields, f)
+	}
+	sort.Strings(fields)
+
+	conds := make([]string, 0, len(fields)+1)
+	args := make([]any, 0, len(fields)+1)
+	for _, f := range fields {
+		conds = append(conds, generatedColumnName(f)+" = ?")
+		args = append(args, match[f])
+	}
+	conds = append(conds, "tenant_id = ?")
+	args = append(args, workspaceID)
+
+	query := fmt.Sprintf(
+		`SELECT id, tenant_id, version, created_at, updated_at, created_by, updated_by, doc_status, data FROM %s WHERE %s`,
+		tbl, strings.Join(conds, " AND "))
+	if s.softDelete {
+		query += " AND deleted_at IS NULL"
+	}
+	query += " LIMIT 1"
+
+	rec, err := s.scanRecord(ctx, txdb, query, args...)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil, nil // no match — the caller inserts
+		}
+		return nil, err
+	}
 	return rec, nil
 }
 
@@ -3259,32 +3514,86 @@ func computeChanges(old, new map[string]any) map[string]map[string]any {
 }
 
 // valuesEqual compares two Go values for audit diff purposes.
-// Handles basic types, maps, and slices.
+//
+// It must never panic: the values come straight from entity data, so any shape
+// a field can hold can show up here. A bare `a == b` on the default path did
+// panic the process — comparing uncomparable type []map[string]interface {} —
+// because a child collection read back from its own table is []map[string]any
+// while the write path carries []any, and neither the map nor a single []any
+// case matched. Two guards keep that from recurring: every slice shape a child
+// collection can arrive in is normalized before comparison (so the two shapes
+// compare equal when their contents are equal), and the fallback checks
+// comparability before using ==.
 func valuesEqual(a, b any) bool {
+	// Normalize first: a child collection reaches this function as []any or as
+	// []map[string]any depending on whether it came from the request or from
+	// ChildStore.Hydrate, and the two must compare by content, not by shape.
+	if sa, ok := asSlice(a); ok {
+		sb, ok := asSlice(b)
+		if !ok {
+			return false
+		}
+		return slicesEqual(sa, sb)
+	}
 	switch va := a.(type) {
 	case map[string]any:
 		vb, ok := b.(map[string]any)
 		if !ok {
 			return false
 		}
+		// A non-slice map compared against a slice was already rejected above.
 		return mapsEqual(va, vb)
-	case []any:
-		vb, ok := b.([]any)
-		if !ok {
-			return false
-		}
-		if len(va) != len(vb) {
-			return false
-		}
-		for i := range va {
-			if !valuesEqual(va[i], vb[i]) {
-				return false
-			}
-		}
-		return true
 	default:
+		return comparableEqual(a, b)
+	}
+}
+
+// asSlice normalizes any slice shape an entity field can carry to []any.
+// A child collection is []any on the write path and []map[string]any once
+// ChildStore.Hydrate has read it back from its own table; both describe the
+// same collection.
+func asSlice(v any) ([]any, bool) {
+	switch s := v.(type) {
+	case []any:
+		return s, true
+	case []map[string]any:
+		out := make([]any, len(s))
+		for i, m := range s {
+			out[i] = m
+		}
+		return out, true
+	default:
+		return nil, false
+	}
+}
+
+// slicesEqual compares two normalized slices element-wise.
+func slicesEqual(a, b []any) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if !valuesEqual(a[i], b[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// comparableEqual compares two values with == when their dynamic type allows it,
+// falling back to reflect.DeepEqual for slices, maps and funcs. Entity data is
+// decoded from JSON and assembled from several code paths, so an uncomparable
+// type reaching a comparison is ordinary, not exceptional — and `==` on one
+// panics rather than returning false.
+func comparableEqual(a, b any) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	ta := reflect.TypeOf(a)
+	if ta.Comparable() && ta == reflect.TypeOf(b) {
 		return a == b
 	}
+	return reflect.DeepEqual(a, b)
 }
 
 // mapsEqual checks if two maps have equal key-value pairs.

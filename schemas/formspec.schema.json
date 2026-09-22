@@ -1058,6 +1058,17 @@
         "LOGS_FILTER_INVALID"
       ]
     },
+    "EventChannel": {
+      "title": "Event Channel",
+      "description": "Delivery channel for an event. Closed set — every name is implemented by the delivery pipeline.",
+      "type": "string",
+      "enum": [
+        "audit_log",
+        "websocket",
+        "queue",
+        "reliable_event"
+      ]
+    },
     "EventDecl": {
       "description": "EventDecl declares an event an entity can publish (Core §12).\n",
       "type": "object",
@@ -1097,8 +1108,8 @@
       "type": "object",
       "properties": {
         "channel": {
-          "description": "audit_log | websocket | queue | reliable_event",
-          "type": "string"
+          "$ref": "#/$defs/EventChannel",
+          "description": "audit_log | websocket | queue | reliable_event"
         },
         "dead_letter": {
           "$ref": "#/$defs/DeliveryTarget",
@@ -1571,26 +1582,34 @@
     },
     "FormRenderDecl": {
       "description": "FormRenderDecl is the design-time container declaration of a Form\n(Frontend §1.6). YAML accepts both `render: separate_page` (shorthand) and\n`render: { mode: separate_page }`; JSON always serializes the object form to\nmatch the renderer contract (`spec.render.mode`).\n",
-      "type": "object",
-      "properties": {
-        "mode": {
-          "$ref": "#/$defs/FormRender",
-          "description": "@schema {description: \"Render mode: modal (popup dialog), drawer (side panel), separate_page (full page)\", enum: [\"modal\", \"drawer\", \"separate_page\"]}"
+      "oneOf": [
+        {
+          "description": "Shorthand render mode — e.g. \"drawer\", \"modal\", \"separate_page\"",
+          "type": "string"
         },
-        "picker_panel": {
-          "description": "PickerPanel places the child-field picker relative to the rest of the",
-          "type": "string",
-          "enum": [
-            "",
-            "inline",
-            "aside"
-          ]
+        {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "$ref": "#/$defs/FormRender",
+              "description": "@schema {description: \"Render mode: modal (popup dialog), drawer (side panel), separate_page (full page)\", enum: [\"modal\", \"drawer\", \"separate_page\"]}"
+            },
+            "picker_panel": {
+              "description": "PickerPanel places the child-field picker relative to the rest of the",
+              "type": "string",
+              "enum": [
+                "",
+                "inline",
+                "aside"
+              ]
+            }
+          },
+          "required": [
+            "mode"
+          ],
+          "additionalProperties": false
         }
-      },
-      "required": [
-        "mode"
-      ],
-      "additionalProperties": false
+      ]
     },
     "FormSection": {
       "description": "FormSection groups form fields.\n",
@@ -1718,6 +1737,11 @@
         "priority": {
           "description": "0 → default 10",
           "type": "integer"
+        },
+        "uses": {
+          "$ref": "#/$defs/UsesDecl",
+          "description": "Uses declares the hook script's own access (db, resources, config,",
+          "nullable": true
         }
       },
       "required": [
@@ -1818,6 +1842,11 @@
           "examples": [
             "create"
           ]
+        },
+        "map": {
+          "description": "Map declares how the source event payload becomes the target action's",
+          "type": "object",
+          "additionalProperties": {}
         },
         "resource": {
           "description": "@schema {example: \"gl.journal-entry\"}",
@@ -2548,7 +2577,7 @@
       ]
     },
     "PrintBodyItem": {
-      "description": "PrintBodyItem is one element in the Print body (fields | separator | child_table | totals).\n",
+      "description": "PrintBodyItem is one element in the Print body\n(fields | separator | child_table | totals | qrcode).\n",
       "type": "object",
       "properties": {
         "child_table": {
@@ -2560,6 +2589,11 @@
           "items": {
             "type": "string"
           }
+        },
+        "qrcode": {
+          "$ref": "#/$defs/PrintQrcode",
+          "description": "Qrcode renders a scannable QR code (gap #3 / S4: a table card or a",
+          "nullable": true
         },
         "separator": {
           "type": "string"
@@ -2621,6 +2655,17 @@
       },
       "additionalProperties": false
     },
+    "PrintFormat": {
+      "title": "Print Format",
+      "description": "Output format for a Print document. Closed set — pdf/thermal are served server-side, html client-side; dotmatrix is not implemented and is rejected.",
+      "type": "string",
+      "enum": [
+        "pdf",
+        "thermal",
+        "dotmatrix",
+        "html"
+      ]
+    },
     "PrintHeader": {
       "description": "PrintHeader is the declarative header block of a Print document.\n",
       "type": "object",
@@ -2642,8 +2687,8 @@
       "type": "object",
       "properties": {
         "format": {
-          "description": "pdf | thermal | dotmatrix | html",
-          "type": "string"
+          "$ref": "#/$defs/PrintFormat",
+          "description": "pdf | thermal | dotmatrix | html"
         },
         "paper": {
           "$ref": "#/$defs/PrintPaper",
@@ -2671,6 +2716,43 @@
           "type": "string"
         }
       },
+      "additionalProperties": false
+    },
+    "PrintQrcode": {
+      "description": "PrintQrcode is a QR code element in a Print body.\n",
+      "type": "object",
+      "properties": {
+        "absolute": {
+          "description": "Absolute prepends the origin the document is printed from, so the code",
+          "type": "boolean"
+        },
+        "label": {
+          "description": "@schema {example: \"Scan untuk struk digital\"}",
+          "type": "string",
+          "examples": [
+            "Scan untuk struk digital"
+          ]
+        },
+        "payload": {
+          "description": "Text the QR encodes. `{dotted.path}` tokens are interpolated from the record, exactly like `header.title`/`footer.text`.",
+          "type": "string",
+          "examples": [
+            "/status/{guest_token}"
+          ],
+          "minLength": 1
+        },
+        "size_mm": {
+          "description": "QR side length in millimetres (default 30). Thermal maps it to a module size instead of a physical size.",
+          "type": "integer",
+          "examples": [
+            "30"
+          ],
+          "minimum": 0
+        }
+      },
+      "required": [
+        "payload"
+      ],
       "additionalProperties": false
     },
     "PrintTotals": {
@@ -2881,21 +2963,39 @@
       ],
       "additionalProperties": false
     },
+    "ReportAggregate": {
+      "title": "Report Aggregate",
+      "description": "Aggregation applied to a report column. Closed set — mirrors the Query Builder's aggregate functions.",
+      "type": "string",
+      "enum": [
+        "sum",
+        "avg",
+        "count",
+        "min",
+        "max"
+      ]
+    },
     "ReportColumn": {
       "description": "ReportColumn is a column in a report output.\n",
       "type": "object",
       "properties": {
         "aggregate": {
-          "type": "string"
+          "$ref": "#/$defs/ReportAggregate",
+          "description": "Aggregate is a closed set (S16) — mirrors the Query Builder's aggregate"
         },
         "field": {
           "type": "string"
         },
         "format": {
-          "type": "string"
+          "$ref": "#/$defs/ReportFormat",
+          "description": "Format is a closed set (S16) — every name is implemented by the report"
         },
         "label": {
           "type": "string"
+        },
+        "widget": {
+          "$ref": "#/$defs/TableCellWidget",
+          "description": "Widget renders the cell like a table cell (S16) — the same closed set as"
         }
       },
       "required": [
@@ -2903,6 +3003,17 @@
         "label"
       ],
       "additionalProperties": false
+    },
+    "ReportFormat": {
+      "title": "Report Format",
+      "description": "Value formatter for a report column. Closed set — every name is implemented by the report renderer.",
+      "type": "string",
+      "enum": [
+        "currency",
+        "date",
+        "datetime",
+        "percentage"
+      ]
     },
     "ReportGroup": {
       "description": "ReportGroup defines a grouping level in a report.\n",
@@ -2935,7 +3046,7 @@
           "type": "boolean"
         },
         "type": {
-          "type": "string"
+          "$ref": "#/$defs/ReportParamType"
         }
       },
       "required": [
@@ -2944,6 +3055,18 @@
         "type"
       ],
       "additionalProperties": false
+    },
+    "ReportParamType": {
+      "title": "Report Param Type",
+      "description": "Input type for a report parameter. Closed set — every name is implemented by the report renderer.",
+      "type": "string",
+      "enum": [
+        "text",
+        "date",
+        "datetime",
+        "select",
+        "relation"
+      ]
     },
     "ReportSource": {
       "description": "ReportSource declares the report's data source + parameterized filter.\n",
@@ -3580,6 +3703,10 @@
       "description": "TransitionDecl defines a transition between states (Core §14).\nThe canonical manifest key for the triggering action is `via`;\n`action` is accepted as a legacy alias.\n",
       "type": "object",
       "properties": {
+        "emit": {
+          "description": "Emit names the event this transition publishes when it fires (S13). It",
+          "type": "string"
+        },
         "from": {
           "oneOf": [
             {
@@ -3627,6 +3754,11 @@
           "items": {
             "type": "string"
           }
+        },
+        "factors": {
+          "description": "Factors maps each convertible unit to how many base units one of it is",
+          "type": "object",
+          "additionalProperties": {}
         }
       },
       "required": [
@@ -4011,13 +4143,24 @@
           "description": "quorum, default 1",
           "type": "integer"
         },
+        "description": {
+          "description": "Description explains what to check before deciding (S15).",
+          "type": "string"
+        },
+        "display_fields": {
+          "description": "DisplayFields names the record fields the approver needs to see to decide",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "escalation": {
           "$ref": "#/$defs/StepEscalation",
           "nullable": true
         },
         "mode": {
-          "description": "all | any | sequential",
-          "type": "string"
+          "$ref": "#/$defs/WorkflowStepMode",
+          "description": "all | any | sequential"
         },
         "roles": {
           "description": "@schema {example: \"[gl.supervisor]\"}",
@@ -4029,12 +4172,26 @@
             "[gl.supervisor]"
           ]
         },
+        "title": {
+          "description": "Title is the human label for this approval task (S15). Without it the",
+          "type": "string"
+        },
         "when": {
           "description": "FormSpecExpr — skip step if false",
           "type": "string"
         }
       },
       "additionalProperties": false
+    },
+    "WorkflowStepMode": {
+      "title": "Workflow Step Mode",
+      "description": "How a step's quorum is collected. Closed set.",
+      "type": "string",
+      "enum": [
+        "all",
+        "any",
+        "sequential"
+      ]
     },
     "WorkflowTransitionRef": {
       "description": "WorkflowTransitionRef identifies the intercepted transition. Two forms exist\nand are mutually exclusive (S9, kafe 1.7):\n\n\ttransition: { name: void-order }            # by transition name — preferred\n\ttransition: { from: draft, to: posted }     # by state pair (legacy)\n\nThe name form is preferred because a transition may have **several** origin\nstates (`from: [paid, in_kitchen, ready, served]`). A state pair can only\ndescribe one of them, so a workflow written as `from: paid` silently does not\ncover the other three — a hole with no error and no log. Naming the transition\ncovers all of its origin states at once, and the name can be validated against\nthe entity's state machine.\n",
@@ -5134,6 +5291,17 @@
         "LOGS_FILTER_INVALID"
       ]
     },
+    "EventChannel": {
+      "title": "Event Channel",
+      "description": "Delivery channel for an event. Closed set — every name is implemented by the delivery pipeline.",
+      "type": "string",
+      "enum": [
+        "audit_log",
+        "websocket",
+        "queue",
+        "reliable_event"
+      ]
+    },
     "EventDecl": {
       "description": "EventDecl declares an event an entity can publish (Core §12).\n",
       "type": "object",
@@ -5173,8 +5341,8 @@
       "type": "object",
       "properties": {
         "channel": {
-          "description": "audit_log | websocket | queue | reliable_event",
-          "type": "string"
+          "$ref": "#/$defs/EventChannel",
+          "description": "audit_log | websocket | queue | reliable_event"
         },
         "dead_letter": {
           "$ref": "#/$defs/DeliveryTarget",
@@ -5647,26 +5815,34 @@
     },
     "FormRenderDecl": {
       "description": "FormRenderDecl is the design-time container declaration of a Form\n(Frontend §1.6). YAML accepts both `render: separate_page` (shorthand) and\n`render: { mode: separate_page }`; JSON always serializes the object form to\nmatch the renderer contract (`spec.render.mode`).\n",
-      "type": "object",
-      "properties": {
-        "mode": {
-          "$ref": "#/$defs/FormRender",
-          "description": "@schema {description: \"Render mode: modal (popup dialog), drawer (side panel), separate_page (full page)\", enum: [\"modal\", \"drawer\", \"separate_page\"]}"
+      "oneOf": [
+        {
+          "description": "Shorthand render mode — e.g. \"drawer\", \"modal\", \"separate_page\"",
+          "type": "string"
         },
-        "picker_panel": {
-          "description": "PickerPanel places the child-field picker relative to the rest of the",
-          "type": "string",
-          "enum": [
-            "",
-            "inline",
-            "aside"
-          ]
+        {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "$ref": "#/$defs/FormRender",
+              "description": "@schema {description: \"Render mode: modal (popup dialog), drawer (side panel), separate_page (full page)\", enum: [\"modal\", \"drawer\", \"separate_page\"]}"
+            },
+            "picker_panel": {
+              "description": "PickerPanel places the child-field picker relative to the rest of the",
+              "type": "string",
+              "enum": [
+                "",
+                "inline",
+                "aside"
+              ]
+            }
+          },
+          "required": [
+            "mode"
+          ],
+          "additionalProperties": false
         }
-      },
-      "required": [
-        "mode"
-      ],
-      "additionalProperties": false
+      ]
     },
     "FormSection": {
       "description": "FormSection groups form fields.\n",
@@ -5794,6 +5970,11 @@
         "priority": {
           "description": "0 → default 10",
           "type": "integer"
+        },
+        "uses": {
+          "$ref": "#/$defs/UsesDecl",
+          "description": "Uses declares the hook script's own access (db, resources, config,",
+          "nullable": true
         }
       },
       "required": [
@@ -5894,6 +6075,11 @@
           "examples": [
             "create"
           ]
+        },
+        "map": {
+          "description": "Map declares how the source event payload becomes the target action's",
+          "type": "object",
+          "additionalProperties": {}
         },
         "resource": {
           "description": "@schema {example: \"gl.journal-entry\"}",
@@ -6624,7 +6810,7 @@
       ]
     },
     "PrintBodyItem": {
-      "description": "PrintBodyItem is one element in the Print body (fields | separator | child_table | totals).\n",
+      "description": "PrintBodyItem is one element in the Print body\n(fields | separator | child_table | totals | qrcode).\n",
       "type": "object",
       "properties": {
         "child_table": {
@@ -6636,6 +6822,11 @@
           "items": {
             "type": "string"
           }
+        },
+        "qrcode": {
+          "$ref": "#/$defs/PrintQrcode",
+          "description": "Qrcode renders a scannable QR code (gap #3 / S4: a table card or a",
+          "nullable": true
         },
         "separator": {
           "type": "string"
@@ -6697,6 +6888,17 @@
       },
       "additionalProperties": false
     },
+    "PrintFormat": {
+      "title": "Print Format",
+      "description": "Output format for a Print document. Closed set — pdf/thermal are served server-side, html client-side; dotmatrix is not implemented and is rejected.",
+      "type": "string",
+      "enum": [
+        "pdf",
+        "thermal",
+        "dotmatrix",
+        "html"
+      ]
+    },
     "PrintHeader": {
       "description": "PrintHeader is the declarative header block of a Print document.\n",
       "type": "object",
@@ -6718,8 +6920,8 @@
       "type": "object",
       "properties": {
         "format": {
-          "description": "pdf | thermal | dotmatrix | html",
-          "type": "string"
+          "$ref": "#/$defs/PrintFormat",
+          "description": "pdf | thermal | dotmatrix | html"
         },
         "paper": {
           "$ref": "#/$defs/PrintPaper",
@@ -6747,6 +6949,43 @@
           "type": "string"
         }
       },
+      "additionalProperties": false
+    },
+    "PrintQrcode": {
+      "description": "PrintQrcode is a QR code element in a Print body.\n",
+      "type": "object",
+      "properties": {
+        "absolute": {
+          "description": "Absolute prepends the origin the document is printed from, so the code",
+          "type": "boolean"
+        },
+        "label": {
+          "description": "@schema {example: \"Scan untuk struk digital\"}",
+          "type": "string",
+          "examples": [
+            "Scan untuk struk digital"
+          ]
+        },
+        "payload": {
+          "description": "Text the QR encodes. `{dotted.path}` tokens are interpolated from the record, exactly like `header.title`/`footer.text`.",
+          "type": "string",
+          "examples": [
+            "/status/{guest_token}"
+          ],
+          "minLength": 1
+        },
+        "size_mm": {
+          "description": "QR side length in millimetres (default 30). Thermal maps it to a module size instead of a physical size.",
+          "type": "integer",
+          "examples": [
+            "30"
+          ],
+          "minimum": 0
+        }
+      },
+      "required": [
+        "payload"
+      ],
       "additionalProperties": false
     },
     "PrintTotals": {
@@ -6957,21 +7196,39 @@
       ],
       "additionalProperties": false
     },
+    "ReportAggregate": {
+      "title": "Report Aggregate",
+      "description": "Aggregation applied to a report column. Closed set — mirrors the Query Builder's aggregate functions.",
+      "type": "string",
+      "enum": [
+        "sum",
+        "avg",
+        "count",
+        "min",
+        "max"
+      ]
+    },
     "ReportColumn": {
       "description": "ReportColumn is a column in a report output.\n",
       "type": "object",
       "properties": {
         "aggregate": {
-          "type": "string"
+          "$ref": "#/$defs/ReportAggregate",
+          "description": "Aggregate is a closed set (S16) — mirrors the Query Builder's aggregate"
         },
         "field": {
           "type": "string"
         },
         "format": {
-          "type": "string"
+          "$ref": "#/$defs/ReportFormat",
+          "description": "Format is a closed set (S16) — every name is implemented by the report"
         },
         "label": {
           "type": "string"
+        },
+        "widget": {
+          "$ref": "#/$defs/TableCellWidget",
+          "description": "Widget renders the cell like a table cell (S16) — the same closed set as"
         }
       },
       "required": [
@@ -6979,6 +7236,17 @@
         "label"
       ],
       "additionalProperties": false
+    },
+    "ReportFormat": {
+      "title": "Report Format",
+      "description": "Value formatter for a report column. Closed set — every name is implemented by the report renderer.",
+      "type": "string",
+      "enum": [
+        "currency",
+        "date",
+        "datetime",
+        "percentage"
+      ]
     },
     "ReportGroup": {
       "description": "ReportGroup defines a grouping level in a report.\n",
@@ -7011,7 +7279,7 @@
           "type": "boolean"
         },
         "type": {
-          "type": "string"
+          "$ref": "#/$defs/ReportParamType"
         }
       },
       "required": [
@@ -7020,6 +7288,18 @@
         "type"
       ],
       "additionalProperties": false
+    },
+    "ReportParamType": {
+      "title": "Report Param Type",
+      "description": "Input type for a report parameter. Closed set — every name is implemented by the report renderer.",
+      "type": "string",
+      "enum": [
+        "text",
+        "date",
+        "datetime",
+        "select",
+        "relation"
+      ]
     },
     "ReportSource": {
       "description": "ReportSource declares the report's data source + parameterized filter.\n",
@@ -7656,6 +7936,10 @@
       "description": "TransitionDecl defines a transition between states (Core §14).\nThe canonical manifest key for the triggering action is `via`;\n`action` is accepted as a legacy alias.\n",
       "type": "object",
       "properties": {
+        "emit": {
+          "description": "Emit names the event this transition publishes when it fires (S13). It",
+          "type": "string"
+        },
         "from": {
           "oneOf": [
             {
@@ -7703,6 +7987,11 @@
           "items": {
             "type": "string"
           }
+        },
+        "factors": {
+          "description": "Factors maps each convertible unit to how many base units one of it is",
+          "type": "object",
+          "additionalProperties": {}
         }
       },
       "required": [
@@ -8087,13 +8376,24 @@
           "description": "quorum, default 1",
           "type": "integer"
         },
+        "description": {
+          "description": "Description explains what to check before deciding (S15).",
+          "type": "string"
+        },
+        "display_fields": {
+          "description": "DisplayFields names the record fields the approver needs to see to decide",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "escalation": {
           "$ref": "#/$defs/StepEscalation",
           "nullable": true
         },
         "mode": {
-          "description": "all | any | sequential",
-          "type": "string"
+          "$ref": "#/$defs/WorkflowStepMode",
+          "description": "all | any | sequential"
         },
         "roles": {
           "description": "@schema {example: \"[gl.supervisor]\"}",
@@ -8105,12 +8405,26 @@
             "[gl.supervisor]"
           ]
         },
+        "title": {
+          "description": "Title is the human label for this approval task (S15). Without it the",
+          "type": "string"
+        },
         "when": {
           "description": "FormSpecExpr — skip step if false",
           "type": "string"
         }
       },
       "additionalProperties": false
+    },
+    "WorkflowStepMode": {
+      "title": "Workflow Step Mode",
+      "description": "How a step's quorum is collected. Closed set.",
+      "type": "string",
+      "enum": [
+        "all",
+        "any",
+        "sequential"
+      ]
     },
     "WorkflowTransitionRef": {
       "description": "WorkflowTransitionRef identifies the intercepted transition. Two forms exist\nand are mutually exclusive (S9, kafe 1.7):\n\n\ttransition: { name: void-order }            # by transition name — preferred\n\ttransition: { from: draft, to: posted }     # by state pair (legacy)\n\nThe name form is preferred because a transition may have **several** origin\nstates (`from: [paid, in_kitchen, ready, served]`). A state pair can only\ndescribe one of them, so a workflow written as `from: paid` silently does not\ncover the other three — a hole with no error and no log. Naming the transition\ncovers all of its origin states at once, and the name can be validated against\nthe entity's state machine.\n",
@@ -11040,6 +11354,10 @@
                 "true"
               ],
               "nullable": true
+            },
+            "realtime": {
+              "description": "Realtime refetches the timeline on its entity's mutation events.",
+              "type": "boolean"
             },
             "sort": {
               "description": "asc | desc (default desc)",

@@ -125,3 +125,64 @@ func TestConditionEvaluation_E2E(t *testing.T) {
 		})
 	}
 }
+
+// A condition written as `resource.status == 'posted'` (dot notation) must
+// work, not only the bracket form. `evaluateCondition` injected the raw data
+// map as `resource`, and a Go map has no attributes — the GL journal's reverse
+// condition failed with "dict has no .status field or method", so the action
+// could never run. State-machine guards already used a FieldMap for exactly this
+// reason; conditions now match.
+func TestEvaluateConditions_ResourceDotNotation(t *testing.T) {
+	tests := []struct {
+		name     string
+		cond     spec.ConditionDecl
+		data     map[string]any
+		wantPass bool
+	}{
+		{
+			name:     "dot notation passes",
+			cond:     spec.ConditionDecl{Script: "resource.status == 'posted'", Message: "not posted"},
+			data:     map[string]any{"status": "posted"},
+			wantPass: true,
+		},
+		{
+			name:     "dot notation rejects",
+			cond:     spec.ConditionDecl{Script: "resource.status == 'posted'", Message: "not posted"},
+			data:     map[string]any{"status": "draft"},
+			wantPass: false,
+		},
+		{
+			name:     "bracket notation keeps working",
+			cond:     spec.ConditionDecl{Script: "resource['status'] == 'posted'"},
+			data:     map[string]any{"status": "posted"},
+			wantPass: true,
+		},
+		{
+			name:     "bare field access keeps working",
+			cond:     spec.ConditionDecl{Script: "status == 'posted'"},
+			data:     map[string]any{"status": "posted"},
+			wantPass: true,
+		},
+		{
+			name:     "data alias works too",
+			cond:     spec.ConditionDecl{Script: "data.status == 'posted'"},
+			data:     map[string]any{"status": "posted"},
+			wantPass: true,
+		},
+		{
+			name:     "a missing field is None, not an error",
+			cond:     spec.ConditionDecl{Script: "resource.nonexistent == None"},
+			data:     map[string]any{"status": "posted"},
+			wantPass: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := EvaluateConditions([]spec.ConditionDecl{tt.cond}, tt.data, nil)
+			if passed := err == nil; passed != tt.wantPass {
+				t.Errorf("want pass=%v, got pass=%v (err=%v)", tt.wantPass, passed, err)
+			}
+		})
+	}
+}

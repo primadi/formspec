@@ -187,7 +187,7 @@ func TestValidateEntitySpec_Unit(t *testing.T) {
 		}
 	}
 
-	if err := ValidateEntitySpec(base(&UnitDecl{Base: "gram", Convertible: []string{"kg"}})); err != nil {
+	if err := ValidateEntitySpec(base(&UnitDecl{Base: "gram", Convertible: []string{"kg"}, Factors: map[string]float64{"kg": 1000}})); err != nil {
 		t.Errorf("valid unit: expected no error, got %v", err)
 	}
 
@@ -195,10 +195,14 @@ func TestValidateEntitySpec_Unit(t *testing.T) {
 		name string
 		u    *UnitDecl
 	}{
-		{"missing base", &UnitDecl{Convertible: []string{"kg"}}},
+		{"missing base", &UnitDecl{Convertible: []string{"kg"}, Factors: map[string]float64{"kg": 1000}}},
 		{"base not in enum_values", &UnitDecl{Base: "ounce"}},
-		{"convertible not in enum_values", &UnitDecl{Base: "gram", Convertible: []string{"ounce"}}},
-		{"convertible repeats base", &UnitDecl{Base: "gram", Convertible: []string{"gram"}}},
+		{"convertible not in enum_values", &UnitDecl{Base: "gram", Convertible: []string{"ounce"}, Factors: map[string]float64{"ounce": 28.35}}},
+		{"convertible repeats base", &UnitDecl{Base: "gram", Convertible: []string{"gram"}, Factors: map[string]float64{"gram": 1}}},
+		{"convertible without factor", &UnitDecl{Base: "gram", Convertible: []string{"kg"}}},
+		{"factor for base unit", &UnitDecl{Base: "gram", Convertible: []string{"kg"}, Factors: map[string]float64{"kg": 1000, "gram": 1}}},
+		{"factor not in convertible", &UnitDecl{Base: "gram", Convertible: []string{"kg"}, Factors: map[string]float64{"kg": 1000, "pcs": 1}}},
+		{"non-positive factor", &UnitDecl{Base: "gram", Convertible: []string{"kg"}, Factors: map[string]float64{"kg": 0}}},
 	}
 	for _, c := range bad {
 		if err := ValidateEntitySpec(base(c.u)); err == nil {
@@ -213,6 +217,42 @@ func TestValidateEntitySpec_Unit(t *testing.T) {
 	}
 	if err := ValidateEntitySpec(badType); err == nil {
 		t.Error("unit on a decimal field: expected an error, got none")
+	}
+}
+
+// TestUnitDecl_Convert pins S12 conversion (item 4.6): conversion goes through
+// the base unit using declared factors, and a unit outside the declared group is
+// an error (a different dimension, not a silent no-op).
+func TestUnitDecl_Convert(t *testing.T) {
+	u := &UnitDecl{Base: "gram", Convertible: []string{"kg"}, Factors: map[string]float64{"kg": 1000}}
+
+	cases := []struct {
+		value    float64
+		from, to string
+		want     float64
+	}{
+		{2, "kg", "gram", 2000},
+		{2000, "gram", "kg", 2},
+		{5, "gram", "gram", 5},
+		{1.5, "kg", "kg", 1.5},
+	}
+	for _, c := range cases {
+		got, err := u.Convert(c.value, c.from, c.to)
+		if err != nil {
+			t.Errorf("Convert(%v, %s, %s): unexpected error %v", c.value, c.from, c.to, err)
+			continue
+		}
+		if got != c.want {
+			t.Errorf("Convert(%v, %s, %s) = %v, want %v", c.value, c.from, c.to, got, c.want)
+		}
+	}
+
+	// A unit outside the declared group is a different dimension — error, not 0.
+	if _, err := u.Convert(1, "pcs", "gram"); err == nil {
+		t.Error("Convert from an undeclared unit: expected an error, got none")
+	}
+	if _, err := u.Convert(1, "gram", "ounce"); err == nil {
+		t.Error("Convert to an undeclared unit: expected an error, got none")
 	}
 }
 
@@ -278,6 +318,81 @@ func TestValidateEntitySpec_SummaryInvariants(t *testing.T) {
 	})
 	if err := ValidateEntitySpec(unknownField); err == nil {
 		t.Error("invariant naming an unknown field: expected an error, got none")
+	}
+}
+
+// TestValidateEntitySpec_SummaryRejectsHooks pins GAP-33 (TODO 4.2): a summary
+// entity is written by its maintainer script, never through the action pipeline,
+// so `hooks:`/`conditions:` declared on it would never run. Rejecting them is
+// the honest answer — a manifest that looks protected but is not is worse than
+// one that fails validation.
+func TestValidateEntitySpec_SummaryRejectsHooks(t *testing.T) {
+	base := func(mutate func(*EntitySpec)) *EntitySpec {
+		e := &EntitySpec{
+			Version:        "v1",
+			Characteristic: CharSummary,
+			Fields:         []Field{{Name: "branch_id", Type: FieldRelation}},
+		}
+		if mutate != nil {
+			mutate(e)
+		}
+		return e
+	}
+
+	withHook := base(func(e *EntitySpec) {
+		e.Hooks = []HookDecl{{On: HookOnBefore, Action: "*", Impl: &ImplDecl{Ref: "m/scripts/x.star"}}}
+	})
+	if err := ValidateEntitySpec(withHook); err == nil {
+		t.Error("summary entity with hooks: expected an error, got none")
+	}
+
+	withCondition := base(func(e *EntitySpec) {
+		e.Actions = []Action{{Name: "apply", Conditions: []ConditionDecl{{Expression: "true"}}}}
+	})
+	if err := ValidateEntitySpec(withCondition); err == nil {
+		t.Error("summary entity action with conditions: expected an error, got none")
+	}
+
+	// A master entity may still declare hooks — the rule is summary-specific.
+	master := &EntitySpec{
+		Version:        "v1",
+		Characteristic: CharMaster,
+		Fields:         []Field{{Name: "name", Type: FieldString}},
+		Hooks:          []HookDecl{{On: HookOnBefore, Action: "*", Impl: &ImplDecl{Ref: "m/scripts/x.star"}}},
+	}
+	if err := ValidateEntitySpec(master); err != nil {
+		t.Errorf("master entity with hooks: expected no error, got %v", err)
+	}
+}
+
+// TestValidateEntitySpec_TransitionEmits pins S13 (item 6.1): a transition's
+// `emit` must name a declared event, so the transition↔event link is verifiable
+// rather than implied by naming.
+func TestValidateEntitySpec_TransitionEmits(t *testing.T) {
+	base := func(emit string) *EntitySpec {
+		return &EntitySpec{
+			Version: "v1",
+			Fields:  []Field{{Name: "status", Type: FieldString}},
+			Events:  []EventDecl{{Name: "on_paid", Type: EventTypeAsync}},
+			StateMachine: &StateMachine{
+				Field:   "status",
+				Initial: "draft",
+				States:  []StateDecl{{Name: "draft"}, {Name: "paid"}},
+				Transitions: []TransitionDecl{
+					{From: StateList{"draft"}, To: "paid", Action: "confirm", Emit: emit},
+				},
+			},
+		}
+	}
+
+	if err := ValidateEntitySpec(base("on_paid")); err != nil {
+		t.Errorf("emit naming a declared event: expected no error, got %v", err)
+	}
+	if err := ValidateEntitySpec(base("")); err != nil {
+		t.Errorf("transition without emit: expected no error, got %v", err)
+	}
+	if err := ValidateEntitySpec(base("on_nope")); err == nil {
+		t.Error("emit naming an undeclared event: expected an error, got none")
 	}
 }
 

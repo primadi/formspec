@@ -320,3 +320,88 @@ func moneyParts(value any) (string, string) {
 		return "", ""
 	}
 }
+
+// ─── Display formatting (print output) ───
+
+// FormatMoneyDisplay renders a money value for display in a print document
+// (kind: Print): "Rp25.000" when the value's currency matches
+// `settings.currency.code` (symbol from settings), otherwise "IDR 25.000".
+// Returns "" when the value is not money-shaped, so callers can fall back to
+// plain scalar rendering.
+//
+// Why it exists: a money value is an object ({amount, currency}), and print
+// output used to render it with `%v` — a receipt printed
+// `map[amount:25000 currency:IDR]` while the screen showed `Rp25.000`.
+//
+// Grouping follows `settings.locale` (`id-*` → "." thousands / "," decimals,
+// otherwise the inverse). The amount's own decimals are preserved: a stored
+// money value is already canonically scaled, so re-rounding here could only
+// lose precision — this is a display function, not a normalizer.
+func FormatMoneyDisplay(value any, settings *Settings) string {
+	amount, currency := moneyParts(value)
+	amount = strings.TrimSpace(amount)
+	// The currency is what makes a value money. A bare number or numeric string
+	// stays a scalar — formatting it as money would invent a currency.
+	if amount == "" || currency == "" {
+		return ""
+	}
+
+	thousands, decimal := ",", "."
+	if settings != nil && strings.HasPrefix(strings.ToLower(settings.Locale), "id") {
+		thousands, decimal = ".", ","
+	}
+
+	sign := ""
+	if strings.HasPrefix(amount, "-") {
+		sign, amount = "-", strings.TrimPrefix(amount, "-")
+	}
+	intPart, frac := amount, ""
+	if i := strings.IndexByte(amount, '.'); i >= 0 {
+		intPart, frac = amount[:i], amount[i+1:]
+	}
+	if !allDigits(intPart) || !allDigits(frac) {
+		return "" // not a numeric amount — refuse to "format" garbage
+	}
+
+	out := groupDigits(intPart, thousands)
+	if frac != "" {
+		out += decimal + frac
+	}
+
+	prefix := currency + " "
+	if settings != nil && settings.Currency != nil &&
+		settings.Currency.Code == currency && settings.Currency.Symbol != "" {
+		prefix = settings.Currency.Symbol
+	}
+	return sign + prefix + out
+}
+
+// groupDigits inserts sep every three digits, counting from the right.
+func groupDigits(digits, sep string) string {
+	if len(digits) <= 3 {
+		return digits
+	}
+	var b strings.Builder
+	lead := len(digits) % 3
+	if lead > 0 {
+		b.WriteString(digits[:lead])
+	}
+	for i := lead; i < len(digits); i += 3 {
+		if b.Len() > 0 {
+			b.WriteString(sep)
+		}
+		b.WriteString(digits[i : i+3])
+	}
+	return b.String()
+}
+
+// allDigits reports whether s consists only of ASCII digits. An empty string
+// counts as valid, so an amount with no decimals passes.
+func allDigits(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}

@@ -29,6 +29,12 @@ import (
 // transitionIndex maps "{module}.{entity}" to that entity's transitions.
 type transitionIndex map[string]map[string]transitionInfo
 
+// entityFieldIndex maps "{module}.{entity}" to the set of its declared field
+// names — used to validate WorkflowStep.display_fields (S15): a display field
+// that names no field would render an empty column in the ApprovalInbox, which
+// reads as "the approver has nothing to decide on" rather than "typo".
+type entityFieldIndex map[string]map[string]bool
+
 // transitionInfo describes one state-machine transition by its `via` name.
 type transitionInfo struct {
 	// froms are the origin states; more than one means the transition is
@@ -44,6 +50,7 @@ func validateWorkflows(manifests []manifest.RawManifest) map[string]string {
 	rejects := map[string]string{}
 
 	index := buildTransitionIndex(manifests)
+	fields := buildEntityFieldIndex(manifests)
 
 	for _, m := range manifests {
 		if spec.Kind(m.Kind) != spec.KindWorkflow || m.Spec == nil {
@@ -60,6 +67,11 @@ func validateWorkflows(manifests []manifest.RawManifest) map[string]string {
 		}
 		if err := spec.ValidateWorkflowSpec(wf); err != nil {
 			rejects[m.Source] = err.Error()
+			continue
+		}
+		// display_fields must name real fields of the workflow's entity (S15).
+		if msg := workflowDisplayFieldError(wf, fields); msg != "" {
+			rejects[m.Source] = msg
 			continue
 		}
 		if wf.On == nil || wf.On.Transition == nil {
@@ -172,6 +184,50 @@ func buildTransitionIndex(manifests []manifest.RawManifest) transitionIndex {
 	}
 
 	return index
+}
+
+// buildEntityFieldIndex collects each entity's declared field names, keyed by
+// "{module}.{entity}", for display_fields validation.
+func buildEntityFieldIndex(manifests []manifest.RawManifest) entityFieldIndex {
+	index := entityFieldIndex{}
+	for _, m := range manifests {
+		if spec.Kind(m.Kind) != spec.KindEntity || m.Spec == nil {
+			continue
+		}
+		specMap, ok := m.Spec.(map[string]any)
+		if !ok {
+			continue
+		}
+		entitySpec, err := manifest.RawSpecToEntitySpec(specMap)
+		if err != nil {
+			continue
+		}
+		names := map[string]bool{}
+		for _, f := range entitySpec.Fields {
+			names[f.Name] = true
+		}
+		index[m.Metadata.Module+"."+m.Metadata.Name] = names
+	}
+	return index
+}
+
+// workflowDisplayFieldError validates every step's display_fields against the
+// workflow entity's declared fields (S15). Returns "" when all resolve.
+func workflowDisplayFieldError(wf *spec.WorkflowSpec, fields entityFieldIndex) string {
+	known, ok := fields[wf.Entity]
+	if !ok {
+		// The entity is not in this spec tree; the transition check reports
+		// that separately, so do not double-report here.
+		return ""
+	}
+	for i, step := range wf.Steps {
+		for _, f := range step.DisplayFields {
+			if !known[f] {
+				return fmt.Sprintf("workflow step %d display_fields names %q, which is not a field of %s — the ApprovalInbox would show an empty column", i, f, wf.Entity)
+			}
+		}
+	}
+	return ""
 }
 
 // describeTransitions renders the known transitions for an error message.

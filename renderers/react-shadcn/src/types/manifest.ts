@@ -1131,6 +1131,21 @@ export interface PrintBodyItem {
   separator?: string
   child_table?: PrintChildTable
   totals?: PrintTotals
+  /** QR code element (gap #3 / S4) — the document's payload, not a field row. */
+  qrcode?: PrintQrcode
+}
+
+/**
+ * QR element in a Print body. `payload` supports `{dotted.path}` tokens, and
+ * `absolute` prepends the origin the document is printed from (the browser's
+ * origin here) so a phone can open the code.
+ */
+export interface PrintQrcode {
+  payload: string
+  label?: string
+  absolute?: boolean
+  /** Side length in millimetres (default 30). */
+  size_mm?: number
 }
 
 export interface PrintChildTable {
@@ -1160,6 +1175,7 @@ export interface TimelineSpec {
   sort?: "asc" | "desc"
   page_size?: number
   empty_state?: string
+  realtime?: boolean
 }
 
 export interface TimelineDisplay {

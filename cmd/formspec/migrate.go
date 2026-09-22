@@ -26,6 +26,7 @@ import (
 
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
 
+	"github.com/primadi/formspec/internal/auth"
 	"github.com/primadi/formspec/internal/manifest"
 	"github.com/primadi/formspec/pkg/spec"
 )
@@ -81,6 +82,12 @@ func runMigrate(args []string) {
 		driver = db.DriverPostgres
 	}
 	runner := db.NewMigrationRunner(database, driver)
+	// Framework-owned entities (formspec.core) are registered by the server at
+	// runtime, never by a user manifest. Without this, every `formspec migrate`
+	// against a database the dev server had migrated refused with
+	// `table_removed formspec_core_*` — a change no manifest can declare
+	// (kafe TODO 3.10).
+	runner.IgnoreModules(auth.CoreModule)
 	ctx := context.Background()
 
 	// PlanMigrations reads formspec_schema_migrations, so system tables must
@@ -159,6 +166,7 @@ func loadEntityMigrations(specPath string) []db.EntityMigration {
 		_, _ = fmt.Fprintf(os.Stderr, "Error: load manifests: %v\n", err)
 		os.Exit(1)
 	}
+
 	var entities []db.EntityMigration
 	for _, m := range res.Manifests {
 		if m.Kind != "Entity" && m.Kind != "Document" {
@@ -168,7 +176,14 @@ func loadEntityMigrations(specPath string) []db.EntityMigration {
 		if !ok {
 			continue
 		}
-		es, err := manifest.RawSpecToEntitySpec(sm)
+		// EntitySpecFromRaw, not RawSpecToEntitySpec: the schema snapshot is
+		// written from this spec, and it must describe the entity the way the
+		// runtime does — including the fields the engine injects
+		// (`is_active` from soft_deactivate). Converting without normalizing made
+		// this path disagree with the dev server about the shape of the same
+		// entity, so `formspec migrate` reported `field_removed is_active` on
+		// every database the dev server had migrated (kafe TODO 3.10).
+		es, err := manifest.EntitySpecFromRaw(sm)
 		if err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "Warning: skip %s: %v\n", m.Source, err)
 			continue

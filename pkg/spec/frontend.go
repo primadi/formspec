@@ -2,6 +2,7 @@ package spec
 
 import (
 	"fmt"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -573,11 +574,11 @@ type ReportSource struct {
 
 // ReportParam is a filterable input for a report.
 type ReportParam struct {
-	Field    string `yaml:"field" json:"field"`
-	Label    string `yaml:"label" json:"label"`
-	Type     string `yaml:"type" json:"type"`
-	Required bool   `yaml:"required,omitempty" json:"required,omitempty"`
-	Default  any    `yaml:"default,omitempty" json:"default,omitempty"`
+	Field    string          `yaml:"field" json:"field"`
+	Label    string          `yaml:"label" json:"label"`
+	Type     ReportParamType `yaml:"type" json:"type"`
+	Required bool            `yaml:"required,omitempty" json:"required,omitempty"`
+	Default  any             `yaml:"default,omitempty" json:"default,omitempty"`
 }
 
 // ReportGroup defines a grouping level in a report.
@@ -588,10 +589,21 @@ type ReportGroup struct {
 
 // ReportColumn is a column in a report output.
 type ReportColumn struct {
-	Field     string `yaml:"field" json:"field"`
-	Label     string `yaml:"label" json:"label"`
-	Aggregate string `yaml:"aggregate,omitempty" json:"aggregate,omitempty"`
-	Format    string `yaml:"format,omitempty" json:"format,omitempty"`
+	Field string `yaml:"field" json:"field"`
+	Label string `yaml:"label" json:"label"`
+	// Aggregate is a closed set (S16) — mirrors the Query Builder's aggregate
+	// functions, so a report column cannot name one the engine does not
+	// implement.
+	Aggregate ReportAggregate `yaml:"aggregate,omitempty" json:"aggregate,omitempty"`
+	// Format is a closed set (S16) — every name is implemented by the report
+	// renderer, so a format it does not know cannot be written (it would
+	// silently print the raw value).
+	Format ReportFormat `yaml:"format,omitempty" json:"format,omitempty"`
+	// Widget renders the cell like a table cell (S16) — the same closed set as
+	// TableColumn.widget, so a report can show a badge/boolean/image/qrcode
+	// instead of the raw value. Before this, ReportColumn had no `widget` at
+	// all, and copying a TableColumn shape into a report failed validation.
+	Widget TableCellWidget `yaml:"widget,omitempty" json:"widget,omitempty"`
 }
 
 // ReportTotal defines a total/aggregate row.
@@ -700,7 +712,7 @@ type PrintSpec struct {
 
 // PrintOutput selects the rendering pipeline and paper.
 type PrintOutput struct {
-	Format string      `yaml:"format" json:"format"` // pdf | thermal | dotmatrix | html
+	Format PrintFormat `yaml:"format" json:"format"` // pdf | thermal | dotmatrix | html
 	Paper  *PrintPaper `yaml:"paper,omitempty" json:"paper,omitempty"`
 }
 
@@ -725,12 +737,104 @@ type PrintHeader struct {
 	Subtitle string `yaml:"subtitle,omitempty" json:"subtitle,omitempty"`
 }
 
-// PrintBodyItem is one element in the Print body (fields | separator | child_table | totals).
+// PrintBodyItem is one element in the Print body
+// (fields | separator | child_table | totals | qrcode).
 type PrintBodyItem struct {
 	Fields     []string         `yaml:"fields,omitempty" json:"fields,omitempty"`
 	Separator  string           `yaml:"separator,omitempty" json:"separator,omitempty"`
 	ChildTable *PrintChildTable `yaml:"child_table,omitempty" json:"child_table,omitempty"`
 	Totals     *PrintTotals     `yaml:"totals,omitempty" json:"totals,omitempty"`
+	// Qrcode renders a scannable QR code (gap #3 / S4: a table card or a
+	// receipt can now carry one). It is a body element rather than a widget on
+	// `fields:` because the QR *is* the document's payload, not a label/value
+	// row — and because a print pipeline must be able to draw it, which a text
+	// cell cannot express.
+	Qrcode *PrintQrcode `yaml:"qrcode,omitempty" json:"qrcode,omitempty"`
+}
+
+// PrintQrcode is a QR code element in a Print body.
+type PrintQrcode struct {
+	// @schema {minLength: 1, example: "/status/{guest_token}", description: "Text the QR encodes. `{dotted.path}` tokens are interpolated from the record, exactly like `header.title`/`footer.text`."}
+	Payload string `yaml:"payload" json:"payload"`
+	// @schema {example: "Scan untuk struk digital"}
+	Label string `yaml:"label,omitempty" json:"label,omitempty"`
+	// Absolute prepends the origin the document is printed from, so the code
+	// encodes a URL a phone can open. The public origin is deployment
+	// knowledge, not record data: `format: html` uses the browser's origin,
+	// server-side formats use the request's scheme+host.
+	Absolute bool `yaml:"absolute,omitempty" json:"absolute,omitempty"`
+	// @schema {example: "30", minimum: 0, description: "QR side length in millimetres (default 30). Thermal maps it to a module size instead of a physical size."}
+	SizeMM int `yaml:"size_mm,omitempty" json:"size_mm,omitempty"`
+}
+
+// DefaultPrintQRSizeMM is the QR side length used when a `qrcode` body item
+// does not declare `size_mm`.
+const DefaultPrintQRSizeMM = 30
+
+// QRSizeMM returns the declared side length or the default.
+func (q *PrintQrcode) QRSizeMM() int {
+	if q == nil || q.SizeMM <= 0 {
+		return DefaultPrintQRSizeMM
+	}
+	return q.SizeMM
+}
+
+// QRPayload resolves the final string to encode. `payload` is the already
+// interpolated template and origin the origin of the document being printed.
+//
+// An empty result means the record has nothing to encode (for example an order
+// placed at the counter has no guest token), and the caller **omits the
+// element** — like an empty optional field. It must never become a code that
+// leads nowhere. The empty manifest case is rejected earlier by the schema
+// (`minLength: 1` on `payload`).
+func (q *PrintQrcode) QRPayload(payload, origin string) (string, error) {
+	out := strings.TrimSpace(payload)
+	// A leftover `{token}` means the record has no value for it: `interpolate`
+	// keeps unresolved tokens verbatim on purpose, so they stay visible in text
+	// — but a QR must never encode a literal template. The client applies the
+	// same rule (`resolveQrPayload`).
+	if out == "" || strings.Contains(out, "{") {
+		return "", nil
+	}
+	if !q.Absolute || hasURLScheme(out) {
+		return out, nil
+	}
+	origin = strings.TrimRight(strings.TrimSpace(origin), "/")
+	if origin == "" {
+		return "", fmt.Errorf("qrcode payload %q is declared `absolute` but the origin is unknown", out)
+	}
+	if !strings.HasPrefix(out, "/") {
+		out = "/" + out
+	}
+	return origin + out, nil
+}
+
+// hasURLScheme reports whether s already carries a scheme (http://, https://,
+// ...), so an `absolute` payload that is already a URL is left as written.
+func hasURLScheme(s string) bool {
+	i := strings.Index(s, "://")
+	if i <= 0 {
+		return false
+	}
+	for _, r := range s[:i] {
+		if !isSchemeChar(r) {
+			return false
+		}
+	}
+	return true
+}
+
+// isSchemeChar reports whether r is valid inside a URL scheme (RFC 3986:
+// ALPHA / DIGIT / "+" / "-" / ".").
+func isSchemeChar(r rune) bool {
+	switch {
+	case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		return true
+	case r == '+' || r == '-' || r == '.':
+		return true
+	default:
+		return false
+	}
 }
 
 // PrintChildTable renders a child-table field in a Print body.
@@ -765,6 +869,9 @@ type TimelineSpec struct {
 	Sort       string           `yaml:"sort,omitempty" json:"sort,omitempty"`         // asc | desc (default desc)
 	PageSize   int              `yaml:"page_size,omitempty" json:"page_size,omitempty"`
 	EmptyState string           `yaml:"empty_state,omitempty" json:"empty_state,omitempty"`
+	// Realtime refetches the timeline on its entity's mutation events.
+	// Same semantics as Table/Kanban/Dashboard `realtime: true` (gap #17 / item 7.4).
+	Realtime bool `yaml:"realtime,omitempty" json:"realtime,omitempty"`
 }
 
 // TimelineDisplay maps entity fields to timeline card slots.

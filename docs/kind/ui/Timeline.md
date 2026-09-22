@@ -58,6 +58,7 @@ spec:
 | `sort` | `string` | — |  | asc \| desc (default desc) |
 | `page_size` | `integer` | — |  |  |
 | `empty_state` | `string` | — |  |  |
+| `realtime` | `boolean` | — |  | Realtime refetches the timeline on its entity's mutation events. |
 
 <!-- /generated:attributes -->
 

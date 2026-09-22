@@ -196,11 +196,16 @@ declare dimensi satuannya:
 - name: unit
   type: enum
   enum_values: [gram, kg, ml, pcs]
-  unit: { base: gram, convertible: [kg] }
+  unit: { base: gram, convertible: [kg], factors: { kg: 1000 } }
 ```
 
 - `base` — satuan **penyimpanan**. Nilai field ini yang menjadi acuan.
 - `convertible` — satuan lain yang boleh dikonversi ke/dari `base`.
+- `factors` — berapa `base` yang setara dengan **satu** satuan itu
+  (`{kg: 1000}` = 1 kg = 1000 gram). Setiap entri `convertible` **wajib** punya
+  faktor; tanpa itu deklarasinya hanya mengatakan "satuan ini berhubungan"
+  tanpa mengatakan **bagaimana** — persis konvensi-di-dalam-script yang ingin
+  dihapus deklarasi ini.
 - Keduanya **wajib** ada di `enum_values` (kalau field-nya `enum`): konversi ke
   satuan yang tidak bisa dinyatakan field itu adalah salah ketik, bukan fitur.
 - Satuan di luar grup `base`+`convertible` (mis. `ml`, `pcs` di atas) berarti
@@ -209,8 +214,10 @@ declare dimensi satuannya:
 Deklarasinya ada supaya satuan menjadi **data**, bukan konvensi yang hidup di
 dalam script: tanpa ini, setiap aplikasi memaksa satu satuan dasar dan
 melakukan konversi di Starlark, sehingga hasil (mis. HPP) bergantung pada
-disiplin penulis script, bukan pada data. Konversi gram↔kg untuk quantity dan
-ledakan resep menyusul di renderer/engine.
+disiplin penulis script, bukan pada data. Konversi dihitung engine lewat
+`ctx.unit.convert(entity, field, value, from, to)` — konversi melewati `base`
+(`value × factor(from) ÷ factor(to)`), dan satuan di luar grup **error**, bukan
+`0`.
 
 ## 2. Money (Normatif)
 

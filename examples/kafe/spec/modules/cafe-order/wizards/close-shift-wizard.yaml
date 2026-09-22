@@ -20,7 +20,7 @@ spec:
     - title: "Hitung Uang Fisik"
       description: "Hitung uang di laci, lalu masukkan jumlahnya."
       fields:
-        # GAP-01 TERTUTUP (2.14): `counted_cash` memakai `moneyinput` — kasir
+        # `counted_cash` memakai `moneyinput` — kasir
         # menghitung uang tanpa keluar dari numpad, dengan pratinjau terformat.
         - field: counted_cash
           label: "Kas Hasil Hitung"

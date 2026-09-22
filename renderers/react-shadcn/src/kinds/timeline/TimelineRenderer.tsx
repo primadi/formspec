@@ -16,6 +16,7 @@ import { resolveEntityRef } from "@/engine/entityRef"
 import { apiList } from "@/lib/api"
 import { createFormatter } from "@/lib/format"
 import { titleCase } from "@/lib/utils"
+import { useRealtime } from "@/hooks/useRealtime"
 import { Badge } from "@/widgets/Badge"
 
 interface TimelineRendererProps {
@@ -75,6 +76,21 @@ export default function TimelineRenderer({ entry }: TimelineRendererProps) {
   useEffect(() => {
     fetchItems()
   }, [])
+
+  // ── Realtime (gap #17 / item 7.4): matching entity event → reset + refetch ──
+  // A timeline is append-only with cursor pagination, so a new entry must be
+  // fetched from the top: reset the cursor and the accumulated items, then
+  // refetch. Same subscription semantics as Table/Kanban/Dashboard.
+  const realtimeTick = useRealtime(
+    entry.spec.realtime && entity ? `${entity.module}/${entity.name}` : "",
+  )
+  useEffect(() => {
+    if (realtimeTick === 0) return
+    cursorRef.current = undefined
+    setItems([])
+    setHasMore(true)
+    fetchItems()
+  }, [realtimeTick, fetchItems])
 
   // Infinite scroll observer
   const lastItemRef = useCallback(

@@ -100,6 +100,18 @@ func (d *Dispatcher) dispatchOne(ctx context.Context, workspaceID, eventName, re
 		"resource": resource,
 	}
 
+	// When the integrator declares a `map:`, it REPLACES the default
+	// payload-passthrough: the target's params are built from the mapping
+	// (S6). The two sides rarely share field names, and the mapping is domain
+	// knowledge (e.g. "revenue → credit 4-1000") that belongs in the manifest,
+	// not in a script owned by the target module.
+	if len(it.Call.Map) > 0 {
+		mapped := applyCallMap(it.Call.Map, payload)
+		// Keep the event metadata available to the target handler.
+		mapped["_event"] = params["_event"]
+		params = mapped
+	}
+
 	// Register the cross-boundary call to the saga log when a compensate is
 	// declared (todo 7.7.4).
 	var sagaID string
@@ -172,4 +184,119 @@ func splitResourceRef(ref string) (module, entity string, ok bool) {
 		return "", "", false
 	}
 	return parts[0], parts[1], true
+}
+
+// applyCallMap builds the target action's params from an integrator's `map:`
+// declaration (S6), interpolating `{dotted.path}` templates against the source
+// event payload. Nested maps and lists are interpolated recursively, so a
+// `lines:` list of account entries can be built inline.
+//
+// A value that is EXACTLY one `{path}` token keeps the resolved value's type
+// (so `debit: "{order.total_amount}"` yields the money object, not its string
+// form); a value with surrounding text is stringified and interpolated.
+func applyCallMap(m map[string]any, payload map[string]any) map[string]any {
+	out := make(map[string]any, len(m))
+	for k, v := range m {
+		out[k] = interpolateValue(v, payload)
+	}
+	return out
+}
+
+// interpolateValue resolves templates in a single map value, recursing into
+// maps and lists.
+func interpolateValue(v any, payload map[string]any) any {
+	switch t := v.(type) {
+	case string:
+		return interpolateString(t, payload)
+	case map[string]any:
+		out := make(map[string]any, len(t))
+		for k, vv := range t {
+			out[k] = interpolateValue(vv, payload)
+		}
+		return out
+	case []any:
+		out := make([]any, len(t))
+		for i, vv := range t {
+			out[i] = interpolateValue(vv, payload)
+		}
+		return out
+	default:
+		return v
+	}
+}
+
+// interpolateString resolves `{dotted.path}` tokens in a string. When the whole
+// string is a single token, the resolved value is returned with its original
+// type; otherwise tokens are stringified and substituted in place. An
+// unresolvable path is left verbatim (so a typo is visible in the payload
+// rather than silently becoming an empty string).
+func interpolateString(s string, payload map[string]any) any {
+	if path, ok := singleToken(s); ok {
+		if val, found := resolvePath(payload, path); found {
+			return val
+		}
+		return s
+	}
+	out := s
+	for {
+		start := strings.Index(out, "{")
+		if start < 0 {
+			break
+		}
+		rel := strings.Index(out[start:], "}")
+		if rel < 0 {
+			break
+		}
+		end := start + rel
+		path := out[start+1 : end]
+		if val, found := resolvePath(payload, path); found {
+			out = out[:start] + stringify(val) + out[end+1:]
+		} else {
+			// Leave the token verbatim; advance past it to avoid a loop.
+			out = out[:end+1] + out[end+1:]
+			break
+		}
+	}
+	return out
+}
+
+// singleToken reports whether s is exactly one `{path}` token, returning the
+// path.
+func singleToken(s string) (string, bool) {
+	if len(s) < 3 || s[0] != '{' || s[len(s)-1] != '}' {
+		return "", false
+	}
+	inner := s[1 : len(s)-1]
+	if strings.ContainsAny(inner, "{}") {
+		return "", false
+	}
+	return inner, true
+}
+
+// resolvePath resolves a dot-path against the payload, returning the value and
+// whether it was found.
+func resolvePath(payload map[string]any, path string) (any, bool) {
+	var cur any = payload
+	for _, part := range strings.Split(path, ".") {
+		m, ok := cur.(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		cur, ok = m[part]
+		if !ok {
+			return nil, false
+		}
+	}
+	return cur, true
+}
+
+// stringify renders a resolved value for in-place substitution.
+func stringify(v any) string {
+	if v == nil {
+		return ""
+	}
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return fmt.Sprintf("%v", v)
 }

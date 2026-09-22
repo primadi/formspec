@@ -34,10 +34,19 @@ spec:
       default: 2
       title: "Kapasitas"
     # Token acak — dasar URL QR meja (aturan bisnis #2).
-    # GAP-03: tidak ada generator QR sama sekali (widget/kind/field type) dan
-    # tidak ada `natural_key_rule` untuk nilai acak (hanya sequence|custom),
-    # jadi token harus diisi script/Service. Halaman QR & kartu cetak meja
-    # belum bisa dinyatakan di spec.
+    # GAP-03 (separuh): generator QR **sudah ada** sejak 2.6 — `kind: Print`
+    # punya body item `qrcode` (html/pdf/thermal), dan token ini sudah dipakai
+    # struk digital/thermal lewat `/kafe/status/{guest_token}`.
+    #
+    # Yang belum bisa dinyatakan: **kartu meja** yang QR-nya langsung membuka
+    # sesi tamu. Pindai QR meja harus men-resolve meja dari token ini lalu
+    # membuat `table-session` dan mengarahkan ke halaman menu — halaman masuk
+    # semacam itu belum bisa dinyatakan (resolve entity dari token route +
+    # create-lalu-redirect). Tercatat sebagai task deferred di ledger, bukan
+    # dipaksakan dengan QR yang tidak menuju ke mana pun.
+    #
+    # Yang masih berlaku: token diisi script/Service (tidak ada
+    # `natural_key_rule` untuk nilai acak).
     - name: qr_token
       type: string
       required: true

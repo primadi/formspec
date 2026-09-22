@@ -16,6 +16,8 @@ import (
 	"os"
 
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
+
+	"github.com/primadi/formspec/internal/auth"
 )
 
 func runDiff(args []string) {
@@ -56,6 +58,9 @@ func runDiff(args []string) {
 		driver = db.DriverPostgres
 	}
 	runner := db.NewMigrationRunner(database, driver)
+	// Same reason as `formspec migrate`: framework-owned entities are never in
+	// a user manifest, so they must not count as a difference (kafe TODO 3.10).
+	runner.IgnoreModules(auth.CoreModule)
 
 	ctx := context.Background()
 	if err := runner.EnsureSystemTables(ctx); err != nil {

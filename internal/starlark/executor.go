@@ -7,6 +7,7 @@ package starlark
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -36,6 +37,15 @@ func declaredUsesSecrets(uses *spec.UsesDecl) []string {
 	}
 	return uses.Secrets
 }
+
+// FailError is the error a script's fail(msg) raises. It carries the author's
+// own message so the caller reports that message verbatim rather than a
+// wrapped Starlark runtime error.
+type FailError struct {
+	Message string
+}
+
+func (e *FailError) Error() string { return e.Message }
 
 // ScriptResult is the outcome of a script execution.
 type ScriptResult struct {
@@ -121,10 +131,15 @@ func ExecuteScript(ctx context.Context, scriptPath string, resource *ResourceAPI
 			if err := starlark.UnpackArgs("fail", args, kwargs, "msg", &msg); err != nil {
 				return nil, err
 			}
-			return starlarkstruct.FromStringDict(starlark.String("fail_result"), starlark.StringDict{
-				"ok":      starlark.False,
-				"message": starlark.String(msg),
-			}), nil
+			// fail() must ABORT the script, not merely return a value: a
+			// returning builtin lets execution continue on the next statement,
+			// so a guard-style `if bad: fail(...)` fell through and the script
+			// kept going with its data still unset — creating a half-built
+			// record and reporting ok(). Returning an error unwinds the
+			// Starlark stack immediately, which is what the contract
+			// (06-script-runtime.md §1: the entrypoint returns ok() or fail(msg))
+			// has always meant.
+			return nil, &FailError{Message: msg}
 		}),
 	}
 
@@ -185,6 +200,17 @@ func ExecuteScript(ctx context.Context, scriptPath string, resource *ResourceAPI
 	// Call execute(resource, params, ctx)
 	result, err := starlark.Call(thread, executeFn, starlark.Tuple{resource, paramsDict, ctxObj}, nil)
 	if err != nil {
+		// A fail() in the script is an expected, authored outcome — report the
+		// author's message as the script's error, not as a runtime fault.
+		var fe *FailError
+		if errors.As(err, &fe) {
+			return &ScriptResult{
+				OK:         false,
+				Error:      fe.Message,
+				LogEntries: ctxObj.Log.Entries(),
+				Elapsed:    time.Since(start),
+			}, nil
+		}
 		return &ScriptResult{
 			OK:      false,
 			Error:   fmt.Sprintf("script runtime error: %v", err),
@@ -254,12 +280,34 @@ type ScriptExecutor struct {
 
 	// CallHandler is the cross-resource call function. callerResources is
 	// the calling action's declared uses.resources (todo 2.6.4) — the
-	// resource layer checks cross-module calls against it.
-	CallHandler func(ctx context.Context, workspaceID, fromModule, targetModule, targetEntity, action string, params map[string]any, callerResources []string) (any, error)
+	// resource layer checks cross-module calls against it. targetID is the
+	// record the target action runs against, or "" for a collection-level
+	// action (resource.call("module.entity.<id>", ...)).
+	CallHandler func(ctx context.Context, workspaceID, fromModule, targetModule, targetEntity, targetID, action string, params map[string]any, callerResources []string) (any, error)
 
-	// LoadHandler loads another entity by ID, returning its data and version.
+	// LoadHandler loads another entity by ID, returning its data, version, and
+	// the resolved record ID (a natural-key request resolves to a different,
+	// UUID identity).
 	// callerResources is the calling action's declared uses.resources.
-	LoadHandler func(ctx context.Context, workspaceID, fromModule, module, entity, id string, callerResources []string) (map[string]any, int, error)
+	LoadHandler func(ctx context.Context, workspaceID, fromModule, module, entity, id string, callerResources []string) (map[string]any, int, string, error)
+
+	// FindHandler finds another entity by field values (#31), returning its data,
+	// version, and the resolved record ID, or (nil, 0, "", nil) when no row
+	// matches. callerResources is the calling action's declared uses.resources.
+	FindHandler func(ctx context.Context, workspaceID, fromModule, module, entity string, match map[string]any, callerResources []string) (map[string]any, int, string, error)
+
+	// UpsertHandler writes a row of a `characteristic: summary` projection
+	// (item 4.1), matching on `match` and merging `data`. It is the ONE
+	// supported write path for summary entities. The wiring layer enforces that
+	// the running script is the entity's `maintained_by`; this handler only
+	// forwards the call. Returns the row id and whether a new row was created.
+	UpsertHandler func(ctx context.Context, workspaceID, fromModule, module, entity string, match, data map[string]any, callerResources []string) (string, bool, error)
+
+	// MaintainerRef is the script ref (e.g. "cafe-stock/stock_level_apply") of
+	// the script currently executing, when known. The wiring layer compares it
+	// against a summary entity's `maintained_by` to authorize resource.upsert
+	// (item 4.1). Empty when the caller is not a named script.
+	MaintainerRef string
 
 	// CreateHandler creates a new record of another entity, returning its ID.
 	// callerResources is the calling action's declared uses.resources.
@@ -268,6 +316,11 @@ type ScriptExecutor struct {
 	// NextKeyHandler generates natural keys, scoped to the entity that owns
 	// the field (natural key counters are per module/entity/field).
 	NextKeyHandler func(ctx context.Context, workspaceID, module, entity, fieldName, scope string) (string, error)
+
+	// UnitConvertHandler converts a value between units of a field's declared
+	// unit dimension (S12, item 4.6). It resolves the entity/field's `unit:`
+	// declaration and applies its factors.
+	UnitConvertHandler func(ctx context.Context, workspaceID, fromModule, entity, field string, value float64, from, to string) (float64, error)
 
 	// DatastoreResolver resolves a ctx primitive ("db", "cache", "lock", ...)
 	// and datastore name ("default" or a named datastore) to a live
@@ -367,17 +420,27 @@ func (e *ScriptExecutor) Execute(ctx context.Context, scriptPath string, module,
 		})
 	}
 	if e.CallHandler != nil {
-		res.SetCallFunc(func(targetModule, targetEntity, actionName string, p map[string]any) (any, error) {
+		res.SetCallFunc(func(targetModule, targetEntity, targetID, actionName string, p map[string]any) (any, error) {
 			// Infer target module from the calling context if not specified
 			if targetModule == "" {
 				targetModule = module
 			}
-			return e.CallHandler(ctx, workspaceID, module, targetModule, targetEntity, actionName, p, callerResources)
+			return e.CallHandler(ctx, workspaceID, module, targetModule, targetEntity, targetID, actionName, p, callerResources)
 		})
 	}
 	if e.LoadHandler != nil {
-		res.SetLoadFunc(func(m, ent, eid string) (map[string]any, int, error) {
+		res.SetLoadFunc(func(m, ent, eid string) (map[string]any, int, string, error) {
 			return e.LoadHandler(ctx, workspaceID, module, m, ent, eid, callerResources)
+		})
+	}
+	if e.FindHandler != nil {
+		res.SetFindFunc(func(m, ent string, match map[string]any) (map[string]any, int, string, error) {
+			return e.FindHandler(ctx, workspaceID, module, m, ent, match, callerResources)
+		})
+	}
+	if e.UpsertHandler != nil {
+		res.SetUpsertFunc(func(m, ent string, match, data map[string]any) (string, bool, error) {
+			return e.UpsertHandler(ctx, workspaceID, module, m, ent, match, data, callerResources)
 		})
 	}
 	if e.CreateHandler != nil {
@@ -405,6 +468,11 @@ func (e *ScriptExecutor) Execute(ctx context.Context, scriptPath string, module,
 	if e.NextKeyHandler != nil {
 		ctxObj.NextKey = func(fieldName, scope string) (string, error) {
 			return e.NextKeyHandler(ctx, workspaceID, module, entity, fieldName, scope)
+		}
+	}
+	if e.UnitConvertHandler != nil {
+		ctxObj.UnitConvert = func(targetEntity, field string, value float64, from, to string) (float64, error) {
+			return e.UnitConvertHandler(ctx, workspaceID, module, targetEntity, field, value, from, to)
 		}
 	}
 	// ctx.secrets (todo 6.8): only keys declared in uses.secrets are readable.

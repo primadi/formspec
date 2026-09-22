@@ -55,23 +55,23 @@ func (d *Dispatcher) Dispatch(ctx context.Context, workspaceID, eventName, resou
 	if d.reg == nil {
 		return nil
 	}
-	subs := d.reg.ForEvent(eventName)
-	if len(subs) == 0 {
+	owned := d.reg.ForEventOwned(eventName)
+	if len(owned) == 0 {
 		return nil
 	}
 
 	var errs []string
-	for _, sub := range subs {
+	for _, sub := range owned {
 		// Tier 2 (durable): append to the stream; the StreamingWorker
 		// consumes it. Tier 1: dispatch directly.
-		if d.stream != nil && sub.Durable == "durable" {
+		if d.stream != nil && sub.Spec.Durable == "durable" {
 			if err := d.appendToStream(ctx, workspaceID, eventName, resource, payload, sub); err != nil {
-				errs = append(errs, fmt.Sprintf("%s: %v", sub.Handler.Ref, err))
+				errs = append(errs, fmt.Sprintf("%s: %v", sub.Spec.Handler.Ref, err))
 			}
 			continue
 		}
 		if err := d.dispatchOne(ctx, workspaceID, eventName, resource, payload, sub); err != nil {
-			errs = append(errs, fmt.Sprintf("%s: %v", sub.Handler.Ref, err))
+			errs = append(errs, fmt.Sprintf("%s: %v", sub.Spec.Handler.Ref, err))
 		}
 	}
 	if len(errs) > 0 {
@@ -84,9 +84,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, workspaceID, eventName, resou
 // entry carries the delivery metadata (workspace, resource, event, occurred_at)
 // plus the wire payload so the StreamingWorker can rebuild the dispatch
 // context and the filter/transform environment.
-func (d *Dispatcher) appendToStream(ctx context.Context, workspaceID, eventName, resource string, payload map[string]any, sub *spec.SubscriptionSpec) error {
+func (d *Dispatcher) appendToStream(ctx context.Context, workspaceID, eventName, resource string, payload map[string]any, sub OwnedSub) error {
 	if d.stream == nil {
-		return fmt.Errorf("durable subscription %s has no stream backend configured", sub.Handler.Ref)
+		return fmt.Errorf("durable subscription %s has no stream backend configured", sub.Spec.Handler.Ref)
 	}
 	streamName := stream.NormalizeStreamName(eventName)
 	data := map[string]any{
@@ -104,11 +104,11 @@ func (d *Dispatcher) appendToStream(ctx context.Context, workspaceID, eventName,
 
 // dispatchOne invokes a single subscription's handler (an ImplDecl) via the
 // action dispatcher.
-func (d *Dispatcher) dispatchOne(ctx context.Context, workspaceID, eventName, resource string, payload map[string]any, sub *spec.SubscriptionSpec) error {
+func (d *Dispatcher) dispatchOne(ctx context.Context, workspaceID, eventName, resource string, payload map[string]any, sub OwnedSub) error {
 	if d.dispatcher == nil {
 		return fmt.Errorf("action dispatcher not wired")
 	}
-	if sub.Handler.Type == "" {
+	if sub.Spec.Handler.Type == "" {
 		return fmt.Errorf("subscription handler has no impl type")
 	}
 
@@ -127,13 +127,20 @@ func (d *Dispatcher) dispatchOne(ctx context.Context, workspaceID, eventName, re
 	// A subscription handler is a stateless computation — model it as a
 	// synthetic action whose Impl is the subscription's handler, dispatched
 	// through the same uniform path as service/entity actions.
+	// The handler runs AS its owning module: the script's own-module resource
+	// access (gl reading gl.account) is same-module, and its cross-module
+	// `uses.resources` are checked against the subscription's module — not a
+	// synthetic "subscription" module that belongs to nobody. Running handlers
+	// under a fake module made every own-module access a USES_VIOLATION, so a
+	// script_ref subscription handler had never been able to touch its own
+	// module's entities at all.
 	actionSpec := spec.Action{
 		Name: "handle",
-		Impl: &sub.Handler,
+		Impl: &sub.Spec.Handler,
 	}
 	execParams := action.ExecuteParams{
-		Module:      "subscription",
-		Entity:      "subscription",
+		Module:      sub.Module,
+		Entity:      sub.Name,
 		ActionName:  "handle",
 		Params:      params,
 		WorkspaceID: workspaceID,

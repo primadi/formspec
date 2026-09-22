@@ -72,13 +72,18 @@ func (c *ChildStore) ChildrenExtract(data map[string]any) (children []map[string
 		return nil, parentData
 	}
 
-	// raw should be []any or []map[string]any
-	arr, ok := raw.([]any)
+	// raw is []any when the caller sent the collection (HTTP body, script
+	// resource.create) and []map[string]any when the collection was read back
+	// by Hydrate — e.g. a script that loads a record, changes one field, and
+	// saves it. Accepting only []any silently left the children in the parent
+	// JSONB on every such update: the child table stayed empty while the
+	// parent accumulated a copy of every row.
+	rows, ok := asSlice(raw)
 	if !ok {
 		return nil, parentData
 	}
 
-	for _, item := range arr {
+	for _, item := range rows {
 		if m, ok := item.(map[string]any); ok {
 			children = append(children, m)
 		}

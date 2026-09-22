@@ -103,6 +103,14 @@ func writeDB(ctx context.Context, base DB) (DB, error) {
 // like SQLite — avoiding a deadlock against a pool with no free
 // connections), else base itself, unchanged from today's behavior.
 func txReadDB(ctx context.Context, base DB) DB {
+	return TxReadDB(ctx, base)
+}
+
+// TxReadDB is the exported form of txReadDB, for callers outside this package
+// (e.g. the datastore.DBQuerier that serves ctx.db().query from Starlark —
+// #30: a script query inside an action's transaction must run on that
+// transaction's connection, not the pool).
+func TxReadDB(ctx context.Context, base DB) DB {
 	if scope := TxScopeFromContext(ctx); scope != nil {
 		if txdb, ok := scope.peek(base); ok {
 			return txdb

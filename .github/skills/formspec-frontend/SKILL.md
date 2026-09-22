@@ -43,3 +43,4 @@ Context for AI coding agents working on the FormSpec frontend (React, TypeScript
 - CSP sandbox for asset components
 - CSS scoped to container
 - Permission-driven UI (never page-based auth)
+- Auth forms use standard `autocomplete` tokens (`username`, `current-password`, `new-password`) driven by `auth_action`; never `"nope"`/`"off"` on credential fields (Chromium password-form guidance), and keep a hidden `workspace`/`app` input for context

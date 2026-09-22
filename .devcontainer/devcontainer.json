@@ -52,7 +52,8 @@
         "bradlc.vscode-tailwindcss",
         "dbcode.dbcode",
         "Anthropic.claude-code",
-        "redhat.vscode-yaml"
+        "redhat.vscode-yaml",
+        "Tyrannmisu.commandcode-copilot-provider"
       ]
     }
   },

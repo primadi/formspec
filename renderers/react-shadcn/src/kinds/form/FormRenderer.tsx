@@ -1075,6 +1075,11 @@ export function FormFieldWidget({
           readonly={readonly}
           error={error}
           id={id}
+          name={fieldName}
+          // An entity password field always *sets* a password (create or
+          // change) — never a login credential. Without this token Chrome
+          // treats it as one and offers to save the wrong thing.
+          autoComplete="new-password"
         />
       )
 

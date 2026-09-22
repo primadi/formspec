@@ -438,6 +438,7 @@ func (b *RouterBuilder) BuildHTTP() http.Handler {
 			// concern); /api/v1/auth is opt-in via EnableAPIAuth.
 			r.Post("/auth/login", b.HandleLogin())
 			r.Post("/auth/refresh", b.HandleRefresh())
+			r.Post("/auth/switch", b.HandleSwitchContext())
 			r.Post("/auth/register", b.HandleRegister())
 			// Email verification (account pre-hijacking protection): verify
 			// (public, token) + resend (authenticated).

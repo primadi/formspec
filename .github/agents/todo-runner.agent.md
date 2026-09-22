@@ -70,6 +70,21 @@ Do **NOT** try to finish the whole todo in one session. The 1M context window is
   - Write design decisions, trade-offs, and findings to `docs/implementation/<topik>.md` (append a new section, never overwrite).
   - Write short in-progress notes to session memory (`/memories/session/`) — e.g. current position, open questions, decisions made.
   - Keep `todo.md`'s `Last Updated` and phase progress line current at every stop.
+- **Leftover work becomes a numbered `[⏸️]` item, never prose.** If an item you
+  finish leaves something open (a gap, a deferred feature, a limitation you chose
+  not to close), add its own numbered item in the right phase:
+  `- [⏸️] 7.7.5 <what is open> — <why> + <how it was observed>. Effort: …` — then
+  cite that number in the changelog's "Sisa" line (`→ 7.7.5 ⏸️`). Do NOT write
+  the leftover only inside the text of the item you just marked `[x]`, or only in
+  the changelog: a prose leftover is indistinguishable from finished work once the
+  parent reads `[x]`, cannot be grepped as open work, and turns into misinformation
+  when a later entry closes it.
+  - Likewise, **never mark `[x]` for partial work**: say which part landed and
+    point at the `⏸️` item for the rest. A bare `✅` covering three channels while
+    two are absent is a false claim.
+  - Include the observation that makes the leftover real (a measurement, a failing
+    case), not just an assertion — "belum idempoten" is weak, "requeue → 143750 →
+    287500" is checkable.
 - **Stop cleanly at each checkpoint**: finish the current item, ensure tests are green, update todo + changelog, write the session note, then report. Do not start a new item you cannot finish.
 - When told "lanjut" in a new session: re-read `todo.md` + the session note, confirm the next item, and continue from there.
 
@@ -80,5 +95,10 @@ When you stop (batch complete, all done, or blocked), report:
 1. **Completed**: list of items finished this run (with ✅ + timestamp).
 2. **Skipped**: items skipped and why (deferred / external / blocked).
 3. **Blocked / needs decision**: items you stopped on and the specific question for the user.
-4. **Verification status**: test/build results (pass counts, any remaining failures).
-5. **Next up**: the next item you'll tackle when told to continue.
+4. **New `⏸️` items added**: the numbered items this run created for leftover work —
+   or "none" if the run closed everything it touched. Never leave this implicit.
+5. **Corrections**: any existing item/prose whose status claim you found to be
+   wrong (e.g. an item marked `✅` whose feature is absent), and how you fixed the
+   claim. Say "none" if you found no such conflict.
+6. **Verification status**: test/build results (pass counts, any remaining failures).
+7. **Next up**: the next item you'll tackle when told to continue.

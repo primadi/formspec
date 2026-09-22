@@ -80,11 +80,42 @@ func indexDefsByName(ti *TableInfo) map[string]IndexDef {
 	return out
 }
 
+// indexTouchesColumns reports whether a generated CREATE INDEX statement
+// references any of the given derived columns — in its column list or in its
+// partial predicate. These are the indexes that must be dropped before a stale
+// derived column can be rebuilt: SQLite refuses to drop a column an index still
+// references (kafe TODO 3.11).
+func indexTouchesColumns(stmt string, cols map[string]bool) bool {
+	def, ok := parseIndexSQL(stmt)
+	if !ok {
+		// A statement this parser cannot read may reference the column. Dropping
+		// and re-creating it is harmless; leaving it in place makes the column
+		// rebuild fail, so assume the worst.
+		return true
+	}
+	for _, col := range def.Columns {
+		if cols[col] {
+			return true
+		}
+	}
+	for _, tok := range derivedColRe.FindAllString(def.Where, -1) {
+		if cols[tok] {
+			return true
+		}
+	}
+	return false
+}
+
 // addDerivedColumnSQL builds the statement that materializes one field's derived
-// column. The modernc SQLite driver cannot ALTER TABLE ADD COLUMN with a
-// GENERATED ALWAYS expression (it silently no-ops), so SQLite gets a plain
-// column while PostgreSQL gets a true generated one — the same split the
-// original column diff used.
+// column on a table that already exists.
+//
+// SQLite refuses `ALTER TABLE ADD COLUMN` for a STORED generated column
+// ("cannot add a STORED column"), but it accepts a VIRTUAL one — which is
+// computed on read, so it is correct for the rows already stored *and* for
+// every row inserted later. That matters: the insert path writes only
+// `(id, tenant_id, version, data)` and relies on the column computing itself,
+// so a plain column here would stay NULL forever and any unique index built over
+// it would enforce nothing (kafe TODO 3.11).
 func addDerivedColumnSQL(ti *TableInfo, f spec.Field, driver DriverType) string {
 	sqlType := fieldTypeToSQLFor(f.Type, f.EnumValues, driver)
 	if f.Type == spec.FieldRelation {
@@ -92,9 +123,13 @@ func addDerivedColumnSQL(ti *TableInfo, f spec.Field, driver DriverType) string 
 		// reference id as text.
 		sqlType = "text"
 	}
-	colDef := fmt.Sprintf("%s %s", generatedColumnName(f.Name), sqlType)
+
+	var colDef string
 	if driver == DriverPostgres {
 		colDef = generateGeneratedColumn(f.Name, f.Type, sqlType, driver)
+	} else {
+		colDef = fmt.Sprintf("%s %s GENERATED ALWAYS AS (%s) VIRTUAL",
+			generatedColumnName(f.Name), sqlType, generatedColumnExpr(f.Name, f.Type, driver))
 	}
 	return fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s;",
 		qualifiedName(ti.Schema, ti.TableName, driver), colDef)
@@ -123,7 +158,10 @@ func dropColumnSQL(ti *TableInfo, col string, driver DriverType) string {
 func (r *MigrationRunner) stripKeySQL(ti *TableInfo, field string) string {
 	tbl := qualifiedName(ti.Schema, ti.TableName, r.driver)
 	if r.driver == DriverPostgres {
-		return fmt.Sprintf("UPDATE %s SET data = data - '%s' WHERE data ? '%s';", tbl, field, field)
+		// jsonb_exists is the functional form of the `?` operator — same
+		// semantics, and no `?` character that the placeholder rewriter
+		// (postgres_db.go) would mistake for a bind parameter.
+		return fmt.Sprintf("UPDATE %s SET data = data - '%s' WHERE jsonb_exists(data, '%s');", tbl, field, field)
 	}
 	return fmt.Sprintf(
 		"UPDATE %s SET data = json_remove(data, '$.%s') WHERE json_extract(data, '$.%s') IS NOT NULL;",
@@ -137,7 +175,7 @@ func (r *MigrationRunner) countRowsWithKey(ctx context.Context, ti *TableInfo, f
 	tbl := qualifiedName(ti.Schema, ti.TableName, r.driver)
 	query := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE json_extract(data, '$.%s') IS NOT NULL", tbl, field)
 	if r.driver == DriverPostgres {
-		query = fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE data ? '%s'", tbl, field)
+		query = fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE jsonb_exists(data, '%s')", tbl, field)
 	}
 	var n int
 	if err := r.db.QueryRowContext(ctx, query).Scan(&n); err != nil {
@@ -268,7 +306,7 @@ func (r *MigrationRunner) countCastFailures(ctx context.Context, ti *TableInfo, 
 
 	exists := fmt.Sprintf("json_extract(data, '$.%s') IS NOT NULL", field)
 	if r.driver == DriverPostgres {
-		exists = fmt.Sprintf("data ? '%s'", field)
+		exists = fmt.Sprintf("jsonb_exists(data, '%s')", field)
 	}
 	query := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s AND (%s)", tbl, exists, cond)
 
@@ -430,7 +468,7 @@ func (r *MigrationRunner) buildChangeDDL(ctx context.Context, ti *TableInfo, ent
 	}
 
 	// 4. Additive reconciliation: missing derived columns + missing indexes.
-	alterDDL, _, err := r.diffExistingTable(ctx, ti, *entity)
+	alterDDL, _, err := r.diffExistingTable(ctx, ti, *entity, rebuilt)
 	if err != nil {
 		return "", err
 	}

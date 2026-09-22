@@ -489,9 +489,10 @@ metadata:
   name: billing-config
   module: billing
 spec:
-  data:
-    tax_rate: 0.11
-    currency: IDR
+  keys:
+    tax_rate: { type: decimal, default: 0.11 }
+    currency: { type: string, default: IDR }
+    smtp_host: { type: string, secret: true }
 ```
 
 ### DDL di Luar Bahasa Spec — `persist.raw_ddl`

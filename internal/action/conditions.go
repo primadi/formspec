@@ -62,8 +62,14 @@ func evaluateCondition(cond spec.ConditionDecl, resourceData map[string]any, par
 	for k, v := range params {
 		env["param_"+k] = v // avoid name collision with resource fields
 	}
-	// Also inject the whole resource as a nested map for "resource.field" access
-	env["resource"] = resourceData
+	// `resource` / `data` are FieldMap values, not raw maps, so BOTH dot
+	// notation (resource.status) and bracket notation (resource["status"]) work.
+	// A raw map supports only the bracket form — a condition written as
+	// `resource.status == 'posted'` failed with "dict has no .status field or
+	// method", which is the shape every state-machine guard already relies on
+	// (internal/starlark/guard.go injects FieldMap for exactly this reason).
+	env["resource"] = starlark.NewFieldMap(resourceData)
+	env["data"] = starlark.NewFieldMap(resourceData)
 	env["params"] = params
 
 	// Evaluate via Starlark expression evaluator

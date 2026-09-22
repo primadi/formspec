@@ -738,11 +738,22 @@ func (r *WorkflowTransitionRef) ByName() bool {
 // Steps are evaluated sequentially; each must reach quorum before the next begins.
 type WorkflowStep struct {
 	// @schema {example: "[gl.supervisor]"}
-	Roles      []string        `yaml:"roles" json:"roles"`
-	Approvers  int             `yaml:"approvers,omitempty" json:"approvers,omitempty"` // quorum, default 1
-	Mode       string          `yaml:"mode,omitempty" json:"mode,omitempty"`           // all | any | sequential
-	When       string          `yaml:"when,omitempty" json:"when,omitempty"`           // FormSpecExpr — skip step if false
-	Escalation *StepEscalation `yaml:"escalation,omitempty" json:"escalation,omitempty"`
+	Roles      []string         `yaml:"roles" json:"roles"`
+	Approvers  int              `yaml:"approvers,omitempty" json:"approvers,omitempty"` // quorum, default 1
+	Mode       WorkflowStepMode `yaml:"mode,omitempty" json:"mode,omitempty"`           // all | any | sequential
+	When       string           `yaml:"when,omitempty" json:"when,omitempty"`           // FormSpecExpr — skip step if false
+	Escalation *StepEscalation  `yaml:"escalation,omitempty" json:"escalation,omitempty"`
+	// Title is the human label for this approval task (S15). Without it the
+	// ApprovalInbox can only say "a task is waiting" — the approver cannot tell
+	// WHAT they are approving. Mirrors WizardStep.title.
+	Title string `yaml:"title,omitempty" json:"title,omitempty"`
+	// Description explains what to check before deciding (S15).
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+	// DisplayFields names the record fields the approver needs to see to decide
+	// (e.g. order number, total, void reason) — so the ApprovalInbox can show
+	// them without the approver opening the record. Each entry must be a field
+	// of the workflow's entity; a typo is rejected at validate time.
+	DisplayFields []string `yaml:"display_fields,omitempty" json:"display_fields,omitempty"`
 }
 
 // StepEscalation configures timeout and reassignment for one step.
@@ -862,6 +873,18 @@ type IntegratorCall struct {
 	Resource string `yaml:"resource" json:"resource"`
 	// @schema {example: "create"}
 	Action string `yaml:"action" json:"action"`
+	// Map declares how the source event payload becomes the target action's
+	// params (S6). The two sides rarely share field names — an order's
+	// `total_amount`/`tax_amount` vs a journal entry's `lines[]` of accounts —
+	// and the mapping ("revenue → credit 4-1000") is accounting knowledge, not
+	// field naming. Without it that knowledge has to live in a script owned by
+	// the target module, which defeats the point of a declarative Integrator.
+	//
+	// Values are templates: a string containing `{dotted.path}` is interpolated
+	// against the event payload; any other value is passed through verbatim.
+	// Nested maps and lists are interpolated recursively, so a `lines:` list of
+	// account entries can be built inline.
+	Map map[string]any `yaml:"map,omitempty" json:"map,omitempty"`
 }
 
 // ─── 1.1.6 MockupSpec ───

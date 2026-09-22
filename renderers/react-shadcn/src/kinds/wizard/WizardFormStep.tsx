@@ -160,7 +160,7 @@ export default function WizardFormStep({
             <p className="text-xs text-muted-foreground">{field.help}</p>
           )}
           <select
-            autoComplete="nope"
+            autoComplete="off"
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
             value={value}
             onChange={(e) => {
@@ -195,7 +195,7 @@ export default function WizardFormStep({
         <div key={field.name} className="space-y-2.5">
           <label className="text-sm font-medium">{label}</label>
           <select
-            autoComplete="nope"
+            autoComplete="off"
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
             value={value}
             onChange={(e) => onFieldChange(field.name, e.target.value)}

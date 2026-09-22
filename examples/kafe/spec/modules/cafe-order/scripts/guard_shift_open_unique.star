@@ -15,10 +15,12 @@
 # Guard ini LAPIS KEDUA yang memberi pesan error ramah di action pipeline.
 # Constraint database-lah yang berlaku untuk semua jalur tulis.
 #
-# GAP-30 — ctx.db().query() deadlock di SQLite dalam transaksi aksi (lihat
-#   catatan lengkap di cafe-master/scripts/guard_menu_item_price_unique.star).
-# GAP-31 — tidak ada API find-by-field; terpaksa raw SQL.
-# GAP-32 — SELECT-then-act tidak atomik; butuh ctx.lock untuk benar-benar rapat.
+# ✅ GAP-30 (item 4.5) — `ctx.db().query()` dulu deadlock di SQLite dalam
+#   transaksi aksi. `resource.find` memakai jalur baca store yang scope-aware.
+# ✅ GAP-31 (item 4.3) — dulu tidak ada API find-by-field; kini
+#   `resource.find(entity, {field: value, ...})` mencari lewat lapisan entity.
+# ⚠️ GAP-32 (item 4.4) — SELECT-then-act tidak atomik; yang menutupnya adalah
+#   partial unique index di atas (database), bukan guard ini.
 #
 # Dipasang lewat `hooks:` pada entity `shift` (on: before, action: create).
 # ─────────────────────────────────────────────────────────────────────────────
@@ -36,20 +38,12 @@ def execute(resource, params, ctx):
     if not branch_id or not cashier_id:
         return fail("Cabang dan Kasir wajib diisi sebelum membuka shift.")
 
-    exclude_id = resource.id or ""
-
-    rows = ctx.db().query(
-        "SELECT id FROM cafe_order_shifts "
-        + "WHERE branch_id = ? "
-        + "  AND cashier_id = ? "
-        + "  AND status = 'open' "
-        + "  AND deleted_at IS NULL "
-        + "  AND id != ? "
-        + "LIMIT 1",
-        [branch_id, cashier_id, exclude_id],
+    existing = resource.find(
+        "cafe-order.shift",
+        {"branch_id": branch_id, "cashier_id": cashier_id, "status": "open"},
     )
 
-    if len(rows) > 0:
+    if existing != None and existing.id != resource.id:
         return fail(
             "Kasir ini masih memiliki shift terbuka di cabang tersebut. "
             + "Tutup shift yang sedang berjalan sebelum membuka shift baru."

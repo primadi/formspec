@@ -180,6 +180,28 @@ func (r *Registry) LoadEntities() []error {
 			}
 		}
 
+		// Register hook uses (#34): a hook script's access must be visible in
+		// the consent footprint too, otherwise it could read/write resources the
+		// manifest never declared. Hooks have no permission of their own, so the
+		// entry is registered under a synthetic action name that names the hook
+		// (e.g. "hook:before:*") — enough for the footprint to list it.
+		for _, hook := range entitySpec.Hooks {
+			if hook.Uses == nil {
+				continue
+			}
+			hookName := hookNameFor(hook)
+			usesEntry := permission.BuildUsesEntry(module, entityName, hookName, hook.Uses)
+			if err := r.permRegistry.RegisterAction(
+				module, entityName, hookName,
+				"", // hooks have no required permission
+				usesEntry,
+				raw.Source,
+				false,
+			); err != nil {
+				allErrors = append(allErrors, fmt.Errorf("%s: register hook uses: %w", raw.Source, err))
+			}
+		}
+
 		// Also register standard CRUD + lifecycle permissions if the entity
 		// is exposed.
 		if len(entitySpec.Expose) > 0 {
@@ -189,6 +211,20 @@ func (r *Registry) LoadEntities() []error {
 	}
 
 	return allErrors
+}
+
+// hookNameFor builds a stable synthetic name for a hook so its `uses` entry can
+// be registered in the permission registry (#34). Hooks have no permission of
+// their own; the name only needs to identify the hook in the consent footprint.
+func hookNameFor(h spec.HookDecl) string {
+	target := h.Action
+	if target == "" {
+		target = h.Event
+	}
+	if target == "" {
+		target = "*"
+	}
+	return "hook:" + string(h.On) + ":" + target
 }
 
 // registerStandardPermissions registers the auto-derived standard CRUD +

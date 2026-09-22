@@ -49,6 +49,20 @@ type loginRequest struct {
 	// App scopes the session to one App (role management is per-App). Empty =
 	// workspace-level session (e.g. the _admin surface).
 	App string `json:"app,omitempty"`
+	// Assignment is the session context the caller wants to act in (TODO 3.8),
+	// as returned in a previous CONTEXT_REQUIRED response (`<role>@<value>`).
+	// Empty = let the server decide: no assignments → boundary-less session,
+	// exactly one → chosen automatically, several → CONTEXT_REQUIRED.
+	Assignment string `json:"assignment,omitempty"`
+}
+
+// switchContextRequest is the POST /auth/switch body. The refresh token proves
+// which session is being replaced: it is revoked as part of the switch, so two
+// contexts are never live at once.
+type switchContextRequest struct {
+	RefreshToken string `json:"refresh_token"`
+	Assignment   string `json:"assignment"`
+	App          string `json:"app,omitempty"`
 }
 
 // registerRequest is the POST /auth/register body. Email is optional but
@@ -103,8 +117,21 @@ func (b *RouterBuilder) HandleLogin() http.HandlerFunc {
 		}
 
 		workspaceID := workspaceFromContext(r.Context())
-		pair, err := authService.Login(r.Context(), workspaceID, req.App, req.Username, req.Password)
+		pair, err := authService.LoginWithContext(r.Context(), workspaceID, req.App, req.Username, req.Password, req.Assignment)
 		if err != nil {
+			// A principal with several session contexts must choose one before a
+			// token is issued (TODO 3.8). This is not a credential failure: the
+			// password was already verified, so answering with the choices leaks
+			// nothing an attacker did not already prove.
+			var needContext *auth.ContextRequiredError
+			if errors.As(err, &needContext) {
+				authAuditLog.record(AuthAuditEntry{
+					Timestamp: time.Now().UTC(), Method: "login", Username: req.Username,
+					IP: ip, Result: "failure", Reason: "context_required",
+				})
+				writeContextRequired(w, r, needContext.Choices)
+				return
+			}
 			// Do not leak whether the user exists — same 401 for both.
 			authAuditLog.record(AuthAuditEntry{
 				Timestamp: time.Now().UTC(), Method: "login", Username: req.Username,
@@ -312,6 +339,95 @@ func (b *RouterBuilder) HandleResendVerification() http.HandlerFunc {
 	}
 }
 
+// writeContextRequired answers 409 CONTEXT_REQUIRED with the choices a client
+// needs to render the session-context picker (TODO 3.8). The status is 409, not
+// 401: the credentials/session are valid — what is missing is the caller's
+// choice of boundary, so retrying the same request would fail again.
+func writeContextRequired(w http.ResponseWriter, r *http.Request, choices []auth.ContextChoice) {
+	body := struct {
+		Error struct {
+			Code    string               `json:"code"`
+			Message string               `json:"message"`
+			Choices []auth.ContextChoice `json:"choices"`
+		} `json:"error"`
+		Meta MetaSingle `json:"meta"`
+	}{}
+	body.Error.Code = "CONTEXT_REQUIRED"
+	body.Error.Message = "choose a session context (role + branch) to continue"
+	body.Error.Choices = choices
+	body.Meta = MetaSingle{
+		RequestID: requestIDFromContext(r.Context()),
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+	}
+	writeJSON(w, http.StatusConflict, body)
+}
+
+// HandleSwitchContext serves POST /{ws}/_ui/auth/switch: re-issue a token pair
+// under a different session context without logging out (TODO 3.8).
+//
+// The caller proves ownership of the session with its refresh token, which is
+// revoked as part of the switch — a context switch never leaves two live
+// contexts behind, and an unknown/revoked assignment fails closed with
+// CONTEXT_REQUIRED instead of silently keeping the old boundary.
+func (b *RouterBuilder) HandleSwitchContext() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if authService == nil {
+			writeError(w, http.StatusServiceUnavailable, "AUTH_NOT_CONFIGURED",
+				"auth service is not configured")
+			return
+		}
+
+		var req switchContextRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "INVALID_REQUEST",
+				"invalid request body: "+err.Error())
+			return
+		}
+		if req.RefreshToken == "" {
+			writeError(w, http.StatusBadRequest, "INVALID_REQUEST",
+				"refresh_token is required")
+			return
+		}
+		if req.Assignment == "" {
+			writeError(w, http.StatusBadRequest, "INVALID_REQUEST",
+				"assignment is required")
+			return
+		}
+
+		ip := clientIP(r)
+		pair, err := authService.SwitchContextByToken(r.Context(), req.RefreshToken, req.App, req.Assignment)
+		if err != nil {
+			var needContext *auth.ContextRequiredError
+			if errors.As(err, &needContext) {
+				authAuditLog.record(AuthAuditEntry{
+					Timestamp: time.Now().UTC(), Method: "switch", IP: ip,
+					Result: "failure", Reason: "context_required",
+				})
+				writeContextRequired(w, r, needContext.Choices)
+				return
+			}
+			authAuditLog.record(AuthAuditEntry{
+				Timestamp: time.Now().UTC(), Method: "switch", IP: ip,
+				Result: "failure", Reason: "invalid_refresh_token",
+			})
+			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED",
+				"invalid or expired refresh token")
+			return
+		}
+
+		authAuditLog.record(AuthAuditEntry{
+			Timestamp: time.Now().UTC(), Method: "switch", IP: ip, Result: "success",
+		})
+		writeJSON(w, http.StatusOK, SingleResponse{
+			Data: pair,
+			Meta: MetaSingle{
+				RequestID: requestIDFromContext(r.Context()),
+				Timestamp: time.Now().UTC().Format(time.RFC3339),
+			},
+		})
+	}
+}
+
 // HandleRefresh serves POST /{ws}/_ui/auth/refresh (and, when EnableAPIAuth
 // is set, POST /{ws}/api/v1/auth/refresh).
 //
@@ -351,6 +467,19 @@ func (b *RouterBuilder) HandleRefresh() http.HandlerFunc {
 
 		pair, err := authService.Refresh(r.Context(), req.RefreshToken)
 		if err != nil {
+			// A context-scoped session whose assignment was revoked (or whose
+			// role was deleted) must ask for a new choice — answering 401 would
+			// tell the client its token is fine and leave it retrying forever
+			// (TODO 3.8).
+			var needContext *auth.ContextRequiredError
+			if errors.As(err, &needContext) {
+				authAuditLog.record(AuthAuditEntry{
+					Timestamp: time.Now().UTC(), Method: "refresh", IP: ip,
+					Result: "failure", Reason: "context_required",
+				})
+				writeContextRequired(w, r, needContext.Choices)
+				return
+			}
 			authAuditLog.record(AuthAuditEntry{
 				Timestamp: time.Now().UTC(), Method: "refresh", IP: ip,
 				Result: "failure", Reason: "invalid_refresh_token",

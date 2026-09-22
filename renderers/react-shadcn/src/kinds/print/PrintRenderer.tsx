@@ -5,20 +5,22 @@
 //
 // Design doc §5.5 Print kind (F5)
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useMemo, useState, useCallback } from "react"
 import { useParams } from "react-router-dom"
 import { Printer, Loader2 } from "lucide-react"
 import { toast } from "@/lib/ui"
 
-import type { Entry, PrintSpec } from "@/types/manifest"
+import type { Entry, PrintQrcode, PrintSpec } from "@/types/manifest"
 import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
 import { resolveEntityRef } from "@/engine/entityRef"
 import { apiGet } from "@/lib/api"
 import { titleCase } from "@/lib/utils"
 import { interpolate, resolvePath } from "@/lib/interpolate"
+import { createFormatter, moneyAmount, type Formatter } from "@/lib/format"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/widgets/Badge"
+import { QrCode } from "@/widgets/QrCode"
 
 interface PrintRendererProps {
   entry: Entry<PrintSpec>
@@ -28,6 +30,11 @@ export default function PrintRenderer({ entry }: PrintRendererProps) {
   const { id, workspace } = useParams<{ id?: string; workspace?: string }>()
   const getClient = useSessionStore((s) => s.getClient)
   const getEntity = useMetaStore((s) => s.getEntity)
+  // Money values arrive as `{amount, currency}` objects; the formatter carries
+  // the resolved currency symbol + locale, so print output matches every other
+  // surface instead of stringifying the object (item 2.6 / gap #1 residual).
+  const settings = useMetaStore((s) => s.bundle?.settings)
+  const formatter = useMemo(() => createFormatter(settings), [settings])
 
   const [entityModule, entityName] = resolveEntityRef(
     entry.spec.entity,
@@ -144,7 +151,9 @@ export default function PrintRenderer({ entry }: PrintRendererProps) {
                       >
                         <span className="text-muted-foreground">{field}</span>
                         <span className="font-medium">
-                          {ctx ? resolveCellValue(ctx, field) : `{${field}}`}
+                          {ctx
+                            ? resolveCellValue(ctx, field, formatter)
+                            : `{${field}}`}
                         </span>
                       </div>
                     ))}
@@ -186,7 +195,7 @@ export default function PrintRenderer({ entry }: PrintRendererProps) {
                                   key={col}
                                   className="border px-2 py-1 text-xs"
                                 >
-                                  {String(child[col] ?? "")}
+                                  {formatValue(child[col], formatter)}
                                 </td>
                               ))}
                             </tr>
@@ -197,6 +206,37 @@ export default function PrintRenderer({ entry }: PrintRendererProps) {
                   )
                 }
               }
+              if (item.qrcode) {
+                // QR code (gap #3 / S4). The payload is interpolated from the
+                // record and, when declared `absolute`, prefixed with the
+                // origin of the page it is printed from — the browser knows the
+                // origin, the record never does. A record with nothing to
+                // encode omits the element rather than showing a code that
+                // leads nowhere (the server pipelines do the same).
+                const payload = resolveQrPayload(
+                  item.qrcode,
+                  ctx,
+                  window.location.origin,
+                )
+                if (!payload) return null
+                return (
+                  <div
+                    key={idx}
+                    className="flex flex-col items-center gap-1 py-2"
+                  >
+                    {item.qrcode.label && (
+                      <span className="text-xs text-muted-foreground">
+                        {ctx ? interpolate(item.qrcode.label, ctx) : ""}
+                      </span>
+                    )}
+                    <QrCode
+                      value={payload}
+                      size={qrPixelSize(item.qrcode.size_mm)}
+                      emptyText="QR belum bisa dibuat"
+                    />
+                  </div>
+                )
+              }
               if (item.totals && ctx) {
                 return (
                   <div
@@ -204,7 +244,7 @@ export default function PrintRenderer({ entry }: PrintRendererProps) {
                     className="text-right text-sm font-medium border-t pt-2"
                   >
                     {item.totals.field}:{" "}
-                    {resolveCellValue(ctx, item.totals.field)}
+                    {resolveCellValue(ctx, item.totals.field, formatter)}
                   </div>
                 )
               }
@@ -253,7 +293,58 @@ export default function PrintRenderer({ entry }: PrintRendererProps) {
 // ── Cell value display (distinct from `interpolate` — this formats a single
 // resolved value for a `body.fields` cell, defaulting to "-" when missing,
 // rather than substituting tokens inside a larger string) ──
-function resolveCellValue(ctx: Record<string, unknown>, path: string): string {
+function resolveCellValue(
+  ctx: Record<string, unknown>,
+  path: string,
+  formatter?: Formatter,
+): string {
   const value = resolvePath(ctx, path)
-  return value == null || value === "" ? "-" : String(value)
+  return value == null || value === "" ? "-" : formatValue(value, formatter)
+}
+
+// A money value is recognized by its shape (`{amount, currency}` — the canonical
+// wire form written at the API boundary, 2.3), never by guessing from a plain
+// number: formatting a quantity as money would be worse than printing it raw.
+export function isMoneyObject(value: unknown): boolean {
+  if (typeof value !== "object" || value === null) return false
+  const v = value as Record<string, unknown>
+  return "amount" in v && "currency" in v
+}
+
+/** Render one print value: money via the shared formatter, everything else as text. */
+export function formatValue(value: unknown, formatter?: Formatter): string {
+  if (value == null || value === "") return ""
+  if (isMoneyObject(value) && formatter) {
+    const amount = moneyAmount(value)
+    if (amount !== undefined) return formatter.money(amount)
+  }
+  return String(value)
+}
+
+/**
+ * Resolve a `qrcode` body item's payload. `absolute` prepends the origin the
+ * document is printed from; a payload that is already a full URL is left as
+ * written. An empty result renders the widget's explicit empty state rather
+ * than a blank, unscannable code.
+ *
+ * `interpolate()` leaves unresolvable `{tokens}` verbatim (so they are visible
+ * in the document instead of vanishing), which for a QR would encode a URL that
+ * leads nowhere — so a leftover token is treated as an empty payload here. The
+ * server pipelines fail loudly on the same condition.
+ */
+export function resolveQrPayload(
+  qr: PrintQrcode,
+  ctx: Record<string, unknown> | null,
+  origin: string,
+): string {
+  const raw = (ctx ? interpolate(qr.payload, ctx) : qr.payload).trim()
+  if (!raw || /\{[^}]*\}/.test(raw)) return ""
+  if (!qr.absolute || /^[a-z][a-z0-9+.-]*:\/\//i.test(raw)) return raw
+  return origin.replace(/\/$/, "") + (raw.startsWith("/") ? raw : `/${raw}`)
+}
+
+/** Millimetres → CSS pixels at 96dpi (1mm ≈ 3.7795px), default 30mm. */
+export function qrPixelSize(sizeMm?: number): number {
+  const mm = sizeMm && sizeMm > 0 ? sizeMm : 30
+  return Math.round(mm * 3.7795)
 }

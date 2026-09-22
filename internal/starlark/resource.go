@@ -39,10 +39,27 @@ type ResourceAPI struct {
 	// different module/entity/id/version than the resource that loaded them.
 	saveFn func(module, entity, id string, version int, data map[string]any) error
 	// callFn is called for cross-resource calls in scripts: entity.call("action", params).
-	// It returns the call result or an error.
-	callFn func(module, entity, action string, params map[string]any) (any, error)
-	// loadFn loads another entity by ID, returning its data and version.
-	loadFn func(module, entity, id string) (map[string]any, int, error)
+	// It returns the call result or an error. id is the target record's ID when
+	// the script addressed a specific instance ("module.entity.<id>"), empty
+	// otherwise (a collection-level action on the entity itself).
+	callFn func(module, entity, id, action string, params map[string]any) (any, error)
+	// loadFn loads another entity by ID, returning its data, version, and the
+	// resolved record ID. The resolved ID is returned separately rather than
+	// read from the data map: a record's id lives in its own table column, so
+	// the data map has no "id" key — and a lookup by natural key resolves to a
+	// different (UUID) identity than the value passed in.
+	loadFn func(module, entity, id string) (map[string]any, int, string, error)
+	// findFn finds another entity by field values, returning its data, version,
+	// and the resolved record ID (or nil data when no row matches). It is the
+	// high-level alternative to raw SQL for guards that must check "does a row
+	// with these field values already exist" (#31) — the query respects tenant
+	// isolation and row scope, which a hand-written ctx.db().query() cannot.
+	findFn func(module, entity string, match map[string]any) (map[string]any, int, string, error)
+	// upsertFn writes a row of a `characteristic: summary` projection, matching
+	// on `match` and merging `data` (item 4.1). It is the ONE supported write
+	// path for summary entities; the caller-identity check (that the running
+	// script is the entity's maintained_by) lives in the wiring layer.
+	upsertFn func(module, entity string, match, data map[string]any) (string, bool, error)
 	// createFn creates a new record of another entity, returning its ID.
 	createFn func(module, entity string, data map[string]any) (string, error)
 
@@ -70,13 +87,23 @@ func (r *ResourceAPI) SetSaveFunc(fn func(module, entity, id string, version int
 }
 
 // SetCallFunc sets the cross-resource call callback.
-func (r *ResourceAPI) SetCallFunc(fn func(module, entity, action string, params map[string]any) (any, error)) {
+func (r *ResourceAPI) SetCallFunc(fn func(module, entity, id, action string, params map[string]any) (any, error)) {
 	r.callFn = fn
 }
 
 // SetLoadFunc sets the entity load callback.
-func (r *ResourceAPI) SetLoadFunc(fn func(module, entity, id string) (map[string]any, int, error)) {
+func (r *ResourceAPI) SetLoadFunc(fn func(module, entity, id string) (map[string]any, int, string, error)) {
 	r.loadFn = fn
+}
+
+// SetFindFunc sets the entity find-by-field callback (#31).
+func (r *ResourceAPI) SetFindFunc(fn func(module, entity string, match map[string]any) (map[string]any, int, string, error)) {
+	r.findFn = fn
+}
+
+// SetUpsertFunc sets the summary-projection upsert callback (item 4.1).
+func (r *ResourceAPI) SetUpsertFunc(fn func(module, entity string, match, data map[string]any) (string, bool, error)) {
+	r.upsertFn = fn
 }
 
 // SetCreateFunc sets the entity create callback.
@@ -123,6 +150,10 @@ func (r *ResourceAPI) Attr(name string) (starlark.Value, error) {
 		return r.builtinCall(), nil
 	case "fetch":
 		return r.builtinLoad(), nil
+	case "find":
+		return r.builtinFind(), nil
+	case "upsert":
+		return r.builtinUpsert(), nil
 	case "create":
 		return r.builtinCreate(), nil
 	case "new":
@@ -137,7 +168,7 @@ func (r *ResourceAPI) Attr(name string) (starlark.Value, error) {
 
 // AttrNames lists the attribute names.
 func (r *ResourceAPI) AttrNames() []string {
-	return []string{"id", "field", "set", "save", "call", "fetch", "create", "new"}
+	return []string{"id", "field", "set", "save", "call", "fetch", "find", "upsert", "create", "new"}
 }
 
 // ─── resource.field ───
@@ -241,8 +272,8 @@ func (r *ResourceAPI) builtinCall() *starlark.Builtin {
 		}
 
 		paramsMap := starlarkValueToMap(params)
-		module, entityName := splitModuleEntity(r.Module, target)
-		result, err := r.callFn(module, entityName, action, paramsMap)
+		module, entityName, id := splitCallTarget(r.Module, target)
+		result, err := r.callFn(module, entityName, id, action, paramsMap)
 		if err != nil {
 			return nil, fmt.Errorf("resource.call(%s.%s): %w", target, action, err)
 		}
@@ -272,20 +303,131 @@ func (r *ResourceAPI) builtinLoad() *starlark.Builtin {
 		}
 
 		module, entityName := splitModuleEntity(r.Module, entity)
-		data, version, err := r.loadFn(module, entityName, id)
+		data, version, resolvedID, err := r.loadFn(module, entityName, id)
 		if err != nil {
 			return nil, fmt.Errorf("resource.fetch(%s, %s): %w", entity, id, err)
 		}
+		if resolvedID == "" {
+			// Handlers that predate the resolved-ID return still work: fall
+			// back to the requested id, then to whatever the data map carries.
+			resolvedID = id
+		}
 
-		loaded := NewResourceAPI(module, entityName, id, version, data)
+		loaded := NewResourceAPI(module, entityName, resolvedID, version, data)
 		// Propagate handlers so the loaded resource can itself be .set()/.save()d,
 		// .call()ed, .fetch()ed, or .create()d from — e.g. rx_dispense.star loads
 		// a medicine record, decrements stock, and saves it back.
 		loaded.saveFn = r.saveFn
 		loaded.callFn = r.callFn
 		loaded.loadFn = r.loadFn
+		loaded.findFn = r.findFn
+		loaded.upsertFn = r.upsertFn
 		loaded.createFn = r.createFn
 		return loaded, nil
+	})
+}
+
+// builtinFind serves resource.find(entity, match) — the high-level alternative
+// to raw SQL for guards that must check whether a row with the given field
+// values already exists (#31). `match` is a dict of field→value; all pairs must
+// match (AND). Unlike ctx.db().query(), the lookup goes through the entity
+// layer, so tenant isolation and row scope apply and the caller never has to
+// know the physical table/column names.
+//
+// Returns the matching resource, or None when no row matches — so a guard can
+// write `if resource.find(...): fail(...)` without a length check.
+func (r *ResourceAPI) builtinFind() *starlark.Builtin {
+	return starlark.NewBuiltin("resource.find", func(
+		thread *starlark.Thread,
+		fn *starlark.Builtin,
+		args starlark.Tuple,
+		kwargs []starlark.Tuple,
+	) (starlark.Value, error) {
+		var entity string
+		var match starlark.Value
+		if err := starlark.UnpackArgs("find", args, kwargs,
+			"entity", &entity,
+			"match", &match,
+		); err != nil {
+			return nil, err
+		}
+
+		if r.findFn == nil {
+			return nil, fmt.Errorf("resource.find: no find handler registered")
+		}
+
+		matchMap := starlarkValueToMap(match)
+		if len(matchMap) == 0 {
+			return nil, fmt.Errorf("resource.find: match must be a non-empty dict of field→value")
+		}
+
+		module, entityName := splitModuleEntity(r.Module, entity)
+		data, version, resolvedID, err := r.findFn(module, entityName, matchMap)
+		if err != nil {
+			return nil, fmt.Errorf("resource.find(%s): %w", entity, err)
+		}
+		if data == nil {
+			return starlark.None, nil
+		}
+
+		if resolvedID == "" {
+			// Defensive fallback for a data map that happens to carry an id.
+			resolvedID, _ = data["id"].(string)
+		}
+		found := NewResourceAPI(module, entityName, resolvedID, version, data)
+		found.saveFn = r.saveFn
+		found.callFn = r.callFn
+		found.loadFn = r.loadFn
+		found.findFn = r.findFn
+		found.upsertFn = r.upsertFn
+		found.createFn = r.createFn
+		return found, nil
+	})
+}
+
+// builtinUpsert serves resource.upsert(entity, match, data) — the ONE supported
+// write path for a `characteristic: summary` projection (item 4.1). It matches
+// on `match` (all pairs, AND) and merges `data` onto the existing row or inserts
+// a new one. The API-facing create/update/delete reject summary entities; this
+// exists so a maintainer script named by `maintained_by` can keep its projection
+// current.
+//
+// The caller-identity check (that the running script IS the entity's
+// maintained_by) lives in the wiring layer, not here — this builtin only
+// forwards the call. Returns the row id.
+func (r *ResourceAPI) builtinUpsert() *starlark.Builtin {
+	return starlark.NewBuiltin("resource.upsert", func(
+		thread *starlark.Thread,
+		fn *starlark.Builtin,
+		args starlark.Tuple,
+		kwargs []starlark.Tuple,
+	) (starlark.Value, error) {
+		var entity string
+		var match, data starlark.Value
+		if err := starlark.UnpackArgs("upsert", args, kwargs,
+			"entity", &entity,
+			"match", &match,
+			"data", &data,
+		); err != nil {
+			return nil, err
+		}
+
+		if r.upsertFn == nil {
+			return nil, fmt.Errorf("resource.upsert: no upsert handler registered")
+		}
+
+		matchMap := starlarkValueToMap(match)
+		if len(matchMap) == 0 {
+			return nil, fmt.Errorf("resource.upsert: match must be a non-empty dict of field→value")
+		}
+		dataMap := starlarkValueToMap(data)
+
+		module, entityName := splitModuleEntity(r.Module, entity)
+		id, _, err := r.upsertFn(module, entityName, matchMap, dataMap)
+		if err != nil {
+			return nil, fmt.Errorf("resource.upsert(%s): %w", entity, err)
+		}
+		return starlark.String(id), nil
 	})
 }
 
@@ -385,6 +527,35 @@ func splitModuleEntity(defaultModule, target string) (module, entity string) {
 		return target[:i], target[i+1:]
 	}
 	return defaultModule, target
+}
+
+// splitCallTarget splits a resource.call target into (module, entity, id).
+//
+// Three accepted forms — the third segment is always a record ID, so calling
+// an action on ONE record (e.g. "gl.journal-entry.<uuid>" → "post") works the
+// same as calling one on the collection:
+//
+//	"medicine"                      → (defaultModule, "medicine",  "")
+//	"pharmacy.medicine"             → ("pharmacy",     "medicine",  "")
+//	"gl.journal-entry.01a0c332-..." → ("gl",           "journal-entry", "01a0c332-...")
+//
+// Because module and entity identifiers are kebab-case and never contain ".",
+// the segment boundaries are unambiguous. A trailing dot with nothing after it
+// ("gl.journal-entry.") is treated as the collection form rather than an
+// empty ID — that shape is what an interpolating caller produces when the ID
+// it meant to append is missing, and a collection call gives a clearer error
+// than a lookup of the empty string.
+func splitCallTarget(defaultModule, target string) (module, entity, id string) {
+	if cut := strings.IndexByte(target, '.'); cut >= 0 {
+		module, entity = target[:cut], target[cut+1:]
+	} else {
+		module, entity = defaultModule, target
+	}
+	if i := strings.IndexByte(entity, '.'); i >= 0 {
+		id = entity[i+1:]
+		entity = entity[:i]
+	}
+	return module, entity, id
 }
 
 // now is a package-level clock for testability.

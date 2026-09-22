@@ -537,6 +537,15 @@ Script (Starlark) mengakses resource `formspec.core` lewat:
   `resource.fetch("formspec.core.user", user_id)`. Akses lintas-module dari
   hook **wajib** dideklarasikan di `uses.resources` action yang menaunginya
   ([`../backend/02-core-extended.md`](../backend/02-core-extended.md) §7).
+- **`resource.find("<module>.<entity>", {field: value, ...})`** — mencari satu
+  record berdasarkan nilai field (semua pasangan harus cocok, AND), tanpa SQL.
+  Mengembalikan resource atau `None`. Ini bentuk yang benar untuk guard
+  keunikan ("apakah baris dengan kunci ini sudah ada?") — pencariannya lewat
+  lapisan entity, jadi tenant isolation & `row_scope` berlaku dan nama
+  tabel/kolom fisik tidak perlu diketahui script. Contoh:
+  `resource.find("cafe-master.menu-item-price", {"branch_id": b, "menu_item_id": m})`.
+  Akses lintas-module tunduk aturan `uses.resources` yang sama seperti
+  `resource.fetch`.
 - **`ctx.config().get("settings.*")`** — membaca global settings (currency,
   locale, timezone, date_format, decimal_scale, rounding) — namespace
   `settings.*` di Config (spec §10,

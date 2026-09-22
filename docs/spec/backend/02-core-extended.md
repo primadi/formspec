@@ -140,6 +140,25 @@ Satu step mendeklarasikan **berapa banyak** persetujuan yang dibutuhkan dan
   bernilai true (mis. `resource.amount > 100000000`). Step yang tidak berlaku
   di-skip tanpa menahan transisi.
 
+- `title`, `description`, `display_fields` — label tugas approval (S15).
+  `ApprovalInbox` bersifat zero-config: sumbernya langkah workflow yang menunggu,
+  jadi tanpa label ia hanya bisa mengatakan "ada tugas menunggu" — approver tidak
+  tahu **apa** yang sedang disetujui. `title` memberi label itu, `description`
+  menjelaskan apa yang harus diperiksa, dan `display_fields` menyebut field
+  record yang approver butuhkan untuk memutuskan (nomor pesanan, total, alasan
+  void) tanpa membuka record sendiri. Setiap entri `display_fields` **wajib**
+  menunjuk field yang benar-benar ada di entity workflow — `formspec validate`
+  menolaknya bila tidak, karena field yang salah ketik akan tampil sebagai kolom
+  kosong (terbaca "tidak ada data", bukan "salah tulis").
+
+  ```yaml
+  steps:
+    - title: "Persetujuan Void Pesanan"
+      description: "Periksa nomor pesanan, total, dan alasan void."
+      display_fields: [number, total_amount, void_reason]
+      roles: [cafe-order.supervisor]
+  ```
+
 **Timeout & eskalasi.** `escalation.after` menandai durasi diam sebelum step
 dieskalasi; `notify_roles` diberi tahu, dan `reassign_roles` (opsional)
 memindahkan hak persetujuan ke role lain setelah durasi itu lewat — sehingga
@@ -259,10 +278,69 @@ compensate: recreate_gl_journal # opsional; framework yang memutuskan kapan dipa
 `listen.resource`/`call.resource` di-resolve lewat registry — Integrator tidak
 pernah `import` definisi Invoice/JournalEntry secara langsung.
 
+**Pemetaan payload (`call.map`).** Kedua sisi integrasi jarang punya nama field
+yang sama — `order.total_amount` vs `journal-entry.lines[].debit` — dan pemetaan
+"omzet → kredit 4-1000" adalah **pengetahuan domain**, bukan penamaan field.
+`call.map` menyatakannya di manifest, sehingga pengetahuan itu tidak perlu hidup
+di script milik modul target (yang mungkin pihak ketiga):
+
+```yaml
+call:
+  resource: gl.journal-entry
+  action: create
+  map:
+    entry_date: "{paid_at}"
+    reference: "{number}"
+    description: "Penjualan {number}"
+    lines:
+      - { account_id: "1-1000", debit: "{total_amount.amount}" }
+      - { account_id: "4-1000", credit: "{subtotal.amount}" }
+```
+
+- Nilai adalah **template**: string berisi `{dotted.path}` diinterpolasi
+  terhadap payload event; map dan list diinterpolasi rekursif.
+- Nilai yang **persis satu token** mempertahankan tipe aslinya — jadi
+  `debit: "{total_amount}"` menghasilkan objek `money`, bukan bentuk teksnya.
+  Untuk field target yang bertipe skalar (mis. `decimal`), ambil komponennya
+  (`{total_amount.amount}`).
+- Token yang tidak bisa di-resolve **dibiarkan verbatim** (terlihat di payload),
+  bukan menjadi string kosong yang diam.
+- Bila `map` tidak dinyatakan, payload event diteruskan apa adanya (perilaku
+  lama).
+
 **Aturan wajib:** setiap Integrator yang membuat efek samping dari satu event
 **wajib** juga menyediakan handler simetris untuk event pembatalannya —
 tanpa itu, cancel di sisi source akan terblokir permanen karena reference
 guard generik selalu memblokir tanpa ada yang tahu cara membuka jalannya.
+
+*Aturan simetri cancel (7.7.2) — mengapa dan bagaimana.* Aturan ini menuntut
+**pasangan**, bukan satu Integrator: untuk setiap Integrator yang bereaksi atas
+event non-cancel dari sebuah resource, harus ada Integrator lain yang bereaksi
+atas event cancel resource yang sama (`on_cancel`/`before_cancel`). Alasannya
+konkret: efek samping yang dibuat saat event maju (mis. jurnal GL dibuat saat
+invoice disetujui) harus punya jalur pembalik saat sumbernya dibatalkan —
+kalau tidak, `cancel` pada invoice akan **terblokir permanen**, karena reference
+guard generik menolak membatalkan record yang masih direferensikan dan tidak ada
+yang tahu cara melepaskannya.
+
+```yaml
+# Pasangan simetris — dua Integrator, satu resource.
+kind: Integrator
+metadata: { name: invoice-to-gl, module: billing }
+spec:
+  listen: { resource: billing.invoice, event: on_approved }
+  call:   { resource: gl.journal-entry, action: create }
+
+kind: Integrator
+metadata: { name: invoice-cancel-to-gl, module: billing }
+spec:
+  listen: { resource: billing.invoice, event: before_cancel }   # ← pembalik
+  call:   { resource: gl.journal-entry, action: cancel }
+```
+
+`formspec validate` menolak Integrator yang mendengarkan event non-cancel tanpa
+pasangan cancel-nya, dengan pesan yang menyebut resource dan event yang
+hilang — jadi aturan ini tidak bisa dilupakan tanpa ketahuan.
 
 Target action **wajib** `idempotent: true` untuk pemanggilan cross-boundary
 (dataspace/proses berbeda) — `formspec apply` menolak Integrator yang menyasar
@@ -345,7 +423,11 @@ Semantik rebuild yang mengikat:
 Summary tidak punya action pipeline: `create`/`update`/`delete` permanen
 nonaktif, jadi **`hooks:` dan `conditions:` pada entity summary tidak pernah
 dipanggil**. Karena itu summary punya dua deklarasi sendiri, dan keduanya
-**divalidasi**, bukan sekadar dikomentari:
+**divalidasi**, bukan sekadar dikomentari. `formspec validate` **menolak**
+`hooks:` dan `conditions:` yang dipasang di entity `summary` — manifest yang
+_terlihat_ terlindungi padahal hook-nya tidak pernah dieksekusi lebih buruk
+daripada manifest yang gagal validasi. Kontrak yang didukung adalah
+`maintained_by` + `invariants`:
 
 ```yaml
 spec:
@@ -371,9 +453,44 @@ spec:
   karena di sana `hooks:`/`conditions:` memang jalan dan invariannya sudah
   punya tempat.
 
-Pola upsert + `ctx.lock` di dalam script pemelihara tetap tanggung jawab script
-itu sendiri: index menjamin keunikan, tetapi urutan baca-lalu-tulis yang rapat
-bukan sesuatu yang bisa dinyatakan di manifest.
+#### `resource.upsert` — satu-satunya jalur tulis proyeksi
+
+Script pemelihara menulis proyeksinya lewat **`resource.upsert(entity, match,
+data)`** — bukan `resource.create`/`resource.save`, yang ditolak untuk summary
+(guard store yang sama dengan API). `match` adalah dict field→nilai (semua
+pasangan harus cocok, AND); baris yang cocok di-update, yang belum ada
+di-insert. Operasinya atomik (baca-lalu-tulis dalam satu transaksi), dan unique
+index dari `invariants` adalah jaring pengaman terakhir.
+
+```python
+def execute(resource, params, ctx):
+    current = resource.find("cafe-stock.stock-level",
+                            {"branch_id": b, "ingredient_id": i})
+    if current == None:
+        resource.upsert("cafe-stock.stock-level",
+                        {"branch_id": b, "ingredient_id": i},
+                        {"quantity_on_hand": qty})
+    else:
+        resource.upsert("cafe-stock.stock-level",
+                        {"branch_id": b, "ingredient_id": i},
+                        {"quantity_on_hand": current.field.quantity_on_hand + qty})
+    return ok({})
+```
+
+Aturan pemanggil — inilah yang menjaga summary tetap read-only bagi semua orang
+kecuali pemeliharanya:
+
+- **Hanya** boleh menargetkan entity `characteristic: summary`. Entity lain
+  ditolak (mereka punya action pipeline).
+- **Hanya** boleh dipanggil dari script yang **disebut `maintained_by`** entity
+  itu. Script lain → error. Jadi `resource.upsert` bukan pintu belakang untuk
+  menulis summary sembarangan; ia mewujudkan kontrak `maintained_by`.
+- Tetap menghormati tenant isolation + `row_scope`, dan tetap menegakkan
+  `invariants` (unique index).
+
+Karena `resource.upsert` atomik, script pemelihara **tidak** perlu membungkusnya
+dengan `ctx.lock` — urutan baca-lalu-tulis yang rapat sudah ditangani engine,
+dan index menjamin keunikan.
 
 ## 7. Named Scripts & Cross-Module Starlark
 
@@ -748,6 +865,24 @@ spec:
 **Priority ordering.** Bila beberapa hook menempel di titik yang sama, urutan
 eksekusi mengikuti `priority` (kecil dijalankan lebih dulu) — konsisten dengan
 prioritas handler event ([`01-core-basic.md`](01-core-basic.md) §7).
+
+**`uses` pada hook.** Setiap hook boleh — dan untuk script yang menyentuh
+infrastruktur, **wajib** — mendeklarasikan `uses` dengan bentuk yang sama seperti
+action ([`01-core-basic.md`](01-core-basic.md) §5):
+
+```yaml
+hooks:
+  - on: before
+    action: create
+    impl: { type: script_ref, ref: cafe-master/guard_menu_item_price_unique }
+    uses: { primitives: [db] }
+```
+
+Tanpa `uses`, akses script hook **tidak terlihat di consent footprint** — script
+bisa membaca/menulis resource yang tidak pernah dinyatakan manifest. `formspec
+validate` (honesty scan) membandingkan `uses` hook dengan pemakaian nyata di
+script dan melaporkan `ctx.db()` yang tidak dideklarasikan sebagai error, persis
+seperti untuk action.
 
 **Cross-module hook.** Sebuah module boleh meng-hook action milik module lain;
 deklarasinya hidup di **module yang meng-hook** (bukan di module yang di-hook),

@@ -48,7 +48,7 @@ func (r *MigrationRunner) planEntityChange(ctx context.Context, em EntityMigrati
 	}
 	if !found {
 		plan.Bootstrap = true
-		alterDDL, added, err := r.diffExistingTable(ctx, ti, em.EntitySpec)
+		alterDDL, added, err := r.diffExistingTable(ctx, ti, em.EntitySpec, nil)
 		if err != nil {
 			return plan, fmt.Errorf("plan migrations: diff %s: %w", ti.TableName, err)
 		}
@@ -74,13 +74,35 @@ func (r *MigrationRunner) planEntityChange(ctx context.Context, em EntityMigrati
 			allowed = append(allowed, c)
 		}
 	}
-	if len(allowed) == 0 {
-		return plan, nil
-	}
 
-	ddl, err := r.buildChangeDDL(ctx, ti, &em.EntitySpec, old, desired, allowed)
-	if err != nil {
-		return plan, fmt.Errorf("plan migrations: build %s: %w", ti.TableName, err)
+	// Storage can differ from BOTH the manifest and the recorded snapshot: the
+	// snapshot records what was *intended* when the manifest was applied, not
+	// what the database actually holds. An index that was never rebuilt when its
+	// definition changed (kafe TODO 3.9), or a derived column that exists as a
+	// plain column because it predates the generated form (kafe TODO 3.11), is
+	// invisible to a snapshot-vs-manifest diff — `DiffShapes` sees nothing, no
+	// DDL is built, and `migrate plan` answers "nothing to do" while the
+	// database keeps enforcing the old rule.
+	//
+	// Reconciling storage is the same call in both cases, and it must happen
+	// exactly once: `buildChangeDDL` already runs the reconciliation as its last
+	// step (it has to, so the DDL it emits sees the end state), so running it
+	// again here would emit the same `ALTER TABLE ... DROP COLUMN` twice and the
+	// apply would fail.
+	var ddl string
+	if len(allowed) > 0 {
+		ddl, err = r.buildChangeDDL(ctx, ti, &em.EntitySpec, old, desired, allowed)
+		if err != nil {
+			return plan, fmt.Errorf("plan migrations: build %s: %w", ti.TableName, err)
+		}
+	} else {
+		ddl, _, err = r.diffExistingTable(ctx, ti, em.EntitySpec, nil)
+		if err != nil {
+			return plan, fmt.Errorf("plan migrations: reconcile %s: %w", ti.TableName, err)
+		}
+	}
+	if ddl == "" {
+		return plan, nil
 	}
 	plan.Result.DDL = ddl
 	return plan, nil
@@ -116,6 +138,14 @@ func (r *MigrationRunner) planForgotten(ctx context.Context, entities []EntityMi
 	var plans []MigrationPlan
 	for key, row := range snaps {
 		if declared[key] {
+			continue
+		}
+		// Framework-owned modules (formspec.core) are registered by the server
+		// at runtime, never by a user manifest. Their absence from the caller's
+		// entity list says nothing about a manifest being removed, so treating
+		// them as a forgotten entity would refuse every run against a database
+		// the server had migrated (kafe TODO 3.10).
+		if r.frameworkModules[row.Module] {
 			continue
 		}
 		desc := "entity:" + key

@@ -17,8 +17,16 @@ type Session struct {
 	UserID      string
 	WorkspaceID string
 	App         string
-	ExpiresAt   time.Time
-	CreatedAt   time.Time
+	// Role/ScopeDimension/ScopeValue are the session context (TODO 3.8): the
+	// role this session acts as and the dimension value it is bound to. Empty =
+	// boundary-less session (owner / service account), which keeps the legacy
+	// behavior. They are re-checked on refresh: if the assignment is gone or the
+	// role no longer exists, the session fails closed with ErrContextRequired.
+	Role           string
+	ScopeDimension string
+	ScopeValue     string
+	ExpiresAt      time.Time
+	CreatedAt      time.Time
 }
 
 // SessionStore tracks active refresh-token sessions for rotation and revoke.
@@ -71,6 +79,9 @@ func (s *EntitySessionStore) Create(ctx context.Context, sess Session) error {
 			"user_id":          sess.UserID,
 			"refresh_jti":      sess.JTI,
 			"app":              sess.App,
+			"role":             sess.Role,
+			"scope_dimension":  sess.ScopeDimension,
+			"scope_value":      sess.ScopeValue,
 			"expires_at":       sess.ExpiresAt.UTC().Format(time.RFC3339),
 		},
 	})
@@ -89,11 +100,14 @@ func (s *EntitySessionStore) Get(ctx context.Context, workspace, jti string) (*S
 		return nil, false
 	}
 	return &Session{
-		JTI:         jti,
-		UserID:      stringField(rec.Data, "user_id"),
-		WorkspaceID: rec.WorkspaceID,
-		App:         stringField(rec.Data, "app"),
-		ExpiresAt:   expiresAt,
+		JTI:            jti,
+		UserID:         stringField(rec.Data, "user_id"),
+		WorkspaceID:    rec.WorkspaceID,
+		App:            stringField(rec.Data, "app"),
+		Role:           stringField(rec.Data, "role"),
+		ScopeDimension: stringField(rec.Data, "scope_dimension"),
+		ScopeValue:     stringField(rec.Data, "scope_value"),
+		ExpiresAt:      expiresAt,
 	}, true
 }
 

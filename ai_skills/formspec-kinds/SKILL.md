@@ -482,6 +482,11 @@ spec:
 Module configuration, read via `ctx.config` in scripts.
 **Not to be confused** with `formspec-app.yaml` (which is CLI dev/serve config).
 
+The body is `spec.keys` — a map of key name → `{type, default, secret, public}`.
+**Not** `spec.data` (that shape is rejected by the schema). Each key declares its
+type (`int | string | bool | decimal | json`); `secret: true` keeps it out of the
+UI surface, and `public: true` opts a non-secret key into `GET /_ui/config/{name}`.
+
 ```yaml
 apiVersion: formspec.dev/v1
 kind: Config
@@ -489,9 +494,10 @@ metadata:
   name: billing-config
   module: billing
 spec:
-  data:
-    tax_rate: 0.11
-    currency: IDR
+  keys:
+    tax_rate: { type: decimal, default: 0.11 }
+    currency: { type: string, default: IDR }
+    smtp_host: { type: string, secret: true }
 ```
 
 ### DDL di Luar Bahasa Spec — `persist.raw_ddl`

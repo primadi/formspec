@@ -145,6 +145,13 @@ func toStarlark(v any) (starlark.Value, error) {
 	case *moneyValue:
 		// Already a Starlark value (a money field inside a nested record).
 		return x, nil
+	case starlark.Value:
+		// Already a Starlark value — pass through untouched. This covers the
+		// helpers EvaluateGuard injects into the env (e.g. the `sum_line`
+		// builtin): without this case the default branch would stringify them
+		// with %v and the guard would fail with "invalid call of
+		// non-function (string)".
+		return x, nil
 	case spec.Money, *spec.Money:
 		// A money field is the object {amount, currency}. Exposed as a plain
 		// dict, `tendered - amount` becomes `dict - dict` — which fails and

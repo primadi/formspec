@@ -21,9 +21,9 @@ spec:
       relation: { type: belongs_to, resource: cafe-master.menu-item }
       required: true
       title: "Menu"
-    # GAP-01 TERTUTUP (2.14): `money` punya widget `moneyinput` — mata uang ikut
+    # `money` punya widget `moneyinput` — mata uang ikut
     # terbawa dan jumlahnya tidak dibulatkan saat diketik.
-    # GAP-02 TERTUTUP (3.2): kolom turunan `money` kini membaca `.amount` dan
+    # Kolom turunan `money` kini membaca `.amount` dan
     # bertipe numerik, jadi `index: true` aman — urutan/rentang atas harga
     # membandingkan angka, bukan teks JSON. Sebelumnya index sengaja tidak
     # dipasang karena `_price text` membuat "9000" > "10000" (gap #23).
@@ -37,18 +37,20 @@ spec:
       default: true
       title: "Berlaku"
   indexes:
-    # Dua aturan bisnis di bawah DITEGAKKAN database: GAP-22 ditutup (indexes:
-    # dihormati) dan field `relation` kini menghasilkan kolom turunan saat
+    # Aturan bisnis di bawah DITEGAKKAN database: `indexes:`
+    # dihormati dan field `relation` kini menghasilkan kolom turunan saat
     # disebut di sini:
     #   1. satu harga per menu per cabang (entitas ini)
     #   2. satu stock-level per (cabang, bahan)
     - fields: [branch_id, menu_item_id]
       unique: true
-  # GUARD — karena blok `indexes:` di atas tidak ditegakkan (GAP-22).
-  # Dijalankan sebelum create DAN update, dengan mengecualikan baris yang
-  # sedang diedit. Hapus hook ini bersama file script-nya begitu GAP-22 ditutup.
-  # GAP-30: guard memakai ctx.db().query -> deadlock di SQLite (dev), aman di
-  # PostgreSQL (produksi).
+  # GUARD — LAPIS KEDUA, bukan pengaman utama.
+  # Yang menegakkan aturan ini adalah UNIQUE index di atas (berlaku untuk semua
+  # jalur tulis: API, script, seed, operator). Guard ini hanya memberi pesan
+  # yang lebih ramah ke pengguna, dan menutup GAP-36 (constraint tidak bisa
+  # merapikan duplikat yang sudah ada).
+  # Guard memakai `resource.find`, bukan raw SQL.
+  # `resource.find` scope-aware, tidak deadlock.
   hooks:
     - on: before
       action: create

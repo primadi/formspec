@@ -133,7 +133,11 @@ spec:
       payload:
         fields: [id, number, entry_date]
       deliver:
+        # Target action yang SAMA dengan journal-posted: `gl-balance` hanya punya
+        # satu script pemelihara (`maintained_by` = gl/gl_balance_update), jadi
+        # hanya satu action yang boleh menulis proyeksi itu. Arah pembalikan
+        # dibaca script dari `journal.status` = "reversed" (mengurangi pergerakan).
         - channel: reliable_event
-          target: { resource: gl.gl-balance, action: reverse }
+          target: { resource: gl.gl-balance, action: update }
           retry: { max: 5, backoff: exponential }
           idempotency_key: "balance-reverse.{id}"

@@ -71,7 +71,7 @@ func StepMode(step spec.WorkflowStep) string {
 	if step.Mode == "" {
 		return "all"
 	}
-	return step.Mode
+	return string(step.Mode)
 }
 
 // Quorum returns the number of approvals required for a step. For mode "all"

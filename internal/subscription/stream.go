@@ -195,7 +195,7 @@ func (w *StreamingWorker) processEntry(ctx context.Context, sub DurableSub, even
 	}
 
 	// dispatch to the handler (same path as Tier 1).
-	if err := w.dispatcher.dispatchOne(ctx, workspaceID, eventName, resource, payload, sub.Spec); err != nil {
+	if err := w.dispatcher.dispatchOne(ctx, workspaceID, eventName, resource, payload, OwnedSub(sub)); err != nil {
 		if e.Attempts >= maxRetry {
 			w.deadLetter(ctx, sub, eventName, streamName, group, e, err)
 			_ = w.stream.Ack(ctx, streamName, group, e.ID)

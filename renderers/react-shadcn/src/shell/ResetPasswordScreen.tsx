@@ -89,6 +89,12 @@ export function ResetPasswordScreen() {
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Hidden context for password managers (Chromium "Create Amazing
+                Password Forms"): workspace and the single-use token are known
+                from the URL, but the manager still needs them to tie the new
+                credential to the right account. */}
+            <input type="hidden" name="workspace" value={workspace} />
+            {token && <input type="hidden" name="token" value={token} />}
             <div className="space-y-2.5">
               <label
                 htmlFor="reset-password"
@@ -98,6 +104,7 @@ export function ResetPasswordScreen() {
               </label>
               <Input
                 id="reset-password"
+                name="password"
                 type="password"
                 placeholder="At least 8 characters"
                 value={password}
@@ -115,6 +122,7 @@ export function ResetPasswordScreen() {
               </label>
               <Input
                 id="reset-confirm"
+                name="confirm-password"
                 type="password"
                 placeholder="Repeat new password"
                 value={confirmPassword}

@@ -479,6 +479,34 @@ func (l *Loader) Validate(raw RawManifest) error {
 	return nil
 }
 
+// EntitySpecFromRaw converts a raw Entity/Document spec and applies the engine's
+// normalization to it (`spec.ValidateEntitySpec`).
+//
+// Validation is not all that call does: it is also what *injects* the fields the
+// engine owns — `is_active` for `soft_deactivate` — so that DDL generation, field
+// validation, and the store all see the same shape.
+//
+// Every path that feeds an entity spec into storage has to go through this. When
+// one skipped it, the shape it derived lacked `is_active` while the snapshot
+// written by a normalizing path (the dev server) had it, so `formspec migrate`
+// reported `field_removed is_active` on every database the dev server had
+// touched — a removal nobody could declare, because the field is not in the
+// manifest at all (kafe TODO 3.10).
+//
+// `internal/entity.Registry` performs the same two calls when it registers a
+// spec; it keeps them separate only to distinguish a parse error from a
+// validation error in its diagnostics.
+func EntitySpecFromRaw(specMap map[string]any) (*spec.EntitySpec, error) {
+	entitySpec, err := RawSpecToEntitySpec(specMap)
+	if err != nil {
+		return nil, err
+	}
+	if err := spec.ValidateEntitySpec(entitySpec); err != nil {
+		return nil, err
+	}
+	return entitySpec, nil
+}
+
 // RawSpecToEntitySpec converts a raw spec map to a typed EntitySpec.
 // Handles backward compatibility:
 //   - `characteristics: [X]` (deprecated array) → `characteristic: X`

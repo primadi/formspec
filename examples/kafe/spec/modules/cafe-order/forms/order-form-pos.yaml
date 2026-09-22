@@ -68,4 +68,4 @@ spec:
   # CATATAN GAP-05: form ini adalah bentuk SEMENTARA untuk POS. Alur yang
   # diinginkan (grid menu + keranjang + numpad uang) butuh blok cart yang belum
   # ada di PageBlock (himpunan tertutup: form/table/component/widget/html/section).
-  # GAP-01 TERTUTUP (2.14): seluruh field money di sini memakai `moneyinput`.
+  # Seluruh field money di sini memakai `moneyinput`.

@@ -139,9 +139,15 @@ func scanHonesty(manifests []manifest.RawManifest, specPath string) []honestyIss
 			if h.Impl == nil || h.Impl.Type != spec.ImplScriptRef && h.Impl.Type != spec.ImplScript {
 				continue
 			}
-			// Hooks inherit the entity's uses? No — HookDecl has no Uses;
-			// hooks run under the entity module's own resources. Only the
-			// ctx.environment warning applies to hooks today.
+			// Hooks now declare their own `uses` (#34): without it, a hook
+			// script's access is invisible in the consent footprint, so it could
+			// read/write resources the manifest never declared. A missing uses
+			// block scans as fully undeclared — the same honesty violation the
+			// scan surfaces for actions.
+			uses := h.Uses
+			if uses == nil {
+				uses = &spec.UsesDecl{}
+			}
 			path := resolveHonestyScript(specPath, m, h.Impl.Ref)
 			usage := parseScriptUsage(path)
 			// A hook script that cannot be resolved or parsed is an error, not a
@@ -151,7 +157,11 @@ func scanHonesty(manifests []manifest.RawManifest, specPath string) []honestyIss
 			if h.Impl.Type == spec.ImplScriptRef {
 				issues = append(issues, scriptLoadIssue(m.Source, path,
 					fmt.Sprintf("hook %s (action %s)", h.On, h.Action), usage)...)
+				if path == "" {
+					continue
+				}
 			}
+			issues = append(issues, compareUses(m.Source, path, hookNameFor(h), uses, usage, false, "", "")...)
 			if usage.envBranch {
 				issues = append(issues, honestyIssue{
 					Source: m.Source, Script: path, Severity: "warning",
@@ -175,6 +185,19 @@ func scanHonesty(manifests []manifest.RawManifest, specPath string) []honestyIss
 // parsed. Without it, a broken script is only discovered when the action/hook
 // runs — the blind spot behind gap #50 (three non-compiling guard scripts on
 // the write path passed `formspec validate` with 0 problems).
+// hookNameFor builds a stable synthetic name for a hook so its `uses` entry can
+// be reported in the honesty scan (#34). Mirrors internal/entity.hookNameFor.
+func hookNameFor(h spec.HookDecl) string {
+	target := h.Action
+	if target == "" {
+		target = h.Event
+	}
+	if target == "" {
+		target = "*"
+	}
+	return "hook:" + string(h.On) + ":" + target
+}
+
 func scriptLoadIssue(source, path, where string, u *scriptUsage) []honestyIssue {
 	if path == "" {
 		return []honestyIssue{{
@@ -287,6 +310,24 @@ func compareUses(source, scriptPath, owner string, uses *spec.UsesDecl, u *scrip
 	return issues
 }
 
+// stripInstanceID rewrites an instance-addressed call target
+// ("gl.journal-entry.01a0c332-...") to its entity-level form
+// ("gl.journal-entry"), reporting whether it did. Targets that already name an
+// entity (no third segment) return false. Mirrors splitCallTarget in
+// internal/starlark: module/entity names are kebab-case and never contain ".",
+// so a third dot-separated segment is a record ID.
+func stripInstanceID(target string) (string, bool) {
+	first := strings.IndexByte(target, '.')
+	if first < 0 {
+		return target, false
+	}
+	rest := target[first+1:]
+	if i := strings.IndexByte(rest, '.'); i >= 0 {
+		return target[:first+1+i], true
+	}
+	return target, false
+}
+
 // resourceDeclared reports whether a used target is covered by the declared
 // list (exact match or wildcard: "{module}.*", "*").
 func resourceDeclared(declared []string, target string) bool {
@@ -394,6 +435,16 @@ func parseScriptUsage(path string) *scriptUsage {
 				if lit, ok := node.Args[0].(*syntax.Literal); ok && lit.Token == syntax.STRING {
 					target := strings.Trim(lit.Raw, "\"'`")
 					u.resources[target] = true
+					// resource.call("module.entity.<id>", ...) addresses ONE
+					// record of that entity — the trailing segment is a record
+					// ID, not an entity name, so record the entity-level target
+					// too and let a uses declaration of "module.entity" cover
+					// it (same rule the runtime applies in splitCallTarget).
+					if fp == "resource.call" {
+						if entityTarget, ok := stripInstanceID(target); ok {
+							u.resources[entityTarget] = true
+						}
+					}
 				}
 			}
 			if fp == "ctx.secrets.get" && len(node.Args) > 0 {

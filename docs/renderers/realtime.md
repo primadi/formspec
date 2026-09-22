@@ -1,6 +1,6 @@
 # Realtime WebSocket — Implementasi Transport
 
-**Updated:** 2026-08-06
+**Updated:** 2026-09-20
 
 Dokumen implementasi transport realtime FormSpec: bagaimana WebSocket di-handle di
 sisi server (`internal/api/wshub.go`) dan di sisi client (renderer shadcn-shell,
@@ -199,24 +199,23 @@ sebuah `Set`; **tidak membuka koneksi WebSocket sendiri**.
 
 ### Sudah berjalan (renderer memakai `useRealtime`)
 
-| Kind          | Flag                       | Perilaku                                                                |
-| ------------- | -------------------------- | ----------------------------------------------------------------------- |
-| **Table**     | `realtime: true`           | Silent refetch baris pada event entity (created/updated/deleted/action) |
-| **Kanban**    | `realtime: true` (default) | Silent refetch — kartu muncul/pindah/berubah status dari client lain    |
-| **Dashboard** | `realtime: true`           | Widget metric & chart refetch pada event entity sumbernya               |
+Ketujuh renderer berikut memanggil `useRealtime` dan me-refetch saat event entity
+yang cocok tiba — refetch-nya **silent** (tanpa spinner) dan di-gate flag
+`realtime:` pada spec kind-nya (kecuali disebut lain):
+
+| Kind                   | Flag                       | Perilaku                                                                |
+| ---------------------- | -------------------------- | ----------------------------------------------------------------------- |
+| **Table**              | `realtime: true`           | Silent refetch baris pada event entity (created/updated/deleted/action) |
+| **Kanban**             | `realtime: true` (default) | Silent refetch — kartu muncul/pindah/berubah status dari client lain    |
+| **Dashboard**          | `realtime: true`           | Widget metric & chart refetch pada event entity sumbernya               |
+| **Timeline**           | `realtime: true`           | Reset cursor + refetch dari atas pada event entity (append-only)        |
+| **Calendar**           | `realtime: true`           | Silent refetch rentang tanggal yang sedang tampil                       |
+| **ApprovalInbox**      | `realtime: true`           | Silent refetch daftar item menunggu saat event entity approval tiba     |
+| **NotificationCenter** | `realtime: true`           | Silent refetch feed notifikasi saat event entity-nya tiba               |
 
 Widget (`kind: Widget`) **tidak punya flag realtime sendiri** — mewarisi flag
 `realtime` dashboard tempat ia ditempel; `refresh` (polling) tetap berfungsi
 sebagai backstop.
-
-### Terdefinisi di spec tapi belum diimplementasikan
-
-| Kind                   | Status renderer                                                                                           |
-| ---------------------- | --------------------------------------------------------------------------------------------------------- |
-| **Calendar**           | Field `realtime` ada di spec; renderer `calendar/` belum ada                                              |
-| **ApprovalInbox**      | Field `realtime` ada; renderer `approval-inbox/` belum ada                                                |
-| **NotificationCenter** | Field `realtime` ada; renderer `notification-center/` belum ada                                           |
-| **Timeline**           | Renderer `timeline/` ada, tapi belum memakai `useRealtime` — tinggal wiring pola sama dengan Kanban/Table |
 
 ---
 
@@ -246,13 +245,11 @@ Semantik subscription server (`wsConn.wants`):
 
 ## 7. Gap & Pekerjaan ke Depan
 
-- **Timeline realtime** belum di-wire (renderer sudah ada).
 - **Heartbeat ping/pong** belum ada — deteksi putus bergantung browser/OS;
   untuk deteksi lebih agresif bisa ditambah ping interval.
 - **`scope: user`** belum didukung — hanya `{scope: workspace}` (satu-satunya
   target yang dipakai; target `user` adalah penambahan index kedua, bukan
   redesign).
-- Renderer **Calendar / ApprovalInbox / NotificationCenter** belum dibuat.
 
 ---
 
@@ -266,4 +263,4 @@ Semantik subscription server (`wsConn.wants`):
 | `internal/action/deliver.go`                                 | `NotifyMutation` (generic events) + `DeliverEvents` (declared events) |
 | `renderers/jsonb-persist/event_handler.go`                    | Outbox worker → websocket (listener-gated)                            |
 | `renderers/react-shadcn/src/hooks/useRealtime.ts`            | Hook + singleton `RealtimeClient`                                     |
-| `renderers/react-shadcn/src/kinds/{table,kanban,dashboard}/` | Renderer yang memakai realtime                                        |
+| `renderers/react-shadcn/src/kinds/{table,kanban,dashboard,timeline,calendar,approval-inbox,notification-center}/` | Renderer yang memakai realtime                                              |

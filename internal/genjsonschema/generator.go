@@ -50,7 +50,7 @@ func (c *Converter) Generate(collect *CollectResult) *GenerateResult {
 		"ReportParam", "ReportColumn", "ReportGroup", "ReportTotal", "ReportSource", "WizardStep",
 		"WizardOnComplete", "WizardSummaryItem", "KanbanColumn", "KanbanCard",
 		"PrintOutput", "PrintPaper", "PrintCustomPaper", "PrintHeader", "PrintBodyItem",
-		"PrintChildTable", "PrintTotals", "PrintFooter",
+		"PrintChildTable", "PrintTotals", "PrintQrcode", "PrintFooter",
 		"TimelineDisplay",
 		// Kind-specific sub-types referenced via $ref from kind specs
 		"ApiGRPCConfig", "ApiRESTConfig",
@@ -245,6 +245,29 @@ func structToSchema(td *TypeDef, collect *CollectResult, sharedDefs map[string]*
 			fromField.Type = ""
 			fromField.Items = nil
 		}
+	}
+
+	// Special handling for FormRenderDecl which accepts both the scalar
+	// shorthand (`render: drawer`) and the object form
+	// (`render: {mode: drawer}`) via custom UnmarshalYAML. Without this the
+	// schema rejected the shorthand the loader accepts — a "validates green in
+	// the engine, fails in the editor" divergence (kafe ledger #37 / item 5.4).
+	if td.Name == "FormRenderDecl" {
+		objSchema := &Schema{
+			Type:                 "object",
+			AdditionalProperties: false,
+			Properties:           s.Properties,
+			Required:             s.Required,
+		}
+		strSchema := &Schema{
+			Type:        "string",
+			Description: "Shorthand render mode — e.g. \"drawer\", \"modal\", \"separate_page\"",
+		}
+		s.OneOf = []*Schema{strSchema, objSchema}
+		s.Type = ""
+		s.Properties = nil
+		s.Required = nil
+		s.AdditionalProperties = nil
 	}
 
 	return s

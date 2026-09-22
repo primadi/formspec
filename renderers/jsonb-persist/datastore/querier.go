@@ -26,8 +26,16 @@ type DBQuerier struct {
 // of column→value maps. Values are returned as their raw database/sql scan
 // types (int64, float64, string, []byte, time.Time, nil); callers convert to
 // Starlark via toStarlark.
+//
+// If a request-scoped transaction is active on ctx (an action's Dispatch and
+// everything it calls into — scripts, native handlers), the query runs on that
+// transaction's connection instead of the pool. On a single-connection driver
+// like SQLite this is what prevents the deadlock documented in #30: the action
+// already holds the only connection, so a second QueryContext against the pool
+// would block forever. It also gives read-your-own-writes inside the action.
 func (q *DBQuerier) Query(ctx context.Context, sql string, args ...any) ([]map[string]any, error) {
-	rows, err := q.DB.QueryContext(ctx, sql, args...)
+	target := db.TxReadDB(ctx, q.DB)
+	rows, err := target.QueryContext(ctx, sql, args...)
 	if err != nil {
 		return nil, err
 	}

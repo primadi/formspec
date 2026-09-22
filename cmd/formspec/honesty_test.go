@@ -122,6 +122,83 @@ func TestHonestyScan_DeclaredButUnused(t *testing.T) {
 	}
 }
 
+// TestHonestyScan_HookUsesDeclared proves a hook's `uses` is scanned (#34): a
+// hook script using ctx.db() without declaring it is an error, and declaring it
+// clears the scan. Before #34, HookDecl had no `uses`, so hook access was
+// invisible in the consent footprint.
+func TestHonestyScan_HookUsesDeclared(t *testing.T) {
+	build := func(t *testing.T, usesYAML string) []honestyIssue {
+		t.Helper()
+		dir := t.TempDir()
+		write := func(rel, content string) {
+			path := filepath.Join(dir, rel)
+			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+				t.Fatalf("mkdir: %v", err)
+			}
+			if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+				t.Fatalf("write %s: %v", rel, err)
+			}
+		}
+		write("apps/test.yaml", `apiVersion: formspec.dev/v1
+kind: App
+metadata:
+  name: test
+spec:
+  version: 1.0.0
+  root_url: /app/test
+  modules:
+    - alpha
+`)
+		write("modules/alpha/module.yaml", `apiVersion: formspec.dev/v1
+kind: Module
+metadata:
+  name: alpha
+spec:
+  version: 1.0.0
+`)
+		write("modules/alpha/master/order/entity.yaml", `apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: order
+  module: alpha
+spec:
+  version: v1
+  characteristic: master
+  fields:
+    - name: number
+      type: string
+  hooks:
+    - on: before
+      action: create
+      impl: { type: script_ref, ref: guard }
+`+usesYAML+`  expose:
+    - type: rest
+      actions: [list, find, create, update, delete]
+`)
+		write("modules/alpha/master/order/scripts/guard.star",
+			"def execute(resource, params, ctx):\n    rows = ctx.db().query(\"SELECT 1\")\n    return ok({})\n")
+		return scanHonesty(loadHonestyManifests(t, dir), dir)
+	}
+
+	undeclared := build(t, "")
+	found := false
+	for _, iss := range undeclared {
+		if iss.Severity == "error" && strings.Contains(iss.Message, "hook:before:create") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected undeclared hook ctx.db error, got %+v", undeclared)
+	}
+
+	declared := build(t, "      uses: { primitives: [db] }\n")
+	for _, iss := range declared {
+		if iss.Severity == "error" {
+			t.Fatalf("declared hook uses should be clean, got %+v", iss)
+		}
+	}
+}
+
 // TestHonestyScan_HonestUsesClean proves a script whose usage matches its
 // declarations produces no issues.
 func TestHonestyScan_HonestUsesClean(t *testing.T) {

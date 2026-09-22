@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strconv"
+	"strings"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
@@ -21,15 +23,15 @@ type pgTx struct {
 }
 
 func (t *pgTx) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
-	return t.tx.ExecContext(ctx, query, args...)
+	return t.tx.ExecContext(ctx, pgRewritePlaceholders(query), args...)
 }
 
 func (t *pgTx) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
-	return t.tx.QueryContext(ctx, query, args...)
+	return t.tx.QueryContext(ctx, pgRewritePlaceholders(query), args...)
 }
 
 func (t *pgTx) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
-	return t.tx.QueryRowContext(ctx, query, args...)
+	return t.tx.QueryRowContext(ctx, pgRewritePlaceholders(query), args...)
 }
 
 func (t *pgTx) Commit() error   { return t.tx.Commit() }
@@ -55,16 +57,68 @@ func OpenPostgres(connString, schema string) (DB, error) {
 	return p, nil
 }
 
+// pgRewritePlaceholders rewrites SQLite-style `?` placeholders to PostgreSQL's
+// `$n`. The whole persist backend was written against the SQLite driver and
+// uses `?` throughout; pgx does not translate them, so the first real
+// PostgreSQL run failed with "syntax error at or near ','" at the first
+// parameterized statement (master todo 15.8).
+//
+// Quoted string literals are passed through untouched, and the rewriting is
+// positional in statement order, so pgx's statement cache keeps working (the
+// rewritten SQL for a given input is stable).
+//
+// The jsonb existence operator (`data ? 'k'`) is NOT a placeholder — callers
+// must use its functional form jsonb_exists(data, 'k') instead; the operator's
+// `?` would be rewritten into a parameter and corrupt the SQL.
+func pgRewritePlaceholders(query string) string {
+	if !strings.ContainsRune(query, '?') {
+		return query
+	}
+	var b strings.Builder
+	b.Grow(len(query) + 16)
+	n := 0
+	inString := false
+	for i := 0; i < len(query); i++ {
+		c := query[i]
+		if inString {
+			b.WriteByte(c)
+			if c == '\'' {
+				// '' inside a quoted string is an escaped quote, not the end.
+				if i+1 < len(query) && query[i+1] == '\'' {
+					b.WriteByte('\'')
+					i++
+				} else {
+					inString = false
+				}
+			}
+			continue
+		}
+		if c == '\'' {
+			inString = true
+			b.WriteByte(c)
+			continue
+		}
+		if c == '?' {
+			n++
+			b.WriteByte('$')
+			b.WriteString(strconv.Itoa(n))
+			continue
+		}
+		b.WriteByte(c)
+	}
+	return b.String()
+}
+
 func (p *PostgresDB) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
-	return p.db.ExecContext(ctx, query, args...)
+	return p.db.ExecContext(ctx, pgRewritePlaceholders(query), args...)
 }
 
 func (p *PostgresDB) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
-	return p.db.QueryContext(ctx, query, args...)
+	return p.db.QueryContext(ctx, pgRewritePlaceholders(query), args...)
 }
 
 func (p *PostgresDB) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
-	return p.db.QueryRowContext(ctx, query, args...)
+	return p.db.QueryRowContext(ctx, pgRewritePlaceholders(query), args...)
 }
 
 func (p *PostgresDB) BeginTx(ctx context.Context, opts *sql.TxOptions) (Tx, error) {
