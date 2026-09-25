@@ -360,4 +360,27 @@ docs-serve:
 	@python3 -c "import markdown" 2>/dev/null || pip install markdown Pygments
 	@python3 scripts/docs-serve.py --port $(if $(PORT),$(PORT),8000)
 
+# Seed the kafe example into a database. Idempotent: a record whose natural
+# key / unique field already exists is not duplicated — but it is also not
+# ignored. Fields that differ from the seed are updated (reported as
+# `update …`), so fixing a value here (a photo that used to be empty, a changed
+# price) reaches an existing database instead of only a fresh one.
+#
+#   make seed-kafe                                   # dev DB (examples/kafe/.formspec/kafe.db)
+#   make seed-kafe DSN=sqlite:/tmp/fresh.db          # a fresh database
+#
+# DSN relatif di-anchor ke project root (plan dsn-spec-anchored.md), jadi path
+# di bawah ditulis relatif terhadap root project — bukan terhadap CWD.
+#
+# Menu photos need no extra step: the seed carries `photo: { $asset: "menu/…" }`
+# and uploads those files through the storage service itself, using the same
+# canonical object key the HTTP upload route writes. Deleting the state dir is
+# therefore recoverable — re-running this target restores the objects.
+seed-kafe:
+	go build -ldflags "-X main.version=$(VERSION)" -o bin/formspec ./cmd/formspec
+	./bin/formspec seed --spec examples/kafe/spec \
+		--dsn $(if $(DSN),$(DSN),sqlite:.formspec/kafe.db) --workspace kafe
+
+.PHONY: seed-kafe
+
 .PHONY: docs-serve

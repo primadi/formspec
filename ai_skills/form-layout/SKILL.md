@@ -24,6 +24,13 @@ metadata:
   - `modal` — data kecil, konteks cepat (default).
   - `drawer` — form sedang, tetap melihat list di belakang.
   - `separate_page` — form panjang/kompleks (banyak section/child table).
+- **Jangan mengulang `help:` yang sudah ada di entity.** `FormField.help`
+  mewarisi `Field.description` dari Entity — tulis `help:` di form hanya untuk
+  **override** per-form. Presedensi: `help` → `description` entity → tidak ada
+  elemen. `description` entity adalah teks untuk pengguna akhir (tampil di
+  bawah input), jadi detail implementasi ditulis sebagai komentar YAML `#`.
+  Section pertama juga mewarisi `metadata.description` entity sebagai subtitle
+  drawer/dialog. Help hanya tampil di mode create/edit, bukan mode `view`.
 
 ## Widget per Tipe Field
 

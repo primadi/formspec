@@ -39,3 +39,16 @@ spec:
     gl_journal_account_diskon:
       type: string
       default: "5-1000"
+
+    # ── Pemetaan pembelian → kode akun (item 10.7) ──
+    # Jurnal pembelian DIBANGUN dari event `cafe-stock.purchase-order.on_po_received`
+    # (kind: Subscription di bawah). Purchase TIDAK tahu akun apa pun dan tidak
+    # tahu modul ini ada — ia hanya memancarkan event yang menyatakan apa yang
+    # terjadi. Sama seperti penjualan: akun adalah tanggung jawab gl, dan kunci
+    # kosong = belum diatur = jurnal gagal dengan menyebut kuncinya, bukan menebak.
+    gl_journal_account_persediaan:
+      type: string
+      default: "1-2000"
+    gl_journal_account_utang_dagang:
+      type: string
+      default: "2-3000"

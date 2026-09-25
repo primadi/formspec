@@ -1,0 +1,29 @@
+# Pembelian → jurnal (item 10.7).
+#
+# Ini SISI CONSUMER, dan ia satu-satunya tempat yang tahu soal akuntansi
+# pembelian. `cafe-stock/purchase-order` hanya memancarkan
+# `on_po_received`/`on_po_cancelled`; ia tidak tahu modul ini ada, tidak tahu
+# kode akun, dan tidak punya Subscription sendiri. Menambah consumer lain
+# (mis. gudang pusat, dashboard supplier) cukup dengan menambah file seperti ini
+# di module masing-masing.
+#
+# Kenapa modul gl yang boleh menentukan akun: bagan akun adalah miliknya. Kalau
+# module pemesanan yang menulis kode akun, mengganti chart of accounts berarti
+# menyentuh setiap module yang bertransaksi — dan itu kebalikan dari alasan
+# chart of accounts dipisahkan.
+#
+# Pasangan cancel ikut didengarkan karena aturan simetri (7.7.2): pemicu yang
+# menulis jurnal wajib menyatakan pembalikannya sejak awal.
+apiVersion: formspec.dev/v1
+kind: Subscription
+metadata:
+  name: purchase-to-journal
+  module: gl
+  description: "Pembelian diterima → jurnal persediaan/utang dagang; pembatalan → jurnal pembalik"
+spec:
+  events:
+    - cafe-stock.purchase-order.on_po_received
+    - cafe-stock.purchase-order.on_po_cancelled
+  handler:
+    type: script_ref
+    ref: gl/journalize_purchase

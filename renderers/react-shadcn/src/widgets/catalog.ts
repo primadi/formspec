@@ -32,6 +32,7 @@ export const FORM_WIDGETS = [
   "password",
   "slider",
   "tags",
+  "select-multi-tag",
   "uuid",
   "json",
   "fileinput",

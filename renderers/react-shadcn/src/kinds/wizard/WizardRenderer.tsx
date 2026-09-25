@@ -5,7 +5,7 @@
 //
 // Design doc §5.5 Wizard kind (F4)
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useAppNavigate } from "@/lib/navigation"
 import { useSearchParams } from "react-router-dom"
 import { useSurface } from "@/hooks/useSurface"
@@ -16,6 +16,7 @@ import type { Entry, WizardSpec } from "@/types/manifest"
 import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
 import { resolveEntityRef } from "@/engine/entityRef"
+import { entityFieldHelp, entityFieldLabel } from "@/engine/derive"
 import { apiPost } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -32,6 +33,14 @@ export default function WizardRenderer({ entry }: WizardRendererProps) {
   const [searchParams, setSearchParams] = useSearchParams()
   const getClient = useSessionStore((s) => s.getClient)
   const getEntity = useMetaStore((s) => s.getEntity)
+
+  // The wizard's target entity — resolved once so step field captions can
+  // inherit its field `title`s (same vocabulary as Form/Table/Detail).
+  const entity = useMemo(() => {
+    if (!entry.spec.entity) return undefined
+    const [mod, name] = resolveEntityRef(entry.spec.entity, entry.module)
+    return getEntity(mod, name)
+  }, [entry.spec.entity, entry.module, getEntity])
 
   const steps = entry.spec.steps
   const currentStep = parseInt(searchParams.get("step") ?? "0", 10)
@@ -305,7 +314,7 @@ export default function WizardRenderer({ entry }: WizardRendererProps) {
             {steps[currentStep].fields?.map((field) => (
               <div key={field.name} className="space-y-1">
                 <label className="text-sm font-medium">
-                  {field.label ?? field.name}
+                  {field.label ?? entityFieldLabel(entity, field.name)}
                 </label>
                 <input
                   autoComplete="off"
@@ -316,6 +325,15 @@ export default function WizardRenderer({ entry }: WizardRendererProps) {
                     setStepData((d) => ({ ...d, [field.name]: e.target.value }))
                   }
                 />
+                {/* Inline fields (`step.fields` instead of `step.form`) took
+                    the same caption fallback as everywhere else but rendered
+                    no help at all — so the identical field showed help when
+                    reached through a Form and dropped it here. */}
+                {(field.help ?? entityFieldHelp(entity, field.name)) && (
+                  <p className="text-xs text-muted-foreground">
+                    {field.help ?? entityFieldHelp(entity, field.name)}
+                  </p>
+                )}
               </div>
             ))}
           </div>

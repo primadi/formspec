@@ -367,13 +367,28 @@ export default function PickerPanel({
               aria-label={`Pilih ${tile.name}`}
             >
               {image ? (
+                // `aspect-square`, not a fixed height: catalog photos arrive
+                // in any aspect (seed masters are 960×643, 960×1280, 480×360),
+                // and a `h-28 w-full` box forces a 2.22:1 frame — measured on
+                // the kafe QR catalog, two portrait photos (960×1280) had ~66%
+                // of their height cropped away. A square frame gives every
+                // photo the same share of the tile without decoding the image,
+                // so it also works while the file is still loading.
                 <img
                   src={image}
                   alt=""
-                  className="h-28 w-full object-cover"
+                  className="aspect-square w-full object-cover"
                   loading="lazy"
                 />
-              ) : null}
+              ) : (
+                // Same footprint as the image frame, so a catalog mixing
+                // illustrated and unillustrated items keeps its rows aligned
+                // (measured: 221px vs 205px tiles without this).
+                <div
+                  className="aspect-square w-full bg-muted"
+                  aria-hidden="true"
+                />
+              )}
               <div className="flex flex-1 flex-col gap-1 p-3">
                 <span className="text-sm leading-snug font-medium">
                   {tile.name}

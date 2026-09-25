@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -241,14 +242,38 @@ type EntityAuth struct {
 	Strategies []string `yaml:"strategies" json:"strategies"`
 }
 
+// FieldOption is one choice in a field's `options:` list — a closed set of
+// values **with captions**. It exists because `enum_values` carries values
+// only: a day-of-week set declared as `[1, 2, 3]` renders as "1, 2, 3", so the
+// author either writes a picker whose choices cannot be read, or a free-text
+// tag input that accepts `9`.
+//
+// `options` is a property of the **data** (which values are legal), not of one
+// form — the same reason `enum_values` lives on the Entity. A multi-value field
+// (`type: json`, or a string holding a comma-separated list) can therefore be
+// declared once and rendered, filtered, and labelled consistently.
+//
+// `Value` keeps the scalar's YAML type (`value: 1` stays the number 1 in the
+// bundle and in the stored array, matching what the field actually holds);
+// `Label` is the caption shown to users, and defaults to the value itself when
+// omitted.
+type FieldOption struct {
+	// @schema {description: "Stored value. Keep the scalar type the field stores — `value: 1` for a numeric set, not `value: \"1\"`."}
+	Value any `yaml:"value" json:"value"`
+	// @schema {description: "Caption shown to users. Defaults to the value (humanised) when omitted."}
+	Label string `yaml:"label,omitempty" json:"label,omitempty"`
+}
+
 // Field defines a data field on an Entity.
 // @schema {title: "Field Definition"}
 type Field struct {
 	// @schema {minLength: 1, maxLength: 128, pattern: "^[a-z][a-z0-9_]*$", description: "Field name — lowercase snake_case, unique within entity"}
 	Name string `yaml:"name" json:"name"`
 	// @schema {description: "Data type — determines storage class, renderer widget, and validation"}
-	Type           FieldType           `yaml:"type" json:"type"`
-	Title          string              `yaml:"title,omitempty" json:"title,omitempty"`
+	Type FieldType `yaml:"type" json:"type"`
+	// @schema {description: "Caption shown to users in tables, forms, and detail pages; falls back to the humanised field name"}
+	Title string `yaml:"title,omitempty" json:"title,omitempty"`
+	// @schema {description: "Help text shown to users under the input in forms (and wizard steps). Written for the end user — not a design note; it is inherited as the field's `help` wherever the field appears, so one declaration serves both surfaces."}
 	Description    string              `yaml:"description,omitempty" json:"description,omitempty"`
 	Default        any                 `yaml:"default,omitempty" json:"default,omitempty"`
 	Required       bool                `yaml:"required,omitempty" json:"required,omitempty"`
@@ -260,6 +285,7 @@ type Field struct {
 	NaturalKeyRule *NaturalKeyRuleDecl `yaml:"natural_key_rule,omitempty" json:"natural_key_rule,omitempty"`
 	Audited        bool                `yaml:"audited,omitempty" json:"audited,omitempty"`
 	EnumValues     []string            `yaml:"enum_values,omitempty" json:"enum_values,omitempty"`
+	Options        []FieldOption       `yaml:"options,omitempty" json:"options,omitempty"`
 	Rules          []ValidationRule    `yaml:"rules,omitempty" json:"rules,omitempty"`
 	Relation       *RelationDecl       `yaml:"relation,omitempty" json:"relation,omitempty"`
 	Child          *ChildDecl          `yaml:"child,omitempty" json:"child,omitempty"`
@@ -411,6 +437,97 @@ func containsString(list []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// optionValueKey renders an option value for comparison and error messages.
+// Values are compared by their canonical string form so `1` and `"1"` collide
+// (they would otherwise let the same choice appear twice in a picker) while the
+// stored value keeps its original scalar type.
+func optionValueKey(v any) string {
+	switch t := v.(type) {
+	case nil:
+		return ""
+	case string:
+		return t
+	case bool:
+		if t {
+			return "true"
+		}
+		return "false"
+	case float64:
+		// YAML/JSON round-trips widen integers to float64; print 1 as "1", not
+		// "1e+00", so the key matches the `int` branch below.
+		return strconv.FormatFloat(t, 'f', -1, 64)
+	default:
+		return fmt.Sprintf("%v", t)
+	}
+}
+
+// OptionValueKey is the exported form of optionValueKey, used by renderer
+// parity tests and by callers matching a stored value against a declared option.
+func OptionValueKey(v any) string { return optionValueKey(v) }
+
+// isOptionScalar reports whether v is a value an option may carry: the scalar
+// types that survive a YAML→JSON round-trip and can be drawn as one chip label.
+func isOptionScalar(v any) bool {
+	switch v.(type) {
+	case string, bool,
+		int, int8, int16, int32, int64,
+		uint, uint8, uint16, uint32, uint64,
+		float32, float64:
+		return true
+	}
+	return false
+}
+
+// validateFieldOptions checks a field's `options:` declaration.
+//
+// Validated tightly for the same reason as `unit`: a declaration the renderer
+// cannot honour reads as "the widget is broken", and each rule below closes a
+// concrete failure:
+//   - missing/empty `value` — an option that stores nothing renders a chip the
+//     user cannot remove meaningfully;
+//   - non-scalar value — an array or mapping cannot be drawn as one chip label;
+//   - duplicate value (after canonicalisation) — the picker offers a choice that
+//     can never be added a second time;
+//   - a field type that holds a single scalar — `options` describes a *set of
+//     choices*; on an `integer` or `date` it is a claim nothing can act on. For
+//     a single-value labelled enum, `enum_values` is the existing contract (it
+//     has no captions yet — a known, separately tracked gap).
+func validateFieldOptions(f *Field) error {
+	if len(f.Options) == 0 {
+		return nil
+	}
+	switch f.Type {
+	case FieldJSON, FieldString:
+		// The two containers the multi-value widgets read: `json` holds an
+		// array, `string` a comma-separated list.
+	default:
+		hint := ""
+		if f.Type == FieldEnum {
+			hint = " — a single-value enum uses `enum_values`"
+		}
+		return fmt.Errorf("field %q: `options` is only valid on a field that holds a set of values (json, string), not %q%s", f.Name, f.Type, hint)
+	}
+
+	seen := make(map[string]int, len(f.Options))
+	for i, o := range f.Options {
+		if o.Value == nil {
+			return fmt.Errorf("field %q: options[%d] has no `value` — every option needs the value it stores", f.Name, i)
+		}
+		if !isOptionScalar(o.Value) {
+			return fmt.Errorf("field %q: options[%d] value must be a string, number, or boolean (got %T) — a chip shows one label", f.Name, i, o.Value)
+		}
+		key := optionValueKey(o.Value)
+		if key == "" {
+			return fmt.Errorf("field %q: options[%d] has an empty `value` — every option needs the value it stores", f.Name, i)
+		}
+		if prev, dup := seen[key]; dup {
+			return fmt.Errorf("field %q: options[%d] duplicates the value %q from options[%d] — a duplicate choice can never be selected twice", f.Name, i, key, prev)
+		}
+		seen[key] = i
+	}
+	return nil
 }
 
 // FieldType is the data type of a field (Core §10.1, 05-field-types.md §1.1).
@@ -979,6 +1096,18 @@ func ValidateEntitySpec(d *EntitySpec) error {
 			if !containsString(f.Unit.Convertible, u) {
 				return fmt.Errorf("field %q: unit.factors[%q] is not listed in unit.convertible %v", f.Name, u, f.Unit.Convertible)
 			}
+		}
+	}
+
+	// `options` — a closed set of choices *with captions* for a multi-value
+	// field (the `select-multi-tag` widget renders them as removable tags).
+	// Validated tightly for the same reason as `unit` above: a declaration the
+	// renderer cannot honour reads as "the widget is broken", and a duplicate
+	// value makes the picker offer a choice that can never be added twice.
+	for i := range d.Fields {
+		f := &d.Fields[i]
+		if err := validateFieldOptions(f); err != nil {
+			return err
 		}
 	}
 

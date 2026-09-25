@@ -19,6 +19,7 @@ import { ArrowLeft, Save, Loader2, AlertTriangle } from "lucide-react"
 import type { EntitySchema, FormField, FormSpec } from "@/types/manifest"
 import { FormaApiError } from "@/types/manifest"
 import { useSessionStore } from "@/stores/session"
+import { canDoEntityAction } from "@/engine/permissions"
 import { useMetaStore } from "@/stores/meta"
 import { resolveForm } from "@/engine/derive"
 import { useRenderContext } from "@/hooks/useRenderContext"
@@ -54,6 +55,7 @@ import { Combobox } from "@/widgets/Combobox"
 import { PasswordInput } from "@/widgets/PasswordInput"
 import { SliderInput } from "@/widgets/SliderInput"
 import { TagsInput } from "@/widgets/TagsInput"
+import { SelectMultiTag } from "@/widgets/SelectMultiTag"
 import { QrCode } from "@/widgets/QrCode"
 import { MoneyInput } from "@/widgets/MoneyInput"
 import { TimeInput } from "@/widgets/TimeInput"
@@ -768,11 +770,15 @@ export default function FormRenderer({
           </div>
         </div>
 
-        {/* Submit buttons — lifecycle-aware */}
+        {/* Submit buttons — lifecycle-aware. A button the caller cannot use is
+            not rendered at all: offering it would only produce a toast/403
+            after the click, and the server is the authority either way. */}
         {!isView && (
           <div className="flex items-center gap-2">
             {/* one_step / quickSubmit: single Create-Submit button */}
-            {lifecycle.quickSubmit && mode === "create" ? (
+            {lifecycle.quickSubmit &&
+            mode === "create" &&
+            canDoEntityAction(me, entity, "create-submit") ? (
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting ? (
                   <Loader2 className="size-4 mr-1 animate-spin" />
@@ -782,7 +788,8 @@ export default function FormRenderer({
                 {entity.actions.find((a) => a.name === "create-submit")?.ui
                   ?.button_label ?? "Create & Submit"}
               </Button>
-            ) : lifecycle.hasSave ? (
+            ) : lifecycle.hasSave &&
+              canDoEntityAction(me, entity, isEdit ? "update" : "create") ? (
               /* Save / Save Draft button */
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting ? (
@@ -801,7 +808,8 @@ export default function FormRenderer({
             {/* Submit button for two_step_manual / two_step_autosave */}
             {lifecycle.hasSubmit &&
               (lifecycle.pattern === "two_step_manual" ||
-                lifecycle.pattern === "two_step_autosave") && (
+                lifecycle.pattern === "two_step_autosave") &&
+              canDoEntityAction(me, entity, "submit") && (
                 <Button
                   type="button"
                   variant="default"
@@ -1126,6 +1134,24 @@ export function FormFieldWidget({
           readonly={readonly}
           error={error}
           id={id}
+        />
+      )
+    }
+
+    case "select-multi-tag": {
+      // Tags chosen from a declared set (`Field.options`, else `enum_values`)
+      // rather than typed. The widget owns the value-shape contract (array for
+      // json, comma-separated for string), so the value is passed through as-is.
+      return (
+        <SelectMultiTag
+          value={value}
+          onChange={(v) => onChange(v)}
+          entityField={entityField}
+          placeholder={field.placeholder}
+          readonly={readonly}
+          error={error}
+          id={id}
+          ariaLabel={label}
         />
       )
     }

@@ -139,36 +139,146 @@ func TestApplyPublicScope_SkipsAuthenticatedCallers(t *testing.T) {
 	}
 }
 
+// A caller authorized BY the grant (signed in, but holding no permission of its
+// own for this route) IS scoped by it. That is the whole point of the fallback:
+// the fallback hands out exactly what a guest gets, never more — the guest's row
+// scope travels with it.
+func TestApplyPublicScope_GrantAuthorisedCallerIsScoped(t *testing.T) {
+	f := &HandlerFactory{}
+	req := httptest.NewRequest("GET", "/kafe/_ui/entity/cafe-order/order?guest_token=abc123", nil)
+	req = req.WithContext(context.WithValue(req.Context(), publicScopeContextKey{}, []spec.FilterSpec{
+		{Field: "guest_token", Op: "eq", From: "route"},
+	}))
+	req = req.WithContext(withPublicGrantAuth(req.Context()))
+	req = req.WithContext(WithIdentity(req.Context(), &auth.Identity{
+		UserID: "u1", WorkspaceID: "kafe",
+	}))
+
+	got, err := f.applyPublicScope(req, nil)
+	if err != nil {
+		t.Fatalf("grant-authorised caller: %v", err)
+	}
+	if got["guest_token"].Value != "abc123" {
+		t.Fatalf("grant-authorised caller must be scoped by the grant: %#v", got)
+	}
+
+	// …and still fails closed without the token, exactly like a guest.
+	req = httptest.NewRequest("GET", "/kafe/_ui/entity/cafe-order/order", nil)
+	req = req.WithContext(context.WithValue(req.Context(), publicScopeContextKey{}, []spec.FilterSpec{
+		{Field: "guest_token", Op: "eq", From: "route"},
+	}))
+	req = req.WithContext(withPublicGrantAuth(req.Context()))
+	req = req.WithContext(WithIdentity(req.Context(), &auth.Identity{UserID: "u1"}))
+	if _, err := f.applyPublicScope(req, nil); err == nil {
+		t.Fatal("grant-authorised caller must fail closed without the token")
+	}
+}
+
+// A public grant on an entity that also declares `row_scope from: session` must
+// not fail closed for a caller running on the grant: the grant already decided
+// which rows are in scope, and a session attribute may not exist for them.
+func TestApplyRowScope_GrantAuthorisedCallerSkipsSessionScope(t *testing.T) {
+	f := &HandlerFactory{}
+	// `attr` is explicit and unresolvable here: without the grant exemption the
+	// caller fails closed, which is what makes this test able to tell the two
+	// branches apart.
+	es := &spec.EntitySpec{
+		RowScope: []spec.FilterSpec{{Field: "branch_id", Op: "eq", From: "session", Attr: "branch_id"}},
+	}
+	req := httptest.NewRequest("GET", "/kafe/_ui/entity/cafe-order/order", nil)
+	req = req.WithContext(context.WithValue(req.Context(), publicScopeContextKey{}, []spec.FilterSpec{
+		{Field: "guest_token", Op: "eq", From: "route"},
+	}))
+	req = req.WithContext(withPublicGrantAuth(req.Context()))
+	req = req.WithContext(WithIdentity(req.Context(), &auth.Identity{UserID: "u1", Username: "kasir"}))
+
+	if _, err := f.applyRowScope(req, es, "cafe-order", "order", nil); err != nil {
+		t.Fatalf("grant-authorised caller must not fail closed on row_scope: %v", err)
+	}
+
+	// A caller holding its own permission is still scoped by the session
+	// attribute — the exemption is tied to the grant, not to being signed in.
+	req = httptest.NewRequest("GET", "/kafe/_ui/entity/cafe-order/order", nil)
+	req = req.WithContext(context.WithValue(req.Context(), publicScopeContextKey{}, []spec.FilterSpec{
+		{Field: "guest_token", Op: "eq", From: "route"},
+	}))
+	req = req.WithContext(WithIdentity(req.Context(), &auth.Identity{UserID: "u1", Username: "kasir"}))
+	if _, err := f.applyRowScope(req, es, "cafe-order", "order", nil); err == nil {
+		t.Fatal("a permissioned caller must still fail closed without the session attribute")
+	}
+}
+
 // A public grant must not become a permission bypass for signed-in callers that
-// merely hit the same URL (#45): anonymous passes, authenticated still needs the
-// permission.
+// merely hit the same URL (#45) — but it must not make them WORSE OFF than a
+// guest either. The grant is a floor: a signed-in caller without the permission
+// falls back to it.
 func TestRequirePermissionOrAnonymous(t *testing.T) {
-	ok := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	ok := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Grant-Auth", map[bool]string{true: "1", false: "0"}[isPublicGrantAuth(r.Context())])
+		w.WriteHeader(http.StatusOK)
+	})
 	guarded := RequirePermissionOrAnonymous("cafe-order.orders.list")(ok)
 
-	// Anonymous → allowed (the grant is the authorization).
+	// Anonymous → allowed (the grant is the authorization), not marked.
 	rec := httptest.NewRecorder()
 	guarded.ServeHTTP(rec, httptest.NewRequest("GET", "/kafe/_ui/entity/cafe-order/order", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("anonymous = %d, want 200", rec.Code)
 	}
+	if rec.Header().Get("X-Grant-Auth") != "0" {
+		t.Error("anonymous caller must not be marked as grant-authorized")
+	}
 
-	// Authenticated without the permission → denied.
+	// Authenticated WITHOUT the permission → allowed via the grant, and marked
+	// so the row-scope layers apply the grant's scope instead of failing closed.
 	req := httptest.NewRequest("GET", "/kafe/_ui/entity/cafe-order/order", nil)
 	req = req.WithContext(WithIdentity(req.Context(), &auth.Identity{UserID: "u1", Permissions: []string{"other.thing.list"}}))
 	rec = httptest.NewRecorder()
 	guarded.ServeHTTP(rec, req)
-	if rec.Code == http.StatusOK {
-		t.Fatal("authenticated caller without the permission must not pass")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("signed-in caller without the permission = %d, want 200 (the grant is the floor)", rec.Code)
+	}
+	if rec.Header().Get("X-Grant-Auth") != "1" {
+		t.Error("a caller falling back to the grant must be marked as grant-authorized")
 	}
 
-	// Authenticated with the permission → allowed.
+	// Authenticated with the permission → allowed, and NOT marked (it is
+	// governed by its own permission and the entity's row scope).
 	req = httptest.NewRequest("GET", "/kafe/_ui/entity/cafe-order/order", nil)
 	req = req.WithContext(WithIdentity(req.Context(), &auth.Identity{UserID: "u1", Permissions: []string{"cafe-order.orders.list"}}))
 	rec = httptest.NewRecorder()
 	guarded.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("authenticated caller with the permission = %d, want 200", rec.Code)
+	}
+	if rec.Header().Get("X-Grant-Auth") != "0" {
+		t.Error("a caller holding the permission must not be marked as grant-authorized")
+	}
+}
+
+// A signed-in caller on a NON-public route still gets the plain permission
+// check: the fallback belongs to the grant, not to being signed in.
+func TestRequirePermission_SignedInWithoutPermStillDenied(t *testing.T) {
+	ok := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	id := &auth.Identity{UserID: "u1", Permissions: []string{"other.thing.list"}}
+
+	// Entity visibility (list/view) on the UI surface → 404, per spec §4: a
+	// caller who may not see the entity must not learn it exists.
+	req := httptest.NewRequest("GET", "/kafe/_ui/entity/cafe-order/order", nil)
+	req = req.WithContext(WithIdentity(req.Context(), id))
+	rec := httptest.NewRecorder()
+	RequirePermission("cafe-order.orders.list")(ok).ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("UI-surface list without permission = %d, want 404", rec.Code)
+	}
+
+	// Any other action (here: update) → 403, the ordinary denial.
+	req = httptest.NewRequest("PATCH", "/kafe/_ui/entity/cafe-order/order/1", nil)
+	req = req.WithContext(WithIdentity(req.Context(), id))
+	rec = httptest.NewRecorder()
+	RequirePermission("cafe-order.orders.update")(ok).ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("UI-surface update without permission = %d, want 403", rec.Code)
 	}
 }
 

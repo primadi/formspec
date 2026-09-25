@@ -13,6 +13,7 @@ import type { KyInstance } from "ky"
 import type { WizardStep, FormSpec, Entry, FormField } from "@/types/manifest"
 import { useMetaStore } from "@/stores/meta"
 import { resolveEntityRef } from "@/engine/entityRef"
+import { entityFieldLabel } from "@/engine/derive"
 import { apiList, apiPost } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -169,7 +170,7 @@ export default function SearchSelect({
   /** Render a single form field input */
   const renderField = (field: FormField) => {
     const value = formData[field.name] ?? ""
-    const label = field.label ?? field.name
+    const label = entityFieldLabel(entity ?? undefined, field.name, field.label)
 
     // Determine input type from the field name / entity field type
     const entityField = entity?.fields.find((f) => f.name === field.name)

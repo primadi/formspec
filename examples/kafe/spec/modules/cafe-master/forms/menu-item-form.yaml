@@ -17,7 +17,10 @@ spec:
         - { field: code, help: "Kode unik menu, mis. LAT-001" }
         - { field: name }
         - { field: menu_category_id, widget: relation-picker }
-        - { field: prep_station, help: "Menentukan tiket muncul di bar atau dapur." }
+        # `prep_station` + `is_available` tidak menulis `help:` — warisan dari
+        # `description` entity (`menu-item/entity.yaml`) yang mengisi keduanya,
+        # sehingga teksnya tidak bisa lagi berbeda antara form dan tabel.
+        - { field: prep_station }
         - { field: sort_order }
     - title: "Tampilan & Ketersediaan"
       columns: 2
@@ -26,7 +29,7 @@ spec:
         # dirender sebagai gambar di Table/Listing/Detail/Print — hanya tampil
         # sebagai teks/link. Katalog publik karena itu belum bisa bergambar.
         - { field: photo, help: "JPG/PNG/WebP, maks 2 MB. Rasio disarankan 1:1." }
-        - { field: is_available, help: "Matikan cepat saat bahan habis." }
+        - { field: is_available }
         - { field: is_taxable }
         - { field: description }
   # Harga TIDAK ada di form ini dengan sengaja: harga disimpan per cabang di

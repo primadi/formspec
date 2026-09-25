@@ -10,7 +10,13 @@ function ScrollArea({
   return (
     <ScrollAreaPrimitive.Root
       data-slot="scroll-area"
-      className={cn("relative", className)}
+      // `min-h-0` is load-bearing, not decoration: as a flex child (`flex-1`
+      // in the sidebar) the default `min-height: auto` makes the Root grow to
+      // its content instead of being clamped by the parent, so the Viewport
+      // never overflows and no scrollbar ever appears — the surplus items are
+      // simply unreachable. Harmless outside a flex/grid parent, where
+      // `min-height: auto` already behaves as `0`.
+      className={cn("relative min-h-0", className)}
       {...props}
     >
       <ScrollAreaPrimitive.Viewport
@@ -37,7 +43,7 @@ function ScrollBar({
       orientation={orientation}
       className={cn(
         "flex touch-none p-px transition-colors select-none data-horizontal:h-2.5 data-horizontal:flex-col data-horizontal:border-t data-horizontal:border-t-transparent data-vertical:h-full data-vertical:w-2.5 data-vertical:border-l data-vertical:border-l-transparent",
-        className
+        className,
       )}
       {...props}
     >

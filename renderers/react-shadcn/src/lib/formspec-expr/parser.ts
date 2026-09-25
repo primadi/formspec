@@ -462,18 +462,35 @@ export class Parser {
 
   private parseCallExpr(callee: Expression): Expression {
     const args: Expression[] = []
+
+    // Zero-argument call: `today()`. The LPAREN is the CURRENT token here (the
+    // infix step already consumed the callee), so peeking at RPAREN and taking
+    // it is the whole call. Getting this wrong is invisible for len/sum/
+    // amount/currency — every one of them takes an argument, so nobody noticed
+    // that the previous code advanced past the RPAREN and then demanded it
+    // again ("expected RPAREN but got >= at line 1:9"). `today()` is the first
+    // zero-arg callable, and it failed to PARSEx while `formspec check`
+    // accepted it — the exact false guarantee 08-formspec-expr.md §4 forbids.
+    if (this.peekTokenIs("RPAREN")) {
+      this.nextToken() // curToken = RPAREN, peekToken = whatever follows
+      return {
+        type: "CallExpr",
+        callee: callee as Identifier,
+        args,
+        loc: { line: this.curToken.line, col: this.curToken.col },
+      } as CallExpr
+    }
+
     this.nextToken() // consume LPAREN
 
-    if (!this.curTokenIs("RPAREN")) {
-      const first = this.parseExpression(0)
-      if (first) args.push(first)
+    const first = this.parseExpression(0)
+    if (first) args.push(first)
 
-      while (this.peekTokenIs("COMMA")) {
-        this.nextToken() // COMMA
-        this.nextToken()
-        const arg = this.parseExpression(0)
-        if (arg) args.push(arg)
-      }
+    while (this.peekTokenIs("COMMA")) {
+      this.nextToken() // COMMA
+      this.nextToken()
+      const arg = this.parseExpression(0)
+      if (arg) args.push(arg)
     }
 
     this.expectPeek("RPAREN")

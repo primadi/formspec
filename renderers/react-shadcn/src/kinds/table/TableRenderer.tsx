@@ -46,11 +46,12 @@ import type {
 import { FormaApiError } from "@/types/manifest"
 import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
-import { can as checkPermission } from "@/engine/permissions"
+import { canDoEntityAction } from "@/engine/permissions"
 import {
   deriveTable,
   deriveForm,
   DERIVED_TABLE_VISIBLE_COLUMNS,
+  withEntityColumnLabels,
 } from "@/engine/derive"
 import { resolveEntityRef } from "@/engine/entityRef"
 import { getLifecycle } from "@/engine/lifecycle"
@@ -63,7 +64,12 @@ import {
 } from "@/lib/filters"
 import { useSelectFilterOptions } from "@/hooks/useSelectFilterOptions"
 import { useRealtime } from "@/hooks/useRealtime"
-import { renderCellValue } from "@/lib/renderCell"
+import { renderCellValue, resolveColumnCell } from "@/lib/renderCell"
+import {
+  columnAlignClass,
+  columnJustifyClass,
+  columnWidthStyle,
+} from "@/lib/tableColumn"
 import { createFormatter } from "@/lib/format"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -146,9 +152,12 @@ export default function TableRenderer({
     return {
       ...derived,
       ...authored.spec,
-      // columns, row_actions: authored if non-empty, else derived
+      // columns, row_actions: authored if non-empty, else derived.
+      // Authored columns missing a `label` inherit the entity field's `title`
+      // (`withEntityColumnLabels`) — authoring a Table to change two columns
+      // must not demote every other caption to a raw field name.
       columns: authored.spec.columns?.length
-        ? authored.spec.columns
+        ? withEntityColumnLabels(authored.spec.columns, entity)
         : derived.columns,
       row_actions: authored.spec.row_actions?.length
         ? authored.spec.row_actions
@@ -284,6 +293,11 @@ export default function TableRenderer({
     sorting,
     filterValues,
     tableSpec.page_size,
+    // Read inside the effect (buildFixedFilterParams). The manifest's
+    // `fixed_filters` is an immutable server-side scope, so a change must
+    // refetch — leaving it out meant a reload with a different scope silently
+    // kept the old rows.
+    tableSpec.fixed_filters,
     getClient,
     reloadKey,
     fixedFilters,
@@ -342,6 +356,38 @@ export default function TableRenderer({
   const overflowColumns = hasOverflow
     ? tableSpec.columns.slice(DERIVED_TABLE_VISIBLE_COLUMNS)
     : []
+
+  // Author-declared column presentation. `align`/`width` are part of the
+  // contract (06-page-kinds.md §3) but were read by no renderer, so
+  // `align: right` on a numeric column was silently discarded. Keyed by column
+  // id, which is the column's `field` (dot-paths included, e.g.
+  // "patient.name" — restore relations use those).
+  const columnByField = useMemo(
+    () => new Map(tableSpec.columns.map((c) => [c.field, c])),
+    [tableSpec.columns],
+  )
+
+  /**
+   * Render one cell: relation columns show the related record's label, other
+   * columns go through the shared cell renderer. Without this an authored
+   * table naming a foreign key (`field: branch_id`) printed the raw UUID even
+   * though the API had already put the resolved object on the same row.
+   */
+  const renderCell = (row: RowData, columnField: string) => {
+    const col = columnByField.get(columnField)
+    const { value, scale } = resolveColumnCell(
+      row,
+      columnField,
+      entity,
+      (m, n) =>
+        metaBundle?.entities.find(
+          (e) => e.module === m && e.name === n,
+        ) as never,
+    )
+    return renderCellValue(value, col?.widget, col?.format, formatter, {
+      scale,
+    })
+  }
 
   const toggleExpand = (id: string) => {
     setExpandedRows((prev) => {
@@ -547,11 +593,11 @@ export default function TableRenderer({
                 }}
                 title="Click to edit"
               >
-                {renderCellValue(value, col.widget, col.format, formatter)}
+                {renderCell(row.original, col.field)}
               </button>
             )
           }
-          return renderCellValue(value, col.widget, col.format, formatter)
+          return renderCell(row.original, col.field)
         },
       })
     }
@@ -598,8 +644,7 @@ export default function TableRenderer({
     if (!me) return
 
     // Check permission
-    const perm = `${entity.module}.${entity.plural}.${action.action}`
-    if (!checkPermission(perm, me.permissions)) {
+    if (!canDoEntityAction(me, entity, action.action)) {
       toast.error("You don't have permission to perform this action")
       return
     }
@@ -689,7 +734,11 @@ export default function TableRenderer({
           </p>
         </div>
 
-        {lifecycle.hasCreate && (
+        {/* A button the caller cannot use is not rendered at all: `hasCreate`
+            reflects the entity's lifecycle, NOT the caller's authorization, so
+            without this check a cashier lacking `create` was offered "New" and
+            then got a form with no Save button (kafe 10.19). */}
+        {lifecycle.hasCreate && canDoEntityAction(me, entity, "create") && (
           <Button
             onClick={() => {
               // Modal/drawer render mode → overlay (authored form name if
@@ -791,31 +840,42 @@ export default function TableRenderer({
             <thead className="border-b bg-muted/50">
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id}>
-                  {headerGroup.headers.map((header) => (
-                    <th
-                      key={header.id}
-                      className={cn(
-                        "h-10 px-3 text-left align-middle font-medium text-muted-foreground",
-                        header.column.getCanSort() &&
-                          "cursor-pointer select-none hover:bg-muted",
-                      )}
-                      onClick={header.column.getToggleSortingHandler()}
-                    >
-                      <div className="flex items-center gap-1">
-                        {flexRender(
-                          header.column.columnDef.header,
-                          header.getContext(),
+                  {headerGroup.headers.map((header) => {
+                    // The expand/select columns have no author config.
+                    const col = columnByField.get(header.column.id)
+                    return (
+                      <th
+                        key={header.id}
+                        style={columnWidthStyle(col?.width)}
+                        className={cn(
+                          "h-10 px-3 text-left align-middle font-medium text-muted-foreground",
+                          columnAlignClass(col?.align),
+                          header.column.getCanSort() &&
+                            "cursor-pointer select-none hover:bg-muted",
                         )}
-                        {{
-                          asc: <ChevronUp className="size-3" />,
-                          desc: <ChevronDown className="size-3" />,
-                        }[header.column.getIsSorted() as string] ??
-                          (header.column.getCanSort() && (
-                            <ChevronsUpDown className="size-3 opacity-50" />
-                          ))}
-                      </div>
-                    </th>
-                  ))}
+                        onClick={header.column.getToggleSortingHandler()}
+                      >
+                        <div
+                          className={cn(
+                            "flex items-center gap-1",
+                            columnJustifyClass(col?.align),
+                          )}
+                        >
+                          {flexRender(
+                            header.column.columnDef.header,
+                            header.getContext(),
+                          )}
+                          {{
+                            asc: <ChevronUp className="size-3" />,
+                            desc: <ChevronDown className="size-3" />,
+                          }[header.column.getIsSorted() as string] ??
+                            (header.column.getCanSort() && (
+                              <ChevronsUpDown className="size-3 opacity-50" />
+                            ))}
+                        </div>
+                      </th>
+                    )
+                  })}
                   {tableSpec.row_actions?.length ? (
                     <th className="h-10 px-3 text-right align-middle font-medium text-muted-foreground w-20">
                       Actions
@@ -876,7 +936,15 @@ export default function TableRenderer({
                         </td>
                       )}
                       {row.getVisibleCells().map((cell) => (
-                        <td key={cell.id} className="p-3 align-middle">
+                        <td
+                          key={cell.id}
+                          className={cn(
+                            "p-3 align-middle",
+                            columnAlignClass(
+                              columnByField.get(cell.column.id)?.align,
+                            ),
+                          )}
+                        >
                           {flexRender(
                             cell.column.columnDef.cell,
                             cell.getContext(),
@@ -887,11 +955,9 @@ export default function TableRenderer({
                         <td className="p-3 align-middle text-right">
                           <div className="flex items-center justify-end gap-1">
                             {tableSpec.row_actions
-                              .filter((a) => {
-                                if (!me) return false
-                                const perm = `${entity.module}.${entity.plural}.${a.action}`
-                                return checkPermission(perm, me.permissions)
-                              })
+                              .filter((a) =>
+                                canDoEntityAction(me, entity, a.action),
+                              )
                               .filter((action) =>
                                 isActionAllowedForRow(
                                   action,
@@ -941,12 +1007,7 @@ export default function TableRenderer({
                                     {col.label ?? col.field}
                                   </span>
                                   <span className="text-sm">
-                                    {renderCellValue(
-                                      getNestedValue(row.original, col.field),
-                                      col.widget,
-                                      col.format,
-                                      formatter,
-                                    )}
+                                    {renderCell(row.original, col.field)}
                                   </span>
                                 </div>
                               ))}
@@ -1042,24 +1103,6 @@ export default function TableRenderer({
 // ── Helpers ──
 
 /**
- * Resolve a dot-path field ("patient.name") from a record object, falling
- * back to the raw value for flat fields. Used by the row-expand overflow
- * columns (5.4.4 / 5.14.1) which may reference relation dot-paths.
- */
-function getNestedValue(
-  record: Record<string, unknown>,
-  path: string,
-): unknown {
-  const parts = path.split(".")
-  let value: unknown = record
-  for (const part of parts) {
-    if (value == null || typeof value !== "object") return undefined
-    value = (value as Record<string, unknown>)[part]
-  }
-  return value
-}
-
-/**
  * Check if a table action can be performed on a given row based on the
  * entity's state machine. Actions not declared in any transition (e.g.
  * "view", "edit", "delete") are always allowed. Actions whose current
@@ -1105,7 +1148,6 @@ function isFieldInlineEditable(
   // Relation dot-paths (e.g. patient.name) are read-only display — never
   // inline-editable.
   if (fieldName.includes(".")) return false
-
   const field: Field | undefined = entity.fields.find(
     (f) => f.name === fieldName,
   )
@@ -1114,8 +1156,7 @@ function isFieldInlineEditable(
   if (field.type === "child") return false
 
   // update permission on the entity
-  const perm = `${entity.module}.${entity.plural}.update`
-  if (!checkPermission(perm, me.permissions)) return false
+  if (!canDoEntityAction(me, entity, "update")) return false
 
   // Submitted rows reject inline-edit (doc_status lifecycle).
   if (
@@ -1192,21 +1233,27 @@ function FilterControl({
   value: string
   onChange: (value: string) => void
 }) {
+  // Called unconditionally, ABOVE the switch. A hook inside a `case` makes the
+  // hook count depend on `filter.type`, which breaks the Rules of Hooks the
+  // moment a caller re-renders this control with a different type (oxlint:
+  // `react-hooks/rules-of-hooks`). Only the select branch consumes the result;
+  // for other types the hook's own `filter.type`-independent guards apply.
+  const selectOptions = useSelectFilterOptions(
+    filter,
+    entity,
+    metaBundle,
+    getClient,
+  )
+
   switch (filter.type) {
     case "select": {
       // Options come from the entity field definition (enum_values / related
       // entity master data), independent of the current rows — so a table or
       // board scoped to an empty date range still shows valid filter options.
-      const options = useSelectFilterOptions(
-        filter,
-        entity,
-        metaBundle,
-        getClient,
-      )
       const showAll = shouldShowAll(filter)
       const optionsWithAll = [
         ...(showAll ? [{ value: "__all__", label: allLabel(filter) }] : []),
-        ...options,
+        ...selectOptions,
       ]
       return (
         <Select
@@ -1298,9 +1345,7 @@ function BatchEditBar({
 }) {
   const me = useSessionStore((s) => s.me)
   const editableFields = fields.filter((f) => {
-    if (!me) return false
-    const perm = `${entity.module}.${entity.plural}.update`
-    if (!checkPermission(perm, me.permissions)) return false
+    if (!canDoEntityAction(me, entity, "update")) return false
     const field = entity.fields.find((ef) => ef.name === f)
     if (!field) return false
     return !field.computed && !field.read_only && !field.immutable

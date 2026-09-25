@@ -51,12 +51,26 @@ spec:
       index: true
       title: "Status"
     # Memakai `moneyinput`. Sisa GAP-02: indeks money.
-    - name: total_amount
-      type: money
-      title: "Total"
     - name: note
       type: text
       title: "Catatan"
+    # ── Biaya kirim (landed cost, item 10.1) ──
+    # Nilai pada level PO, bukan per baris: ongkos kirim dari supplier hampir
+    # selalu satu angka untuk satu pengiriman, dan memaksanya per baris berarti
+    # membagi sendiri angka yang di faktur sudah utuh.
+    #
+    # Nilai ini TIDAK menjadi baris terpisah di jurnal; ia DIALOKASIKAN
+    # proporsional ke `unit_cost` tiap `stock-movement` yang dibuat
+    # `receive-goods`, sehingga masuk HPP bahan lewat biaya rata-rata bergerak —
+    # tempat yang benar untuk biaya perolehan persediaan.
+    - name: shipping_cost
+      type: money
+      title: "Biaya Kirim"
+      description: "Dialokasikan proporsional ke harga per satuan bahan saat barang diterima (landed cost)"
+    - name: total_amount
+      type: money
+      title: "Total"
+      description: "Subtotal baris bahan (biaya kirim TIDAK termasuk — ia biaya perolehan, bukan harga barang)"
     - name: lines
       type: child
       child:
@@ -79,19 +93,28 @@ spec:
           - name: line_no
             type: integer
             title: "No."
+          # Dua jenis baris, sama seperti resep (item 10.1): bahan, atau biaya
+          # bebas. Baris `cost` adalah tempat menaruh ongkos kirim yang MENEMPEL
+          # pada satu bahan tertentu (mis. freezer sewa khusus per supplier);
+          # `shipping_cost` di atas untuk ongkos kirim umum.
+          - name: line_type
+            type: enum
+            enum_values: [ingredient, cost]
+            default: ingredient
+            title: "Jenis Baris"
           - name: ingredient_id
             type: relation
             relation: { type: belongs_to, resource: cafe-stock.ingredient }
-            required: true
+            required_when: "line_type == 'ingredient'"
             title: "Bahan"
           - name: quantity
             type: decimal
             scale: 3
-            required: true
+            required_when: "line_type == 'ingredient'"
             title: "Jumlah Dipesan"
           - name: unit_cost
             type: money
-            required: true
+            required_when: "line_type == 'ingredient'"
             title: "Harga Satuan"
           - name: subtotal
             type: money
@@ -100,6 +123,24 @@ spec:
             type: decimal
             scale: 3
             title: "Jumlah Diterima"
+          # ── Biaya bebas (line_type: cost) ──
+          - name: cost_label
+            type: string
+            required_when: "line_type == 'cost'"
+            title: "Nama Biaya"
+            description: "Mis. 'Ongkos angkut khusus', 'Sewa cold storage'"
+          - name: cost_amount
+            type: money
+            required_when: "line_type == 'cost'"
+            title: "Nilai Biaya"
+          # Baris biaya boleh dialokasikan ke satu bahan tertentu; kosong =
+          # dibagi proporsional ke seluruh baris bahan (perilaku yang sama
+          # dengan `shipping_cost`).
+          - name: allocated_to
+            type: relation
+            relation: { type: belongs_to, resource: cafe-stock.ingredient }
+            title: "Dialokasikan ke Bahan"
+            description: "Kosong = dibagi proporsional ke semua baris bahan"
   state_machine:
     field: status
     initial: draft
@@ -110,9 +151,44 @@ spec:
       - { name: cancelled, label: "Dibatalkan" }
     transitions:
       - { from: draft, to: submitted, via: submit-po }
-      - { from: draft, to: cancelled, via: cancel-po }
-      - { from: submitted, to: received, via: receive-goods }
-      - { from: submitted, to: cancelled, via: cancel-po }
+      - { from: draft, to: cancelled, via: cancel-po, emit: on_po_cancelled }
+      # Keterkaitan transisi↔event DINYATAKAN EKSPLISIT lewat `emit:` (S13) —
+      # sama seperti `order.on_paid`. Tanpa ini, "PO diterima" hanya fakta yang
+      # bisa dibaca dari kolom status, bukan kejadian yang bisa didengarkan.
+      - { from: submitted, to: received, via: receive-goods, emit: on_po_received }
+      - { from: submitted, to: cancelled, via: cancel-po, emit: on_po_cancelled }
+  # ── Event — antarmuka keluar untuk akuntansi (item 10.2) ──
+  #
+  # KEPUTUSAN PEMILIK (2026-09-22): purchase HANYA memancarkan event. Ia tidak
+  # tahu apa-apa soal jurnal, akun, utang, atau persediaan. Saat module `gl`
+  # dikerjakan, gl cukup MENAMBAHKAN `kind: Subscription` di manifest-nya
+  # sendiri — persis pola `gl/subscriptions/sales-to-journal.yaml` yang
+  # mendengarkan `cafe-order.order.on_paid`. Tidak ada satu baris pun di module
+  # `cafe-stock` yang perlu diubah untuk itu.
+  #
+  # Kenapa `durable`: pembelian adalah peristiwa finansial. Event yang hilang
+  # karena proses mati berarti utang dagang yang tidak pernah tercatat, dan
+  # penerimaan barang yang tidak masuk persediaan — keduanya baru ketahuan saat
+  # tutup buku. `reliable_event` = outbox + retry + dead-letter.
+  #
+  # Kenapa `on_cancel` WAJIB ada di sini (aturan simetri 7.7.2, ditegakkan
+  # `formspec validate`): pemicu yang menulis jurnal wajib menyatakan
+  # pembalikannya sejak awal. PO yang dibatalkan setelah diterima harus bisa
+  # membalik jurnalnya; kalau pasangan ini tidak dinyatakan, pembatalan di sisi
+  # sumber akan diblokir permanen.
+  events:
+    - name: on_po_received
+      description: "Pembelian diterima — pemicu pencatatan persediaan & utang dagang"
+      type: async
+      publish: { durable: true }
+      deliver:
+        - channel: reliable_event
+    - name: on_po_cancelled
+      description: "Pembelian dibatalkan — pemicu pembalikan"
+      type: async
+      publish: { durable: true }
+      deliver:
+        - channel: reliable_event
   actions:
     - { name: submit, disabled: true }
     - name: submit-po
@@ -123,8 +199,34 @@ spec:
       description: "Batalkan pesanan beli"
       required_permission: purchase-orders.cancel-po
       audit: true
+      # `emit:` pada TRANSISI menyatakan bahwa transisi ini menerbitkan event;
+      # `emits:` pada ACTION yang meneruskannya ke outbox. Keduanya diperlukan:
+      # tanpa baris ini, `emit:` di state machine terlihat benar dan
+      # `formspec validate` hijau, tetapi tidak ada event yang pernah dikirim —
+      # pola yang sama dengan jurnal penjualan (order.cancel-order).
+      emits: on_po_cancelled
     - name: receive-goods
-      description: "Terima barang — script membuat stock-movement (in) per baris"
+      description: "Terima barang — script membuat stock-movement (in) per baris + alokasi landed cost"
       required_permission: purchase-orders.receive-goods
       audit: true
+      # Lihat catatan pada cancel-po: `emits:` inilah yang benar-benar
+      # mengirimkan event ke outbox. Subscription `gl/purchase-to-journal`
+      # bergantung padanya — tanpanya pembelian tidak pernah menjadi jurnal.
+      emits: on_po_received
+      # Implementasi Starlark menggantikan "transisi tanpa impl" (yang hanya bisa
+      # dipicu lewat PATCH) karena penerimaan punya pekerjaan NYATA: mengubah
+      # baris → pergerakan stok, dan mengalokasikan biaya kirim. Tanpa `impl`,
+      # `receive-goods` hanya memindahkan status dan `stock-movement` tidak
+      # pernah lahir — persis celah yang ditutup item 10.1/10.2.
+      impl: { type: script_ref, ref: cafe-stock/purchase_receive }
+      uses:
+        # `stock-movement` ditulis script ini (bukan dibaca) — deklarasi tetap
+        # wajib: honesty check menolak akses resource yang tidak dinyatakan,
+        # dan itu yang membuat footprint consent terlihat (#34).
+        #
+        # `ingredient` DIBACA untuk `weight_per_unit` (alokasi landed cost
+        # berbasis berat, item 10.6). Ditambahkan ke sini justru karena honesty
+        # check menolaknya: akses lintas-entitas yang tidak dinyatakan adalah
+        # persis yang membuat footprint consent tidak bisa dipercaya.
+        resources: [cafe-stock.stock-movement, cafe-stock.ingredient]
   # expose: [] — UI-only.

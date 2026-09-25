@@ -12,7 +12,12 @@ spec:
   columns:
     - { field: branch_id, label: "Cabang", sortable: true }
     - { field: ingredient_id, label: "Bahan", sortable: true }
-    - { field: quantity_on_hand, label: "Saldo", align: right, sortable: true }
+    # `format: number` = pemisah ribuan mengikuti `settings.locale`. Saldo
+    # bertipe `decimal, scale: 3`, jadi skalanya ikut dari field (bukan
+    # `settings.decimal_scale` 2) — 20000 → "20.000", 1,234 → "1,234".
+    # Format angka sengaja opt-in: `decimal`/`integer` sama seringnya sebuah
+    # pengenal (`line_number`) maupun kuantitas, dan framework tidak menebak.
+    - { field: quantity_on_hand, label: "Saldo", format: number, align: right, sortable: true }
     - { field: moving_avg_cost, label: "Biaya Rata-rata", format: currency, align: right }
     - { field: stock_value, label: "Nilai Persediaan", format: currency, align: right }
     - { field: is_below_min, label: "Kritis", widget: boolean }

@@ -33,25 +33,53 @@ import { FormaApiError } from "@/types/manifest"
 
 // Picks which resolved App (Core §4.4) the current URL belongs to: the
 // longest root_url prefix match, after stripping the leading {workspace}
-// path segment. Falls back to the first App when nothing matches (e.g. the
-// _admin surface, which isn't scoped to any App's root_url).
-function detectAppName(
+// path segment. A `root_url` of "/" is the WORKSPACE ROOT — the shortest
+// possible mount, so it is the fallback rather than a prefix to exclude.
+//
+// Exported because the login screen needs the SAME resolution: the session must
+// be scoped by the App's NAME (`kafe-pos`), which is what roles are declared
+// against — not by the URL segment (`pos`), and the post-login redirect must
+// land on the App's `root_url` rather than on `/{workspace}` (which would drop
+// the `/app/pos` prefix and silently re-scope the session to whatever App owns
+// the root).
+export function detectApp(
   pathname: string,
   apps: AppSummary[],
-): string | undefined {
+): AppSummary | undefined {
   if (apps.length === 0) return undefined
-  if (apps.length === 1) return apps[0].name
+  if (apps.length === 1) return apps[0]
 
   const segments = pathname.split("/").filter(Boolean)
   const rest = "/" + segments.slice(1).join("/") // drop {workspace}
 
+  const normalized = (root: string) =>
+    root === "" || root === "/" ? "/" : root.replace(/\/+$/, "")
+
   let best: AppSummary | undefined
+  let bestLen = -1
   for (const a of apps) {
-    if (rest === a.root_url || rest.startsWith(a.root_url + "/")) {
-      if (!best || a.root_url.length > best.root_url.length) best = a
+    const root = normalized(a.root_url)
+    const matches =
+      root === "/" ? true : rest === root || rest.startsWith(root + "/")
+    if (matches && root.length > bestLen) {
+      best = a
+      bestLen = root.length
     }
   }
-  return (best ?? apps[0]).name
+  // Nothing matched an App's mount: the path belongs to no App, so there is no
+  // App to scope to. Returning `apps[0]` here is what made `/{ws}/menu` (the
+  // PUBLIC `kafe-qr`) resolve to `kafe-kds`, whose root_url matched nothing —
+  // the request was then scoped to the wrong App and rendered "Page not found"
+  // inside another App's chrome. Only the doc's fallback case (the `_admin`
+  // surface, which is not App-scoped at all) still wants an arbitrary App.
+  return best
+}
+
+export function detectAppName(
+  pathname: string,
+  apps: AppSummary[],
+): string | undefined {
+  return detectApp(pathname, apps)?.name
 }
 
 export interface MetaState {
@@ -142,7 +170,12 @@ export function createLookups(bundle: MetaBundle) {
 
   const entitiesByKey = new Map<string, EntitySchema>()
   const entitiesByPlural = new Map<string, EntitySchema>()
-  for (const e of bundle.entities) {
+  // `?? []`: a bundle whose caller can see no entity used to arrive with
+  // `entities: null`, and iterating it threw "e.entities is not iterable" —
+  // killing the whole panel through the ErrorBoundary instead of rendering an
+  // empty one. The server now always sends `[]`, but the renderer must not
+  // depend on that to stay alive.
+  for (const e of bundle.entities ?? []) {
     entitiesByKey.set(`${e.module}/${e.name}`, e)
     entitiesByPlural.set(`${e.module}/${e.plural}`, e)
   }

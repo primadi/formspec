@@ -51,7 +51,10 @@ import type {
 import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
 import { resolveEntityRef } from "@/engine/entityRef"
-import { can as checkPermission } from "@/engine/permissions"
+import {
+  can as checkPermission,
+  canDoEntityAction,
+} from "@/engine/permissions"
 import { deriveKanbanColumns } from "@/engine/derive"
 import { evalFormSpecExpr, type RuntimeValue } from "@/lib/formspec-expr"
 import { useSurface } from "@/hooks/useSurface"
@@ -617,8 +620,7 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
       if (!me || !entity) return
 
       // Permission check
-      const perm = `${entity.module}.${entity.plural}.${action.action}`
-      if (!checkPermission(perm, me.permissions)) {
+      if (!canDoEntityAction(me, entity ?? { module: entityModule, plural: entityName }, action.action)) {
         toast.error("You don't have permission to perform this action")
         return
       }
@@ -1034,6 +1036,7 @@ function SortableCard({
   entityPlural: string
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const me = useSessionStore((s) => s.me)
 
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id })
@@ -1044,6 +1047,13 @@ function SortableCard({
         transition,
       }
     : undefined
+
+  // Only actions the caller may actually perform are offered. Without this the
+  // menu listed every row action and relied on a click-time toast — an
+  // inconsistency with the table, which already filters.
+  const visibleRowActions = (rowActions ?? []).filter((a) =>
+    canDoEntityAction(me, { module: entityModule, plural: entityPlural }, a.action),
+  )
 
   return (
     <div
@@ -1076,7 +1086,7 @@ function SortableCard({
         </div>
 
         {/* Row actions dropdown */}
-        {rowActions && rowActions.length > 0 && (
+        {visibleRowActions.length > 0 && (
           <div className="relative shrink-0">
             <button
               className="text-muted-foreground hover:text-foreground p-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity"
@@ -1094,7 +1104,7 @@ function SortableCard({
                   onClick={() => setMenuOpen(false)}
                 />
                 <div className="absolute right-0 top-6 z-20 w-36 rounded-md border bg-popover p-1 shadow-md">
-                  {rowActions.map((action) => (
+                  {visibleRowActions.map((action) => (
                     <button
                       key={action.action}
                       className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-accent flex items-center gap-2"
@@ -1103,8 +1113,7 @@ function SortableCard({
                         setMenuOpen(false)
                         onRowAction(action, record)
                       }}
-                    >
-                      {action.icon === "eye" || action.action === "view" ? (
+                    >                      {action.icon === "eye" || action.action === "view" ? (
                         <Eye className="size-3" />
                       ) : action.icon === "edit" || action.action === "edit" ? (
                         <Edit2 className="size-3" />

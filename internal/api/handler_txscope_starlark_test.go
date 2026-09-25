@@ -74,7 +74,7 @@ def execute(resource, params, ctx):
 	// newDispatcher does — the same Set*Handler closures, pointed at this
 	// test's registry instead of the real app's.
 	scriptEx := action.NewScriptExecutor(specDir)
-	scriptEx.SetSaveHandler(func(ctx context.Context, workspaceID, module, entityName, id string, version int, data map[string]any) error {
+	scriptEx.SetSaveHandler(func(ctx context.Context, workspaceID, fromModule, module, entityName, id string, version int, data map[string]any, callerResources []string) error {
 		s, err := reg.GetEntityStore(module, entityName)
 		if err != nil {
 			return err

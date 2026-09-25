@@ -14,6 +14,7 @@ import { useAppNavigate } from "@/lib/navigation"
 import { useParams } from "react-router-dom"
 import { Search } from "lucide-react"
 import { resolveEntityRef } from "@/engine/entityRef"
+import { entityFieldLabel } from "@/engine/derive"
 import type {
   Entry,
   ListingSpec,
@@ -23,9 +24,11 @@ import type {
 import { useMetaStore } from "@/stores/meta"
 import { useSessionStore } from "@/stores/session"
 import { apiList } from "@/lib/api"
-import { renderCellValue } from "@/lib/renderCell"
+import { renderCellValue, resolveColumnCell } from "@/lib/renderCell"
+import { columnAlignClass, columnWidthStyle } from "@/lib/tableColumn"
 import { fileDownloadUrl } from "@/lib/media"
 import { createFormatter } from "@/lib/format"
+import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Select } from "@/components/ui/select"
@@ -55,6 +58,7 @@ export default function ListingRenderer({
   const navigate = useAppNavigate()
   const spec = entry.spec
   const getEntity = useMetaStore((s) => s.getEntity)
+  const entityList = useMetaStore((s) => s.bundle?.entities ?? [])
   const getClient = useSessionStore((s) => s.getClient)
   const settings = useMetaStore((s) => s.bundle?.settings)
   const formatter = useMemo(() => createFormatter(settings), [settings])
@@ -170,8 +174,15 @@ export default function ListingRenderer({
             <thead className="border-b bg-muted/50 text-left">
               <tr>
                 {columns.map((col) => (
-                  <th key={col.field} className="px-4 py-3 font-medium">
-                    {col.label ?? col.field}
+                  <th
+                    key={col.field}
+                    style={columnWidthStyle(col.width)}
+                    className={cn(
+                      "px-4 py-3 font-medium",
+                      columnAlignClass(col.align),
+                    )}
+                  >
+                    {col.label ?? entityFieldLabel(entity, col.field)}
                   </th>
                 ))}
               </tr>
@@ -186,25 +197,48 @@ export default function ListingRenderer({
                   }
                 >
                   {columns.map((col) => (
-                    <td key={col.field} className="border-t px-4 py-3">
-                      {renderCellValue(
-                        row[col.field],
-                        col.widget,
-                        col.format,
-                        formatter,
-                        {
-                          // Image cells (#4) need the file's download URL;
-                          // the cell renderer only has the stored object key.
-                          imageUrl: fileDownloadUrl(
-                            workspace,
-                            String(entity?.module ?? ""),
-                            entity?.name ?? "",
-                            String(row.id),
-                            col.field,
-                          ),
-                          alt: String(row[col.field] ?? ""),
-                        },
+                    <td
+                      key={col.field}
+                      className={cn(
+                        "border-t px-4 py-3",
+                        columnAlignClass(col.align),
                       )}
+                    >
+                      {(() => {
+                        // Relation columns show the related record's label, not
+                        // the foreign key: the API already resolved the object
+                        // onto the row. Dot-paths (`category.name`) are read
+                        // directly — the old `row[col.field]` lookup returned
+                        // undefined for those, since the key is nested.
+                        const { value, scale } = resolveColumnCell(
+                          row,
+                          col.field,
+                          entity,
+                          (m, n) =>
+                            entityList.find(
+                              (e) => e.module === m && e.name === n,
+                            ),
+                        )
+                        return renderCellValue(
+                          value,
+                          col.widget,
+                          col.format,
+                          formatter,
+                          {
+                            // Image cells (#4) need the file's download URL;
+                            // the cell renderer only has the stored object key.
+                            imageUrl: fileDownloadUrl(
+                              workspace,
+                              String(entity?.module ?? ""),
+                              entity?.name ?? "",
+                              String(row.id),
+                              col.field,
+                            ),
+                            alt: String(row[col.field] ?? ""),
+                            scale,
+                          },
+                        )
+                      })()}
                     </td>
                   ))}
                 </tr>
@@ -239,7 +273,7 @@ function FilterControl({
         className="w-40"
         value={value}
         onChange={onChange}
-        placeholder={filter.label ?? filter.field}
+        placeholder={filter.label ?? entityFieldLabel(entity, filter.field)}
         options={["", ...options]}
       />
     )
@@ -248,7 +282,7 @@ function FilterControl({
   return (
     <Input
       className="w-40"
-      placeholder={filter.label ?? filter.field}
+      placeholder={filter.label ?? entityFieldLabel(entity, filter.field)}
       value={value}
       onChange={(e) => onChange(e.target.value)}
     />

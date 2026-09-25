@@ -10,6 +10,7 @@ import { Upload, X, FileText, Loader2 } from "lucide-react"
 import { useSessionStore } from "@/stores/session"
 import { cn } from "@/lib/utils"
 import { allowedFileType, fileDownloadUrl, isImageFile } from "@/lib/media"
+import ImageLightbox from "@/components/ui/image-lightbox"
 
 interface FileInputProps {
   value?: string // object key
@@ -98,13 +99,13 @@ export function FileInput({
     return (
       <div className="py-1">
         {isImage && downloadUrl ? (
-          <a href={downloadUrl} target="_blank" rel="noreferrer">
-            <img
-              src={downloadUrl}
-              alt={value}
-              className="max-h-32 rounded border"
-            />
-          </a>
+          // Preview opens a popup dialog, not a new tab — the same contract as
+          // the detail page's image field.
+          <ImageLightbox
+            src={downloadUrl}
+            alt={value}
+            className="max-h-32 rounded border"
+          />
         ) : (
           <a
             href={downloadUrl ?? "#"}
@@ -125,7 +126,7 @@ export function FileInput({
       {value ? (
         <div className="flex items-center gap-2">
           {isImage && downloadUrl ? (
-            <img
+            <ImageLightbox
               src={downloadUrl}
               alt={value}
               className="h-12 w-12 rounded border object-cover"

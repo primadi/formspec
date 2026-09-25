@@ -14,9 +14,21 @@ type PermissionResolver struct {
 	users       *EntityUserStore
 	roleStore   *RoleStore
 	materialize *Materializer
+	// logf, when set, receives diagnostics that would otherwise vanish. A role
+	// with malformed grants is the important case: without this it looks like a
+	// plain authorization failure.
+	logf func(format string, args ...any)
 
 	mu    sync.Mutex
 	cache map[string][]string // key: workspaceID + "/" + userID
+}
+
+// SetLogger installs a diagnostic logger. Optional — a nil logger keeps the
+// resolver silent, which is right for tests.
+func (r *PermissionResolver) SetLogger(logf func(format string, args ...any)) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.logf = logf
 }
 
 // NewPermissionResolver creates a permission resolver.
@@ -111,7 +123,17 @@ func (r *PermissionResolver) resolveUncached(ctx context.Context, workspaceID, a
 		}
 		perms, err := r.materialize.Materialize(role.Grants)
 		if err != nil {
-			continue // malformed grant — skip role
+			// A role whose grants cannot be materialized contributes NOTHING.
+			// Swallowing this made a typo in a grant page name indistinguishable
+			// from a role that legitimately has no permissions: the symptom is a
+			// 404 on every request (permission check fails), with no error
+			// anywhere and nothing in the logs. Report it and carry on — the
+			// remaining roles may still grant access, so failing the whole login
+			// would be worse.
+			if r.logf != nil {
+				r.logf("auth: role %q has unmaterializable grants (contributing no permissions): %v", role.Name, err)
+			}
+			continue
 		}
 		for _, p := range perms {
 			add(p)

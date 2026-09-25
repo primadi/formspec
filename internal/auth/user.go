@@ -403,15 +403,23 @@ func (s *EntityUserStore) CreateUser(ctx context.Context, workspaceID string, u 
 			"roles":          u.Roles,
 			"permissions":    u.Permissions,
 			"assignments":    u.Assignments,
-			"active":         u.Active,
-			"status":         status,
+			// Always true on create. The entity spec documents `active` as a
+			// default-true flag, but writing the Go zero value (false) OVERRIDES
+			// that default — every account created through this path landed
+			// disabled, and login then refused it with "invalid username or
+			// password" (service.go checks `!user.Active`). The credentials were
+			// right; the account was off, and nothing said so.
+			//
+			// Deactivation is expressed through `status` (active|pending|
+			// disabled) — the channel the entity documents. A caller that needs a
+			// disabled account should create it and then set Status.
+			"active": true,
+			"status": status,
 		},
 	})
 	return err
 }
 
-// HasUsers reports whether the workspace has at least one user record.
-// Used for first-run setup detection (no users → setup wizard required).
 func (s *EntityUserStore) HasUsers(ctx context.Context, workspaceID string) (bool, error) {
 	res, err := s.store.List(ctx, db.ListParams{WorkspaceID: workspaceID, Page: 1, PerPage: 1})
 	if err != nil {
@@ -453,11 +461,30 @@ func (s *EntityUserStore) UpdateUser(ctx context.Context, workspaceID string, u 
 			"roles":          u.Roles,
 			"permissions":    u.Permissions,
 			"assignments":    u.Assignments,
-			"active":         u.Active,
-			"status":         u.Status,
+			// This map REPLACES the record's data, so a zero-value `active`
+			// deactivates the account: callers that only change Roles (approve /
+			// role-change flows) never set it, and the user is then locked out with
+			// a symptom identical to a wrong password. Keep what is stored unless
+			// the caller explicitly turned the flag on.
+			"active": activeForUpdate(u.Active, rec.Data),
+			"status": u.Status,
 		},
 	})
 	return err
+}
+
+// activeForUpdate keeps the stored value when the caller passed the zero value.
+//
+// `User.Active` is a plain bool with no tri-state, so false is not
+// distinguishable from "not set" — and in practice it IS "not set" at every
+// call site of this method. Deactivation goes through Status
+// (pending/disabled), which login checks independently; this helper therefore
+// only ever preserves or enables, and never turns an account off by accident.
+func activeForUpdate(want bool, stored map[string]any) bool {
+	if want {
+		return true
+	}
+	return boolField(stored, "active", true)
 }
 
 // SetPassword hashes a plaintext password and updates ONLY the user's

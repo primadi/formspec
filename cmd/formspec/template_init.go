@@ -40,6 +40,12 @@ var templateModuleNamed = map[string]bool{
 	"ws.tmpl.yaml":  true,
 }
 
+// moduleDirToken is the directory placeholder renamed to the module name on
+// extraction, so the scaffold follows the layout convention
+// spec/modules/{module}/module.yaml (same shape `formspec new entity` writes
+// entities into).
+const moduleDirToken = "_module_"
+
 // templateSkipIfExists lists project-relative files that must never overwrite
 // an existing file in the target project (respect the user's own settings).
 var templateSkipIfExists = map[string]bool{
@@ -64,6 +70,9 @@ func extractTemplates(targetDir string, data templateData) error {
 		if templateModuleNamed[filepath.Base(rel)] {
 			rel = filepath.Join(filepath.Dir(rel), data.Module+".yaml")
 		}
+		// _module_ → the module name, so spec/modules/_module_/module.yaml
+		// lands at spec/modules/{module}/module.yaml.
+		rel = strings.ReplaceAll(rel, moduleDirToken, data.Module)
 
 		dest := filepath.Join(targetDir, filepath.FromSlash(rel))
 		if templateSkipIfExists[rel] && fileExists(dest) {

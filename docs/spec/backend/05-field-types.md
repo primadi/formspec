@@ -41,6 +41,39 @@ Format tanggal/waktu, zona, dan default lain yang lintas-komponen dibaca dari
 **global settings** (`settings.*`, [`01-core-basic.md`](01-core-basic.md) §10) —
 komponen tidak pernah menebak.
 
+### 1.1.1 `options` — himpunan pilihan berlabel (multi-nilai)
+
+`enum_values` membawa **nilai saja**. Untuk field yang nilainya **daftar**
+(`json` menyimpan array, `string` menyimpan daftar dipisah koma), nilai telanjang
+tidak bisa dibaca: `[1, 2]` tidak pernah terbaca sebagai "Senin, Selasa".
+
+```yaml
+- name: days_of_week
+  type: json
+  title: "Hari Berlaku"
+  options:
+    - { value: 1, label: "Senin" }
+    - { value: 2, label: "Selasa" }
+    - { value: 7, label: "Minggu" }
+```
+
+- `options` adalah properti **data** (nilai mana yang sah) — ditaruh di Entity,
+  sama alasannya dengan `enum_values`. Satu deklarasi dipakai ulang oleh form
+  (widget `select-multi-tag`, [`../frontend/07-component-kinds.md`](../frontend/07-component-kinds.md) §1.3),
+  sel tabel, dan halaman detail.
+- `value` mempertahankan **tipe skalar** yang benar-benar disimpan
+  (`value: 1` → angka `1`, bukan `"1"`), supaya array `json` tetap array angka.
+- `label` opsional; tanpa `label`, nilai di-humanise jadi caption
+  (`in_progress` → "In Progress").
+- Hanya sah pada field yang **memegang himpunan** (`json`, `string`). Pada
+  field skalar (`integer`, `date`, …) `options` adalah klaim yang tidak bisa
+  dieksekusi apa pun; pada `enum` pesan errornya mengarahkan ke `enum_values`.
+
+Aturan yang ditegakkan saat validasi (bukan konvensi): `value` wajib ada dan
+skalar, dan **tidak boleh duplikat** (termasuk lintas ejaan — `1` dan `"1"`
+adalah pilihan yang sama) sebab pilihan duplikat tidak akan pernah bisa dipilih
+dua kali, yang terbaca sebagai widget rusak.
+
 ### 1.2 `decimal` — Precision & Scale
 
 `decimal` menyimpan angka **eksak**, bukan floating-point biner. Dua atribut

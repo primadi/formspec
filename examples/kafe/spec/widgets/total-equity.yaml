@@ -1,16 +1,19 @@
-# Total equity widget
+# Total ekuitas — Σ saldo akun bertipe ekuitas pada periode berjalan.
+# DIPERBAIKI 2026-09-22: entity `ledger` tidak pernah ada; sumber sebenarnya
+# adalah `gl-balance` (lihat catatan di total-assets.yaml).
 apiVersion: formspec.dev/v1
 kind: Widget
 metadata:
   name: total-equity
   module: gl
+  description: "Total ekuitas — Σ closing_balance akun bertipe equity"
 spec:
   title: "Total Ekuitas"
   type: metric
-  entity: ledger
-  query: "account_type = 'equity'"
+  entity: gl.gl-balance
+  query: "period = 'this-month'"
   refresh_secs: 300
   config:
     aggregate: sum
-    field: ending_balance
+    field: closing_balance
     format: currency

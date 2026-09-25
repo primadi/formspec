@@ -39,6 +39,7 @@ type RouterBuilder struct {
 	webDir        string           // static SPA root (renderers/react-shadcn/dist); empty = no static serving
 	webFS         fs.FS            // embedded SPA (embed.FS); empty = no static serving
 	hub           *WSHub
+	wsTickets     *wsTicketStore                       // single-use WS handshake tickets (todo 5.8.4)
 	apps          map[string]*formspec_app.ResolvedApp // resolved kind: App manifests, keyed by name (Core §4.4)
 	settings      *spec.Settings                       // resolved global settings namespace (spec §10)
 	specVersionFn func() int64                         // returns the current spec version (for Meta API polling)
@@ -58,9 +59,10 @@ type RouterBuilder struct {
 // NewRouterBuilder creates a new router builder backed by the entity registry.
 func NewRouterBuilder(registry *entity.Registry) *RouterBuilder {
 	b := &RouterBuilder{
-		registry: registry,
-		factory:  NewHandlerFactory(registry),
-		hub:      NewWSHub(registry),
+		registry:  registry,
+		factory:   NewHandlerFactory(registry),
+		hub:       NewWSHub(registry),
+		wsTickets: newWSTicketStore(),
 	}
 	// Per-resource/per-action rate limiting (todo 7.12).
 	b.factory.SetResourceRateLimiter(NewResourceRateLimiter())
@@ -481,7 +483,15 @@ func (b *RouterBuilder) BuildHTTP() http.Handler {
 			// Realtime event push (Frontend kanban/board realtime: true).
 			r.Get("/_ws", b.HandleWS())
 
-			// Public non-secret Config keys (render-context `source: config`,
+			// Single-use WS handshake ticket (todo 5.8.4): issued over the
+			// authenticated REST surface so the JWT never appears in the WS
+			// URL. The client then connects with ?ticket=.
+			r.Post("/_ws/ticket", b.HandleWSTicket())
+
+			// Single-use WS handshake ticket (todo 5.8.4): issue over the
+			// authenticated REST surface so the JWT never appears in the
+			// WS URL. The client then connects with ?ticket=.
+			r.Post("/_ws/ticket", b.HandleWSTicket())
 			// plan custom-screens-spec-driven Phase 3). Opt-in per key via
 			// `public: true`; secrets are never served.
 			r.Get("/config/{name}", b.HandleConfig())

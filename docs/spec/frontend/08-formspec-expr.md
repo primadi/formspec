@@ -26,6 +26,28 @@ perbandingan, `and`/`or`/`not`, aritmetika, `len`, `sum`, list comprehension.
 **wajib** menolak konstruk di luar ekspresi ini saat `formspec validate` — bukan
 diam-diam diterima lalu gagal saat runtime.
 
+**Callable adalah himpunan tertutup:** `len`, `sum`, `amount`, `currency`,
+`today`. Tidak ada fungsi lain — tidak ada method (`user.has(...)`), tidak ada
+fungsi buatan Starlark server (`sum_line`, `days_ago`, `empty`). Nama di luar
+himpunan ini adalah **error deploy-time**, bukan warning runtime: ekspresi yang
+lolos `apply` dijamin dapat dievaluasi shell (§4), sedangkan pemanggilan tak
+dikenal hanya akan mati sebagai warning saat runtime. `today()` mengembalikan
+tanggal hari ini `YYYY-MM-DD` (UTC) — perbandingan string ISO untuk tanggal
+karena itu sah dan mengikuti urutan kronologis (`today() >= '2026-01-01'`).
+
+**Perbandingan urutan** (`<`, `>`, `<=`, `>=`) berlaku untuk angka, money (dengan
+mata uang sama), dan **string dengan string** — yang terakhir ini yang membuat
+perbandingan tanggal berbasis string bermakna. Membandingkan string dengan angka
+tetap error, bukan koersi diam-diam.
+
+**Literal string mengikuti Starlark: kutip tunggal dan kutip ganda setara.**
+`fields.type == 'fixed'` dan `fields.type == "fixed"` adalah literal yang sama;
+sebuah string hanya ditutup oleh kutip yang membukanya, sehingga `"it's"` tidak
+berakhir di apostrof. Ini bukan detail gaya penulisan: server (Starlark
+sungguhan) sudah menerima keduanya, jadi shell yang hanya mengenal kutip ganda
+menyimpang dari kontrak dan menampilkan error parse untuk manifest yang sah.
+Shell **wajib** menerima keduanya.
+
 Diimplementasikan sebagai **AST interpreter kecil di JS** di sisi renderer —
 tanpa transpilasi, tanpa build step. Satu grammar dipakai bersama guard
 sisi-server (`conditions` di action, [`../backend/01-core-basic.md`](../backend/01-core-basic.md)
@@ -50,6 +72,17 @@ Resolution API ([`04-spec-resolution-api.md`](04-spec-resolution-api.md) §4),
 bukan lewat ekspresi ini. FormSpecExpr murni untuk kondisi _bisnis_, terpisah
 dari mekanisme permission.
 
+**Satu pengecualian yang terbatas dan eksplisit: `MenuItem.when`.** Kondisi pada
+item menu dievaluasi terhadap `{ user }` (identitas pemanggil) — karena satu-
+satunya hal yang membedakan satu item menu dari yang lain bagi seorang pemanggil
+adalah dirinya. Ini **bukan** pelonggaran aturan di atas: `user` membawa
+identitas (mis. `user.roles`, `user.workspace`), bukan permission, dan `when`
+tetap bukan gerbang otorisasi. Pembatasan akses menu memakai
+`MenuItem.permissions`, yang dievaluasi **server** saat bundle dibangun
+([`../platform/02-workspace-app-module.md`](../platform/02-workspace-app-module.md)
+§4) — bentuk seperti `user.has('<permission>')` **ditolak** karena `has` bukan
+callable yang sah (§2).
+
 ## 4. Determinisme & Batasan
 
 Dievaluasi di browser — **UX saja, tidak pernah otorisasi dan tidak pernah
@@ -70,7 +103,13 @@ adalah **error, bukan fail-safe**. Penegakannya dua lapis:
    referensi field yang tidak ada, member access yang tidak valid, atau
    identifier di luar konteks §3 adalah **validation error yang menggagalkan
    apply**. Ekspresi yang lolos apply dijamin seluruh referensinya resolvable,
-   sehingga error kelas ini tidak mungkin terjadi di runtime.
+   sehingga error kelas ini tidak mungkin terjadi di runtime. Gerbang ini juga
+   **wajib menolak ekspresi yang tidak bisa di-tokenize grammar §2** — termasuk
+   string tak tertutup dan karakter di luar himpunan operator. Memeriksa
+   delimiter seimbang saja tidak cukup: `fields.type == 'percentage'` seimbang,
+   tetapi tidak bisa diparse shell yang hanya mengenal kutip ganda, dan gate
+   yang meloloskannya memberi jaminan palsu. Jaminan §4 hanya berlaku sejauh
+   gate benar-benar memindai token, bukan hanya mencocokkan tanda kurung.
 2. **Runtime (defensive).** Kalau evaluasi tetap gagal di runtime (data
    korup, bug renderer), itu **bug framework** — renderer wajib menampilkan
    error state yang kentara (bukan diam-diam mengevaluasi ke `false`/kosong)

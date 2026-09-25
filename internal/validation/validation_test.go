@@ -1,6 +1,7 @@
 package validation
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/primadi/formspec/pkg/spec"
@@ -178,5 +179,45 @@ func TestToInt_ToFloat(t *testing.T) {
 	}
 	if n := toFloat("not-a-number"); n != 0 {
 		t.Errorf("toFloat(string) = %v, want 0", n)
+	}
+}
+
+// TestTypedErrors_CarryLevelAndField proves the validators return structured
+// errors (todo 7.9.5) so the API envelope can populate `details[].level/field`
+// instead of a hardcoded level with no field.
+func TestTypedErrors_CarryLevelAndField(t *testing.T) {
+	// Field-level rule failure.
+	err := applyInlineRule("due_date", "not-a-date", spec.ValidationRule{Name: "future"})
+	var ve *ValidationError
+	if !errors.As(err, &ve) {
+		t.Fatalf("applyInlineRule should return *ValidationError, got %T", err)
+	}
+	if ve.Level != LevelField || ve.Field != "due_date" {
+		t.Errorf("got level=%q field=%q, want field/due_date", ve.Level, ve.Field)
+	}
+
+	// Cross-field rule failure (after/before).
+	err = ValidateCrossField("end_date", "2026-01-01T00:00:00Z",
+		spec.ValidationRule{Name: "after", Value: "start_date"},
+		map[string]any{"start_date": "2026-06-01T00:00:00Z"})
+	if !errors.As(err, &ve) {
+		t.Fatalf("ValidateCrossField should return *ValidationError, got %T", err)
+	}
+	if ve.Level != LevelCrossField || ve.Field != "end_date" {
+		t.Errorf("got level=%q field=%q, want cross_field/end_date", ve.Level, ve.Field)
+	}
+
+	// required, via the action-param entry point.
+	errs := ValidateActionParams(map[string]any{}, []spec.ParamValidation{
+		{Field: "customer_id", Rules: []spec.ValidationRule{{Name: "required"}}},
+	})
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error, got %d", len(errs))
+	}
+	if !errors.As(errs[0], &ve) {
+		t.Fatalf("required error should be *ValidationError, got %T", errs[0])
+	}
+	if ve.Level != LevelField || ve.Field != "customer_id" {
+		t.Errorf("got level=%q field=%q, want field/customer_id", ve.Level, ve.Field)
 	}
 }

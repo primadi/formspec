@@ -1,0 +1,48 @@
+# Seed bagan akun GL — menutup item 9.4.1a.
+#
+# Sebelum ini kafe TIDAK punya file `kind: Seed` untuk bagan akun, sehingga
+# `journalize.star` selalu gagal dengan
+# `FORMSPEC.GL.ACCOUNT_NOT_FOUND: setting akun 'pajak' menunjuk kode '2-2000'
+# yang tidak ada di bagan akun` — dan setiap kali dijalankan di database baru,
+# jurnal penjualan tidak bisa dibangun sampai akun dibuat manual. Harness E2E
+# (resource/o2c_e2e_test.go) harus men-seed-nya sendiri, yang justru membuktikan
+# ketiadaannya.
+#
+# Kode akun di bawah HARUS cocok dengan `default:` di
+# `modules/gl/config/gl.yaml` (`gl_journal_account_*`). Kalau salah satu diubah
+# di sana, ubah juga di sini — jurnal yang tidak seimbang = error `FORMSPEC.GL.*`,
+# bukan tebakan.
+#
+# `type` + `normal_balance` tidak boleh asal: akun kredit-normal (liability,
+# revenue, equity) membalik arah perhitungan saldo penutup, dan itu yang membuat
+# `gl-balance.closing_balance` benar untuk utang/pendapatan.
+apiVersion: formspec.dev/v1
+kind: Seed
+metadata:
+  name: gl-chart-of-accounts
+  module: gl
+  description: "Bagan akun standar kafe — kas, utang pajak, service charge, omzet, HPP, diskon"
+spec:
+  entities:
+    - entity: account
+      records:
+        # ── Aset ──
+        - { code: "1-1000", name: "Kas", type: asset, normal_balance: debit }
+        - { code: "1-2000", name: "Persediaan Bahan", type: asset, normal_balance: debit }
+        # ── Liabilitas ──
+        # Service charge BUKAN pendapatan usaha (milik karyawan) → liabilitas.
+        - { code: "2-1000", name: "Utang Service Charge", type: liability, normal_balance: credit }
+        # Pajak PB1 yang dipungut dari pelanggan → utang ke negara.
+        - { code: "2-2000", name: "Utang Pajak PB1", type: liability, normal_balance: credit }
+        # Utang dagang (item 10.7): pembelian diterima tetapi belum dibayar.
+        # Pasangan kredit dari jurnal pembelian — tanpa akun ini, penerimaan
+        # barang tidak bisa dicatat dan laporan tidak akan seimbang.
+        - { code: "2-3000", name: "Utang Dagang", type: liability, normal_balance: credit }
+        # ── Ekuitas ──
+        - { code: "3-1000", name: "Modal Pemilik", type: equity, normal_balance: credit }
+        # ── Pendapatan ──
+        - { code: "4-1000", name: "Pendapatan Penjualan", type: revenue, normal_balance: credit }
+        # ── Beban ──
+        - { code: "5-1000", name: "Diskon Penjualan", type: expense, normal_balance: debit }
+        - { code: "5-2000", name: "Harga Pokok Penjualan", type: expense, normal_balance: debit }
+        - { code: "5-3000", name: "Beban Operasional", type: expense, normal_balance: debit }

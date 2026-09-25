@@ -355,9 +355,12 @@ type FormSection struct {
 // YAML uses `field:` to reference the Entity field name; JSON serializes as
 // `name:` to match the TypeScript FormField interface.
 type FormField struct {
-	Field        string     `yaml:"field" json:"name"`
-	Label        string     `yaml:"label,omitempty" json:"label,omitempty"`
-	Placeholder  string     `yaml:"placeholder,omitempty" json:"placeholder,omitempty"`
+	Field string `yaml:"field" json:"name"`
+	// @schema {description: "Caption for this field in the form; falls back to the entity field's `title`, then the humanised field name"}
+	Label string `yaml:"label,omitempty" json:"label,omitempty"`
+	// @schema {description: "Placeholder text inside the input control"}
+	Placeholder string `yaml:"placeholder,omitempty" json:"placeholder,omitempty"`
+	// @schema {description: "Help text shown under the input. Falls back to the entity field's `description`, so declaring it here is only needed to override that per-form."}
 	Help         string     `yaml:"help,omitempty" json:"help,omitempty"`
 	Widget       FormWidget `yaml:"widget,omitempty" json:"widget,omitempty"`
 	ReadOnly     bool       `yaml:"read_only,omitempty" json:"read_only,omitempty"`
@@ -442,14 +445,19 @@ type TableSpec struct {
 
 // TableColumn configures a table column.
 type TableColumn struct {
-	Field    string          `yaml:"field" json:"field"`
-	Label    string          `yaml:"label,omitempty" json:"label,omitempty"`
-	Sortable bool            `yaml:"sortable,omitempty" json:"sortable,omitempty"`
-	Width    string          `yaml:"width,omitempty" json:"width,omitempty"`
-	Align    string          `yaml:"align,omitempty" json:"align,omitempty"`   // left | center | right
-	Link     string          `yaml:"link,omitempty" json:"link,omitempty"`     // Page name to navigate to
-	Format   string          `yaml:"format,omitempty" json:"format,omitempty"` // currency | date | relative | ...
-	Widget   TableCellWidget `yaml:"widget,omitempty" json:"widget,omitempty"`
+	Field    string `yaml:"field" json:"field"`
+	Label    string `yaml:"label,omitempty" json:"label,omitempty"`
+	Sortable bool   `yaml:"sortable,omitempty" json:"sortable,omitempty"`
+	// @schema {description: "CSS width for this column, applied to the header cell (e.g. \"120px\", \"10rem\")."}
+	Width string `yaml:"width,omitempty" json:"width,omitempty"`
+	// @schema {description: "Text alignment of this column's header and body cells.", enum: ["", "left", "center", "right"]}
+	Align string `yaml:"align,omitempty" json:"align,omitempty"` // left | center | right
+	// @schema {description: "Page name to navigate to when this cell is clicked."}
+	Link string `yaml:"link,omitempty" json:"link,omitempty"` // Page name to navigate to
+	// Format is the value formatter for this cell. Closed set — every name is
+	// implemented by the cell renderer (see TableCellFormat).
+	Format TableCellFormat `yaml:"format,omitempty" json:"format,omitempty"`
+	Widget TableCellWidget `yaml:"widget,omitempty" json:"widget,omitempty"`
 }
 
 // TableAction is a clickable action on a table row or bulk selection.

@@ -19,9 +19,10 @@ renderer sel dan nilainya tercetak mentah:
 **Form field** — `FormField.widget` (juga field langkah Wizard):
 
 `input`, `textarea`, `richtext`, `number`, `decimalinput`, `select`, `switch`,
-`radio-group`, `combobox`, `password`, `slider`, `tags`, `uuid`, `json`,
-`fileinput` (§1.1), `relation-picker`, `datepicker`, `datetimeinput`,
-`child-grid`, `grants-editor`, `qrcode`, `moneyinput`, `timeinput`.
+`radio-group`, `combobox`, `password`, `slider`, `tags`, `select-multi-tag`,
+`uuid`, `json`, `fileinput` (§1.1), `relation-picker`, `datepicker`,
+`datetimeinput`, `child-grid`, `grants-editor`, `qrcode`, `moneyinput`,
+`timeinput`.
 
 **Table/Listing cell** — `TableColumn.widget`:
 
@@ -36,6 +37,11 @@ memuat gambar, sehingga spec tidak wajib menulisnya.
 
 Halaman detail memperlakukan hal yang sama: nilai gambar dirender sebagai
 `<img>`, dan hanya file non-gambar yang tampil sebagai tautan berikon.
+Mengklik gambar membuka **dialog pratinjau di dalam App** — bukan tab peramban
+baru — sehingga permukaan, navigasi, dan record yang sedang dibuka tidak
+hilang. Tautan unduh berkas non-gambar tetap membuka tab: di situlah tempat
+sebuah unduhan. Salinan besar dibatasi viewport (`max-h-[80vh]`, rasio asli
+dipertahankan) dan ditutup dengan Escape/klik luar/tombol tutup.
 
 **`qrcode`** (gap #3/S4) merender nilai field sebagai QR yang bisa dipindai —
 tersedia di **kedua** permukaan dengan nama yang sama, karena artinya sama:
@@ -63,6 +69,38 @@ Aturan yang mengikat seluruh himpunan di atas:
   `widget:` hanya perlu untuk _mengganti_ turunan itu.
 - Field type yang **belum** punya widget khusus: tidak ada lagi — `money` dan
   `time`, dua yang terakhir, kini punya `moneyinput` dan `timeinput` (§1.2).
+
+### 1.3 `select-multi-tag` — tag dari pilihan, bukan dari ketikan
+
+Saudara `tags` untuk field multi-nilai yang **himpunan nilainya dideklarasikan**
+(`Field.options`, [`../backend/05-field-types.md`](../backend/05-field-types.md) §1.1;
+fallback `enum_values` bila `options` tidak ada). `tags` menerima apa pun yang
+diketik, jadi himpunan yang ditetapkan spec (`1=Senin … 7=Minggu`) tidak bisa
+ditegakkan lewatnya — `9` tetap tersimpan.
+
+Yang menjadi kontrak widget ini:
+
+- **Pilihan yang sudah dipilih tidak ditawarkan lagi**, sehingga nilai yang sama
+  tidak bisa masuk dua kali.
+- **Urutan chip mengikuti urutan deklarasi**, bukan urutan klik — himpunan
+  terurut (`Senin..Jumat`) terbaca alami. Ini urutan **tampilan** saja: array
+  tersimpan mempertahankan urutan pengisian, jadi membuka lalu menyimpan ulang
+  form tidak menulis ulang isi record (reorder senyap akan muncul sebagai
+  perubahan di tiap diff/audit).
+- **Nilai di luar deklarasi tetap ditampilkan**, ditandai sebagai tidak dikenal —
+  bukan dibuang senyap saat save. Data lama, atau spec yang himpunannya menyusut,
+  tetap terlihat dan bisa dihapus pengguna.
+- **Nilai non-daftar** (mis. object pada field `json`) memunculkan **error yang
+  terlihat**, bukan diganti `[]` yang menyembunyikan data.
+- **Bentuk nilai dipertahankan**: `json` masuk array → keluar array; `string`
+  masuk daftar dipisah koma → keluar string. Tipe skalar mengikuti deklarasi,
+  jadi himpunan angka tetap tersimpan sebagai angka.
+
+Field `json` yang mendeklarasikan `options` menurunkan widget ini; tanpa
+`options` ia tetap editor JSON (tidak ada spec lama yang berubah perilaku).
+Halaman detail dan sel tabel/listing merender himpunan yang sama sebagai chip
+berlabel ("Senin, Selasa") — bukan `[1,2]` mentah — dari satu resolver bersama,
+supaya kedua permukaan tidak bisa berbeda.
 
 ### 1.2 `moneyinput` / `timeinput`
 

@@ -100,16 +100,24 @@ export function MoneyInput({
   const previewAmount = moneyAmount(normalizeAmount(text))
   // `fmt.money` always formats with settings.currency, so it would mislabel a
   // field that declares its own currency (05-field-types.md §2 allows the
-  // override). In that case show the settings-formatted number plus the field's
-  // own code instead of a symbol that belongs to another currency.
-  const overridden = Boolean(currency) && currency !== settings?.currency?.code
+  // override). The currency to compare against is the one the value actually
+  // carries: a `{amount, currency}` payload can name a currency the manifest
+  // field did not declare (legacy or hand-written data), and `fmt.money` would
+  // then print `Rp` in front of a USD amount. Prefer the declared override,
+  // then fall back to the value's own code.
+  const valueCurrency =
+    (value as { currency?: string } | undefined)?.currency ?? undefined
+  const effectiveCurrency = currency || valueCurrency
+  const overridden =
+    Boolean(effectiveCurrency) &&
+    effectiveCurrency !== settings?.currency?.code
   const preview =
     previewAmount === undefined
       ? null
       : overridden
         ? // The field's own scale applies here (its currency need not share the
           // global one); display-only, the stored amount stays exact.
-          `${previewAmount.toFixed(decimalPlaces ?? 2)} ${code}`
+          `${previewAmount.toFixed(decimalPlaces ?? 2)} ${effectiveCurrency}`
         : fmt.money(previewAmount)
 
   if (readonly) {

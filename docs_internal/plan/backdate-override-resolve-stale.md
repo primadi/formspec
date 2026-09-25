@@ -2,7 +2,7 @@
 
 **Tanggal:** 2026-08-05
 **Status:** ✅ Selesai
-**Referensi spec:** `docs/spec/backend/01-core-basic.md` §14a (transaction_date policy), `docs_old/spec/11-reference.md` (transaction_date), `docs/spec/platform/06-datastore.md` §2 (closed primitives / scheduler pattern)
+**Referensi spec:** `docs/spec/backend/01-core-basic.md` §14a (transaction_date policy), `docs/spec/platform/06-datastore.md` §2 (closed primitives / scheduler pattern)
 
 ## Latar Belakang
 

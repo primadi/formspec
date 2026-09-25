@@ -276,7 +276,14 @@ type ScriptExecutor struct {
 	// request-scoped TxScope (if any) so this write joins the same
 	// transaction as everything else in the current action execution — see
 	// renderers/jsonb-persist/txscope.go.
-	SaveHandler func(ctx context.Context, workspaceID, module, entity, id string, version int, data map[string]any) error
+	//
+	// callerResources is the calling action's declared uses.resources
+	// (nil-safe). `resource.save` can write another module's entity, so it needs
+	// the same cross-module consent check `create`/`call`/`load`/`find` already
+	// get — without it a script could write any entity in the workspace just by
+	// naming the module, which makes the consent footprint a description of
+	// intentions rather than a boundary (todo 2.6.4).
+	SaveHandler func(ctx context.Context, workspaceID, fromModule, module, entity, id string, version int, data map[string]any, callerResources []string) error
 
 	// CallHandler is the cross-resource call function. callerResources is
 	// the calling action's declared uses.resources (todo 2.6.4) — the
@@ -308,6 +315,13 @@ type ScriptExecutor struct {
 	// against a summary entity's `maintained_by` to authorize resource.upsert
 	// (item 4.1). Empty when the caller is not a named script.
 	MaintainerRef string
+
+	// ActionUses is the `uses` declaration of the action whose script is
+	// currently running, when known. `resource.save`/`resource.create` dispatch
+	// the target entity's before/after hooks, and a hook inherits the enclosing
+	// action's consent — so the wiring layer needs it here, exactly as
+	// MaintainerRef is needed for the summary write path.
+	ActionUses *spec.UsesDecl
 
 	// CreateHandler creates a new record of another entity, returning its ID.
 	// callerResources is the calling action's declared uses.resources.
@@ -416,7 +430,7 @@ func (e *ScriptExecutor) Execute(ctx context.Context, scriptPath string, module,
 	callerResources := declaredUsesResources(uses)
 	if e.SaveHandler != nil {
 		res.SetSaveFunc(func(m, ent, rid string, v int, data map[string]any) error {
-			return e.SaveHandler(ctx, workspaceID, m, ent, rid, v, data)
+			return e.SaveHandler(ctx, workspaceID, module, m, ent, rid, v, data, callerResources)
 		})
 	}
 	if e.CallHandler != nil {

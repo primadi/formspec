@@ -259,16 +259,17 @@ plan/`, termasuk `todo.md`), changelog (`docs_internal/changelog/`),
   presentations, technical-notes. Bukan dokumentasi developer FormSpec,
   tidak masuk docs-site. Workflow discipline (plan → changelog → todo)
   menunjuk ke sini.
-- **`docs_old/` dan `reff_docs/` adalah arsip internal/historis.** Jangan kutip
-  sebagai kontrak berlaku dan jangan edit (read-only). Keduanya hanya source
-  material selama migrasi docs dan akan dihapus. Peta migrasi + aturan "tree
-  otoritatif per topik selama transisi": `docs_old/MIGRATION.md`.
+- **`reff_docs/` adalah arsip historis (draft v0.x).** Jangan kutip sebagai
+  kontrak berlaku dan jangan edit (read-only). Isinya hanya source material —
+  kontrak yang berlaku ada di `docs/`. (`docs_old/` sudah dipensiunkan
+  2026-09-22; audit kelayakannya di
+  `docs_internal/audit/docs-old-pensiun-2026-09-22.md`.)
 - Jangan menambahkan konten historis ("dulu X, diganti Y", changelog, decision
   ledger) ke `docs/` — catatan semacam itu ke `docs_internal/changelog/` atau
   cukup di git history.
 - Dokumen `docs/spec/` berstatus `Outline → Draft → Final`. Yang masih
-  `Outline` belum menjelaskan perilaku kode; perilaku kode yang berjalan masih
-  mengikuti `docs_old/spec/` sampai dokumen penerusnya ≥ Draft.
+  `Outline` belum menjelaskan perilaku kode; selama itu, **kode yang berjalan
+  adalah otoritasnya**.
 
 ## Konvensi
 

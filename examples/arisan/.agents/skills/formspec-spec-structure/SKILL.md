@@ -84,7 +84,7 @@ Outline → Draft → Final
 
 | Status    | Meaning                                      | Agent behavior                                                                                              |
 | --------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `Outline` | Scope skeleton only; content is aspirational | **DO NOT treat as source of truth.** Code behavior follows `docs_old/spec/` until successor reaches ≥ Draft |
+| `Outline` | Scope skeleton only; content is aspirational | **DO NOT treat as source of truth.** The running code is the authority until the document reaches ≥ Draft |
 | `Draft`   | Complete content, open to revision           | Can be used as reference; note that details may still change                                                |
 | `Final`   | Binding; changes require version bump        | Authoritative source of truth                                                                               |
 
@@ -98,7 +98,7 @@ Outline → Draft → Final
 
 ## Gotchas
 
-- **`docs/spec/` is authoritative; `docs_old/` and `reff_docs/` are historical archives (read-only).** Never cite `docs_old/` or `reff_docs/` as a current contract.
+- **`docs/spec/` is authoritative; `reff_docs/` holds historical draft v0.x material (read-only).** Never cite `reff_docs/` as a current contract. (`docs_old/` has been retired.)
 - **`formspec-app.yaml` is dev/serve config for the CLI — NOT a `kind: Config` manifest.** It points the engine to spec path, DSN, and runtime settings.
 - **The spec is storage-agnostic.** SQL examples live in renderer documentation (`docs/renderers/`), not in the spec.
 - **Entity characteristics are mutually exclusive.** An Entity can be `master`, `transaction`, `reference`, or `summary` — not a combination.

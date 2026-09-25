@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/primadi/formspec/internal/entity"
+	"github.com/primadi/formspec/internal/permission"
 	"github.com/primadi/formspec/internal/service"
 	"github.com/primadi/formspec/internal/webhook"
 	"github.com/primadi/formspec/pkg/spec"
@@ -281,6 +282,16 @@ func generatePrepareRoutes(module, name, plural string, es *spec.EntitySpec, isS
 			perm := a.RequiredPermission
 			if perm == "" {
 				perm = module + "." + plural + "." + a.Name
+			} else {
+				// `required_permission: purchase-orders.receive-goods` means
+				// "this entity's action" — the same shorthand the grant
+				// materializer expands (internal/permission.AutoPrefixPermission).
+				// Using the string verbatim here made the route check
+				// `purchase-orders.receive-goods` while the materialized grant was
+				// `cafe-stock.purchase-orders.receive-goods`, so the permission
+				// could never match: every call returned 403 with a message naming
+				// a permission that LOOKS declared in the manifest.
+				perm = permission.AutoPrefixPermission(perm, module)
 			}
 			routes = append(routes, RouteDescriptor{
 				Module: module,
@@ -348,10 +359,14 @@ func GenerateCustomActionRoutes(registry *entity.Registry) []RouteDescriptor {
 					continue
 				}
 
-				// Build permission: prefer action.RequiredPermission, else derive
+				// Build permission: prefer action.RequiredPermission, else derive.
+				// Auto-prefix an unqualified declaration so the route and the
+				// materialized grant agree (see the prepare-route site above).
 				perm := action.RequiredPermission
 				if perm == "" {
 					perm = info.Module + "." + plural + "." + action.Name
+				} else {
+					perm = permission.AutoPrefixPermission(perm, info.Module)
 				}
 
 				routes = append(routes, RouteDescriptor{
@@ -422,6 +437,8 @@ func UICustomActionRoutesForEntity(module, name string, es *spec.EntitySpec) []R
 		perm := action.RequiredPermission
 		if perm == "" {
 			perm = module + "." + plural + "." + action.Name
+		} else {
+			perm = permission.AutoPrefixPermission(perm, module)
 		}
 
 		routes = append(routes, RouteDescriptor{

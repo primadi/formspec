@@ -1,0 +1,248 @@
+# Seed role & akun — hak akses kafe yang benar-benar bisa diuji.
+#
+# Menutup item 10.3. Sebelum ini kafe **tidak punya seed role sama sekali**:
+# role `kasir`/`dapur`/`admin` hanya nama di kolom `employee.position`, tanpa
+# grant, tanpa akun — sehingga "role bisa dites" tidak pernah bisa dijalankan,
+# dan setiap pengujian permission bergantung pada menempel `permissions: ["*"]`
+# langsung di DB (yang justru membuktikan kebalikannya: tidak ada role).
+#
+# ─── BENTUK GRANT ───
+# `formspec.core.role.grants` = daftar `{page, actions[]}`, dan `page` menerima
+# TIGA bentuk (internal/auth/materialize.go):
+#   1. halaman authored   → `pos-workbench`
+#   2. navigation kind    → `kanban:order-board-kds`, `report:sales-by-period`
+#   3. halaman entity turunan → `order-page` (= {entity}-page)
+# Bentuk (3) yang paling ringkas untuk master/transaksi; (2) untuk layar khas.
+#
+# PENTING: nama page/action yang TIDAK dikenal membuat `Materialize` gagal, dan
+# resolver **melewati role itu tanpa suara** (`resolver.go`: `continue // malformed
+# grant — skip role`). Jadi role yang salah ketik akan tampak "tidak punya
+# permission" tanpa error apa pun — persis yang terjadi pada versi pertama seed
+# ini: `approval-inbox:supervisor-inbox` bukan navigation kind yang didukung
+# (`navigationFootprint` hanya mengenal dashboard/report/wizard/kanban/timeline/
+# print), sehingga role `supervisor` DAN `manajer` kehilangan seluruh grant-nya
+# dan semua request-nya membalas 404. Karena itu seed ini diuji dengan
+# memanggil endpoint nyata per role, bukan hanya "seed selesai".
+#
+# Password akun seed: `kafe123`. Diganti di luar demo. `password` ditulis
+# plaintext di YAML dan di-hash `CreateUser` (hook entity tidak jalan di jalur
+# seed — lihat cmd/formspec/seed.go).
+apiVersion: formspec.dev/v1
+kind: Seed
+metadata:
+  name: kafe-roles
+  module: formspec.core
+  description: "Role + akun kafe: kasir, barista, dapur, pelayan, supervisor, manajer"
+spec:
+  entities:
+    # ── Role ──
+    # `app: kafe-pos` / `kafe-kds` membuat grant hanya berlaku bila sesi login
+    # pada App itu (role app-scoped). `module: ""` = berlaku lintas module.
+    - entity: role
+      records:
+        # KASIR — menjalankan POS: pesanan, pembayaran, shift.
+        # TIDAK ada `approval-inbox` dan tidak ada master: kasir tidak boleh
+        # menyetujui void-nya sendiri (aturan 7.4.5) maupun mengubah harga.
+        - name: kasir
+          app: kafe-pos
+          description: "Kasir — jualan, pembayaran, buka/tutup shift"
+          grants:
+            - { page: "pos-workbench", actions: [{ name: view }, { name: list }, { name: create }, { name: update }] }
+            - { page: "order-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }] }
+            - { page: "payment-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }] }
+            - { page: "shift-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }, { name: submit }, { name: cancel }] }
+            - { page: "cash-movement-page", actions: [{ name: list }, { name: view }, { name: create }] }
+            - { page: "table-session-page", actions: [{ name: list }, { name: view }, { name: create }] }
+            # Katalog & harga: read-only — kasir butuh keduanya untuk melayani.
+            - { page: "menu-item-page", actions: [{ name: list }, { name: view }] }
+            - { page: "menu-item-price-page", actions: [{ name: list }, { name: view }] }
+            - { page: "menu-category-page", actions: [{ name: list }, { name: view }] }
+            - { page: "dining-table-page", actions: [{ name: list }, { name: view }] }
+            # Pelanggan & loyalitas: read-only — kasir mencari member lewat
+            # nomor HP dan menukar poin di meja kasir. WAJIB ada begitu menu
+            # App menampilkan "Pelanggan"/"Loyalitas": grant `{entity}-page`
+            # inilah yang menyertakan entity di bundle, dan entity yang tidak
+            # ada di bundle membuat link menu itu mati (dulu mati DIAM-DIAM —
+            # lihat catatan di Baris 10.11).
+            - { page: "member-page", actions: [{ name: list }, { name: view }] }
+            - { page: "point-entry-page", actions: [{ name: list }, { name: view }] }
+            - { page: "member-point-page", actions: [{ name: list }, { name: view }] }
+            - { page: "report:sales-by-period", actions: [{ name: view }] }
+            - { page: "print:receipt-thermal", actions: [{ name: view }] }
+            - { page: "print:receipt-digital", actions: [{ name: view }] }
+
+        # BARISTA — layar dapur (bar): memajukan status pesanan minuman.
+        # Hanya kanban + baca pesanan; tidak menyentuh uang sama sekali.
+        - name: barista
+          app: kafe-kds
+          description: "Barista — majukan status pesanan minuman di KDS"
+          grants:
+            - { page: "kanban:order-board-kds", actions: [{ name: view }] }
+            - { page: "order-page", actions: [{ name: list }, { name: view }, { name: update }] }
+            - { page: "menu-item-page", actions: [{ name: list }, { name: view }] }
+
+        # DAPUR — sama dengan barista; dipisah karena `prep_station` memisahkan
+        # tiket, dan kafe nyata memberi orang yang berbeda. Jadi bukan duplikat
+        # tanpa alasan: dua role ini yang membuktikan routing stasiun bekerja.
+        - name: dapur
+          app: kafe-kds
+          description: "Dapur — majukan status pesanan makanan di KDS"
+          grants:
+            - { page: "kanban:order-board-kds", actions: [{ name: view }] }
+            - { page: "order-page", actions: [{ name: list }, { name: view }, { name: update }] }
+            - { page: "menu-item-page", actions: [{ name: list }, { name: view }] }
+            - { page: "recipe-page", actions: [{ name: list }, { name: view }] }
+            - { page: "ingredient-page", actions: [{ name: list }, { name: view }] }
+
+        # PELAYAN — antar pesanan & tandai tersaji.
+        - name: pelayan
+          app: kafe-pos
+          description: "Pelayan — antar & tandai pesanan tersaji"
+          grants:
+            - { page: "order-page", actions: [{ name: list }, { name: view }, { name: update }] }
+            - { page: "menu-item-page", actions: [{ name: list }, { name: view }] }
+            - { page: "dining-table-page", actions: [{ name: list }, { name: view }] }
+            # Sama seperti kasir: menu App menampilkan Pelanggan/Loyalitas,
+            # jadi grant-nya harus ada — kalau tidak, link-nya mati.
+            - { page: "member-page", actions: [{ name: list }, { name: view }] }
+            - { page: "point-entry-page", actions: [{ name: list }, { name: view }] }
+            - { page: "member-point-page", actions: [{ name: list }, { name: view }] }
+
+        # SUPERVISOR — kasir + persetujuan void.
+        # Inilah satu-satunya role non-manajer yang boleh approve, sehingga
+        # workflow `order-void-approval` punya approver nyata (tanpa ini,
+        # approval selalu 403 dan alurnya tidak bisa diuji).
+        - name: supervisor
+          app: kafe-pos
+          description: "Supervisor — operasional + persetujuan void"
+          grants:
+            - { page: "pos-workbench", actions: [{ name: view }, { name: list }, { name: create }, { name: update }] }
+            - { page: "order-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }, { name: cancel }] }
+            - { page: "payment-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }] }
+            - { page: "shift-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }, { name: submit }, { name: cancel }] }
+            - { page: "cash-movement-page", actions: [{ name: list }, { name: view }, { name: create }] }
+            # Antrean approval TIDAK di-grant lewat `approval-inbox:` — kind itu
+            # belum punya footprint materialisasi. Yang menentukan siapa boleh
+            # menyetujui adalah role pada `step.roles` workflow, dan hak
+            # `cancel` pada `order` di baris berikut.
+            - { page: "menu-item-page", actions: [{ name: list }, { name: view }, { name: update }] }
+            - { page: "menu-item-price-page", actions: [{ name: list }, { name: view }, { name: update }] }
+            - { page: "dining-table-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }] }
+            - { page: "table-session-page", actions: [{ name: list }, { name: view }] }
+            - { page: "member-page", actions: [{ name: list }, { name: view }] }
+            - { page: "point-entry-page", actions: [{ name: list }, { name: view }] }
+            - { page: "member-point-page", actions: [{ name: list }, { name: view }] }
+            - { page: "report:sales-by-period", actions: [{ name: view }] }
+            - { page: "report:shift-recap", actions: [{ name: view }] }
+            - { page: "print:receipt-thermal", actions: [{ name: view }] }
+
+        # MANAJER — hampir penuh: master, stok, laporan, dashboard.
+        # Tanpa `delete` (aturan bisnis #14: data penjualan tidak pernah dihapus
+        # permanen) — jadi role ini juga yang membuktikan guard itu bekerja.
+        - name: manajer
+          app: kafe-pos
+          description: "Manajer — master, stok, pembelian, laporan (tanpa hapus)"
+          grants:
+            - { page: "pos-workbench", actions: [{ name: view }, { name: list }, { name: create }, { name: update }] }
+            - { page: "order-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }, { name: cancel }] }
+            - { page: "shift-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }, { name: submit }, { name: cancel }] }
+            - { page: "cash-movement-page", actions: [{ name: list }, { name: view }, { name: create }] }
+            - { page: "menu-item-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }, { name: deactivate }, { name: reactivate }] }
+            - { page: "menu-category-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }] }
+            - { page: "menu-item-price-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }] }
+            - { page: "employee-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }] }
+            - { page: "branch-page", actions: [{ name: list }, { name: view }, { name: update }] }
+            - { page: "table-session-page", actions: [{ name: list }, { name: view }] }
+            - { page: "member-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }] }
+            - { page: "point-entry-page", actions: [{ name: list }, { name: view }] }
+            - { page: "member-point-page", actions: [{ name: list }, { name: view }] }
+            - { page: "dining-table-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }] }
+            - { page: "promo-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }] }
+            - { page: "ingredient-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }] }
+            - { page: "recipe-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }] }
+            - { page: "supplier-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }] }
+            - { page: "purchase-order-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }, { name: submit-po }, { name: cancel-po }, { name: receive-goods }] }
+            - { page: "stock-opname-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }] }
+            - { page: "waste-entry-page", actions: [{ name: list }, { name: view }, { name: create }] }
+            - { page: "stock-level-page", actions: [{ name: list }, { name: view }] }
+            - { page: "menu-cost-page", actions: [{ name: list }, { name: view }] }
+            - { page: "dashboard:owner-overview", actions: [{ name: view }] }
+            - { page: "report:sales-by-period", actions: [{ name: view }] }
+            - { page: "report:menu-profitability", actions: [{ name: view }] }
+            - { page: "report:stock-usage", actions: [{ name: view }] }
+            - { page: "report:shift-recap", actions: [{ name: view }] }
+            - { page: "report:purchase-by-supplier", actions: [{ name: view }] }
+            - { page: "report:loyalty-summary", actions: [{ name: view }] }
+            - { page: "print:receipt-thermal", actions: [{ name: view }] }
+            - { page: "print:receipt-digital", actions: [{ name: view }] }
+
+    # ── Akun ──
+    # `roles` memberi permission lewat materialisasi grant di atas.
+    #
+    # `assignments` = konteks sesi (todo 3.8): `{role, dimension, value}`.
+    # `dimension` adalah NAMA FIELD yang dibandingkan `row_scope.field`
+    # (`branch_id`), dan `value` harus ID record cabang — karena itu memakai
+    # `$ref`. Login dengan >1 assignment membalas 409 CONTEXT_REQUIRED + choices;
+    # `manajer` dan `supervisor` sengaja hanya punya SATU sehingga login
+    # otomatis memakai konteks itu tanpa langkah memilih (UI pemilih belum ada —
+    # item 6.5.9).
+    - entity: user
+      records:
+        - username: kasir
+          display_name: "Siti Rahayu (Kasir JKT)"
+          password: kafe123
+          roles: [kasir]
+          assignments:
+            - role: kasir
+              dimension: branch_id
+              value: { $ref: "cafe-master.branch:code=KFE-JKT-01" }
+        - username: barista
+          display_name: "Budi Santoso (Barista JKT)"
+          password: kafe123
+          roles: [barista]
+          assignments:
+            - role: barista
+              dimension: branch_id
+              value: { $ref: "cafe-master.branch:code=KFE-JKT-01" }
+        - username: dapur
+          display_name: "Dewi Lestari (Dapur JKT)"
+          password: kafe123
+          roles: [dapur]
+          assignments:
+            - role: dapur
+              dimension: branch_id
+              value: { $ref: "cafe-master.branch:code=KFE-JKT-01" }
+        - username: pelayan
+          display_name: "Agus Salim (Pelayan JKT)"
+          password: kafe123
+          roles: [pelayan]
+          assignments:
+            - role: pelayan
+              dimension: branch_id
+              value: { $ref: "cafe-master.branch:code=KFE-JKT-01" }
+        - username: supervisor
+          display_name: "Andi Pratama (Supervisor JKT)"
+          password: kafe123
+          roles: [supervisor]
+          assignments:
+            - role: supervisor
+              dimension: branch_id
+              value: { $ref: "cafe-master.branch:code=KFE-JKT-01" }
+        - username: manajer
+          display_name: "Rina Marlina (Manajer)"
+          password: kafe123
+          roles: [manajer]
+          # Tanpa assignment: manajer memang lintas cabang (pemilik data).
+          # Akun tanpa assignment memakai perilaku union tanpa boundary.
+        # Akun dua-cabang — untuk menguji 409 CONTEXT_REQUIRED.
+        - username: kasir.dua
+          display_name: "Joko Widodo (Kasir JKT + BDG)"
+          password: kafe123
+          roles: [kasir]
+          assignments:
+            - role: kasir
+              dimension: branch_id
+              value: { $ref: "cafe-master.branch:code=KFE-JKT-01" }
+            - role: kasir
+              dimension: branch_id
+              value: { $ref: "cafe-master.branch:code=KFE-BDG-01" }

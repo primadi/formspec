@@ -1,0 +1,218 @@
+# Seed master kafe — cabang, kategori menu, menu, harga, bahan, resep, meja.
+#
+# DIPERBAIKI 2026-09-22: sebelumnya kafe **tidak punya file seed sama sekali**
+# (`find examples/kafe/spec -name '*seed*'` → kosong), sehingga setiap kali
+# dijalankan di database baru, aplikasi berdiri kosong: tidak ada cabang, tidak
+# ada menu, tidak ada bahan, tidak ada resep. Pemilik harus mengetik master data
+# manual sebelum bisa menguji apa pun — dan itu yang membuat item 10.3/10.4
+# ("role bisa dites", "menu nasi goreng muncul") tidak pernah bisa diverifikasi.
+#
+# `kind: Seed` kini kind yang TERDAFTAR (pkg/spec/seed.go), jadi file ini
+# divalidasi `formspec validate` — bukan file yang dijalankan CLI tapi ditolak
+# gate.
+#
+# Jalankan:
+#   formspec seed --spec examples/kafe/spec --dsn sqlite:examples/kafe/.formspec/kafe.db --workspace kafe
+#   (atau `make seed-kafe`)
+#
+# Idempoten: record dengan natural key / field unik yang sudah ada **tidak**
+# diduplikasi — tapi juga **tidak dibiarkan apa adanya**. Field yang berbeda dari
+# seed di-update (dilaporkan sebagai `update ... (field)`); sisanya `skip`. Jadi
+# memperbaiki nilai di file ini benar-benar sampai ke database yang sudah ada,
+# bukan hanya ke database baru. Record yang `doc_status`-nya bukan `draft`
+# dilewati (dokumen yang sudah submit adalah fakta bisnis, bukan seed data).
+#
+# ─── CATATAN `$ref` ───
+# Relasi disimpan sebagai ID record (UUID yang digenerate engine), yang tidak
+# bisa diketahui penulis YAML. Karena itu nilai relasi ditulis sebagai
+# `$ref: "<module>.<entity>:<field>=<value>"` dan resolver seed menggantinya
+# dengan ID sungguhan. Urutan blok di file ini TIDAK wajib mengikuti urutan
+# dependensi — resolver mengulang sampai semua rujukan selesai.
+#
+# ─── CATATAN `$asset` ───
+# Nilai `$asset: "menu/<file>.jpg"` adalah path relatif ke
+# `spec/modules/cafe-master/assets/`. Seed meng-INSERT record dulu (id tercipta),
+# lalu mengunggah file lewat **storage service** (datastore registry: filesystem
+# di dev, garage/minio/s3 di prod) dan menulis **key kanonik**
+# (`{ws}/{module}/{entity}/{id}/{field}/{uuid}-{nama}`) ke field `photo` — bentuk
+# key yang sama dengan unggah HTTP, sehingga unduhan dan `visibility: public`
+# bekerja tanpa cabang baru. Karena itu tidak ada lagi langkah `cp` terpisah:
+# `make seed-kafe` saja sudah cukup, dan menghapus folder storage tidak permanen
+# (seed berikutnya memulihkan objeknya).
+#
+# Lisensi gambar: examples/kafe/spec/modules/cafe-master/assets/ATTRIBUTION.md
+apiVersion: formspec.dev/v1
+kind: Seed
+metadata:
+  name: kafe-master
+  module: cafe-master
+  description: "Master kafe: cabang, kategori, menu (dengan foto), harga, meja"
+spec:
+  entities:
+    # ── Cabang ──
+    - entity: branch
+      records:
+        - code: KFE-JKT-01
+          name: "Kafe Senayan"
+          address: "Jl. Asia Afrika No. 8, Jakarta Pusat"
+          timezone: "Asia/Jakarta"
+          tax_percent: 10
+          service_charge_percent: 5
+          apply_service_charge: true
+          receipt_header: "KAFE SENAYAN\nJl. Asia Afrika No. 8, Jakarta"
+        - code: KFE-BDG-01
+          name: "Kafe Dago"
+          address: "Jl. Ir. H. Juanda No. 90, Bandung"
+          timezone: "Asia/Jakarta"
+          tax_percent: 10
+          service_charge_percent: 5
+          apply_service_charge: true
+          receipt_header: "KAFE DAGO\nJl. Ir. H. Juanda No. 90, Bandung"
+
+    # ── Kategori menu ──
+    # `prep_station_default` menentukan layar mana yang menerima tiket (KDS
+    # dapur vs bar) — jalur yang membuat KDS punya isi.
+    - entity: menu-category
+      records:
+        - { name: "Makanan", sort_order: 10, prep_station_default: kitchen }
+        - { name: "Minuman", sort_order: 20, prep_station_default: bar }
+        - { name: "Kopi", sort_order: 30, prep_station_default: bar }
+        - { name: "Snack", sort_order: 40, prep_station_default: kitchen }
+
+    # ── Menu ──
+    # `photo` memakai marker `$asset` (path relatif ke `<module-dir>/assets/`),
+    # bukan key storage: key kanonik memuat id record yang belum ada sebelum
+    # insert, jadi seed mengunggah lewat storage service SETELAH insert dan
+    # menulis key hasilnya sendiri. Lihat catatan `$asset` di atas.
+    - entity: menu-item
+      records:
+        - code: MKN-001
+          name: "Nasi Goreng Spesial"
+          menu_category_id: { $ref: "cafe-master.menu-category:name=Makanan" }
+          description: "Nasi goreng kampung dengan telur, ayam, dan kerupuk"
+          photo: { $asset: "menu/nasi-goreng.jpg" }
+          prep_station: kitchen
+          is_available: true
+          is_taxable: true
+          sort_order: 10
+        - code: MKN-002
+          name: "Sate Ayam Madura"
+          menu_category_id: { $ref: "cafe-master.menu-category:name=Makanan" }
+          description: "10 tusuk sate ayam, bumbu kacang, lontong"
+          photo: { $asset: "menu/sate-ayam.jpg" }
+          prep_station: kitchen
+          is_available: true
+          is_taxable: true
+          sort_order: 20
+        - code: MKN-003
+          name: "Gado-Gado"
+          menu_category_id: { $ref: "cafe-master.menu-category:name=Makanan" }
+          description: "Sayuran rebus dengan bumbu kacang dan lontong"
+          photo: { $asset: "menu/gado-gado.jpg" }
+          prep_station: kitchen
+          is_available: true
+          is_taxable: true
+          sort_order: 30
+        - code: MKN-004
+          name: "Nasi Uduk Komplit"
+          menu_category_id: { $ref: "cafe-master.menu-category:name=Makanan" }
+          description: "Nasi uduk dengan bihun, tempe orek, dan sambal"
+          photo: { $asset: "menu/nasi-uduk.jpg" }
+          prep_station: kitchen
+          is_available: true
+          is_taxable: true
+          sort_order: 40
+        - code: MNM-001
+          name: "Es Teh Manis"
+          menu_category_id: { $ref: "cafe-master.menu-category:name=Minuman" }
+          description: "Teh tubruk manis dengan es batu"
+          photo: { $asset: "menu/es-teh.jpg" }
+          prep_station: bar
+          is_available: true
+          is_taxable: true
+          sort_order: 10
+        - code: MNM-002
+          name: "Es Jeruk"
+          menu_category_id: { $ref: "cafe-master.menu-category:name=Minuman" }
+          description: "Jeruk peras segar dengan es"
+          photo: { $asset: "menu/es-jeruk.jpg" }
+          prep_station: bar
+          is_available: true
+          is_taxable: true
+          sort_order: 20
+        - code: KPI-001
+          name: "Kopi Tubruk"
+          menu_category_id: { $ref: "cafe-master.menu-category:name=Kopi" }
+          description: "Kopi robusta digiling kasar, diseduh langsung di gelas"
+          photo: { $asset: "menu/kopi-tubruk.jpg" }
+          prep_station: bar
+          is_available: true
+          is_taxable: true
+          sort_order: 10
+        # Dua menu ini sebelumnya HANYA ada di database dev (diketik manual lewat
+        # UI, tanpa foto), sementara katalog menampilkannya — jadi "Kopi Susu"
+        # dan "Roti Bakar" tampil tanpa gambar sementara menu lain bergambar.
+        # Ditambahkan ke seed supaya database baru pun punya keduanya lengkap
+        # dengan foto, dan supaya baris lama ikut sembuh: kode natural key-nya
+        # sama (K01/R01), jadi drill reconcile mengisi `photo` yang kosong di
+        # sana alih-alih membuat duplikat.
+        - code: K01
+          name: "Kopi Susu"
+          menu_category_id: { $ref: "cafe-master.menu-category:name=Minuman" }
+          description: "Espresso dengan susu kental manis dan es"
+          photo: { $asset: "menu/kopi-susu.jpg" }
+          prep_station: bar
+          is_available: true
+          is_taxable: true
+          sort_order: 30
+        - code: R01
+          name: "Roti Bakar"
+          menu_category_id: { $ref: "cafe-master.menu-category:name=Makanan" }
+          description: "Roti bakar dengan isian coklat dan keju"
+          photo: { $asset: "menu/roti-bakar.jpg" }
+          prep_station: kitchen
+          is_available: true
+          is_taxable: true
+          sort_order: 50
+
+    # ── Harga per cabang (D1: harga BUKAN di menu-item) ──
+    # Dua cabang punya harga berbeda untuk menu yang sama — inilah alasan
+    # `menu-item-price` ada sebagai entity terpisah, dan seed ini yang membuat
+    # perbedaan itu terlihat saat diuji.
+    - entity: menu-item-price
+      records:
+        - { branch_id: { $ref: "cafe-master.branch:code=KFE-JKT-01" }, menu_item_id: { $ref: "cafe-master.menu-item:code=MKN-001" }, price: { amount: "45000", currency: "IDR" } }
+        - { branch_id: { $ref: "cafe-master.branch:code=KFE-JKT-01" }, menu_item_id: { $ref: "cafe-master.menu-item:code=MKN-002" }, price: { amount: "52000", currency: "IDR" } }
+        - { branch_id: { $ref: "cafe-master.branch:code=KFE-JKT-01" }, menu_item_id: { $ref: "cafe-master.menu-item:code=MKN-003" }, price: { amount: "38000", currency: "IDR" } }
+        - { branch_id: { $ref: "cafe-master.branch:code=KFE-JKT-01" }, menu_item_id: { $ref: "cafe-master.menu-item:code=MKN-004" }, price: { amount: "42000", currency: "IDR" } }
+        - { branch_id: { $ref: "cafe-master.branch:code=KFE-JKT-01" }, menu_item_id: { $ref: "cafe-master.menu-item:code=MNM-001" }, price: { amount: "12000", currency: "IDR" } }
+        - { branch_id: { $ref: "cafe-master.branch:code=KFE-JKT-01" }, menu_item_id: { $ref: "cafe-master.menu-item:code=MNM-002" }, price: { amount: "15000", currency: "IDR" } }
+        - { branch_id: { $ref: "cafe-master.branch:code=KFE-JKT-01" }, menu_item_id: { $ref: "cafe-master.menu-item:code=KPI-001" }, price: { amount: "18000", currency: "IDR" } }
+        # Harga dua menu tambahan di atas — nilainya diambil dari harga yang
+        # sudah dipakai di database dev supaya reconcile tidak mengubah harga
+        # yang sudah tampil di katalog.
+        - { branch_id: { $ref: "cafe-master.branch:code=KFE-JKT-01" }, menu_item_id: { $ref: "cafe-master.menu-item:code=K01" }, price: { amount: "25000", currency: "IDR" } }
+        - { branch_id: { $ref: "cafe-master.branch:code=KFE-JKT-01" }, menu_item_id: { $ref: "cafe-master.menu-item:code=R01" }, price: { amount: "18000", currency: "IDR" } }
+        - { branch_id: { $ref: "cafe-master.branch:code=KFE-BDG-01" }, menu_item_id: { $ref: "cafe-master.menu-item:code=MKN-001" }, price: { amount: "40000", currency: "IDR" } }
+        - { branch_id: { $ref: "cafe-master.branch:code=KFE-BDG-01" }, menu_item_id: { $ref: "cafe-master.menu-item:code=MNM-001" }, price: { amount: "10000", currency: "IDR" } }
+
+    # ── Meja ──
+    - entity: dining-table
+      records:
+        - { branch_id: { $ref: "cafe-master.branch:code=KFE-JKT-01" }, code: "A-01", area: indoor, seats: 2, qr_token: "JKT-A01-DEMO" }
+        - { branch_id: { $ref: "cafe-master.branch:code=KFE-JKT-01" }, code: "A-02", area: indoor, seats: 4, qr_token: "JKT-A02-DEMO" }
+        - { branch_id: { $ref: "cafe-master.branch:code=KFE-JKT-01" }, code: "B-01", area: outdoor, seats: 4, qr_token: "JKT-B01-DEMO" }
+        - { branch_id: { $ref: "cafe-master.branch:code=KFE-BDG-01" }, code: "A-01", area: indoor, seats: 4, qr_token: "BDG-A01-DEMO" }
+
+    # ── Karyawan ──
+    # `username` harus sama dengan username akun login (lihat seed role);
+    # `assignments` inilah yang membuat `row_scope: {from: session}` tahu
+    # cabang mana yang boleh dibaca kasir.
+    - entity: employee
+      records:
+        - { name: "Siti Rahayu", branch_id: { $ref: "cafe-master.branch:code=KFE-JKT-01" }, position: kasir, username: kasir }
+        - { name: "Budi Santoso", branch_id: { $ref: "cafe-master.branch:code=KFE-JKT-01" }, position: barista, username: barista }
+        - { name: "Dewi Lestari", branch_id: { $ref: "cafe-master.branch:code=KFE-JKT-01" }, position: dapur, username: dapur }
+        - { name: "Andi Pratama", branch_id: { $ref: "cafe-master.branch:code=KFE-JKT-01" }, position: supervisor, username: supervisor }
+        - { name: "Rina Marlina", branch_id: { $ref: "cafe-master.branch:code=KFE-JKT-01" }, position: manajer, username: manajer }
+        - { name: "Joko Widodo", branch_id: { $ref: "cafe-master.branch:code=KFE-BDG-01" }, position: kasir, username: kasir.bdg }

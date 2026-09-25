@@ -7,10 +7,14 @@
 //
 // Backup format is an open tar archive:
 //
-//	manifest.json            → {created_at, driver, tables:[{module,entity,table,count}]}
+//	manifest.json            → {created_at, driver, tables:[{module,entity,table,count}], storage_objects}
 //	<module>_<entity>.jsonl  → one flattened record per line (wire shape)
+//	storage/<object key>     → ctx.storage bytes, under the key the records reference
 //
-// File storage (ctx.storage) is not yet included — noted as a gap (4.8.1).
+// File storage (ctx.storage) IS included (gap 10.16): objects are read and
+// written through the storage service resolved from the manifests, not from a
+// hardcoded `{state}/storage` path, so a `kind: Datastore` backed by
+// garage/minio/s3 is covered too.
 // Read/export operations are never license-gated (credible exit, 4.8.4).
 package main
 
@@ -23,10 +27,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/primadi/formspec/internal/entity"
+	"github.com/primadi/formspec/internal/manifest"
+	spec "github.com/primadi/formspec/pkg/spec"
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
 	formspec "github.com/primadi/formspec/resource"
 )
@@ -36,6 +43,121 @@ type BackupManifest struct {
 	CreatedAt string        `json:"created_at"`
 	Driver    string        `json:"driver"`
 	Tables    []BackupTable `json:"tables"`
+	// StorageObjects counts the ctx.storage objects carried in this archive.
+	// Zero with a non-zero file-field count means the app had no uploads — not
+	// that files were skipped (gap 10.16).
+	StorageObjects int `json:"storage_objects"`
+}
+
+// storageEntryPrefix is the archive path prefix under which ctx.storage objects
+// are stored. The object key follows it verbatim
+// (`{workspace}/{module}/{entity}/{id}/{field}/{uuid}-{name}`), so restore can
+// upload the bytes straight back under the key the records already reference —
+// no key remapping, and a record never points at a missing object.
+const storageEntryPrefix = "storage/"
+
+// backupStorageService resolves the SAME storage the server reads from: the
+// datastore registry built from the manifests, falling back to the filesystem
+// under the project-root-anchored state dir. Shared with `formspec seed`
+// (gap 10.16 — a second implementation that only works on filesystem is how
+// seed assets used to break in prod).
+func backupStorageService(specPath, dsn string) (formspec.ObjectStoreStorage, error) {
+	res, err := manifest.NewLoader(specPath).LoadAll()
+	if err != nil {
+		return nil, err
+	}
+	database, err := db.Open(dsn)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = database.Close() }()
+	dsReg, err := formspec.NewDatastoreRegistryFromManifests(res.Manifests, database, formspec.StateDirFor(dsn, specPath))
+	if err != nil {
+		return nil, err
+	}
+	return formspec.ResolveStorage(dsReg, formspec.StateDirFor(dsn, specPath))
+}
+
+// collectStorageKeys returns the ctx.storage object keys referenced by the
+// records of every backed-up entity whose fields include a `file`/`attachment`.
+//
+// Keys come from the record data, not from listing the backend: the Storage
+// contract is Upload/Download/Stat only, so no portable listing exists. That is
+// also why this is sufficient — a `file` field stores the canonical key, so
+// every object a record can reference is nameable.
+func collectStorageKeys(ctx context.Context, reg *entity.Registry, tables []BackupTable, filter string) ([]string, error) {
+	seen := map[string]bool{}
+	var keys []string
+	for _, t := range tables {
+		if filter != "" && !matchesFilter(t.Module, t.Entity, filter) {
+			continue
+		}
+		info, ok := reg.GetEntity(t.Module, t.Entity)
+		if !ok || info.EntitySpec == nil {
+			continue
+		}
+		// Child fields are not walked: a child `file` column is stored in the
+		// child table's own rows, which `listAll` (above) already flattened in.
+		fileFields := fileFieldNames(info.EntitySpec.Fields)
+		if len(fileFields) == 0 {
+			continue
+		}
+		store, err := reg.GetEntityStore(t.Module, t.Entity)
+		if err != nil {
+			return nil, fmt.Errorf("%s.%s: %w", t.Module, t.Entity, err)
+		}
+		records, err := listAll(ctx, store, "demo")
+		if err != nil {
+			return nil, fmt.Errorf("list %s.%s: %w", t.Module, t.Entity, err)
+		}
+		for _, rec := range records {
+			for _, f := range fileFields {
+				for _, key := range objectKeysIn(rec.Data[f]) {
+					if !seen[key] {
+						seen[key] = true
+						keys = append(keys, key)
+					}
+				}
+			}
+		}
+	}
+	sort.Strings(keys)
+	return keys, nil
+}
+
+// fileFieldNames returns the names of `file`/`attachment` fields.
+func fileFieldNames(fields []spec.Field) []string {
+	var out []string
+	for _, f := range fields {
+		if f.Type == spec.FieldFile || f.Type == spec.FieldAttachment {
+			out = append(out, f.Name)
+		}
+	}
+	return out
+}
+
+// objectKeysIn extracts object keys from a file-field value. The stored value
+// is one key (string) or several when `max_count > 1` (array). Anything else
+// (a stale `{key, filename}` object, null) yields nothing — restore must not
+// fail over a shape it does not recognize.
+func objectKeysIn(value any) []string {
+	switch v := value.(type) {
+	case string:
+		if v == "" {
+			return nil
+		}
+		return []string{v}
+	case []any:
+		var out []string
+		for _, item := range v {
+			if s, ok := item.(string); ok && s != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
 }
 
 // BackupTable describes one entity table in the backup.
@@ -167,12 +289,45 @@ func runBackupCreate(args []string) {
 		os.Exit(1)
 	}
 
-	// File storage (ctx.storage) ikut ter-backup (4.8.1): files under
-	// {state}/storage are added under storage/ in the archive.
-	storageDir := filepath.Join(formspec.StateDirFromDSN(dsn), "storage")
-	if err := writeDirToTar(tw, storageDir, "storage"); err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Error: write storage: %v\n", err)
+	// File storage (ctx.storage) ikut ter-backup (4.8.1, gap 10.16): objek
+	// diambil lewat **storage service** (datastore registry), bukan dengan
+	// membaca `{state}/storage` langsung. Membaca hardcoded hanya bekerja di
+	// dev (filesystem); begitu sebuah `kind: Datastore` menyajikan `storage`
+	// dengan driver garage/minio/s3 (jalur prod), seluruh objek `file` tidak
+	// ikut ter-backup — dan tidak ada peringatan apa pun.
+	//
+	// Kunci objek di-enumerasi dari RECORD yang baru saja ditulis, bukan dengan
+	// meminta daftar ke backend: kontrak `Storage` hanya Upload/Download/Stat,
+	// jadi tidak ada cara portable untuk melisting. Field `file`/`attachment`
+	// menyimpan kunci kanoniknya, sehingga data itu memang sumber kebenarannya.
+	keys, err := collectStorageKeys(ctx, reg, manifest.Tables, filter)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "Error: enumerate storage objects: %v\n", err)
 		os.Exit(1)
+	}
+	if len(keys) > 0 {
+		store, err := backupStorageService(specPath, dsn)
+		if err != nil {
+			// A backup that silently drops files is worse than one that fails:
+			// the operator would only discover it at restore time, when the
+			// originals may be gone.
+			_, _ = fmt.Fprintf(os.Stderr, "Error: resolve storage service: %v\n", err)
+			os.Exit(1)
+		}
+		for _, key := range keys {
+			data, err := store.Download(ctx, key)
+			if err != nil {
+				// Report and continue: one unreadable object must not abort the
+				// whole backup, but it must be visible.
+				_, _ = fmt.Fprintf(os.Stderr, "formspec backup: warning: read object %q: %v\n", key, err)
+				continue
+			}
+			if err := writeBytes(tw, storageEntryPrefix+key, data); err != nil {
+				_, _ = fmt.Fprintf(os.Stderr, "Error: write object %q: %v\n", key, err)
+				os.Exit(1)
+			}
+			manifest.StorageObjects++
+		}
 	}
 
 	if err := closeAll(); err != nil {
@@ -180,31 +335,8 @@ func runBackupCreate(args []string) {
 		os.Exit(1)
 	}
 
-	fmt.Printf("Backup written to %s (%d table(s), %d record(s)).\n", out, len(manifest.Tables), manifestRecordCount(manifest))
-}
-
-// writeDirToTar recursively adds a directory's files to the tar under prefix.
-func writeDirToTar(tw *tar.Writer, dir, prefix string) error {
-	return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			if os.IsNotExist(err) {
-				return nil // storage dir may not exist
-			}
-			return err
-		}
-		if info.IsDir() {
-			return nil
-		}
-		rel, err := filepath.Rel(dir, path)
-		if err != nil {
-			return err
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		return writeBytes(tw, prefix+"/"+rel, data)
-	})
+	fmt.Printf("Backup written to %s (%d table(s), %d record(s), %d storage object(s)).\n",
+		out, len(manifest.Tables), manifestRecordCount(manifest), manifest.StorageObjects)
 }
 
 func runBackupInspect(args []string) {
@@ -396,7 +528,22 @@ func runRestore(args []string) {
 	defer func() { _ = database.Close() }()
 
 	ctx := context.Background()
-	report := restoreFrom(ctx, reg, from, conflict, dryRun)
+
+	// ctx.storage objects ride along in the archive (gap 10.16). Resolve the
+	// same service the server reads from; a restore that writes records but
+	// skips their files would leave every `file` field pointing at nothing.
+	// A dry run needs no service — it only counts.
+	var store formspec.ObjectStoreStorage
+	if !dryRun {
+		var err error
+		store, err = backupStorageService(specPath, dsn)
+		if err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Error: resolve storage service: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	report, stored, _ := restoreFromWithStorage(ctx, reg, from, conflict, dryRun, store)
 
 	if dryRun {
 		// Compatibility report (4.8.3): per-entity breakdown of what would
@@ -407,12 +554,13 @@ func runRestore(args []string) {
 			fmt.Printf("  %s/%s: %d restore, %d skip, %d remap, %d fail\n",
 				e.Module, e.Entity, e.Restored, e.Skipped, e.Remapped, e.Failed)
 		}
+		fmt.Printf("Objects: %d would be restored.\n", stored)
 		fmt.Printf("Total: %d would be restored, %d skipped, %d remapped, %d failed.\n",
 			report.Restored, report.Skipped, report.Remapped, report.Failed)
 		return
 	}
-	fmt.Printf("Restore complete: %d restored, %d skipped, %d remapped, %d failed.\n",
-		report.Restored, report.Skipped, report.Remapped, report.Failed)
+	fmt.Printf("Restore complete: %d restored, %d skipped, %d remapped, %d failed, %d storage object(s).\n",
+		report.Restored, report.Skipped, report.Remapped, report.Failed, stored)
 	if report.Failed > 0 {
 		os.Exit(1)
 	}
@@ -470,7 +618,27 @@ type RestoreEntityReport struct {
 // conflict=overwrite updates them; conflict=remap assigns a fresh natural key
 // and inserts as a new record. dryRun only reports what would happen.
 func restoreFrom(ctx context.Context, reg *entity.Registry, from, conflict string, dryRun bool) RestoreReport {
+	report, _, _ := restoreFromWithStorage(ctx, reg, from, conflict, dryRun, nil)
+	return report
+}
+
+// RestoreReport mirrors the counts restoreFromWithStorage produces; the storage
+// tally is a separate return value because it is not per-entity.
+//
+// `store` may be nil (dry run, or a caller that only wants records). When it is
+// non-nil, `storage/*` entries in the archive are uploaded through the SAME
+// storage service the server reads from — previously they were dropped by the
+// `.jsonl` filter, so a restore produced records whose `file` fields pointed at
+// objects that were never written (gap 10.16).
+func restoreFromWithStorage(
+	ctx context.Context,
+	reg *entity.Registry,
+	from, conflict string,
+	dryRun bool,
+	store formspec.ObjectStoreStorage,
+) (RestoreReport, int, error) {
 	var report RestoreReport
+	stored, failedStored := 0, 0
 	f, err := os.Open(from)
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "Error: open %s: %v\n", from, err)
@@ -487,6 +655,33 @@ func restoreFrom(ctx context.Context, reg *entity.Registry, from, conflict strin
 		if err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "Error: read tar: %v\n", err)
 			report.Failed++
+			continue
+		}
+		// ctx.storage objects (gap 10.16): the key is the tar path minus the
+		// prefix, and it is uploaded verbatim — the records in this same archive
+		// already reference exactly that key, so remapping would break them.
+		if strings.HasPrefix(hdr.Name, storageEntryPrefix) && store != nil {
+			key := strings.TrimPrefix(hdr.Name, storageEntryPrefix)
+			if key == "" {
+				continue
+			}
+			if dryRun {
+				// Dry run reports what WOULD happen without writing objects.
+				stored++
+				continue
+			}
+			body, err := io.ReadAll(tr)
+			if err != nil {
+				_, _ = fmt.Fprintf(os.Stderr, "Error: read object %q: %v\n", key, err)
+				failedStored++
+				continue
+			}
+			if err := store.Upload(ctx, key, body); err != nil {
+				_, _ = fmt.Fprintf(os.Stderr, "Error: upload object %q: %v\n", key, err)
+				failedStored++
+				continue
+			}
+			stored++
 			continue
 		}
 		if hdr.Name == "manifest.json" || filepath.Ext(hdr.Name) != ".jsonl" {
@@ -594,7 +789,10 @@ func restoreFrom(ctx context.Context, reg *entity.Registry, from, conflict strin
 		}
 		report.Entities = append(report.Entities, *entityReport)
 	}
-	return report
+	if failedStored > 0 {
+		report.Failed += failedStored
+	}
+	return report, stored, nil
 }
 
 // remapNaturalKey generates a fresh natural key value for a conflicting

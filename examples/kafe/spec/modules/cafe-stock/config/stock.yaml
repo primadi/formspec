@@ -1,0 +1,31 @@
+# Konfigurasi module stok.
+#
+# `allocation_strategy` menentukan bagaimana biaya perolehan tambahan (ongkos
+# kirim + baris `line_type: cost` pada PO) dibagi ke harga per satuan tiap bahan
+# saat barang diterima — lihat `scripts/purchase_receive.star` (item 10.6).
+#
+#   weight   — proporsional BERAT kiriman (qty × ingredient.weight_per_unit).
+#              Paling benar secara fisik: ongkos kirim mengikuti berat/volume,
+#              bukan nilai. DEFAULT bila berat semua bahan sudah diisi.
+#   value    — proporsional NILAI (qty × unit_cost). Dipakai bila berat belum
+#              diisi, atau bila biaya memang mengikuti nilai (bea masuk,
+#              asuransi).
+#   quantity — proporsional jumlah unit. Hanya masuk akal bila satuan semua
+#              baris sebanding.
+#
+# Kosong = pilih otomatis: `weight` bila berat semua bahan diketahui, selain itu
+# `value`. Mengisi `weight` secara eksplisit saat beratnya belum lengkap akan
+# DITOLAK dengan pesan yang menyebut bahan mana yang kosong — bukan diam-diam
+# beralih ke `value`, karena itu menghasilkan angka salah tanpa satu pun tanda.
+apiVersion: formspec.dev/v1
+kind: Config
+metadata:
+  name: cafe-stock
+  module: cafe-stock
+  description: Konfigurasi module stok — strategi alokasi landed cost
+spec:
+  keys:
+    allocation_strategy:
+      type: string
+      public: true
+      default: ""

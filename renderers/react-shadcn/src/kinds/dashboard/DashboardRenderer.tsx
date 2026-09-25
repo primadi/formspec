@@ -280,9 +280,15 @@ function WidgetBody({
   realtime?: boolean
 }) {
   if (!spec) {
+    // The widget was filtered out of the bundle — its entity is not readable
+    // by this caller (`BuildBundle` gates entity-backed widgets). Say so
+    // instead of reporting a missing definition: the definition exists, the
+    // caller simply may not see this data. Reporting "not found" reads as a
+    // broken manifest and sends the reader hunting for a typo that is not
+    // there.
     return (
       <p className="text-sm text-muted-foreground text-center py-4">
-        Widget definition not found
+        Not available for your role
       </p>
     )
   }

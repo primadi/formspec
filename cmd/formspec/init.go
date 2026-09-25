@@ -56,6 +56,7 @@ func runInit(args []string) {
 		_, _ = fmt.Fprintf(os.Stderr, "  - Standard directory structure (spec/)\n")
 		_, _ = fmt.Fprintf(os.Stderr, "  - formspec-app.yaml configuration\n")
 		_, _ = fmt.Fprintf(os.Stderr, "  - spec/apps/<module>.yaml — kind: App scaffold (with default confirm dialogs)\n")
+		_, _ = fmt.Fprintf(os.Stderr, "  - spec/modules/<module>/module.yaml — kind: Module the App mounts\n")
 		_, _ = fmt.Fprintf(os.Stderr, "  - spec/workspaces/<module>.yaml — kind: Workspace seed\n")
 		_, _ = fmt.Fprintf(os.Stderr, "  - .vscode/settings.json registering yaml.schemas\n")
 		_, _ = fmt.Fprintf(os.Stderr, "    → yaml.schemas points to %s (no local schemas/ copy)\n", schemaURL)

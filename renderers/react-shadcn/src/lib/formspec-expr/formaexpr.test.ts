@@ -50,6 +50,51 @@ describe("FormSpecExpr Lexer", () => {
     expect(tokens[1].literal).toBe("world")
   })
 
+  // FormSpecExpr is a *Starlark* expression subset (08-formspec-expr.md §2), and
+  // Starlark treats 'x' and "x" as the same literal. The server side already
+  // accepts both (`internal/starlark` is real Starlark); the client lexer only
+  // recognised '"', so every single-quoted expression — including four fields of
+  // the kafe `promo-form` — failed to parse at runtime.
+  it("tokenizes single-quoted strings", () => {
+    const tokens = tokenize("'hello' 'world'")
+    expect(tokens.map((t) => t.type)).toEqual(["STRING", "STRING"])
+    expect(tokens[0].literal).toBe("hello")
+    expect(tokens[1].literal).toBe("world")
+  })
+
+  it("treats single- and double-quoted literals as the same value", () => {
+    const result = evalFormSpecExpr("'a' == \"a\"")
+    expect(result.valid).toBe(true)
+    expect(result.value).toBe(true)
+  })
+
+  it("closes a double-quoted string only at a double quote", () => {
+    const tokens = tokenize('"it\'s"')
+    expect(tokens).toHaveLength(1)
+    expect(tokens[0].type).toBe("STRING")
+    expect(tokens[0].literal).toBe("it's")
+  })
+
+  it("closes a single-quoted string only at a single quote", () => {
+    const tokens = tokenize("'say \"hi\"'")
+    expect(tokens).toHaveLength(1)
+    expect(tokens[0].type).toBe("STRING")
+    expect(tokens[0].literal).toBe('say "hi"')
+  })
+
+  it("escapes both quote styles", () => {
+    expect(tokenize("'it\\'s'")[0].literal).toBe("it's")
+    expect(tokenize('"a\\"b"')[0].literal).toBe('a"b')
+  })
+
+  // An unterminated literal must not be silently accepted as a valid string —
+  // that is the fail-safe 08-formspec-expr.md §4 forbids.
+  it("rejects an unterminated string", () => {
+    const result = validateFormSpecExpr("fields.type == 'percentage")
+    expect(result.valid).toBe(false)
+    expect(result.error).toContain("unexpected token")
+  })
+
   it("tokenizes keywords", () => {
     const tokens = tokenize("true false null and or not in len sum")
     expect(tokens.map((t) => t.type)).toEqual([
@@ -558,5 +603,38 @@ describe("FormSpecExpr Edge Cases", () => {
   it("handles boolean negation chain", () => {
     const result = evalFormSpecExpr("!!true")
     expect(result.value).toBe(true)
+  })
+})
+
+// ── Regression: kafe promo-form ──
+//
+// Every `visible_when` in `examples/kafe/spec/modules/cafe-master/forms/
+// promo-form.yaml` used single quotes. They are reproduced verbatim here so the
+// page cannot silently regress: a parse failure in any of them showed the user
+// an "Expression error: unexpected token: '" banner instead of hiding the field.
+describe("FormSpecExpr — kafe promo-form expressions", () => {
+  const cases: Array<[string, Record<string, unknown>, boolean]> = [
+    // [expression, form values, expected visibility]
+    ["fields.type == 'percentage'", { type: "percentage" }, true],
+    ["fields.type == 'percentage'", { type: "fixed" }, false],
+    ["fields.type == 'fixed'", { type: "fixed" }, true],
+    ["fields.type == 'buy_x_get_y'", { type: "buy_x_get_y" }, true],
+    ["fields.type == 'buy_x_get_y'", { type: "percentage" }, false],
+    ["fields.applies_to == 'menu_item'", { applies_to: "menu_item" }, true],
+    ["fields.applies_to == 'menu_item'", { applies_to: "category" }, false],
+    ["fields.applies_to == 'category'", { applies_to: "category" }, true],
+  ]
+
+  it.each(cases)("%s → %s", (expr, fields, expected) => {
+    const strict = strictEvalFormSpecExpr(expr, { fields } as never)
+    expect(strict.error).toBeUndefined()
+    expect(evalVisibleWhen(expr, { fields } as never)).toBe(expected)
+  })
+
+  it("does not report an expression error for the promo-form fields", () => {
+    const { error } = strictEvalFormSpecExpr("fields.type == 'percentage'", {
+      fields: { type: "percentage" },
+    } as never)
+    expect(error).toBeUndefined()
   })
 })

@@ -36,6 +36,17 @@ Context for AI coding agents working on the FormSpec frontend (React, TypeScript
 
 - Manifest-driven: SPA reads manifests via `/_meta/ui` at runtime
 - Two surfaces: `/_admin` (auto-derived) and `/app` (authored)
+- **Routing: see `docs/renderers/shadcn-shell/05-routing.md`** — four route kinds:
+  A authored Page (`spec.route`) · B derived Form/Table Page (`/<module>/form|table/<n>`,
+  mode always `view`) · C derived entity CRUD (`/<module>/<plural>[/new|/:id[/edit]]`) ·
+  D overlay (`?action=&form=&mode=`, not a route). Which Form is used: A/B/D by
+  explicit `form.ref`; C by the `{entity}-create/-edit/-form` naming convention.
+  Form's own `spec.mode` does NOT pick the runtime mode.
+- Menu is a CONSUMER of routes, not their source. `MenuItem.permissions` = RBAC,
+  enforced server-side (`filterMenu`); `MenuItem.when` = business condition,
+  evaluated client-side (fail-open). `when` is never an authorization gate.
+- FormSpecExpr callables are a closed set (`len`/`sum`/`amount`/`currency`/`today`);
+  `formspec check` rejects anything else at deploy time.
 - Derived by default: Entity → Table + Forms + Page + Menu
 - Design-time layout: modal/drawer/separate_page decided in manifest
 - Asset contract: `mount(el, props, formspec)` / `unmount(el)`

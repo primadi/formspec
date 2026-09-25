@@ -7,12 +7,14 @@
 > kontrak.
 
 ## 1. Peran
+
 Seam runtime antara engine dan Shell manapun: kontrak internal yang dipanggil
 interpreter Shell untuk mendapat representasi siap-render dari App/Page/Entity.
 Rendering adalah interpretasi runtime — Shell di-deploy sekali dan membaca spec
 saat runtime; tidak ada build artifact per-app.
 
 ## 2. Endpoint
+
 Shell boot dari satu round-trip `GET .../_meta/ui`, ditambah endpoint pelengkap
 untuk identitas dan schema entity granular:
 
@@ -57,17 +59,35 @@ Kedua grup (`/_meta/` dan `/_ui/`) memakai auth session yang sama.
 Bentuk `EntitySchema` yang dikirim tiap endpoint: field (tipe, validasi,
 relasi), `state_machine` (kalau ada), daftar `actions` (tiap action membawa
 `permission`-nya sendiri untuk gating client-side, §4), `lifecycle`
-(`plain_crud` | `two_step_autosave`), dan `label_field` (natural key → `name`
-→ `title` → `number` → `id`, urutan fallback).
+(`plain_crud` | `two_step_autosave`), `label_field` (natural key → `name`
+→ `title` → `number` → `id`, urutan fallback), dan `authorized_actions`.
+
+**`authorized_actions` — himpunan aksi yang boleh dilakukan PEMANGGIL ini.**
+Di-resolve server dengan checker yang sama yang memutuskan entity itu ikut
+bundle, memakai kosakata RESOURCE (`list`, `find`, `create`, `update`,
+`delete`, plus aksi lifecycle bila entity memilikinya). Absen = belum
+di-resolve (klien memakai daftar permission pemanggil sendiri); `[]` =
+di-resolve dan tidak ada yang boleh.
+
+Field ini ada karena Shell **tidak boleh menebak**: tanpa itu, Shell
+menurunkan route CRUD dan tombol aksi dari `lifecycle` entity saja, sehingga
+App publik yang hanya di-grant `[list, find]` tetap merender modal create yang
+submit-nya 401, dan pemanggil tanpa `create` tetap ditawari tombol "New".
+Shell juga tidak bisa menghitungnya sendiri: grant App publik tidak muncul di
+daftar permission pemanggil (tamu tidak memegang permission apa pun), jadi
+hanya server yang tahu jawabannya.
 
 ## 3. Wajib Backend-Agnostic
+
 API menyerahkan bentuk data (field/type/validation/permission) — bukan query
 result mentah. Dilarang membocorkan detail PersistBackend (nama kolom fisik,
 path JSONB). Ini syarat agar Shell tidak perlu tahu backend apa di baliknya.
 
 ## 4. Permission Filtering
+
 Filtering terjadi pada tiga granularitas, semuanya di sisi resolusi (bukan di
 renderer):
+
 - **Entity** — schema sebuah entity (dan seluruh manifest yang mereferensikannya:
   Form, Table, Kanban, Timeline, Print, Report) hanya ikut terkirim kalau
   caller punya permission `list` atau `view` entity itu. Kalau tidak, entity
@@ -90,16 +110,16 @@ terhadap `/_meta/me`, bukan disaring di endpoint ini.
 **Kenapa bukan otorisasi berbasis halaman.** Model "bisa lihat halaman →
 implisit bisa simpan entity-nya" ditolak sebagai mekanisme enforcement: asal
 UI (apakah request benar-benar datang dari halaman yang berwenang) tidak bisa
-diverifikasi server — masalah *confused deputy* klasik — dan client unmanaged
+diverifikasi server — masalah _confused deputy_ klasik — dan client unmanaged
 (Flutter, API mentah) tidak pernah melewati "halaman" sama sekali. Karena itu
 enforcement **selalu** di resource (`required_permission`, lihat
 `spec/backend/01-core-basic.md` §5), tidak pernah di lapisan UI. Endpoint ini
-hanya menyediakan *derivasi* footprint kapabilitas per Page (dari komposisinya:
+hanya menyediakan _derivasi_ footprint kapabilitas per Page (dari komposisinya:
 Form → action, Table → list, component → deklarasi `needs:` eksplisit) supaya
 Shell bisa merender kontrol yang tepat — bukan sumber otorisasi itu sendiri.
 
 **Administrasi berbasis tugas: grant-per-halaman termaterialisasi jadi
-permission.** Penolakan otorisasi berbasis halaman di atas soal *enforcement*,
+permission.** Penolakan otorisasi berbasis halaman di atas soal _enforcement_,
 bukan soal UX granting. Ketika Workspace Owner/admin memberi user "akses ke
 halaman X" lewat UI admin (pengalaman granting yang task-based / berorientasi
 halaman), framework **wajib** mematerialisasikan grant itu menjadi permission
@@ -108,18 +128,20 @@ yang sama yang dipakai di mana-mana ([`../backend/01-core-basic.md`](../backend/
 §5) — **tidak pernah** sebagai flag opaque "boleh lihat halaman ini". Dengan
 begitu UX admin tetap sederhana (grant per halaman, footprint kapabilitas Page
 di atas jadi bahan derivasinya) sementara enforcement di baliknya tetap seragam
-dan auditable (string permission, argumen *confused deputy* di atas tetap
+dan auditable (string permission, argumen _confused deputy_ di atas tetap
 berlaku).
 
 ## 5. Realtime
+
 Realtime adalah **kapabilitas inti** Spec Resolution API — standar websocket
 untuk browser shell yang didefinisikan di sini bagian dari kontrak, bukan
 ekstensi opsional; implementasi renderer boleh mendarat bertahap (§7) tapi
 kontraknya inti.
 
 Subskripsi deklaratif terhadap perubahan entity, terpisah dari `/_meta/ui`:
+
 - **Konvensi channel:** `entity:{module}.{name}` dengan event `created |
-  updated | deleted`, payload = field event, selalu tenant/workspace-scoped.
+updated | deleted`, payload = field event, selalu tenant/workspace-scoped.
 - **Filter sisi-server:** caller menerima sebuah event hanya kalau ia punya
   permission `view` entity itu — dievaluasi **per pesan**, bukan sekali saat
   koneksi dibuka (permission caller bisa berubah selama koneksi hidup).
@@ -129,14 +151,23 @@ Subskripsi deklaratif terhadap perubahan entity, terpisah dari `/_meta/ui`:
   component custom.
 - Realtime **non-durable by definisi** — client yang reconnect refetch lewat
   `/_meta/ui`/`/_meta/entities/...`, tidak ada replay.
+- **Handshake auth:** browser tidak bisa men-set header `Authorization` pada
+  handshake WebSocket, jadi kredensial tidak boleh ditaruh di URL sebagai JWT
+  full-lifetime. Client meminta **ticket single-use** lewat
+  `POST /{workspace}/_ui/_ws/ticket` (header `Authorization: Bearer`), lalu
+  connect dengan `?ticket=<opaque>`. Ticket opaque, sekali pakai, terikat ke
+  identity + workspace penerbit, TTL 30 detik — access log tidak lagi merekam
+  kredensial yang bisa dipakai ulang.
 
 ## 6. Versi & Kompatibilitas
+
 Versi API ini ada di path (`/api/v1/...`) — Shell resmi dibangun terhadap satu
 versi mayor, breaking change menaikkan segmen versi. ETag pada `/_meta/ui`
 (§2) adalah mekanisme caching (conditional GET, 304 kalau bundle tak berubah)
 — bukan mekanisme kompatibilitas, jangan dicampur artinya dengan versi API.
 
 ## 7. Status Implementasi Hari Ini (Gap)
+
 - Filter per-pesan pada Realtime (§5) **sebagian sudah ditutup oleh
   implementasi resmi** (lihat [`../renderers/realtime.md`](../renderers/realtime.md)):
   hub websocket memfilter per subscription (client mendaftarkan resource/event
@@ -148,8 +179,9 @@ versi mayor, breaking change menaikkan segmen versi. ETag pada `/_meta/ui`
   per-page `view-spec` seperti draft awal dokumen ini sebelum direvisi).
 
 ## 8. Referensi
-| Dokumen | Isi |
-|---|---|
-| [`01-visual-hierarchy.md`](01-visual-hierarchy.md) | Shell, App/Page/Component renderer |
-| [`02-visual-spec-kind.md`](02-visual-spec-kind.md) | VisualSpecKind, slot system |
+
+| Dokumen                                                           | Isi                                                        |
+| ----------------------------------------------------------------- | ---------------------------------------------------------- |
+| [`01-visual-hierarchy.md`](01-visual-hierarchy.md)                | Shell, App/Page/Component renderer                         |
+| [`02-visual-spec-kind.md`](02-visual-spec-kind.md)                | VisualSpecKind, slot system                                |
 | [`spec/backend/01-core-basic.md`](../backend/01-core-basic.md) §5 | `required_permission` di resource — enforcement sebenarnya |

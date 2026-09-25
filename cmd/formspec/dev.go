@@ -107,7 +107,11 @@ func runDev(args []string) {
 	// di mana pun perintah dijalankan; absolute DSN tetap dipakai apa adanya.
 	cfg.DSN = resolveDSN(cfg.DSN, cfg.SpecPath)
 	if cfg.StateDir == defaultStateDir {
-		cfg.StateDir = formspec.StateDirFromDSN(cfg.DSN)
+		// Anchor to the project root: `StateDirFromDSN` alone returns a bare
+		// ".formspec" for a non-SQLite DSN, which the process resolves against
+		// its CWD — so the dev JWT secret moved with the working directory
+		// (gap 10.17, same class as dsn-spec-anchored.md).
+		cfg.StateDir = formspec.StateDirFor(cfg.DSN, cfg.SpecPath)
 	}
 
 	// ── 3. Apply defaults for values not set by CLI or config file ──

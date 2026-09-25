@@ -10,19 +10,29 @@
 import { useAppNavigate } from "@/lib/navigation"
 import { useParams, useSearchParams } from "react-router-dom"
 import { useSessionStore } from "@/stores/session"
-import { useMetaStore } from "@/stores/meta"
+import { detectApp, useMetaStore } from "@/stores/meta"
+import { fetchMetaApps } from "@/lib/api/meta"
+import type { AppSummary } from "@/types/manifest"
+import { useEffect, useState } from "react"
 import { LoginScreen } from "./LoginScreen"
 
-// App scope for a login URL: /{ws}/app/{app}/... → the segment after "app".
-// Empty for the _admin surface / top-level /login. Role management is per-App,
-// so the login must carry the app to resolve app-scoped permissions.
-function appFromPath(pathname: string): string | undefined {
-  const segments = pathname.split("/").filter(Boolean)
-  if (segments.length >= 3 && segments[1] === "app") {
-    return segments[2]
-  }
-  return undefined
-}
+// App scope for a login request, resolved from the URL by matching the longest
+// `root_url` prefix — the SAME rule the app bundle uses (`detectApp`), so the
+// session and the bundle can never disagree.
+//
+// WHY NOT the URL segment after `/app/`: the URL is `/{ws}/app/{segment}/...`
+// and the segment is `pos` while the App is named `kafe-pos`. Roles are
+// declared `app: kafe-pos`, so a session scoped to `pos` matches NOTHING:
+// `PermissionResolver` skips every role whose `app` differs from the session's,
+// the user ends up with zero permissions, and an `access: private` App then
+// serves an EMPTY bundle — the menu still renders (it is built from the App
+// manifest, not from permissions) while every list under it is blank. That is
+// exactly how it looked: a sidebar full of items over an empty page.
+//
+// The resolved root_url is ALSO the post-login landing path. Redirecting to
+// `/{workspace}` instead drops the `/app/<segment>` prefix, so the bundle is
+// then resolved for whatever App owns the root (for kafe: the PUBLIC `kafe-qr`)
+// and the signed-in user is shown a different App than the one they logged into.
 
 export function LoginPage({ mode = "login" }: { mode?: "login" | "register" }) {
   const navigate = useAppNavigate()
@@ -32,14 +42,25 @@ export function LoginPage({ mode = "login" }: { mode?: "login" | "register" }) {
   const { workspace: workspaceParam } = useParams<{ workspace?: string }>()
   const [searchParams] = useSearchParams()
   const boot = useSessionStore((s) => s.boot)
-  const app = appFromPath(window.location.pathname)
+  // The app list is needed to turn the URL into an App NAME. The login screen
+  // may render before any bundle is loaded (that is the point of a login
+  // screen), so it fetches the list itself rather than reading it from the meta
+  // store — which is also why the store's `load()` cannot be reused for this.
+  const [apps, setApps] = useState<AppSummary[]>([])
+  useEffect(() => {
+    if (!workspaceParam) return
+    fetchMetaApps(workspaceParam)
+      .then(setApps)
+      .catch(() => setApps([]))
+  }, [workspaceParam])
+  const resolvedApp = detectApp(window.location.pathname, apps)
 
   const handleLogin = async (
     workspace: string,
     token: string,
     refreshToken?: string,
   ) => {
-    await boot(workspace, token, refreshToken, app)
+    await boot(workspace, token, refreshToken, resolvedApp?.name)
     // The bundle may have been loaded anonymously (empty entities) while on
     // the login route — reset it so it reloads with the authenticated
     // identity's permissions after the redirect.
@@ -53,7 +74,10 @@ export function LoginPage({ mode = "login" }: { mode?: "login" | "register" }) {
         !returnTo.startsWith("//") &&
         returnTo !== "/"
         ? returnTo
-        : `/${workspace}`,
+        // Land on the App's own root_url, not on `/{workspace}` — see the note
+        // above about the prefix loss. Falls back to workspace root only when
+        // the app list is unavailable.
+        : `/${workspace}${resolvedApp && resolvedApp.root_url !== "/" ? resolvedApp.root_url : ""}`,
       { replace: true },
     )
   }
@@ -61,7 +85,7 @@ export function LoginPage({ mode = "login" }: { mode?: "login" | "register" }) {
   return (
     <LoginScreen
       workspace={workspaceParam}
-      app={app}
+      app={resolvedApp?.name}
       onLogin={handleLogin}
       mode={mode}
     />

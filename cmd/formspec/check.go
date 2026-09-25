@@ -170,6 +170,10 @@ func runCheck(args []string) {
 	checkKanban(result, idx, res.Manifests)
 	checkWizard(result, idx, res.Manifests)
 
+	// Check 2 (menu): MenuItem.When on App/Module — grammar + closed callable
+	// set only (no entity schema to resolve field refs against).
+	checkMenuExpr(result, res.Manifests)
+
 	// Check 6: aggregate declarations (Report columns/totals, Widget config) —
 	// SUM/AVG/MIN/MAX only mean something over a numeric or money field (S7).
 	checkAggregates(result, idx, res.Manifests)
@@ -342,6 +346,15 @@ func checkExpr(result *checkResult, source, _, where, expr string, fields map[st
 // references, comparisons, and/or/not, arithmetic, len/sum, list
 // comprehension, `in`. Explicitly forbidden: `ctx` access, function
 // definitions, imports, loops, and unbalanced delimiters.
+//
+// The expression is scanned with the same rules as the client lexer
+// (renderers/react-shadcn/src/lib/formspec-expr/lexer.ts) so that anything
+// accepted here can actually be evaluated there. Checking only for balanced
+// delimiters was not enough: the kafe promo-form used `== 'percentage'`, which
+// balances fine and reported 0 errors, yet every field failed at runtime with
+// "unexpected token: '" because the client lexer did not recognise single
+// quotes. A gate that passes an expression the renderer cannot parse is a false
+// guarantee — §4 says expressions surviving apply are resolvable at runtime.
 func validateExprGrammar(expr string) string {
 	// No ctx access — the closed ctx.* primitives are server-side only.
 	if strings.Contains(expr, "ctx.") {
@@ -353,27 +366,231 @@ func validateExprGrammar(expr string) string {
 			return "construct outside the expression subset (function defs, imports, statements)"
 		}
 	}
-	// Balanced delimiters.
+
 	stack := []rune{}
-	for _, ch := range expr {
+	runes := []rune(expr)
+	for i := 0; i < len(runes); i++ {
+		ch := runes[i]
+
+		// Whitespace separates tokens.
+		if ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' {
+			continue
+		}
+
+		// String literals are opaque: delimiters inside them do not nest
+		// (`fields.name != "("` is balanced). Both quote styles are valid
+		// Starlark, so both are accepted — see readString in the client lexer.
+		if ch == '"' || ch == '\'' {
+			quote := ch
+			startCol := i + 1
+			closed := false
+			for i++; i < len(runes); i++ {
+				if runes[i] == '\\' {
+					i++ // skip the escaped character
+					continue
+				}
+				if runes[i] == quote {
+					closed = true
+					break
+				}
+			}
+			if !closed {
+				return fmt.Sprintf("unterminated string literal starting at column %d", startCol)
+			}
+			continue
+		}
+
+		// Delimiters.
 		switch ch {
-		case '(', '[', '{':
+		case '(', '[':
 			stack = append(stack, ch)
-		case ')', ']', '}':
+			continue
+		case ')', ']':
 			if len(stack) == 0 {
 				return "unbalanced delimiter"
 			}
 			open := stack[len(stack)-1]
 			stack = stack[:len(stack)-1]
-			if (ch == ')' && open != '(') || (ch == ']' && open != '[') || (ch == '}' && open != '{') {
+			if (ch == ')' && open != '(') || (ch == ']' && open != '[') {
 				return "mismatched delimiter"
 			}
+			continue
+		case '{', '}':
+			// FormSpecExpr has no dict/set literals or blocks.
+			return "construct outside the expression subset (dict/set literals, blocks)"
+		case ',':
+			continue
 		}
+
+		// Operators. A two-character form is preferred, but only when it is a
+		// real operator — otherwise the rune stands alone, so `!!x` reads as two
+		// unary negations rather than an unknown `!!`.
+		if exprOneCharOps[ch] || exprPairFirst[ch] {
+			if i+1 < len(runes) {
+				if pair := string(runes[i : i+2]); exprTwoCharOps[pair] {
+					i++
+					continue
+				}
+			}
+			if !exprOneCharOps[ch] {
+				return fmt.Sprintf("operator %q is not part of FormSpecExpr", string(ch))
+			}
+			continue
+		}
+
+		// Numbers: digits and '.' (the client lexer's readNumber rule).
+		if ch >= '0' && ch <= '9' {
+			for i+1 < len(runes) {
+				next := runes[i+1]
+				if (next >= '0' && next <= '9') || next == '.' {
+					i++
+					continue
+				}
+				break
+			}
+			continue
+		}
+
+		// Identifiers, keywords, and member access (`fields.name`).
+		if isExprIdentStart(ch) {
+			for i+1 < len(runes) && isExprIdentPart(runes[i+1]) {
+				i++
+			}
+			continue
+		}
+
+		return fmt.Sprintf("character %q is not part of FormSpecExpr", string(ch))
 	}
+
 	if len(stack) > 0 {
 		return "unbalanced delimiter"
 	}
+
+	// Callable-name gate (closed set). The character scan above cannot see the
+	// difference between `len(fields.items)` (valid) and `user.has('x')`
+	// (impossible): both are identifiers, dots and parens. The client evaluator
+	// resolves a call as `node.callee.name` over an Identifier, so a member
+	// callee (`user.has`, `session.x`) lands in its `default:` branch and the
+	// expression dies at RUNTIME as a warning — exactly the false guarantee
+	// 08-formspec-expr.md §4 forbids. Measured on the live example
+	// (`examples/Clinic-UI-Showcase/.../clinic/module.yaml`):
+	// `when: "user.has('clinic.settings.update')"` passed this gate and would
+	// evaluate to "unknown function: undefined".
+	//
+	// So the callable identifiers are a closed set, mirroring the way
+	// checkAggregates pins aggregateFns. Anything else is a deploy-time error.
+	if bad := firstUnknownCallable(expr); bad != "" {
+		return fmt.Sprintf("unknown function %q — FormSpecExpr callables are a closed set: %s",
+			bad, strings.Join(exprCallables, ", "))
+	}
 	return ""
+}
+
+// exprCallables is the closed set of functions callable from a FormSpecExpr.
+//
+// Kept in step with the client evaluator's evalCall switch
+// (renderers/react-shadcn/src/lib/formspec-expr/eval.ts). Deliberately NOT
+// included: the server-side Starlark-only builtins (`sum_line`, `days_ago`,
+// `empty`) — those belong to state-machine guards, a different contract
+// (internal/starlark.EvaluateGuard), not to the client expression subset.
+var exprCallables = []string{"len", "sum", "amount", "currency", "today"}
+
+// firstUnknownCallable returns the first call identifier in expr that is not in
+// exprCallables, or "" when every call is known. A member call (`user.has`) is
+// reported as its full dotted path so the message says what was actually
+// written.
+//
+// This is a lexical scan, not a parse: it looks for an identifier (optionally
+// dotted) immediately followed by `(`, skipping string literals. That is enough
+// to catch the class this gate exists for, and it cannot reject a valid
+// expression — every valid callable is a bare identifier.
+func firstUnknownCallable(expr string) string {
+	known := make(map[string]bool, len(exprCallables))
+	for _, c := range exprCallables {
+		known[c] = true
+	}
+
+	runes := []rune(expr)
+	for i := 0; i < len(runes); i++ {
+		ch := runes[i]
+
+		// String literals are opaque — a `(` inside one is content, not a call.
+		// (The delimiter scan above already guarantees the literal is closed.)
+		if ch == '"' || ch == '\'' {
+			quote := ch
+			for i++; i < len(runes); i++ {
+				if runes[i] == '\\' {
+					i++
+					continue
+				}
+				if runes[i] == quote {
+					break
+				}
+			}
+			continue
+		}
+
+		if !isExprIdentStart(ch) {
+			continue
+		}
+
+		// Read the identifier, plus any `.member` chain (`user.has`).
+		start := i
+		for i+1 < len(runes) && (isExprIdentPart(runes[i+1]) || runes[i+1] == '.') {
+			i++
+		}
+		// `isExprIdentPart` includes '.', so a trailing dot would be swallowed
+		// (`fields.` in `fields.(x)`); trim it back so the next loop iteration
+		// sees it as a non-identifier and skips it.
+		name := string(runes[start : i+1])
+		name = strings.TrimRight(name, ".")
+		if name == "" {
+			continue
+		}
+
+		// A call is an identifier immediately followed by `(`, ignoring spaces.
+		j := i + 1
+		for j < len(runes) && (runes[j] == ' ' || runes[j] == '\t') {
+			j++
+		}
+		if j >= len(runes) || runes[j] != '(' {
+			continue
+		}
+		if !known[name] {
+			return name
+		}
+	}
+	return ""
+}
+
+// exprOneCharOps is the closed set of single-character operators. A lone `=` is
+// deliberately absent: FormSpecExpr uses `==`, and the client lexer treats `=`
+// as ILLEGAL.
+var exprOneCharOps = map[rune]bool{
+	'+': true, '-': true, '*': true, '/': true,
+	'<': true, '>': true, '!': true,
+}
+
+// exprTwoCharOps is the closed set of two-character operators.
+var exprTwoCharOps = map[string]bool{
+	"==": true, "!=": true, "<=": true, ">=": true,
+	"&&": true, "||": true,
+}
+
+// exprPairFirst is the set of characters that could begin a two-character
+// operator (or a lone valid `&`/`|`, which FormSpecExpr does not have — hence
+// their absence from exprOneCharOps).
+var exprPairFirst = map[rune]bool{
+	'=': true, '!': true, '<': true, '>': true,
+	'&': true, '|': true,
+}
+
+func isExprIdentStart(ch rune) bool {
+	return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '_'
+}
+
+func isExprIdentPart(ch rune) bool {
+	return isExprIdentStart(ch) || (ch >= '0' && ch <= '9') || ch == '.'
 }
 
 // checkKanban validates Kanban manifests: the `drag_guard` FormSpecExpr is
@@ -655,6 +872,61 @@ func checkAppWorkspaces(result *checkResult, manifests []manifest.RawManifest) {
 			result.add(m.Source, "warning",
 				"app %q is staged — explicit empty `workspaces: []` mounts it in no workspace (intentional? fill the allowlist or remove the field)",
 				m.Metadata.Name)
+		}
+	}
+}
+
+// checkMenuExpr validates `MenuItem.When` on every App and Module manifest.
+//
+// Menu was the one FormSpecExpr site with NO deploy-time gate at all, even
+// though 08-formspec-expr.md §4 makes that gate mandatory for every expression.
+// The consequence was live, not theoretical: the clinic showcase shipped
+// `when: "user.has('clinic.settings.update')"` — a member call the evaluator
+// cannot resolve, and identity-based besides, which §3 forbids in FormSpecExpr.
+// It validated green and hid nothing.
+//
+// There is no entity schema to check field references against (a menu condition
+// is about the caller and the clock, not a record), so this checks the grammar
+// and the closed callable set only — which is precisely what the broken example
+// would have failed on.
+func checkMenuExpr(result *checkResult, manifests []manifest.RawManifest) {
+	// Declared before assignment so the closure can recurse into children.
+	var check func(source, kind, label string, items []spec.MenuItem)
+	check = func(source, kind, label string, items []spec.MenuItem) {
+		for _, it := range items {
+			if it.When != "" {
+				if err := validateExprGrammar(it.When); err != "" {
+					where := fmt.Sprintf("%s %q menu item %q when", kind, label, it.Label)
+					result.add(source, "error", "%s: FormSpecExpr %q invalid: %s", where, it.When, err)
+				}
+			}
+			if len(it.Children) > 0 {
+				check(source, kind, label, it.Children)
+			}
+		}
+	}
+
+	for _, m := range manifests {
+		if m.Spec == nil {
+			continue
+		}
+		specMap, ok := m.Spec.(map[string]any)
+		if !ok {
+			continue
+		}
+		switch spec.Kind(m.Kind) {
+		case spec.KindApp:
+			appSpec, err := manifest.RawSpecToAppSpec(specMap)
+			if err != nil {
+				continue
+			}
+			check(m.Source, "App", m.Metadata.Name, appSpec.Menu)
+		case spec.KindModule:
+			modSpec, err := manifest.RawSpecToModuleSpec(specMap)
+			if err != nil {
+				continue
+			}
+			check(m.Source, "Module", m.Metadata.Name, modSpec.Menu)
 		}
 	}
 }

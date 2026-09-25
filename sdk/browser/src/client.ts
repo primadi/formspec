@@ -18,7 +18,7 @@ export interface FormaClientOptions {
 
 /**
  * Generic, untyped runtime for the FormSpec REST API
- * (docs_old/spec/02-core-basic.md §16). `formspec generate` emits a typed layer on
+ * (docs/spec/backend/01-core-basic.md §8.5). `formspec generate` emits a typed layer on
  * top of this — one interface and one set of typed methods per exposed
  * entity — so application code almost never calls this class directly.
  *

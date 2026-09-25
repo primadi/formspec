@@ -103,7 +103,18 @@ func (f *HandlerFactory) resolveStorage() (*storageCaps, error) {
 
 // effectiveUploadLimitMB returns min(global upload limit, per-field limit).
 func (f *HandlerFactory) effectiveUploadLimitMB(field *spec.Field) int {
-	limit := f.uploadLimitMB
+	return MinUploadLimitMB(f.uploadLimitMB, field)
+}
+
+// MinUploadLimitMB returns the effective upload ceiling for a field: the
+// smaller of the global limit and the field's own `max_size_mb`.
+//
+// Exported because the seed path uploads through the same storage service and
+// must enforce the same ceiling — a seed that can write an object the upload
+// route would reject breaks the contract that a seeded record is shaped like
+// one the API produced (cmd/formspec/seed_asset.go).
+func MinUploadLimitMB(globalMB int, field *spec.Field) int {
+	limit := globalMB
 	if field != nil && field.Storage != nil && field.Storage.MaxSizeMB > 0 && field.Storage.MaxSizeMB < limit {
 		limit = field.Storage.MaxSizeMB
 	}
@@ -219,7 +230,7 @@ func (f *HandlerFactory) HandleFileUpload() http.HandlerFunc {
 				return
 			}
 			if len(st.AllowedTypes) > 0 &&
-				!allowedFileType(st.AllowedTypes, header.Header.Get("Content-Type"), header.Filename) {
+				!AllowedFileType(st.AllowedTypes, header.Header.Get("Content-Type"), header.Filename) {
 				writeError(w, http.StatusBadRequest, "FILE_TYPE_NOT_ALLOWED",
 					"file type not allowed for field "+fieldName)
 				return
@@ -227,9 +238,7 @@ func (f *HandlerFactory) HandleFileUpload() http.HandlerFunc {
 		}
 
 		// Object key: {workspace}/{module}/{entity}/{id}/{field}/{uuid}-{name}
-		key := fmt.Sprintf("%s/%s/%s/%s/%s/%s-%s",
-			workspaceID, module, entity, id, fieldName,
-			db.NewUUIDv7(), sanitizeFilename(header.Filename))
+		key := ObjectKey(workspaceID, module, entity, id, fieldName, header.Filename)
 
 		storage, err := f.storage()
 		if err != nil {
@@ -326,7 +335,7 @@ func (f *HandlerFactory) HandleFileDownload() http.HandlerFunc {
 			return
 		}
 		visibility := "private" // default
-		if field != nil && field.Storage != nil && field.Storage.Visibility != "" {
+		if field.Storage != nil && field.Storage.Visibility != "" {
 			visibility = field.Storage.Visibility
 		}
 
@@ -481,8 +490,12 @@ func (f *HandlerFactory) entitySpec(module, entity string) (*spec.EntitySpec, bo
 	return f.specLookup(module, entity)
 }
 
-// sanitizeFilename keeps only safe filename characters (no path traversal).
-func sanitizeFilename(name string) string {
+// SanitizeFilename keeps only safe filename characters (no path traversal).
+//
+// Exported for the seed upload path, which builds the same canonical object key
+// as HandleFileUpload — a key that differed between the two would make a seeded
+// photo unreachable through the download route.
+func SanitizeFilename(name string) string {
 	name = filepath.Base(name)
 	name = strings.Map(func(r rune) rune {
 		switch {
@@ -499,7 +512,38 @@ func sanitizeFilename(name string) string {
 	return name
 }
 
-// allowedFileType reports whether an upload satisfies the field's
+// ObjectKey builds the canonical object key for a file field value:
+//
+//	{workspace}/{module}/{entity}/{id}/{field}/{uuid}-{name}
+//
+// Exported so every write path (HTTP upload, seed assets) lands on the same key
+// shape. The canonical key embeds the record ID, which is why a seed cannot
+// produce it before insert — it uploads AFTER the row exists (see
+// docs_internal/plan/seed-assets-and-reconcile.md §1.1).
+func ObjectKey(workspaceID, module, entity, id, field, filename string) string {
+	return fmt.Sprintf("%s/%s/%s/%s/%s/%s-%s",
+		workspaceID, module, entity, id, field,
+		db.NewUUIDv7(), SanitizeFilename(filename))
+}
+
+// ObjectExists reports whether the storage backend can confirm that an object
+// is present. Backends opt in structurally (Stat); a backend without it returns
+// ok=false, and callers must then assume "unknown" rather than "missing".
+func ObjectExists(ctx context.Context, store Storage, key string) (exists bool, ok bool) {
+	st, has := store.(interface {
+		Stat(ctx context.Context, path string) (int64, error)
+	})
+	if !has {
+		return false, false
+	}
+	size, err := st.Stat(ctx, key)
+	if err != nil {
+		return false, true
+	}
+	return size > 0, true
+}
+
+// AllowedFileType reports whether an upload satisfies the field's
 // `storage.allowed_types` (05-field-types.md §1.3, gap #4b).
 //
 // The canonical form is a bare extension without the dot (`jpg`, `png`, `pdf`).
@@ -513,7 +557,7 @@ func sanitizeFilename(name string) string {
 // what the spec documents, fell through every branch and rejected legitimate
 // uploads. Normalizing here (and in the client's matcher, which must agree) is
 // what makes one canonical spelling sufficient.
-func allowedFileType(allowed []string, contentType, filename string) bool {
+func AllowedFileType(allowed []string, contentType, filename string) bool {
 	ext := strings.ToLower(filepath.Ext(filename)) // ".jpg"
 	for _, a := range allowed {
 		a = strings.ToLower(strings.TrimSpace(a))
@@ -787,7 +831,7 @@ func (f *HandlerFactory) HandleChunkInit() http.HandlerFunc {
 		// are transferred.
 		if st := field.Storage; st != nil && len(st.AllowedTypes) > 0 {
 			ct := body.Filename // no content-type available yet; extension match
-			if !allowedFileType(st.AllowedTypes, "", ct) {
+			if !AllowedFileType(st.AllowedTypes, "", ct) {
 				writeError(w, http.StatusBadRequest, "FILE_TYPE_NOT_ALLOWED",
 					"file type not allowed for field "+fieldName)
 				return
@@ -807,9 +851,7 @@ func (f *HandlerFactory) HandleChunkInit() http.HandlerFunc {
 		}
 
 		// Same key layout as HandleFileUpload.
-		key := fmt.Sprintf("%s/%s/%s/%s/%s/%s-%s",
-			workspaceID, module, entity, id, fieldName,
-			db.NewUUIDv7(), sanitizeFilename(body.Filename))
+		key := ObjectKey(workspaceID, module, entity, id, fieldName, body.Filename)
 		uploadID, err := caps.chunk.InitChunkUpload(ctx, key)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "CHUNK_INIT_FAILED",

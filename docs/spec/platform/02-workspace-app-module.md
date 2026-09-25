@@ -354,12 +354,44 @@ Nesting dibatasi **3 level**; tiap node wajib salah satu dari tiga bentuk
 
 Resolusi route: leaf ber-`view` me-resolve route dari registrasi View itu
 sendiri (Page pakai `route:`-nya; Dashboard/Widget/Wizard/Kanban/Timeline/
-Report/Print pakai konvensi `/<kind-lowercase>/<name>`) — route tidak pernah
-diduplikasi ke item menu supaya tidak bisa drift. `Form` dan `Table` **bukan**
-target `view` yang valid — keduanya tidak pernah dapat route standalone
-(cuma tampil embedded di blok Page, atau lewat derived CRUD route). Tidak
-ada `kind: Menu` standalone — sudah dilebur seluruhnya ke `App.spec.menu`
-(otoritatif) dan `Module.spec.menu` (saran default).
+Report/Print/Calendar/Listing/ApprovalInbox/NotificationCenter pakai konvensi
+`/<kind-lowercase>/<name>`) — route tidak pernah diduplikasi ke item menu supaya
+tidak bisa drift.
+
+`Form` dan `Table` **boleh** jadi target `view`: keduanya mendapat derived Page
+wrapper dengan route `/<module>/form/<name>` dan `/<module>/table/<name>`
+(kecuali `public: false`), dan route itu juga dipakai footprint grant
+(`{entity}-page`, [`../../runtimes/`](../../runtimes/README.md)). Wrapper-nya
+dibuat tanpa `mode`, sehingga halaman itu selalu merender mode `view` — untuk
+create/edit gunakan blok `form:` di sebuah Page dengan `mode` eksplisit.
+
+Tidak ada `kind: Menu` standalone — sudah dilebur seluruhnya ke
+`App.spec.menu` (otoritatif) dan `Module.spec.menu` (saran default).
+
+### Visibilitas item menu — dua sumbu
+
+`MenuItem` membawa dua field yang **tidak boleh saling menggantikan**:
+
+| Field         | Sumbu                                                                        | Dievaluasi                       | Bypass-able                        |
+| ------------- | ---------------------------------------------------------------------------- | -------------------------------- | ---------------------------------- |
+| `permissions` | RBAC — sembunyikan dari pemanggil yang tidak memegang salah satunya (any-of) | **server**, saat bundle dibangun | tidak — item tidak pernah terkirim |
+| `when`        | kondisi **bisnis** (FormSpecExpr) — sembunyikan saat false                   | **klien**                        | ya, memang                         |
+
+**`when` bukan gerbang otorisasi** dan tidak boleh dipakai begitu:
+menyembunyikan tautan tidak memberi atau menolak akses — route tetap ada dan
+datanya tetap dijaga `required_permission` di resource serta filter visibilitas
+entity di bundle. `when` dievaluasi klien karena kondisinya bisa bergantung waktu
+(`today()`), sedangkan bundle `/_meta/ui` di-cache lewat ETag. Untuk membatasi
+siapa yang boleh melihat/membuka sesuatu, pakai `permissions`.
+
+Konsekuensi yang perlu diketahui: surface `_admin` memakai bundle unscoped
+(`?admin=true`) dan menu yang dibangun dari daftar entity, sehingga
+`permissions`/`when` tidak berlaku di sana — gerbangnya biner (`_admin.access`).
+
+Grammar `when` mengikuti [`../frontend/08-formspec-expr.md`](../frontend/08-formspec-expr.md),
+termasuk himpunan callable tertutupnya; `formspec check` menolak ekspresi di
+luar itu saat deploy. Konteks evaluasinya `{ user }` (identitas pemanggil) —
+**bukan** permission; lihat dokumen itu §3.
 
 ## 5. Qualifier Referensi Antar Module
 

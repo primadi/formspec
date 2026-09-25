@@ -1,10 +1,11 @@
 # Form
 
 <!-- generated:meta -->
-| | |
-|---|---|
-| Grup | `ui` |
-| Plane | `resource` |
+
+|             |            |
+| ----------- | ---------- |
+| Grup        | `ui`       |
+| Plane       | `resource` |
 | Spec struct | `FormSpec` |
 
 <!-- /generated:meta -->
@@ -62,18 +63,19 @@ spec:
 ## Atribut
 
 <!-- generated:attributes -->
-| Atribut | Tipe | Wajib | Contoh | Deskripsi |
-|---|---|---|---|---|
-| `public` | `boolean` | — | true | If true (default), a route /module/form/<name> is auto-generated. Set false for embed-only forms. |
-| `entity` | `string` | ✅ | billing.order |  |
-| `auth_action` | enum (login · register · change_password · forgot_password · reset_password) | — |  | Bind submit to a platform auth action (mutually exclusive with entity). |
-| `mode` | enum (create · edit · view) | — | edit |  |
-| `sections` | []`FormSection` | — |  |  |
-| `actions` | []`FormAction` | — |  |  |
-| `submit` | `FormSubmit` | — |  |  |
-| `render` | `FormRenderDecl` | — |  |  |
-| `context` | [][`ContextDecl`](../../spec/frontend/04-spec-resolution-api.md) | — |  | Context declares render-context variables injected into this form's |
-| `confirm` | `FormConfirm` | — |  | Per-form confirm override: create/update message — nil = inherit App default, empty string = off |
+
+| Atribut       | Tipe                                                                         | Wajib | Contoh        | Deskripsi                                                                                         |
+| ------------- | ---------------------------------------------------------------------------- | ----- | ------------- | ------------------------------------------------------------------------------------------------- |
+| `public`      | `boolean`                                                                    | —     | true          | If true (default), a route /module/form/<name> is auto-generated. Set false for embed-only forms. |
+| `entity`      | `string`                                                                     | ✅    | billing.order |                                                                                                   |
+| `auth_action` | enum (login · register · change_password · forgot_password · reset_password) | —     |               | Bind submit to a platform auth action (mutually exclusive with entity).                           |
+| `mode`        | enum (create · edit · view)                                                  | —     | edit          |                                                                                                   |
+| `sections`    | []`FormSection`                                                              | —     |               |                                                                                                   |
+| `actions`     | []`FormAction`                                                               | —     |               |                                                                                                   |
+| `submit`      | `FormSubmit`                                                                 | —     |               |                                                                                                   |
+| `render`      | `FormRenderDecl`                                                             | —     |               |                                                                                                   |
+| `context`     | [][`ContextDecl`](../../spec/frontend/04-spec-resolution-api.md)             | —     |               | Context declares render-context variables injected into this form's                               |
+| `confirm`     | `FormConfirm`                                                                | —     |               | Per-form confirm override: create/update message — nil = inherit App default, empty string = off  |
 
 <!-- /generated:attributes -->
 
@@ -107,6 +109,15 @@ Karena konvensional, tidak ada properti YAML baru untuk ini.
 ## Gotchas
 
 - **Tiap `field` wajib ada di Entity**; tiap `action` wajib ada + permission-gated otomatis.
+- **`help` mewarisi `description` entity** — `FormField.help` dan
+  `Field.description` berarti sama bagi pengguna; `help` di form hanya perlu
+  ditulis untuk **override** per-form. Konsekuensinya `description` entity
+  adalah teks yang dibaca pengguna akhir, bukan catatan desain — detail
+  implementasi ditulis sebagai komentar YAML (`# …`). `help`/`description`
+  hanya tampil di mode create/edit, tidak di mode `view`, dan tidak di
+  permukaan baca-saja (Table/detail). Section pertama juga mewarisi
+  `metadata.description` entity sebagai subtitle drawer/dialog
+  (`docs/spec/frontend/06-page-kinds.md` §2).
 - **Vocabulary perilaku client TERTUTUP**: `visible_when`, `readonly_when`, `required_when`, `compute` — butuh efek imperatif → custom widget (`asset`), bukan FormSpecExpr.
 - **Form auth wajib token `autocomplete` standar** (`username`, `current-password`, `new-password`) — jangan `"nope"` (token tidak valid) atau `"off"` pada field kredensial; password manager berhenti bisa memasangkan/menyimpan.
 - **`render` = keputusan container design-time**, bukan runtime. `modal` (≤5 field), `drawer` (5–12), `separate_page` (12+ field / child table / butuh deep-link). Form kedua dengan render lain = deklarasi terpisah.

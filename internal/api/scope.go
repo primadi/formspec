@@ -65,13 +65,14 @@ func ReadAllPermission(module, entity string, es *spec.EntitySpec) string {
 //     token). The token IS the credential, so a client-supplied value is expected
 //     there; a missing parameter fails closed rather than listing everything.
 //
-// A caller with NO identity whose request arrived through a public grant that
-// declares its own `scope` is skipped: that grant already constrains the rows
-// (it is applied by applyPublicScope), and a session-sourced scope could never
-// resolve for an anonymous caller — so resolving it here would deny every read
-// on a public surface instead of filtering it. An entity with `row_scope` but no
-// public grant still fails closed for anonymous callers, which is the correct
-// answer for an entity nobody meant to expose.
+// A caller authorized by a public grant that declares its own `scope` is
+// skipped: that grant already constrains the rows (it is applied by
+// applyPublicScope), and a session-sourced scope could never resolve for such a
+// caller — so resolving it here would deny every read on a public surface
+// instead of filtering it. That covers both anonymous callers and signed-in
+// ones running on the grant (see RequirePermissionOrAnonymous). An entity with
+// `row_scope` but no public grant still fails closed for anonymous callers,
+// which is the correct answer for an entity nobody meant to expose.
 //
 // Returns the merged filter map (never nil when a scope is declared).
 func (f *HandlerFactory) applyRowScope(r *http.Request, es *spec.EntitySpec, module, entity string, filters map[string]db.FilterOp) (map[string]db.FilterOp, error) {
@@ -86,9 +87,15 @@ func (f *HandlerFactory) applyRowScope(r *http.Request, es *spec.EntitySpec, mod
 		identity.HasPermission(ReadAllPermission(module, entity, es)) {
 		return filters, nil
 	}
-	// The public surface's own scope takes over for anonymous callers (see the
-	// doc comment above).
-	if IdentityFromContext(r.Context()) == nil && len(publicScopeFromContext(r.Context())) > 0 {
+	// The public surface's own scope takes over for callers the grant
+	// authorized: anonymous ones, and signed-in ones with no permission of
+	// their own for this route (see RequirePermissionOrAnonymous). A
+	// session-sourced scope could never resolve for either — resolving it here
+	// would deny every read on a public surface instead of filtering it. A
+	// caller that DOES hold the permission falls through and is scoped by its
+	// session/route attributes as usual.
+	if len(publicScopeFromContext(r.Context())) > 0 &&
+		(IdentityFromContext(r.Context()) == nil || isPublicGrantAuth(r.Context())) {
 		return filters, nil
 	}
 	if filters == nil {
@@ -254,13 +261,17 @@ func publicScopeFromContext(ctx context.Context) []spec.FilterSpec {
 // the token IS the credential — and a missing one fails closed, exactly like an
 // entity `row_scope` with `from: route`.
 //
-// It applies to ANONYMOUS callers only. An authenticated caller is governed by
-// its permissions and the entity's own `row_scope`: the grant exists to constrain
-// access that has no identity, and applying it to signed-in callers would filter
-// the cashier's POS list by a token it does not carry.
+// It applies to callers AUTHORIZED BY THE GRANT — anonymous ones, and signed-in
+// ones with no permission of their own for this route (see
+// RequirePermissionOrAnonymous). A caller that holds the permission is governed
+// by it plus the entity's own `row_scope` instead: applying the grant to such a
+// caller would filter the cashier's POS list by a token it does not carry.
 func (f *HandlerFactory) applyPublicScope(r *http.Request, filters map[string]db.FilterOp) (map[string]db.FilterOp, error) {
 	scope := publicScopeFromContext(r.Context())
-	if len(scope) == 0 || IdentityFromContext(r.Context()) != nil {
+	if len(scope) == 0 {
+		return filters, nil
+	}
+	if IdentityFromContext(r.Context()) != nil && !isPublicGrantAuth(r.Context()) {
 		return filters, nil
 	}
 	if filters == nil {

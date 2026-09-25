@@ -42,6 +42,10 @@ func (c *Converter) Generate(collect *CollectResult) *GenerateResult {
 		"TableColumn", "TableAction", "BackdatePolicy", "ForwardDatePolicy",
 		"SoftDeactivateDecl", "PersistSpec", "ExtendStorage", "RawDDLDecl",
 		"NaturalKeyRuleDecl", "NaturalKeyPrefix", "StorageSpec", "FieldRef",
+		// Field.options — the labelled choice set behind `select-multi-tag`
+		// (2026-09-24). A $ref target, so it MUST be listed here or every
+		// Entity.schema.json points at a missing definition.
+		"FieldOption",
 		"DeliveryDecl", "PublishDecl", "PayloadDecl", "EventDeliveryDecl", "DeliveryTarget",
 		"RetryDecl", "PageBlock", "PageTab", "BlockRef", "DashboardWidget", "WidgetLayout",
 		"SectionBlock", "SectionCTA", "SectionItem",
@@ -54,6 +58,9 @@ func (c *Converter) Generate(collect *CollectResult) *GenerateResult {
 		"TimelineDisplay",
 		// Kind-specific sub-types referenced via $ref from kind specs
 		"ApiGRPCConfig", "ApiRESTConfig",
+		// Seed kind (platform): the per-entity record block is a $ref target, so
+		// it must be listed or Seed.schema.json points at a missing definition.
+		"SeedEntity",
 		"DatastoreAccess", "DatastoreConnection", "DatastoreAccessFilter", "DatastorePermission", "DatastorePool", "DatastorePermissionRule",
 		"ConfigKey",                    // map value type for ConfigSpec.Keys
 		"Settings", "CurrencySettings", // global settings namespace (spec §10)
@@ -467,6 +474,17 @@ func fieldItemsSchema(fd FieldDef, collect *CollectResult, _ map[string]*Schema)
 			}
 		case *types.Interface:
 			// any type
+		case *types.Map:
+			// []map[string]any — a list of free-form records, e.g. Seed records
+			// or a raw JSON payload list. Without this case the element fell
+			// through to `items: {type: string}` and every record in a seed
+			// failed schema validation while the engine accepted it — the
+			// "lolos engine, ditolak schema" class this generator exists to
+			// avoid.
+			items.Type = "object"
+			if _, isAny := t.Elem().(*types.Interface); !isAny {
+				items.AdditionalProperties = map[string]any{}
+			}
 		default:
 			items.Type = "string"
 		}

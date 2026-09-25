@@ -44,6 +44,21 @@ spec:
       default: 0
       title: "Stok Minimum"
       description: "Ambang peringatan stok kritis"
+    # Berat per SATUAN DASAR dalam gram — dasar alokasi landed cost berbasis
+    # berat (item 10.6). Ongkos kirim mengikuti berat/volume, bukan nilai:
+    # PO yang mengirim 50 kg beras bersama 100 g vanili membebani beras jauh
+    # lebih banyak daripada proporsi nilainya, dan kolom ini yang membuat itu
+    # bisa dinyatakan alih-alih ditebak.
+    #
+    # Kosong = tidak diketahui. Alokasi berbasis berat akan MENOLAK berjalan
+    # bila ada baris yang beratnya tidak diketahui, bukan menganggapnya nol:
+    # berat nol berarti bahan itu gratis ongkos kirim, dan itu klaim yang tidak
+    # boleh dibuat oleh data yang tidak ada.
+    - name: weight_per_unit
+      type: decimal
+      scale: 3
+      title: "Berat per Satuan (gram)"
+      description: "Untuk alokasi biaya kirim berbasis berat; kosong = tidak diketahui"
     - name: shelf_life_days
       type: integer
       title: "Umur Simpan (hari)"

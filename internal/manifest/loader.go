@@ -323,6 +323,10 @@ var KnownKinds = KindSet{
 	"Environment": true, "Policy": true, "Datastore": true,
 	// Platform — named workspace registry seed (platform/02-workspace-app-module.md §1)
 	"Workspace": true,
+	// Platform — CLI seed data (cmd/formspec/seed.go). Registered so
+	// `formspec validate` accepts seed manifests instead of rejecting the kind
+	// the CLI itself runs.
+	"Seed": true,
 }
 
 // Versions maps a spec version (the segment of apiVersion, e.g. "v1") to the
@@ -404,6 +408,20 @@ func (l *Loader) Validate(raw RawManifest) error {
 			return fmt.Errorf("%s: invalid spec: %w", raw.Source, err)
 		}
 		if err := spec.ValidateModuleSpec(moduleSpec); err != nil {
+			return fmt.Errorf("%s: %w", raw.Source, err)
+		}
+	}
+
+	// Seed: the declaration must name entities and carry records. Record
+	// payloads are deliberately NOT validated here — that needs the entity
+	// registry (cross-manifest) and the engine already rejects bad payloads at
+	// insert time, so validating here would be a second, drifting copy.
+	if raw.Kind == "Seed" && raw.Spec != nil {
+		seedSpec, err := RawSpecTo[spec.SeedSpec](raw.Spec.(map[string]any))
+		if err != nil {
+			return fmt.Errorf("%s: invalid spec: %w", raw.Source, err)
+		}
+		if err := spec.ValidateSeedSpec(seedSpec); err != nil {
 			return fmt.Errorf("%s: %w", raw.Source, err)
 		}
 	}

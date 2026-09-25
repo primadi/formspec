@@ -253,6 +253,16 @@ type App struct {
 	// linkSweeper enforces storage-link TTLs (delete_if_untouched) and
 	// purges consumed link rows (todo 7.17.6).
 	linkSweeper *api.StorageLinkSweeper
+	// storageFn resolves the object store for file fields, and linkStore backs
+	// download links. Both are held so ReloadSpec() can re-wire them: a reload
+	// builds a FRESH RouterBuilder, and without re-wiring, every file operation
+	// after the first hot-reload failed with "storage not configured" — uploads
+	// and downloads alike, on every entity, with no relation to what changed in
+	// the spec. That is a hot-reload bug, not a storage-configuration bug, and
+	// it only showed up when the dev server was used the way it is meant to be
+	// used (edit a file, keep working).
+	storageFn func() (api.Storage, error)
+	linkStore *db.StorageLinkStore
 	// pubsub is the shared in-memory pub/sub bus backing both ctx.pubsub()
 	// and the `pubsub` event delivery channel (todo 7.3.5). Held so a
 	// ReloadSpec() reuses the same instance.
@@ -571,7 +581,7 @@ func New(cfg Config) (*App, error) {
 	jobTracker := job.NewTracker(jobStore, nil, cfg.JWTSecret)
 	// Datastore registry (todo 2.9.4): named kind: Datastore manifests +
 	// per-module `spec.datastore` bindings for module-scoped ctx.* resolution.
-	dsReg, err := buildDatastoreRegistry(specManifests.Manifests, database, stateDirFromDSN(cfg.DSN), sharedPubSub)
+	dsReg, err := buildDatastoreRegistry(specManifests.Manifests, database, StateDirFor(cfg.DSN, cfg.SpecPath), sharedPubSub)
 	if err != nil {
 		return nil, err
 	}
@@ -678,48 +688,15 @@ func New(cfg Config) (*App, error) {
 	// registry (plan fase E — env-var implicit path removed): a module bound
 	// to a service serving `storage` backed by garage/minio/s3 provides the
 	// object store; otherwise filesystem under the state dir (.formspec/storage).
-	storageResolved := false
-	var storageFn func() (api.Storage, error)
-	for _, name := range sortedServiceNames(dsReg) {
-		e := dsReg.services[name]
-		if e == nil || e.spec == nil {
-			continue
-		}
-		drv := e.spec.Driver
-		if drv != spec.DatastoreDriverGarage && drv != spec.DatastoreDriverMinio && drv != spec.DatastoreDriverS3 {
-			continue
-		}
-		servesStorage := false
-		for _, p := range e.spec.Serves {
-			if p == spec.PrimitiveStorage {
-				servesStorage = true
-				break
-			}
-		}
-		if !servesStorage {
-			continue
-		}
-		conn, err := dsReg.Resolve("storage", name, "")
-		if err != nil {
-			return nil, fmt.Errorf("init storage service %q: %w", name, err)
-		}
-		mc, ok := conn.(api.Storage)
-		if !ok {
-			return nil, fmt.Errorf("storage service %q does not implement api.Storage", name)
-		}
-		storageFn = func() (api.Storage, error) { return mc, nil }
-		rb.SetStorageResolver(storageFn)
-		storageResolved = true
-		break
+	// ResolveStorage is shared with the CLI seed path so `formspec seed` writes
+	// objects through the SAME service the server reads them from
+	// (docs_internal/plan/seed-assets-and-reconcile.md).
+	store, err := ResolveStorage(dsReg, StateDirFor(cfg.DSN, cfg.SpecPath))
+	if err != nil {
+		return nil, err
 	}
-	if !storageResolved {
-		fsStore, err := memory.NewStorage(filepath.Join(StateDirFromDSN(cfg.DSN), "storage"))
-		if err != nil {
-			return nil, fmt.Errorf("init storage: %w", err)
-		}
-		storageFn = func() (api.Storage, error) { return fsStore, nil }
-		rb.SetStorageResolver(storageFn)
-	}
+	storageFn := func() (api.Storage, error) { return store, nil }
+	rb.SetStorageResolver(storageFn)
 
 	// Storage links (todo 7.17.6) — token store for download links backing
 	// the one_time (delete-after-download) and TTL (delete-if-untouched)
@@ -971,6 +948,8 @@ func New(cfg Config) (*App, error) {
 		jobTracker:       jobTracker,
 		idempotency:      idempotencyStore,
 		linkSweeper:      linkSweeper,
+		storageFn:        storageFn,
+		linkStore:        linkStore,
 		nativeHandlers:   make(map[string]action.NativeHandler),
 		authSvc:          authSvc,
 		subReg:           subReg,
@@ -1267,6 +1246,19 @@ func (a *App) ReloadSpec() error {
 	// new router — SetHub must precede BuildRoutes so the WS handler
 	// registered by BuildHTTP uses the correct hub reference.
 	newRB.SetHub(oldHub)
+	// Re-wire the object store and download-link store. These live on the APP,
+	// not in the spec, so a reload has nothing to re-resolve — but the new
+	// RouterBuilder starts empty and its handler factory would answer
+	// "storage not configured" for every file field from the first reload
+	// onward. The symptom is entirely disconnected from the edit that triggered
+	// the reload, which is what made it hard to see: uploads/downloads simply
+	// stop working until the process restarts.
+	if a.storageFn != nil {
+		newRB.SetStorageResolver(a.storageFn)
+	}
+	if a.linkStore != nil {
+		newRB.SetLinkStore(a.linkStore)
+	}
 	// Wire spec version function BEFORE BuildHTTP() so HandleMetaVersion
 	// captures it. Reads from the live App's atomic counter.
 	newRB.SetSpecVersionFn(func() int64 { return a.specVersion.Load() })
@@ -1286,7 +1278,7 @@ func (a *App) ReloadSpec() error {
 	newItReg := buildIntegratorRegistry(specManifests.Manifests)
 	// Datastore registry (todo 2.9.4): re-resolve on reload so new/changed
 	// kind: Datastore manifests and module bindings take effect.
-	newDsReg, err := buildDatastoreRegistry(specManifests.Manifests, a.database, stateDirFromDSN(a.cfg.DSN), a.pubsub)
+	newDsReg, err := buildDatastoreRegistry(specManifests.Manifests, a.database, StateDirFor(a.cfg.DSN, a.cfg.SpecPath), a.pubsub)
 	if err != nil {
 		return err
 	}
@@ -1857,7 +1849,13 @@ func newDispatcher(reg *entity.Registry, svcReg *service.Registry, _ db.DB, cfg 
 			return jobTracker.Progress(ctx, workspaceID, jobID, pct, message)
 		})
 	}
-	scriptEx.SetSaveHandler(func(ctx context.Context, workspaceID, module, entityName, id string, version int, data map[string]any) error {
+	scriptEx.SetSaveHandler(func(ctx context.Context, workspaceID, fromModule, module, entityName, id string, version int, data map[string]any, callerResources []string) error {
+		if err := checkCrossModuleUses(fromModule, module, entityName, callerResources); err != nil {
+			return err
+		}
+		// The enclosing action's `uses`, so the target entity's hooks inherit the
+		// same consent the action declared (a hook is part of the action).
+		uses := scriptEx.ActionUses()
 		store, err := reg.GetEntityStore(module, entityName)
 		if err != nil {
 			return fmt.Errorf("get store: %w", err)
@@ -1865,23 +1863,40 @@ func newDispatcher(reg *entity.Registry, svcReg *service.Registry, _ db.DB, cfg 
 		// resource.new() produces a handle with ID "" — save() on it performs
 		// an INSERT (todo 7.14.4). A non-empty ID updates the existing record.
 		if id == "" {
-			_, err = store.Insert(ctx, db.InsertParams{
+			// Guards run BEFORE the row is written, and an error aborts — the
+			// same contract the HTTP path honours. Without this call the entity's
+			// `before create` script was enforced for every API create and silently
+			// skipped for every script create.
+			if err := runBeforeWriteHooks(ctx, disp, reg, module, entityName, "create", "", workspaceID, data, uses); err != nil {
+				return err
+			}
+			newID, err := store.Insert(ctx, db.InsertParams{
 				WorkspaceID: workspaceID,
 				CreatedBy:   "script",
 				Data:        data,
 				Permissions: auth.PermissionsFromContext(ctx),
 			})
+			if err != nil {
+				return err
+			}
+			runAfterWriteHooks(ctx, disp, reg, module, entityName, "create", newID, workspaceID, uses)
+			return nil
+		}
+		if err := runBeforeWriteHooks(ctx, disp, reg, module, entityName, "update", id, workspaceID, data, uses); err != nil {
 			return err
 		}
-		_, err = store.Update(ctx, db.UpdateParams{
+		if _, err := store.Update(ctx, db.UpdateParams{
 			WorkspaceID: workspaceID,
 			ID:          id,
 			Version:     version,
 			UpdatedBy:   "script",
 			Data:        data,
 			Permissions: auth.PermissionsFromContext(ctx),
-		})
-		return err
+		}); err != nil {
+			return err
+		}
+		runAfterWriteHooks(ctx, disp, reg, module, entityName, "update", id, workspaceID, uses)
+		return nil
 	})
 	scriptEx.SetCallHandler(func(ctx context.Context, workspaceID, fromModule, targetModule, targetEntity, targetID, actionName string, params map[string]any, callerResources []string) (any, error) {
 		if targetModule == "" {
@@ -1968,15 +1983,24 @@ func newDispatcher(reg *entity.Registry, svcReg *service.Registry, _ db.DB, cfg 
 		if err := checkCrossModuleUses(fromModule, module, entityName, callerResources); err != nil {
 			return "", err
 		}
+		uses := scriptEx.ActionUses()
 		store, err := reg.GetEntityStore(module, entityName)
 		if err != nil {
 			return "", fmt.Errorf("get store: %w", err)
 		}
-		return store.Insert(ctx, db.InsertParams{
+		if err := runBeforeWriteHooks(ctx, disp, reg, module, entityName, "create", "", workspaceID, data, uses); err != nil {
+			return "", err
+		}
+		id, err := store.Insert(ctx, db.InsertParams{
 			WorkspaceID: workspaceID,
 			CreatedBy:   "script",
 			Data:        data,
 		})
+		if err != nil {
+			return "", err
+		}
+		runAfterWriteHooks(ctx, disp, reg, module, entityName, "create", id, workspaceID, uses)
+		return id, nil
 	})
 	scriptEx.SetNextKeyHandler(func(ctx context.Context, workspaceID, module, entityName, fieldName, scope string) (string, error) {
 		return generateNextKey(ctx, reg, workspaceID, module, entityName, fieldName, scope)
@@ -2033,6 +2057,99 @@ func generateNextKey(ctx context.Context, reg *entity.Registry, workspaceID, mod
 //
 // declared is the caller's uses.resources (nil-safe). A violation returns a
 // USES_VIOLATION error that aborts the script action.
+// scriptExecuteParams builds the ExecuteParams for hook dispatch from a
+// script-driven write. The `uses` declaration that gates a hook's cross-module
+// reads travels separately, as a *spec.Action passed to RunBeforePhase /
+// RunAfterPhase — not in ExecuteParams.
+func scriptExecuteParams(module, entityName, verb, id, workspaceID string, data map[string]any) action.ExecuteParams {
+	return action.ExecuteParams{
+		Module:      module,
+		Entity:      entityName,
+		ActionName:  verb,
+		ResourceID:  id,
+		Resource:    data,
+		Params:      data,
+		WorkspaceID: workspaceID,
+		UserID:      "script",
+	}
+}
+
+// runBeforeWriteHooks runs the target entity's `before <verb>` hooks, and
+// RETURNS their error so the write is aborted.
+//
+// EntityStore.Insert does not run hooks — the API layer does — so every
+// script-driven write needs this call or the entity's guards are simply
+// absent on that path. That is the same class of hole as the missing
+// `after` hook (see runAfterWriteHooks): a manifest that declares a guard and
+// a path that ignores it. On this path the consequence is worse, because
+// guards are what stop bad data from being written at all: a `before create`
+// script that rejects a duplicate price or an out-of-range quantity was
+// enforced for every HTTP create and silently skipped for every script create.
+//
+// Unlike the after-phase, a failure must propagate: the caller aborts.
+func runBeforeWriteHooks(ctx context.Context, disp *action.Dispatcher, reg *entity.Registry, module, entityName, verb, id, workspaceID string, data map[string]any, uses *spec.UsesDecl) error {
+	// RunBeforePhase expects a *spec.Action (a reserved action may carry its own
+	// Impl); here the enclosing action is a script, so only Uses matters.
+	actionSpec := &spec.Action{Uses: uses}
+	if disp == nil || reg == nil {
+		return nil
+	}
+	info, ok := reg.GetEntity(module, entityName)
+	if !ok || info.EntitySpec == nil || len(info.EntitySpec.Hooks) == 0 {
+		return nil
+	}
+	params := scriptExecuteParams(module, entityName, verb, id, workspaceID, data)
+	if err := action.RunBeforePhase(ctx, disp, info.EntitySpec.Hooks, actionSpec, verb, &params); err != nil {
+		return err
+	}
+	// `resource.set()` inside a before-hook mutates the map in place, so the
+	// caller's data already reflects it — but be explicit: a hook that
+	// REPLACED the map would otherwise be lost.
+	if params.Resource != nil {
+		for k, v := range params.Resource {
+			data[k] = v
+		}
+	}
+	return nil
+}
+
+// runAfterWriteHooks runs the target entity's `after <verb>` hooks after a
+// script-driven write, exactly as the HTTP path does
+// (internal/api/handler.go HandleCreate/HandleUpdate).
+//
+// WHY THIS EXISTS. Both `resource.create` and `resource.save` write through
+// EntityStore directly, and EntityStore does not run hooks — the API layer
+// does. Without this call a record written from a script was INVISIBLE to every
+// projection that entity feeds: kafe's `stock-movement` maintains `stock-level`
+// from an `after create` hook, so a purchase received through a script created
+// movements that moved no balance at all. The movement row existed, the
+// projection stayed empty, and nothing reported an error — the hook simply
+// never ran. The same hole applied to `after update` on the save path.
+//
+// Best-effort by design, matching the API path: `RunAfterPhase` does not roll
+// back the write, so a failing hook leaves the row in place. It also means the
+// caller cannot detect hook failure here — that is a known limitation of the
+// phase model (see master todo 2.1.1), not something this helper introduces.
+func runAfterWriteHooks(ctx context.Context, disp *action.Dispatcher, reg *entity.Registry, module, entityName, verb, id, workspaceID string, uses *spec.UsesDecl) {
+	actionSpec := &spec.Action{Uses: uses}
+	if disp == nil || reg == nil || id == "" {
+		return
+	}
+	info, ok := reg.GetEntity(module, entityName)
+	if !ok || info.EntitySpec == nil || len(info.EntitySpec.Hooks) == 0 {
+		return
+	}
+	store, err := reg.GetEntityStore(module, entityName)
+	if err != nil {
+		return
+	}
+	rec, err := store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: id})
+	if err != nil || rec == nil {
+		return
+	}
+	action.RunAfterPhase(ctx, disp, info.EntitySpec.Hooks, actionSpec, verb, scriptExecuteParams(module, entityName, verb, id, workspaceID, rec.Data))
+}
+
 func checkCrossModuleUses(fromModule, targetModule, targetEntity string, declared []string) error {
 	if targetModule == "" || targetModule == fromModule {
 		return nil

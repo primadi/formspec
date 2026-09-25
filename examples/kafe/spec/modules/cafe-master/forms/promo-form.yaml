@@ -16,8 +16,10 @@ spec:
         - { field: name }
         - { field: type, help: "Menentukan field nilai mana yang dipakai." }
         - { field: applies_to, help: "Menentukan field cakupan mana yang dipakai." }
-        - { field: branch_id, widget: relation-picker, help: "Kosongkan untuk berlaku di semua cabang." }
-        - { field: priority, help: "Dipakai memilih satu promo terbaik bila beberapa cocok (aturan bisnis #7)." }
+        # `branch_id` + `priority` tidak menulis `help:` — warisan dari
+        # `description` entity (`promo/entity.yaml`) mengisi keduanya.
+        - { field: branch_id, widget: relation-picker }
+        - { field: priority }
     - title: "Nilai Potongan"
       columns: 2
       fields:
@@ -39,7 +41,7 @@ spec:
       fields:
         - { field: start_date }
         - { field: end_date }
-        - { field: days_of_week, help: "Array angka: 1=Senin .. 7=Minggu. Kosongkan untuk setiap hari." }
+        - { field: days_of_week, widget: select-multi-tag, help: "Pilih hari promo berlaku. Kosongkan untuk setiap hari." }
         # `time` memakai `timeinput` — jam happy hour
         # diisi lewat kontrol waktu, bukan teks bebas.
         - { field: time_from, label: "Jam Mulai" }

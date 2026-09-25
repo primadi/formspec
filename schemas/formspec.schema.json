@@ -1219,6 +1219,7 @@
         },
         "default": {},
         "description": {
+          "description": "Help text shown to users under the input in forms (and wizard steps). Written for the end user — not a design note; it is inherited as the field's `help` wherever the field appears, so one declaration serves both surfaces.",
           "type": "string"
         },
         "encrypted": {
@@ -1261,6 +1262,12 @@
         "natural_key_rule": {
           "$ref": "#/$defs/NaturalKeyRuleDecl",
           "nullable": true
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FieldOption"
+          }
         },
         "precision": {
           "description": "Decimal precision/scale (05-field-types.md §1.2) — only meaningful for",
@@ -1318,6 +1325,7 @@
           "nullable": true
         },
         "title": {
+          "description": "Caption shown to users in tables, forms, and detail pages; falls back to the humanised field name",
           "type": "string"
         },
         "tree": {
@@ -1355,6 +1363,23 @@
         "financial",
         "internal"
       ]
+    },
+    "FieldOption": {
+      "description": "FieldOption is one choice in a field's `options:` list — a closed set of\nvalues **with captions**. It exists because `enum_values` carries values\nonly: a day-of-week set declared as `[1, 2, 3]` renders as \"1, 2, 3\", so the\nauthor either writes a picker whose choices cannot be read, or a free-text\ntag input that accepts `9`.\n\n`options` is a property of the **data** (which values are legal), not of one\nform — the same reason `enum_values` lives on the Entity. A multi-value field\n(`type: json`, or a string holding a comma-separated list) can therefore be\ndeclared once and rendered, filtered, and labelled consistently.\n\n`Value` keeps the scalar's YAML type (`value: 1` stays the number 1 in the\nbundle and in the stored array, matching what the field actually holds);\n`Label` is the caption shown to users, and defaults to the value itself when\nomitted.\n",
+      "type": "object",
+      "properties": {
+        "label": {
+          "description": "Caption shown to users. Defaults to the value (humanised) when omitted.",
+          "type": "string"
+        },
+        "value": {
+          "description": "Stored value. Keep the scalar type the field stores — `value: 1` for a numeric set, not `value: \\\"1\\\"`."
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "additionalProperties": false
     },
     "FieldRef": {
       "description": "FieldRef references another entity's field.\n",
@@ -1542,12 +1567,15 @@
           "type": "string"
         },
         "help": {
+          "description": "Help text shown under the input. Falls back to the entity field's `description`, so declaring it here is only needed to override that per-form.",
           "type": "string"
         },
         "label": {
+          "description": "Caption for this field in the form; falls back to the entity field's `title`, then the humanised field name",
           "type": "string"
         },
         "placeholder": {
+          "description": "Placeholder text inside the input control",
           "type": "string"
         },
         "read_only": {
@@ -1672,6 +1700,7 @@
         "password",
         "slider",
         "tags",
+        "select-multi-tag",
         "uuid",
         "json",
         "fileinput",
@@ -1961,6 +1990,7 @@
       "description": "Kind represents the resource kind as a PascalCase string.\n@schema {title: \"Resource Kind\"}\n",
       "type": "string",
       "enum": [
+        "Seed",
         "App",
         "Module",
         "Entity",
@@ -2017,7 +2047,6 @@
       "additionalProperties": false
     },
     "MenuItem": {
-      "description": "MenuItem is one navigation entry, embedded in App.spec.menu or\nModule.spec.menu (Core §4.4/§4.5) — there is no standalone kind: Menu.\nMenu order follows array position — no separate `order` field.\n\nEvery item is exactly one of three shapes, enforced by the loader/resolver\n(see internal/manifest), not by separate Go types:\n\n  - Adopt node (Type == \"module\"): only Module set.\n    Splices that Module's own Menu wholesale at this position. Level 1 only.\n  - Group node (len(Children) \u003e 0): Label + Children. Module/View/Route\n    forbidden on the group itself — only its descendants carry Module.\n  - Leaf node (no Children, Type != \"module\"): Label + Module + exactly one\n    of View/Route. Level 3 leaves cannot have Children (3-level cap).\n",
       "type": "object",
       "properties": {
         "children": {
@@ -2035,6 +2064,16 @@
         "module": {
           "type": "string"
         },
+        "permissions": {
+          "description": "RBAC: the item is withheld unless the caller holds at least one of these permissions (any-of). Enforced server-side — it never reaches a caller who lacks them.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "examples": [
+            "[clinic.settings.update]"
+          ]
+        },
         "route": {
           "description": "raw URL escape hatch (no registered View)",
           "type": "string"
@@ -2048,8 +2087,11 @@
           "type": "string"
         },
         "when": {
-          "description": "FormSpecExpr business condition",
-          "type": "string"
+          "description": "FormSpecExpr business condition (presentation only): item hidden when false. Evaluated client-side against `user` and `today()`. NOT an authorization gate — use `permissions` for RBAC.",
+          "type": "string",
+          "examples": [
+            "today() \u003e= '2026-01-01"
+          ]
         }
       },
       "additionalProperties": false
@@ -3305,6 +3347,31 @@
       },
       "additionalProperties": false
     },
+    "SeedEntity": {
+      "description": "SeedEntity declares the records to insert for a single entity.\n",
+      "type": "object",
+      "properties": {
+        "entity": {
+          "description": "Entity name inside metadata.module",
+          "type": "string",
+          "examples": [
+            "menu-item"
+          ]
+        },
+        "records": {
+          "description": "Raw entity payloads (same shape as an API create body); supports `$ref` for relations and `$asset` for file fields",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": {}
+          }
+        }
+      },
+      "required": [
+        "entity"
+      ],
+      "additionalProperties": false
+    },
     "Settings": {
       "description": "Settings is the typed global presentation/config namespace. It is declared\nonce on a workspace/App `kind: Config` manifest under `settings:` and\nresolved with standard defaults so behavior is consistent across every\ncomponent even when unset. Renderers/backends read these values instead of\nguessing per component (01-core-basic.md §10, 05-field-types.md §2).\n",
       "type": "object",
@@ -3629,6 +3696,18 @@
       ],
       "additionalProperties": false
     },
+    "TableCellFormat": {
+      "title": "Table Cell Format",
+      "description": "Value formatter for a table/listing cell. Closed set — every name is implemented by the cell renderer.",
+      "type": "string",
+      "enum": [
+        "currency",
+        "number",
+        "date",
+        "relative",
+        "percent"
+      ]
+    },
     "TableCellWidget": {
       "title": "Table Cell Widget",
       "description": "Widget rendering a table or listing cell. Closed set — every name is implemented by the cell renderer; omit to render the raw value (optionally via `format`).",
@@ -3645,21 +3724,27 @@
       "type": "object",
       "properties": {
         "align": {
-          "description": "left | center | right",
-          "type": "string"
+          "description": "Text alignment of this column's header and body cells.",
+          "type": "string",
+          "enum": [
+            "",
+            "left",
+            "center",
+            "right"
+          ]
         },
         "field": {
           "type": "string"
         },
         "format": {
-          "description": "currency | date | relative | ...",
-          "type": "string"
+          "$ref": "#/$defs/TableCellFormat",
+          "description": "Format is the value formatter for this cell. Closed set — every name is"
         },
         "label": {
           "type": "string"
         },
         "link": {
-          "description": "Page name to navigate to",
+          "description": "Page name to navigate to when this cell is clicked.",
           "type": "string"
         },
         "sortable": {
@@ -3669,6 +3754,7 @@
           "$ref": "#/$defs/TableCellWidget"
         },
         "width": {
+          "description": "CSS width for this column, applied to the header cell (e.g. \\\"120px\\\", \\\"10rem\\\").",
           "type": "string"
         }
       },
@@ -5452,6 +5538,7 @@
         },
         "default": {},
         "description": {
+          "description": "Help text shown to users under the input in forms (and wizard steps). Written for the end user — not a design note; it is inherited as the field's `help` wherever the field appears, so one declaration serves both surfaces.",
           "type": "string"
         },
         "encrypted": {
@@ -5494,6 +5581,12 @@
         "natural_key_rule": {
           "$ref": "#/$defs/NaturalKeyRuleDecl",
           "nullable": true
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FieldOption"
+          }
         },
         "precision": {
           "description": "Decimal precision/scale (05-field-types.md §1.2) — only meaningful for",
@@ -5551,6 +5644,7 @@
           "nullable": true
         },
         "title": {
+          "description": "Caption shown to users in tables, forms, and detail pages; falls back to the humanised field name",
           "type": "string"
         },
         "tree": {
@@ -5588,6 +5682,23 @@
         "financial",
         "internal"
       ]
+    },
+    "FieldOption": {
+      "description": "FieldOption is one choice in a field's `options:` list — a closed set of\nvalues **with captions**. It exists because `enum_values` carries values\nonly: a day-of-week set declared as `[1, 2, 3]` renders as \"1, 2, 3\", so the\nauthor either writes a picker whose choices cannot be read, or a free-text\ntag input that accepts `9`.\n\n`options` is a property of the **data** (which values are legal), not of one\nform — the same reason `enum_values` lives on the Entity. A multi-value field\n(`type: json`, or a string holding a comma-separated list) can therefore be\ndeclared once and rendered, filtered, and labelled consistently.\n\n`Value` keeps the scalar's YAML type (`value: 1` stays the number 1 in the\nbundle and in the stored array, matching what the field actually holds);\n`Label` is the caption shown to users, and defaults to the value itself when\nomitted.\n",
+      "type": "object",
+      "properties": {
+        "label": {
+          "description": "Caption shown to users. Defaults to the value (humanised) when omitted.",
+          "type": "string"
+        },
+        "value": {
+          "description": "Stored value. Keep the scalar type the field stores — `value: 1` for a numeric set, not `value: \\\"1\\\"`."
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "additionalProperties": false
     },
     "FieldRef": {
       "description": "FieldRef references another entity's field.\n",
@@ -5775,12 +5886,15 @@
           "type": "string"
         },
         "help": {
+          "description": "Help text shown under the input. Falls back to the entity field's `description`, so declaring it here is only needed to override that per-form.",
           "type": "string"
         },
         "label": {
+          "description": "Caption for this field in the form; falls back to the entity field's `title`, then the humanised field name",
           "type": "string"
         },
         "placeholder": {
+          "description": "Placeholder text inside the input control",
           "type": "string"
         },
         "read_only": {
@@ -5905,6 +6019,7 @@
         "password",
         "slider",
         "tags",
+        "select-multi-tag",
         "uuid",
         "json",
         "fileinput",
@@ -6194,6 +6309,7 @@
       "description": "Kind represents the resource kind as a PascalCase string.\n@schema {title: \"Resource Kind\"}\n",
       "type": "string",
       "enum": [
+        "Seed",
         "App",
         "Module",
         "Entity",
@@ -6250,7 +6366,6 @@
       "additionalProperties": false
     },
     "MenuItem": {
-      "description": "MenuItem is one navigation entry, embedded in App.spec.menu or\nModule.spec.menu (Core §4.4/§4.5) — there is no standalone kind: Menu.\nMenu order follows array position — no separate `order` field.\n\nEvery item is exactly one of three shapes, enforced by the loader/resolver\n(see internal/manifest), not by separate Go types:\n\n  - Adopt node (Type == \"module\"): only Module set.\n    Splices that Module's own Menu wholesale at this position. Level 1 only.\n  - Group node (len(Children) \u003e 0): Label + Children. Module/View/Route\n    forbidden on the group itself — only its descendants carry Module.\n  - Leaf node (no Children, Type != \"module\"): Label + Module + exactly one\n    of View/Route. Level 3 leaves cannot have Children (3-level cap).\n",
       "type": "object",
       "properties": {
         "children": {
@@ -6268,6 +6383,16 @@
         "module": {
           "type": "string"
         },
+        "permissions": {
+          "description": "RBAC: the item is withheld unless the caller holds at least one of these permissions (any-of). Enforced server-side — it never reaches a caller who lacks them.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "examples": [
+            "[clinic.settings.update]"
+          ]
+        },
         "route": {
           "description": "raw URL escape hatch (no registered View)",
           "type": "string"
@@ -6281,8 +6406,11 @@
           "type": "string"
         },
         "when": {
-          "description": "FormSpecExpr business condition",
-          "type": "string"
+          "description": "FormSpecExpr business condition (presentation only): item hidden when false. Evaluated client-side against `user` and `today()`. NOT an authorization gate — use `permissions` for RBAC.",
+          "type": "string",
+          "examples": [
+            "today() \u003e= '2026-01-01"
+          ]
         }
       },
       "additionalProperties": false
@@ -7538,6 +7666,31 @@
       },
       "additionalProperties": false
     },
+    "SeedEntity": {
+      "description": "SeedEntity declares the records to insert for a single entity.\n",
+      "type": "object",
+      "properties": {
+        "entity": {
+          "description": "Entity name inside metadata.module",
+          "type": "string",
+          "examples": [
+            "menu-item"
+          ]
+        },
+        "records": {
+          "description": "Raw entity payloads (same shape as an API create body); supports `$ref` for relations and `$asset` for file fields",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": {}
+          }
+        }
+      },
+      "required": [
+        "entity"
+      ],
+      "additionalProperties": false
+    },
     "Settings": {
       "description": "Settings is the typed global presentation/config namespace. It is declared\nonce on a workspace/App `kind: Config` manifest under `settings:` and\nresolved with standard defaults so behavior is consistent across every\ncomponent even when unset. Renderers/backends read these values instead of\nguessing per component (01-core-basic.md §10, 05-field-types.md §2).\n",
       "type": "object",
@@ -7862,6 +8015,18 @@
       ],
       "additionalProperties": false
     },
+    "TableCellFormat": {
+      "title": "Table Cell Format",
+      "description": "Value formatter for a table/listing cell. Closed set — every name is implemented by the cell renderer.",
+      "type": "string",
+      "enum": [
+        "currency",
+        "number",
+        "date",
+        "relative",
+        "percent"
+      ]
+    },
     "TableCellWidget": {
       "title": "Table Cell Widget",
       "description": "Widget rendering a table or listing cell. Closed set — every name is implemented by the cell renderer; omit to render the raw value (optionally via `format`).",
@@ -7878,21 +8043,27 @@
       "type": "object",
       "properties": {
         "align": {
-          "description": "left | center | right",
-          "type": "string"
+          "description": "Text alignment of this column's header and body cells.",
+          "type": "string",
+          "enum": [
+            "",
+            "left",
+            "center",
+            "right"
+          ]
         },
         "field": {
           "type": "string"
         },
         "format": {
-          "description": "currency | date | relative | ...",
-          "type": "string"
+          "$ref": "#/$defs/TableCellFormat",
+          "description": "Format is the value formatter for this cell. Closed set — every name is"
         },
         "label": {
           "type": "string"
         },
         "link": {
-          "description": "Page name to navigate to",
+          "description": "Page name to navigate to when this cell is clicked.",
           "type": "string"
         },
         "sortable": {
@@ -7902,6 +8073,7 @@
           "$ref": "#/$defs/TableCellWidget"
         },
         "width": {
+          "description": "CSS width for this column, applied to the header cell (e.g. \\\"120px\\\", \\\"10rem\\\").",
           "type": "string"
         }
       },
@@ -8502,6 +8674,7 @@
         "Print",
         "Renderer",
         "Report",
+        "Seed",
         "Service",
         "Subscription",
         "Table",
@@ -10177,6 +10350,66 @@
                 "cafe"
               ],
               "pattern": "^[a-z0-9](-[a-z0-9])*$"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "apiVersion",
+        "kind",
+        "metadata",
+        "spec"
+      ]
+    },
+    {
+      "properties": {
+        "apiVersion": {
+          "type": "string",
+          "const": "formspec.dev/v1"
+        },
+        "kind": {
+          "type": "string",
+          "const": "Seed"
+        },
+        "metadata": {
+          "description": "Metadata is common to all FormSpec resources.\n",
+          "type": "object",
+          "properties": {
+            "annotations": {
+              "type": "object",
+              "additionalProperties": {}
+            },
+            "description": {
+              "type": "string"
+            },
+            "labels": {
+              "type": "object",
+              "additionalProperties": {}
+            },
+            "module": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        "spec": {
+          "title": "Seed Spec",
+          "description": "SeedSpec is the kind-specific body of a `kind: Seed` manifest.\n",
+          "type": "object",
+          "properties": {
+            "entities": {
+              "description": "Entities declares records for one or more entities, grouped so a reader",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/SeedEntity"
+              }
             }
           },
           "additionalProperties": false

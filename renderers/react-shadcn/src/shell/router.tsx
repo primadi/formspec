@@ -14,7 +14,7 @@ import type { RouteObject } from "react-router-dom"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useSessionStore } from "@/stores/session"
 import { useSurface } from "@/hooks/useSurface"
-import type { MetaBundle } from "@/types/manifest"
+import type { EntitySchema, MetaBundle } from "@/types/manifest"
 
 // ─── Lazy-loaded kind renderers ──
 
@@ -48,6 +48,27 @@ function Loading() {
         <Skeleton className="h-4 w-96" />
         <Skeleton className="h-32 w-full" />
       </div>
+    </div>
+  )
+}
+
+/**
+ * The answer for a derived route this caller is not authorized to use.
+ *
+ * It mirrors the surface catch-all's wording, because the meaning is the same
+ * and the user should not be able to tell the difference: the route does not
+ * exist FOR THIS CALLER. Without an explicit element the path would be captured
+ * by a neighbouring route (e.g. `:id` matching the literal "new") and render
+ * something plausible, which is worse than a 404 — it looks like it worked.
+ */
+function RouteNotFound() {
+  return (
+    <div className="flex min-h-[60vh] flex-col items-center justify-center gap-2">
+      <h2 className="text-xl font-semibold">Page not found</h2>
+      <p className="max-w-md text-center text-sm text-muted-foreground">
+        This page does not exist, or you don&apos;t have access to the data
+        behind it.
+      </p>
     </div>
   )
 }
@@ -108,6 +129,29 @@ export interface RouteBuilderOptions {
 }
 
 /**
+ * Whether a derived CRUD route for `action` should be registered.
+ *
+ * `authorized_actions` is resolved server-side for THIS caller, with the same
+ * checker that decides whether the entity ships at all — so it also covers the
+ * public-App grant, which the caller's permission list cannot express (a guest
+ * holds no permissions yet may still `list` and `create`).
+ *
+ * Without this the builder registered every derived route from the entity's
+ * lifecycle alone, so a public App granted only `[list, find]` still served a
+ * working-looking "Create Menu Category" modal whose submit answered 401
+ * (kafe 10.23). Unauthorized paths now fall through to the surface catch-all,
+ * which is the honest answer: "Page not found".
+ *
+ * Absent `authorized_actions` (older server) keeps the previous behaviour —
+ * the route exists and its data call is refused. An empty array means
+ * "resolved: nothing", which registers no derived route at all.
+ */
+function allowsRoute(entity: EntitySchema, action: string): boolean {
+  if (!entity.authorized_actions) return true
+  return entity.authorized_actions.includes(action)
+}
+
+/**
  * Build a flat array of RouteObject from the Meta bundle.
  */
 export function buildRoutes(options: RouteBuilderOptions): RouteObject[] {
@@ -137,48 +181,67 @@ export function buildRoutes(options: RouteBuilderOptions): RouteObject[] {
     })
   }
 
-  // 2. Derived CRUD routes per entity
+  // 2. Derived CRUD routes per entity — each gated by the caller's authorized
+  // actions, so the surface never offers an operation the server would refuse.
   for (const entity of bundle.entities ?? []) {
     const base = `${basePath}/${entity.module}/${entity.plural}`
 
     // List route
-    routes.push({
-      path: base,
-      Component: () => (
-        <Suspense fallback={<Loading />}>
-          <TableRenderer entity={entity} />
-        </Suspense>
-      ),
-    })
+    if (allowsRoute(entity, "list")) {
+      routes.push({
+        path: base,
+        Component: () => (
+          <Suspense fallback={<Loading />}>
+            <TableRenderer entity={entity} />
+          </Suspense>
+        ),
+      })
+    }
 
-    // Create route (derived form)
+    // Create route (derived form).
+    //
+    // Registered UNCONDITIONALLY, even when `create` is not authorized: `/new`
+    // would otherwise be swallowed by the `:id` detail route below, which would
+    // fetch a record literally named "new" and land the user on a fallback list
+    // — an accident that looks like a working page. An explicit not-found says
+    // the truth instead.
     routes.push({
       path: `${base}/new`,
-      Component: () => (
-        <Suspense fallback={<Loading />}>
-          <FormRenderer entity={entity} mode="create" />
-        </Suspense>
-      ),
+      Component: allowsRoute(entity, "create")
+        ? () => (
+            <Suspense fallback={<Loading />}>
+              <FormRenderer entity={entity} mode="create" />
+            </Suspense>
+          )
+        : () => <RouteNotFound />,
     })
 
-    // Detail route
+    // Detail route.
+    //
+    // Registered unconditionally for the same reason as `/new`: the edit route
+    // (`:id/edit`) and the list route would otherwise capture the path and
+    // answer with something plausible instead of a not-found.
     routes.push({
       path: `${base}/:id`,
-      Component: () => (
-        <Suspense fallback={<Loading />}>
-          <DetailPage entity={entity} />
-        </Suspense>
-      ),
+      Component: allowsRoute(entity, "find")
+        ? () => (
+            <Suspense fallback={<Loading />}>
+              <DetailPage entity={entity} />
+            </Suspense>
+          )
+        : () => <RouteNotFound />,
     })
 
-    // Edit route
+    // Edit route.
     routes.push({
       path: `${base}/:id/edit`,
-      Component: () => (
-        <Suspense fallback={<Loading />}>
-          <FormRenderer entity={entity} mode="edit" />
-        </Suspense>
-      ),
+      Component: allowsRoute(entity, "update")
+        ? () => (
+            <Suspense fallback={<Loading />}>
+              <FormRenderer entity={entity} mode="edit" />
+            </Suspense>
+          )
+        : () => <RouteNotFound />,
     })
   }
 

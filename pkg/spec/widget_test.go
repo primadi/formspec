@@ -36,6 +36,7 @@ func TestFormWidgets_ClosedSet(t *testing.T) {
 		"relation-picker",
 		"richtext",
 		"select",
+		"select-multi-tag",
 		"slider",
 		"switch",
 		"tags",
@@ -173,6 +174,61 @@ func TestValidateTableColumns(t *testing.T) {
 	// The message must locate the column, not just the manifest.
 	if !strings.Contains(err.Error(), `listing "catalog"`) || !strings.Contains(err.Error(), `column "total"`) {
 		t.Errorf("want the column located in the message, got: %v", err)
+	}
+}
+
+// The vocabulary used to live only in a comment and in the renderer's `if`
+// chain, so `format: currncy` passed validation and the cell silently printed
+// the raw value.
+func TestValidateTableCellFormat(t *testing.T) {
+	if err := ValidateTableCellFormat("", `column "total"`); err != nil {
+		t.Fatalf("empty format must be valid (raw value), got: %v", err)
+	}
+	for _, f := range tableCellFormats {
+		if err := ValidateTableCellFormat(f, `column "total"`); err != nil {
+			t.Fatalf("%q must be valid, got: %v", f, err)
+		}
+	}
+
+	err := ValidateTableCellFormat("currncy", `column "amount"`)
+	if err == nil {
+		t.Fatal("a typo must be rejected, not silently rendered as a raw value")
+	}
+	if !strings.Contains(err.Error(), "allowed: currency, number, date, relative, percent") {
+		t.Errorf("want the closed set in the message, got: %v", err)
+	}
+}
+
+// `datetime` is legal for a ReportColumn but no cell renderer implements it, so
+// accepting it here would print the raw value. The error must say which surface
+// the name belongs to.
+func TestValidateTableCellFormat_RejectsReportFormatWithHint(t *testing.T) {
+	err := ValidateTableCellFormat("datetime", `column "at"`)
+	if err == nil {
+		t.Fatal("a report-only format must not be accepted on a table column")
+	}
+	if !strings.Contains(err.Error(), "is a report format, not a table cell format") {
+		t.Errorf("want a cross-surface hint, got: %v", err)
+	}
+}
+
+// The cell format set is deliberately NOT ReportFormat: a report has no
+// `relative`/`number`, and a cell has no `datetime`. This pins the difference
+// so a later "unify the two enums" change has to argue with a test first.
+func TestTableCellFormat_DiffersFromReportFormat(t *testing.T) {
+	for _, onlyCell := range []string{"number", "relative"} {
+		if !IsTableCellFormat(onlyCell) {
+			t.Errorf("%q must be a cell format", onlyCell)
+		}
+		if IsReportFormat(onlyCell) {
+			t.Errorf("%q must not be a report format", onlyCell)
+		}
+	}
+	if !IsReportFormat("datetime") {
+		t.Error("datetime must stay a report format")
+	}
+	if IsTableCellFormat("datetime") {
+		t.Error("datetime must not be a cell format — no cell renderer implements it")
 	}
 }
 

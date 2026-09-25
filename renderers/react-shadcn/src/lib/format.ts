@@ -20,8 +20,16 @@ import type { Settings } from "@/types/manifest"
 export interface Formatter {
   /** Format a number as money using the resolved currency + locale. */
   money: (value: number) => string
-  /** Format a number with the resolved locale + decimal scale. */
-  number: (value: number) => string
+  /**
+   * Format a number with the resolved locale.
+   *
+   * `scale` overrides `settings.decimal_scale` per call. A field's own `scale`
+   * (05-field-types.md §1.2) must win over the global default: a
+   * `decimal, scale: 3` field holds three fractional digits, and formatting it
+   * with the global scale of 2 would PRINT a rounded number the database does
+   * not agree with — a lie about stored data, not a display preference.
+   */
+  number: (value: number, scale?: number) => string
   /** Format a date/datetime string using the resolved locale + date format. */
   date: (value: string | Date) => string
   /** Format a datetime string using the resolved locale (with time). */
@@ -141,11 +149,11 @@ export function createFormatter(settings?: Settings): Formatter {
     }).format(rounded)
   }
 
-  const number = (value: number): string =>
+  const number = (value: number, scale?: number): string =>
     new Intl.NumberFormat(locale, {
       minimumFractionDigits: 0,
-      maximumFractionDigits: decimalScale,
-    }).format(roundTo(value, decimalScale, rounding))
+      maximumFractionDigits: scale ?? decimalScale,
+    }).format(roundTo(value, scale ?? decimalScale, rounding))
 
   const date = (value: string | Date): string => {
     const d = typeof value === "string" ? new Date(value) : value

@@ -14,11 +14,13 @@
 `kind: Table` adalah **override list/browse view** untuk satu Entity — kolom terderivasi dari entity, bisa di-override.
 
 **Kapan memakai Table:**
+
 - Pilih persis kolom + urutan (`columns`)
 - Sort/filter/paginate (`filters`, `default_sort`, `search`)
 - Inline/batch edit, row/bulk actions, realtime
 
 **Kapan TIDAK pakai Table:**
+
 - Entity cukup dengan default table → jangan deklarasi
 - Status sebagai dimensi kerja utama → `kind: Kanban`
 - Waktu sebagai narasi utama → `kind: Timeline`
@@ -44,7 +46,7 @@ spec:
   filters:
     - { field: status, label: Status, type: select }
     - { field: created_at, label: "Created", type: date_range }
-  default_sort: -created_at       # "field" = asc, "-field" = desc
+  default_sort: -created_at # "field" = asc, "-field" = desc
   search: true
   realtime: true
   row_actions: [mark-paid, void]
@@ -73,6 +75,9 @@ spec:
 
 ## Gotchas
 
+- **`align`/`width` mengikat, bukan hiasan** — keduanya diterapkan ke sel header **dan** body kolom itu (`docs/spec/frontend/06-page-kinds.md` §3.1.1). `align` adalah himpunan tertutup (`left`/`center`/`right`); nilai lain ditolak validasi. Kolom yang diderivasi tidak menebak perataan dari tipe field.
+- **`format` tidak diturunkan dari tipe field** — `decimal`/`integer` sama seringnya pengenal (`line_number`) maupun kuantitas, jadi kolom yang ingin pemisah ribuan menulis `format: number`. Skala `decimal` milik field menang atas `settings.decimal_scale` (§3.1.2).
+- **Kolom relasi menampilkan label, bukan UUID** — `field: branch_id` (`belongs_to`) dirender sebagai nama record terkait, sama seperti dot-path `field: branch.name`. Keduanya sah; keduanya benar (§3.1.2).
 - **Derivasi kolom tidak boleh membuang field diam-diam** — field sisa tetap terjangkau via row detail/expand (no-silent-drop). `columns` eksplisit menang penuh.
 - **`inline_edit`** — field `readonly`/`compute`/`immutable` atau di luar permission `update` tidak editable. Commit = action `update` + `version` (CAS → 409 kalau stale). Baris `submitted` menolak inline-edit.
 - **`batch_edit`** — partial failure dilaporkan per baris; tak pernah all-or-nothing diam-diam.

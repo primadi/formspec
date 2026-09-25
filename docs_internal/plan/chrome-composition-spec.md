@@ -104,3 +104,105 @@ Level of effort: **medium** (spec+backend kecil, frontend sedang, docs).
 - Resolusi default di backend meta, bukan frontend.
 - Nilai chrome tidak dikenal fallback ke default archetype (lenient) —
   validasi ketat ditangani JSON Schema + `formspec validate`.
+
+## Sisa yang belum diputuskan (2026-09-24)
+
+Chrome menjadi **satu-satunya** tempat kontrol auth bisa hidup, dan itu membuat
+"hak akses menu" **mandatory-by-omission**: kalau manifest tidak menyatakannya,
+pengguna tidak punya jalan masuk/keluar — dan manifest-nya tetap lolos validasi.
+
+Rantai bukti (kafe, diukur 2026-09-24):
+
+1. `AuthArea` hanya dirender di dalam header chrome ketiga shell
+   (`NoNavShell.tsx:104`, `SideNavShell.tsx:147`, `TopNavShell.tsx:188`).
+2. `AuthArea` → `if (mode !== "links" && mode !== "button") return null`, jadi
+   `auth: none` = **nol** kontrol (bukan "default").
+3. Kontrol itu ada di dalam `{chrome?.brand !== "hide" && …}` — sehingga
+   `chrome: {brand: hide, auth: links}` juga menghapus semua kontrol auth.
+4. `auth_action` (satu-satunya deklarasi auth non-chrome) = closed set
+   `login, register, change_password, forgot_password, reset_password` —
+   **tanpa `logout`**; Page kind tidak punya blok/CTA auth (`SectionCTA` =
+   `{label, href, variant}`).
+5. `useAutoLogout` tidak dipasang pada permukaan publik (`App.tsx:383`), jadi
+   sesinya juga tidak kedaluwarsa sendiri.
+6. App `private` + `no-nav` + `chrome: {auth: none}` → `formspec validate`
+   **0 problem** (diuji pada salinan spec kafe).
+
+Tiga pertanyaan yang menunggu keputusan pemilik proyek:
+
+1. **Apakah `chrome.auth: none` tetap sah pada App `private`?** Kalau tidak,
+   validator harus menolaknya (invarian: "App privat, kecuali yang seluruh
+   halamannya `public: true`, wajib punya jalan masuk").
+2. **Apakah Page/Form perlu bisa menyatakan aksi auth (khususnya `logout`)**
+   lewat `auth_action` dan/atau blok CTA — supaya kontrol auth tidak lagi
+   eksklusif milik chrome, dan menu benar-benar bisa jadi dekorasi?
+3. **Apa perilaku aman `brand: hide`** — apakah kontrol auth harus keluar dari
+   blok brand (mis. selalu render bila `auth != none`), atau `brand: hide` +
+   auth aktif ditolak saat validasi?
+
+Terkait (dicatat di kafe TODO, bukan di sini): **10.22 ⏸️** — App privat berisi
+0 entity tidak bergerbang (200 + bundle kosong), padahal `_admin` sudah punya
+preseden benar (403 `missing permission: _admin.access`).
+
+## Opsi: region + attach (usulan pemilik proyek, 2026-09-24)
+
+Rumusan yang diusulkan: **`no-nav` bukan "tanpa chrome", melainkan archetype
+tanpa bar _default_** — topbar/bottombar/sidebar tetap mungkin ada, hanya saja
+tidak ada yang dipasang otomatis. `sidebar-nav`/`topnav` = chrome yang sudah
+_predefined_. Developer yang ingin topbar kustom **plus** sidebar-menu memakai
+`no-nav` + memasang sidebar; tidak perlu archetype baru.
+
+**Kenapa ini lebih baik dari matriks sekarang.** Matriks `chrome: {brand, nav,
+auth, footer, breadcrumbs, theme_switcher}` menjawab pertanyaan _"apakah region
+predefined ditampilkan?"_ — boolean per region, tertutup. Ia tidak punya bahasa
+untuk _"region ini diisi komponen saya"_, sehingga kombinasi "topbar kustom +
+sidebar-menu" tidak bisa dinyatakan; satu-satunya jalan adalah `asset` yang
+menggantikan seluruh shell. Model region+attach memisahkan **dua sumbu** yang
+sekarang tercampur: (1) region mana yang aktif, (2) apa yang mengisinya.
+
+**Yang sudah ada (bukan usulan di atas kertas):**
+
+- `Sidebar` sudah komponen mandiri — props `{collapsed, onToggle, mobile,
+mobileOpen, onMobileClose}`, menu dibaca sendiri via `useResolvedMenu()`
+  (`hooks/useResolvedMenu.ts`). TopNavShell sudah memakai hook yang sama, jadi
+  "menu resolved" memang bukan milik satu shell.
+- Preseden **attach komponen ke chrome** sudah ada dan berjalan:
+  `App.spec.auth.chrome_auth` (component ref yang menggantikan area auth).
+  Model region adalah generalisasi pola itu dari satu region ke N.
+- Sistem **slot** sudah dideklarasikan di spec (`accepts_slots` tier
+  `page`/`app`, `implements_slot` tier `component`,
+  `02-visual-spec-kind.md` §4) — bentuk formal dari "lubang + isi".
+
+**Batas jujur hari ini:**
+
+- Slot itu **belum ada implementasinya di renderer**: `grep implements_slot`
+  di `renderers/react-shadcn/src` → **0 hit**; satu-satunya pemakaian adalah
+  validasi tier di `internal/manifest/renderer.go:163-168`. Jadi jalur slot
+  masih spec-only.
+- `kind: App` **bukan** `VisualSpecKind` (punya `AppSpec` sendiri), sehingga App
+  belum berpartisipasi di mesin slot.
+- Ketiga shell (973 baris) masih hard-coded: `SideNavShell` menaruh brand +
+  sidebar-toggle + breadcrumbs + `AuthArea` di dalam **satu** `<header>`, jadi
+  memisahkan header itu menjadi region-region mandiri adalah bagian pekerjaan —
+  kalau tidak, "attach sidebar ke no-nav" akan menggandakan chrome.
+
+**Dua jalur implementasi:**
+
+| Jalur                                       | Isi                                                                                                                              | Biaya                                                       | Catatan                                                                               |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| **A — region override via component asset** | Generalisasi `chrome_auth` → mis. `chrome.regions: {topbar: assets/…, sidebar: auto\|none\|<asset>}`, `auto` = default archetype | **medium** — infrastruktur asset sudah ada, tanpa kind baru | Menyelesaikan "no-nav + attach sidebar" sekarang; pola yang sama dengan `chrome_auth` |
+| **B — slot resmi (`tier: app`)**            | `kind: App` ber-`accepts_slots: [topbar, sidebar, …]`; komponen `implements_slot`                                                | **large** — membangun mesin slot di renderer dari nol       | Bentuk jangka panjang sesuai spec §4; jangan dipilih kalau hanya butuh A              |
+
+**Rekomendasi:** ambil **A** sebagai langkah nyata (memberi kemampuan yang
+diminta tanpa membangun mesin baru), dan simpan **B** sebagai formalisasi
+setelah ada ≥2 konsumen nyata. Yang perlu diputuskan sebelum A: apakah
+`chrome.*` boolean tetap berdampingan (region `auto` = "ikut matriks") atau
+digantikan seluruhnya oleh `chrome.regions`.
+
+**Catatan penting soal pertanyaan #2 di atas:** model region membuat kontrol auth
+menjadi _region yang bisa diganti/dipasang_ — perbaikan besar dibanding
+chrome-only — tetapi ia **tetap hidup di shell, bukan di Page**. Jadi model ini
+belum dengan sendirinya menutup keluhan "menu itu dekorasi page, sedangkan page
+tidak punya login/logout": untuk itu Page/Form tetap perlu bisa menyatakan aksi
+auth (pertanyaan #2), atau auth harus diperlakukan sebagai region yang _selalu_
+ada betapa pun `no-nav`-nya.

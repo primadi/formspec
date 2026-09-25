@@ -33,8 +33,15 @@ spec:
           icon: "wallet"
           route: "/clinic/payments" # derived entity-list route (no authored View) — route escape hatch
         - { label: "Laporan Pendapatan", icon: "bar-chart-3", view: revenue-by-polyclinic }
+        # RBAC, not a business condition: `permissions` is enforced server-side,
+        # so the item never reaches a caller lacking it. Sebelumnya ditulis
+        # `when: "user.has('clinic.settings.update')"` — bentuk yang tidak pernah
+        # bisa dievaluasi (evaluator tidak punya `user.has`, dan
+        # 08-formspec-expr.md §3 melarang permission di FormSpecExpr), sehingga
+        # item ini tampil untuk SEMUA orang sambil terlihat seperti dijaga.
+        # `formspec check` kini menolak bentuk itu (himpunan callable tertutup).
         - label: "Pengaturan"
           icon: "settings"
           view: system-settings
-          when: "user.has('clinic.settings.update')"
+          permissions: [clinic.settings.update]
         - { label: "Data Master", icon: "database", route: "/master?tab=Dokter" }

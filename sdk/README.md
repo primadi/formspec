@@ -84,10 +84,10 @@ surface that as a per-call error; the invoke path is fully functional.
 ## `@formspec/client` — REST API Protocol
 
 `browser/` is a completely different client: it calls `formspec-resource`'s
-generated REST API directly (`docs_old/spec/02-core-basic.md` §16) — no unix
+generated REST API directly (`docs/spec/backend/01-core-basic.md` §8) — no unix
 socket, no sidecar involved. Paired with `formspec generate --lang typescript`
 (`cmd/formspec/generate.go`), it's the typed client for hand-building frontend
-pages (`docs_old/spec/05-frontend.md` §7's `formspec.api`, before any manifest-driven
-renderer exists). See [`browser/README.md`](browser/README.md) for the
+pages (the escape hatch that exists independently of the manifest-driven
+renderer). See [`browser/README.md`](browser/README.md) for the
 runtime API and `docs/cli-tools/03-formspec-generate.md` for the full guide —
 including a step-by-step React + shadcn walkthrough.

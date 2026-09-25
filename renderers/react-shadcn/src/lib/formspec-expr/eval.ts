@@ -234,9 +234,28 @@ function evalMember(node: MemberExpr, context: EvalContext): RuntimeValue {
 }
 
 function evalCall(node: CallExpr, context: EvalContext): RuntimeValue {
-  const calleeName = node.callee.name
+  // A member callee (`user.has(...)`) arrives here as a MemberExpr, so
+  // `callee.name` is undefined and the switch falls to `default:` — reported as
+  // "unknown function: undefined". `formspec check` now rejects that shape at
+  // deploy time (closed callable set), so reaching this branch means a spec bug
+  // rather than a missing feature.
+  const calleeName =
+    node.callee.type === "Identifier" ? node.callee.name : undefined
 
   switch (calleeName) {
+    case "today": {
+      if (node.args.length !== 0) {
+        evalWarnings.push(
+          `today() expects no arguments, got ${node.args.length}`,
+        )
+        return null
+      }
+      // Server date (UTC, YYYY-MM-DD) — same anchor as the filter resolver
+      // (lib/filters.ts serverToday), so `today()` in a menu `when` and in a
+      // table filter agree on what "today" is.
+      return new Date().toISOString().slice(0, 10)
+    }
+
     case "len": {
       if (node.args.length !== 1) {
         evalWarnings.push(
@@ -616,10 +635,27 @@ function evalOrder(
     return a >= b
   }
 
+  // String comparison — ISO dates and times compare correctly lexicographically
+  // (`'2026-01-15' >= '2026-01-01'`), which is exactly how `today()` is meant
+  // to be used in a condition, and how a `date`/`time` field stores its value.
+  //
+  // Starlark (the server evaluator) supports `<`/`>` over strings, so WITHOUT
+  // this branch the client would reject an expression the server accepts and
+  // `formspec check` passes — a false guarantee of the class
+  // 08-formspec-expr.md §4 forbids. Only string-to-string is allowed: comparing
+  // a string to a number stays an error rather than silently coercing, matching
+  // the money rule below (a wrong comparison must be loud).
+  if (typeof left === "string" && typeof right === "string") {
+    if (op === "<") return left < right
+    if (op === ">") return left > right
+    if (op === "<=") return left <= right
+    return left >= right
+  }
+
   for (const value of [left, right]) {
     if (isNonNumeric(value)) {
       evalWarnings.push(
-        `cannot apply "${op}" to ${describeValue(value)}: expected a number or a money value`,
+        `cannot apply "${op}" to ${describeValue(value)}: expected a number, a money value, or a string compared with another string`,
       )
       return null
     }

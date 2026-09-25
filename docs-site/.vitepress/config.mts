@@ -139,6 +139,7 @@ const renderers = [
       item("Derivation Engine", "/renderers/shadcn-shell/02-derivation-engine"),
       item("Kind Renderers", "/renderers/shadcn-shell/03-kind-renderers"),
       item("Theming & Assets", "/renderers/shadcn-shell/04-theming-assets"),
+      item("Routing", "/renderers/shadcn-shell/05-routing"),
     ],
   },
   {
@@ -190,6 +191,7 @@ const cliTools = [
 const guides = [
   item("Guides", "/guides/"),
   item("Install", "/guides/install"),
+  item("Getting Started", "/guides/getting-started"),
   item("Releasing", "/guides/releasing"),
   item("How to Run", "/guides/how-to-run"),
   item("Authentication", "/guides/authentication"),
@@ -250,12 +252,10 @@ export default defineConfig({
       preserveSymlinks: true,
     },
   },
-  srcExclude: [
-    // Folder internal sudah pindah ke docs_internal/ di root repo — tidak
-    // pernah masuk srcDir (symlink docs → ../docs). Exclusion ini tinggal
-    // untuk arsip docs_old bila pernah tersalin.
-    "**/docs_old/**",
-  ],
+  // srcExclude kosong: folder internal (plan/changelog/…) sudah hidup di
+  // docs_internal/ di root repo dan tidak pernah masuk srcDir (symlink
+  // docs → ../docs). docs_old/ sudah dipensiunkan 2026-09-22.
+  srcExclude: [],
   lastUpdated: true,
   // Docs banyak memakai placeholder angle-bracket (mis. `<name>`, `<id>`,
   // `<module>`) di dalam prosa. Dengan html:false, markdown-it meng-escape
@@ -289,13 +289,9 @@ export default defineConfig({
   ignoreDeadLinks: [
     (link: string) => {
       // Folder internal / referensi luar docs yang tidak ada di site
-      if (
-        /(^|\/)(plan|changelog|presentations|technical-notes|docs_old)\//.test(
-          link,
-        )
-      )
+      if (/(^|\/)(plan|changelog|presentations|technical-notes)\//.test(link))
         return true
-      if (/(^|\/)(examples|ai_skills|scripts|verticals|docs_old)\//.test(link))
+      if (/(^|\/)(examples|ai_skills|scripts|verticals)\//.test(link))
         return true
       // Konvensi: docs menaut "./x/index" padahal index-nya README.md
       // (VitePress memetakan README.md → root folder). Bukan kesalahan site.

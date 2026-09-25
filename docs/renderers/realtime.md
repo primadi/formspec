@@ -35,9 +35,29 @@ WebSocket ke client yang sedang terhubung. Prinsip kuncinya:
 | Aspek        | Detail                                                                                                                                                                                                                             |
 | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Endpoint     | `/{workspace}/_ui/_ws` (`internal/api/router.go` → `HandleWS` di `internal/api/wshub.go`)                                                                                                                                          |
-| Auth         | `AuthMiddleware` — identity dari header `Authorization` atau query `?token=` (browser tidak bisa set header saat WS handshake). Dev fallback → identity `nil`                                                                      |
+| Auth         | Utama: **single-use ticket** — `POST /{workspace}/_ui/_ws/ticket` (header `Authorization: Bearer`) mengembalikan `{ticket, expires_in}`; client connect dengan `?ticket=`. Fallback deprekasi: `?token=` (browser tidak bisa set header saat WS handshake)                                                                      |
 | Origin check | `websocket.Accept(..., &AcceptOptions{InsecureSkipVerify: true})` — diperlukan saat SPA diakses lewat reverse proxy dev (Vite) yang membuat `Origin` ≠ `Host`; auth tetap dijaga oleh AuthMiddleware + filter permission per-pesan |
 | Protocol     | Push-only untuk data; frame masuk dari client hanya subscription-control                                                                                                                                                           |
+
+**Ticket handshake (todo 5.8.4).** JWT full-lifetime di query string bocor ke
+access log proxy/server, riwayat browser, dan header `Referer`. Alur ticket
+memindahkan kredensial keluar dari URL:
+
+```text
+1. Client →  POST /{ws}/_ui/_ws/ticket      (Authorization: Bearer — tidak pernah di URL)
+2. Server →  { "ticket": "<opaque>", "expires_in": 30 }
+3. Client →  WS /{ws}/_ui/_ws?ticket=…      (handshake)
+4. Server →  consume ticket sekali → resolve identity → hapus dari store
+```
+
+Ticket **opaque, single-use, terikat ke identity + workspace penerbit**, TTL 30
+detik. Log hanya melihat nilai yang mati dalam ±30 detik; pemakaian kedua kali
+ditolak (`401`); ticket workspace A dipakai di path workspace B ditolak.
+Issuance dibatasi 60 ticket per (workspace, user) per menit. Konsumsi terjadi
+**sebelum** upgrade, jadi ticket buruk = `401` bersih, bukan socket yang
+di-upgrade lalu ditutup. Client (`useRealtime.ts`) meminta ticket baru di setiap
+koneksi **dan setiap reconnect**; bila issuance gagal ia jatuh ke `?token=`
+lama sebagai fallback.
 
 Koneksi (`wsConn`) punya channel `send` buffered (kapasitas 32) dan satu
 writer goroutine sendiri (`writePump`) — socket yang lambat/macet di-drop

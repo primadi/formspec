@@ -1,16 +1,21 @@
-# Total assets widget
+# Total aset — Σ saldo akun bertipe aset pada periode berjalan.
+#
+# DIPERBAIKI 2026-09-22: sebelumnya menunjuk `entity: ledger` (entity yang tidak
+# pernah ada) dengan field `ending_balance`/`account_type` yang juga tidak ada.
+# Sumber yang benar: `gl-balance` + relasi `account_id`.
 apiVersion: formspec.dev/v1
 kind: Widget
 metadata:
   name: total-assets
   module: gl
+  description: "Total aset — Σ closing_balance akun bertipe asset"
 spec:
   title: "Total Aset"
   type: metric
-  entity: ledger
-  query: "account_type = 'asset'"
+  entity: gl.gl-balance
+  query: "period = 'this-month'"
   refresh_secs: 300
   config:
     aggregate: sum
-    field: ending_balance
+    field: closing_balance
     format: currency

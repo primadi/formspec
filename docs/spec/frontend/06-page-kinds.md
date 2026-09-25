@@ -255,6 +255,56 @@ tetap otoritas — cek client bukan pernah keamanan.**
 sesuai skema dan renderer) maupun shorthand skalar `render: separate_page` —
 keduanya disetarakan saat parse.
 
+**Caption field (normatif).** Setiap caption field/kolom memakai presedensi
+yang sama di semua kind (Form, Table, Listing, Report, Wizard, detail Page):
+
+```
+label eksplisit di manifest  →  title field di Entity  →  nama field
+```
+
+`label` yang dideklarasikan penulis **selalu menang**; fallback hanya mengisi
+yang kosong. Konsekuensinya: mendeklarasikan `kind: Form`/`Table` — biasanya
+demi urutan, section, `visible_when`, atau lebar kolom, **bukan** demi label —
+tidak boleh menurunkan caption field menjadi nama mentah. Renderer **wajib**
+menerapkan presedensi ini pada manifest authored maupun hasil derivasi, karena
+keduanya adalah tipe yang sama (§9: derivasi "tak bisa dibedakan dari manifest
+YAML"). Sebelum aturan ini ditetapkan, hanya jalur derivasi yang membaca
+`title` entity — sehingga `min_purchase` dengan `title: "Minimum Belanja"`
+tampil sebagai `min_purchase` begitu entity-nya punya Form authored, dan field
+yang sama tampil berbeda antara Form dan tabel di halaman yang sama.
+
+**Help field (normatif).** Teks bantuan di bawah input punya presedensi yang
+sama bentuknya, dengan dua kosakata yang berbeda nama:
+
+```
+help eksplisit di manifest  →  description field di Entity  →  tidak ada
+```
+
+`FormField.help` dan `Field.description` berarti **satu hal yang sama bagi
+pengguna**; dua nama itu ada karena satu milik Form dan satu milik Entity.
+`help` yang dideklarasikan penulis **selalu menang** — itu jalur override
+per-form. Bila tidak ada, `description` entity yang dipakai. Bila keduanya
+kosong, **tidak ada elemen yang dirender** (bukan string kosong — elemen kosong
+terbaca sebagai baris kosong).
+
+Konsekuensinya, dan ini yang mengikat: `description` pada field Entity adalah
+**teks yang dibaca pengguna akhir**, bukan catatan desain. Menulis
+`description: "compute dari branch.service_charge_percent"` akan menampilkan
+kalimat itu di bawah input pada setiap form yang memuat field tersebut. Detail
+implementasi ditulis sebagai komentar YAML (`# …`), bukan `description`.
+
+`metadata.description` Entity mengikuti aturan yang sama untuk level section:
+section pertama Form yang tidak mendeklarasikan `description` sendiri
+mewarisi deskripsi Entity. Ini string yang dipakai sebagai subtitle
+drawer/dialog Form, sehingga Form authored tidak jatuh ke teks generik
+("Fill in the details for this …") saat Entity-nya sudah dideskripsikan.
+
+Batasnya, dan ini disengaja: help adalah **alat input**. Ia dirender di Form
+(dan langkah Wizard) pada mode create/edit; di mode `view` ia tidak dirender,
+dan permukaan baca-saja (Table, Listing, detail Page, Kanban, sel child)
+**tidak** menampilkan help sama sekali — deskripsi field tidak tersedia di
+sana, bukan tersembunyi.
+
 ### 2.1 Pola UI: Lifecycle vs Plain CRUD
 
 Renderer memilih pola UI berdasar apakah reserved action `submit` aktif di
@@ -332,6 +382,98 @@ Table tanpa `columns:` eksplisit menderivasi kolomnya dari entity. Derivasi
 Renderer **dilarang** memotong keras daftar kolom derived (mis. berhenti di 8
 kolom) sehingga field lain tak pernah bisa dilihat — pemotongan tanpa jalan
 akses balik adalah data-loss, bukan layout.
+
+### 3.1.1 Presentasi kolom: `align` & `width` (normatif)
+
+Tiap `TableColumn` boleh menyatakan presentasinya. Keduanya **mengikat**: nilai
+yang dideklarasikan renderer terapkan, bukan diabaikan diam-diam.
+
+```yaml
+kind: Table
+spec:
+  entity: order
+  columns:
+    - { field: number, label: "No." }
+    - {
+        field: total,
+        label: "Total",
+        format: currency,
+        align: right,
+        width: "140px",
+      }
+```
+
+| Properti | Nilai                          | Efek                                                                                                              |
+| -------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| `align`  | `left` · `center` · `right`    | Perataan teks **sel header dan sel body** kolom itu.                                                              |
+| `width`  | panjang CSS (`120px`, `10rem`) | Lebar kolom — diterapkan pada sel header (`<th>`), yaitu kotak yang dipakai browser untuk menentukan lebar kolom. |
+
+Dua hal yang mudah salah:
+
+- **Perataan harus kena sel body juga.** `<td>` adalah sibling `<th>`, bukan
+  keturunannya — `text-align` **tidak** diwarisi. Meratakan header saja
+  menghasilkan judul rata kanan di atas angka rata kiri.
+- **Header yang sortable membungkus labelnya di flex row**; `text-align` tidak
+  bisa menggeser anak flex, jadi header itu juga butuh perataan flex
+  (`justify-*`).
+
+`align` adalah **himpunan tertutup** di skema — nilai di luar
+`left`/`center`/`right` ditolak validasi, bukan diam-diam diabaikan. `width`
+tidak divalidasi bentuknya (panjang CSS bebas), tetapi ia **wajib diterapkan**.
+
+Nilai default: tanpa `align`/`width`, kolom mengikuti default tabel (label
+kiri, lebar otomatis). Kolom yang **diderivasi** (tanpa `columns:` eksplisit)
+tidak menyatakan perataan — derivasi tidak menebak dari tipe field.
+
+Kind `Listing` (§10) memakai `TableColumn` yang sama dan tunduk pada aturan ini.
+
+### 3.1.2 Kosakata `format` & sel relasi (normatif)
+
+`TableColumn.format` memilih bagaimana nilai mentah ditampilkan:
+
+| `format`   | Nilai yang diharapkan        | Hasil                                                |
+| ---------- | ---------------------------- | ---------------------------------------------------- |
+| `currency` | `{amount, currency}` / angka | `Rp50.000` — simbol & skala dari `settings.currency` |
+| `number`   | angka                        | `20.000` — pemisah ribuan dari `settings.locale`     |
+| `date`     | string tanggal               | mengikuti `settings.date_format`                     |
+| `relative` | string waktu                 | "3d ago"                                             |
+| `percent`  | angka                        | `10%`                                                |
+
+`format` adalah **himpunan tertutup** (`TableCellFormat`) — setiap nama
+diimplementasikan renderer sel, jadi salah ketik **ditolak validasi** alih-alih
+diam-diam mencetak nilai mentah.
+
+Himpunan ini **bukan** `ReportFormat` meski mirip: laporan tidak punya
+`relative`/`number`, dan sel tabel tidak punya `datetime` (kolom `datetime`
+menderivasi `relative` — §3.1). Menyamakan keduanya memaksa satu permukaan
+menerima nama yang tidak bisa ia render; karena itu `datetime` pada kolom tabel
+ditolak dengan petunjuk bahwa ia format laporan.
+
+**`format` tidak pernah diturunkan dari tipe field.** `decimal`/`integer` sama
+seringnya sebuah kuantitas (`quantity_on_hand`) maupun sebuah pengenal
+(`line_number`, kode); renderer tidak menebak, jadi kolom yang ingin pemisah
+ribuan menyatakannya. Kolom tanpa `format` menampilkan nilai apa adanya.
+
+**Skala field menang atas skala global.** Untuk `format: number` pada field
+`decimal` yang punya `scale` sendiri, skala field itulah yang dipakai — bukan
+`settings.decimal_scale`. Field `scale: 3` yang dicetak dengan skala global 2
+akan **membulatkan** digit yang tersimpan: itu salah menyatakan data, bukan
+pilihan tampilan.
+
+**Sel relasi menampilkan label, bukan kunci.** Field `belongs_to` disimpan
+sebagai foreign key (`branch_id`), tetapi API juga mengirim record terkait pada
+alias bersaudara (`branch: { id, name, … }`). Kolom yang menyebut field itu —
+baik sebagai `field: branch_id` maupun sebagai dot-path `field: branch.name` —
+menampilkan **label** record terkait (`label_field` entity tujuan, fallback
+`name`/`title`/`code`). Yang **tidak boleh** terjadi: menampilkan UUID padahal
+namanya ada di baris yang sama.
+
+Alias mengikuti aturan server (`renderers/jsonb-persist`): `patient_id` →
+`patient`, selain itu nama resource. Bila API tidak mengirim objek terkait
+(mis. field yang tak boleh dibaca pemanggil), sel menampilkan kunci mentahnya —
+bukan kosong.
+
+Wajib untuk `Table` **dan** `Listing`; keduanya memakai resolver yang sama.
 
 ### 3.2 Inline & Batch Editing
 
@@ -761,13 +903,21 @@ tetapi hidup di kind yang berbeda dan **tidak** saling menyalin. Perbedaannya
 dinyatakan berdampingan supaya penulis spec tidak menyalin bentuk satu ke yang
 lain:
 
-| Properti                             | `TableColumn` | `ReportColumn` |
-| ------------------------------------ | ------------- | -------------- |
-| `field`, `label`                     | ✅            | ✅             |
+| Properti                             | `TableColumn` | `ReportColumn`                                          |
+| ------------------------------------ | ------------- | ------------------------------------------------------- |
+| `field`, `label`                     | ✅            | ✅                                                      |
 | `format`                             | ✅ (bebas)    | ✅ **enum** (`currency`/`date`/`datetime`/`percentage`) |
-| `aggregate`                          | —             | ✅ **enum** (`sum`/`avg`/`count`/`min`/`max`) |
-| `widget`                             | ✅            | ✅ (set yang sama) |
-| `sortable`, `width`, `align`, `link` | ✅            | —              |
+| `aggregate`                          | —             | ✅ **enum** (`sum`/`avg`/`count`/`min`/`max`)           |
+| `widget`                             | ✅            | ✅ (set yang sama)                                      |
+| `sortable`, `width`, `align`, `link` | ✅            | —                                                       |
+
+> **Open — `TableColumn.link`.** Kolom yang nilainya menjadi tautan ke sebuah
+> Page (`link: order-detail`) dideklarasikan di skema dan dipakai contoh di
+> atas, tetapi **belum ada renderer yang menerapkannya** dan belum ada manifest
+> yang memakainya. Yang belum ditetapkan: bagaimana `:param` pada route Page
+> tujuan (`/orders/:id`) diisi dari record baris — konvensi yang sama belum
+> dinyatakan untuk `Calendar` (§5) maupun `Kanban`. Selama itu, `link` diterima
+> skema tetapi tidak berefek; jangan andalkan ia bernavigasi.
 
 `ReportColumn.aggregate` dan `.format` adalah **himpunan tertutup** — setiap
 nama diimplementasikan engine/renderer, jadi agregat atau format yang tidak

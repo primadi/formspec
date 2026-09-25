@@ -47,6 +47,19 @@ func TestRunInit_ScaffoldsProject(t *testing.T) {
 	// Module-named manifests rendered from app.tmpl.yaml / ws.tmpl.yaml.
 	assertExists(filepath.Join("spec", "apps", "testapp.yaml"))
 	assertExists(filepath.Join("spec", "workspaces", "testapp.yaml"))
+	// The App mounts module "testapp", so the scaffold MUST also declare that
+	// Module — without it the App mounts nothing and the project fails its own
+	// documented gate (`formspec validate --spec spec`). The module template's
+	// _module_ directory placeholder resolves to the module name.
+	assertExists(filepath.Join("spec", "modules", "testapp", "module.yaml"))
+	moduleYAML, err := os.ReadFile(filepath.Join(root, "spec", "modules", "testapp", "module.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mod := string(moduleYAML); !strings.Contains(mod, "kind: Module") ||
+		!strings.Contains(mod, "name: testapp") {
+		t.Fatalf("spec/modules/testapp/module.yaml not rendered as expected:\n%s", mod)
+	}
 
 	// Embedded AI skills extracted into .agents/skills/<name>/SKILL.md
 	skillsDir := filepath.Join(root, ".agents", "skills")

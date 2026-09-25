@@ -19,6 +19,12 @@ spec:
         - { field: supplier_id, widget: relation-picker, label: "Pemasok" }
         - { field: transaction_date, label: "Tanggal" }
         - { field: expected_date, label: "Estimasi Datang" }
+        # Landed cost (item 10.1): ongkos kirim satu pengiriman. Dialokasikan
+        # proporsional ke harga per satuan bahan saat barang diterima, jadi ia
+        # masuk HPP — bukan biaya yang menggantung di luar persediaan.
+        - { field: shipping_cost, widget: moneyinput, label: "Biaya Kirim" }
         - { field: note, widget: textarea, label: "Catatan" }
-        # `lines` dirender oleh panel picker (kolom kiri).
-        - { field: lines, label: "Bahan Dipesan" }
+        # `lines` dirender oleh panel picker (kolom kiri). Baris bisa berjenis
+        # bahan atau biaya bebas (`line_type`), sehingga ongkos angkut khusus
+        # bisa menempel pada bahan tertentu.
+        - { field: lines, label: "Bahan & Biaya Dipesan" }

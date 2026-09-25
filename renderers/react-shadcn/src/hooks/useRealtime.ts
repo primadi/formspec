@@ -42,7 +42,15 @@ function getClient(): RealtimeClient {
 class RealtimeClient {
   private ws: WebSocket | null = null
   private subs = new Set<RealtimeSub>()
+  /** WS URL with no credential in it — ticket/token are appended per attempt. */
   private url = ""
+  /** POST endpoint that mints a single-use handshake ticket (todo 5.8.4). */
+  private ticketUrl = ""
+  /** Legacy handshake credential, used only if ticket issuance fails. */
+  private token = ""
+  /** Bumped by configure(); an in-flight open() whose generation is stale
+   *  aborts instead of connecting with the previous URL. */
+  private gen = 0
   private retryMs = 1000
   private retryTimer: number | undefined
 
@@ -52,25 +60,55 @@ class RealtimeClient {
   private subscribed = new Map<string, Set<string>>()
 
   /** (Re)configure the connection URL; closes & reopens on change. */
-  configure(url: string) {
-    if (this.url === url) return
+  configure(url: string, opts?: { ticketUrl?: string; token?: string }) {
+    const ticketUrl = opts?.ticketUrl ?? ""
+    const token = opts?.token ?? ""
+    if (
+      this.url === url &&
+      this.ticketUrl === ticketUrl &&
+      this.token === token
+    )
+      return
     this.url = url
+    this.ticketUrl = ticketUrl
+    this.token = token
+    this.gen += 1
     this.retryMs = 1000
     this.clearRetry()
     if (this.ws) {
       this.ws.close()
       this.ws = null
     }
-    this.open()
+    void this.open()
   }
 
   subscribe(sub: RealtimeSub): () => void {
     this.subs.add(sub)
-    if (!this.ws) this.open()
+    if (!this.ws) void this.open()
     this.syncSubscriptions()
     return () => {
       this.subs.delete(sub)
       this.syncSubscriptions()
+    }
+  }
+
+  /**
+   * Exchanges the access token for a single-use ticket (todo 5.8.4). The
+   * ticket is opaque and dies in ~30s, so an access log that records the WS
+   * URL no longer captures a reusable credential. Returns "" when issuance
+   * fails — the caller then falls back to the legacy ?token= handshake.
+   */
+  private async fetchTicket(): Promise<string> {
+    try {
+      const res = await fetch(this.ticketUrl, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${this.token}` },
+      })
+      if (!res.ok) return ""
+      const body = (await res.json()) as { ticket?: string }
+      return typeof body.ticket === "string" ? body.ticket : ""
+    } catch {
+      return ""
     }
   }
 
@@ -171,9 +209,21 @@ class RealtimeClient {
     }
   }
 
-  private open() {
+  private async open() {
     if (!this.url || this.ws) return
-    const ws = new WebSocket(this.url)
+    const gen = this.gen
+    let handshakeURL = this.url
+    if (this.token) {
+      const ticket = await this.fetchTicket()
+      handshakeURL += ticket
+        ? `?ticket=${encodeURIComponent(ticket)}`
+        : `?token=${encodeURIComponent(this.token)}`
+    }
+    // A configure() landed while the ticket request was in flight, or another
+    // attempt already opened a socket — this attempt is stale.
+    if (this.ws || gen !== this.gen) return
+
+    const ws = new WebSocket(handshakeURL)
     this.ws = ws
     // Fresh connection: the hub knows nothing about our interests yet.
     this.subscribed.clear()
@@ -219,7 +269,7 @@ class RealtimeClient {
       this.retryTimer = window.setTimeout(() => {
         this.retryTimer = undefined
         this.retryMs = Math.min(this.retryMs * 2, 15000)
-        this.open()
+        void this.open()
       }, this.retryMs)
     }
   }
@@ -250,10 +300,11 @@ export function useRealtime(
     if (!resource || !workspace) return
 
     const proto = window.location.protocol === "https:" ? "wss:" : "ws:"
-    const q = token ? `?token=${encodeURIComponent(token)}` : ""
-    getClient().configure(
-      `${proto}//${window.location.host}/${workspace}/_ui/_ws${q}`,
-    )
+    const base = `${proto}//${window.location.host}/${workspace}/_ui`
+    getClient().configure(`${base}/_ws`, {
+      ticketUrl: `${base}/_ws/ticket`,
+      token: token ?? "",
+    })
 
     const bump = () => {
       tickRef.current += 1
@@ -283,9 +334,10 @@ export function subscribeRealtime(
   const token = useSessionStore.getState().token
   if (!resource || !workspace) return () => {}
   const proto = window.location.protocol === "https:" ? "wss:" : "ws:"
-  const q = token ? `?token=${encodeURIComponent(token)}` : ""
-  getClient().configure(
-    `${proto}//${window.location.host}/${workspace}/_ui/_ws${q}`,
-  )
+  const base = `${proto}//${window.location.host}/${workspace}/_ui`
+  getClient().configure(`${base}/_ws`, {
+    ticketUrl: `${base}/_ws/ticket`,
+    token: token ?? "",
+  })
   return getClient().subscribe({ resource, onEvent })
 }

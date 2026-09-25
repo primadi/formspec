@@ -1,0 +1,78 @@
+# Seed stok kafe — supplier, bahan baku, dan resep (termasuk baris BIAYA BEBAS).
+#
+# Melengkapi item 10.1 & 10.4: tanpa bahan dan resep, HPP tidak bisa dihitung
+# sama sekali (`menu-cost.cost_per_portion` = Σ baris resep × biaya bahan ÷ yield),
+# jadi menu yang sudah di-seed akan tampil dengan biaya nol — angka yang terlihat
+# sah dan salah.
+#
+# ─── BARIS BIAYA BEBAS (`line_type: cost`) ───
+# Resep Nasi Goreng di bawah punya DUA baris biaya selain bahan:
+#   "Gas & listrik"      — overhead dapur per batch resep
+#   "Kemasan takeaway"   — biaya per batch, bukan per bahan
+# Inilah "custom item biaya yg bisa diisi bebas" (permintaan pemilik, item 10.1):
+# `cost_label` + `cost_amount` diisi apa pun, dan `menu-cost` ikut menjumlahkannya
+# karena ia membaca seluruh baris resep.
+apiVersion: formspec.dev/v1
+kind: Seed
+metadata:
+  name: kafe-stock
+  module: cafe-stock
+  description: "Supplier, bahan baku, dan resep menu kafe"
+spec:
+  entities:
+    - entity: supplier
+      records:
+        - { code: SUP-001, name: "PT Sumber Pangan Sejahtera", phone: "021-5550101" }
+        - { code: SUP-002, name: "CV Segar Alami", phone: "022-5550202" }
+
+    # `unit` = satuan DASAR, dan enum-nya tertutup: `gram | ml | pcs`. `kg`
+    # SENGAJA bukan pilihan meski deklarasi `unit: {base: gram, convertible:
+    # [kg], factors: {kg: 1000}}` mengenalinya — kg adalah satuan yang
+    # DIKONVERSI ke gram (S12/4.6), bukan satuan dasar yang disimpan. Menulis
+    # `unit: kg` ditolak CHECK constraint database, bukan dibiarkan lolos:
+    # menyimpan dua satuan dalam satu kolom membuat setiap penjumlahan stok
+    # bergantung pada siapa yang menulis terakhir.
+    # `cost_per_unit` = biaya per SATUAN DASAR (per gram), jadi 15.000/kg ditulis
+    # 15 per gram. Sebelum ada pergerakan stok, ini acuan biaya; sesudahnya
+    # acuannya `stock-level.moving_avg_cost` (D3).
+    - entity: ingredient
+      records:
+        - { code: BHN-BERAS-01, name: "Beras Putih", unit: gram, cost_per_unit: { amount: "15", currency: "IDR" }, weight_per_unit: 1, min_stock: 20000 }
+        - { code: BHN-TELUR-01, name: "Telur Ayam", unit: pcs, cost_per_unit: { amount: "2500", currency: "IDR" }, weight_per_unit: 60, min_stock: 30 }
+        - { code: BHN-AYAM-01, name: "Ayam Fillet", unit: gram, cost_per_unit: { amount: "45", currency: "IDR" }, weight_per_unit: 1, min_stock: 5000 }
+        - { code: BHN-TEH-01, name: "Teh Tubruk", unit: gram, cost_per_unit: { amount: "80", currency: "IDR" }, weight_per_unit: 0.5, min_stock: 500 }
+        - { code: BHN-GULA-01, name: "Gula Pasir", unit: gram, cost_per_unit: { amount: "16", currency: "IDR" }, weight_per_unit: 1, min_stock: 10000 }
+        - { code: BHN-JERUK-01, name: "Jeruk Peras", unit: gram, cost_per_unit: { amount: "22", currency: "IDR" }, weight_per_unit: 1, min_stock: 5000 }
+        - { code: BHN-KOPI-01, name: "Kopi Robusta", unit: gram, cost_per_unit: { amount: "120", currency: "IDR" }, weight_per_unit: 0.6, min_stock: 1000 }
+        - { code: BHN-KACANG-01, name: "Kacang Tanah", unit: gram, cost_per_unit: { amount: "28", currency: "IDR" }, weight_per_unit: 1, min_stock: 5000 }
+        - { code: BHN-MINYAK-01, name: "Minyak Goreng", unit: gram, cost_per_unit: { amount: "18", currency: "IDR" }, weight_per_unit: 0.9, min_stock: 10000 }
+        - { code: BHN-KEMAS-01, name: "Kotak Takeaway", unit: pcs, cost_per_unit: { amount: "1200", currency: "IDR" }, weight_per_unit: 25, min_stock: 100 }
+
+    # Resep 1:1 dengan menu (`menu_item_id` unique). Yield = jumlah porsi per batch.
+    - entity: recipe
+      records:
+        - menu_item_id: { $ref: "cafe-master.menu-item:code=MKN-001" }
+          yield_quantity: 1
+          instructions: "Tumis bumbu, masukkan nasi, aduk rata, tambahkan telur dan ayam."
+          lines:
+            - { line_no: 1, line_type: ingredient, ingredient_id: { $ref: "cafe-stock.ingredient:code=BHN-BERAS-01" }, quantity: 250, unit: gram }
+            - { line_no: 2, line_type: ingredient, ingredient_id: { $ref: "cafe-stock.ingredient:code=BHN-TELUR-01" }, quantity: 1, unit: pcs }
+            - { line_no: 3, line_type: ingredient, ingredient_id: { $ref: "cafe-stock.ingredient:code=BHN-AYAM-01" }, quantity: 80, unit: gram }
+            - { line_no: 4, line_type: ingredient, ingredient_id: { $ref: "cafe-stock.ingredient:code=BHN-MINYAK-01" }, quantity: 30, unit: gram }
+            # Baris BIAYA BEBAS — bukan bahan, diisi apa pun oleh pemilik.
+            - { line_no: 5, line_type: cost, cost_label: "Gas & listrik", cost_amount: { amount: "2500", currency: "IDR" } }
+            - { line_no: 6, line_type: cost, cost_label: "Kemasan takeaway", cost_amount: { amount: "1200", currency: "IDR" } }
+        - menu_item_id: { $ref: "cafe-master.menu-item:code=MNM-001" }
+          yield_quantity: 1
+          instructions: "Seduh teh, tambahkan gula, sajikan dengan es."
+          lines:
+            - { line_no: 1, line_type: ingredient, ingredient_id: { $ref: "cafe-stock.ingredient:code=BHN-TEH-01" }, quantity: 8, unit: gram }
+            - { line_no: 2, line_type: ingredient, ingredient_id: { $ref: "cafe-stock.ingredient:code=BHN-GULA-01" }, quantity: 20, unit: gram }
+            - { line_no: 3, line_type: cost, cost_label: "Es & kemasan gelas", cost_amount: { amount: "800", currency: "IDR" } }
+        - menu_item_id: { $ref: "cafe-master.menu-item:code=KPI-001" }
+          yield_quantity: 1
+          instructions: "Seduh kopi dengan air panas, aduk, sajikan."
+          lines:
+            - { line_no: 1, line_type: ingredient, ingredient_id: { $ref: "cafe-stock.ingredient:code=BHN-KOPI-01" }, quantity: 15, unit: gram }
+            - { line_no: 2, line_type: ingredient, ingredient_id: { $ref: "cafe-stock.ingredient:code=BHN-GULA-01" }, quantity: 10, unit: gram }
+            - { line_no: 3, line_type: cost, cost_label: "Gas & listrik", cost_amount: { amount: "600", currency: "IDR" } }

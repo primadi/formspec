@@ -21,6 +21,7 @@ import type {
 import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
 import { resolveEntityRef } from "@/engine/entityRef"
+import { entityFieldLabel } from "@/engine/derive"
 import { apiList, buildListParams } from "@/lib/api"
 import { createFormatter, moneyAmount, type Formatter } from "@/lib/format"
 import { computeTotals, type TotalsResult } from "@/lib/aggregate"
@@ -45,6 +46,15 @@ export default function ReportRenderer({ entry }: ReportRendererProps) {
   const [meta, setMeta] = useState<ListResponseMeta | null>(null)
 
   const hasParams = (entry.spec.parameters?.length ?? 0) > 0
+
+  // The report's target entity — lets a column with no `label` still show the
+  // entity field's `title` instead of a raw field name (same vocabulary as
+  // Form/Table/Listing/Detail). `ReportColumn.label` is schema-required, so
+  // this is the defensive path for manifests that bypass validation.
+  const reportEntity = useMemo(() => {
+    const [mod, name] = resolveEntityRef(entry.spec.entity, entry.module)
+    return getEntity(mod, name)
+  }, [entry.spec.entity, entry.module, getEntity])
 
   const fetchReport = useCallback(async () => {
     setLoading(true)
@@ -211,7 +221,7 @@ export default function ReportRenderer({ entry }: ReportRendererProps) {
                       key={col.field}
                       className="h-10 px-3 text-left align-middle font-medium text-muted-foreground"
                     >
-                      {col.label || col.field}
+                      {col.label || entityFieldLabel(reportEntity, col.field)}
                     </th>
                   ))}
                 </tr>

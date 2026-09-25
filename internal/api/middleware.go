@@ -232,26 +232,71 @@ func AuthMiddleware(next http.Handler) http.Handler {
 //   - Otherwise, passes through to the next handler.
 //
 // RequirePermissionOrAnonymous guards a route a public App exposes to anonymous
-// callers (#45): an anonymous request passes — the public grant IS its
-// authorization, and the grant's row scope constrains which rows it returns —
-// while an authenticated request must still hold `required`.
+// callers (#45).
+//
+// The public grant is a FLOOR, not an anonymous-only lane. A caller that holds
+// `required` is governed by that permission (plus the entity's own row scope);
+// a caller that does NOT hold it — anonymous, or signed in without it — falls
+// back to the grant and may do everything an anonymous visitor may, and no
+// more. When it falls back, the grant's row scope applies to it as well (see
+// applyPublicScope/applyRowScope), so the fallback never widens what the grant
+// already hands to a guest.
 //
 // This is deliberately tighter than RequirePermission("public"). A public grant
 // must not double as a permission bypass for signed-in callers that merely hit
 // the same URL; without this, granting anonymous `list` on an entity would
 // silently strip the list permission from every POS/admin surface sharing that
 // route.
+//
+// The fallback exists because requiring the permission made signed-in callers
+// strictly WORSE OFF than guests on the App's own surface — an inversion, not a
+// restriction. Measured on kafe (`kafe-qr`, allowlist
+// `menu-category: [list, find]`): `GET /_ui/entity/cafe-master/menu-category`
+// answered 200 for anonymous and **404** for the same request carrying a
+// session scoped to the public App, so signing in — via the `chrome.auth` links
+// or the public sign-up form — broke a catalog that worked a moment earlier.
 func RequirePermissionOrAnonymous(required string) func(http.Handler) http.Handler {
 	inner := RequirePermission(required)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if IdentityFromContext(r.Context()) != nil {
+			identity := IdentityFromContext(r.Context())
+			if identity == nil {
+				// Anonymous — the public grant is its authorization.
+				next.ServeHTTP(w, r)
+				return
+			}
+			if identity.HasPermission(required) {
+				// Holds it: the permission governs (and must, or a POS/admin
+				// surface sharing this route would lose its own gate).
 				inner(next).ServeHTTP(w, r)
 				return
 			}
-			next.ServeHTTP(w, r)
+			// Signed in without the permission. Record that this request is
+			// running on the public grant so the row-scope layers apply the
+			// grant's scope instead of failing closed on a session attribute
+			// the caller never had.
+			next.ServeHTTP(w, r.WithContext(withPublicGrantAuth(r.Context())))
 		})
 	}
+}
+
+// publicGrantAuthContextKey marks a request that reached its handler through a
+// public grant rather than through a permission of its own (see
+// RequirePermissionOrAnonymous). It is decided once, at the route's gate, and
+// read by the row-scope layers — so "who is governed by what" has a single
+// source of truth instead of each layer re-deriving it from the identity.
+type publicGrantAuthContextKey struct{}
+
+// withPublicGrantAuth marks the request as authorized by a public grant.
+func withPublicGrantAuth(ctx context.Context) context.Context {
+	return context.WithValue(ctx, publicGrantAuthContextKey{}, true)
+}
+
+// isPublicGrantAuth reports whether the request was authorized by a public
+// grant because the caller held no permission of its own for the route.
+func isPublicGrantAuth(ctx context.Context) bool {
+	marked, _ := ctx.Value(publicGrantAuthContextKey{}).(bool)
+	return marked
 }
 
 // RequirePermission returns middleware that enforces a specific permission.

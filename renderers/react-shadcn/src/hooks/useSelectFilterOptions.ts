@@ -25,7 +25,16 @@ export function useSelectFilterOptions(
   metaBundle: MetaBundle | null,
   getClient: () => import("ky").KyInstance,
 ): SelectOption[] {
-  const fieldDef = entity?.fields.find((f) => f.name === filter.field)
+  // Only a `select` filter renders options. The guard lives HERE, not at the
+  // call site, because callers must now call this hook unconditionally
+  // (a hook inside a `switch` case violates the Rules of Hooks — see
+  // TableRenderer.FilterControl). Folding the requirement into the hook keeps
+  // the "no fetch for a date/text filter" behaviour that a hoisted call would
+  // otherwise lose.
+  const isSelect = (filter.type ?? "select") === "select"
+  const fieldDef = isSelect
+    ? entity?.fields.find((f) => f.name === filter.field)
+    : undefined
   const isRelation = fieldDef?.type === "relation" && fieldDef?.relation != null
 
   const [relationOptions, setRelationOptions] = useState<SelectOption[]>([])
@@ -61,6 +70,10 @@ export function useSelectFilterOptions(
       .catch(() => {
         // Silently fail — the filter just shows "All" only
       })
+    // `entity?.module` is read (via resolveEntityRef) but a dep on the
+    // optional chain would re-run this on every render; the entity identity
+    // covers it — a module change always arrives as a different entity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRelation, metaBundle, fieldDef, getClient])
 
   if (isRelation) return relationOptions

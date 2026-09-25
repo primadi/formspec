@@ -1,8 +1,8 @@
 # @formspec/client
 
 Typed browser/Node runtime for FormSpec's generated REST API
-(docs_old/spec/02-core-basic.md §16). This is the hand-written half of
-`formspec.api` (docs_old/spec/05-frontend.md §7) — `formspec generate --lang
+(docs/spec/backend/01-core-basic.md §8.5). This is the hand-written half of
+`formspec.api` (docs/spec/backend/01-core-basic.md §8) — `formspec generate --lang
 typescript` (`cmd/formspec/generate.go`) emits the typed half on top of it.
 Zero runtime dependencies (native `fetch`), Node ≥ 18 or any modern browser.
 

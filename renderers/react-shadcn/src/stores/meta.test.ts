@@ -50,3 +50,39 @@ describe("createLookups — widget refs are module-qualified (gap #16 / 7.3)", (
     expect(lookups.widgets.get("omzet-hari-ini")).toBeDefined()
   })
 })
+
+// A bundle whose caller can see no entity used to arrive with `entities: null`
+// (the server left the field nil, so it serialized as `null`), and
+// `for (const e of bundle.entities)` threw "e.entities is not iterable" — the
+// ErrorBoundary turned that into a dead panel instead of an empty list.
+//
+// Observed on kafe as role `dapur` opening the owner dashboard: the dashboard
+// renders metrics through getWidget → createLookups, so the crash took out a
+// page that had nothing to do with entities. The server now always sends `[]`
+// (internal/ui/meta.go initializes Entities), and createLookups must stay alive
+// even if it does not.
+describe("createLookups — a null entities list must not throw", () => {
+  const base = bundleWithWidgets()
+
+  it("survives entities: null", () => {
+    const bundle = { ...base, entities: null } as unknown as MetaBundle
+    expect(() => createLookups(bundle)).not.toThrow()
+    const lookups = createLookups(bundle)
+    expect(lookups.entitiesByKey.size).toBe(0)
+    expect(lookups.entitiesByPlural.size).toBe(0)
+  })
+
+  it("survives entities: undefined", () => {
+    const bundle = { ...base, entities: undefined } as unknown as MetaBundle
+    expect(() => createLookups(bundle)).not.toThrow()
+  })
+
+  it("still indexes entities when they are present", () => {
+    const bundle = {
+      ...base,
+      entities: [{ module: "billing", name: "order", plural: "orders" }],
+    } as unknown as MetaBundle
+    const lookups = createLookups(bundle)
+    expect(lookups.entitiesByPlural.get("billing/orders")).toBeTruthy()
+  })
+})

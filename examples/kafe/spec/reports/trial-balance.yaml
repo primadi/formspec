@@ -1,26 +1,39 @@
-# Trial balance report
+# Trial balance — neraca saldo per akun per periode.
+#
+# DIPERBAIKI 2026-09-22: laporan ini sebelumnya menunjuk `entity: ledger` — sebuah
+# entity yang TIDAK PERNAH ADA di spec kafe (module `gl` hanya punya `account`,
+# `journal-entry`, dan `gl-balance`). Akibatnya `formspec check` melaporkan
+# `aggregate "sum" references unknown entity "ledger"`, dan laporan ini tidak
+# akan pernah bisa dijalankan oleh siapa pun; `formspec validate` tetap hijau
+# karena rujukan entity di dalam Report belum diperiksa (kelas yang sama dengan
+# `view:`/`App.spec.modules` di 8.3 — belum ditutup untuk Report/Widget).
+#
+# Sumber yang BENAR adalah proyeksi `gl-balance` (saldo per akun per periode,
+# dipelihara `gl/gl_balance_update`): ia yang menyimpan mutasi debit & kredit
+# per akun. Nama lama `ledger` mengandaikan journal-entry sudah di-denormalisasi
+# menjadi satu baris per akun — bentuk yang tidak pernah dinyatakan di spec.
 apiVersion: formspec.dev/v1
 kind: Report
 metadata:
   name: trial-balance
   module: gl
-  description: Laporan neraca saldo — summary per akun
+  description: Laporan neraca saldo — saldo per akun per periode
 spec:
   title: "Neraca Saldo"
-  entity: ledger
+  entity: gl.gl-balance
   parameters:
-    - field: as_of_date
-      label: "Per Tanggal"
-      type: "date"
-      default: "today"
+    - field: period
+      label: "Periode"
+      type: "text"
+      required: true
   columns:
-    - field: account_code
-      label: "Kode Akun"
-    - field: account_name
-      label: "Nama Akun"
-    - field: beginning_balance
-      label: "Saldo Awal"
-      format: "currency"
+    - field: account_id
+      label: "Akun"
+    - field: period
+      label: "Periode"
+    - field: currency
+      label: "Mata Uang"
+    - { field: opening_balance, label: "Saldo Awal", format: currency }
     - field: debit_movement
       label: "Mutasi Debit"
       aggregate: "sum"
@@ -29,13 +42,9 @@ spec:
       label: "Mutasi Kredit"
       aggregate: "sum"
       format: "currency"
-    - field: ending_balance
-      label: "Saldo Akhir"
-      format: "currency"
-  groups:
-    - { field: account_type, label: "Tipe Akun" }
+    - { field: closing_balance, label: "Saldo Akhir", format: currency }
   totals:
     - label: "TOTAL"
-      field: ending_balance
+      field: debit_movement
       fn: "sum"
   export: [pdf, csv, xlsx]

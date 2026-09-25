@@ -16,6 +16,8 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { render, screen, fireEvent, cleanup } from "@testing-library/react"
 import { MoneyInput } from "@/widgets/MoneyInput"
 import { TimeInput } from "@/widgets/TimeInput"
+import { useMetaStore } from "@/stores/meta"
+import type { MetaBundle } from "@/types/manifest"
 
 // Without this, each render() leaves its DOM behind and the role queries below
 // match several inputs.
@@ -66,6 +68,26 @@ describe("MoneyInput", () => {
     )
     expect(screen.queryByRole("textbox")).toBeNull()
     expect(screen.getByText(/15/)).toBeTruthy()
+  })
+
+  // The preview may only use a symbol that belongs to the value's own currency.
+  // `fmt.money` formats with `settings.currency`, so a value that carries a
+  // different code (allowed on the wire — 05-field-types.md §2) would otherwise
+  // be shown as "Rp" in front of a USD amount, or vice versa.
+  it("does not label a foreign-currency value with the settings symbol", () => {
+    useMetaStore.setState({
+      bundle: {
+        settings: {
+          currency: { code: "IDR", decimal_places: 0, symbol: "Rp" },
+          locale: "id-ID",
+        },
+      } as unknown as MetaBundle,
+    })
+    // No field-level `currency` prop — the manifest declared none, but the
+    // stored value names its own.
+    render(<MoneyInput value={{ amount: "1500", currency: "USD" }} readonly />)
+    expect(screen.queryByText(/Rp/)).toBeNull()
+    expect(screen.getByText(/USD/)).toBeTruthy()
   })
 })
 

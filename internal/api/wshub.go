@@ -252,6 +252,26 @@ func (b *RouterBuilder) HandleWS() http.HandlerFunc {
 		workspaceID := workspaceFromContext(r.Context())
 		identity := IdentityFromContext(r.Context())
 
+		// Single-use ticket (?ticket=) — the preferred handshake credential
+		// (todo 5.8.4). Consumed BEFORE the upgrade so a bad ticket is a
+		// clean HTTP 401 rather than an accepted-then-closed socket. A ticket
+		// is bound to the workspace that issued it: presenting it on a
+		// different workspace's path is rejected.
+		if ticketVal := r.URL.Query().Get("ticket"); ticketVal != "" {
+			ticket, ok := b.wsTickets.consume(ticketVal)
+			if !ok || ticket.workspaceID != workspaceID {
+				writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "invalid or expired ticket")
+				return
+			}
+			identity = ticket.identity
+			if identity != nil {
+				ctx := WithIdentity(r.Context(), identity)
+				ctx = WithUser(ctx, identity.UserID)
+				r = r.WithContext(ctx)
+			}
+			workspaceID = ticket.workspaceID
+		}
+
 		// InsecureSkipVerify disables coder/websocket's Origin-vs-Host check.
 		// It is required when the SPA is reached through a dev reverse proxy
 		// (Vite --dev-ui: Origin stays the browser's :5173 while Host becomes

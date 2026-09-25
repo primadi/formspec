@@ -52,7 +52,7 @@ func ValidateCrossField(fieldName string, val any, rule spec.ValidationRule, dat
 	case "after", "after_field":
 		refField, ok := rule.Value.(string)
 		if !ok {
-			return fmt.Errorf("after rule for %q: value must be a field name string", fieldName)
+			return crossFieldError(fieldName, "after rule for %q: value must be a field name string", fieldName)
 		}
 		refVal, exists := data[refField]
 		if !exists {
@@ -63,7 +63,7 @@ func ValidateCrossField(fieldName string, val any, rule spec.ValidationRule, dat
 	case "before", "before_field":
 		refField, ok := rule.Value.(string)
 		if !ok {
-			return fmt.Errorf("before rule for %q: value must be a field name string", fieldName)
+			return crossFieldError(fieldName, "before rule for %q: value must be a field name string", fieldName)
 		}
 		refVal, exists := data[refField]
 		if !exists {
@@ -75,7 +75,7 @@ func ValidateCrossField(fieldName string, val any, rule spec.ValidationRule, dat
 		// Format: {exists: billing.product} — check that field value references an existing record
 		target, ok := rule.Value.(string)
 		if !ok {
-			return fmt.Errorf("exists rule for %q: value must be a resource reference", fieldName)
+			return crossFieldError(fieldName, "exists rule for %q: value must be a resource reference", fieldName)
 		}
 		return checkExists(fieldName, val, target)
 	}
@@ -106,11 +106,11 @@ func compareDateTime(fieldName string, val any, refField string, refVal any, aft
 
 	if after {
 		if !valTime.After(refTime) {
-			return fmt.Errorf("%q must be after %q (%s)", fieldName, refField, refStr)
+			return crossFieldError(fieldName, "%q must be after %q (%s)", fieldName, refField, refStr)
 		}
 	} else {
 		if !valTime.Before(refTime) {
-			return fmt.Errorf("%q must be before %q (%s)", fieldName, refField, refStr)
+			return crossFieldError(fieldName, "%q must be before %q (%s)", fieldName, refField, refStr)
 		}
 	}
 	return nil
@@ -155,7 +155,7 @@ func ValidateActionParams(params map[string]any, validate []spec.ParamValidation
 			// Handle required/optional presence checks
 			if rule.Name == "required" {
 				if !exists || val == nil || val == "" {
-					errs = append(errs, fmt.Errorf("%s: required", pv.Field))
+					errs = append(errs, fieldError(pv.Field, "%s: required", pv.Field))
 				}
 				continue
 			}
@@ -200,121 +200,121 @@ func applyInlineRule(fieldName string, val any, rule spec.ValidationRule) error 
 	case "min_length":
 		str, ok := val.(string)
 		if !ok {
-			return fmt.Errorf("%s: must be a string", fieldName)
+			return fieldError(fieldName, "%s: must be a string", fieldName)
 		}
 		minLen := toInt(rule.Value)
 		if len(str) < minLen {
-			return fmt.Errorf("%s: minimum length %d, got %d", fieldName, minLen, len(str))
+			return fieldError(fieldName, "%s: minimum length %d, got %d", fieldName, minLen, len(str))
 		}
 	case "max_length":
 		str, ok := val.(string)
 		if !ok {
-			return fmt.Errorf("%s: must be a string", fieldName)
+			return fieldError(fieldName, "%s: must be a string", fieldName)
 		}
 		maxLen := toInt(rule.Value)
 		if len(str) > maxLen {
-			return fmt.Errorf("%s: maximum length %d, got %d", fieldName, maxLen, len(str))
+			return fieldError(fieldName, "%s: maximum length %d, got %d", fieldName, maxLen, len(str))
 		}
 	case "min":
 		num := toFloat(val)
 		minVal := toFloat(rule.Value)
 		if num < minVal {
-			return fmt.Errorf("%s: minimum value %v", fieldName, minVal)
+			return fieldError(fieldName, "%s: minimum value %v", fieldName, minVal)
 		}
 	case "max":
 		num := toFloat(val)
 		maxVal := toFloat(rule.Value)
 		if num > maxVal {
-			return fmt.Errorf("%s: maximum value %v", fieldName, maxVal)
+			return fieldError(fieldName, "%s: maximum value %v", fieldName, maxVal)
 		}
 	case "positive":
 		num := toFloat(val)
 		if num <= 0 {
-			return fmt.Errorf("%s: must be positive", fieldName)
+			return fieldError(fieldName, "%s: must be positive", fieldName)
 		}
 	case "email":
 		str, ok := val.(string)
 		if !ok {
-			return fmt.Errorf("%s: must be a string", fieldName)
+			return fieldError(fieldName, "%s: must be a string", fieldName)
 		}
 		if !emailRegex.MatchString(str) {
-			return fmt.Errorf("%s: invalid email format", fieldName)
+			return fieldError(fieldName, "%s: invalid email format", fieldName)
 		}
 	case "pattern":
 		str, ok := val.(string)
 		if !ok {
-			return fmt.Errorf("%s: must be a string", fieldName)
+			return fieldError(fieldName, "%s: must be a string", fieldName)
 		}
 		pattern, ok := rule.Value.(string)
 		if !ok {
-			return fmt.Errorf("%s: pattern must be a string regex", fieldName)
+			return fieldError(fieldName, "%s: pattern must be a string regex", fieldName)
 		}
 		matched, err := regexp.MatchString(pattern, str)
 		if err != nil {
-			return fmt.Errorf("%s: invalid regex: %v", fieldName, err)
+			return fieldError(fieldName, "%s: invalid regex: %v", fieldName, err)
 		}
 		if !matched {
-			return fmt.Errorf("%s: does not match pattern %q", fieldName, pattern)
+			return fieldError(fieldName, "%s: does not match pattern %q", fieldName, pattern)
 		}
 	case "url":
 		str, ok := val.(string)
 		if !ok {
-			return fmt.Errorf("%s: must be a string", fieldName)
+			return fieldError(fieldName, "%s: must be a string", fieldName)
 		}
 		if !urlRegex.MatchString(str) {
-			return fmt.Errorf("%s: invalid URL format", fieldName)
+			return fieldError(fieldName, "%s: invalid URL format", fieldName)
 		}
 	case "precision":
 		num := toFloat(val)
 		prec := toInt(rule.Value)
 		if prec < 0 {
-			return fmt.Errorf("%s: precision must be non-negative", fieldName)
+			return fieldError(fieldName, "%s: precision must be non-negative", fieldName)
 		}
 		dp := countDecimalPlaces(num)
 		if dp > prec {
-			return fmt.Errorf("%s: max %d decimal places, got %d", fieldName, prec, dp)
+			return fieldError(fieldName, "%s: max %d decimal places, got %d", fieldName, prec, dp)
 		}
 	case "future":
 		str, ok := val.(string)
 		if !ok {
-			return fmt.Errorf("%s: must be a datetime string", fieldName)
+			return fieldError(fieldName, "%s: must be a datetime string", fieldName)
 		}
 		t, err := parseDateTime(str)
 		if err != nil {
-			return fmt.Errorf("%s: invalid datetime: %v", fieldName, err)
+			return fieldError(fieldName, "%s: invalid datetime: %v", fieldName, err)
 		}
 		if !t.After(time.Now().UTC()) {
-			return fmt.Errorf("%s: must be in the future", fieldName)
+			return fieldError(fieldName, "%s: must be in the future", fieldName)
 		}
 	case "past":
 		str, ok := val.(string)
 		if !ok {
-			return fmt.Errorf("%s: must be a datetime string", fieldName)
+			return fieldError(fieldName, "%s: must be a datetime string", fieldName)
 		}
 		t, err := parseDateTime(str)
 		if err != nil {
-			return fmt.Errorf("%s: invalid datetime: %v", fieldName, err)
+			return fieldError(fieldName, "%s: invalid datetime: %v", fieldName, err)
 		}
 		if !t.Before(time.Now().UTC()) {
-			return fmt.Errorf("%s: must be in the past", fieldName)
+			return fieldError(fieldName, "%s: must be in the past", fieldName)
 		}
 	case "min_items":
 		items, ok := val.([]any)
 		if !ok {
-			return fmt.Errorf("%s: must be an array", fieldName)
+			return fieldError(fieldName, "%s: must be an array", fieldName)
 		}
 		minLen := toInt(rule.Value)
 		if len(items) < minLen {
-			return fmt.Errorf("%s: min %d items, got %d", fieldName, minLen, len(items))
+			return fieldError(fieldName, "%s: min %d items, got %d", fieldName, minLen, len(items))
 		}
 	case "max_items":
 		items, ok := val.([]any)
 		if !ok {
-			return fmt.Errorf("%s: must be an array", fieldName)
+			return fieldError(fieldName, "%s: must be an array", fieldName)
 		}
 		maxLen := toInt(rule.Value)
 		if len(items) > maxLen {
-			return fmt.Errorf("%s: max %d items, got %d", fieldName, maxLen, len(items))
+			return fieldError(fieldName, "%s: max %d items, got %d", fieldName, maxLen, len(items))
 		}
 	}
 	return nil
@@ -377,13 +377,13 @@ func checkExists(fieldName string, val any, target string) error {
 	// Parse target into module and entity
 	parts := strings.SplitN(target, ".", 2)
 	if len(parts) != 2 {
-		return fmt.Errorf("%s: invalid exists target %q — must be \"module.entity\"", fieldName, target)
+		return crossFieldError(fieldName, "%s: invalid exists target %q — must be \"module.entity\"", fieldName, target)
 	}
 	module, entity := parts[0], parts[1]
 
 	id, ok := val.(string)
 	if !ok {
-		return fmt.Errorf("%s: exists check requires a string value, got %T", fieldName, val)
+		return crossFieldError(fieldName, "%s: exists check requires a string value, got %T", fieldName, val)
 	}
 	if id == "" {
 		return nil
@@ -396,10 +396,12 @@ func checkExists(fieldName string, val any, target string) error {
 
 	found, err := existsLookup(module, entity, id)
 	if err != nil {
-		return fmt.Errorf("%s: exists(%s) lookup error: %w", fieldName, target, err)
+		ve := crossFieldError(fieldName, "%s: exists(%s) lookup error: %v", fieldName, target, err)
+		ve.Cause = err
+		return ve
 	}
 	if !found {
-		return fmt.Errorf("%s: referenced %s record %q does not exist", fieldName, target, id)
+		return crossFieldError(fieldName, "%s: referenced %s record %q does not exist", fieldName, target, id)
 	}
 
 	return nil

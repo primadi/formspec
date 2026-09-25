@@ -2,7 +2,7 @@ package api
 
 import "testing"
 
-// allowedFileType — the server half of the `allowed_types` contract (gap #4b).
+// AllowedFileType — the server half of the `allowed_types` contract (gap #4b).
 // The documented canonical form is a bare extension (`[jpg]`), and that was the
 // one form the matcher did not understand: uploads of perfectly allowed files
 // were rejected with "File type not allowed". The client matcher
@@ -26,9 +26,9 @@ func TestAllowedFileType(t *testing.T) {
 		{"no extension at all", []string{"jpg"}, "image/jpeg", "foto", false},
 	}
 	for _, c := range cases {
-		got := allowedFileType(c.allowed, c.contentType, c.filename)
+		got := AllowedFileType(c.allowed, c.contentType, c.filename)
 		if got != c.want {
-			t.Errorf("%s: allowedFileType(%v, %q, %q) = %v, want %v",
+			t.Errorf("%s: AllowedFileType(%v, %q, %q) = %v, want %v",
 				c.name, c.allowed, c.contentType, c.filename, got, c.want)
 		}
 	}

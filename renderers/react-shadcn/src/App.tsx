@@ -21,7 +21,7 @@ import { UiHost } from "@/shell/UiHost"
 import { DownloadTray } from "@/shell/DownloadTray"
 
 import { useSessionStore } from "@/stores/session"
-import { useMetaStore } from "@/stores/meta"
+import { detectApp, useMetaStore } from "@/stores/meta"
 import { usePrefsStore } from "@/stores/prefs"
 import { usePageTransitionEffect } from "@/lib/navigation"
 import {
@@ -168,24 +168,14 @@ function RootSurface() {
     )
   }
 
-  // Find the winning App by longest root_url prefix match (same logic as
-  // detectAppName in stores/meta.ts). For the workspace root, a public App
-  // with root_url "/" wins.
-  const segments = window.location.pathname.split("/").filter(Boolean)
-  const rest = "/" + segments.slice(1).join("/")
-  let best: AppSummary | undefined
-  for (const a of apps) {
-    // root_url "/" owns the whole workspace root — any subpath matches.
-    // (startsWith(a.root_url + "/") would test startsWith("//") and never
-    // match, silently falling back to _admin for every nested route.)
-    if (
-      a.root_url === "/" ||
-      rest === a.root_url ||
-      rest.startsWith(a.root_url + "/")
-    ) {
-      if (!best || a.root_url.length > best.root_url.length) best = a
-    }
-  }
+  // Find the winning App by longest root_url prefix match. Delegated to
+  // detectApp so the router, the login screen and the meta store cannot drift
+  // apart: this loop used to duplicate the logic, and the copy scored a
+  // `root_url: "/"` App as a FULL-LENGTH match, so it beat every other App on
+  // every path — `/{ws}/menu` (the public App's own surface) was served by
+  // whichever App happened to be listed first, and the public catalog answered
+  // "Page not found" inside an unrelated App's chrome.
+  const best = detectApp(window.location.pathname, apps)
 
   if (!best) {
     // No App claims this path — fall back to the admin surface.
@@ -568,35 +558,56 @@ function SurfaceShell({
               Component={route.Component}
             />
           ))}
-          {/* Index: the App's home page (spec.route "/") when authored —
-              otherwise fall back to the first derived entity. A page route
-              "/" strips to an empty relative path that never matches the
-              splat remainder, so it must be rendered as the index. */}
-          <Route
-            index
-            element={
-              homePage ? (
-                <Suspense fallback={null}>
-                  <PageRenderer entry={homePage} />
-                </Suspense>
-              ) : (
-                <DefaultRedirect
-                  bundle={bundle}
-                  workspace={workspace}
-                  surface={surface}
-                />
-              )
-            }
-          />
-          {/* Catch-all: redirect to root */}
-          <Route
-            path="*"
-            element={
+          {/* The App's own root (its `root_url`): the home page when authored,
+              otherwise the sensible default landing view.
+
+              This is a PATH, not an `index` route. The outer mount is
+              `/:workspace/*`, so for the App root the nested <Routes> sees the
+              remainder after mountPrefix — for `/kafe/app/pos` with
+              mountPrefix `/kafe` that is the string "app/pos", never "". An
+              `index` route never matches a non-empty remainder, so the root
+              fell through to the catch-all and rendered 404. Deriving the path
+              from surfacePath minus mountPrefix yields "app/pos" here (and ""
+              for mountPrefixOverride, where it degrades to the index case). */}
+          {(() => {
+            const relative = surfacePath.startsWith(mountPrefix)
+              ? surfacePath.slice(mountPrefix.length).replace(/^\/+/, "")
+              : ""
+            const element = homePage ? (
+              <Suspense fallback={null}>
+                <PageRenderer entry={homePage} />
+              </Suspense>
+            ) : (
               <DefaultRedirect
                 bundle={bundle}
                 workspace={workspace}
                 surface={surface}
               />
+            )
+            return relative ? (
+              <Route path={relative} element={element} />
+            ) : (
+              <Route index element={element} />
+            )
+          })()}
+          {/* Catch-all: the route does not exist FOR THIS SESSION.
+              This used to silently redirect to the surface root, which made a
+              dead link indistinguishable from a working one: an authored menu
+              entry whose target entity is not in the bundle (the entity is
+              filtered out by permission — e.g. "Pelanggan" pointing at
+              `cafe-master/members`, which the user has no grant for) rendered
+              the FIRST entity's list instead. The user believed they had opened
+              the page they clicked. A 404 states the truth. */}
+          <Route
+            path="*"
+            element={
+              <div className="flex min-h-[60vh] flex-col items-center justify-center gap-2">
+                <h2 className="text-xl font-semibold">Page not found</h2>
+                <p className="max-w-md text-center text-sm text-muted-foreground">
+                  This page does not exist, or you don&apos;t have access to the
+                  data behind it.
+                </p>
+              </div>
             }
           />
         </Route>

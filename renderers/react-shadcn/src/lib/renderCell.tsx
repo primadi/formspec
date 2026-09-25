@@ -9,6 +9,14 @@ import { Badge } from "@/widgets/Badge"
 import { QrCode } from "@/widgets/QrCode"
 import { createFormatter, moneyAmount, type Formatter } from "@/lib/format"
 import { isImageFile, storageAllowsImage } from "@/lib/media"
+import { readPath, relationDisplay } from "@/lib/relation"
+import {
+  fieldOptions,
+  optionLabel,
+  orderByDeclaration,
+  parseOptionValue,
+} from "@/lib/field-options"
+import type { EntitySchema } from "@/types/manifest"
 
 /** Extra context a cell may need beyond its own value. */
 export interface CellRenderOpts {
@@ -20,6 +28,13 @@ export interface CellRenderOpts {
   imageUrl?: string
   /** Alt text for an image cell (defaults to the file name). */
   alt?: string
+  /**
+   * The field's own decimal `scale` (05-field-types.md §1.2), used by
+   * `format: number`. Without it the cell would fall back to the global
+   * `settings.decimal_scale` and print a rounded number the database does not
+   * agree with.
+   */
+  scale?: number
 }
 
 export function renderCellValue(
@@ -97,6 +112,15 @@ export function renderCellValue(
     return formatter.relative(value)
   }
 
+  // A plain number with locale grouping (05-field-types.md §10: separators
+  // follow `settings.locale`). Opt-in rather than derived from the field type:
+  // `decimal`/`integer` are just as often an identifier or a line number
+  // (`line_number`) as a quantity, and the framework never guesses.
+  if (format === "number") {
+    const n = typeof value === "number" ? value : Number(value)
+    if (!Number.isNaN(n)) return formatter.number(n, opts?.scale)
+  }
+
   // S11: a percentage renders with its unit, so `10` does not read as 10 of
   // something unknown. The stored value is the percentage itself (10 = 10%).
   if (format === "percent") {
@@ -107,6 +131,31 @@ export function renderCellValue(
   if (typeof value === "object") return JSON.stringify(value)
 
   return String(value)
+}
+
+/**
+ * Render a multi-value cell as comma-separated option **labels**.
+ *
+ * Without this a `days_of_week` column prints `JSON.stringify([1,2,3])` — the
+ * same "value rendered raw in one place, formatted in another" split that the
+ * `select-multi-tag` widget exists to close on the form side. Resolved once in
+ * `resolveColumnCell` rather than per renderer, so Table, Listing, and
+ * ChildTable cannot drift apart. Returns null when no display form applies.
+ */
+export function renderOptionCell(
+  value: unknown,
+  field: import("@/types/manifest").Field | undefined,
+): string | null {
+  if (!field || !Array.isArray(value)) return null
+  const options = fieldOptions(field)
+  if (options.length === 0) return null
+  // Declaration order — the same ordering the form widget shows, so a set reads
+  // identically in a table cell and in the form.
+  const labels = orderByDeclaration(
+    parseOptionValue(value, options),
+    options,
+  ).map((v) => optionLabel(options, v))
+  return labels.length === 0 ? null : labels.join(", ")
 }
 
 /**
@@ -147,5 +196,43 @@ export function cellHintsForField(field: {
       return { format: "date" }
     default:
       return {}
+  }
+}
+
+/**
+ * Resolve the value a column cell should display, handling the two relation
+ * spellings and the field's own decimal scale. Both TableRenderer and
+ * ListingRenderer use this so a column behaves identically in either kind —
+ * the omission that produced 10.26 (align in one renderer only) is exactly
+ * what a second copy here would reintroduce.
+ *
+ * Returns the value plus the scale `format: number` should use; the caller
+ * still owns widget/format opts (image URL, alt text).
+ */
+export function resolveColumnCell(
+  row: Record<string, unknown>,
+  columnField: string,
+  entity: EntitySchema | undefined,
+  findEntity: (module: string, name: string) => EntitySchema | undefined,
+): { value: unknown; scale?: number } {
+  if (columnField.includes(".")) {
+    // Dot-path (e.g. `branch.name`) — already nested on the record.
+    return { value: readPath(row, columnField) }
+  }
+
+  const display = relationDisplay(row, columnField, entity, findEntity)
+  if (display !== null) return { value: display }
+
+  const field = entity?.fields.find((f) => f.name === columnField)
+
+  // A multi-value field with a declared choice set prints its labels
+  // (`Senin, Selasa`) instead of the raw array. Resolved here, not in each
+  // renderer, because Table/Listing/ChildTable all read this one function.
+  const optionsText = renderOptionCell(row[columnField], field)
+  if (optionsText !== null) return { value: optionsText }
+
+  return {
+    value: row[columnField],
+    scale: field?.scale,
   }
 }

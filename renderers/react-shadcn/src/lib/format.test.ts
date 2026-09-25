@@ -100,6 +100,24 @@ describe("createFormatter — with global settings", () => {
     expect(fmt.number(1234.5)).toBe("1.234,5")
   })
 
+  // A field's own `scale` must win over the global `decimal_scale`. The global
+  // value is 2 here while the field holds 3 fractional digits; using the global
+  // one would print a rounded number the database does not agree with.
+  // A field's own `scale` must win over the global `decimal_scale`. The global
+  // value is 2 here while the field (`decimal, scale: 3`) holds a third
+  // fractional digit; using the global scale would print a rounded number the
+  // database does not agree with — a lie about stored data, not a preference.
+  it("lets a field's own scale override the global decimal_scale", () => {
+    expect(fmt.number(1.234, 3)).toBe("1,234")
+    expect(fmt.number(1.234)).toBe("1,23") // global decimal_scale = 2
+  })
+
+  it("groups thousands and keeps the field scale", () => {
+    // The reported symptom: Saldo showed "20000" with no separator.
+    expect(fmt.number(20000, 3)).toBe("20.000")
+    expect(fmt.number(0.9, 3)).toBe("0,9")
+  })
+
   it("formats dates with DD/MM/YYYY pattern", () => {
     expect(fmt.date("2026-08-24T00:00:00Z")).toBe("24/08/2026")
   })

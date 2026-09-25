@@ -15,9 +15,9 @@ import { ArrowLeft, Edit, FileText, Loader2 } from "lucide-react"
 import type { EntitySchema } from "@/types/manifest"
 import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
-import { can as checkPermission } from "@/engine/permissions"
+import { canDoEntityAction } from "@/engine/permissions"
 import { resolveEntityRef } from "@/engine/entityRef"
-import { deriveDetailFields } from "@/engine/derive"
+import { deriveDetailFields, entityFieldLabel } from "@/engine/derive"
 import { getLifecycle, getAvailableTransitions } from "@/engine/lifecycle"
 import { apiGet } from "@/lib/api"
 import { titleCase } from "@/lib/utils"
@@ -25,8 +25,11 @@ import { createFormatter, moneyAmount, type Formatter } from "@/lib/format"
 import { isImageFile } from "@/lib/media"
 import { sanitizeHTML } from "@/lib/sanitize"
 import { Badge } from "@/widgets/Badge"
+import { OptionChips } from "@/widgets/SelectMultiTag"
+import { hasFieldOptions } from "@/lib/field-options"
 import { Button } from "@/components/ui/button"
 import ConfirmDialog from "@/components/ui/confirm-dialog"
+import ImageLightbox from "@/components/ui/image-lightbox"
 
 interface DetailPageProps {
   entity: EntitySchema
@@ -91,15 +94,22 @@ export default function DetailPage({ entity }: DetailPageProps) {
     [entity, currentState],
   )
 
+  // Transitions the caller may not perform are hidden entirely — the click-time
+  // check below stays as a backstop, but offering a button that can only fail
+  // is worse UX than not showing it.
+  const visibleTransitions = useMemo(
+    () => transitions.filter((t) => canDoEntityAction(me, entity, t.action)),
+    [transitions, me, entity],
+  )
+
   const handleTransition = async (action: string, skipConfirm = false) => {
     if (!me) return
-    const perm = `${entity.module}.${entity.plural}.${action}`
-    if (!checkPermission(perm, me.permissions)) {
+    if (!canDoEntityAction(me, entity, action)) {
       toast.error("You don't have permission")
       return
     }
 
-    // Find transition to check for confirm message
+    // Find the transition so its confirm message can be shown first.
     const transition = transitions.find((t) => t.action === action)
     if (transition?.confirm && !skipConfirm) {
       setPendingTransition({
@@ -154,7 +164,10 @@ export default function DetailPage({ entity }: DetailPageProps) {
           )}
         </div>
 
-        {lifecycle.hasSave && id && (
+        {/* The button navigates to the guarded edit route, so it must use the
+            same authorization as that route — otherwise the detail page offers
+            an edit affordance whose target answers "Page not found". */}
+        {lifecycle.hasSave && id && canDoEntityAction(me, entity, "update") && (
           <Button
             variant="outline"
             onClick={() =>
@@ -176,7 +189,7 @@ export default function DetailPage({ entity }: DetailPageProps) {
             // the raw UUID. The API returns a nested resolved object under the
             // alias (e.g. polyclinic_id → polyclinic: {id, name, ...}).
             let value = record[field.name]
-            const fieldLabel = field.name.replace(/_/g, " ")
+            const fieldLabel = entityFieldLabel(entity, field.name)
 
             if (
               field.type === "relation" &&
@@ -240,7 +253,7 @@ export default function DetailPage({ entity }: DetailPageProps) {
       {childFields.map((field) => (
         <div key={field.name} className="rounded-md border">
           <div className="border-b px-4 py-2 text-sm font-medium">
-            {field.name.replace(/_/g, " ")}
+            {entityFieldLabel(entity, field.name)}
           </div>
           <div className="p-4">
             {record[field.name] ? (
@@ -255,11 +268,11 @@ export default function DetailPage({ entity }: DetailPageProps) {
       ))}
 
       {/* State Machine Transitions */}
-      {transitions.length > 0 && (
+      {visibleTransitions.length > 0 && (
         <div className="space-y-2">
           <h3 className="text-sm font-medium">Actions</h3>
           <div className="flex flex-wrap gap-2">
-            {transitions.map((t) => (
+            {visibleTransitions.map((t) => (
               <Button
                 key={t.action}
                 variant={
@@ -344,6 +357,14 @@ function DetailFieldValue({
     return value ? "Yes" : "No"
   }
 
+  // A multi-value field with a declared choice set renders as labelled chips
+  // rather than raw JSON — the same reason the form uses the tag picker: `[1, 2]`
+  // tells the reader nothing, `Senin`, `Selasa` does. Placed before the generic
+  // json branch below, which would otherwise print the array.
+  if (Array.isArray(value) && hasFieldOptions(field)) {
+    return <OptionChips value={value} entityField={field} />
+  }
+
   if (field.type === "text") {
     return <span className="whitespace-pre-wrap">{String(value)}</span>
   }
@@ -361,22 +382,16 @@ function DetailFieldValue({
     const key = Array.isArray(value) ? String(value[0] ?? "") : String(value)
     const name = key.split("/").pop()
     // An image renders as an image (#4) — the download route serves the bytes,
-    // so the detail page needs no separate preview widget. Non-images keep the
-    // download link.
+    // so the detail page needs no separate preview widget. Clicking it opens a
+    // popup dialog (ImageLightbox) rather than a browser tab, which used to
+    // navigate away from the record. Non-images keep the download link.
     if (isImageFile(key) && fileUrl) {
       return (
-        <a
-          href={fileUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-block"
-        >
-          <img
-            src={fileUrl}
-            alt={name ?? "image"}
-            className="max-h-64 rounded border object-contain"
-          />
-        </a>
+        <ImageLightbox
+          src={fileUrl}
+          alt={key}
+          className="max-h-64 rounded border object-contain"
+        />
       )
     }
     return (

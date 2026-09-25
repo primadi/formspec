@@ -13,6 +13,7 @@ import type { KyInstance } from "ky"
 import type { WizardStep, Entry, FormSpec, FormField } from "@/types/manifest"
 import { useMetaStore } from "@/stores/meta"
 import { resolveEntityRef } from "@/engine/entityRef"
+import { entityFieldLabel, withEntityFieldDefaults } from "@/engine/derive"
 import { apiList } from "@/lib/api"
 import { Input } from "@/components/ui/input"
 
@@ -51,20 +52,38 @@ export default function WizardFormStep({
   const entityName = form?.spec.entity
   const entity = useMemo(() => {
     if (!entityName || !form) return undefined
-    const [entityModule, entityLocalName] = resolveEntityRef(entityName, form.module)
+    const [entityModule, entityLocalName] = resolveEntityRef(
+      entityName,
+      form.module,
+    )
     return getEntity(entityModule, entityLocalName)
   }, [entityName, form, getEntity])
 
+  // A wizard step reads the Form straight from the bundle (`getForm`), so it
+  // bypasses `resolveForm()` — the one place that fills in a field's `label`
+  // and `help` from the Entity. Without this the same Form showed help in its
+  // standalone route and dropped it inside a wizard.
+  const resolvedForm: Entry<FormSpec> | undefined = useMemo(
+    () =>
+      form && entity
+        ? { ...form, spec: withEntityFieldDefaults(form.spec, entity) }
+        : form,
+    [form, entity],
+  )
+
   // Gather all fields from all sections — stable reference
   const allFields: FormField[] = useMemo(
-    () => (form ? form.spec.sections.flatMap((s) => s.fields) : []),
-    [form],
+    () =>
+      resolvedForm ? resolvedForm.spec.sections.flatMap((s) => s.fields) : [],
+    [resolvedForm],
   )
 
   // ── Load options for relation fields ──
   // Use ref to avoid re-render loops (infinite update depth exceeded)
   const optionsRef = useRef<Record<string, OptionItem[]>>({})
-  const [loadingOptions, setLoadingOptions] = useState<Record<string, boolean>>({})
+  const [loadingOptions, setLoadingOptions] = useState<Record<string, boolean>>(
+    {},
+  )
   // Re-render trigger when new options arrive
   const [refreshTick, setRefreshTick] = useState(0)
 
@@ -75,32 +94,40 @@ export default function WizardFormStep({
     [refreshTick],
   )
 
-  const loadOptions = useCallback(async (resource: string) => {
-    if (optionsRef.current[resource]) return // already loaded
-    setLoadingOptions((prev) => ({ ...prev, [resource]: true }))
-    try {
-      const client = getClient()
-      // relation.resource is resolved relative to the entity that declares
-      // the relation field (entity.module) — falling back to the wizard's
-      // own module only if the entity itself hasn't resolved yet.
-      const [resModule, resName] = resolveEntityRef(resource, entity?.module ?? module)
-      const resEntity = getEntity(resModule, resName)
-      if (!resEntity) {
+  const loadOptions = useCallback(
+    async (resource: string) => {
+      if (optionsRef.current[resource]) return // already loaded
+      setLoadingOptions((prev) => ({ ...prev, [resource]: true }))
+      try {
+        const client = getClient()
+        // relation.resource is resolved relative to the entity that declares
+        // the relation field (entity.module) — falling back to the wizard's
+        // own module only if the entity itself hasn't resolved yet.
+        const [resModule, resName] = resolveEntityRef(
+          resource,
+          entity?.module ?? module,
+        )
+        const resEntity = getEntity(resModule, resName)
+        if (!resEntity) {
+          optionsRef.current = { ...optionsRef.current, [resource]: [] }
+          setRefreshTick((t) => t + 1)
+          return
+        }
+        const path = `${resEntity.module}/${resEntity.name}`
+        const { items } = await apiList<OptionItem>(client, path, {
+          per_page: "100",
+        })
+        optionsRef.current = { ...optionsRef.current, [resource]: items ?? [] }
+        setRefreshTick((t) => t + 1)
+      } catch {
         optionsRef.current = { ...optionsRef.current, [resource]: [] }
         setRefreshTick((t) => t + 1)
-        return
+      } finally {
+        setLoadingOptions((prev) => ({ ...prev, [resource]: false }))
       }
-      const path = `${resEntity.module}/${resEntity.name}`
-      const { items } = await apiList<OptionItem>(client, path, { per_page: "100" })
-      optionsRef.current = { ...optionsRef.current, [resource]: items ?? [] }
-      setRefreshTick((t) => t + 1)
-    } catch {
-      optionsRef.current = { ...optionsRef.current, [resource]: [] }
-      setRefreshTick((t) => t + 1)
-    } finally {
-      setLoadingOptions((prev) => ({ ...prev, [resource]: false }))
-    }
-  }, [module, entity, getClient, getEntity])
+    },
+    [module, entity, getClient, getEntity],
+  )
 
   // Load options for relation fields on mount
   useEffect(() => {
@@ -127,7 +154,18 @@ export default function WizardFormStep({
     if (!entityField) return null
 
     const value = (stepData[field.name] as string) ?? ""
-    const label = field.label ?? entityField.description ?? field.name
+    // Caption precedence is shared with Form/Table/Detail (engine/derive.ts):
+    // manifest `label` → entity field `title` → humanised field name. The old
+    // `?? entityField.description ?? field.name` fell back to a *description*
+    // (a sentence) when no title existed, and to a raw name otherwise.
+    const label = entityFieldLabel(entity, field.name, field.label)
+    // Help is rendered in EVERY branch below (position: under the control,
+    // matching FormRenderer). It used to exist only on the relation branch, so
+    // a single wizard screen showed help for `supervisor_id` (relation) while
+    // silently dropping it for `counted_cash` (money) in the step above it.
+    const help = field.help ? (
+      <p className="text-xs text-muted-foreground">{field.help}</p>
+    ) : null
 
     // Handle relation fields → dropdown
     if (entityField.type === "relation" && entityField.relation?.resource) {
@@ -137,7 +175,8 @@ export default function WizardFormStep({
       // This field is the *dependent* one (e.g. doctor_id) when a depends_on
       // is declared and it isn't the trigger field itself (e.g. polyclinic_id)
       // — the trigger field's own options are never filtered by themselves.
-      const isDependent = dependsOnField !== undefined && field.name !== dependsOnField
+      const isDependent =
+        dependsOnField !== undefined && field.name !== dependsOnField
       const dependentId = isDependent ? dependsOnValue : undefined
 
       // Filter options if this field depends on another
@@ -156,9 +195,7 @@ export default function WizardFormStep({
       return (
         <div key={field.name} className="space-y-2.5">
           <label className="text-sm font-medium">{label}</label>
-          {field.help && (
-            <p className="text-xs text-muted-foreground">{field.help}</p>
-          )}
+          {help}
           <select
             autoComplete="off"
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
@@ -194,6 +231,7 @@ export default function WizardFormStep({
       return (
         <div key={field.name} className="space-y-2.5">
           <label className="text-sm font-medium">{label}</label>
+          {help}
           <select
             autoComplete="off"
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
@@ -202,7 +240,9 @@ export default function WizardFormStep({
           >
             <option value="">Pilih {label}</option>
             {entityField.enum_values.map((opt) => (
-              <option key={opt} value={opt}>{opt}</option>
+              <option key={opt} value={opt}>
+                {opt}
+              </option>
             ))}
           </select>
         </div>
@@ -212,19 +252,22 @@ export default function WizardFormStep({
     // Handle boolean fields
     if (entityField.type === "boolean") {
       return (
-        <div key={field.name} className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            id={`wf-${field.name}`}
-            checked={value === "true"}
-            onChange={(e) =>
-              onFieldChange(field.name, e.target.checked ? "true" : "false")
-            }
-            className="size-4 rounded border border-input"
-          />
-          <label htmlFor={`wf-${field.name}`} className="text-sm font-medium">
-            {label}
-          </label>
+        <div key={field.name} className="space-y-2.5">
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id={`wf-${field.name}`}
+              checked={value === "true"}
+              onChange={(e) =>
+                onFieldChange(field.name, e.target.checked ? "true" : "false")
+              }
+              className="size-4 rounded border border-input"
+            />
+            <label htmlFor={`wf-${field.name}`} className="text-sm font-medium">
+              {label}
+            </label>
+          </div>
+          {help}
         </div>
       )
     }
@@ -239,12 +282,17 @@ export default function WizardFormStep({
             value={value}
             onChange={(e) => onFieldChange(field.name, e.target.value)}
           />
+          {help}
         </div>
       )
     }
 
     // Handle number types
-    if (entityField.type === "integer" || entityField.type === "decimal" || entityField.type === "number") {
+    if (
+      entityField.type === "integer" ||
+      entityField.type === "decimal" ||
+      entityField.type === "number"
+    ) {
       return (
         <div key={field.name} className="space-y-2.5">
           <label className="text-sm font-medium">{label}</label>
@@ -255,6 +303,7 @@ export default function WizardFormStep({
             value={value}
             onChange={(e) => onFieldChange(field.name, e.target.value)}
           />
+          {help}
         </div>
       )
     }
@@ -268,11 +317,12 @@ export default function WizardFormStep({
           value={value}
           onChange={(e) => onFieldChange(field.name, e.target.value)}
         />
+        {help}
       </div>
     )
   }
 
-  if (!form) {
+  if (!resolvedForm) {
     return (
       <p className="text-sm text-muted-foreground py-4">
         Form "{step.form}" tidak ditemukan
@@ -282,13 +332,15 @@ export default function WizardFormStep({
 
   return (
     <div className="space-y-6">
-      {form.spec.sections.map((section, si) => (
+      {resolvedForm.spec.sections.map((section, si) => (
         <div key={si} className="space-y-3">
           {section.title && (
             <h3 className="text-md font-semibold">{section.title}</h3>
           )}
           {section.description && (
-            <p className="text-xs text-muted-foreground">{section.description}</p>
+            <p className="text-xs text-muted-foreground">
+              {section.description}
+            </p>
           )}
           {section.fields.map(renderField)}
         </div>

@@ -135,13 +135,12 @@ func (b *RouterBuilder) resolveAppContext(r *http.Request) (ui.AppContext, strin
 		return ui.AppContext{}, "unknown app " + name
 	}
 	return ui.AppContext{
-		Name:           resolved.Name,
-		Title:          resolved.Spec.Title,
-		Logo:           resolved.Spec.Logo,
-		RootURL:        resolved.Spec.RootURL,
-		AppRenderer:    resolved.Spec.AppRenderer,
-		Access:         string(resolved.Spec.Access),
-		StackFamily:    resolved.Spec.StackFamily,
+		Name:        resolved.Name,
+		Title:       resolved.Spec.Title,
+		Logo:        resolved.Spec.Logo,
+		RootURL:     resolved.Spec.RootURL,
+		AppRenderer: resolved.Spec.AppRenderer,
+		Access:      string(resolved.Spec.Access), PublicEntities: resolved.Spec.PublicEntities, StackFamily: resolved.Spec.StackFamily,
 		PersistBackend: resolved.Spec.PersistBackend,
 		ThemeRef:       resolved.Spec.ThemeRef,
 		Chrome:         resolved.Spec.Chrome,
@@ -287,13 +286,28 @@ func (b *RouterBuilder) HandleMetaUI() http.HandlerFunc {
 				alwaysVisible := func(string) bool { return true }
 				bundle = b.uiRegistry.BuildBundle(b.listEntityDescriptors, alwaysVisible, appCtx)
 			} else {
-				// An `access: public` App is entirely public (frontend/
-				// 05-app-kinds.md §1): its bundle ships to anonymous callers with
-				// every entity in its modules visible. Private Apps keep
-				// per-entity permission filtering.
+				// An `access: public` App serves its bundle to anonymous
+				// callers, so there is no session to check permissions against —
+				// but "no session" must not mean "everything". The App's
+				// `public_entities` allowlist is exactly the answer to what an
+				// anonymous caller may see, and skipping it shipped the WHOLE
+				// mounted module set.
+				//
+				// Measured on kafe (`kafe-qr`, which mounts cafe-master +
+				// cafe-order behind a narrow allowlist): the anonymous bundle
+				// carried 13 entities including `cafe-master.members` (customer
+				// phone numbers), `employees`, `menu-item-prices`,
+				// `cafe-order.shifts` and `cash-movements`. The data endpoints
+				// still enforced the allowlist, so no row leaked — but the
+				// schema of private data was handed out and the SPA generated
+				// routes for it.
 				can := callerChecker(r)
 				if appCtx.Access == string(spec.AppAccessPublic) {
-					can = func(string) bool { return true }
+					// The App's `public_entities` allowlist decides what an
+					// anonymous caller may see; BuildBundle derives the checker
+					// from appCtx.PublicEntities (it owns the route/entity
+					// conventions the allowlist is expressed in).
+					can = nil
 				}
 				bundle = b.uiRegistry.BuildBundle(b.listEntityDescriptors, can, appCtx)
 			}

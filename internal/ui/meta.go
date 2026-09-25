@@ -26,6 +26,21 @@ type EntitySchema struct {
 	Lifecycle      string             `json:"lifecycle"` // plain_crud | two_step_autosave (§1.7)
 	HasQuickSubmit bool               `json:"has_quick_submit,omitempty"`
 	Exposed        bool               `json:"exposed"`
+	// AuthorizedActions is the set of entity actions THIS caller may perform,
+	// resolved server-side with the same checker that decides whether the
+	// entity ships at all.
+	//
+	// Without it the renderer has to GUESS: it built every derived CRUD route
+	// and every action button from the entity's lifecycle alone, so a public
+	// App granted only `[list, find]` still rendered a working-looking
+	// "Create Menu Category" modal whose submit answered 401 (kafe 10.23), and
+	// a cashier without `create` was shown a "New" button that opened a form
+	// with no Save button (kafe 10.19).
+	//
+	// nil means "not resolved" (an older server, or a bundle built without a
+	// permission checker) — the renderer then falls back to the caller's own
+	// permission list. An empty but non-nil slice means "resolved: nothing".
+	AuthorizedActions []string `json:"authorized_actions,omitempty"`
 }
 
 // ActionSummary is the renderer-facing view of one entity action.
@@ -174,12 +189,17 @@ func resolveAuth(a *spec.AppAuth) *AuthConfig {
 // to routes — see internal/app.Resolve). A zero-value AppContext (Modules
 // nil) disables module filtering, for callers with no App concept yet.
 type AppContext struct {
-	Name           string
-	Title          string
-	Logo           string
-	RootURL        string
-	AppRenderer    string
-	Access         string
+	Name        string
+	Title       string
+	Logo        string
+	RootURL     string
+	AppRenderer string
+	Access      string
+	// PublicEntities is the raw `public_entities` allowlist of an
+	// `access: public` App. It is the ONLY statement of what an anonymous
+	// caller may see, so BuildBundle uses it to build its permission checker
+	// rather than treating every mounted entity as public.
+	PublicEntities *[]spec.PublicEntityDecl
 	StackFamily    string
 	PersistBackend string
 	// ThemeRef is the raw manifest declaration (App.spec.theme_ref) — the
@@ -218,6 +238,96 @@ func (c AppContext) allows(module string) bool {
 		return true
 	}
 	return c.Modules[module]
+}
+
+// owns reports whether the App explicitly declares this module in
+// spec.modules — the stricter question, for a PUBLIC App where anything
+// implicitly-allowed (the framework's own admin surface) must NOT ship to
+// anonymous callers.
+func (c AppContext) owns(module string) bool {
+	return c.Modules != nil && c.Modules[module]
+}
+
+// isAuthScreen reports whether a page is one of the framework's auth screens
+// (routes under /_auth/). A public App needs these to sign a visitor in, while
+// /access-management — the other page internal/auth/module ships — must not
+// reach anonymous callers.
+func isAuthScreen(e *Entry[spec.PageSpec]) bool {
+	return e.Spec != nil && strings.HasPrefix(e.Spec.Route, "/_auth/")
+}
+
+// publicEntityChecker derives the permission checker for an ANONYMOUS caller of
+// an `access: public` App from that App's `public_entities` allowlist.
+//
+// Why it lives here rather than at the HTTP layer: the allowlist is written in
+// entity refs ("cafe-master/menu-item", "cafe-master.menu-item") while the
+// bundle builder asks in permissions ("{module}.{plural}.{action}"). Deriving
+// the checker next to the code that performs the checks keeps the two in step.
+//
+// A nil allowlist keeps the documented legacy behaviour (the App opted into
+// `access: public` without narrowing anything), so the checker is absent and
+// the caller supplies its own.
+func publicEntityChecker(ix *entityIndex, decls *[]spec.PublicEntityDecl) PermissionChecker {
+	if decls == nil {
+		return nil
+	}
+	grants := map[string]map[string]bool{}
+	for _, decl := range *decls {
+		key, ok := spec.NormalizeEntityRef(decl.Entity) // "module/entity-name"
+		if !ok {
+			continue // validation rejects this; never widen access here
+		}
+		if grants[key] == nil {
+			grants[key] = map[string]bool{}
+		}
+		for _, act := range decl.Actions {
+			grants[key][act] = true
+		}
+	}
+	return func(perm string) bool {
+		module, plural, action, ok := splitEntityPermission(perm)
+		if !ok {
+			// Not an entity permission (a page permission, say) — pages are
+			// judged separately, so do not filter on it here.
+			return true
+		}
+		// The allowlist is written in the GRANT vocabulary ("find") while the
+		// permission asks in the RESOURCE vocabulary ("view"), so translate
+		// before looking the pair up. Without this `find` never matched: a grant
+		// of `[find]` (e.g. `cafe-master.dining-table`) shipped the entity to
+		// nobody, even though the router happily served its `find` route —
+		// measured on kafe, the entity was absent from the bundle while
+		// `GET /_ui/entity/.../dining-table/{id}` answered 200 anonymously.
+		action = grantActionForPermission(action)
+		// The allowlist names the ENTITY ("cafe-master/menu-item") while a
+		// permission names the PLURAL ("cafe-master.menu-items.list"), so the
+		// route segment is mapped back through the same index the router uses.
+		// Skipping this step made every allowlisted entity fail to match
+		// (measured: the bundle shipped 0 entities for `kafe-qr`).
+		ref, ok := ix.moduleOfPlural(module, plural)
+		if !ok {
+			return false
+		}
+		acts, ok := grants[ref]
+		if !ok {
+			return false
+		}
+		return acts[action]
+	}
+}
+
+// splitEntityPermission splits "{module}.{plural}.{action}", tolerating dotted
+// module names ("formspec.core.roles.list") by taking the last two segments as
+// plural and action.
+func splitEntityPermission(perm string) (module, entity, action string, ok bool) {
+	parts := strings.Split(perm, ".")
+	if len(parts) < 3 {
+		return "", "", "", false
+	}
+	action = parts[len(parts)-1]
+	entity = parts[len(parts)-2]
+	module = strings.Join(parts[:len(parts)-2], ".")
+	return module, entity, action, true
 }
 
 // Bundle is the full /_meta/ui payload.
@@ -352,6 +462,43 @@ func (r *Registry) BuildBundle(entities EntityLister, can PermissionChecker, app
 	if menu == nil {
 		menu = []spec.MenuItem{}
 	}
+
+	// Drop menu items whose view the caller cannot reach (kafe 10.10/10.11).
+	//
+	// An App menu is authored ONCE for every role, while entities are filtered
+	// per role — so a curated item routinely points at an entity this user has
+	// no grant for. Serving it produces a dead link, and because the SPA's
+	// catch-all used to redirect silently, the user saw a DIFFERENT entity's
+	// list and believed the click worked. The filter itself runs at the END of
+	// this function, once every section is final (it asks which routes exist).
+	//
+	// AppContext.Access decides the SCOPE of what may ship at all:
+	//
+	//	public   the App is anonymous, so `can` is always-true (see
+	//	         internal/api/meta.go) and only its own modules may ship —
+	//	         EXCEPT the framework's auth screens, which a public App needs
+	//	         to sign someone in. Without this, an `access: public` App
+	//	         shipped the framework admin surface to anonymous visitors:
+	//	         measured on kafe, `GET /kafe/_ui/_meta/ui?app=kafe-qr` returned
+	//	         `formspec.core` entities (user, role, api-key, session) and the
+	//	         `/access-management` page, and the anonymous browser rendered an
+	//	         "Access Management" table whose columns include `Password Hash`.
+	//	         The data endpoints still answered 401, so nothing leaked — but
+	//	         the admin surface must not be reachable at all.
+	//	private  per-entity permission filtering decides, as before.
+	publicScope := appCtx.Access == string(spec.AppAccessPublic)
+	// Built once and shared by the public-App allowlist check, the dashboard
+	// widget check, and the menu pass — all of which ask the same question:
+	// "which entity does this name refer to?".
+	ix := newEntityIndex(entities)
+	if publicScope {
+		// An anonymous caller of a public App has no session, so the App's own
+		// allowlist stands in for one. `internal/api` passes nil to say "derive
+		// it"; a non-nil checker (the `?grants=true` editor) is left alone.
+		if derived := publicEntityChecker(ix, appCtx.PublicEntities); can == nil && derived != nil {
+			can = derived
+		}
+	}
 	b := &Bundle{
 		App: AppSummary{
 			Name:           appCtx.Name,
@@ -368,8 +515,15 @@ func (r *Registry) BuildBundle(entities EntityLister, can PermissionChecker, app
 			Auth:           resolveAuth(appCtx.Auth),
 			Confirm:        resolveConfirm(appCtx.Confirm),
 		},
-		Menu:                menu,
-		Pages:               []*Entry[spec.PageSpec]{},
+		Menu: menu, // Entities MUST be non-nil: a bundle whose caller can see no entity
+		// still has to serialize `"entities": []`. Left nil it becomes
+		// `null`, and the SPA iterates it unconditionally
+		// (renderers/react-shadcn/src/stores/meta.ts `createLookups`) — a
+		// `for (const e of bundle.entities)` on null throws
+		// "e.entities is not iterable", which the ErrorBoundary turns into
+		// a dead panel. Observed on kafe as role `dapur` opening the owner
+		// dashboard: widgets renderer called getWidget → createLookups → boom.
+		Entities: []EntitySchema{}, Pages: []*Entry[spec.PageSpec]{},
 		Forms:               []*Entry[spec.FormSpec]{},
 		Tables:              []*Entry[spec.TableSpec]{},
 		Dashboards:          []*Entry[spec.DashboardSpec]{},
@@ -392,12 +546,19 @@ func (r *Registry) BuildBundle(entities EntityLister, can PermissionChecker, app
 		if !appCtx.allows(d.Module) {
 			continue
 		}
+		if publicScope && !appCtx.owns(d.Module) {
+			continue
+		}
 		schema := buildEntitySchema(d)
 		listPerm := d.Module + "." + schema.Plural + ".list"
 		viewPerm := d.Module + "." + schema.Plural + ".view"
 		if !can(listPerm) && !can(viewPerm) {
 			continue
 		}
+		// Which actions this caller may actually perform. Resolved with the
+		// SAME checker that just decided the entity ships, so the bundle and
+		// the endpoints can never disagree about it.
+		schema.AuthorizedActions = authorizedActions(d, schema, can)
 		visible[d.Module+"/"+d.Name] = true
 		b.Entities = append(b.Entities, schema)
 	}
@@ -412,26 +573,45 @@ func (r *Registry) BuildBundle(entities EntityLister, can PermissionChecker, app
 
 	for _, k := range sortedKeys(r.Pages) {
 		e := r.Pages[k]
-		if appCtx.allows(e.Module) && allowedPage(e, can) {
-			b.Pages = append(b.Pages, e)
+		if !appCtx.allows(e.Module) || !allowedPage(e, can) {
+			continue
 		}
+		if publicScope && !appCtx.owns(e.Module) && !isAuthScreen(e) {
+			continue
+		}
+		b.Pages = append(b.Pages, e)
 	}
 	for _, k := range sortedKeys(r.Forms) {
 		// Auth forms (spec.auth_action, plan custom-screens-spec-driven) have
 		// no entity — include them directly: they carry no data, only the
 		// declarative field layout for the public /_ui/auth/* endpoints.
-		if e := r.Forms[k]; appCtx.allows(e.Module) && (e.Spec.AuthAction != "" || entityVisible(e.Module, e.Spec.Entity)) {
+		//
+		// They are also the one thing internal/auth ships that a PUBLIC App
+		// legitimately needs (a visitor must be able to sign in), which is why
+		// they survive the publicScope gate that drops the rest of
+		// `formspec.core` (notably /access-management).
+		e := r.Forms[k]
+		if !appCtx.allows(e.Module) {
+			continue
+		}
+		if publicScope && !appCtx.owns(e.Module) && e.Spec.AuthAction == "" {
+			continue
+		}
+		if e.Spec.AuthAction != "" || entityVisible(e.Module, e.Spec.Entity) {
 			b.Forms = append(b.Forms, e)
 		}
 	}
 	for _, k := range sortedKeys(r.Tables) {
-		if e := r.Tables[k]; appCtx.allows(e.Module) && entityVisible(e.Module, e.Spec.Entity) {
+		if e := r.Tables[k]; appCtx.allows(e.Module) && (!publicScope || appCtx.owns(e.Module)) && entityVisible(e.Module, e.Spec.Entity) {
 			b.Tables = append(b.Tables, e)
 		}
 	}
 	for _, k := range sortedKeys(r.Widgets) {
 		e := r.Widgets[k]
 		if !appCtx.allows(e.Module) {
+			continue
+		}
+		if publicScope && !appCtx.owns(e.Module) {
 			continue
 		}
 		if e.Spec.Entity == "" || entityVisible(e.Module, e.Spec.Entity) {
@@ -485,13 +665,29 @@ func (r *Registry) BuildBundle(entities EntityLister, can PermissionChecker, app
 			b.NotificationCenters = append(b.NotificationCenters, e)
 		}
 	}
+	// A dashboard is an aggregate of widgets, so it is only as visible as the
+	// widgets behind it: ship it when at least ONE placed widget survives.
+	//
+	// Measured on kafe as role `dapur`: the widget list was empty (no grant on
+	// `cafe-order.order` / `cafe-report.*`), yet `owner-overview` still shipped,
+	// so the role's only menu entry opened a page of four
+	// "Widget definition not found" placeholders. An all-permission-filtered
+	// dashboard is dead, not merely thin.
+	// (ix is built above; the widget check and the menu pass share it.)
 	for _, k := range sortedKeys(r.Dashboards) {
-		if e := r.Dashboards[k]; appCtx.allows(e.Module) {
+		e := r.Dashboards[k]
+		if !appCtx.allows(e.Module) {
+			continue
+		}
+		if publicScope && !appCtx.owns(e.Module) {
+			continue
+		}
+		if r.dashboardHasVisibleWidget(e, ix, can) {
 			b.Dashboards = append(b.Dashboards, e)
 		}
 	}
 	for _, k := range sortedKeys(r.Wizards) {
-		if e := r.Wizards[k]; appCtx.allows(e.Module) {
+		if e := r.Wizards[k]; appCtx.allows(e.Module) && (!publicScope || appCtx.owns(e.Module)) {
 			b.Wizards = append(b.Wizards, e)
 		}
 	}
@@ -593,7 +789,310 @@ func (r *Registry) BuildBundle(entities EntityLister, can PermissionChecker, app
 		))
 	}
 
+	// ── Filter the menu against the finished bundle ──
+	//
+	// An App menu is authored ONCE for every role, while entities, forms,
+	// reports and dashboards are each filtered per role. A curated item
+	// therefore routinely points at something this caller cannot open, and
+	// serving it produces a dead link — historically one the SPA's catch-all
+	// answered with a SILENT redirect, so the user saw a different entity's
+	// list and believed the click worked.
+	//
+	// The rule is "does this route exist in THIS bundle", not "does the caller
+	// hold a permission". The two differ exactly where it matters: a dashboard
+	// whose widgets are all filtered out is absent from the bundle while the
+	// caller may still hold a grant on it — asking about permissions would keep
+	// a link to a route that was never registered.
+	//
+	// Order matters: this reads every section, so it must run last.
+	b.Menu = r.filterMenu(b.Menu, b, can)
+
 	return b
+}
+
+// entityIndex answers the two questions menu filtering asks: "what is the
+// plural of entity X in module M?" and "which module/plural does this route
+// display?".
+//
+// Built once per bundle from the SAME entity list the bundle itself uses, so the
+// menu can never disagree with the entities actually being served.
+type entityIndex struct {
+	// pluralByRef["M/name"] = plural
+	pluralByRef map[string]string
+	// refByPlural["M/plural"] = "M/name"
+	refByPlural map[string]string
+	// modules holds every module that owns an entity.
+	modules map[string]bool
+}
+
+func newEntityIndex(entities EntityLister) *entityIndex {
+	ix := &entityIndex{
+		pluralByRef: map[string]string{},
+		refByPlural: map[string]string{},
+		modules:     map[string]bool{},
+	}
+	for _, d := range entities() {
+		plural := d.Spec.Plural
+		if plural == "" {
+			plural = d.Name + "s"
+		}
+		ix.pluralByRef[d.Module+"/"+d.Name] = plural
+		ix.refByPlural[d.Module+"/"+plural] = d.Module + "/" + d.Name
+		ix.modules[d.Module] = true
+	}
+	return ix
+}
+
+// isModule reports whether the module owns at least one entity. Used to decide
+// whether a "/M/<segment>" route is a derived entity page (M is a module, so
+// the segment MUST name one of its entities) or just an opaque authored route.
+func (ix *entityIndex) isModule(module string) bool { return ix.modules[module] }
+
+// pluralOf returns the plural (route segment) of a module-local entity.
+func (ix *entityIndex) pluralOf(module, name string) (string, bool) {
+	p, ok := ix.pluralByRef[module+"/"+name]
+	return p, ok
+}
+
+// moduleOfPlural inverts the route segment back to (module, name).
+func (ix *entityIndex) moduleOfPlural(module, plural string) (string, bool) {
+	ref, ok := ix.refByPlural[module+"/"+plural]
+	return ref, ok
+}
+
+// filterMenu removes a menu item when the caller may not have it, on two
+// independent grounds, bottom-up: a group whose children all disappear goes
+// with them.
+//
+//  1. ROUTE EXISTENCE. The bundle may not serve the route the item points at,
+//     because the entity/kind behind it was filtered out for this caller.
+//     Permission was the earlier approach and it kept links the bundle had
+//     already dropped — measured on kafe as role `dapur`, whose sidebar offered
+//     "Ringkasan Pemilik" (`/dashboard/owner-overview`) although
+//     `dashboardHasVisibleWidget` had removed that dashboard (every one of its
+//     widgets reads an entity the role cannot see). The link rendered the 404
+//     page. A route that was never registered cannot be navigated to, whoever
+//     asks.
+//
+//  2. `permissions:` on the item itself (RBAC). This is the ONLY place it is
+//     enforced — enforced here so the item never reaches a caller who lacks it,
+//     and so the check cannot drift from the one deciding the bundle (same
+//     `can`). A client-side RBAC check would be bypassable and would silently
+//     disagree with the server as soon as the two diverged; the client
+//     therefore no longer looks at `permissions` at all (see
+//     renderers/react-shadcn/src/hooks/useResolvedMenu.ts).
+//
+// `when:` is deliberately NOT evaluated here: it is a business condition that
+// may depend on the clock, and the bundle body is ETag-hashed
+// (internal/api/meta.go), so a time-dependent filter would invalidate the cache
+// continuously. The client evaluates it.
+//
+// The `?admin=true` and `?grants=true` bundles pass an always-true checker
+// (internal/api/meta.go), so both variants ignore `permissions` — intended: the
+// grants editor must offer every page/action so an admin can grant things they
+// do not personally hold.
+//
+// Items that are not a route at all are kept: a leaf with no `route` (`type:
+// module` groups are already spliced by internal/app.Resolve) is not
+// navigable, so there is nothing to check.
+func (r *Registry) filterMenu(items []spec.MenuItem, b *Bundle, can PermissionChecker) []spec.MenuItem {
+	out := make([]spec.MenuItem, 0, len(items))
+	for _, item := range items {
+		if len(item.Children) > 0 {
+			item.Children = r.filterMenu(item.Children, b, can)
+			if len(item.Children) == 0 {
+				continue // group lost every child — nothing left to show
+			}
+			out = append(out, item)
+			continue
+		}
+		if !menuItemAllowed(item, can) {
+			continue
+		}
+		if item.Route == "" || r.routeExists(item.Module, item.Route, b) {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+// menuItemAllowed reports whether the caller holds at least one of the item's
+// declared permissions (any-of). An item with no `permissions:` is allowed.
+func menuItemAllowed(item spec.MenuItem, can PermissionChecker) bool {
+	if len(item.Permissions) == 0 {
+		return true
+	}
+	for _, p := range item.Permissions {
+		if can(p) {
+			return true
+		}
+	}
+	return false
+}
+
+// routeExists reports whether the bundle serves this route — i.e. whether the
+// SPA registered a Route for it in buildRoutes
+// (renderers/react-shadcn/src/shell/router.tsx). Every shape that function
+// generates is covered here; the two must be kept in step, which is why the
+// section checks come first and the entity conventions second.
+func (r *Registry) routeExists(module, route string, b *Bundle) bool {
+	parts := strings.Split(strings.Trim(route, "/"), "/")
+
+	// 1. Authored pages: the bundle ships exactly the routes it carries.
+	for _, e := range b.Pages {
+		if e.Spec != nil && e.Spec.Route == route {
+			return true
+		}
+	}
+
+	// 2. Form/Table views: "/M/form/<n>" and "/M/table/<n>" — the shapes
+	//    ResolveViewRoute generates for those two kinds.
+	if len(parts) == 3 && parts[0] == module {
+		switch parts[1] {
+		case "form":
+			return findEntry(b.Forms, module, parts[2]) != nil
+		case "table":
+			return findEntry(b.Tables, module, parts[2]) != nil
+		}
+	}
+
+	// 3. Navigation kinds: /dashboard/<n>, /report/<n>, /kanban/<n>, …
+	if len(parts) == 2 {
+		if r.navigationPrefix(parts[0]) {
+			return r.hasNavigationView(parts[1], parts[0], module, b)
+		}
+	}
+
+	// 4. Derived entity routes: /<module>/<plural>[/new|/:id[/edit]]. The SPA
+	//    generates these for every entity in the bundle, so the entity list —
+	//    not the router — is the source of truth.
+	if len(parts) >= 2 {
+		for _, e := range b.Entities {
+			if e.Module == parts[0] && e.Plural == parts[1] {
+				return true
+			}
+		}
+	}
+
+	// 5. The App root — the SPA always renders a route for it.
+	if root := strings.Trim(b.App.RootURL, "/"); root != "" && root == strings.Trim(route, "/") {
+		return true
+	}
+	return false
+}
+
+// navigationPrefix reports whether a path segment names a navigation kind.
+func (r *Registry) navigationPrefix(seg string) bool {
+	switch seg {
+	case "dashboard", "report", "kanban", "timeline", "calendar",
+		"print", "widget", "wizard", "listing", "approval-inbox",
+		"notification-center":
+		return true
+	}
+	return false
+}
+
+// hasNavigationView reports whether the bundle ships the named navigation kind.
+func (r *Registry) hasNavigationView(name, prefix, module string, b *Bundle) bool {
+	switch prefix {
+	case "dashboard":
+		return findEntry(b.Dashboards, module, name) != nil
+	case "report":
+		return findEntry(b.Reports, module, name) != nil
+	case "kanban":
+		return findEntry(b.Kanbans, module, name) != nil
+	case "timeline":
+		return findEntry(b.Timelines, module, name) != nil
+	case "calendar":
+		return findEntry(b.Calendars, module, name) != nil
+	case "print":
+		return findEntry(b.Prints, module, name) != nil
+	case "widget":
+		return findEntry(b.Widgets, module, name) != nil
+	case "wizard":
+		return findEntry(b.Wizards, module, name) != nil
+	case "listing":
+		return findEntry(b.Listings, module, name) != nil
+	case "approval-inbox":
+		return findEntry(b.ApprovalInboxes, module, name) != nil
+	case "notification-center":
+		return findEntry(b.NotificationCenters, module, name) != nil
+	}
+	return false
+}
+
+// findEntry returns the named entry of a kind, or nil.
+func findEntry[T any](entries []*Entry[T], module, name string) *Entry[T] {
+	for _, e := range entries {
+		if e.Name == name && (module == "" || e.Module == module) {
+			return e
+		}
+	}
+	return nil
+}
+
+// viewVerdict is what a menu route resolves to.
+type viewVerdict int
+
+const (
+	// viewUnbacked — no entity behind the view (dashboard, wizard, custom asset
+	// page, opaque authored route). "Not permission-checkable" is not
+	// "forbidden": the item is kept.
+	viewUnbacked viewVerdict = iota
+	// viewBacked — an entity backs the view; require its read permission.
+	viewBacked
+	// viewDead — the route names one of ours (a navigation kind, or a module's
+	// entity page) but the target does not exist for ANYONE, so no route was
+	// generated. Dropped regardless of permission.
+	viewDead
+)
+
+// dashboardHasVisibleWidget reports whether any widget placed on the dashboard
+// resolves to a widget the caller may read. A widget with no entity (a static
+// note, a metric the caller always sees) keeps the dashboard alive — this only
+// drops a dashboard whose every placement is filtered out.
+func (r *Registry) dashboardHasVisibleWidget(d *Entry[spec.DashboardSpec], ix *entityIndex, can PermissionChecker) bool {
+	if d.Spec == nil || len(d.Spec.Widgets) == 0 {
+		// No placements — nothing to filter, and the dashboard itself is not
+		// entity-backed.
+		return true
+	}
+	for _, w := range d.Spec.Widgets {
+		e, ok := r.Widgets[w.Ref]
+		if !ok || e.Module != d.Module || e.Spec == nil {
+			// A ref this module does not own, or one whose spec is missing:
+			// cannot judge, so do not hide.
+			return true
+		}
+		if e.Spec.Entity == "" {
+			return true
+		}
+		_, plural, v := r.entityRefBacking(ix, e.Module, e.Spec.Entity)
+		if v != viewBacked || can(e.Module+"."+plural+".list") {
+			return true
+		}
+	}
+	return false
+}
+
+// entityRefBacking resolves an entity reference that may be cross-module
+// ("cafe-master.member") or module-local ("member").
+func (r *Registry) entityRefBacking(ix *entityIndex, module, ref string) (string, string, viewVerdict) {
+	if ref == "" {
+		return "", "", viewUnbacked
+	}
+	m, name := module, ref
+	// Split at the LAST dot: module names may be dotted ("formspec.core.role").
+	if i := strings.LastIndexByte(ref, '.'); i > 0 {
+		m, name = ref[:i], ref[i+1:]
+	}
+	if plural, ok := ix.pluralOf(m, name); ok {
+		return m, plural, viewBacked
+	}
+	// The manifest names a resource the bundle does not have — a broken
+	// reference (the kafe `trial-balance` report pointed at a non-existent
+	// `ledger` entity). Dead: no route backs it.
+	return "", "", viewDead
 }
 
 // nonEmpty returns a if non-empty, otherwise b.
@@ -700,6 +1199,107 @@ func buildEntitySchema(d EntityDescriptor) EntitySchema {
 	}
 
 	return schema
+}
+
+// entityActionPermission returns the permission a standard entity action
+// requires, using the SAME mapping the router registers routes with
+// (`internal/api/descriptor.go` StandardRESTActions). The two vocabularies
+// differ on purpose — the UI says "find"/"edit", the resource says
+// "view"/"update" — and the renderer used to spell the permission out by hand
+// from the UI word, so a cashier holding `.update` was denied the Edit button
+// that `.edit` (which never exists) failed to match.
+func entityActionPermission(module, plural, action string) string {
+	base := module + "." + plural + "."
+	switch action {
+	case "find":
+		return base + "view"
+	default:
+		return base + action
+	}
+}
+
+// grantActionForPermission is entityActionPermission in reverse: it turns the
+// RESOURCE action a permission asks about ("view") back into the GRANT word a
+// `public_entities` entry is written with ("find").
+//
+// The two vocabularies are the same pair the router uses (StandardRESTActions
+// maps the `find` action to the `view` permission), and the allowlist is
+// authored in grant words. Comparing them without translating made a grant of
+// `[find]` match nothing.
+func grantActionForPermission(action string) string {
+	switch action {
+	case "view":
+		return "find"
+	default:
+		return action
+	}
+}
+
+// authorizedActions returns the entity actions THIS caller may perform — the
+// same question the renderer asks before registering a derived CRUD route or
+// rendering an action button.
+//
+// The set mirrors the routes the router actually registers for the UI surface
+// (internal/api/generator.go GenerateUIRoutes): standard CRUD, then the subset
+// of lifecycle actions the entity really has, plus soft-deactivate pairs. A
+// `characteristic: summary` entity is a system-managed projection, so its write
+// actions are excluded exactly as the router excludes their routes.
+//
+// Custom actions are not listed: the renderer already takes their permission
+// from `ActionSummary.Permission`, which the bundle carries per action.
+func authorizedActions(d EntityDescriptor, schema EntitySchema, can PermissionChecker) []string {
+	es := d.Spec
+	if es == nil {
+		return nil
+	}
+	isSummary := es.Characteristic == spec.CharSummary
+	disabled := map[string]bool{}
+	for _, a := range es.Actions {
+		if a.Disabled {
+			disabled[a.Name] = true
+		}
+	}
+	// Same rule the router applies (internal/api/generator.go disabledActions):
+	// a lifecycle-free entity has no draft→submit workflow, and disabling
+	// `submit` transitively disables cancel/amend.
+	if es.LifecycleFree() {
+		disabled["submit"] = true
+	}
+	if disabled["submit"] {
+		disabled["cancel"] = true
+		disabled["amend"] = true
+	}
+	if disabled["cancel"] {
+		disabled["amend"] = true
+	}
+
+	var out []string
+	add := func(action string) {
+		if disabled[action] {
+			return
+		}
+		if !can(entityActionPermission(d.Module, schema.Plural, action)) {
+			return
+		}
+		out = append(out, action)
+	}
+
+	for _, action := range []string{"list", "find", "create", "update", "delete"} {
+		if isSummary && action != "list" && action != "find" {
+			continue // summary entities take no CUD (router registers none)
+		}
+		add(action)
+	}
+	if !isSummary {
+		for _, action := range []string{"submit", "cancel", "amend"} {
+			add(action)
+		}
+	}
+	if es.SoftDeactivate != nil && es.SoftDeactivate.Enabled {
+		add("deactivate")
+		add("reactivate")
+	}
+	return out
 }
 
 // lifecycle derives the UI pattern from the reserved `submit` action

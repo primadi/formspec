@@ -13,24 +13,34 @@
 // Constants
 // ══════════════════════════════════════════════════════════════════════════════
 
-export const API_VERSION = "formspec.dev/v1alpha1"
+export const API_VERSION = "formspec.dev/v1"
 
 // ── Resource Kinds ──
-
+//
+// Mirrors `pkg/spec.AllKinds()` — `pkg/spec/renderer_parity_test.go` fails if
+// these two lists diverge. Note there is no KIND_MIGRATION: `kind: Migration`
+// is not a manifest kind in the engine's catalog.
 export const KIND_APP = "App"
 export const KIND_MODULE = "Module"
 export const KIND_DOCUMENT = "Document"
 export const KIND_ENTITY = "Entity"
 export const KIND_SERVICE = "Service"
 export const KIND_CONFIG = "Config"
-export const KIND_MIGRATION = "Migration"
 export const KIND_SUBSCRIPTION = "Subscription"
 export const KIND_WORKFLOW = "Workflow"
 export const KIND_API = "Api"
 export const KIND_WEBHOOK = "Webhook"
+export const KIND_INTEGRATOR = "Integrator"
+export const KIND_KIND_DEFINITION = "KindDefinition"
+export const KIND_MOCKUP = "Mockup"
 export const KIND_ENVIRONMENT = "Environment"
 export const KIND_POLICY = "Policy"
 export const KIND_DATASTORE = "Datastore"
+export const KIND_WORKSPACE = "Workspace"
+export const KIND_SEED = "Seed"
+export const KIND_RENDERER = "Renderer"
+export const KIND_VISUAL_SPEC_KIND = "VisualSpecKind"
+export const KIND_PERSIST_BACKEND = "PersistBackend"
 export const KIND_PAGE = "Page"
 export const KIND_FORM = "Form"
 export const KIND_TABLE = "Table"
@@ -40,9 +50,12 @@ export const KIND_REPORT = "Report"
 export const KIND_WIZARD = "Wizard"
 export const KIND_KANBAN = "Kanban"
 export const KIND_TIMELINE = "Timeline"
+export const KIND_CALENDAR = "Calendar"
 export const KIND_PRINT = "Print"
 export const KIND_THEME = "Theme"
 export const KIND_LISTING = "Listing"
+export const KIND_APPROVAL_INBOX = "ApprovalInbox"
+export const KIND_NOTIFICATION_CENTER = "NotificationCenter"
 
 // No KIND_MENU — navigation isn't a standalone kind. It lives as
 // App.spec.menu (authoritative) / Module.spec.menu (default suggestion),
@@ -54,14 +67,21 @@ export type ResourceKind =
   | "Entity"
   | "Service"
   | "Config"
-  | "Migration"
   | "Subscription"
   | "Workflow"
   | "Api"
   | "Webhook"
+  | "Integrator"
+  | "KindDefinition"
+  | "Mockup"
   | "Environment"
   | "Policy"
   | "Datastore"
+  | "Workspace"
+  | "Seed"
+  | "Renderer"
+  | "VisualSpecKind"
+  | "PersistBackend"
   | "Page"
   | "Form"
   | "Table"
@@ -71,9 +91,12 @@ export type ResourceKind =
   | "Wizard"
   | "Kanban"
   | "Timeline"
+  | "Calendar"
   | "Print"
   | "Theme"
   | "Listing"
+  | "ApprovalInbox"
+  | "NotificationCenter"
 
 // ── Field Types ──
 
@@ -278,6 +301,16 @@ export interface PersistSpec {
   // TODO: add fields from the Go spec as needed
 }
 
+/** One choice in a field's `options:` list — a closed set of values **with
+ *  captions** (backend 05-field-types.md §1.1). `enum_values` carries values
+ *  only, so a day-of-week set declared as `[1, 2, 3]` would render as
+ *  "1, 2, 3". `value` keeps the scalar type the field stores (`1`, not "1"). */
+export interface FieldOption {
+  value: string | number | boolean
+  /** Caption shown to users. Defaults to the value (humanised) when omitted. */
+  label?: string
+}
+
 export interface Field {
   name: string
   type: FieldType
@@ -293,6 +326,9 @@ export interface Field {
   natural_key_rule?: NaturalKeyRuleDecl
   audited?: boolean
   enum_values?: string[]
+  /** Declared choice set for a multi-value field (json/string), rendered by
+   *  the `select-multi-tag` widget. */
+  options?: FieldOption[]
   rules?: ValidationRule[]
   relation?: RelationDecl
   child?: ChildDecl
@@ -1087,6 +1123,13 @@ export interface MenuItem {
   module?: string
   view?: string
   route?: string
+  /** RBAC: withheld unless the caller holds at least one of these
+   *  permissions (any-of). Enforced SERVER-side in filterMenu — the item never
+   *  reaches a caller lacking them, so the client has nothing to check. */
+  permissions?: string[]
+  /** FormSpecExpr business condition — item hidden when false. Presentation
+   *  only, evaluated client-side against `user`/`today()`; NOT authorization
+   *  (use `permissions` for that). */
   when?: string
   children?: MenuItem[]
 }
@@ -1222,6 +1265,21 @@ export interface EntitySchema {
   lifecycle: Lifecycle
   has_quick_submit?: boolean
   exposed?: boolean
+  /** The entity actions THIS caller may perform, resolved server-side with the
+   *  same checker that decides whether the entity ships in the bundle at all.
+   *
+   *  Derived CRUD routes and action buttons must consult this: without it the
+   *  renderer built them from the entity's lifecycle alone, so a public App
+   *  granted only `[list, find]` still rendered a "Create Menu Category"
+   *  modal whose submit answered 401 (kafe 10.23), and a cashier without
+   *  `create` saw a "New" button that opened a form with no Save (kafe 10.19).
+   *
+   *  Uses the RESOURCE vocabulary (`list`, `find`, `create`, `update`,
+   *  `delete`, lifecycle actions) — not the UI's `view`/`edit` labels.
+   *
+   *  `undefined` means not resolved (older server) — the renderer falls back
+   *  to the caller's permission list. `[]` means resolved: nothing allowed. */
+  authorized_actions?: string[]
 }
 
 export interface ActionSummary {

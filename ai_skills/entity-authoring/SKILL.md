@@ -28,6 +28,13 @@ metadata:
    - `summary` — proyeksi system-managed; tidak ada CUD via API.
 3. **Rancang fields** — lihat tabel tipe di bawah. Setiap field butuh `name`
    - `type`; `required`, `unique`, `title`, `description` sesuai kebutuhan.
+   - `title` = caption (dipakai tabel, form, halaman detail).
+   - `description` = **teks bantuan untuk pengguna akhir** — ia tampil di bawah
+     input pada setiap form/wizard yang memuat field itu (form tidak perlu
+     mengulang `help:`). Tulis sebagai kalimat bagi pemakai aplikasi; catatan
+     desain/implementasi ditulis sebagai komentar YAML `#`, bukan
+     `description` — mis. `# compute dari branch.tax_percent`, bukan
+     `description: "compute dari branch.tax_percent"`.
 4. **Lifecycle** — `plain_crud` untuk CRUD murni; state machine kalau ada
    alur status (draft → submitted → approved). State machine butuh `states`,
    `initial`, `transitions` (dengan optional `guard`), dan action `submit`.

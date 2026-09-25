@@ -46,6 +46,32 @@ func StateDirFromDSN(dsn string) string {
 	return ".formspec"
 }
 
+// StateDirFor resolves the state directory for a DSN *anchored to the project
+// root* derived from specPath.
+//
+// StateDirFromDSN only understands SQLite DSNs: for a non-SQLite DSN
+// (`postgres://…`) it returns a bare ".formspec", which the process then
+// resolves against its CWD. The filesystem storage fallback and the persisted
+// dev JWT secret both live under that path, so running `formspec dev` from the
+// repo root vs. from the example folder pointed them at two different
+// directories — the same class of bug that dsn-spec-anchored.md fixed for the
+// SQLite database itself.
+//
+// A relative path derived from a SQLite DSN is anchored too: `resolveDSN`
+// already anchors the database file to the project root (cmd/formspec/dsn.go),
+// so the state dir must follow it or storage would sit beside a database that
+// is somewhere else. An absolute DSN (or absolute derived dir) is left alone.
+func StateDirFor(dsn, specPath string) string {
+	dir := StateDirFromDSN(dsn)
+	if filepath.IsAbs(dir) {
+		return dir
+	}
+	if specPath == "" {
+		return dir
+	}
+	return filepath.Join(ProjectRootOf(specPath), dir)
+}
+
 // stateDirFromDSN derives a state directory from a DSN like
 // "sqlite:.formspec/data.db" → ".formspec". Falls back to ".formspec".
 func stateDirFromDSN(dsn string) string {

@@ -1,0 +1,21 @@
+# Module — the package the App mounts (spec/apps/<module>.yaml).
+#
+# An App mounts one or more Modules; a Module groups the manifests that belong
+# together (Entities, Services, Config, ...) and can be published to the
+# registry on its own. Without this file the App mounts a module that does not
+# exist, which `formspec validate` rejects.
+#
+# Entities live under spec/modules/{{module}}/{characteristic}/{entity}/entity.yaml
+# — scaffold one with: formspec new entity <entity-name>
+apiVersion: formspec.dev/v1
+kind: Module
+metadata:
+  name: {{module}}
+  description: "{{projectName}} — module utama"
+spec:
+  version: 0.1.0
+  vendor: {{module}}
+  # runtime binds the module to a sidecar/native implementation; `local` (the
+  # default) means the manifests run on the embedded engine. Set it when you
+  # scaffold a sidecar app with `formspec new app <name>`.
+  runtime: local

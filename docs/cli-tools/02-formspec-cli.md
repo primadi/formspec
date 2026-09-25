@@ -364,7 +364,57 @@ Jalankan seeder & factory (`formspec/seed` official module) untuk data dev/testi
 
 ```bash
 formspec seed --module billing
+formspec seed --spec examples/kafe/spec --dsn sqlite:.formspec/kafe.db --workspace kafe
 ```
+
+**Record yang sudah ada di-reconcile, bukan sekadar dilewati.** Record yang
+natural key-nya sudah ada tetapi field-nya berbeda dari seed akan di-**update**
+(laporan menyebut field yang berubah), sisanya `skip`. Alasannya konkret: dengan
+semantik skip murni, memperbaiki nilai di file seed tidak pernah sampai ke
+database yang sudah ada — file terlihat benar sementara aplikasi tetap salah
+(foto yang tadinya kosong, harga yang berubah). Dua pengecualian:
+
+- **Field write-only (`masked: true`) tidak pernah di-reconcile.** Nilai
+  tersimpannya bukan nilai yang ditulis (mis. `user.password` di-hash hook
+  menjadi `password_hash`), dan reconcile menulis lewat jalur yang tidak
+  menjalankan hook — menyalin nilai seed akan menyimpan kredensial dalam bentuk
+  terbaca. Akun `user` karena itu selalu `skip`.
+- **Record yang `doc_status`-nya bukan `draft`/kosong tidak disentuh.** Dokumen
+  yang sudah di-submit adalah fakta bisnis, bukan data seed.
+
+`$ref` di dalam record dapat menunjuk baris yang dibuat blok **lain** (urutan blok
+di file tidak perlu mengikuti urutan dependensi).
+
+#### `$asset` — aset seed diunggah lewat storage service
+
+Nilai field `file` **adalah object key**, dan key kanoniknya memuat **id record**
+(`{workspace}/{module}/{entity}/{id}/{field}/{uuid}-{nama}`) — yang belum ada
+sebelum insert. Karena itu seed tidak menulis key sendiri; ia menyatakan **path
+aset** dan membiarkan engine mengunggahnya:
+
+```yaml
+- entity: menu-item
+  records:
+    - code: MKN-002
+      name: "Sate Ayam Madura"
+      photo: { $asset: "menu/sate-ayam.jpg" } # relatif ke <module-dir>/assets/
+```
+
+Alurnya: record di-**insert** dulu (id tercipta) → file dibaca dari
+`<module-dir>/assets/<path>` → **diunggah melalui storage service** (datastore
+registry: filesystem di dev, garage/minio/s3 di prod) → **key kanonik** hasilnya
+ditulis ke field. Bentuk key-nya sama persis dengan jalur unggah HTTP, sehingga
+rute unduh dan `storage.visibility` bekerja tanpa cabang baru. `allowed_types`
+dan `max_size_mb` field ditegakkan dengan matcher yang sama dengan handler
+unggah — seed tidak bisa menulis objek yang API-nya tolak.
+
+Karena itu **tidak ada langkah menyalin file terpisah**: `formspec seed` saja
+sudah cukup, dan menghapus folder storage tidak permanen — seed berikutnya
+meng-unggah ulang objek yang hilang (perbandingan byte, sehingga **mengganti**
+file aset dengan versi yang benar pun ikut terkirim).
+
+`$asset` hanya sah pada field `file`/`attachment`; di field lain ia ditolak saat
+seed berjalan.
 
 ### `formspec backup create|inspect` / `formspec restore`
 
@@ -380,7 +430,9 @@ formspec restore --from backup-2026-07-10.tar \
   --dry-run                                       # laporan kompatibilitas dulu
 ```
 
-File storage ikut ter-backup; summary/agregat tidak (bisa dihitung ulang). Transform per-record via script Starlark saat restore. `restore` yang meng-overwrite data yang sudah ada wajib tanda tangan pemilik workspace atau delegasi eksplisit ber-scope `backup.restore`, selalu tercatat di transparency log.
+File storage ikut ter-backup **lewat storage service** — objek dibaca/ditulis melalui `ResolveStorage` (datastore registry), bukan dari path `{state}/storage` yang hardcoded, sehingga `kind: Datastore` ber-driver garage/minio/s3 juga tercakup. Kunci objek di-enumerasi dari field `file`/`attachment` pada record yang ikut ter-backup (kontrak `Storage` tidak punya operasi list), dan di-upload kembali **verbatim** saat restore — kunci di arsip identik dengan yang dirujuk record, jadi tidak ada remap yang bisa memutusnya. Summary/agregat tidak ikut (bisa dihitung ulang). Transform per-record via script Starlark saat restore. `restore` yang meng-overwrite data yang sudah ada wajib tanda tangan pemilik workspace atau delegasi eksplisit ber-scope `backup.restore`, selalu tercatat di transparency log.
+
+> **Batasan yang diketahui (jangan diandalkan):** backup/restore masih menulis ke workspace **`"demo"`** yang hardcoded, tanpa flag `--workspace`. Untuk aplikasi yang datanya ber-tenant lain (mis. kafe → `kafe`), `backup create` akan melaporkan **0 record** meski tabelnya berisi. Ditracking sebagai todo 4.8.7.
 
 ### `formspec summary list|rebuild`
 

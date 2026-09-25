@@ -1,6 +1,6 @@
 /**
  * Wire types — mirror the Go response envelopes in internal/api/handler.go
- * (docs_old/spec/02-core-basic.md §16). Every FormSpec entity record is the
+ * (docs/spec/backend/01-core-basic.md §8.5). Every FormSpec entity record is the
  * entity's own fields flattened alongside these reserved framework columns
  * (internal/db/crud.go EntityRecord.MarshalJSON).
  */

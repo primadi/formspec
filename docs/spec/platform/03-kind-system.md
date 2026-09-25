@@ -11,23 +11,24 @@
 
 ## 1. Taksonomi Kind
 
-Seluruh 33 kind FormSpec memakai format manifest yang sama
+Seluruh 34 kind FormSpec memakai format manifest yang sama
 (`apiVersion/kind/metadata/spec`,
 [`../backend/01-core-basic.md`](../backend/01-core-basic.md) §1) dan
 dikelompokkan dalam **4 grup** yang mencerminkan struktur `docs/spec/`:
 
-| #            | Grup | Jumlah                                                                                                                                                                                                              | Definisi    | Mirror `docs/spec/` |
-| ------------ | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------------------- |
-| **Curation** | 2    | `App`, `Module` — struktur workspace, kurasi module, menu                                                                                                                                                           | `platform/` |
-| **Data**     | 10   | `Entity`, `Service`, `Config`, `Subscription`, `Workflow`, `Api`, `Webhook`, `Mockup`, `Integrator`, `KindDefinition` — model domain, behaviour, integrasi                                                          | `backend/`  |
-| **UI**       | 15   | `Page`, `Form`, `Table`, `Dashboard`, `Widget`, `Report`, `Wizard`, `Kanban`, `Timeline`, `Calendar`, `Listing`, `ApprovalInbox`, `NotificationCenter`, `Print`, `Theme` — presentasi visual, override auto-derived | `frontend/` |
-| **Infra**    | 5    | `Renderer`, `PersistBackend`, `Environment`, `Policy`, `Datastore` — runtime infrastructure, renderer, storage, governance                                                                                          | `platform/` |
+| Grup         | Jumlah | Definisi                                                                                                                                                                                                            | Mirror `docs/spec/` |
+| ------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| **Curation** | 3      | `Workspace`, `App`, `Module` — struktur workspace, kurasi module, menu                                                                                                                                              | `platform/`         |
+| **Data**     | 11     | `Entity`, `Service`, `Config`, `Subscription`, `Workflow`, `Api`, `Webhook`, `Mockup`, `Integrator`, `KindDefinition`, `Seed` — model domain, behaviour, integrasi                                                  | `backend/`          |
+| **UI**       | 15     | `Page`, `Form`, `Table`, `Dashboard`, `Widget`, `Report`, `Wizard`, `Kanban`, `Timeline`, `Calendar`, `Listing`, `ApprovalInbox`, `NotificationCenter`, `Print`, `Theme` — presentasi visual, override auto-derived | `frontend/`         |
+| **Infra**    | 5      | `Renderer`, `PersistBackend`, `Environment`, `Policy`, `Datastore` — runtime infrastructure, renderer, storage, governance                                                                                          | `platform/`         |
 
 ### Rincian per Grup
 
 **Curation** — didklarasikan pertama saat membangun aplikasi:
 | Kind | Didefinisikan di |
 |---|---|
+| `Workspace` | `spec/platform/02-workspace-app-module.md` §1 |
 | `App` | `spec/platform/02-workspace-app-module.md` |
 | `Module` | `spec/platform/02-workspace-app-module.md` |
 
@@ -44,6 +45,7 @@ dikelompokkan dalam **4 grup** yang mencerminkan struktur `docs/spec/`:
 | `Mockup` | `spec/backend/02-core-extended.md` §8 |
 | `Integrator` | `spec/backend/02-core-extended.md` §5 |
 | `KindDefinition` | §2 di bawah |
+| `Seed` | `docs/cli-tools/02-formspec-cli.md` §6 · [`docs/kind/data/Seed.md`](../../kind/data/Seed.md) |
 
 **UI** — presentasi visual. Instance `VisualSpecKind` dengan tier `page`.
 Semua ada hanya untuk _override_ auto-derived defaults dari Entity:
@@ -165,15 +167,16 @@ mengonfigurasi infrastruktur/governance/deployment/keamanan platform →
 Control Plane; kalau mendefinisikan domain logic/UI/business behavior →
 Resource Plane.
 
-| Kind                                                                                                                                                                     | Plane                                                                                                   |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
-| `App`, `Module`, `Entity`, `Service`, `Config`, `Subscription`                                                                                                           | Resource                                                                                                |
-| `Workflow`, `Api`, `Webhook`, `Mockup`, `Integrator`, `KindDefinition`                                                                                                   | Resource                                                                                                |
-| `Page`, `Form`, `Table`, `Dashboard`, `Widget`, `Report`, `Wizard`, `Kanban`, `Timeline`, `Calendar`, `Listing`, `ApprovalInbox`, `NotificationCenter`, `Print`, `Theme` | Resource                                                                                                |
-| `VisualSpecKind`, `Renderer`                                                                                                                                             | Resource (dideklarasikan bersama artifact visual; distribusi lewat marketplace §7)                      |
-| `Environment`, `Policy`                                                                                                                                                  | Control                                                                                                 |
-| `Datastore`                                                                                                                                                              | Control                                                                                                 |
-| `PersistBackend`                                                                                                                                                         | Resource (dideklarasikan per deployment scope, dikonsumsi Resource Plane; distribusi lewat marketplace) |
+| Kind                                                                                                                                                                     | Plane                                                                                                                                           |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Workspace`, `App`, `Module`, `Entity`, `Service`, `Config`, `Subscription`                                                                                              | Resource                                                                                                                                        |
+| `Workflow`, `Api`, `Webhook`, `Mockup`, `Integrator`, `KindDefinition`                                                                                                   | Resource                                                                                                                                        |
+| `Seed`                                                                                                                                                                   | Resource (menulis baris lintas Entity lewat `EntityStore` — ia membaca/menulis data bisnis, jadi aturan (c) mewajibkan Resource, bukan Control) |
+| `Page`, `Form`, `Table`, `Dashboard`, `Widget`, `Report`, `Wizard`, `Kanban`, `Timeline`, `Calendar`, `Listing`, `ApprovalInbox`, `NotificationCenter`, `Print`, `Theme` | Resource                                                                                                                                        |
+| `VisualSpecKind`, `Renderer`                                                                                                                                             | Resource (dideklarasikan bersama artifact visual; distribusi lewat marketplace §7)                                                              |
+| `Environment`, `Policy`                                                                                                                                                  | Control                                                                                                                                         |
+| `Datastore`                                                                                                                                                              | Control                                                                                                                                         |
+| `PersistBackend`                                                                                                                                                         | Resource (dideklarasikan per deployment scope, dikonsumsi Resource Plane; distribusi lewat marketplace)                                         |
 
 Menambah kind baru: jawab (a) apakah ia mengonfigurasi infrastruktur/
 governance? → Control; (b) apakah ia mendefinisikan business logic/UI/domain

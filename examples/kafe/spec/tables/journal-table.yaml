@@ -1,4 +1,12 @@
-# Journal entry table — general journal with debit/credit columns
+# Journal entry table — general journal with debit/credit columns.
+#
+# DIPERBAIKI 2026-09-22: `entity: journal_entry` (underscore) tidak pernah
+# cocok — nama entity-nya `journal-entry`. Akibatnya dev server mencetak
+# `Table "journal-table": entity "journal_entry" not found` di setiap boot dan
+# tabel ini tidak pernah bisa dirender. Referensi entity di dalam Table/
+# Dashboard belum diperiksa `formspec validate` (kelas yang sama dengan `view:`
+# dan `App.spec.modules` yang sudah ditutup 8.3), jadi kesalahan ini hidup
+# sampai ada yang membaca log boot — bukan sampai ada yang gagal.
 apiVersion: formspec.dev/v1
 kind: Table
 metadata:
@@ -6,10 +14,14 @@ metadata:
   module: gl
   description: Tabel jurnal umum — debit/kredit
 spec:
-  entity: journal_entry
+  entity: gl.journal-entry
   default_sort: "-entry_date"
   page_size: 50
   columns:
+    - field: number
+      label: "Nomor"
+      sortable: true
+      width: "160px"
     - field: entry_date
       label: "Tanggal"
       sortable: true
@@ -19,14 +31,16 @@ spec:
       sortable: true
     - field: description
       label: "Deskripsi"
-    - field: debit
-      label: "Debit"
-      width: "130px"
-      align: "right"
-    - field: credit
-      label: "Kredit"
-      width: "130px"
-      align: "right"
+    - field: source
+      label: "Sumber"
+    - field: status
+      label: "Status"
+    # DIPERBAIKI 2026-09-22: kolom `debit`/`credit` sebelumnya dideklarasikan di
+    # sini, padahal keduanya field CHILD (`lines[].debit`), bukan field header
+    # jurnal. Dev server mencetak `column "debit" not on entity` dan kolom itu
+    # selalu kosong. Nilai satu jurnal adalah JUMLAH barisnya — ditampilkan
+    # sebagai total, bukan sebagai kolom per sel (satu header tidak punya satu
+    # debit/credit; ia punya banyak).
   row_actions:
     - action: "view"
       label: "Detail"

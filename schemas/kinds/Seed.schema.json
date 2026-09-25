@@ -1,0 +1,15 @@
+{
+  "title": "Seed Spec",
+  "description": "SeedSpec is the kind-specific body of a `kind: Seed` manifest.\n",
+  "type": "object",
+  "properties": {
+    "entities": {
+      "description": "Entities declares records for one or more entities, grouped so a reader",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SeedEntity"
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -47,7 +47,7 @@ func (e *ScriptExecutor) getSpecDir(params ExecuteParams) string {
 }
 
 // SetSaveHandler sets the save callback used by resource.save() in scripts.
-func (e *ScriptExecutor) SetSaveHandler(fn func(ctx context.Context, workspaceID, module, entity, id string, version int, data map[string]any) error) {
+func (e *ScriptExecutor) SetSaveHandler(fn func(ctx context.Context, workspaceID, fromModule, module, entity, id string, version int, data map[string]any, callerResources []string) error) {
 	e.engine.SaveHandler = fn
 }
 
@@ -86,6 +86,14 @@ func (e *ScriptExecutor) SetUpsertHandler(fn func(ctx context.Context, workspace
 // resource.upsert (item 4.1).
 func (e *ScriptExecutor) MaintainerRef() string {
 	return e.engine.MaintainerRef
+}
+
+// ActionUses returns the `uses` declaration of the action whose script is
+// currently running, or nil when no script is running. `resource.save` and
+// `resource.create` need it because they dispatch the target entity's hooks,
+// and a hook inherits the enclosing action's consent (todo 2.6.4).
+func (e *ScriptExecutor) ActionUses() *spec.UsesDecl {
+	return e.engine.ActionUses
 }
 
 // SetCreateHandler sets the entity create callback used by resource.create()

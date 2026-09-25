@@ -8,9 +8,10 @@
 // sessions, key rotate, policy test, log verify) as conventional code
 // inside this same binary — never a separate process with its own
 // dependencies, so it keeps working when the platform it is repairing does
-// not (see docs_old/spec/11-reference.md D43, docs/cli-tools/02-formspec-ctl.md).
+// not ("bedrock exception" — see docs/cli-tools/04-formspec-ctl.md and
+// docs/runtimes/01-formspec-ctl.md).
 // The emergency subcommands are not implemented yet — see
-// docs/cli-tools/02-formspec-ctl.md §5.
+// docs/cli-tools/04-formspec-ctl.md §5.
 //
 // Usage:
 //

@@ -1886,7 +1886,7 @@ func writeStoreError(w http.ResponseWriter, err error) {
 	}
 	switch {
 	case isValidationError(err):
-		writeError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", err.Error())
+		writeStoreValidationError(w, err)
 	case isConflictError(err):
 		writeError(w, http.StatusConflict, "CONFLICT", err.Error())
 	case errors.Is(err, db.ErrCrossStoreTx):
@@ -1905,8 +1905,43 @@ func contains(s, substr string) bool {
 	return false
 }
 
+// storeValidationDetail extracts the {level, field} pair for a storage-layer
+// validation error (todo 7.9.5). A field-rule violation carries a
+// *validation.ValidationError in its chain (level "field"/"cross_field"); a
+// required-field or immutability violation does not, so it falls back to the
+// record-level level with no field. The message string is unchanged either
+// way — only the structured detail gains precision.
+func storeValidationDetail(err error) (level, field string) {
+	var ve *validation.ValidationError
+	if errors.As(err, &ve) {
+		if ve.Level != "" {
+			return ve.Level, ve.Field
+		}
+		return "field", ve.Field
+	}
+	// ErrValidationRequired / ErrImmutableFieldChanged name a field in their
+	// message but do not carry it structurally yet, so the detail is
+	// level-only rather than guessing the field by parsing the string.
+	return "field", ""
+}
+
+// writeStoreValidationError writes a storage-layer validation failure as 422
+// VALIDATION_ERROR with the structured details array the spec mandates
+// (details: [{level, field?, message}]). Previously this path used plain
+// writeError, so record-level failures returned no details at all.
+func writeStoreValidationError(w http.ResponseWriter, err error) {
+	level, field := storeValidationDetail(err)
+	writeErrorWithDetails(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", err.Error(),
+		[]ErrorDetailItem{{Level: level, Field: field, Message: err.Error()}})
+}
+
 // writeValidationErrors writes one or more validation errors as 422 VALIDATION_ERROR.
 // Spec §16: errors include structured details array with level, optional field, and message.
+//
+// A *validation.ValidationError carries its own level + field (todo 7.9.5), so
+// the envelope reports what actually failed instead of a hardcoded "error".
+// Callers should return that type; a plain error still degrades gracefully to
+// level "error" with no field rather than losing the entry.
 func writeValidationErrors(w http.ResponseWriter, errs []error) {
 	var msg strings.Builder
 	details := make([]ErrorDetailItem, 0, len(errs))
@@ -1916,10 +1951,16 @@ func writeValidationErrors(w http.ResponseWriter, errs []error) {
 		}
 		errStr := e.Error()
 		msg.WriteString(errStr)
-		details = append(details, ErrorDetailItem{
-			Level:   "error",
-			Message: errStr,
-		})
+
+		item := ErrorDetailItem{Level: "error", Message: errStr}
+		var ve *validation.ValidationError
+		if errors.As(e, &ve) {
+			if ve.Level != "" {
+				item.Level = ve.Level
+			}
+			item.Field = ve.Field
+		}
+		details = append(details, item)
 	}
 	writeErrorWithDetails(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", msg.String(), details)
 }
@@ -2239,11 +2280,7 @@ func (f *HandlerFactory) handleWorkflowApproval(
 
 	// No pending approval → this is the request to START the approval flow.
 	if approval == nil {
-		requesterID := ""
-		if cb, ok := resourceData["created_by"]; ok && cb != nil {
-			requesterID = fmt.Sprintf("%v", cb)
-		}
-		approval = workflow.NewApproval(wf, module, module+"."+entity, resourceID, fromState, toState, requesterID)
+		approval = workflow.NewApproval(wf, module, module+"."+entity, resourceID, fromState, toState, f.requesterIDFor(ctx, module, entity, resourceID, workspaceID, resourceData))
 		// Persist the workflow's manifest name (not a pointer address) so the
 		// escalation worker can resolve it back (todo 7.4.4).
 		if wfKey := f.wfRegistry.NameFor(wf); wfKey != "" {
@@ -2376,6 +2413,40 @@ func (f *HandlerFactory) handleWorkflowApproval(
 		writeError(w, http.StatusUnprocessableEntity, "WORKFLOW_ERROR",
 			"transition requires approval — call again with {\"decision\": \"approve\"} or {\"decision\": \"reject\"}")
 	}
+}
+
+// requesterIDFor resolves the user the approval request is attributed to.
+//
+// created_by is a framework-owned COLUMN on the record, not a business field:
+// it is projected onto the wire by EntityRecord.MarshalJSON but is absent from
+// the Data map that resourceData holds. Reading resourceData["created_by"]
+// therefore always found nothing, leaving RequesterID empty — and with an empty
+// requester, CanApprove's "requester can never approve their own request"
+// (7.4.5) never matched, so the requester could approve a request they raised
+// themselves. Found by the level-API harness in
+// workflow_approval_api_test.go (todo 7.4.7).
+//
+// The Data map is still consulted first so an entity that genuinely declares a
+// created_by field keeps its own value; the store read is the fallback that
+// covers the framework column.
+func (f *HandlerFactory) requesterIDFor(
+	ctx context.Context, module, entity, resourceID, workspaceID string,
+	resourceData map[string]any,
+) string {
+	if cb, ok := resourceData["created_by"]; ok && cb != nil {
+		if s := fmt.Sprintf("%v", cb); s != "" {
+			return s
+		}
+	}
+	store, err := f.registry.GetEntityStore(module, entity)
+	if err != nil {
+		return ""
+	}
+	rec, err := store.GetByID(ctx, db.GetByIDParams{WorkspaceID: workspaceID, ID: resourceID})
+	if err != nil || rec == nil {
+		return ""
+	}
+	return rec.CreatedBy
 }
 
 // executeWorkflowTransition performs the actual state-machine transition once

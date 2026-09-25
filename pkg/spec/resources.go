@@ -414,14 +414,31 @@ type PersistBackendSpec struct {
 //     forbidden on the group itself — only its descendants carry Module.
 //   - Leaf node (no Children, Type != "module"): Label + Module + exactly one
 //     of View/Route. Level 3 leaves cannot have Children (3-level cap).
+//
+// Navigation visibility has TWO independent axes, and using the wrong one is
+// the classic mistake:
+//
+//   - Permissions — RBAC. Enforced SERVER-side in filterMenu, so the item is
+//     never sent to a caller who does not hold one of the permissions. This is
+//     the axis for "only supervisors may see Settings" (08-formspec-expr.md §3
+//     forbids identity/permission expressions, so `when` could never do it).
+//   - When — a FormSpecExpr BUSINESS condition, evaluated client-side against
+//     `user`/`today()`. It is presentation only and deliberately NOT an
+//     authorization gate: hiding a link grants nothing, since the route and the
+//     data behind it stay protected by the entity permission filter and the
+//     resource's own `required_permission`.
+
 type MenuItem struct {
-	Type     string     `yaml:"type,omitempty" json:"type,omitempty"` // "module" = adopt-shorthand node
-	Label    string     `yaml:"label,omitempty" json:"label,omitempty"`
-	Icon     string     `yaml:"icon,omitempty" json:"icon,omitempty"`
-	Module   string     `yaml:"module,omitempty" json:"module,omitempty"`
-	View     string     `yaml:"view,omitempty" json:"view,omitempty"`   // name of a registered View resource
-	Route    string     `yaml:"route,omitempty" json:"route,omitempty"` // raw URL escape hatch (no registered View)
-	When     string     `yaml:"when,omitempty" json:"when,omitempty"`   // FormSpecExpr business condition
+	Type   string `yaml:"type,omitempty" json:"type,omitempty"` // "module" = adopt-shorthand node
+	Label  string `yaml:"label,omitempty" json:"label,omitempty"`
+	Icon   string `yaml:"icon,omitempty" json:"icon,omitempty"`
+	Module string `yaml:"module,omitempty" json:"module,omitempty"`
+	View   string `yaml:"view,omitempty" json:"view,omitempty"`   // name of a registered View resource
+	Route  string `yaml:"route,omitempty" json:"route,omitempty"` // raw URL escape hatch (no registered View)
+	// @schema {description: "RBAC: the item is withheld unless the caller holds at least one of these permissions (any-of). Enforced server-side — it never reaches a caller who lacks them.", example: "[clinic.settings.update]"}
+	Permissions []string `yaml:"permissions,omitempty" json:"permissions,omitempty"`
+	// @schema {description: "FormSpecExpr business condition (presentation only): item hidden when false. Evaluated client-side against `user` and `today()`. NOT an authorization gate — use `permissions` for RBAC.", example: "today() >= '2026-01-01'"}
+	When     string     `yaml:"when,omitempty" json:"when,omitempty"`
 	Children []MenuItem `yaml:"children,omitempty" json:"children,omitempty"`
 }
 

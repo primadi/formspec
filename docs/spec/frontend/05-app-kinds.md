@@ -68,11 +68,25 @@ sebabnya grant semacam ini berbahaya, dan sebabnya scope ada:
   scope tidak bisa menjaganya, jadi kombinasi itu akan terlihat terfilter padahal
   mengembalikan record apa pun yang id-nya diketahui — validator menolaknya.
 
-**Grant berlaku untuk anonim, bukan sebagai bypass permission.** Pada route yang
-sama, permintaan yang **sudah terautentikasi** tetap wajib memegang permission
-entity tersebut (`{module}.{plural}.{action}`), dan scope anonim **tidak**
-diterapkan padanya. Ini penting karena `/_ui/entity` dipakai bersama: surface POS
-kasir yang tidak membawa token tamu tidak boleh ikut terfilter.
+**Grant adalah _floor_, bukan bypass permission.** Pada route yang sama,
+permintaan **sudah terautentikasi** yang memegang permission entity
+(`{module}.{plural}.{action}`) tunduk pada permission itu (dan `row_scope`
+entity) — scope grant **tidak** diterapkan padanya. Ini penting karena
+`/_ui/entity` dipakai bersama: surface POS kasir yang tidak membawa token tamu
+tidak boleh ikut terfilter.
+
+Pemanggil yang **tidak** memegang permission itu — anonim, atau sudah
+terautentikasi tanpa permission tersebut — jatuh ke grant dan boleh melakukan
+persis apa yang boleh dilakukan tamu, tidak lebih; **scope grant ikut berlaku
+padanya**. Efektivitasnya `max(permission miliknya, grant publik)`.
+
+Fallback ini bukan kelonggaran: grant publik sudah publik (dideklarasikan di
+manifest dan dikirim apa adanya ke pengunjung anonim lewat bundle), dan jalur
+fallback tetap dibatasi `scope`. Tanpanya, pemanggil yang login justru **lebih
+buruk** daripada tamu di permukaan App itu sendiri — halaman katalog yang
+sebelumnya terbuka menjadi 404 begitu pengunjung menekan "Sign up" atau login
+lewat `chrome.auth`, dan `create` anonim (mis. pesan QR) berhenti bekerja untuk
+pelanggan yang sudah mendaftar.
 
 Navigasi App sendiri (`App.spec.menu`/`Module.spec.menu`, bentuk `MenuItem`,
 batas nesting 3 level) adalah kontrak `kind: App`/`kind: Module` — didokumentasikan
@@ -85,6 +99,12 @@ cuma mengonsumsi menu yang sudah resolved lewat Spec Resolution API
 
 Chrome penuh dengan navigasi samping — binding ke menu App yang sudah
 resolved, responsive (collapse ke overlay di breakpoint mobile).
+
+Tree menu yang lebih tinggi dari viewport harus tetap bisa dijangkau seluruhnya:
+nav dibungkus area scroll yang tingginya dibatasi sisa tinggi sidebar (di
+bawah header brand), sehingga vertical scroll bar muncul saat item tidak
+seluruhnya terlihat. Item yang melimpah **tidak boleh** hanya meluber keluar
+sidebar tanpa cara menjangkaunya.
 
 ## 3. `topnav`
 

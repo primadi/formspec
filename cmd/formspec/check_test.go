@@ -313,6 +313,204 @@ func TestCheckExpr_GrammarValidation(t *testing.T) {
 	}
 }
 
+// TestValidateExprGrammar_AcceptsValidExpressions pins the expressions that
+// real manifests use (including the kafe promo-form, which regressed at runtime
+// because the previous gate only balanced delimiters and never tokenized).
+func TestValidateExprGrammar_AcceptsValidExpressions(t *testing.T) {
+	valid := []string{
+		// Single-quoted literals — the kafe promo-form regression. Starlark
+		// accepts both quote styles, so these must survive the gate.
+		"fields.type == 'percentage'",
+		"fields.type == 'fixed'",
+		"fields.type == 'buy_x_get_y'",
+		"fields.applies_to == 'menu_item'",
+		"fields.applies_to == 'category'",
+		// Double-quoted literals keep working.
+		`fields.method == "cash"`,
+		// Compound conditions, list comprehensions, arithmetic.
+		"fields.status == 'draft' or fields.status == 'awaiting_payment'",
+		"fields.manual_discount_amount != null",
+		"fields.items != None and len(fields.items) > 0",
+		"sum([i.quantity * i.unit_price for i in fields.items])",
+		"sum([t.quantity * t.price for t in fields.treatments])",
+		"fields.tendered >= fields.amount",
+		"fields.total * 0.1",
+		"!!true",
+		"fields.status != 'open' and len(fields.notes) > 0",
+		// Delimiters inside a string literal are opaque, not nesting.
+		`fields.name != "("`,
+		"fields.name != '('",
+		// An apostrophe inside a double-quoted string does not end it.
+		`fields.name != "it's"`,
+		// The closed callable set — every member must stay accepted. A `(` that
+		// only LOOKS like a call (inside a string literal) is content, not a
+		// call, so `fields.name == 'f('` must survive the callable gate.
+		"len(fields.items) > 0",
+		"sum([i.qty for i in fields.items]) > 0",
+		"amount(fields.total) > 100",
+		"currency(fields.total) == 'IDR'",
+		"today() >= '2026-01-01'",
+		"fields.name == 'f('",
+		"fields.note == \"sum(x)\"",
+		// Whitespace between the callee and `(` is still a call.
+		"len (fields.items) > 0",
+		"",
+	}
+	for _, expr := range valid {
+		if err := validateExprGrammar(expr); err != "" {
+			t.Errorf("validateExprGrammar(%q) = %q, want accepted", expr, err)
+		}
+	}
+}
+
+// TestValidateExprGrammar_RejectsUnknownCallables pins the closed callable set.
+//
+// The character scan alone cannot tell `len(x)` from `user.has('x')` — both are
+// identifiers, dots and parens — so before this gate existed, a member call
+// passed `formspec check` and then died at RUNTIME as "unknown function:
+// undefined" in the client evaluator (which resolves `node.callee.name` over an
+// Identifier). That is exactly the false guarantee 08-formspec-expr.md §4
+// forbids: an expression surviving apply is supposed to be resolvable.
+//
+// Measured on the live example: examples/Clinic-UI-Showcase shipped
+// `when: "user.has('clinic.settings.update')"`, which validated green (0
+// problems) and hid nothing — identity-based conditions are also outside the
+// expression subset per §3.
+func TestValidateExprGrammar_RejectsUnknownCallables(t *testing.T) {
+	cases := []struct {
+		expr string
+		want string
+	}{
+		// The live regression: a member call the evaluator cannot resolve.
+		{"user.has('clinic.settings.update')", "unknown function \"user.has\""},
+		{"session.x()", "unknown function \"session.x\""},
+		// A plain typo is caught too — same class, no member access needed.
+		{"leng(fields.items) > 0", "unknown function \"leng\""},
+		{"lenn(fields.items) > 0", "unknown function \"lenn\""},
+		// Server-only Starlark builtins are NOT part of the client subset.
+		{"days_ago(1)", "unknown function \"days_ago\""},
+		{"empty(fields.note)", "unknown function \"empty\""},
+		{"sum_line('debit') > 0", "unknown function \"sum_line\""},
+	}
+	for _, tc := range cases {
+		got := validateExprGrammar(tc.expr)
+		if got == "" {
+			t.Errorf("validateExprGrammar(%q) accepted, want error containing %q", tc.expr, tc.want)
+			continue
+		}
+		if !strings.Contains(got, tc.want) {
+			t.Errorf("validateExprGrammar(%q) = %q, want error containing %q", tc.expr, got, tc.want)
+		}
+		// The message must say what IS allowed, so the author can fix it without
+		// reading the source.
+		if !strings.Contains(got, "closed set") {
+			t.Errorf("validateExprGrammar(%q) = %q, want the message to name the closed callable set", tc.expr, got)
+		}
+	}
+}
+
+// TestCheckMenuExpr pins the deploy-time gate for `MenuItem.When`, the one
+// FormSpecExpr site that had no gate at all before this.
+func TestCheckMenuExpr(t *testing.T) {
+	loader := manifest.NewLoader("")
+	src := `
+apiVersion: formspec.dev/v1alpha1
+kind: App
+metadata: { name: demo, module: demo }
+spec:
+  root_url: /app/demo
+  modules: [demo]
+  menu:
+    - { label: "Broken", route: /x, when: "user.has('demo.x')" }
+    - { label: "Fine", route: /y, when: "today() >= '2026-01-01'" }
+`
+	raws, errs := loader.ParseBytes([]byte(src), "app.yaml")
+	if len(errs) > 0 {
+		t.Fatalf("parse: %v", errs)
+	}
+
+	result := &checkResult{}
+	checkMenuExpr(result, raws)
+
+	if len(result.Issues) != 1 {
+		t.Fatalf("want exactly 1 issue (the broken `when`), got %d: %+v", len(result.Issues), result.Issues)
+	}
+	msg := result.Issues[0].Message
+	if !strings.Contains(msg, "unknown function") || !strings.Contains(msg, "Broken") {
+		t.Errorf("issue should name the offending callable and the item, got %q", msg)
+	}
+}
+
+// TestCheckMenuExpr_ModuleMenu covers the other manifest that carries a menu:
+// a Module's default suggestion is spliced into Apps, so a broken `when` there
+// must be caught at its source.
+func TestCheckMenuExpr_ModuleMenu(t *testing.T) {
+	loader := manifest.NewLoader("")
+	src := `
+apiVersion: formspec.dev/v1alpha1
+kind: Module
+metadata: { name: demo }
+spec:
+  version: 1.0.0
+  menu:
+    - label: "Group"
+      children:
+        - { label: "Nested broken", route: /x, when: "leng(1) > 0" }
+`
+	raws, errs := loader.ParseBytes([]byte(src), "module.yaml")
+	if len(errs) > 0 {
+		t.Fatalf("parse: %v", errs)
+	}
+
+	result := &checkResult{}
+	checkMenuExpr(result, raws)
+
+	if len(result.Issues) != 1 {
+		t.Fatalf("want 1 issue from the nested item, got %d: %+v", len(result.Issues), result.Issues)
+	}
+	if !strings.Contains(result.Issues[0].Message, "Nested broken") {
+		t.Errorf("issue should be attributed to the nested item, got %q", result.Issues[0].Message)
+	}
+}
+
+// TestValidateExprGrammar_RejectsUnparsableExpressions pins the class the
+// previous gate let through: expressions the client renderer cannot parse, so
+// they surfaced as a runtime "Expression error" banner instead of failing at
+// deploy time (08-formspec-expr.md §4).
+func TestValidateExprGrammar_RejectsUnparsableExpressions(t *testing.T) {
+	cases := []struct {
+		expr string
+		want string
+	}{
+		// A quote typo — the exact shape that broke promo-form.
+		{"fields.status == 'open", "unterminated string literal"},
+		{`fields.status == "open`, "unterminated string literal"},
+		// A lone `=` is not FormSpecExpr (the client lexer marks it ILLEGAL).
+		{"fields.status = 'open'", `operator "="`},
+		// Unbalanced / mismatched delimiters.
+		{"(fields.status == 'open'", "unbalanced delimiter"},
+		{"fields.status == 'open')", "unbalanced delimiter"},
+		{"len(fields.items]", "mismatched delimiter"},
+		// Dict/set literals and blocks are outside the subset.
+		{"len({})", "dict/set literals"},
+		// Forbidden constructs.
+		{"ctx.db.query('x')", "ctx access"},
+		// Unparseable characters.
+		{"fields.status == 'open' # comment", "not part of FormSpecExpr"},
+		{"fields.status == 'open' @ 1", "not part of FormSpecExpr"},
+	}
+	for _, tc := range cases {
+		got := validateExprGrammar(tc.expr)
+		if got == "" {
+			t.Errorf("validateExprGrammar(%q) accepted, want error containing %q", tc.expr, tc.want)
+			continue
+		}
+		if !strings.Contains(got, tc.want) {
+			t.Errorf("validateExprGrammar(%q) = %q, want error containing %q", tc.expr, got, tc.want)
+		}
+	}
+}
+
 func TestApplyUsesFix_RemovesBrokenRefs(t *testing.T) {
 	dir := t.TempDir()
 	writeCheckSpec(t, dir)

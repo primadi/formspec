@@ -53,6 +53,14 @@ const (
 	WidgetPassword       FormWidget = "password"
 	WidgetSlider         FormWidget = "slider"
 	WidgetTags           FormWidget = "tags"
+	// WidgetSelectMultiTag edits a multi-value field whose choices are
+	// *declared* (`Field.options`, or `enum_values` as the value-only fallback)
+	// rather than typed: the chips are chosen from the closed set, a chosen
+	// value is no longer offered, and the stored value keeps the field's shape
+	// (a `json` field stores an array, a `string` field a comma-separated list).
+	// `tags` is the free-text sibling — it accepts anything, so a set defined by
+	// a spec (`1=Senin..7=Minggu`) could not be enforced through it.
+	WidgetSelectMultiTag FormWidget = "select-multi-tag"
 	WidgetUUID           FormWidget = "uuid"
 	WidgetJSON           FormWidget = "json"
 	WidgetFileInput      FormWidget = "fileinput"
@@ -111,6 +119,7 @@ var formWidgets = []FormWidget{
 	WidgetPassword,
 	WidgetSlider,
 	WidgetTags,
+	WidgetSelectMultiTag,
 	WidgetUUID,
 	WidgetJSON,
 	WidgetFileInput,
@@ -201,6 +210,84 @@ func ReportFormatValues() []string {
 		out[i] = string(f)
 	}
 	return out
+}
+
+// TableCellFormat is the closed set of value formatters a `TableColumn` (or
+// `ListingColumn`) may declare.
+//
+// Why a named type and not `string` (which it was until 2026-09-24): the
+// vocabulary lived only in a comment (`// currency | date | relative | ...`)
+// and in the renderer's `if` chain, so `format: currncy` passed validation and
+// the cell silently printed the raw value. ReportColumn has had a closed set
+// since S16 for exactly this reason; a table column is the same kind of
+// declaration and gets the same guarantee.
+//
+// It is deliberately NOT the same list as ReportFormat: a report has no
+// `relative` or `number`, and a cell renderer has no `datetime` (a datetime
+// column derives `relative`, see engine/derive.ts). Sharing the type would
+// force one surface to accept a name the other cannot render.
+// @schema {title: "Table Cell Format", description: "Value formatter for a table/listing cell. Closed set — every name is implemented by the cell renderer."}
+type TableCellFormat string
+
+const (
+	// CellFormatCurrency formats `{amount, currency}` (or a bare number) using
+	// `settings.currency` — symbol, scale, locale.
+	CellFormatCurrency TableCellFormat = "currency"
+	// CellFormatNumber formats a plain number with the locale's group
+	// separators. Opt-in: `decimal`/`integer` are as often an identifier
+	// (`line_number`) as a quantity, so the renderer never guesses.
+	CellFormatNumber TableCellFormat = "number"
+	// CellFormatDate formats a date string per `settings.date_format`.
+	CellFormatDate TableCellFormat = "date"
+	// CellFormatRelative renders a past timestamp as "3d ago".
+	CellFormatRelative TableCellFormat = "relative"
+	// CellFormatPercent renders a percentage with its unit (`10` → "10%").
+	CellFormatPercent TableCellFormat = "percent"
+)
+
+var tableCellFormats = []TableCellFormat{
+	CellFormatCurrency,
+	CellFormatNumber,
+	CellFormatDate,
+	CellFormatRelative,
+	CellFormatPercent,
+}
+
+// IsTableCellFormat reports whether v is a declared cell format.
+func IsTableCellFormat(v string) bool {
+	for _, f := range tableCellFormats {
+		if string(f) == v {
+			return true
+		}
+	}
+	return false
+}
+
+// TableCellFormatNames renders the closed set for an error message.
+func TableCellFormatNames() string {
+	names := make([]string, len(tableCellFormats))
+	for i, f := range tableCellFormats {
+		names[i] = string(f)
+	}
+	return strings.Join(names, ", ")
+}
+
+// ValidateTableCellFormat checks an explicit `format:` value on a table or
+// listing column. `where` locates the column (e.g. `table "orders", column
+// "total"`). An empty format is valid — the cell then renders the raw value.
+func ValidateTableCellFormat(f TableCellFormat, where string) error {
+	if f == "" || IsTableCellFormat(string(f)) {
+		return nil
+	}
+	// A report format on a table column is the quiet version of this mistake:
+	// `datetime` is legal for a Report but no cell renderer implements it, so
+	// the cell would print the raw value.
+	hint := ""
+	if IsReportFormat(string(f)) {
+		hint = fmt.Sprintf(" — %q is a report format, not a table cell format", f)
+	}
+	return fmt.Errorf("%s: unknown cell format %q (allowed: %s)%s",
+		where, f, TableCellFormatNames(), hint)
 }
 
 // widgetAliasHints maps a field *type* name to the canonical widget an author
@@ -301,11 +388,16 @@ func ValidateTableCellWidget(w TableCellWidget, where string) error {
 		where, w, TableCellWidgetNames(), hint)
 }
 
-// ValidateTableColumns checks the `widget:` of every column on a Table or
-// Listing manifest. `where` names the kind (e.g. `table "order-table"`).
+// ValidateTableColumns checks the `widget:` and `format:` of every column on a
+// Table or Listing manifest. `where` names the kind (e.g. `table
+// "order-table"`).
 func ValidateTableColumns(columns []TableColumn, where string) error {
 	for _, c := range columns {
-		if err := ValidateTableCellWidget(c.Widget, fmt.Sprintf("%s, column %q", where, c.Field)); err != nil {
+		at := fmt.Sprintf("%s, column %q", where, c.Field)
+		if err := ValidateTableCellWidget(c.Widget, at); err != nil {
+			return err
+		}
+		if err := ValidateTableCellFormat(c.Format, at); err != nil {
 			return err
 		}
 	}

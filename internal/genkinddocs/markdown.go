@@ -60,6 +60,11 @@ var kindGroups = map[string]GroupInfo{
 	"Mockup":         {Group: "data", Plane: "resource"},
 	"Integrator":     {Group: "data", Plane: "resource"},
 	"KindDefinition": {Group: "data", Plane: "resource"},
+	// Seed declares which records exist at boot (master rows, reference tables,
+	// role/grant rows, demo data) and inserts them through the same EntityStore
+	// the API uses — so it is a domain-data declaration, not workspace
+	// structure. docs/kind/README.md already counted data/ as 11 kinds.
+	"Seed": {Group: "data", Plane: "resource"},
 	// UI — visual presentation (tier: page / component)
 	"Page":               {Group: "ui", Plane: "resource"},
 	"Form":               {Group: "ui", Plane: "resource"},

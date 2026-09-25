@@ -4,9 +4,10 @@
 //
 // The types in this package correspond 1:1 with the YAML manifest format
 // defined in docs/spec/backend/{01-core-basic,02-core-extended,03-entity-extension}.md,
-// docs/spec/frontend/{01-04} (docs_old/spec/05-frontend.md §3-13 pending migration),
-// and docs_old/spec/04-control-plane.md (pending migration).
+// docs/spec/frontend/{01-08}, and docs/spec/platform/{01-08}.
 package spec
+
+import "sort"
 
 // APIVersion is the current FormSpec API version string. Only **stable**
 // versions are accepted: `internal/schemaregistry.ParseVersion` rejects
@@ -132,11 +133,15 @@ const (
 )
 
 // IsValidKind returns true if k is a known FormSpec kind.
+//
+// It mirrors the engine's catalog (internal/manifest.KnownKinds), which is
+// what actually gates manifest loading; TestIsValidKind_MatchesKnownKinds pins
+// the two together so a kind added in one place can't be silently missed here.
 func IsValidKind(k Kind) bool {
 	switch k {
 	case KindApp, KindModule, KindDocument, KindEntity, KindService, KindConfig, KindSubscription,
 		KindWorkflow, KindApi, KindKindDefinition, KindWebhook, KindMockup, KindIntegrator,
-		KindEnvironment, KindPolicy, KindDatastore,
+		KindEnvironment, KindPolicy, KindDatastore, KindWorkspace, KindSeed,
 		KindRenderer, KindVisualSpecKind, KindPersistBackend,
 		KindPage, KindForm, KindTable, KindDashboard, KindWidget, KindReport,
 		KindWizard, KindKanban, KindTimeline, KindPrint, KindTheme,
@@ -145,6 +150,28 @@ func IsValidKind(k Kind) bool {
 	default:
 		return false
 	}
+}
+
+// AllKinds returns the closed set of built-in kinds this package declares,
+// sorted. It is the pkg/spec side of the parity check against
+// internal/manifest.KnownKinds — the single list the engine gates on.
+func AllKinds() []string {
+	out := []string{
+		string(KindApp), string(KindModule), string(KindDocument), string(KindEntity),
+		string(KindService), string(KindConfig), string(KindSubscription),
+		string(KindWorkflow), string(KindApi), string(KindKindDefinition), string(KindWebhook),
+		string(KindMockup), string(KindIntegrator),
+		string(KindRenderer), string(KindVisualSpecKind), string(KindPersistBackend),
+		string(KindPage), string(KindForm), string(KindTable), string(KindDashboard),
+		string(KindWidget), string(KindReport), string(KindWizard), string(KindKanban),
+		string(KindTimeline), string(KindPrint), string(KindTheme), string(KindListing),
+		string(KindCalendar), string(KindApprovalInbox), string(KindNotificationCenter),
+		string(KindEnvironment), string(KindPolicy), string(KindDatastore),
+		string(KindWorkspace),
+		string(KindSeed),
+	}
+	sort.Strings(out)
+	return out
 }
 
 // IsEntityKind returns true if k is Entity (or the deprecated Document alias).

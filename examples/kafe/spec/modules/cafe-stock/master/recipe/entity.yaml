@@ -27,8 +27,20 @@ spec:
     - name: instructions
       type: text
       title: "Langkah Pembuatan"
-    # Baris bahan. `storage: jsonb` = bagian dari record resep, bukan entity
+    # Baris resep. `storage: jsonb` = bagian dari record resep, bukan entity
     # terpisah (kepemilikan lifecycle mengikuti parent).
+    #
+    # DUA JENIS BARIS (item 10.1) — `line_type`:
+    #   ingredient → bahan dari master `ingredient` (qty × moving_avg_cost)
+    #   cost       → biaya non-bahan yang DIISI BEBAS (`cost_label` + `cost_amount`)
+    #
+    # Kenapa satu child dengan `line_type`, bukan child kedua: biaya per porsi
+    # adalah SATU jumlah (Σ semua baris), dan memisahkannya ke dua child berarti
+    # setiap konsumen HPP harus tahu ada dua tempat. Satu daftar baris = satu
+    # penjumlahan, dan urutan baris (line_no) tetap bisa dibaca seperti resep.
+    #
+    # Contoh `cost`: "Gas & listrik (per porsi)", "Kemasan takeaway",
+    # "Susut / waste allowance 3%", "Biaya kirim dialokasikan" (landed cost).
     - name: lines
       type: child
       child:
@@ -38,15 +50,26 @@ spec:
           - name: line_no
             type: integer
             title: "No."
+          - name: line_type
+            type: enum
+            enum_values: [ingredient, cost]
+            default: ingredient
+            title: "Jenis Baris"
+            description: "ingredient = bahan (qty × biaya bergerak); cost = biaya bebas yang diisi manual"
+          # `ingredient_id` WAJIB hanya untuk baris bahan. Sebelumnya field ini
+          # `required: true` tanpa syarat, sehingga baris biaya non-bahan tidak
+          # bisa dinyatakan sama sekali — pemilik harus menaruh biaya kirim/gas
+          # di luar resep (di kepala orang, bukan di spec).
           - name: ingredient_id
             type: relation
             relation: { type: belongs_to, resource: cafe-stock.ingredient }
-            required: true
+            required_when: "line_type == 'ingredient'"
             title: "Bahan"
+            description: "Wajib bila line_type = ingredient"
           - name: quantity
             type: decimal
             scale: 3
-            required: true
+            required_when: "line_type == 'ingredient'"
             title: "Jumlah"
           - name: unit
             type: enum
@@ -55,6 +78,17 @@ spec:
             title: "Satuan"
             description: "Satu dimensi dengan ingredient.unit; gram↔kg dikonversi engine (S12), ml/pcs tidak"
             unit: { base: gram, convertible: [kg], factors: { kg: 1000 } }
+          # ── Biaya bebas (line_type: cost) ──
+          - name: cost_label
+            type: string
+            required_when: "line_type == 'cost'"
+            title: "Nama Biaya"
+            description: "Mis. 'Gas & listrik', 'Kemasan takeaway', 'Biaya kirim'"
+          - name: cost_amount
+            type: money
+            required_when: "line_type == 'cost'"
+            title: "Nilai Biaya"
+            description: "Untuk satu batch resep (dibagi yield_quantity). Biaya TIDAK mengikuti harga bahan — nilainya tetap sampai diubah manual."
           - name: note
             type: string
             title: "Catatan"

@@ -26,6 +26,7 @@ func KindMapping() []KindEntry {
 
 		// — Platform —
 		{Kind: "Workspace", SpecStruct: "WorkspaceSpec"},
+		{Kind: "Seed", SpecStruct: "SeedSpec"},
 
 		// — Renderer Kinds —
 		{Kind: "Renderer", SpecStruct: "RendererSpec"},

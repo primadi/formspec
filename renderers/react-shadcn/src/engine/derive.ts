@@ -290,8 +290,14 @@ export function resolveTable(
   >,
 ): TableSpec {
   const authored = authoredTables.get(entity.name)
-  if (authored) return authored.spec
-  return deriveTable(entity)
+  if (!authored) return deriveTable(entity)
+  // Authored wins, but a column with no `label` still inherits the entity
+  // field's `title` — otherwise declaring a Table to reorder/adjust two
+  // columns drops every other caption to a raw field name.
+  return {
+    ...authored.spec,
+    columns: withEntityColumnLabels(authored.spec.columns ?? [], entity),
+  }
 }
 
 /**
@@ -327,7 +333,7 @@ export function resolveForm(
 ): FormSpec {
   if (explicitRef) {
     const named = authoredForms.get(explicitRef)
-    if (named) return named.spec
+    if (named) return withEntityFieldDefaults(named.spec, entity)
   }
 
   const modeSuffix =
@@ -335,24 +341,156 @@ export function resolveForm(
 
   // 1. Mode-specific: entity-create, entity-edit, entity-view
   const modeForm = authoredForms.get(`${entity.name}-${modeSuffix}`)
-  if (modeForm) return modeForm.spec
+  if (modeForm) return withEntityFieldDefaults(modeForm.spec, entity)
 
   // 2. Generic entity form: entity-form
   const genericForm = authoredForms.get(`${entity.name}-form`)
-  if (genericForm) return genericForm.spec
+  if (genericForm) return withEntityFieldDefaults(genericForm.spec, entity)
 
   // 3. Fallback: auto-generate
   return deriveForm(entity, mode)
 }
 
-// ── Field mapping helpers ──
+// ── Field caption helpers ──
+//
+// One vocabulary for "what do we call this field on screen", shared by every
+// renderer that draws a field caption. Before this, four spellings coexisted:
+// `fieldLabel()` (derived Form/Table), `field.label ?? field.name` (authored
+// Form/Table/Wizard/SearchSelect), the Wizard's `label ?? description ?? name`,
+// and `field.name.replace(/_/g, " ")` (DetailPage — which ignored the entity's
+// `title` entirely).
+//
+// Only the derived spelling consulted the entity's `title`. So declaring
+// `kind: Form` — usually for field order, sections or `visible_when`, not for
+// labels — silently downgraded every caption from "Minimum Belanja" to
+// "min_purchase", and DetailPage showed "min purchase" even with no authored
+// manifest at all. 111 of 161 authored form fields in `examples/` declare no
+// `label`, so the fallback is the common path, not an edge case.
+//
+// Precedence, identical everywhere: manifest `label` → entity `title` →
+// humanised field name.
 
-function fieldLabel(field: Field): string {
-  if (field.title) return field.title
-  return field.name
+/** Humanise a snake_case identifier: "min_purchase" → "Min Purchase". */
+export function humanizeFieldName(name: string): string {
+  return name
     .replace(/_/g, " ")
     .replace(/\bid\b/i, "ID")
     .replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+function fieldLabel(field: Field): string {
+  if (field.title) return field.title
+  return humanizeFieldName(field.name)
+}
+
+/**
+ * Effective caption for a field referenced by name: the manifest's own `label`
+ * when declared, otherwise the entity field's `title`, otherwise a humanised
+ * field name.
+ *
+ * `name` may be a dot-path column (`polyclinic.name`, `patient.name`); the
+ * entity field is then the root segment, matching either `polyclinic` or the
+ * relation's own `polyclinic_id`.
+ */
+export function entityFieldLabel(
+  entity: EntitySchema | undefined,
+  name: string,
+  label?: string,
+): string {
+  if (label) return label
+  const root = name.split(".")[0]
+  const field = entity?.fields.find(
+    (f) => f.name === root || f.name === `${root}_id`,
+  )
+  if (field?.title) return field.title
+  return humanizeFieldName(field?.name ?? root)
+}
+
+/**
+ * Effective help text for a field referenced by name: the manifest's own
+ * `help` when declared (the caller passes it), otherwise the entity field's
+ * `description`.
+ *
+ * Returns `undefined` when neither exists so callers can distinguish "no help
+ * declared" from "help deliberately emptied" — the same distinction
+ * `entityFieldLabel` does not need, because a caption always has to render
+ * something.
+ *
+ * Resolution is shared with the derived path (`formField()`), which is what
+ * keeps the two vocabularies from drifting apart again: before this, four
+ * spellings coexisted for captions and only one of them read the entity.
+ */
+export function entityFieldHelp(
+  entity: EntitySchema | undefined,
+  name: string,
+): string | undefined {
+  const root = name.split(".")[0]
+  const field = entity?.fields.find(
+    (f) => f.name === root || f.name === `${root}_id`,
+  )
+  return field?.description || undefined
+}
+
+/**
+ * Fill in the missing per-field `label` and `help` of an authored Form from
+ * the target entity's field `title`/`description`. Explicit declarations
+ * always win.
+ *
+ * The `help` half exists because the two vocabularies were disconnected:
+ * `Field.description` (Entity) and `FormField.help` (Form) mean the same
+ * thing to a user, but only `deriveForm()` read the former (via
+ * `formField()`). So the moment an Entity gained a `kind: Form` — usually for
+ * ordering, sections or `visible_when`, *not* for help — every description
+ * vanished, and authors had to copy it by hand. They did: `promo-form.yaml`
+ * and `promo/entity.yaml` carried the same sentence verbatim. Declaring help
+ * via the Entity keeps one declaration for both surfaces.
+ *
+ * `sections[0].description` likewise falls back to the Entity's own
+ * `metadata.description`, matching what `deriveForm()` has always done for
+ * the derived section — that is the string `OverlayHost` shows as the
+ * drawer/dialog subtitle, which otherwise degrades to the generic English
+ * "Fill in the details for this <entity>." even when the Entity is described.
+ *
+ * Returns a new spec: the bundle entry is shared (zustand) and a Page can
+ * embed the same Form twice, so mutating it in place would leak across
+ * renders.
+ */
+export function withEntityFieldDefaults(
+  spec: FormSpec,
+  entity: EntitySchema,
+): FormSpec {
+  if (!spec.sections?.length) return spec
+  return {
+    ...spec,
+    sections: spec.sections.map((section, idx) => ({
+      ...section,
+      description:
+        section.description || (idx === 0 ? entity.description : undefined),
+      fields: section.fields.map((f) => {
+        const label = f.label ?? entityFieldLabel(entity, f.name)
+        const help = f.help ?? entityFieldHelp(entity, f.name)
+        // Only allocate a new object when something is actually filled in —
+        // an authored field that declares both stays referentially equal.
+        if (label === f.label && help === f.help) return f
+        const next: FormField = { ...f, label }
+        if (help !== undefined) next.help = help
+        return next
+      }),
+    })),
+  }
+}
+
+/**
+ * Fill in the missing `label`s of authored Table/Listing columns from the
+ * target entity's field `title`s. Explicit `label` declarations always win.
+ */
+export function withEntityColumnLabels(
+  columns: TableColumn[],
+  entity: EntitySchema | undefined,
+): TableColumn[] {
+  return columns.map((c) =>
+    c.label ? c : { ...c, label: entityFieldLabel(entity, c.field) },
+  )
 }
 
 function isSortable(field: Field): boolean {
@@ -386,15 +524,12 @@ function tableFormat(field: Field): string | undefined {
   if (field.type === "date") return "date"
   // A percentage is numerically a decimal (S11); the difference is rendering.
   if (field.type === "percent") return "percent"
-  if (field.type === "decimal") {
-    // Check if the field has currency-like rules
-    if (
-      field.rules?.some(
-        (r) => r.name === "min" && typeof (r.value as number) === "number",
-      )
-    )
-      return "currency"
-  }
+  // `money` carries its own unit (05-field-types.md §2), so the cell must be
+  // formatted as an amount — a derived column previously fell through to
+  // `JSON.stringify` and rendered `{"amount":"50000","currency":"IDR"}`.
+  // This is the same mapping `cellHintsForField()` (lib/renderCell.tsx) already
+  // applies to child-grid cells; the two vocabularies must stay in step.
+  if (field.type === "money") return "currency"
   return undefined
 }
 
@@ -405,6 +540,9 @@ function formField(field: Field, mode: "create" | "edit" | "view"): FormField {
     widget: formWidget(field),
   }
 
+  // Same rule the authored path applies through `withEntityFieldDefaults()`
+  // — the entity's `description` is the field's default help text. Keeping
+  // the single rule in one place is what stops the two paths diverging.
   if (field.description) ff.help = field.description
   if (field.required) {
     // required is handled by zod schema, not FormField
@@ -465,7 +603,14 @@ function formWidget(field: Field): string {
     case "uuid":
       return "uuid"
     case "json":
-      return "json"
+      // A json field that declares a choice set is a *set of declared values*,
+      // not free-form JSON — deriving the tag picker here is what saves the
+      // author from writing `widget:` just to avoid a raw JSON editor. A json
+      // field without `options` keeps the JSON editor (no behaviour change for
+      // existing specs).
+      return field.options && field.options.length > 0
+        ? "select-multi-tag"
+        : "json"
     case "file":
       return "fileinput"
     case "relation":

@@ -1,0 +1,29 @@
+# Widget "jurnal terbaru" — daftar jurnal yang baru diposting.
+#
+# DIBUAT 2026-09-22: `dashboards/gl-dashboard.yaml` merujuk widget ini sejak
+# lama, tetapi manifest-nya tidak pernah ada — dev server mencetak
+# `Dashboard "gl-dashboard": widget ref "recent-journals" not found` di setiap
+# boot dan satu slot dashboard selalu kosong. Rujukan widget di dalam Dashboard
+# belum diperiksa `formspec validate` (kelas yang sama dengan `view:` di menu
+# yang sudah ditutup 8.3, dan `entity:` di Table yang diperbaiki hari ini), jadi
+# yang membuatnya terlihat hanya log boot.
+apiVersion: formspec.dev/v1
+kind: Widget
+metadata:
+  name: recent-journals
+  module: gl
+  description: "10 jurnal terbaru — nomor, tanggal, sumber, status, nilai"
+spec:
+  title: "Jurnal Terbaru"
+  type: list
+  entity: gl.journal-entry
+  query: "status = 'posted'"
+  refresh_secs: 60
+  # `WidgetSpec` sengaja tipis: `title`, `type`, `entity`, `query`, `config`.
+  # Kolom/sortir/paging BUKAN bagian kontrak widget — widget daftar mengambil
+  # bentuknya dari entity + `config`, bukan mendeklarasikan tabel sendiri
+  # (kalau butuh kolom eksplisit, bentuknya `kind: Table`, bukan Widget).
+  config:
+    sort: "-entry_date"
+    limit: 10
+    fields: [number, entry_date, source, status]

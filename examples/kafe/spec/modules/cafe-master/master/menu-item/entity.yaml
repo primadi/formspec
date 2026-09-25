@@ -44,17 +44,30 @@ spec:
         allowed_types: [jpg, jpeg, png, webp]
         max_size_mb: 2
         max_count: 1
+        # WAJIB `public` (ditemukan 2026-09-22, item 10.8): tanpa deklarasi ini
+        # `visibility` default-nya `private`, dan unduhan menuntut permission
+        # `view` pada entity — yang TIDAK dimiliki tamu. Akibatnya halaman
+        # katalog publik (`kafe-qr`, `access: public`) bisa membaca daftar menu
+        # (200) tetapi setiap fotonya membalas **403**, sehingga menu bergambar
+        # tidak pernah bergambar di permukaan pelanggan.
+        #
+        # Foto menu memang data publik: ia ditampilkan di papan menu, di QR meja,
+        # dan di halaman katalog tanpa login. Menjadikannya `private` memaksa
+        # setiap pembaca membawa sesi — dan itu bukan model bisnis kafe.
+        visibility: public
     - name: prep_station
       type: enum
       enum_values: [bar, kitchen, both]
       default: bar
       title: "Stasiun Penyiapan"
-      description: "Dasar routing tiket di layar dapur (KDS)"
+      # Teks ini ikut tampil sebagai `help` di form (warisan description →
+      # help), jadi ditulis untuk staf — bukan catatan desain.
+      description: "Menentukan tiket muncul di layar bar atau dapur."
     - name: is_available
       type: boolean
       default: true
       title: "Tersedia"
-      description: "Saklar cepat kasir saat bahan habis"
+      description: "Matikan cepat saat bahan habis."
     - name: is_taxable
       type: boolean
       default: true

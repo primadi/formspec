@@ -4,7 +4,8 @@
 // Produces a stream of Tokens consumed by the Pratt parser.
 //
 // Grammar (same as frontend-renderer.md §5.7):
-//   - Literals: numbers, strings (double-quoted), booleans, null
+//   - Literals: numbers, strings, booleans, null
+//   - Strings are quoted with ' or " (Starlark accepts both) — see readString
 //   - Identifiers: alphanumeric + underscore/dot (for member access)
 //   - Operators: + - * / == != < <= > >= && || ! and or not in
 //   - Functions: len, sum
@@ -30,12 +31,12 @@ export type TokenType =
   | "ELSE"
 
   // Operators (multi-char)
-  | "EQ"       // ==
-  | "NEQ"      // !=
-  | "GTE"      // >=
-  | "LTE"      // <=
-  | "AND_OP"   // &&
-  | "OR_OP"    // ||
+  | "EQ" // ==
+  | "NEQ" // !=
+  | "GTE" // >=
+  | "LTE" // <=
+  | "AND_OP" // &&
+  | "OR_OP" // ||
 
   // Operators (single-char)
   | "PLUS"
@@ -114,7 +115,12 @@ export class Lexer {
   }
 
   private skipWhitespace(): void {
-    while (this.ch === " " || this.ch === "\t" || this.ch === "\n" || this.ch === "\r") {
+    while (
+      this.ch === " " ||
+      this.ch === "\t" ||
+      this.ch === "\n" ||
+      this.ch === "\r"
+    ) {
       this.readChar()
     }
   }
@@ -239,7 +245,8 @@ export class Lexer {
         }
         break
       case '"':
-        return this.readString()
+      case "'":
+        return this.readString(this.ch)
       default:
         if (this.isLetter(this.ch) || this.ch === "_") {
           return this.readIdentifier()
@@ -254,13 +261,20 @@ export class Lexer {
     return { type, literal, line, col }
   }
 
-  private readString(): Token {
+  /**
+   * Read a string literal. FormSpecExpr is a Starlark expression subset, and
+   * Starlark accepts both quote styles, so `'open'` and `"open"` are the same
+   * literal. A string is closed only by the quote that opened it — `"it's"`
+   * does not end at the apostrophe.
+   */
+  private readString(quote: string): Token {
     const line = this.line
     const col = this.col
+    const start = this.pos // index of the opening quote
     let value = ""
-    this.readChar() // skip opening "
+    this.readChar() // skip the opening quote
 
-    while (this.ch !== '"' && this.ch !== "\0") {
+    while (this.ch !== quote && this.ch !== "\0") {
       if (this.ch === "\\") {
         this.readChar()
         const c: string = this.ch
@@ -268,6 +282,7 @@ export class Lexer {
         else if (c === "t") value += "\t"
         else if (c === "\\") value += "\\"
         else if (c === '"') value += '"'
+        else if (c === "'") value += "'"
         else value += c
       } else {
         value += this.ch
@@ -275,11 +290,16 @@ export class Lexer {
       this.readChar()
     }
 
-    if (this.ch === '"') {
-      this.readChar() // skip closing "
+    if (this.ch === quote) {
+      this.readChar() // skip the closing quote
+      return { type: "STRING", literal: value, line, col }
     }
 
-    return { type: "STRING", literal: value, line, col }
+    // Ran off the end of the input without the closing quote. Treating this as
+    // a valid STRING would let a typo like `fields.type == 'percentage` evaluate
+    // as if it were well-formed — the fail-safe the spec forbids (§4). Emit
+    // ILLEGAL so the parser reports it at the position of the opening quote.
+    return { type: "ILLEGAL", literal: this.input.slice(start), line, col }
   }
 
   private readIdentifier(): Token {
@@ -301,7 +321,12 @@ export class Lexer {
     while (this.isDigit(this.ch) || this.ch === ".") {
       this.readChar()
     }
-    return { type: "NUMBER", literal: this.input.slice(start, this.pos), line, col }
+    return {
+      type: "NUMBER",
+      literal: this.input.slice(start, this.pos),
+      line,
+      col,
+    }
   }
 
   private isLetter(ch: string): boolean {

@@ -620,3 +620,51 @@ spec:
 		t.Fatalf("expected notification center regardless of permissions, got %+v", b2.NotificationCenters)
 	}
 }
+
+// TestBuildBundle_ActionPermissionsAreAdditiveNotFiltered pins the "action"
+// clause of the permission-filtering contract (todo 5.12.4): action summaries in
+// the bundle carry their permission string but are NEVER filtered by the caller.
+// The rationale is the grants editor — an admin composing a role must see every
+// action to grant, including ones they do not personally hold. Shipping the
+// permission (rather than filtering) is what lets a client decide for itself.
+//
+// This closes the item: the behaviour was described as "permission string sent,
+// not filtered" but nothing asserted it, so a future edit could start filtering
+// actions and silently break the grants editor.
+func TestBuildBundle_ActionPermissionsAreAdditiveNotFiltered(t *testing.T) {
+	r := loadFixture(t)
+	entities := func() []EntityDescriptor {
+		return []EntityDescriptor{{Module: "billing", Name: "order", Spec: orderEntity()}}
+	}
+
+	// A caller holding NOTHING still receives the entity's action list with
+	// permission strings intact — as long as the entity itself is visible.
+	can := func(p string) bool { return p == "billing.orders.list" }
+	b := r.BuildBundle(entities, can, AppContext{})
+	if len(b.Entities) != 1 {
+		t.Fatalf("expected the order entity visible to a list-only caller, got %d", len(b.Entities))
+	}
+	actions := b.Entities[0].Actions
+	if len(actions) == 0 {
+		t.Fatal("expected action summaries on the entity schema")
+	}
+	for _, a := range actions {
+		if a.Name == "" || a.Permission == "" {
+			t.Errorf("action %+v must carry a qualified permission string", a)
+		}
+		if strings.Count(a.Permission, ".") < 2 {
+			t.Errorf("action %q permission %q must be module-qualified (module.plural.action)", a.Name, a.Permission)
+		}
+	}
+
+	// And the same list still ships under the grants view, which grants
+	// everything — proving the list is invariant to the caller's permissions.
+	bGrants := r.BuildBundle(entities, func(string) bool { return true }, AppContext{})
+	if len(bGrants.Entities) != 1 {
+		t.Fatalf("grants view: expected the order entity, got %d", len(bGrants.Entities))
+	}
+	if len(bGrants.Entities[0].Actions) != len(actions) {
+		t.Errorf("action list must not depend on caller permissions: %d vs %d",
+			len(bGrants.Entities[0].Actions), len(actions))
+	}
+}

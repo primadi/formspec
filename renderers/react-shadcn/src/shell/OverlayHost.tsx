@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/sheet"
 import { useMetaStore } from "@/stores/meta"
 import { resolveEntityRef } from "@/engine/entityRef"
+import { withEntityFieldDefaults } from "@/engine/derive"
 import { titleCase } from "@/lib/utils"
 import { Skeleton } from "@/components/ui/skeleton"
 
@@ -87,6 +88,17 @@ export function OverlayHost() {
   const isOpen = action === "create" || action === "edit"
   const formMode = action === "edit" ? "edit" : "create"
 
+  // Subtitle: the form's own first-section description, falling back to the
+  // entity's `metadata.description` — the same inheritance the standalone
+  // FormRenderer gets through `resolveForm()`. Read from the RAW bundle entry
+  // before this, so an authored form always degraded to the generic English
+  // sentence below even when the entity was described.
+  const overlayDescription = form
+    ? withEntityFieldDefaults(form.spec, entity).sections?.[0]?.description
+    : undefined
+  const overlaySubtitle =
+    overlayDescription || `Fill in the details for this ${entity.name}.`
+
   const overlayContent = (
     <Suspense
       fallback={
@@ -119,10 +131,7 @@ export function OverlayHost() {
             <SheetTitle>
               {action === "create" ? "New" : "Edit"} {titleCase(entity.name)}
             </SheetTitle>
-            <SheetDescription>
-              {form?.spec.sections?.[0]?.description ??
-                `Fill in the details for this ${entity.name}.`}
-            </SheetDescription>
+            <SheetDescription>{overlaySubtitle}</SheetDescription>
           </SheetHeader>
           <div className="mt-6 px-4 pb-4">{overlayContent}</div>
         </SheetContent>
@@ -143,10 +152,7 @@ export function OverlayHost() {
           <DialogTitle>
             {action === "create" ? "New" : "Edit"} {titleCase(entity.name)}
           </DialogTitle>
-          <DialogDescription>
-            {form?.spec.sections?.[0]?.description ??
-              `Fill in the details for this ${entity.name}.`}
-          </DialogDescription>
+          <DialogDescription>{overlaySubtitle}</DialogDescription>
         </DialogHeader>
         <div className="mt-4">{overlayContent}</div>
       </DialogContent>

@@ -160,14 +160,14 @@ Tiga sumber menyebut bentuk yang **berbeda**:
 
 | Sumber | Bentuk yang dicontohkan |
 | --- | --- |
-| `docs/spec/backend/05-field-types.md` §1.3 + `docs_old/spec/03-core-extended.md` | `allowed_types: [jpg, png, webp]` — ekstensi **tanpa titik**, plus `file_list` sebagai tipe terpisah |
+| `docs/spec/backend/05-field-types.md` §1.3 | `allowed_types: [jpg, png, webp]` — ekstensi **tanpa titik**, plus `file_list` sebagai tipe terpisah |
 | `renderers/react-shadcn/src/widgets/FileInput.tsx` → `allowedFileType()` | mencocokkan `".ext"` (**dengan** titik), atau `contentType` persis (`image/jpeg`), atau pola `image/*` |
 | `internal/api/file.go` | memakai `allowedFileType(...)` yang sama di server (menegakkan `allowed_types`) |
 
 Akibatnya, `allowed_types: [jpg]` (bentuk yang **didokumentasikan**) tidak akan
 cocok dengan klien, karena `jpg` bukan `.jpg`, bukan mime, bukan `image/*`.
 
-Selain itu `docs_old` menyebut tipe `file_list` yang **tidak ada** di himpunan
+Selain itu draft lama menyebut tipe `file_list` yang **tidak ada** di himpunan
 `FieldType` sekarang (`file` + `attachment` saja) — jadi cara menyatakan
 "banyak file" juga tidak jelas (`max_count > 1`, bukan tipe terpisah).
 

@@ -19,7 +19,7 @@ menghindari kolisi merek/CLI/domain, produk di-rename total menjadi
    `formspec-operator`, `formspec-gen-schema`, `formspec-gen-kind-docs`).
 4. GitHub repo `primadi/formspec` → `primadi/formspec` di-rename **setelah**
    migrasi kode selesai & test hijau (redirect otomatis GitHub menangani URL lama).
-5. Scope exclusion: **`docs_old/` & `reff_docs/`** (arsip read-only) tidak diubah;
+5. Scope exclusion: **`reff_docs/`** (arsip read-only) tidak diubah;
    `renderers/web/dist/` & `cmd/formspec/dist/` (build output) diregenerasi, tidak
    di-hand-edit.
 
@@ -73,4 +73,4 @@ menghindari kolisi merek/CLI/domain, produk di-rename total menjadi
 - Sed dilakukan case-sensitive & word-boundary-aware (`\bforma\b`) supaya tidak
   merusak kata Inggris seperti `platform`, `format`, `information`.
 - `dist/` (build output) dikecualikan dari sed; diregenerasi via `make web-build`.
-- `docs_old/` & `reff_docs/` dibiarkan (arsip); referensi historis tetap ada.
+- `reff_docs/` dibiarkan (arsip); referensi historis tetap ada. (`docs_old/` dipensiunkan 2026-09-22.)

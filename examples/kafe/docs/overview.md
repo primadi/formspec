@@ -240,8 +240,14 @@ Stok menipis → muncul peringatan untuk segera dibeli
 
 Aplikasi ini adalah **test case FormSpec untuk menyelesaikan masalah bisnis
 nyata**. Karena itu spec ditulis sebagai **spec ideal** — menggambarkan
-bagaimana aplikasi kafe *seharusnya* dinyatakan, dengan asumsi seluruh
-keterbatasan mesin yang ditemukan di `gaps_found/` **sudah diselesaikan**.
+bagaimana aplikasi kafe *seharusnya* dinyatakan.
+
+> **Status per 2026-09-22 (dikoreksi):** keterbatasan mesin yang ditemukan di
+> `gaps_found/` **sebagian besar sudah diselesaikan** — bukan seluruhnya. Yang
+> masih terbuka: **2.15** (kartu meja QR), **6.3** (#15, cross-app grant —
+> Control Plane), **6.4** (#42, kepemilikan `publishes`), **9.4** (skenario
+> walkthrough di luar rantai akuntansi), dan sisa non-blocker di **Fase 10**
+> (`TODO.md`).
 
 Konsekuensinya:
 
