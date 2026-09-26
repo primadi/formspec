@@ -7,6 +7,7 @@
 
 import { Badge } from "@/widgets/Badge"
 import { QrCode } from "@/widgets/QrCode"
+import { ImageLightboxTrigger } from "@/components/ui/image-lightbox"
 import { createFormatter, moneyAmount, type Formatter } from "@/lib/format"
 import { isImageFile, storageAllowsImage } from "@/lib/media"
 import { readPath, relationDisplay } from "@/lib/relation"
@@ -58,12 +59,15 @@ export function renderCellValue(
         ? value
         : undefined
     if (typeof key === "string" && isImageFile(key) && opts?.imageUrl) {
+      // A cell image lives inside a clickable row (`<tr onClick>` opens the
+      // record), so the enlarge affordance is a corner control that stops the
+      // click from reaching the row — a nested `<button>` wrapping the whole
+      // thumbnail would swallow "open the record" entirely (todo 5.21.2).
       return (
-        <img
+        <ImageLightboxTrigger
           src={opts.imageUrl}
           alt={opts.alt ?? key.split("/").pop() ?? "image"}
-          className="h-10 w-10 rounded border object-cover"
-          loading="lazy"
+          thumbClassName="h-10 w-10 rounded border object-cover"
         />
       )
     }

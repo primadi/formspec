@@ -70,6 +70,33 @@ describe("deriveTableColumns priority ordering (5.4.4 / 5.14.1)", () => {
     expect(cols[4].field).toBe("patient.name")
   })
 
+  it("withholds the sort affordance for relation columns (5.18.5)", () => {
+    // A relation column renders the target's display name (`patient.name`), but
+    // the server orders by the stored value (the FK UUID) and rejects
+    // `?sort=patient.name` outright (`422 unknown field`). Offering a sort
+    // button there promises an order the API cannot deliver, so the derived
+    // column must not set `sortable` — otherwise clicking it fails visibly.
+    const entity = makeEntity({
+      fields: [
+        { name: "number", type: "string", natural_key: true },
+        {
+          name: "patient_id",
+          type: "relation",
+          relation: { type: "belongs_to", resource: "patient" },
+        },
+      ],
+    })
+
+    const cols = deriveTableColumns(entity)
+    const relation = cols.find((c) => c.field === "patient.name")
+    const scalar = cols.find((c) => c.field === "number")
+    expect(relation).toBeDefined()
+    expect(scalar).toBeDefined()
+    expect(relation?.sortable).toBe(false)
+    // The fix must not disable sorting generally — only for relations.
+    expect(scalar?.sortable).toBe(true)
+  })
+
   it("never drops eligible fields — all non-child, non-computed fields present", () => {
     const fields = Array.from({ length: 20 }, (_, i) => ({
       name: `field_${i}`,
@@ -297,7 +324,10 @@ describe("withEntityFieldDefaults — authored forms inherit entity help", () =>
   })
 
   it("fills help from the entity field's description", () => {
-    const out = withEntityFieldDefaults(authored([{ name: "branch_id" }]), entity)
+    const out = withEntityFieldDefaults(
+      authored([{ name: "branch_id" }]),
+      entity,
+    )
     expect(out.sections[0].fields[0].help).toBe(
       "Kosong = berlaku di semua cabang",
     )
@@ -314,7 +344,10 @@ describe("withEntityFieldDefaults — authored forms inherit entity help", () =>
   it("adds no help when the entity field has no description", () => {
     // `undefined`, not "" — a field with no description must not gain an
     // empty element that the renderer would draw as a blank line.
-    const out = withEntityFieldDefaults(authored([{ name: "priority" }]), entity)
+    const out = withEntityFieldDefaults(
+      authored([{ name: "priority" }]),
+      entity,
+    )
     expect(out.sections[0].fields[0].help).toBeUndefined()
   })
 
@@ -322,7 +355,10 @@ describe("withEntityFieldDefaults — authored forms inherit entity help", () =>
     // This is the drawer/dialog subtitle OverlayHost reads; without it an
     // authored form degrades to "Fill in the details for this promo." even
     // though the entity is described.
-    const out = withEntityFieldDefaults(authored([{ name: "priority" }]), entity)
+    const out = withEntityFieldDefaults(
+      authored([{ name: "priority" }]),
+      entity,
+    )
     expect(out.sections[0].description).toBe("ATURAN promo, bukan pemakaian")
   })
 
@@ -349,7 +385,11 @@ describe("withEntityFieldDefaults — authored forms inherit entity help", () =>
   it("keeps an authored field referentially equal when it declares both", () => {
     // resolveForm() runs in a useMemo keyed on the entity; allocating new
     // objects for already-complete fields would churn every render.
-    const field = { name: "branch_id", label: "Cabang", help: "Ditulis sendiri" }
+    const field = {
+      name: "branch_id",
+      label: "Cabang",
+      help: "Ditulis sendiri",
+    }
     const out = withEntityFieldDefaults(authored([field]), entity)
     expect(out.sections[0].fields[0]).toBe(field)
   })
@@ -470,7 +510,11 @@ describe("deriveForm widget inference — declared option sets", () => {
     // is prose, which stays `textarea`.
     expect(widgetFor({ name: "note", type: "string" })).toBe("input")
     expect(
-      widgetFor({ name: "body", type: "string", rules: [{ name: "max_length", value: 500 }] }),
+      widgetFor({
+        name: "body",
+        type: "string",
+        rules: [{ name: "max_length", value: 500 }],
+      }),
     ).toBe("textarea")
   })
 })

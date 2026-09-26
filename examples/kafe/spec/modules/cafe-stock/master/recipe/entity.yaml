@@ -55,7 +55,9 @@ spec:
             enum_values: [ingredient, cost]
             default: ingredient
             title: "Jenis Baris"
-            description: "ingredient = bahan (qty × biaya bergerak); cost = biaya bebas yang diisi manual"
+            # ingredient = bahan (qty × biaya bergerak); cost = biaya bebas yang
+            # diisi manual.
+            description: "Baris ini bahan yang dipakai, atau biaya lain."
           # `ingredient_id` WAJIB hanya untuk baris bahan. Sebelumnya field ini
           # `required: true` tanpa syarat, sehingga baris biaya non-bahan tidak
           # bisa dinyatakan sama sekali — pemilik harus menaruh biaya kirim/gas
@@ -76,7 +78,9 @@ spec:
             enum_values: [gram, kg, ml, pcs]
             default: gram
             title: "Satuan"
-            description: "Satu dimensi dengan ingredient.unit; gram↔kg dikonversi engine (S12), ml/pcs tidak"
+            # Satu dimensi dengan ingredient.unit; gram↔kg dikonversi engine
+            # (S12), ml/pcs tidak.
+            description: "Satuan bahan — gram dan kg dihitung sebagai satuan yang sama."
             unit: { base: gram, convertible: [kg], factors: { kg: 1000 } }
           # ── Biaya bebas (line_type: cost) ──
           - name: cost_label
@@ -88,7 +92,9 @@ spec:
             type: money
             required_when: "line_type == 'cost'"
             title: "Nilai Biaya"
-            description: "Untuk satu batch resep (dibagi yield_quantity). Biaya TIDAK mengikuti harga bahan — nilainya tetap sampai diubah manual."
+            # Untuk SATU batch resep (dibagi yield_quantity). Biaya tidak
+            # mengikuti harga bahan — nilainya tetap sampai diubah manual.
+            description: "Biaya tambahan untuk satu kali masak resep ini."
           - name: note
             type: string
             title: "Catatan"

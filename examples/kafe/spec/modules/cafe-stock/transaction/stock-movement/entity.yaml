@@ -64,7 +64,8 @@ spec:
       type: string
       index: true
       title: "Referensi Sumber"
-      description: "ID pesanan / PO / opname — untuk telusur balik"
+      # ID pesanan / PO / opname — untuk telusur balik.
+      description: "Dokumen yang menyebabkan pergerakan ini."
     - name: note
       type: string
       title: "Catatan"

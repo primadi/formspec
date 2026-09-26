@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/primadi/formspec/internal/api"
@@ -272,6 +273,76 @@ func optionalMark(optional bool) string {
 	return ""
 }
 
+// tsOptionType renders a field's declared `options` as a TypeScript type, or
+// "" when the options cannot be expressed as one (caller then emits the open
+// scalar type).
+//
+// `options` is a legality declaration on the Entity (pkg/spec/entity.go
+// FieldOption), so a field carrying it is a closed set. Emitting the bare type
+// would let a caller write a value the server does not declare — the exact
+// thing `options` exists to prevent.
+//
+// Cardinality decides the shape, because it is a property of the data
+// (`Field.Multiple`), not of one form:
+//   - single value (`multiple: false` / absent) → literal union, `1 | 2 | 7`
+//   - set on `json` → `Array<1 | 2 | 7>`
+//   - set on `string` → `string`: the wire form is a comma-separated list, and
+//     TypeScript cannot express "comma-joined members of this set" in a string
+//     type, so the union would be a lie.
+//
+// Labels are deliberately excluded — a type is not a place for captions;
+// renderers read captions from the manifest at runtime.
+func tsOptionType(f spec.Field) string {
+	union := tsOptionUnion(f.Options)
+	if union == "" {
+		return ""
+	}
+	if f.Multiple != nil && *f.Multiple {
+		if f.Type == spec.FieldJSON {
+			return "Array<" + union + ">"
+		}
+		return ""
+	}
+	return union
+}
+
+// tsOptionUnion renders a field's declared `options` as a TypeScript literal
+// union (`1 | 2 | 7`), or "" when there are none.
+//
+// Values keep their declared scalar type: a string option becomes `"a"`, a
+// number option becomes `1`, matching what the field stores.
+//
+// Returns "" (not "never") for an empty or unresolvable option list so callers
+// fall back to the open scalar type rather than generating an impossible type
+// that would break compilation downstream.
+func tsOptionUnion(options []spec.FieldOption) string {
+	literals := make([]string, 0, len(options))
+	for _, opt := range options {
+		switch v := opt.Value.(type) {
+		case nil:
+			continue
+		case string:
+			literals = append(literals, fmt.Sprintf("%q", v))
+		case bool:
+			literals = append(literals, fmt.Sprintf("%t", v))
+		case int:
+			literals = append(literals, strconv.Itoa(v))
+		case int64:
+			literals = append(literals, strconv.FormatInt(v, 10))
+		case float64:
+			literals = append(literals, strconv.FormatFloat(v, 'f', -1, 64))
+		default:
+			// A non-scalar option (map/slice) cannot be a literal union member.
+			// Fall back to the open type instead of guessing at a shape.
+			return ""
+		}
+	}
+	if len(literals) == 0 {
+		return ""
+	}
+	return strings.Join(literals, " | ")
+}
+
 // tsFieldType maps a FormSpec field type to its TypeScript representation.
 // decimal maps to string, not number: money fields MUST be arbitrary
 // precision (pkg/spec/entity.go FieldDecimal doc comment) and JS `number`
@@ -294,8 +365,23 @@ func tsFieldType(f spec.Field) string {
 	}
 	switch f.Type {
 	case spec.FieldString, spec.FieldUUID, spec.FieldDate, spec.FieldDateTime:
+		// A string carrying a SINGLE-valued `options` set is a closed set too
+		// (todo 5.10.22). A `multiple: true` string stays `string` — its wire
+		// form is a comma-separated list, which no TS string type can narrow.
+		if f.Type == spec.FieldString {
+			if u := tsOptionType(f); u != "" {
+				return u
+			}
+		}
 		return "string"
 	case spec.FieldInteger:
+		// A scalar with `options` is a closed set just like an enum, so the
+		// generated type should be the literal union — `1 | 2 | 7` — not the
+		// open `number` that would let `9` through (todo 5.10.22). Captions
+		// do not belong in a type; they are read from the manifest at runtime.
+		if u := tsOptionType(f); u != "" {
+			return u
+		}
 		return "number"
 	case spec.FieldBoolean:
 		return "boolean"
@@ -309,6 +395,11 @@ func tsFieldType(f spec.Field) string {
 		}
 		return strings.Join(quoted, " | ")
 	case spec.FieldJSON:
+		// A set of declared choices on JSON is `Array<...>`; a JSON scalar with
+		// a single-valued closed set is the union itself.
+		if u := tsOptionType(f); u != "" {
+			return u
+		}
 		return "unknown"
 	case spec.FieldFile, spec.FieldAttachment:
 		// file/attachment is a pointer to a ctx.storage object with canonical

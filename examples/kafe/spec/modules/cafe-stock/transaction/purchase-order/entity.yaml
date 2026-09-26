@@ -76,7 +76,9 @@ spec:
     - name: total_amount
       type: money
       title: "Total"
-      description: "Subtotal baris bahan (biaya kirim TIDAK termasuk — ia biaya perolehan, bukan harga barang)"
+      # Subtotal baris bahan; biaya kirim TIDAK termasuk (ia biaya perolehan,
+      # bukan harga barang).
+      description: "Jumlah harga barang yang dipesan."
     - name: lines
       type: child
       child:
@@ -146,7 +148,7 @@ spec:
             type: relation
             relation: { type: belongs_to, resource: cafe-stock.ingredient }
             title: "Dialokasikan ke Bahan"
-            description: "Kosong = dibagi proporsional ke semua baris bahan"
+            description: "Kosongkan bila biaya kirim dibagi rata ke semua bahan."
   state_machine:
     field: status
     initial: draft
@@ -212,7 +214,8 @@ spec:
       # pola yang sama dengan jurnal penjualan (order.cancel-order).
       emits: on_po_cancelled
     - name: receive-goods
-      description: "Terima barang — script membuat stock-movement (in) per baris + alokasi landed cost"
+      # script membuat stock-movement (in) per baris + alokasi landed cost.
+      description: "Terima barang — stok bertambah dan biaya kirim ikut diperhitungkan."
       required_permission: purchase-orders.receive-goods
       audit: true
       # Lihat catatan pada cancel-po: `emits:` inilah yang benar-benar

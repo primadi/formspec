@@ -59,31 +59,44 @@ func declaredWorkspaces(specPath string) []string {
 //     so the mismatch is visible at startup rather than at "why is my data
 //     empty?".
 func resolveActiveWorkspace(cfg DevConfig) DevConfig {
-	declared := declaredWorkspaces(cfg.SpecPath)
+	cfg.WorkspaceID = activeWorkspaceFor(cfg.SpecPath, cfg.WorkspaceID, cfg.WorkspaceIDExplicit)
+	return cfg
+}
+
+// activeWorkspaceFor is the #48 rule itself, without the DevConfig wrapper, so
+// CLI commands that are not `formspec dev` can apply the SAME rule instead of
+// re-inventing it (or, worse, hardcoding `"demo"` — the bug in todo 4.8.7).
+//
+// It has one extra branch the dev path does not need: when the caller does not
+// know which workspace anything is in and the tree declares exactly one, that
+// one is adopted. With several declared and no explicit choice, it does NOT
+// guess — it keeps the given default (`"demo"`/`"default"`) and warns, because
+// picking one at random would silently write to the wrong tenant.
+func activeWorkspaceFor(specPath, current string, explicit bool) string {
+	declared := declaredWorkspaces(specPath)
 	if len(declared) == 0 {
-		return cfg
+		return current
 	}
 	declaredList := joinQuoted(declared)
 
-	if cfg.WorkspaceIDExplicit {
-		if !containsString(declared, cfg.WorkspaceID) {
+	if explicit {
+		if !containsString(declared, current) {
 			_, _ = fmt.Fprintf(os.Stderr,
-				"[formspec] warning: workspace %q is not declared by this spec tree (declared: %s) — everything will be stored under tenant %q. Workspace manifests register slugs; --workspace-id selects one.\n",
-				cfg.WorkspaceID, declaredList, cfg.WorkspaceID)
+				"[formspec] warning: workspace %q is not declared by this spec tree (declared: %s) — everything will be stored under tenant %q. Workspace manifests register slugs; --workspace selects one.\n",
+				current, declaredList, current)
 		}
-		return cfg
+		return current
 	}
 
 	if len(declared) == 1 {
-		cfg.WorkspaceID = declared[0]
-		fmt.Printf("[formspec] workspace: %s (the only one declared under spec/workspaces; override with --workspace-id)\n", cfg.WorkspaceID)
-		return cfg
+		fmt.Printf("[formspec] workspace: %s (the only one declared under spec/workspaces; override with --workspace)\n", declared[0])
+		return declared[0]
 	}
 
 	_, _ = fmt.Fprintf(os.Stderr,
-		"[formspec] warning: this spec tree declares %d workspaces (%s) but the active one is %q — pass --workspace-id to choose; workspace manifests register slugs, they do not select one.\n",
-		len(declared), declaredList, cfg.WorkspaceID)
-	return cfg
+		"[formspec] warning: this spec tree declares %d workspaces (%s) but the active one is %q — pass --workspace to choose; workspace manifests register slugs, they do not select one.\n",
+		len(declared), declaredList, current)
+	return current
 }
 
 func joinQuoted(items []string) string {

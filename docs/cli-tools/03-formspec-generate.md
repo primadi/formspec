@@ -72,7 +72,19 @@ Field type mapping:
 | `relation`                           | `string`                                                                                  | The referenced ID (`belongs_to`)                                                                                                                                                                                                                                                |
 | `child`                              | `Array<{ ...inline fields... }>`                                                          | Recursively typed from `child.fields`                                                                                                                                                                                                                                           |
 
+Rows above list the **base** mapping. Three cells have an `options` exception — `string` (single-valued), `integer`, and `json` — described below. `uuid`/`date`/`datetime` are always `string`.
+
 A field counts as required if either the manifest's top-level `required: true` **or** a `rules: [required, ...]` entry is present — real manifests in this repo exclusively use the latter, so both are checked.
+
+**`options` is a closed set, so it becomes a literal union.** A field that declares `options:` on the Entity (`pkg/spec/entity.go` `FieldOption`) is as closed as an `enum` — generating the open scalar type would let a caller write a value the server does not declare, which is precisely what `options` exists to prevent. **Cardinality decides the shape**, because it is a property of the data (`Field.Multiple`), not of one form:
+
+| Declared                                                          | Generated                                                                                                            |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `type: integer` (or `string`/`json`) with single-valued `options` | `1 \| 2 \| 7` / `"qris" \| "cash"`                                                                                   |
+| `type: json`, `multiple: true`, with `options`                    | `Array<1 \| 2 \| 7>`                                                                                                 |
+| `type: string`, `multiple: true`, with `options`                  | `string` — the wire form is a comma-separated list, and no TS string type can narrow it; a union here would be a lie |
+
+Option **labels are never emitted** — a type is not a place for captions. Renderers read captions from the manifest at runtime. If an option list is not expressible as literals (nil or non-scalar values), the generator falls back to the open scalar type rather than emitting a union that does not compile.
 
 **Field keys are never renamed.** `customer_id` stays `"customer_id"` in the generated interface, not `customerId` — the wire JSON is whatever `EntityRecord.MarshalJSON` produces (`internal/db/crud.go`), which spreads your field names verbatim. A generator that camelCased keys would produce code that compiles but is silently wrong at runtime (`record.customerId` would always be `undefined`).
 

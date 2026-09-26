@@ -68,7 +68,12 @@ func TestBuildBundle_MenuDropsUnreachableItems(t *testing.T) {
 		b := r.BuildBundle(entities, can, AppContext{Menu: newMenu()})
 
 		got := menuLabels(b.Menu)
-		want := []string{"Orders", "Order list page", "Order table", "Sales report", "Order board", "Settings"}
+		// "Order table" is NOT here: the authored `order-list` Page already
+		// references `order-table`, so BuildBundle derives no page for it and the
+		// SPA registers no route (`/billing/table/order-table`). Serving the menu
+		// item produced a dead link (todo 5.22.6) — `routeExists` used to answer
+		// from the Table registry instead of the bundle.
+		want := []string{"Orders", "Order list page", "Sales report", "Order board", "Settings"}
 		if !equalStrings(got, want) {
 			t.Errorf("visible menu:\n want %v\n  got %v", want, got)
 		}
@@ -114,9 +119,12 @@ func TestBuildBundle_MenuDropsUnreachableItems(t *testing.T) {
 		b := r.BuildBundle(entities, all, AppContext{Menu: newMenu()})
 
 		got := menuLabels(b.Menu)
+		// "Order table" is absent even for a full-access caller: the authored
+		// `order-list` Page already references `order-table`, so no derived page
+		// (and therefore no route) exists for it — todo 5.22.6.
 		want := []string{
 			"Orders", "Customers", "Group of one",
-			"Order list page", "Order table", "Sales report", "Order board", "Settings",
+			"Order list page", "Sales report", "Order board", "Settings",
 		}
 		if !equalStrings(got, want) {
 			t.Errorf("visible menu:\n want %v\n  got %v", want, got)

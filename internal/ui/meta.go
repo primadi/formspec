@@ -945,15 +945,28 @@ func (r *Registry) routeExists(module, route string, b *Bundle) bool {
 		}
 	}
 
-	// 2. Form/Table views: "/M/form/<n>" and "/M/table/<n>" — the shapes
-	//    ResolveViewRoute generates for those two kinds.
-	if len(parts) == 3 && parts[0] == module {
-		switch parts[1] {
-		case "form":
-			return findEntry(b.Forms, module, parts[2]) != nil
-		case "table":
-			return findEntry(b.Tables, module, parts[2]) != nil
+	// 2. Form/Table views: "/M/form/<n>" and "/M/table/<n>".
+	//
+	//    The bundle is the source of truth here, NOT the Form/Table registry.
+	//    Those two disagree in a way that produces dead menu links: a Form that
+	//    is already referenced by a Page block (or that is `public: false`) gets
+	//    no derived Page, so the SPA registers no route for it — yet the Form
+	//    still exists in `b.Forms`. Checking the registry therefore answered
+	//    "route exists" for a route nothing serves, and the click landed on the
+	//    surface catch-all (todo 5.22.6).
+	//
+	//    `b.Pages` is the right thing to ask because the SPA builds its routes
+	//    from `bundle.pages` (shell/router.tsx `buildRoutes`), and `b.Pages` is
+	//    already filtered per caller — so an item pointing at a page this caller
+	//    cannot open is dropped for the same reason.
+	if len(parts) == 3 && parts[0] == module && (parts[1] == "form" || parts[1] == "table") {
+		want := "/" + module + "/" + parts[1] + "/" + parts[2]
+		for _, e := range b.Pages {
+			if e.Spec != nil && e.Spec.Route == want {
+				return true
+			}
 		}
+		return false
 	}
 
 	// 3. Navigation kinds: /dashboard/<n>, /report/<n>, /kanban/<n>, …

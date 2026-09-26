@@ -14,6 +14,7 @@ package config
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"sync"
 
@@ -119,6 +120,36 @@ func (r *Registry) ResolveKey(configName, keyName string) (string, bool) {
 		return "", false
 	}
 	return fmt.Sprintf("%v", resolveValue(ck)), true
+}
+
+// ResolveKeyAny resolves a key by name across EVERY registered Config
+// manifest, returning its string value and whether it was found. Manifest
+// names are not needed, so framework-level keys the spec names by bare id
+// (`core.idempotency_retention` in 01-core-basic.md §5) can be read without
+// knowing which module declared them.
+//
+// When more than one manifest declares the same key, the result is
+// deterministic (manifests are visited in sorted name order) but ambiguous by
+// nature — the framework key namespace is intended to be declared once, in
+// the `formspec.core` Config, so callers should not rely on shadowing.
+func (r *Registry) ResolveKeyAny(keyName string) (string, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	names := make([]string, 0, len(r.configs))
+	for name := range r.configs {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		cs := r.configs[name]
+		if cs == nil {
+			continue
+		}
+		if ck, ok := cs.Keys[keyName]; ok {
+			return fmt.Sprintf("%v", resolveValue(ck)), true
+		}
+	}
+	return "", false
 }
 
 // resolveValue coerces a ConfigKey's default to the Go type matching its

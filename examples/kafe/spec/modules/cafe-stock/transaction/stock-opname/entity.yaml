@@ -70,7 +70,7 @@ spec:
             type: decimal
             scale: 3
             title: "Stok Sistem"
-            description: "Diambil dari stock-level saat draft dibuat"
+            description: "Nilai ini diisi sistem dari saldo stok saat opname dibuat."
           - name: counted_qty
             type: decimal
             scale: 3
@@ -108,7 +108,8 @@ spec:
       required_permission: stock-opnames.reopen
       audit: true
     - name: post-opname
-      description: "Posting — script membuat stock-movement (adjust) sebesar selisih"
+      # script membuat stock-movement (adjust) sebesar selisih.
+      description: "Posting hasil hitung fisik — selisihnya jadi penyesuaian stok."
       required_permission: stock-opnames.post-opname
       audit: true
     - name: cancel-opname

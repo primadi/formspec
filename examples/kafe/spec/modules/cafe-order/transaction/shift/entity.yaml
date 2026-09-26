@@ -45,7 +45,10 @@ spec:
     - name: expected_cash
       type: money
       title: "Kas Seharusnya"
-      description: "compute: kas awal + tunai masuk - kas keluar"
+      # computed: kas_awal + tunai_masuk − kas_keluar. Catatan implementasi,
+      # bukan help — lihat kontrak `description` (user-facing) di entity/field
+      # §2 `05-field-types.md`.
+      description: "Kas yang seharusnya ada di laci menurut sistem."
     - name: counted_cash
       type: money
       title: "Kas Hasil Hitung"

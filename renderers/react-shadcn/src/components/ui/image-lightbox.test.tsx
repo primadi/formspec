@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url"
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import "@testing-library/jest-dom/vitest"
 
-import ImageLightbox from "./image-lightbox"
+import ImageLightbox, { ImageLightboxTrigger } from "./image-lightbox"
 
 const read = (rel: string) =>
   readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8")
@@ -130,5 +130,67 @@ describe("image display sites", () => {
     const src = read("../../widgets/FileInput.tsx")
     // Readonly preview + edit-mode thumbnail.
     assertNoTab(src, 2)
+  })
+
+  it("table cells use the corner trigger, not a wrapping button (5.21.2)", () => {
+    // A cell image sits inside a clickable row (`<tr onClick>` opens the
+    // record). Wrapping the thumbnail in a `<button>` would swallow that click,
+    // so the cell must use the corner control instead — and the trigger itself
+    // must not carry a tab link.
+    const src = read("../../lib/renderCell.tsx")
+    const idx = src.indexOf("<ImageLightboxTrigger")
+    expect(idx).toBeGreaterThan(-1)
+    const element = src.slice(idx, src.indexOf("/>", idx))
+    expect(element).not.toContain("target=")
+    expect(element).not.toContain("<a")
+    // The `<a target="_blank">` that remains below is the NON-image fallback,
+    // which is the documented behaviour ("opening a PDF/CSV in a tab is what a
+    // download link is for") — it must stay, so it is not asserted away.
+    expect(src.slice(idx)).toContain('target="_blank"')
+  })
+
+  it("catalog cards use the corner trigger, not the photo (5.21.2)", () => {
+    // The card IS a `<button>` that adds the item to the order (measured:
+    // clicking the photo totalled Rp18.000). "Click the photo to enlarge" would
+    // therefore be indistinguishable from "add to order".
+    const src = read("../../kinds/form/PickerPanel.tsx")
+    expect(src).toContain("<ImageLightboxTrigger")
+  })
+})
+
+describe("ImageLightboxTrigger — sits inside a clickable parent", () => {
+  it("opens the preview and stops the click from reaching the parent", async () => {
+    const parentClicks: number[] = []
+    render(
+      <button type="button" onClick={() => parentClicks.push(1)}>
+        <ImageLightboxTrigger
+          src={SRC}
+          alt="kopi-tubruk.jpg"
+          thumbClassName="h-10 w-10"
+        />
+      </button>,
+    )
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "View kopi-tubruk.jpg" }),
+    )
+
+    // The dialog opened...
+    expect(await screen.findByRole("dialog")).toBeInTheDocument()
+    // ...and the parent did NOT act. Without `stopPropagation` this is where
+    // the row would navigate / the card would be added to the cart.
+    expect(parentClicks).toHaveLength(0)
+  })
+
+  it("still renders the thumbnail when the dialog is closed", () => {
+    render(
+      <ImageLightboxTrigger
+        src={SRC}
+        alt="kopi-tubruk.jpg"
+        thumbClassName="h-10 w-10"
+      />,
+    )
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    expect(document.querySelector(`img[src="${SRC}"]`)).not.toBeNull()
   })
 })

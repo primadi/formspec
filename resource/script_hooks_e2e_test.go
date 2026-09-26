@@ -48,7 +48,7 @@ func TestKafe_ReceiveGoodsMaintainsStockLevel(t *testing.T) {
 	// on the order + 50.000 allocated to the ingredient), so the effective cost
 	// per unit must be 40 — not 15.
 	po := map[string]any{
-		"transaction_date": "2026-09-22",
+		"transaction_date": recentDate(),
 		"branch_id":        branchID,
 		"supplier_id":      supplierID,
 		"shipping_cost":    map[string]any{"amount": "200000", "currency": "IDR"},

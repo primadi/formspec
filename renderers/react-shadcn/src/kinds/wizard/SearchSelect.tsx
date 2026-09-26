@@ -7,13 +7,14 @@
 // Used by WizardRenderer when step.layout === "search_select".
 
 import { useState, useEffect, useRef, useCallback } from "react"
+import type { ReactNode } from "react"
 import { Search, Check, Loader2, UserPlus } from "lucide-react"
 import type { KyInstance } from "ky"
 
 import type { WizardStep, FormSpec, Entry, FormField } from "@/types/manifest"
 import { useMetaStore } from "@/stores/meta"
 import { resolveEntityRef } from "@/engine/entityRef"
-import { entityFieldLabel } from "@/engine/derive"
+import { entityFieldHelp, entityFieldLabel } from "@/engine/derive"
 import { apiList, apiPost } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -171,6 +172,23 @@ export default function SearchSelect({
   const renderField = (field: FormField) => {
     const value = formData[field.name] ?? ""
     const label = entityFieldLabel(entity ?? undefined, field.name, field.label)
+    // Help text follows the same precedence as every other Form surface
+    // (todo 5.23.3): the authored `help:` wins, then the Entity field's
+    // `description`. SearchSelect was the one Form-reading site that skipped
+    // it, so a wizard's quick-create dialog was the only place in the app where
+    // an Entity's `description` did not reach the user.
+    const help = field.help ?? entityFieldHelp(entity ?? undefined, field.name)
+
+    /** Shared: label + input + help, so every branch stays consistent. */
+    const wrap = (control: ReactNode, htmlFor?: string) => (
+      <div key={field.name} className="space-y-2.5">
+        <label className="text-sm font-medium" htmlFor={htmlFor}>
+          {label}
+        </label>
+        {control}
+        {help ? <p className="text-xs text-muted-foreground">{help}</p> : null}
+      </div>
+    )
 
     // Determine input type from the field name / entity field type
     const entityField = entity?.fields.find((f) => f.name === field.name)
@@ -178,32 +196,26 @@ export default function SearchSelect({
 
     switch (fieldType) {
       case "date":
-        return (
-          <div key={field.name} className="space-y-2.5">
-            <label className="text-sm font-medium">{label}</label>
-            <DateInput
-              value={value}
-              onChange={(v) => setFormData((d) => ({ ...d, [field.name]: v }))}
-            />
-          </div>
+        return wrap(
+          <DateInput
+            value={value}
+            onChange={(v) => setFormData((d) => ({ ...d, [field.name]: v }))}
+          />,
         )
       case "enum": {
         const options = entityField?.enum_values ?? []
-        return (
-          <div key={field.name} className="space-y-2.5">
-            <label className="text-sm font-medium">{label}</label>
-            <ThemedSelect
-              value={value}
-              onChange={(v) => setFormData((d) => ({ ...d, [field.name]: v }))}
-              options={options}
-              placeholder={`Pilih ${label}`}
-            />
-          </div>
+        return wrap(
+          <ThemedSelect
+            value={value}
+            onChange={(v) => setFormData((d) => ({ ...d, [field.name]: v }))}
+            options={options}
+            placeholder={`Pilih ${label}`}
+          />,
         )
       }
       case "boolean":
-        return (
-          <div key={field.name} className="flex items-center gap-2">
+        return wrap(
+          <div className="flex items-center gap-2">
             <input
               type="checkbox"
               id={`field-${field.name}`}
@@ -222,36 +234,30 @@ export default function SearchSelect({
             >
               {label}
             </label>
-          </div>
+          </div>,
         )
       case "integer":
       case "decimal":
       case "number":
-        return (
-          <div key={field.name} className="space-y-2.5">
-            <label className="text-sm font-medium">{label}</label>
-            <Input
-              type="number"
-              step={fieldType === "decimal" ? "0.01" : "1"}
-              value={value}
-              onChange={(e) =>
-                setFormData((d) => ({ ...d, [field.name]: e.target.value }))
-              }
-            />
-          </div>
+        return wrap(
+          <Input
+            type="number"
+            step={fieldType === "decimal" ? "0.01" : "1"}
+            value={value}
+            onChange={(e) =>
+              setFormData((d) => ({ ...d, [field.name]: e.target.value }))
+            }
+          />,
         )
       default:
-        return (
-          <div key={field.name} className="space-y-2.5">
-            <label className="text-sm font-medium">{label}</label>
-            <Input
-              placeholder={field.placeholder}
-              value={value}
-              onChange={(e) =>
-                setFormData((d) => ({ ...d, [field.name]: e.target.value }))
-              }
-            />
-          </div>
+        return wrap(
+          <Input
+            placeholder={field.placeholder}
+            value={value}
+            onChange={(e) =>
+              setFormData((d) => ({ ...d, [field.name]: e.target.value }))
+            }
+          />,
         )
     }
   }

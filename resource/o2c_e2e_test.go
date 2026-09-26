@@ -166,7 +166,7 @@ func TestKafe_OnPaidCreatesBalancedJournal(t *testing.T) {
 	payload := map[string]any{
 		"id":                     "11111111-1111-1111-1111-111111111111",
 		"number":                 "ORD-E2E-00001",
-		"transaction_date":       "2026-09-22",
+		"transaction_date":       recentDate(),
 		"total_amount":           map[string]any{"amount": "143750", "currency": "IDR"},
 		"subtotal":               map[string]any{"amount": "125000", "currency": "IDR"},
 		"tax_amount":             map[string]any{"amount": "12500", "currency": "IDR"},
@@ -217,7 +217,7 @@ func TestKafe_OnPaidIsIdempotent(t *testing.T) {
 	payload := map[string]any{
 		"id":               "22222222-2222-2222-2222-222222222222",
 		"number":           "ORD-E2E-00002",
-		"transaction_date": "2026-09-22",
+		"transaction_date": recentDate(),
 		"total_amount":     map[string]any{"amount": "50000", "currency": "IDR"},
 		"subtotal":         map[string]any{"amount": "50000", "currency": "IDR"},
 		"tax_amount":       map[string]any{"amount": "0", "currency": "IDR"},
@@ -253,7 +253,7 @@ func TestKafe_JournalizeRejectsOrderWithNoAmount(t *testing.T) {
 	payload := map[string]any{
 		"id":               "33333333-3333-3333-3333-333333333333",
 		"number":           "ORD-E2E-NO-AMOUNT",
-		"transaction_date": "2026-09-22",
+		"transaction_date": recentDate(),
 		"total_amount":     map[string]any{"amount": "0", "currency": "IDR"},
 		"subtotal":         map[string]any{"amount": "0", "currency": "IDR"},
 		"items":            []any{},
@@ -287,7 +287,7 @@ func enqueueOnPaid(t *testing.T, app *App, payload map[string]any) {
 		"event":    "on_paid",
 		"resource": "cafe-order/order",
 		"payload":  payload,
-		"emitted":  "2026-09-22T00:00:00Z",
+		"emitted":  time.Now().UTC().Format(time.RFC3339),
 	})
 	if err != nil {
 		t.Fatalf("marshal envelope: %v", err)
@@ -298,19 +298,45 @@ func enqueueOnPaid(t *testing.T, app *App, payload map[string]any) {
 	}
 }
 
-// waitForJournal waits for the outbox worker to deliver and the journal to
-// appear. The worker polls on an interval, so a bounded poll is the honest way
-// to observe asynchronous delivery.
+// waitForJournal waits for the outbox worker to deliver `on_paid` AND for the
+// `journalize` subscription to finish posting the journal.
+//
+// It polls for the journal's STATUS, not merely its existence. Those are two
+// different moments: the row is born when `journalize.star` inserts it, while
+// `status: posted` is set by the subscription handler afterwards. Waiting only
+// for the row (count > 0) left a window in which an assertion could observe
+// "draft" and fail — the flake tracked as todo 5.10.24. Polling the status
+// removes the race instead of widening the timeout and hoping.
+//
+// The worker polls on an interval, so a bounded poll is the honest way to
+// observe asynchronous delivery.
 func waitForJournal(t *testing.T, app *App) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(10 * time.Second)
+	var last string
 	for time.Now().Before(deadline) {
-		if countJournalEntries(t, app) > 0 {
-			return
+		store, err := app.GetEntityStore("gl", "journal-entry")
+		if err != nil {
+			t.Fatalf("GetEntityStore(gl/journal-entry): %v", err)
+		}
+		res, err := store.List(context.Background(), db.ListParams{
+			WorkspaceID: "kafe",
+			Page:        1,
+			PerPage:     500,
+		})
+		if err != nil {
+			t.Fatalf("list journal entries: %v", err)
+		}
+		for _, rec := range res.Data {
+			status, _ := rec.Data["status"].(string)
+			last = status
+			if status == "posted" {
+				return
+			}
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	t.Fatal("timed out waiting for the outbox worker to deliver on_paid and create a journal")
+	t.Fatalf("timed out waiting for the journal to reach status %q after delivery (last observed: %q)", "posted", last)
 }
 
 // countJournalEntries lists journal entries through the registry's store — the

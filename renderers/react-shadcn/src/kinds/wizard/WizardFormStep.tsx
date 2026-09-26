@@ -8,6 +8,7 @@
 // Used by WizardRenderer when step.form is set and layout is not search_select.
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react"
+import type { ReactNode } from "react"
 import type { KyInstance } from "ky"
 
 import type { WizardStep, Entry, FormSpec, FormField } from "@/types/manifest"
@@ -16,6 +17,24 @@ import { resolveEntityRef } from "@/engine/entityRef"
 import { entityFieldLabel, withEntityFieldDefaults } from "@/engine/derive"
 import { apiList } from "@/lib/api"
 import { Input } from "@/components/ui/input"
+import { FormFieldWidget } from "@/kinds/form/FormRenderer"
+
+/**
+ * Widgets the wizard renders itself, rather than delegating to
+ * `FormFieldWidget`.
+ *
+ * The wizard keeps three branches hand-written because they carry behaviour a
+ * Form does not have: relation options are fetched with `depends_on` filtering,
+ * and enum/boolean render as plain `<select>`/checkbox inside a step.
+ * Everything else defers to the shared router — the closed vocabulary is one
+ * implementation, and a widget added to the catalog works in a wizard without
+ * a second edit here (todo 5.10.17).
+ *
+ * A name in this set is a *fall-through*, not a claim that the widget is
+ * unhandled: `relation-picker` is deliberately rendered by the relation branch
+ * (which has the fetched options), not by the picker's own fetch.
+ */
+const WIZARD_NATIVE_WIDGETS = new Set(["date", "datetime", "select", "text"])
 
 interface WizardFormStepProps {
   step: WizardStep
@@ -167,6 +186,25 @@ export default function WizardFormStep({
       <p className="text-xs text-muted-foreground">{field.help}</p>
     ) : null
 
+    /**
+     * Label + control + help, in the same order and with the same classes as
+     * `FormRenderer`. Every branch below goes through this so a branch cannot
+     * silently drop the label or the help — the failure mode that let help
+     * exist on only one of six branches before (todo 5.23.1).
+     */
+    const wrap = (
+      f: FormField,
+      lbl: string,
+      helpNode: ReactNode,
+      control: ReactNode,
+    ) => (
+      <div key={f.name} className="space-y-2.5">
+        <label className="text-sm font-medium">{lbl}</label>
+        {control}
+        {helpNode}
+      </div>
+    )
+
     // Handle relation fields → dropdown
     if (entityField.type === "relation" && entityField.relation?.resource) {
       const resource = entityField.relation.resource
@@ -192,64 +230,64 @@ export default function WizardFormStep({
         })
       }
 
-      return (
-        <div key={field.name} className="space-y-2.5">
-          <label className="text-sm font-medium">{label}</label>
-          {help}
-          <select
-            autoComplete="off"
-            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
-            value={value}
-            onChange={(e) => {
-              const id = e.target.value
-              onFieldChange(field.name, id)
-              // Also store the full record under the resource name (e.g.
-              // "polyclinic"/"doctor") so wizard summary steps can resolve
-              // dotted paths like "polyclinic.name" — mirrors how
-              // SearchSelect stores the full patient record.
-              const full = filteredOptions.find((o) => o.id === id)
-              onFieldChange(resource, full ?? null)
-            }}
-          >
-            <option value="">Pilih {label}</option>
-            {isLoading ? (
-              <option disabled>Memuat...</option>
-            ) : (
-              filteredOptions.map((opt) => (
-                <option key={opt.id} value={opt.id}>
-                  {opt.name ?? opt.id}
-                </option>
-              ))
-            )}
-          </select>
-        </div>
+      return wrap(
+        field,
+        label,
+        help,
+        <select
+          autoComplete="off"
+          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+          value={value}
+          onChange={(e) => {
+            const id = e.target.value
+            onFieldChange(field.name, id)
+            // Also store the full record under the resource name (e.g.
+            // "polyclinic"/"doctor") so wizard summary steps can resolve
+            // dotted paths like "polyclinic.name" — mirrors how
+            // SearchSelect stores the full patient record.
+            const full = filteredOptions.find((o) => o.id === id)
+            onFieldChange(resource, full ?? null)
+          }}
+        >
+          <option value="">Pilih {label}</option>
+          {isLoading ? (
+            <option disabled>Memuat...</option>
+          ) : (
+            filteredOptions.map((opt) => (
+              <option key={opt.id} value={opt.id}>
+                {opt.name ?? opt.id}
+              </option>
+            ))
+          )}
+        </select>,
       )
     }
 
     // Handle enum fields → dropdown
     if (entityField.type === "enum" && entityField.enum_values?.length) {
-      return (
-        <div key={field.name} className="space-y-2.5">
-          <label className="text-sm font-medium">{label}</label>
-          {help}
-          <select
-            autoComplete="off"
-            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
-            value={value}
-            onChange={(e) => onFieldChange(field.name, e.target.value)}
-          >
-            <option value="">Pilih {label}</option>
-            {entityField.enum_values.map((opt) => (
-              <option key={opt} value={opt}>
-                {opt}
-              </option>
-            ))}
-          </select>
-        </div>
+      return wrap(
+        field,
+        label,
+        help,
+        <select
+          autoComplete="off"
+          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+          value={value}
+          onChange={(e) => onFieldChange(field.name, e.target.value)}
+        >
+          <option value="">Pilih {label}</option>
+          {entityField.enum_values.map((opt) => (
+            <option key={opt} value={opt}>
+              {opt}
+            </option>
+          ))}
+        </select>,
       )
     }
 
-    // Handle boolean fields
+    // Handle boolean fields. The label lives inside the control (bound to the
+    // checkbox's id), so `wrap` is not used for the label here — but help is
+    // still rendered by the same single site at the end of each branch.
     if (entityField.type === "boolean") {
       return (
         <div key={field.name} className="space-y-2.5">
@@ -274,16 +312,34 @@ export default function WizardFormStep({
 
     // Handle date fields
     if (entityField.type === "date" || entityField.type === "datetime") {
-      return (
-        <div key={field.name} className="space-y-2.5">
-          <label className="text-sm font-medium">{label}</label>
+      // `datetimeinput` is catalogued and must render the same widget here as
+      // in a Form (todo 5.10.17) — the wizard used to ignore `widget:` entirely
+      // and always emit a bare `<Input type="date">`.
+      if (!field.widget || WIZARD_NATIVE_WIDGETS.has(field.widget)) {
+        return wrap(
+          field,
+          label,
+          help,
           <Input
             type={entityField.type === "datetime" ? "datetime-local" : "date"}
             value={value}
             onChange={(e) => onFieldChange(field.name, e.target.value)}
-          />
-          {help}
-        </div>
+          />,
+        )
+      }
+      return wrap(
+        field,
+        label,
+        help,
+        <FormFieldWidget
+          field={field}
+          entityField={entityField}
+          value={value}
+          readonly={false}
+          fieldName={field.name}
+          label={label}
+          onChange={(v) => onFieldChange(field.name, v)}
+        />,
       )
     }
 
@@ -293,32 +349,58 @@ export default function WizardFormStep({
       entityField.type === "decimal" ||
       entityField.type === "number"
     ) {
-      return (
-        <div key={field.name} className="space-y-2.5">
-          <label className="text-sm font-medium">{label}</label>
+      if (!field.widget || WIZARD_NATIVE_WIDGETS.has(field.widget)) {
+        return wrap(
+          field,
+          label,
+          help,
           <Input
             type="number"
             step={entityField.type === "decimal" ? "0.01" : "1"}
             placeholder={field.placeholder}
             value={value}
             onChange={(e) => onFieldChange(field.name, e.target.value)}
-          />
-          {help}
-        </div>
+          />,
+        )
+      }
+      return wrap(
+        field,
+        label,
+        help,
+        <FormFieldWidget
+          field={field}
+          entityField={entityField}
+          value={value}
+          readonly={false}
+          fieldName={field.name}
+          label={label}
+          onChange={(v) => onFieldChange(field.name, v)}
+        />,
       )
     }
 
-    // Default: string text input
-    return (
-      <div key={field.name} className="space-y-2.5">
-        <label className="text-sm font-medium">{label}</label>
-        <Input
-          placeholder={field.placeholder}
-          value={value}
-          onChange={(e) => onFieldChange(field.name, e.target.value)}
-        />
-        {help}
-      </div>
+    // Everything else goes through the shared widget router, so the wizard
+    // speaks the same closed vocabulary as a Form: `moneyinput`, `timeinput`,
+    // `qrcode`, `password`, `slider`, `tags`, `select-multi-tag`, `combobox`,
+    // `radio-group`, `select`, and the rest of the catalog.
+    //
+    // The default branch's `widget:`-aware path is what closes todo 5.10.17:
+    // before this, EVERY widget was ignored inside a wizard (a field declaring
+    // `widget: moneyinput` rendered a plain text input), because the branches
+    // above were written by hand with `import { Input }`.
+    return wrap(
+      field,
+      label,
+      help,
+      <FormFieldWidget
+        field={field}
+        entityField={entityField}
+        value={value}
+        readonly={false}
+        fieldName={field.name}
+        label={label}
+        onChange={(v) => onFieldChange(field.name, v)}
+      />,
     )
   }
 

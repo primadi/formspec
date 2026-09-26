@@ -43,6 +43,7 @@ import type { Field, PickerDecl } from "@/types/manifest"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { EmptyState } from "@/components/ui/empty-state"
+import { ImageLightboxTrigger } from "@/components/ui/image-lightbox"
 import { cn } from "@/lib/utils"
 
 interface Props {
@@ -374,11 +375,16 @@ export default function PickerPanel({
                 // of their height cropped away. A square frame gives every
                 // photo the same share of the tile without decoding the image,
                 // so it also works while the file is still loading.
-                <img
+                <ImageLightboxTrigger
                   src={image}
-                  alt=""
-                  className="aspect-square w-full object-cover"
-                  loading="lazy"
+                  alt={tile.name}
+                  // The card is a `<button>` that ADDS the item to the order
+                  // (measured: clicking the photo of Kopi Tubruk totalled
+                  // Rp18.000). So the enlarge control must not be the photo
+                  // itself — it is a corner button that stops the click, leaving
+                  // "click the card to add" intact (todo 5.21.2).
+                  className="relative block"
+                  thumbClassName="aspect-square w-full object-cover"
                 />
               ) : (
                 // Same footprint as the image frame, so a catalog mixing

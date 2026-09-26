@@ -95,7 +95,8 @@ spec:
       type: relation
       relation: { type: belongs_to, resource: cafe-order.shift }
       title: "Shift"
-      description: "Wajib bila channel = cashier (aturan bisnis #11)"
+      # Wajib bila channel = cashier (aturan bisnis #11).
+      description: "Shift kasir yang menangani pesanan ini."
     - name: status
       type: enum
       enum_values:
@@ -130,7 +131,8 @@ spec:
     - name: manual_discount_reason
       type: string
       title: "Alasan Diskon Manual"
-      description: "Wajib bila diskon manual melebihi batas di Config (aturan bisnis #8)"
+      # Wajib bila diskon manual melebihi batas di Config (aturan bisnis #8).
+      description: "Alasan diskon ini diberikan."
     - name: points_redeemed
       type: integer
       title: "Poin Ditukar"
@@ -140,11 +142,13 @@ spec:
     - name: service_charge_amount
       type: money
       title: "Service Charge"
-      description: "compute dari branch.service_charge_percent"
+      # computed: branch.service_charge_percent × subtotal.
+      description: "Service charge cabang ini, dihitung dari subtotal."
     - name: tax_amount
       type: money
       title: "Pajak"
-      description: "compute dari branch.tax_percent"
+      # computed: branch.tax_percent × (subtotal + service charge).
+      description: "Pajak PB1 cabang ini."
     - name: total_amount
       type: money
       # Kolom turunan money numerik (membaca `.amount`),
@@ -321,7 +325,8 @@ spec:
       required_permission: orders.confirm-payment
       audit: true
     - name: cancel-order
-      description: "Batal sebelum bayar (aturan bisnis #11: shift harus masih terbuka)"
+      # Batal sebelum bayar (aturan bisnis #11: shift harus masih terbuka).
+      description: "Batalkan pesanan yang belum dibayar."
       required_permission: orders.cancel-order
       audit: true
       conditions:
@@ -340,7 +345,8 @@ spec:
       description: "Pesanan selesai"
       required_permission: orders.complete-order
     - name: void-order
-      description: "Batalkan pesanan yang sudah dibayar — WAJIB lewat approval supervisor (D5)"
+      # WAJIB lewat approval supervisor (D5).
+      description: "Batalkan pesanan yang sudah dibayar — perlu persetujuan supervisor."
       required_permission: orders.void-order
       audit: true
       conditions:

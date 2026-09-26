@@ -12,6 +12,15 @@ metadata:
   name: app-settings
   description: "Pengaturan global kafe: mata uang, locale, zona waktu, format"
 spec:
+  # Key framework-level (01-core-basic.md §5). Retention idempotency dibaca
+  # dari `core.idempotency_retention`; tanpa deklarasi ini TTL jatuh ke default
+  # 24 jam. Format durasi mengikuti retention stream (`7d`, `24h`, `30m`), dan
+  # `0` berarti tanpa kedaluwarsa. Nilai yang tidak bisa diparse tidak diam-diam
+  # mematikan retention — ia dilaporkan lalu default dipakai (todo 2.1.6).
+  keys:
+    idempotency_retention:
+      type: string
+      default: "24h"
   settings:
     currency:
       code: IDR

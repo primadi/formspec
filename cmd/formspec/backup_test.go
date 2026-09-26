@@ -392,7 +392,7 @@ spec:
 	defer func() { _ = database.Close() }()
 
 	keys, err := collectStorageKeys(context.Background(), reg,
-		[]BackupTable{{Module: "alpha", Entity: "doc"}}, "")
+		[]BackupTable{{Module: "alpha", Entity: "doc"}}, "", "demo")
 	if err != nil {
 		t.Fatalf("collect: %v", err)
 	}
@@ -431,7 +431,7 @@ func TestRestoreUploadsStorageObjects(t *testing.T) {
 	_ = f.Close()
 
 	mem := newMemStorage()
-	_, stored, err := restoreFromWithStorage(context.Background(), reg, archive, "skip", false, mem)
+	_, stored, err := restoreFromWithStorage(context.Background(), reg, archive, "skip", false, mem, nil, "demo")
 	if err != nil {
 		t.Fatalf("restore: %v", err)
 	}
@@ -471,7 +471,7 @@ func TestRestoreDryRunDoesNotUpload(t *testing.T) {
 
 	// restoreFromWithStorage with a nil store is what runRestore does on a dry
 	// run — objects are counted, never written.
-	report, _, err := restoreFromWithStorage(context.Background(), reg, archive, "skip", true, nil)
+	report, _, err := restoreFromWithStorage(context.Background(), reg, archive, "skip", true, nil, nil, "demo")
 	if err != nil {
 		t.Fatalf("dry run: %v", err)
 	}

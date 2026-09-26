@@ -65,10 +65,7 @@ import {
 import { useSelectFilterOptions } from "@/hooks/useSelectFilterOptions"
 import { useRealtime } from "@/hooks/useRealtime"
 import { renderCellValue, resolveColumnCell } from "@/lib/renderCell"
-import {
-  fieldOptions,
-  parseSingleOptionValue,
-} from "@/lib/field-options"
+import { fieldOptions, parseSingleOptionValue } from "@/lib/field-options"
 import {
   columnAlignClass,
   columnJustifyClass,
@@ -232,6 +229,17 @@ export default function TableRenderer({
   const [pendingAction, setPendingAction] = useState<{
     action: TableAction
     row: RowData
+  } | null>(null)
+
+  // Bulk actions (5.12.8) — per-row outcome of the last collective run, plus
+  // the confirm gate for destructive ones.
+  const [bulkResults, setBulkResults] = useState<{
+    label: string
+    results: { id: string; ok: boolean; message?: string }[]
+  } | null>(null)
+  const [pendingBulkAction, setPendingBulkAction] = useState<{
+    action: TableAction
+    confirmMsg: string
   } | null>(null)
 
   // Reset page when filters change
@@ -502,6 +510,97 @@ export default function TableRenderer({
     setReloadKey((k) => k + 1)
   }
 
+  // ── Bulk actions (5.12.8) ──
+  //
+  // Run one `bulk_actions` entry across every selected row, per row, with
+  // partial failure reported — the same contract `applyBatchEdit` (5.4.3) uses,
+  // and the reason these buttons exist at all: before this they rendered with
+  // no `onClick`, so the bar appeared, looked clickable, and did nothing.
+  //
+  // Which actions are eligible:
+  //   - `view`/`edit` are navigation, not collective work — there is no
+  //     meaningful "edit 12 rows" without values, so they are refused;
+  //   - `delete` and custom actions run per row;
+  //   - an action the caller may not perform is refused **before any row is
+  //     touched**, so a partial run cannot be blamed on permissions.
+  //
+  // Rows that fail are reported individually (409 → stale, so the badge shows).
+  const canRunBulk = (action: TableAction): string | null => {
+    if (action.action === "view" || action.action === "edit") {
+      return `"${action.label}" butuh satu baris — pakai aksi baris, bukan aksi massal`
+    }
+    if (me && !canDoEntityAction(me, entity, action.action)) {
+      return "You don't have permission to perform this action"
+    }
+    return null
+  }
+
+  const runBulkAction = async (action: TableAction) => {
+    const reason = canRunBulk(action)
+    if (reason) {
+      toast.error(reason)
+      return
+    }
+    const rows = data.filter((r) => selectedRows.has(r.id as string))
+    if (rows.length === 0) return
+
+    const client = getClient()
+    const results: { id: string; ok: boolean; message?: string }[] = []
+    for (const row of rows) {
+      const segments = getEntityRouteSegment(entity, row)
+      try {
+        if (action.action === "delete") {
+          await apiDelete(client, `${entity.module}/${entity.name}/${segments}`)
+        } else {
+          await client.post(
+            `${entity.module}/${entity.name}/${segments}/${action.action}`,
+          )
+        }
+        results.push({ id: row.id as string, ok: true })
+      } catch (err) {
+        if (err instanceof FormaApiError && err.status === 409) {
+          setStaleRows((prev) => new Set(prev).add(row.id as string))
+        }
+        results.push({
+          id: row.id as string,
+          ok: false,
+          message: err instanceof Error ? err.message : "Failed",
+        })
+      }
+    }
+
+    setBulkResults({ label: action.label, results })
+    const okCount = results.filter((r) => r.ok).length
+    const failCount = results.length - okCount
+    if (failCount === 0) {
+      toast.success(`${action.label}: ${okCount} baris berhasil`)
+    } else {
+      toast.error(`${okCount} berhasil, ${failCount} gagal — lihat laporan`)
+    }
+    setSelectedRows(new Set())
+    setReloadKey((k) => k + 1)
+  }
+
+  /** Confirm-gated entry point: destructive bulk actions ask first. */
+  const requestBulkAction = (action: TableAction) => {
+    if (canRunBulk(action)) {
+      runBulkAction(action)
+      return
+    }
+    const entityAction = entity.actions?.find((a) => a.name === action.action)
+    const confirmMsg =
+      action.confirm_msg ??
+      entityAction?.ui?.confirm ??
+      (action.action === "delete"
+        ? interpolateConfirm(metaBundle?.app.confirm?.delete ?? "", entity.name)
+        : "")
+    if (confirmMsg) {
+      setPendingBulkAction({ action, confirmMsg })
+      return
+    }
+    runBulkAction(action)
+  }
+
   const columns = useMemo<ColumnDef<RowData>[]>(() => {
     const cols: ColumnDef<RowData>[] = []
 
@@ -566,7 +665,19 @@ export default function TableRenderer({
         id: col.field,
         accessorKey: col.field,
         header: col.label ?? col.field,
-        enableSorting: col.sortable ?? true,
+        // A column backed by a relation cannot be sorted by the server: it
+        // renders the target's display name (`branch.name`), while the stored
+        // value is the foreign-key UUID — so ordering would be by UUID, and the
+        // dot-path form is rejected outright (`?sort=branch.name` → 422 unknown
+        // field). The derivation path already withholds the affordance; this
+        // covers AUTHORED tables that declared `sortable: true` on a relation
+        // column (`cafe-stock/stock-level-table.yaml` does, and its header
+        // sorted nothing usable). Todo 5.18.5, option (b).
+        //
+        // The ROOT field is what matters: `branch.name` is a relation because
+        // `branch_id`/`branch` is, and `isRelationColumn` resolves that.
+        enableSorting:
+          (col.sortable ?? true) && !isRelationColumn(entity, col.field),
         cell: ({ getValue, row }) => {
           const value = getValue()
           // Inline editing (5.4.2): editable cells render an in-place input.
@@ -833,11 +944,25 @@ export default function TableRenderer({
       {tableSpec.bulk_actions &&
         tableSpec.bulk_actions.length > 0 &&
         selectedRows.size > 0 && (
-          <BulkActionsBar
-            bulkActions={tableSpec.bulk_actions}
-            selectedCount={selectedRows.size}
-            onClear={() => setSelectedRows(new Set())}
-          />
+          <>
+            <BulkActionsBar
+              bulkActions={tableSpec.bulk_actions}
+              selectedCount={selectedRows.size}
+              onRun={requestBulkAction}
+              isDisabled={(a) => canRunBulk(a) !== null}
+              onClear={() => {
+                setSelectedRows(new Set())
+                setBulkResults(null)
+              }}
+            />
+            {bulkResults && (
+              <BulkResultReport
+                label={bulkResults.label}
+                results={bulkResults.results}
+                onDismiss={() => setBulkResults(null)}
+              />
+            )}
+          </>
         )}
 
       {/* Batch editing (5.4.3) — set values for batch_edit fields across the
@@ -1131,11 +1256,53 @@ export default function TableRenderer({
           />
         )
       })()}
+      {/* Confirm Dialog — bulk (5.12.8). The message names the row COUNT,
+          because unlike the single-row dialog the operator cannot see what is
+          about to be affected from the selection alone. */}
+      <ConfirmDialog
+        open={!!pendingBulkAction}
+        onOpenChange={(open) => {
+          if (!open) setPendingBulkAction(null)
+        }}
+        title={pendingBulkAction?.action.label ?? "Konfirmasi"}
+        message={pendingBulkAction?.confirmMsg ?? ""}
+        variant={
+          pendingBulkAction?.action.action === "delete" ||
+          pendingBulkAction?.action.action === "cancel"
+            ? "destructive"
+            : "default"
+        }
+        confirmLabel={
+          pendingBulkAction?.action.action === "delete"
+            ? `Hapus ${selectedRows.size} baris`
+            : "Konfirmasi"
+        }
+        onConfirm={() => {
+          const pending = pendingBulkAction
+          setPendingBulkAction(null)
+          if (pending) runBulkAction(pending.action)
+        }}
+        onCancel={() => setPendingBulkAction(null)}
+      />
     </div>
   )
 }
 
-// ── Helpers ──
+/**
+ * Whether a column is backed by a relation, so the server cannot order by it.
+ *
+ * Resolves the column's ROOT segment against the entity: `branch.name` is a
+ * relation because `branch_id` (or `branch`) is; a plain scalar is not. Both
+ * spellings are checked because a Form/Table may name either the `_id` field or
+ * the relation alias — the same pair `resolveRelations` accepts server-side.
+ */
+function isRelationColumn(entity: EntitySchema, column: string): boolean {
+  const root = column.split(".")[0]
+  const field = entity.fields.find(
+    (f) => f.name === root || f.name === `${root}_id`,
+  )
+  return field?.type === "relation"
+}
 
 /**
  * Check if a table action can be performed on a given row based on the
@@ -1329,10 +1496,14 @@ function FilterControl({
 function BulkActionsBar({
   bulkActions,
   selectedCount,
+  onRun,
+  isDisabled,
   onClear,
 }: {
   bulkActions: TableAction[]
   selectedCount: number
+  onRun: (action: TableAction) => void
+  isDisabled: (action: TableAction) => boolean
   onClear: () => void
 }) {
   return (
@@ -1341,7 +1512,15 @@ function BulkActionsBar({
         {selectedCount} selected
       </span>
       {bulkActions.map((action) => (
-        <Button key={action.action} variant="secondary" size="sm">
+        <Button
+          key={action.action}
+          variant="secondary"
+          size="sm"
+          // An action that cannot run collectively is disabled rather than
+          // hidden, so the author can see it is declared but not applicable.
+          disabled={isDisabled(action)}
+          onClick={() => onRun(action)}
+        >
           <ActionIcon iconName={action.icon ?? action.action} />
           <span className="ml-1">{action.label}</span>
         </Button>
@@ -1350,6 +1529,51 @@ function BulkActionsBar({
         <X className="size-3 mr-1" />
         Clear
       </Button>
+    </div>
+  )
+}
+
+/**
+ * Per-row outcome of a bulk run. Mirrors `BatchEditReport` (5.4.3): a partial
+ * failure is neither hidden nor turned into a blanket error — the caller sees
+ * which rows landed and which did not, and 409 rows are marked stale.
+ */
+function BulkResultReport({
+  label,
+  results,
+  onDismiss,
+}: {
+  label: string
+  results: { id: string; ok: boolean; message?: string }[]
+  onDismiss: () => void
+}) {
+  const failed = results.filter((r) => !r.ok)
+  return (
+    <div className="rounded-md border bg-muted/30 p-3 space-y-2 text-sm">
+      <div className="flex items-center gap-2">
+        <span className="font-medium">
+          {label} — {results.length - failed.length} berhasil, {failed.length}{" "}
+          gagal
+        </span>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onDismiss}
+          className="ml-auto"
+        >
+          <X className="size-3 mr-1" />
+          Tutup
+        </Button>
+      </div>
+      {failed.length > 0 && (
+        <ul className="space-y-0.5 text-xs text-muted-foreground">
+          {failed.map((r) => (
+            <li key={r.id} title={r.message}>
+              <span className="font-mono">{r.id}</span> — {r.message ?? "gagal"}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }
@@ -1427,7 +1651,9 @@ function BatchEditBar({
                     // The draft holds the option's canonical key; it is resolved
                     // back to the declared scalar (`1`, not `"1"`) when the PATCH
                     // body is built, so one place owns that mapping.
-                    onChange={(v) => onDraftChange(f, v === null ? "" : String(v))}
+                    onChange={(v) =>
+                      onDraftChange(f, v === null ? "" : String(v))
+                    }
                     options={[
                       { value: "", label: "(unchanged)" },
                       ...choices.map((c) => ({

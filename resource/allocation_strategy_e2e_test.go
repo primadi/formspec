@@ -61,7 +61,7 @@ func TestKafe_LandedCostAllocationStrategy(t *testing.T) {
 			})
 
 			po := map[string]any{
-				"transaction_date": "2026-09-22",
+				"transaction_date": recentDate(),
 				"branch_id":        branchID,
 				"supplier_id":      supplierID,
 				"shipping_cost":    map[string]any{"amount": "300000", "currency": "IDR"},
@@ -125,7 +125,7 @@ func TestKafe_WeightStrategyRefusesUnknownWeight(t *testing.T) {
 	})
 
 	po := map[string]any{
-		"transaction_date": "2026-09-22",
+		"transaction_date": recentDate(),
 		"branch_id":        branchID,
 		"supplier_id":      supplierID,
 		"shipping_cost":    map[string]any{"amount": "100000", "currency": "IDR"},

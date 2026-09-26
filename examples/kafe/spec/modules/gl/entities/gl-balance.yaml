@@ -31,7 +31,9 @@ spec:
       default: 0
     - name: closing_balance
       type: decimal
-      description: computed — opening + debit - credit (asset) atau opening + credit - debit (liability/revenue)
+      # computed — opening + debit − credit (asset) atau opening + credit −
+      # debit (liability/revenue); arah ditentukan `normal_balance` akun.
+      description: "Saldo akhir periode ini."
 
   # S14: pemelihara proyeksi ini adalah script gl sendiri — invariants
   # menegakkan keunikan baris lewat database (unique index di `indexes:`),

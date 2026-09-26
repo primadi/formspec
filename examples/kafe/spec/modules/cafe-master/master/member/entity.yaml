@@ -23,7 +23,7 @@ spec:
       required: true
       unique: true
       title: "Nomor HP"
-      description: "Kunci identitas member (aturan bisnis #13)"
+      description: "Nomor HP member — dipakai untuk mencari dan memverifikasi."
     - name: email
       type: string
       title: "Email"

@@ -313,20 +313,12 @@ func (a *App) Database() db.DB {
 	return a.database
 }
 
-// Idempotency returns the app's idempotency-key store, configured with
-// cfg.IdempotencyTTL (default db.DefaultIdempotencyTTL — Core Basic §5:
-// "the TTL MUST be configurable via WithTTL; hard-coding is a spec
-// violation"). Exposed for the two-step prepare flow
-// (POST /{resource}/{action}/prepare, Fase 2.7) to wire against once it
-// lands — construction is done here, once, so the TTL is resolved from
-// Config consistently regardless of which caller ends up using the store.
-//
-// core.idempotency_retention (a manifest-level Config key) is the intended
-// long-term source for this value once the Config-kind runtime exists
-// (Fase 7.2 — no such registry is loaded today, see internal/entity.Registry
-// .LoadEntities, which only registers Document/Entity kinds). Until then,
-// cfg.IdempotencyTTL is the equivalent Go-level configuration seam, same
-// pattern as JWTSecret and the other Config fields above.
+// Idempotency returns the app's idempotency-key store, configured with the
+// manifest's `core.idempotency_retention` (falling back to cfg.IdempotencyTTL,
+// then db.DefaultIdempotencyTTL). Core Basic §5 requires the TTL to be
+// configurable and forbids hard-coding it; since todo 2.1.6 the manifest key
+// is read for real by resolveIdempotencyTTL, so `kind: Config` is now the
+// source — not just a documented intention.
 func (a *App) Idempotency() *db.IdempotencyStore { return a.idempotency }
 
 // GetEntityStore returns the EntityStore for a given module/entity pair.
@@ -930,7 +922,8 @@ func New(cfg Config) (*App, error) {
 	// — the HTTP path's emission resolution has no counterpart on that path.
 	disp.SetEventEmitter((&eventWiring{store: outboxStore}).emit)
 
-	idempotencyStore := db.NewIdempotencyStore(database, driver).WithTTL(cfg.IdempotencyTTL)
+	idempotencyTTL := resolveIdempotencyTTL(cfgReg, cfg.IdempotencyTTL)
+	idempotencyStore := db.NewIdempotencyStore(database, driver).WithTTL(idempotencyTTL)
 	// Wire the idempotency store into the router so idempotent actions are
 	// enforced and the prepare endpoint (todo 2.7) is served.
 	rb.SetIdempotencyStore(idempotencyStore)
@@ -1434,8 +1427,10 @@ func (a *App) ReloadSpec() error {
 	}
 
 	// Wire the idempotency store (todo 2.7) — same store instance, so
-	// in-flight keys survive a spec reload.
-	newRB.SetIdempotencyStore(a.idempotency)
+	// in-flight keys survive a spec reload. The TTL is re-resolved from the
+	// NEW Config registry (todo 2.1.6) so editing `core.idempotency_retention`
+	// takes effect on hot-reload instead of requiring a restart.
+	newRB.SetIdempotencyStore(a.idempotency.WithTTL(resolveIdempotencyTTL(newCfgReg, a.cfg.IdempotencyTTL)))
 	// Wire the async job tracker (todo 7.13) — same store + hub, so in-flight
 	// jobs survive a spec reload.
 	newRB.SetJobTracker(a.jobTracker)
@@ -1575,6 +1570,45 @@ func buildConfigRegistry(manifests []manifest.RawManifest) *config.Registry {
 		reg.Add(raw.Metadata.Name, cs)
 	}
 	return reg
+}
+
+// resolveIdempotencyTTL maps the manifest-level Config key
+// `core.idempotency_retention` onto a TTL for the idempotency store
+// (01-core-basic.md §5: "Entry kedaluwarsa lewat retention (default 24 jam,
+// dibaca dari `core.idempotency_retention`)"; todo 2.1.6).
+//
+// Precedence: the manifest key wins when present and parseable, then
+// cfg.IdempotencyTTL (the Go-level seam), then db.DefaultIdempotencyTTL. A
+// declared-but-unparseable value is reported and ignored rather than silently
+// collapsing to the default — an ignored setting that looks active is exactly
+// the confusion this key exists to remove. A non-positive value means
+// "no expiry" (0) and is honored, matching BackdatePolicy's max_days_back=0.
+//
+// Duration strings accept `d`/`h`/`m`/`s` (`7d`, `24h`) via the same parser
+// stream retention uses, so authors do not have to express days in hours.
+func resolveIdempotencyTTL(cfgReg *config.Registry, fallback time.Duration) time.Duration {
+	if cfgReg == nil {
+		return fallback
+	}
+	raw, ok := cfgReg.ResolveKeyAny("idempotency_retention")
+	if !ok {
+		return fallback
+	}
+	raw = strings.TrimSpace(raw)
+	if raw == "" || raw == "<nil>" {
+		return fallback
+	}
+	age, count, ok := stream.ParseRetention(raw)
+	if !ok || count > 0 {
+		_, _ = fmt.Fprintf(os.Stderr,
+			"formspec: warning: core.idempotency_retention=%q is not a duration "+
+				"(want e.g. \"7d\" or \"24h\"); using default %s\n", raw, fallback)
+		return fallback
+	}
+	if age < 0 {
+		return fallback
+	}
+	return age
 }
 
 // buildServiceRegistry loads kind: Service manifests into a service.Registry

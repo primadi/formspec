@@ -43,6 +43,12 @@ type BackupManifest struct {
 	CreatedAt string        `json:"created_at"`
 	Driver    string        `json:"driver"`
 	Tables    []BackupTable `json:"tables"`
+	// Workspace is the tenant this archive was read from (todo 4.8.7). Recorded
+	// so an operator can tell which tenant an archive describes — without it,
+	// an archive that captured zero records is indistinguishable from an
+	// archive of an empty app. Empty in archives written before this field
+	// existed.
+	Workspace string `json:"workspace,omitempty"`
 	// StorageObjects counts the ctx.storage objects carried in this archive.
 	// Zero with a non-zero file-field count means the app had no uploads — not
 	// that files were skipped (gap 10.16).
@@ -85,7 +91,7 @@ func backupStorageService(specPath, dsn string) (formspec.ObjectStoreStorage, er
 // contract is Upload/Download/Stat only, so no portable listing exists. That is
 // also why this is sufficient — a `file` field stores the canonical key, so
 // every object a record can reference is nameable.
-func collectStorageKeys(ctx context.Context, reg *entity.Registry, tables []BackupTable, filter string) ([]string, error) {
+func collectStorageKeys(ctx context.Context, reg *entity.Registry, tables []BackupTable, filter, workspace string) ([]string, error) {
 	seen := map[string]bool{}
 	var keys []string
 	for _, t := range tables {
@@ -106,7 +112,7 @@ func collectStorageKeys(ctx context.Context, reg *entity.Registry, tables []Back
 		if err != nil {
 			return nil, fmt.Errorf("%s.%s: %w", t.Module, t.Entity, err)
 		}
-		records, err := listAll(ctx, store, "demo")
+		records, err := listAll(ctx, store, workspace)
 		if err != nil {
 			return nil, fmt.Errorf("list %s.%s: %w", t.Module, t.Entity, err)
 		}
@@ -190,6 +196,12 @@ func runBackupCreate(args []string) {
 	out := ""
 	full := false
 	filter := "" // "module" or "module/entity" (4.8.2)
+	// Workspace to read from. Default stays "demo" for backward compatibility,
+	// but a named deployment (kafe) must be able to point at its own tenant —
+	// without this the command reported "0 record(s)" for every real app while
+	// looking successful (todo 4.8.7).
+	workspace := "demo"
+	workspaceExplicit := false
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--spec", "-spec":
@@ -214,8 +226,14 @@ func runBackupCreate(args []string) {
 			}
 		case "--full":
 			full = true
+		case "--workspace", "-workspace":
+			if i+1 < len(args) {
+				workspace = args[i+1]
+				workspaceExplicit = true
+				i++
+			}
 		case "--help", "-h":
-			_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec backup create --full [--out <file>] [--filter <module|module/entity>] [--spec <path>] [--dsn <dsn>]\n")
+			_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec backup create --full [--out <file>] [--filter <module|module/entity>] [--workspace <slug>] [--spec <path>] [--dsn <dsn>]\n")
 			os.Exit(0)
 		default:
 			_, _ = fmt.Fprintf(os.Stderr, "formspec backup create: unknown flag %q\n", args[i])
@@ -237,8 +255,19 @@ func runBackupCreate(args []string) {
 	reg, database, driver := loadRegistry(specPath, dsn)
 	defer func() { _ = database.Close() }()
 
+	// Apply the same #48 workspace rule `formspec dev` uses (workspace
+	// manifests REGISTER slugs, they do not select one): adopt the only declared
+	// workspace, or say out loud which tenant is being read and which ones the
+	// tree declares. Without this the command silently read `demo` and printed
+	// "0 record(s)" for a populated app (todo 4.8.7).
+	workspace = activeWorkspaceFor(specPath, workspace, workspaceExplicit)
+
 	ctx := context.Background()
-	manifest := BackupManifest{CreatedAt: time.Now().UTC().Format(time.RFC3339), Driver: driver}
+	manifest := BackupManifest{
+		CreatedAt: time.Now().UTC().Format(time.RFC3339),
+		Driver:    driver,
+		Workspace: workspace,
+	}
 
 	f, err := os.Create(out)
 	if err != nil {
@@ -266,7 +295,7 @@ func runBackupCreate(args []string) {
 			_, _ = fmt.Fprintf(os.Stderr, "Error: store %s.%s: %v\n", info.Module, info.Name, err)
 			os.Exit(1)
 		}
-		records, err := listAll(ctx, store, "demo")
+		records, err := listAll(ctx, store, workspace)
 		if err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "Error: list %s.%s: %v\n", info.Module, info.Name, err)
 			os.Exit(1)
@@ -300,7 +329,7 @@ func runBackupCreate(args []string) {
 	// meminta daftar ke backend: kontrak `Storage` hanya Upload/Download/Stat,
 	// jadi tidak ada cara portable untuk melisting. Field `file`/`attachment`
 	// menyimpan kunci kanoniknya, sehingga data itu memang sumber kebenarannya.
-	keys, err := collectStorageKeys(ctx, reg, manifest.Tables, filter)
+	keys, err := collectStorageKeys(ctx, reg, manifest.Tables, filter, workspace)
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "Error: enumerate storage objects: %v\n", err)
 		os.Exit(1)
@@ -380,6 +409,14 @@ func runBackupInspect(args []string) {
 	fmt.Printf("Backup: %s\n", file)
 	fmt.Printf("  Created: %s\n", manifest.CreatedAt)
 	fmt.Printf("  Driver:  %s\n", manifest.Driver)
+	// The source tenant (todo 4.8.7). An archive written before this field
+	// existed has none — say so rather than printing an empty string, because
+	// "unknown" and "read from tenant ''" are different problems.
+	if manifest.Workspace != "" {
+		fmt.Printf("  Workspace: %s\n", manifest.Workspace)
+	} else {
+		fmt.Printf("  Workspace: (not recorded — archive predates 4.8.7)\n")
+	}
 	fmt.Printf("  Tables:  %d\n", len(manifest.Tables))
 	for _, t := range manifest.Tables {
 		fmt.Printf("    %s.%s (%s): %d record(s)\n", t.Module, t.Entity, t.Table, t.Count)
@@ -479,6 +516,9 @@ func runRestore(args []string) {
 	dsn := "sqlite:.formspec/data.db"
 	conflict := "skip"
 	dryRun := false
+	workspace := ""
+	workspaceExplicit := false
+	var mapResource []string
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--from":
@@ -496,15 +536,26 @@ func runRestore(args []string) {
 				dsn = args[i+1]
 				i++
 			}
+		case "--workspace", "-workspace":
+			if i+1 < len(args) {
+				workspace = args[i+1]
+				workspaceExplicit = true
+				i++
+			}
 		case "--conflict":
 			if i+1 < len(args) {
 				conflict = args[i+1]
 				i++
 			}
+		case "--map-resource":
+			if i+1 < len(args) {
+				mapResource = append(mapResource, args[i+1])
+				i++
+			}
 		case "--dry-run":
 			dryRun = true
 		case "--help", "-h":
-			_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec restore --from <file> [--conflict skip|overwrite|remap] [--dry-run] [--spec <path>] [--dsn <dsn>]\n")
+			_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec restore --from <file> [--workspace <slug>] [--conflict skip|overwrite|remap] [--map-resource <src>=<dst>]... [--dry-run] [--spec <path>] [--dsn <dsn>]\n")
 			os.Exit(0)
 		default:
 			_, _ = fmt.Fprintf(os.Stderr, "formspec restore: unknown flag %q\n", args[i])
@@ -524,8 +575,42 @@ func runRestore(args []string) {
 		os.Exit(2)
 	}
 
+	// --map-resource <src>=<dst> (todo 3.7.7) redirects records from the
+	// archived resource onto a different one — e.g. loading a production
+	// sample into a dev entity. Parsed before the registry is loaded so a
+	// malformed flag fails fast without touching the database.
+	remap, err := parseResourceMap(mapResource)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "formspec restore: %v\n", err)
+		os.Exit(2)
+	}
+
 	reg, database, _ := loadRegistry(specPath, dsn)
 	defer func() { _ = database.Close() }()
+
+	// Restore target tenant. Same #48 rule as backup create (todo 4.8.7):
+	// without it, restoring a kafe archive wrote every record into `demo`,
+	// where the App never reads it.
+	if !workspaceExplicit {
+		workspace = "demo"
+	}
+	workspace = activeWorkspaceFor(specPath, workspace, workspaceExplicit)
+
+	// Every mapping target must exist in the loaded spec. A target that
+	// silently does not resolve would make the restore skip those records and
+	// report 0 failed, which reads as success — the failure mode this check
+	// exists to prevent.
+	for _, dst := range remap {
+		mod, ent, ok := parseResourceRef(dst)
+		if !ok {
+			_, _ = fmt.Fprintf(os.Stderr, "formspec restore: --map-resource target %q must be <module>/<entity>\n", dst)
+			os.Exit(2)
+		}
+		if _, err := reg.GetEntityStore(mod, ent); err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "formspec restore: --map-resource target %q does not exist in spec: %v\n", dst, err)
+			os.Exit(2)
+		}
+	}
 
 	ctx := context.Background()
 
@@ -543,7 +628,23 @@ func runRestore(args []string) {
 		}
 	}
 
-	report, stored, _ := restoreFromWithStorage(ctx, reg, from, conflict, dryRun, store)
+	report, stored, _ := restoreFromWithStorage(ctx, reg, from, conflict, dryRun, store, remap, workspace)
+
+	// A mapping changes where records land, so state it once up front — the
+	// per-entry lines below then read unambiguously, and an empty report cannot
+	// be mistaken for "the mapping did nothing" when it actually redirected
+	// everything away.
+	if len(remap) > 0 {
+		srcs := make([]string, 0, len(remap))
+		for s := range remap {
+			srcs = append(srcs, s)
+		}
+		sort.Strings(srcs)
+		fmt.Printf("Resource mapping:\n")
+		for _, s := range srcs {
+			fmt.Printf("  %s -> %s\n", s, remap[s])
+		}
+	}
 
 	if dryRun {
 		// Compatibility report (4.8.3): per-entity breakdown of what would
@@ -551,8 +652,12 @@ func runRestore(args []string) {
 		// committing.
 		fmt.Printf("Dry-run compatibility report:\n")
 		for _, e := range report.Entities {
-			fmt.Printf("  %s/%s: %d restore, %d skip, %d remap, %d fail\n",
-				e.Module, e.Entity, e.Restored, e.Skipped, e.Remapped, e.Failed)
+			where := e.Module + "/" + e.Entity
+			if e.MappedTo != "" {
+				where += " -> " + e.MappedTo
+			}
+			fmt.Printf("  %s: %d restore, %d skip, %d remap, %d fail\n",
+				where, e.Restored, e.Skipped, e.Remapped, e.Failed)
 		}
 		fmt.Printf("Objects: %d would be restored.\n", stored)
 		fmt.Printf("Total: %d would be restored, %d skipped, %d remapped, %d failed.\n",
@@ -611,6 +716,10 @@ type RestoreEntityReport struct {
 	Skipped  int
 	Remapped int
 	Failed   int
+	// MappedTo is set when `--map-resource` redirected this archive entry onto
+	// a different resource (todo 3.7.7), as `module/entity` of the target.
+	// Empty means the entry was restored in place.
+	MappedTo string
 }
 
 // restoreFrom reads a backup archive and inserts its records into the target
@@ -618,8 +727,89 @@ type RestoreEntityReport struct {
 // conflict=overwrite updates them; conflict=remap assigns a fresh natural key
 // and inserts as a new record. dryRun only reports what would happen.
 func restoreFrom(ctx context.Context, reg *entity.Registry, from, conflict string, dryRun bool) RestoreReport {
-	report, _, _ := restoreFromWithStorage(ctx, reg, from, conflict, dryRun, nil)
+	report, _, _ := restoreFromWithStorage(ctx, reg, from, conflict, dryRun, nil, nil, "demo")
 	return report
+}
+
+// parseResourceMap turns repeated `--map-resource <src>=<dst>` flags into a
+// lookup from source `module/entity` to target `module/entity`.
+//
+// Both sides accept either `module/entity` or `module_entity` (the archive's
+// own file naming), because the left side is what an operator reads out of
+// `formspec backup inspect` while the right side is what they read out of the
+// spec. Accepting only one spelling would force a translation step that people
+// get wrong silently.
+func parseResourceMap(pairs []string) (map[string]string, error) {
+	if len(pairs) == 0 {
+		return nil, nil
+	}
+	out := make(map[string]string, len(pairs))
+	for _, pair := range pairs {
+		src, dst, ok := strings.Cut(pair, "=")
+		if !ok || src == "" || dst == "" {
+			return nil, fmt.Errorf("--map-resource wants <src>=<dst> (e.g. billing/invoice=staging/invoice), got %q", pair)
+		}
+		key, ok := normalizeResourceRef(src)
+		if !ok {
+			return nil, fmt.Errorf("--map-resource source %q must be <module>/<entity> or <module>_<entity>", src)
+		}
+		val, ok := normalizeResourceRef(dst)
+		if !ok {
+			return nil, fmt.Errorf("--map-resource target %q must be <module>/<entity> or <module>_<entity>", dst)
+		}
+		out[key] = val
+	}
+	return out, nil
+}
+
+// normalizeResourceRef accepts `module/entity` and `module_entity` and returns
+// the canonical `module/entity`. The underscore form is ambiguous in principle
+// (module and entity names may contain underscores), so the LAST underscore is
+// taken as the separator — the same rule `splitModuleEntity` applies to archive
+// entry names. That is correct for kafe (`cafe-master` etc.), but a module whose
+// name itself contains an underscore would be split wrongly; hence the slash
+// form is the documented one and the underscore form is a convenience for
+// pasting what `backup inspect` printed.
+func normalizeResourceRef(ref string) (string, bool) {
+	mod, ent, ok := parseResourceRef(ref)
+	if !ok {
+		return "", false
+	}
+	return mod + "/" + ent, true
+}
+
+// parseResourceRef splits a resource reference in EITHER accepted spelling:
+// `module/entity` (spec form) or `module_entity` (archive/backup-inspect form),
+// reporting whether the reference is well-formed. Distinct from check.go's
+// `splitResourceRef`, which accepts the `{module}.{entity}` consent form and
+// returns ("","") on failure rather than a bool — this one must be able to
+// REJECT, because a `--map-resource` value that silently parses to empty
+// modules would redirect records nowhere.
+func parseResourceRef(ref string) (string, string, bool) {
+	if strings.Contains(ref, "/") {
+		parts := strings.SplitN(ref, "/", 2)
+		if parts[0] == "" || parts[1] == "" || strings.Contains(parts[1], "/") {
+			return "", "", false
+		}
+		return parts[0], parts[1], true
+	}
+	return splitModuleEntity(ref)
+}
+
+// resolveResourceMapKey looks up a source resource in the map, trying both the
+// canonical `module/entity` form and the archive's `module_entity` form so a
+// map written in either spelling matches.
+func resolveResourceMapKey(remap map[string]string, module, entity string, reportKey string) string {
+	if len(remap) == 0 {
+		return ""
+	}
+	if dst, ok := remap[module+"/"+entity]; ok {
+		return dst
+	}
+	if dst, ok := remap[reportKey]; ok {
+		return dst
+	}
+	return ""
 }
 
 // RestoreReport mirrors the counts restoreFromWithStorage produces; the storage
@@ -636,6 +826,8 @@ func restoreFromWithStorage(
 	from, conflict string,
 	dryRun bool,
 	store formspec.ObjectStoreStorage,
+	remap map[string]string,
+	workspace string,
 ) (RestoreReport, int, error) {
 	var report RestoreReport
 	stored, failedStored := 0, 0
@@ -693,6 +885,23 @@ func restoreFromWithStorage(
 		if !ok {
 			continue
 		}
+		// --map-resource (todo 3.7.7): redirect this archive entry onto a
+		// different resource before anything is resolved, so both the store and
+		// the spec used for the record are the target's. The entry's OWN name
+		// stays the key for the dry-run report, so the report still shows which
+		// archive file produced these counts (see the Entities append below).
+		srcModule, srcEntity := module, entityName
+		mapped := false
+		if dst := resolveResourceMapKey(remap, module, entityName, base); dst != "" {
+			dstModule, dstEntity, ok := parseResourceRef(dst)
+			if !ok {
+				_, _ = fmt.Fprintf(os.Stderr, "Error: --map-resource target %q must be <module>/<entity>\n", dst)
+				report.Failed++
+				continue
+			}
+			module, entityName = dstModule, dstEntity
+			mapped = true
+		}
 		store, err := reg.GetEntityStore(module, entityName)
 		if err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "Error: store %s.%s: %v\n", module, entityName, err)
@@ -723,7 +932,7 @@ func restoreFromWithStorage(
 			// Drop framework-owned columns; keep only business data.
 			data := stripReserved(rec)
 			if nkField != "" && data[nkField] != nil {
-				exists, err := naturalKeyExists(ctx, store, "demo", nkField, data[nkField])
+				exists, err := naturalKeyExists(ctx, store, workspace, nkField, data[nkField])
 				if err == nil && exists {
 					switch conflict {
 					case "skip":
@@ -733,7 +942,7 @@ func restoreFromWithStorage(
 					case "overwrite":
 						// overwrite: update the existing record's data
 						if !dryRun {
-							if err := updateByNaturalKey(ctx, store, "demo", nkField, data[nkField], data); err != nil {
+							if err := updateByNaturalKey(ctx, store, workspace, nkField, data[nkField], data); err != nil {
 								_, _ = fmt.Fprintf(os.Stderr, "Error: overwrite %s.%s %s=%v: %v\n", module, entityName, nkField, data[nkField], err)
 								report.Failed++
 								entityReport.Failed++
@@ -747,7 +956,7 @@ func restoreFromWithStorage(
 						// remap: assign a fresh natural key and insert as a
 						// new record, preserving the existing one.
 						if !dryRun {
-							newKey, err := remapNaturalKey(ctx, store, "demo", nkField, data[nkField])
+							newKey, err := remapNaturalKey(ctx, store, workspace, nkField, data[nkField])
 							if err != nil {
 								_, _ = fmt.Fprintf(os.Stderr, "Error: remap %s.%s %s=%v: %v\n", module, entityName, nkField, data[nkField], err)
 								report.Failed++
@@ -755,7 +964,7 @@ func restoreFromWithStorage(
 								continue
 							}
 							data[nkField] = newKey
-							if _, err := store.Insert(ctx, db.InsertParams{WorkspaceID: "demo", CreatedBy: "restore", Data: data}); err != nil {
+							if _, err := store.Insert(ctx, db.InsertParams{WorkspaceID: workspace, CreatedBy: "restore", Data: data}); err != nil {
 								_, _ = fmt.Fprintf(os.Stderr, "Error: insert (remap) %s.%s: %v\n", module, entityName, err)
 								report.Failed++
 								entityReport.Failed++
@@ -773,7 +982,7 @@ func restoreFromWithStorage(
 				entityReport.Restored++
 				continue
 			}
-			if _, err := store.Insert(ctx, db.InsertParams{WorkspaceID: "demo", CreatedBy: "restore", Data: data}); err != nil {
+			if _, err := store.Insert(ctx, db.InsertParams{WorkspaceID: workspace, CreatedBy: "restore", Data: data}); err != nil {
 				_, _ = fmt.Fprintf(os.Stderr, "Error: insert %s.%s: %v\n", module, entityName, err)
 				report.Failed++
 				entityReport.Failed++
@@ -786,6 +995,14 @@ func restoreFromWithStorage(
 			_, _ = fmt.Fprintf(os.Stderr, "Error: read %s: %v\n", hdr.Name, err)
 			report.Failed++
 			entityReport.Failed++
+		}
+		// The report is keyed by the ARCHIVE entry, not the (possibly mapped)
+		// target: an operator reading the output needs to know which file in the
+		// backup produced these counts, and a mapped target can receive records
+		// from more than one entry.
+		entityReport.Module, entityReport.Entity = srcModule, srcEntity
+		if mapped {
+			entityReport.MappedTo = module + "/" + entityName
 		}
 		report.Entities = append(report.Entities, *entityReport)
 	}

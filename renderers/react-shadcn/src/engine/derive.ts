@@ -510,7 +510,16 @@ export function withEntityColumnLabels(
   )
 }
 
+/** Sort affordance: does the SERVER support ordering by this column? */
 function isSortable(field: Field): boolean {
+  // A relation renders its target's display name (`branch.name`), but the
+  // server orders by the stored value — the foreign-key UUID. Offering a sort
+  // button there promises an order the API cannot deliver, and the request is
+  // rejected outright (`?sort=branch.name` → 422 unknown field). Sorting a
+  // relation needs a JOIN in the PersistBackend, which does not exist yet, so
+  // the affordance is withheld rather than shown-and-broken (todo 5.18.5 —
+  // option (b): "matikan tombol sortir untuk kolom relasi").
+  if (field.type === "relation") return false
   return [
     "string",
     "integer",

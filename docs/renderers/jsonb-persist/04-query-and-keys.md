@@ -65,14 +65,15 @@ field itu ternyata tidak diisi siapa pun.
 ([`../../spec/backend/01-core-basic.md`](../../spec/backend/01-core-basic.md)
 §5) — entry tidak pernah dihapus saat commit, kedaluwarsa via `CleanupExpired`
 lewat retention (`core.idempotency_retention`, default 24 jam,
-`IdempotencyStore.WithTTL`). `resource.App` (`resource/formspec.go`) sekarang
-membuat satu `IdempotencyStore` per App dengan TTL dari `Config.IdempotencyTTL`
-dan mengeksposnya lewat `App.Idempotency()` — TTL-nya nyata dipakai, bukan
-field yang dihitung lalu dibuang. Resolusi TTL dari manifest `kind: Config`
-(`core.idempotency_retention` sebagai key config, bukan field Go) menunggu
-runtime Config-kind (belum ada registry-nya — lihat Fase 7.2 di
-`docs_internal/plan/todo.md`); sampai saat itu, `Config.IdempotencyTTL` adalah seam
-konfigurasi yang setara, sama seperti `JWTSecret` dkk.
+`IdempotencyStore.WithTTL`). `resource.App` (`resource/formspec.go`) membuat satu
+`IdempotencyStore` per App dan mengeksposnya lewat `App.Idempotency()` — TTL-nya
+nyata dipakai, bukan field yang dihitung lalu dibuang. **Retention dibaca dari
+manifest** lewat `resolveIdempotencyTTL` (boot **dan** `ReloadSpec`, jadi
+mengubah nilainya berlaku tanpa restart): key `core.idempotency_retention`
+menang, lalu `Config.IdempotencyTTL` (seam Go), lalu default 24 jam. Nilai
+non-positif berarti tanpa kedaluwarsa; nilai yang tidak bisa diparse **dilaporkan**
+lalu default dipakai alih-alih diam-diam mematikan retention. Format durasi
+mengikuti retention stream (`7d`, `24h`, `30m`).
 
 **Jalur HTTP sudah aktif (Fase 2.7, 2026-08-17).** Store di-wire ke router
 (`RouterBuilder.SetIdempotencyStore`) di `New()` dan `ReloadSpec()`, dan

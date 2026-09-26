@@ -96,7 +96,7 @@ spec:
       required_permission: payments.fail
       audit: true
     - name: refund
-      description: "Kembalikan pembayaran — butuh persetujuan supervisor (D5)"
+      description: "Kembalikan pembayaran ini — butuh persetujuan supervisor."
       required_permission: payments.refund
       audit: true
   # expose: [] — UI-only.

@@ -47,7 +47,7 @@ func TestKafe_PurchaseReceivedCreatesJournal(t *testing.T) {
 
 	// 200 × 2.500 = 500.000 — the figure the journal must carry.
 	po := map[string]any{
-		"transaction_date": "2026-09-22",
+		"transaction_date": recentDate(),
 		"branch_id":        branchID,
 		"supplier_id":      supplierID,
 		"lines": []any{
@@ -146,21 +146,32 @@ func TestKafe_PurchaseReceivedCreatesJournal(t *testing.T) {
 }
 
 // waitForJournalSource polls until the outbox worker has delivered the purchase
-// event and the subscription has produced a journal for this specific PO.
+// event AND the subscription has finished posting a journal for this specific
+// PO.
 //
 // A source-specific wait rather than the generic waitForJournal: the sales
 // chain's helper returns as soon as ANY journal exists, which would let this
 // test pass on a journal created by an unrelated order.
+//
+// Like waitForJournal it waits for `status: posted`, not for the row to exist:
+// the row appears when `journalize` inserts it, and `posted` is set by the
+// handler afterwards. Waiting only for existence is the race behind todo
+// 5.10.24.
 func waitForJournalSource(t *testing.T, app *App, sourceID string) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
+	var last string
 	for time.Now().Before(deadline) {
-		if findJournalBySource(t, app, sourceID) != nil {
-			return
+		if rec := findJournalBySource(t, app, sourceID); rec != nil {
+			status, _ := rec.Data["status"].(string)
+			last = status
+			if status == "posted" {
+				return
+			}
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	t.Fatalf("timed out waiting for the outbox worker to deliver on_po_received and create a journal for PO %s", sourceID)
+	t.Fatalf("timed out waiting for the purchase journal of PO %s to reach status %q (last observed: %q)", sourceID, "posted", last)
 }
 
 // seedKafePurchaseAccounts adds the purchasing accounts the purchase journal

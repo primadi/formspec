@@ -425,14 +425,23 @@ formspec backup create --full                       # atau --incremental, --filt
 formspec backup inspect backup-2026-07-10.tar
 
 formspec restore --from backup-2026-07-10.tar \
-  --map-resource old-customer=new-customer \      # remap saat konflik ID
-  --conflict remap \                              # skip | overwrite | remap (UUID+FK di-remap)
+  --map-resource beta/customer=staging/lead \     # arahkan record ke resource LAIN (3.7.7)
+  --conflict remap \                              # skip | overwrite | remap (natural key baru)
   --dry-run                                       # laporan kompatibilitas dulu
 ```
 
+**`--map-resource` dan `--conflict remap` dua hal yang berbeda**, dan namanya mudah tertukar:
+
+| Flag                         | Artinya                                                                                                                                                                                                                                         |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--map-resource <src>=<dst>` | record dari resource `src` di arsip ditulis ke resource `dst` di spec tujuan (mis. memuat sample produksi ke entity dev). Boleh diulang. Target **wajib ada** di spec — kalau tidak, perintah berhenti dengan error sebelum menyentuh database. |
+| `--conflict remap`           | resource-nya tetap sama; yang diubah **natural key** saat bentrok (`C-001` → `C-001-r1`) supaya record lama tidak tertimpa.                                                                                                                     |
+
+Kedua sisi `--map-resource` menerima `module/entity` atau `module_entity` (spelling yang dicetak `backup inspect`). Pemetaan dilaporkan di awal output, dan laporan dry-run mencetak `sumber -> target` per entity sehingga hasil yang kosong tidak salah dibaca sebagai "pemetaan tidak melakukan apa-apa".
+
 File storage ikut ter-backup **lewat storage service** — objek dibaca/ditulis melalui `ResolveStorage` (datastore registry), bukan dari path `{state}/storage` yang hardcoded, sehingga `kind: Datastore` ber-driver garage/minio/s3 juga tercakup. Kunci objek di-enumerasi dari field `file`/`attachment` pada record yang ikut ter-backup (kontrak `Storage` tidak punya operasi list), dan di-upload kembali **verbatim** saat restore — kunci di arsip identik dengan yang dirujuk record, jadi tidak ada remap yang bisa memutusnya. Summary/agregat tidak ikut (bisa dihitung ulang). Transform per-record via script Starlark saat restore. `restore` yang meng-overwrite data yang sudah ada wajib tanda tangan pemilik workspace atau delegasi eksplisit ber-scope `backup.restore`, selalu tercatat di transparency log.
 
-> **Batasan yang diketahui (jangan diandalkan):** backup/restore masih menulis ke workspace **`"demo"`** yang hardcoded, tanpa flag `--workspace`. Untuk aplikasi yang datanya ber-tenant lain (mis. kafe → `kafe`), `backup create` akan melaporkan **0 record** meski tabelnya berisi. Ditracking sebagai todo 4.8.7.
+> **Batasan yang diketahui:** backup/restore memakai workspace aktif hasil aturan #48 (`kind: Workspace` **mendaftarkan** slug, tidak memilih satu): dengan satu workspace dideklarasikan, slug itulah yang dipakai; dengan beberapa, perintah **memperingatkan** dan memakai default `demo` sampai `--workspace <slug>` diberikan. Sebelumnya perintah selalu membaca `demo` secara hardcoded, sehingga `formspec backup create` pada aplikasi ber-tenant lain (kafe → `kafe`) melaporkan **0 record** padahal tabelnya berisi — dan manifest.json kini mencatat `workspace` supaya arsip kosong bisa dibedakan dari arsip aplikasi yang memang kosong. Ditutup di todo **4.8.7**.
 
 ### `formspec summary list|rebuild`
 

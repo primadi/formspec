@@ -9,7 +9,9 @@ import (
 
 // DefaultIdempotencyTTL is the default TTL for idempotency keys (24 hours).
 // Spec §11.3/§420: implementations MUST NOT hard-code the window.
-// Production deployments SHOULD configure this via core.idempotency_retention.
+// Production deployments SHOULD configure this via core.idempotency_retention
+// — a manifest `kind: Config` key, read at boot and on spec reload by
+// resource.resolveIdempotencyTTL (todo 2.1.6).
 const DefaultIdempotencyTTL = 24 * time.Hour
 
 // IdempotencyStore manages idempotency keys for action deduplication.

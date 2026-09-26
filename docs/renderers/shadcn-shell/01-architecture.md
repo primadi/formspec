@@ -89,26 +89,31 @@ jatuh ke jalur error generik (`toast.error`), bukan alur refetch-khusus.
 Bagian yang terbukti belum/tidak sesuai rencana desain awal — dicatat supaya
 tidak diam-diam diasumsikan bekerja:
 
-- **`OverlayHost.tsx` (modal/drawer via query string) ada tapi tidak
-  terhubung ke jalur hidup mana pun.** Seluruh navigasi create/edit dari
-  `TableRenderer` pergi ke route halaman penuh, bukan men-drive
-  `OverlayHost` lewat `?action=...`. Isi `Dialog`/`Sheet`-nya masih literal
-  placeholder ("Form renderer coming in Fase 4.F3") walau `FormRenderer`
-  sendiri sudah selesai dibangun di jalur lain. `Form.render: modal|drawer`
-  di manifest karena itu **tidak benar-benar mengubah presentasi** hari ini
-  — lihat gap serupa di [`03-kind-renderers.md`](03-kind-renderers.md) §Table.
-- **`engine/registry.tsx`** (registry kind→component generik) dan
-  **`engine/derive.ts`'s `deriveMenuItems()`** adalah kode mati — wiring
-  aktual pakai `lazy()` map hardcoded di `shell/router.tsx`, dan menu
-  `_admin` dibangun inline di `Sidebar.tsx`, bukan lewat fungsi derivasi ini.
-- **`TableRenderer` hardcode prefiks `/_admin`** pada `navigate()` untuk
-  aksi row/New — tabel yang dirender di bawah surface `app` (lewat blok
-  Page) ikut ter-navigasi ke `_admin`, kemungkinan bug untuk App-surface.
-- Realtime (`realtime: true` di Table/Dashboard) **belum ada implementasi
-  apapun** — bukan polling, bukan websocket. Field-nya ada di tipe tapi
-  tidak pernah dibaca renderer manapun. Lihat
-  [`../../spec/frontend/04-spec-resolution-api.md`](../../spec/frontend/04-spec-resolution-api.md)
-  §5 untuk kontrak yang harus dipenuhi nanti.
-- Component contract `asset` (mount/unmount, `formspec.ui` service) **belum
-  diimplementasikan sama sekali** — lihat
-  [`04-theming-assets.md`](04-theming-assets.md) §2.
+- **`OverlayHost` sudah terhubung** — dipasang di ketiga shell
+  (`SideNavShell`, `TopNavShell`, dan otomatis ikut `AuthPage`) dan dibuka lewat
+  query string `?action=&form=&mode=` yang dikirim `TableRenderer`; `Form.render:
+modal|drawer` di manifest karena itu benar-benar mengubah presentasi. Jalur
+  derivasi juga bekerja saat pemanggil mengirim `entity=module.name` sebagai
+  ganti `form` (lihat `OverlayHost.tsx` + `formspec-client.ts`).
+- **`engine/registry.tsx` sudah dihapus.** Wiring aktual memakai `lazy()` map
+  hardcoded di `shell/router.tsx`; tidak ada file registry generik lagi. (Item
+  ini dulu menyebutnya "kode mati" — sekarang tidak ada sama sekali.)
+- **`deriveMenuItems()` sudah dipakai** — `hooks/useResolvedMenu.ts` memanggilnya
+  untuk cabang `_admin`, bukan lagi membangun menu inline di `Sidebar.tsx`.
+- **`TableRenderer` tidak lagi hardcode prefiks `/_admin`** — navigasi memakai
+  `useSurface().surfacePath`, sehingga tabel di surface `app` tetap di `app`.
+- **Realtime sudah ada** — `hooks/useRealtime.ts` (subscriber union + delta) dan
+  sudah dipakai Table, Kanban, Calendar, Dashboard, Timeline, ApprovalInbox, dan
+  NotificationCenter; `realtime: true` di manifest dibaca, bukan field mati.
+- **Component contract `asset` sudah ada** — `shell/AssetRenderer.tsx` memuat ES
+  module dari path `asset`, memanggil `mount(el, props, formspec)` /
+  `unmount(el)`, dan menyuntikkan `formspec` client sesuai
+  [`07-component-kinds.md`](../../spec/frontend/07-component-kinds.md) §4
+  ([`04-theming-assets.md`](04-theming-assets.md) §2).
+
+**Cara memakai section ini:** ia memuat **divergensi yang masih berlaku**.
+Tiap baris di atas adalah divergensi yang sudah **tertutup** dan sengaja
+dipertahankan sebagai jejak singkat — bila Anda menemukan barisnya tidak lagi
+benar, hapus baris itu (jangan tambahkan baris "dulu X sekarang Y" ke `docs/`,
+cukup rujuk changelog penutupnya). Untuk routing dan visibilitas menu, dokumen
+otoritatifnya [`05-routing.md`](05-routing.md).
