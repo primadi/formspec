@@ -55,6 +55,38 @@ metadata:
 | `date`, `datetime`   |                                                                                                                                |
 | `enum`               | wajib `enum_values: [...]`                                                                                                     |
 | `relation`           | referensi entity lain — `relation: {type: belongs_to, resource: "<module>.<entity>"}` (key-nya **`resource`**, bukan `target`) |
+| `json`               | struktur bebas; beri `multiple: true` + `options` bila nilainya himpunan pilihan                                                          |
+
+### Himpunan pilihan — `options` + `multiple`
+
+Bila nilai field diambil dari daftar tetap, deklarasikan di **Entity** (bukan di
+Form): `options: [{value, label}]` menyatakan nilai + caption-nya, dan
+`multiple` menyatakan berapa banyak yang dipegang field.
+
+```yaml
+- name: days_of_week        # himpunan
+  type: json
+  multiple: true            # WAJIB di json/string bila ada options
+  options:
+    - { value: 1, label: "Senin" }
+    - { value: 2, label: "Selasa" }
+
+- name: channel             # satu nilai, tetap ber-caption
+  type: string
+  multiple: false
+  options:
+    - { value: pos, label: "POS" }
+    - { value: qris, label: "QRIS" }
+```
+
+- `multiple: true` → widget tag; `multiple: false`/absen (skalar) → picker
+  pilihan tunggal. **Form cukup mengikuti** — jangan tulis `widget:` untuk
+  field ber-`options`; `formspec check` menolak widget yang bertentangan.
+- `multiple` **wajib** di `json`/`string` (keduanya bisa satu nilai atau daftar).
+- `options` **tidak sah** pada `enum` (pakai `enum_values`), `money`, `file`,
+  `relation`, `child`, `text`, `richtext`, dan tipe non-skalar lain.
+- `value` mempertahankan tipe: `value: 1` menyimpan angka `1`, bukan `"1"`.
+- Nilai di luar deklarasi tetap tersimpan (data lama tidak hilang senyap).
 
 ## Aturan Penting
 

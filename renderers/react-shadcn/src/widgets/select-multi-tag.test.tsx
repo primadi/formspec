@@ -26,11 +26,14 @@ import {
 import { SelectMultiTag } from "@/widgets/SelectMultiTag"
 import {
   fieldOptions,
+  isMultiValue,
+  optionValueShape,
   parseOptionValue,
+  parseSingleOptionValue,
   serializeOptionValue,
+  serializeSingleOptionValue,
   optionKey,
   optionLabel,
-  valueShapeOf,
 } from "@/lib/field-options"
 import type { Field } from "@/types/manifest"
 
@@ -40,12 +43,24 @@ afterEach(cleanup)
 const daysField: Field = {
   name: "days_of_week",
   type: "json",
+  multiple: true,
   options: [
     { value: 1, label: "Senin" },
     { value: 2, label: "Selasa" },
     { value: 3, label: "Rabu" },
     { value: 4, label: "Kamis" },
     { value: 5, label: "Jumat" },
+  ],
+}
+
+/** A scalar single-select: one day, with captions. */
+const dayField: Field = {
+  name: "day_of_week",
+  type: "integer",
+  multiple: false,
+  options: [
+    { value: 1, label: "Senin" },
+    { value: 2, label: "Selasa" },
   ],
 }
 
@@ -129,12 +144,67 @@ describe("option value shape", () => {
   it("serializes back into the field's declared shape", () => {
     expect(serializeOptionValue([1, 2], "array")).toEqual([1, 2])
     expect(serializeOptionValue([1, 2], "string")).toBe("1,2")
-    expect(valueShapeOf(daysField)).toBe("array")
-    expect(valueShapeOf({ name: "t", type: "string" })).toBe("string")
+    expect(optionValueShape(daysField)).toBe("array")
+    expect(
+      optionValueShape({ name: "t", type: "string", multiple: true }),
+    ).toBe("string")
   })
 
   it("labels an undeclared value rather than blanking it", () => {
     expect(optionLabel(fieldOptions(daysField), 9)).toBe("9")
+  })
+})
+
+// Cardinality is a property of the Entity (`Field.multiple`), not of the widget:
+// the Form follows the declaration instead of restating it, so the same field
+// cannot be a tag picker in one form and a single select in another.
+describe("cardinality", () => {
+  it("reads a set from `multiple: true`", () => {
+    expect(isMultiValue(daysField)).toBe(true)
+    expect(optionValueShape(daysField)).toBe("array")
+  })
+
+  it("reads a scalar as single, declared or absent", () => {
+    expect(isMultiValue(dayField)).toBe(false)
+    expect(
+      isMultiValue({ name: "qty", type: "integer", multiple: false }),
+    ).toBe(false)
+    // Absent on a scalar means single — no declaration needed there.
+    expect(isMultiValue({ name: "qty", type: "integer" })).toBe(false)
+  })
+
+  it("gives a set on `string` the comma-separated shape", () => {
+    const field: Field = {
+      name: "tags",
+      type: "string",
+      multiple: true,
+      options: [{ value: "a" }],
+    }
+    expect(optionValueShape(field)).toBe("string")
+  })
+
+  it("normalises a single stored value to its declared scalar type", () => {
+    // "1" from a JSON round-trip is the declared number 1, so the field keeps
+    // storing numbers rather than silently becoming a string.
+    expect(parseSingleOptionValue("1", fieldOptions(dayField))).toBe(1)
+    expect(parseSingleOptionValue(2, fieldOptions(dayField))).toBe(2)
+  })
+
+  it("keeps an undeclared single value visible and removable", () => {
+    expect(parseSingleOptionValue(9, fieldOptions(dayField))).toBe(9)
+  })
+
+  it("treats empty and object values as no selection", () => {
+    expect(parseSingleOptionValue("", fieldOptions(dayField))).toBeUndefined()
+    expect(parseSingleOptionValue(null, fieldOptions(dayField))).toBeUndefined()
+    // A set value on a single-value field is a different value, not a choice.
+    expect(parseSingleOptionValue([1], fieldOptions(dayField))).toBeUndefined()
+  })
+
+  it("serializes a cleared single as null, not an empty string", () => {
+    // `""` would be stored as a string on a numeric field.
+    expect(serializeSingleOptionValue(undefined)).toBeNull()
+    expect(serializeSingleOptionValue(1)).toBe(1)
   })
 })
 

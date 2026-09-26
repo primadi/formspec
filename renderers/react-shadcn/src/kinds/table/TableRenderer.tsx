@@ -66,6 +66,10 @@ import { useSelectFilterOptions } from "@/hooks/useSelectFilterOptions"
 import { useRealtime } from "@/hooks/useRealtime"
 import { renderCellValue, resolveColumnCell } from "@/lib/renderCell"
 import {
+  fieldOptions,
+  parseSingleOptionValue,
+} from "@/lib/field-options"
+import {
   columnAlignClass,
   columnJustifyClass,
   columnWidthStyle,
@@ -78,6 +82,10 @@ import { Select } from "@/components/ui/select"
 import { cn, interpolateConfirm, titleCase } from "@/lib/utils"
 import { resolveIcon } from "@/lib/icon-resolver"
 import ConfirmDialog from "@/components/ui/confirm-dialog"
+import {
+  getEntityRouteIdentifier,
+  getEntityRouteSegment,
+} from "@/lib/entityIdentity"
 
 interface TableRendererProps {
   entity: EntitySchema
@@ -449,7 +457,17 @@ export default function TableRenderer({
     for (const row of rows) {
       const version = typeof row.version === "number" ? row.version : undefined
       const patch: Record<string, unknown> = {}
-      for (const f of fields) patch[f] = batchDraft[f]
+      for (const f of fields) {
+        // A draft value chosen from a declared option set is stored in its
+        // declared scalar form (`1`, not `"1"`) — the same rule the form widgets
+        // follow, so a batch PATCH cannot silently turn a numeric set into
+        // strings. A plain text draft passes through unchanged.
+        const decl = entity.fields.find((ef) => ef.name === f)
+        patch[f] = decl
+          ? (parseSingleOptionValue(batchDraft[f], fieldOptions(decl)) ??
+            batchDraft[f])
+          : batchDraft[f]
+      }
       try {
         await apiPatch(
           getClient(),
@@ -667,9 +685,16 @@ export default function TableRenderer({
 
     switch (action.action) {
       case "view":
-        navigate(surfacePath(entity.module, entity.plural, row.id))
+        navigate(
+          surfacePath(
+            entity.module,
+            entity.plural,
+            getEntityRouteSegment(entity, row),
+          ),
+        )
         break
       case "edit":
+        const routeIdentifier = getEntityRouteIdentifier(entity, row)
         // Modal/drawer render mode → overlay (authored form name if there is
         // one, otherwise the entity itself — OverlayHost derives the form).
         if (formRenderMode !== "separate_page") {
@@ -678,17 +703,27 @@ export default function TableRenderer({
             ...(authoredForm
               ? { form: authoredForm.name }
               : { entity: `${entity.module}.${entity.name}` }),
-            id: row.id,
+            id: routeIdentifier,
             mode: formRenderMode,
           })
         } else {
-          navigate(surfacePath(entity.module, entity.plural, row.id, "edit"))
+          navigate(
+            surfacePath(
+              entity.module,
+              entity.plural,
+              getEntityRouteSegment(entity, row),
+              "edit",
+            ),
+          )
         }
         break
       case "delete":
         try {
           const client = getClient()
-          await apiDelete(client, `${entity.module}/${entity.name}/${row.id}`)
+          await apiDelete(
+            client,
+            `${entity.module}/${entity.name}/${getEntityRouteSegment(entity, row)}`,
+          )
           toast.success("Deleted successfully")
           setReloadKey((k) => k + 1)
         } catch (err) {
@@ -700,7 +735,7 @@ export default function TableRenderer({
         try {
           const client = getClient()
           await client.post(
-            `${entity.module}/${entity.name}/${row.id}/${action.action}`,
+            `${entity.module}/${entity.name}/${getEntityRouteSegment(entity, row)}/${action.action}`,
           )
           toast.success("Action completed")
           setReloadKey((k) => k + 1)
@@ -1377,21 +1412,27 @@ function BatchEditBar({
         <div className="flex flex-wrap items-end gap-2">
           {editableFields.map((f) => {
             const field = entity.fields.find((ef) => ef.name === f)
-            const isEnum = !!field?.enum_values?.length
+            // A field with a declared choice set gets a picker that offers the
+            // declared values — with their captions when `options` provides
+            // them (`1` → "Senin"), not just the raw enum values.
+            const choices = field ? fieldOptions(field) : []
             return (
               <div key={f} className="flex flex-col gap-1">
                 <label className="text-[11px] uppercase tracking-wide text-muted-foreground">
                   {field?.title ?? f}
                 </label>
-                {isEnum ? (
+                {choices.length > 0 ? (
                   <Select
                     value={draft[f] ?? ""}
-                    onChange={(v) => onDraftChange(f, v)}
+                    // The draft holds the option's canonical key; it is resolved
+                    // back to the declared scalar (`1`, not `"1"`) when the PATCH
+                    // body is built, so one place owns that mapping.
+                    onChange={(v) => onDraftChange(f, v === null ? "" : String(v))}
                     options={[
                       { value: "", label: "(unchanged)" },
-                      ...(field?.enum_values ?? []).map((v) => ({
-                        value: v,
-                        label: v,
+                      ...choices.map((c) => ({
+                        value: c.key,
+                        label: c.label,
                       })),
                     ]}
                     className="h-8 w-44 text-xs"

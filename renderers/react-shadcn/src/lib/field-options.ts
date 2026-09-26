@@ -1,8 +1,11 @@
-// ─── Field options — the declared choice set behind `select-multi-tag` ───
+// ─── Field options — the declared choice set behind the pickers ───
 //
-// A field's `options:` (backend 05-field-types.md §1.1) is a closed set of
-// values *with captions*: `enum_values` carries values only, so a day-of-week
-// set would render "1, 2, 3" and the author has no way to say that 1 is Senin.
+// A field's `options:` (backend 05-field-types.md §1.1.1) is a closed set of
+// values *with captions*, and `multiple` says **how many** of them the field
+// holds. Both live on the Entity, because "which values are legal" and "one or
+// many" are properties of the **data** — a Form's `widget:` only renders the
+// decision, it does not make it. `enum_values` remains the value-only contract
+// for `enum` (no captions, and a database CHECK constraint behind it).
 //
 // Everything that needs to agree on this list lives here, in one place:
 //
@@ -12,19 +15,27 @@
 //                           `spec.OptionValueKey` on the Go side, so `1` and
 //                           `"1"` are the same choice and a stored value can be
 //                           matched against a declared option;
-//   3. `parseOptionValue` / `serializeOptionValue` — the value shape contract.
+//   3. `isMultiValue()` / `optionValueShape()` — the Entity's cardinality,
+//                           mirrored 1:1 from `spec.FieldIsMultiple`;
+//   4. `parseOptionValue` / `serializeOptionValue` (set) and
+//                           `parseSingleOptionValue` / `serializeSingleOptionValue`
+//                           (one value) — the value shape contract.
 //
 // Why one module: this is the same "one vocabulary, several call sites" shape
 // that produced earlier gaps (a value rendered raw in one place and formatted in
 // another). Duplicating the key rule would let the picker and the read-only
-// renderer disagree about whether a stored value is "known".
+// renderer disagree about whether a stored value is "known"; duplicating the
+// cardinality rule would let a form and a table disagree about whether the same
+// field holds one value or a set.
 
 import type { Field, FieldOption } from "@/types/manifest"
-import { humanizeFieldName } from "@/engine/derive"
+import { humanizeFieldName, isMultiValue } from "@/engine/derive"
 
-/** The value shape a multi-tag field holds. `array` for `json` fields (the
- *  declared array survives), `string` for a comma-separated `string` field. */
-export type OptionValueShape = "array" | "string"
+export { isMultiValue }
+
+/** The value shape a field holds. `array` for a `json` set, `string` for a
+ *  comma-separated set, `scalar` for a single declared value. */
+export type OptionValueShape = "array" | "string" | "scalar"
 
 /** A resolved option: the stored value plus the caption to show. */
 export interface ResolvedOption {
@@ -104,8 +115,9 @@ export function optionLabel(options: ResolvedOption[], value: unknown): string {
   return raw === "" ? "" : labelFor(raw)
 }
 
-/** The value shape a field's widget must preserve. */
-export function valueShapeOf(field: Field | undefined): OptionValueShape {
+/** The value shape a field's widget must preserve (see `isMultiValue`). */
+export function optionValueShape(field: Field | undefined): OptionValueShape {
+  if (!isMultiValue(field)) return "scalar"
   return field?.type === "json" ? "array" : "string"
 }
 
@@ -201,6 +213,47 @@ export function serializeOptionValue(
 ): unknown {
   if (shape === "array") return values
   return values.map((v) => String(v)).join(",")
+}
+
+/**
+ * Normalise a stored single value against the declared options, keeping the
+ * declared scalar type where the value is known — the single-value twin of
+ * `parseOptionValue`, so `1` from a `value: 1` declaration is stored as the
+ * number 1 rather than "1".
+ *
+ * An empty/absent value stays `undefined` (the caller renders the placeholder);
+ * an unknown value is kept as-is when scalar, because a legacy record or a
+ * shrunk declaration must remain visible and removable rather than silently
+ * blanked on the next save (the policy `select-multi-tag` already follows).
+ */
+export function parseSingleOptionValue(
+  value: unknown,
+  options: ResolvedOption[],
+): string | number | boolean | undefined {
+  if (value === null || value === undefined || value === "") return undefined
+  // A set value on a field declared single is a different value, not a choice:
+  // surfacing it as no selection would hide the mismatch behind an empty
+  // control, and saving would drop it.
+  if (typeof value === "object") return undefined
+  const declared = findOption(options, value)
+  if (declared) return declared.value
+  return typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+    ? value
+    : undefined
+}
+
+/**
+ * Serialize a single selection back into the field's shape: the declared scalar
+ * as-is, the empty selection as `null` (an explicit "cleared" the server can
+ * apply, rather than `""` which would be stored as a string on a numeric
+ * field).
+ */
+export function serializeSingleOptionValue(
+  value: string | number | boolean | undefined,
+): unknown {
+  return value === undefined ? null : value
 }
 
 /** Type guard for the manifest's `FieldOption` array (used by tests). */

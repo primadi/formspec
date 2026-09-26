@@ -12,8 +12,11 @@ spec:
     - name: code
       type: string
       natural_key: true
+      # Kode akun dipasok seed bagan akun (dan boleh diisi user saat menambah
+      # akun sendiri) — engine TIDAK pernah men-generate-nya. `auto_generated`
+      # akan mengabaikan nilai yang dikirim, yang salah untuk field ini.
+      natural_key_entry: user_entry
       immutable: true
-      unique: true
       index: true
       description: Kode akun — "1-10001" (Kas), "4-40001" (Pendapatan)
     - name: name

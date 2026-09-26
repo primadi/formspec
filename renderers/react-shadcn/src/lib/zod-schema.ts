@@ -6,29 +6,34 @@
 
 import { z } from "zod"
 import type { Field } from "@/types/manifest"
+import { fieldIsUserRequired } from "@/lib/field-presence"
 
 export function buildZodField(entityField: Field): z.ZodTypeAny {
   let schema: z.ZodTypeAny
 
+  // The user-facing presence requirement — a server-minted key (a
+  // `natural_key_rule: sequence` natural key) is satisfied by generation, so it
+  // must not block an empty Create form. See `lib/field-presence.ts`.
+  const required = fieldIsUserRequired(entityField)
+
   switch (entityField.type) {
     case "string":
       schema = z.string()
-      if (entityField.required)
-        schema = (schema as z.ZodString).min(1, "Required")
+      if (required) schema = (schema as z.ZodString).min(1, "Required")
       else schema = (schema as z.ZodString).optional().or(z.literal(""))
       break
     case "integer":
       schema = z.number({ message: "Must be a number" })
-      if (!entityField.required) schema = schema.nullable().optional()
+      if (!required) schema = schema.nullable().optional()
       break
     case "decimal":
       schema = z.number({ message: "Must be a number" })
-      if (!entityField.required) schema = schema.nullable().optional()
+      if (!required) schema = schema.nullable().optional()
       break
     case "percent":
       // A percentage is numerically a decimal (S11).
       schema = z.number({ message: "Must be a number" })
-      if (!entityField.required) schema = schema.nullable().optional()
+      if (!required) schema = schema.nullable().optional()
       break
     case "money":
       // The canonical wire shape is `{amount, currency}` (05-field-types §2),
@@ -42,33 +47,31 @@ export function buildZodField(entityField: Field): z.ZodTypeAny {
         z.number(),
         z.string(),
       ])
-      if (!entityField.required) schema = schema.nullable().optional()
+      if (!required) schema = schema.nullable().optional()
       break
     case "time":
       schema = z
         .string()
         .regex(/^\d{2}:\d{2}(:\d{2})?$/, "Use HH:MM or HH:MM:SS")
-      if (!entityField.required) schema = schema.optional().or(z.literal(""))
+      if (!required) schema = schema.optional().or(z.literal(""))
       break
     case "boolean":
       schema = z.boolean()
-      if (!entityField.required) schema = schema.optional()
+      if (!required) schema = schema.optional()
       break
     case "enum":
       schema = z.string()
-      if (entityField.required)
-        schema = (schema as z.ZodString).min(1, "Required")
+      if (required) schema = (schema as z.ZodString).min(1, "Required")
       else schema = (schema as z.ZodString).optional().or(z.literal(""))
       break
     case "date":
     case "datetime":
       schema = z.string()
-      if (!entityField.required) schema = schema.optional().or(z.literal(""))
+      if (!required) schema = schema.optional().or(z.literal(""))
       break
     case "relation":
       schema = z.string()
-      if (entityField.required)
-        schema = (schema as z.ZodString).min(1, "Required")
+      if (required) schema = (schema as z.ZodString).min(1, "Required")
       else schema = (schema as z.ZodString).optional().or(z.literal(""))
       break
     default:

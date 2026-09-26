@@ -13,6 +13,7 @@ import { useParams, useLocation } from "react-router-dom"
 import { useSurface } from "@/hooks/useSurface"
 import { z } from "zod"
 import { buildZodField } from "@/lib/zod-schema"
+import { fieldIsUserRequired } from "@/lib/field-presence"
 import { toast } from "@/lib/ui"
 import { ArrowLeft, Save, Loader2, AlertTriangle } from "lucide-react"
 
@@ -21,7 +22,7 @@ import { FormaApiError } from "@/types/manifest"
 import { useSessionStore } from "@/stores/session"
 import { canDoEntityAction } from "@/engine/permissions"
 import { useMetaStore } from "@/stores/meta"
-import { resolveForm } from "@/engine/derive"
+import { resolveForm, deriveFormWidget } from "@/engine/derive"
 import { useRenderContext } from "@/hooks/useRenderContext"
 import { seedDefaults } from "@/lib/picker"
 import PickerPanel from "@/kinds/form/PickerPanel"
@@ -35,6 +36,8 @@ import {
   strictEvalFormSpecExpr,
 } from "@/lib/formspec-expr"
 import { apiGet, apiPost, apiPatch } from "@/lib/api"
+import { getEntityRouteIdentifier } from "@/lib/entityIdentity"
+import { useRouteIdentityStore } from "@/stores/routeIdentity"
 import { interpolateConfirm, titleCase } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import ConfirmDialog from "@/components/ui/confirm-dialog"
@@ -60,6 +63,7 @@ import { QrCode } from "@/widgets/QrCode"
 import { MoneyInput } from "@/widgets/MoneyInput"
 import { TimeInput } from "@/widgets/TimeInput"
 import { isFormWidget, formWidgetNames } from "@/widgets/catalog"
+import { fieldOptions } from "@/lib/field-options"
 
 interface FormRendererProps {
   entity: EntitySchema
@@ -117,6 +121,7 @@ export default function FormRenderer({
   const { surfacePath } = useSurface()
   const id = fixedId ?? routeId
   const getClient = useSessionStore((s) => s.getClient)
+  const setRouteIdentity = useRouteIdentityStore((s) => s.setIdentity)
   const me = useSessionStore((s) => s.me)
   const bundleForms = useMetaStore((s) => s.bundle?.forms) ?? []
   const appName = useMetaStore((s) => s.bundle?.app.name)
@@ -293,10 +298,16 @@ export default function FormRenderer({
       const client = getClient()
       const record = await apiGet<Record<string, unknown>>(
         client,
-        `${entity.module}/${entity.name}/${id}`,
+        `${entity.module}/${entity.name}/${encodeURIComponent(id ?? "")}`,
       )
       if (loadTokenRef.current !== token) return
       reset(record as FormData)
+      if (routeId && !fixedId && !inOverlay) {
+        setRouteIdentity(
+          location.pathname,
+          getEntityRouteIdentifier(entity, record),
+        )
+      }
       if (typeof record.version === "number") {
         setRecordVersion(record.version)
       }
@@ -326,6 +337,10 @@ export default function FormRenderer({
     navigate,
     workspace,
     fixedId,
+    routeId,
+    inOverlay,
+    location.pathname,
+    setRouteIdentity,
   ])
 
   useEffect(() => {
@@ -362,7 +377,7 @@ export default function FormRenderer({
         const client = getClient()
         await apiPatch(
           client,
-          `${entity.module}/${entity.name}/${id}`,
+          `${entity.module}/${entity.name}/${encodeURIComponent(id ?? "")}`,
           data,
           recordVersion,
         )
@@ -446,7 +461,7 @@ export default function FormRenderer({
       if (isEdit && id) {
         await apiPatch(
           client,
-          `${entity.module}/${entity.name}/${id}`,
+          `${entity.module}/${entity.name}/${encodeURIComponent(id ?? "")}`,
           payload,
           recordVersion,
         )
@@ -640,7 +655,7 @@ export default function FormRenderer({
                               fieldContext as any,
                             ))
                       const isRequired =
-                        entityField.required ||
+                        fieldIsUserRequired(entityField) ||
                         (requiredExpr.error
                           ? false
                           : evalRequiredWhen(
@@ -819,7 +834,7 @@ export default function FormRenderer({
                     try {
                       const client = getClient()
                       await client.post(
-                        `${entity.module}/${entity.name}/${id}/submit`,
+                        `${entity.module}/${entity.name}/${encodeURIComponent(id ?? "")}/submit`,
                       )
                       toast.success("Submitted successfully")
                       if (inOverlay) {
@@ -948,25 +963,23 @@ function UnknownWidget({
 // FormFieldWidget routes one field to its widget. Exported for the widget
 // catalog parity test (src/widgets/catalog.test.tsx), which asserts every
 // catalogued widget name actually renders here.
-// implicitWidgetForType resolves the widget for a manifest form field that
-// declares no `widget:` — the field's type is used as the widget name.
 //
-// `money` and `time` have a dedicated widget since item 2.14, and a manifest
-// form is exactly where a cashier meets them (payment form, close-shift wizard,
-// promo happy hours): falling through to the type name would keep rendering the
-// plain text input that item exists to remove. Other types keep the previous
-// behaviour on purpose — broadening this table is a separate change with its own
-// blast radius (enum → select, relation → relation-picker, …), and derived forms
-// already go through `derive.formWidget` for those.
-function implicitWidgetForType(type: string): string {
-  switch (type) {
-    case "money":
-      return "moneyinput"
-    case "time":
-      return "timeinput"
-    default:
-      return type
-  }
+// When a manifest form field declares no `widget:`, the widget comes from
+// `deriveFormWidget` — the SAME function the derived Form uses. That is what
+// makes the Form follow the Entity: cardinality (`multiple` + `options` on the
+// Entity) decides between the set picker and the single-value picker, and an
+// authored `kind: Form` no longer has to restate the decision as
+// `widget: select-multi-tag` (or silently render a raw JSON editor because it
+// did not).
+//
+// Before this, only `money`/`time` were mapped for manifest forms while every
+// other type fell through to the type name — so the two paths disagreed, and
+// the disagreement is visible: the same field rendered a tag picker in a
+// derived form and a JSON editor in an authored one.
+function implicitWidgetForType(
+  field: import("@/types/manifest").Field,
+): string {
+  return deriveFormWidget(field)
 }
 
 export function FormFieldWidget({
@@ -1011,7 +1024,7 @@ export function FormFieldWidget({
     return <UnknownWidget widget={field.widget} allowed={formWidgetNames()} />
   }
 
-  const widget = field.widget ?? implicitWidgetForType(entityField.type)
+  const widget = field.widget ?? implicitWidgetForType(entityField)
 
   switch (widget) {
     // Renders nothing but keeps the value in form state (the field loop skips
@@ -1052,9 +1065,12 @@ export function FormFieldWidget({
     case "radio-group":
       return (
         <RadioGroup
-          value={(value as string) ?? ""}
+          value={value}
           onChange={(v) => onChange(v)}
-          options={entityField.enum_values ?? []}
+          // Declared captions when the field has a choice set (`options`), else
+          // the bare `enum_values` — the same vocabulary `select` reads, so the
+          // three single-value pickers cannot disagree about a field's captions.
+          options={fieldOptions(entityField)}
           readonly={readonly}
           error={error}
           label={label}
@@ -1064,9 +1080,9 @@ export function FormFieldWidget({
     case "combobox":
       return (
         <Combobox
-          value={(value as string) ?? ""}
+          value={value}
           onChange={(v) => onChange(v)}
-          options={entityField.enum_values ?? []}
+          options={fieldOptions(entityField)}
           placeholder={field.placeholder}
           readonly={readonly}
           error={error}
@@ -1140,8 +1156,10 @@ export function FormFieldWidget({
 
     case "select-multi-tag": {
       // Tags chosen from a declared set (`Field.options`, else `enum_values`)
-      // rather than typed. The widget owns the value-shape contract (array for
-      // json, comma-separated for string), so the value is passed through as-is.
+      // rather than typed. The widget owns the value-shape contract, which now
+      // comes from the Entity's cardinality (`Field.multiple`) instead of from
+      // the field type — so a set on `string` is comma-separated, a set on
+      // `json` an array. The value is passed through as-is.
       return (
         <SelectMultiTag
           value={value}
@@ -1231,9 +1249,9 @@ export function FormFieldWidget({
     case "select":
       return (
         <Select
-          value={(value as string) ?? ""}
+          value={value}
           onChange={(v) => onChange(v)}
-          options={entityField.enum_values ?? []}
+          options={fieldOptions(entityField)}
           placeholder={field.placeholder}
           readonly={readonly}
           error={error}

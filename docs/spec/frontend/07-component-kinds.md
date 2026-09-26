@@ -72,8 +72,9 @@ Aturan yang mengikat seluruh himpunan di atas:
 
 ### 1.3 `select-multi-tag` — tag dari pilihan, bukan dari ketikan
 
-Saudara `tags` untuk field multi-nilai yang **himpunan nilainya dideklarasikan**
-(`Field.options`, [`../backend/05-field-types.md`](../backend/05-field-types.md) §1.1;
+Saudara `tags` untuk field yang memegang **himpunan** nilai yang dideklarasikan
+(`Field.options` + `multiple: true`,
+[`../backend/05-field-types.md`](../backend/05-field-types.md) §1.1.1;
 fallback `enum_values` bila `options` tidak ada). `tags` menerima apa pun yang
 diketik, jadi himpunan yang ditetapkan spec (`1=Senin … 7=Minggu`) tidak bisa
 ditegakkan lewatnya — `9` tetap tersimpan.
@@ -96,11 +97,38 @@ Yang menjadi kontrak widget ini:
   masuk daftar dipisah koma → keluar string. Tipe skalar mengikuti deklarasi,
   jadi himpunan angka tetap tersimpan sebagai angka.
 
-Field `json` yang mendeklarasikan `options` menurunkan widget ini; tanpa
-`options` ia tetap editor JSON (tidak ada spec lama yang berubah perilaku).
 Halaman detail dan sel tabel/listing merender himpunan yang sama sebagai chip
 berlabel ("Senin, Selasa") — bukan `[1,2]` mentah — dari satu resolver bersama,
 supaya kedua permukaan tidak bisa berbeda.
+
+### 1.4 Cardinality: Form mengikuti Entity
+
+**Single vs multi bukan keputusan Form.** Cardinality dideklarasikan pada Entity
+(`Field.multiple`), dan renderer menurunkan widgetnya — sehingga field yang sama
+tidak bisa jadi tag picker di satu form dan picker satu-nilai di form lain.
+
+| Deklarasi Entity                            | Widget yang diturunkan |
+| ------------------------------------------- | ---------------------- |
+| `options` + `multiple: true`                | `select-multi-tag`     |
+| `options` + `multiple: false` (atau skalar) | `select`               |
+| `enum_values` (tanpa `options`)             | `select`               |
+| tanpa `options`                             | seperti tipe field-nya |
+
+Aturan yang mengikat:
+
+- **Form yang ditulis tidak perlu menulis `widget:`** untuk field ber-`options`;
+  widget diturunkan dari deklarasi Entity — jalur derivasi dan jalur manifest
+  memakai fungsi yang sama, jadi keduanya tidak bisa berbeda.
+- **Caption ikut deklarasi.** Picker pilihan tunggal (`select`, `radio-group`,
+  `combobox`) menampilkan `options[].label` bila ada, bukan nilai mentah — jadi
+  `1` tampil "Senin" dan `qris` tampil "QRIS". Nilai yang **dikirim** tetap nilai
+  deklarasi (bukan caption), dengan tipe skalarnya.
+- **Widget yang bertentangan ditolak di deploy**, bukan di browser:
+  `formspec check` menolak `select-multi-tag` pada field bernilai tunggal dan
+  `select`/`radio-group`/`combobox` pada himpunan.
+- **Permukaan baca ikut aturan yang sama**: sel tabel, halaman detail, dan filter
+  `select` merender label dari deklarasi (nilai tunggal tampil sebagai badge
+  ber-caption di tabel).
 
 ### 1.2 `moneyinput` / `timeinput`
 

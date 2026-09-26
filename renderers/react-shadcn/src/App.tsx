@@ -32,6 +32,7 @@ import {
   AuthPage,
   buildRoutes,
 } from "@/shell"
+import { SwitchContextScreen } from "@/shell/SwitchContextScreen"
 import ThemeRenderer from "@/kinds/theme/ThemeRenderer"
 import { useTheme } from "@/hooks/useTheme"
 import { useAutoLogout } from "@/hooks/useAutoLogout"
@@ -224,6 +225,7 @@ function SurfaceShell({
   const unauthenticated = useSessionStore((s) => s.unauthenticated)
   const token = useSessionStore((s) => s.token)
   const boot = useSessionStore((s) => s.boot)
+  const pendingContext = useSessionStore((s) => s.pendingContext)
   const storedBundle = useMetaStore((s) => s.bundle)
   const metaSurface = useMetaStore((s) => s.loadedSurface)
   // The meta store holds ONE bundle for the whole SPA. A bundle fetched for
@@ -421,6 +423,21 @@ function SurfaceShell({
           Make sure the FormSpec server is running.
         </p>
       </div>
+    )
+  }
+
+  // A token refresh answered 409 CONTEXT_REQUIRED: the session's assignment
+  // (role × branch) was revoked or its role was deleted, so the server will
+  // not renew it under the old boundary (backend §8.7). The credentials are
+  // still good — this is a question, not a logout — so block the surface and
+  // ask which context to continue in, instead of bouncing to the login form.
+  if (pendingContext && pendingContext.length > 0) {
+    return (
+      <SwitchContextScreen
+        workspace={workspace}
+        choices={pendingContext}
+        app={bundle?.app?.name}
+      />
     )
   }
 

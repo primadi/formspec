@@ -235,6 +235,10 @@ export const useMetaStore = create<MetaState>((set, get) => ({
       // Live auth callbacks so a 401 during meta load can refresh the token.
       const getToken = () => useSessionStore.getState().token
       const onUnauthorized = () => useSessionStore.getState().refreshSession()
+      // A refresh 409 is "pick a context", not "session expired" — without
+      // this the auth hook would expire a still-valid session.
+      const needsContext = () =>
+        useSessionStore.getState().pendingContext !== null
       // `_admin` isn't scoped to any App (Core §4.4) — skip App detection
       // entirely and fetch the unscoped, binary-gated bundle.
       let bundle: MetaBundle
@@ -244,6 +248,7 @@ export const useMetaStore = create<MetaState>((set, get) => ({
           token,
           getToken,
           onUnauthorized,
+          needsContext,
         })
       } else {
         const apps = await fetchMetaApps(workspace, token, {
@@ -321,6 +326,8 @@ export const useMetaStore = create<MetaState>((set, get) => ({
     try {
       const getToken = () => useSessionStore.getState().token
       const onUnauthorized = () => useSessionStore.getState().refreshSession()
+      const needsContext = () =>
+        useSessionStore.getState().pendingContext !== null
       let bundle: MetaBundle
       if (surface === "admin") {
         bundle = await fetchMetaBundle(workspace, {
@@ -328,11 +335,13 @@ export const useMetaStore = create<MetaState>((set, get) => ({
           token,
           getToken,
           onUnauthorized,
+          needsContext,
         })
       } else {
         const apps = await fetchMetaApps(workspace, token, {
           getToken,
           onUnauthorized,
+          needsContext,
         })
         const appName = detectAppName(window.location.pathname, apps)
         bundle = await fetchMetaBundle(workspace, {
@@ -340,6 +349,7 @@ export const useMetaStore = create<MetaState>((set, get) => ({
           token,
           getToken,
           onUnauthorized,
+          needsContext,
         })
       }
       set({ bundle, error: null, loadedSurface: surface })

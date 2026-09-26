@@ -403,7 +403,7 @@ describe("entityFieldHelp", () => {
   })
 })
 
-describe("deriveForm widget inference — json with options (5.10.15)", () => {
+describe("deriveForm widget inference — declared option sets", () => {
   const widgetFor = (field: Record<string, unknown>) => {
     const entity = makeEntity({
       name: "promo",
@@ -413,19 +413,45 @@ describe("deriveForm widget inference — json with options (5.10.15)", () => {
     return resolveForm(entity, "create", new Map()).sections[0].fields[0].widget
   }
 
-  it("derives select-multi-tag for a json field with a declared choice set", () => {
+  it("derives select-multi-tag for a set declared on the Entity", () => {
     // Without this the author must write `widget:` just to avoid a raw JSON
     // editor on a field whose values are a declared set of days.
     expect(
       widgetFor({
         name: "days_of_week",
         type: "json",
+        multiple: true,
         options: [
           { value: 1, label: "Senin" },
           { value: 2, label: "Selasa" },
         ],
       }),
     ).toBe("select-multi-tag")
+  })
+
+  it("derives a single-value select when the Entity declares one value", () => {
+    // The cardinality decision lives on the Entity, so the same `options` list
+    // renders a one-value picker — and the derived form and the authored form
+    // agree because both call `deriveFormWidget`.
+    expect(
+      widgetFor({
+        name: "day_of_week",
+        type: "integer",
+        multiple: false,
+        options: [{ value: 1, label: "Senin" }],
+      }),
+    ).toBe("select")
+  })
+
+  it("derives a single-value select for a json field declared single", () => {
+    expect(
+      widgetFor({
+        name: "day_of_week",
+        type: "json",
+        multiple: false,
+        options: [{ value: 1, label: "Senin" }],
+      }),
+    ).toBe("select")
   })
 
   it("keeps the JSON editor for a json field with no options", () => {
@@ -437,6 +463,15 @@ describe("deriveForm widget inference — json with options (5.10.15)", () => {
     expect(widgetFor({ name: "payload", type: "json", options: [] })).toBe(
       "json",
     )
+  })
+
+  it("keeps the plain input for a string field with no options", () => {
+    // A `string` with no choice set is free text — unless `max_length` says it
+    // is prose, which stays `textarea`.
+    expect(widgetFor({ name: "note", type: "string" })).toBe("input")
+    expect(
+      widgetFor({ name: "body", type: "string", rules: [{ name: "max_length", value: 500 }] }),
+    ).toBe("textarea")
   })
 })
 

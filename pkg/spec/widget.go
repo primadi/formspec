@@ -41,18 +41,18 @@ type FormWidget string
 // (renderers/react-shadcn/src/kinds/form/FormRenderer.tsx → FormFieldWidget) so
 // diffs between the two stay readable.
 const (
-	WidgetInput          FormWidget = "input" // single-line text (default)
-	WidgetTextarea       FormWidget = "textarea"
-	WidgetRichText       FormWidget = "richtext"
-	WidgetNumber         FormWidget = "number"
-	WidgetDecimalInput   FormWidget = "decimalinput"
-	WidgetSelect         FormWidget = "select"
-	WidgetSwitch         FormWidget = "switch"
-	WidgetRadioGroup     FormWidget = "radio-group"
-	WidgetCombobox       FormWidget = "combobox"
-	WidgetPassword       FormWidget = "password"
-	WidgetSlider         FormWidget = "slider"
-	WidgetTags           FormWidget = "tags"
+	WidgetInput        FormWidget = "input" // single-line text (default)
+	WidgetTextarea     FormWidget = "textarea"
+	WidgetRichText     FormWidget = "richtext"
+	WidgetNumber       FormWidget = "number"
+	WidgetDecimalInput FormWidget = "decimalinput"
+	WidgetSelect       FormWidget = "select"
+	WidgetSwitch       FormWidget = "switch"
+	WidgetRadioGroup   FormWidget = "radio-group"
+	WidgetCombobox     FormWidget = "combobox"
+	WidgetPassword     FormWidget = "password"
+	WidgetSlider       FormWidget = "slider"
+	WidgetTags         FormWidget = "tags"
 	// WidgetSelectMultiTag edits a multi-value field whose choices are
 	// *declared* (`Field.options`, or `enum_values` as the value-only fallback)
 	// rather than typed: the chips are chosen from the closed set, a chosen

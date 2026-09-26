@@ -324,11 +324,31 @@ export interface Field {
   index?: boolean
   natural_key?: boolean
   natural_key_rule?: NaturalKeyRuleDecl
+  /** Who supplies the natural key — mirrors `spec.NaturalKeyEntry`.
+   *  `auto_generated` (the engine only; not an input), `user_entry` (a person),
+   *  `auto_generated_if_empty` (engine pre-fills unless a value is supplied).
+   *  Absent resolves by convention in `lib/field-presence.ts`, so the renderer
+   *  reads the same mode as the Go validator. */
+  natural_key_entry?:
+    | "auto_generated"
+    | "user_entry"
+    | "auto_generated_if_empty"
   audited?: boolean
   enum_values?: string[]
-  /** Declared choice set for a multi-value field (json/string), rendered by
-   *  the `select-multi-tag` widget. */
+  /** Declared choice set for the field (`json`/`string` sets, or a scalar
+   *  single-select), rendered by the `select-multi-tag` / `select` widgets. */
   options?: FieldOption[]
+  /** How many of the declared `options` this field holds: `true` = a set
+   *  (array for `json`, comma-separated for `string`), `false` = one value.
+   *
+   *  Cardinality is a property of the **data**, so it is declared here rather
+   *  than in a Form's `widget:` — that is what lets the Form, the table cell,
+   *  the detail page, and the filter all agree on the same field.
+   *
+   *  Required (by the engine's validator) when `options` is declared on `json`
+   *  or `string`, because those types hold either shape. Absent means `false`
+   *  for a scalar type. Mirrors `spec.FieldIsMultiple` in `pkg/spec/entity.go`. */
+  multiple?: boolean
   rules?: ValidationRule[]
   relation?: RelationDecl
   child?: ChildDecl
@@ -1494,7 +1514,24 @@ export interface ErrorResponse {
     message: string
     details?: ErrorDetail[]
     request_id?: string
+    /**
+     * Present on 409 `CONTEXT_REQUIRED` only: the session contexts the caller
+     * may act in. Mirrors `auth.ContextChoice` (backend §8.7) — the client
+     * shows a picker and re-sends login with the chosen `id` as `assignment`.
+     */
+    choices?: ContextChoice[]
   }
+}
+
+/**
+ * One session context (role × dimension value) a principal may act in.
+ * `id` is `<role>@<value>` and is what the client sends back as `assignment`.
+ */
+export interface ContextChoice {
+  id: string
+  role: string
+  dimension: string
+  value: string
 }
 
 export interface ErrorDetail {
@@ -1535,18 +1572,26 @@ export class FormaApiError extends Error {
   status: number
   code: string
   details?: ErrorDetail[]
+  /**
+   * Session contexts the caller must choose between — set only for 409
+   * `CONTEXT_REQUIRED`. The client renders a picker from these and retries
+   * login with the chosen `id` as `assignment` (backend §8.7).
+   */
+  choices?: ContextChoice[]
 
   constructor(
     status: number,
     code: string,
     message: string,
     details?: ErrorDetail[],
+    choices?: ContextChoice[],
   ) {
     super(message)
     this.name = "FormaApiError"
     this.status = status
     this.code = code
     this.details = details
+    this.choices = choices
   }
 }
 

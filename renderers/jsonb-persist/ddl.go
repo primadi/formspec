@@ -252,7 +252,9 @@ func GenerateEntityDDL(meta spec.Metadata, entity *spec.EntitySpec, driver Drive
 			columns = append(columns, gc)
 		}
 
-		// Unique constraint
+		// Unique constraint. `f.NaturalKey` implies uniqueness at validate time
+		// (spec.ValidateEntitySpec sets Unique), but the flag is still tested here
+		// because DDL can be generated from a spec that skipped validation.
 		if f.Unique || f.NaturalKey {
 			colName := generatedColumnName(f.Name)
 			idxName := fmt.Sprintf("idx_uq_%s_%s", ti.TableName, f.Name)
@@ -267,31 +269,52 @@ func GenerateEntityDDL(meta spec.Metadata, entity *spec.EntitySpec, driver Drive
 				keyCols = "tenant_id, " + generatedColumnName(f.NaturalKeyRule.ScopeField) + ", " + colName
 			}
 
+			// A natural key may be OPTIONAL (the author's "diisi user" mode), so a
+			// blank value means "not set" rather than "a value" — two records
+			// without a code are not duplicates, and an index that thinks they are
+			// rejects the second insert ("UNIQUE constraint failed"). Uniqueness is
+			// therefore enforced only over rows that actually carry a key, which
+			// also matches SQL NULL semantics: a unique index never treats NULLs as
+			// equal. A `required` natural key keeps the stricter index (the value is
+			// always supplied), and a plain `unique` field follows its own contract.
+			blankPredicate := ""
+			if f.NaturalKey && !f.Required {
+				blankPredicate = colName + " IS NOT NULL AND " + colName + " != ''"
+			}
+
+			predicate := ""
+			switch {
+			case softDelete && blankPredicate != "":
+				predicate = "WHERE deleted_at IS NULL AND " + blankPredicate
+			case softDelete:
+				predicate = "WHERE deleted_at IS NULL"
+			case blankPredicate != "":
+				predicate = "WHERE " + blankPredicate
+			}
+
 			if driver == DriverSQLite {
-				// SQLite: partial unique constraints must be CREATE UNIQUE INDEX.
-				// Natural key uniqueness is scoped per tenant (tenant_id, _field)
-				// per 01-core-basic.md §2: "unique constraint per tenant".
-				if softDelete {
-					indexes = append(indexes,
-						fmt.Sprintf("CREATE UNIQUE INDEX %s ON %s (%s) WHERE deleted_at IS NULL;",
-							idxName, ti.TableName, keyCols))
-				} else {
-					indexes = append(indexes,
-						fmt.Sprintf("CREATE UNIQUE INDEX %s ON %s (%s);",
-							idxName, ti.TableName, keyCols))
+				// SQLite: a partial unique constraint MUST be written as a CREATE
+				// UNIQUE INDEX (an inline table constraint cannot carry a WHERE).
+				// The unconditional case is an index too — deliberately: an inline
+				// `UNIQUE` becomes an internal `sqlite_autoindex_*`, which carries
+				// no name the migration diff can match, so every plan would report
+				// storage drift against an index it could never find.
+				stmt := fmt.Sprintf("CREATE UNIQUE INDEX %s ON %s (%s)",
+					idxName, ti.TableName, keyCols)
+				if predicate != "" {
+					stmt += " " + predicate
 				}
-			} else if softDelete {
-				// PostgreSQL cannot declare a *partial* unique constraint
-				// inline in CREATE TABLE — the WHERE clause is a syntax error
-				// there ("syntax error at or near WHERE", first real PG run,
-				// master todo 15.8). A partial unique index is the equivalent
-				// construction and is what the partial declared-index path
-				// (S8) already emits.
+				indexes = append(indexes, stmt+";")
+			} else if predicate != "" {
+				// PostgreSQL cannot put a WHERE on an inline UNIQUE constraint —
+				// the clause is a syntax error there ("syntax error at or near
+				// WHERE", first real PG run, master todo 15.8) — so the partial
+				// index is the construction that works.
 				indexes = append(indexes,
-					fmt.Sprintf("CREATE UNIQUE INDEX %s ON %s (%s) WHERE deleted_at IS NULL;",
-						idxName, ti.TableName, keyCols))
+					fmt.Sprintf("CREATE UNIQUE INDEX %s ON %s (%s) %s;",
+						idxName, ti.TableName, keyCols, predicate))
 			} else {
-				// PostgreSQL: inline UNIQUE constraint (no predicate).
+				// Unconditional uniqueness: PostgreSQL may declare it inline.
 				constraints = append(constraints,
 					fmt.Sprintf("UNIQUE (%s)", keyCols))
 			}
@@ -814,26 +837,21 @@ func GenerateExtensionDDL(_ spec.Metadata, entity *spec.EntitySpec, driver Drive
 
 			if f.Unique || f.NaturalKey {
 				idxName := fmt.Sprintf("idx_uq_ext_%s_%s", ns, f.Name)
-				softDelete := true // default
-				if driver == DriverSQLite {
-					if softDelete {
-						alterIdx += fmt.Sprintf("\nCREATE UNIQUE INDEX %s ON %s (%s) WHERE deleted_at IS NULL;",
-							idxName, targetTable, colName)
-					} else {
-						alterIdx += fmt.Sprintf("\nCREATE UNIQUE INDEX %s ON %s (%s);",
-							idxName, targetTable, colName)
-					}
-				} else {
-					// PostgreSQL: inline UNIQUE is messy with ALTER TABLE ADD COLUMN
-					// Use separate CREATE UNIQUE INDEX
-					if softDelete {
-						alterIdx += fmt.Sprintf("\nCREATE UNIQUE INDEX %s ON %s (%s) WHERE deleted_at IS NULL;",
-							idxName, targetTable, colName)
-					} else {
-						alterIdx += fmt.Sprintf("\nCREATE UNIQUE INDEX %s ON %s (%s);",
-							idxName, targetTable, colName)
-					}
+				// Same rule as the CREATE TABLE path: an optional natural key's
+				// blank value means "not set", so uniqueness must skip it or the
+				// second blank row is refused. The two paths must agree, or an
+				// entity created by ALTER enforces a different rule than one
+				// created with its table.
+				blankPredicate := ""
+				if f.NaturalKey && !f.Required {
+					blankPredicate = colName + " IS NOT NULL AND " + colName + " != ''"
 				}
+				predicate := "WHERE deleted_at IS NULL"
+				if blankPredicate != "" {
+					predicate += " AND " + blankPredicate
+				}
+				alterIdx += fmt.Sprintf("\nCREATE UNIQUE INDEX %s ON %s (%s) %s;",
+					idxName, targetTable, colName, predicate)
 			} else if f.Index {
 				idxName := fmt.Sprintf("idx_ext_%s_%s", ns, f.Name)
 				alterIdx += fmt.Sprintf("\nCREATE INDEX %s ON %s (%s);",

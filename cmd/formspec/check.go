@@ -9,6 +9,8 @@
 //     a field missing from the schema → error (docs/spec/frontend/08-formspec-expr.md §4)
 //  3. Cross-module uses.resources referencing a {module}.{entity} that does not exist → error
 //  4. Cross-module uses.resources declared but never used → warning
+//  5. Cross-file NAMES: `spec.entity` and view refs (form/table/component/
+//     widget) that no manifest declares → error (todo 10.12)
 //
 // `--fix` removes unused cross-module declarations (safe — does not change the
 // consent footprint). Adding declarations is a consent-footprint expansion and
@@ -27,6 +29,7 @@ import (
 	"os"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -111,6 +114,24 @@ func (idx *entityIndex) fieldType(module, entity, field string) (spec.FieldType,
 	return "", false
 }
 
+// fieldDecl returns the full declaration of a field on an indexed entity.
+//
+// The cardinality gate needs more than the type name: `multiple` and `options`
+// live on the declaration, and a Form `widget:` can only be judged against them
+// (see spec.WidgetCardinalityMismatch).
+func (idx *entityIndex) fieldDecl(module, entity, field string) (*spec.Field, bool) {
+	es, ok := idx.byKey[module+"."+entity]
+	if !ok {
+		return nil, false
+	}
+	for i := range es.Fields {
+		if es.Fields[i].Name == field {
+			return &es.Fields[i], true
+		}
+	}
+	return nil, false
+}
+
 // buildEntityIndex indexes all Entity/Document manifests by "{module}.{entity}".
 func buildEntityIndex(manifests []manifest.RawManifest) *entityIndex {
 	idx := &entityIndex{byKey: map[string]*spec.EntitySpec{}, sourceByKey: map[string]string{}}
@@ -185,6 +206,10 @@ func runCheck(args []string) {
 
 	// Check 3+4: cross-module uses.resources existence + unused.
 	brokenRefs := checkUses(result, idx, res.Manifests)
+
+	// Check 7: cross-file NAMES — `spec.entity` and view refs
+	// (form/table/component/widget) that no manifest declares (10.12).
+	checkReferences(result, idx, res.Manifests)
 
 	// Check 2.9.4: kind: Datastore driver×serves compatibility +
 	// module `spec.datastore` binding targets (platform/06-datastore.md §1.1/§2).
@@ -312,6 +337,19 @@ func checkForms(result *checkResult, idx *entityIndex, manifests []manifest.RawM
 			for _, f := range section.Fields {
 				if f.Field != "" && !fields[f.Field] {
 					result.add(m.Source, "error", "Form %q field %q references field %q missing from entity %q", name, f.Field, f.Field, form.Entity)
+				}
+				// The Form follows the Entity's cardinality: a widget that picks
+				// one value on a set field (or tags on a single-value field) would
+				// render a control the data cannot honour. Reported here, at deploy
+				// time, rather than as a surprise in the browser.
+				// `WidgetCardinalityMismatch` already names the field, so the
+				// prefix only says which Form made the claim.
+				if f.Field != "" && f.Widget != "" {
+					if decl, ok := idx.fieldDecl(module, entity, f.Field); ok {
+						if err := spec.WidgetCardinalityMismatch(decl, f.Widget); err != nil {
+							result.add(m.Source, "error", "Form %q: %v", name, err)
+						}
+					}
 				}
 				checkExpr(result, m.Source, name, "field "+f.Field+".visible_when", f.VisibleWhen, fields)
 				checkExpr(result, m.Source, name, "field "+f.Field+".readonly_when", f.ReadonlyWhen, fields)
@@ -1117,6 +1155,222 @@ func findMappingValue(m *yaml.Node, key string) *yaml.Node {
 		}
 	}
 	return nil
+}
+
+// kindIndex maps "{module}/{name}" → manifest source, per frontend kind. It is
+// what makes "does this ref point at something?" answerable at check time.
+type kindIndex map[string]map[string]string
+
+func (k kindIndex) add(kind, module, name, source string) {
+	if k[kind] == nil {
+		k[kind] = map[string]string{}
+	}
+	k[kind][module+"/"+name] = source
+}
+
+func (k kindIndex) has(kind, module, name string) bool {
+	_, ok := k[kind][module+"/"+name]
+	return ok
+}
+
+// hasAnyModule reports whether ANY module declares this kind under this bare
+// name.
+//
+// Why unqualified cross-module refs must resolve: the authoring convention is a
+// bare name for a view, and internal/ui resolves it module-locally — but a
+// plain name also occurs where the author means "the widget of that name, in
+// whichever module has it". Measured on Clinic-UI-Showcase: the `clinic`
+// module's dashboard places `pharmacy-queue-count`, declared by the `pharmacy`
+// module, with a comment saying so. Treating a bare name as module-local alone
+// reported that working dashboard as broken — a false positive, which is worse
+// than not checking at all. Only a name NO module declares is an error.
+func (k kindIndex) hasAnyModule(kind, name string) bool {
+	for key := range k[kind] {
+		if i := strings.LastIndex(key, "/"); i >= 0 && key[i+1:] == name {
+			return true
+		}
+	}
+	return false
+}
+
+// buildKindIndex indexes every ref-able frontend kind by "{module}/{name}".
+func buildKindIndex(manifests []manifest.RawManifest) kindIndex {
+	idx := kindIndex{}
+	for _, m := range manifests {
+		switch m.Kind {
+		case "Form", "Table", "Page", "Report", "Print", "Widget", "Dashboard",
+			"Wizard", "Kanban", "Timeline", "Calendar", "Listing",
+			"NotificationCenter", "Component", "ApprovalInbox":
+			idx.add(m.Kind, m.Metadata.Module, m.Metadata.Name, m.Source)
+		}
+	}
+	return idx
+}
+
+// splitKindRef splits a frontend-kind reference into (module, name). Refs are
+// module-local bare names in practice (`r.Forms[ref]` plus a module equality
+// check in internal/ui), but the module-qualified spellings "m/name" and
+// "m.name" are accepted so a valid cross-module ref is not reported as missing.
+func splitKindRef(ref, ownModule string) (string, string) {
+	if i := strings.LastIndex(ref, "/"); i > 0 {
+		return ref[:i], ref[i+1:]
+	}
+	if i := strings.LastIndex(ref, "."); i > 0 {
+		return ref[:i], ref[i+1:]
+	}
+	return ownModule, ref
+}
+
+// checkReferences verifies that every cross-file NAME a manifest points at
+// actually exists (todo 10.12, raised by kafe 10.10).
+//
+// Why this is needed: a manifest referencing a view, entity or widget that does
+// not exist is accepted by `validate` — every check it performs is per-manifest,
+// so a name that was never declared anywhere is simply never compared to
+// anything. The failure surfaces at runtime as a 404 route or a placeholder,
+// long after authoring. Measured on kafe before the fix: `formspec validate`
+// was green on a report whose `entity: ledger` never existed, a Table pointing
+// at `journal_entry` (the manifest is `journal-entry`), and a dashboard whose
+// `recent-journals` widget was never written at all.
+//
+// Scope is deliberately NAMES, not fields: entity fields are already covered by
+// checkForms/checkKanban/checkWizard/checkAggregates, and dotted column paths
+// like `customer.name` need relation traversal this check does not do.
+func checkReferences(result *checkResult, idx *entityIndex, manifests []manifest.RawManifest) {
+	kinds := buildKindIndex(manifests)
+
+	// A `spec.entity` ("module.entity" or bare = the manifest's own module).
+	checkEntityRef := func(m manifest.RawManifest, ref, where string) {
+		if ref == "" {
+			return // legitimate: dashboards, wizards, components carry no entity
+		}
+		module, entity := splitEntityRef(ref, m.Metadata.Module)
+		if _, ok := idx.byKey[module+"."+entity]; !ok {
+			result.add(m.Source, "error", "%s references unknown entity %q", where, ref)
+		}
+	}
+
+	// A view reference to a declared manifest of `kind`. An empty ref or an
+	// inline asset replaces the reference, so neither is a dangling name.
+	checkKindRef := func(m manifest.RawManifest, kind, ref, asset, where string) {
+		if ref == "" || asset != "" {
+			return
+		}
+		module, name := splitKindRef(ref, m.Metadata.Module)
+		if kinds.has(kind, module, name) {
+			return
+		}
+		// Unqualified ref: accept any module that declares it (see
+		// hasAnyModule). A qualified ref stays strict — the author named the
+		// module, so a miss there is a real dangling reference.
+		if ref == name && kinds.hasAnyModule(kind, name) {
+			return
+		}
+		result.add(m.Source, "error", "%s references unknown %s %q",
+			where, strings.ToLower(kind), ref)
+	}
+
+	checkBlocks := func(m manifest.RawManifest, owner string, blocks []spec.PageBlock, tabs []spec.PageTab) {
+		for _, blk := range blocks {
+			if blk.Form != nil {
+				checkKindRef(m, "Form", blk.Form.Ref, blk.Form.Asset, owner+" block form")
+			}
+			if blk.Table != nil {
+				checkKindRef(m, "Table", blk.Table.Ref, blk.Table.Asset, owner+" block table")
+			}
+			if blk.Component != nil {
+				checkKindRef(m, "Component", blk.Component.Ref, blk.Component.Asset, owner+" block component")
+			}
+			if blk.Widget != nil {
+				checkKindRef(m, "Widget", blk.Widget.Ref, blk.Widget.Asset, owner+" block widget")
+			}
+		}
+		for _, tab := range tabs {
+			where := owner + " tab " + strconv.Quote(tab.Label)
+			if tab.Form != nil {
+				checkKindRef(m, "Form", tab.Form.Ref, tab.Form.Asset, where+" form")
+			}
+			if tab.Table != nil {
+				checkKindRef(m, "Table", tab.Table.Ref, tab.Table.Asset, where+" table")
+			}
+			if tab.Component != nil {
+				checkKindRef(m, "Component", tab.Component.Ref, tab.Component.Asset, where+" component")
+			}
+		}
+	}
+
+	for _, m := range manifests {
+		sm, ok := m.Spec.(map[string]any)
+		if !ok {
+			continue
+		}
+		name := m.Metadata.Name
+
+		switch m.Kind {
+		case "Table":
+			if ts, err := manifest.RawSpecTo[spec.TableSpec](sm); err == nil {
+				checkEntityRef(m, ts.Entity, fmt.Sprintf("Table %q", name))
+			}
+		case "Form":
+			if fs, err := manifest.RawSpecTo[spec.FormSpec](sm); err == nil {
+				// An auth form carries `auth_action` and has no entity by design.
+				if fs.AuthAction == "" {
+					checkEntityRef(m, fs.Entity, fmt.Sprintf("Form %q", name))
+				}
+			}
+		case "Listing":
+			if ls, err := manifest.RawSpecTo[spec.ListingSpec](sm); err == nil {
+				checkEntityRef(m, ls.Entity, fmt.Sprintf("Listing %q", name))
+			}
+		case "Kanban":
+			if ks, err := manifest.RawSpecTo[spec.KanbanSpec](sm); err == nil {
+				checkEntityRef(m, ks.Entity, fmt.Sprintf("Kanban %q", name))
+			}
+		case "Timeline":
+			if ts, err := manifest.RawSpecTo[spec.TimelineSpec](sm); err == nil {
+				checkEntityRef(m, ts.Entity, fmt.Sprintf("Timeline %q", name))
+			}
+		case "Calendar":
+			if cs, err := manifest.RawSpecTo[spec.CalendarSpec](sm); err == nil {
+				checkEntityRef(m, cs.Entity, fmt.Sprintf("Calendar %q", name))
+			}
+		case "Print":
+			if ps, err := manifest.RawSpecTo[spec.PrintSpec](sm); err == nil {
+				checkEntityRef(m, ps.Entity, fmt.Sprintf("Print %q", name))
+			}
+		case "Report":
+			if rs, err := manifest.RawSpecTo[spec.ReportSpec](sm); err == nil {
+				ref := rs.Entity
+				if rs.Source != nil && rs.Source.Entity != "" {
+					ref = rs.Source.Entity
+				}
+				checkEntityRef(m, ref, fmt.Sprintf("Report %q", name))
+			}
+		case "Widget":
+			if ws, err := manifest.RawSpecTo[spec.WidgetSpec](sm); err == nil {
+				checkEntityRef(m, ws.Entity, fmt.Sprintf("Widget %q", name))
+			}
+		case "Wizard":
+			if ws, err := manifest.RawSpecTo[spec.WizardSpec](sm); err == nil {
+				checkEntityRef(m, ws.Entity, fmt.Sprintf("Wizard %q", name))
+			}
+		case "Page":
+			if ps, err := manifest.RawSpecTo[spec.PageSpec](sm); err == nil {
+				checkBlocks(m, fmt.Sprintf("Page %q", name), ps.Blocks, ps.Tabs)
+			}
+		case "Dashboard":
+			if ds, err := manifest.RawSpecTo[spec.DashboardSpec](sm); err == nil {
+				for _, w := range ds.Widgets {
+					checkKindRef(m, "Widget", w.Ref, "", fmt.Sprintf("Dashboard %q widget", name))
+				}
+				// `defaults` names widgets too (the pre-`widgets` spelling) — a
+				// stale entry there is the same dangling name.
+				for _, d := range ds.Defaults {
+					checkKindRef(m, "Widget", d, "", fmt.Sprintf("Dashboard %q default", name))
+				}
+			}
+		}
+	}
 }
 
 // splitEntityRef splits a Form entity reference "module.entity" (or bare

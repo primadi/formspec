@@ -9,7 +9,7 @@ import { Outlet, useParams, useLocation } from "react-router-dom"
 import { AppLink as Link } from "@/lib/navigation"
 import { useSurface } from "@/hooks/useSurface"
 import { useMetaStore } from "@/stores/meta"
-import { ChevronLeft, ChevronRight, Menu, Home } from "lucide-react"
+import { ChevronLeft, ChevronRight, Home } from "lucide-react"
 import { usePrefsStore } from "@/stores/prefs"
 import { useMediaQuery } from "@/hooks/useMediaQuery"
 import { ErrorBoundary } from "@/components/ErrorBoundary"
@@ -28,6 +28,8 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
 import { TooltipProvider } from "@/components/ui/tooltip"
+import { buildBreadcrumbs } from "./breadcrumbs"
+import { useRouteIdentityStore } from "@/stores/routeIdentity"
 
 export function SideNavShell() {
   const { workspace } = useParams<{ workspace: string }>()
@@ -55,16 +57,16 @@ export function SideNavShell() {
     setMobileSidebarOpen(false)
   }, [])
 
-  // Build breadcrumbs from current path
-  const pathParts = location.pathname.split("/").filter(Boolean).slice(1) // remove workspace
-
-  const breadcrumbs = pathParts.map((part, idx) => {
-    const href = `/${workspace}/${pathParts.slice(0, idx + 1).join("/")}`
-    const label = part
-      .replace(/[-_]/g, " ")
-      .replace(/\b\w/g, (c) => c.toUpperCase())
-    return { label, href, isLast: idx === pathParts.length - 1 }
-  })
+  const entities = useMetaStore((s) => s.bundle?.entities) ?? []
+  const routeIdentity = useRouteIdentityStore((s) =>
+    s.getIdentity(location.pathname),
+  )
+  const breadcrumbs = buildBreadcrumbs(
+    location.pathname,
+    workspace ?? "default",
+    entities,
+    routeIdentity,
+  )
 
   return (
     <TooltipProvider>
@@ -94,16 +96,6 @@ export function SideNavShell() {
               size="icon"
               className="md:hidden"
               onClick={handleMobileToggle}
-            >
-              <Menu className="size-4" />
-            </Button>
-
-            {/* Sidebar toggle (desktop) */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="hidden md:inline-flex"
-              onClick={toggleSidebar}
             >
               {sidebarCollapsed ? (
                 <ChevronRight className="size-4" />

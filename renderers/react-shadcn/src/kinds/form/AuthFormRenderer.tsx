@@ -19,7 +19,17 @@ import { TextInput } from "@/widgets/TextInput"
 import { PasswordInput } from "@/widgets/PasswordInput"
 import { createAuth } from "@/lib/formspec-client"
 import { useMetaStore } from "@/stores/meta"
-import type { FormField, FormSpec } from "@/types/manifest"
+import { ContextPicker } from "@/shell/ContextPicker"
+import {
+  defaultContextChoice,
+  readContextPreference,
+} from "@/lib/session-context"
+import {
+  FormaApiError,
+  type ContextChoice,
+  type FormField,
+  type FormSpec,
+} from "@/types/manifest"
 
 /** Per-action field names that are NOT required. */
 const OPTIONAL_FIELDS: Record<string, string[]> = {
@@ -98,6 +108,12 @@ export default function AuthFormRenderer({ spec }: { spec: FormSpec }) {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  // Session context (role × branch) — set when login answers 409
+  // CONTEXT_REQUIRED with the choices the caller must pick from (backend §8.7).
+  const [contextChoices, setContextChoices] = useState<
+    ContextChoice[] | null
+  >(null)
+  const [assignment, setAssignment] = useState<string | null>(null)
 
   const set = (name: string, value: string) =>
     setValues((prev) => ({ ...prev, [name]: value }))
@@ -144,7 +160,9 @@ export default function AuthFormRenderer({ spec }: { spec: FormSpec }) {
     try {
       switch (spec.auth_action) {
         case "login": {
-          await auth.login(values.username.trim(), values.password)
+          await auth.login(values.username.trim(), values.password, {
+            assignment: assignment ?? undefined,
+          })
           redirectAfterLogin()
           return
         }
@@ -187,10 +205,75 @@ export default function AuthFormRenderer({ spec }: { spec: FormSpec }) {
       }
       finish()
     } catch (err) {
+      // Several session contexts and no explicit choice → the server refused
+      // to pick one (backend §8.7). Not a failure: present the picker.
+      if (
+        err instanceof FormaApiError &&
+        err.status === 409 &&
+        err.code === "CONTEXT_REQUIRED" &&
+        err.choices?.length
+      ) {
+        setContextChoices(err.choices)
+        return
+      }
       setError(err instanceof Error ? err.message : "Authentication failed")
     } finally {
       setSubmitting(false)
     }
+  }
+
+  /** Retry the login action with the context the caller picked. */
+  const onPickContext = async (chosen: string) => {
+    setAssignment(chosen)
+    setSubmitting(true)
+    try {
+      await auth.login(values.username.trim(), values.password, {
+        assignment: chosen,
+      })
+      redirectAfterLogin()
+    } catch (err) {
+      if (
+        err instanceof FormaApiError &&
+        err.status === 409 &&
+        err.code === "CONTEXT_REQUIRED" &&
+        err.choices?.length
+      ) {
+        setContextChoices(err.choices)
+        setError(err.message)
+        return
+      }
+      setError(err instanceof Error ? err.message : "Authentication failed")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  // The credentials were accepted but the principal holds several session
+  // contexts and the server refused to pick one (backend §8.7). Replace the
+  // credential form entirely — a nested <form> would be invalid HTML — and
+  // keep the password in state so the retry does not ask for it again.
+  if (contextChoices) {
+    // No App scope here: a custom auth_action form renders before any bundle
+    // is loaded, so only the workspace is known. The preference key falls back
+    // to the workspace-level one (LoginScreen uses the resolved App).
+    return (
+      <div className="space-y-6">
+        <ContextPicker
+          choices={contextChoices}
+          defaultId={defaultContextChoice(
+            contextChoices,
+            readContextPreference(workspace),
+          )}
+          onSubmit={onPickContext}
+          busy={submitting}
+        />
+        {error && (
+          <p className="text-sm text-destructive" role="alert">
+            {error}
+          </p>
+        )}
+      </div>
+    )
   }
 
   return (

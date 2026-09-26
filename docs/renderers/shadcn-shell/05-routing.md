@@ -61,6 +61,27 @@ mengklaim path itu, pengguna diarahkan ke `_admin`. Ini penting untuk workspace
 dengan banyak App (kafe: `kafe-pos` `/app/pos`, `kafe-kds` `/app/kds`,
 `kafe-qr` `/`).
 
+### Identifier record pada URL dan breadcrumb
+
+Route detail memakai identifier record dalam satu path segment. Saat Entity
+memiliki tepat satu field `natural_key`, renderer memakai nilai field tersebut
+untuk link tabel, Listing, Kanban, route detail/edit, dan breadcrumb. Jika
+natural key tidak ada atau nilainya kosong, renderer memakai UUID primary key.
+
+`unique: true` saja tidak memilih identifier URL karena satu Entity dapat
+memiliki beberapa field unique. `natural_key` **implisit unik** — cukup tulis
+`natural_key: true`, dan field dibatasi maksimal satu per Entity. URL memakai
+nilai key begitu record memilikinya (mode apa pun: `user_entry`,
+`auto_generated_if_empty`, maupun `auto_generated` yang nilainya dibuat engine);
+bila key belum ada atau kosong, renderer memakai UUID primary key. Nilainya
+di-encode sebagai path segment. URL lama berbasis UUID tetap diterima backend;
+breadcrumb mengganti UUID dengan natural key setelah detail record berhasil
+dimuat.
+
+Mode entry juga menentukan apakah key muncul sebagai **input** di form:
+`auto_generated` tidak (nilai yang dikirim caller dibuang engine), sedangkan
+`user_entry` dan `auto_generated_if_empty` ya.
+
 ## 2. Empat jenis route
 
 Hanya **satu** yang ditulis tangan; tiga lainnya dihasilkan. Jalur D bukan jenis
@@ -112,6 +133,9 @@ Karena tidak ada `formRef`, `FormRenderer` jatuh ke konvensi nama dan akhirnya
 bisa menderivasi sendiri (§4). Route `/new` dan `/:id` **selalu didaftarkan**
 sebagai route — bila aksinya tidak diizinkan, isinya `RouteNotFound`, supaya
 `/new` tidak tertelan `:id`.
+
+Pada route CRUD, `:id` berarti `natural_key` bila tersedia, atau UUID primary
+key sebagai fallback. Keduanya diterima oleh endpoint detail/action.
 
 ### D. Overlay — bukan route, melainkan query string
 

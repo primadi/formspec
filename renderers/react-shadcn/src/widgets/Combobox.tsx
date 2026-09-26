@@ -6,11 +6,13 @@
 import { useState, useRef, useEffect } from "react"
 import { ChevronDown, Search, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { normalizeChoice, type SelectChoice } from "@/widgets/Select"
 
 interface ComboboxProps {
-  value?: string
-  onChange?: (value: string) => void
-  options: string[]
+  /** The stored value (any declared scalar, or `null`/`""` for none). */
+  value?: unknown
+  onChange?: (value: unknown) => void
+  options: SelectChoice[]
   placeholder?: string
   readonly?: boolean
   error?: string
@@ -44,13 +46,22 @@ export function Combobox({
     return () => document.removeEventListener("mousedown", onClick)
   }, [])
 
-  const filtered = options.filter((o) =>
-    o.toLowerCase().includes(query.toLowerCase()),
+  // Captions come from the declaration when there is one (`options`), so a
+  // `1`-valued option reads "Senin" and search matches the caption, not the key.
+  const choices = options.map(normalizeChoice)
+  const current = value === null || value === undefined ? "" : String(value)
+  const selected = choices.find((o) => o.key === current)
+
+  const filtered = choices.filter((o) =>
+    o.label.toLowerCase().includes(query.toLowerCase()),
   )
-  const selected = options.find((o) => o === value)
 
   if (readonly) {
-    return <div className="py-1 text-sm">{value || "-"}</div>
+    return (
+      <div className="py-1 text-sm">
+        {current === "" ? "-" : (selected?.label ?? current)}
+      </div>
+    )
   }
 
   return (
@@ -65,10 +76,7 @@ export function Combobox({
         )}
       >
         <span className={cn("truncate", !selected && "text-muted-foreground")}>
-          {selected
-            ? selected.charAt(0).toUpperCase() +
-              selected.slice(1).replace(/_/g, " ")
-            : (placeholder ?? "Select…")}
+          {selected ? selected.label : (placeholder ?? "Select…")}
         </span>
         <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
       </button>
@@ -92,15 +100,15 @@ export function Combobox({
               </div>
             )}
             {filtered.map((opt) => {
-              const label =
-                opt.charAt(0).toUpperCase() + opt.slice(1).replace(/_/g, " ")
-              const isSelected = opt === value
+              const isSelected = opt.key === current
               return (
                 <button
-                  key={opt}
+                  key={opt.key}
                   type="button"
                   onClick={() => {
-                    onChange?.(opt)
+                    // The declared scalar, not the key — a numeric option set
+                    // must keep storing numbers.
+                    onChange?.(opt.value)
                     setOpen(false)
                     setQuery("")
                   }}
@@ -109,7 +117,7 @@ export function Combobox({
                     isSelected && "bg-accent",
                   )}
                 >
-                  {label}
+                  {opt.label}
                   {isSelected && <Check className="size-4 text-primary" />}
                 </button>
               )

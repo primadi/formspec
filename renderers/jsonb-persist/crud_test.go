@@ -59,6 +59,50 @@ func TestEntityStore_InsertAndGetByID(t *testing.T) {
 	}
 }
 
+func TestEntityStore_GetByID_NaturalKey(t *testing.T) {
+	dir := t.TempDir()
+	d, err := OpenSQLite(filepath.Join(dir, "crud_natural_key.db"), nil)
+	if err != nil {
+		t.Fatalf("OpenSQLite failed: %v", err)
+	}
+	defer func() { _ = d.Close() }()
+
+	meta := spec.Metadata{Name: "promo", Module: "cafe-master"}
+	entity := &spec.EntitySpec{
+		Version: "v1",
+		Fields: []spec.Field{
+			{Name: "code", Type: spec.FieldString, Required: true, Unique: true, NaturalKey: true},
+			{Name: "name", Type: spec.FieldString},
+		},
+	}
+	if err := spec.ValidateEntitySpec(entity); err != nil {
+		t.Fatalf("ValidateEntitySpec failed: %v", err)
+	}
+
+	r := NewMigrationRunner(d, DriverSQLite)
+	ctx := context.Background()
+	if _, err := r.ApplyMigrations(ctx, []EntityMigration{{Metadata: meta, EntitySpec: *entity}}); err != nil {
+		t.Fatalf("ApplyMigrations failed: %v", err)
+	}
+
+	store := NewEntityStore(d, DriverSQLite, meta, entity)
+	if _, err := store.Insert(ctx, InsertParams{
+		WorkspaceID: "kafe",
+		CreatedBy:   "user-1",
+		Data:        map[string]any{"code": "HAPPY-HOUR-20", "name": "Happy Hour"},
+	}); err != nil {
+		t.Fatalf("Insert failed: %v", err)
+	}
+
+	rec, err := store.GetByID(ctx, GetByIDParams{WorkspaceID: "kafe", ID: "HAPPY-HOUR-20"})
+	if err != nil {
+		t.Fatalf("GetByID natural key failed: %v", err)
+	}
+	if rec.Data["code"] != "HAPPY-HOUR-20" {
+		t.Errorf("expected natural-key record, got %#v", rec.Data["code"])
+	}
+}
+
 func TestEntityStore_Update(t *testing.T) {
 	dir := t.TempDir()
 	d, err := OpenSQLite(filepath.Join(dir, "crud_update.db"), nil)

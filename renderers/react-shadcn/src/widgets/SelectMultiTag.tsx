@@ -27,10 +27,10 @@ import {
   fieldOptions,
   isListValue,
   optionKey,
+  optionValueShape,
   orderByDeclaration,
   parseOptionValue,
   serializeOptionValue,
-  valueShapeOf,
   type ResolvedOption,
 } from "@/lib/field-options"
 import type { Field } from "@/types/manifest"
@@ -66,7 +66,11 @@ export function SelectMultiTag({
   const containerRef = useRef<HTMLDivElement>(null)
 
   const options = useMemo(() => fieldOptions(entityField), [entityField])
-  const shape = valueShapeOf(entityField)
+  // The shape follows the Entity's declared cardinality (`Field.multiple`) — a
+  // set on `string` is comma-separated, a set on `json` an array. This widget
+  // only ever renders a set (the gate in `formspec check` refuses it on a
+  // single-value field), so the shape is never `scalar` here.
+  const shape = optionValueShape(entityField)
 
   // Close on click outside — same behaviour as Combobox/Select.
   useEffect(() => {

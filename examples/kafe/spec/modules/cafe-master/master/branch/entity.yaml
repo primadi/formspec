@@ -16,7 +16,6 @@ spec:
     - name: code
       type: string
       required: true
-      unique: true
       natural_key: true
       title: "Kode Cabang"
       description: "Mis. KFE-JKT-01"

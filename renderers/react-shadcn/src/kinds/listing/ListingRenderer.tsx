@@ -15,6 +15,7 @@ import { useParams } from "react-router-dom"
 import { Search } from "lucide-react"
 import { resolveEntityRef } from "@/engine/entityRef"
 import { entityFieldLabel } from "@/engine/derive"
+import { getEntityRouteSegment } from "@/lib/entityIdentity"
 import type {
   Entry,
   ListingSpec,
@@ -25,6 +26,7 @@ import { useMetaStore } from "@/stores/meta"
 import { useSessionStore } from "@/stores/session"
 import { apiList } from "@/lib/api"
 import { renderCellValue, resolveColumnCell } from "@/lib/renderCell"
+import { fieldOptions } from "@/lib/field-options"
 import { columnAlignClass, columnWidthStyle } from "@/lib/tableColumn"
 import { fileDownloadUrl } from "@/lib/media"
 import { createFormatter } from "@/lib/format"
@@ -39,14 +41,23 @@ interface RowData {
   [key: string]: unknown
 }
 
-// ── Resolve filter options from a field's enum values ──
-
-function filterOptions(filter: FilterSpec, entity?: EntitySchema): string[] {
+// ── Resolve filter options from a field's declared choice set ──
+//
+// One resolver with the Table/Kanban filter hook and the form widgets: a field
+// that declares `options` (with captions) offers those values and labels, so a
+// listing filter cannot offer a different set than the column it filters. The
+// **value** stays the stored one (`1`) while the label is the caption (`Senin`)
+// — sending the caption would filter by a value the row does not hold.
+function filterOptions(
+  filter: FilterSpec,
+  entity?: EntitySchema,
+): { value: string; label: string }[] {
   const field = entity?.fields.find((f) => f.name === filter.field)
-  if (Array.isArray(field?.enum_values)) {
-    return field.enum_values.map((e) => String(e))
-  }
-  return []
+  if (!field) return []
+  return fieldOptions(field).map((o) => ({
+    value: String(o.value),
+    label: o.label,
+  }))
 }
 
 export default function ListingRenderer({
@@ -274,7 +285,8 @@ function FilterControl({
         value={value}
         onChange={onChange}
         placeholder={filter.label ?? entityFieldLabel(entity, filter.field)}
-        options={["", ...options]}
+        // The stored value, with its declared caption as the label.
+        options={[{ value: "", label: "All" }, ...options]}
       />
     )
   }
@@ -295,5 +307,5 @@ function FilterControl({
 
 function detailPath(entity: EntitySchema | undefined, row: RowData): string {
   if (!entity) return `/${row.id}`
-  return `/${entity.module}/${entity.plural}/${row.id}`
+  return `/${entity.module}/${entity.plural}/${getEntityRouteSegment(entity, row)}`
 }

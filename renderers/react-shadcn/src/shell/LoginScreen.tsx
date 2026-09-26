@@ -15,6 +15,13 @@ import { Select } from "@/components/ui/select"
 import { loginWithPassword } from "@/lib/api"
 import { usePrefsStore } from "@/stores/prefs"
 import { useMetaStore } from "@/stores/meta"
+import { ContextPicker } from "./ContextPicker"
+import {
+  defaultContextChoice,
+  readContextPreference,
+  writeContextPreference,
+} from "@/lib/session-context"
+import { FormaApiError, type ContextChoice } from "@/types/manifest"
 
 interface LoginScreenProps {
   /** Pre-filled workspace from the URL (in-app login) — hides the workspace field */
@@ -50,6 +57,11 @@ export function LoginScreen({
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Set when the server answers 409 CONTEXT_REQUIRED: the principal holds
+  // several assignments (role × branch) and must state which one to act in.
+  const [contextChoices, setContextChoices] = useState<
+    ContextChoice[] | null
+  >(null)
 
   // Configured external auth providers (auth redesign Fase 5) — a button per
   // provider redirects to the authorize endpoint. Select the raw value (stable
@@ -71,6 +83,29 @@ export function LoginScreen({
   // Workspace comes from the URL when provided (in-app login); otherwise the
   // user types it (top-level /login).
   const effectiveWorkspace = workspaceProp ?? workspace.trim()
+
+  /**
+   * Log in and boot the session. `assignment` is the caller's chosen session
+   * context (`<role>@<value>`); omitted on the first attempt so the server can
+   * pick automatically when there is only one.
+   *
+   * A 409 `CONTEXT_REQUIRED` is NOT an error to report — it means the caller
+   * must choose a context, so the picker is shown instead. The last choice on
+   * this device is remembered so the picker arrives prefilled.
+   */
+  const submitLogin = async (assignment?: string) => {
+    const { accessToken, refreshToken } = await loginWithPassword(
+      effectiveWorkspace,
+      username.trim(),
+      password,
+      app,
+      assignment,
+    )
+    if (assignment) {
+      writeContextPreference(effectiveWorkspace, app, assignment)
+    }
+    await onLogin(effectiveWorkspace, accessToken, refreshToken)
+  }
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -116,14 +151,44 @@ export function LoginScreen({
           )
         }
       }
-      const { accessToken, refreshToken } = await loginWithPassword(
-        effectiveWorkspace,
-        username.trim(),
-        password,
-        app,
-      )
-      await onLogin(effectiveWorkspace, accessToken, refreshToken)
+      await submitLogin()
     } catch (err) {
+      // Several assignments → not a failure, a question. Show the picker with
+      // the remembered choice preselected instead of an error banner.
+      if (
+        err instanceof FormaApiError &&
+        err.status === 409 &&
+        err.code === "CONTEXT_REQUIRED" &&
+        err.choices?.length
+      ) {
+        setContextChoices(err.choices)
+        return
+      }
+      setError(err instanceof Error ? err.message : "Authentication failed")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  /** Retry login with the context the caller picked. */
+  const handleContextSubmit = async (assignment: string) => {
+    setLoading(true)
+    setError(null)
+    try {
+      await submitLogin(assignment)
+    } catch (err) {
+      // The assignment was rejected (revoked between the two calls). Ask
+      // again with the fresh choices rather than failing closed in silence.
+      if (
+        err instanceof FormaApiError &&
+        err.status === 409 &&
+        err.code === "CONTEXT_REQUIRED" &&
+        err.choices?.length
+      ) {
+        setContextChoices(err.choices)
+        setError(err.message)
+        return
+      }
       setError(err instanceof Error ? err.message : "Authentication failed")
     } finally {
       setLoading(false)
@@ -253,6 +318,39 @@ export function LoginScreen({
               </button>
             </p>
           </form>
+        ) : contextChoices ? (
+          // The credentials were accepted but the principal holds several
+          // session contexts — the server refused to pick one (backend §8.7).
+          // Replace the credential form with the picker; the password stays in
+          // state, so retrying does not ask for it again.
+          <>
+            <p className="text-center text-sm text-muted-foreground">
+              Signed in as <span className="font-medium">{username}</span>
+            </p>
+            <ContextPicker
+              choices={contextChoices}
+              defaultId={defaultContextChoice(
+                contextChoices,
+                readContextPreference(effectiveWorkspace, app),
+              )}
+              onSubmit={handleContextSubmit}
+              busy={loading}
+            />
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <p className="text-center text-sm">
+              <button
+                type="button"
+                onClick={() => {
+                  setContextChoices(null)
+                  setError(null)
+                  setPassword("")
+                }}
+                className="cursor-pointer text-muted-foreground underline"
+              >
+                Sign in as someone else
+              </button>
+            </p>
+          </>
         ) : (
           <>
             {/* key={mode} keeps login and register as distinct <form>

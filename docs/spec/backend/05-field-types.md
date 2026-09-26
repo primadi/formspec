@@ -41,38 +41,86 @@ Format tanggal/waktu, zona, dan default lain yang lintas-komponen dibaca dari
 **global settings** (`settings.*`, [`01-core-basic.md`](01-core-basic.md) §10) —
 komponen tidak pernah menebak.
 
-### 1.1.1 `options` — himpunan pilihan berlabel (multi-nilai)
+### 1.1.1 `options` + `multiple` — himpunan pilihan berlabel & cardinality-nya
 
-`enum_values` membawa **nilai saja**. Untuk field yang nilainya **daftar**
-(`json` menyimpan array, `string` menyimpan daftar dipisah koma), nilai telanjang
-tidak bisa dibaca: `[1, 2]` tidak pernah terbaca sebagai "Senin, Selasa".
+`enum_values` membawa **nilai saja**. Untuk field yang nilainya diambil dari
+daftar, nilai telanjang tidak bisa dibaca: `[1, 2]` tidak pernah terbaca sebagai
+"Senin, Selasa".
+
+`options` menyatakan **nilai mana yang sah** beserta caption-nya; `multiple`
+menyatakan **berapa banyak** dari nilai itu yang dipegang field. Keduanya
+properti **data**, karena itu keduanya tinggal di Entity — bukan di `widget:`
+sebuah Form. Form (dan sel tabel, halaman detail, filter) hanya **mengikuti**
+deklarasi ini.
 
 ```yaml
+# Himpunan: satu promo berlaku di beberapa hari.
 - name: days_of_week
   type: json
+  multiple: true
   title: "Hari Berlaku"
   options:
     - { value: 1, label: "Senin" }
     - { value: 2, label: "Selasa" }
     - { value: 7, label: "Minggu" }
+
+# Satu nilai, tapi tetap ber-caption.
+- name: channel
+  type: string
+  multiple: false
+  title: "Kanal"
+  options:
+    - { value: pos, label: "POS" }
+    - { value: qris, label: "QRIS" }
 ```
 
-- `options` adalah properti **data** (nilai mana yang sah) — ditaruh di Entity,
-  sama alasannya dengan `enum_values`. Satu deklarasi dipakai ulang oleh form
-  (widget `select-multi-tag`, [`../frontend/07-component-kinds.md`](../frontend/07-component-kinds.md) §1.3),
-  sel tabel, dan halaman detail.
 - `value` mempertahankan **tipe skalar** yang benar-benar disimpan
-  (`value: 1` → angka `1`, bukan `"1"`), supaya array `json` tetap array angka.
+  (`value: 1` → angka `1`, bukan `"1"`), supaya himpunan angka tetap array angka
+  dan pilihan tunggal tetap angka.
 - `label` opsional; tanpa `label`, nilai di-humanise jadi caption
   (`in_progress` → "In Progress").
-- Hanya sah pada field yang **memegang himpunan** (`json`, `string`). Pada
-  field skalar (`integer`, `date`, …) `options` adalah klaim yang tidak bisa
-  dieksekusi apa pun; pada `enum` pesan errornya mengarahkan ke `enum_values`.
+- `multiple` **wajib** pada `json`/`string` bila `options` dinyatakan: kedua tipe
+  itu bisa memegang satu nilai **atau** daftar, jadi tipe saja tidak menentukan.
+  Pada tipe skalar, absen berarti `false`.
 
-Aturan yang ditegakkan saat validasi (bukan konvensi): `value` wajib ada dan
+**Matriks tipe × cardinality** (ditegakkan saat validasi):
+
+| tipe                                                                           | `multiple` absen         | `multiple: false` | `multiple: true`    |
+| ------------------------------------------------------------------------------ | ------------------------ | ----------------- | ------------------- |
+| `json`                                                                         | ERROR bila ada `options` | satu nilai skalar | array               |
+| `string`                                                                       | ERROR bila ada `options` | satu nilai        | daftar dipisah koma |
+| `integer`, `decimal`, `percent`, `date`, `datetime`, `time`, `boolean`, `uuid` | single (default)         | single            | ERROR               |
+| `enum`                                                                         | —                        | —                 | `options` ditolak   |
+| `text`, `richtext`, `money`, `file`, `attachment`, `relation`, `child`         | `options` ditolak        | —                 | —                   |
+
+`multiple` tanpa `options` juga ERROR (tidak ada yang dideskripsikan). Pada
+`enum`, pesan errornya mengarahkan ke `enum_values` — tipe itu sudah punya nilai
+**dan** CHECK constraint di database, jadi caption-nya ditambahkan lewat jalur
+terpisah, bukan dengan mendeklarasikan himpunan kedua.
+
+Aturan lain yang ditegakkan saat validasi (bukan konvensi): `value` wajib ada dan
 skalar, dan **tidak boleh duplikat** (termasuk lintas ejaan — `1` dan `"1"`
 adalah pilihan yang sama) sebab pilihan duplikat tidak akan pernah bisa dipilih
 dua kali, yang terbaca sebagai widget rusak.
+
+**Bentuk nilai tersimpan:**
+
+| Cardinality | Tipe     | Bentuk keluar                                |
+| ----------- | -------- | -------------------------------------------- |
+| `true`      | `json`   | array, nilai opsi apa adanya (`[1, 5]`)      |
+| `true`      | `string` | teks dipisah koma                            |
+| `false`     | apa pun  | skalar tunggal, tipe deklarasi dipertahankan |
+
+Nilai di luar deklarasi **tidak ditolak**: data lama, atau spec yang himpunannya
+menyusut, tetap tersimpan dan tetap terlihat pengguna (sehingga bisa diperbaiki
+atau dihapus) — bukan dibuang senyap saat save.
+
+**Cardinality menentukan widget, bukan sebaliknya.** Renderer menurunkan widget
+dari deklarasi ini (himpunan → widget tag, satu nilai → picker pilihan tunggal),
+sehingga Form yang ditulis (`kind: Form`) tidak perlu mengulang keputusan yang
+sudah ada di Entity. `formspec check` menolak Form yang widget-nya bertentangan
+dengan deklarasi (`select-multi-tag` pada field bernilai tunggal, atau
+`select`/`radio-group`/`combobox` pada himpunan).
 
 ### 1.2 `decimal` — Precision & Scale
 

@@ -124,36 +124,36 @@ ditandai tertutup. Tidak ada gap #1–#53/S1–S16 yang berubah status.
 or "route", got "cookie"`) + schema (`/spec/scope/0/from: validation failed`).
       Bukti runtime (binary SUDAH di-rebuild, raw JSON, spec uji dengan dua baris A/B):
 
-                                                | Permintaan | Hasil |
-                                                | --- | --- |
-                                                | (tanpa param) | `403 row scope on branch_id: missing "branch" request parameter` |
-                                                | `?branch=A` | `total: 1`, hanya `branch_id":"A"` |
-                                                | `?branch=A&branch_id[eq]=B` | **`total: 1`, hanya A** — klien tidak bisa melebarkan |
-                                                | `?branch=B` | `total: 1`, hanya B |
-                                                | `?branch_id[notnull]=1` (op lain) | `403` — tidak bisa dilewati |
+                                                  | Permintaan | Hasil |
+                                                  | --- | --- |
+                                                  | (tanpa param) | `403 row scope on branch_id: missing "branch" request parameter` |
+                                                  | `?branch=A` | `total: 1`, hanya `branch_id":"A"` |
+                                                  | `?branch=A&branch_id[eq]=B` | **`total: 1`, hanya A** — klien tidak bisa melebarkan |
+                                                  | `?branch=B` | `total: 1`, hanya B |
+                                                  | `?branch_id[notnull]=1` (op lain) | `403` — tidak bisa dilewati |
 
-                                                Test: 7 case `internal/api/scope_test.go` + `TestValidateEntitySpec_Scope`.
-                                                (e) **Gerbang adopsi (temuan baru):** `formspec validate` tanpa `--schema`
-                                                memakai **schema registry cache**, yang menolak properti baru →
-                                                `additional properties 'scope' not allowed`. Schema lokal sudah diregenerasi
-                                                (`make generate-schema`), tetapi **schema yang dipublikasikan di registry harus
-                                                di-refresh lebih dulu** sebelum aplikasi mana pun memakai `scope:`.
-                                                **Catatan 2026-09-15:** gerbang yang sama kini menghadang `1.2` —
-                                                `formspec validate` (tanpa `--schema`) pada spec kafe melaporkan
-                                                `additional properties 'public_entities' not allowed` karena schema **App**
-                                                di registry masih versi sebelum `public_entities`; dengan schema lokal
-                                                (`--schema ../../schemas`) hasilnya **0 problem**. Jadi ini murni staleness
-                                                registry, bukan regresi spec. Satu tiket refresh menutup `scope` +
-                                                `public_entities` sekaligus.
-                                                **Kenapa kafe belum memakai `scope:`** (keputusan sadar, bukan lupa):
-                                                - `from: session, attr: branch_id` butuh **atribut sesi yang terisi** — mekanisme
-                                                  penugasan (employee → cabang) baru ada di **1.8/3.5 (S5 `assignments`)**.
-                                                  Kalau dipasang sekarang, seluruh list kasir akan **403** (fail-closed benar,
-                                                  tapi aplikasi tak terpakai).
-                                                - `from: route` pada `table-session` akan menuntut `?token=` pada **semua** surface,
-                                                  termasuk POS kasir yang tidak punya token → merusak surface POS. Scope
-                                                  per-permukaan adalah **S3 (1.2)**, bukan scope entitas menyeluruh.
-                                                Jadi adopsi di spec kafe menunggu **1.8** (session) dan **1.2** (per-surface).
+                                                  Test: 7 case `internal/api/scope_test.go` + `TestValidateEntitySpec_Scope`.
+                                                  (e) **Gerbang adopsi (temuan baru):** `formspec validate` tanpa `--schema`
+                                                  memakai **schema registry cache**, yang menolak properti baru →
+                                                  `additional properties 'scope' not allowed`. Schema lokal sudah diregenerasi
+                                                  (`make generate-schema`), tetapi **schema yang dipublikasikan di registry harus
+                                                  di-refresh lebih dulu** sebelum aplikasi mana pun memakai `scope:`.
+                                                  **Catatan 2026-09-15:** gerbang yang sama kini menghadang `1.2` —
+                                                  `formspec validate` (tanpa `--schema`) pada spec kafe melaporkan
+                                                  `additional properties 'public_entities' not allowed` karena schema **App**
+                                                  di registry masih versi sebelum `public_entities`; dengan schema lokal
+                                                  (`--schema ../../schemas`) hasilnya **0 problem**. Jadi ini murni staleness
+                                                  registry, bukan regresi spec. Satu tiket refresh menutup `scope` +
+                                                  `public_entities` sekaligus.
+                                                  **Kenapa kafe belum memakai `scope:`** (keputusan sadar, bukan lupa):
+                                                  - `from: session, attr: branch_id` butuh **atribut sesi yang terisi** — mekanisme
+                                                    penugasan (employee → cabang) baru ada di **1.8/3.5 (S5 `assignments`)**.
+                                                    Kalau dipasang sekarang, seluruh list kasir akan **403** (fail-closed benar,
+                                                    tapi aplikasi tak terpakai).
+                                                  - `from: route` pada `table-session` akan menuntut `?token=` pada **semua** surface,
+                                                    termasuk POS kasir yang tidak punya token → merusak surface POS. Scope
+                                                    per-permukaan adalah **S3 (1.2)**, bukan scope entitas menyeluruh.
+                                                  Jadi adopsi di spec kafe menunggu **1.8** (session) dan **1.2** (per-surface).
 
 - [x] **1.2 — S3: akses publik per-entity** (prioritas §F #2).
       Konstruksi: `spec.public_entities: [{entity, actions}]` pada App.
@@ -358,50 +358,50 @@ price_field, quantity_field, note_field, max_quantity}`. Aturan: `ref_field`
       **Bukti runtime** (dev server, spec kafe, satu DB segar — lihat catatan
       nomor pesanan di bawah):
 
-                                            | Langkah | Hasil |
-                                            | --- | --- |
-                                            | Anonim baca katalog (`is_available=true`) | `['Kopi Susu','Roti Bakar']` |
-                                            | Anonim baca baris harga cabang | 2 baris `{amount,currency}` |
-                                            | Context halaman (sesi dari route) | `session.id`, `branch_id`, `table_id` |
-                                            | POST payload hasil `buildSubmitPayload` | **201** — `number=ORD-2026-00001`, `channel=qr_table`, `guest_note` terbawa, `note` per baris terbawa, `line_total` **{50000,12500}** dan `subtotal` **{62500}** dihitung server (S7) |
+                                              | Langkah | Hasil |
+                                              | --- | --- |
+                                              | Anonim baca katalog (`is_available=true`) | `['Kopi Susu','Roti Bakar']` |
+                                              | Anonim baca baris harga cabang | 2 baris `{amount,currency}` |
+                                              | Context halaman (sesi dari route) | `session.id`, `branch_id`, `table_id` |
+                                              | POST payload hasil `buildSubmitPayload` | **201** — `number=ORD-2026-00001`, `channel=qr_table`, `guest_note` terbawa, `note` per baris terbawa, `line_total` **{50000,12500}** dan `subtotal` **{62500}** dihitung server (S7) |
 
-                                            Halaman `cafe-order/pages/menu-catalog.yaml` (route `/menu/:session_id`,
-                                            `public: true`). Adopsi: `line_total` + `subtotal` kini `computed` di
-                                            entity order (komentar GAP-02 yang kedaluwarsa dihapus);
-                                            `total_amount` **belum** diturunkan karena rantai diskon/pajak butuh nilai
-                                            Config cabang — dicatat di entity, bukan dikira-kira.
-                                            _Sisa (dicatat, bukan disembunyikan):_
-                                            - **Token QR → sesi** masih dua langkah (aplikasi membuat/menemukan sesi
-                                              dulu, halaman mengambil ID-nya): `GET /entity/{id}` me-resolve ID dan
-                                              natural key, sedangkan `guest_token` bukan keduanya. Menjadikan token
-                                              kunci milik tamu = **2.2** (sisa #45). Halaman **tidak** berpura-pura
-                                              sudah bisa.
-                                            - **Sisi kasir belum tersentuh**: numpad uang & kembalian menunggu widget
-                                              uang (**2.14**), layar POS sebagai kind tersendiri menunggu `kind: Pos`.
-                                              Marker GAP-05 di `pos-workbench.yaml` diperbarui: pelanggan tertutup,
-                                              kasir masih terbuka.
-                                            - **3 bug engine ditemukan & diperbaiki** selama mengerjakan ini (kelas
-                                              "diam-diam salah", jadi bagian dari pekerjaan, bukan deferred):
-                                              (a) filter boolean `?flag=true` **mencocokkan nol baris** (nilai string
-                                              "true" dibandingkan dengan kolom hasil cast numerik) → katalog QR akan
-                                              kosong tanpa gejala; kini `true/false/1/0/yes/no` diterima untuk field
-                                              boolean (`coerceFilterValue`, dipakai List/Aggregate/Window);
-                                              (b) `created_by`/`updated_by` NULL (baris hasil seed/migrasi/operator)
-                                              membuat **setiap** pembacaan entity 500 (`converting NULL to string is
-                                              unsupported`) → `scanEntityRecord` memakai `sql.NullString`;
-                                              (c) gerbang permission `source: entity` di render context memakai nama
-                                              **singular** (`{module}.{entity}.view`) padahal permission terdaftar
-                                              `{module}.{plural}.view` → deklarasi `context` entity **tidak pernah**
-                                              resolve kecuali pemanggil punya `*` (seed dev), dan permukaan publik
-                                              mustahil; kini plural dari metadata + permukaan `public: true`
-                                              melewati pra-cek (server tetap otoritas).
-                                            - **Dua gap lama tetap terbuka** (bukan bagian 1.5): menulis harga lewat
-                                              API gagal karena `guard_menu_item_price_unique.star` memakai SQL mentah
-                                              dengan nama kolom yang tidak ada (#30/#31, item 4.5) — seed harga di
-                                              verifikasi memakai SQL langsung; dan nomor pesanan `ORD-2026-00001`
-                                              bertabrakan saat cabang kedua membuat pesanan di DB yang sama
-                                              (`scope_field` per cabang + index unik global) → item **1.6**/#9/3.6,
-                                              verifikasi memakai DB segar.
+                                              Halaman `cafe-order/pages/menu-catalog.yaml` (route `/menu/:session_id`,
+                                              `public: true`). Adopsi: `line_total` + `subtotal` kini `computed` di
+                                              entity order (komentar GAP-02 yang kedaluwarsa dihapus);
+                                              `total_amount` **belum** diturunkan karena rantai diskon/pajak butuh nilai
+                                              Config cabang — dicatat di entity, bukan dikira-kira.
+                                              _Sisa (dicatat, bukan disembunyikan):_
+                                              - **Token QR → sesi** masih dua langkah (aplikasi membuat/menemukan sesi
+                                                dulu, halaman mengambil ID-nya): `GET /entity/{id}` me-resolve ID dan
+                                                natural key, sedangkan `guest_token` bukan keduanya. Menjadikan token
+                                                kunci milik tamu = **2.2** (sisa #45). Halaman **tidak** berpura-pura
+                                                sudah bisa.
+                                              - **Sisi kasir belum tersentuh**: numpad uang & kembalian menunggu widget
+                                                uang (**2.14**), layar POS sebagai kind tersendiri menunggu `kind: Pos`.
+                                                Marker GAP-05 di `pos-workbench.yaml` diperbarui: pelanggan tertutup,
+                                                kasir masih terbuka.
+                                              - **3 bug engine ditemukan & diperbaiki** selama mengerjakan ini (kelas
+                                                "diam-diam salah", jadi bagian dari pekerjaan, bukan deferred):
+                                                (a) filter boolean `?flag=true` **mencocokkan nol baris** (nilai string
+                                                "true" dibandingkan dengan kolom hasil cast numerik) → katalog QR akan
+                                                kosong tanpa gejala; kini `true/false/1/0/yes/no` diterima untuk field
+                                                boolean (`coerceFilterValue`, dipakai List/Aggregate/Window);
+                                                (b) `created_by`/`updated_by` NULL (baris hasil seed/migrasi/operator)
+                                                membuat **setiap** pembacaan entity 500 (`converting NULL to string is
+                                                unsupported`) → `scanEntityRecord` memakai `sql.NullString`;
+                                                (c) gerbang permission `source: entity` di render context memakai nama
+                                                **singular** (`{module}.{entity}.view`) padahal permission terdaftar
+                                                `{module}.{plural}.view` → deklarasi `context` entity **tidak pernah**
+                                                resolve kecuali pemanggil punya `*` (seed dev), dan permukaan publik
+                                                mustahil; kini plural dari metadata + permukaan `public: true`
+                                                melewati pra-cek (server tetap otoritas).
+                                              - **Dua gap lama tetap terbuka** (bukan bagian 1.5): menulis harga lewat
+                                                API gagal karena `guard_menu_item_price_unique.star` memakai SQL mentah
+                                                dengan nama kolom yang tidak ada (#30/#31, item 4.5) — seed harga di
+                                                verifikasi memakai SQL langsung; dan nomor pesanan `ORD-2026-00001`
+                                                bertabrakan saat cabang kedua membuat pesanan di DB yang sama
+                                                (`scope_field` per cabang + index unik global) → item **1.6**/#9/3.6,
+                                                verifikasi memakai DB segar.
 
 - [x] **1.6 — S8: unique parsial + index atas relasi** (prioritas §F #6).
       Target: `pkg/spec/entity.go` (`IndexDecl.where`), `renderers/jsonb-persist/ddl.go`
@@ -1059,30 +1059,30 @@ route}` — sebelumnya daftar harga anonim terbuka tanpa syarat, sehingga satu
       **Bukti runtime** (dev server, DB segar, dua pesanan B1/B2, token dev
       ditandatangani dengan secret dev sehingga klaim sesi nyata):
 
-                            | Permintaan | Hasil |
-                            | --- | --- |
-                            | kasir B1 (`attrs.branch_id=B1`, perm `.list`) | `200`, `total: 1`, hanya `B1-1` |
-                            | kasir B1 + `?branch_id[eq]=B2` | `200`, **tetap hanya `B1-1`** — klien tidak bisa melebarkan |
-                            | kasir B2 | `200`, hanya `B2-1` |
-                            | pemilik (`.list` + `.read_all`, **tanpa** atribut cabang) | `200`, `total: 2` — kedua cabang |
-                            | identitas `.list` tanpa atribut cabang | **403** `row scope on branch_id: caller has no "branch_id" session attribute` |
-                            | anonim `list order` | **401** (allowlist; `order` butuh token tamu) |
-                            | anonim `list menu-item-price` tanpa `?branch_id` | **403** |
-                            | anonim `list menu-item-price?branch_id=B1` | `200` |
+                              | Permintaan | Hasil |
+                              | --- | --- |
+                              | kasir B1 (`attrs.branch_id=B1`, perm `.list`) | `200`, `total: 1`, hanya `B1-1` |
+                              | kasir B1 + `?branch_id[eq]=B2` | `200`, **tetap hanya `B1-1`** — klien tidak bisa melebarkan |
+                              | kasir B2 | `200`, hanya `B2-1` |
+                              | pemilik (`.list` + `.read_all`, **tanpa** atribut cabang) | `200`, `total: 2` — kedua cabang |
+                              | identitas `.list` tanpa atribut cabang | **403** `row scope on branch_id: caller has no "branch_id" session attribute` |
+                              | anonim `list order` | **401** (allowlist; `order` butuh token tamu) |
+                              | anonim `list menu-item-price` tanpa `?branch_id` | **403** |
+                              | anonim `list menu-item-price?branch_id=B1` | `200` |
 
-                            **Nuansa yang tercatat:** pemilik yang **hanya** memegang `read_all` (tanpa
-                            `.list`) mendapat **404** — itu gerbang permission UI-surface, bukan scope:
-                            `read_all` mengecualikan penyaringan, bukan memberikan hak baca.
-                            Test: `TestKafeRowScopeSpec_ScopeAndSource`, `TestKafeAssignmentSources_EmployeeMapsUsernameToBranch`,
-                            `TestKafePublicGrants_ScopedWhereRowsMatter`. `go test ./...` hijau · kafe
-                            `validate` **0 problem**.
-                            **Sisa (dicatat):** ~~supervisor pemegang **dua** cabang belum bisa dinyatakan
-                            (`assignments` masih satu nilai per dimensi; butuh daftar nilai + `op: in`)~~
-                            — **digantikan oleh 3.8**: bukan daftar nilai, melainkan pilihan konteks
-                            sesi `(role, cabang)` yang **selalu tunggal**. Yang tetap tersisa:
-                            `dining-table`/`table-session` sengaja belum di-scope sesi karena masih
-                            dibaca permukaan tamu (`find` by id) → **10.5(a) ⏸️** (satu paket dengan
-                            **2.15 ⏸️**).
+                              **Nuansa yang tercatat:** pemilik yang **hanya** memegang `read_all` (tanpa
+                              `.list`) mendapat **404** — itu gerbang permission UI-surface, bukan scope:
+                              `read_all` mengecualikan penyaringan, bukan memberikan hak baca.
+                              Test: `TestKafeRowScopeSpec_ScopeAndSource`, `TestKafeAssignmentSources_EmployeeMapsUsernameToBranch`,
+                              `TestKafePublicGrants_ScopedWhereRowsMatter`. `go test ./...` hijau · kafe
+                              `validate` **0 problem**.
+                              **Sisa (dicatat):** ~~supervisor pemegang **dua** cabang belum bisa dinyatakan
+                              (`assignments` masih satu nilai per dimensi; butuh daftar nilai + `op: in`)~~
+                              — **digantikan oleh 3.8**: bukan daftar nilai, melainkan pilihan konteks
+                              sesi `(role, cabang)` yang **selalu tunggal**. Yang tetap tersisa:
+                              `dining-table`/`table-session` sengaja belum di-scope sesi karena masih
+                              dibaca permukaan tamu (`find` by id) → **10.5(a) ⏸️** (satu paket dengan
+                              **2.15 ⏸️**).
 
 - [x] **3.8 — Konteks sesi: (principal, role, cabang).** ✅ **2026-09-20 — SELESAI (inti + API; UI pemilih menyusul)**
       Usulan pemilik proyek 2026-09-16: sesi selalu spesifik — siapa, sebagai
@@ -2294,13 +2294,20 @@ Semuanya adalah **adopsi spec / verifikasi**, bukan gap engine — karena itu ia
   **Teramati:** `grep` entri menu kafe vs `roles.yaml` → 4 entri tanpa
   grant untuk kasir/pelayan/supervisor sebelum 10.10.
 
-- [⏸️] **10.12 — `validate` tidak melihat nama view/route yang tidak ada.**
-  `metadatasets`/manifest yang menunjuk view, entity, atau widget tidak ada
-  (mis. `recent-journals`, `entity: ledger`, `journal_entry`) hanya ketahuan
-  saat runtime — sebagai route 404 atau placeholder, bukan error validasi.
-  Hari ini ketiganya sudah diperbaiki secara manual; yang terbuka adalah
-  pemeriksanya. Effort: medium. **Teramati:** `formspec validate` hijau pada
-  manifest yang mereferensikan `entity: ledger` (tidak pernah ada).
+- [x] **10.12 — ✅ 2026-09-23 — `check` kini memeriksa NAMA
+      lintas-file; pemeriksanya tertutup di level engine (7.8.16).**
+      **Selesai.** Item ini membuka _keberadaan_ pemeriksa, bukan tambalan
+      manifest: ketiga rujukan di kafe sudah diperbaiki manual pada 10.10, tetapi
+      **tidak ada** yang bisa menangkapnya sebelum runtime. Pemeriksanya sekarang
+      ada: `checkReferences` (`cmd/formspec/check.go`) memeriksa `spec.entity`
+      pada sepuluh kind + rujukan form/table/component/widget di Page (blocks &
+      tabs) + rujukan widget di Dashboard (`widgets` dan `defaults`).
+      **Bukti bahwa ia menggigit:** pada contoh yang dikirim, arisan 4→4,
+      Clinic-UI-Showcase 4→4, **Midtrans-Payment-Gateway 0→2** (dua bug
+      nyata: Page merujuk Form/Table yang tidak pernah ada). Kafe sendiri 0.
+      **Sisa (engine, bukan kafe):** 7.8.17 ⏸️ — tidak ada kind UI
+      untuk mengedit `kind: Config` atau menampilkan log webhook, yang persis
+      yang dibutuhkan contoh Midtrans. Changelog `2026-09-23-004`.
 
 - [⏸️] **10.13 — App publik: `public_entities` diuji hanya lewat satu
   jalur.** 10.10 memperbaiki jalur **bundle**; jalur penegakan permintaan
@@ -2691,17 +2698,17 @@ skipped` pada DB dev kafe) — tanpa itu memperbaiki nilai di seed tidak
       `skip` (akun bukan data seed). Terverifikasi: 0 user dengan key `password`.
       **Bukti terukur sesudah perbaikan:**
 
-                    | Uji | Hasil |
-                    | --- | --- |
-                    | `make seed-kafe` pada DB dev lama | `0 inserted, 25 updated, 49 skipped`; rerun → `0 inserted, 0 updated, 74 skipped` |
-                    | 9/9 foto via `GET .../{id}/photo` | **200, image/jpeg**, sha256 **byte-for-byte sama** dengan file di `assets/menu/` |
-                    | DB **baru** (`formspec seed` ke `/tmp`) | `74 inserted`, 9 key kanonik `kafe/cafe-master/menu-item/<id>/photo/<uuid>-<nama>.jpg` |
-                    | `rm -rf` storage lalu seed ulang | **9 objek dipulihkan** (= menggantikan `seed-kafe-assets`), rerun `0 updated` |
-                    | `es-jeruk.jpg` diganti | terkirim ke record yang sudah ada (`update ... code=MNM-002 ([photo])`) — perbandingan **byte**, bukan sekadar "objek ada" |
-                    | `go test ./...` | hijau; 6 test baru (`TestSeedAssetUploadsThroughStorage`, `TestSeedReconcilesExistingRecord`, `TestSeedReconcileIsIdempotent`, `TestSeedRestoresMissingObjects`, `TestSeedReconcileSkipsMaskedFields`, `TestSeedAssetRejectedOnNonFileField`) |
-                    | `formspec validate --spec examples/kafe/spec --schema schemas` | **85 manifest, 0 problem** |
-                    Plan `docs_internal/plan/seed-assets-and-reconcile.md` · changelog
-                    `2026-09-23-002`.
+                      | Uji | Hasil |
+                      | --- | --- |
+                      | `make seed-kafe` pada DB dev lama | `0 inserted, 25 updated, 49 skipped`; rerun → `0 inserted, 0 updated, 74 skipped` |
+                      | 9/9 foto via `GET .../{id}/photo` | **200, image/jpeg**, sha256 **byte-for-byte sama** dengan file di `assets/menu/` |
+                      | DB **baru** (`formspec seed` ke `/tmp`) | `74 inserted`, 9 key kanonik `kafe/cafe-master/menu-item/<id>/photo/<uuid>-<nama>.jpg` |
+                      | `rm -rf` storage lalu seed ulang | **9 objek dipulihkan** (= menggantikan `seed-kafe-assets`), rerun `0 updated` |
+                      | `es-jeruk.jpg` diganti | terkirim ke record yang sudah ada (`update ... code=MNM-002 ([photo])`) — perbandingan **byte**, bukan sekadar "objek ada" |
+                      | `go test ./...` | hijau; 6 test baru (`TestSeedAssetUploadsThroughStorage`, `TestSeedReconcilesExistingRecord`, `TestSeedReconcileIsIdempotent`, `TestSeedRestoresMissingObjects`, `TestSeedReconcileSkipsMaskedFields`, `TestSeedAssetRejectedOnNonFileField`) |
+                      | `formspec validate --spec examples/kafe/spec --schema schemas` | **85 manifest, 0 problem** |
+                      Plan `docs_internal/plan/seed-assets-and-reconcile.md` · changelog
+                      `2026-09-23-002`.
 
 - [x] **10.15 — ✅ 2026-09-24 — `docs/kind/` belum punya halaman `Seed`.**
       `kind: Seed` sudah terdaftar (`pkg/spec/seed.go`) tetapi tidak ada di
@@ -2785,7 +2792,7 @@ skipped` pada DB dev kafe) — tanpa itu memperbaiki nilai di seed tidak
       benar-benar berlaku.
       **Terukur:** `vitest` 365 lulus (+15), `tsc -b` bersih, `go test ./...`
       hijau; browser: tanpa banner, `type = Percentage` → `percent`, `type =
-      Fixed` → `value`, `applies_to = Menu item` → `menu_item_id`. Changelog
+    Fixed` → `value`, `applies_to = Menu item` → `menu_item_id`. Changelog
       `2026-09-24-007`; sisa paritas grammar → master todo 5.11.7 ⏸️ & 5.11.8 ⏸️.
 - [x] **10.19 — ✅ 2026-09-24 — Caption field form promo tampil sebagai nama
       mentah, bukan label.**
@@ -2793,12 +2800,12 @@ skipped` pada DB dev kafe) — tanpa itu memperbaiki nilai di seed tidak
       menampilkan `min_purchase`, `menu_item_id`, `start_date`,
       `max_uses_per_member` — padahal entity `promo` sudah mendeklarasikan
       `title` untuk semuanya (`Minimum Belanja`, `Menu Spesifik`, `Mulai
-      Berlaku`, `Batas per Member`). `Jam Mulai`/`Jam Selesai` tampak benar
+    Berlaku`, `Batas per Member`). `Jam Mulai`/`Jam Selesai` tampak benar
       hanya karena `label:` ditulis eksplisit di YAML.
       **Akar:** `deriveForm()` (entity tanpa `kind: Form`) membaca `field.title`
       lewat `fieldLabel()`, tetapi `resolveForm()` mengembalikan manifest
       **authored** apa adanya sehingga renderer jatuh ke `field.label ??
-      field.name`. Jadi menulis Form — di kafe demi urutan/section/
+    field.name`. Jadi menulis Form — di kafe demi urutan/section/
       `visible_when`, bukan label — menurunkan caption. Terukur dua arah dengan
       probe pada entity yang sama: `DERIVED: min_purchase=Minimum Belanja` vs
       `AUTHORED: min_purchase=(no label)`.
@@ -2811,8 +2818,8 @@ skipped` pada DB dev kafe) — tanpa itu memperbaiki nilai di seed tidak
       dan **mengabaikan `title` sepenuhnya**.
       **Terukur:** drawer promo → `Kode Promo`, `Nama Promo`, `Cabang`,
       `Prioritas`, `Persentase (%)`, `Minimum Belanja`, `Menu Spesifik`, `Batas
-      per Member`, `Batas Total`; header tabel promo & detail cabang (`Kode
-      Cabang`, `Pajak (%)`, `Header Struk`) ikut benar; regex nama mentah di DOM
+    per Member`, `Batas Total`; header tabel promo & detail cabang (`Kode
+    Cabang`, `Pajak (%)`, `Header Struk`) ikut benar; regex nama mentah di DOM
       → false. `vitest` 377 lulus (+12), `tsc -b` bersih, `go test ./...` hijau.
       Changelog `2026-09-24-008`. Berdampak ke **seluruh** aplikasi kafe: 111
       dari 161 field di 21 form authored tidak menulis `label:`, jadi semua
@@ -2840,7 +2847,7 @@ skipped` pada DB dev kafe) — tanpa itu memperbaiki nilai di seed tidak
       Test `src/components/ui/image-lightbox.test.tsx` (6) mengunci DOM dialog
       **dan** ketiga situs render, dibuktikan **gagal** (1 failed / 5 passed)
       saat `DetailPage` dikembalikan ke anchor `target="_blank"`; vitest **383
-lulus** (+6), `tsc -b` bersih. Changelog `2026-09-24-009`. Sisa → master todo
+      lulus** (+6), `tsc -b` bersih. Changelog `2026-09-24-009`. Sisa → master todo
       **5.21.2 ⏸️** (sel tabel ber-`widget: image` + kartu katalog
       `PickerPanel`, keduanya punya konflik hit target: navigasi baris dan
       tambah-ke-keranjang).
@@ -2880,6 +2887,40 @@ lulus** (+6), `tsc -b` bersih. Changelog `2026-09-24-009`. Sisa → master todo
       memakai kosakata widget sama sekali — kelas yang sama, ditemukan saat
       menelusuri pembaca `widget:`) + **5.10.18 ⏸️** (filter `select` belum
       membaca `options`).
+
+        **Lanjutan 2026-09-25 — ✅ cardinality dipindah ke Entity.** Laporan
+        pengguna lanjutan: "`options` tidak jelas single-select atau multi-select;
+        `promo-form.yaml` memakai `widget: select-multi-tag` — seharusnya penentuan
+        single/multi ada di level Entity, level Form hanya mengikutinya." Benar:
+        atribut 10.33 hanya menyatakan **nilai mana yang sah**, bukan **berapa
+        banyak** — sehingga Form yang menentukannya, dan spec kafe **wajib**
+        menulis `widget:` (jalur authored hanya memetakan `money`/`time`).
+        Ditutup dengan **`Field.multiple`** (`days_of_week` kini `multiple: true`)
+        dan `options` yang sah juga di field skalar (single-select ber-caption):
+        kafe mendapat field baru **`promo.channel`** (`type: string`,
+        `multiple: false`, options `pos/qris/online`). `widget: select-multi-tag`
+        **dihapus** dari `promo-form.yaml` — Form kini benar-benar mengikuti Entity,
+        dan `formspec check` menolak kalau tidak.
+        **Terukur (browser `:8099`, App `kafe-pos`, form promo tanpa `widget:`):**
+        chip hari urut deklarasi (`Senin, Jumat` walau klik `Jumat` lebih dulu);
+        DB `days_of_week=[5, 1]` bertipe **int** (urutan isian — tampilan tidak
+        menulis ulang data); `channel='qris'` skalar (bukan caption `QRIS`);
+        halaman detail menampilkan chip hari + caption `QRIS`, bukan `qris`.
+        Filter `select` kini juga ber-caption (menutup 5.10.18). Test: vitest
+        **454**, `tsc -b` bersih, `go test ./...` 39 paket hijau, kafe `validate`
+        85 manifest 0 problem, `check` 0/0. Plan
+        `docs_internal/plan/options-cardinality-entity.md`, changelog
+        `2026-09-25-007`. Sisa → master todo **5.10.20 ⏸️** (penegakan server),
+        **5.10.21 ⏸️** (paritas lintas-shell), **5.10.22 ⏸️** (`generate` belum
+        emit union `options`), **5.10.23 ⏸️** (caption `enum`), plus **5.10.17 ⏸️**
+        (Wizard) yang tetap terbuka.
+        Catatan verifikasi: `go test ./resource/` ternyata **flaky pra-eksisting**
+        (`TestKafe_OnPaidCreatesBalancedJournal`: `journal status = "draft", want
+        posted`; HEAD bersih 2/8 run, working tree 1/8 — setara, jadi bukan regresi
+        perubahan ini) → master todo **5.10.24 ⏸️**. Atribusi lama ke item kafe
+        10.7 (`gl/config/gl.yaml`) **salah**: `git diff HEAD -- examples/kafe/spec/
+
+  modules/gl/` kosong.
 
 ---
 

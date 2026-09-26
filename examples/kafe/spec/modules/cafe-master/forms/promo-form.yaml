@@ -41,7 +41,13 @@ spec:
       fields:
         - { field: start_date }
         - { field: end_date }
-        - { field: days_of_week, widget: select-multi-tag, help: "Pilih hari promo berlaku. Kosongkan untuk setiap hari." }
+        # `days_of_week` tidak menulis `widget:` — Entity mendeklarasikan
+        # `multiple: true` + `options`, dan renderer menurunkan
+        # `select-multi-tag` dari deklarasi itu. Satu keputusan (single/multi)
+        # di Entity, bukan diulang di sini; `formspec check` menolak widget yang
+        # bertentangan dengannya.
+        - { field: days_of_week, help: "Pilih hari promo berlaku. Kosongkan untuk setiap hari." }
+        - { field: channel }
         # `time` memakai `timeinput` — jam happy hour
         # diisi lewat kontrol waktu, bukan teks bebas.
         - { field: time_from, label: "Jam Mulai" }

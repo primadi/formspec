@@ -12,6 +12,7 @@ import { isImageFile, storageAllowsImage } from "@/lib/media"
 import { readPath, relationDisplay } from "@/lib/relation"
 import {
   fieldOptions,
+  isMultiValue,
   optionLabel,
   orderByDeclaration,
   parseOptionValue,
@@ -134,34 +135,58 @@ export function renderCellValue(
 }
 
 /**
- * Render a multi-value cell as comma-separated option **labels**.
+ * Render a cell holding declared option values as **labels**.
  *
- * Without this a `days_of_week` column prints `JSON.stringify([1,2,3])` — the
- * same "value rendered raw in one place, formatted in another" split that the
- * `select-multi-tag` widget exists to close on the form side. Resolved once in
- * `resolveColumnCell` rather than per renderer, so Table, Listing, and
- * ChildTable cannot drift apart. Returns null when no display form applies.
+ * Without this a `days_of_week` column prints `JSON.stringify([1,2,3])` and a
+ * single-select column prints the bare `1` — the same "value rendered raw in one
+ * place, formatted in another" split that the form widgets exist to close.
+ * Resolved once in `resolveColumnCell` rather than per renderer, so Table,
+ * Listing, and ChildTable cannot drift apart. Returns null when no display form
+ * applies.
+ *
+ * Both cardinalities are handled from the same declaration: a set joins its
+ * labels (`Senin, Selasa`), a single value reads as its one caption (`Senin`).
  */
 export function renderOptionCell(
   value: unknown,
   field: import("@/types/manifest").Field | undefined,
 ): string | null {
-  if (!field || !Array.isArray(value)) return null
+  if (!field || value === null || value === undefined) return null
   const options = fieldOptions(field)
   if (options.length === 0) return null
-  // Declaration order — the same ordering the form widget shows, so a set reads
-  // identically in a table cell and in the form.
-  const labels = orderByDeclaration(
-    parseOptionValue(value, options),
-    options,
-  ).map((v) => optionLabel(options, v))
-  return labels.length === 0 ? null : labels.join(", ")
+
+  if (Array.isArray(value)) {
+    // Declaration order — the same ordering the form widget shows, so a set
+    // reads identically in a table cell and in the form.
+    const labels = orderByDeclaration(
+      parseOptionValue(value, options),
+      options,
+    ).map((v) => optionLabel(options, v))
+    return labels.length === 0 ? null : labels.join(", ")
+  }
+
+  // A comma-separated string is a set stored in the `string` shape — split it
+  // so a multi-value `string` column reads as labels too, not as `1,2,3`.
+  if (isMultiValue(field) && typeof value === "string") {
+    const labels = orderByDeclaration(
+      parseOptionValue(value, options),
+      options,
+    ).map((v) => optionLabel(options, v))
+    return labels.length === 0 ? null : labels.join(", ")
+  }
+
+  // Single value: a declared option renders its caption; an unknown scalar
+  // still renders humanised rather than blank (legacy data stays visible).
+  if (typeof value === "object") return null
+  return optionLabel(options, value)
 }
 
 /**
  * Derive a display widget/format hint from a field's type, so child-grid
  * columns render like parent-table columns without an explicit config:
  *   - enum        → badge
+ *   - a declared single option set → badge (the caption is substituted by
+ *     `renderOptionCell`, so the badge shows "Senin", not `1`)
  *   - boolean     → boolean (Yes/No)
  *   - money       → currency
  *   - percent     → percent
@@ -172,11 +197,32 @@ export function renderOptionCell(
 export function cellHintsForField(field: {
   type: string
   name?: string
+  multiple?: boolean
+  options?: unknown[]
   storage?: { allowed_types?: string[] }
 }): {
   widget?: string
   format?: string
 } {
+  switch (field.type) {
+    case "enum":
+      return { widget: "badge" }
+    // A single declared value reads as a labelled badge; a set stays plain text
+    // because one pill carrying "Senin, Selasa, Jumat" reads worse than the
+    // comma-separated labels already do (same rule as `derive.tableWidget`).
+    case "json":
+    case "string":
+    case "integer":
+    case "decimal":
+    case "percent":
+    case "date":
+    case "datetime":
+    case "time":
+      if (field.options?.length && field.multiple !== true) {
+        return { widget: "badge" }
+      }
+      break
+  }
   switch (field.type) {
     case "enum":
       return { widget: "badge" }

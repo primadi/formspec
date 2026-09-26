@@ -1,4 +1,31 @@
-**Last Updated**: 2026-09-25 (**Fase 5.23** Field `help` — warisan `description`
+**Last Updated**: 2026-09-25 (**Fase 5.10.19** Cardinality `options` di Entity SELESAI
+(5.10.19) — plus 5.10.18 tertutup, dengan 5 sisa ⏸️ (5.10.20–5.10.24).
+Pertanyaan pengguna pada `promo.days_of_week`: "field type `json` ada `options`,
+tidak jelas single-select atau multi-select; di `promo-form.yaml` dipakai
+`widget: select-multi-tag` — seharusnya penentuan single/multi ada di level Entity,
+level Form hanya mengikuti." Benar, dan akarnya asimetri dua jalur: jalur
+**derivasi** sudah mengikuti Entity (`formWidget()`), jalur **authored** tidak
+(`FormRenderer` hanya memetakan `money`/`time`), sehingga `promo-form.yaml`
+**wajib** menulis `widget:` dan keputusan single/multi hidup di Form. Ditutup
+dengan **`Field.multiple`** (pointer bool; wajib di `json`/`string` karena
+keduanya bisa satu nilai **atau** daftar) + `options` kini sah di field skalar
+non-enum (single-select ber-caption — celah "known, separately tracked gap" yang
+selama ini hanya prosa di godoc, kini punya kontrak). **Form mengikuti Entity**
+dua lapis: `deriveFormWidget` menjadi satu sumber untuk Form turunan **dan** Form
+yang ditulis, dan `formspec check` menolak widget yang bertentangan dua arah.
+Konsumen ikut: sel tabel + halaman detail (nilai tunggal = badge ber-caption),
+filter `select` (**5.10.18 tertutup**), derivasi kolom Table/Listing/Kanban.
+**Terukur** (browser `:8099`, App `kafe-pos`, form promo **tanpa** `widget:` di
+YAML): chip hari urut deklarasi ("Senin, Jumat" walau klik Jumat lebih dulu) ·
+DB `days_of_week=[5,1]` **int** · `channel='qris'` skalar · detail page chip +
+caption `QRIS`. Uji negatif: hapus `multiple` / `multiple: true` pada `integer` /
+`options` pada `enum` → **validate** tolak; `widget: select` pada himpunan +
+`select-multi-tag` pada nilai tunggal → **check** tolak. `go test ./...` 39 paket
+· vitest **454** · `tsc -b` bersih · kafe `validate` 85 manifest 0 problem ·
+`check` 0/0. Plan `docs_internal/plan/options-cardinality-entity.md`, changelog
+`2026-09-25-007`. Ditemukan sekaligus: `go test ./resource/` **flaky
+pra-eksisting** (`journal status = "draft", want posted`; HEAD bersih 2/8 run,
+working tree 1/8 — setara) → **5.10.24 ⏸️**. Sebelumnya: (**Fase 5.23** Field `help` — warisan `description`
 entity + situs bolong SELESAI (5.23.1), dengan 2 sisa ⏸️ (5.23.2–5.23.3).
 Pertanyaan pengguna pada `promo-form`: "di entity field ada `description`, di form
 field ada `help`, apa yg ditampilkan di ui?" Jawabannya hanya `help`, di tiga
@@ -1207,6 +1234,7 @@ grep -i seed` → kosong. Effort: small.
 - [ ] 3.6.6 Replay untuk proyeksi yang digerakkan `kind: Integrator` — integrator di-dispatch langsung saat delivery (`internal/integrator/dispatch.go`) dan **tidak** melewati stream durabel, jadi ia tidak punya riwayat untuk di-replay. Pilihan: (a) beri integrator jalur durabel (append ke stream + worker), atau (b) migrasikan proyeksi ke `kind: Subscription` `durability: durable`. Perlu keputusan desain dulu — jangan pilih salah satu tanpa itu.
       ⚠️ **Koreksi 2026-09-22 — contoh kafe di item ini sudah tidak berlaku.** Teks lama menyatakan "hari ini **semua** proyeksi `kafe` digerakkan integrator (`cafe-gl-integrator`), sehingga `summary rebuild` melaporkan sumbernya `orphaned`". Diverifikasi ulang: `grep "^kind: Integrator" examples/kafe/spec` → **0 hasil** (`cafe-gl-integrator` tidak ada lagi), dan ketiga proyeksi kafe kini `kind: Subscription`: `cafe-order` meng-`emit:` event `on_paid` pada transisi, lalu `gl/subscriptions/sales-to-journal.yaml` mendengarkannya dan `journalize.star` mem-posting jurnal — jalur yang **sudah** durabel (outbox, `payload.fields: [id]`, idempoten per `source_id`; E2E `ORD-2026-00021` → `JRN-2026-000055`, changelog `2026-09-21-003`). Jadi argumen item ini tetap berdiri **untuk integrator secara umum**, tetapi **bukan** sebagai deskripsi kafe: kafe sudah menjadi contoh pilihan (b).
 - [ ] 3.6.7 Refresh schema registry dengan `sources`/`join_key`/`rebuild` — `formspec validate` tanpa `--schema` masih melaporkan problem pada spec kafe karena schema App/Entity di `schemas.formspec.dev` belum memuat field kontrak §6. Tiket yang sama dengan `scope`/`public_entities` (`docs_internal/plan/schema-registry-sync.md`); `make publish-schemas` + push menutup semuanya sekaligus. Sementara itu: `--schema schemas` → 0 problem.
+      **Ditambah 2026-09-25** (changelog `2026-09-25-008`): root online juga belum memuat kind `Seed` — `formspec validate` (mode registry) gagal `404 .../kinds/Seed.schema.json` dengan exit 2 pada SETIAP proyek yang memakai `kind: Seed`; kafe punya 4 manifest seperti itu. Root lokal sudah benar (`Seed` + `$defs.SeedEntity`), jadi ini murni publish tertinggal — tiket yang sama. Bukti: online kinds=35 tanpa `Seed` & tanpa `defs.SeedEntity`; `--schema schemas` → 85 manifest, 0 problem.
       ⚠️ **Koreksi 2026-09-22 — angka & daftar manifest di teks lama sudah drift.** Teks lama: "3 problem untuk ketiga summary kafe". Diukur ulang (`./bin/formspec validate --spec examples/kafe/spec`, v0.0.9): **78 manifest, 7 problem**, dan **tidak satu pun** pada ketiga summary. Yang gagal: `unit` (`ingredient`, `recipe.lines[].unit`), `hooks/0` (`stock-movement`), `emit` pada 4 transisi (`order`), `steps[0]` (`order-void-approval`), `body[5]`/`body[7]` (`receipt-digital`/`receipt-thermal` — item `qrcode` di `Print`). Dengan `--schema schemas` → **0 problem**, jadi diagnosisnya (registry ketinggalan kontrak) tetap benar; yang perlu diperbarui hanya angkanya. Sekaligus menutup klaim 2026-09-20 bahwa registry sudah selaras.
 - [ ] 3.6.8 `rebuild.strategy: partial` belum benar-benar parsial — `RebuildSpec.Window`/`Since` **dideklarasikan dan dicetak di rencana, tetapi tidak dikonsumsi**: `subscription.ReplayOptions` tidak punya field window/since, dan replay selalu membaca stream dari `earliest`. Jadi `partial` hari ini hanya berarti "menolak `--reset`" (`cmd/formspec/summary.go`), bukan "hanya bangun ulang jendela itu". Dua hal yang harus diputuskan lebih dulu: (a) **format** `window` — docs §6 memakai `"7d"` sementara fixture memakai `"month"`, dan `ValidateEntitySpec` hanya memvalidasi `strategy` sehingga `window: "banana"` pun lolos; (b) **semantik `since`** (batas absolut vs relatif ke kalender bisnis, §9.4). Setelah itu: teruskan ke `ReplayOptions` + filter entri stream (pakai kolom waktu entri, `stream.Entry.Timestamp`/`occurred_at`) + `formspec check` menolak `partial` tanpa `window`/`since`.
 
@@ -1335,6 +1363,8 @@ tapi belum melakukan apa pun: CLI tampak mendukung, perilakunya tidak.
 - [x] 5.1.1 `sidebar-nav` — full chrome, side navigation, breadcrumb (verified, working)
 - [x] 5.1.2 `topnav` — full chrome, top navigation — `TopNavShell` (nav atas + dropdown group + breadcrumb + mobile drawer), menu di-resolve via `useResolvedMenu` (sama dgn Sidebar). Contoh `examples/arisan/`. ✅ 2026-08-19
 - [x] 5.1.3 `no-nav` — chrome minimal tanpa nav standar — App renderer archetype (bukan "landing"/marketing): chrome & auth dipisah (`app_renderer` = chrome; `access: public|private` = auth). `NoNavShell` chrome-only + blok `section:` declarative (hero/feature_grid/card/carousel/cta) + anonim create (list/find/create publik di module App `access: public`) + login `returnTo`. Contoh `examples/storefront/`. Lihat `docs_internal/plan/landing-page.md` + changelog 2026-08-19-001/002. ✅ 2026-08-19
+- [x] 5.1.4 Entity detail URL dan breadcrumb memakai `natural_key` bila tersedia, fallback ke UUID; `unique` biasa tidak dipilih implisit; URL UUID lama tetap valid. ✅ 2026-09-25 — `docs_internal/plan/entity-natural-key-routing.md`
+- [x] 5.1.5 `natural_key` mengimplikasikan `unique` (bukan `required` — presence keputusan author); `unique: false` eksplisit ditolak lewat presence flag `Field.uniqueSet`. `natural_key_entry` (`auto_generated` | `user_entry` | `auto_generated_if_empty`) menyatakan siapa pemasok nilai, diresolusi konvensi sehingga deklarasi lama tetap sah; `auto_generated` mengabaikan nilai caller dan tidak muncul sebagai input di form; key opsional melewatkan nilai kosong pada index unik. ✅ 2026-09-26 — changelog `2026-09-26-001`
 
 ### 5.1a App-level fields (chrome/auth/shell/persist)
 
@@ -1471,7 +1501,13 @@ tapi belum melakukan apa pun: CLI tampak mendukung, perilakunya tidak.
 - [x] 5.10.15 SelectMultiTag — widget `select-multi-tag` (`widgets/SelectMultiTag.tsx`) + atribut `Field.options` (`pkg/spec/entity.go`): tag yang sumbernya **deklarasi**, bukan ketikan. Opsi terpilih tidak ditawarkan lagi; chip urut deklarasi (tampilan saja — array tersimpan mempertahankan urutan isian); nilai di luar deklarasi tetap tampil & tidak dibuang saat save; nilai non-daftar → error terlihat; bentuk nilai dipertahankan (`json` array / `string` comma-separated, tipe skalar ikut deklarasi). Satu resolver bersama (`lib/field-options.ts`) dipakai Form, DetailPage, dan sel tabel/listing. Katalog form 24 → 25. ✅ 2026-09-24
       **Terukur** (browser `:8099`): pilih Senin → daftar tinggal `[Selasa…Minggu]`; chip `Senin, Selasa, Jumat` (urutan deklarasi) walau urutan klik berbeda; detail page `preCount: 0` (chip berlabel, bukan `[1,2]` mentah); simpan UI → API membaca `days_of_week: [1, 5, 2]` dengan `types: [int,int,int]` (angka, bukan `"1"`). Duplikat ditolak engine: `options[1] duplicates the value "1" from options[0]`. `go test ./...` 39 paket hijau · vitest **403 lulus** (+20) · `tsc -b` bersih · kafe `validate` 85 manifest 0 problem. Plan `docs_internal/plan/select-multi-tag-widget.md`, changelog `2026-09-24-010`. **Sisa → 5.10.17 ⏸️ + 5.10.18 ⏸️.**
 - [ ] 5.10.17 ⏸️ **Wizard step (`kind: Wizard`) tidak memakai kosakata widget sama sekali.** `WizardFormStep.tsx` merender input-nya sendiri (`import { Input } from "@/components/ui/input"`) dan tidak pernah memanggil `FormFieldWidget`, jadi **setiap** widget di katalog (termasuk `moneyinput`, `datetimeinput`, `relation-picker`, dan `select-multi-tag` yang baru) diabaikan di dalam wizard — sebuah field ber-`widget: moneyinput` tampil sebagai input teks polos. Bukan akibat 5.10.15 (batasnya sudah ada sebelumnya), tetapi baru terlihat saat menelusuri "siapa saja yang membaca `widget:`". **Teramati**: `grep -n 'FormFieldWidget' renderers/react-shadcn/src/kinds/wizard/*.tsx` → 0 hasil; `grep -n 'components/ui/input' WizardFormStep.tsx` → 1. Effort: medium (routing widget per field + paritas label; butuh keputusan apakah wizard memakai `FormFieldWidget` langsung).
-- [ ] 5.10.18 ⏸️ **Filter `select` pada field non-enum/non-relasi belum memakai `Field.options`.** `useSelectFilterOptions` hanya menurunkan opsi dari field `enum` (`enum_values`) dan relasi (`belongs_to`); field `json`/`string` yang mendeklarasikan `options` menghasilkan filter kosong, padahal deklarasinya sudah memberi caption yang manusiawi. Satu kosakata (`options`), dua jalur konsumen — halaman detail dan sel tabel sudah memakainya, filter belum. **Teramati**: `grep -n 'enum_values\|relation' renderers/react-shadcn/src/hooks/useSelectFilterOptions.ts` → hanya dua cabang itu; tidak ada rujukan `fieldOptions`. Effort: small (pakai `fieldOptions()` di hook itu + test filter).
+- [ ] 5.10.18 ✅ 2026-09-25 **Filter `select` pada field non-enum/non-relasi kini memakai `Field.options`.** `useSelectFilterOptions` memakai `fieldOptions()`, jadi field `json`/`string` ber-`options` menghasilkan filter ber-caption; `ListingRenderer`/`TableRenderer` memakai resolver yang sama (nilai terkirim tetap nilai deklarasi, bukan caption). Menutup sisa 5.10.15. Sebelumnya: `useSelectFilterOptions` hanya menurunkan opsi dari `enum_values` dan relasi, sehingga field ber-`options` menghasilkan filter kosong. ✅ 2026-09-25
+- [x] 5.10.19 Cardinality `options` di Entity — `Field.multiple` (pointer bool) + matriks tipe × cardinality: `json`/`string` **wajib** `multiple` bila `options` dinyatakan; skalar non-enum boleh `options` (single-select ber-caption); `multiple: true` pada skalar dan `enum`+`options` ditolak. `options` kini sah di field skalar, jadi celah "known, separately tracked gap" di godoc `pkg/spec/entity.go` akhirnya punya kontrak (caption `enum` tetap terbuka → 5.10.23). **Form mengikuti Entity** di dua lapis: `deriveFormWidget` (`engine/derive.ts`) menjadi satu sumber untuk Form turunan **dan** Form yang ditulis (sebelumnya router authored hanya mengenal `money`/`time` → field `json` ber-`options` jatuh ke editor JSON mentah), dan `formspec check` menolak widget yang bertentangan **dua arah**. Konsumen ikut: sel tabel + halaman detail (nilai tunggal ber-caption = badge), derivasi kolom Table/Listing/Kanban, tiga picker single (`select`/`radio-group`/`combobox`) membaca `options` + mengirim nilai skalar. **Terukur** (browser `:8099`, App `kafe-pos`, form promo **tanpa** `widget:` di YAML): chip hari urut deklarasi ("Senin, Jumat" walau klik Jumat dulu) · DB `days_of_week=[5,1]` **int** (urutan isian, tampilan tidak menulis ulang data) · `channel='qris'` skalar · detail page menampilkan chip + caption `QRIS`. Uji negatif: 3 bentuk ditolak `validate` (hapus `multiple`, `multiple: true` pada `integer`, `options` pada `enum`), 2 kontradiksi ditolak `check`. `go test ./...` 39 paket · vitest **454** · `tsc -b` bersih · kafe `validate` 85 manifest 0 problem · `check` 0/0. Plan `docs_internal/plan/options-cardinality-entity.md`, changelog `2026-09-25-007`. **Sisa → 5.10.20 ⏸️ + 5.10.21 ⏸️ + 5.10.22 ⏸️ + 5.10.23 ⏸️.** ✅ 2026-09-25
+- [ ] 5.10.20 ⏸️ **Penegakan server cardinality/keanggotaan `options` belum ada.** Cardinality hanya menentukan **bentuk** nilai di klien; server tidak menolak array untuk field `multiple: false`, dan nilai di luar deklarasi tetap tersimpan (keputusan sadar, lihat 10.33 — data lama/spec menyusut tidak boleh hilang senyap). Yang belum diputuskan: apakah `multiple: false` harus menolak array, dan apakah nilai di luar set harus ditolak atau sekadar ditandai. **Teramati:** `grep -n "Multiple" renderers/jsonb-persist/*.go` → 0 hasil (tidak ada pembacaan `Field.Multiple` di jalur tulis). Effort: medium (keputusan perilaku + validasi di `validateFieldRules` + 422 dengan pesan yang bisa ditindak).
+- [ ] 5.10.21 ⏸️ **Paritas lintas-shell untuk aturan "Form mengikuti Entity".** Aturan cardinality (derivasi widget + gerbang `formspec check`) ditegakkan di renderer `react-shadcn` dan validator engine; shell lain yang mengimplementasikan kontrak renderer tidak mendapat warisan ini. Sama kelasnya dengan 5.14.6 (presedensi caption). **Teramati:** `grep -rn "deriveFormWidget" renderers/` → hanya `react-shadcn`. Effort: medium (angkut aturan ke kontrak renderer + fixture bersama).
+- [ ] 5.10.22 ⏸️ **`formspec generate --lang typescript` belum mengemit union dari `options`.** Field skalar ber-`options` (`type: integer` + `options 1=Senin`) digenerate sebagai `number`, bukan `1 | 2 | 7`; caption tidak ikut. **Teramati:** `cmd/formspec/generate.go` `tsFieldType` hanya membaca `EnumValues` (baris ~303), tidak ada rujukan `Options`. Effort: small (map `options[].value` → union literal + test).
+- [ ] 5.10.23 ⏸️ **Caption untuk `enum` belum ada (hanya sebagian tertutup).** 5.10.19 membuat `options` sah di field skalar **non-enum**, jadi single-select ber-caption kini bisa dinyatakan — tetapi `enum` sengaja tetap hanya `enum_values` (punya CHECK constraint di DB), sehingga `enum` masih menampilkan nilai mentah tanpa caption. Godoc `pkg/spec/entity.go` (`validateFieldOptionsShape`) menyebutnya "tracked separately" — item ini rujukannya. Effort: medium (bentuk deklarasi caption untuk enum + validasi 1:1 terhadap `enum_values` + pembacaan di tiga picker).
+- [ ] 5.10.24 ⏸️ **`TestKafe_OnPaidCreatesBalancedJournal`/`TestKafe_PurchaseReceivedCreatesJournal` flaky — balapan di helper test, BUKAN regresi kode.** Ditemukan saat verifikasi 5.10.19 dan **dibuktikan pra-eksisting** dengan `git worktree`: pada HEAD bersih (`dd3adc6`) `go test -count=1 ./resource/` gagal **2/8** run dengan test yang sama, sedangkan working tree perubahan 5.10.19 gagal **1/8** — laju yang setara, jadi bukan akibat perubahan ini. **Akar (terbaca di kode, bukan dugaan):** `waitForJournal` (`resource/o2c_e2e_test.go:304`) hanya menunggu `countJournalEntries() > 0` — yaitu barisnya **ada** — lalu test meng-assert `status == "posted"`; baris lahir saat `journalize.star` meng-insert, sedangkan `posted` di-set handler setelahnya, dan outbox worker polling pada interval. Di antara dua momen itu assertion melihat `"draft"`. **Terukur:** pesan persisnya `journal status = "draft", want posted (the handler posts it itself)`. Fix: tunggu **status**, bukan keberadaan baris (poll `status == "posted"` dengan deadline). Effort: small (dua test, satu helper bersama). Catatan: sebelumnya kegagalan kelas ini diatribusikan ke item kafe 10.7 (`gl/config/gl.yaml`) — atribusi itu **salah**, terbukti `git diff HEAD -- examples/kafe/spec/modules/gl/` kosong.
 
 ### 5.11 FormSpecExpr
 
@@ -1716,7 +1752,7 @@ deliverable utama.
       (validasi terhadap `b.Pages` yang sudah dibangun, bukan terhadap Form).
 - [ ] 5.22.7 ⏸️ **Surface `_admin` buta `permissions`/`when` menu — gerbangnya
       biner.** `?admin=true` memakai `alwaysVisible := func(string) bool { return
-    true }` (`internal/api/meta.go`) dan menu `_admin` dibangun klien dari
+true }` (`internal/api/meta.go`) dan menu `_admin` dibangun klien dari
       `bundle.entities` (`deriveMenuItems`), bukan dari `App.spec.menu`. Jadi
       pemegang `_admin.access` melihat **semua** entity di sidebar tanpa
       `list`/`view`-nya, lalu klik-nya 403 dari endpoint data — UX buruk, bukan
@@ -1757,7 +1793,7 @@ deliverable utama.
       drawer beralih dari `"Fill in the details for this promo."` →
       deskripsi entity, wizard close-shift step 2 menampilkan **dua** help
       (money + string, dua cabang berbeda), `go test ./...` hijau, `formspec
-    check` 0 error. Plan `docs_internal/plan/field-help-inheritance.md`,
+check` 0 error. Plan `docs_internal/plan/field-help-inheritance.md`,
       changelog `2026-09-25-006`. ✅ 2026-09-25. **Sisa → 5.23.2 ⏸️, 5.23.3 ⏸️.**
 - [ ] 5.23.2 ⏸️ **81 `description` field di `examples/kafe` adalah catatan
       developer, bukan kalimat pengguna — kini teks itu tampil di bawah input.**
@@ -1767,16 +1803,16 @@ deliverable utama.
       `"Denormalisasi untuk tampilan cepat"`; `:137`
       `"compute dari branch.service_charge_percent"`;
       `gl/entities/gl-balance.yaml:34` `"computed — opening + debit - credit
-    (asset) atau opening + credit - debit (liability/revenue)"`;
+(asset) atau opening + credit - debit (liability/revenue)"`;
       `cafe-master/master/promo/entity.yaml:77` `"Array angka
-    1=Senin..7=Minggu, mis. [1,2,3,4,5]"`. Kontrak sudah diperbarui (spec §2 + skill), hanya isi contohnya yang tertinggal. Effort: small–medium (audit + tulis ulang; mekanis, tanpa keputusan kontrak).
+1=Senin..7=Minggu, mis. [1,2,3,4,5]"`. Kontrak sudah diperbarui (spec §2 + skill), hanya isi contohnya yang tertinggal. Effort: small–medium (audit + tulis ulang; mekanis, tanpa keputusan kontrak).
 - [ ] 5.23.3 ⏸️ **`help` tidak punya presedensi yang ditegakkan test di jalur
       `Form` authored non-`resolveForm`.** `FormRenderer` memakai `resolveForm()`
       sehingga tercakup, tetapi `SearchSelect` (`kinds/wizard/SearchSelect.tsx`)
       membaca `getForm()` langsung dan hanya memakai `entityFieldLabel` — ia
       belum memanggil resolver, dan `field.help` di sana hanya soal field
       pencarian. **Teramati**: `grep -n "withEntityFieldDefaults\|entityFieldHelp"
-    kinds/wizard/SearchSelect.tsx` → 0 hasil, padahal file itu satu-satunya
+kinds/wizard/SearchSelect.tsx` → 0 hasil, padahal file itu satu-satunya
       situs baca-Form yang belum lewat resolver (FormRenderer, OverlayHost,
       WizardFormStep, WizardRenderer sudah). Effort: small (putuskan apakah
       SearchSelect memang perlu help — ia layar pemilihan, bukan input — lalu
@@ -1968,6 +2004,58 @@ Hash`) ikut terkirim, DAN bundle memuat seluruh module yang di-mount (13 entity
       entity). **Test pengunci:** `TestBuildBundle_PublicAppHidesFrameworkAdmin`.
       **Sisa:** kesepakatan bundle vs penegakan permintaan belum diuji menyeluruh
       — lihat kafe 10.13 ⏸️.
+
+- [x] 7.8.16 **`check` belum memeriksa NAMA lintas-file (`spec.entity`, ref view).**
+      Ditutup 2026-09-23 (changelog `2026-09-23-004`, item kafe 10.12). Sebelumnya
+      `formspec validate` **hijau** pada manifest yang menunjuk entity/view/widget
+      yang tidak pernah dideklarasikan — pemeriksaan `validate` per-manifest, jadi
+      nama yang tidak ada di mana pun tidak pernah dibandingkan dengan apa pun;
+      kegagalannya muncul saat runtime sebagai 404/placeholder. Terukur pada kafe:
+      `entity: ledger`, Table → `journal_entry` (manifest `journal-entry`),
+      dashboard → widget `recent-journals`. **Diperbaiki:** `checkReferences`
+      memeriksa `spec.entity` pada sepuluh kind + rujukan form/table/component/widget
+      di Page (blocks & tabs) + rujukan widget di Dashboard (`widgets` dan `defaults`).
+      Field entity TIDAK diperiksa (sudah ada pemeriksanya; jalur kolom ber-titik butuh
+      penelusuran relasi). **False positive ditemukan & dihapus sebelum commit:** ref
+      telanjang yang dideklarasikan modul LAIN (dashboard `clinic` → widget
+      `pharmacy-queue-count` milik `pharmacy` di Clinic-UI-Showcase) kini diterima;
+      ref yang menyebut modul tetap ketat. **Hasil pada contoh:** kafe/cafe/
+      crc-management/service-demo/storefront 0, arisan 4→4, Clinic 4→4,
+      **Midtrans 0→2 bug nyata**. **Test pengunci:**
+      `TestCheckReferences_{DanglingNames,NoFalsePositives,CleanSpecIsSilent}`
+      (`cmd/formspec/check_references_test.go`) — dibuktikan gagal saat lookup
+      dinonaktifkan.
+
+- [⏸️] 7.8.17 **Tidak ada kind UI untuk mengedit `kind: Config` atau
+  menampilkan log (`kind: Webhook`).** Ditemukan oleh pemeriksa 7.8.16
+  (changelog `2026-09-23-004`): contoh `Midtrans-Payment-Gateway` punya dua Page
+  — `midtrans-config-page` (`block form: midtrans-config-form`) dan
+  `midtrans-webhook-log` (`block table: midtrans-webhook-table`) — yang
+  merujuk manifest Form/Table yang **tidak pernah ada**, dan contoh itu memang
+  tidak punya satu pun `kind: Form`/`kind: Table`. Tambalannya bukan menambah
+  manifest palsu (itu hanya menyembunyikan gap): `FormSpec` hanya bisa mengikat
+  `entity` atau `auth_action` — **tidak ada** yang mengikat `Config` —
+  dan `WebhookSpec` tidak punya hook query/list, sehingga log webhook tidak bisa
+  di-render sebagai Table. Yang perlu diputuskan: (a) Form mengikat Config
+  (`config_ref` + key-path), (b) Table/Listing bisa bersumber dari Config/log
+  store (bukan hanya Entity), atau (c) bentuk lain (mis. Page `mode: settings`
+  dengan blok khusus). Effort: medium. **Teramati:** `formspec check` pada contoh
+  itu 0 → 2 error sesudah 7.8.16; `grep "kind: Form\|kind: Table"` di contoh
+  → 0.
+
+- [⏸️] 7.8.18 **`TestKafe_OnPaidCreatesBalancedJournal` flaky.**
+  Teramati 2026-09-23 pada `go test ./... -count=1` (gagal sekali), lalu **tidak
+  dapat direproduksi**: paket `resource` lulus 3×3 berturut-turut dan satu
+  run penuh berikutnya hijau; test-nya juga lulus saat dijalankan sendiri.
+  Gejalanya menunjuk timing: jurnalnya dibangun oleh jalur **event/outbox**
+  (`on_paid` → Subscription → `journalize_sale`), dan test menunggu
+  jurnal muncul dengan batas waktu — di bawah beban paralel, worker outbox
+  (poll 1s) bisa melewati jendela tunggu. Yang perlu diputuskan: naikkan batas
+  tunggu (dan dokumentasikan sebagai latensi yang wajar, bukan kebetulan), atau
+  buat test memacu pemrosesan outbox secara deterministik alih-alih menunggu
+  poll. Effort: small. **Teramati:** `TestKafe_OnPaidCreatesBalancedJournal`
+  1,61s FAIL saat suite penuh; `-run` tunggal PASS 1,47s; `./resource/` ×3
+  `ok`.
 
 - [⏸️] 7.8.13 **Tidak ada cara berbagi kode antar-script Starlark, dan tidak ada peringatan untuk rujukan lintas-file.** 7.8.12 menutup satu kasus dengan menulis ulang script, tetapi polanya akan terulang: setiap module dengan dua aksi serupa (jurnal penjualan vs pembelian, dua guard keunikan) menghadapi pilihan antara meng-copy fungsi atau memaksakan satu file besar. Perlu keputusan: (a) dukung `load()` dengan allowlist path relatif spec, (b) file "lib" yang di-include saat kompilasi, atau (c) dokumentasikan duplikasi sebagai aturan. Apa pun pilihannya, validator sebaiknya memperingatkan pemanggilan nama yang tidak terdefinisi di file itu (analisis statis sederhana: nama yang di-define vs yang dipanggil). Effort: medium. **Teramati:** `grep "load(" examples/kafe/spec/modules/*/scripts/*.star` → 0, dan kegagalan 7.8.12 muncul sebagai retry outbox, bukan error saat authoring.
 - [x] 7.8.9 **`resource.save`/`update` dari script: gap-nya NYATA — dan lebih besar dari dugaan awalnya.** ✅ **2026-09-22** (changelog `2026-09-22-013`). Diperiksa dan diperbaiki:

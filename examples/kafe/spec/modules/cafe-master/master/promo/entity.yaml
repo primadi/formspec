@@ -17,7 +17,6 @@ spec:
     - name: code
       type: string
       required: true
-      unique: true
       natural_key: true
       title: "Kode Promo"
       description: "Mis. HAPPY-HOUR-20"
@@ -73,6 +72,11 @@ spec:
       title: "Selesai Berlaku"
     - name: days_of_week
       type: json
+      # Cardinality ada di Entity, bukan di form: satu promo memakai BEBERAPA
+      # hari, jadi field ini sebuah himpunan. Form cukup mengikuti deklarasi ini
+      # (dulu `widget: select-multi-tag` harus ditulis di `promo-form.yaml`,
+      # sehingga keputusan single/multi hidup di Form — sekarang tidak lagi).
+      multiple: true
       title: "Hari Berlaku"
       description: "Array angka 1=Senin..7=Minggu, mis. [1,2,3,4,5]"
       # Himpunan tertutup + caption: `enum_values` hanya membawa nilai, jadi
@@ -87,6 +91,18 @@ spec:
         - { value: 5, label: "Jumat" }
         - { value: 6, label: "Sabtu" }
         - { value: 7, label: "Minggu" }
+    # Satu nilai dari himpunan berlabel: `options` di field skalar. Dipakai
+    # untuk menunjukkan cardinality single — `enum_values` tidak punya caption,
+    # jadi `qris` tak akan pernah terbaca "QRIS".
+    - name: channel
+      type: string
+      multiple: false
+      title: "Kanal"
+      description: "Kanal promo dipakai. Kosongkan bila berlaku di semua kanal."
+      options:
+        - { value: pos, label: "POS" }
+        - { value: qris, label: "QRIS" }
+        - { value: online, label: "Online" }
     # `time` kini punya `timeinput` — jam happy hour
     # diisi lewat kontrol waktu, bukan teks bebas.
     - name: time_from

@@ -2,6 +2,8 @@ package spec
 
 import (
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func TestValidateEntitySpec_BaseEntity(t *testing.T) {
@@ -713,5 +715,108 @@ func TestValidateDocumentSpec_NaturalKeyRuleFormat(t *testing.T) {
 				t.Errorf("ValidateDocumentSpec() error = %v, wantErr = %v", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestValidateEntitySpec_NaturalKeyImpliesUnique(t *testing.T) {
+	spec := &EntitySpec{Fields: []Field{
+		{Name: "code", Type: FieldString, NaturalKey: true},
+	}}
+	if err := ValidateEntitySpec(spec); err != nil {
+		t.Fatalf("natural_key alone must be valid (unique is implied), got %v", err)
+	}
+	if !spec.Fields[0].Unique {
+		t.Error("natural_key must resolve to Unique=true for the storage layer")
+	}
+	// Presence is the author's choice, NOT an engine implication: the two modes
+	// are "generated on insert" and "filled by a person, maybe later". Asserting
+	// required here would demand a value the author never declared.
+	if spec.Fields[0].Required {
+		t.Error("natural_key must NOT imply Required — presence is the author's decision")
+	}
+	if spec.NaturalKeyField != "code" {
+		t.Errorf("NaturalKeyField = %q, want %q", spec.NaturalKeyField, "code")
+	}
+}
+
+// TestValidateEntitySpec_NaturalKeyPresenceModes pins the two supported modes:
+// a generated key (rule) and a user-filled key, the latter with or without
+// `required`. All three must load — the choice belongs to the manifest.
+func TestValidateEntitySpec_NaturalKeyPresenceModes(t *testing.T) {
+	generated := &EntitySpec{Fields: []Field{
+		{Name: "number", Type: FieldString, NaturalKey: true, NaturalKeyRule: &NaturalKeyRuleDecl{Strategy: "sequence"}},
+	}}
+	userFilledOptional := &EntitySpec{Fields: []Field{
+		// A chart-of-accounts code: the user MAY fill it in.
+		{Name: "code", Type: FieldString, NaturalKey: true},
+	}}
+	userFilledRequired := &EntitySpec{Fields: []Field{
+		{Name: "code", Type: FieldString, NaturalKey: true, Required: true},
+	}}
+
+	for _, tc := range []struct {
+		name string
+		spec *EntitySpec
+	}{
+		{"generated", generated},
+		{"user-filled optional", userFilledOptional},
+		{"user-filled required", userFilledRequired},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := ValidateEntitySpec(tc.spec); err != nil {
+				t.Fatalf("mode must be valid, got %v", err)
+			}
+			if !tc.spec.Fields[0].Unique {
+				t.Error("every mode must still be unique")
+			}
+		})
+	}
+}
+
+// TestValidateEntitySpec_NaturalKeyRejectsExplicitUniqueFalse pins the
+// presence-flag contract: uniqueness is the ONE guarantee `natural_key` makes,
+// so writing `unique: false` contradicts the declaration and is refused — while
+// omitting it stays valid (the normal case, and what every core manifest does).
+// Only a presence flag can tell those two apart; a plain bool decodes both to
+// the same value.
+func TestValidateEntitySpec_NaturalKeyRejectsExplicitUniqueFalse(t *testing.T) {
+	contradiction := Field{Name: "code", Type: FieldString, NaturalKey: true, uniqueSet: true}
+	if err := ValidateEntitySpec(&EntitySpec{Fields: []Field{contradiction}}); err == nil {
+		t.Fatal("expected a contradiction error for explicit `unique: false`")
+	}
+}
+
+// TestFieldUnmarshalYAML_RecordsExplicitKeys proves the presence flag is
+// actually set by decoding — the validator above is only as good as this.
+func TestFieldUnmarshalYAML_RecordsExplicitKeys(t *testing.T) {
+	var doc struct {
+		Fields []Field `yaml:"fields"`
+	}
+	src := `
+fields:
+  - { name: a, type: string, natural_key: true, unique: false }
+  - { name: b, type: string, natural_key: true }
+`
+	if err := yaml.Unmarshal([]byte(src), &doc); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(doc.Fields) != 2 {
+		t.Fatalf("expected 2 fields, got %d", len(doc.Fields))
+	}
+	if !doc.Fields[0].uniqueSet {
+		t.Error("field a: explicit `unique: false` must set uniqueSet")
+	}
+	if doc.Fields[1].uniqueSet {
+		t.Error("field b: omitted key must not set the presence flag")
+	}
+}
+
+func TestValidateEntitySpec_OnlyOneNaturalKey(t *testing.T) {
+	spec := &EntitySpec{Fields: []Field{
+		{Name: "code", Type: FieldString, NaturalKey: true},
+		{Name: "sku", Type: FieldString, NaturalKey: true},
+	}}
+	if err := ValidateEntitySpec(spec); err == nil {
+		t.Fatal("expected an error for two natural_key fields")
 	}
 }

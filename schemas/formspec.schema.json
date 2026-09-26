@@ -1249,6 +1249,11 @@
           "description": "1.4.7 MaskedField — auto-mask in response/log (05-field-types.md §5.2).",
           "type": "boolean"
         },
+        "multiple": {
+          "description": "How many of the declared `options` this field holds: `true` = a set (array / comma-separated list), `false` = one value. Required when `options` is declared on `json` or `string`, because those types can hold either shape.",
+          "type": "boolean",
+          "nullable": true
+        },
         "name": {
           "description": "Field name — lowercase snake_case, unique within entity",
           "type": "string",
@@ -1257,7 +1262,12 @@
           "pattern": "^[a-z][a-z0-9_]*$"
         },
         "natural_key": {
+          "description": "NaturalKey marks the field as the record's business identifier.",
           "type": "boolean"
+        },
+        "natural_key_entry": {
+          "$ref": "#/$defs/NaturalKeyEntry",
+          "description": "NaturalKeyEntry states who supplies the key: the engine, a person, or the engine unless a person supplies one (see the NaturalKeyEntry enum)."
         },
         "natural_key_rule": {
           "$ref": "#/$defs/NaturalKeyRuleDecl",
@@ -1337,6 +1347,7 @@
           "description": "@schema {description: \"Data type — determines storage class, renderer widget, and validation\"}"
         },
         "unique": {
+          "description": "Unique declares a cross-record uniqueness constraint (unique per tenant).",
           "type": "boolean"
         },
         "unit": {
@@ -2122,6 +2133,16 @@
         "name"
       ],
       "additionalProperties": false
+    },
+    "NaturalKeyEntry": {
+      "title": "Natural Key Entry",
+      "description": "Who supplies the natural key: `auto_generated` (engine only), `user_entry` (a person), `auto_generated_if_empty` (engine mints it unless a value is supplied).",
+      "type": "string",
+      "enum": [
+        "auto_generated",
+        "user_entry",
+        "auto_generated_if_empty"
+      ]
     },
     "NaturalKeyPrefix": {
       "description": "NaturalKeyPrefix defines the prefix for a natural key.\n",
@@ -5568,6 +5589,11 @@
           "description": "1.4.7 MaskedField — auto-mask in response/log (05-field-types.md §5.2).",
           "type": "boolean"
         },
+        "multiple": {
+          "description": "How many of the declared `options` this field holds: `true` = a set (array / comma-separated list), `false` = one value. Required when `options` is declared on `json` or `string`, because those types can hold either shape.",
+          "type": "boolean",
+          "nullable": true
+        },
         "name": {
           "description": "Field name — lowercase snake_case, unique within entity",
           "type": "string",
@@ -5576,7 +5602,12 @@
           "pattern": "^[a-z][a-z0-9_]*$"
         },
         "natural_key": {
+          "description": "NaturalKey marks the field as the record's business identifier.",
           "type": "boolean"
+        },
+        "natural_key_entry": {
+          "$ref": "#/$defs/NaturalKeyEntry",
+          "description": "NaturalKeyEntry states who supplies the key: the engine, a person, or the engine unless a person supplies one (see the NaturalKeyEntry enum)."
         },
         "natural_key_rule": {
           "$ref": "#/$defs/NaturalKeyRuleDecl",
@@ -5656,6 +5687,7 @@
           "description": "@schema {description: \"Data type — determines storage class, renderer widget, and validation\"}"
         },
         "unique": {
+          "description": "Unique declares a cross-record uniqueness constraint (unique per tenant).",
           "type": "boolean"
         },
         "unit": {
@@ -6441,6 +6473,16 @@
         "name"
       ],
       "additionalProperties": false
+    },
+    "NaturalKeyEntry": {
+      "title": "Natural Key Entry",
+      "description": "Who supplies the natural key: `auto_generated` (engine only), `user_entry` (a person), `auto_generated_if_empty` (engine mints it unless a value is supplied).",
+      "type": "string",
+      "enum": [
+        "auto_generated",
+        "user_entry",
+        "auto_generated_if_empty"
+      ]
     },
     "NaturalKeyPrefix": {
       "description": "NaturalKeyPrefix defines the prefix for a natural key.\n",
@@ -9099,7 +9141,6 @@
         },
         "spec": {
           "title": "Entity Spec",
-          "description": "EntitySpec defines a stateful, persisted business data resource (Core §4.1).\n",
           "type": "object",
           "properties": {
             "actions": {

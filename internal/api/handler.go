@@ -678,7 +678,8 @@ func (f *HandlerFactory) HandleFind(module, entity string) http.HandlerFunc {
 			// seeded with the natural key value + field defaults.
 			if f.specLookup != nil {
 				if es, ok := f.specLookup(module, entity); ok &&
-					es.Characteristic == spec.CharReference && es.NaturalKeyField != "" {
+					es.Characteristic == spec.CharReference && es.NaturalKeyField != "" &&
+					id != "" {
 					defaultData := map[string]any{es.NaturalKeyField: id}
 					// Seed the `app-setting` record with the manifest-declared
 					// settings (spec §10 Configuration Page pattern) so the

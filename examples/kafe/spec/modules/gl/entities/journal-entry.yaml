@@ -17,7 +17,6 @@ spec:
       type: string
       natural_key: true
       immutable: true
-      unique: true
       index: true
       natural_key_rule:
         strategy: sequence

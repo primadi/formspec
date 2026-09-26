@@ -99,6 +99,165 @@ func TestCheckForms_FieldAndExprErrors(t *testing.T) {
 	}
 }
 
+// The Form must follow the Entity's cardinality. Before this gate, a Form could
+// declare `widget: select` on a field the Entity declared a set (or the reverse)
+// and `formspec check` reported nothing — the contradiction only surfaced as a
+// control the data could not honour, in the browser.
+func TestCheckForms_WidgetCardinalityContradiction(t *testing.T) {
+	dir := t.TempDir()
+	write := func(rel, content string) {
+		path := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", filepath.Dir(path), err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatalf("write %s: %v", rel, err)
+		}
+	}
+
+	// The Entity is the authority: `days_of_week` is a set, `channel` one value.
+	write("modules/alpha/master/promo/entity.yaml", `apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: promo
+  module: alpha
+spec:
+  version: v1
+  characteristic: master
+  fields:
+    - name: code
+      type: string
+    - name: days_of_week
+      type: json
+      multiple: true
+      options:
+        - { value: 1, label: Senin }
+        - { value: 2, label: Selasa }
+    - name: channel
+      type: string
+      multiple: false
+      options:
+        - { value: pos, label: POS }
+        - { value: qris, label: QRIS }
+`)
+
+	write("modules/alpha/forms/promo-form.yaml", `apiVersion: formspec.dev/v1
+kind: Form
+metadata:
+  name: promo-form
+  module: alpha
+spec:
+  entity: alpha.promo
+  sections:
+    - title: Main
+      fields:
+        - field: code
+        - { field: days_of_week, widget: select }
+        - { field: channel, widget: select-multi-tag }
+`)
+
+	loader := manifest.NewLoader(dir)
+	res, err := loader.LoadAll()
+	if err != nil {
+		t.Fatalf("LoadAll: %v", err)
+	}
+
+	idx := buildEntityIndex(res.Manifests)
+	result := &checkResult{}
+	checkForms(result, idx, res.Manifests)
+
+	var setAsSingle, singleAsTags bool
+	for _, i := range result.Issues {
+		if i.Kind != "error" {
+			continue
+		}
+		if strings.Contains(i.Message, "days_of_week") &&
+			strings.Contains(i.Message, "`widget: select` picks one value") {
+			setAsSingle = true
+		}
+		if strings.Contains(i.Message, "channel") &&
+			strings.Contains(i.Message, "needs a field that holds a set") {
+			singleAsTags = true
+		}
+	}
+	if !setAsSingle {
+		t.Errorf("a one-value select on a set field must be reported, got: %+v", result.Issues)
+	}
+	if !singleAsTags {
+		t.Errorf("the tag widget on a single-value field must be reported, got: %+v", result.Issues)
+	}
+	if len(result.Issues) != 2 {
+		t.Errorf("want exactly the two contradictions, got %d: %+v", len(result.Issues), result.Issues)
+	}
+}
+
+// The gate must not fire on the shapes it is not about: a widget that says
+// nothing about cardinality, and a field with no declared set at all.
+func TestCheckForms_WidgetCardinalityAllowsUnrelatedWidgets(t *testing.T) {
+	dir := t.TempDir()
+	write := func(rel, content string) {
+		path := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", filepath.Dir(path), err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatalf("write %s: %v", rel, err)
+		}
+	}
+
+	write("modules/alpha/master/promo/entity.yaml", `apiVersion: formspec.dev/v1
+kind: Entity
+metadata:
+  name: promo
+  module: alpha
+spec:
+  version: v1
+  characteristic: master
+  fields:
+    - name: days_of_week
+      type: json
+      multiple: true
+      options:
+        - { value: 1, label: Senin }
+    - name: code
+      type: string
+    - name: payload
+      type: json
+`)
+
+	write("modules/alpha/forms/promo-form.yaml", `apiVersion: formspec.dev/v1
+kind: Form
+metadata:
+  name: promo-form
+  module: alpha
+spec:
+  entity: alpha.promo
+  sections:
+    - title: Main
+      fields:
+        # A cardinality-neutral widget on a set field is fine — only the
+        # one-value pickers contradict it.
+        - { field: days_of_week, widget: input }
+        - { field: code, widget: input }
+        # No declared options: nothing to be multiple of, so tags is allowed.
+        - { field: payload, widget: select-multi-tag }
+`)
+
+	loader := manifest.NewLoader(dir)
+	res, err := loader.LoadAll()
+	if err != nil {
+		t.Fatalf("LoadAll: %v", err)
+	}
+
+	idx := buildEntityIndex(res.Manifests)
+	result := &checkResult{}
+	checkForms(result, idx, res.Manifests)
+
+	if len(result.Issues) != 0 {
+		t.Fatalf("no cardinality contradiction expected, got: %+v", result.Issues)
+	}
+}
+
 func TestCheckUses_UnknownResourceError(t *testing.T) {
 	dir := t.TempDir()
 	writeCheckSpec(t, dir)

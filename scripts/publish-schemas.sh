@@ -62,6 +62,14 @@ echo "📐 Men-generate JSON Schema dari Go types..."
 echo "✅ Schema segar di $SCHEMA_DIR"
 
 echo "📦 Menyusun layout versi '$VERSION' di $DIST_DIR/$VERSION ..."
+# Clean the version dir first: `mkdir -p` + `cp` alone never removes what the
+# generator stopped emitting, so a retired kind keeps its schema in the
+# published set forever. Measured: `Migration.schema.json` was still staged and
+# served long after the engine began rejecting `kind: Migration` as
+# "unknown kind", because nothing ever deleted it. A stale file here is not
+# inert — it tells every consumer (and `index.json`'s kind list) that the kind
+# is valid.
+rm -rf "$DIST_DIR/$VERSION"
 mkdir -p "$DIST_DIR/$VERSION/kinds"
 cp "$OUT_DIR/formspec.schema.json" "$DIST_DIR/$VERSION/formspec.schema.json"
 for f in "$OUT_DIR"/kinds/*.schema.json; do

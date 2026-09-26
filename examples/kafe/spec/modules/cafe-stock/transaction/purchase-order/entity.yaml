@@ -16,11 +16,17 @@ spec:
   row_scope:
     - { field: branch_id, op: eq, from: session }
   fields:
+    # Nomor PO dibuat sistem, bukan input — form `purchase-order-form` tidak
+    # menyediakannya, dan skrip `purchase_receive.star` hanya MEMBACA nilai ini
+    # (untuk `source_ref` pergerakan stok). `auto_generated` karena itu
+    # mengabaikan nilai yang dikirim caller, supaya tidak ada yang bisa mematok
+    # nomor yang nanti diberikan deret kepada PO lain. `unique` tidak ditulis:
+    # `natural_key` sudah mengimplikasikannya.
     - name: number
       type: string
       required: true
-      unique: true
       natural_key: true
+      natural_key_entry: auto_generated
       natural_key_rule:
         strategy: sequence
         format: "PO-{year}-{seq:05d}"

@@ -51,16 +51,14 @@ import type {
 import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
 import { resolveEntityRef } from "@/engine/entityRef"
-import {
-  can as checkPermission,
-  canDoEntityAction,
-} from "@/engine/permissions"
+import { can as checkPermission, canDoEntityAction } from "@/engine/permissions"
 import { deriveKanbanColumns } from "@/engine/derive"
 import { evalFormSpecExpr, type RuntimeValue } from "@/lib/formspec-expr"
 import { useSurface } from "@/hooks/useSurface"
 import { useRealtime } from "@/hooks/useRealtime"
 import { useSelectFilterOptions } from "@/hooks/useSelectFilterOptions"
 import { apiList, apiPatch, apiDelete } from "@/lib/api"
+import { getEntityRouteSegment } from "@/lib/entityIdentity"
 import {
   buildFixedFilterParams,
   buildUserFilterParams,
@@ -620,7 +618,13 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
       if (!me || !entity) return
 
       // Permission check
-      if (!canDoEntityAction(me, entity ?? { module: entityModule, plural: entityName }, action.action)) {
+      if (
+        !canDoEntityAction(
+          me,
+          entity ?? { module: entityModule, plural: entityName },
+          action.action,
+        )
+      ) {
         toast.error("You don't have permission to perform this action")
         return
       }
@@ -644,18 +648,24 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
       }
 
       const id = record.id as string
+      const routeSegment = getEntityRouteSegment(entity, record)
 
       switch (action.action) {
         case "view":
-          navigate(surfacePath(entity.module, entity.plural, id))
+          navigate(surfacePath(entity.module, entity.plural, routeSegment))
           break
         case "edit":
-          navigate(surfacePath(entity.module, entity.plural, id, "edit"))
+          navigate(
+            surfacePath(entity.module, entity.plural, routeSegment, "edit"),
+          )
           break
         case "delete":
           try {
             const client = getClient()
-            await apiDelete(client, `${entity.module}/${entity.name}/${id}`)
+            await apiDelete(
+              client,
+              `${entity.module}/${entity.name}/${routeSegment}`,
+            )
             toast.success("Deleted successfully")
             setRecords((prev) => prev.filter((r) => r.id !== id))
           } catch (err) {
@@ -666,7 +676,7 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
           try {
             const client = getClient()
             await client.post(
-              `${entity.module}/${entity.name}/${id}/${action.action}`,
+              `${entity.module}/${entity.name}/${routeSegment}/${action.action}`,
             )
             toast.success("Action completed")
             fetchRecords()
@@ -1052,7 +1062,11 @@ function SortableCard({
   // menu listed every row action and relied on a click-time toast — an
   // inconsistency with the table, which already filters.
   const visibleRowActions = (rowActions ?? []).filter((a) =>
-    canDoEntityAction(me, { module: entityModule, plural: entityPlural }, a.action),
+    canDoEntityAction(
+      me,
+      { module: entityModule, plural: entityPlural },
+      a.action,
+    ),
   )
 
   return (
@@ -1113,7 +1127,9 @@ function SortableCard({
                         setMenuOpen(false)
                         onRowAction(action, record)
                       }}
-                    >                      {action.icon === "eye" || action.action === "view" ? (
+                    >
+                      {" "}
+                      {action.icon === "eye" || action.action === "view" ? (
                         <Eye className="size-3" />
                       ) : action.icon === "edit" || action.action === "edit" ? (
                         <Edit2 className="size-3" />

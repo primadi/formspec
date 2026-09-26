@@ -11,6 +11,7 @@ import { useSessionStore } from "@/stores/session"
 import { ui } from "@/lib/ui"
 import { files } from "@/lib/files"
 import { loginWithPassword, type LoginResult } from "@/lib/api/auth"
+import { writeContextPreference } from "@/lib/session-context"
 import {
   createHeadlessForm,
   type HeadlessForm,
@@ -29,7 +30,13 @@ export interface FormspecAuth {
   login: (
     username: string,
     password: string,
-    opts?: { app?: string },
+    /**
+     * `app` scopes the session to one App. `assignment` is the session context
+     * (`<role>@<value>`) to act in — omit it to let the server pick when the
+     * principal has exactly one; a 409 `CONTEXT_REQUIRED` carries the
+     * `choices` to present otherwise (backend §8.7).
+     */
+    opts?: { app?: string; assignment?: string },
   ) => Promise<LoginResult>
   register: (
     username: string,
@@ -174,7 +181,11 @@ export function createAuth(workspace: string): FormspecAuth {
         username,
         password,
         opts?.app,
+        opts?.assignment,
       )
+      if (opts?.assignment) {
+        writeContextPreference(workspace, opts?.app, opts.assignment)
+      }
       await useSessionStore
         .getState()
         .boot(workspace, accessToken, refreshToken, opts?.app)

@@ -11,6 +11,7 @@ import type { EntitySchema } from "@/types/manifest"
 import { useSessionStore } from "@/stores/session"
 import { apiGet, apiPost, apiPatch } from "@/lib/api"
 import { buildZodField } from "@/lib/zod-schema"
+import { fieldIsUserRequired } from "@/lib/field-presence"
 import type { RuntimeValue } from "@/lib/formspec-expr"
 import {
   evalVisibleWhen,
@@ -52,7 +53,10 @@ export function createHeadlessForm(
 
   const ctx = () => ({
     fields: values as Record<string, RuntimeValue>,
-    user: useSessionStore.getState().me as unknown as Record<string, RuntimeValue>,
+    user: useSessionStore.getState().me as unknown as Record<
+      string,
+      RuntimeValue
+    >,
   })
 
   const schema = z.object(
@@ -90,7 +94,7 @@ export function createHeadlessForm(
     isRequired: (name) => {
       const f = entity.fields.find((x) => x.name === name)
       if (!f) return false
-      return !!f.required || evalRequiredWhen(f.required_when, ctx())
+      return fieldIsUserRequired(f) || evalRequiredWhen(f.required_when, ctx())
     },
     compute: (name) => {
       const f = entity.fields.find((x) => x.name === name)

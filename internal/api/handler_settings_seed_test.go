@@ -80,6 +80,7 @@ func TestHandleFind_SeedsAppSettingFromSettings(t *testing.T) {
 
 	handler := factory.HandleFind("formspec.core", "app-setting")
 	req := httptest.NewRequest("GET", "/formspec.core/app-settings/global", nil)
+	req.SetPathValue("id", "global")
 	req = req.WithContext(WithWorkspace(req.Context(), "t1"))
 	rr := httptest.NewRecorder()
 	handler(rr, req)
@@ -149,6 +150,7 @@ func TestHandleFind_SeedsOnlyKeyForOtherReference(t *testing.T) {
 
 	handler := factory.HandleFind("geo", "province")
 	req := httptest.NewRequest("GET", "/geo/provinces/JKT", nil)
+	req.SetPathValue("id", "JKT")
 	req = req.WithContext(WithWorkspace(req.Context(), "t1"))
 	rr := httptest.NewRecorder()
 	handler(rr, req)

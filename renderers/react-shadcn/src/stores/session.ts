@@ -10,7 +10,7 @@
 
 import { create } from "zustand"
 import ky, { type KyInstance } from "ky"
-import type { MeResponse } from "@/types/manifest"
+import { FormaApiError, type ContextChoice, type MeResponse } from "@/types/manifest"
 import { createApiClient, fetchMe } from "@/lib/api"
 import { onSessionExpired } from "@/lib/api/sessionEvents"
 import { can } from "@/engine/permissions"
@@ -78,6 +78,13 @@ export interface SessionState {
   unauthenticated: boolean
   /** Optional error from boot */
   error: string | null
+  /**
+   * Set when a token refresh answered 409 `CONTEXT_REQUIRED`: the session's
+   * assignment was revoked (or its role deleted) and the caller must choose a
+   * boundary again. Non-null means "show the picker" — the session is NOT
+   * expired, so the credentials are still good (backend §8.7).
+   */
+  pendingContext: ContextChoice[] | null
 
   // ── Actions ──
   setSession: (
@@ -100,6 +107,8 @@ export interface SessionState {
   getClient: () => KyInstance
   /** Check if the current identity holds a permission (see engine/permissions) */
   can: (permission: string) => boolean
+  /** Clear `pendingContext` once the picker has been shown / resolved. */
+  clearPendingContext: () => void
 }
 
 // Single-flight guard so concurrent 401s share one refresh call.
@@ -122,6 +131,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   loaded: false,
   unauthenticated: false,
   error: null,
+  pendingContext: null,
 
   setSession: (
     workspace: string,
@@ -161,6 +171,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       loaded: false,
       unauthenticated: false,
       error: null,
+      pendingContext: null,
     })
   },
 
@@ -173,6 +184,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       loaded: true,
       unauthenticated: true,
       error: null,
+      pendingContext: null,
     })
   },
 
@@ -214,6 +226,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         me = await fetchMe(workspace, effectiveToken, {
           getToken: () => get().token,
           onUnauthorized: () => get().refreshSession(),
+          needsContext: () => get().pendingContext !== null,
         })
       } catch {
         // Server unreachable / error — connection error screen. Keep the
@@ -298,6 +311,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           set({
             token: body.data.access_token,
             refreshToken: body.data.refresh_token,
+            pendingContext: null,
           })
           writeStoredSession({
             workspace: get().workspace,
@@ -306,7 +320,22 @@ export const useSessionStore = create<SessionState>((set, get) => ({
             app: get().app,
           })
           return true
-        } catch {
+        } catch (err) {
+          // 409 CONTEXT_REQUIRED: the session's assignment was revoked or its
+          // role was deleted. This is NOT an expired session — the server is
+          // asking which boundary to renew under, so the caller must choose
+          // again (backend §8.7: "fail closed, minta pilih ulang"). Returning
+          // false here would expire the session and silently discard a still
+          // valid credential; instead record the choices so the picker can be
+          // shown, and let the caller decide.
+          if (
+            err instanceof FormaApiError &&
+            err.status === 409 &&
+            err.code === "CONTEXT_REQUIRED" &&
+            err.choices?.length
+          ) {
+            set({ pendingContext: err.choices })
+          }
           return false
         }
       })().finally(() => {
@@ -322,6 +351,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       workspace,
       getToken: () => get().token,
       onUnauthorized: () => get().refreshSession(),
+      needsContext: () => get().pendingContext !== null,
     }) as unknown as KyInstance
   },
 
@@ -330,6 +360,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     if (!me) return false
     return can(permission, me.permissions)
   },
+
+  clearPendingContext: () => set({ pendingContext: null }),
 }))
 
 // Register the global 401 handler: any API call that returns 401 (invalid /

@@ -1,12 +1,11 @@
 # App
 
 <!-- generated:meta -->
-
-|             |            |
-| ----------- | ---------- |
-| Grup        | `curation` |
-| Plane       | `resource` |
-| Spec struct | `AppSpec`  |
+| | |
+|---|---|
+| Grup | `curation` |
+| Plane | `resource` |
+| Spec struct | `AppSpec` |
 
 <!-- /generated:meta -->
 
@@ -91,32 +90,31 @@ spec:
 ## Atribut
 
 <!-- generated:attributes -->
-
-| Atribut           | Tipe                                          | Wajib | Contoh                                             | Deskripsi                                                                                                                                                                                                           |
-| ----------------- | --------------------------------------------- | ----- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `version`         | `string`                                      | —     | 1.0.0                                              | Version is optional — only meaningful when publishing the App to the                                                                                                                                                |
-| `vendor`          | `string`                                      | —     | acme-corp                                          | Vendor is optional — the publishing vendor identity, only required                                                                                                                                                  |
-| `title`           | `string`                                      | —     | Acme Corp Portal                                   | Human-readable display name (spaces allowed) — brand bar + document.title; metadata.name stays the machine identifier                                                                                               |
-| `logo`            | `string`                                      | —     | package                                            | Brand mark icon (lucide name) next to the title in the shell brand bar                                                                                                                                              |
-| `root_url`        | `string`                                      | ✅    | /app/klinik                                        | Mount prefix inside the workspace: \"/\" or any \"/path\" — unique per workspace; reserved segments (\_ui, api, \_admin, assets, health, login, register, \_ws, print) are rejected                                 |
-| `workspaces`      | —                                             | —     | [cafe, kopi]                                       | Optional workspace mount allowlist — absent = all workspaces; [] = staged (mounted nowhere); [slug,...] = only those workspaces                                                                                     |
-| `modules`         | []`string`                                    | —     | [clinic, pharmacy]                                 | Modules mounted by this App — manifests outside these modules are excluded from the App bundle                                                                                                                      |
-| `datastores`      | map                                           | —     | db: pg-main                                        | Datastores is the App-level App Registry selection — the App Registry                                                                                                                                               |
-| `app_renderer`    | enum (sidebar-nav · topnav · no-nav)          | —     | no-nav                                             | Chrome archetype (frontend/05-app-kinds.md): sidebar-nav \| topnav \| no-nav — no-nav means truly no navigation                                                                                                     |
-| `access`          | enum (private · public)                       | —     | private                                            | Auth axis: private (default, secure by default) \| public — orthogonal to app_renderer                                                                                                                              |
-| `stack_family`    | `string`                                      | —     | react-shadcn                                       | Shell implementation (frontend/03-renderer-kind.md), e.g. react-shadcn                                                                                                                                              |
-| `persist_backend` | `string`                                      | —     | jsonb-persist                                      | Entity persist backend (backend/04-persist-backend.md), e.g. jsonb-persist                                                                                                                                          |
-| `theme_ref`       | `string`                                      | —     | ocean-blue                                         | Theme kind name applied per-App (frontend/05-app-kinds.md §6)                                                                                                                                                       |
-| `auth_config_ref` | `string`                                      | —     |                                                    | Per-App auth strategy config (kind: Config)                                                                                                                                                                         |
-| `auth`            | `AppAuth`                                     | —     |                                                    | Per-App auth screen overrides: login_page/setup_page/change_password_page/reset_password_page/oauth_callback_page (kind: Page refs) + chrome_auth (component ref) — empty slots fall back to formspec.core defaults |
-| `renderers`       | map                                           | —     |                                                    | Renderers maps a VisualSpecKind name → renderer for the whole App                                                                                                                                                   |
-| `chrome`          | `AppChrome`                                   | —     | nav: menu                                          | Chrome composition: brand/nav/auth/footer/breadcrumbs/theme_switcher, each auto\|show\|hide (auth: auto\|links\|button\|none) — see frontend/05-app-kinds.md §5                                                     |
-| `page_transition` | enum (none · fade · slide · slide-up · scale) | —     | fade                                               | Page-to-page navigation animation (View Transitions API), scoped to the page content area: none \| fade (default) \| slide \| slide-up \| scale                                                                     |
-| `confirm`         | `AppConfirm`                                  | —     |                                                    | App-wide default confirm dialogs: create/update/delete message strings — absent = off; forms/actions override per-instance                                                                                          |
-| `menu`            | []`MenuItem`                                  | —     |                                                    |                                                                                                                                                                                                                     |
-| `publishes`       | []`AppInterface`                              | —     |                                                    | cross-app interfaces offered                                                                                                                                                                                        |
-| `consumes`        | []`AppConsume`                                | —     |                                                    | cross-app interfaces needed → grant request                                                                                                                                                                         |
-| `public_entities` | —                                             | —     | [{entity: catalog/product, actions: [list, find]}] | Allowlist of anonymous entity actions for a public App: absent = legacy module-wide, [] = none, list = exactly those pairs                                                                                          |
+| Atribut | Tipe | Wajib | Contoh | Deskripsi |
+|---|---|---|---|---|
+| `version` | `string` | — | 1.0.0 | Version is optional — only meaningful when publishing the App to the |
+| `vendor` | `string` | — | acme-corp | Vendor is optional — the publishing vendor identity, only required |
+| `title` | `string` | — | Acme Corp Portal | Human-readable display name (spaces allowed) — brand bar + document.title; metadata.name stays the machine identifier |
+| `logo` | `string` | — | package | Brand mark icon (lucide name) next to the title in the shell brand bar |
+| `root_url` | `string` | ✅ | /app/klinik | Mount prefix inside the workspace: \"/\" or any \"/path\" — unique per workspace; reserved segments (_ui, api, _admin, assets, health, login, register, _ws, print) are rejected |
+| `workspaces` | — | — | [cafe, kopi] | Optional workspace mount allowlist — absent = all workspaces; [] = staged (mounted nowhere); [slug,...] = only those workspaces |
+| `modules` | []`string` | — | [clinic, pharmacy] | Modules mounted by this App — manifests outside these modules are excluded from the App bundle |
+| `datastores` | map | — | db: pg-main | Datastores is the App-level App Registry selection — the App Registry |
+| `app_renderer` | enum (sidebar-nav · topnav · no-nav) | — | no-nav | Chrome archetype (frontend/05-app-kinds.md): sidebar-nav \| topnav \| no-nav — no-nav means truly no navigation |
+| `access` | enum (private · public) | — | private | Auth axis: private (default, secure by default) \| public — orthogonal to app_renderer |
+| `stack_family` | `string` | — | react-shadcn | Shell implementation (frontend/03-renderer-kind.md), e.g. react-shadcn |
+| `persist_backend` | `string` | — | jsonb-persist | Entity persist backend (backend/04-persist-backend.md), e.g. jsonb-persist |
+| `theme_ref` | `string` | — | ocean-blue | Theme kind name applied per-App (frontend/05-app-kinds.md §6) |
+| `auth_config_ref` | `string` | — |  | Per-App auth strategy config (kind: Config) |
+| `auth` | `AppAuth` | — |  | Per-App auth screen overrides: login_page/setup_page/change_password_page/reset_password_page/oauth_callback_page (kind: Page refs) + chrome_auth (component ref) — empty slots fall back to formspec.core defaults |
+| `renderers` | map | — |  | Renderers maps a VisualSpecKind name → renderer for the whole App |
+| `chrome` | `AppChrome` | — | nav: menu | Chrome composition: brand/nav/auth/footer/breadcrumbs/theme_switcher, each auto\|show\|hide (auth: auto\|links\|button\|none) — see frontend/05-app-kinds.md §5 |
+| `page_transition` | enum (none · fade · slide · slide-up · scale) | — | fade | Page-to-page navigation animation (View Transitions API), scoped to the page content area: none \| fade (default) \| slide \| slide-up \| scale |
+| `confirm` | `AppConfirm` | — |  | App-wide default confirm dialogs: create/update/delete message strings — absent = off; forms/actions override per-instance |
+| `menu` | []`MenuItem` | — |  |  |
+| `publishes` | []`AppInterface` | — |  | cross-app interfaces offered |
+| `consumes` | []`AppConsume` | — |  | cross-app interfaces needed → grant request |
+| `public_entities` | — | — | [{entity: catalog/product, actions: [list, find]}] | Allowlist of anonymous entity actions for a public App: absent = legacy module-wide, [] = none, list = exactly those pairs |
 
 <!-- /generated:attributes -->
 

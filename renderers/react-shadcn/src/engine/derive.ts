@@ -21,6 +21,7 @@ import {
 } from "@/types/manifest"
 import { titleCase } from "@/lib/utils"
 import { storageAllowsImage } from "@/lib/media"
+import { isUserEnterableKey } from "@/lib/field-presence"
 
 // ── Main derive functions ──
 
@@ -149,7 +150,13 @@ export function deriveForm(
 ): FormSpec {
   const sections: FormSection[] = []
   const editableFields = entity.fields.filter(
-    (f) => mode !== "create" || !f.computed,
+    (f) =>
+      (mode !== "create" || !f.computed) &&
+      // A key the engine alone authors (`natural_key_entry: auto_generated`) is
+      // not an input — the store drops a supplied value, so rendering one would
+      // offer the user a field whose content is discarded. `user_entry` and
+      // `auto_generated_if_empty` stay, because a person does supply those.
+      isUserEnterableKey(f),
   )
 
   const section: FormSection = {
@@ -258,6 +265,16 @@ export function deriveKanbanColumns(
     return statusFieldDef.enum_values.map((v) => ({
       status: v,
       label: titleCase(v),
+    }))
+  }
+
+  // 3. A declared choice set on the status field — declaration order, and the
+  // only branch that carries real captions (`options[].label`). Without it a
+  // Kanban board on an `options` field would show no columns at all.
+  if (statusFieldDef?.options?.length) {
+    return statusFieldDef.options.map((o) => ({
+      status: String(o.value),
+      label: o.label?.trim() || humanizeFieldName(String(o.value)),
     }))
   }
 
@@ -509,6 +526,12 @@ function isSortable(field: Field): boolean {
 function tableWidget(field: Field): string | undefined {
   if (field.type === "enum" || field.name === "doc_status") return "badge"
   if (field.type === "boolean") return "boolean"
+  // A field with a declared choice set renders as a labelled badge: a single
+  // value is exactly what `badge` is for (10.30), and the label is substituted
+  // before the cell is drawn (`renderOptionCell` in lib/renderCell.tsx). A
+  // *set* stays plain text — one pill carrying "Senin, Selasa, Jumat" reads
+  // worse than the comma-separated labels already do.
+  if (field.options?.length && !isMultiValue(field)) return "badge"
   // Image files render as an inline preview (#4). Non-image files keep the
   // plain download link, so they get no widget hint here.
   if (
@@ -562,6 +585,38 @@ function formField(field: Field, mode: "create" | "edit" | "view"): FormField {
   return ff
 }
 
+// isMultiValue mirrors `spec.FieldIsMultiple` (`pkg/spec/entity.go`): the
+// Entity's declared cardinality, read by both the widget derivation and the
+// read-only renderers (re-exported through `lib/field-options.ts`).
+//
+// It lives here — not in field-options.ts — because field-options already
+// depends on this module for `humanizeFieldName`; the reverse import would make
+// the two mutually dependent.
+//
+// Absent means single: `json` and `string` can hold either shape, so the Go
+// validator *requires* `multiple` on them whenever `options` is declared — an
+// undeclared cardinality reaching the renderer is therefore a scalar field, not
+// a set.
+export function isMultiValue(field: Field | undefined): boolean {
+  if (!field) return false
+  return field.multiple === true
+}
+
+// deriveFormWidget is the single source of "which widget renders this field".
+//
+// Both paths read it — the derived Form (`formField` below) and the authored
+// Form (`FormRenderer`'s field router) — because when the two disagree, the
+// same field renders differently depending on whether someone wrote a
+// `kind: Form`. That divergence is exactly what forced authors to restate the
+// Entity's decision as `widget: select-multi-tag` in the manifest.
+//
+// Cardinality (the Entity's `multiple`) picks between the set and single
+// widgets; without a declared `options` nothing is inferred, so no existing
+// spec changes behaviour.
+export function deriveFormWidget(field: Field): string {
+  return formWidget(field)
+}
+
 function formWidget(field: Field): string {
   switch (field.type) {
     case "string":
@@ -575,13 +630,13 @@ function formWidget(field: Field): string {
       ) {
         return "textarea"
       }
-      return "input"
+      return field.options?.length ? optionWidget(field) : "input"
     case "text":
       return "textarea"
     case "richtext":
       return "richtext"
     case "integer":
-      return "number"
+      return field.options?.length ? optionWidget(field) : "number"
     case "decimal":
       return "decimalinput"
     case "money":
@@ -597,20 +652,18 @@ function formWidget(field: Field): string {
     case "enum":
       return "select"
     case "date":
-      return "datepicker"
+      return field.options?.length ? optionWidget(field) : "datepicker"
     case "datetime":
       return "datetimeinput"
     case "uuid":
       return "uuid"
     case "json":
       // A json field that declares a choice set is a *set of declared values*,
-      // not free-form JSON — deriving the tag picker here is what saves the
-      // author from writing `widget:` just to avoid a raw JSON editor. A json
-      // field without `options` keeps the JSON editor (no behaviour change for
+      // not free-form JSON — deriving the picker here is what saves the author
+      // from writing `widget:` just to avoid a raw JSON editor. A json field
+      // without `options` keeps the JSON editor (no behaviour change for
       // existing specs).
-      return field.options && field.options.length > 0
-        ? "select-multi-tag"
-        : "json"
+      return field.options?.length ? optionWidget(field) : "json"
     case "file":
       return "fileinput"
     case "relation":
@@ -620,6 +673,11 @@ function formWidget(field: Field): string {
     default:
       return "input"
   }
+}
+
+// optionWidget picks the single vs set picker from the Entity's cardinality.
+function optionWidget(field: Field): string {
+  return isMultiValue(field) ? "select-multi-tag" : "select"
 }
 
 function hasField(entity: EntitySchema, name: string): boolean {

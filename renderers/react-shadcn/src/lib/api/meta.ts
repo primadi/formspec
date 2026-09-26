@@ -25,6 +25,8 @@ import {
 interface MetaClientOpts {
   getToken?: () => string
   onUnauthorized?: () => Promise<boolean>
+  /** See AuthHooksOptions.needsContext — 409 CONTEXT_REQUIRED vs dead session. */
+  needsContext?: () => boolean
 }
 
 /** Create a ky client scoped to /_ui for Meta API calls. */
@@ -36,6 +38,7 @@ function createMetaClient(
   const auth = createAuthHooks({
     getToken: opts?.getToken ?? (() => token ?? ""),
     onUnauthorized: opts?.onUnauthorized ?? (async () => false),
+    needsContext: opts?.needsContext,
   })
   return ky.create({
     prefix: `/${workspace}/_ui`,
@@ -66,6 +69,8 @@ export async function fetchMetaBundle(
     token?: string
     getToken?: () => string
     onUnauthorized?: () => Promise<boolean>
+    /** See AuthHooksOptions.needsContext — 409 CONTEXT_REQUIRED vs dead session. */
+    needsContext?: () => boolean
   },
 ): Promise<MetaBundle> {
   const client = createMetaClient(workspace, opts?.token, opts)

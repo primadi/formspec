@@ -7,7 +7,7 @@
 
 import { useEffect, useState, useMemo } from "react"
 import { useAppNavigate } from "@/lib/navigation"
-import { useParams } from "react-router-dom"
+import { useLocation, useParams } from "react-router-dom"
 import { useSurface } from "@/hooks/useSurface"
 import { toast } from "@/lib/ui"
 import { ArrowLeft, Edit, FileText, Loader2 } from "lucide-react"
@@ -27,9 +27,12 @@ import { sanitizeHTML } from "@/lib/sanitize"
 import { Badge } from "@/widgets/Badge"
 import { OptionChips } from "@/widgets/SelectMultiTag"
 import { hasFieldOptions } from "@/lib/field-options"
+import { renderOptionCell } from "@/lib/renderCell"
 import { Button } from "@/components/ui/button"
 import ConfirmDialog from "@/components/ui/confirm-dialog"
 import ImageLightbox from "@/components/ui/image-lightbox"
+import { getEntityRouteIdentifier } from "@/lib/entityIdentity"
+import { useRouteIdentityStore } from "@/stores/routeIdentity"
 
 interface DetailPageProps {
   entity: EntitySchema
@@ -37,6 +40,7 @@ interface DetailPageProps {
 
 export default function DetailPage({ entity }: DetailPageProps) {
   const navigate = useAppNavigate()
+  const location = useLocation()
   const { workspace = "default", id } = useParams<{
     workspace: string
     id: string
@@ -44,6 +48,7 @@ export default function DetailPage({ entity }: DetailPageProps) {
   const { surfacePath } = useSurface()
   const me = useSessionStore((s) => s.me)
   const getClient = useSessionStore((s) => s.getClient)
+  const setRouteIdentity = useRouteIdentityStore((s) => s.setIdentity)
 
   const { mainFields, childFields } = useMemo(
     () => deriveDetailFields(entity),
@@ -66,9 +71,10 @@ export default function DetailPage({ entity }: DetailPageProps) {
         const client = getClient()
         const data = await apiGet<Record<string, unknown>>(
           client,
-          `${entity.module}/${entity.name}/${id}`,
+          `${entity.module}/${entity.name}/${encodeURIComponent(id ?? "")}`,
         )
         setRecord(data)
+        setRouteIdentity(location.pathname, getEntityRouteIdentifier(entity, data))
       } catch (err) {
         toast.error("Failed to load record")
         navigate(surfacePath(entity.module, entity.plural))
@@ -77,7 +83,7 @@ export default function DetailPage({ entity }: DetailPageProps) {
       }
     }
     loadRecord()
-  }, [id, entity, getClient, navigate, workspace])
+  }, [id, entity, getClient, navigate, workspace, location.pathname, setRouteIdentity])
 
   // All entity schemas from the meta bundle — used to resolve relation display fields
   // Select the raw value (stable reference) and fall back outside the selector
@@ -123,12 +129,14 @@ export default function DetailPage({ entity }: DetailPageProps) {
     setTransitioning(action)
     try {
       const client = getClient()
-      await client.post(`${entity.module}/${entity.name}/${id}/${action}`)
+      await client.post(
+        `${entity.module}/${entity.name}/${encodeURIComponent(id ?? "")}/${action}`,
+      )
       toast.success("State updated")
       // Reload
       const data = await apiGet<Record<string, unknown>>(
         client,
-        `${entity.module}/${entity.name}/${id}`,
+        `${entity.module}/${entity.name}/${encodeURIComponent(id ?? "")}`,
       )
       setRecord(data)
     } catch (err) {
@@ -171,7 +179,16 @@ export default function DetailPage({ entity }: DetailPageProps) {
           <Button
             variant="outline"
             onClick={() =>
-              navigate(surfacePath(entity.module, entity.plural, id, "edit"))
+              navigate(
+                surfacePath(
+                  entity.module,
+                  entity.plural,
+                  encodeURIComponent(
+                    getEntityRouteIdentifier(entity, { ...record, id }),
+                  ),
+                  "edit",
+                ),
+              )
             }
           >
             <Edit className="size-4 mr-1" />
@@ -238,7 +255,7 @@ export default function DetailPage({ entity }: DetailPageProps) {
                     fmt={formatter}
                     fileUrl={
                       field.type === "file"
-                        ? `/${workspace}/_ui/entity/${entity.module}/${entity.name}/${id}/${field.name}`
+                        ? `/${workspace}/_ui/entity/${entity.module}/${entity.name}/${encodeURIComponent(id ?? "")}/${field.name}`
                         : undefined
                     }
                   />
@@ -363,6 +380,14 @@ function DetailFieldValue({
   // json branch below, which would otherwise print the array.
   if (Array.isArray(value) && hasFieldOptions(field)) {
     return <OptionChips value={value} entityField={field} />
+  }
+
+  // A single declared value renders its caption (`Senin`), not the stored scalar
+  // (`1`) — the same declaration the form and the table cell read, so one field
+  // cannot read three ways depending on the surface.
+  if (!Array.isArray(value) && hasFieldOptions(field)) {
+    const caption = renderOptionCell(value, field)
+    if (caption !== null) return <span>{caption}</span>
   }
 
   if (field.type === "text") {

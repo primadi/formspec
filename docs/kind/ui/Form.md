@@ -1,11 +1,10 @@
 # Form
 
 <!-- generated:meta -->
-
-|             |            |
-| ----------- | ---------- |
-| Grup        | `ui`       |
-| Plane       | `resource` |
+| | |
+|---|---|
+| Grup | `ui` |
+| Plane | `resource` |
 | Spec struct | `FormSpec` |
 
 <!-- /generated:meta -->
@@ -63,19 +62,18 @@ spec:
 ## Atribut
 
 <!-- generated:attributes -->
-
-| Atribut       | Tipe                                                                         | Wajib | Contoh        | Deskripsi                                                                                         |
-| ------------- | ---------------------------------------------------------------------------- | ----- | ------------- | ------------------------------------------------------------------------------------------------- |
-| `public`      | `boolean`                                                                    | —     | true          | If true (default), a route /module/form/<name> is auto-generated. Set false for embed-only forms. |
-| `entity`      | `string`                                                                     | ✅    | billing.order |                                                                                                   |
-| `auth_action` | enum (login · register · change_password · forgot_password · reset_password) | —     |               | Bind submit to a platform auth action (mutually exclusive with entity).                           |
-| `mode`        | enum (create · edit · view)                                                  | —     | edit          |                                                                                                   |
-| `sections`    | []`FormSection`                                                              | —     |               |                                                                                                   |
-| `actions`     | []`FormAction`                                                               | —     |               |                                                                                                   |
-| `submit`      | `FormSubmit`                                                                 | —     |               |                                                                                                   |
-| `render`      | `FormRenderDecl`                                                             | —     |               |                                                                                                   |
-| `context`     | [][`ContextDecl`](../../spec/frontend/04-spec-resolution-api.md)             | —     |               | Context declares render-context variables injected into this form's                               |
-| `confirm`     | `FormConfirm`                                                                | —     |               | Per-form confirm override: create/update message — nil = inherit App default, empty string = off  |
+| Atribut | Tipe | Wajib | Contoh | Deskripsi |
+|---|---|---|---|---|
+| `public` | `boolean` | — | true | If true (default), a route /module/form/<name> is auto-generated. Set false for embed-only forms. |
+| `entity` | `string` | ✅ | billing.order |  |
+| `auth_action` | enum (login · register · change_password · forgot_password · reset_password) | — |  | Bind submit to a platform auth action (mutually exclusive with entity). |
+| `mode` | enum (create · edit · view) | — | edit |  |
+| `sections` | []`FormSection` | — |  |  |
+| `actions` | []`FormAction` | — |  |  |
+| `submit` | `FormSubmit` | — |  |  |
+| `render` | `FormRenderDecl` | — |  |  |
+| `context` | [][`ContextDecl`](../../spec/frontend/04-spec-resolution-api.md) | — |  | Context declares render-context variables injected into this form's |
+| `confirm` | `FormConfirm` | — |  | Per-form confirm override: create/update message — nil = inherit App default, empty string = off |
 
 <!-- /generated:attributes -->
 

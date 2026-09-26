@@ -426,15 +426,39 @@ Aturannya:
 ## 2. Primary Key & Natural Key
 
 Primary key: **UUID v7** (time-ordered) untuk semua Entity — ini kontrak,
-bukan pilihan per backend. Natural key adalah **unique constraint per
-tenant**, bukan pernah jadi PK:
+bukan pilihan per backend. Natural key adalah **unique constraint per tenant**, bukan pernah jadi PK.
+Menulis `natural_key: true` **sudah berarti unik**: key itu dipakai sebagai
+lookup alternatif (`GetByID`) dan identifier route, jadi key yang duplikat tidak
+bisa memenuhi perannya. Flag `unique` di-set validator, sehingga tidak perlu
+ditulis ulang — dan `unique: false` eksplisit **ditolak** sebagai kontradiksi.
+
+`natural_key_entry` menyatakan **siapa** yang memasok nilainya — pertanyaan yang
+berbeda dari "apakah unik", dan yang menentukan UI:
+
+| Mode                      | Arti                      | Perilaku engine                                   |
+| ------------------------- | ------------------------- | ------------------------------------------------- |
+| `auto_generated`          | Hanya engine              | Nilai dari caller **diabaikan**; key bukan input  |
+| `user_entry`              | User/seed/hook            | Engine tidak pernah membuat nilai                 |
+| `auto_generated_if_empty` | Engine, boleh di-override | Nilai caller dipakai; engine mengisi kalau kosong |
+
+Mode tidak ditulis pun tetap sah dan diresolusi dengan konvensi (lihat
+`ResolveNaturalKeyEntry`): tanpa rule → `user_entry`; `strategy: custom` →
+`user_entry`; `strategy: sequence` → `auto_generated_if_empty`. Konvensi inilah
+yang membuat deklarasi lama tetap bermakna — termasuk `order.number` dan
+`purchase-order.number`, yang memang mengizinkan kasir memakai nomor kertas.
+
+`required` adalah keputusan author, bukan implikasi engine: `account.code` diisi
+seed, `journal-entry.number` dibuat engine, dan kode yang diisi user boleh kosong
+sampai dibutuhkan. Pada key yang **opsional**, nilai kosong berarti "belum
+diisi", sehingga index uniknya melewatkan baris kosong (dua record tanpa kode
+bukan duplikat).
 
 ```yaml
 - name: number
   type: string
   natural_key: true
+  natural_key_entry: auto_generated_if_empty # opsional — konvensi sudah memberi ini
   immutable: true
-  unique: true
   natural_key_rule:
     strategy: sequence # sequence | custom
     format: "{prefix}-{year}-{seq:06d}"
@@ -780,7 +804,12 @@ state_machine:
   field: status
   transitions:
     - { from: awaiting_payment, to: paid, via: confirm-payment, emit: on_paid }
-    - { from: [paid, in_kitchen, ready, served], to: cancelled, via: void-order, emit: on_cancel }
+    - {
+        from: [paid, in_kitchen, ready, served],
+        to: cancelled,
+        via: void-order,
+        emit: on_cancel,
+      }
 ```
 
 Transisi tanpa `emit` tidak memancarkan apa pun (default). Konvensi penamaan
@@ -970,12 +999,12 @@ nama dimensi dekoratif `scope.dimension` (`branch`), karena
 
 **Login memilih satu.** Aturan pemilihan, dan tidak ada varian lain:
 
-| Keadaan | Hasil |
-| --- | --- |
-| 0 assignment | sesi **tanpa boundary** — perilaku principal tanpa konteks (pemilik/service account): permission = union role, bacaan lintas cabang lewat `read_all` |
-| tepat 1 | dipakai otomatis |
-| >1 tanpa `assignment` | **409 `CONTEXT_REQUIRED`** + `choices[{id, role, dimension, value}]`; **tidak ada token** |
-| `assignment` yang tidak ada / sudah dicabut | **409 `CONTEXT_REQUIRED`** juga — fail closed, minta pilih ulang |
+| Keadaan                                     | Hasil                                                                                                                                                |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0 assignment                                | sesi **tanpa boundary** — perilaku principal tanpa konteks (pemilik/service account): permission = union role, bacaan lintas cabang lewat `read_all` |
+| tepat 1                                     | dipakai otomatis                                                                                                                                     |
+| >1 tanpa `assignment`                       | **409 `CONTEXT_REQUIRED`** + `choices[{id, role, dimension, value}]`; **tidak ada token**                                                            |
+| `assignment` yang tidak ada / sudah dicabut | **409 `CONTEXT_REQUIRED`** juga — fail closed, minta pilih ulang                                                                                     |
 
 Server **tidak pernah** memilih boundary atas nama pemanggil, dan tidak pernah
 menurunkan "tidak tahu" menjadi "tanpa boundary".

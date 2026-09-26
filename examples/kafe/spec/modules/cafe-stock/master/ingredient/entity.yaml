@@ -14,7 +14,6 @@ spec:
     - name: code
       type: string
       required: true
-      unique: true
       natural_key: true
       title: "Kode Bahan"
       description: "Mis. BHN-SUSU-01"

@@ -8,7 +8,7 @@
 // chrome variants render the same permission-filtered tree.
 
 import { useState } from "react"
-import { Outlet, useParams } from "react-router-dom"
+import { Outlet, useLocation, useParams } from "react-router-dom"
 import { AppLink as Link, AppNavLink as NavLink } from "@/lib/navigation"
 import { ChevronDown, Menu } from "lucide-react"
 import { useSurface } from "@/hooks/useSurface"
@@ -32,6 +32,8 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
 import { TooltipProvider } from "@/components/ui/tooltip"
+import { buildBreadcrumbs } from "./breadcrumbs"
+import { useRouteIdentityStore } from "@/stores/routeIdentity"
 
 function NavIcon({ name }: { name?: string }) {
   const Icon = name ? resolveIcon(name) : null
@@ -118,23 +120,24 @@ function TopNavGroup({ item, basePath }: { item: MenuItem; basePath: string }) {
 export function TopNavShell() {
   const { workspace = "default" } = useParams<{ workspace: string }>()
   const { surfacePrefix } = useSurface()
-  const locationPath = window.location.pathname
+  const location = useLocation()
   const isMobile = useMediaQuery("(max-width: 767px)")
   const [mobileOpen, setMobileOpen] = useState(false)
   const { items, basePath } = useResolvedMenu()
   // Resolved chrome composition (frontend/05-app-kinds.md §4.1) — final
   // values from the meta API; undefined only before the bundle loads.
   const chrome = useMetaStore((s) => s.bundle?.app.chrome)
+  const entities = useMetaStore((s) => s.bundle?.entities) ?? []
+  const routeIdentity = useRouteIdentityStore((s) =>
+    s.getIdentity(location.pathname),
+  )
 
-  // Breadcrumbs from the current path (same pattern as SideNavShell).
-  const pathParts = locationPath.split("/").filter(Boolean).slice(1)
-  const breadcrumbs = pathParts.map((part, idx) => {
-    const href = `/${workspace}/${pathParts.slice(0, idx + 1).join("/")}`
-    const label = part
-      .replace(/[-_]/g, " ")
-      .replace(/\b\w/g, (c) => c.toUpperCase())
-    return { label, href, isLast: idx === pathParts.length - 1 }
-  })
+  const breadcrumbs = buildBreadcrumbs(
+    location.pathname,
+    workspace,
+    entities,
+    routeIdentity,
+  )
 
   return (
     <TooltipProvider>
@@ -154,14 +157,6 @@ export function TopNavShell() {
               </Button>
             )}
             {/* Brand */}
-            <Link
-              to={surfacePrefix}
-              className="mr-4 flex items-center gap-2 font-semibold"
-            >
-              <span className="text-lg tracking-tight">FormSpec</span>
-            </Link>
-
-            {/* Horizontal nav (desktop) */}
             {!isMobile && (
               <nav className="hidden items-center gap-1 md:flex">
                 {items.map((item, idx) =>

@@ -23,6 +23,11 @@ export interface ApiClientConfig {
   getToken?: () => string
   /** Refresh the access token; resolves true when a fresh token is available. */
   onUnauthorized?: () => Promise<boolean>
+  /**
+   * True when the refresh failure was a 409 `CONTEXT_REQUIRED` (revoked
+   * assignment) rather than a dead session — see AuthHooksOptions.
+   */
+  needsContext?: () => boolean
 }
 
 /**
@@ -40,6 +45,7 @@ export function createApiClient(config: ApiClientConfig): KyInstance {
   const auth = createAuthHooks({
     getToken: config.getToken ?? (() => config.token ?? ""),
     onUnauthorized: config.onUnauthorized ?? (async () => false),
+    needsContext: config.needsContext,
   })
   const api = ky.create({
     prefix,

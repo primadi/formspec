@@ -95,6 +95,26 @@ katalog resmi: menulisnya di `widget:` ditolak validator dengan petunjuk nama
 kanoniknya. Nama di luar himpunan dirender sebagai `UnknownWidget` yang terlihat
 (`role="alert"`), bukan jatuh senyap ke input teks polos.
 
+**Widget diturunkan dari Entity, bukan ditulis di Form.** `engine/derive.ts`
+`deriveFormWidget(field)` adalah satu-satunya sumber pemetaan field → widget:
+baik Form turunan maupun router `FormRenderer` (untuk `kind: Form` yang ditulis)
+memanggilnya, sehingga kedua jalur tidak bisa berbeda. Deklarasi Entity yang
+menentukan:
+
+| Entity                                      | Widget                 |
+| ------------------------------------------- | ---------------------- |
+| `options` + `multiple: true`                | `select-multi-tag`     |
+| `options` + `multiple: false` (atau skalar) | `select` (ber-caption) |
+| `enum_values`                               | `select`               |
+| `json`/`string` tanpa `options`             | `json` / `input`       |
+
+Sebelum ini router Form yang ditulis hanya mengenal `money`/`time` sebagai
+pemetaan, jadi field `json` ber-`options` jatuh ke editor JSON mentah kecuali
+spec menulis `widget: select-multi-tag` — keputusan single/multi dengan demikian
+hidup di Form. Permukaan baca mengikuti deklarasi yang sama: sel tabel/halaman
+detail menampilkan label opsi (nilai tunggal sebagai badge ber-caption), dan
+filter `select` membaca `options` lalu `enum_values` lewat resolver yang sama.
+
 **Gambar → dialog, bukan tab.** `ImageLightbox`
 (`src/components/ui/image-lightbox.tsx`) adalah satu-satunya jalur "lihat gambar
 lebih besar": thumbnail ber-`aria-label`, lalu `Dialog` berisi gambar

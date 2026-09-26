@@ -5,7 +5,11 @@
 //   - relation field (`belongs_to`) → fetch the related entity's records
 //     (id + label field), so the options stay valid even when the board/table
 //     is scoped to an empty date range.
-//   - enum field → the field's enum_values.
+//   - a field with a declared choice set (`options`, or `enum_values`) → those
+//     values, with `options` donating the captions. One vocabulary: the same
+//     declaration the form widget and the table cell already read, so a filter
+//     cannot offer a different caption (or a different set) than the column it
+//     filters.
 //   - otherwise → empty (the caller may fall back to record-derived values).
 //
 // Shared by Table and Kanban so select filters behave identically.
@@ -13,6 +17,7 @@
 import { useEffect, useState } from "react"
 import type { EntitySchema, FilterSpec, MetaBundle } from "@/types/manifest"
 import { resolveEntityRef } from "@/engine/entityRef"
+import { fieldOptions } from "@/lib/field-options"
 
 export interface SelectOption {
   value: string
@@ -77,8 +82,14 @@ export function useSelectFilterOptions(
   }, [isRelation, metaBundle, fieldDef, getClient])
 
   if (isRelation) return relationOptions
-  if (fieldDef?.enum_values?.length) {
-    return fieldDef.enum_values.map((o) => ({ value: o, label: o }))
-  }
-  return []
+
+  // `options` wins (it carries captions), `enum_values` is the value-only
+  // fallback — the same resolution `fieldOptions()` performs for the form
+  // widget, the table cell, and the detail page. Before this the hook read
+  // `enum_values` directly, so a field that declared `options` (with human
+  // captions) produced an empty filter.
+  return fieldOptions(fieldDef).map((o) => ({
+    value: String(o.value),
+    label: o.label,
+  }))
 }

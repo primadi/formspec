@@ -860,6 +860,7 @@
         "valkey",
         "redis",
         "s3",
+        "garage",
         "minio",
         "nats",
         "memory",
@@ -1057,6 +1058,17 @@
         "LOGS_FILTER_INVALID"
       ]
     },
+    "EventChannel": {
+      "title": "Event Channel",
+      "description": "Delivery channel for an event. Closed set — every name is implemented by the delivery pipeline.",
+      "type": "string",
+      "enum": [
+        "audit_log",
+        "websocket",
+        "queue",
+        "reliable_event"
+      ]
+    },
     "EventDecl": {
       "description": "EventDecl declares an event an entity can publish (Core §12).\n",
       "type": "object",
@@ -1096,8 +1108,8 @@
       "type": "object",
       "properties": {
         "channel": {
-          "description": "audit_log | websocket | queue | reliable_event",
-          "type": "string"
+          "$ref": "#/$defs/EventChannel",
+          "description": "audit_log | websocket | queue | reliable_event"
         },
         "dead_letter": {
           "$ref": "#/$defs/DeliveryTarget",
@@ -1173,6 +1185,10 @@
       "description": "Field defines a data field on an Entity.\n@schema {title: \"Field Definition\"}\n",
       "type": "object",
       "properties": {
+        "accept_data_loss": {
+          "description": "AcceptDataLoss consents to a lossy type change (01-core-basic.md §4.2):",
+          "type": "boolean"
+        },
         "audited": {
           "type": "boolean"
         },
@@ -1203,6 +1219,7 @@
         },
         "default": {},
         "description": {
+          "description": "Help text shown to users under the input in forms (and wizard steps). Written for the end user — not a design note; it is inherited as the field's `help` wherever the field appears, so one declaration serves both surfaces.",
           "type": "string"
         },
         "encrypted": {
@@ -1232,6 +1249,11 @@
           "description": "1.4.7 MaskedField — auto-mask in response/log (05-field-types.md §5.2).",
           "type": "boolean"
         },
+        "multiple": {
+          "description": "How many of the declared `options` this field holds: `true` = a set (array / comma-separated list), `false` = one value. Required when `options` is declared on `json` or `string`, because those types can hold either shape.",
+          "type": "boolean",
+          "nullable": true
+        },
         "name": {
           "description": "Field name — lowercase snake_case, unique within entity",
           "type": "string",
@@ -1240,11 +1262,22 @@
           "pattern": "^[a-z][a-z0-9_]*$"
         },
         "natural_key": {
+          "description": "NaturalKey marks the field as the record's business identifier.",
           "type": "boolean"
+        },
+        "natural_key_entry": {
+          "$ref": "#/$defs/NaturalKeyEntry",
+          "description": "NaturalKeyEntry states who supplies the key: the engine, a person, or the engine unless a person supplies one (see the NaturalKeyEntry enum)."
         },
         "natural_key_rule": {
           "$ref": "#/$defs/NaturalKeyRuleDecl",
           "nullable": true
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FieldOption"
+          }
         },
         "precision": {
           "description": "Decimal precision/scale (05-field-types.md §1.2) — only meaningful for",
@@ -1257,9 +1290,20 @@
         "readonly_when": {
           "type": "string"
         },
+        "reason": {
+          "description": "Reason states why a destructive declaration is intended (audit trail).",
+          "type": "string",
+          "examples": [
+            "digantikan branch_id pada 2026-09"
+          ]
+        },
         "relation": {
           "$ref": "#/$defs/RelationDecl",
           "nullable": true
+        },
+        "removed": {
+          "description": "Removed is the tombstone that lets a field be dropped at all (01-core-basic.md",
+          "type": "boolean"
         },
         "renamed_from": {
           "description": "4.2.2 RenamedFrom — declares that this field was renamed from the given",
@@ -1291,6 +1335,7 @@
           "nullable": true
         },
         "title": {
+          "description": "Caption shown to users in tables, forms, and detail pages; falls back to the humanised field name",
           "type": "string"
         },
         "tree": {
@@ -1302,6 +1347,7 @@
           "description": "@schema {description: \"Data type — determines storage class, renderer widget, and validation\"}"
         },
         "unique": {
+          "description": "Unique declares a cross-record uniqueness constraint (unique per tenant).",
           "type": "boolean"
         },
         "unit": {
@@ -1328,6 +1374,23 @@
         "financial",
         "internal"
       ]
+    },
+    "FieldOption": {
+      "description": "FieldOption is one choice in a field's `options:` list — a closed set of\nvalues **with captions**. It exists because `enum_values` carries values\nonly: a day-of-week set declared as `[1, 2, 3]` renders as \"1, 2, 3\", so the\nauthor either writes a picker whose choices cannot be read, or a free-text\ntag input that accepts `9`.\n\n`options` is a property of the **data** (which values are legal), not of one\nform — the same reason `enum_values` lives on the Entity. A multi-value field\n(`type: json`, or a string holding a comma-separated list) can therefore be\ndeclared once and rendered, filtered, and labelled consistently.\n\n`Value` keeps the scalar's YAML type (`value: 1` stays the number 1 in the\nbundle and in the stored array, matching what the field actually holds);\n`Label` is the caption shown to users, and defaults to the value itself when\nomitted.\n",
+      "type": "object",
+      "properties": {
+        "label": {
+          "description": "Caption shown to users. Defaults to the value (humanised) when omitted.",
+          "type": "string"
+        },
+        "value": {
+          "description": "Stored value. Keep the scalar type the field stores — `value: 1` for a numeric set, not `value: \\\"1\\\"`."
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "additionalProperties": false
     },
     "FieldRef": {
       "description": "FieldRef references another entity's field.\n",
@@ -1515,12 +1578,15 @@
           "type": "string"
         },
         "help": {
+          "description": "Help text shown under the input. Falls back to the entity field's `description`, so declaring it here is only needed to override that per-form.",
           "type": "string"
         },
         "label": {
+          "description": "Caption for this field in the form; falls back to the entity field's `title`, then the humanised field name",
           "type": "string"
         },
         "placeholder": {
+          "description": "Placeholder text inside the input control",
           "type": "string"
         },
         "read_only": {
@@ -1555,26 +1621,34 @@
     },
     "FormRenderDecl": {
       "description": "FormRenderDecl is the design-time container declaration of a Form\n(Frontend §1.6). YAML accepts both `render: separate_page` (shorthand) and\n`render: { mode: separate_page }`; JSON always serializes the object form to\nmatch the renderer contract (`spec.render.mode`).\n",
-      "type": "object",
-      "properties": {
-        "mode": {
-          "$ref": "#/$defs/FormRender",
-          "description": "@schema {description: \"Render mode: modal (popup dialog), drawer (side panel), separate_page (full page)\", enum: [\"modal\", \"drawer\", \"separate_page\"]}"
+      "oneOf": [
+        {
+          "description": "Shorthand render mode — e.g. \"drawer\", \"modal\", \"separate_page\"",
+          "type": "string"
         },
-        "picker_panel": {
-          "description": "PickerPanel places the child-field picker relative to the rest of the",
-          "type": "string",
-          "enum": [
-            "",
-            "inline",
-            "aside"
-          ]
+        {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "$ref": "#/$defs/FormRender",
+              "description": "@schema {description: \"Render mode: modal (popup dialog), drawer (side panel), separate_page (full page)\", enum: [\"modal\", \"drawer\", \"separate_page\"]}"
+            },
+            "picker_panel": {
+              "description": "PickerPanel places the child-field picker relative to the rest of the",
+              "type": "string",
+              "enum": [
+                "",
+                "inline",
+                "aside"
+              ]
+            }
+          },
+          "required": [
+            "mode"
+          ],
+          "additionalProperties": false
         }
-      },
-      "required": [
-        "mode"
-      ],
-      "additionalProperties": false
+      ]
     },
     "FormSection": {
       "description": "FormSection groups form fields.\n",
@@ -1637,6 +1711,7 @@
         "password",
         "slider",
         "tags",
+        "select-multi-tag",
         "uuid",
         "json",
         "fileinput",
@@ -1702,6 +1777,11 @@
         "priority": {
           "description": "0 → default 10",
           "type": "integer"
+        },
+        "uses": {
+          "$ref": "#/$defs/UsesDecl",
+          "description": "Uses declares the hook script's own access (db, resources, config,",
+          "nullable": true
         }
       },
       "required": [
@@ -1802,6 +1882,11 @@
           "examples": [
             "create"
           ]
+        },
+        "map": {
+          "description": "Map declares how the source event payload becomes the target action's",
+          "type": "object",
+          "additionalProperties": {}
         },
         "resource": {
           "description": "@schema {example: \"gl.journal-entry\"}",
@@ -1916,13 +2001,13 @@
       "description": "Kind represents the resource kind as a PascalCase string.\n@schema {title: \"Resource Kind\"}\n",
       "type": "string",
       "enum": [
+        "Seed",
         "App",
         "Module",
         "Entity",
         "Document",
         "Service",
         "Config",
-        "Migration",
         "Subscription",
         "Workflow",
         "Api",
@@ -1973,7 +2058,6 @@
       "additionalProperties": false
     },
     "MenuItem": {
-      "description": "MenuItem is one navigation entry, embedded in App.spec.menu or\nModule.spec.menu (Core §4.4/§4.5) — there is no standalone kind: Menu.\nMenu order follows array position — no separate `order` field.\n\nEvery item is exactly one of three shapes, enforced by the loader/resolver\n(see internal/manifest), not by separate Go types:\n\n  - Adopt node (Type == \"module\"): only Module set.\n    Splices that Module's own Menu wholesale at this position. Level 1 only.\n  - Group node (len(Children) \u003e 0): Label + Children. Module/View/Route\n    forbidden on the group itself — only its descendants carry Module.\n  - Leaf node (no Children, Type != \"module\"): Label + Module + exactly one\n    of View/Route. Level 3 leaves cannot have Children (3-level cap).\n",
       "type": "object",
       "properties": {
         "children": {
@@ -1991,6 +2075,16 @@
         "module": {
           "type": "string"
         },
+        "permissions": {
+          "description": "RBAC: the item is withheld unless the caller holds at least one of these permissions (any-of). Enforced server-side — it never reaches a caller who lacks them.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "examples": [
+            "[clinic.settings.update]"
+          ]
+        },
         "route": {
           "description": "raw URL escape hatch (no registered View)",
           "type": "string"
@@ -2004,8 +2098,11 @@
           "type": "string"
         },
         "when": {
-          "description": "FormSpecExpr business condition",
-          "type": "string"
+          "description": "FormSpecExpr business condition (presentation only): item hidden when false. Evaluated client-side against `user` and `today()`. NOT an authorization gate — use `permissions` for RBAC.",
+          "type": "string",
+          "examples": [
+            "today() \u003e= '2026-01-01"
+          ]
         }
       },
       "additionalProperties": false
@@ -2036,6 +2133,16 @@
         "name"
       ],
       "additionalProperties": false
+    },
+    "NaturalKeyEntry": {
+      "title": "Natural Key Entry",
+      "description": "Who supplies the natural key: `auto_generated` (engine only), `user_entry` (a person), `auto_generated_if_empty` (engine mints it unless a value is supplied).",
+      "type": "string",
+      "enum": [
+        "auto_generated",
+        "user_entry",
+        "auto_generated_if_empty"
+      ]
     },
     "NaturalKeyPrefix": {
       "description": "NaturalKeyPrefix defines the prefix for a natural key.\n",
@@ -2298,6 +2405,13 @@
             "$ref": "#/$defs/IndexDecl"
           }
         },
+        "raw_ddl": {
+          "description": "RawDDL holds storage-level DDL the spec language does not express —",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RawDDLDecl"
+          }
+        },
         "soft_delete": {
           "description": "SoftDelete defaults to true; nil means \"not set\" so a persist block",
           "type": "boolean",
@@ -2526,7 +2640,7 @@
       ]
     },
     "PrintBodyItem": {
-      "description": "PrintBodyItem is one element in the Print body (fields | separator | child_table | totals).\n",
+      "description": "PrintBodyItem is one element in the Print body\n(fields | separator | child_table | totals | qrcode).\n",
       "type": "object",
       "properties": {
         "child_table": {
@@ -2538,6 +2652,11 @@
           "items": {
             "type": "string"
           }
+        },
+        "qrcode": {
+          "$ref": "#/$defs/PrintQrcode",
+          "description": "Qrcode renders a scannable QR code (gap #3 / S4: a table card or a",
+          "nullable": true
         },
         "separator": {
           "type": "string"
@@ -2599,6 +2718,17 @@
       },
       "additionalProperties": false
     },
+    "PrintFormat": {
+      "title": "Print Format",
+      "description": "Output format for a Print document. Closed set — pdf/thermal are served server-side, html client-side; dotmatrix is not implemented and is rejected.",
+      "type": "string",
+      "enum": [
+        "pdf",
+        "thermal",
+        "dotmatrix",
+        "html"
+      ]
+    },
     "PrintHeader": {
       "description": "PrintHeader is the declarative header block of a Print document.\n",
       "type": "object",
@@ -2620,8 +2750,8 @@
       "type": "object",
       "properties": {
         "format": {
-          "description": "pdf | thermal | dotmatrix | html",
-          "type": "string"
+          "$ref": "#/$defs/PrintFormat",
+          "description": "pdf | thermal | dotmatrix | html"
         },
         "paper": {
           "$ref": "#/$defs/PrintPaper",
@@ -2649,6 +2779,43 @@
           "type": "string"
         }
       },
+      "additionalProperties": false
+    },
+    "PrintQrcode": {
+      "description": "PrintQrcode is a QR code element in a Print body.\n",
+      "type": "object",
+      "properties": {
+        "absolute": {
+          "description": "Absolute prepends the origin the document is printed from, so the code",
+          "type": "boolean"
+        },
+        "label": {
+          "description": "@schema {example: \"Scan untuk struk digital\"}",
+          "type": "string",
+          "examples": [
+            "Scan untuk struk digital"
+          ]
+        },
+        "payload": {
+          "description": "Text the QR encodes. `{dotted.path}` tokens are interpolated from the record, exactly like `header.title`/`footer.text`.",
+          "type": "string",
+          "examples": [
+            "/status/{guest_token}"
+          ],
+          "minLength": 1
+        },
+        "size_mm": {
+          "description": "QR side length in millimetres (default 30). Thermal maps it to a module size instead of a physical size.",
+          "type": "integer",
+          "examples": [
+            "30"
+          ],
+          "minimum": 0
+        }
+      },
+      "required": [
+        "payload"
+      ],
       "additionalProperties": false
     },
     "PrintTotals": {
@@ -2746,6 +2913,44 @@
       ],
       "additionalProperties": false
     },
+    "RawDDLDecl": {
+      "description": "RawDDLDecl is one storage-level DDL statement declared on an Entity\n(01-core-basic.md §4.3).\n",
+      "type": "object",
+      "properties": {
+        "ddl": {
+          "description": "DDL is one statement valid on every driver.",
+          "type": "string",
+          "examples": [
+            "CREATE INDEX idx_invoice_date ON invoice(transaction_date)"
+          ]
+        },
+        "ddl_by": {
+          "description": "DDLByDialect holds per-driver variants, for DDL that cannot be written",
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "name": {
+          "description": "Name identifies the statement for recording and reporting.",
+          "type": "string",
+          "examples": [
+            "menu-price-unique"
+          ],
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$"
+        },
+        "reason": {
+          "description": "Reason states why the DDL is needed (audit trail).",
+          "type": "string",
+          "examples": [
+            "satu harga per menu per cabang"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    },
     "RebuildSpec": {
       "description": "RebuildSpec describes how a summary entity is rebuilt from its durable\nsource event/record stream.\n",
       "type": "object",
@@ -2821,21 +3026,39 @@
       ],
       "additionalProperties": false
     },
+    "ReportAggregate": {
+      "title": "Report Aggregate",
+      "description": "Aggregation applied to a report column. Closed set — mirrors the Query Builder's aggregate functions.",
+      "type": "string",
+      "enum": [
+        "sum",
+        "avg",
+        "count",
+        "min",
+        "max"
+      ]
+    },
     "ReportColumn": {
       "description": "ReportColumn is a column in a report output.\n",
       "type": "object",
       "properties": {
         "aggregate": {
-          "type": "string"
+          "$ref": "#/$defs/ReportAggregate",
+          "description": "Aggregate is a closed set (S16) — mirrors the Query Builder's aggregate"
         },
         "field": {
           "type": "string"
         },
         "format": {
-          "type": "string"
+          "$ref": "#/$defs/ReportFormat",
+          "description": "Format is a closed set (S16) — every name is implemented by the report"
         },
         "label": {
           "type": "string"
+        },
+        "widget": {
+          "$ref": "#/$defs/TableCellWidget",
+          "description": "Widget renders the cell like a table cell (S16) — the same closed set as"
         }
       },
       "required": [
@@ -2843,6 +3066,17 @@
         "label"
       ],
       "additionalProperties": false
+    },
+    "ReportFormat": {
+      "title": "Report Format",
+      "description": "Value formatter for a report column. Closed set — every name is implemented by the report renderer.",
+      "type": "string",
+      "enum": [
+        "currency",
+        "date",
+        "datetime",
+        "percentage"
+      ]
     },
     "ReportGroup": {
       "description": "ReportGroup defines a grouping level in a report.\n",
@@ -2875,7 +3109,7 @@
           "type": "boolean"
         },
         "type": {
-          "type": "string"
+          "$ref": "#/$defs/ReportParamType"
         }
       },
       "required": [
@@ -2884,6 +3118,18 @@
         "type"
       ],
       "additionalProperties": false
+    },
+    "ReportParamType": {
+      "title": "Report Param Type",
+      "description": "Input type for a report parameter. Closed set — every name is implemented by the report renderer.",
+      "type": "string",
+      "enum": [
+        "text",
+        "date",
+        "datetime",
+        "select",
+        "relation"
+      ]
     },
     "ReportSource": {
       "description": "ReportSource declares the report's data source + parameterized filter.\n",
@@ -3120,6 +3366,31 @@
           "type": "string"
         }
       },
+      "additionalProperties": false
+    },
+    "SeedEntity": {
+      "description": "SeedEntity declares the records to insert for a single entity.\n",
+      "type": "object",
+      "properties": {
+        "entity": {
+          "description": "Entity name inside metadata.module",
+          "type": "string",
+          "examples": [
+            "menu-item"
+          ]
+        },
+        "records": {
+          "description": "Raw entity payloads (same shape as an API create body); supports `$ref` for relations and `$asset` for file fields",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": {}
+          }
+        }
+      },
+      "required": [
+        "entity"
+      ],
       "additionalProperties": false
     },
     "Settings": {
@@ -3446,6 +3717,18 @@
       ],
       "additionalProperties": false
     },
+    "TableCellFormat": {
+      "title": "Table Cell Format",
+      "description": "Value formatter for a table/listing cell. Closed set — every name is implemented by the cell renderer.",
+      "type": "string",
+      "enum": [
+        "currency",
+        "number",
+        "date",
+        "relative",
+        "percent"
+      ]
+    },
     "TableCellWidget": {
       "title": "Table Cell Widget",
       "description": "Widget rendering a table or listing cell. Closed set — every name is implemented by the cell renderer; omit to render the raw value (optionally via `format`).",
@@ -3462,21 +3745,27 @@
       "type": "object",
       "properties": {
         "align": {
-          "description": "left | center | right",
-          "type": "string"
+          "description": "Text alignment of this column's header and body cells.",
+          "type": "string",
+          "enum": [
+            "",
+            "left",
+            "center",
+            "right"
+          ]
         },
         "field": {
           "type": "string"
         },
         "format": {
-          "description": "currency | date | relative | ...",
-          "type": "string"
+          "$ref": "#/$defs/TableCellFormat",
+          "description": "Format is the value formatter for this cell. Closed set — every name is"
         },
         "label": {
           "type": "string"
         },
         "link": {
-          "description": "Page name to navigate to",
+          "description": "Page name to navigate to when this cell is clicked.",
           "type": "string"
         },
         "sortable": {
@@ -3486,6 +3775,7 @@
           "$ref": "#/$defs/TableCellWidget"
         },
         "width": {
+          "description": "CSS width for this column, applied to the header cell (e.g. \\\"120px\\\", \\\"10rem\\\").",
           "type": "string"
         }
       },
@@ -3520,6 +3810,10 @@
       "description": "TransitionDecl defines a transition between states (Core §14).\nThe canonical manifest key for the triggering action is `via`;\n`action` is accepted as a legacy alias.\n",
       "type": "object",
       "properties": {
+        "emit": {
+          "description": "Emit names the event this transition publishes when it fires (S13). It",
+          "type": "string"
+        },
         "from": {
           "oneOf": [
             {
@@ -3567,6 +3861,11 @@
           "items": {
             "type": "string"
           }
+        },
+        "factors": {
+          "description": "Factors maps each convertible unit to how many base units one of it is",
+          "type": "object",
+          "additionalProperties": {}
         }
       },
       "required": [
@@ -3951,13 +4250,24 @@
           "description": "quorum, default 1",
           "type": "integer"
         },
+        "description": {
+          "description": "Description explains what to check before deciding (S15).",
+          "type": "string"
+        },
+        "display_fields": {
+          "description": "DisplayFields names the record fields the approver needs to see to decide",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "escalation": {
           "$ref": "#/$defs/StepEscalation",
           "nullable": true
         },
         "mode": {
-          "description": "all | any | sequential",
-          "type": "string"
+          "$ref": "#/$defs/WorkflowStepMode",
+          "description": "all | any | sequential"
         },
         "roles": {
           "description": "@schema {example: \"[gl.supervisor]\"}",
@@ -3969,12 +4279,26 @@
             "[gl.supervisor]"
           ]
         },
+        "title": {
+          "description": "Title is the human label for this approval task (S15). Without it the",
+          "type": "string"
+        },
         "when": {
           "description": "FormSpecExpr — skip step if false",
           "type": "string"
         }
       },
       "additionalProperties": false
+    },
+    "WorkflowStepMode": {
+      "title": "Workflow Step Mode",
+      "description": "How a step's quorum is collected. Closed set.",
+      "type": "string",
+      "enum": [
+        "all",
+        "any",
+        "sequential"
+      ]
     },
     "WorkflowTransitionRef": {
       "description": "WorkflowTransitionRef identifies the intercepted transition. Two forms exist\nand are mutually exclusive (S9, kafe 1.7):\n\n\ttransition: { name: void-order }            # by transition name — preferred\n\ttransition: { from: draft, to: posted }     # by state pair (legacy)\n\nThe name form is preferred because a transition may have **several** origin\nstates (`from: [paid, in_kitchen, ready, served]`). A state pair can only\ndescribe one of them, so a workflow written as `from: paid` silently does not\ncover the other three — a hole with no error and no log. Naming the transition\ncovers all of its origin states at once, and the name can be validated against\nthe entity's state machine.\n",
@@ -4876,6 +5200,7 @@
         "valkey",
         "redis",
         "s3",
+        "garage",
         "minio",
         "nats",
         "memory",
@@ -5073,6 +5398,17 @@
         "LOGS_FILTER_INVALID"
       ]
     },
+    "EventChannel": {
+      "title": "Event Channel",
+      "description": "Delivery channel for an event. Closed set — every name is implemented by the delivery pipeline.",
+      "type": "string",
+      "enum": [
+        "audit_log",
+        "websocket",
+        "queue",
+        "reliable_event"
+      ]
+    },
     "EventDecl": {
       "description": "EventDecl declares an event an entity can publish (Core §12).\n",
       "type": "object",
@@ -5112,8 +5448,8 @@
       "type": "object",
       "properties": {
         "channel": {
-          "description": "audit_log | websocket | queue | reliable_event",
-          "type": "string"
+          "$ref": "#/$defs/EventChannel",
+          "description": "audit_log | websocket | queue | reliable_event"
         },
         "dead_letter": {
           "$ref": "#/$defs/DeliveryTarget",
@@ -5189,6 +5525,10 @@
       "description": "Field defines a data field on an Entity.\n@schema {title: \"Field Definition\"}\n",
       "type": "object",
       "properties": {
+        "accept_data_loss": {
+          "description": "AcceptDataLoss consents to a lossy type change (01-core-basic.md §4.2):",
+          "type": "boolean"
+        },
         "audited": {
           "type": "boolean"
         },
@@ -5219,6 +5559,7 @@
         },
         "default": {},
         "description": {
+          "description": "Help text shown to users under the input in forms (and wizard steps). Written for the end user — not a design note; it is inherited as the field's `help` wherever the field appears, so one declaration serves both surfaces.",
           "type": "string"
         },
         "encrypted": {
@@ -5248,6 +5589,11 @@
           "description": "1.4.7 MaskedField — auto-mask in response/log (05-field-types.md §5.2).",
           "type": "boolean"
         },
+        "multiple": {
+          "description": "How many of the declared `options` this field holds: `true` = a set (array / comma-separated list), `false` = one value. Required when `options` is declared on `json` or `string`, because those types can hold either shape.",
+          "type": "boolean",
+          "nullable": true
+        },
         "name": {
           "description": "Field name — lowercase snake_case, unique within entity",
           "type": "string",
@@ -5256,11 +5602,22 @@
           "pattern": "^[a-z][a-z0-9_]*$"
         },
         "natural_key": {
+          "description": "NaturalKey marks the field as the record's business identifier.",
           "type": "boolean"
+        },
+        "natural_key_entry": {
+          "$ref": "#/$defs/NaturalKeyEntry",
+          "description": "NaturalKeyEntry states who supplies the key: the engine, a person, or the engine unless a person supplies one (see the NaturalKeyEntry enum)."
         },
         "natural_key_rule": {
           "$ref": "#/$defs/NaturalKeyRuleDecl",
           "nullable": true
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FieldOption"
+          }
         },
         "precision": {
           "description": "Decimal precision/scale (05-field-types.md §1.2) — only meaningful for",
@@ -5273,9 +5630,20 @@
         "readonly_when": {
           "type": "string"
         },
+        "reason": {
+          "description": "Reason states why a destructive declaration is intended (audit trail).",
+          "type": "string",
+          "examples": [
+            "digantikan branch_id pada 2026-09"
+          ]
+        },
         "relation": {
           "$ref": "#/$defs/RelationDecl",
           "nullable": true
+        },
+        "removed": {
+          "description": "Removed is the tombstone that lets a field be dropped at all (01-core-basic.md",
+          "type": "boolean"
         },
         "renamed_from": {
           "description": "4.2.2 RenamedFrom — declares that this field was renamed from the given",
@@ -5307,6 +5675,7 @@
           "nullable": true
         },
         "title": {
+          "description": "Caption shown to users in tables, forms, and detail pages; falls back to the humanised field name",
           "type": "string"
         },
         "tree": {
@@ -5318,6 +5687,7 @@
           "description": "@schema {description: \"Data type — determines storage class, renderer widget, and validation\"}"
         },
         "unique": {
+          "description": "Unique declares a cross-record uniqueness constraint (unique per tenant).",
           "type": "boolean"
         },
         "unit": {
@@ -5344,6 +5714,23 @@
         "financial",
         "internal"
       ]
+    },
+    "FieldOption": {
+      "description": "FieldOption is one choice in a field's `options:` list — a closed set of\nvalues **with captions**. It exists because `enum_values` carries values\nonly: a day-of-week set declared as `[1, 2, 3]` renders as \"1, 2, 3\", so the\nauthor either writes a picker whose choices cannot be read, or a free-text\ntag input that accepts `9`.\n\n`options` is a property of the **data** (which values are legal), not of one\nform — the same reason `enum_values` lives on the Entity. A multi-value field\n(`type: json`, or a string holding a comma-separated list) can therefore be\ndeclared once and rendered, filtered, and labelled consistently.\n\n`Value` keeps the scalar's YAML type (`value: 1` stays the number 1 in the\nbundle and in the stored array, matching what the field actually holds);\n`Label` is the caption shown to users, and defaults to the value itself when\nomitted.\n",
+      "type": "object",
+      "properties": {
+        "label": {
+          "description": "Caption shown to users. Defaults to the value (humanised) when omitted.",
+          "type": "string"
+        },
+        "value": {
+          "description": "Stored value. Keep the scalar type the field stores — `value: 1` for a numeric set, not `value: \\\"1\\\"`."
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "additionalProperties": false
     },
     "FieldRef": {
       "description": "FieldRef references another entity's field.\n",
@@ -5531,12 +5918,15 @@
           "type": "string"
         },
         "help": {
+          "description": "Help text shown under the input. Falls back to the entity field's `description`, so declaring it here is only needed to override that per-form.",
           "type": "string"
         },
         "label": {
+          "description": "Caption for this field in the form; falls back to the entity field's `title`, then the humanised field name",
           "type": "string"
         },
         "placeholder": {
+          "description": "Placeholder text inside the input control",
           "type": "string"
         },
         "read_only": {
@@ -5571,26 +5961,34 @@
     },
     "FormRenderDecl": {
       "description": "FormRenderDecl is the design-time container declaration of a Form\n(Frontend §1.6). YAML accepts both `render: separate_page` (shorthand) and\n`render: { mode: separate_page }`; JSON always serializes the object form to\nmatch the renderer contract (`spec.render.mode`).\n",
-      "type": "object",
-      "properties": {
-        "mode": {
-          "$ref": "#/$defs/FormRender",
-          "description": "@schema {description: \"Render mode: modal (popup dialog), drawer (side panel), separate_page (full page)\", enum: [\"modal\", \"drawer\", \"separate_page\"]}"
+      "oneOf": [
+        {
+          "description": "Shorthand render mode — e.g. \"drawer\", \"modal\", \"separate_page\"",
+          "type": "string"
         },
-        "picker_panel": {
-          "description": "PickerPanel places the child-field picker relative to the rest of the",
-          "type": "string",
-          "enum": [
-            "",
-            "inline",
-            "aside"
-          ]
+        {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "$ref": "#/$defs/FormRender",
+              "description": "@schema {description: \"Render mode: modal (popup dialog), drawer (side panel), separate_page (full page)\", enum: [\"modal\", \"drawer\", \"separate_page\"]}"
+            },
+            "picker_panel": {
+              "description": "PickerPanel places the child-field picker relative to the rest of the",
+              "type": "string",
+              "enum": [
+                "",
+                "inline",
+                "aside"
+              ]
+            }
+          },
+          "required": [
+            "mode"
+          ],
+          "additionalProperties": false
         }
-      },
-      "required": [
-        "mode"
-      ],
-      "additionalProperties": false
+      ]
     },
     "FormSection": {
       "description": "FormSection groups form fields.\n",
@@ -5653,6 +6051,7 @@
         "password",
         "slider",
         "tags",
+        "select-multi-tag",
         "uuid",
         "json",
         "fileinput",
@@ -5718,6 +6117,11 @@
         "priority": {
           "description": "0 → default 10",
           "type": "integer"
+        },
+        "uses": {
+          "$ref": "#/$defs/UsesDecl",
+          "description": "Uses declares the hook script's own access (db, resources, config,",
+          "nullable": true
         }
       },
       "required": [
@@ -5818,6 +6222,11 @@
           "examples": [
             "create"
           ]
+        },
+        "map": {
+          "description": "Map declares how the source event payload becomes the target action's",
+          "type": "object",
+          "additionalProperties": {}
         },
         "resource": {
           "description": "@schema {example: \"gl.journal-entry\"}",
@@ -5932,13 +6341,13 @@
       "description": "Kind represents the resource kind as a PascalCase string.\n@schema {title: \"Resource Kind\"}\n",
       "type": "string",
       "enum": [
+        "Seed",
         "App",
         "Module",
         "Entity",
         "Document",
         "Service",
         "Config",
-        "Migration",
         "Subscription",
         "Workflow",
         "Api",
@@ -5989,7 +6398,6 @@
       "additionalProperties": false
     },
     "MenuItem": {
-      "description": "MenuItem is one navigation entry, embedded in App.spec.menu or\nModule.spec.menu (Core §4.4/§4.5) — there is no standalone kind: Menu.\nMenu order follows array position — no separate `order` field.\n\nEvery item is exactly one of three shapes, enforced by the loader/resolver\n(see internal/manifest), not by separate Go types:\n\n  - Adopt node (Type == \"module\"): only Module set.\n    Splices that Module's own Menu wholesale at this position. Level 1 only.\n  - Group node (len(Children) \u003e 0): Label + Children. Module/View/Route\n    forbidden on the group itself — only its descendants carry Module.\n  - Leaf node (no Children, Type != \"module\"): Label + Module + exactly one\n    of View/Route. Level 3 leaves cannot have Children (3-level cap).\n",
       "type": "object",
       "properties": {
         "children": {
@@ -6007,6 +6415,16 @@
         "module": {
           "type": "string"
         },
+        "permissions": {
+          "description": "RBAC: the item is withheld unless the caller holds at least one of these permissions (any-of). Enforced server-side — it never reaches a caller who lacks them.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "examples": [
+            "[clinic.settings.update]"
+          ]
+        },
         "route": {
           "description": "raw URL escape hatch (no registered View)",
           "type": "string"
@@ -6020,8 +6438,11 @@
           "type": "string"
         },
         "when": {
-          "description": "FormSpecExpr business condition",
-          "type": "string"
+          "description": "FormSpecExpr business condition (presentation only): item hidden when false. Evaluated client-side against `user` and `today()`. NOT an authorization gate — use `permissions` for RBAC.",
+          "type": "string",
+          "examples": [
+            "today() \u003e= '2026-01-01"
+          ]
         }
       },
       "additionalProperties": false
@@ -6052,6 +6473,16 @@
         "name"
       ],
       "additionalProperties": false
+    },
+    "NaturalKeyEntry": {
+      "title": "Natural Key Entry",
+      "description": "Who supplies the natural key: `auto_generated` (engine only), `user_entry` (a person), `auto_generated_if_empty` (engine mints it unless a value is supplied).",
+      "type": "string",
+      "enum": [
+        "auto_generated",
+        "user_entry",
+        "auto_generated_if_empty"
+      ]
     },
     "NaturalKeyPrefix": {
       "description": "NaturalKeyPrefix defines the prefix for a natural key.\n",
@@ -6314,6 +6745,13 @@
             "$ref": "#/$defs/IndexDecl"
           }
         },
+        "raw_ddl": {
+          "description": "RawDDL holds storage-level DDL the spec language does not express —",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RawDDLDecl"
+          }
+        },
         "soft_delete": {
           "description": "SoftDelete defaults to true; nil means \"not set\" so a persist block",
           "type": "boolean",
@@ -6542,7 +6980,7 @@
       ]
     },
     "PrintBodyItem": {
-      "description": "PrintBodyItem is one element in the Print body (fields | separator | child_table | totals).\n",
+      "description": "PrintBodyItem is one element in the Print body\n(fields | separator | child_table | totals | qrcode).\n",
       "type": "object",
       "properties": {
         "child_table": {
@@ -6554,6 +6992,11 @@
           "items": {
             "type": "string"
           }
+        },
+        "qrcode": {
+          "$ref": "#/$defs/PrintQrcode",
+          "description": "Qrcode renders a scannable QR code (gap #3 / S4: a table card or a",
+          "nullable": true
         },
         "separator": {
           "type": "string"
@@ -6615,6 +7058,17 @@
       },
       "additionalProperties": false
     },
+    "PrintFormat": {
+      "title": "Print Format",
+      "description": "Output format for a Print document. Closed set — pdf/thermal are served server-side, html client-side; dotmatrix is not implemented and is rejected.",
+      "type": "string",
+      "enum": [
+        "pdf",
+        "thermal",
+        "dotmatrix",
+        "html"
+      ]
+    },
     "PrintHeader": {
       "description": "PrintHeader is the declarative header block of a Print document.\n",
       "type": "object",
@@ -6636,8 +7090,8 @@
       "type": "object",
       "properties": {
         "format": {
-          "description": "pdf | thermal | dotmatrix | html",
-          "type": "string"
+          "$ref": "#/$defs/PrintFormat",
+          "description": "pdf | thermal | dotmatrix | html"
         },
         "paper": {
           "$ref": "#/$defs/PrintPaper",
@@ -6665,6 +7119,43 @@
           "type": "string"
         }
       },
+      "additionalProperties": false
+    },
+    "PrintQrcode": {
+      "description": "PrintQrcode is a QR code element in a Print body.\n",
+      "type": "object",
+      "properties": {
+        "absolute": {
+          "description": "Absolute prepends the origin the document is printed from, so the code",
+          "type": "boolean"
+        },
+        "label": {
+          "description": "@schema {example: \"Scan untuk struk digital\"}",
+          "type": "string",
+          "examples": [
+            "Scan untuk struk digital"
+          ]
+        },
+        "payload": {
+          "description": "Text the QR encodes. `{dotted.path}` tokens are interpolated from the record, exactly like `header.title`/`footer.text`.",
+          "type": "string",
+          "examples": [
+            "/status/{guest_token}"
+          ],
+          "minLength": 1
+        },
+        "size_mm": {
+          "description": "QR side length in millimetres (default 30). Thermal maps it to a module size instead of a physical size.",
+          "type": "integer",
+          "examples": [
+            "30"
+          ],
+          "minimum": 0
+        }
+      },
+      "required": [
+        "payload"
+      ],
       "additionalProperties": false
     },
     "PrintTotals": {
@@ -6762,6 +7253,44 @@
       ],
       "additionalProperties": false
     },
+    "RawDDLDecl": {
+      "description": "RawDDLDecl is one storage-level DDL statement declared on an Entity\n(01-core-basic.md §4.3).\n",
+      "type": "object",
+      "properties": {
+        "ddl": {
+          "description": "DDL is one statement valid on every driver.",
+          "type": "string",
+          "examples": [
+            "CREATE INDEX idx_invoice_date ON invoice(transaction_date)"
+          ]
+        },
+        "ddl_by": {
+          "description": "DDLByDialect holds per-driver variants, for DDL that cannot be written",
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "name": {
+          "description": "Name identifies the statement for recording and reporting.",
+          "type": "string",
+          "examples": [
+            "menu-price-unique"
+          ],
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$"
+        },
+        "reason": {
+          "description": "Reason states why the DDL is needed (audit trail).",
+          "type": "string",
+          "examples": [
+            "satu harga per menu per cabang"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    },
     "RebuildSpec": {
       "description": "RebuildSpec describes how a summary entity is rebuilt from its durable\nsource event/record stream.\n",
       "type": "object",
@@ -6837,21 +7366,39 @@
       ],
       "additionalProperties": false
     },
+    "ReportAggregate": {
+      "title": "Report Aggregate",
+      "description": "Aggregation applied to a report column. Closed set — mirrors the Query Builder's aggregate functions.",
+      "type": "string",
+      "enum": [
+        "sum",
+        "avg",
+        "count",
+        "min",
+        "max"
+      ]
+    },
     "ReportColumn": {
       "description": "ReportColumn is a column in a report output.\n",
       "type": "object",
       "properties": {
         "aggregate": {
-          "type": "string"
+          "$ref": "#/$defs/ReportAggregate",
+          "description": "Aggregate is a closed set (S16) — mirrors the Query Builder's aggregate"
         },
         "field": {
           "type": "string"
         },
         "format": {
-          "type": "string"
+          "$ref": "#/$defs/ReportFormat",
+          "description": "Format is a closed set (S16) — every name is implemented by the report"
         },
         "label": {
           "type": "string"
+        },
+        "widget": {
+          "$ref": "#/$defs/TableCellWidget",
+          "description": "Widget renders the cell like a table cell (S16) — the same closed set as"
         }
       },
       "required": [
@@ -6859,6 +7406,17 @@
         "label"
       ],
       "additionalProperties": false
+    },
+    "ReportFormat": {
+      "title": "Report Format",
+      "description": "Value formatter for a report column. Closed set — every name is implemented by the report renderer.",
+      "type": "string",
+      "enum": [
+        "currency",
+        "date",
+        "datetime",
+        "percentage"
+      ]
     },
     "ReportGroup": {
       "description": "ReportGroup defines a grouping level in a report.\n",
@@ -6891,7 +7449,7 @@
           "type": "boolean"
         },
         "type": {
-          "type": "string"
+          "$ref": "#/$defs/ReportParamType"
         }
       },
       "required": [
@@ -6900,6 +7458,18 @@
         "type"
       ],
       "additionalProperties": false
+    },
+    "ReportParamType": {
+      "title": "Report Param Type",
+      "description": "Input type for a report parameter. Closed set — every name is implemented by the report renderer.",
+      "type": "string",
+      "enum": [
+        "text",
+        "date",
+        "datetime",
+        "select",
+        "relation"
+      ]
     },
     "ReportSource": {
       "description": "ReportSource declares the report's data source + parameterized filter.\n",
@@ -7136,6 +7706,31 @@
           "type": "string"
         }
       },
+      "additionalProperties": false
+    },
+    "SeedEntity": {
+      "description": "SeedEntity declares the records to insert for a single entity.\n",
+      "type": "object",
+      "properties": {
+        "entity": {
+          "description": "Entity name inside metadata.module",
+          "type": "string",
+          "examples": [
+            "menu-item"
+          ]
+        },
+        "records": {
+          "description": "Raw entity payloads (same shape as an API create body); supports `$ref` for relations and `$asset` for file fields",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": {}
+          }
+        }
+      },
+      "required": [
+        "entity"
+      ],
       "additionalProperties": false
     },
     "Settings": {
@@ -7462,6 +8057,18 @@
       ],
       "additionalProperties": false
     },
+    "TableCellFormat": {
+      "title": "Table Cell Format",
+      "description": "Value formatter for a table/listing cell. Closed set — every name is implemented by the cell renderer.",
+      "type": "string",
+      "enum": [
+        "currency",
+        "number",
+        "date",
+        "relative",
+        "percent"
+      ]
+    },
     "TableCellWidget": {
       "title": "Table Cell Widget",
       "description": "Widget rendering a table or listing cell. Closed set — every name is implemented by the cell renderer; omit to render the raw value (optionally via `format`).",
@@ -7478,21 +8085,27 @@
       "type": "object",
       "properties": {
         "align": {
-          "description": "left | center | right",
-          "type": "string"
+          "description": "Text alignment of this column's header and body cells.",
+          "type": "string",
+          "enum": [
+            "",
+            "left",
+            "center",
+            "right"
+          ]
         },
         "field": {
           "type": "string"
         },
         "format": {
-          "description": "currency | date | relative | ...",
-          "type": "string"
+          "$ref": "#/$defs/TableCellFormat",
+          "description": "Format is the value formatter for this cell. Closed set — every name is"
         },
         "label": {
           "type": "string"
         },
         "link": {
-          "description": "Page name to navigate to",
+          "description": "Page name to navigate to when this cell is clicked.",
           "type": "string"
         },
         "sortable": {
@@ -7502,6 +8115,7 @@
           "$ref": "#/$defs/TableCellWidget"
         },
         "width": {
+          "description": "CSS width for this column, applied to the header cell (e.g. \\\"120px\\\", \\\"10rem\\\").",
           "type": "string"
         }
       },
@@ -7536,6 +8150,10 @@
       "description": "TransitionDecl defines a transition between states (Core §14).\nThe canonical manifest key for the triggering action is `via`;\n`action` is accepted as a legacy alias.\n",
       "type": "object",
       "properties": {
+        "emit": {
+          "description": "Emit names the event this transition publishes when it fires (S13). It",
+          "type": "string"
+        },
         "from": {
           "oneOf": [
             {
@@ -7583,6 +8201,11 @@
           "items": {
             "type": "string"
           }
+        },
+        "factors": {
+          "description": "Factors maps each convertible unit to how many base units one of it is",
+          "type": "object",
+          "additionalProperties": {}
         }
       },
       "required": [
@@ -7967,13 +8590,24 @@
           "description": "quorum, default 1",
           "type": "integer"
         },
+        "description": {
+          "description": "Description explains what to check before deciding (S15).",
+          "type": "string"
+        },
+        "display_fields": {
+          "description": "DisplayFields names the record fields the approver needs to see to decide",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "escalation": {
           "$ref": "#/$defs/StepEscalation",
           "nullable": true
         },
         "mode": {
-          "description": "all | any | sequential",
-          "type": "string"
+          "$ref": "#/$defs/WorkflowStepMode",
+          "description": "all | any | sequential"
         },
         "roles": {
           "description": "@schema {example: \"[gl.supervisor]\"}",
@@ -7985,12 +8619,26 @@
             "[gl.supervisor]"
           ]
         },
+        "title": {
+          "description": "Title is the human label for this approval task (S15). Without it the",
+          "type": "string"
+        },
         "when": {
           "description": "FormSpecExpr — skip step if false",
           "type": "string"
         }
       },
       "additionalProperties": false
+    },
+    "WorkflowStepMode": {
+      "title": "Workflow Step Mode",
+      "description": "How a step's quorum is collected. Closed set.",
+      "type": "string",
+      "enum": [
+        "all",
+        "any",
+        "sequential"
+      ]
     },
     "WorkflowTransitionRef": {
       "description": "WorkflowTransitionRef identifies the intercepted transition. Two forms exist\nand are mutually exclusive (S9, kafe 1.7):\n\n\ttransition: { name: void-order }            # by transition name — preferred\n\ttransition: { from: draft, to: posted }     # by state pair (legacy)\n\nThe name form is preferred because a transition may have **several** origin\nstates (`from: [paid, in_kitchen, ready, served]`). A state pair can only\ndescribe one of them, so a workflow written as `from: paid` silently does not\ncover the other three — a hole with no error and no log. Naming the transition\ncovers all of its origin states at once, and the name can be validated against\nthe entity's state machine.\n",
@@ -8059,7 +8707,6 @@
         "Kanban",
         "KindDefinition",
         "Listing",
-        "Migration",
         "Mockup",
         "Module",
         "NotificationCenter",
@@ -8069,6 +8716,7 @@
         "Print",
         "Renderer",
         "Report",
+        "Seed",
         "Service",
         "Subscription",
         "Table",
@@ -8493,7 +9141,6 @@
         },
         "spec": {
           "title": "Entity Spec",
-          "description": "EntitySpec defines a stateful, persisted business data resource (Core §4.1).\n",
           "type": "object",
           "properties": {
             "actions": {
@@ -8800,95 +9447,6 @@
               "$ref": "#/$defs/Settings",
               "description": "Settings is the typed global presentation/config namespace (spec §10).",
               "nullable": true
-            }
-          },
-          "additionalProperties": false
-        }
-      },
-      "required": [
-        "apiVersion",
-        "kind",
-        "metadata",
-        "spec"
-      ]
-    },
-    {
-      "properties": {
-        "apiVersion": {
-          "type": "string",
-          "const": "formspec.dev/v1"
-        },
-        "kind": {
-          "type": "string",
-          "const": "Migration"
-        },
-        "metadata": {
-          "description": "Metadata is common to all FormSpec resources.\n",
-          "type": "object",
-          "properties": {
-            "annotations": {
-              "type": "object",
-              "additionalProperties": {}
-            },
-            "description": {
-              "type": "string"
-            },
-            "labels": {
-              "type": "object",
-              "additionalProperties": {}
-            },
-            "module": {
-              "type": "string"
-            },
-            "name": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "name"
-          ],
-          "additionalProperties": false
-        },
-        "spec": {
-          "title": "Migration Spec",
-          "description": "MigrationSpec defines a custom DDL migration (01-core-basic.md §4).\nOnly DDL statements are allowed — DML is rejected at runtime.\n",
-          "type": "object",
-          "properties": {
-            "ddl": {
-              "description": "@schema {example: \"CREATE INDEX idx_invoice_date ON invoice(transaction_date)\"}",
-              "type": "string",
-              "examples": [
-                "CREATE INDEX idx_invoice_date ON invoice(transaction_date)"
-              ]
-            },
-            "ddl_by": {
-              "description": "DDLByDialect holds per-driver variants of the same statement, for DDL",
-              "type": "object",
-              "additionalProperties": {},
-              "examples": [
-                "{sqlite: \\\"CREATE INDEX …\\\", postgres: \\\"CREATE INDEX …\\\"}"
-              ]
-            },
-            "dml": {
-              "description": "DML is an explicitly declared data repair, run BEFORE the DDL of the same",
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "module": {
-              "description": "@schema {example: \"billing\"}",
-              "type": "string",
-              "examples": [
-                "billing"
-              ]
-            },
-            "reason": {
-              "description": "Reason states why the declared DML is needed (audit trail).",
-              "type": "string",
-              "examples": [
-                "merge duplicate menu prices before the unique index"
-              ]
             }
           },
           "additionalProperties": false
@@ -9833,6 +10391,66 @@
                 "cafe"
               ],
               "pattern": "^[a-z0-9](-[a-z0-9])*$"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "apiVersion",
+        "kind",
+        "metadata",
+        "spec"
+      ]
+    },
+    {
+      "properties": {
+        "apiVersion": {
+          "type": "string",
+          "const": "formspec.dev/v1"
+        },
+        "kind": {
+          "type": "string",
+          "const": "Seed"
+        },
+        "metadata": {
+          "description": "Metadata is common to all FormSpec resources.\n",
+          "type": "object",
+          "properties": {
+            "annotations": {
+              "type": "object",
+              "additionalProperties": {}
+            },
+            "description": {
+              "type": "string"
+            },
+            "labels": {
+              "type": "object",
+              "additionalProperties": {}
+            },
+            "module": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        "spec": {
+          "title": "Seed Spec",
+          "description": "SeedSpec is the kind-specific body of a `kind: Seed` manifest.\n",
+          "type": "object",
+          "properties": {
+            "entities": {
+              "description": "Entities declares records for one or more entities, grouped so a reader",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/SeedEntity"
+              }
             }
           },
           "additionalProperties": false
@@ -11010,6 +11628,10 @@
                 "true"
               ],
               "nullable": true
+            },
+            "realtime": {
+              "description": "Realtime refetches the timeline on its entity's mutation events.",
+              "type": "boolean"
             },
             "sort": {
               "description": "asc | desc (default desc)",
