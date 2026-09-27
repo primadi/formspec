@@ -1,7 +1,46 @@
-**Last Updated**: 2026-09-26 (**Sesi "kerjakan semua todo terbuka"** — 83 item
+**Last Updated**: 2026-09-27 (**L3 ✅ · L1 ✅ · L5 ✅ · validator L4 ✅ — dan
+temuan bahwa migrasi L4 TIDAK boleh buta.** Tiga hal. **(1) L5 lebih luas dari
+rencana:** dua pembaca tambahan (`buildEntitySchema`, `entityFootprint`) juga
+membaca `es.Actions`, sehingga menghapus entri `actions:` membuat
+`schema.actions` **kosong** dan `authorized_actions` kehilangan
+`release`/`reserve` — regresi 10.49 dari arah lain, dan **prasyarat keras
+migrasi L4**. **(2) Bug dedup ditemukan bukti bundle, bukan test:**
+`ActionSources()` mensintesis satu action **per transisi**, jadi `dining-table`
+melaporkan `occupy` **3×** (tiga transisi memakai `via: occupy`) → React key
+ganda di daftar tombol. Diperbaiki: satu action per nama, transisi pertama
+menang. **(3) Validator L4 mendarat dengan dua pengecualian wajib**, karena
+**36 dari 77 duplikat mengubah otorisasi** bila dihapus — termasuk satu
+permission dipakai dua action (`start-compounding` + `mark-ready`), dan
+`cancel` yang mempersempit route lifecycle generik (6 entitas). **Jebakan
+metodologis saya sendiri:** alat ukur meniru logika prefix alih-alih memanggil
+`AutoPrefixPermission` → laporan "76 dari 77 berubah" yang **salah**;
+sebenarnya 36. **Bukti:** blok `actions:` kafe `dining-table` dihapus
+seluruhnya, tombol "Tandai meja dipesan" tetap tampil, PATCH
+`table_status: reserved` → **200**. **Butuh keputusan pemilik sebelum migrasi 36
+Kategori B → kafe 10.51.** Changelog `2026-09-27-013`, plan
+`docs_internal/plan/l4-validator-anti-duplikat.md`.)
+(**Sebelumnya:** 2026-09-27 **Lanjutan plan `via-sebagai-action-penuh`: L1 ✅ +
+L3 ✅ tuntas.** Dua bug nyata ditutup dengan bukti terukur. **L3**: generator
+sudah lama menghasilkan `RouteDescriptor` untuk transisi ber-`impl`, tetapi
+**registrasi handler**-nya belum ikut — `registerRouteWithPattern` dan
+`generatePrepareRoutes` masih memindai `EntitySpec.Actions` langsung, sementara
+`ActionSources()` **mensintesis** `via` tanpa menuliskannya kembali. Akibatnya
+route dilewati dan permintaan jatuh ke handler file: terukur `POST
+/kafe/_ui/entity/gl/journal-entry/1/post` → **404 `no such file field or action:
+post`**, kini **403 `missing permission: gl.journal-entrys.post`** (setara
+kontrol `submit`). **L1**: pengukuran menunjukkan migrasi L4 akan **lossy** —
+dari 83 deklarasi ganda, 11 membawa `uses` dan 2 membawa `params`, yang tanpa
+field baru akan **hilang** (footprint consent menyempit diam-diam). Guard baru
+terkalibrasi gagal saat penyalinan field dihapus. **Item terbuka baru: kafe
+10.51** (L4/L5/L7 — lihat `examples/kafe/gaps_found/TODO.md`). Changelog
+`2026-09-27-011`, `-012`. Plan `docs_internal/plan/via-sebagai-action-penuh.md`.)
+(**Sebelumnya:** 2026-09-26 **Sesi "kerjakan semua todo terbuka"** — 83 item
 `[ ]`/`[⏸️]` ditriase; **19 ditutup**, 64 tersisa dengan alasan yang
 diverifikasi). Plan induk: `docs_internal/plan/close-open-items-2026-09-26.md`.
-Changelog: `2026-09-26-001`–`016`.
+Changelog: `2026-09-26-001`–`017`. (**Tambahan 2026-09-26:** fix `--dev-ui` Vite
+proxy multi-workspace dari laporan pemilik `localhost:5174/kafe` — mengoreksi
+klaim 2.11.7 (hanya sisi Go) + item baru 2.11.7a; changelog `2026-09-26-017`,
+plan `docs_internal/plan/dev-ui-vite-proxy-multi-workspace.md`.)
 
 **Ditutup dengan kode (12 perubahan, semuanya dengan test yang dibuktikan gagal
 lebih dulu):** 5.10.24 (flaky kafe E2E — akarnya **dua**: balapan `draft` vs
@@ -1080,7 +1119,7 @@ closed-set agar custom screen sederhana (login, landing) bisa pure-YAML tanpa
 - [x] 2.1.2 Natural key counter in same transaction as Entity insert — UPSERT counter + INSERT dalam satu `Tx` (`generateNaturalKeys` menerima DB terikat-transaksi; `04-query-and-keys.md` §2)
 - [x] 2.1.3 UUID v7 PK — replace SQLite `INTEGER PRIMARY KEY AUTOINCREMENT` with UUID v7 generated at app layer (`NewUUIDv7`, kedua driver; child table PK juga ikut)
 - [x] 2.1.4 Idempotency retention configurable — `IdempotencyStore` dikonstruksi di `resource.App`; TTL diselesaikan `resolveIdempotencyTTL` dengan presedensi **`core.idempotency_retention` (manifest, sejak 2.1.6) → `Config.IdempotencyTTL` → `db.DefaultIdempotencyTTL` (24h)**; diekspos lewat `App.Idempotency()`. **Dikoreksi 2026-09-26:** kalimat lama "resolusi dari manifest … menunggu runtime Config-kind (Fase 7.2, belum ada)" sudah **basi** — runtime-nya landing 2026-08-25 dan pemetaannya landing bersama 2.1.6.
-- [x] 2.1.6 ✅ **2026-09-26** **`core.idempotency_retention` (key Config) kini dipetakan ke `IdempotencyTTL`.** Key ini sudah normatif di `01-core-basic.md` §5 tapi dibaca **0 tempat** di Go (hanya komentar). Kini `resolveIdempotencyTTL` (`resource/formspec.go`) membacanya lewat `Registry.ResolveKeyAny` (baru — key framework hidup di namespace `formspec.core` tanpa nama Config stabil) dan di-wire di **dua** titik: boot `New()` **dan** `ReloadSpec()`, jadi perubahan berlaku tanpa restart. Presedensi `core.idempotency_retention` → `Config.IdempotencyTTL` → default 24h. Dua keputusan eksplisit: (a) nilai tak terbaca (`"banana"`) **dilaporkan** lalu default dipakai — bukan diam-diam mematikan retention; (b) `0` = tanpa kedaluwarsa (selaras `BackdatePolicy.MaxDaysBack = 0`) dan bare integer (`"7"`) **ditolak** karena pada parser retention itu *count*, bukan durasi. Konsumen nyata: kafe mendeklarasikan `keys.idempotency_retention: "24h"` di `examples/kafe/spec/config/app.yaml`. **Bukti:** `TestResolveIdempotencyTTL` (7 sub-test) **dibuktikan gagal** saat pemetaan dinetralkan (`7d: got 24h0m0s, want 168h`); `TestRegistry_ResolveKeyAny`; kafe `validate` 85 manifest 0 problem, `check` 0/0. Changelog `2026-09-26-003`. Effort selesai: small.
+- [x] 2.1.6 ✅ **2026-09-26** **`core.idempotency_retention` (key Config) kini dipetakan ke `IdempotencyTTL`.** Key ini sudah normatif di `01-core-basic.md` §5 tapi dibaca **0 tempat** di Go (hanya komentar). Kini `resolveIdempotencyTTL` (`resource/formspec.go`) membacanya lewat `Registry.ResolveKeyAny` (baru — key framework hidup di namespace `formspec.core` tanpa nama Config stabil) dan di-wire di **dua** titik: boot `New()` **dan** `ReloadSpec()`, jadi perubahan berlaku tanpa restart. Presedensi `core.idempotency_retention` → `Config.IdempotencyTTL` → default 24h. Dua keputusan eksplisit: (a) nilai tak terbaca (`"banana"`) **dilaporkan** lalu default dipakai — bukan diam-diam mematikan retention; (b) `0` = tanpa kedaluwarsa (selaras `BackdatePolicy.MaxDaysBack = 0`) dan bare integer (`"7"`) **ditolak** karena pada parser retention itu _count_, bukan durasi. Konsumen nyata: kafe mendeklarasikan `keys.idempotency_retention: "24h"` di `examples/kafe/spec/config/app.yaml`. **Bukti:** `TestResolveIdempotencyTTL` (7 sub-test) **dibuktikan gagal** saat pemetaan dinetralkan (`7d: got 24h0m0s, want 168h`); `TestRegistry_ResolveKeyAny`; kafe `validate` 85 manifest 0 problem, `check` 0/0. Changelog `2026-09-26-003`. Effort selesai: small.
 - [x] 2.1.5 `natural_key_rule` lengkap — `strategy: sequence|custom` (custom = framework tidak auto-generate, diisi hook/script/import), `format`, `prefix`, `reset: never|yearly|monthly|daily` (divalidasi di `ValidateDocumentSpec`), `scope_field` (`01-core-basic.md` §2); counter komposit `(tenant, resource, field, scope, period, seq)` sudah ada (`jsonb-persist/04` §2)
 
 ### 2.2 Query correctness ✅
@@ -1190,7 +1229,8 @@ closed-set agar custom screen sederhana (login, landing) bisa pure-YAML tanpa
 - [x] 2.11.4 Seed `default` — workspace `default` selalu di-upsert saat boot (fallback URL tanpa slug tetap routable)
 - [x] 2.11.5 CLI `formspec workspace create|list|delete` — `cmd/formspec/workspace.go` (flag-first parsing; `--dsn` wajib; `default` tak bisa dihapus)
 - [x] 2.11.6 Unifikasi default workspace — `"demo"` → `"default"` (`workspaceFromContext`, fallback middleware, `Config.WorkspaceID`, `formspec logs`); test resource + e2e clinic dimigrasi ke `"default"`
-- [x] 2.11.7 Dev-ui proxy multi-workspace — `viteSPAProxy` meneruskan `/{ws}/_ui|api/` untuk semua workspace (sebelumnya hanya workspace terkonfigurasi)
+- [x] 2.11.7 Dev-ui proxy multi-workspace — `viteSPAProxy` meneruskan `/{ws}/_ui|api/` untuk semua workspace (sebelumnya hanya workspace terkonfigurasi). **Koreksi 2026-09-26:** klaim ini hanya benar untuk sisi **Go**; `server.proxy` Vite (`renderers/react-shadcn/vite.config.ts`) masih literal `/default/...`, jadi `--dev-ui`/`npm run dev` (Vite menyajikan SPA langsung, bukan lewat `:8080`) gagal untuk workspace lain — `localhost:5174/kafe` → `Unexpected token '<', "<!doctype "... is not valid JSON` (terukur: `GET /kafe/_ui/_meta/apps` lewat Vite = `200 text/html`). Diperbaiki ke key RegExp `^/[a-z0-9-]+/_ui` + `api/v1` + guard `devProxyConfig.test.ts` (7/10 test gagal saat regresi disuntikkan; 529 vitest lulus). Changelog `2026-09-26-017`. **Sisa → 2.11.7a ⏸️.**
+- [⏸️] 2.11.7a `/health` tidak di-proxy Vite di mode `--dev-ui` — Vite menjawab SPA, sedangkan `viteSPAProxy` Go meneruskannya ke backend. **Sengaja dibiarkan**: SPA tidak pernah memanggil `/health`, dan menambah key proxy untuknya tidak bisa tumpang-tindih dengan slug (`health` reserved). **Teramati:** `curl :5173/health` → `text/html`. Effort: small (tambah key `"/health"` bila ada flow CLI yang membutuhkannya).
 - [x] 2.11.8 Contoh + docs — `examples/cafe/spec/workspaces/cafe-workspaces.yaml` (seed `cafe`); `docs/spec/platform/02-workspace-app-module.md` §1.1; `docs/cli-tools/02-formspec-cli.md` §12–§13; `docs/runtimes/05-engine-api-layer.md`
 - [⏸️] 2.11.9 Slug→UUID resolution — deferred: slug = workspace ID untuk saat ini (data existing keyed by slug); mapping ke internal UUID menunggu kebutuhan nyata (rename workspace / merge tenant)
 - [⏸️] 2.11.10 Publish `Workspace.schema.json` ke registry online — `formspec validate` tanpa `--schema` masih 404 untuk kind Workspace sampai schema ter-publish ke `schemas.formspec.dev`
@@ -1260,19 +1300,19 @@ closed-set agar custom screen sederhana (login, landing) bisa pure-YAML tanpa
       di-skip; field `masked` (write-only) & record non-`draft` dikecualikan;
       `resolveDSN` dipakai sehingga DSN relatif di-anchor ke project root.
 - [x] 3.6.3a **`docs/kind/` belum punya halaman `Seed`** — ✅ **2026-09-26:
-  TIDAK BERLAKU LAGI (stale).** Ketiga klaim diverifikasi ulang dan semuanya
-  sudah berubah: (a) `docs/kind/data/Seed.md` **ada** (dibuat commit `dd3adc6`,
-  "feat: kafe landed-cost/purchase events, seed kind…"); (b) `kindGroups`
-  (`internal/genkinddocs/markdown.go:47`) **memuat** `"Seed": {Group: "data",
-  Plane: "resource"}` beserta komentar alasannya; (c) `docs/kind/README.md`
-  menulis **34 kind** yang kini **cocok** dengan porosnya — grup `data/`
-  berisi 11 file (Entity, Service, Config, Subscription, Workflow, Api, Webhook,
-  Mockup, Integrator, KindDefinition, Seed) sesuai tabel README. `make
-  generate-kind-docs` karena itu menyentuh `Seed.md` (generated block
-  `generated:meta` memuat `SeedSpec`). Tidak ada aksi lanjutan.
-  **Bukti:** `ls docs/kind/data/Seed.md` → ada; `grep -n '"Seed"' internal/genkinddocs/markdown.go`
-  → 1 hit; `head -8 docs/kind/data/Seed.md` menampilkan `Grup | data` +
-  `Spec struct | SeedSpec`.
+      TIDAK BERLAKU LAGI (stale).** Ketiga klaim diverifikasi ulang dan semuanya
+      sudah berubah: (a) `docs/kind/data/Seed.md` **ada** (dibuat commit `dd3adc6`,
+      "feat: kafe landed-cost/purchase events, seed kind…"); (b) `kindGroups`
+      (`internal/genkinddocs/markdown.go:47`) **memuat** `"Seed": {Group: "data",
+Plane: "resource"}` beserta komentar alasannya; (c) `docs/kind/README.md`
+      menulis **34 kind** yang kini **cocok** dengan porosnya — grup `data/`
+      berisi 11 file (Entity, Service, Config, Subscription, Workflow, Api, Webhook,
+      Mockup, Integrator, KindDefinition, Seed) sesuai tabel README. `make
+generate-kind-docs` karena itu menyentuh `Seed.md` (generated block
+      `generated:meta` memuat `SeedSpec`). Tidak ada aksi lanjutan.
+      **Bukti:** `ls docs/kind/data/Seed.md` → ada; `grep -n '"Seed"' internal/genkinddocs/markdown.go`
+      → 1 hit; `head -8 docs/kind/data/Seed.md` menampilkan `Grup | data` +
+      `Spec struct | SeedSpec`.
 - [x] 3.6.5 DSN relatif di-anchor ke lokasi spec — path SQLite relative pada `--dsn` (dev/migrate/backup/restore/repl/archive) di-anchor ke project root yang di-derive dari `--spec` (bukan CWD), sehingga file db statis di mana pun perintah dijalankan; absolute & postgres tidak diubah. Lihat `docs_internal/plan/dsn-spec-anchored.md`. ✅ 2026-09-06 — `seed` menyusul 2026-09-23 (jalur ini sebelumnya terlewat: `make seed-kafe` meng-`cd` ke `examples/kafe` untuk menutupinya, yang berarti seed dari IDE/`make -C` menulis database lain).
 - [x] 3.6.4 `formspec summary rebuild <entity>` — rebuild summary Entity dari replay event durable (`02-core-extended.md` §6). ✅ 2026-09-15 (`docs_internal/changelog/2026-09-15-007-summary-rebuild-command.md`). Kontrak `sources`/`join_key`/`rebuild` ada di canonical `pkg/spec.EntitySpec` + divalidasi (`ValidateEntitySpec`); rencana rebuild di `internal/summary/` (resolve entity → sources → stream durabel, orphaned dilaporkan); replay di `internal/subscription/replay.go` (`ReplayingSummaryProjection`, consumer group per run sehingga cursor worker live tidak tersentuh, filter/transform sama dengan delivery live); CLI `formspec summary list|rebuild` (`cmd/formspec/summary.go`) dengan `--dry-run`/`--reset`/`--subscriber`/`--workspace`/`--json`. **Bug nyata ikut tertutup:** channel `reliable_event` ternyata no-op di runtime (jatuh ke `default:` + warning) padahal `ValidateEventDurability` mewajibkannya — sekarang lewat outbox (`internal/action/deliver.go`); tanpa ini proyeksi yang digerakkan event durabel (jantung kafe) tidak pernah terisi. Adopsi `examples/kafe`: `cafe-stock/stock-level`, `cafe-stock/menu-cost`, `cafe-loyalty/member-point` kini mendeklarasikan §6 (`strategy: full` — biaya rata-rata bergerak & saldo poin bergantung seluruh riwayat). Bukti: `summary list` menampilkan 3 proyeksi + orphaned; `validate --schema schemas` → 72 manifest, 0 problem; `check` → 0 error/0 warning; test `internal/summary` (8), `internal/subscription/replay_test.go` (7), `internal/action/reliable_event_test.go` (2) hijau. **Sisa:** (a) 3.6.6, (b) 3.6.7, (c) 3.6.8.
 - [ ] 3.6.6 Replay untuk proyeksi yang digerakkan `kind: Integrator` — integrator di-dispatch langsung saat delivery (`internal/integrator/dispatch.go`) dan **tidak** melewati stream durabel, jadi ia tidak punya riwayat untuk di-replay. Pilihan: (a) beri integrator jalur durabel (append ke stream + worker), atau (b) migrasikan proyeksi ke `kind: Subscription` `durability: durable`. Perlu keputusan desain dulu — jangan pilih salah satu tanpa itu.
@@ -1330,7 +1370,7 @@ tapi belum melakukan apa pun: CLI tampak mendukung, perilakunya tidak.
 - [x] 4.2.2 `renamed_from` field — two-phase removal (deprecate then drop) — `Field.RenamedFrom` ditambahkan + validasi (tidak boleh reserved/collide). Diff field-add tidak menandai kolom lama sebagai removal (rename ≠ drop+add). Drop dua-fase penuh tetap enhancement. ✅ 2026-08-17
 - [x] 4.2.3 Per-Entity migration in one transaction — fail = full rollback; data in `data` JSONB never rewritten by structural migration — `ApplyMigrations` kini wrap DDL + record per entity dalam satu `BeginTx`/`Commit` (rollback on error). ✅ 2026-08-17
 - [x] 4.2.4 `kind: Migration` — custom DDL (index, function, trigger, extension, materialized view); DML rejected at runtime — **DICABUT 2026-09-16** (changelog `2026-09-16-012`). Penggantinya `Entity.spec.persist.raw_ddl` (`pkg/spec/entity.go:2219`, `ValidateRawDDL`): DDL-only, `reason` wajib, `ddl` **atau** `ddl_by` per-dialek, forward-only, dan ikut jalur sync normal (`renderers/jsonb-persist/alter.go` langkah 6). **Dikoreksi 2026-09-26:** teks lama item ini masih menyatakan verb `formspec migrate plan|apply` "load `kind: Migration` manifests" — tidak lagi benar. ✅ 2026-08-17 → digantikan.
-- [x] 4.2.5 Data migration ber-versi — script backfill dengan run/rollback manual — **DICABUT 2026-09-16** bersama `kind: DataMigration` (changelog `2026-09-16-012`). Keputusan penggantinya **eksplisit: perbaikan data TIDAK punya permukaan spec.** `formspec migrate` menolak perubahan yang butuh perbaikan data **dengan hitungan** (`RefuseUndeclared`, `renderers/jsonb-persist/diff.go:563` — menyebut jumlah baris/grup duplikat + `Remedy`), operator merapikannya sekali lewat `formspec repl -f <script>` (verb nyata, `cmd/formspec/repl.go:56`), lalu apply diulang. Alasan pencabutan: script backfill ber-versi di dalam spec berarti *framework menjalankan SQL/DML yang ditulis tangan pada data produksi*, yang justru ingin dihindari. **Dikoreksi 2026-09-26:** teks lama item ini masih menyatakan `kind: DataMigration` + `formspec migrate data <name> run|rollback` ada. ✅ 2026-08-17 → digantikan.
+- [x] 4.2.5 Data migration ber-versi — script backfill dengan run/rollback manual — **DICABUT 2026-09-16** bersama `kind: DataMigration` (changelog `2026-09-16-012`). Keputusan penggantinya **eksplisit: perbaikan data TIDAK punya permukaan spec.** `formspec migrate` menolak perubahan yang butuh perbaikan data **dengan hitungan** (`RefuseUndeclared`, `renderers/jsonb-persist/diff.go:563` — menyebut jumlah baris/grup duplikat + `Remedy`), operator merapikannya sekali lewat `formspec repl -f <script>` (verb nyata, `cmd/formspec/repl.go:56`), lalu apply diulang. Alasan pencabutan: script backfill ber-versi di dalam spec berarti _framework menjalankan SQL/DML yang ditulis tangan pada data produksi_, yang justru ingin dihindari. **Dikoreksi 2026-09-26:** teks lama item ini masih menyatakan `kind: DataMigration` + `formspec migrate data <name> run|rollback` ada. ✅ 2026-08-17 → digantikan.
 - [x] 4.2.6 ✅ **2026-09-26: TIDAK BERLAKU LAGI (moot) — subjeknya sudah dicabut.** Item ini meminta `dml`+`ddl` dalam satu manifest `kind: Migration` dibungkus satu transaksi. Tetapi **`kind: Migration` (beserta `DataMigrationSpec`, `MigrationSpec`, `ValidateMigrationSpec`, `MigrationDialects`, `dml`, `ddl_by`, schema, kind doc, dan verb `formspec migrate data`) DICABUT SELURUHNYA** pada changelog `2026-09-16-012` — **satu hari setelah** 4.2.6 difile (`2026-09-16-008`). Terverifikasi di kode hari ini: `grep -rn '"dml"\|yaml:"dml\|DDLByDialect' --include='*.go'` → **0 hasil**; `kind: Migration` **bukan** anggota `KnownKinds` (`internal/manifest/loader.go:309`); `formspec migrate` hanya punya verb `plan|apply` (`cmd/formspec/migrate.go:51`); `docs/kind/` tidak punya halaman `Migration`; dan **terukur**: manifest `kind: Migration` pada spec uji ditolak `formspec validate` dengan `unknown kind "Migration" for spec version v1` + `read Migration.schema.json: no such file`. **Penggantinya tidak punya `dml` sama sekali:** DDL di luar bahasa spec hidup di `Entity.spec.persist.raw_ddl` (DDL-only, `reason` wajib, **forward-only**) dan ikut jalur sync normal — jadi ia dijalankan di dalam tx per-entity yang sama dengan DDL struktural (`alter.go` langkah 1–6 dibangun jadi satu string lalu dieksekusi dalam tx `applyPlans`), sehingga masalah "dua pernyataan tidak atomik" yang item ini khawatirkan tidak punya bentuk lagi. Perbaikan data sengaja **tidak** punya permukaan spec: `formspec migrate` menolak dengan hitungan, operator merapikan lewat `formspec repl -f <script>` (verb yang memang ada), lalu apply diulang. Tidak ada aksi lanjutan.
 
 ### 4.3 Entity extension
@@ -1588,15 +1628,15 @@ tapi belum melakukan apa pun: CLI tampak mendukung, perilakunya tidak.
 - [x] 5.13.5 `kind: Listing` — public catalog, no auth wrap, no row/bulk actions — `ListingRenderer` read-only (search + filter, tanpa create/row/bulk; klik baris → detail) + kind `Listing` end-to-end (spec, registry, bundle, route). Contoh `examples/storefront/`. Lihat `docs_internal/plan/landing-page.md` + changelog 2026-08-19-001. ✅ 2026-08-19
 - [⏸️] 5.13.6 **Wiring runtime `ApprovalInbox` zero-config belum ada — dan sesudah ditelusuri, gap-nya LEBIH DALAM dari teks aslinya.** ⚠️ **Diperjelas 2026-09-26:** teks di bawah menyebut "engine belum mengisi `title`/`display_fields` ke item inbox dari step". Pemeriksaan menunjukkan **tidak ada entity yang bisa dibaca sama sekali**:
 
-  | Bukti | Hasil |
-  | --- | --- |
-  | `ApprovalInboxRenderer` `APPROVAL_ENTITY_REFS` | mencari `formspec.core.approval` / `approval-task` / `workflow-task` |
-  | `grep -rn "workflow-task\|approval-task\|name: approval" --include='*.yaml'` | **0 hasil** di seluruh repo |
-  | `WorkflowApprovalRow` (`renderers/jsonb-persist/workflow_approval.go:21`) | punya `Entity`/`RecordID`/`FromState`/`ToState`/`WorkflowName`/`RequesterID` — **tidak ada** `title`/`subject`/`display_fields` |
-  | jalur HTTP ke `formspec_workflow_approval` | **tidak ada** — tabel itu bukan Entity, jadi tidak ada route yang mengeksposnya |
+  | Bukti                                                                        | Hasil                                                                                                                           |
+  | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+  | `ApprovalInboxRenderer` `APPROVAL_ENTITY_REFS`                               | mencari `formspec.core.approval` / `approval-task` / `workflow-task`                                                            |
+  | `grep -rn "workflow-task\|approval-task\|name: approval" --include='*.yaml'` | **0 hasil** di seluruh repo                                                                                                     |
+  | `WorkflowApprovalRow` (`renderers/jsonb-persist/workflow_approval.go:21`)    | punya `Entity`/`RecordID`/`FromState`/`ToState`/`WorkflowName`/`RequesterID` — **tidak ada** `title`/`subject`/`display_fields` |
+  | jalur HTTP ke `formspec_workflow_approval`                                   | **tidak ada** — tabel itu bukan Entity, jadi tidak ada route yang mengeksposnya                                                 |
 
   Jadi renderer-nya merender **"No approval source configured" secara permanen**, dan `item.title ?? item.subject ?? item.id` tidak pernah menerima dua yang pertama. Menambahkan `title` saja **tidak cukup**: yang belum diputuskan adalah **bagaimana baris `formspec_workflow_approval` menjadi sesuatu yang bisa dibaca klien** — (a) deklarasikan entity bawaan `formspec.core.workflow-task` yang memetakan tabel itu (lalu `title` = ringkasan step, `display_fields` dari record sumber), (b) endpoint khusus `/_ui/workflow/approvals` yang mengembalikan baris + ringkasan, atau (c) biarkan inbox hanya bekerja bila author mendeklarasikan entity approval sendiri (dan hapus daftar `APPROVAL_ENTITY_REFS` yang menyesatkan). Ini keputusan yang lebih besar dari "isi item dari step" — karena itu item tetap `⏸️`, bukan dikerjakan sebagian. Effort: medium (keputusan + implementasi salah satu dari tiga + test).
-      _(teks awal, dipertahankan sebagai jejak)_ Ditulis sebagai "**Sisa 5.3**" di catatan 2026-09-20 dan sebagai "**Sisa (dicatat)**" di kafe TODO 5.3, tanpa item pelacak (audit 2026-09-22). **Teramati:** `ApprovalInbox` yang tidak mendeklarasikan sumber mengambil dari langkah workflow yang menunggu, dan renderer sudah bisa menampilkan `item.title` — tetapi engine belum mengisi `title`/`display_fields` ke item inbox dari step, jadi inbox tampil tanpa label yang bisa ditindaklanjuti. Effort: medium (isi item dari step + test).
+  _(teks awal, dipertahankan sebagai jejak)_ Ditulis sebagai "**Sisa 5.3**" di catatan 2026-09-20 dan sebagai "**Sisa (dicatat)**" di kafe TODO 5.3, tanpa item pelacak (audit 2026-09-22). **Teramati:** `ApprovalInbox` yang tidak mendeklarasikan sumber mengambil dari langkah workflow yang menunggu, dan renderer sudah bisa menampilkan `item.title` — tetapi engine belum mengisi `title`/`display_fields` ke item inbox dari step, jadi inbox tampil tanpa label yang bisa ditindaklanjuti. Effort: medium (isi item dari step + test).
 
 ### 5.14 Derivation engine
 
@@ -1871,14 +1911,15 @@ mergeable ke project lain via `external/`/`spec/modules/`; middleware tetap Go.
 - [x] 6.5.8 Session persistence ke sessionStorage — access + refresh token dipersist ke `sessionStorage` (key `formspec-session`) sehingga browser refresh (F5) me-restore session tanpa login ulang; `boot` restore saat workspace cocok, `setSession`/`refreshSession` tulis, `clearSession`/`expireSession` clear. Changelog `2026-08-22-003`. ✅ 2026-08-22
 - [x] 6.5.9 **Layar pemilih konteks sesi — SEBAGIAN BESAR SUDAH LANDING tanpa item ini ditutup.** ✅ **Dikoreksi & ditutup 2026-09-26.** Teks item menyatakan tiga hal belum ada; **dua di antaranya sudah ada** sejak changelog `2026-09-25-010` dan tidak pernah tercatat di sini — kelas misinformasi yang sama dengan 4.2.4–4.2.6. Verifikasi per bagian:
 
-  | Bagian | Status (terverifikasi) |
-  | --- | --- |
-  | layar pemilih konteks | **ADA** — `shell/ContextPicker.tsx` (radiogroup, label `role · value`), 11 test di `ContextPicker.test.tsx` |
-  | penanganan 409 `CONTEXT_REQUIRED` | **ADA** — `LoginScreen.tsx:330` merender picker dari `choices`; `AuthFormRenderer` ikut; `stores/session.ts` menyimpan `pendingContext` sehingga refresh 409 tidak meng-expire sesi |
-  | persistensi pilihan terakhir | **ADA** — `lib/session-context.ts`, `localStorage formspec-context:<ws>:<app>`, prefill **tanpa** auto-submit (boundary tetap dinyatakan pemanggil, jawaban audit tetap sah) |
-  | **pengalih di header** | **BELUM** — `grep` di ketiga shell (`SideNav/TopNav/NoNav`) tidak menemukan pengalih konteks; yang ada hanya `ThemeSwitcher`. `SwitchContextScreen` (`App.tsx:436`) hidup sebagai **layar**, bukan pengalih di header |
+  | Bagian                            | Status (terverifikasi)                                                                                                                                                                                                |
+  | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | layar pemilih konteks             | **ADA** — `shell/ContextPicker.tsx` (radiogroup, label `role · value`), 11 test di `ContextPicker.test.tsx`                                                                                                           |
+  | penanganan 409 `CONTEXT_REQUIRED` | **ADA** — `LoginScreen.tsx:330` merender picker dari `choices`; `AuthFormRenderer` ikut; `stores/session.ts` menyimpan `pendingContext` sehingga refresh 409 tidak meng-expire sesi                                   |
+  | persistensi pilihan terakhir      | **ADA** — `lib/session-context.ts`, `localStorage formspec-context:<ws>:<app>`, prefill **tanpa** auto-submit (boundary tetap dinyatakan pemanggil, jawaban audit tetap sah)                                          |
+  | **pengalih di header**            | **BELUM** — `grep` di ketiga shell (`SideNav/TopNav/NoNav`) tidak menemukan pengalih konteks; yang ada hanya `ThemeSwitcher`. `SwitchContextScreen` (`App.tsx:436`) hidup sebagai **layar**, bukan pengalih di header |
 
   Jadi yang benar-benar tersisa adalah **satu** bagian, bukan tiga. Tidak ada aksi pada tiga yang pertama. Sisa pengalih header → **6.5.10 ⏸️** di bawah.
+
 - [⏸️] 6.5.10 **Pengalih konteks di header belum ada (sisa 6.5.9).** Konteks sesi saat ini hanya bisa dipilih saat **login** (`ContextPicker` di `LoginScreen`) atau lewat **layar** `SwitchContextScreen` (`App.tsx:436`) — tidak ada kontrol di chrome untuk berganti role/cabang **tanpa** meninggalkan halaman, yang merupakan inti janji "role × cabang" (kasir pindah cabang di tengah shift). **Teramati:** `grep -rn "ContextPicker\|switch" src/shell/{TopNavShell,SideNavShell,NoNavShell}.tsx` → hanya `ThemeSwitcher`; `SwitchContextScreen` dirender sebagai route, bukan di dalam shell. Effort: medium (kontrol di chrome + pemanggilan `POST /_ui/auth/switch` + refetch bundle; chrome composition sudah punya preseden `ThemeSwitcher` dan `AuthArea`).
 
 ### 6.6 Auth middleware pipeline
@@ -1985,15 +2026,16 @@ mergeable ke project lain via `external/`/`spec/modules/`; middleware tetap Go.
 - [x] 7.8.10 **`emit:` pada transisi tanpa `emits:` pada action = event tidak pernah dikirim (SENYAP).** Ditemukan 2026-09-22 saat kafe 10.7 (changelog `2026-09-22-014`). State machine membaca benar (`emit: on_po_received` pada transisi `submitted → received`), `formspec validate` **hijau**, dan subscription menunggu event yang **tidak pernah datang** — penerimaan barang tidak menghasilkan akuntansi apa pun, tanpa satu pun error atau log. Deklarasi `emits:` pada action-lah yang meneruskan event ke outbox. **Terukur:** tanpa `emits:` → outbox tidak punya baris `on_po_received`; dengan → baris masuk dan jurnal lahir. **Test pengunci:** `TestKafe_PurchaseReceivedCreatesJournal` (timeout saat `emits:` dihapus). **Sisa:** `formspec validate` belum menolak pasangan ini — lihat 7.8.11 ⏸️.
 - [⏸️] 7.8.11 **Validator belum memeriksa konsistensi `emit:` (transisi) ↔ `emits:` (action).** ⚠️ **Premis item ini DIKOREKSI 2026-09-26 oleh pembacaan kode: "`emit:` tanpa `emits:` = event tidak pernah dikirim" TIDAK selalu benar — ia bergantung pada jalur HTTP yang dipakai.** Ada **tiga** jalur, dan mereka tidak sepakat:
 
-  | Jalur | Sumber event | Perlu `emits:`? |
-  | --- | --- | --- |
-  | `PATCH /{id}` `{"status": …}` | `ResolveTransitionEmission` (`handler.go:1068`, `:1111`) | **tidak** |
-  | `POST /{id}/{action}` | `ResolveEmission(actionSpec.Emits)` (`handler.go:2181`) — transisi **tidak** dikonsultasi | **ya** |
-  | script `resource.save` | transisi bila state berubah, jika tidak `emits:` (if/else, `formspec.go:2283`) | tidak, bila state berubah |
+  | Jalur                         | Sumber event                                                                              | Perlu `emits:`?           |
+  | ----------------------------- | ----------------------------------------------------------------------------------------- | ------------------------- |
+  | `PATCH /{id}` `{"status": …}` | `ResolveTransitionEmission` (`handler.go:1068`, `:1111`)                                  | **tidak**                 |
+  | `POST /{id}/{action}`         | `ResolveEmission(actionSpec.Emits)` (`handler.go:2181`) — transisi **tidak** dikonsultasi | **ya**                    |
+  | script `resource.save`        | transisi bila state berubah, jika tidak `emits:` (if/else, `formspec.go:2283`)            | tidak, bila state berubah |
 
   **Konsekuensi konkret pada kafe (terukur dari manifest):** `order.confirm-payment` **tidak** punya `emits:`, sedangkan transisi `awaiting_payment → paid` punya `emit: on_paid`. Jadi perintah yang sama — "konfirmasi pembayaran" — **menerbitkan `on_paid` lewat PATCH** tetapi **tidak menerbitkan apa pun lewat `POST /{id}/confirm-payment`**, dan tidak ada yang memberitahukannya. Itu asimetri nyata, bukan "manifest kurang `emits:`": menambahkan `emits: on_paid` akan membuat jalur action bekerja, tetapi jalur PATCH tetap tidak membacanya, jadi keduanya masih tidak sepakat bila nilainya berbeda. `cafe-stock` tidak terkena karena `receive-goods`/`cancel-po` mendeklarasikan `emits:` **dan** transisinya `emit:` dengan nama sama (publish tunggal di ketiga jalur).
 
-  **Yang perlu diputuskan (sekarang lebih sempit):** pilih **satu** model, lalu buat ketiga jalur menaatinya. (a) `emit:` adalah otoritas dan jalur action juga harus membacanya (lalu `emits:` menjadi opsional/redundan — perlu aturan bila keduanya berbeda); (b) `emits:` adalah otoritas dan transisi hanya menyatakan *kenapa*, dengan PATCH menyintesis action spec dari `via:`; atau (c) keduanya wajib identik — inilah yang paling dekat dengan item ini semula, tetapi **tidak bisa** menjadi error polos karena kafe sendiri melanggarnya di jalur PATCH yang sudah jalan. Jadi pemeriksaan statis yang benar bukan "`emit:` tanpa `emits:` → error" melainkan "`via:` yang transisinya ber-`emit:` dan action-nya ber-`emits:` **berbeda nama** → error", plus **perbandingan perilaku per-jalur** agar (a)/(b)/(c) tidak berbeda diam-diam. **Bukti:** `grep -n 'emits:' examples/kafe/spec/modules/cafe-order/transaction/order/entity.yaml` → **0 hit**, padahal tiga transisi mendeklarasikan `emit:` (`on_paid`, `on_cancel`×2). Effort: medium (satu keputusan kontrak + penyelarasan tiga jalur + test per-jalur; bukan "satu cabang di `ValidateTransitionEmits`").
+  **Yang perlu diputuskan (sekarang lebih sempit):** pilih **satu** model, lalu buat ketiga jalur menaatinya. (a) `emit:` adalah otoritas dan jalur action juga harus membacanya (lalu `emits:` menjadi opsional/redundan — perlu aturan bila keduanya berbeda); (b) `emits:` adalah otoritas dan transisi hanya menyatakan _kenapa_, dengan PATCH menyintesis action spec dari `via:`; atau (c) keduanya wajib identik — inilah yang paling dekat dengan item ini semula, tetapi **tidak bisa** menjadi error polos karena kafe sendiri melanggarnya di jalur PATCH yang sudah jalan. Jadi pemeriksaan statis yang benar bukan "`emit:` tanpa `emits:` → error" melainkan "`via:` yang transisinya ber-`emit:` dan action-nya ber-`emits:` **berbeda nama** → error", plus **perbandingan perilaku per-jalur** agar (a)/(b)/(c) tidak berbeda diam-diam. **Bukti:** `grep -n 'emits:' examples/kafe/spec/modules/cafe-order/transaction/order/entity.yaml` → **0 hit**, padahal tiga transisi mendeklarasikan `emit:` (`on_paid`, `on_cancel`×2). Effort: medium (satu keputusan kontrak + penyelarasan tiga jalur + test per-jalur; bukan "satu cabang di `ValidateTransitionEmits`").
+
 - [x] 7.8.12 **Script `.star` adalah unit kompilasi sendiri — fungsi dari file lain gagal di RUNTIME, dan `validate` tidak bisa melihatnya.** Ditemukan 2026-09-22 saat kafe 10.7 (changelog `2026-09-22-014`). `journalize_purchase.star` memanggil `journalize_sale` yang didefinisikan di `journalize.star` → outbox worker mencatat `undefined: journalize_sale` dan meng-retry 5×, sementara `formspec validate` **hijau** (ia mengompilasi tiap file terpisah). **Diperbaiki** dengan membuat script itu mandiri. **Sisa:** tidak ada mekanisme berbagi fungsi lintas-script — lihat 7.8.13 ⏸️.
 - [x] 7.8.14 **Menu App bocor: link ke route yang bundle-nya tidak melayani.**
       Ditemukan 2026-09-22 saat kafe 10.10 (changelog `2026-09-22-015`). Menu App
@@ -2063,13 +2105,13 @@ Hash`) ikut terkirim, DAN bundle memuat seluruh module yang di-mount (13 entity
   → 0.
 
 - [x] 7.8.18 ✅ **2026-09-26: DIGABUNG ke 5.10.24 (duplikat) dan sudah ditutup di sana.**
-  Item ini melacak flake yang **sama** (`TestKafe_OnPaidCreatesBalancedJournal`) —
-  ditulis 2026-09-23 sebelum akarnya ditemukan, dengan hipotesis "worker outbox
-  poll 1s melewati jendela tunggu, naikkan batas tunggu". Hipotesis itu **tidak
-  benar dan berbahaya**: menaikkan timeout tidak akan menyembuhkan tanggal
-  hardcoded yang ditolak `BackdatePolicy` (temuan nyata), dan untuk balapan
-  `draft` vs `posted` ia hanya memperkecil peluang, bukan menghapusnya. Fix
-  sebenarnya ada di 5.10.24 (poll **status**). Lihat changelog `2026-09-26-002`.
+      Item ini melacak flake yang **sama** (`TestKafe_OnPaidCreatesBalancedJournal`) —
+      ditulis 2026-09-23 sebelum akarnya ditemukan, dengan hipotesis "worker outbox
+      poll 1s melewati jendela tunggu, naikkan batas tunggu". Hipotesis itu **tidak
+      benar dan berbahaya**: menaikkan timeout tidak akan menyembuhkan tanggal
+      hardcoded yang ditolak `BackdatePolicy` (temuan nyata), dan untuk balapan
+      `draft` vs `posted` ia hanya memperkecil peluang, bukan menghapusnya. Fix
+      sebenarnya ada di 5.10.24 (poll **status**). Lihat changelog `2026-09-26-002`.
 
 - [⏸️] 7.8.13 **Tidak ada cara berbagi kode antar-script Starlark, dan tidak ada peringatan untuk rujukan lintas-file.** 7.8.12 menutup satu kasus dengan menulis ulang script, tetapi polanya akan terulang: setiap module dengan dua aksi serupa (jurnal penjualan vs pembelian, dua guard keunikan) menghadapi pilihan antara meng-copy fungsi atau memaksakan satu file besar. Perlu keputusan: (a) dukung `load()` dengan allowlist path relatif spec, (b) file "lib" yang di-include saat kompilasi, atau (c) dokumentasikan duplikasi sebagai aturan. Apa pun pilihannya, validator sebaiknya memperingatkan pemanggilan nama yang tidak terdefinisi di file itu (analisis statis sederhana: nama yang di-define vs yang dipanggil). Effort: medium. **Teramati:** `grep "load(" examples/kafe/spec/modules/*/scripts/*.star` → 0, dan kegagalan 7.8.12 muncul sebagai retry outbox, bukan error saat authoring.
 - [x] 7.8.9 **`resource.save`/`update` dari script: gap-nya NYATA — dan lebih besar dari dugaan awalnya.** ✅ **2026-09-22** (changelog `2026-09-22-013`). Diperiksa dan diperbaiki:
@@ -2218,19 +2260,19 @@ Hash`) ikut terkirim, DAN bundle memuat seluruh module yang di-mount (13 entity
 ### 9.3 Code generation
 
 - [x] 9.4.1a **Kafe belum punya seeder bagan akun (`kind: Seed`)** — ✅
-  **2026-09-26: SUDAH ADA (stale).**
-  `examples/kafe/spec/modules/gl/seeds/chart-of-accounts.yaml` (kind `Seed`,
-  `metadata.name: gl-chart-of-accounts`) men-seed 10 akun lewat
-  `spec.entities[].records`, dan komentarnya menyebut item ini sebagai alasan
-  keberadaannya. **Cakupan diverifikasi terhadap konfigurasi, bukan terhadap
-  ingatan:** kesembilan kode yang di-resolve `journalize.star` semuanya ada —
-  `1-1000` kas, `4-1000` omzet, `2-2000` pajak, `2-1000` service charge,
-  `5-1000` diskon (semua dari `modules/gl/config/gl.yaml`
-  `gl_journal_account_*`), plus `1-2000` persediaan, `2-3000` utang dagang
-  (landed-cost/10.7), `3-1000` modal, `5-2000` HPP, `5-3000` beban operasional.
-  Jadi jalur dev/produksi tidak lagi bergantung pada pembuatan akun manual.
-  **Bukti:** `ls examples/kafe/spec/modules/gl/seeds/chart-of-accounts.yaml` →
-  ada; setiap `default:` di `gl.yaml:24–54` punya pasangan `code:` di seed.
+      **2026-09-26: SUDAH ADA (stale).**
+      `examples/kafe/spec/modules/gl/seeds/chart-of-accounts.yaml` (kind `Seed`,
+      `metadata.name: gl-chart-of-accounts`) men-seed 10 akun lewat
+      `spec.entities[].records`, dan komentarnya menyebut item ini sebagai alasan
+      keberadaannya. **Cakupan diverifikasi terhadap konfigurasi, bukan terhadap
+      ingatan:** kesembilan kode yang di-resolve `journalize.star` semuanya ada —
+      `1-1000` kas, `4-1000` omzet, `2-2000` pajak, `2-1000` service charge,
+      `5-1000` diskon (semua dari `modules/gl/config/gl.yaml`
+      `gl_journal_account_*`), plus `1-2000` persediaan, `2-3000` utang dagang
+      (landed-cost/10.7), `3-1000` modal, `5-2000` HPP, `5-3000` beban operasional.
+      Jadi jalur dev/produksi tidak lagi bergantung pada pembuatan akun manual.
+      **Bukti:** `ls examples/kafe/spec/modules/gl/seeds/chart-of-accounts.yaml` →
+      ada; setiap `default:` di `gl.yaml:24–54` punya pasangan `code:` di seed.
 - [ ] 9.3.1 `make generate` — generate TypeScript types from `pkg/spec/` → `renderers/web/src/generated/types.ts`
       **Status 2026-09-22**: `make generate` **masih stub** (`Makefile` mencetak pesan "not implemented yet"), dan target path-nya (`renderers/web/`) **sudah tidak ada** — frontend sekarang `renderers/react-shadcn/`. Yang nyata berjalan hari ini adalah `formspec generate` (per-entitas client dari manifest, `cmd/formspec/generate.go` — terverifikasi: `cafe` → 12 interface), tetapi itu **client codegen**, bukan "TS types dari `pkg/spec`" yang diminta item ini. Handler `formspec generate` juga menolak `--lang` selain `typescript`. Sebagian tujuan item ini (mirror TS tidak boleh drift dari Go) sudah ditutup oleh guard parity 9.3.2. **Sisa**: generator TS dari struct `pkg/spec` (atau hapus item ini bila mirror hand-written dianggap final) — perlu keputusan apakah mirror dipertahankan atau digantikan generated types. Effort: medium.
 - [x] 9.3.2 Validate generated types against manual `types/manifest.ts` — ✅ **2026-09-22 (sebagai parity guard, bukan migrasi).** `formspec generate` (9.3.1) **sudah ada** dan menghasilkan client per-entity (`cafe` → 12 interface, terverifikasi), tetapi ia men-generate `formspec-client.ts` yang **berbeda artefak** dari mirror hand-written `renderers/react-shadcn/src/types/manifest.ts` — jadi "validate generated vs manual" tidak bisa dijalankan apa-adanya. Yang dikerjakan: guard lintas-bahasa `pkg/spec/renderer_parity_test.go` yang mempin mirror TS ke sumber Go — `API_VERSION` vs `spec.APIVersion`, dan himpunan `KIND_*` vs `spec.AllKinds()` (dua arah). **Menemukan & menutup drift nyata:** `API_VERSION` masih `"formspec.dev/v1alpha1"` (nilai pra-stabil yang **ditolak** `schemaregistry.ParseVersion`, sudah diperbaiki jadi `formspec.dev/v1` di 8.2) → kini `formspec.dev/v1`; phantom `KIND_MIGRATION` (buat `kind: Migration` yang tidak pernah ada di katalog engine) dihapus; 9 kind hilang ditambahkan (Integrator, KindDefinition, Mockup, Renderer, VisualSpecKind, PersistBackend, Workspace, Calendar, ApprovalInbox, NotificationCenter); `ResourceKind` union ikut diselaraskan. Ikut ditemukan: `spec.IsValidKind` **tidak pernah mengecek `KindWorkspace`** padahal engine menerimanya (`internal/manifest.KnownKinds`) — diperbaiki + dipin oleh `TestIsValidKind_MatchesKnownKinds`. **Bukti**: `TestTSManifest_APIVersionMatchesGo` & `TestTSManifest_KindsCoverGoCatalog` (gagal lebih dulu, lalu hijau), `TestIsValidKind_MatchesKnownKinds`, `TestKnownKinds_ContainsWorkspace`; `go test ./...` hijau; `tsc` bersih; `vitest` 288. **Sisa** (bukan bagian item ini): mengganti mirror hand-written dengan tipe yang di-generate dari `pkg/spec` → item **9.3.1 ⏸️**.

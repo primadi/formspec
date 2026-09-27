@@ -538,9 +538,23 @@ func (b *RouterBuilder) BuildHTTP() http.Handler {
 					}
 					b.registerRouteWithPattern(r, rd, pattern)
 				}
-				// File upload/download (todo 7.17.1) — generic per-entity routes;
-				// the handler resolves module/entity from the path and enforces
+				// File upload/download (todo 7.17.1) — generic
+				// per-entity routes; the handler resolves
+				// module/entity from the path and enforces
 				// permission dynamically.
+				//
+				// Registered AFTER the custom-action loop above,
+				// and that order is load-bearing: this pattern
+				// (`/{id}/{field}`) has the same shape as a
+				// custom action path (`/{id}/{action}`), so
+				// whichever registers first wins the match. With
+				// the file route first, `POST .../{id}/post`
+				// reached the FILE handler and answered
+				// "no such file field or action: post" — measured
+				// on the gl/journal-entry `post` transition. The
+				// same shadowing is why submit/cancel/amend are
+				// registered as standard routes rather than
+				// custom ones (see generator.go UIRoutesForEntity).
 				r.Post("/{module}/{entity}/{id}/{field}", b.factory.HandleFileUpload())
 				r.Get("/{module}/{entity}/{id}/{field}", b.factory.HandleFileDownload())
 				// Download-link issue (todo 7.17.6) + chunked upload (7.17.5).
@@ -758,16 +772,16 @@ func (b *RouterBuilder) registerRoute(r chi.Router, rd RouteDescriptor) {
 			break
 		}
 
-		// Find the action by name
-		var actionSpec *spec.Action
-		for i, a := range specInfo.EntitySpec.Actions {
-			if a.Name == rd.Action {
-				actionSpec = &specInfo.EntitySpec.Actions[i]
-				break
-			}
-		}
-
-		if actionSpec == nil {
+		// Find the action by name — over the UNION of declared actions and
+		// state-machine transitions (plan via-sebagai-action-penuh, L3). A
+		// transition that declares `impl` is an action with a route, and it may
+		// be the ONLY place it is declared; reading `Actions` alone would leave
+		// the route registered but its handler answering "action not found".
+		//
+		// Resolved through the entity registry so the router, `resource.call`
+		// and the route generator all agree on one precedence rule.
+		actionSpec, ok := b.registry.GetActionSpec(rd.Module, rd.Entity, rd.Action)
+		if !ok || actionSpec == nil {
 			handler = func(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusNotFound, "NOT_FOUND",
 					"action not found: "+rd.Action)
@@ -793,14 +807,15 @@ func (b *RouterBuilder) registerRoute(r chi.Router, rd RouteDescriptor) {
 			}
 			break
 		}
-		var actionSpec *spec.Action
-		for i, a := range specInfo.EntitySpec.Actions {
-			if a.Name == rd.Action {
-				actionSpec = &specInfo.EntitySpec.Actions[i]
-				break
-			}
-		}
-		if actionSpec == nil {
+		// Resolve over the union (declared actions ∪ transition `via`),
+		// not `Actions` alone. A transition may be the ONLY place its
+		// `via` is declared, while the route generator emits a route for
+		// every union member carrying `impl`. Scanning `Actions` here left
+		// such a route unregistered (or registered with a handler that
+		// 404s) — measured as `no such file field or action: post` on
+		// the gl/journal-entry `post` transition.
+		actionSpec, ok := b.registry.GetActionSpec(rd.Module, rd.Entity, rd.Action)
+		if !ok || actionSpec == nil {
 			handler = func(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusNotFound, "NOT_FOUND",
 					"action not found: "+rd.Action)
@@ -901,14 +916,15 @@ func (b *RouterBuilder) registerRouteWithPattern(r chi.Router, rd RouteDescripto
 		if !ok || specInfo.EntitySpec == nil {
 			return
 		}
-		var actionSpec *spec.Action
-		for i, a := range specInfo.EntitySpec.Actions {
-			if a.Name == rd.Action {
-				actionSpec = &specInfo.EntitySpec.Actions[i]
-				break
-			}
-		}
-		if actionSpec == nil {
+		// Resolve over the union (declared actions ∪ transition `via`),
+		// not `Actions` alone. A transition may be the ONLY place its
+		// `via` is declared, while the route generator emits a route for
+		// every union member carrying `impl`. Scanning `Actions` here left
+		// such a route unregistered (or registered with a handler that
+		// 404s) — measured as `no such file field or action: post` on
+		// the gl/journal-entry `post` transition.
+		actionSpec, ok := b.registry.GetActionSpec(rd.Module, rd.Entity, rd.Action)
+		if !ok || actionSpec == nil {
 			return
 		}
 		specDir := ""
@@ -921,14 +937,15 @@ func (b *RouterBuilder) registerRouteWithPattern(r chi.Router, rd RouteDescripto
 		if !ok || specInfo.EntitySpec == nil {
 			return
 		}
-		var actionSpec *spec.Action
-		for i, a := range specInfo.EntitySpec.Actions {
-			if a.Name == rd.Action {
-				actionSpec = &specInfo.EntitySpec.Actions[i]
-				break
-			}
-		}
-		if actionSpec == nil {
+		// Resolve over the union (declared actions ∪ transition `via`),
+		// not `Actions` alone. A transition may be the ONLY place its
+		// `via` is declared, while the route generator emits a route for
+		// every union member carrying `impl`. Scanning `Actions` here left
+		// such a route unregistered (or registered with a handler that
+		// 404s) — measured as `no such file field or action: post` on
+		// the gl/journal-entry `post` transition.
+		actionSpec, ok := b.registry.GetActionSpec(rd.Module, rd.Entity, rd.Action)
+		if !ok || actionSpec == nil {
 			return
 		}
 		handler = b.factory.HandlePrepare(rd.Module, rd.Entity, rd.Action, *actionSpec)

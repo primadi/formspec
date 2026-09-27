@@ -10,11 +10,31 @@
 //
 // `characteristic: reference` → no New/Delete buttons (Configuration pattern)
 
-import type { EntitySchema, Lifecycle } from "@/types/manifest"
+import type {
+  EntitySchema,
+  Lifecycle as LifecyclePattern,
+} from "@/types/manifest"
+
+/** One state-machine transition the caller can trigger from the current state. */
+export interface AvailableTransition {
+  /**
+   * The action name (`via`). EMPTY for a transition declared without `via` —
+   * those carry no action, no route and no button (owner decision C,
+   * docs_internal/plan/via-sebagai-action-penuh.md), so they are filtered out
+   * before reaching the renderer. Kept on the type because the target state is
+   * still meaningful to callers that drive the transition directly.
+   */
+  action: string
+  /** Target state (`to`) — what a PATCH must set when there is no action route. */
+  to: string
+  label: string
+  style?: string
+  confirm?: string
+}
 
 export interface LifecycleActions {
   /** The primary action type */
-  pattern: Lifecycle
+  pattern: LifecyclePattern
   /** Whether to show a Save / Save Draft button */
   hasSave: boolean
   /** Whether to show a Submit button */
@@ -75,16 +95,24 @@ export function getLifecycle(entity: EntitySchema): LifecycleActions {
 
 /**
  * Get state machine transitions available from the current state.
- * Filters transitions that the caller has permission for.
+ *
+ * Transitions declared WITHOUT `via` are excluded (owner decision C): they have
+ * no action, so there is no route to POST and no button to label. Rely on an
+ * explicit filter rather than the accident that `canDoEntityAction(me, entity,
+ * "")` happens to be false — those transitions were hidden for the wrong
+ * reason, and the same accident left duplicate empty React keys behind.
+ *
+ * `label` prefers `ui.button_label`, then the transition's own `description`,
+ * then the humanised `via`.
  */
 export function getAvailableTransitions(
   entity: EntitySchema,
   currentState: string,
-): Array<{ action: string; to: string; label: string; style?: string; confirm?: string }> {
+): AvailableTransition[] {
   if (!entity.state_machine) return []
 
-  const transitions = entity.state_machine.transitions.filter((t) =>
-    t.from.includes(currentState) || t.from.includes("*"),
+  const transitions = entity.state_machine.transitions.filter(
+    (t) => t.via && (t.from.includes(currentState) || t.from.includes("*")),
   )
 
   return transitions.map((t) => {
@@ -92,7 +120,10 @@ export function getAvailableTransitions(
     return {
       action: t.via,
       to: t.to,
-      label: action?.ui?.button_label ?? t.via.charAt(0).toUpperCase() + t.via.slice(1),
+      label:
+        action?.ui?.button_label ??
+        t.description ??
+        t.via.charAt(0).toUpperCase() + t.via.slice(1),
       style: action?.ui?.style,
       confirm: action?.ui?.confirm,
     }

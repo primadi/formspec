@@ -17,6 +17,7 @@ import (
 	entityengine "github.com/primadi/formspec/internal/entity"
 	"github.com/primadi/formspec/internal/job"
 	"github.com/primadi/formspec/internal/observability"
+	"github.com/primadi/formspec/internal/permission"
 	"github.com/primadi/formspec/internal/service"
 	"github.com/primadi/formspec/internal/validation"
 	"github.com/primadi/formspec/internal/webhook"
@@ -1023,6 +1024,38 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 		// covering four origin states) was never consulted: the PATCH went
 		// straight to the target state and the approval requirement silently
 		// did not exist.
+		// Per-transition gate (10.44). `PATCH` is the ONLY path a transition
+		// without an `impl` can take (a `/{id}/{action}` route exists solely for
+		// impl actions), and it is authorized by `{module}.{plural}.update` —
+		// ONE permission for every transition of the entity. So a state machine
+		// that says "available -> not_available is admin-only" was honored
+		// nowhere: any caller holding `update` could run every transition.
+		//
+		// The gate cannot live in `guard.expression` instead: FormSpecExpr
+		// excludes identity/permission by design (08-formspec-expr.md §3), so
+		// `user.roles`/`has(...)` is not evaluable there.
+		//
+		// Fail-safe and additive: only a transition that DECLARES
+		// require_permission is checked, so every existing manifest behaves
+		// exactly as before.
+		if entitySpec != nil && entitySpec.StateMachine != nil {
+			sm := entitySpec.StateMachine
+			fromState := preUpdateState
+			toState := stateFieldValue(sm, merged)
+			if fromState != "" && toState != "" && fromState != toState {
+				if trans := entityengine.NewStateMachineEngine().FindTransitionByStates(entitySpec, fromState, toState); trans != nil {
+					if required := spec.TransitionPermission(*trans); required != "" {
+						qualified := permission.AutoPrefixPermission(required, module)
+						identity := IdentityFromContext(ctx)
+						if identity == nil || !identity.HasPermission(qualified) {
+							writeError(w, http.StatusForbidden, "FORBIDDEN",
+								"missing permission: "+qualified+" (required for transition "+fromState+" -> "+toState+")")
+							return
+						}
+					}
+				}
+			}
+		}
 		if entitySpec != nil && entitySpec.StateMachine != nil && f.wfRegistry != nil && f.wfApprovals != nil {
 			sm := entitySpec.StateMachine
 			fromState := preUpdateState

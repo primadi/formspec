@@ -31,19 +31,20 @@ Slug **tetap** menjadi workspace ID (tanpa mapping UUID) agar data existing
 
 ## File yang Diubah/Dibuat
 
-| File                                                     | Aksi                                                                                         |
-| -------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `pkg/spec/spec.go`                                       | Tambah `KindWorkspace Kind = "Workspace"`                                                    |
-| `pkg/spec/workspace.go`                                  | **Baru** — `WorkspaceSpec`, `ValidateWorkspaceSpec`                                          |
-| `internal/manifest/loader.go`                            | `KnownKinds` + branch validasi `Workspace`                                                   |
-| `internal/genjsonschema/kinds.go`                        | Entry `WorkspaceSpec`; `make generate-schema`                                                |
-| `internal/api/middleware.go`                             | `WorkspaceMiddleware` resolve via resolver; unknown → 404                                    |
-| `internal/api/handler.go`                                | `workspaceFromContext` default → `"default"`                                                 |
-| `internal/resource/formspec.go`                          | Kumpulkan manifest Workspace, wire `SetWorkspaceResolver` (New + ReloadSpec), seed `default` |
-| `cmd/formspec/workspace.go`                              | **Baru** — `workspace create/list/delete`                                                    |
-| `cmd/formspec/main.go`                                   | Wire verb `workspace`                                                                        |
-| `cmd/formspec/dev.go`, `logs.go`, `resource/formspec.go` | Default `"demo"` → `"default"`                                                               |
-| `examples/cafe/spec/workspaces/cafe-workspaces.yaml`     | **Baru** — seed `default` + `cafe`                                                           |
+| File                                                     | Aksi                                                                                                                                            |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pkg/spec/spec.go`                                       | Tambah `KindWorkspace Kind = "Workspace"`                                                                                                       |
+| `pkg/spec/workspace.go`                                  | **Baru** — `WorkspaceSpec`, `ValidateWorkspaceSpec`                                                                                             |
+| `internal/manifest/loader.go`                            | `KnownKinds` + branch validasi `Workspace`                                                                                                      |
+| `internal/genjsonschema/kinds.go`                        | Entry `WorkspaceSpec`; `make generate-schema`                                                                                                   |
+| `internal/api/middleware.go`                             | `WorkspaceMiddleware` resolve via resolver; unknown → 404                                                                                       |
+| `internal/api/handler.go`                                | `workspaceFromContext` default → `"default"`                                                                                                    |
+| `internal/resource/formspec.go`                          | Kumpulkan manifest Workspace, wire `SetWorkspaceResolver` (New + ReloadSpec), seed `default`                                                    |
+| `cmd/formspec/workspace.go`                              | **Baru** — `workspace create/list/delete`                                                                                                       |
+| `cmd/formspec/main.go`                                   | Wire verb `workspace`                                                                                                                           |
+| `cmd/formspec/dev.go`, `logs.go`, `resource/formspec.go` | Default `"demo"` → `"default"`                                                                                                                  |
+| `renderers/react-shadcn/vite.config.ts`                  | `server.proxy` → key RegExp `^/[a-z0-9-]+/_ui\|api/v1` (paritas dengan `isWorkspaceAPIPath`; lihat plan `dev-ui-vite-proxy-multi-workspace.md`) |
+| `examples/cafe/spec/workspaces/cafe-workspaces.yaml`     | **Baru** — seed `default` + `cafe`                                                                                                              |
 
 ## Dependensi Antar Task
 

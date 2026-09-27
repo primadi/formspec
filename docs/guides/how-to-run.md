@@ -249,17 +249,35 @@ Vite perlu proxy API calls ke backend. Konfigurasi ada di `renderers/react-shadc
 ```typescript
 server: {
   proxy: {
-    '/default/api/v1': {
+    // Kunci yang diawali "^" diperlakukan Vite sebagai RegExp. Wajib, karena
+    // SPA berjalan di workspace apa pun yang disebut URL — setiap API call-nya
+    // `/{ws}/_ui/...` atau `/{ws}/api/v1/...`, bukan selalu `default`.
+    '^/[a-z0-9-]+/api/v1': {
       target: 'http://localhost:8080',
       changeOrigin: true,
+      ws: true,
+    },
+    '^/[a-z0-9-]+/_ui/': {
+      target: 'http://localhost:8080',
+      changeOrigin: true,
+      ws: true,
     },
   },
 },
 ```
 
+`[a-z0-9-]+` adalah charset slug workspace; ancor `^` menjaga `_ui`/`api` hanya
+cocok sebagai segmen **pertama** setelah slug — sama dengan predikat Go
+`isWorkspaceAPIPath` (`cmd/formspec/dev.go`) yang memegang kontrak yang sama
+ketika SPA disajikan lewat `:8080` (`--dev-ui`). `ws: true` wajib untuk realtime:
+browser membuka `/{ws}/_ui/_ws`, dan tanpa itu upgrade WebSocket menggantung.
+
 Jika backend di port berbeda, sesuaikan `target`.
 
 ### Akses
+
+Ganti `default` dengan slug workspace yang ingin dibuka (mis. `kafe`) — proxy
+meneruskan setiap slug, jadi tidak perlu mengubah `vite.config.ts` per workspace.
 
 | URL                                                                | Keterangan                                    |
 | ------------------------------------------------------------------ | --------------------------------------------- |

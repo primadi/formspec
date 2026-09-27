@@ -57,7 +57,10 @@ spec:
             - { page: "menu-item-page", actions: [{ name: list }, { name: view }] }
             - { page: "menu-item-price-page", actions: [{ name: list }, { name: view }] }
             - { page: "menu-category-page", actions: [{ name: list }, { name: view }] }
-            - { page: "dining-table-page", actions: [{ name: list }, { name: view }] }
+            # Langkah 5 alur meja: kasir menutup meja. Konvensi repo: transisi
+            # state digerbangi `update` (persis `shift-page` → `close-shift`),
+            # bukan permission action sendiri — jadi `update` yang diperlukan.
+            - { page: "dining-table-page", actions: [{ name: list }, { name: view }, { name: update }, { name: reserve }, { name: release }] }
             # Pelanggan & loyalitas: read-only — kasir mencari member lewat
             # nomor HP dan menukar poin di meja kasir. WAJIB ada begitu menu
             # App menampilkan "Pelanggan"/"Loyalitas": grant `{entity}-page`
@@ -101,7 +104,11 @@ spec:
           grants:
             - { page: "order-page", actions: [{ name: list }, { name: view }, { name: update }] }
             - { page: "menu-item-page", actions: [{ name: list }, { name: view }] }
-            - { page: "dining-table-page", actions: [{ name: list }, { name: view }] }
+            # Pelayan yang menandai pesanan tersaji, jadi ia yang menggerakkan
+            # meja `occupied → served` (dan kembali `occupied` bila tamu
+            # menambah pesanan) — keduanya lewat transisi, yang digerbangi
+            # `update`.
+            - { page: "dining-table-page", actions: [{ name: list }, { name: view }, { name: update }, { name: mark-table-served }] }
             # Sama seperti kasir: menu App menampilkan Pelanggan/Loyalitas,
             # jadi grant-nya harus ada — kalau tidak, link-nya mati.
             - { page: "member-page", actions: [{ name: list }, { name: view }] }
@@ -156,7 +163,7 @@ spec:
             - { page: "member-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }] }
             - { page: "point-entry-page", actions: [{ name: list }, { name: view }] }
             - { page: "member-point-page", actions: [{ name: list }, { name: view }] }
-            - { page: "dining-table-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }] }
+            - { page: "dining-table-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }, { name: mark-not-available }, { name: mark-available }] }
             - { page: "promo-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }] }
             - { page: "ingredient-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }] }
             - { page: "recipe-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }] }

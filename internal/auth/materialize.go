@@ -171,7 +171,15 @@ func (m *Materializer) entityFootprint(module, entityName string) ([]FootprintAc
 	}
 
 	// Custom actions (non-reserved) with their own permission strings.
-	for _, a := range es.Actions {
+	//
+	// Read the UNION (declared actions ∪ transition `via`), not `es.Actions`
+	// alone (plan docs_internal/plan/via-sebagai-action-penuh.md, L5). A grant
+	// names an ACTION, and since L3 a transition's `via` IS an action; once the
+	// duplicated `actions:` entry is removed (L4), reading only `es.Actions`
+	// makes the grant EDITOR stop offering the transition — measured: dining-table
+	// kept `reserve`/`release` in `authorized_actions` only while the duplicate
+	// `actions:` block existed, and lost them the moment it was removed.
+	for _, a := range es.ActionSources() {
 		if a.Disabled || spec.IsReservedAction(a.Name) {
 			continue
 		}

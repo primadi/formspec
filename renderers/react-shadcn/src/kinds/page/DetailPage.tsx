@@ -19,7 +19,7 @@ import { canDoEntityAction } from "@/engine/permissions"
 import { resolveEntityRef } from "@/engine/entityRef"
 import { deriveDetailFields, entityFieldLabel } from "@/engine/derive"
 import { getLifecycle, getAvailableTransitions } from "@/engine/lifecycle"
-import { apiGet } from "@/lib/api"
+import { apiGet, apiPatch } from "@/lib/api"
 import { titleCase } from "@/lib/utils"
 import { createFormatter, moneyAmount, type Formatter } from "@/lib/format"
 import { isImageFile } from "@/lib/media"
@@ -74,7 +74,10 @@ export default function DetailPage({ entity }: DetailPageProps) {
           `${entity.module}/${entity.name}/${encodeURIComponent(id ?? "")}`,
         )
         setRecord(data)
-        setRouteIdentity(location.pathname, getEntityRouteIdentifier(entity, data))
+        setRouteIdentity(
+          location.pathname,
+          getEntityRouteIdentifier(entity, data),
+        )
       } catch (err) {
         toast.error("Failed to load record")
         navigate(surfacePath(entity.module, entity.plural))
@@ -83,7 +86,15 @@ export default function DetailPage({ entity }: DetailPageProps) {
       }
     }
     loadRecord()
-  }, [id, entity, getClient, navigate, workspace, location.pathname, setRouteIdentity])
+  }, [
+    id,
+    entity,
+    getClient,
+    navigate,
+    workspace,
+    location.pathname,
+    setRouteIdentity,
+  ])
 
   // All entity schemas from the meta bundle — used to resolve relation display fields
   // Select the raw value (stable reference) and fall back outside the selector
@@ -129,15 +140,52 @@ export default function DetailPage({ entity }: DetailPageProps) {
     setTransitioning(action)
     try {
       const client = getClient()
-      await client.post(
-        `${entity.module}/${entity.name}/${encodeURIComponent(id ?? "")}/${action}`,
-      )
+      const path = `${entity.module}/${entity.name}/${encodeURIComponent(id ?? "")}`
+
+      // How a transition is invoked depends on whether its action has an
+      // `impl`, and the bundle cannot tell us that directly — so we try the
+      // action route first and fall back to setting the state field.
+      //
+      // `POST .../{id}/{action}` only exists for actions WITH an impl
+      // (internal/api/generator.go skips `Impl == nil`). A transition that only
+      // names a `via` has no route of its own: the PATCH path is what applies
+      // it, matching the transition by (from, to). Posting anyway answered
+      // 404 `no such file field or action: reserve` — the button existed, the
+      // click could never work.
+      // Does this transition have its own action route?
+      //
+      // The bundle answers that directly via `has_route` (derived server-side
+      // from `Impl != nil`, mirroring internal/api/generator.go). Only an
+      // action with an `impl` gets `POST /{entity}/{id}/{action}`; a transition
+      // that merely names a `via` has none, and the PATCH path is what applies
+      // it (the server matches by (from, to)).
+      //
+      // When the flag is absent — an older server — fall back to probing the
+      // route, because guessing is exactly what this flag exists to remove.
+      const declared = entity.actions.find((a) => a.name === action)
+      const useActionRoute = declared?.has_route ?? declared !== undefined
+
+      if (useActionRoute) {
+        await client.post(`${path}/${action}`)
+      } else {
+        const target = transition?.to
+        const field = entity.state_machine?.field
+        if (!target || !field) {
+          throw new Error(
+            `Cannot apply transition "${action}": the bundle carries no target state for it`,
+          )
+        }
+        await apiPatch(
+          client,
+          path,
+          { [field]: target },
+          record?.version as number,
+        )
+      }
+
       toast.success("State updated")
       // Reload
-      const data = await apiGet<Record<string, unknown>>(
-        client,
-        `${entity.module}/${entity.name}/${encodeURIComponent(id ?? "")}`,
-      )
+      const data = await apiGet<Record<string, unknown>>(client, path)
       setRecord(data)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Transition failed")

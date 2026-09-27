@@ -1546,6 +1546,25 @@ func ValidateEntitySpec(d *EntitySpec) error {
 		return err
 	}
 
+	// Per-transition gate (10.44): a `require_permission` that names neither
+	// the `via` action's own required_permission nor any permission this
+	// entity registers is a typo. Rejecting it is the honest answer: nobody
+	// ever holds an unregistered permission, so enforcing it would deny the
+	// transition forever, and ignoring it would silently drop the gate the
+	// author asked for (the failure mode this contract exists to remove).
+	if err := ValidateTransitionPermissions(d); err != nil {
+		return err
+	}
+
+	// A `via` that also has an `actions:` entry is a declaration with two
+	// homes. L3 made the transition a full action source, so the entry is
+	// usually a leftover — but NOT always, and rejecting it blindly would
+	// widen authorization for real entities (plan
+	// docs_internal/plan/l4-validator-anti-duplikat.md).
+	if err := ValidateActionTransitionDuplication(d); err != nil {
+		return err
+	}
+
 	// Summary projection contract (Core Extended §6): if a summary entity
 	// declares a rebuild plan, it must name its sources and provide a valid
 	// strategy. The framework may also accept summary entities without explicit
@@ -1719,6 +1738,82 @@ type TransitionDecl struct {
 	To     string     `yaml:"to" json:"to"`
 	Action string     `yaml:"via" json:"via"`
 	Guard  *GuardDecl `yaml:"guard,omitempty" json:"guard,omitempty"`
+	// RequirePermission gates this transition on a permission the CALLER must
+	// hold — the per-transition gate that `via` alone cannot express.
+	//
+	// It exists because a transition reached through `PATCH` is authorized by
+	// `{module}.{plural}.update` — ONE permission for every transition of the
+	// entity. So a state machine could declare `available -> not_available`
+	// ("admin only") and `available -> reserved` ("cashier only"), and a
+	// cashier holding `update` could run BOTH. `TransitionDecl` had no place
+	// for a gate, and `guard.expression` cannot stand in: FormSpecExpr
+	// deliberately excludes identity and permission
+	// (docs/spec/frontend/08-formspec-expr.md §3), so `user.roles`/`has(...)`
+	// is not evaluable there.
+	//
+	// Additive and fail-safe:
+	//   - "" → no gate; the transition is authorized by `update` exactly as
+	//     before (`require_permission` is new, so no manifest declares it yet);
+	//   - set → enforced on the PATCH path, independent of whether the `via`
+	//     action declares the same permission — an action without an `impl` has
+	//     no route of its own, which is exactly why the gate lives here;
+	//   - set to a name this entity registers nothing for → FAILS manifest
+	//     validation (ValidateTransitionPermissions), because a permission
+	//     nobody is granted would lock the transition forever, and silently
+	//     dropping the gate is the failure mode this field removes.
+	// @schema {example: "dining-tables.release", description: "Permission the caller must hold to run this transition (own-module prefix may be omitted — same convention as Action.required_permission)."}
+	RequirePermission string `yaml:"require_permission,omitempty" json:"require_permission,omitempty"`
+	// Description documents the transition, and doubles as the button label when
+	// no `ui.button_label` overrides it. It exists so a transition can be
+	// described on its own — `via` is a NAME, not a reference (a transition with
+	// no matching `actions:` entry is legal), so without this field a transition
+	// could only be labelled by declaring a whole action for it.
+	// @schema {example: "Semua pesanan meja sudah disajikan", description: "Deskripsi transisi; dipakai sebagai label tombol bila `ui.button_label` tidak ada."}
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+	// Impl makes this transition an ACTION WITH A ROUTE, exactly like a declared
+	// custom action: `POST /_ui/entity/{module}/{entity}/{id}/{via}`. Without it
+	// the transition is applied by writing the status field (PATCH) or by a
+	// script/subscription, and has no endpoint of its own.
+	//
+	// It exists so `via` can be the ONE place a transition is declared (plan
+	// docs_internal/plan/via-sebagai-action-penuh.md, L3): before it, an action
+	// carrying `impl` had to be duplicated under `actions:` for the transition
+	// to get a route — the duplication this plan removes. Nothing else about the
+	// transition changes: the state machine guard still validates the (from, to)
+	// move, and `require_permission` still gates it on the PATCH path.
+	Impl *ImplDecl `yaml:"impl,omitempty" json:"impl,omitempty"`
+	// Audit records this transition in the business audit trail. Meaningful only
+	// with `impl` (the action pipeline is what writes the entry).
+	Audit bool `yaml:"audit,omitempty" json:"audit,omitempty"`
+	// Emits publishes an event when this transition fires. Distinct from
+	// `emit` below: `emits` is the ACTION-side declaration (resolved against
+	// declared events when the action runs), `emit` is the TRANSITION-side link
+	// resolved when the state actually crosses (S13).
+	Emits string `yaml:"emits,omitempty" json:"emits,omitempty"`
+	// Idempotent / IdempotencyKey apply to a transition that has an `impl` and
+	// is invoked through its route (two-step /prepare + submit, §2.7).
+	Idempotent     bool             `yaml:"idempotent,omitempty" json:"idempotent,omitempty"`
+	IdempotencyKey *IdempotencyDecl `yaml:"idempotency_key,omitempty" json:"idempotency_key,omitempty"`
+	// Conditions gate the transition ACTION before it runs (e.g. a required
+	// reason). Evaluated by the action pipeline, so meaningful with `impl`.
+	Conditions []ConditionDecl `yaml:"conditions,omitempty" json:"conditions,omitempty"`
+	// UI carries the button hints for this transition (label, style, icon,
+	// confirm). Read by the renderer for transition buttons.
+	UI *ActionUIHint `yaml:"ui,omitempty" json:"ui,omitempty"`
+	// Uses / Params / Expose / RateLimit complete the "via is a full action"
+	// promise (plan L1). Without them, deleting the duplicated `actions:` entry
+	// for a transition would silently DROP that configuration — the migration
+	// would look like a cleanup while removing a consent footprint (`uses`) or
+	// an input contract (`params`).
+	//
+	// Measured need (2026-09-27): of 83 duplicated declarations in the repo, 76
+	// carried `required_permission` (which moves to `require_permission`), 11
+	// carried `uses`, and 2 carried `params`. Deleting those without these
+	// fields would have been lossy, not lossless.
+	Uses      *UsesDecl      `yaml:"uses,omitempty" json:"uses,omitempty"`
+	Params    *ParamsDecl    `yaml:"params,omitempty" json:"params,omitempty"`
+	Expose    []string       `yaml:"expose,omitempty" json:"expose,omitempty"`
+	RateLimit *RateLimitSpec `yaml:"rate_limit,omitempty" json:"rate_limit,omitempty"`
 	// Emit names the event this transition publishes when it fires (S13). It
 	// makes the transition↔event link explicit instead of implied by naming:
 	// without it, nothing can verify that `order.paid` is actually emitted when
@@ -1727,32 +1822,32 @@ type TransitionDecl struct {
 	Emit string `yaml:"emit,omitempty" json:"emit,omitempty"`
 }
 
-// UnmarshalYAML accepts both the canonical `via:` key and the legacy `action:` alias.
+// UnmarshalYAML accepts both the canonical `via:` key and the legacy `action:`
+// alias.
+//
+// It embeds `TransitionDecl` by value (`,inline`) instead of listing fields in
+// a local struct. The listing form was a recurring trap: a field added to
+// TransitionDecl stayed invisible at runtime because every load goes through
+// this method — `formspec validate` reads the FILE and stayed green, so a
+// manifest could declare something the engine never saw. That trap already
+// swallowed `emit` (the durable on_paid never reached the outbox) and then
+// `require_permission` and `description`. Embedding makes new fields carry
+// automatically, so the class is closed rather than re-caught per field.
 func (t *TransitionDecl) UnmarshalYAML(value *yaml.Node) error {
+	type plain TransitionDecl
 	var raw struct {
-		From   StateList  `yaml:"from"`
-		To     string     `yaml:"to"`
-		Via    string     `yaml:"via"`
-		Action string     `yaml:"action"`
-		Guard  *GuardDecl `yaml:"guard"`
-		// Emit must be carried through this custom unmarshaler: without it, the
-		// S13 transition→event link silently vanished at load time — the
-		// manifest declared `emit: on_paid`, validate accepted it, and the
-		// runtime published nothing, because every load went through this
-		// method and dropped the field (found via the scenario-8 journal chain:
-		// the durable on_paid never reached the outbox).
-		Emit string `yaml:"emit"`
+		plain `yaml:",inline"`
+		// Legacy alias for `via`. `plain.Action` already binds `via`, so only
+		// the alias is added here — declaring `via` twice would be a duplicate
+		// key.
+		LegacyAction string `yaml:"action"`
 	}
 	if err := value.Decode(&raw); err != nil {
 		return err
 	}
-	t.From = raw.From
-	t.To = raw.To
-	t.Guard = raw.Guard
-	t.Emit = raw.Emit
-	t.Action = raw.Via
+	*t = TransitionDecl(raw.plain)
 	if t.Action == "" {
-		t.Action = raw.Action
+		t.Action = raw.LegacyAction
 	}
 	return nil
 }
@@ -1937,6 +2032,211 @@ func ValidateTransitionEmits(sm *StateMachine, events []EventDecl) error {
 		}
 	}
 	return nil
+}
+
+// TransitionPermission returns the permission a CALLER must hold to run
+// transition t, or "" when the transition carries no gate.
+//
+// The transition is the ONLY place a gate belongs. A `via` action with a
+// `required_permission` does not enforce anything here: an action without an
+// `impl` has no route of its own, and the path that actually applies a
+// transition is `PATCH` — authorized by `{module}.{plural}.update`. The gate
+// therefore has to be read off the transition itself.
+func TransitionPermission(t TransitionDecl) string {
+	return t.RequirePermission
+}
+
+// ValidateTransitionPermissions checks each transition's `require_permission`
+// for the two mistakes that would otherwise be silent.
+//
+// It deliberately does NOT require `require_permission` to name an ACTION this
+// entity declares: a transition gate is a permission, and a permission needs no
+// action. Requiring one would keep forcing a meaningless duplicate declaration
+// — a `via: release` transition on an entity that already has a standard
+// `Delete` action could not be gated on `{plural}.delete` without inventing an
+// action named `delete`.
+//
+// The two checks:
+//   - the permission must have a non-empty final segment, so a grant can
+//     express it. A dangling `require_permission: cafe-master.` splits to a
+//     trailing empty segment, can never be held by anyone, and would lock the
+//     transition forever.
+//   - it must not merely repeat the `via` action's own `required_permission`.
+//     That form is a declaration, not a second gate: only the transition's
+//     value is enforced, so the two are free to drift — two edits, and the one
+//     that looks authoritative is not the one enforced, a difference that is
+//     unobservable at runtime. The transition is the enforcement point, so the
+//     permission belongs there and only there.
+func ValidateTransitionPermissions(d *EntitySpec) error {
+	if d == nil || d.StateMachine == nil {
+		return nil
+	}
+	actions := map[string]Action{}
+	for _, a := range d.Actions {
+		actions[a.Name] = a
+	}
+
+	for _, t := range d.StateMachine.Transitions {
+		if t.RequirePermission == "" {
+			continue
+		}
+		if parts := strings.Split(t.RequirePermission, "."); len(parts) == 0 ||
+			strings.TrimSpace(parts[len(parts)-1]) == "" {
+			return fmt.Errorf(
+				"state_machine transition %s->%s: require_permission %q has an empty final segment, so no grant can express it — the transition could never be run",
+				t.From, t.To, t.RequirePermission)
+		}
+		if via, ok := actions[t.Action]; ok {
+			// Only an EXPLICIT declaration can duplicate. When the action
+			// declares nothing, its permission is merely conventionally named
+			// `{plural}.{actionName}` — which is exactly the name a transition
+			// gate naturally uses, and using it is not a second declaration.
+			if via.RequiredPermission != "" && via.RequiredPermission == t.RequirePermission {
+				return fmt.Errorf(
+					"state_machine transition %s->%s repeats the `via` action %q's own required_permission %q — that is a declaration, not a second gate: an action without `impl` has no route of its own, so only the transition's gate is enforced and the two are free to drift. Declare the permission on the TRANSITION and drop it from the action",
+					t.From, t.To, t.Action, t.RequirePermission)
+			}
+		}
+	}
+	return nil
+}
+
+// ValidateActionTransitionDuplication rejects a transition `via` that is ALSO
+// declared under `actions:` with nothing of its own to say — and deliberately
+// ALLOWS the two cases where the entry is load-bearing.
+//
+// Why this is not a blanket rejection of `actions[].name == transitions[].via`
+// (plan docs_internal/plan/l4-validator-anti-duplikat.md, measured 2026-09-27):
+//
+// Deleting every duplicate is not a cleanup — it CHANGES AUTHORIZATION. The
+// route permission is:
+//
+//	perm := action.RequiredPermission
+//	if perm == "" { perm = module + "." + plural + "." + action.Name }
+//
+// so an entry carrying `required_permission` narrows (or redirects) the name
+// the route requires. Measured across the repo: of 77 duplicates, 41 leave the
+// permission unchanged and 36 DO change it. A blunt validator would push all 36
+// into the fallback name.
+//
+// The two allowed shapes:
+//
+//   - a RESERVED name (`cancel`). `cancel` gets a generic lifecycle route
+//     `/{id}/cancel` whose permission is `{module}.{plural}.cancel`. Verified in
+//     examples/cafe/spec/modules/cafe-order/transaction/order/entity.yaml: the
+//     entry narrows it to the SINGULAR `cafe-order.order.cancel`, and without it
+//     every holder of `update` could cancel a money-bearing order. Six entities
+//     rely on this. Rejecting it would be an authorization regression, so the
+//     name is exempt.
+//
+//   - an entry that declares something the transition cannot: an explicit
+//     `required_permission`, or an `impl` (making it the route's handler).
+//     Either is a real reason to keep two declarations.
+//
+// Everything else is a leftover: `name` + `description` that the transition
+// already carries. Those must go, so `via` stays the ONE place a transition is
+// declared.
+func ValidateActionTransitionDuplication(d *EntitySpec) error {
+	if d == nil || d.StateMachine == nil || len(d.Actions) == 0 {
+		return nil
+	}
+
+	for _, a := range d.Actions {
+		if IsReservedAction(a.Name) {
+			continue // lifecycle names may be narrowed/overridden (see above)
+		}
+		for _, t := range d.StateMachine.Transitions {
+			if t.Action != a.Name {
+				continue
+			}
+			// The entry earns its place only by saying something the
+			// transition does not already say.
+			if a.Impl != nil && t.Impl == nil {
+				continue // the entry supplies the handler
+			}
+			if a.RequiredPermission != "" && a.RequiredPermission != t.RequirePermission {
+				// The transition does not gate on this permission, so the entry
+				// is what the route will require. Kept intentionally: dropping it
+				// would move the route to the fallback name.
+				continue
+			}
+			return fmt.Errorf(
+				"action %q is declared in BOTH `actions:` and `state_machine.transitions[].via`, and the action entry adds nothing — the transition is already the one place it is declared (`via` is an action source since L3). Delete the `actions:` entry. If you meant to gate the transition, use the transition's `require_permission`; if the entry existed only to narrow the route's permission, say so with an explicit `required_permission` on BOTH (or move the gate onto the transition)",
+				a.Name)
+		}
+	}
+	return nil
+}
+
+// ActionSources returns every action this entity exposes — declared `actions:`
+// plus the state-machine transitions that name a `via`. The union exists so
+// `via` can be the ONE place a transition is declared (plan
+// docs_internal/plan/via-sebagai-action-penuh.md, L2/L3): a transition's `via`
+// IS an action, and when it declares `impl` it gets a route of its own.
+//
+// A DECLARED action always wins, so a manifest keeping both behaves as before.
+func (d *EntitySpec) ActionSources() []Action {
+	if d == nil {
+		return nil
+	}
+	// Count declared names first: only a name declared ONCE can be overridden
+	// unambiguously, and duplicate actions are a manifest bug we must not paper
+	// over by synthesising a third entry.
+	declaredCount := map[string]int{}
+	for i := range d.Actions {
+		declaredCount[d.Actions[i].Name]++
+	}
+	// Transitions SHARING a `via` (e.g. `available->occupied` and
+	// `reserved->occupied` and `served->occupied` all via `occupy`) must collapse
+	// into ONE action. Synthesising one per transition produced duplicates in
+	// `schema.actions`, and duplicated entries make React emit the same key
+	// twice in the transition-button list.
+	//
+	// The FIRST transition to name the `via` wins, consistent with
+	// `GetActionSpec`, which returns the first match in this same order. A
+	// transition whose impl is more specific than the winner's is not merged —
+	// that would be two actions sharing one name, which the validator rejects
+	// instead of silently picking one.
+	seenVia := map[string]bool{}
+
+	out := make([]Action, 0, len(d.Actions))
+	out = append(out, d.Actions...)
+
+	if d.StateMachine == nil {
+		return out
+	}
+	for _, t := range d.StateMachine.Transitions {
+		via := t.Action
+		if via == "" {
+			continue // a transition without `via` declares no action (decision C)
+		}
+		if declaredCount[via] > 0 {
+			continue // the declared entry governs, including its `disabled`
+		}
+		if seenVia[via] {
+			continue // one action per name — see seenVia above
+		}
+		seenVia[via] = true
+		synthesized := Action{
+			Name:        via,
+			Description: t.Description,
+			Impl:        t.Impl,
+			Audit:       t.Audit,
+			Emits:       t.Emits,
+			Conditions:  t.Conditions,
+			UI:          t.UI,
+			Uses:        t.Uses,
+			Params:      t.Params,
+			Expose:      t.Expose,
+			RateLimit:   t.RateLimit,
+		}
+		if t.Idempotent {
+			synthesized.Idempotent = true
+			synthesized.IdempotencyKey = t.IdempotencyKey
+		}
+		out = append(out, synthesized)
+	}
+	return out
 }
 
 // ValidateEventDurability checks durability contract (2.4.3):

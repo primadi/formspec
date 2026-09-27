@@ -31,17 +31,32 @@ export default defineConfig({
   },
   server: {
     host: true,
+    // Keys starting with "^" are treated by Vite as RegExp — required here
+    // because the workspace slug is NOT always "default": the SPA runs in
+    // whichever workspace the URL names (`/{ws}/_admin`, `/{ws}/app/...`,
+    // `/{ws}/` for a public App), and every one of its API calls is
+    // `/{ws}/_ui/...` or `/{ws}/api/v1/...`. Literal "/default/..." keys
+    // answered every other workspace with index.html, so the SPA received
+    // HTML where it expected JSON and died with
+    // `Unexpected token '<', "<!doctype "... is not valid JSON`.
+    //
+    // `[a-z0-9-]+` is the workspace slug charset
+    // (pkg/spec/workspace.go `workspaceSlugPattern`), and the "^" anchor
+    // keeps `_ui`/`api` matching only as the FIRST segment after the slug —
+    // mirroring Go's isWorkspaceAPIPath (cmd/formspec/dev.go), which owns the
+    // same contract when the SPA is served through :8080 instead of here.
     proxy: {
-      // Proxy API calls to the FormSpec backend
-      "/default/api/v1": {
+      // Proxy REST API calls to the FormSpec backend
+      "^/[a-z0-9-]+/api/v1": {
         target: "http://localhost:8080",
         changeOrigin: true,
         ws: true, // forward WebSocket upgrade (realtime /_ui/_ws) in dev
       },
-      // Proxy _ui/* (meta API, entity CRUD) — matches what Go's viteSPAProxy intercepts.
-      // ws: true is REQUIRED for realtime: the browser connects to /_ui/_ws here,
-      // and without it the WebSocket upgrade hangs and realtime never receives events.
-      "/default/_ui/": {
+      // Proxy _ui/* (meta API, entity CRUD).
+      // ws: true is REQUIRED for realtime: the browser connects to
+      // /{ws}/_ui/_ws here, and without it the WebSocket upgrade hangs and
+      // realtime never receives events.
+      "^/[a-z0-9-]+/_ui/": {
         target: "http://localhost:8080",
         changeOrigin: true,
         ws: true,

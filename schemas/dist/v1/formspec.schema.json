@@ -3810,9 +3810,37 @@
       "description": "TransitionDecl defines a transition between states (Core §14).\nThe canonical manifest key for the triggering action is `via`;\n`action` is accepted as a legacy alias.\n",
       "type": "object",
       "properties": {
+        "audit": {
+          "description": "Audit records this transition in the business audit trail. Meaningful only",
+          "type": "boolean"
+        },
+        "conditions": {
+          "description": "Conditions gate the transition ACTION before it runs (e.g. a required",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConditionDecl"
+          }
+        },
+        "description": {
+          "description": "Deskripsi transisi; dipakai sebagai label tombol bila `ui.button_label` tidak ada.",
+          "type": "string",
+          "examples": [
+            "Semua pesanan meja sudah disajikan"
+          ]
+        },
         "emit": {
           "description": "Emit names the event this transition publishes when it fires (S13). It",
           "type": "string"
+        },
+        "emits": {
+          "description": "Emits publishes an event when this transition fires. Distinct from",
+          "type": "string"
+        },
+        "expose": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "from": {
           "oneOf": [
@@ -3833,8 +3861,46 @@
           "$ref": "#/$defs/GuardDecl",
           "nullable": true
         },
+        "idempotency_key": {
+          "$ref": "#/$defs/IdempotencyDecl",
+          "nullable": true
+        },
+        "idempotent": {
+          "description": "Idempotent / IdempotencyKey apply to a transition that has an `impl` and",
+          "type": "boolean"
+        },
+        "impl": {
+          "$ref": "#/$defs/ImplDecl",
+          "description": "Impl makes this transition an ACTION WITH A ROUTE, exactly like a declared",
+          "nullable": true
+        },
+        "params": {
+          "$ref": "#/$defs/ParamsDecl",
+          "nullable": true
+        },
+        "rate_limit": {
+          "$ref": "#/$defs/RateLimitSpec",
+          "nullable": true
+        },
+        "require_permission": {
+          "description": "Permission the caller must hold to run this transition (own-module prefix may be omitted — same convention as Action.required_permission).",
+          "type": "string",
+          "examples": [
+            "dining-tables.release"
+          ]
+        },
         "to": {
           "type": "string"
+        },
+        "ui": {
+          "$ref": "#/$defs/ActionUIHint",
+          "description": "UI carries the button hints for this transition (label, style, icon,",
+          "nullable": true
+        },
+        "uses": {
+          "$ref": "#/$defs/UsesDecl",
+          "description": "Uses / Params / Expose / RateLimit complete the \"via is a full action\"",
+          "nullable": true
         },
         "via": {
           "type": "string"
@@ -8150,9 +8216,37 @@
       "description": "TransitionDecl defines a transition between states (Core §14).\nThe canonical manifest key for the triggering action is `via`;\n`action` is accepted as a legacy alias.\n",
       "type": "object",
       "properties": {
+        "audit": {
+          "description": "Audit records this transition in the business audit trail. Meaningful only",
+          "type": "boolean"
+        },
+        "conditions": {
+          "description": "Conditions gate the transition ACTION before it runs (e.g. a required",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConditionDecl"
+          }
+        },
+        "description": {
+          "description": "Deskripsi transisi; dipakai sebagai label tombol bila `ui.button_label` tidak ada.",
+          "type": "string",
+          "examples": [
+            "Semua pesanan meja sudah disajikan"
+          ]
+        },
         "emit": {
           "description": "Emit names the event this transition publishes when it fires (S13). It",
           "type": "string"
+        },
+        "emits": {
+          "description": "Emits publishes an event when this transition fires. Distinct from",
+          "type": "string"
+        },
+        "expose": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "from": {
           "oneOf": [
@@ -8173,8 +8267,46 @@
           "$ref": "#/$defs/GuardDecl",
           "nullable": true
         },
+        "idempotency_key": {
+          "$ref": "#/$defs/IdempotencyDecl",
+          "nullable": true
+        },
+        "idempotent": {
+          "description": "Idempotent / IdempotencyKey apply to a transition that has an `impl` and",
+          "type": "boolean"
+        },
+        "impl": {
+          "$ref": "#/$defs/ImplDecl",
+          "description": "Impl makes this transition an ACTION WITH A ROUTE, exactly like a declared",
+          "nullable": true
+        },
+        "params": {
+          "$ref": "#/$defs/ParamsDecl",
+          "nullable": true
+        },
+        "rate_limit": {
+          "$ref": "#/$defs/RateLimitSpec",
+          "nullable": true
+        },
+        "require_permission": {
+          "description": "Permission the caller must hold to run this transition (own-module prefix may be omitted — same convention as Action.required_permission).",
+          "type": "string",
+          "examples": [
+            "dining-tables.release"
+          ]
+        },
         "to": {
           "type": "string"
+        },
+        "ui": {
+          "$ref": "#/$defs/ActionUIHint",
+          "description": "UI carries the button hints for this transition (label, style, icon,",
+          "nullable": true
+        },
+        "uses": {
+          "$ref": "#/$defs/UsesDecl",
+          "description": "Uses / Params / Expose / RateLimit complete the \"via is a full action\"",
+          "nullable": true
         },
         "via": {
           "type": "string"

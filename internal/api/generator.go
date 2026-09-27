@@ -147,6 +147,9 @@ func UIRoutesForEntity(module, name string, es *spec.EntitySpec) []RouteDescript
 // draft→submit workflow, so `submit` — and transitively `cancel`/`amend` — must
 // not exist on any surface. Keeps routes aligned with the store, which leaves
 // doc_status NULL for those entities (gap #44).
+// disabledActions reports the standard actions disabled via `disabled: true`
+// (§11.1), including the transitive lifecycle gating a lifecycle-free entity
+// implies. Shared by both surfaces so they agree.
 func disabledActions(es *spec.EntitySpec) map[string]bool {
 	disabled := make(map[string]bool)
 	for _, a := range es.Actions {
@@ -254,7 +257,12 @@ func generatePrepareRoutes(module, name, plural string, es *spec.EntitySpec, isS
 
 	pathPrefix := "/api/v1/" + module + "/" + plural
 
-	for _, a := range es.Actions {
+	// Iterate the UNION (declared actions \u222a transition `via`, L3): a
+	// server-sourced idempotent action declared only on its transition still
+	// needs a prepare endpoint, and the router resolves prepare over the same
+	// union \u2014 generating from `Actions` alone would leave the two surfaces
+	// disagreeing about which actions exist.
+	for _, a := range es.ActionSources() {
 		// Only server-sourced idempotent actions (create + custom) get a
 		// prepare endpoint.
 		if a.Disabled || !a.Idempotent || a.IdempotencyKey == nil || a.IdempotencyKey.From != "server" {
@@ -413,6 +421,11 @@ func GenerateUICustomActionRoutes(registry *entity.Registry) []RouteDescriptor {
 // endpoint of its own — printing one would document a route the server never
 // serves, which is the failure this whole "generate, don't transcribe" approach
 // exists to prevent.
+//
+// Transitions count as action sources (L3, plan
+// docs_internal/plan/via-sebagai-action-penuh.md): a transition that declares
+// `impl` yields a route under its `via` name, so the transition is the ONE place
+// it is declared instead of being duplicated as an `actions:` entry.
 func UICustomActionRoutesForEntity(module, name string, es *spec.EntitySpec) []RouteDescriptor {
 	if es == nil {
 		return nil
@@ -423,7 +436,7 @@ func UICustomActionRoutesForEntity(module, name string, es *spec.EntitySpec) []R
 	}
 
 	var routes []RouteDescriptor
-	for _, action := range es.Actions {
+	for _, action := range es.ActionSources() {
 		// Standard CRUD actions (list/find/create/update/delete) are handled
 		// by generateRESTRoutes. Lifecycle actions (submit/cancel/amend) with
 		// a custom impl constitute custom actions and are generated here.

@@ -666,14 +666,71 @@ func (r *Registry) GetEntity(module, name string) (*SpecInfo, bool) {
 
 // GetActionSpec returns a named action's spec for a module/entity pair, e.g.
 // for cross-resource resource.call() dispatch or route generation.
+//
+// It resolves over the UNION of declared `actions:` and the entity's
+// state-machine transitions (plan docs_internal/plan/via-sebagai-action-penuh.md,
+// L2). A transition's `via` IS an action: it names the thing a caller invokes,
+// and the path that applies the transition (PATCH) already accepts it. Reading
+// only `actions:` therefore made `via` a second-class name — it could not be
+// dispatched, could not get a route, and had to be duplicated as an action
+// entry to work at all. One lookup, two sources, so callers stop caring which
+// one declared it.
+//
+// Precedence: a DECLARED action wins. A transition only ADDS a name, and the
+// synthesised action carries no `impl` — so it never gains a route by accident,
+// only becomes resolvable.
+//
+// Note on permission: the synthesised action deliberately leaves
+// `RequiredPermission` empty rather than copying the transition's
+// `require_permission`. The two are read by different layers — the route
+// generator derives `{module}.{plural}.{name}`, while the PATCH path enforces
+// the transition's gate — and copying the gate here would make
+// `spec.ValidateTransitionPermissions` see the same permission declared twice,
+// which it rejects as two sources that can drift.
+//
+// What this does NOT do yet (documented successor steps, not silent gaps): the
+// transition is not yet registered as a grantable permission, and route
+// generation does not yet read this union.
 func (r *Registry) GetActionSpec(module, name, actionName string) (*spec.Action, bool) {
 	info, ok := r.GetEntity(module, name)
 	if !ok || info.EntitySpec == nil {
 		return nil, false
 	}
-	for i := range info.EntitySpec.Actions {
-		if info.EntitySpec.Actions[i].Name == actionName {
-			return &info.EntitySpec.Actions[i], true
+	es := info.EntitySpec
+	// Any non-empty name may resolve; the empty name never may — a transition
+	// without `via` is legal (decision C) and must not be reachable as an
+	// action called "".
+	if actionName == "" {
+		return nil, false
+	}
+	// The union (declared actions ∪ transition `via`) comes from the SPEC
+	// package so the route generator (internal/api) and this lookup cannot
+	// disagree — internal/entity cannot import internal/api, and two copies of
+	// the precedence rule is exactly how the surfaces drift apart.
+	//
+	// A declared action is returned as a pointer into the manifest (callers may
+	// read it cheaply); a synthesised one is a fresh value per call, because it
+	// must never be written back into the manifest.
+	declared := 0
+	for i := range es.Actions {
+		if es.Actions[i].Name == actionName {
+			declared++
+			if declared > 1 {
+				break // ambiguous; fall through to the search below
+			}
+		}
+	}
+	if declared == 1 {
+		for i := range es.Actions {
+			if es.Actions[i].Name == actionName {
+				return &es.Actions[i], true
+			}
+		}
+	}
+	for _, a := range es.ActionSources() {
+		if a.Name == actionName {
+			action := a // copy: must not alias the slice backing the search
+			return &action, true
 		}
 	}
 	return nil, false

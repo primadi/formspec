@@ -19,6 +19,22 @@ spec:
       relation: { type: belongs_to, resource: cafe-master.branch }
       required: true
       title: "Cabang"
+    # Siklus hidup meja (keputusan pemilik 2026-09-27): meja punya
+    # `state_machine`, dan pemicunya adalah PEMBAYARAN — bukan timer (v1 tidak
+    # punya `Schedule`/`Cron`, dan tidak memerlukannya di sini).
+    #
+    # Kenapa `state_machine` dan bukan "occupied = ada sesi terbuka": sumbu
+    # inilah yang bisa digerbangi permission. `POST table-session` anonim
+    # sempat TERBUKTI berhasil (201), jadi menautkan "terisi" ke keberadaan sesi
+    # berarti tamu mana pun bisa mengunci meja. Dengan state machine, `occupied`
+    # hanya lahir dari jalur ber-permission (subscription saat bayar, atau staf).
+    - name: table_status
+      type: enum
+      enum_values: [available, occupied, served, reserved, not_available]
+      default: available
+      index: true
+      title: "Status Meja"
+      description: "available → occupied (bayar) → served (semua pesanan disajikan) → release (kasir). reserved = dipesan, not_available = tidak bisa dipakai."
     - name: code
       type: string
       required: true
@@ -52,6 +68,75 @@ spec:
       required: true
       unique: true
       title: "Token QR"
+  # Siklus hidup meja. Transisi TIDAK butuh `impl` — `PATCH` yang mengubah field
+  # state adalah pemicunya (internal/api/handler.go FindTransitionByStates +
+  # renderers/jsonb-persist/crud.go validateStateTransition), persis pola
+  # `shift` dan `order`. Jadi "clear meja" tidak butuh route action baru.
+  state_machine:
+    field: table_status
+    initial: available
+    states:
+      - { name: available, label: "Kosong" }
+      - { name: occupied, label: "Terisi" }
+      - { name: served, label: "Selesai Disajikan" }
+      - { name: reserved, label: "Dipesan" }
+      - { name: not_available, label: "Tidak Tersedia" }
+    transitions:
+      # Tamu membayar (lewat subscription order.on_paid) → meja terisi.
+      #
+      # TANPA `require_permission`: transisi ini memang bisa dipanggil manual
+      # (kasir/dashboard), tetapi penulis utamanya adalah subscription saat
+      # pembayaran (10.40b). Keputusan pemilik 2026-09-27: apakah ia harus
+      # dikunci ke jalur otomatis saja → dicatat di 10.46.
+      - { from: available, to: occupied, via: occupy, description: "Tamu membayar — meja terisi" }
+      # Tamu yang memesan meja (`reserved`) lalu datang & bayar → terisi.
+      - { from: reserved, to: occupied, via: occupy, description: "Tamu datang dan membayar" }
+      # Semua pesanan sesi ini sudah dikeluarkan dapur — PELAYAN yang melakukan.
+      # Digerbangi: tanpa ini kasir/manajer juga bisa "menyajikan".
+      #
+      # Nama gate = `{plural}.{nama action}` supaya grant yang menyebut action
+      # `mark-table-served` menghasilkan permission yang PERSIS sama. Salah
+      # nama di sini tidak diam-diam lolos: transisinya jadi 403 (menolak),
+      # bukan 200 (mengizinkan) — arah yang aman.
+      - { from: occupied, to: served, via: mark-table-served, description: "Semua pesanan sudah disajikan", require_permission: dining-tables.mark-table-served }
+      # Tamu menambah pesanan dari meja yang sudah `served` → kembali terisi.
+      # Sama seperti `occupy`: jalur utamanya pembayaran berikutnya.
+      - { from: served, to: occupied, via: occupy, description: "Tamu menambah pesanan" }
+      # KASIR menutup meja (langkah 5 alur). Digerbangi: tanpa ini siapa pun
+      # yang memegang `update` (mis. pelayan) bisa mengosongkan meja.
+      - { from: [occupied, served], to: available, via: release, description: "Kosongkan meja (kasir menutup)", require_permission: dining-tables.release }
+      # Meja dipesan (kasir) dan batal dipesan.
+      - { from: available, to: reserved, via: reserve, description: "Tandai meja dipesan", require_permission: dining-tables.reserve }
+      - { from: reserved, to: available, via: unreserve, description: "Batalkan pesanan meja", require_permission: dining-tables.reserve }
+      # Meja ditarik dari peredaran oleh ADMIN (rusak/dibersihkan).
+      #
+      # `require_permission` di sini benar-benar mengikat: tanpa itu, kasir
+      # (yang memegang `dining-tables.update` untuk menjalankan `reserve`) juga
+      # bisa menjalankannya — terukur 2026-09-27, kasir berhasil
+      # `available → not_available`. Gate-nya tidak bisa ditulis sebagai
+      # `guard.expression`: FormSpecExpr melarang identitas/permission
+      # (08-formspec-expr.md §3).
+      - { from: available, to: not_available, via: mark-not-available, description: "Tarik meja dari peredaran (rusak/dibersihkan)", require_permission: dining-tables.mark-not-available }
+      - { from: not_available, to: available, via: mark-available, description: "Kembalikan meja ke peredaran", require_permission: dining-tables.mark-available }
+  # ─── `actions:` SENGAJA TIDAK ADA ───
+  #
+  # Setiap nama (`occupy`, `mark-table-served`, `release`, `reserve`,
+  # `unreserve`, `mark-not-available`, `mark-available`) sudah dideklarasikan
+  # sebagai `via:` pada transisi di atas, dan sejak L3 **`via` adalah action
+  # penuh**: ia muncul di meta bundle (`schema.actions`), mendapat permission
+  # (`{module}.{plural}.{via}`, atau `require_permission` transisi), dan
+  # dirender sebagai tombol. Menulisnya lagi di blok `actions:` hanya
+  # menciptakan dua rumah untuk satu deklarasi — dua sumber yang bisa
+  # menyimpang.
+  #
+  # Sebelum L3/L5 entri itu WAJIB ada: `buildEntitySchema` hanya membaca
+  # `actions`, sehingga menghapusnya membuat tombol transisi hilang
+  # (kafe 10.49). Sekarang `buildEntitySchema` dan `authorizedActions` membaca
+  # `ActionSources()` (union), jadi transisi adalah SATU-SATUNYA tempat
+  # nama-nama ini perlu ditulis.
+  #
+  # `spec.ValidateActionTransitionDuplication` menolak menuliskannya kembali
+  # bila entri itu tidak menambahkan apa pun.
   indexes:
     - fields: [branch_id, code]
       unique: true

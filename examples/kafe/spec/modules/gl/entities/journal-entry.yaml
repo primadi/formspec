@@ -81,35 +81,42 @@ spec:
       # Guard `{expression, message}` — bentuk objek yang schema terima
       # (bentuk string dulu ditolak schema meski UnmarshalYAML menerimanya:
       # kelas drift "lolos loader, ditolak schema", kini selaras).
+      #
+      # `post`/`reverse` adalah ACTION PENUH di sini: `impl` pada transisi
+      # menghasilkan route `POST .../{id}/{via}` tanpa perlu entri `actions:`
+      # yang menduplikasi namanya (plan via-sebagai-action-penuh, L3). Versi
+      # pertama manifest ini menulis aksinya dua kali — sekali sebagai
+      # transisi (untuk state machine) dan sekali sebagai action (untuk
+      # route) — dan dua salinan itu bisa menyimpang tanpa gejala.
       - { from: draft, to: posted, via: post,
+          description: "Posting journal entry — update GL balance",
+          require_permission: journal-entries.post,
+          idempotent: true,
+          idempotency_key: { from: server },
+          audit: true,
+          emits: journal-posted,
+          # TANPA `primitives: [lock]`: resource.upsert pada gl-balance sudah
+          # atomik dalam transaksinya (read-then-write dalam satu tx + unique
+          # index sebagai jaring pengaman), jadi deklarasi lock yang tidak
+          # dipakai hanya jadi honesty warning (verifikasi 2026-09-21).
+          impl: { type: script_ref, ref: gl/journal_post },
           guard: { expression: "sum_line('debit') == sum_line('credit') and sum_line('debit') > 0",
                    message: "Jurnal tidak seimbang — debit harus sama dengan kredit dan lebih dari nol" } }
-      - { from: posted, to: reversed, via: reverse }
+      # Block style karena `conditions:` adalah list — flow-mapping `{...}`
+      # tidak menerima list block di dalamnya.
+      - from: posted
+        to: reversed
+        via: reverse
+        description: "Reverse (batalkan) journal entry yang sudah posted"
+        require_permission: journal-entries.reverse
+        audit: true
+        emits: journal-reversed
+        conditions:
+          - script: "resource.status == 'posted'"
+            message: "Hanya journal posted yang bisa di-reverse"
+        impl: { type: script_ref, ref: gl/journal_reverse }
 
   actions:
-    - name: post
-      description: Posting journal entry — update GL balance
-      required_permission: journal-entries.post
-      idempotent: true
-      idempotency_key: { from: server }
-      audit: true
-      emits: journal-posted
-      # TANPA `primitives: [lock]`: resource.upsert pada gl-balance sudah
-      # atomik dalam transaksinya (read-then-write dalam satu tx + unique
-      # index sebagai jaring pengaman), jadi deklarasi lock yang tidak
-      # dipakai hanya jadi honesty warning (verifikasi 2026-09-21).
-      impl: { type: script_ref, ref: gl/journal_post }
-
-    - name: reverse
-      description: Reverse (batalkan) journal entry yang sudah posted
-      required_permission: journal-entries.reverse
-      audit: true
-      emits: journal-reversed
-      conditions:
-        - script: "resource.status == 'posted'"
-          message: "Hanya journal posted yang bisa di-reverse"
-      impl: { type: script_ref, ref: gl/journal_reverse }
-
     - name: create
       idempotent: true
       idempotency_key: { from: server }

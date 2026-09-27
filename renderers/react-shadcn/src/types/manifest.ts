@@ -595,9 +595,25 @@ export interface StateDecl {
 export interface TransitionDecl {
   from: string[]
   to: string
-  /** The canonical key is `via`; legacy alias `action` also accepted */
+  /**
+   * The canonical key is `via`; legacy alias `action` also accepted.
+   *
+   * EMPTY when the transition declares no action — such a transition has no
+   * route and no button (owner decision C); it is triggered by setting the
+   * status field (PATCH) or by a script/subscription.
+   */
   via: string
+  /**
+   * Documents the transition, and doubles as the button label when the
+   * transition has no `ui.button_label` to override it.
+   */
+  description?: string
   guard?: GuardDecl
+  /**
+   * Permission the caller must hold to run this transition. The per-transition
+   * gate — `PATCH` is otherwise authorized by `{plural}.update` alone.
+   */
+  require_permission?: string
 }
 
 export interface GuardDecl {
@@ -1308,6 +1324,17 @@ export interface ActionSummary {
   permission: string
   has_params?: boolean
   ui?: ActionUIHint
+  /**
+   * Whether `POST /{module}/{entity}/{id}/{action}` exists for this action.
+   *
+   * Only an action with an `impl` gets a route, so a state-machine transition
+   * that merely names a `via` has none — the PATCH path applies it, matching by
+   * (from, to). The bundle states that here instead of making the renderer
+   * probe the endpoint and read a 404 as "no route" (kafe 10.48).
+   *
+   * `undefined` on older servers: fall back to probing.
+   */
+  has_route?: boolean
 }
 
 export interface AppSummary {

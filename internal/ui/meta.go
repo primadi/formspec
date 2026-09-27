@@ -50,6 +50,25 @@ type ActionSummary struct {
 	Permission  string             `json:"permission"`
 	HasParams   bool               `json:"has_params,omitempty"`
 	UI          *spec.ActionUIHint `json:"ui,omitempty"`
+	// HasRoute reports whether `POST /{module}/{entity}/{id}/{action}` exists.
+	//
+	// Only an action with an `impl` gets a route (internal/api/generator.go
+	// skips `Impl == nil`). A state-machine transition that only names `via`
+	// therefore has NO route — the path that applies it is `PATCH`, which the
+	// server matches by (from, to).
+	//
+	// Without this flag the renderer had to GUESS: it POSTed to the action
+	// route, took the 404 as "no route", and fell back to the state write. That
+	// worked, but wasted a round-trip per transition, printed a 404 in the
+	// console for a completely normal path, and made the client depend on a
+	// status code to learn a static property of the manifest (kafe 10.48).
+	//
+	// NO `omitempty`: a false value must be SERIALIZED, not omitted. With
+	// omitempty the two states collapse — "no route" and "older server that
+	// never sent this field" both arrive as absent, so the client fell back to
+	// probing for exactly the actions this flag exists to settle (measured: the
+	// click still POSTed and 404ed).
+	HasRoute bool `json:"has_route"`
 }
 
 // AppSummary identifies which resolved App a Bundle was built for (Core §4.4).
@@ -1189,7 +1208,17 @@ func buildEntitySchema(d EntityDescriptor) EntitySchema {
 		Exposed:        len(es.Expose) > 0,
 	}
 
-	for _, a := range es.Actions {
+	// Iterate the UNION of declared actions and transition `via` (plan
+	// docs_internal/plan/via-sebagai-action-penuh.md, L5). This is what makes
+	// `via` first-class in the renderer: `authorizedActions` below reads
+	// `schema.Actions` to decide which buttons may be offered, so a `via`
+	// declared ONLY on its transition must appear here — otherwise removing the
+	// duplicated `actions:` entry (L4) would silently hide the button, which is
+	// exactly the defect 10.49 fixed from the other direction.
+	//
+	// A declared action still wins (ActionSources: declared ∪ via, declared
+	// first), so a manifest keeping both behaves identically.
+	for _, a := range es.ActionSources() {
 		if a.Disabled {
 			continue
 		}
@@ -1205,6 +1234,12 @@ func buildEntitySchema(d EntityDescriptor) EntitySchema {
 			Permission:  perm,
 			HasParams:   a.Params != nil && len(a.Params.Validate) > 0,
 			UI:          a.UI,
+			// Same condition the UI route generator uses to decide whether a
+			// custom action gets a route (internal/api/generator.go: skip
+			// `Disabled || Impl == nil`). Kept identical on purpose: this flag
+			// exists so the renderer can trust the bundle instead of probing the
+			// endpoint (kafe 10.48).
+			HasRoute: !a.Disabled && a.Impl != nil,
 		})
 		if a.Name == "create-submit" {
 			schema.HasQuickSubmit = true
@@ -1254,12 +1289,14 @@ func grantActionForPermission(action string) string {
 //
 // The set mirrors the routes the router actually registers for the UI surface
 // (internal/api/generator.go GenerateUIRoutes): standard CRUD, then the subset
-// of lifecycle actions the entity really has, plus soft-deactivate pairs. A
+// of lifecycle actions the entity really has, plus soft-deactivate pairs, plus
+// every declared custom action (the ones a state machine drives). A
 // `characteristic: summary` entity is a system-managed projection, so its write
 // actions are excluded exactly as the router excludes their routes.
 //
-// Custom actions are not listed: the renderer already takes their permission
-// from `ActionSummary.Permission`, which the bundle carries per action.
+// Custom actions MUST be included: the renderer treats this list as the
+// authority and only consults `me.permissions` when the field is absent, so
+// omitting them hid every custom-transition button (kafe 10.49).
 func authorizedActions(d EntityDescriptor, schema EntitySchema, can PermissionChecker) []string {
 	es := d.Spec
 	if es == nil {
@@ -1287,13 +1324,15 @@ func authorizedActions(d EntityDescriptor, schema EntitySchema, can PermissionCh
 	}
 
 	var out []string
-	add := func(action string) {
-		if disabled[action] {
+	seen := map[string]bool{}
+	add := func(action, perm string) {
+		if disabled[action] || seen[action] {
 			return
 		}
-		if !can(entityActionPermission(d.Module, schema.Plural, action)) {
+		if !can(perm) {
 			return
 		}
+		seen[action] = true
 		out = append(out, action)
 	}
 
@@ -1301,16 +1340,37 @@ func authorizedActions(d EntityDescriptor, schema EntitySchema, can PermissionCh
 		if isSummary && action != "list" && action != "find" {
 			continue // summary entities take no CUD (router registers none)
 		}
-		add(action)
+		add(action, entityActionPermission(d.Module, schema.Plural, action))
 	}
 	if !isSummary {
 		for _, action := range []string{"submit", "cancel", "amend"} {
-			add(action)
+			add(action, entityActionPermission(d.Module, schema.Plural, action))
 		}
 	}
 	if es.SoftDeactivate != nil && es.SoftDeactivate.Enabled {
-		add("deactivate")
-		add("reactivate")
+		add("deactivate", entityActionPermission(d.Module, schema.Plural, "deactivate"))
+		add("reactivate", entityActionPermission(d.Module, schema.Plural, "reactivate"))
+	}
+
+	// Declared actions — the non-CRUD ones a state machine drives (`release`,
+	// `mark-table-served`, …). Their permission is already resolved on
+	// ActionSummary.Permission (explicit `required_permission` when declared,
+	// else `{module}.{plural}.{name}`), so it must be used as-is rather than
+	// re-derived.
+	//
+	// Leaving them out was a real defect, not a conservative default: the
+	// renderer checks `authorized_actions.includes(action)` FIRST and only
+	// falls back to `me.permissions` when the field is absent (see
+	// renderers/react-shadcn `canDoEntityAction`). So a resolved list that
+	// omitted custom actions made EVERY custom-transition button disappear —
+	// DetailPage hid them before the click-time check could run — while the
+	// server accepted the very same call (measured: cashier PATCH
+	// `table_status: available` → 200, yet no "clear table" button). The
+	// fallback could not rescue it, because `me.permissions` also lacks the
+	// action under that name when a transition gate declares its own
+	// permission (kafe 10.47 / 10.49).
+	for _, a := range schema.Actions {
+		add(a.Name, a.Permission)
 	}
 	return out
 }
