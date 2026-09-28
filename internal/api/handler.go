@@ -1056,6 +1056,51 @@ func (f *HandlerFactory) HandleUpdate(module, entity string) http.HandlerFunc {
 				}
 			}
 		}
+		// Transition input contract (plan docs_internal/plan/action-input-contract.md).
+		//
+		// `PATCH` is the ONLY path a transition without an `impl` can take, and
+		// until now it enforced neither the transition's `params.validate` nor its
+		// `conditions` — only `guard` ran (in the store's validateStateTransition).
+		// So a transition could declare "the reason must be filled in" and look
+		// perfectly declarative while a bare `{"status":"cancelled"}` went through:
+		// measured on kafe `void-order`, whose
+		// `conditions: len(params.get('void_reason','')) > 0` was dead on both
+		// surfaces (the POST path needs an `impl`, which that transition lacks).
+		//
+		// The contract is read through EffectiveActionSpec so a manifest that keeps
+		// the condition on a declared `actions:` entry is honoured identically to
+		// one that moved it onto the transition.
+		if entitySpec != nil && entitySpec.StateMachine != nil {
+			sm := entitySpec.StateMachine
+			fromState := preUpdateState
+			toState := stateFieldValue(sm, merged)
+			if fromState != "" && toState != "" && fromState != toState {
+				if trans := entityengine.NewStateMachineEngine().FindTransitionByStates(entitySpec, fromState, toState); trans != nil {
+					if contract := spec.EffectiveActionSpec(entitySpec, trans); contract != nil {
+						// An approval decision legitimately omits the inputs the
+						// REQUESTER supplied: it is a different person on a
+						// different request. Seed them from the pending approval
+						// row before enforcing, so the approver is not asked to
+						// re-type a reason they did not write — without which a
+						// correct approval would be rejected as incomplete.
+						f.seedStoredApprovalParams(ctx, workspaceID, module, entity, id, merged)
+						params := spec.TransitionInputParams(entitySpec, trans, body, merged)
+						if rules := spec.EffectiveParamValidation(entitySpec, contract.Params); len(rules) > 0 {
+							if errs := validation.ValidateActionParams(params, rules); len(errs) > 0 {
+								writeValidationErrors(w, errs)
+								return
+							}
+						}
+						if len(contract.Conditions) > 0 {
+							if err := action.EvaluateConditions(contract.Conditions, merged, params); err != nil {
+								writeError(w, http.StatusUnprocessableEntity, "CONDITION_FAILED", err.Error())
+								return
+							}
+						}
+					}
+				}
+			}
+		}
 		if entitySpec != nil && entitySpec.StateMachine != nil && f.wfRegistry != nil && f.wfApprovals != nil {
 			sm := entitySpec.StateMachine
 			fromState := preUpdateState
@@ -2067,9 +2112,18 @@ func (f *HandlerFactory) HandleCustomAction(module, entity, actionName string, a
 			params = make(map[string]any)
 		}
 
-		// Validate action params if declared
-		if actionSpec.Params != nil && len(actionSpec.Params.Validate) > 0 {
-			if errs := validation.ValidateActionParams(params, actionSpec.Params.Validate); len(errs) > 0 {
+		// Validate action params if declared. `EffectiveParamValidation` folds in
+		// the renderable half of the contract (`params.inputs`), so a parameter
+		// declared required there is enforced here rather than only rendered.
+		// The entity spec is resolved here (not later, where the record is
+		// loaded) because an input that names an Entity field inherits that
+		// field's rules, and those must be in force before dispatch.
+		var contractSpec *spec.EntitySpec
+		if f.specLookup != nil {
+			contractSpec, _ = f.specLookup(module, entity)
+		}
+		if rules := spec.EffectiveParamValidation(contractSpec, actionSpec.Params); len(rules) > 0 {
+			if errs := validation.ValidateActionParams(params, rules); len(errs) > 0 {
 				writeValidationErrors(w, errs)
 				return
 			}
@@ -2325,6 +2379,18 @@ func (f *HandlerFactory) handleWorkflowApproval(
 	}
 	wf := wfs[0]
 
+	// The transition's declared input contract. `handleWorkflowApproval` is
+	// reached from both write paths, and neither passes the resolved spec — so it
+	// is resolved here rather than widening a signature five call sites share.
+	var contractSpec *spec.EntitySpec
+	if f.specLookup != nil {
+		contractSpec, _ = f.specLookup(module, entity)
+	}
+	var contractTrans *spec.TransitionDecl
+	if contractSpec != nil && contractSpec.StateMachine != nil {
+		contractTrans = entityengine.NewStateMachineEngine().FindTransitionByStates(contractSpec, fromState, toState)
+	}
+
 	// Determine applicable steps (evaluate `when` conditions).
 	steps, err := wfEngine.ApplicableSteps(wf, resourceData)
 	if err != nil {
@@ -2333,7 +2399,7 @@ func (f *HandlerFactory) handleWorkflowApproval(
 	}
 	if len(steps) == 0 {
 		// No applicable steps — the transition proceeds without approval.
-		f.executeWorkflowTransition(w, r, ctx, module, entity, resourceID, toState, resourceData, resourceVersion, workspaceID, userID)
+		f.executeWorkflowTransition(w, r, ctx, module, entity, resourceID, fromState, toState, resourceData, resourceVersion, workspaceID, userID)
 		return
 	}
 
@@ -2359,6 +2425,14 @@ func (f *HandlerFactory) handleWorkflowApproval(
 		row := workflowApprovalToRow(approval)
 		row.TenantID = workspaceID
 		row.RejectStep = -1
+		// Carry the requester's declared inputs across the approval boundary
+		// (plan action-input-contract, D5). This call writes NOTHING to the
+		// record — it returns 202 — so the only place these values can survive
+		// until the approver's separate request is on the approval row itself.
+		// Without this they were dropped, and the approved transition wrote the
+		// state alone (measured on kafe `void-order`: a voided order with no
+		// `void_reason`).
+		row.Params = spec.TransitionInputParams(contractSpec, contractTrans, params, resourceData)
 		if _, err := f.wfApprovals.Create(ctx, *row); err != nil {
 			writeError(w, http.StatusInternalServerError, "WORKFLOW_ERROR", err.Error())
 			return
@@ -2430,7 +2504,12 @@ func (f *HandlerFactory) handleWorkflowApproval(
 
 		// If all steps are approved, execute the real transition.
 		if approval.AllStepsApproved(steps) {
-			f.executeWorkflowTransition(w, r, ctx, module, entity, resourceID, toState, resourceData, resourceVersion, workspaceID, userID)
+			// Merge the requester's stored inputs back in, so the record the
+			// approver's request carries is completed with what the requester
+			// declared. An explicit value from the approver wins — they may have
+			// corrected it — and the stored value is the fallback.
+			mergeApprovalParams(approval.Params, resourceData)
+			f.executeWorkflowTransition(w, r, ctx, module, entity, resourceID, fromState, toState, resourceData, resourceVersion, workspaceID, userID)
 			return
 		}
 
@@ -2482,6 +2561,54 @@ func (f *HandlerFactory) handleWorkflowApproval(
 	}
 }
 
+// seedStoredApprovalParams fills in the inputs an earlier requester stored on a
+// pending approval row, for any key the current request and record do not
+// already carry.
+//
+// It exists so the approver's call can satisfy the transition's contract from
+// the requester's values. The approval call is a different request by a
+// different person: requiring them to repeat a reason they did not write would
+// make a correct approval fail validation, and the alternative — trusting the
+// body alone — is what let the requester's input be dropped in the first place.
+//
+// Best-effort: when no approval store is wired, or no row is pending, the request
+// proceeds with exactly what it carried.
+func (f *HandlerFactory) seedStoredApprovalParams(
+	ctx context.Context, workspaceID, module, entity, resourceID string, merged map[string]any,
+) {
+	if f.wfApprovals == nil || merged == nil || resourceID == "" {
+		return
+	}
+	row, err := f.wfApprovals.GetByRecord(ctx, workspaceID, module+"."+entity, resourceID)
+	if err != nil || row == nil {
+		return
+	}
+	mergeApprovalParams(row.Params, merged)
+}
+
+// mergeApprovalParams fills in the requester's stored inputs for any key the
+// approving request did not itself carry.
+//
+// Approver values win (they may have corrected or completed the input); the
+// requester's stored values are the fallback. Framework-owned keys are skipped:
+// an approval row is a stored snapshot, and letting one overwrite the record's
+// identity, state field, or version bookkeeping would corrupt the write it is
+// merged into.
+func mergeApprovalParams(stored, recordData map[string]any) {
+	if len(stored) == 0 || recordData == nil {
+		return
+	}
+	for k, v := range stored {
+		if _, present := recordData[k]; present {
+			continue
+		}
+		if k == "id" || k == "version" || k == "decision" || strings.HasPrefix(k, "_") {
+			continue
+		}
+		recordData[k] = v
+	}
+}
+
 // requesterIDFor resolves the user the approval request is attributed to.
 //
 // created_by is a framework-owned COLUMN on the record, not a business field:
@@ -2525,7 +2652,7 @@ func (f *HandlerFactory) requesterIDFor(
 // _ to avoid the unused-param warning.
 func (f *HandlerFactory) executeWorkflowTransition(
 	w http.ResponseWriter, _ *http.Request, ctx context.Context,
-	module, entity, resourceID, toState string,
+	module, entity, resourceID, fromState, toState string,
 	resourceData map[string]any, resourceVersion int,
 	workspaceID, userID string,
 ) {
@@ -2537,22 +2664,52 @@ func (f *HandlerFactory) executeWorkflowTransition(
 
 	// Determine the state field name from the entity spec.
 	stateField := "status"
+	var entitySpec *spec.EntitySpec
 	if f.specLookup != nil {
-		if es, ok := f.specLookup(module, entity); ok && es.StateMachine != nil {
-			stateField = es.StateMachine.Field
+		if es, ok := f.specLookup(module, entity); ok {
+			entitySpec = es
+			if es.StateMachine != nil {
+				stateField = es.StateMachine.Field
+			}
+		}
+	}
+
+	// Transition → event link (S13), enqueued with the state write below.
+	//
+	// This is the piece both write paths missed: `HandleUpdate` returns BEFORE
+	// its emission block once an approval is required, and this function never
+	// resolved one — so an approval-gated transition published NOTHING. Measured
+	// on kafe `void-order` (`emit: on_cancel`): the order became `cancelled` and
+	// its table stayed `occupied` forever, because the table bridge is what
+	// listens for `on_cancel` — leaving the next guest unable to check in (a
+	// second OPEN session on one table is refused by the partial unique index).
+	// Drive the same transition without a workflow and the event fires, which is
+	// what made the asymmetry invisible (todo 5.24.5).
+	//
+	// `fromState` comes from the approval row, so the pair (from, to) still
+	// identifies the transition even though the approving request is a different
+	// call from the requesting one.
+	var pendingEvents []db.PendingEvent
+	if entitySpec != nil && entitySpec.StateMachine != nil {
+		if emitted := action.ResolveTransitionEmission(entitySpec.StateMachine, entitySpec.Events,
+			fromState, toState, emissionRecordID(resourceID, resourceData), resourceData); emitted != nil && emitted.Durable {
+			if payloadJSON, err := action.BuildEventMessage(module+"/"+entity, *emitted); err == nil {
+				pendingEvents = append(pendingEvents, db.PendingEvent{Name: emitted.Name, Payload: string(payloadJSON)})
+			}
 		}
 	}
 
 	// Update the record's state field.
 	resourceData[stateField] = toState
 	_, err = store.Update(ctx, db.UpdateParams{
-		WorkspaceID: workspaceID,
-		ID:          resourceID,
-		Version:     resourceVersion,
-		Data:        resourceData,
-		UpdatedBy:   userID,
-		RequestID:   requestIDFromContext(ctx),
-		Permissions: permissionsFromContext(ctx),
+		WorkspaceID:   workspaceID,
+		ID:            resourceID,
+		Version:       resourceVersion,
+		Data:          resourceData,
+		UpdatedBy:     userID,
+		RequestID:     requestIDFromContext(ctx),
+		Permissions:   permissionsFromContext(ctx),
+		PendingEvents: pendingEvents,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "WORKFLOW_ERROR", err.Error())
@@ -2599,6 +2756,7 @@ func workflowApprovalFromRow(row *db.WorkflowApprovalRow) *workflow.Approval {
 		RejectedBy:     row.RejectedBy,
 		RejectStep:     row.RejectStep,
 		EscalatedSteps: row.EscalatedSteps,
+		Params:         row.Params,
 	}
 }
 
@@ -2623,6 +2781,7 @@ func workflowApprovalToRow(a *workflow.Approval) *db.WorkflowApprovalRow {
 		RejectedBy:     a.RejectedBy,
 		RejectStep:     a.RejectStep,
 		EscalatedSteps: a.EscalatedSteps,
+		Params:         a.Params,
 	}
 }
 
@@ -2671,9 +2830,14 @@ func (f *HandlerFactory) HandleServiceAction(module, serviceName, actionName str
 			params = make(map[string]any)
 		}
 
-		// Validate action params if declared.
-		if actionSpec.Params != nil && len(actionSpec.Params.Validate) > 0 {
-			if errs := validation.ValidateActionParams(params, actionSpec.Params.Validate); len(errs) > 0 {
+		// Validate action params if declared. As on the entity path, the
+		// renderable half of the contract (`params.inputs`) is folded in so a
+		// parameter declared required there is enforced, not merely rendered.
+		// A Service has no entity spec to inherit field rules from, so the
+		// reference half resolves to nothing — which is correct: an ad-hoc input
+		// is the only kind a Service can have.
+		if rules := spec.EffectiveParamValidation(nil, actionSpec.Params); len(rules) > 0 {
+			if errs := validation.ValidateActionParams(params, rules); len(errs) > 0 {
 				writeValidationErrors(w, errs)
 				return
 			}

@@ -41,6 +41,13 @@ metadata:
 5. **Actions** — custom action butuh `uses:` (primitives/resources/secrets)
    yang JUJUR: hanya deklarasikan yang benar-benar dipakai script.
    `formspec validate` men-scan honesty (undeclared usage → error).
+   Kalau action/transisi butuh **input dari pemanggil**, deklarasikan
+   `params.inputs` — bukan hanya `params.validate`. `validate` menolak body yang
+   salah; `inputs` yang membuat body itu bisa **diisi**: nama yang sama dengan
+   field Entity MERUJUK field itu (tipe/enum diwarisi, nilainya disimpan), nama
+   lain wajib punya `type` dan hanya diteruskan ke handler. Ini yang
+   memunculkan dialog input di UI (DetailPage, Table baris + massal, Kanban)
+   tanpa menulis komponen — lihat `formspec-kinds` §"Kontrak input".
 6. **Expose** — API tidak terbuka by default; deklarasikan
    `expose: [{type: rest, actions: [list, find, ...]}]`.
 
@@ -55,7 +62,7 @@ metadata:
 | `date`, `datetime`   |                                                                                                                                |
 | `enum`               | wajib `enum_values: [...]`                                                                                                     |
 | `relation`           | referensi entity lain — `relation: {type: belongs_to, resource: "<module>.<entity>"}` (key-nya **`resource`**, bukan `target`) |
-| `json`               | struktur bebas; beri `multiple: true` + `options` bila nilainya himpunan pilihan                                                          |
+| `json`               | struktur bebas; beri `multiple: true` + `options` bila nilainya himpunan pilihan                                               |
 
 ### Himpunan pilihan — `options` + `multiple`
 
@@ -64,14 +71,14 @@ Form): `options: [{value, label}]` menyatakan nilai + caption-nya, dan
 `multiple` menyatakan berapa banyak yang dipegang field.
 
 ```yaml
-- name: days_of_week        # himpunan
+- name: days_of_week # himpunan
   type: json
-  multiple: true            # WAJIB di json/string bila ada options
+  multiple: true # WAJIB di json/string bila ada options
   options:
     - { value: 1, label: "Senin" }
     - { value: 2, label: "Selasa" }
 
-- name: channel             # satu nilai, tetap ber-caption
+- name: channel # satu nilai, tetap ber-caption
   type: string
   multiple: false
   options:

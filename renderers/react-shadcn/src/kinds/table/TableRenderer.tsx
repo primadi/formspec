@@ -79,6 +79,12 @@ import { Select } from "@/components/ui/select"
 import { cn, interpolateConfirm, titleCase } from "@/lib/utils"
 import { resolveIcon } from "@/lib/icon-resolver"
 import ConfirmDialog from "@/components/ui/confirm-dialog"
+import ActionInputDialog from "@/shell/ActionInputDialog"
+import {
+  resolveActionInputs,
+  EMPTY_ACTION_INPUTS,
+  type ResolvedActionInputs,
+} from "@/lib/actionParams"
 import {
   getEntityRouteIdentifier,
   getEntityRouteSegment,
@@ -240,6 +246,15 @@ export default function TableRenderer({
   const [pendingBulkAction, setPendingBulkAction] = useState<{
     action: TableAction
     confirmMsg: string
+  } | null>(null)
+
+  // Declared-input collection (plan action-input-contract). `row` is set for a
+  // row action and absent for a bulk one, which collects ONCE for the whole
+  // selection — the difference the caller needs when applying the values.
+  const [inputAction, setInputAction] = useState<{
+    action: TableAction
+    resolved: ResolvedActionInputs
+    row?: RowData
   } | null>(null)
 
   // Reset page when filters change
@@ -535,7 +550,10 @@ export default function TableRenderer({
     return null
   }
 
-  const runBulkAction = async (action: TableAction) => {
+  const runBulkAction = async (
+    action: TableAction,
+    inputs?: Record<string, unknown>,
+  ) => {
     const reason = canRunBulk(action)
     if (reason) {
       toast.error(reason)
@@ -552,8 +570,13 @@ export default function TableRenderer({
         if (action.action === "delete") {
           await apiDelete(client, `${entity.module}/${entity.name}/${segments}`)
         } else {
+          // The same inputs are sent for every row: a bulk action collects once
+          // and applies N times. Before this, a bulk action was limited to
+          // actions with NO parameters — one that needed a reason (void-order)
+          // failed validation on every row (todo 5.12.9).
           await client.post(
             `${entity.module}/${entity.name}/${segments}/${action.action}`,
+            { json: inputs ?? {} },
           )
         }
         results.push({ id: row.id as string, ok: true })
@@ -587,6 +610,15 @@ export default function TableRenderer({
       runBulkAction(action)
       return
     }
+
+    // A bulk action that declares inputs collects them ONCE, before the loop —
+    // asking per row would defeat the point of a bulk operation.
+    const resolved = resolveActionInputs(entity, action.action)
+    if (!resolved.isEmpty) {
+      setInputAction({ action, resolved })
+      return
+    }
+
     const entityAction = entity.actions?.find((a) => a.name === action.action)
     const confirmMsg =
       action.confirm_msg ??
@@ -769,13 +801,27 @@ export default function TableRenderer({
     action: TableAction,
     row: RowData,
     skipConfirm = false,
+    inputs?: Record<string, unknown>,
   ) => {
     if (!me) return
-
-    // Check permission
     if (!canDoEntityAction(me, entity, action.action)) {
       toast.error("You don't have permission to perform this action")
       return
+    }
+
+    // Collect the action's declared inputs first, so a row action that needs a
+    // reason asks for one instead of POSTing an empty body the server now
+    // rejects. `view`/`edit`/`delete` never declare inputs.
+    if (
+      !skipConfirm &&
+      !inputs &&
+      !["view", "edit", "delete"].includes(action.action)
+    ) {
+      const resolved = resolveActionInputs(entity, action.action)
+      if (!resolved.isEmpty) {
+        setInputAction({ action, resolved, row })
+        return
+      }
     }
 
     // Resolve confirm message: table action first, then entity action's ui.confirm,
@@ -847,6 +893,7 @@ export default function TableRenderer({
           const client = getClient()
           await client.post(
             `${entity.module}/${entity.name}/${getEntityRouteSegment(entity, row)}/${action.action}`,
+            { json: inputs ?? {} },
           )
           toast.success("Action completed")
           setReloadKey((k) => k + 1)
@@ -1283,6 +1330,41 @@ export default function TableRenderer({
           if (pending) runBulkAction(pending.action)
         }}
         onCancel={() => setPendingBulkAction(null)}
+      />
+
+      {/* Declared-input form for a row or bulk action. One component, and the
+          values travel through the same code path whether they were declared on
+          the action or on a transition `via`. */}
+      <ActionInputDialog
+        open={!!inputAction}
+        onOpenChange={(open) => {
+          if (!open) setInputAction(null)
+        }}
+        title={inputAction?.action.label ?? ""}
+        message={
+          inputAction?.row
+            ? undefined
+            : `Diterapkan ke ${selectedRows.size} baris terpilih`
+        }
+        resolved={inputAction?.resolved ?? EMPTY_ACTION_INPUTS}
+        record={inputAction?.row as Record<string, unknown> | undefined}
+        user={me}
+        variant={
+          inputAction?.action.action === "delete" ||
+          inputAction?.action.action === "cancel"
+            ? "destructive"
+            : "default"
+        }
+        onSubmit={async (values) => {
+          const pending = inputAction
+          setInputAction(null)
+          if (!pending) return
+          if (pending.row) {
+            await handleRowAction(pending.action, pending.row, true, values)
+          } else {
+            await runBulkAction(pending.action, values)
+          }
+        }}
       />
     </div>
   )

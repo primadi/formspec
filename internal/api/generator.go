@@ -42,7 +42,7 @@ func GenerateRoutes(registry *entity.Registry) []RouteDescriptor {
 
 		for _, exp := range es.Expose {
 			if exp.Type == spec.ProtocolREST {
-				routes = append(routes, generateRESTRoutes(info.Module, info.Name, plural, exp, isSummary, disabled, es.SoftDeactivate != nil && es.SoftDeactivate.Enabled)...)
+				routes = append(routes, generateRESTRoutes(info.Module, info.Name, plural, exp, isSummary, disabled, es.SoftDeactivate != nil && es.SoftDeactivate.Enabled, implBackedActionNames(es))...)
 			}
 			// Future: grpc, ws
 		}
@@ -110,8 +110,18 @@ func UIRoutesForEntity(module, name string, es *spec.EntitySpec) []RouteDescript
 		// Lifecycle actions that declare a custom `impl` are emitted by
 		// GenerateUICustomActionRoutes (Handler "custom"); adding them here as
 		// well would register the same path twice and shadow the custom handler.
+		//
+		// Read through ActionSources, NOT `es.Actions`: the custom generator
+		// emits from the union (declared ∪ transition `via`), so asking
+		// `es.Actions` answers a different question than the one that matters.
+		// A transition declaring `via: submit` + `impl` with no `actions:` entry
+		// was invisible here, so this emitted the generic route AND the custom
+		// generator emitted the same path — and `mergeRoutes` keeps the FIRST,
+		// silently dropping the transition's own handler. Latent until a
+		// manifest writes that shape, which is exactly what L3/L4 encourage by
+		// deleting the duplicated `actions:` entry.
 		implActions := make(map[string]bool)
-		for _, a := range es.Actions {
+		for _, a := range es.ActionSources() {
 			if a.Impl != nil {
 				implActions[a.Name] = true
 			}
@@ -126,7 +136,7 @@ func UIRoutesForEntity(module, name string, es *spec.EntitySpec) []RouteDescript
 		uiActions = append(uiActions, "deactivate", "reactivate")
 	}
 	uiExp := spec.ExposeConfig{Type: spec.ProtocolREST, Actions: uiActions}
-	routes = append(routes, generateRESTRoutes(module, name, plural, uiExp, isSummary, disabled, es.SoftDeactivate != nil && es.SoftDeactivate.Enabled)...)
+	routes = append(routes, generateRESTRoutes(module, name, plural, uiExp, isSummary, disabled, es.SoftDeactivate != nil && es.SoftDeactivate.Enabled, implBackedActionNames(es))...)
 
 	// Two-step idempotency prepare (todo 2.7.1) on the UI surface too —
 	// the primary use case is browser double-submit on create.
@@ -163,9 +173,36 @@ func disabledActions(es *spec.EntitySpec) map[string]bool {
 	return disabled
 }
 
+// implBackedActionNames lists the action names served by their OWN route
+// (Handler "custom") because they declare an `impl`.
+//
+// The generic generator must not emit a route for these names as well: both
+// descriptors carry the same (Method, Path), and `mergeRoutes` keeps the FIRST
+// one — so the generic handler silently wins and the declared `impl` never runs.
+//
+// Read through ActionSources() so a transition `via` counts exactly like a
+// declared `actions:` entry. Asking `es.Actions` instead answered a different
+// question than the one that decides the overlap: a transition declaring
+// `via: submit` + `impl` with no `actions:` entry was invisible, so the generic
+// route was emitted next to the custom one. Latent until a manifest writes that
+// shape — which is what L3/L4 encourage, by deleting the duplicated `actions:`
+// entry.
+func implBackedActionNames(es *spec.EntitySpec) map[string]bool {
+	out := make(map[string]bool)
+	if es == nil {
+		return out
+	}
+	for _, a := range es.ActionSources() {
+		if a.Impl != nil {
+			out[a.Name] = true
+		}
+	}
+	return out
+}
+
 // generateRESTRoutes creates REST route descriptors for one entity.
 // Applies transitive gating (2.3.2) and auto-derives composite actions (2.3.6).
-func generateRESTRoutes(module, name, plural string, exp spec.ExposeConfig, isSummary bool, disabled map[string]bool, softDeactivate bool) []RouteDescriptor {
+func generateRESTRoutes(module, name, plural string, exp spec.ExposeConfig, isSummary bool, disabled map[string]bool, softDeactivate bool, customHandled map[string]bool) []RouteDescriptor {
 	var routes []RouteDescriptor
 
 	// Apply transitive gating (2.3.2): submit disabled → cancel/amend implicitly disabled;
@@ -190,6 +227,16 @@ func generateRESTRoutes(module, name, plural string, exp spec.ExposeConfig, isSu
 	for _, std := range StandardRESTActions {
 		// Disabled standard actions never generate a route (§11.1)
 		if fullDisabled[std.Action] {
+			continue
+		}
+
+		// An action with its own `impl` is served by its custom route (Handler
+		// "custom"). Emitting the generic one too registers the same
+		// (Method, Path) twice, and `mergeRoutes` keeps the first — so this
+		// generic handler would shadow the declared `impl`. Checked BEFORE the
+		// `allowed` filter, because `exp.actions` may name the action
+		// explicitly and that is precisely the case that overlaps.
+		if customHandled[std.Action] {
 			continue
 		}
 
@@ -353,7 +400,15 @@ func GenerateCustomActionRoutes(registry *entity.Registry) []RouteDescriptor {
 				continue
 			}
 
-			for _, action := range es.Actions {
+			// Iterate the UNION (declared `actions:` ∪ transition `via`), like
+			// `UICustomActionRoutesForEntity` and `generatePrepareRoutes` already
+			// do. Reading `es.Actions` here was the one hold-out: a transition
+			// that declares `impl` and names its `via` is a full action source
+			// (L3, plan docs_internal/plan/via-sebagai-action-penuh.md), so it
+			// serves `/_ui/entity/…` while being absent from `/api/v1/…` — and
+			// `formspec generate`, which mirrors this surface, then had no method
+			// and no params type for an endpoint that already existed.
+			for _, action := range es.ActionSources() {
 				// Standard CRUD actions (list/find/create/update/delete) are handled
 				// by generateRESTRoutes. Lifecycle actions (submit/cancel/amend) with
 				// a custom impl constitute custom state-machine actions, not document

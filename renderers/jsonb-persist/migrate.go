@@ -231,6 +231,12 @@ func SystemTableDDLs(driver DriverType) []string {
 			"rejected_by     text    NOT NULL DEFAULT ''",
 			"reject_step     integer NOT NULL DEFAULT -1",
 			"escalated_steps text    NOT NULL DEFAULT '{}'", // stepIdx -> reassign_roles (7.4.4)
+			// params carries the input values the REQUESTER supplied for the
+			// transition (plan action-input-contract, D5). Without it they were
+			// dropped: a 202 is returned before any write, so `void_reason` on the
+			// requesting call never reached the record, and the approval call had
+			// no way to know it.
+			"params          text    NOT NULL DEFAULT '{}'",
 			fmt.Sprintf("created_at      %s NOT NULL DEFAULT %s", ts, now),
 			fmt.Sprintf("updated_at      %s NOT NULL DEFAULT %s", ts, now),
 		),
@@ -379,28 +385,34 @@ func (r *MigrationRunner) EnsureSystemTables(ctx context.Context) error {
 		}
 	}
 
-	// Ensure the escalated_steps column exists on formspec_workflow_approval
-	// (todo 7.4.4) — added after the table's initial creation, so existing
-	// databases need an ALTER TABLE ADD COLUMN.
+	// Ensure the escalated_steps and params columns exist on
+	// formspec_workflow_approval — each was added after the table's initial
+	// creation, so existing databases need an ALTER TABLE ADD COLUMN.
 	if err := r.ensureWorkflowApprovalColumn(ctx); err != nil {
 		return err
 	}
 	return nil
 }
 
-// ensureWorkflowApprovalColumn adds the escalated_steps column to
-// formspec_workflow_approval if it is missing (todo 7.4.4).
+// ensureWorkflowApprovalColumn adds the columns formspec_workflow_approval
+// gained after its initial creation: escalated_steps (todo 7.4.4) and params
+// (plan action-input-contract).
 func (r *MigrationRunner) ensureWorkflowApprovalColumn(ctx context.Context) error {
 	existing, err := r.existingColumns(ctx, "", "formspec_workflow_approval")
 	if err != nil {
-		return fmt.Errorf("ensure escalated_steps: list columns: %w", err)
+		return fmt.Errorf("ensure workflow approval columns: list columns: %w", err)
 	}
-	if existing["escalated_steps"] {
-		return nil
+	if !existing["escalated_steps"] {
+		if _, err := r.db.ExecContext(ctx,
+			"ALTER TABLE formspec_workflow_approval ADD COLUMN escalated_steps text NOT NULL DEFAULT '{}'"); err != nil {
+			return fmt.Errorf("ensure escalated_steps: add column: %w", err)
+		}
 	}
-	if _, err := r.db.ExecContext(ctx,
-		"ALTER TABLE formspec_workflow_approval ADD COLUMN escalated_steps text NOT NULL DEFAULT '{}'"); err != nil {
-		return fmt.Errorf("ensure escalated_steps: add column: %w", err)
+	if !existing["params"] {
+		if _, err := r.db.ExecContext(ctx,
+			"ALTER TABLE formspec_workflow_approval ADD COLUMN params text NOT NULL DEFAULT '{}'"); err != nil {
+			return fmt.Errorf("ensure approval params: add column: %w", err)
+		}
 	}
 	return nil
 }

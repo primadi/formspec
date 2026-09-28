@@ -1888,6 +1888,29 @@
       },
       "additionalProperties": false
     },
+    "InputSet": {
+      "description": "InputSet is a named, reusable list of inputs declared on the Entity.\n\nTransitions that collect the same parameters share one set through\n`params.inputs_from` instead of repeating the declaration. The set lives on\nthe Entity rather than on an action because a transition's parameters are\ndrawn from the same field pool as the record's — which is also why a \"one\nshared form for every transition\" is not expressible: permission, conditions,\napproval interception, and event emission all attach to individual\ntransitions, not to the entity.\n",
+      "type": "object",
+      "properties": {
+        "inputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ParamInput"
+          }
+        },
+        "name": {
+          "description": "Set name, referenced by a transition's or action's `params.inputs_from`.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z][a-z0-9_]*$"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    },
     "IntegratorCall": {
       "description": "IntegratorCall declares the target action to invoke.\n",
       "type": "object",
@@ -2362,6 +2385,92 @@
       ],
       "additionalProperties": false
     },
+    "ParamInput": {
+      "description": "ParamInput is one declared input of an action or transition.\n",
+      "type": "object",
+      "properties": {
+        "compute": {
+          "type": "string"
+        },
+        "default": {
+          "description": "Default seeds the input before the user touches it."
+        },
+        "enum_values": {
+          "description": "EnumValues / Options / Multiple describe an ad-hoc input's choice set, the",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "help": {
+          "description": "Help is the user-facing hint rendered under the input. On an Entity field",
+          "type": "string"
+        },
+        "label": {
+          "description": "Label overrides the caption. Falls back to the Entity field's `title`,",
+          "type": "string"
+        },
+        "multiple": {
+          "type": "boolean",
+          "nullable": true
+        },
+        "name": {
+          "description": "Parameter name, and the wire key in the request body. Matching an Entity field name makes this a REFERENCE to that field (inheriting type/enum/cardinality, and persisting the collected value); otherwise the input is ad-hoc.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FieldOption"
+          }
+        },
+        "persist": {
+          "description": "Persist overrides the destination of a collected value. Absent means the",
+          "type": "boolean",
+          "nullable": true
+        },
+        "placeholder": {
+          "description": "Placeholder is the empty-state hint inside the input.",
+          "type": "string"
+        },
+        "readonly_when": {
+          "type": "string"
+        },
+        "required": {
+          "description": "Required marks the input as unconditionally required. `RequiredWhen`",
+          "type": "boolean"
+        },
+        "required_when": {
+          "type": "string"
+        },
+        "rules": {
+          "description": "Rules constrains the collected value. Merged with the Entity field's own",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ValidationRule"
+          }
+        },
+        "type": {
+          "$ref": "#/$defs/FieldType",
+          "description": "Type is the data type of an AD-HOC input. Required when `name` matches no"
+        },
+        "visible_when": {
+          "description": "Client-behavior vocabulary (`FormSpecExpr`), identical to a Form field's",
+          "type": "string"
+        },
+        "widget": {
+          "$ref": "#/$defs/FormWidget",
+          "description": "Widget overrides the widget derived from the field's type. A CLOSED set"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    },
     "ParamValidation": {
       "description": "ParamValidation validates an action parameter.\n",
       "type": "object",
@@ -2382,14 +2491,49 @@
       "additionalProperties": false
     },
     "ParamsDecl": {
-      "description": "ParamsDecl defines input parameters for an action.\n",
+      "description": "ParamsDecl declares what an action or transition accepts: the rules a request\nbody must satisfy (`validate`), and — since the action-input contract — the\ninputs a renderer should COLLECT (`inputs`).\n",
       "type": "object",
       "properties": {
+        "inputs": {
+          "description": "Inputs declares the parameters richly enough to render: label, widget, and",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ParamInput"
+          }
+        },
+        "inputs_from": {
+          "description": "InputsFrom pulls in named `input_sets:` declared on the owning Entity, so",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "render": {
+          "$ref": "#/$defs/ParamsRenderHint",
+          "description": "Render carries the design-time container decision. Absent means the",
+          "nullable": true
+        },
         "validate": {
           "type": "array",
           "items": {
             "$ref": "#/$defs/ParamValidation"
           }
+        }
+      },
+      "additionalProperties": false
+    },
+    "ParamsRenderHint": {
+      "description": "ParamsRenderHint carries the container decision for an input form, and is\ndeliberately a design-time choice — the same locking `Form.render` has, and\nfor the same reason: whether a dialog or a page appears is a layout decision\na manifest author makes, not something the runtime should second-guess.\n\nWhen absent the renderer derives the container from the input count, matching\n`deriveFormRenderMode` (≤5 modal, 5–12 drawer, \u003e12 separate_page).\n",
+      "type": "object",
+      "properties": {
+        "mode": {
+          "description": "Input-form container. Design-time decision, not switchable at runtime.",
+          "type": "string",
+          "enum": [
+            "modal",
+            "drawer",
+            "separate_page"
+          ]
         }
       },
       "additionalProperties": false
@@ -6310,6 +6454,29 @@
       },
       "additionalProperties": false
     },
+    "InputSet": {
+      "description": "InputSet is a named, reusable list of inputs declared on the Entity.\n\nTransitions that collect the same parameters share one set through\n`params.inputs_from` instead of repeating the declaration. The set lives on\nthe Entity rather than on an action because a transition's parameters are\ndrawn from the same field pool as the record's — which is also why a \"one\nshared form for every transition\" is not expressible: permission, conditions,\napproval interception, and event emission all attach to individual\ntransitions, not to the entity.\n",
+      "type": "object",
+      "properties": {
+        "inputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ParamInput"
+          }
+        },
+        "name": {
+          "description": "Set name, referenced by a transition's or action's `params.inputs_from`.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z][a-z0-9_]*$"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    },
     "IntegratorCall": {
       "description": "IntegratorCall declares the target action to invoke.\n",
       "type": "object",
@@ -6784,6 +6951,92 @@
       ],
       "additionalProperties": false
     },
+    "ParamInput": {
+      "description": "ParamInput is one declared input of an action or transition.\n",
+      "type": "object",
+      "properties": {
+        "compute": {
+          "type": "string"
+        },
+        "default": {
+          "description": "Default seeds the input before the user touches it."
+        },
+        "enum_values": {
+          "description": "EnumValues / Options / Multiple describe an ad-hoc input's choice set, the",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "help": {
+          "description": "Help is the user-facing hint rendered under the input. On an Entity field",
+          "type": "string"
+        },
+        "label": {
+          "description": "Label overrides the caption. Falls back to the Entity field's `title`,",
+          "type": "string"
+        },
+        "multiple": {
+          "type": "boolean",
+          "nullable": true
+        },
+        "name": {
+          "description": "Parameter name, and the wire key in the request body. Matching an Entity field name makes this a REFERENCE to that field (inheriting type/enum/cardinality, and persisting the collected value); otherwise the input is ad-hoc.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FieldOption"
+          }
+        },
+        "persist": {
+          "description": "Persist overrides the destination of a collected value. Absent means the",
+          "type": "boolean",
+          "nullable": true
+        },
+        "placeholder": {
+          "description": "Placeholder is the empty-state hint inside the input.",
+          "type": "string"
+        },
+        "readonly_when": {
+          "type": "string"
+        },
+        "required": {
+          "description": "Required marks the input as unconditionally required. `RequiredWhen`",
+          "type": "boolean"
+        },
+        "required_when": {
+          "type": "string"
+        },
+        "rules": {
+          "description": "Rules constrains the collected value. Merged with the Entity field's own",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ValidationRule"
+          }
+        },
+        "type": {
+          "$ref": "#/$defs/FieldType",
+          "description": "Type is the data type of an AD-HOC input. Required when `name` matches no"
+        },
+        "visible_when": {
+          "description": "Client-behavior vocabulary (`FormSpecExpr`), identical to a Form field's",
+          "type": "string"
+        },
+        "widget": {
+          "$ref": "#/$defs/FormWidget",
+          "description": "Widget overrides the widget derived from the field's type. A CLOSED set"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    },
     "ParamValidation": {
       "description": "ParamValidation validates an action parameter.\n",
       "type": "object",
@@ -6804,14 +7057,49 @@
       "additionalProperties": false
     },
     "ParamsDecl": {
-      "description": "ParamsDecl defines input parameters for an action.\n",
+      "description": "ParamsDecl declares what an action or transition accepts: the rules a request\nbody must satisfy (`validate`), and — since the action-input contract — the\ninputs a renderer should COLLECT (`inputs`).\n",
       "type": "object",
       "properties": {
+        "inputs": {
+          "description": "Inputs declares the parameters richly enough to render: label, widget, and",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ParamInput"
+          }
+        },
+        "inputs_from": {
+          "description": "InputsFrom pulls in named `input_sets:` declared on the owning Entity, so",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "render": {
+          "$ref": "#/$defs/ParamsRenderHint",
+          "description": "Render carries the design-time container decision. Absent means the",
+          "nullable": true
+        },
         "validate": {
           "type": "array",
           "items": {
             "$ref": "#/$defs/ParamValidation"
           }
+        }
+      },
+      "additionalProperties": false
+    },
+    "ParamsRenderHint": {
+      "description": "ParamsRenderHint carries the container decision for an input form, and is\ndeliberately a design-time choice — the same locking `Form.render` has, and\nfor the same reason: whether a dialog or a page appears is a layout decision\na manifest author makes, not something the runtime should second-guess.\n\nWhen absent the renderer derives the container from the input count, matching\n`deriveFormRenderMode` (≤5 modal, 5–12 drawer, \u003e12 separate_page).\n",
+      "type": "object",
+      "properties": {
+        "mode": {
+          "description": "Input-form container. Design-time decision, not switchable at runtime.",
+          "type": "string",
+          "enum": [
+            "modal",
+            "drawer",
+            "separate_page"
+          ]
         }
       },
       "additionalProperties": false
@@ -9385,6 +9673,13 @@
               "type": "array",
               "items": {
                 "$ref": "#/$defs/IndexDecl"
+              }
+            },
+            "input_sets": {
+              "description": "InputSets declares named, reusable lists of action inputs. A transition or",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/InputSet"
               }
             },
             "invariants": {

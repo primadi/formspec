@@ -33,9 +33,21 @@ import ConfirmDialog from "@/components/ui/confirm-dialog"
 import ImageLightbox from "@/components/ui/image-lightbox"
 import { getEntityRouteIdentifier } from "@/lib/entityIdentity"
 import { useRouteIdentityStore } from "@/stores/routeIdentity"
+import ActionInputDialog from "@/shell/ActionInputDialog"
+import {
+  resolveActionInputs,
+  type ResolvedActionInputs,
+} from "@/lib/actionParams"
 
 interface DetailPageProps {
   entity: EntitySchema
+}
+
+/** Stable empty value, so a closed dialog does not remount its inputs each render. */
+const EMPTY_RESOLVED_INPUTS: ResolvedActionInputs = {
+  inputs: [],
+  renderMode: "modal",
+  isEmpty: true,
 }
 
 export default function DetailPage({ entity }: DetailPageProps) {
@@ -63,6 +75,15 @@ export default function DetailPage({ entity }: DetailPageProps) {
     action: string
     label: string
     confirm: string
+  } | null>(null)
+  // A transition that declares inputs opens a form instead of a plain confirm
+  // (plan docs_internal/plan/action-input-contract.md). The dialog is generic:
+  // what to collect comes from the manifest, not from this component.
+  const [inputTransition, setInputTransition] = useState<{
+    action: string
+    label: string
+    confirm?: string
+    resolved: ResolvedActionInputs
   } | null>(null)
 
   useEffect(() => {
@@ -119,7 +140,11 @@ export default function DetailPage({ entity }: DetailPageProps) {
     [transitions, me, entity],
   )
 
-  const handleTransition = async (action: string, skipConfirm = false) => {
+  const handleTransition = async (
+    action: string,
+    skipConfirm = false,
+    inputs?: Record<string, unknown>,
+  ) => {
     if (!me) return
     if (!canDoEntityAction(me, entity, action)) {
       toast.error("You don't have permission")
@@ -128,6 +153,25 @@ export default function DetailPage({ entity }: DetailPageProps) {
 
     // Find the transition so its confirm message can be shown first.
     const transition = transitions.find((t) => t.action === action)
+
+    // A transition that DECLARES inputs collects them before running — for the
+    // action route and the PATCH path alike. A guard reading
+    // `params.get('void_reason')` could never pass while the button posted an
+    // empty body, and the server now rejects the call outright, so the form is
+    // what makes the declared contract satisfiable rather than a nicety.
+    if (!skipConfirm && !inputs) {
+      const resolved = resolveActionInputs(entity, action, transition?.decl)
+      if (!resolved.isEmpty) {
+        setInputTransition({
+          action,
+          label: transition?.label ?? action,
+          confirm: transition?.confirm,
+          resolved,
+        })
+        return
+      }
+    }
+
     if (transition?.confirm && !skipConfirm) {
       setPendingTransition({
         action,
@@ -166,7 +210,7 @@ export default function DetailPage({ entity }: DetailPageProps) {
       const useActionRoute = declared?.has_route ?? declared !== undefined
 
       if (useActionRoute) {
-        await client.post(`${path}/${action}`)
+        await client.post(`${path}/${action}`, { json: inputs ?? {} })
       } else {
         const target = transition?.to
         const field = entity.state_machine?.field
@@ -178,7 +222,7 @@ export default function DetailPage({ entity }: DetailPageProps) {
         await apiPatch(
           client,
           path,
-          { [field]: target },
+          { [field]: target, ...(inputs ?? {}) },
           record?.version as number,
         )
       }
@@ -376,6 +420,33 @@ export default function DetailPage({ entity }: DetailPageProps) {
           if (pt) handleTransition(pt.action, true)
         }}
         onCancel={() => setPendingTransition(null)}
+      />
+
+      {/* A transition that declares inputs opens this instead of the confirm
+          above. One generic component serves transitions, row/bulk actions and
+          Kanban cards — what to collect comes from the manifest, so a new
+          transition needs no new UI (plan action-input-contract). */}
+      <ActionInputDialog
+        open={!!inputTransition}
+        onOpenChange={(open) => {
+          if (!open) setInputTransition(null)
+        }}
+        title={inputTransition?.label ?? ""}
+        message={inputTransition?.confirm}
+        resolved={inputTransition?.resolved ?? EMPTY_RESOLVED_INPUTS}
+        record={record ?? undefined}
+        user={me}
+        variant={
+          visibleTransitions.find((t) => t.action === inputTransition?.action)
+            ?.style === "danger"
+            ? "destructive"
+            : "default"
+        }
+        onSubmit={async (values) => {
+          const it = inputTransition
+          setInputTransition(null)
+          if (it) await handleTransition(it.action, true, values)
+        }}
       />
 
       {/* Audit Info */}

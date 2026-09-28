@@ -68,11 +68,22 @@ dihapus. Skema JSON ikut diregenerasi (`make generate-schema`).
 transisi ber-`via`. Precedence: `Actions` menang; transisi menambah
 `{From,To,Guard}`. `ReservedActionNames` tetap mengikat.
 
-**L3 — route & collision** _(depends on L2)_ ✅ 2026-09-27
+**L3 — route & collision** _(depends on L2)_ ✅ 2026-09-27, **dikoreksi 2026-09-28**
 `GenerateCustomActionRoutes` (`internal/api/generator.go:322`) +
 `UICustomActionRoutesForEntity` (`:416`) membaca registry gabungan → transisi
 ber-`impl` dapat route. `IsReservedAction(via)` → error jelas. Nama route
 ber-`via` lama tetap → **additif, URL tidak berubah**.
+
+⚠️ **Koreksi (2026-09-28).** Klaim di atas benar untuk
+`UICustomActionRoutesForEntity`, tetapi **salah untuk
+`GenerateCustomActionRoutes`**: sampai 2026-09-28 fungsi itu masih memindai
+`es.Actions` langsung. Bukti L3 hanya mengukur surface `/_ui/entity/` (404 → 403),
+sehingga celah di `/api/v1/…` tidak terlihat — dan `formspec generate`, yang
+mencerminkan surface REST, tidak punya method maupun tipe params untuk transisi
+`via`+`impl`. Diperbaiki ke `ActionSources()` (changelog `2026-09-28-005`, todo
+5.24.3). Pelajaran yang bisa dipakai ulang: "generator sudah membaca union"
+harus diperiksa **per fungsi**, karena satu surface bisa benar sementara
+surface lain masih memindai `es.Actions`.
 
 ⚠️ **Descriptor bukan route.** Generator menghasilkan `RouteDescriptor` dengan
 benar sejak awal; yang belum ikut adalah **registrasi handler**

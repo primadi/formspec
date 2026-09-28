@@ -263,7 +263,7 @@ func TestRouteDescriptor(t *testing.T) {
 		plural = meta.Name + "s"
 	}
 
-	routes := generateRESTRoutes(meta.Module, meta.Name, plural, entitySpec.Expose[0], false, nil, false)
+	routes := generateRESTRoutes(meta.Module, meta.Name, plural, entitySpec.Expose[0], false, nil, false, nil)
 
 	// Expected: 3 routes (list, find, create — NOT update, delete)
 	if len(routes) != 3 {
@@ -304,7 +304,7 @@ func TestRouteDescriptor(t *testing.T) {
 func TestGenerateRoutes_SummaryEntity(t *testing.T) {
 	routes := generateRESTRoutes("fin", "gl-balance", "gl_balances",
 		spec.ExposeConfig{Type: spec.ProtocolREST},
-		true, nil, false) // isSummary
+		true, nil, false, nil) // isSummary
 
 	// Should only generate list + find
 	if len(routes) != 2 {
@@ -331,7 +331,7 @@ func TestGenerateRoutes_SummaryEntity(t *testing.T) {
 func TestGenerateRoutes_NoActionsFilter(t *testing.T) {
 	routes := generateRESTRoutes("inv", "product", "products",
 		spec.ExposeConfig{Type: spec.ProtocolREST}, // no actions filter
-		false, nil, false)
+		false, nil, false, nil)
 
 	// Default: list, find, create, update (NOT delete)
 	actions := make(map[string]bool)
@@ -767,7 +767,7 @@ func TestUserFromContext_PrefersIdentity(t *testing.T) {
 func TestRouteDescriptor_RequiredPermission(t *testing.T) {
 	routes := generateRESTRoutes("billing", "invoice", "invoices",
 		spec.ExposeConfig{Type: spec.ProtocolREST, Actions: []string{"list", "find", "create"}},
-		false, nil, false)
+		false, nil, false, nil)
 
 	if len(routes) != 3 {
 		t.Fatalf("expected 3 routes, got %d", len(routes))

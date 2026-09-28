@@ -8,10 +8,11 @@ import {
   evaluate,
   getWarnings,
   type EvalContext,
+  type RuntimeObject,
   type RuntimeValue,
 } from "./eval"
 
-export type { EvalContext, RuntimeValue }
+export type { EvalContext, RuntimeValue, RuntimeObject }
 
 export interface FormSpecExprResult {
   value: RuntimeValue

@@ -73,6 +73,12 @@ import { DateInput } from "@/widgets/DateInput"
 import { Search } from "lucide-react"
 import { Select } from "@/components/ui/select"
 import ConfirmDialog from "@/components/ui/confirm-dialog"
+import ActionInputDialog from "@/shell/ActionInputDialog"
+import {
+  resolveActionInputs,
+  EMPTY_ACTION_INPUTS,
+  type ResolvedActionInputs,
+} from "@/lib/actionParams"
 
 // ── Constants ──
 
@@ -213,6 +219,14 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
   const [pendingAction, setPendingAction] = useState<{
     action: TableAction
     record: Record<string, unknown>
+  } | null>(null)
+  // A card action that DECLARES inputs opens a form rather than a plain confirm.
+  // The board is a third surface for the same declaration — one generic dialog,
+  // no per-surface UI (plan docs_internal/plan/action-input-contract.md).
+  const [inputAction, setInputAction] = useState<{
+    action: TableAction
+    record: Record<string, unknown>
+    resolved: ResolvedActionInputs
   } | null>(null)
 
   // ── Sensors for drag detection ──
@@ -614,6 +628,7 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
       action: TableAction,
       record: Record<string, unknown>,
       skipConfirm = false,
+      inputs?: Record<string, unknown>,
     ) => {
       if (!me || !entity) return
 
@@ -627,6 +642,16 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
       ) {
         toast.error("You don't have permission to perform this action")
         return
+      }
+
+      // A card action that declares inputs collects them first — otherwise the
+      // request would fail the contract the manifest declares.
+      if (!skipConfirm && !inputs && action.action !== "delete") {
+        const resolved = resolveActionInputs(entity, action.action)
+        if (!resolved.isEmpty) {
+          setInputAction({ action, record, resolved })
+          return
+        }
       }
 
       // Resolve confirm message: kanban action first, then entity action's
@@ -677,6 +702,7 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
             const client = getClient()
             await client.post(
               `${entity.module}/${entity.name}/${routeSegment}/${action.action}`,
+              { json: inputs ?? {} },
             )
             toast.success("Action completed")
             fetchRecords()
@@ -814,6 +840,26 @@ export default function KanbanRenderer({ entry }: KanbanRendererProps) {
           if (!pendingAction) return
           handleRowAction(pendingAction.action, pendingAction.record, true)
           setPendingAction(null)
+        }}
+      />
+
+      {/* Declared-input form for a card action — the same generic component the
+          detail page and table use, so one declaration serves every surface. */}
+      <ActionInputDialog
+        open={inputAction !== null}
+        onOpenChange={(open) => {
+          if (!open) setInputAction(null)
+        }}
+        title={inputAction?.action.label ?? ""}
+        resolved={inputAction?.resolved ?? EMPTY_ACTION_INPUTS}
+        record={inputAction?.record}
+        user={me}
+        onSubmit={async (values) => {
+          const pending = inputAction
+          setInputAction(null)
+          if (pending) {
+            await handleRowAction(pending.action, pending.record, true, values)
+          }
         }}
       />
     </div>

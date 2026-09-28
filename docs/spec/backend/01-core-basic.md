@@ -343,16 +343,50 @@ spec:
 Transisi boleh membawa **seluruh atribut action**, sehingga `via` tidak pernah
 menjadi warga kelas dua:
 
-| Field transisi                           | Arti                                                                                                          |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `via`                                    | Nama action (wajib untuk bisa dipanggil; boleh kosong untuk transisi yang hanya berlaku lewat `PATCH`/script) |
-| `description`                            | Deskripsi action; dipakai sebagai label tombol bila `ui.button_label` tidak ada                               |
-| `impl`                                   | Membuat action punya route sendiri (`POST /{id}/{via}`)                                                       |
-| `require_permission`                     | Gate yang diperiksa pada jalur `PATCH`/route; **inilah** tempat menulis permission, bukan di `actions:`       |
-| `audit`, `emits`, `emit`                 | Jejak audit dan tautan event                                                                                  |
-| `conditions`, `ui`                       | Aturan bisnis dan petunjuk tombol                                                                             |
-| `idempotent`, `idempotency_key`          | Semantik two-step (`/prepare`)                                                                                |
-| `uses`, `params`, `expose`, `rate_limit` | Footprint consent, kontrak input, protokol, limit                                                             |
+| Field transisi                  | Arti                                                                                                          |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `via`                           | Nama action (wajib untuk bisa dipanggil; boleh kosong untuk transisi yang hanya berlaku lewat `PATCH`/script) |
+| `description`                   | Deskripsi action; dipakai sebagai label tombol bila `ui.button_label` tidak ada                               |
+| `impl`                          | Membuat action punya route sendiri (`POST /{id}/{via}`)                                                       |
+| `require_permission`            | Gate yang diperiksa pada jalur `PATCH`/route; **inilah** tempat menulis permission, bukan di `actions:`       |
+| `audit`, `emits`, `emit`        | Jejak audit dan tautan event                                                                                  |
+| `conditions`, `ui`              | Aturan bisnis dan petunjuk tombol                                                                             |
+| `idempotent`, `idempotency_key` | Semantik two-step (`/prepare`)                                                                                |
+| `uses`, `expose`, `rate_limit`  | Footprint consent, protokol, limit                                                                            |
+| `params`                        | Kontrak input — `validate` (rule) **dan** `inputs` (yang dirender dan diisi pemanggil); lihat di bawah        |
+
+#### `params` — kontrak input yang ditegakkan, bukan sekadar ditolak
+
+`params` punya dua paruh yang menjawab pertanyaan berbeda:
+
+| Kunci         | Menjawab                                            | Bentuk                                                                                                                                       |
+| ------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `validate`    | "body yang dikirim pemanggil sah?"                  | daftar rule per nama field (`{field, rules}`)                                                                                                |
+| `inputs`      | "nilai apa yang harus **dikumpulkan**?"             | `ParamInput` — `name`, `type` (ad-hoc), `label`, `widget`, `required`/`required_when`, `visible_when`, `readonly_when`, `compute`, `persist` |
+| `inputs_from` | "set input mana yang dipakai ulang?"                | nama di `Entity.spec.input_sets`                                                                                                             |
+| `render`      | "container apa?" (`modal`/`drawer`/`separate_page`) | keputusan design-time, sejajar `Form.render`                                                                                                 |
+
+Aturan yang mengikat keduanya:
+
+- **Input yang namanya sama dengan sebuah field Entity MERUJUK field itu** —
+  tipe, `enum_values`/`options`, dan `multiple` diwarisi, dan nilai yang
+  dikumpulkan **disimpan** ke field tersebut. Menuliskan `type` pada input yang
+  merujuk ditolak: itu dua tipe untuk satu nilai, dan hanya milik field yang
+  ditegakkan.
+- **Input ad-hoc** (tidak ada field-nya) wajib mendeklarasikan `type`, dan
+  nilainya diteruskan sebagai `params` ke handler — bukan disimpan. `persist:
+true` padanya ditolak karena tidak ada tujuan tulis.
+- **`params.inputs` ditegakkan server, bukan hanya dirender.** Paruh render dan
+  paruh validasi digabung menjadi satu daftar rule (`EffectiveParamValidation`),
+  dipakai di ketiga jalur tulis: `PATCH`, `POST /{id}/{action}`, dan action
+  Service. Deklarasi yang hanya tampil di UI tetapi diterima server adalah bug
+  kontrak, bukan fitur.
+- **`conditions` transisi dievaluasi di jalur `PATCH`.** Jalur itu dulu hanya
+  mengevaluasi `guard`, sehingga transisi tanpa `impl` — yang hanya bisa lewat
+  `PATCH` — tidak punya satu pun jalur yang menjalankan `conditions`-nya.
+- Karena aturan di atas dibaca lewat **`ActionSources()`** (declared ∪ `via`) dan
+  `EffectiveActionSpec`, kontrak boleh ditulis di transisi **atau** di entri
+  `actions:` dengan `via` yang sama — keduanya berperilaku identik.
 
 #### Nama permission sebuah action
 
@@ -889,6 +923,23 @@ state_machine:
 Transisi tanpa `emit` tidak memancarkan apa pun (default). Konvensi penamaan
 event (`on_*` = async, `before_*` = sync) tetap berlaku dan **terpisah** dari
 keterkaitan ini — keduanya kini terverifikasi sendiri-sendiri.
+
+**`emit` berlaku juga saat transisi dijalankan lewat approval.** Event
+dipancarkan bersamaan dengan penulisan state — satu transaksi, satu
+`store.Update` — jadi tidak ada jendela di mana state sudah berubah tetapi
+konsumennya belum diberi tahu. Ini eksplisit karena sempat tidak begitu: jalur
+approval `return` sebelum resolusi emisi di jalur `PATCH` dan tidak
+meresolusinya sendiri, sehingga transisi ber-approval **tidak memancarkan apa
+pun**. Terukur pada kafe `void-order` (`emit: on_cancel`): order menjadi
+`cancelled` sementara mejanya tetap `occupied` — jembatan meja-lah yang
+mendengarkan `on_cancel` — sehingga tamu berikutnya tidak bisa check-in.
+Menjalankan transisi yang sama **tanpa** workflow memancarkan event-nya, dan
+itulah yang membuat asimetri ini tidak terlihat.
+
+Konsekuensinya untuk penulis spec: jangan mengandalkan approval sebagai alasan
+menunda efek samping. Kalau sebuah transisi menyatakan `emit`, efeknya terjadi
+saat transisi itu **selesai** — langsung atau setelah quorum, bukan hanya pada
+jalur langsung.
 
 **Prioritas handler** (event sync): urutan `priority` (kecil dijalankan
 duluan) — kelipatan 10 supaya handler baru bisa disisipkan tanpa

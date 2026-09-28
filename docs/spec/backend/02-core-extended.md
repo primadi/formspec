@@ -87,6 +87,19 @@ pernah bisa menyetujui permintaannya sendiri.** Workflow selalu tampil di
 output gabungan `formspec describe document` — perilaku yang menempel selalu
 ter-compile, tidak pernah tersembunyi.
 
+Approval **menunda** transisi; ia tidak mengubah apa yang dilakukan transisi
+itu. Saat quorum tercapai, transisi dijalankan lengkap — penulisan state,
+`emit`-nya, dan audit — dalam satu tulisan. Sebuah transisi yang mendeklarasikan
+`emit` karena itu tetap memancarkan event-nya pada jalur ber-approval; kalau
+tidak, state akan berubah tanpa konsumennya diberi tahu (terukur pada kafe
+`void-order`: order menjadi `cancelled` sementara mejanya tetap `occupied`,
+sehingga tamu berikutnya tidak bisa check-in).
+
+Input yang dikumpulkan pemohon juga melewati approval: nilainya disimpan
+bersama baris approval dan diterapkan saat eksekusi, sehingga approver tidak
+perlu mengetik ulang alasan orang lain — dan bila approver mengirim nilai
+sendiri, nilai itu yang menang.
+
 #### 2.0.1 Merujuk transisi: lewat `name`, bukan pasangan state
 
 Pemicu menerima dua bentuk, dan keduanya **saling eksklusif**:
@@ -158,6 +171,25 @@ Satu step mendeklarasikan **berapa banyak** persetujuan yang dibutuhkan dan
       display_fields: [number, total_amount, void_reason]
       roles: [cafe-order.supervisor]
   ```
+
+- **Input pemohon bertahan melewati approval.** Transisi yang di-intercept boleh
+  mendeklarasikan input (`params.inputs`, `01-core-basic.md` §1.6), dan nilai yang
+  dikumpulkan **pemohon** disimpan bersama baris approval — bukan diminta ulang
+  kepada approver.
+
+  Alasannya mekanis: permintaan pemohon selesai dengan **202 tanpa menulis apa
+  pun**, dan panggilan approval adalah request **berbeda oleh orang berbeda**.
+  Tanpa menyimpan nilai itu, yang tersisa untuk ditulis hanyalah perubahan state
+  — terukur pada kafe `void-order`: order berakhir `cancelled` **tanpa**
+  `void_reason`, dan transisi yang menggerbang pada nilai itu gagal pada check
+  yang tidak punya cara untuk dipenuhi. Karena itu approver tidak perlu mengetik
+  ulang alasan orang lain; bila ia **mengirim** nilai sendiri, nilai approver yang
+  menang (ia boleh mengoreksi).
+
+  Konsekuensi untuk penulis manifest: `display_fields` tetap tempat yang benar
+  untuk **membaca** nilai yang approver butuhkan, sementara `params.inputs`
+  adalah tempat yang benar untuk **mengumpulkannya** dari pemohon. Keduanya
+  sering menunjuk field yang sama (`void_reason`) dengan peran berbeda.
 
 **Timeout & eskalasi.** `escalation.after` menandai durasi diam sebelum step
 dieskalasi; `notify_roles` diberi tahu, dan `reassign_roles` (opsional)
@@ -313,7 +345,7 @@ call:
 tanpa itu, cancel di sisi source akan terblokir permanen karena reference
 guard generik selalu memblokir tanpa ada yang tahu cara membuka jalannya.
 
-*Aturan simetri cancel (7.7.2) — mengapa dan bagaimana.* Aturan ini menuntut
+_Aturan simetri cancel (7.7.2) — mengapa dan bagaimana._ Aturan ini menuntut
 **pasangan**, bukan satu Integrator: untuk setiap Integrator yang bereaksi atas
 event non-cancel dari sebuah resource, harus ada Integrator lain yang bereaksi
 atas event cancel resource yang sama (`on_cancel`/`before_cancel`). Alasannya

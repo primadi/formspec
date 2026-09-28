@@ -92,6 +92,7 @@ spec:
 | `persist` | [`PersistSpec`](../../spec/backend/04-persist-backend.md) | — |  |  |
 | `fields` | [][`Field`](../../spec/backend/05-field-types.md) | — |  |  |
 | `actions` | [][`Action`](../../spec/backend/01-core-basic.md) | — |  |  |
+| `input_sets` | []`InputSet` | — |  | InputSets declares named, reusable lists of action inputs. A transition or |
 | `state_machine` | [`StateMachine`](../../spec/backend/02-core-extended.md) | — |  |  |
 | `events` | [][`EventDecl`](../../spec/backend/01-core-basic.md) | — |  |  |
 | `deliver` | [][`DeliveryDecl`](../../spec/backend/02-core-extended.md) | — |  |  |

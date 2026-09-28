@@ -28,6 +28,11 @@ func (c *Converter) Generate(collect *CollectResult) *GenerateResult {
 		"MenuDecl", "MenuItem", "ValidationRule", "RelationDecl",
 		"ChildDecl", "ComputedDecl", "AutoFillDecl", "IndexDecl", "UsesDecl",
 		"ParamsDecl", "ConditionDecl", "HookDecl", "IdempotencyDecl",
+		// Action input contract (plan action-input-contract): ParamsDecl now
+		// carries `inputs`, which is a $ref target from both Entity and
+		// TransitionDecl — unlisted, every Entity schema would point at a
+		// missing definition.
+		"ParamInput", "ParamsRenderHint", "InputSet",
 		"EntityAuth", "ExposeConfig", "RateLimitSpec", "CacheSpec",
 		// Summary projection contract (Core Extended §6, todo 3.6.4) — these
 		// MUST be listed, or Entity.schema.json emits "$ref: #/$defs/RebuildSpec"

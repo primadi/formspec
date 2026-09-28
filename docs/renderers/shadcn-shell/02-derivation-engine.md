@@ -33,6 +33,20 @@ field** → `drawer`; selain itu → `modal`. (Field child ber-`storage: jsonb`
 **tidak** ikut dihitung sebagai alasan `separate_page` — beda dari niat awal
 yang menghitung "punya child table" secara generik.)
 
+**Input action/transisi** (`resolveActionInputs`, `toFieldDescriptor` di
+`src/lib/actionParams.ts`): bukan derivasi dari Entity, melainkan **resolusi
+deklarasi** — input yang dibaca dari `params.inputs`/`inputs_from` pada
+transisi/action, lalu disesuaikan ke bentuk `Field` supaya
+`FormFieldWidget`/`buildZodField` yang sama bisa menggambarnya. Karena itu tidak
+ada kosakata widget kedua yang perlu dijaga sinkron dengan
+`widgets/catalog.tsx`. Presedensi: `params` transisi → `params` action →
+`input_sets` entity; container dari `params.render.mode` → jumlah input (≤5
+`modal`, 5–12 `drawer`, >12 `separate_page`, sama seperti `deriveForm`).
+Dipakai satu komponen (`src/shell/ActionInputDialog.tsx`) oleh DetailPage, Table
+(baris + massal, satu payload untuk seluruh seleksi), dan Kanban; lihat
+[`../../spec/frontend/06-page-kinds.md`](../../spec/frontend/06-page-kinds.md)
+§2.0.
+
 **Caption & help field** (`entityFieldLabel`, `entityFieldHelp`,
 `withEntityFieldDefaults`, `withEntityColumnLabels`): caption memakai
 `label` manifest → `title` field Entity → nama field yang di-humanise; help

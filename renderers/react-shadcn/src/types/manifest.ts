@@ -563,6 +563,60 @@ export interface KvstoreUseDecl {
 
 export interface ParamsDecl {
   validate?: ParamValidation[]
+  /**
+   * The renderable half of the contract: what the caller should be asked for.
+   * `validate` can reject a body the caller already knows how to build; `inputs`
+   * tells the UI how to build it (plan action-input-contract).
+   */
+  inputs?: ParamInput[]
+  /** Names of `input_sets` on the Entity to pull in, so transitions collecting
+   *  the same parameters share one declaration. */
+  inputs_from?: string[]
+  /** Design-time container decision for the input form. */
+  render?: ParamsRenderHint
+}
+
+/**
+ * One declared input of an action or transition.
+ *
+ * When `name` matches an Entity field the input REFERS to it — inheriting type,
+ * options and cardinality, and persisting the collected value there. Otherwise it
+ * is an ad-hoc parameter and `type` is required.
+ */
+export interface ParamInput {
+  name: string
+  /** Required for an ad-hoc input; refused on a referring one. */
+  type?: FieldType
+  label?: string
+  placeholder?: string
+  help?: string
+  widget?: string
+  required?: boolean
+  default?: unknown
+  enum_values?: string[]
+  options?: FieldOption[]
+  multiple?: boolean
+  rules?: ValidationRule[]
+  visible_when?: string
+  readonly_when?: string
+  required_when?: string
+  compute?: string
+  /** Overrides where a collected value goes; absent follows the referring rule. */
+  persist?: boolean
+}
+
+/** A named, reusable list of inputs declared on the Entity (Tier 1 reuse). */
+export interface InputSet {
+  name: string
+  inputs: ParamInput[]
+}
+
+/**
+ * Container decision for an input form. Design-time, like `Form.render` — the
+ * runtime never switches it.
+ */
+export interface ParamsRenderHint {
+  mode?: "modal" | "drawer" | "separate_page"
 }
 
 export interface ParamValidation {
@@ -614,6 +668,12 @@ export interface TransitionDecl {
    * gate — `PATCH` is otherwise authorized by `{plural}.update` alone.
    */
   require_permission?: string
+  /**
+   * The transition's own input contract. Shipped because the whole state
+   * machine is projected raw, so a renderer can draw the form the transition
+   * describes without a second request.
+   */
+  params?: ParamsDecl
 }
 
 export interface GuardDecl {
@@ -1311,6 +1371,9 @@ export interface EntitySchema {
   fields: Field[]
   state_machine?: StateMachine
   actions: ActionSummary[]
+  /** Named, reusable input lists. An action's `params.inputs_from` resolves
+   *  against these, so they must ship alongside the actions that reference them. */
+  input_sets?: InputSet[]
   lifecycle: Lifecycle
   has_quick_submit?: boolean
   exposed?: boolean
@@ -1335,7 +1398,19 @@ export interface ActionSummary {
   name: string
   description?: string
   permission: string
+  /**
+   * Whether the action accepts any caller input at all.
+   *
+   * Prefer `params` — this boolean cannot say WHAT to collect, which is why it
+   * shipped with no consumer.
+   */
   has_params?: boolean
+  /**
+   * The action's input contract. Absent means "nothing to collect", which is also
+   * what an empty one means — so unlike `has_route` it is omitted when empty and
+   * no client has to distinguish the two.
+   */
+  params?: ParamsDecl
   ui?: ActionUIHint
   /**
    * Whether `POST /{module}/{entity}/{id}/{action}` exists for this action.

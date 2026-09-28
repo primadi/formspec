@@ -72,11 +72,24 @@ dan menghasilkan `RouteDescriptor` untuk `list/find/create/update/delete`
 (`internal/api/generator.go:10-51,54-107`); `delete` di-skip secara default
 kecuali disebut eksplisit di `actions:` (`generator.go:85-88`).
 `GenerateCustomActionRoutes` menghasilkan `POST .../{id}/{action}` untuk
-setiap `Action` yang punya `impl` dan bukan action standar
-(`generator.go:115-174`). Entity tanpa `Expose` sama sekali tidak
+setiap action yang punya `impl` dan bukan action standar CRUD. Sumbernya
+**`EntitySpec.ActionSources()`** — gabungan `actions:` yang dideklarasikan
+dengan transisi state machine yang menamai `via` — sama seperti
+`UICustomActionRoutesForEntity` dan `generatePrepareRoutes`. Jadi transisi
+ber-`impl` yang hanya dideklarasikan lewat `via` mendapat route di kedua
+surface, dan `formspec generate` (yang mencerminkan surface REST) ikut
+menghasilkan method + tipe params untuknya.
+Entity tanpa `Expose` sama sekali tidak
 menghasilkan route apa pun — deny-by-default (`generator.go:22-24,127-129`).
 Standard action yang ditandai `disabled: true` juga tidak pernah
 menghasilkan route, di surface manapun (`generator.go:33-40,70-72`).
+
+Satu aksi tidak pernah mendapat **dua** route: nama yang punya `impl`
+di-skip dari generator generik (`customHandled` di `generateRESTRoutes`),
+karena `mergeRoutes` menyimpan descriptor PERTAMA untuk satu `(Method, Path)`.
+Tanpa skip itu, handler generik menang dan `impl` yang dideklarasikan tidak
+pernah berjalan — kelas bug yang sama dengan urutan registrasi `/{id}/{field}`
+vs `/{id}/{action}` di bawah.
 
 `RouterBuilder.registerRoute` (`router.go:188-265`) memetakan tiap
 `RouteDescriptor` ke handler chi: `Handler: "auto"` → salah satu dari

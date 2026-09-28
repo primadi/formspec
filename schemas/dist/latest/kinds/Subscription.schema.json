@@ -68,6 +68,11 @@
     "transform": {
       "description": "Tier 2: Starlark transform over event payload",
       "type": "string"
+    },
+    "uses": {
+      "$ref": "#/$defs/UsesDecl",
+      "description": "Uses declares what the HANDLER may touch — the same shape and the same",
+      "nullable": true
     }
   },
   "required": [

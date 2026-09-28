@@ -34,8 +34,14 @@ type WorkflowApprovalRow struct {
 	RejectedBy     string
 	RejectStep     int
 	EscalatedSteps map[int][]string // stepIdx -> reassign_roles (7.4.4)
-	CreatedAt      string
-	UpdatedAt      string
+	// Params holds the input values the REQUESTER supplied for the intercepted
+	// transition (plan action-input-contract, D5). They are applied to the record
+	// together with the state change when approval completes, because the
+	// requesting call returns 202 before writing anything — without this the
+	// values it collected were dropped on the floor.
+	Params    map[string]any
+	CreatedAt string
+	UpdatedAt string
 }
 
 // NewWorkflowApprovalStore creates a new approval store.
@@ -53,6 +59,10 @@ func (s *WorkflowApprovalStore) Create(ctx context.Context, row WorkflowApproval
 	if err != nil {
 		return "", fmt.Errorf("approval create: marshal escalated_steps: %w", err)
 	}
+	paramsJSON, err := json.Marshal(marshalableParams(row.Params))
+	if err != nil {
+		return "", fmt.Errorf("approval create: marshal params: %w", err)
+	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	status := row.Status
 	if status == "" {
@@ -62,11 +72,12 @@ func (s *WorkflowApprovalStore) Create(ctx context.Context, row WorkflowApproval
 		INSERT INTO formspec_workflow_approval
 			(tenant_id, entity, record_id, workflow_module, workflow_name,
 			 from_state, to_state, requester_id, status, active_step,
-			 approvals, rejected_by, reject_step, escalated_steps, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 approvals, rejected_by, reject_step, escalated_steps, params, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		row.TenantID, row.Entity, row.RecordID, row.WorkflowModule, row.WorkflowName,
 		row.FromState, row.ToState, row.RequesterID, status, row.ActiveStep,
-		string(approvalsJSON), row.RejectedBy, row.RejectStep, string(escalatedJSON), now, now,
+		string(approvalsJSON), row.RejectedBy, row.RejectStep, string(escalatedJSON),
+		string(paramsJSON), now, now,
 	)
 	if err != nil {
 		return "", fmt.Errorf("approval create: %w", err)
@@ -83,7 +94,7 @@ func (s *WorkflowApprovalStore) GetByRecord(ctx context.Context, tenantID, entit
 	row := s.db.QueryRowContext(ctx, `
 		SELECT id, tenant_id, entity, record_id, workflow_module, workflow_name,
 		       from_state, to_state, requester_id, status, active_step,
-		       approvals, rejected_by, reject_step, escalated_steps, created_at, updated_at
+		       approvals, rejected_by, reject_step, escalated_steps, params, created_at, updated_at
 		FROM formspec_workflow_approval
 		WHERE tenant_id = ? AND entity = ? AND record_id = ? AND status = 'pending'
 		ORDER BY created_at DESC LIMIT 1`,
@@ -101,7 +112,7 @@ func (s *WorkflowApprovalStore) ListPending(ctx context.Context, limit int) ([]W
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, tenant_id, entity, record_id, workflow_module, workflow_name,
 		       from_state, to_state, requester_id, status, active_step,
-		       approvals, rejected_by, reject_step, escalated_steps, created_at, updated_at
+		       approvals, rejected_by, reject_step, escalated_steps, params, created_at, updated_at
 		FROM formspec_workflow_approval
 		WHERE status = 'pending'
 		ORDER BY created_at ASC
@@ -125,6 +136,30 @@ func (s *WorkflowApprovalStore) ListPending(ctx context.Context, limit int) ([]W
 	return out, nil
 }
 
+// marshalableParams drops values JSON cannot encode, so storing a request's
+// inputs can never fail the whole approval creation.
+//
+// It matters because these values come straight off a decoded JSON body: in
+// practice they are already encodable, but a value injected by a hook (a
+// function, a channel) would otherwise turn "start an approval" into a 500 — an
+// input that cannot be stored is a reason to store less, not to refuse the
+// transition.
+func marshalableParams(in map[string]any) map[string]any {
+	if len(in) == 0 {
+		return map[string]any{}
+	}
+	if _, err := json.Marshal(in); err == nil {
+		return in
+	}
+	out := make(map[string]any, len(in))
+	for k, v := range in {
+		if _, err := json.Marshal(v); err == nil {
+			out[k] = v
+		}
+	}
+	return out
+}
+
 // Update persists an updated approval row.
 func (s *WorkflowApprovalStore) Update(ctx context.Context, row WorkflowApprovalRow) error {
 	approvalsJSON, err := json.Marshal(row.Approvals)
@@ -135,14 +170,18 @@ func (s *WorkflowApprovalStore) Update(ctx context.Context, row WorkflowApproval
 	if err != nil {
 		return fmt.Errorf("approval update: marshal escalated_steps: %w", err)
 	}
+	paramsJSON, err := json.Marshal(marshalableParams(row.Params))
+	if err != nil {
+		return fmt.Errorf("approval update: marshal params: %w", err)
+	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	_, err = s.db.ExecContext(ctx, `
 		UPDATE formspec_workflow_approval
 		SET status = ?, active_step = ?, approvals = ?, rejected_by = ?,
-		    reject_step = ?, escalated_steps = ?, updated_at = ?
+		    reject_step = ?, escalated_steps = ?, params = ?, updated_at = ?
 		WHERE id = ?`,
 		row.Status, row.ActiveStep, string(approvalsJSON), row.RejectedBy,
-		row.RejectStep, string(escalatedJSON), now, row.ID,
+		row.RejectStep, string(escalatedJSON), string(paramsJSON), now, row.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("approval update: %w", err)
@@ -156,12 +195,13 @@ func scanApprovalRow(row *sql.Row) (*WorkflowApprovalRow, error) {
 		r          WorkflowApprovalRow
 		approvals  string
 		escalated  string
+		params     string
 		rejectStep sql.NullInt64
 	)
 	err := row.Scan(
 		&r.ID, &r.TenantID, &r.Entity, &r.RecordID, &r.WorkflowModule,
 		&r.WorkflowName, &r.FromState, &r.ToState, &r.RequesterID, &r.Status,
-		&r.ActiveStep, &approvals, &r.RejectedBy, &rejectStep, &escalated,
+		&r.ActiveStep, &approvals, &r.RejectedBy, &rejectStep, &escalated, &params,
 		&r.CreatedAt, &r.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
@@ -181,6 +221,9 @@ func scanApprovalRow(row *sql.Row) (*WorkflowApprovalRow, error) {
 	if err := json.Unmarshal([]byte(escalated), &r.EscalatedSteps); err != nil {
 		r.EscalatedSteps = make(map[int][]string)
 	}
+	if err := json.Unmarshal([]byte(params), &r.Params); err != nil {
+		r.Params = nil
+	}
 	normalizeApprovalRow(&r)
 	return &r, nil
 }
@@ -190,12 +233,13 @@ func scanApprovalRows(rows *sql.Rows, r *WorkflowApprovalRow) error {
 	var (
 		approvals  string
 		escalated  string
+		params     string
 		rejectStep sql.NullInt64
 	)
 	err := rows.Scan(
 		&r.ID, &r.TenantID, &r.Entity, &r.RecordID, &r.WorkflowModule,
 		&r.WorkflowName, &r.FromState, &r.ToState, &r.RequesterID, &r.Status,
-		&r.ActiveStep, &approvals, &r.RejectedBy, &rejectStep, &escalated,
+		&r.ActiveStep, &approvals, &r.RejectedBy, &rejectStep, &escalated, &params,
 		&r.CreatedAt, &r.UpdatedAt,
 	)
 	if err != nil {
@@ -205,6 +249,9 @@ func scanApprovalRows(rows *sql.Rows, r *WorkflowApprovalRow) error {
 		r.RejectStep = int(rejectStep.Int64)
 	} else {
 		r.RejectStep = -1
+	}
+	if err := json.Unmarshal([]byte(params), &r.Params); err != nil {
+		r.Params = nil
 	}
 	if err := json.Unmarshal([]byte(approvals), &r.Approvals); err != nil {
 		r.Approvals = make(map[int][]string)

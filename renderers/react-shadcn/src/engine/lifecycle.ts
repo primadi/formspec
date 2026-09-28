@@ -13,6 +13,7 @@
 import type {
   EntitySchema,
   Lifecycle as LifecyclePattern,
+  TransitionDecl,
 } from "@/types/manifest"
 
 /** One state-machine transition the caller can trigger from the current state. */
@@ -30,6 +31,15 @@ export interface AvailableTransition {
   label: string
   style?: string
   confirm?: string
+  /**
+   * The raw declaration this entry came from.
+   *
+   * Carried so a surface can resolve the transition's input contract without
+   * looking it up a second time: the declaration holds `params`, and every
+   * caller that draws a button also needs to know whether the button must first
+   * collect something (plan docs_internal/plan/action-input-contract.md).
+   */
+  decl: TransitionDecl
 }
 
 export interface LifecycleActions {
@@ -126,6 +136,7 @@ export function getAvailableTransitions(
         t.via.charAt(0).toUpperCase() + t.via.slice(1),
       style: action?.ui?.style,
       confirm: action?.ui?.confirm,
+      decl: t,
     }
   })
 }

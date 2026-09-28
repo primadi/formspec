@@ -170,6 +170,16 @@ type Approval struct {
 	// EscalatedSteps records which steps were escalated (7.4.4) and the
 	// reassign_roles that gained approval rights: stepIdx -> reassign_roles.
 	EscalatedSteps map[int][]string `json:"escalated_steps,omitempty"`
+	// Params carries the input values the REQUESTER supplied for the intercepted
+	// transition (plan docs_internal/plan/action-input-contract.md, D5).
+	//
+	// They have to be stored rather than re-supplied: the requesting call returns
+	// 202 before writing anything, so the approver's later call is a DIFFERENT
+	// request. Without this the values the requester collected were dropped, and
+	// `executeWorkflowTransition` would write only the state — leaving a voided
+	// order with no reason, or, if the transition guarded on that value, failing
+	// a check nobody could satisfy.
+	Params map[string]any `json:"params,omitempty"`
 }
 
 // NewApproval creates a pending approval for a record.

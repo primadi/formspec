@@ -23,9 +23,14 @@ type EntitySchema struct {
 	Fields         []spec.Field       `json:"fields"`
 	StateMachine   *spec.StateMachine `json:"state_machine,omitempty"`
 	Actions        []ActionSummary    `json:"actions"`
-	Lifecycle      string             `json:"lifecycle"` // plain_crud | two_step_autosave (§1.7)
-	HasQuickSubmit bool               `json:"has_quick_submit,omitempty"`
-	Exposed        bool               `json:"exposed"`
+	// InputSets are the Entity's named, reusable action-input lists. Shipped so
+	// an action whose `params.inputs_from` names a set can be resolved by the
+	// renderer without a second request — the transition itself only carries the
+	// reference.
+	InputSets      []spec.InputSet `json:"input_sets,omitempty"`
+	Lifecycle      string          `json:"lifecycle"` // plain_crud | two_step_autosave (§1.7)
+	HasQuickSubmit bool            `json:"has_quick_submit,omitempty"`
+	Exposed        bool            `json:"exposed"`
 	// AuthorizedActions is the set of entity actions THIS caller may perform,
 	// resolved server-side with the same checker that decides whether the
 	// entity ships at all.
@@ -50,6 +55,23 @@ type ActionSummary struct {
 	Permission  string             `json:"permission"`
 	HasParams   bool               `json:"has_params,omitempty"`
 	UI          *spec.ActionUIHint `json:"ui,omitempty"`
+	// Params is the action's input contract, shipped whole so the renderer can
+	// build the form it describes (`inputs`) instead of only being told that
+	// *some* parameter exists.
+	//
+	// `HasParams` alone was dead information: it was in the bundle with zero
+	// consumers, because a boolean cannot say what to render. The renderer needs
+	// the declarations — name, label, widget, and the conditional predicates —
+	// and the Entity's own `fields` are already shipped alongside, so a referring
+	// input resolves without a second round-trip.
+	//
+	// Notably NOT `omitempty`-free the way `HasRoute` is. `HasRoute` must
+	// serialize `false` because "no route" and "an older server that never sent
+	// this flag" would otherwise both arrive as absent, and the client would fall
+	// back to probing for exactly the actions the flag exists to settle. Here an
+	// absent `params` and an empty one mean the same thing — there is nothing to
+	// collect — so the smaller bundle wins and no client has to guess.
+	Params *spec.ParamsDecl `json:"params,omitempty"`
 	// HasRoute reports whether `POST /{module}/{entity}/{id}/{action}` exists.
 	//
 	// Only an action with an `impl` gets a route (internal/api/generator.go
@@ -1204,6 +1226,7 @@ func buildEntitySchema(d EntityDescriptor) EntitySchema {
 		LabelField:     labelField(es),
 		Fields:         es.Fields,
 		StateMachine:   es.StateMachine,
+		InputSets:      es.InputSets,
 		Lifecycle:      lifecycle(es),
 		Exposed:        len(es.Expose) > 0,
 	}
@@ -1232,7 +1255,8 @@ func buildEntitySchema(d EntityDescriptor) EntitySchema {
 			Name:        a.Name,
 			Description: a.Description,
 			Permission:  perm,
-			HasParams:   a.Params != nil && len(a.Params.Validate) > 0,
+			HasParams:   actionTakesParams(a.Params),
+			Params:      a.Params,
 			UI:          a.UI,
 			// Same condition the UI route generator uses to decide whether a
 			// custom action gets a route (internal/api/generator.go: skip
@@ -1373,6 +1397,22 @@ func authorizedActions(d EntityDescriptor, schema EntitySchema, can PermissionCh
 		add(a.Name, a.Permission)
 	}
 	return out
+}
+
+// actionTakesParams reports whether an action accepts any caller input at all,
+// counting both the validation-only contract (`validate`) and the renderable one
+// (`inputs` / `inputs_from`).
+//
+// The two are separate on purpose: `validate` rejects a body the caller already
+// knows how to build, while `inputs` tells the UI how to build it. An action
+// may declare either, and asking "does this take parameters?" must see both —
+// otherwise an action whose inputs are the only declaration would be summarised
+// as taking none.
+func actionTakesParams(p *spec.ParamsDecl) bool {
+	if p == nil {
+		return false
+	}
+	return len(p.Validate) > 0 || len(p.Inputs) > 0 || len(p.InputsFrom) > 0
 }
 
 // lifecycle derives the UI pattern from the reserved `submit` action

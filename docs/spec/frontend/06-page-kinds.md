@@ -255,6 +255,54 @@ tetap otoritas — cek client bukan pernah keamanan.**
 sesuai skema dan renderer) maupun shorthand skalar `render: separate_page` —
 keduanya disetarakan saat parse.
 
+### 2.0 Input action & transisi — satu dialog, deklarasi di manifest
+
+Action dan transisi state machine mengumpulkan inputnya dari
+**`params.inputs`** pada deklarasi transisi/action, bukan dari komponen UI
+per-permukaan:
+
+```yaml
+state_machine:
+  transitions:
+    - from: [paid, in_kitchen, ready, served]
+      to: cancelled
+      via: void-order
+      params:
+        inputs:
+          - name: void_reason # nama == field Entity → MERUJUK field itu
+            widget: textarea
+            required_when: "fields.status == 'paid'"
+        render: { mode: modal }
+```
+
+Yang membuat ini **generik** bukan "satu Form untuk semua transisi":
+
+| Pertanyaan                           | Jawaban                                                                                                                                                                       |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Berapa komponen dialognya?           | **Satu** (`ActionInputDialog`), dipakai DetailPage, Table (baris + massal), Kanban.                                                                                           |
+| Berapa kali author menulis form-nya? | **Nol** — deklarasi input _adalah_ form-nya; tidak ada asset terpisah.                                                                                                        |
+| Berapa deklarasinya?                 | **Per transisi/action.** Permission, `conditions`, intersepsi approval, dan `emit` semuanya melekat pada transisi tertentu — satu form bersama tidak bisa mengekspresikannya. |
+| Dipakai ulang antar transisi?        | Ya, lewat `params.inputs_from` → `Entity.spec.input_sets` (dalam satu entity).                                                                                                |
+
+Aturannya:
+
+- Input yang **namanya sama dengan field Entity** mewarisi tipe/`options`/
+  `multiple` field itu, dan nilainya **disimpan** ke field tersebut. Input
+  ad-hoc wajib punya `type` dan nilainya hanya diteruskan sebagai payload.
+- Field dirender widget router yang sama dengan Form (`FormFieldWidget`) dan
+  divalidasi builder zod yang sama, jadi **tidak ada kosakata widget kedua**
+  yang perlu dijaga sinkron.
+- Vocabulary perilaku yang dipakai juga sama: `visible_when`, `readonly_when`,
+  `required_when`, `compute`. Karena itu transisi dengan beberapa state asal
+  tetap **satu** deklarasi (`required_when` yang menyempitkan), bukan dipecah
+  per asal.
+- `render.mode` adalah keputusan **design-time** seperti `Form.render`; bila
+  tidak ditulis, container diturunkan dari jumlah input (≤5 `modal`, 5–12
+  `drawer`, >12 `separate_page`).
+- Untuk aksi massal, satu dialog mengumpulkan nilai untuk **seluruh seleksi**
+  dan payload yang sama dikirim per baris — nilainya sama untuk semua baris,
+  bukan dikumpulkan per baris.
+
 **Caption field (normatif).** Setiap caption field/kolom memakai presedensi
 yang sama di semua kind (Form, Table, Listing, Report, Wizard, detail Page):
 

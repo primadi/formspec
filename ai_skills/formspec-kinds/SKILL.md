@@ -455,6 +455,47 @@ spec:
 Transitions use `via` (the triggering action name) — `action` is only a
 legacy alias. `guard` is `{ expression, message }`, not a list of roles.
 
+### Kontrak input — `params.inputs` (transisi & action)
+
+Kalau sebuah transisi/action butuh nilai dari pemanggil, deklarasikan
+`params.inputs`. **Ini bukan sekadar validasi** — hanya `params.validate` berarti
+UI tidak tahu apa yang harus ditanyakan, dan `conditions` yang membaca
+`params.get('x')` tidak akan pernah terpenuhi (tombol transisi mengirim body
+kosong).
+
+```yaml
+fields:
+  - { name: void_reason, type: text, title: "Alasan Void" }
+
+state_machine:
+  transitions:
+    - from: [paid, ready]
+      to: cancelled
+      via: void-order
+      params:
+        inputs:
+          - name: void_reason # == field Entity → MERUJUK field itu
+            widget: textarea
+            required_when: "fields.status == 'paid'"
+        render: { mode: modal } # opsional; default dari jumlah input
+```
+
+Aturan yang sering salah:
+
+| Salah                                                         | Benar                                            | Kenapa                                                                                                                      |
+| ------------------------------------------------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| `inputs: [{name: void_reason, type: string}]` (field itu ada) | tanpa `type`                                     | Menulis `type` pada input yang merujuk ditolak validator: dua tipe untuk satu nilai, dan hanya milik field yang ditegakkan. |
+| `inputs: [{name: approver_note}]` (tanpa field)               | `type: text` wajib                               | Input ad-hoc tanpa tipe tidak bisa dirender maupun divalidasi.                                                              |
+| `inputs: [{name: approver_note, type: text, persist: true}]`  | tanpa `persist`                                  | Tidak ada field tujuan; nilainya hanya diteruskan ke handler.                                                               |
+| Satu deklarasi per state asal                                 | `required_when`                                  | Transisi dengan banyak `from` tetap satu deklarasi; predikat yang menyempitkan.                                             |
+| Duplikat deklarasi antar transisi                             | `params.inputs_from: [nama]` + `spec.input_sets` | Set input bernama di level Entity, dipakai ulang.                                                                           |
+
+Kontrak dijalankan **di server**, bukan hanya dirender: PATCH, `POST
+/{id}/{action}`, dan action Service semuanya menegakkan gabungan `validate` +
+`inputs`. Untuk transisi yang di-intercept approval, nilai yang diisi **pemohon**
+disimpan bersama baris approval dan diterapkan saat approver menyetujui —
+approver tidak perlu mengetik ulang (dan nilai approver menang bila ia mengirim).
+
 ### Service — Stateless Computation
 
 Stateless, pure computation. No `characteristic`, `doc_status`, or lifecycle guards.

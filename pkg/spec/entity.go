@@ -203,10 +203,15 @@ type EntitySpec struct {
 	Persist        *PersistSpec   `yaml:"persist,omitempty" json:"persist,omitempty"`
 	Fields         []Field        `yaml:"fields" json:"fields"`
 	Actions        []Action       `yaml:"actions" json:"actions"`
-	StateMachine   *StateMachine  `yaml:"state_machine,omitempty" json:"state_machine,omitempty"`
-	Events         []EventDecl    `yaml:"events,omitempty" json:"events,omitempty"`
-	Deliver        []DeliveryDecl `yaml:"deliver,omitempty" json:"deliver,omitempty"`
-	Indexes        []IndexDecl    `yaml:"indexes,omitempty" json:"indexes,omitempty"`
+	// InputSets declares named, reusable lists of action inputs. A transition or
+	// action pulls one in with `params.inputs_from`, so several transitions that
+	// collect the same parameters share a single declaration instead of
+	// repeating it (plan docs_internal/plan/action-input-contract.md, Tier 1).
+	InputSets    []InputSet     `yaml:"input_sets,omitempty" json:"input_sets,omitempty"`
+	StateMachine *StateMachine  `yaml:"state_machine,omitempty" json:"state_machine,omitempty"`
+	Events       []EventDecl    `yaml:"events,omitempty" json:"events,omitempty"`
+	Deliver      []DeliveryDecl `yaml:"deliver,omitempty" json:"deliver,omitempty"`
+	Indexes      []IndexDecl    `yaml:"indexes,omitempty" json:"indexes,omitempty"`
 	// RowScope declares the row-level filters the server enforces on every read
 	// of this entity (S2, #6/#9): `{field, op, from: session|route, attr|param}`.
 	// Unlike a kind's `fixed_filters` — which the browser merges and a malicious
@@ -1565,6 +1570,15 @@ func ValidateEntitySpec(d *EntitySpec) error {
 		return err
 	}
 
+	// Input contracts (plan docs_internal/plan/action-input-contract.md): an
+	// input that names an Entity field must name one that EXISTS, an ad-hoc input
+	// must declare a type, and `inputs_from` must resolve — each failure would
+	// otherwise render an input the server never receives, or write a value into
+	// a field that is not there.
+	if err := ValidateActionInputs(d); err != nil {
+		return err
+	}
+
 	// Summary projection contract (Core Extended §6): if a summary entity
 	// declares a rebuild plan, it must name its sources and provide a valid
 	// strategy. The framework may also accept summary entities without explicit
@@ -1712,9 +1726,21 @@ type KvstoreUseDecl struct {
 	Module string `yaml:"module,omitempty" json:"module,omitempty"`
 }
 
-// ParamsDecl defines input parameters for an action.
+// ParamsDecl declares what an action or transition accepts: the rules a request
+// body must satisfy (`validate`), and — since the action-input contract — the
+// inputs a renderer should COLLECT (`inputs`).
 type ParamsDecl struct {
 	Validate []ParamValidation `yaml:"validate,omitempty" json:"validate,omitempty"`
+	// Inputs declares the parameters richly enough to render: label, widget, and
+	// the same conditional vocabulary a Form field has. See ParamInput — an input
+	// named after an Entity field REFERS to it and is persisted there.
+	Inputs []ParamInput `yaml:"inputs,omitempty" json:"inputs,omitempty"`
+	// InputsFrom pulls in named `input_sets:` declared on the owning Entity, so
+	// transitions collecting the same parameters share one declaration.
+	InputsFrom []string `yaml:"inputs_from,omitempty" json:"inputs_from,omitempty"`
+	// Render carries the design-time container decision. Absent means the
+	// renderer derives it from the input count.
+	Render *ParamsRenderHint `yaml:"render,omitempty" json:"render,omitempty"`
 }
 
 // ParamValidation validates an action parameter.
@@ -2285,9 +2311,15 @@ func (d *EntitySpec) ActionSources() []Action {
 			Conditions:  t.Conditions,
 			UI:          t.UI,
 			Uses:        t.Uses,
-			Params:      t.Params,
-			Expose:      t.Expose,
-			RateLimit:   t.RateLimit,
+			// Params carries the whole input contract (`validate` + `inputs` +
+			// `inputs_from` + `render`). Copying the pointer is what keeps a
+			// transition's declared inputs reaching the renderer through the
+			// `actions[]` projection; dropping it here would make the inputs
+			// visible on the transition and invisible on its action entry — the
+			// same field-absorbed-then-lost trap the `,inline` unmarshaler closed.
+			Params:    t.Params,
+			Expose:    t.Expose,
+			RateLimit: t.RateLimit,
 		}
 		if t.Idempotent {
 			synthesized.Idempotent = true

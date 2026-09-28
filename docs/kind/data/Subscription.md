@@ -47,6 +47,7 @@ spec:
 |---|---|---|---|---|
 | `events` | []`string` | — | billing.invoice.on_submit |  |
 | `handler` | `ImplDecl` | ✅ |  |  |
+| `uses` | `UsesDecl` | — |  | Uses declares what the HANDLER may touch — the same shape and the same |
 | `store` | `string` | — | redis |  |
 | `durability` | `string` | — |  | Tier 2: durability mode ("durable" = streaming) |
 | `retry` | [`RetryDecl`](../../spec/backend/02-core-extended.md) | — |  | Tier 2 |

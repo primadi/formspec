@@ -128,7 +128,13 @@ func generateTypeScript(reg *entity.Registry) (string, error) {
 		if rd.Handler == "auto" {
 			g.standardActions[rd.Action] = true
 		} else {
-			for _, a := range g.spec.Actions {
+			// ActionSources, not `Actions`: since L3 a state-machine transition's
+			// `via` IS an action, and one that declares `impl` gets a route — so it
+			// appears among the descriptors this loop walks. Reading only the
+			// declared list made a routable transition invisible to codegen, so a
+			// generated client had no method and no params type for it even though
+			// the endpoint existed.
+			for _, a := range g.spec.ActionSources() {
 				if a.Name == rd.Action {
 					g.customActions = append(g.customActions, a)
 					break
@@ -202,33 +208,149 @@ func writeEntityTypes(b *strings.Builder, g *entityGroup) {
 	}
 
 	for _, action := range g.customActions {
-		writeActionParamsType(b, typeName, action)
+		writeActionParamsType(b, typeName, action, g.spec)
 	}
 }
 
-func writeActionParamsType(b *strings.Builder, entityTypeName string, action spec.Action) {
+// writeActionParamsType emits the params interface for one custom action.
+//
+// Two contracts can describe an action's input, and this reads both:
+//
+//   - `params.validate` — names each parameter and its rules, but carries no
+//     type. Every property is emitted as `unknown`: naming it still buys
+//     autocomplete, while asserting a type nothing enforces would be a lie.
+//   - `params.inputs` / `params.inputs_from` — declares type (ad-hoc), widget,
+//     and semantics. A property referring to an Entity field takes the FIELD's
+//     type, so the parameter type is derived by the same rule as the record.
+//     `inputs` is preferred where both describe the same name.
+//
+// Inputs were previously invisible to codegen, so a generated client described a
+// transition's parameters only as `unknown` even when the manifest spelled out
+// their types (plan docs_internal/plan/action-input-contract.md).
+func writeActionParamsType(b *strings.Builder, entityTypeName string, action spec.Action, es *spec.EntitySpec) {
 	paramsTypeName := entityTypeName + pascalCase(action.Name) + "Params"
-	if action.Params == nil || len(action.Params.Validate) == 0 {
+	if action.Params == nil {
+		_, _ = fmt.Fprintf(b, "export type %s = Record<string, unknown>;\n\n", paramsTypeName)
+		return
+	}
+
+	// Merge the two contract sources into one ordered, de-duplicated list of
+	// names, remembering what each source could say about the parameter.
+	type paramShape struct {
+		input *spec.ParamInput
+		rule  *spec.ParamValidation
+	}
+	order := make([]string, 0, len(action.Params.Inputs)+len(action.Params.Validate))
+	shapes := map[string]*paramShape{}
+	add := func(name string) *paramShape {
+		if s, ok := shapes[name]; ok {
+			return s
+		}
+		s := &paramShape{}
+		shapes[name] = s
+		order = append(order, name)
+		return s
+	}
+	for i := range action.Params.Inputs {
+		in := &action.Params.Inputs[i]
+		add(in.Name).input = in
+	}
+	// `inputs_from` references are resolved through the set list so a
+	// transition sharing a set generates the same parameter type as one that
+	// declares it inline.
+	if es != nil {
+		for _, setName := range action.Params.InputsFrom {
+			for i := range es.InputSets {
+				if es.InputSets[i].Name != setName {
+					continue
+				}
+				for j := range es.InputSets[i].Inputs {
+					in := &es.InputSets[i].Inputs[j]
+					add(in.Name).input = in
+				}
+			}
+		}
+	}
+	for i := range action.Params.Validate {
+		v := &action.Params.Validate[i]
+		add(v.Field).rule = v
+	}
+	if len(order) == 0 {
 		_, _ = fmt.Fprintf(b, "export type %s = Record<string, unknown>;\n\n", paramsTypeName)
 		return
 	}
 
 	_, _ = fmt.Fprintf(b, "export interface %s {\n", paramsTypeName)
-	for _, p := range action.Params.Validate {
+	for _, name := range order {
+		s := shapes[name]
+		var tsType string
 		required := false
-		for _, r := range p.Rules {
-			if r.Name == "required" {
-				required = true
+
+		if s.input != nil {
+			// A referring input inherits the Entity field's type; an ad-hoc one
+			// is typed from its own declaration.
+			if f := entityFieldByName(es, name); f != nil {
+				tsType = tsFieldType(*f)
+			} else {
+				tsType = tsFieldType(spec.Field{
+					Name:       s.input.Name,
+					Type:       s.input.Type,
+					EnumValues: s.input.EnumValues,
+					Options:    s.input.Options,
+					Multiple:   s.input.Multiple,
+				})
 			}
+			required = s.input.Required || hasRequiredRule(s.input.Rules)
+		} else {
+			// No declared type — see the doc comment above on why `unknown`.
+			tsType = "unknown"
 		}
-		// No type info is declared for action params today (spec.ParamValidation
-		// only carries validation rules, not a data type) — `unknown` names the
-		// parameter for autocomplete without asserting a type we can't verify.
-		// Quoted literal key, same reasoning as writeField: this must match the
+
+		// A `required` rule is the older spelling of the same statement; it
+		// stays authoritative when there is no input declaration to read.
+		if s.rule != nil && hasRequiredRule(s.rule.Rules) {
+			required = true
+		}
+
+		// `nullable` is deliberately absent: parameters have never been emitted
+		// with `| null` here, and widening it now would change the generated
+		// surface of every existing action for no gain — an absent key already
+		// means "not sent".
+		//
+		// Quoted literal key — same reasoning as writeField: this must match the
 		// JSON body key the server decodes, not a camelCased rename.
-		_, _ = fmt.Fprintf(b, "  %q%s: unknown;\n", p.Field, optionalMark(!required))
+		_, _ = fmt.Fprintf(b, "  %q%s: %s;\n", name, optionalMark(!required), tsType)
 	}
 	b.WriteString("}\n\n")
+}
+
+// hasRequiredRule reports whether a rule list declares `required`.
+//
+// `rules: [required]` and `required: true` are the same statement in two
+// spellings, and real manifests use each: the Entity field convention is the
+// rule list, while `ParamInput.Required` is the boolean. Reading only one would
+// emit an optional property for a parameter the server refuses to see omitted.
+func hasRequiredRule(rules []spec.ValidationRule) bool {
+	for _, r := range rules {
+		if r.Name == "required" {
+			return true
+		}
+	}
+	return false
+}
+
+// entityFieldByName resolves which Entity field a parameter name refers to.
+// A nil result simply means "ad-hoc".
+func entityFieldByName(es *spec.EntitySpec, name string) *spec.Field {
+	if es == nil {
+		return nil
+	}
+	for i := range es.Fields {
+		if es.Fields[i].Name == name {
+			return &es.Fields[i]
+		}
+	}
+	return nil
 }
 
 // writeField emits one interface property. The key is the field's literal
@@ -364,7 +486,13 @@ func tsFieldType(f spec.Field) string {
 		return "string"
 	}
 	switch f.Type {
-	case spec.FieldString, spec.FieldUUID, spec.FieldDate, spec.FieldDateTime:
+	case spec.FieldString, spec.FieldText, spec.FieldRichText,
+		spec.FieldUUID, spec.FieldDate, spec.FieldDateTime:
+		// `text` and `richtext` cross the wire as strings like any other prose
+		// field. They used to fall through to `unknown`, which made a perfectly
+		// ordinary `text` field — including the `void_reason` an action input
+		// commonly refers to — untyped in every generated client.
+		//
 		// A string carrying a SINGLE-valued `options` set is a closed set too
 		// (todo 5.10.22). A `multiple: true` string stays `string` — its wire
 		// form is a comma-separated list, which no TS string type can narrow.

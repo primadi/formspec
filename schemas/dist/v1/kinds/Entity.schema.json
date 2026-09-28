@@ -82,6 +82,13 @@
         "$ref": "#/$defs/IndexDecl"
       }
     },
+    "input_sets": {
+      "description": "InputSets declares named, reusable lists of action inputs. A transition or",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/InputSet"
+      }
+    },
     "invariants": {
       "description": "Invariants declares properties that must hold for a `characteristic:",
       "type": "array",

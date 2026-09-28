@@ -301,7 +301,30 @@ spec:
       - { from: ready, to: served, via: mark-served, emit: on_served, require_permission: orders.mark-served }
       - { from: served, to: completed, via: complete-order, require_permission: orders.complete-order }
       # Void setelah pembayaran menyentuh uang (refund) — digerbangi sama.
-      - { from: [paid, in_kitchen, ready, served], to: cancelled, via: void-order, emit: on_cancel, require_permission: orders.void-order }
+      #
+      # `params.inputs` (plan action-input-contract): kontrak input yang bisa
+      # DIRENDER. Sebelum ini `void-order` hanya punya `conditions` yang membaca
+      # `params.get('void_reason')` di sisi action — deklarasi yang tampak
+      # menuntut alasan tetapi tidak punya satu pun permukaan yang bisa
+      # mengumpulkannya: tombol transisi POST tanpa body, dan `void_reason`
+      # adalah field entity yang tak pernah terisi di jalur ini.
+      #
+      # `void_reason` di sini MERUJUK field entity (baris ~167) — tipe, title,
+      # dan enum-nya tidak diulang. `required_when` menjaga satu deklarasi tetap
+      # cukup untuk keempat state asal: alasan wajib, dan `persist` bawaannya
+      # menyimpan nilainya bersama perpindahan state (termasuk melewati approval
+      # supervisor, yang menyimpan input pemohon di baris approval).
+      - from: [paid, in_kitchen, ready, served]
+        to: cancelled
+        via: void-order
+        emit: on_cancel
+        require_permission: orders.void-order
+        params:
+          inputs:
+            - name: void_reason
+              widget: textarea
+              required_when: "fields.status == 'paid'"
+          render: { mode: modal }
   # ── Event — pemicu integrasi lintas-app (stok & jurnal) ──
   # Transisi memancarkan event lewat `emit:`
   # yang DINYATAKAN di state machine di atas. Nama event tetap berkonvensi
