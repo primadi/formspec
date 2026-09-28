@@ -116,60 +116,93 @@ entitas. Karena itu validator **wajib** memiliki pengecualian untuk
 
 ---
 
-## 3. Bentuk validator
+## 3. Bentuk validator ✅ mendarat 2026-09-27
 
-```
-ValidateActionTransitionDuplication(d *EntitySpec) error
-```
+`ValidateActionTransitionDuplication(d *EntitySpec) error` — dipanggil dari
+`ValidateEntitySpec` (setelah `ValidateTransitionPermissions`).
 
-Dipanggil dari `ValidateEntitySpec` (dekat `ValidateTransitionPermissions`).
+| kondisi | hasil |
+| --- | --- |
+| `via` tidak ada di `actions` | ✅ sah (inti L3) |
+| `via` kosong | ✅ sah (keputusan C) |
+| `actions[].name` ∈ `ReservedActionNames` | ✅ **dikecualikan** — action lifecycle punya route generik; entri nyata bisa mempersempit/mengganti permission-nya |
+| entri membawa `impl` yang tidak dimiliki transisi | ✅ dikecualikan — entri itulah sumber handler route |
+| entri membawa `required_permission` ≠ gate transisi | ✅ dikecualikan — route akan memakai nama entri |
+| nama sama, entri **tidak** menambahkan apa pun | ❌ **ditolak** |
 
-| kondisi                                                         | hasil                                                                                                              |
-| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `via` tidak ada di `actions`                                    | ✅ sah (inti L3)                                                                                                   |
-| `via` kosong                                                    | ✅ sah (keputusan C)                                                                                               |
-| `actions[].name` ∈ `ReservedActionNames`                        | ✅ **dikecualikan** — action lifecycle punya route generik; entri nyata bisa mempersempit/mengganti permission-nya |
-| `via` = nama reserved (mis. `cancel`)                           | ⚠️ **warning**: entri ini jadi satu-satunya sumber permission route `/{id}/cancel`; pastikan disengaja             |
-| nama sama, entri **tanpa** `required_permission`                | ❌ tolak — deklarasi murni, hapus                                                                                  |
-| nama sama, permission identik dengan fallback                   | ❌ tolak — deklarasi murni, hapus                                                                                  |
-| nama sama, `required_permission` + `impl` berbeda dari transisi | ❌ tolak                                                                                                           |
-
-Agar bisa membedakan baris terakhir dari "murni", validator memerlukan
-`TransitionDecl` untuk menyatakan `impl`-nya; itu sudah ada sejak L1.
-
-**Urutan wajib:** validator dulu → kalibrasi (test gagal saat duplikat murni
-diizinkan) → baru migrasi per-module. Tanpa validator, bentuk lama dan baru hidup
-berdampingan tanpa penjaga dan deklarasi ganda bisa ditulis ulang kapan saja.
+Pengunci: `pkg/spec/duplication_test.go` (4 test), terkalibrasi — gagal saat
+penolakan dinetralkan, dan gagal dengan "`occupy` appears 3 times" saat dedup
+`ActionSources()` dihapus.
 
 ---
 
-## 4. Urutan pengerjaan
+## 4. 🔴 Pembalikan analisis: pertanyaannya bukan "mana yang benar"
 
-| #   | Langkah                                                                 | Ukuran | Dependensi |
-| --- | ----------------------------------------------------------------------- | ------ | ---------- |
-| 1   | `ValidateActionTransitionDuplication` + pengecualian reserved + warning | small  | —          |
-| 2   | Test pengunci (kalibrasi: gagal saat duplikat murni diizinkan)          | small  | 1          |
-| 3   | Putuskan bentuk permission untuk Kategori B1 (butuh pemilik)            | small  | —          |
-| 4   | Selaraskan 36 Kategori B + grant terkait; perbaiki `plural` B3          | medium | 3          |
-| 5   | Migrasi 35 Kategori A mulai dari `examples/kafe` (1 entitas)            | medium | 2          |
-| 6   | `formspec validate` per-module setelah tiap langkah + `go test ./...`   | small  | 4,5        |
-| 7   | Tutup kafe 10.51 (bagian L4) + changelog                                | small  | 5          |
+Bagian 2 menyimpulkan migrasi Kategori B **butuh keputusan pemilik** — plural
+atau singular. **Pembacaan `docs/spec/backend/01-core-basic.md` §8.6
+membatalkan premisnya.** Spec itu **normatif**:
 
-**Langkah 4 dan 5 sengaja terpisah dari 1–2:** validator bisa mendarat lebih dulu
-tanpa memaksa migrasi, sehingga migrasi dapat dilakukan per-module dengan aman.
+> Bentuk kanonik satu-satunya adalah `{module}.{plural}.{action}` ... Bentuk
+> **singular** (`{module}.{entity}.{action}`) **bukan** varian yang setara dan
+> tidak pernah cocok — registry mendaftarkan plural, jadi permission berbentuk
+> singular hanya menghasilkan 403 yang sulit dilacak.
+
+**Terukur:** dari 21 permission yang dideklarasikan, **20 berbentuk singular**
+(melanggar §8.6); hanya **1** kanonik. Jadi tidak ada keputusan desain yang
+terbuka — yang ada **dua cacat yang harus diperbaiki**, dan urutannya
+kebalikan dari tebakan awal.
+
+### Dua cacat terpisah
+
+**(a) Route action kustom tidak pernah mendaftarkan permission-nya.** Registry
+kaya, route miskin (terukur):
+
+| sumber | `cafe-order.orders.submit-order` |
+| --- | --- |
+| blob grant (`entityFootprint`) | ✅ ada |
+| `authorized_actions` (bundle, supervisor) | `[list, find, create, update]` — **tidak ada** |
+| registry permission (`registerStandardPermissions`) | **tidak didaftarkan** (hardcoded list/view/create/update/delete/read_all/submit/cancel/amend + soft-deactivate) |
+
+Akibat: nama yang diturunkan dari konvensi dan nama yang didaftarkan berbeda.
+
+**(b) 50 dari 77 duplikat tidak punya `impl`** → tidak ada route → maka
+`required_permission`-nya terdaftar dan bisa di-grant, tetapi **tidak pernah
+dieksekusi**. Kelas yang sama dengan 10.46, pada action alih-alih gate
+transisi. Sementara **27 duplikat punya `impl`** (route nyata → permission
+benar-benar ditegakkan).
+
+**Kesimpulan urutan:** perbaiki **(a) dulu** — jadikan bentuk permission
+kanonik (plural) di generator, daftarkan permission action kustom, dan tambahkan
+validator yang menolak bentuk singular sesuai §8.6. Baru setelah itu migrasi
+Kategori B kehilangan bahayanya: yang berubah hanyalah nama, menuju bentuk yang
+spec sudah nyatakan wajib.
 
 ---
 
-## 5. Risiko
+## 5. Item terbuka (temuan lanjutan 2026-09-27)
 
-| Risiko                                                              | Mitigasi                                                                              |
-| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Menghapus entri Kategori B = melebarkan akses ke pemegang `update`  | Validator menolak; migrasi hanya setelah keputusan B1 dan grant diperbarui            |
-| Validator tanpa pengecualian reserved = regresi otorisasi 6 entitas | Pengecualian eksplisit + test yang mem-pin-nya                                        |
-| `plural` yang salah (B3) memperbaiki nama tapi memutus grant lama   | Perbaiki `plural` di langkah terpisah, catat di changelog, sebut entitas yang terkena |
-| Alat ukur meniru logika produksi (jebakan M2)                       | Setiap measurement berikutnya memanggil fungsi produksi, bukan menyalin logikanya     |
+| # | Item | Ukuran |
+| --- | --- | --- |
+| O1 | Route action kustom mendaftarkan bentuk kanonik `{module}.{plural}.{action}` | small |
+| O2 | `registerStandardPermissions` mendaftarkan permission action kustom (registry = route) | small |
+| O3 | Validator menolak `required_permission` berbentuk singular (§8.6) | small |
+| O4 | Validator menolak entri `actions:` yang menamai action tidak-ada di halaman yang di-grant (10.47) — butuh materializer di `check` | medium |
+| O5 | 20 manifest diperbaiki ke bentuk plural + grant diselaraskan | medium |
+| O6 | ~~50 action impl-less: putuskan bagaimana `required_permission` ditegakkan~~ **✅ sebagian 2026-09-27** — check `check_ungated.go` memperingatkan bentuk ini, dan **7 gate kafe dipindahkan ke transisi** (lubang uang `confirm-payment`/`refund`/`settle`/`close-shift` + pemisahan peran dapur/pelayan). Warning kafe 21 → 10, lalu **21 → 0** (`-016`: 10 warning terakhir tuntas; semua gate pindah ke transisi) | medium |
+| O9 | *(masih terbuka, di luar kafe)* **43 transisi tanpa gate sama sekali** di `examples/` + `verticals/` (15 file) — diotorisasi `{plural}.update` saja. Check hanya menangkap kontradiksi, bukan omisi. Termasuk `arisan/draw.mark-paid`, `stock-opname.post-opname`, `billing/order.void`, 11 transisi approval CRC | medium |
+| O7 | `buildTransitionIndex` menimpa pada tabrakan `via`; `ActionSources()` memakai yang pertama — selaraskan | small |
+| O8 | `cancel` yang genuinely tidak ada di 2 entitas (grant error?) | small |
 
 ---
+
+## 6. Risiko
+
+| Risiko | Mitigasi |
+| --- | --- |
+| Menghapus entri Kategori B = melebarkan akses ke pemegang `update` | Jangan migrasi sebelum O1–O3; setelah bentuk kanonik didaftarkan, migrasi hanya mengganti nama ke bentuk yang §8.6 sudah nyatakan wajib |
+| Validator tanpa pengecualian reserved = regresi otorisasi 6 entitas | Pengecualian eksplisit + test yang mem-pin-nya |
+| `plural` salah (B3) memperbaiki nama tapi memutus grant lama | Perbaiki `plural` di langkah terpisah, catat entitas yang terkena |
+| Alat ukur meniru logika produksi | Setiap measurement memanggil fungsi produksi (lihat jebakan M2 di bagian 1) |
 
 ## Files
 

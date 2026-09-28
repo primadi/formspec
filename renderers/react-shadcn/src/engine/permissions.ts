@@ -165,7 +165,19 @@ export function entityActionPermission(
  * may still `list` and `create`. Falling back to `me.permissions` keeps older
  * servers working.
  *
- * A null/undefined identity fails closed.
+ * It is consulted BEFORE the identity check, and that order is the whole point.
+ * A PUBLIC surface (`access: public`) boots anonymously and — by construction —
+ * has no identity: `boot()` clears `me` for the `anonymous` user rather than
+ * fabricating one. Gating on `me` first therefore hid every button a guest was
+ * server-authorized to press. On kafe that meant the guest ordering flow had no
+ * Create button at all: the submit control was absent from the DOM, so nothing
+ * a human could click would ever place an order from a table QR. Measured with
+ * the Playwright harness on `/kafe/t/JKT-A01-DEMO` — the form rendered the two
+ * visible fields and only "Cancel".
+ *
+ * So the authority list is trusted on its own; only when the bundle does NOT
+ * carry one (an older server) does the decision fall back to permissions, which
+ * is the case that must fail closed without an identity.
  */
 export function canDoEntityAction(
   me: { permissions: string[] } | null | undefined,
@@ -177,10 +189,10 @@ export function canDoEntityAction(
   },
   action: string,
 ): boolean {
-  if (!me) return false
   const resource = resourceAction(action)
   if (entity.authorized_actions) {
     return entity.authorized_actions.includes(resource)
   }
+  if (!me) return false
   return can(entityActionPermission(entity, action), me.permissions)
 }

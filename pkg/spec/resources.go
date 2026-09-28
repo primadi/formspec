@@ -652,6 +652,24 @@ type SubscriptionSpec struct {
 	// @schema {example: "billing.invoice.on_submit"}
 	Events  []string `yaml:"events" json:"events"`
 	Handler ImplDecl `yaml:"handler" json:"handler"`
+	// Uses declares what the HANDLER may touch — the same shape and the same
+	// reason as an action's `uses` (and a hook's, see HookDecl).
+	//
+	// Without it the handler's access is UNDECLARABLE, not merely undeclared:
+	// the dispatcher models a handler as a synthetic action carrying only
+	// name + impl, and in ProdMode/StrictMode a `ctx.<primitive>` call with no
+	// `uses` fails with
+	//   "USES_VIOLATION: ctx.db used but the action declares no uses block —
+	//    add uses.primitives: [db]"
+	// — an instruction the manifest had no way to comply with (kafe 10.56).
+	//
+	// Note the enforcement is per-primitive, not uniform: only the datastore
+	// primitives (db, cache, lock, queue, pubsub, storage, kvstore) are
+	// checked; `ctx.now()`/`ctx.today()`/`ctx.config`/`ctx.log` are not. That
+	// asymmetry is documented in docs/reference/primitives.md — declaring
+	// `uses` here is still the right thing, because it is what the consent
+	// footprint reads.
+	Uses *UsesDecl `yaml:"uses,omitempty" json:"uses,omitempty"`
 	// @schema {example: "redis"}
 	Store   string     `yaml:"store,omitempty" json:"store,omitempty"`           // Tier 2: stream backend (redis, kafka)
 	Durable string     `yaml:"durability,omitempty" json:"durability,omitempty"` // Tier 2: durability mode ("durable" = streaming)

@@ -1,0 +1,25 @@
+apiVersion: formspec.dev/v1
+kind: Page
+metadata:
+  name: table-open
+  module: cafe-order
+  description: "Halaman masuk tamu dari QR meja — kartu meja memuat token, bukan id"
+spec:
+  # Langkah 1–2 alur QR (10.35): kartu meja memuat `/kafe/t/{qr_token}`,
+  # halaman ini men-resolve meja dari token itu, membuat `table-session`, lalu
+  # mengarahkan tamu ke menu.
+  #
+  # Sebelumnya hanya ada DUA langkah (`token → sesi` dilakukan aplikasi), jadi
+  # tidak ada apa pun yang bisa di-URL oleh QR. Sekarang `qr_token` adalah
+  # `natural_key` meja (10.34b) dan `submit.redirect` bisa membawa nilai yang
+  # baru saja ditulis (10.37), sehingga rantainya utuh tanpa pemilih meja —
+  # token = bukti fisik pemegang meja, jadi tidak ada meja untuk "dipilih".
+  route: /t/:qr_token
+  title: "Selamat Datang"
+  icon: "qr-code"
+  # `public: true`: tamu anonim tanpa akun (aturan bisnis #3). Di App
+  # `kafe-qr` (access: public) halaman ini boleh dibuka siapa pun yang
+  # memegang token meja.
+  public: true
+  blocks:
+    - form: { ref: table-open-form, mode: create }

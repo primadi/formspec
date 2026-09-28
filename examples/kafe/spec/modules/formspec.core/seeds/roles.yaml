@@ -48,11 +48,15 @@ spec:
           description: "Kasir — jualan, pembayaran, buka/tutup shift"
           grants:
             - { page: "pos-workbench", actions: [{ name: view }, { name: list }, { name: create }, { name: update }] }
-            - { page: "order-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }] }
-            - { page: "payment-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }] }
-            - { page: "shift-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }, { name: submit }, { name: cancel }] }
+            # `confirm-payment`/`cancel-order` adalah GATE transisi (2026-09-27).
+            # Sebelum digerbangi, kasir menandai pesanan LUNAS hanya dengan
+            # `update` — terukur 200. Grant menyebut NAMA ACTION, dan nama itu
+            # harus sama persis dengan `via:` transisi.
+            - { page: "order-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }, { name: confirm-payment }, { name: cancel-order }, { name: submit-order }, { name: abandon }] }
+            - { page: "payment-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }, { name: confirm-payment }, { name: settle }, { name: fail }] }
+            - { page: "shift-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }, { name: submit }, { name: cancel }, { name: close-shift }] }
             - { page: "cash-movement-page", actions: [{ name: list }, { name: view }, { name: create }] }
-            - { page: "table-session-page", actions: [{ name: list }, { name: view }, { name: create }] }
+            - { page: "table-session-page", actions: [{ name: list }, { name: view }, { name: create }, { name: close-session }, { name: abandon }] }
             # Katalog & harga: read-only — kasir butuh keduanya untuk melayani.
             - { page: "menu-item-page", actions: [{ name: list }, { name: view }] }
             - { page: "menu-item-price-page", actions: [{ name: list }, { name: view }] }
@@ -81,7 +85,7 @@ spec:
           description: "Barista — majukan status pesanan minuman di KDS"
           grants:
             - { page: "kanban:order-board-kds", actions: [{ name: view }] }
-            - { page: "order-page", actions: [{ name: list }, { name: view }, { name: update }] }
+            - { page: "order-page", actions: [{ name: list }, { name: view }, { name: update }, { name: start-preparing }, { name: mark-ready }] }
             - { page: "menu-item-page", actions: [{ name: list }, { name: view }] }
 
         # DAPUR — sama dengan barista; dipisah karena `prep_station` memisahkan
@@ -92,7 +96,7 @@ spec:
           description: "Dapur — majukan status pesanan makanan di KDS"
           grants:
             - { page: "kanban:order-board-kds", actions: [{ name: view }] }
-            - { page: "order-page", actions: [{ name: list }, { name: view }, { name: update }] }
+            - { page: "order-page", actions: [{ name: list }, { name: view }, { name: update }, { name: start-preparing }, { name: mark-ready }] }
             - { page: "menu-item-page", actions: [{ name: list }, { name: view }] }
             - { page: "recipe-page", actions: [{ name: list }, { name: view }] }
             - { page: "ingredient-page", actions: [{ name: list }, { name: view }] }
@@ -102,7 +106,7 @@ spec:
           app: kafe-pos
           description: "Pelayan — antar & tandai pesanan tersaji"
           grants:
-            - { page: "order-page", actions: [{ name: list }, { name: view }, { name: update }] }
+            - { page: "order-page", actions: [{ name: list }, { name: view }, { name: update }, { name: mark-served }, { name: complete-order }, { name: submit-order }, { name: abandon }] }
             - { page: "menu-item-page", actions: [{ name: list }, { name: view }] }
             # Pelayan yang menandai pesanan tersaji, jadi ia yang menggerakkan
             # meja `occupied → served` (dan kembali `occupied` bila tamu
@@ -124,9 +128,9 @@ spec:
           description: "Supervisor — operasional + persetujuan void"
           grants:
             - { page: "pos-workbench", actions: [{ name: view }, { name: list }, { name: create }, { name: update }] }
-            - { page: "order-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }, { name: cancel }] }
-            - { page: "payment-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }] }
-            - { page: "shift-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }, { name: submit }, { name: cancel }] }
+            - { page: "order-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }, { name: cancel }, { name: confirm-payment }, { name: cancel-order }, { name: void-order }] }
+            - { page: "payment-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }, { name: confirm-payment }, { name: void-order }, { name: refund }, { name: settle }, { name: fail }] }
+            - { page: "shift-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }, { name: submit }, { name: cancel }, { name: close-shift }] }
             - { page: "cash-movement-page", actions: [{ name: list }, { name: view }, { name: create }] }
             # Antrean approval TIDAK di-grant lewat `approval-inbox:` — kind itu
             # belum punya footprint materialisasi. Yang menentukan siapa boleh
@@ -135,7 +139,7 @@ spec:
             - { page: "menu-item-page", actions: [{ name: list }, { name: view }, { name: update }] }
             - { page: "menu-item-price-page", actions: [{ name: list }, { name: view }, { name: update }] }
             - { page: "dining-table-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }] }
-            - { page: "table-session-page", actions: [{ name: list }, { name: view }] }
+            - { page: "table-session-page", actions: [{ name: list }, { name: view }, { name: close-session }, { name: abandon }] }
             - { page: "member-page", actions: [{ name: list }, { name: view }] }
             - { page: "point-entry-page", actions: [{ name: list }, { name: view }] }
             - { page: "member-point-page", actions: [{ name: list }, { name: view }] }
@@ -151,15 +155,15 @@ spec:
           description: "Manajer — master, stok, pembelian, laporan (tanpa hapus)"
           grants:
             - { page: "pos-workbench", actions: [{ name: view }, { name: list }, { name: create }, { name: update }] }
-            - { page: "order-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }, { name: cancel }] }
-            - { page: "shift-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }, { name: submit }, { name: cancel }] }
+            - { page: "order-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }, { name: cancel }, { name: confirm-payment }, { name: cancel-order }, { name: void-order }] }
+            - { page: "shift-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }, { name: submit }, { name: cancel }, { name: close-shift }] }
             - { page: "cash-movement-page", actions: [{ name: list }, { name: view }, { name: create }] }
             - { page: "menu-item-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }, { name: deactivate }, { name: reactivate }] }
             - { page: "menu-category-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }] }
             - { page: "menu-item-price-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }] }
             - { page: "employee-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }] }
             - { page: "branch-page", actions: [{ name: list }, { name: view }, { name: update }] }
-            - { page: "table-session-page", actions: [{ name: list }, { name: view }] }
+            - { page: "table-session-page", actions: [{ name: list }, { name: view }, { name: close-session }, { name: abandon }] }
             - { page: "member-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }] }
             - { page: "point-entry-page", actions: [{ name: list }, { name: view }] }
             - { page: "member-point-page", actions: [{ name: list }, { name: view }] }
@@ -169,7 +173,7 @@ spec:
             - { page: "recipe-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }] }
             - { page: "supplier-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }] }
             - { page: "purchase-order-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }, { name: submit-po }, { name: cancel-po }, { name: receive-goods }] }
-            - { page: "stock-opname-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }] }
+            - { page: "stock-opname-page", actions: [{ name: list }, { name: view }, { name: create }, { name: update }, { name: record-count }, { name: reopen }, { name: post-opname }, { name: cancel-opname }] }
             - { page: "waste-entry-page", actions: [{ name: list }, { name: view }, { name: create }] }
             - { page: "stock-level-page", actions: [{ name: list }, { name: view }] }
             - { page: "menu-cost-page", actions: [{ name: list }, { name: view }] }

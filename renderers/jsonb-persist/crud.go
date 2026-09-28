@@ -599,9 +599,8 @@ func (s *EntityStore) Insert(ctx context.Context, params InsertParams) (string, 
 			params.CreatedBy,
 			toJSONString(parentData),
 		); err != nil {
-			return fmt.Errorf("insert row: %w", err)
+			return fmt.Errorf("insert row: %w", classifyConstraintError(err))
 		}
-
 		// Write extension data (4.3.2): each namespaced payload goes to its
 		// ext_{namespace} column, isolated from the base data JSONB.
 		for ns, ext := range extData {
@@ -629,7 +628,7 @@ func (s *EntityStore) Insert(ctx context.Context, params InsertParams) (string, 
 		for name, ch := range childrenData {
 			cs := s.children[name]
 			if err := cs.withDB(txdb).InsertChildren(ctx, id, ch); err != nil {
-				return fmt.Errorf("insert children %s: %w", name, err)
+				return fmt.Errorf("insert children %s: %w", name, classifyConstraintError(err))
 			}
 		}
 
@@ -993,14 +992,14 @@ func (s *EntityStore) Update(ctx context.Context, params UpdateParams) (int, err
 			if strings.Contains(err.Error(), "no rows") {
 				return fmt.Errorf("%w (version conflict or not found)", ErrNotFound)
 			}
-			return err
+			return classifyConstraintError(err)
 		}
 
 		// Sync children in child tables (replace-all)
 		for name, ch := range childrenData {
 			cs := s.children[name]
 			if err := cs.withDB(txdb).UpdateChildren(ctx, resolvedID, ch); err != nil {
-				return fmt.Errorf("update children %s: %w", name, err)
+				return fmt.Errorf("update children %s: %w", name, classifyConstraintError(err))
 			}
 		}
 
@@ -3075,7 +3074,12 @@ func (s *EntityStore) evaluateComputed(data map[string]any) {
 
 // validateStateTransition checks that a state transition is valid according to
 // the entity's state machine definition.
-// It only validates when the state machine field is present in both old and new data.
+//
+// Its ONLY caller is Update (Insert sets the initial state through
+// applyDefaults, so a fresh row never needs re-validating). That single caller
+// is what makes the `!oldExists` branch below well-defined — it always means
+// "the STORED row has no value for the state field", never "this is a new
+// record".
 func (s *EntityStore) validateStateTransition(oldData, newData map[string]any) error {
 	if s.stateMachine == nil {
 		return nil
@@ -3090,12 +3094,25 @@ func (s *EntityStore) validateStateTransition(oldData, newData map[string]any) e
 		return nil
 	}
 
-	// If this is a new record (no old state), only verify initial state
+	// The stored row has no value for the state field — a row written BEFORE
+	// the field existed (kafe 10.42). Treat it as being in the machine's
+	// initial state and validate the transition from there, rather than
+	// demanding the new value BE the initial state.
+	//
+	// Demanding initial here was wrong in a way that only showed up on legacy
+	// rows: `applyDefaults` gives every INSERT the initial state, so the check
+	// never fired on fresh data — while an existing row answered 500
+	// `initial state must be "available"` for what was a perfectly ordinary
+	// `available → occupied`. The bug was reading "field absent" as "new
+	// record" on a path (Update) where a new record cannot occur. Failures here
+	// now have the right two outcomes: a registered transition is allowed, and
+	// an unregistered one is a normal `invalid state transition` 422.
 	if !oldExists {
-		if s.stateMachine.Initial != "" && newVal != s.stateMachine.Initial {
-			return fmt.Errorf("initial state must be %q, got %v", s.stateMachine.Initial, newVal)
+		if s.stateMachine.Initial == "" {
+			return nil
 		}
-		return nil
+		oldVal = s.stateMachine.Initial
+		oldExists = true
 	}
 
 	oldState := fmt.Sprintf("%v", oldVal)

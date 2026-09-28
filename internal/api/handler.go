@@ -1892,6 +1892,9 @@ func parseIfMatchVersion(r *http.Request) (version int, present bool, valid bool
 }
 
 func isConflictError(err error) bool {
+	if errors.Is(err, db.ErrUniqueViolation) {
+		return true
+	}
 	s := err.Error()
 	return contains(s, "version conflict") || contains(s, "not found")
 }
@@ -1921,6 +1924,10 @@ func writeStoreError(w http.ResponseWriter, err error) {
 	switch {
 	case isValidationError(err):
 		writeStoreValidationError(w, err)
+	case errors.Is(err, db.ErrUniqueViolation):
+		// Must be checked BEFORE the generic conflict branch so the caller gets
+		// the offending field rather than a bare "CONFLICT".
+		writeUniqueViolationError(w, err)
 	case isConflictError(err):
 		writeError(w, http.StatusConflict, "CONFLICT", err.Error())
 	case errors.Is(err, db.ErrCrossStoreTx):
@@ -1963,10 +1970,36 @@ func storeValidationDetail(err error) (level, field string) {
 // VALIDATION_ERROR with the structured details array the spec mandates
 // (details: [{level, field?, message}]). Previously this path used plain
 // writeError, so record-level failures returned no details at all.
+// writeStoreValidationError writes a 422 for a storage-layer validation error.
 func writeStoreValidationError(w http.ResponseWriter, err error) {
 	level, field := storeValidationDetail(err)
 	writeErrorWithDetails(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", err.Error(),
 		[]ErrorDetailItem{{Level: level, Field: field, Message: err.Error()}})
+}
+
+// writeUniqueViolationError writes a 409 CONFLICT for a uniqueness violation.
+//
+// 409 rather than 422 on purpose: the submitted value is WELL-FORMED, it simply
+// already exists. That is the same class as an optimistic-locking conflict
+// (`CONFLICT`), and it tells the caller to change the value rather than to fix
+// its request shape or retry blindly.
+//
+// This used to be a 500 INTERNAL_ERROR — measured 2026-09-28 on three shapes
+// (partial unique index, composite unique index, field `unique: true`). A
+// duplicate value is not a server fault, and reporting it as one raised false
+// paging alarms while hiding real faults among them.
+func writeUniqueViolationError(w http.ResponseWriter, err error) {
+	var uv *db.UniqueViolationError
+	if errors.As(err, &uv) && uv.Detail != "" {
+		// Name the field so the client can show something actionable. The
+		// detail is already normalized to logical field names
+		// (`dining_table_id`, not `cafe_tables._dining_table_id`).
+		msg := "a record with this value already exists: " + uv.Detail
+		writeErrorWithDetails(w, http.StatusConflict, "CONFLICT", msg,
+			[]ErrorDetailItem{{Level: "field", Message: msg}})
+		return
+	}
+	writeError(w, http.StatusConflict, "CONFLICT", err.Error())
 }
 
 // writeValidationErrors writes one or more validation errors as 422 VALIDATION_ERROR.

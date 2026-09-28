@@ -1,6 +1,7 @@
 package permission
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/primadi/formspec/pkg/spec"
@@ -397,6 +398,78 @@ func TestValidateAction(t *testing.T) {
 	if len(errs2) == 0 {
 		t.Error("expected error for invalid permission format")
 	}
+}
+
+// `public: true` is the Service-only anonymous allowlist (kafe 10.39). These
+// pin the two refusals that keep it from becoming an open door.
+func TestValidatePublicAction(t *testing.T) {
+	rl := &spec.RateLimitSpec{Max: 10, Per: "1m", Scope: "ip"}
+
+	t.Run("service action with a rate limit is accepted", func(t *testing.T) {
+		errs := ValidatePublicAction(spec.Action{
+			Name:      "open",
+			Public:    true,
+			RateLimit: rl,
+		}, spec.KindService)
+		if len(errs) != 0 {
+			t.Errorf("expected no errors, got: %v", errs)
+		}
+	})
+
+	t.Run("non-public action is never checked", func(t *testing.T) {
+		// No rate limit, but not public — so nothing to refuse.
+		errs := ValidatePublicAction(spec.Action{Name: "internal"}, spec.KindService)
+		if len(errs) != 0 {
+			t.Errorf("expected no errors for a non-public action, got: %v", errs)
+		}
+	})
+
+	t.Run("public without a rate limit is refused", func(t *testing.T) {
+		errs := ValidatePublicAction(spec.Action{
+			Name:   "open",
+			Public: true,
+		}, spec.KindService)
+		if len(errs) == 0 {
+			t.Fatal("an anonymous action without rate_limit must be refused")
+		}
+		if !strings.Contains(errs[0].Error(), "rate_limit") {
+			t.Errorf("the error must name rate_limit, got: %v", errs[0])
+		}
+	})
+
+	t.Run("public on an entity action is refused", func(t *testing.T) {
+		errs := ValidatePublicAction(spec.Action{
+			Name:      "list",
+			Public:    true,
+			RateLimit: rl,
+		}, spec.KindEntity)
+		if len(errs) == 0 {
+			t.Fatal("`public` on an entity action must be refused — the App's public_entities allowlist owns that decision")
+		}
+		if !strings.Contains(errs[0].Error(), "public_entities") {
+			t.Errorf("the error must point at public_entities, got: %v", errs[0])
+		}
+	})
+
+	t.Run("entity spec validation catches it through the action list", func(t *testing.T) {
+		// The refusal has to be reachable from the normal validation entry
+		// point, not only from a direct call.
+		errs := ValidateEntitySpec(spec.Metadata{Module: "billing"}, &spec.EntitySpec{
+			Actions: []spec.Action{{Name: "list", Public: true, RateLimit: rl}},
+		})
+		if len(errs) == 0 {
+			t.Fatal("ValidateEntitySpec must refuse `public` on an entity action")
+		}
+	})
+
+	t.Run("service spec validation accepts a well-formed public action", func(t *testing.T) {
+		errs := ValidateServiceSpec(spec.Metadata{Module: "cafe-order"}, &spec.ServiceSpec{
+			Actions: []spec.Action{{Name: "open", Public: true, RateLimit: rl}},
+		})
+		if len(errs) != 0 {
+			t.Errorf("expected no errors, got: %v", errs)
+		}
+	})
 }
 
 // ============================================================================

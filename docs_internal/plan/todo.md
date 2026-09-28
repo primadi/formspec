@@ -1,4 +1,54 @@
-**Last Updated**: 2026-09-27 (**L3 ✅ · L1 ✅ · L5 ✅ · validator L4 ✅ — dan
+**Last Updated**: 2026-09-28 (**Bug yang timbul dari alur sesi meja: 2 diperbaiki,
+1 menunggu keputusan, 1 tidak terbukti ✅.** **(1) Pelanggaran constraint dijawab
+`500 INTERNAL_ERROR` di SELURUH platform** — terukur 3 bentuk (partial unique
+index, composite unique, field `unique: true`) semuanya 500, karena
+`jsonb-persist` tidak punya sentinel constraint dan `isConflictError` hanya
+mengenali "version conflict"/"not found". Sekarang **409 `CONFLICT`** dengan nama
+field (`a record with this value already exists: dining_table_id`); klasifikasi
+dipasang di **titik tulis**, jadi script/seed ikut dapat kelas yang sama.
+**(2) Handler subscription tidak bisa mendeklarasikan `uses`** (kafe 10.56 ✅) —
+`ctx.db` di ProdMode gagal `USES_VIOLATION` dengan instruksi yang manifest-nya
+tidak punya tempat untuk dituruti; `SubscriptionSpec.Uses` ditambahkan (saudara
+`handler`, bukan anaknya) + test. Asimetri primitive (hanya 7 datastore yang
+diperiksa; `config`/`log`/`now`/`today`/`next_key`/`unit` tidak) kini
+**didokumentasikan** di `docs/reference/primitives.md`, bukan diam-diam.
+**(3) kafe 10.57** (sesi ditinggalkan mengunci meja) **butuh keputusan pemilik** —
+gejalanya kini 409 yang jujur, tetapi tamu tetap tidak bisa memesan.
+**(4) vitest flaky** (3 gagal di 1 dari 10 run) tidak dikejar tanpa bukti.
+Changelog `2026-09-28-001`, plan `perbaikan-bug-timbul-2026-09-28.md`.** (**Sisa terbuka kafe ditindaklanjuti: 4 item
+ditutup, 1 klaim saya sendiri DITARIK, 2 temuan diberi nomor ✅.** 10.42
+(baris lama → transisi state 500) diperbaiki **di engine** — `validateStateTransition`
+salah membaca `!oldExists` sebagai "record baru"; 10.35a (sesi tidak pernah
+ditutup) ternyata **wajib**, bukan pilihan: bersama 10.34c ia membuat meja hanya
+bisa dipakai sekali, jadi `release` sekarang memancarkan `on_cleared` dan
+`cafe-order` menutup sesinya; 10.53 (satu grant jelek melemahkan seluruh role)
+diperbaiki dengan `MaterializePartial` + pelaporan per-grant; 10.43 **SUPERSEDED**
+— `PATCH` memang menghormati `require_permission` transisi (`handler.go:1047`,
+terbukti 403 `dapur` vs 200 `pelayan`). **10.54 DITARIK:** saya mengklaim
+`LIMIT 1` tidak ada, padahal `FindByField`/`FindByFields` memilikinya — kesalahan
+dari inferensi, bukan pembacaan. Temuan baru: **10.56** (handler subscription
+tidak bisa mendeklarasikan `uses` → `USES_VIOLATION` di ProdMode dengan
+instruksi yang mustahil dituruti) dan **10.57** (sesi dibuat lalu ditinggalkan
+mengunci meja). Changelog `2026-09-27-020`.** (**Alur sesi meja kafe ✅ mendarat + harness E2E
+browser PERTAMA di repo ✅.** Skenario pemilik — tamu scan QR → pesan → bayar
+QRIS → dapur → meja `served` → tambah pesanan → bayar → `served` → kasir
+`release` — kini **dijalankan**, bukan dibaca: `make e2e-kafe` (Playwright,
+Chromium nyata) + 3 test Go in-process. Enam gap kafe tertutup: 10.34b
+(`qr_token` natural key), 10.34c (satu sesi terbuka per meja), 10.35/2.15
+(halaman masuk token → sesi), 10.36 (rate limit intake anonim), 10.37
+(`submit.redirect` + token `{uuid}`), 10.40b (`on_paid` → `occupied`, plus
+`on_served` → `served` dan `on_cancel` → `available`). **Dua bug renderer nyata
+ikut tertangkap** dan diperbaiki — tombol Create hilang di permukaan publik
+(`canDoEntityAction` memeriksa identitas sebelum `authorized_actions`), dan
+`default_from` mengirim placeholder mentah saat `spec.context` async; keduanya
+membuat alur tamu **tidak mungkin diklik di browser** sebelum ini. Kafe: 88
+manifest / 0 problem. **Sisa yang bernomor** (kafe ledger): 10.38 (PIN tamu
+kedua), 10.39 (Service publik), 10.20 (landing), 10.41 🟡 (`semua pesanan
+disajikan` — agregat lintas-record), 10.52 (pembatalan mengosongkan meja berisi
+pesanan lain), 10.53 (`Materialize` menolak seluruh role bila satu grant gagal —
+senyap, blast radius sistemik), 10.54 (lookup natural key tanpa `LIMIT 1`),
+10.55 (tanpa kompensasi bila subscription occupancy gagal). Changelog
+`2026-09-27-017` · `-018` · `-019`.** (**L3 ✅ · L1 ✅ · L5 ✅ · validator L4 ✅ — dan
 temuan bahwa migrasi L4 TIDAK boleh buta.** Tiga hal. **(1) L5 lebih luas dari
 rencana:** dua pembaca tambahan (`buildEntitySchema`, `entityFootprint`) juga
 membaca `es.Actions`, sehingga menghapus entri `actions:` membuat
@@ -35,9 +85,9 @@ terkalibrasi gagal saat penyalinan field dihapus. **Item terbuka baru: kafe
 10.51** (L4/L5/L7 — lihat `examples/kafe/gaps_found/TODO.md`). Changelog
 `2026-09-27-011`, `-012`. Plan `docs_internal/plan/via-sebagai-action-penuh.md`.)
 (**Sebelumnya:** 2026-09-26 **Sesi "kerjakan semua todo terbuka"** — 83 item
-`[ ]`/`[⏸️]` ditriase; **19 ditutup**, 64 tersisa dengan alasan yang
+`[ ]`/`[⏸️]` ditriase; **19 ditutup\*\*, 64 tersisa dengan alasan yang
 diverifikasi). Plan induk: `docs_internal/plan/close-open-items-2026-09-26.md`.
-Changelog: `2026-09-26-001`–`017`. (**Tambahan 2026-09-26:** fix `--dev-ui` Vite
+Changelog: `2026-09-26-001`–`017`. (\*\*Tambahan 2026-09-26:\*\* fix `--dev-ui` Vite
 proxy multi-workspace dari laporan pemilik `localhost:5174/kafe` — mengoreksi
 klaim 2.11.7 (hanya sisi Go) + item baru 2.11.7a; changelog `2026-09-26-017`,
 plan `docs_internal/plan/dev-ui-vite-proxy-multi-workspace.md`.)

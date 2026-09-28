@@ -329,6 +329,30 @@ web-typecheck:
 web-build: web-typecheck
 	cd renderers/react-shadcn && npm run build
 
+# Browser end-to-end untuk alur sesi meja kafe (QR → bayar → occupied → served
+# → release). Harness ini boot SENDIRI: backend Go + Vite dijalankan oleh
+# Playwright `webServer`, dengan database SQLite sementara yang di-seed ulang
+# tiap run — jadi ia tidak menyentuh dev DB dan tidak perlu server yang sudah
+# jalan.
+#
+# Prasyarat sekali per mesin (Chromium + pustaka sistemnya):
+#   make e2e-deps
+#
+# PLAYWRIGHT_BROWSERS_PATH sengaja dioverride: di dev container ini ~/.cache
+# dimiliki root, jadi browser dipasang ke lokasi yang bisa ditulis.
+e2e-kafe:
+	cd renderers/react-shadcn && PLAYWRIGHT_BROWSERS_PATH=$${PLAYWRIGHT_BROWSERS_PATH:-/tmp/pw-browsers} npx playwright test
+
+# Pasang Chromium + pustaka sistem yang dibutuhkannya (butuh sudo).
+e2e-deps:
+	cd renderers/react-shadcn && PLAYWRIGHT_BROWSERS_PATH=$${PLAYWRIGHT_BROWSERS_PATH:-/tmp/pw-browsers} npx playwright install chromium
+	@NODEBIN=$$(dirname $$(which node)); \
+	sudo -n env PATH="$$NODEBIN:$$PATH" \
+		PLAYWRIGHT_BROWSERS_PATH=$${PLAYWRIGHT_BROWSERS_PATH:-/tmp/pw-browsers} \
+		"$$NODEBIN/npx" playwright install-deps chromium
+
+.PHONY: web-deps web-dev web-typecheck web-build e2e-kafe e2e-deps
+
 # Landing page site/ (formspec.dev) — React + Vite + Cloudflare.
 # Usage:
 #   make site-dev           # dev server http://localhost:5198/

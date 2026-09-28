@@ -80,23 +80,23 @@ spec:
       - { name: failed, label: "Gagal" }
       - { name: refunded, label: "Dikembalikan" }
     transitions:
-      - { from: pending, to: settled, via: settle }
-      - { from: pending, to: failed, via: fail }
-      - { from: settled, to: refunded, via: refund }
+      # ── Gate di transisi, BUKAN di action ──
+      #
+      # Ketiga transisi ini tidak punya `impl`, jadi actionnya tidak punya route
+      # sendiri: jalur penerapannya `PATCH status`, yang diperiksa
+      # `cafe-order.payments.update`. Tanpa `require_permission` di sini,
+      # `required_permission` pada action **tidak ditegakkan di mana pun** —
+      # terukur 2026-09-27: pelayan (hanya punya `update`) berhasil menjalankan
+      # `awaiting_payment -> paid` pada `order`.
+      #
+      # `refund` adalah **uang keluar**; `settle` menandai lunas. Keduanya tidak
+      # boleh jatuh ke pemegang `update` biasa.
+      - { from: pending, to: settled, via: settle, description: "Tandai pembayaran lunas", require_permission: payments.settle }
+      - { from: pending, to: failed, via: fail, description: "Tandai pembayaran gagal", require_permission: payments.fail }
+      # Refund dijalankan supervisor (aturan bisnis di roles.yaml).
+      - { from: settled, to: refunded, via: refund, description: "Kembalikan pembayaran ini — butuh persetujuan supervisor", require_permission: payments.refund }
   actions:
     # Aturan bisnis #14: jejak pembayaran tidak dihapus — koreksi lewat refund.
     - { name: delete, disabled: true }
     - { name: submit, disabled: true }
-    - name: settle
-      description: "Tandai pembayaran lunas"
-      required_permission: payments.settle
-      audit: true
-    - name: fail
-      description: "Tandai pembayaran gagal"
-      required_permission: payments.fail
-      audit: true
-    - name: refund
-      description: "Kembalikan pembayaran ini — butuh persetujuan supervisor."
-      required_permission: payments.refund
-      audit: true
   # expose: [] — UI-only.

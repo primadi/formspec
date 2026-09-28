@@ -1,0 +1,64 @@
+apiVersion: formspec.dev/v1
+kind: Form
+metadata:
+  name: table-open-form
+  module: cafe-order
+  description: "Halaman masuk tamu dari QR meja — buat sesi kunjungan, lalu arahkan ke menu"
+spec:
+  entity: cafe-order.table-session
+  mode: create
+  # Permukaan publik: tamu anonim memindai QR dan sesi dibuat tanpa login
+  # (aturan bisnis #3).
+  public: true
+  # Confirm DIMATIKAN (“” = eksplisit off, bukan inherit). App `kafe-qr`
+  # mendeklarasikan `confirm.create: "Kirim pesanan?"` karena permukaan itu
+  # untuk memesan; halaman masuk ini BUKAN pemesanan — membiarkannya inherit
+  # membuat tamu yang baru memindai QR ditanya "Kirim pesanan?" padahal belum
+  # ada pesanan apa pun (dan form ini memang punya `submit.label` sendiri).
+  confirm: { create: "" }
+  render:
+    mode: separate_page
+  # Meja di-resolve dari TOKEN di route, bukan dari id.
+  #
+  # `source: entity` me-resolve lewat `GET .../dining-table/{id}`, dan engine
+  # mem-fallback ke `WHERE _<natural_key> = ?`. Karena `qr_token` kini
+  # `natural_key` (10.34b), URL kartu meja cukup memuat tokennya — tamu tidak
+  # perlu tahu UUID meja, dan tidak ada pemilih meja yang bisa disalahgunakan
+  # untuk mengklaim meja orang lain (10.34/10.35).
+  #
+  # Cabang ikut terselesaikan dari sini: `dining-table.branch_id` menentukan
+  # `table-session.branch_id`, sehingga harga per cabang di picker menu memakai
+  # cabang yang benar tanpa tamu memilihnya.
+  context:
+    - name: table
+      source: entity
+      entity: cafe-master.dining-table
+      id: "{route.params.qr_token}"
+  sections:
+    - title: "Kunjungan"
+      fields:
+        # Sesi ini diidentifikasi oleh token acak, dan token itu JUGA alamat
+        # halaman status pesanan tamu (`/kafe/status/{guest_token}`). Nilainya
+        # di-mint di klien ({uuid}, satu per instance form) karena engine tidak
+        # menyediakan generator nilai acak di Starlark.
+        - { field: guest_token, widget: hidden, default_from: "{uuid}" }
+        - { field: transaction_date, widget: hidden, default_from: "{now}" }
+        - { field: dining_table_id, widget: hidden, default_from: "{table.id}" }
+        - { field: branch_id, widget: hidden, default_from: "{table.branch_id}" }
+        # Satu-satunya field yang tamu lihat (dan boleh dilewati).
+        - field: guest_name
+          widget: input
+          label: "Nama Anda"
+          help: "Opsional — untuk memanggil pesanan Anda."
+        - field: guest_count
+          widget: number
+          label: "Jumlah Orang"
+  submit:
+    label: "Lihat Menu"
+    # Inilah langkah ketiga alur QR (10.35): token → sesi → menu. Percobaan
+    # pertama MENGGUNAKAN `{id}` — itu salah, karena `id` record ditetapkan
+    # server di dalam `store.Insert` dan tidak pernah diketahui klien. Yang
+    # dipakai adalah `{uuid}`: nilai yang sama sudah ditulis sebagai
+    # `guest_token` (natural key), jadi `/menu/{uuid}` resolve lewat pencarian
+    # natural key — alamat dan payload-nya satu nilai yang sama.
+    redirect: "/menu/{uuid}"

@@ -859,8 +859,11 @@ func (b *RouterBuilder) registerRoute(r chi.Router, rd RouteDescriptor) {
 	sub := r
 	switch {
 	case rd.Public && rd.RequiredPermission != "":
-		// A public grant authorizes anonymous callers; a signed-in caller on the
-		// same route still needs the permission (#45).
+		// A public grant is a FLOOR, not an anonymous-only lane: anonymous
+		// callers pass, AND a signed-in caller without the permission falls
+		// back to the grant rather than being refused — see
+		// RequirePermissionOrAnonymous for why (refusing them made signing in
+		// worse than staying anonymous).
 		sub = r.With(RequirePermissionOrAnonymous(rd.RequiredPermission))
 	case rd.RequiredPermission != "":
 		sub = r.With(RequirePermission(rd.RequiredPermission))
@@ -964,8 +967,7 @@ func (b *RouterBuilder) registerRouteWithPattern(r chi.Router, rd RouteDescripto
 	sub := r
 	switch {
 	case rd.Public && rd.RequiredPermission != "":
-		// A public grant authorizes anonymous callers; a signed-in caller on the
-		// same route still needs the permission (#45).
+		// Same floor-not-a-lane rule as registerRoute above.
 		sub = r.With(RequirePermissionOrAnonymous(rd.RequiredPermission))
 	case rd.RequiredPermission != "":
 		sub = r.With(RequirePermission(rd.RequiredPermission))

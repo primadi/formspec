@@ -20,6 +20,53 @@ normatif: [`../spec/platform/06-datastore.md`](../spec/platform/06-datastore.md)
 Set tertutup — tidak bisa ditambah. Kebutuhan baru (mail, scheduler,
 notification) = module resmi di atas primitive yang ada.
 
+## Helper nilai (bukan primitive)
+
+Selain 9 primitive di atas, `ctx` menyediakan helper **nilai** — tidak menyentuh
+infrastruktur, jadi tidak ada yang perlu di-provision dan tidak ada yang
+diperiksa `uses.primitives`:
+
+| Helper                      | Fungsi                                                            | Kenapa bukan primitive                            |
+| --------------------------- | ----------------------------------------------------------------- | ------------------------------------------------- |
+| `ctx.now()` / `ctx.today()` | waktu server (RFC3339 / `YYYY-MM-DD`)                             | hanya jam                                         |
+| `ctx.next_key(field)`       | deret bernomor (counter per workspace)                            | state framework, bukan service                    |
+| `ctx.random_digits(n)`      | `n` digit acak **kriptografis** (4 ≤ n ≤ 12), leading zero dijaga | hanya entropi OS                                  |
+| `ctx.config.get(key)`       | config non-secret                                                 | punya gerbang sendiri (per-key `public`/`secret`) |
+| `ctx.log.info/warn/error`   | log terstruktur                                                   | hanya keluaran                                    |
+
+**`ctx.random_digits(n)` vs `ctx.next_key`** — dua-duanya menghasilkan nilai,
+dan memilih yang salah adalah kesalahan yang tampak benar: `next_key` adalah
+**deret**, jadi nilainya bisa ditebak. Ia tidak boleh dipakai untuk apa pun yang
+harus rahasia (kode gabung sesi meja, token, OTP). `random_digits` memakai
+`crypto/rand` dan **rejection sampling** — bukan `byte % 10`, yang akan
+membiaskan digit 0–5 karena 256 bukan kelipatan 10, sehingga ruang pencarian
+menyusut diam-diam.
+
+Batasan 4–12 dijaga secara sengaja: nilai 1–2 digit bukan rahasia yang berarti,
+dan `n` tanpa batas berarti satu manifest bisa meminta string sepanjang apa pun
+per panggilan.
+
+## Mana yang diperiksa `uses`, mana yang tidak
+
+Di `ProdMode`/`StrictMode`, **hanya 7 primitive datastore** yang diperiksa
+terhadap `uses.primitives`:
+
+| Diperiksa `uses.primitives`                                    | Tidak diperiksa                                     |
+| -------------------------------------------------------------- | --------------------------------------------------- |
+| `db`, `cache`, `lock`, `queue`, `pubsub`, `storage`, `kvstore` | `config`, `log`, `now`, `today`, `next_key`, `unit` |
+
+Yang diperiksa `uses.primitives` adalah tepat primitive yang menyentuh
+**infrastruktur ber-batas** — yang perlu di-provision, diberi kredensial, atau
+dibatasi per tenant. Yang tidak diperiksa tidak punya batas untuk dipagari:
+`now`/`today` hanya jam, `log` hanya keluaran, dan `config` sudah punya gerbang
+sendiri (per-key `public`/`secret`). Jadi pemeriksaan ini sengaja asimetris,
+bukan belum lengkap.
+
+Konsekuensi praktisnya: memakai `ctx.now()` tanpa `uses` adalah **sah** dan tidak
+akan gagal; memakai `ctx.db()` tanpa `uses` **gagal** dengan `USES_VIOLATION`.
+Mendeklarasikan keduanya tetap dianjurkan — `uses` adalah footprint consent yang
+dibaca reviewer dan validator, bukan hanya penjaga runtime.
+
 ## Named Logical Primitive
 
 ```python
@@ -29,6 +76,20 @@ rows = ctx.db.named("analytics").query("SELECT ...")
 Alias teregistrasi di App Registry (`db/analytics: pg-analytics`), wajib
 dideklarasikan di `uses.datastores` action. Unknown → `DATASTORE_NOT_FOUND`;
 tidak dideklarasikan → `DATASTORE_ACCESS_DENIED`.
+
+## Di mana `uses` boleh ditulis
+
+| Pemilik               | Bentuk                                        |
+| --------------------- | --------------------------------------------- |
+| Action entity/Service | `actions[].uses`                              |
+| Hook                  | `hooks[].uses`                                |
+| **Subscription**      | **`uses`** (saudara `handler`, bukan anaknya) |
+
+Subscription adalah yang terakhir ditambahkan: sebelumnya `SubscriptionSpec`
+tidak punya field itu sama sekali, sehingga sebuah handler yang menyentuh
+`ctx.db` gagal `USES_VIOLATION` dengan pesan _"add uses.primitives: [db]"_ —
+instruksi yang manifest-nya tidak punya tempat untuk dituruti. Ketiganya kini
+bentuk yang sama.
 
 ## Dialek Starlark (script & hook)
 

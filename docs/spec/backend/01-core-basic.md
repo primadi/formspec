@@ -295,6 +295,17 @@ Transition custom `via: complete` bisa di-guard dengan `conditions` yang
 memeriksa `doc_status` — misalnya, hanya izinkan transisi bisnis kalau
 dokumen sudah `submitted`.
 
+#### `via` adalah Action
+
+`state_machine.transitions[].via` **mendeklarasikan action**. Nama `via` muncul
+di `/{workspace}/api/v1/{module}/{plural}` sebagai action yang dapat dipanggil,
+appear di meta bundle (`schema.actions`), dapat di-grant per-role, dan — bila
+transisi mendeklarasikan `impl` — mendapat route sendiri di
+`POST /_ui/entity/{module}/{entity}/{id}/{via}`.
+
+Konsekuensinya, **satu nama tidak ditulis dua kali**. Blok `actions:` **tidak
+perlu** mengulang `via`:
+
 ```yaml
 spec:
   version: v1
@@ -316,16 +327,79 @@ spec:
       - { name: cancelled, label: "Cancelled" }
     transitions:
       - { from: draft, to: in_progress, via: start-work }
-      - { from: in_progress, to: completed, via: complete }
+      # Gate per-transisi: `PATCH` diperiksa `{module}.{plural}.update`, jadi
+      # tanpa ini setiap pemegang `update` bisa menjalankan transisi apa pun.
+      - {
+          from: in_progress,
+          to: completed,
+          via: complete,
+          description: "Selesaikan pekerjaan",
+          require_permission: billing.invoices.complete,
+        }
       - { from: "*", to: cancelled, via: cancel }
-  actions:
-    - name: submit
-      disabled: false
-    - name: start-work
-      description: "Mulai pengerjaan"
-      required_permission: billing.invoice.start-work
-      audit: true
+  # `actions:` hanya untuk action yang BUKAN `via` dari transisi mana pun.
 ```
+
+Transisi boleh membawa **seluruh atribut action**, sehingga `via` tidak pernah
+menjadi warga kelas dua:
+
+| Field transisi                           | Arti                                                                                                          |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `via`                                    | Nama action (wajib untuk bisa dipanggil; boleh kosong untuk transisi yang hanya berlaku lewat `PATCH`/script) |
+| `description`                            | Deskripsi action; dipakai sebagai label tombol bila `ui.button_label` tidak ada                               |
+| `impl`                                   | Membuat action punya route sendiri (`POST /{id}/{via}`)                                                       |
+| `require_permission`                     | Gate yang diperiksa pada jalur `PATCH`/route; **inilah** tempat menulis permission, bukan di `actions:`       |
+| `audit`, `emits`, `emit`                 | Jejak audit dan tautan event                                                                                  |
+| `conditions`, `ui`                       | Aturan bisnis dan petunjuk tombol                                                                             |
+| `idempotent`, `idempotency_key`          | Semantik two-step (`/prepare`)                                                                                |
+| `uses`, `params`, `expose`, `rate_limit` | Footprint consent, kontrak input, protokol, limit                                                             |
+
+#### Nama permission sebuah action
+
+Permission action diturunkan dengan aturan tunggal (`internal/api/generator.go`):
+
+```
+perm := action.required_permission
+if perm == "" { perm = "{module}.{plural}.{action_name}" }
+```
+
+`required_permission` boleh ditulis singkat (`invoices.complete`) atau penuh
+(`billing.invoices.complete`); `internal/permission.AutoPrefixPermission`
+melengkapi prefix module. Untuk action yang hanya lahir dari transisi,
+permissionnya adalah `{module}.{plural}.{via}` kecuali transisi menulis
+`require_permission`.
+
+#### Kapan `via` boleh diulang di `actions:`
+
+Dua bentuk saja — keduanya karena entri itu **benar-benar mengikat**, bukan
+sekadar mengulang:
+
+```yaml
+# (1) Nama reserved dengan route lifecycle generik.
+#     `cancel` sudah punya route `/{id}/cancel` dengan permission
+#     `{module}.{plural}.cancel`. Entri ini adalah satu-satunya cara
+#     mempersempit/mengalihkannya; tanpa entri ini setiap pemegang `update`
+#     bisa membatalkan dokumen.
+actions:
+  - { name: cancel, required_permission: billing.invoice.cancel }
+
+# (2) Entri yang memberi `impl` (jadi dialah handler route) atau
+#     `required_permission` eksplisit yang berbeda dari transisi.
+```
+
+Di luar dua bentuk itu, `spec.ValidateActionTransitionDuplication` menolak
+manifest: entri semacam itu tidak menambahkan apa pun dan membuat satu nama punya
+dua rumah.
+
+#### Aturan yang berlaku untuk semua action
+
+- **Satu nama, satu action.** Bila beberapa transisi memakai `via` yang sama
+  (mis. `available→occupied` dan `reserved→occupied` sama-sama `via: occupy`),
+  hasilnya **satu** action, bukan satu per transisi.
+- **Nama action harus cocok dengan nama yang di-grant.** Grant menyebut **nama
+  action**, dan nama itu harus sama persis dengan `via`/`actions[].name`.
+  Grant untuk action yang tidak ada dibuang tanpa suara — grant editor
+  menampilkan footprint nyata per entity, jadi pilih nama dari sana.
 
 Untuk Workflow (approval multi-level yang meng-intercept transition
 state_machine), lihat [`02-core-extended.md`](02-core-extended.md) §2.

@@ -68,12 +68,17 @@
           "$ref": "#/$defs/ParamsDecl",
           "nullable": true
         },
+        "public": {
+          "description": "Public makes a SERVICE action callable by anonymous callers on the UI",
+          "type": "boolean"
+        },
         "rate_limit": {
           "$ref": "#/$defs/RateLimitSpec",
           "description": "1.4.1 per-action override (02-core-extended.md §17)",
           "nullable": true
         },
         "required_permission": {
+          "description": "RequiredPermission is the permission a caller must hold. For a Service",
           "type": "string"
         },
         "track": {
@@ -1682,6 +1687,13 @@
       "description": "FormSubmit configures the submit button and post-submit behavior.\n",
       "type": "object",
       "properties": {
+        "call": {
+          "description": "Call turns the form's submit into a SERVICE call instead of an entity",
+          "type": "string",
+          "examples": [
+            "cafe-order.table-access.open"
+          ]
+        },
         "label": {
           "type": "string"
         },
@@ -1689,7 +1701,11 @@
           "type": "string"
         },
         "redirect": {
-          "type": "string"
+          "description": "Redirect is where a successful submit lands, overriding the derived list",
+          "type": "string",
+          "examples": [
+            "/menu/{response.guest_token}"
+          ]
         }
       },
       "additionalProperties": false
@@ -4474,12 +4490,17 @@
           "$ref": "#/$defs/ParamsDecl",
           "nullable": true
         },
+        "public": {
+          "description": "Public makes a SERVICE action callable by anonymous callers on the UI",
+          "type": "boolean"
+        },
         "rate_limit": {
           "$ref": "#/$defs/RateLimitSpec",
           "description": "1.4.1 per-action override (02-core-extended.md §17)",
           "nullable": true
         },
         "required_permission": {
+          "description": "RequiredPermission is the permission a caller must hold. For a Service",
           "type": "string"
         },
         "track": {
@@ -6088,6 +6109,13 @@
       "description": "FormSubmit configures the submit button and post-submit behavior.\n",
       "type": "object",
       "properties": {
+        "call": {
+          "description": "Call turns the form's submit into a SERVICE call instead of an entity",
+          "type": "string",
+          "examples": [
+            "cafe-order.table-access.open"
+          ]
+        },
         "label": {
           "type": "string"
         },
@@ -6095,7 +6123,11 @@
           "type": "string"
         },
         "redirect": {
-          "type": "string"
+          "description": "Redirect is where a successful submit lands, overriding the derived list",
+          "type": "string",
+          "examples": [
+            "/menu/{response.guest_token}"
+          ]
         }
       },
       "additionalProperties": false
@@ -9698,6 +9730,11 @@
             "transform": {
               "description": "Tier 2: Starlark transform over event payload",
               "type": "string"
+            },
+            "uses": {
+              "$ref": "#/$defs/UsesDecl",
+              "description": "Uses declares what the HANDLER may touch — the same shape and the same",
+              "nullable": true
             }
           },
           "required": [

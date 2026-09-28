@@ -5,6 +5,65 @@
 **Ledger kafe:** 10.34, 10.34c, 10.35, 10.36, 10.37, 10.38, 10.39, 10.40, 10.40b.
 **Terkait:** 10.20 (landing).
 
+> ## STATUS 2026-09-27 — §1–5 MENDARAT (6 gap tertutup), §6–8 masih terbuka
+>
+> | #   | Item                                                 | Status                                                     |
+> | --- | ---------------------------------------------------- | ---------------------------------------------------------- |
+> | 1   | **10.40** status meja `state_machine`                | ✅ sudah mendarat lebih dulu                               |
+> | 2   | **10.40b** subscription `on_paid` → `occupied`       | ✅ + `on_served` → `served`, `on_cancel` → `available`     |
+> | 3   | **10.36** rate limit intake anonim                   | ✅ `table-session` 20/menit, `order` 30/menit, `scope: ip` |
+> | 4   | **10.34c** unique satu sesi terbuka per meja         | ✅ partial index; sesi kedua → 500                         |
+> | 5   | **10.37** `submit.redirect` + token                  | ✅ token `{uuid}` (bukan `{id}` — lihat koreksi)           |
+> | —   | **10.34b** `qr_token` `natural_key`                  | ✅ (prasyarat §5, bukan efek samping)                      |
+> | —   | **10.35 / 2.15** halaman masuk token → sesi          | ✅ Page `table-open` + Form `table-open-form`              |
+> | 6   | **10.38** PIN tamu kedua + hash                      | ⏸️ terbuka                                                 |
+> | 7   | **10.39** Service publik `table-status`/`verify-pin` | ⏸️ terbuka                                                 |
+> | 8   | **10.20** landing `/kafe`                            | ⏸️ terbuka                                                 |
+>
+> **Verifikasi:** `formspec validate` kafe **89 manifest / 0 problem**;
+> 4 test Go baru (16 total kafe); 1 skenario Playwright (`make e2e-kafe`)
+> menjalankan seluruh alur dari browser. Changelog
+> `docs_internal/changelog/2026-09-27-017`, `-018`, `-019`, `-020`.
+>
+> **Tindak lanjut (changelog `-020`):** 10.42 (baris lama → transisi state 500)
+> ✅ diperbaiki **di engine**; **10.35a** ✅ sesi ditutup saat meja dikosongkan;
+> 10.53 ✅ `MaterializePartial`; 10.43 ✅ **superseded** (`PATCH` memang menghormati
+> gate transisi); 10.54 ⛔ **ditarik — klaim saya salah** (`LIMIT 1` sudah ada).
+>
+> **Koreksi terhadap rencana ini (penting, karena §5 salah di dua tempat dan
+> kurang satu langkah):**
+>
+> 1. **`{id}` tidak bisa dipakai di `submit.redirect`.** Rencana menulis
+>    "redirect setelah buat sesi dengan token `{id}`". Id record ditetapkan
+>    server di dalam `store.Insert`, jadi klien **tidak pernah** tahu nilainya
+>    sebelum POST. Yang dipakai adalah **`{uuid}`** — satu nilai yang ditulis
+>    sebagai `guest_token` (natural key), sehingga alamat dan payload-nya adalah
+>    nilai yang sama dan halaman tujuan me-resolve-nya lewat jalur natural key.
+> 2. **`natural_key` pada `qr_token` bukan opsional.** Rencana menyebutnya
+>    "bukan blocker" — benar untuk `find`, tetapi langkah §5 menjadi mungkin
+>    **karena** `natural_key` me-resolve **tanpa index** yang harus dideklarasikan
+>    terpisah; `unique` saja tidak cukup untuk lookup by value.
+> 3. **Rencana tidak menyebut penutupan sesi sama sekali.** Ia berhenti di
+>    "kasir clear meja" tanpa menanyakan apa yang terjadi pada `table-session`.
+>    Itu ternyata **bukan detail**: 10.34c (direncanakan di §4) mengizinkan satu
+>    sesi TERBUKA per meja, dan §5 membuat sesi baru tiap kali kartu dipindai —
+>    jadi gabungan keduanya membuat meja hanya bisa dipakai **sekali**. Tamu
+>    kedua mendapat 500. Ditutup di `-020`: `release` memancarkan `on_cleared`,
+>    dan `cafe-order` (pemilik `table-session`) menutup sesinya.
+>
+> **Dua bug renderer ditemukan** oleh verifikasi browser dan harus ada sebelum
+> alur ini bisa diklik manusia sama sekali: tombol Create hilang di permukaan
+> publik, dan `default_from` mengirim placeholder mentah saat `spec.context`
+> async. Detail + bukti: changelog `-018`.
+>
+> **Keterbatasan yang diakui dan dinomori** (bukan disembunyikan sebagai prosa):
+> **10.52** pembatalan mengosongkan meja yang masih berisi pesanan lain;
+> **10.55** tidak ada kompensasi bila subscription occupancy gagal;
+> **10.57** sesi yang dibuat lalu ditinggalkan mengunci mejanya — celah yang
+> justru **terbuka** karena memperbaiki 10.35a. Yang pertama dan kedua berasal
+> dari agregat lintas-record yang sama dengan **10.41** (yang kini
+> tercatat 🟡 sebagian: aturan longgar landing, `semua pesanan disajikan` belum).
+
 ## Alur yang diminta (pemilik)
 
 1. Tamu **scan QR statis meja**.

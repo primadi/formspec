@@ -34,10 +34,17 @@ spec:
     # memberi anonim `list`/`find` untuk SELURUH entity di module yang di-mount,
     # sehingga tanpa token ini pelanggan bisa membaca pesanan meja lain.
     # Idealnya: allowlist publik per-entity + scoping per-record.
+    #
+    # `natural_key: true` (2026-09-27): token inilah identitas bisnis sesi, dan
+    # itu yang membuat halaman masuk QR bisa mengarahkan tamu ke
+    # `/menu/{token}` (#37) — `GET .../table-session/{token}` me-resolve lewat
+    # `WHERE _guest_token = ?`. Sebelumnya token hanya bisa dipakai sebagai
+    # FILTER (`?guest_token=`), bukan sebagai alamat, sehingga halaman menu
+    # tidak punya cara menyebut sesi yang baru dibuat.
     - name: guest_token
       type: string
       required: true
-      unique: true
+      natural_key: true
       title: "Token Tamu"
       description: "Token acak — kunci akses pelanggan ke pesanan & struk digitalnya"
     - name: guest_name
@@ -69,18 +76,33 @@ spec:
       - { name: closed, label: "Selesai" }
       - { name: abandoned, label: "Ditinggalkan" }
     transitions:
-      - { from: open, to: closed, via: close-session }
-      - { from: open, to: abandoned, via: abandon }
+      # Gate di TRANSISI (2026-09-27): action-nya tanpa `impl`, jadi tidak ada
+      # route yang memeriksa `required_permission` — jalur penerapannya
+      # `PATCH status`, yang hanya diperiksa `{plural}.update`.
+      - { from: open, to: closed, via: close-session, require_permission: table-sessions.close-session }
+      - { from: open, to: abandoned, via: abandon, require_permission: table-sessions.abandon }
   actions:
     - { name: submit, disabled: true }
     - name: close-session
       description: "Tutup sesi meja (meja jadi kosong)"
-      required_permission: table-sessions.close-session
       audit: true
       # Guard ideal: semua order di sesi ini sudah tidak ada yang berstatus
       # draft/awaiting_payment. Logika lintas-record -> script hook, bukan expr.
     - name: abandon
       description: "Tandai sesi ditinggalkan"
-      required_permission: table-sessions.abandon
       audit: true
+  # 10.34c — satu sesi TERBUKA per meja. Tanpa ini satu meja bisa menampung
+  # sesi terbuka tanpa batas: terukur 4 sesi dari 4 request. Pola yang sama
+  # sudah dipakai `shift` (`where: "status = 'open'"`, S8) dan portabel antar
+  # driver (SQLite & PostgreSQL sama-sama mendukung partial index).
+  #
+  # `dining_table_id` sudah field top-level, jadi index atas field relasi
+  # berlaku sejak 3.1/#22 — tidak perlu kolom baru.
+  indexes:
+    - fields: [dining_table_id]
+      unique: true
+      where: "status = 'open'"
+  # Intake anonim (10.36): halaman QR boleh membuat sesi tanpa login, jadi
+  # pembatasannya per-IP. Tanpa ini satu skrip bisa membuat sesi di semua meja.
+  rate_limit: { max: 20, per: 1m, scope: ip }
   # expose: [] — UI-only.

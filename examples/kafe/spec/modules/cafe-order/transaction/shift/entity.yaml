@@ -77,15 +77,15 @@ spec:
       - { name: open, label: "Terbuka" }
       - { name: closed, label: "Tutup" }
     transitions:
-      - { from: open, to: closed, via: close-shift }
+      # Gate di TRANSISI: `close-shift` tidak punya `impl`, jadi jalurnya
+      # `PATCH status` yang diperiksa `cafe-order.shifts.update`. Menaruh
+      # permission di action tidak menegakkan apa pun (terukur 2026-09-27).
+      # Menutup shift adalah rekonsiliasi kas — bukan operasi `update` biasa.
+      - { from: open, to: closed, via: close-shift, description: "Tutup shift: hitung fisik, tampilkan selisih, konfirmasi (Wizard)", require_permission: shifts.close-shift }
   actions:
     # Aturan bisnis #14: shift tidak dihapus — rekonsiliasi kas harus utuh.
     - { name: delete, disabled: true }
     - { name: submit, disabled: true }
-    - name: close-shift
-      description: "Tutup shift: hitung fisik, tampilkan selisih, konfirmasi (Wizard)"
-      required_permission: shifts.close-shift
-      audit: true
   indexes:
     - fields: [branch_id, transaction_date]
     # ATURAN BISNIS #10 — satu shift terbuka per (cabang, kasir).

@@ -13,6 +13,7 @@
 package starlark
 
 import (
+	"crypto/rand"
 	"fmt"
 	"strings"
 	"time"
@@ -283,6 +284,8 @@ func (c *CtxAPI) Attr(name string) (starlark.Value, error) {
 		return c.Log, nil
 	case "next_key":
 		return c.builtinNextKey(), nil
+	case "random_digits":
+		return c.builtinRandomDigits(), nil
 	case "unit":
 		return c.builtinUnit(), nil
 	case "config":
@@ -401,8 +404,80 @@ func (c *CtxAPI) Attr(name string) (starlark.Value, error) {
 }
 
 func (c *CtxAPI) AttrNames() []string {
-	return []string{"workspace", "user", "auth", "now", "today", "log", "next_key", "config", "job",
+	return []string{"workspace", "user", "auth", "now", "today", "log", "next_key", "random_digits", "config", "job",
 		"db", "cache", "lock", "queue", "pubsub", "storage", "kvstore"}
+}
+
+// randomDigitsMin/Max bound ctx.random_digits(n).
+//
+// The lower bound exists because a 1-2 digit value is not a secret worth having;
+// the upper bound exists because an unbounded n would let a manifest request a
+// megabyte-long string per call. Keeping the range narrow means a bad
+// declaration fails loudly at the call rather than quietly at allocation time.
+const (
+	randomDigitsMin = 4
+	randomDigitsMax = 12
+)
+
+// builtinRandomDigits returns ctx.random_digits(n) — n cryptographically random
+// decimal digits, as a string (leading zeros preserved, so "004213" is a legal
+// 6-digit code).
+//
+// Why this exists at all (kafe 10.38): the guest check-in flow needs a join code
+// that cannot be guessed, and Starlark has NO source of randomness. The only
+// value-shaped generator available was ctx.next_key, which is a SEQUENCE — a
+// predictable counter is not a secret, and using it for a join code would have
+// made the code trivially forgeable while looking correct.
+//
+// crypto/rand rather than math/rand: the value is a presence token that an
+// anonymous caller must not be able to predict. math/rand's stream is
+// reproducible from its seed, which is exactly the property to avoid here.
+//
+// It is NOT gated by uses.primitives — deliberately, and consistently with
+// ctx.now/ctx.today/ctx.next_key: what that check guards is access to bounded
+// INFRASTRUCTURE (a datastore, a lock, a queue), and reading the OS entropy
+// pool is not an infrastructure dependency a manifest can meaningfully declare.
+// (See docs/reference/primitives.md for the documented asymmetry.)
+func (c *CtxAPI) builtinRandomDigits() *starlark.Builtin {
+	return starlark.NewBuiltin("ctx.random_digits", func(
+		thread *starlark.Thread,
+		fn *starlark.Builtin,
+		args starlark.Tuple,
+		kwargs []starlark.Tuple,
+	) (starlark.Value, error) {
+		var n int
+		if err := starlark.UnpackArgs("random_digits", args, kwargs, "n", &n); err != nil {
+			return nil, err
+		}
+		if n < randomDigitsMin || n > randomDigitsMax {
+			return nil, fmt.Errorf(
+				"ctx.random_digits: n must be between %d and %d, got %d",
+				randomDigitsMin, randomDigitsMax, n)
+		}
+
+		// One byte per digit, rejected-sampled into 0..9 so the distribution is
+		// uniform. Taking `b % 10` instead would bias the low digits (256 is not
+		// a multiple of 10), which shrinks the effective search space — the one
+		// property this helper exists to provide.
+		const maxAcceptable = 250 // largest multiple of 10 ≤ 255
+		digits := make([]byte, 0, n)
+		buf := make([]byte, n)
+		for len(digits) < n {
+			if _, err := rand.Read(buf); err != nil {
+				return nil, fmt.Errorf("ctx.random_digits: entropy source failed: %w", err)
+			}
+			for _, b := range buf {
+				if b >= maxAcceptable {
+					continue // reject and resample
+				}
+				digits = append(digits, '0'+b%10)
+				if len(digits) == n {
+					break
+				}
+			}
+		}
+		return starlark.String(string(digits)), nil
+	})
 }
 
 func (c *CtxAPI) builtinNow() *starlark.Builtin {

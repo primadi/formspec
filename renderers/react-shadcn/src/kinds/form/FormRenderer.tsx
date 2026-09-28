@@ -25,6 +25,8 @@ import { useMetaStore } from "@/stores/meta"
 import { resolveForm, deriveFormWidget } from "@/engine/derive"
 import { useRenderContext } from "@/hooks/useRenderContext"
 import { seedDefaults } from "@/lib/picker"
+import { resolveSubmitRedirect } from "@/lib/submitRedirect"
+import { serviceCallPath } from "@/lib/serviceCall"
 import PickerPanel from "@/kinds/form/PickerPanel"
 import { cn } from "@/lib/utils"
 import { getLifecycle } from "@/engine/lifecycle"
@@ -161,7 +163,34 @@ export default function FormRenderer({
   const { context: ownCtx } = useRenderContext(formSpec.context, renderCtx, {
     publicSurface: formSpec.public === true,
   })
-  const ctx = useMemo(() => ({ ...renderCtx, ...ownCtx }), [renderCtx, ownCtx])
+
+  // ── Per-submission minted uuid ──
+  //
+  // `{uuid}` is a block-local token (like `{now}`/`{today}`) that supplies a
+  // fresh v4 UUID for THIS form instance. It exists for one job with two uses:
+  // a create form that needs a value the *server* cannot mint — a natural key
+  // whose value is random rather than a sequence (e.g. the guest token of a
+  // table session) — and a `submit.redirect` that must land on that same
+  // record (`/menu/{uuid}`).
+  //
+  // Client-generated on purpose. The server assigns the record's `id` inside
+  // `store.Insert` and ignores a caller-supplied one, so a redirect cannot
+  // name the id it has not read back. It does not need to: the form writes this
+  // value into a `natural_key` field, and `GET /{entity}/{value}` resolves
+  // through the natural-key fallback (`WHERE _<key> = ?`) — so the same token
+  // works as both the payload and the address.
+  const mintId = useMemo(
+    () =>
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`,
+    [],
+  )
+
+  const ctx = useMemo(
+    () => ({ ...renderCtx, ...ownCtx, uuid: mintId }),
+    [renderCtx, ownCtx, mintId],
+  )
 
   // ── Child-field pickers ──
   // A child field may declare a `picker` (S1): rows are picked from a source
@@ -238,10 +267,8 @@ export default function FormRenderer({
   // confirm-dialogs.md). Non-null → the dialog is open.
   const [pendingConfirm, setPendingConfirm] = useState<FormData | null>(null)
 
-  // ── Seed fields from the render context (`default_from`) ──
-  // Values the user does not type (branch, session, timestamp) arrive here.
-  // Only fields that are still unset are seeded: a loaded record always wins,
-  // and a value the user has already edited is never overwritten.
+  // Identity of the `default_from` declarations — changes when the authored
+  // form changes, not on every render.
   const seedKey = useMemo(
     () =>
       JSON.stringify(
@@ -252,6 +279,32 @@ export default function FormRenderer({
       ),
     [formSpec],
   )
+
+  // ── Seed fields from the render context (`default_from`) ──
+  // Values the user does not type (branch, session, timestamp) arrive here.
+  // Only fields that are still unset are seeded: a loaded record always wins,
+  // and a value the user has already edited is never overwritten.
+  //
+  // `ctx` IS a dependency, and that is load-bearing rather than incidental. A
+  // form whose own `spec.context` fetches a record (`source: entity`) resolves
+  // it ASYNCHRONOUSLY, so the first pass runs with the declaration still
+  // pending and `{table.branch_id}` interpolates to nothing. `seedDefaults`
+  // leaves an unresolvable token VERBATIM by design (a blank would be a
+  // mystery 422), so the placeholder was written into the field as the literal
+  // string "{table.branch_id}" and shipped to the server — measured on the
+  // kafe QR check-in page: `relation branch_id points to cafe-branch
+  // [{table.branch_id}], which does not exist`.
+  //
+  // The earlier "seed once" shape (a key of the declarations, excluding `ctx`)
+  // could not recover: the effect never re-ran when the context resolved. So
+  // the rule is now: re-run while a seeded value is still an UNRESOLVED
+  // template, and never touch a field the user or a loaded record already
+  // filled. A resolved value is never re-written, which is what keeps this from
+  // fighting the user's edits.
+  //
+  // `seedKey` (not `formSpec.sections`) is the dependency that stands in for
+  // the declarations: it IS their serialized identity, and depending on the
+  // array itself would re-run on every render for no gain.
   useEffect(() => {
     if (seedKey === "[]") return
     const seeds = seedDefaults(
@@ -260,15 +313,22 @@ export default function FormRenderer({
     )
     for (const [name, value] of Object.entries(seeds)) {
       const current = form.getValues(name as never) as unknown
-      if (current === undefined || current === null || current === "") {
-        form.setValue(name as never, value as never, { shouldDirty: false })
-      }
+      const empty = current === undefined || current === null || current === ""
+      // Still holding the unresolved placeholder from an earlier pass?
+      const unresolved =
+        typeof current === "string" && /^\{[\w.]+\}$/.test(current)
+      if (!empty && !unresolved) continue
+      form.setValue(name as never, value as never, { shouldDirty: false })
     }
-    // `ctx` is intentionally excluded: it is a fresh object each render, and
-    // re-seeding on every resolution pass would fight the user's edits. The
-    // resolved values themselves are covered by `seedKey`.
+    // The declaration identity stands in for `formSpec.sections` (see above).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seedKey, form])
+  }, [seedKey, form, ctx])
+
+  // `submit.call` — when set, the form's submit is a SERVICE call rather than
+  // an entity write (kafe P3). Hoisted to component scope because both the
+  // submit handler (which POSTs to the service) and the button rule (which must
+  // NOT gate on the entity permission) need it.
+  const submitCall = formSpec.submit?.call
 
   // Resolve the effective confirm message for this form's mode (plan
   // confirm-dialogs.md): form override > App default > off. Form value
@@ -444,6 +504,10 @@ export default function FormRenderer({
   // Submit handler
   const doSubmit = async (data: FormData) => {
     autoSaveBlockedRef.current = false // unblock auto-save on manual save
+    // `submit.call` — the form's submit is a SERVER OPERATION, not an entity
+    // write (kafe P3). The service owns the mutation, so none of the entity
+    // branches below run; the response is what the redirect interpolates.
+    let serviceResponse: Record<string, unknown> = {}
     // Roles are scoped per-App (security per-App) — the form no longer asks
     // for `app`; auto-fill it from the current App context when empty.
     const payload: Record<string, unknown> = {
@@ -458,7 +522,22 @@ export default function FormRenderer({
     }
     try {
       const client = getClient()
-      if (isEdit && id) {
+      if (submitCall) {
+        // Service call: "module.service.action" → POST /{ws}/_ui/service/...
+        //
+        // The form payload is sent as the params (same shape an entity create
+        // sends), so a hidden field with `default_from` is how a route/session
+        // value reaches a service action — no second params vocabulary.
+        // `serviceCallPath` owns the `../` prefix arithmetic; it is tested
+        // against a real server because getting it wrong 404s silently.
+        serviceResponse =
+          (await apiPost<Record<string, unknown>>(
+            client,
+            serviceCallPath(submitCall),
+            payload,
+          )) ?? {}
+        toast.success(formSpec.submit?.message ?? "Submitted successfully")
+      } else if (isEdit && id) {
         await apiPatch(
           client,
           `${entity.module}/${entity.name}/${encodeURIComponent(id ?? "")}`,
@@ -478,7 +557,33 @@ export default function FormRenderer({
       }
       // A fixed-id embed (Page/Tab block's `form.id`, e.g. a Configuration
       // Page singleton) has no derived list to return to — stay in place.
-      if (inOverlay) {
+      // An authored `submit.redirect` (kafe 10.37) wins over the derived list:
+      // it is how the QR gateway hands the guest to `/menu/{uuid}` after
+      // creating their table session. The token is the minted uuid the form
+      // wrote into the session's natural key, so the destination resolves it
+      // back through the natural-key lookup — no read-back of the response.
+      //
+      // The value is SURFACE-relative, exactly like an authored Page's `route`
+      // ("`/t/:qr_token`" lives under the App root): a manifest must not have to
+      // know the workspace slug. `surfacePath` adds the prefix and collapses
+      // the join, so `/menu/x` becomes `/kafe/menu/x`.
+      const redirect = formSpec.submit?.redirect
+      if (redirect) {
+        // `{response.*}` resolves against the SERVICE RESPONSE when the submit
+        // was a call — the only way to address a server-decided value (after a
+        // join, the token is the EXISTING session's, which the client never
+        // knew). The helper also REFUSES to navigate on an unresolved token:
+        // landing on a literal `/menu/{response.x}` looks like success and is
+        // a dead end, so it fails loudly instead.
+        const resolved = resolveSubmitRedirect(redirect, ctx, serviceResponse)
+        if (!resolved.ok) {
+          toast.error(
+            `Tidak bisa melanjutkan: nilai "${resolved.unresolved}" tidak ada di respons.`,
+          )
+          return
+        }
+        navigate(surfacePath(resolved.target.replace(/^\/+/, "")))
+      } else if (inOverlay) {
         onClose?.()
       } else if (!fixedId) {
         navigate(surfacePath(entity.module, entity.plural))
@@ -787,11 +892,29 @@ export default function FormRenderer({
 
         {/* Submit buttons — lifecycle-aware. A button the caller cannot use is
             not rendered at all: offering it would only produce a toast/403
-            after the click, and the server is the authority either way. */}
+            after the click, and the server is the authority either way.
+
+            A `submit.call` form is the deliberate exception. The gate below
+            checks the ENTITY's create/update permission, and such a form does
+            not write its entity — the service does. Checking the entity
+            permission would be checking the wrong thing, and it fails
+            outright on the flow this exists for: the guest check-in runs
+            anonymously, and once the service owns the write the anonymous
+            `create` grant on `table-session` is removed (that grant was the
+            original 10.34 complaint — anonymous create with no proof of
+            presence). So the client has no service metadata to substitute, and
+            the honest position is: render, let the service's own gate decide.
+
+            The cost is real and accepted: on a private form calling a
+            restricted service, the button shows and the server answers 403.
+            Closing that means shipping service metadata (name + permission +
+            public flag) in the meta bundle so the client can pre-check it —
+            recorded as a follow-up, not silently ignored. */}
         {!isView && (
           <div className="flex items-center gap-2">
             {/* one_step / quickSubmit: single Create-Submit button */}
-            {lifecycle.quickSubmit &&
+            {!submitCall &&
+            lifecycle.quickSubmit &&
             mode === "create" &&
             canDoEntityAction(me, entity, "create-submit") ? (
               <Button type="submit" disabled={isSubmitting}>
@@ -803,8 +926,9 @@ export default function FormRenderer({
                 {entity.actions.find((a) => a.name === "create-submit")?.ui
                   ?.button_label ?? "Create & Submit"}
               </Button>
-            ) : lifecycle.hasSave &&
-              canDoEntityAction(me, entity, isEdit ? "update" : "create") ? (
+            ) : submitCall ||
+              (lifecycle.hasSave &&
+                canDoEntityAction(me, entity, isEdit ? "update" : "create")) ? (
               /* Save / Save Draft button */
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting ? (
@@ -812,11 +936,15 @@ export default function FormRenderer({
                 ) : (
                   <Save className="size-4 mr-1" />
                 )}
-                {lifecycle.pattern === "two_step_manual"
-                  ? "Save Draft"
-                  : isEdit
-                    ? "Save Changes"
-                    : "Create"}
+                {/* An authored `submit.label` wins — it is the only way a
+                    manifest can name the action the way its user thinks of it
+                    ("Lihat Menu", not "Create"). */}
+                {formSpec.submit?.label ??
+                  (lifecycle.pattern === "two_step_manual"
+                    ? "Save Draft"
+                    : isEdit
+                      ? "Save Changes"
+                      : "Create")}
               </Button>
             ) : null}
 

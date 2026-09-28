@@ -1620,24 +1620,42 @@ func ValidateDocumentSpec(d *DocumentSpec) error {
 
 // Action defines an operation on an Entity or Service.
 type Action struct {
-	Name               string           `yaml:"name" json:"name"`
-	Description        string           `yaml:"description,omitempty" json:"description,omitempty"`
-	RequiredPermission string           `yaml:"required_permission,omitempty" json:"required_permission,omitempty"`
-	Idempotent         bool             `yaml:"idempotent,omitempty" json:"idempotent,omitempty"`
-	IdempotencyKey     *IdempotencyDecl `yaml:"idempotency_key,omitempty" json:"idempotency_key,omitempty"`
-	Audit              bool             `yaml:"audit,omitempty" json:"audit,omitempty"`
-	Disabled           bool             `yaml:"disabled,omitempty" json:"disabled,omitempty"` // §11.1 — removes a standard action from every surface
-	Call               string           `yaml:"call,omitempty" json:"call,omitempty"`         // sync (default) | async (§11.4)
-	Track              bool             `yaml:"track,omitempty" json:"track,omitempty"`       // §13: call:async + track:true = tracked async job (job_id + progress)
-	Callback           *CallbackDecl    `yaml:"callback,omitempty" json:"callback,omitempty"` // §13.1: callback webhook delivery for tracked async jobs
-	Emits              string           `yaml:"emits,omitempty" json:"emits,omitempty"`       // event name linked per §12
-	Expose             []string         `yaml:"expose,omitempty" json:"expose,omitempty"`     // per-action protocol filter: rest | grpc | ws
-	Impl               *ImplDecl        `yaml:"impl,omitempty" json:"impl,omitempty"`
-	Uses               *UsesDecl        `yaml:"uses,omitempty" json:"uses,omitempty"`
-	Params             *ParamsDecl      `yaml:"params,omitempty" json:"params,omitempty"`
-	Conditions         []ConditionDecl  `yaml:"conditions,omitempty" json:"conditions,omitempty"`
-	UI                 *ActionUIHint    `yaml:"ui,omitempty" json:"ui,omitempty"`                 // Backend §5.1 — button rendering hints (confirm, icon, style, etc.)
-	RateLimit          *RateLimitSpec   `yaml:"rate_limit,omitempty" json:"rate_limit,omitempty"` // 1.4.1 per-action override (02-core-extended.md §17)
+	Name        string `yaml:"name" json:"name"`
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+	// RequiredPermission is the permission a caller must hold. For a Service
+	// action it defaults to {module}.{service}.{action} when empty.
+	RequiredPermission string `yaml:"required_permission,omitempty" json:"required_permission,omitempty"`
+	// Public makes a SERVICE action callable by anonymous callers on the UI
+	// surface (kafe 10.39 — the guest check-in page needs two server-side
+	// operations: "does this table have an open session" and "verify the join
+	// code", and neither may go through entity CRUD).
+	//
+	// It is SERVICE-ONLY by design, and validation enforces that. An entity
+	// action is reachable anonymously through its App's `public_entities`
+	// allowlist, which is the single place an operator reviews "what may an
+	// anonymous caller touch"; a second, per-action switch would route around
+	// that review. A Service has no such allowlist, so this flag IS its
+	// allowlist — which is why the route gate below treats it like one.
+	//
+	// A public action MUST declare `rate_limit`: an anonymous endpoint with no
+	// rate limit is an abuse vector, and the manifest is the only place to say
+	// otherwise. Validation refuses the combination rather than warning.
+	Public         bool             `yaml:"public,omitempty" json:"public,omitempty"`
+	Idempotent     bool             `yaml:"idempotent,omitempty" json:"idempotent,omitempty"`
+	IdempotencyKey *IdempotencyDecl `yaml:"idempotency_key,omitempty" json:"idempotency_key,omitempty"`
+	Audit          bool             `yaml:"audit,omitempty" json:"audit,omitempty"`
+	Disabled       bool             `yaml:"disabled,omitempty" json:"disabled,omitempty"` // §11.1 — removes a standard action from every surface
+	Call           string           `yaml:"call,omitempty" json:"call,omitempty"`         // sync (default) | async (§11.4)
+	Track          bool             `yaml:"track,omitempty" json:"track,omitempty"`       // §13: call:async + track:true = tracked async job (job_id + progress)
+	Callback       *CallbackDecl    `yaml:"callback,omitempty" json:"callback,omitempty"` // §13.1: callback webhook delivery for tracked async jobs
+	Emits          string           `yaml:"emits,omitempty" json:"emits,omitempty"`       // event name linked per §12
+	Expose         []string         `yaml:"expose,omitempty" json:"expose,omitempty"`     // per-action protocol filter: rest | grpc | ws
+	Impl           *ImplDecl        `yaml:"impl,omitempty" json:"impl,omitempty"`
+	Uses           *UsesDecl        `yaml:"uses,omitempty" json:"uses,omitempty"`
+	Params         *ParamsDecl      `yaml:"params,omitempty" json:"params,omitempty"`
+	Conditions     []ConditionDecl  `yaml:"conditions,omitempty" json:"conditions,omitempty"`
+	UI             *ActionUIHint    `yaml:"ui,omitempty" json:"ui,omitempty"`                 // Backend §5.1 — button rendering hints (confirm, icon, style, etc.)
+	RateLimit      *RateLimitSpec   `yaml:"rate_limit,omitempty" json:"rate_limit,omitempty"` // 1.4.1 per-action override (02-core-extended.md §17)
 }
 
 // ActionUIHint carries frontend rendering hints for an action button (Backend §5.1).
@@ -2160,12 +2178,53 @@ func ValidateActionTransitionDuplication(d *EntitySpec) error {
 				// would move the route to the fallback name.
 				continue
 			}
+			// Every field `TransitionDecl` can now carry (L1). Comparing only
+			// `impl`/`required_permission` made this validator LIE: an entry with
+			// `audit: true` and a `description` that the transition lacks does add
+			// something, and deleting it would silently drop the audit trail —
+			// measured on kafe `cafe-order.order.confirm-payment`.
+			if addsField(t, a) {
+				continue
+			}
 			return fmt.Errorf(
-				"action %q is declared in BOTH `actions:` and `state_machine.transitions[].via`, and the action entry adds nothing — the transition is already the one place it is declared (`via` is an action source since L3). Delete the `actions:` entry. If you meant to gate the transition, use the transition's `require_permission`; if the entry existed only to narrow the route's permission, say so with an explicit `required_permission` on BOTH (or move the gate onto the transition)",
+				"action %q is declared in BOTH `actions:` and `state_machine.transitions[].via`, and the action entry adds nothing — the transition is already the one place it is declared (`via` is an action source since L3). Delete the `actions:` entry. If you meant to gate the transition, use the transition's `require_permission`; if the entry carried fields the transition lacks (description/audit/uses/...), move them onto the transition and then delete the entry",
 				a.Name)
 		}
 	}
 	return nil
+}
+
+// addsField reports whether the declared action carries a value the transition
+// does not — i.e. whether deleting the entry would LOSE configuration.
+//
+// It mirrors the field list `TransitionDecl` absorbed (L1) so the two stay in
+// step: a field that transfers is a field this comparison must consider.
+func addsField(t TransitionDecl, a Action) bool {
+	switch {
+	case a.Description != "" && t.Description == "":
+		return true
+	case a.Audit && !t.Audit:
+		return true
+	case a.Emits != "" && t.Emits == "":
+		return true
+	case a.Idempotent && !t.Idempotent:
+		return true
+	case a.IdempotencyKey != nil && t.IdempotencyKey == nil:
+		return true
+	case len(a.Conditions) > 0 && len(t.Conditions) == 0:
+		return true
+	case a.UI != nil && t.UI == nil:
+		return true
+	case a.Uses != nil && t.Uses == nil:
+		return true
+	case a.Params != nil && t.Params == nil:
+		return true
+	case len(a.Expose) > 0 && len(t.Expose) == 0:
+		return true
+	case a.RateLimit != nil && t.RateLimit == nil:
+		return true
+	}
+	return false
 }
 
 // ActionSources returns every action this entity exposes — declared `actions:`

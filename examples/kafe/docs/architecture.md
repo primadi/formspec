@@ -150,9 +150,35 @@ pemiliknya.
 > ⚠️ **GAP-15** — integrator App terpisah adalah bentuk **ideal**. Komposisi
 > multi-App belum bisa dilayani end-to-end hari ini (`SyncAgent` belum
 > tersambung ke router; _"a real multi-App workspace can accept manifests per
-> App but can't yet serve them together end-to-end"_). Alternatif sementara:
-> `kind: Subscription` di dalam `cafe-order` — lebih jelek (tertanam di satu
-> sisi, tidak bisa diganti vendor), tapi berjalan.
+> App but can't yet serve them together end-to-end"_).
+>
+> **Yang benar-benar dipakai hari ini: `kind: Subscription` di module
+> PEMILIK entity yang ditulis — bukan di module pemancar event.** Jalur
+> lintas-App yang di atas tetap belum ada; yang berjalan adalah subscription
+> satu-server (registry-nya dimuat dari seluruh spec tree, bukan per-App), dan
+> yang menentukan penempatannya adalah **akses lintas-module dari script**:
+>
+> ```
+> USES_VIOLATION: undeclared cross-module access to
+>                 cafe-master.dining-table from module cafe-order
+> ```
+>
+> Akses itu ditegakkan saat runtime, dan **`SubscriptionSpec` tidak punya blok
+> `uses`** untuk mendeklarasikannya. Jadi handler harus tinggal di module yang
+> memiliki entity tujuan. Yang sudah memakai pola ini:
+>
+> | Subscription                  | Menulis                    | Kenapa di situ                                                            |
+> | ----------------------------- | -------------------------- | ------------------------------------------------------------------------- |
+> | `gl/sales-to-journal`         | `gl.journal-entry`         | jurnal + bagan akun milik gl; module pemesanan tidak boleh tahu kode akun |
+> | `cafe-master/table-occupancy` | `cafe-master.dining-table` | meja milik cafe-master                                                    |
+>
+> Arah ketergantungannya tetap benar: `cafe-master` mendengarkan **nama event
+> yang sepenuhnya terkualifikasi** dari `cafe-order` (`cafe-order.order.on_paid`),
+> bukan sebaliknya — `cafe-order` tidak tahu apa pun tentang meja.
+>
+> **Konsekuensi yang harus disadari:** kalau module pemilik entity
+> di-uninstall/di-nonaktifkan, subscription-nya ikut hilang dan fiturnya mati
+> tanpa error di module pemancar.
 
 ### Diagram Dependensi
 

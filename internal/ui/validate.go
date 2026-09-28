@@ -60,6 +60,24 @@ func (r *Registry) Validate(resolve EntityResolver) []error {
 				addf("%s: Form %q: action %q not on entity %q", e.Source, name, a.Action, e.Spec.Entity)
 			}
 		}
+		// `submit.call` makes the submit a Service call rather than an entity
+		// write (kafe P3). Only the SHAPE is checkable here — this registry
+		// knows entities, not services, so whether the service action exists is
+		// a cross-manifest question. A malformed ref, though, is a manifest bug
+		// that would otherwise surface as a confusing runtime call.
+		if e.Spec.Submit != nil && e.Spec.Submit.Call != "" {
+			if parts := strings.Split(e.Spec.Submit.Call, "."); len(parts) != 3 {
+				addf("%s: Form %q: submit.call %q must be \"module.service.action\" (3 dot-separated segments)",
+					e.Source, name, e.Spec.Submit.Call)
+			} else {
+				for _, p := range parts {
+					if p == "" {
+						addf("%s: Form %q: submit.call %q has an empty segment", e.Source, name, e.Spec.Submit.Call)
+						break
+					}
+				}
+			}
+		}
 		var renderMode spec.FormRender
 		if e.Spec.Render != nil {
 			renderMode = e.Spec.Render.Mode

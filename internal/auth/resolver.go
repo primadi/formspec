@@ -121,19 +121,20 @@ func (r *PermissionResolver) resolveUncached(ctx context.Context, workspaceID, a
 			add(p)
 			continue
 		}
-		perms, err := r.materialize.Materialize(role.Grants)
-		if err != nil {
-			// A role whose grants cannot be materialized contributes NOTHING.
-			// Swallowing this made a typo in a grant page name indistinguishable
-			// from a role that legitimately has no permissions: the symptom is a
-			// 404 on every request (permission check fails), with no error
-			// anywhere and nothing in the logs. Report it and carry on — the
-			// remaining roles may still grant access, so failing the whole login
-			// would be worse.
+		perms, problems := r.materialize.MaterializePartial(role.Grants)
+		// Grants that resolved to nothing are skipped INDIVIDUALLY, and named.
+		//
+		// Swallowing the reason made a typo in a grant page name
+		// indistinguishable from a role that legitimately has no permissions:
+		// the symptom is a 404 on every request (the permission check fails),
+		// with nothing in the logs and no clue which grant caused it. Reporting
+		// per grant also means one bad entry can no longer remove the access the
+		// OTHER entries granted — before this, Materialize was all-or-nothing
+		// and a single unknown page voided the whole role (kafe 10.53).
+		for _, p := range problems {
 			if r.logf != nil {
-				r.logf("auth: role %q has unmaterializable grants (contributing no permissions): %v", role.Name, err)
+				r.logf("auth: role %q grant contributed no permissions — %s", role.Name, p)
 			}
-			continue
 		}
 		for _, p := range perms {
 			add(p)

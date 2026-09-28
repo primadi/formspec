@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"path/filepath"
+	"slices"
 	"sort"
 	"testing"
 
@@ -167,6 +168,77 @@ func TestMaterialize_UnknownPage(t *testing.T) {
 	m, _ := setupMaterializer(t)
 	if _, err := m.Materialize([]Grant{{Page: "nope"}}); err == nil {
 		t.Fatal("expected error for unknown page")
+	}
+}
+
+// TestMaterializePartial_KeepsGoodGrants pins kafe 10.53: one unresolvable grant
+// must not disarm the whole role.
+//
+// Strict Materialize returns on the FIRST error, so a role whose grant list
+// contained a single unknown page name (or a page whose action names did not
+// match) contributed ZERO permissions — the operator-visible symptom was "this
+// role has no permissions at all", with nothing pointing at the one bad entry.
+// The partial form resolves each grant independently and reports the failures.
+func TestMaterializePartial_KeepsGoodGrants(t *testing.T) {
+	m, _ := setupMaterializer(t)
+
+	perms, problems := m.MaterializePartial([]Grant{
+		{Page: "order-list", Actions: []ActionGrant{{Name: "list"}, {Name: "view"}}},
+		{Page: "nope", Actions: []ActionGrant{{Name: "list"}}}, // unknown page
+		{Page: "customer-page", Actions: []ActionGrant{{Name: "list"}}},
+	})
+
+	// The two resolvable grants still take effect.
+	for _, want := range []string{"billing.orders.list", "billing.orders.view", "billing.customers.list"} {
+		if !slices.Contains(perms, want) {
+			t.Errorf("expected %q to survive the bad grant; got %v", want, perms)
+		}
+	}
+	// And the bad one is named, not silently dropped.
+	if len(problems) != 1 {
+		t.Fatalf("expected exactly 1 reported problem, got %d: %v", len(problems), problems)
+	}
+	if problems[0].Page != "nope" {
+		t.Errorf("problem should name the offending page, got %q", problems[0].Page)
+	}
+	if problems[0].Reason == "" {
+		t.Error("problem should carry a reason an operator can act on")
+	}
+}
+
+// TestMaterializePartial_ReportsActionMismatch covers the 10.47 shape: the page
+// resolves, but the granted ACTION names are not ones it exposes — so the grant
+// yields nothing even though the page is real.
+func TestMaterializePartial_ReportsActionMismatch(t *testing.T) {
+	m, _ := setupMaterializer(t)
+
+	perms, problems := m.MaterializePartial([]Grant{
+		// `order-list` exposes list/view (from its `order-table` block).
+		{Page: "order-list", Actions: []ActionGrant{{Name: "settle"}}},
+	})
+	if len(perms) != 0 {
+		t.Fatalf("expected no permissions from a mismatched action, got %v", perms)
+	}
+	if len(problems) != 1 || problems[0].Page != "order-list" {
+		t.Fatalf("expected the mismatch to be reported for order-list, got %v", problems)
+	}
+}
+
+// TestMaterializePartial_NoProblemsWhenEverythingResolves guards against
+// over-reporting: a healthy grant list must produce zero problems, otherwise
+// the new logging becomes noise operators learn to ignore.
+func TestMaterializePartial_NoProblemsWhenEverythingResolves(t *testing.T) {
+	m, _ := setupMaterializer(t)
+
+	perms, problems := m.MaterializePartial([]Grant{
+		{Page: "order-list", Actions: []ActionGrant{{Name: "list"}, {Name: "view"}}},
+		{Page: "customer-page", Actions: []ActionGrant{{Name: "list"}}},
+	})
+	if len(problems) != 0 {
+		t.Fatalf("a fully resolvable grant list must report no problems, got %v", problems)
+	}
+	if len(perms) != 3 {
+		t.Fatalf("expected 3 permissions, got %v", perms)
 	}
 }
 

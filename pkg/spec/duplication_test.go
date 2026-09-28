@@ -147,3 +147,61 @@ func TestActionSources_FirstTransitionWinsForSharedVia(t *testing.T) {
 		}
 	}
 }
+
+// The entry must be KEPT when it carries a field the transition lacks.
+//
+// This is a regression guard for a real false positive: the first version of
+// this validator compared only `impl` and `required_permission`, so it called
+// kafe's `confirm-payment` entry "adds nothing" and told the author to delete
+// it — silently dropping `audit: true` and its description. Measured
+// 2026-09-27 while gating the money path.
+func TestValidateDuplication_KeepsEntryWithFieldsTheTransitionLacks(t *testing.T) {
+	t.Run("audit present only on the action", func(t *testing.T) {
+		d := &EntitySpec{
+			Plural:  "orders",
+			Actions: []Action{{Name: "confirm-payment", Audit: true}},
+			StateMachine: &StateMachine{
+				Field: "status", Initial: "awaiting_payment",
+				Transitions: []TransitionDecl{
+					{From: StateList{"awaiting_payment"}, To: "paid", Action: "confirm-payment",
+						RequirePermission: "orders.confirm-payment"},
+				},
+			},
+		}
+		if err := ValidateActionTransitionDuplication(d); err != nil {
+			t.Fatalf("the entry carries `audit: true` that the transition lacks — "+
+				"deleting it would drop the audit trail, so it must be allowed: %v", err)
+		}
+	})
+
+	t.Run("uses present only on the action", func(t *testing.T) {
+		d := &EntitySpec{
+			Plural:  "orders",
+			Actions: []Action{{Name: "post", Uses: &UsesDecl{Resources: []string{"gl"}}}},
+			StateMachine: &StateMachine{
+				Field: "status", Initial: "draft",
+				Transitions: []TransitionDecl{{From: StateList{"draft"}, To: "posted", Action: "post"}},
+			},
+		}
+		if err := ValidateActionTransitionDuplication(d); err != nil {
+			t.Fatalf("`uses` is a consent footprint; dropping it would widen access: %v", err)
+		}
+	})
+
+	t.Run("truly empty entry is still rejected", func(t *testing.T) {
+		d := &EntitySpec{
+			Plural:  "orders",
+			Actions: []Action{{Name: "post"}},
+			StateMachine: &StateMachine{
+				Field: "status", Initial: "draft",
+				Transitions: []TransitionDecl{
+					{From: StateList{"draft"}, To: "posted", Action: "post", Description: "Posting"},
+				},
+			},
+		}
+		if err := ValidateActionTransitionDuplication(d); err == nil {
+			t.Fatal("an entry with nothing of its own is exactly the leftover this " +
+				"validator exists to reject")
+		}
+	})
+}

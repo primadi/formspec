@@ -84,6 +84,7 @@ func ValidateUses(uses *spec.UsesDecl, module string) []error {
 // Checks:
 //   - required_permission format is valid
 //   - uses declarations are valid
+//   - public actions declare a rate limit (see ValidatePublicAction)
 func ValidateAction(action spec.Action, module string) []error {
 	var errs []error
 
@@ -100,6 +101,43 @@ func ValidateAction(action spec.Action, module string) []error {
 		for _, e := range useErrs {
 			errs = append(errs, fmt.Errorf("action %q: %w", action.Name, e))
 		}
+	}
+
+	return errs
+}
+
+// ValidatePublicAction checks an action that declares `public: true`.
+//
+// `public` is the SERVICE-side allowlist: an anonymous endpoint. Two rules keep
+// it safe, and both are hard errors rather than warnings because the failure
+// mode is an open door rather than an inconvenience.
+//
+//  1. A public action MUST declare `rate_limit`. An anonymous endpoint with no
+//     rate limit is an abuse vector, and nothing downstream can invent the
+//     limit the author did not state.
+//  2. `public` is refused on ENTITY actions. Entity actions are reachable
+//     anonymously through the App's `public_entities` allowlist — the single
+//     place an operator reviews what anonymous callers may touch. A per-action
+//     switch would route around that review, so an entity must use the App
+//     allowlist instead (kafe 10.39).
+//
+// kind is spec.KindEntity or spec.KindService; the caller knows which it is
+// validating.
+func ValidatePublicAction(action spec.Action, kind spec.Kind) []error {
+	if !action.Public {
+		return nil
+	}
+	var errs []error
+
+	if kind != spec.KindService {
+		errs = append(errs, fmt.Errorf(
+			"action %q: `public: true` is only valid on a Service action — an entity action reaches anonymous callers through the App's `public_entities` allowlist; declare it there instead",
+			action.Name))
+	}
+	if action.RateLimit == nil {
+		errs = append(errs, fmt.Errorf(
+			"action %q: `public: true` requires `rate_limit` — an anonymous endpoint with no rate limit is an abuse vector (e.g. rate_limit: {max: 10, per: 1m, scope: ip})",
+			action.Name))
 	}
 
 	return errs
@@ -160,6 +198,26 @@ func ValidateEntitySpec(meta spec.Metadata, entitySpec *spec.EntitySpec) []error
 		action := entitySpec.Actions[i]
 		actionErrs := ValidateAction(action, meta.Module)
 		errs = append(errs, actionErrs...)
+		// `public` is refused on an entity action: anonymous reach for an
+		// entity is declared once, in the App's `public_entities` allowlist.
+		errs = append(errs, ValidatePublicAction(action, spec.KindEntity)...)
+	}
+
+	return errs
+}
+
+// ValidateServiceSpec validates permission/uses for all actions in a service spec.
+//
+// It runs the same per-action checks as an entity PLUS the public-action rules:
+// a Service action is the only place `public: true` is legal, so this is where
+// that flag is actually vetted (kafe 10.39).
+func ValidateServiceSpec(meta spec.Metadata, serviceSpec *spec.ServiceSpec) []error {
+	var errs []error
+
+	for i := range serviceSpec.Actions {
+		action := serviceSpec.Actions[i]
+		errs = append(errs, ValidateAction(action, meta.Module)...)
+		errs = append(errs, ValidatePublicAction(action, spec.KindService)...)
 	}
 
 	return errs

@@ -254,11 +254,14 @@ spec:
           - name: note
             type: string
             title: "Catatan"
+  # Intake anonim (10.36): tamu memesan dari QR tanpa login, jadi pembatasannya
+  # per-IP — satu skrip tidak bisa membanjiri pesanan.
+  rate_limit: { max: 30, per: 1m, scope: ip }
   state_machine:
     field: status
     initial: draft
     states:
-      - { name: draft, label: "Keranjang" }
+      - { name: draft, label: "Draf" }
       - { name: awaiting_payment, label: "Menunggu Bayar" }
       - { name: paid, label: "Lunas" }
       - { name: in_kitchen, label: "Diproses" }
@@ -267,20 +270,38 @@ spec:
       - { name: completed, label: "Selesai" }
       - { name: cancelled, label: "Dibatalkan" }
     transitions:
-      - { from: draft, to: awaiting_payment, via: submit-order }
-      - { from: draft, to: cancelled, via: abandon }
+      - { from: draft, to: awaiting_payment, via: submit-order, require_permission: orders.submit-order }
+      - { from: draft, to: cancelled, via: abandon, require_permission: orders.abandon }
       # Keterkaitan transisi↔event kini
       # DINYATAKAN EKSPLISIT lewat `emit:` — bukan disimpulkan dari penamaan.
       # `formspec validate` menolak `emit` yang menunjuk event yang tidak
       # dideklarasikan, jadi tidak ada lagi "nama event = nama state" yang
       # hanya kebetulan.
-      - { from: awaiting_payment, to: paid, via: confirm-payment, emit: on_paid }
-      - { from: awaiting_payment, to: cancelled, via: cancel-order, emit: on_cancel }
-      - { from: paid, to: in_kitchen, via: start-preparing }
-      - { from: in_kitchen, to: ready, via: mark-ready }
-      - { from: ready, to: served, via: mark-served }
-      - { from: served, to: completed, via: complete-order }
-      - { from: [paid, in_kitchen, ready, served], to: cancelled, via: void-order, emit: on_cancel }
+      # GATE WAJIB (temuan 2026-09-27): tanpa `require_permission`, transisi
+      # ini hanya diperiksa `cafe-order.orders.update` — TERUKUR kasir (tanpa
+      # `confirm-payment` sama sekali) berhasil `PATCH status=paid` → **200**.
+      # Itu jalur uang: siapa pun pemegang `update` bisa menandai pesanan LUNAS.
+      # `required_permission` di blok `actions:` tidak menolong — action tanpa
+      # `impl` tidak punya route, jadi tidak ada yang memeriksanya
+      # (`formspec check` menandai bentuk ini sebagai warning).
+      - { from: awaiting_payment, to: paid, via: confirm-payment, emit: on_paid, require_permission: orders.confirm-payment }
+      - { from: awaiting_payment, to: cancelled, via: cancel-order, emit: on_cancel, require_permission: orders.cancel-order }
+      # ── Gate peran dapur/pelayan (temuan 2026-09-27) ──
+      #
+      # Empat transisi ini membentuk PEMISAHAN PERAN (dapur menyiapkan, pelayan
+      # menyajikan) tetapi hanya dijaga `cafe-order.orders.update` — dan grant
+      # `order-page` barista/dapur/pelayan semuanya berisi `update`, jadi
+      # ketiganya bisa menjalankan keempatnya. Satu nama action hanya bermakna
+      # bila permission-nya mengikat.
+      - { from: paid, to: in_kitchen, via: start-preparing, require_permission: orders.start-preparing }
+      - { from: in_kitchen, to: ready, via: mark-ready, require_permission: orders.mark-ready }
+      # `emit: on_served` (2026-09-27): meja berubah `served` lewat jalur yang
+      # SAMA dengan `occupied` — pelayan mengantar, status meja ikut. Tidak ada
+      # impl/route baru: urusan meja dibaca konsumen event.
+      - { from: ready, to: served, via: mark-served, emit: on_served, require_permission: orders.mark-served }
+      - { from: served, to: completed, via: complete-order, require_permission: orders.complete-order }
+      # Void setelah pembayaran menyentuh uang (refund) — digerbangi sama.
+      - { from: [paid, in_kitchen, ready, served], to: cancelled, via: void-order, emit: on_cancel, require_permission: orders.void-order }
   # ── Event — pemicu integrasi lintas-app (stok & jurnal) ──
   # Transisi memancarkan event lewat `emit:`
   # yang DINYATAKAN di state machine di atas. Nama event tetap berkonvensi
@@ -308,46 +329,61 @@ spec:
       publish: { durable: true }
       deliver:
         - channel: reliable_event
+    # `on_served` — pemicu "meja disajikan". Bukan event uang (seperti on_paid),
+    # jadi ia tidak menuntut pasangan cancel: pembalikannya adalah pembayaran
+    # BERIKUTNYA dari sesi yang sama (`on_paid` → meja kembali `occupied`), dan
+    # itu memang sudah ada.
+    - name: on_served
+      description: "Pesanan disajikan ke tamu — pemicu status meja `served`"
+      type: async
+      publish: { durable: true }
+      deliver:
+        - channel: reliable_event
   actions:
     # Aturan bisnis #14: data penjualan TIDAK pernah dihapus permanen.
     # Koreksi lewat pembatalan (cancel-order / void-order), bukan delete.
     - { name: delete, disabled: true }
     - { name: submit, disabled: true }
+    # ── submit-order / abandon ──
+    #
+    # Gate-nya hidup di TRANSISI (2026-09-27). `required_permission` pada action
+    # tanpa `impl` tidak menegakkan apa pun: action itu tidak punya route, dan
+    # jalur penerapannya `PATCH status` hanya diperiksa `{plural}.update`.
+    # Deskripsi + `audit` tetap di sini — audit adalah properti ACTION, dieksekusi
+    # pipeline action saat action berjalan.
     - name: submit-order
       description: "Konfirmasi pesanan & hitung subtotal/pajak/service charge/promo"
-      required_permission: orders.submit-order
       audit: true
     - name: abandon
       description: "Tinggalkan keranjang"
-      required_permission: orders.abandon
+    # `required_permission` DIHAPUS dari sini (2026-09-27): action ini tidak
+    # punya `impl`, jadi tidak punya route — permission-nya tidak akan pernah
+    # diperiksa di sini. Gate-nya hidup di transisi
+    # (`state_machine.transitions[].require_permission`), dan menulisnya di dua
+    # tempat ditolak `spec.ValidateTransitionPermissions` karena keduanya bisa
+    # menyimpang. `audit` tetap di sini: audit adalah properti ACTION (dieksekusi
+    # pipeline action saat action berjalan).
     - name: confirm-payment
       description: "Pesanan LUNAS — di sinilah pesanan masuk dapur"
-      required_permission: orders.confirm-payment
       audit: true
     - name: cancel-order
       # Batal sebelum bayar (aturan bisnis #11: shift harus masih terbuka).
       description: "Batalkan pesanan yang belum dibayar."
-      required_permission: orders.cancel-order
       audit: true
       conditions:
         - script: "True"
           message: "Guard ideal: shift terkait masih berstatus open"
-    - name: start-preparing
-      description: "Dapur/bar mulai mengerjakan"
-      required_permission: orders.start-preparing
-    - name: mark-ready
-      description: "Pesanan siap disajikan"
-      required_permission: orders.mark-ready
-    - name: mark-served
-      description: "Pesanan diantar ke meja"
-      required_permission: orders.mark-served
-    - name: complete-order
-      description: "Pesanan selesai"
-      required_permission: orders.complete-order
+    # ── start-preparing / mark-ready / mark-served / complete-order ──
+    #
+    # Entri `actions:`-nya DIHAPUS (2026-09-27): gate-nya kini hidup di
+    # transisi. `required_permission` pada action tanpa `impl` tidak menegakkan
+    # apa pun — tidak ada route yang memeriksanya, dan jalur penerapannya
+    # `PATCH status` diperiksa `{plural}.update`. Gate transisi diperiksa pada
+    # jalur itu. Menulis keduanya ditolak validator. Nama, deskripsi, dan
+    # permission-nya tetap ada lewat transisi, yang sejak L3 adalah action penuh.
     - name: void-order
       # WAJIB lewat approval supervisor (D5).
       description: "Batalkan pesanan yang sudah dibayar — perlu persetujuan supervisor."
-      required_permission: orders.void-order
       audit: true
       conditions:
         - script: "len(params.get('void_reason', '')) > 0"

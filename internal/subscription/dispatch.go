@@ -137,6 +137,13 @@ func (d *Dispatcher) dispatchOne(ctx context.Context, workspaceID, eventName, re
 	actionSpec := spec.Action{
 		Name: "handle",
 		Impl: &sub.Spec.Handler,
+		// Carry the subscription's declared `uses` so a handler's access is
+		// checked against something the manifest can actually state. Passing
+		// nil here made every datastore primitive in a handler fail
+		// USES_VIOLATION in ProdMode/StrictMode — with a message telling the
+		// author to add `uses.primitives` to a declaration that did not exist
+		// (kafe 10.56).
+		Uses: sub.Spec.Uses,
 	}
 	execParams := action.ExecuteParams{
 		Module:      sub.Module,

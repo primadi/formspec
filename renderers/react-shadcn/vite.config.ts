@@ -1,6 +1,7 @@
 import { defineConfig, type Plugin } from "vite"
 import react from "@vitejs/plugin-react"
 import tailwindcss from "@tailwindcss/vite"
+import { configDefaults } from "vitest/config"
 import path from "path"
 
 /**
@@ -28,6 +29,16 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
+  },
+  test: {
+    // Unit tests are jsdom component/engine tests that live under `src/`.
+    // `e2e/` holds the Playwright suites, which are a DIFFERENT runner with a
+    // different API (`test/page` fixtures, a real browser) — Vitest's default
+    // glob would try to execute them as unit tests and fail on the import
+    // shape rather than on anything real. Scoping to `src/**` plus an explicit
+    // exclusion keeps the two runners from claiming each other's files.
+    include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    exclude: [...configDefaults.exclude, "e2e/**"],
   },
   server: {
     host: true,

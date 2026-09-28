@@ -386,7 +386,40 @@ type FormAction struct {
 
 // FormSubmit configures the submit button and post-submit behavior.
 type FormSubmit struct {
-	Label    string `yaml:"label,omitempty" json:"label,omitempty"`
+	Label string `yaml:"label,omitempty" json:"label,omitempty"`
+	// Call turns the form's submit into a SERVICE call instead of an entity
+	// write: "module.service.action" (kafe P3, docs_internal/plan/kafe-join-
+	// session-kode.md).
+	//
+	// Why this has to exist rather than being expressible with entity CRUD: the
+	// guest check-in has to decide, server-side and atomically, between
+	// "this table is free → create a session" and "this table is taken → join
+	// the existing one if the code matches". A plain create cannot express
+	// either half — it would need a read-then-write the client cannot be
+	// trusted with, and an anonymous `list table-session` cannot be row-scoped
+	// (the guest has no token yet) and would leak the join code.
+	//
+	// When set, the form does NOT write its entity: the service owns the
+	// mutation. That also means the entity's create/update permission is NOT
+	// the right gate for the submit button — see submit.redirect for how the
+	// result is used, and the renderer for the button rule.
+	// @schema {example: "cafe-order.table-access.open"}
+	Call string `yaml:"call,omitempty" json:"call,omitempty"`
+	// Redirect is where a successful submit lands, overriding the derived list
+	// route. It is SURFACE-relative, like an authored Page's `route` — the
+	// manifest must not need to know the workspace slug.
+	// It interpolates `{dotted.path}` against the form's render context
+	// (the same tokens `default_from` accepts), which is what makes a
+	// create-then-continue flow expressible: a form that writes a random
+	// natural key can send the caller to `/{route}/{uuid}` — the minted value
+	// is both the payload and the address, resolved on arrival through the
+	// natural-key lookup rather than the (server-assigned) record id.
+	//
+	// With `call` set, `{response.*}` additionally resolves against the SERVICE
+	// RESPONSE. That is the only way to reach a value the server decided: after
+	// a join, the token the guest must carry is the EXISTING session's token,
+	// which the client never knew.
+	// @schema {example: "/menu/{response.guest_token}"}
 	Redirect string `yaml:"redirect,omitempty" json:"redirect,omitempty"`
 	Message  string `yaml:"message,omitempty" json:"message,omitempty"`
 }

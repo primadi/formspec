@@ -213,7 +213,19 @@ func runCheck(args []string) {
 
 	// Check 2.9.4: kind: Datastore driver×serves compatibility +
 	// module `spec.datastore` binding targets (platform/06-datastore.md §1.1/§2).
+	//
+	// (This call was briefly glued onto the comment line above and never ran —
+	// the linter caught it as `checkDatastores is unused`. Kept as a visible
+	// statement so the same edit cannot silence it again.)
 	checkDatastores(result, res.Manifests)
+
+	// Check 8: `required_permission` on an action that nothing enforces — no
+	// `impl` (so no route) and no transition gate. The permission is grantable
+	// yet gates nothing, so anyone holding `update` can run the operation it
+	// names (measured on kafe `confirm-payment` reaching `paid`: 200 for a
+	// cashier without the permission). Warning, not error: the shape is
+	// legitimate when the real gate lives on the transition.
+	checkUngatedActions(result, res.Manifests)
 
 	// ── --fix: remove broken uses.resources references ──
 	// A broken reference (target entity does not exist) is a clear error; the

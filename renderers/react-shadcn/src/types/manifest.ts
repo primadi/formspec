@@ -901,8 +901,10 @@ export interface FormField {
   visible_when?: string
   compute?: string
   /** Seed the initial value from the render context: a literal, or a template
-   *  with `{dotted.path}` (e.g. `{session.branch_id}`) plus `{now}`/`{today}`.
-   *  Pair with `widget: hidden` for values the user must not see. */
+   *  with `{dotted.path}` (e.g. `{session.branch_id}`) plus the block-local
+   *  `{now}`/`{today}`/`{uuid}`. Pair with `widget: hidden` for values the user
+   *  must not see. `{uuid}` is a fresh v4 UUID per form instance — for a
+   *  natural key whose value is random (table-session guest token). */
   default_from?: string
 }
 
@@ -915,6 +917,17 @@ export interface FormAction {
 
 export interface FormSubmit {
   label?: string
+  /** Turn the submit into a SERVICE call instead of an entity write:
+   *  `"module.service.action"`. The service owns the mutation, so the form does
+   *  not write its entity — and the entity's create/update permission is not the
+   *  gate for the submit button. */
+  call?: string
+  /** Where a successful submit lands, overriding the derived list route.
+   *  Interpolates `{dotted.path}` against the form's render context, plus the
+   *  block-local `{now}` / `{today}` / `{uuid}`. With `call` set,
+   *  `{response.*}` resolves against the SERVICE RESPONSE — the only way to
+   *  reach a value the server decided (e.g. the existing session's token after
+   *  a join). */
   redirect?: string
   message?: string
 }

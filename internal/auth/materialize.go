@@ -36,8 +36,103 @@ func NewMaterializer(uiReg *ui.Registry, reg *entity.Registry) *Materializer {
 	return &Materializer{uiReg: uiReg, reg: reg}
 }
 
+// GrantProblem records one grant that contributed nothing, and why. It exists
+// so a partial materialization can be REPORTED instead of silently dropped —
+// a grant that resolves to zero permissions is almost always a name typo, and
+// before this the only trace of it was an unexplained missing button.
+type GrantProblem struct {
+	// Page is the grant's page reference, exactly as the role declared it.
+	Page string
+	// Reason is a human-readable explanation (e.g. "unknown page", or the
+	// actions that matched nothing in the page's footprint).
+	Reason string
+}
+
+func (p GrantProblem) String() string { return fmt.Sprintf("%s: %s", p.Page, p.Reason) }
+
+// MaterializePartial expands a role's grants into permissions, resolving each
+// grant INDEPENDENTLY: a grant that cannot be resolved is skipped and reported
+// rather than voiding the whole role.
+//
+// Why this exists (kafe 10.53): resolveFootprint returns an error for a page it
+// does not recognize, and the strict Materialize propagates it — so ONE bad
+// page name in a role's grants removed EVERY permission that role granted. The
+// symptom was not a missing button but "this role appears to have no
+// permissions at all", with the cause buried in one grant the operator had to
+// find by eye. The failure was fail-closed (no privilege leaked), but a typo in
+// one page reference should not be able to disarm a whole role.
+//
+// `app` is accepted for symmetry with the resolver and is not used for
+// filtering here — App scoping happens in the resolver (role.App), before this
+// point.
+func (m *Materializer) MaterializePartial(grants []Grant) ([]string, []GrantProblem) {
+	seen := map[string]bool{}
+	out := []string{}
+	var problems []GrantProblem
+
+	// add records a permission once.
+	add := func(p string) {
+		if p != "" && !seen[p] {
+			seen[p] = true
+			out = append(out, p)
+		}
+	}
+
+	for _, g := range grants {
+		footprint, err := m.resolveFootprint(g.Page)
+		if err != nil {
+			problems = append(problems, GrantProblem{Page: g.Page, Reason: err.Error()})
+			continue
+		}
+
+		before := len(out)
+
+		// Tabbed page: match granted tabs against footprint tabs.
+		if len(g.Tabs) > 0 {
+			for _, tabGrant := range g.Tabs {
+				for _, fa := range footprint {
+					if fa.Tab != tabGrant.Tab {
+						continue
+					}
+					for _, ag := range tabGrant.Actions {
+						if fa.Action == ag.Name {
+							add(fa.Permission)
+						}
+					}
+				}
+			}
+		} else {
+			// Block page: match granted actions against footprint (no tab).
+			for _, ag := range g.Actions {
+				for _, fa := range footprint {
+					if fa.Tab == "" && fa.Action == ag.Name {
+						add(fa.Permission)
+					}
+				}
+			}
+		}
+
+		// A page that resolves but grants nothing is the 10.47 class: the page
+		// is real, the action name is not one it exposes. Reported for the same
+		// reason — otherwise the grant silently disappears.
+		if len(out) == before {
+			problems = append(problems, GrantProblem{
+				Page:   g.Page,
+				Reason: "no granted action matches this page's footprint (check the action names)",
+			})
+		}
+	}
+
+	return out, problems
+}
+
 // Materialize expands a role's grants into a deduplicated set of permission
 // strings. It returns an error if a grant references an unknown page/tab/action.
+//
+// Strict by design: validation and tests want "this role's grants are all
+// resolvable" as a single yes/no. The RESOLVER uses MaterializePartial instead,
+// so a runtime typo degrades one grant rather than the entire role — see the
+// comment there.
 func (m *Materializer) Materialize(grants []Grant) ([]string, error) {
 	seen := map[string]bool{}
 	var out []string

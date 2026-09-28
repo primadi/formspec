@@ -158,13 +158,18 @@ spec:
       - { name: received, label: "Diterima" }
       - { name: cancelled, label: "Dibatalkan" }
     transitions:
-      - { from: draft, to: submitted, via: submit-po }
-      - { from: draft, to: cancelled, via: cancel-po, emit: on_po_cancelled }
+      # Gate di TRANSISI (2026-09-27): grant `submit-po`/`cancel-po` sudah
+      # diberikan ke manajer lewat `purchase-order-page`, tetapi tanpa gate ini
+      # permission-nya tidak diperiksa di mana pun — jalur `PATCH status` hanya
+      # diperiksa `{plural}.update`. Memindahkannya membuat grant itu BENAR-BENAR
+      # membatasi (dan tidak mengubah siapa yang boleh — manajer memang punya).
+      - { from: draft, to: submitted, via: submit-po, require_permission: purchase-orders.submit-po }
+      - { from: draft, to: cancelled, via: cancel-po, emit: on_po_cancelled, require_permission: purchase-orders.cancel-po }
       # Keterkaitan transisi↔event DINYATAKAN EKSPLISIT lewat `emit:` (S13) —
       # sama seperti `order.on_paid`. Tanpa ini, "PO diterima" hanya fakta yang
       # bisa dibaca dari kolom status, bukan kejadian yang bisa didengarkan.
       - { from: submitted, to: received, via: receive-goods, emit: on_po_received }
-      - { from: submitted, to: cancelled, via: cancel-po, emit: on_po_cancelled }
+      - { from: submitted, to: cancelled, via: cancel-po, emit: on_po_cancelled, require_permission: purchase-orders.cancel-po }
   # ── Event — antarmuka keluar untuk akuntansi (item 10.2) ──
   #
   # KEPUTUSAN PEMILIK (2026-09-22): purchase HANYA memancarkan event. Ia tidak
@@ -199,13 +204,12 @@ spec:
         - channel: reliable_event
   actions:
     - { name: submit, disabled: true }
+    # `required_permission` dihapus: gate-nya di transisi (lihat state_machine).
     - name: submit-po
       description: "Kirim pesanan ke supplier"
-      required_permission: purchase-orders.submit-po
       audit: true
     - name: cancel-po
       description: "Batalkan pesanan beli"
-      required_permission: purchase-orders.cancel-po
       audit: true
       # `emit:` pada TRANSISI menyatakan bahwa transisi ini menerbitkan event;
       # `emits:` pada ACTION yang meneruskannya ke outbox. Keduanya diperlukan:

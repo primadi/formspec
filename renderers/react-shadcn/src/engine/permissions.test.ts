@@ -67,6 +67,30 @@ describe("canDoEntityAction", () => {
     expect(canDoEntityAction(undefined, entity, "list")).toBe(false)
   })
 
+  it("trusts authorized_actions WITHOUT an identity (public surface)", () => {
+    // The guest ordering flow (kafe): a public surface boots anonymously and
+    // therefore has `me === null` by construction — `boot()` clears the
+    // `anonymous` identity instead of fabricating one. Gating on `me` first hid
+    // the Create button the server had authorized, so the guest UI had no
+    // submit control at all (measured on /kafe/t/JKT-A01-DEMO).
+    const entity = makeEntity({
+      authorized_actions: ["list", "create"],
+    })
+    expect(canDoEntityAction(null, entity, "create")).toBe(true)
+    expect(canDoEntityAction(undefined, entity, "create")).toBe(true)
+    // The list is still an allow-list — an action outside it stays hidden.
+    expect(canDoEntityAction(null, entity, "delete")).toBe(false)
+  })
+
+  it("applies resourceAction() before consulting authorized_actions", () => {
+    // The bundle's list is in RESOURCE vocabulary (`update`), while the UI says
+    // `edit`; the mapping has to happen before the membership test or the
+    // button disappears for everyone.
+    const entity = makeEntity({ authorized_actions: ["update"] })
+    expect(canDoEntityAction(null, entity, "edit")).toBe(true)
+    expect(canDoEntityAction(null, entity, "view")).toBe(false)
+  })
+
   it("honours the entity's declared permission", () => {
     const entity = makeEntity({
       actions: [{ name: "approve", permission: "billing.approvals.approve" }],

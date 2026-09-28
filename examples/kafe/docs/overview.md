@@ -40,14 +40,14 @@ dari satu tempat.
 
 ## Pengguna dan Perannya
 
-| Peran | Siapa | Yang bisa dilakukan |
-| --- | --- | --- |
-| **Pemilik** | Pemilik kafe | Melihat data & laporan seluruh outlet, mengatur menu, harga, promo, dan pengguna |
-| **Supervisor / Manajer Outlet** | Kepala outlet | Menyetujui pembatalan transaksi & diskon di luar batas, menutup shift, mengelola stok & pembelian |
-| **Kasir** | Staf kasir | Membuat dan membayar pesanan, menerima pembayaran tunai, buka/tutup shift, kas masuk/keluar |
-| **Barista / Dapur** | Staf produksi | Melihat daftar pesanan yang sudah lunas, menandai sedang dibuat dan siap disajikan |
-| **Pelanggan** | Pengunjung kafe | Memindai QR meja, melihat menu, memesan, membayar, melihat status pesanan |
-| **Pelanggan Member** | Pengunjung terdaftar | Seperti pelanggan biasa, ditambah akumulasi poin dan penukaran poin |
+| Peran                           | Siapa                | Yang bisa dilakukan                                                                               |
+| ------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------- |
+| **Pemilik**                     | Pemilik kafe         | Melihat data & laporan seluruh outlet, mengatur menu, harga, promo, dan pengguna                  |
+| **Supervisor / Manajer Outlet** | Kepala outlet        | Menyetujui pembatalan transaksi & diskon di luar batas, menutup shift, mengelola stok & pembelian |
+| **Kasir**                       | Staf kasir           | Membuat dan membayar pesanan, menerima pembayaran tunai, buka/tutup shift, kas masuk/keluar       |
+| **Barista / Dapur**             | Staf produksi        | Melihat daftar pesanan yang sudah lunas, menandai sedang dibuat dan siap disajikan                |
+| **Pelanggan**                   | Pengunjung kafe      | Memindai QR meja, melihat menu, memesan, membayar, melihat status pesanan                         |
+| **Pelanggan Member**            | Pengunjung terdaftar | Seperti pelanggan biasa, ditambah akumulasi poin dan penukaran poin                               |
 
 ## Alur Bisnis Utama
 
@@ -56,7 +56,8 @@ dari satu tempat.
 ```
 Pelanggan duduk di meja
    │
-   ├─ Scan QR code meja → halaman menu kafe (tanpa login)
+   ├─ Scan kartu QR di meja → halaman sambutan (tanpa login)
+   │     sistem mengenali meja dari token, membuka kunjungan
    │
    ├─ Pilih menu → keranjang → isi jumlah
    │
@@ -77,6 +78,62 @@ Barista menandai "sedang dibuat" → "siap" → pelayan mengantar → "selesai"
 Untuk pesanan "bayar di kasir", pelanggan menyebutkan nomor meja atau kode
 pesanan kepada kasir, kasir menerima uang tunai, dan pesanan baru diteruskan
 ke dapur setelah kasir menekan "Lunas".
+
+### 1a. Kartu QR di meja, dan siklus hidup meja
+
+Kartu yang tertempel di meja memuat **token** meja, bukan nomor meja:
+
+```
+Pelanggan pindai kartu QR → /kafe/t/<token meja>
+   │
+   ▼
+Halaman sambutan: sistem mengenali mejanya dari token, lalu membuka satu
+"kunjungan" (sesi) untuk meja itu
+   │
+   ▼
+Pelanggan isi nama (opsional) → tekan "Lihat Menu"
+   │
+   ▼
+Halaman menu, dengan harga cabang meja itu dan keranjang atas nama sesinya
+```
+
+Karena token itu bukti fisik pemegang meja, pelanggan **tidak pernah memilih
+meja** — tidak ada daftar meja untuk disalahpilih, dan tidak ada cara mengklaim
+meja orang lain. Satu meja hanya boleh punya **satu kunjungan terbuka**; tamu
+yang memindai kartu meja yang sedang terisi tetap masuk ke kunjungan yang sama
+(halaman menu bisa dibuka dari perangkat kedua).
+
+**Menutup meja juga menutup kunjungannya.** Saat kasir mengosongkan meja,
+kunjungan tamu di meja itu ditutup sekaligus — jadi tamu berikutnya yang
+memindai kartu yang sama memulai kunjungan baru. Tanpa itu, satu meja hanya bisa
+dipakai sekali: aturan "satu kunjungan terbuka per meja" akan menolak tamu
+berikutnya. Di sisi lain, kunjungan yang dibuat lalu **ditinggalkan tanpa
+membayar** belum punya jalur keluar — meja baru ditutup lewat kasir, dan tamu
+yang pergi begitu saja meninggalkan kunjungan menggantung (sisa yang tercatat di
+ledger kafe **10.57**).
+
+**Status meja** bergerak mengikuti pekerjaan nyata, bukan timer:
+
+```
+   available ──(pelanggan BAYAR)──▶ occupied ──(semua pesanan diantar)──▶ served
+       ▲                               │  ▲                                  │
+       │                               │  └────(tamu TAMBAH pesanan & bayar)──┘
+       └────(kasir menutup meja)───────┴──────────────────────────────────────┘
+```
+
+- **`occupied`** lahir dari **pembayaran**, bukan dari keberadaan sesi. Ini
+  disengaja: kalau "terisi" diukur dari sesi, siapa pun yang membuka sesi bisa
+  mengunci meja orang lain tanpa membayar apa pun.
+- **`served`** berarti pesanan sudah diantar. Bila tamu menambah pesanan dan
+  membayar lagi, meja kembali `occupied` — tamu itu masih duduk dan sedang
+  dilayani lagi.
+- **`available`** hanya lewat kasir, dan hanya dari `occupied`/`served`. Meja
+  yang ditarik dari peredaran (rusak/dibersihkan) ditandai manajer dan **tidak**
+  tersentuh oleh pembayaran.
+- Meja yang pesanannya **dibatalkan** kembali `available`. Batasnya: bila satu
+  meja punya beberapa pesanan dan hanya satu yang batal, meja dikosongkan lebih
+  awal — kasir menandainya terisi lagi (sisa yang tercatat di ledger kafe
+  **10.52**).
 
 ### 2. Pelanggan membayar di kasir (tunai)
 
@@ -176,14 +233,14 @@ Stok menipis → muncul peringatan untuk segera dibeli
 
 ## Laporan yang Dibutuhkan
 
-| Laporan | Isi | Untuk siapa |
-| --- | --- | --- |
-| **Penjualan per periode** | Omzet harian/mingguan/bulanan, per jam, per outlet, per metode bayar | Pemilik, Supervisor |
-| **Menu terlaris & profitabilitas** | Jumlah terjual, omzet, biaya bahan, margin per menu | Pemilik |
-| **Pemakaian & stok bahan** | Bahan terpakai, stok tersisa, item kritis, selisih opname | Supervisor |
-| **Rekap kas & shift** | Kas awal, penjualan per metode, kas masuk/keluar, selisih per shift | Supervisor, Pemilik |
-| **Loyalitas & pelanggan** | Pelanggan baru vs kembali, poin terkumpul/terpakai, pelanggan teratas | Pemilik |
-| **Pembelian & supplier** | Pembelian per supplier, harga bahan, hutang pembelian | Supervisor |
+| Laporan                            | Isi                                                                   | Untuk siapa         |
+| ---------------------------------- | --------------------------------------------------------------------- | ------------------- |
+| **Penjualan per periode**          | Omzet harian/mingguan/bulanan, per jam, per outlet, per metode bayar  | Pemilik, Supervisor |
+| **Menu terlaris & profitabilitas** | Jumlah terjual, omzet, biaya bahan, margin per menu                   | Pemilik             |
+| **Pemakaian & stok bahan**         | Bahan terpakai, stok tersisa, item kritis, selisih opname             | Supervisor          |
+| **Rekap kas & shift**              | Kas awal, penjualan per metode, kas masuk/keluar, selisih per shift   | Supervisor, Pemilik |
+| **Loyalitas & pelanggan**          | Pelanggan baru vs kembali, poin terkumpul/terpakai, pelanggan teratas | Pemilik             |
+| **Pembelian & supplier**           | Pembelian per supplier, harga bahan, hutang pembelian                 | Supervisor          |
 
 ## Catatan Teknis (untuk tim)
 
@@ -200,8 +257,8 @@ Stok menipis → muncul peringatan untuk segera dibeli
     master data, stok, laporan (wajib login).
   - **Layar dapur (KDS)** — layar penuh khusus tablet dapur, tanpa navigasi,
     hanya menampilkan antrean pesanan yang sudah lunas.
-    *(Perlu konfirmasi: apakah layar dapur dipisah sebagai aplikasi sendiri,
-    atau cukup satu halaman di dalam aplikasi privat.)*
+    _(Perlu konfirmasi: apakah layar dapur dipisah sebagai aplikasi sendiri,
+    atau cukup satu halaman di dalam aplikasi privat.)_
 
 ## Keputusan yang Sudah Disetujui
 
@@ -240,7 +297,7 @@ Stok menipis → muncul peringatan untuk segera dibeli
 
 Aplikasi ini adalah **test case FormSpec untuk menyelesaikan masalah bisnis
 nyata**. Karena itu spec ditulis sebagai **spec ideal** — menggambarkan
-bagaimana aplikasi kafe *seharusnya* dinyatakan.
+bagaimana aplikasi kafe _seharusnya_ dinyatakan.
 
 > **Status per 2026-09-22 (dikoreksi):** keterbatasan mesin yang ditemukan di
 > `gaps_found/` **sebagian besar sudah diselesaikan** — bukan seluruhnya. Yang

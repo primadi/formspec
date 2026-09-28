@@ -1,0 +1,54 @@
+apiVersion: formspec.dev/v1
+kind: Subscription
+metadata:
+  name: table-occupancy
+  module: cafe-master
+  description: "Pesanan lunas → meja terisi; disajikan → meja `served`; batal → kosong kembali"
+spec:
+  # Event PEMANCAR dideklarasikan di entity `cafe-order.order` — transisi
+  # `confirm-payment` memancarkan `on_paid`, `mark-served` memancarkan
+  # `on_served`, dan `cancel-order`/`void-order` memancarkan `on_cancel`;
+  # ketiganya `publish.durable` (outbox + retry + dead-letter).
+  #
+  # KENAPA SUBSCRIPTION-nya MILIK cafe-master (bukan cafe-order):
+  # konsumennya menulis `dining-table`, dan entity itu milik cafe-master.
+  # Akses lintas-module dari script ditegakkan saat runtime (USES_VIOLATION →
+  # "undeclared cross-module access to cafe-master.dining-table from module
+  # cafe-order"), dan `SubscriptionSpec` belum punya blok `uses` untuk
+  # mendeklarasikannya. Menempatkan handler di module PEMILIK entity bukan
+  # jalan pintas: ia persis pola yang sudah dipakai `gl` (pemilik jurnal
+  # mendengarkan event pesanan) dan `cafe-stock`. Modul yang tahu aturan sebuah
+  # entity adalah modul yang memilikinya.
+  #
+  # Arah ketergantungannya tetap benar: cafe-master mendengarkan NAMA event yang
+  # sepenuhnya terkualifikasi dari cafe-order, bukan sebaliknya. cafe-order
+  # tidak tahu apa pun tentang meja, dan tidak perlu tahu.
+  #
+  # KENAPA SUBSCRIPTION, BUKAN LANGSUNG DI TRANSISI: inilah yang membuat
+  # "pembayaran" dan "meja terisi" tetap terpisah. Modul pemesanan memancarkan
+  # fakta bisnis ("pesanan lunas", "pesanan disajikan"); urusan meja dibaca
+  # oleh konsumen yang memang memilikinya.
+  #
+  # on_cancel ikut didengarkan karena aturan simetri (7.7.2): satu pemicu yang
+  # mengubah keadaan wajib menyatakan pembalikannya sejak awal. Tanpa ini,
+  # pesanan yang dibatalkan meninggalkan meja `occupied` selamanya.
+  #
+  # RISIKO YANG DIAKUI (ledger 10.40b): subscription berjalan async setelah
+  # commit. Bila handler gagal, meja tetap `available` padahal pesanan sudah
+  # lunas — outbox retry menutup sebagian besar kasus, tetapi tidak ada
+  # kompensasi sinkron. Teramati: handler dimatikan → bayar → `table_status`
+  # tetap `available`.
+  events:
+    - cafe-order.order.on_paid
+    - cafe-order.order.on_served
+    - cafe-order.order.on_cancel
+  handler:
+    type: script_ref
+    ref: cafe-master/table_status_from_order
+  # Handler ini hanya menyentuh entity, bukan `ctx.*`, jadi `uses` ini
+  # deklaratif (footprint consent) dan tidak menggating apa pun.
+  #
+  # `uses` adalah SAUDARA `handler`, bukan anaknya — `handler` sendiri bertipe
+  # `ImplDecl` (type/ref saja).
+  uses:
+    resources: [cafe-master.dining-table]

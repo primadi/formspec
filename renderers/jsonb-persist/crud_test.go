@@ -705,6 +705,94 @@ func TestEntityStore_StateMachineTransition(t *testing.T) {
 	}
 }
 
+// TestEntityStore_StateMachineTransition_LegacyRowMissingField pins kafe 10.42:
+// a row written BEFORE the state field existed must transition normally.
+//
+// The stored row has no `status` at all, which validateStateTransition used to
+// read as "this is a new record" and then demand the new value equal the
+// machine's initial state. On a real dev database that turned an ordinary
+// `available → occupied` on a pre-existing table into a 500
+// `initial state must be "available"` — while every FRESH row worked, because
+// Insert's applyDefaults always supplies the initial state. That asymmetry is
+// why it survived: the check was unreachable for new data.
+//
+// The row is produced by writing the data JSONB directly, which is the only
+// way to build the legacy shape now that applyDefaults exists — and is exactly
+// what a pre-field row looks like on disk.
+func TestEntityStore_StateMachineTransition_LegacyRowMissingField(t *testing.T) {
+	dir := t.TempDir()
+	d, err := OpenSQLite(filepath.Join(dir, "crud_sm_legacy.db"), nil)
+	if err != nil {
+		t.Fatalf("OpenSQLite failed: %v", err)
+	}
+	defer func() { _ = d.Close() }()
+
+	meta := spec.Metadata{Name: "table", Module: "cafe"}
+	entity := &spec.EntitySpec{
+		Version: "v1",
+		Fields:  []spec.Field{{Name: "status", Type: spec.FieldString}},
+		StateMachine: &spec.StateMachine{
+			Field:   "status",
+			Initial: "available",
+			States:  []spec.StateDecl{{Name: "available"}, {Name: "occupied"}, {Name: "served"}},
+			Transitions: []spec.TransitionDecl{
+				{From: spec.StateList{"available"}, To: "occupied", Action: "occupy"},
+				{From: spec.StateList{"occupied"}, To: "served", Action: "serve"},
+			},
+		},
+	}
+
+	r := NewMigrationRunner(d, DriverSQLite)
+	ctx := context.Background()
+	if _, err := r.ApplyMigrations(ctx, []EntityMigration{{Metadata: meta, EntitySpec: *entity}}); err != nil {
+		t.Fatalf("ApplyMigrations failed: %v", err)
+	}
+	store := NewEntityStore(d, DriverSQLite, meta, entity)
+
+	id, err := store.Insert(ctx, InsertParams{
+		WorkspaceID: "t1", CreatedBy: "u1",
+		Data: map[string]any{"status": "available"},
+	})
+	if err != nil {
+		t.Fatalf("Insert failed: %v", err)
+	}
+
+	// Rewrite the row WITHOUT the state field — the pre-field shape.
+	if _, err := d.ExecContext(ctx,
+		`UPDATE cafe_tables SET data = '{}' WHERE id = ?`, id); err != nil {
+		t.Fatalf("simulate legacy row failed: %v", err)
+	}
+	rec, err := store.GetByID(ctx, GetByIDParams{WorkspaceID: "t1", ID: id})
+	if err != nil {
+		t.Fatalf("GetByID failed: %v", err)
+	}
+	if _, present := rec.Data["status"]; present {
+		t.Fatalf("fixture is wrong: the legacy row still carries `status` (%v)", rec.Data)
+	}
+
+	// A registered transition AWAY from the initial state must be allowed: the
+	// row is treated as being in `available`, not as a new record.
+	if _, err := store.Update(ctx, UpdateParams{
+		WorkspaceID: "t1", ID: id, Version: rec.Version, UpdatedBy: "u2",
+		Data: map[string]any{"status": "occupied"},
+	}); err != nil {
+		t.Fatalf("a legacy row must still be able to transition available→occupied: %v", err)
+	}
+
+	// And it must still be VALIDATED — the fix must not wave everything
+	// through. `served` is two steps away from `available`.
+	rec, err = store.GetByID(ctx, GetByIDParams{WorkspaceID: "t1", ID: id})
+	if err != nil {
+		t.Fatalf("GetByID failed: %v", err)
+	}
+	if _, err := store.Update(ctx, UpdateParams{
+		WorkspaceID: "t1", ID: id, Version: rec.Version, UpdatedBy: "u3",
+		Data: map[string]any{"status": "available"},
+	}); err == nil || !strings.Contains(err.Error(), "invalid state transition") {
+		t.Fatalf("expected an invalid-transition rejection, got: %v", err)
+	}
+}
+
 func TestEntityStore_StateMachineGuard_Passes(t *testing.T) {
 	dir := t.TempDir()
 	d, err := OpenSQLite(filepath.Join(dir, "crud_sm_guard_pass.db"), nil)

@@ -54,19 +54,22 @@ spec:
     # punya body item `qrcode` (html/pdf/thermal), dan token ini sudah dipakai
     # struk digital/thermal lewat `/kafe/status/{guest_token}`.
     #
-    # Yang belum bisa dinyatakan: **kartu meja** yang QR-nya langsung membuka
-    # sesi tamu. Pindai QR meja harus men-resolve meja dari token ini lalu
-    # membuat `table-session` dan mengarahkan ke halaman menu — halaman masuk
-    # semacam itu belum bisa dinyatakan (resolve entity dari token route +
-    # create-lalu-redirect). Tercatat sebagai task deferred di ledger, bukan
-    # dipaksakan dengan QR yang tidak menuju ke mana pun.
+    # `natural_key: true` (10.34b, ditutup 2026-09-27) adalah yang membuat
+    # **kartu meja** bisa menuju ke sesuatu: `GET .../dining-table/JKT-A01-DEMO`
+    # kini me-resolve meja lewat `WHERE _qr_token = ?` (fallback GetByID di
+    # `renderers/jsonb-persist/crud.go`), sehingga halaman masuk token → sesi →
+    # menu bisa dinyatakan sebagai `context` + `submit.redirect` biasa.
     #
-    # Yang masih berlaku: token diisi script/Service (tidak ada
-    # `natural_key_rule` untuk nilai acak).
+    # Sebelumnya di sini tertulis "tidak ada `natural_key_rule` untuk nilai
+    # acak" — itu **mencampur dua hal**: `natural_key_rule` adalah GENERATOR
+    # (sequence/`{seq:05d}`), sedangkan `natural_key: true` hanya menandai
+    # "inilah identitas bisnis record ini". Nilai acak tidak butuh generator
+    # sama sekali — ia diisi di sisi klien saat sesi dibuat. Yang penting token
+    # unik, dan `natural_key` sudah mengimplikasikan `unique`.
     - name: qr_token
       type: string
       required: true
-      unique: true
+      natural_key: true
       title: "Token QR"
   # Siklus hidup meja. Transisi TIDAK butuh `impl` — `PATCH` yang mengubah field
   # state adalah pemicunya (internal/api/handler.go FindTransitionByStates +
@@ -104,7 +107,15 @@ spec:
       - { from: served, to: occupied, via: occupy, description: "Tamu menambah pesanan" }
       # KASIR menutup meja (langkah 5 alur). Digerbangi: tanpa ini siapa pun
       # yang memegang `update` (mis. pelayan) bisa mengosongkan meja.
-      - { from: [occupied, served], to: available, via: release, description: "Kosongkan meja (kasir menutup)", require_permission: dining-tables.release }
+      #
+      # `emit: on_cleared` menutup SIKLUS, bukan hanya meja: 10.34c hanya
+      # mengizinkan SATU sesi terbuka per meja, dan halaman masuk QR membuat
+      # sesi setiap kali tamu memindai. Tanpa menutup sesi saat meja
+      # dikosongkan, tamu BERIKUTNYA di meja yang sama gagal check-in —
+      # `UNIQUE constraint failed: cafe_order_table_sessions._dining_table_id`
+      # → **500**. Meja yang bisa dipakai sekali seumur hidup jelas bukan
+      # maksudnya, jadi event inilah yang membuat index itu aman.
+      - { from: [occupied, served], to: available, via: release, emit: on_cleared, description: "Kosongkan meja (kasir menutup)", require_permission: dining-tables.release }
       # Meja dipesan (kasir) dan batal dipesan.
       - { from: available, to: reserved, via: reserve, description: "Tandai meja dipesan", require_permission: dining-tables.reserve }
       - { from: reserved, to: available, via: unreserve, description: "Batalkan pesanan meja", require_permission: dining-tables.reserve }
@@ -137,6 +148,21 @@ spec:
   #
   # `spec.ValidateActionTransitionDuplication` menolak menuliskannya kembali
   # bila entri itu tidak menambahkan apa pun.
+  # ─── Event: meja dikosongkan ───
+  #
+  # Dipancarkan oleh transisi `release` (kasir menutup meja). Konsumennya
+  # tinggal di module yang memiliki `table-session` (cafe-order), sesuai pola
+  # yang sudah dipakai dua arah lain di kafe ini: cafe-master mendengarkan
+  # event pesanan untuk mengubah status meja, dan cafe-order mendengarkan
+  # event meja untuk menutup sesi kunjungan. Keduanya sama-module dengan
+  # entity yang ditulisnya, sehingga tidak ada akses lintas-module dari script.
+  events:
+    - name: on_cleared
+      description: "Meja dikosongkan kasir — kunjungan di meja itu selesai"
+      type: async
+      publish: { durable: true }
+      deliver:
+        - channel: reliable_event
   indexes:
     - fields: [branch_id, code]
       unique: true

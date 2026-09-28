@@ -91,30 +91,30 @@ spec:
       - { name: posted, label: "Diposting" }
       - { name: cancelled, label: "Dibatalkan" }
     transitions:
-      - { from: draft, to: counted, via: record-count }
-      - { from: counted, to: draft, via: reopen }
-      - { from: counted, to: posted, via: post-opname }
-      - { from: draft, to: cancelled, via: cancel-opname }
+      # Gate di TRANSISI (2026-09-27): keempat action ini tanpa `impl`, jadi
+      # `required_permission`-nya tidak diperiksa siapa pun — `PATCH status`
+      # hanya diperiksa `{plural}.update`. `post-opname` mengubah stok secara
+      # permanen, jadi gate-nya bukan formalitas.
+      - { from: draft, to: counted, via: record-count, require_permission: stock-opnames.record-count }
+      - { from: counted, to: draft, via: reopen, require_permission: stock-opnames.reopen }
+      - { from: counted, to: posted, via: post-opname, require_permission: stock-opnames.post-opname }
+      - { from: draft, to: cancelled, via: cancel-opname, require_permission: stock-opnames.cancel-opname }
   actions:
     # Aturan bisnis #14: opname tidak dihapus — koreksi lewat cancel-opname.
     - { name: delete, disabled: true }
     - { name: submit, disabled: true }
     - name: record-count
       description: "Simpan hasil hitung fisik"
-      required_permission: stock-opnames.record-count
       audit: true
     - name: reopen
       description: "Buka kembali untuk dihitung ulang"
-      required_permission: stock-opnames.reopen
       audit: true
     - name: post-opname
       # script membuat stock-movement (adjust) sebesar selisih.
       description: "Posting hasil hitung fisik — selisihnya jadi penyesuaian stok."
-      required_permission: stock-opnames.post-opname
       audit: true
     - name: cancel-opname
       description: "Batalkan opname"
-      required_permission: stock-opnames.cancel-opname
       audit: true
   indexes:
     - fields: [branch_id, transaction_date]

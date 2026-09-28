@@ -1,0 +1,33 @@
+apiVersion: formspec.dev/v1
+kind: Subscription
+metadata:
+  name: table-cleared
+  module: cafe-order
+  description: "Meja dikosongkan kasir → sesi kunjungan di meja itu ditutup"
+spec:
+  # Konsumen `cafe-master.dining-table.on_cleared` — dipancarkan oleh transisi
+  # `release` ("kasir menutup meja").
+  #
+  # KENAPA INI WAJIB ADA (bukan kerapian):
+  # 10.34c hanya mengizinkan SATU `table-session` ber-status `open` per meja,
+  # dan halaman masuk QR membuat sesi baru setiap kali tamu memindai. Bila sesi
+  # kunjungan tidak pernah ditutup, tamu KEDUA di meja yang sama gagal
+  # check-in: `UNIQUE constraint failed: cafe_order_table_sessions.
+  # _dining_table_id` → **500** di halaman masuk. Jadi menutup sesi adalah
+  # pasangan yang membuat index itu aman dipakai — bukan pilihan produk.
+  #
+  # KENAPA SUBSCRIPTION-nya MILIK cafe-order, bukan cafe-master:
+  # handler-nya menulis `cafe-order.table-session`, dan module pemilik entity
+  # itulah yang boleh menulisnya. Pola yang sama dipakai
+  # `cafe-master/table-occupancy` (arah sebaliknya: cafe-master mendengarkan
+  # event pesanan untuk mengubah meja). Tidak ada script yang menembus batas
+  # module, jadi `USES_VIOLATION` tidak relevan di kedua arah.
+  #
+  # Arah ketergantungannya tetap benar: cafe-order mendengarkan NAMA event
+  # yang sepenuhnya terkualifikasi dari cafe-master, dan cafe-master tidak tahu
+  # apa pun tentang sesi.
+  events:
+    - cafe-master.dining-table.on_cleared
+  handler:
+    type: script_ref
+    ref: cafe-order/close_session_on_clear

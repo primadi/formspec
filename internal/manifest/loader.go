@@ -19,6 +19,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/primadi/formspec/internal/permission"
 	"github.com/primadi/formspec/internal/schemaregistry"
 	"github.com/primadi/formspec/pkg/spec"
 )
@@ -380,6 +381,31 @@ func (l *Loader) Validate(raw RawManifest) error {
 		}
 		if err := spec.ValidateEntitySpec(entitySpec); err != nil {
 			return fmt.Errorf("%s: %w", raw.Source, err)
+		}
+		// `public` is a Service-only flag: an entity reaches anonymous callers
+		// through its App's `public_entities` allowlist, which is the single
+		// place an operator reviews that decision (kafe 10.39).
+		for i := range entitySpec.Actions {
+			if errs := permission.ValidatePublicAction(entitySpec.Actions[i], spec.KindEntity); len(errs) > 0 {
+				return fmt.Errorf("%s: %w", raw.Source, errs[0])
+			}
+		}
+	}
+
+	// Service actions carry `public`, the anonymous allowlist for a Service
+	// (there is no App-level `public_entities` for services). It is the only
+	// kind where the flag is legal, so it is also the only place that has to
+	// vet it — including the rate-limit requirement that keeps an anonymous
+	// endpoint from being an abuse vector.
+	if raw.Kind == "Service" && raw.Spec != nil {
+		serviceSpec, err := RawSpecToServiceSpec(raw.Spec.(map[string]any))
+		if err != nil {
+			return fmt.Errorf("%s: invalid spec: %w", raw.Source, err)
+		}
+		for i := range serviceSpec.Actions {
+			if errs := permission.ValidatePublicAction(serviceSpec.Actions[i], spec.KindService); len(errs) > 0 {
+				return fmt.Errorf("%s: %w", raw.Source, errs[0])
+			}
 		}
 	}
 

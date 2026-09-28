@@ -586,6 +586,17 @@ func GenerateUIServiceRoutes(svcReg *service.Registry) []RouteDescriptor {
 				Protocol:           spec.ProtocolREST,
 				Handler:            "service",
 				RequiredPermission: perm,
+				// A Service action that declares `public: true` is callable by
+				// anonymous callers (kafe 10.39). A Service has no App-level
+				// `public_entities` allowlist, so this flag IS its allowlist —
+				// which is why validation requires a rate limit alongside it.
+				//
+				// The gate below pairs Public with RequiredPermission: anonymous
+				// callers pass on the public grant, while a SIGNED-IN caller on
+				// the same route still needs the permission (see
+				// registerRouteWithPattern). Without that pairing, making an
+				// action public would also make it permission-free for staff.
+				Public: actionSpec.Public,
 			})
 		}
 	}
