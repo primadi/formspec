@@ -7,6 +7,19 @@ spec:
   root_url: /
   access: public
   app_renderer: no-nav
+  # `no-nav` = tanpa bar DEFAULT, bukan tanpa chrome. Region tetap ada dan
+  # boleh diisi (frontend/05-app-kinds.md §4.2): di sini topbar = brand bar
+  # minimal dan footer menyala, tanpa nav dan tanpa kontrol auth (pelanggan
+  # tidak login). Sesi staf yang kebetulan mendarat di sini kini tetap punya
+  # jalan keluar lewat user menu — kontrol sesi dirender bila ada token,
+  # terlepas dari `chrome.auth`.
+  chrome:
+    regions:
+      topbar: auto
+      sidebar: none
+      rightbar: none
+      bottombar: none
+      footer: auto
   # Anonim hanya boleh menyentuh entity & aksi yang didaftarkan di bawah.
   # Sebelum `public_entities` ada, `access: public` memberi anonim
   # `list`/`find`/`create` untuk SELURUH entity di module yang di-mount —
@@ -58,6 +71,20 @@ spec:
   modules:
     - cafe-master
     - cafe-order
+  # Permukaan App publik = target menu ∪ `registered_views`. kafe-qr sengaja
+  # TIDAK punya menu (no-nav), jadi satu-satunya deklarasi permukaannya ada di
+  # sini: tiga Page yang dilalui pelanggan dari scan QR sampai lihat status.
+  # Tanpa daftar ini tidak ada satu pun route yang dibuat (semuanya 404) —
+  # entity di `public_entities` TETAP dapat diakses lewat API (katalog/pesanan),
+  # tetapi tidak punya route yang bisa dibuka langsung di SPA.
+  #
+  #   /t/:qr_token       table-open       → buka/gabung sesi meja dari token QR
+  #   /menu/:session_id  menu-catalog     → katalog + keranjang + kirim pesanan
+  #   /status/:guest_token order-status-page → status pesanan setelah submit
+  registered_views:
+    - { view: cafe-order/table-open }
+    - { view: cafe-order/menu-catalog }
+    - { view: cafe-order/order-status-page }
   # menu dikosongkan: `no-nav` default tidak merender nav sama sekali.
   # Halaman pelanggan sudah ada: `cafe-order/pages/menu-catalog.yaml`
   # (katalog + keranjang + kirim pesanan). UX itu datang dari `picker` pada child

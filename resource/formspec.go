@@ -83,6 +83,14 @@ type Config struct {
 	IdempotencyTTL     time.Duration // TTL for idempotency keys (default: db.DefaultIdempotencyTTL)
 	WorkspaceID        string        // Tenant scope used by script save/load/call handlers (default: "default")
 	MaxSessionsPerUser int           // Concurrent session limit per user (todo 6.5.3); 0 = unlimited
+	// SkipSchemaSync opens the app WITHOUT running the schema sync (structural
+	// migration + storage reconciliation). It exists for one caller: the data
+	// repair surface (`formspec repl --no-sync`). A refused migration is fatal
+	// to a normal boot BY DESIGN (01-core-basic.md §4.4) — but the refusal is
+	// precisely what blocks the repair from running, so the repair needs a boot
+	// that does not touch the schema. Nothing else should set this: the app is
+	// then running against storage it did not verify.
+	SkipSchemaSync bool
 	// EnableAPIAuth mounts /api/v1/auth/* (login/refresh) on the external
 	// surface. Default false — auth lives on the always-available UI surface
 	// (/_ui/auth/*); /api/v1 is deny-by-default for external services
@@ -464,8 +472,14 @@ func New(cfg Config) (*App, error) {
 	permReg := reg.GetPermissionRegistry()
 	auth.SetPermissionChecker(permission.NewAuthChecker(permReg))
 
-	if _, err := reg.SyncSchema(context.Background()); err != nil {
-		return nil, fmt.Errorf("sync schema: %w", err)
+	// Schema sync is skipped only for the data repair surface (see
+	// Config.SkipSchemaSync). Normal boots — dev, serve, the registry — must go
+	// through it: a refused change has to stop the process rather than leave a
+	// half-applied schema behind.
+	if !cfg.SkipSchemaSync {
+		if _, err := reg.SyncSchema(context.Background()); err != nil {
+			return nil, fmt.Errorf("sync schema: %w", err)
+		}
 	}
 
 	// Wire the period-closing guard (todo 7.11.5): transaction writes whose
@@ -732,6 +746,17 @@ func New(cfg Config) (*App, error) {
 		authSvc.SetRoleStore(auth.NewRoleStore(roleStore))
 	}
 	authSvc.SetMaterializer(auth.NewMaterializer(uiReg, reg))
+	// Public Apps are exempt from the 0-permission login gate: their
+	// public_entities floor authorizes the surface (plan app-scoped-login.md
+	// D6 — e.g. the registry portal, which is `access: public` and accepts
+	// login for vendor accounts).
+	authSvc.SetAppAccessFunc(func(workspace, app string) bool {
+		a, ok := resolvedApps[app]
+		if !ok || a.Spec == nil || !a.Spec.MountsWithin(workspace) {
+			return false
+		}
+		return a.Spec.Access == spec.AppAccessPublic
+	})
 	// Concurrent session limit per user (todo 6.5.3); 0 = unlimited.
 	if cfg.MaxSessionsPerUser > 0 {
 		authSvc.SetMaxSessionsPerUser(cfg.MaxSessionsPerUser)

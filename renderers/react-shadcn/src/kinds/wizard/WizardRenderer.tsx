@@ -17,7 +17,8 @@ import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
 import { resolveEntityRef } from "@/engine/entityRef"
 import { entityFieldHelp, entityFieldLabel } from "@/engine/derive"
-import { apiPost } from "@/lib/api"
+import { resolveWizardCommit } from "@/engine/wizardCommit"
+import { apiPatch, apiPost } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import SearchSelect from "./SearchSelect"
@@ -29,7 +30,7 @@ interface WizardRendererProps {
 
 export default function WizardRenderer({ entry }: WizardRendererProps) {
   const navigate = useAppNavigate()
-  const { adminPath } = useSurface()
+  const { surfacePath } = useSurface()
   const [searchParams, setSearchParams] = useSearchParams()
   const getClient = useSessionStore((s) => s.getClient)
   const getEntity = useMetaStore((s) => s.getEntity)
@@ -44,6 +45,10 @@ export default function WizardRenderer({ entry }: WizardRendererProps) {
 
   const steps = entry.spec.steps
   const currentStep = parseInt(searchParams.get("step") ?? "0", 10)
+  // The record this wizard acts on, when it finalizes an existing one (a
+  // transition). Supplied by whoever launched the wizard — DetailPage puts the
+  // detail route's id here. A wizard that plain-creates its entity has none.
+  const recordId = searchParams.get("id") ?? undefined
 
   // Each open wizard is identified by an instance id in the URL so that
   // ordinary multi-tab use (Ctrl+click) and page refresh don't clobber or
@@ -159,14 +164,47 @@ export default function WizardRenderer({ entry }: WizardRendererProps) {
       const client = getClient()
       let response: Record<string, unknown> = {}
       if (entry.spec.action) {
-        // A custom commit action — expected to be an entity-scoped action
-        // (POST .../{id}/{action}), for wizards that finalize an existing
-        // draft record rather than create one from scratch.
-        response = await apiPost<Record<string, unknown>>(
-          client,
-          entry.spec.action,
-          stepData,
-        )
+        // A commit action. Whether that action HAS its own route decides the
+        // call — the same rule DetailPage uses (kafe 10.48), resolved from the
+        // bundle rather than probed against the endpoint:
+        //
+        //   has_route        → POST /{module}/{entity}/{id}/{action}
+        //   via-only (none)  → PATCH /{module}/{entity}/{id} with {state: to}
+        //
+        // The old code POSTed `spec.action` RAW, which resolved to
+        // `…/_ui/entity/close-shift` — a path that cannot exist — and never
+        // carried the record id, so a wizard committing a via-only transition
+        // could not work at all.
+        const [entityModule, entityName] = entry.spec.entity
+          ? resolveEntityRef(entry.spec.entity, entry.module)
+          : [entry.module, ""]
+        const target = getEntity(entityModule, entityName)
+        if (!target) {
+          throw new Error(
+            `entity ${entityModule}.${entityName} not found — a wizard with \`action\` must declare the entity that action belongs to`,
+          )
+        }
+        const commit = resolveWizardCommit({
+          entity: target,
+          action: entry.spec.action,
+          id: recordId,
+          collected: stepData,
+        })
+        if (commit.kind === "error") {
+          throw new Error(commit.message)
+        }
+        response =
+          commit.kind === "action"
+            ? await apiPost<Record<string, unknown>>(
+                client,
+                commit.path,
+                commit.body,
+              )
+            : await apiPatch<Record<string, unknown>>(
+                client,
+                commit.path,
+                commit.body,
+              )
       } else if (entry.spec.entity) {
         // No action declared: every field the target entity needs was
         // already resolved during the wizard's steps (e.g. patient_id from
@@ -203,8 +241,14 @@ export default function WizardRenderer({ entry }: WizardRendererProps) {
         goToStep(0)
       } else if (onComplete?.redirect) {
         navigate(onComplete.redirect)
+      } else if (entity) {
+        // Default landing: the wizard's own entity list, ON THE APP SURFACE the
+        // wizard was opened from. (The old `adminPath()` default sent App users
+        // to the `_admin` surface — a surface they often cannot even access,
+        // and which no longer exists: plan app-scoped-login.md D4.)
+        navigate(surfacePath(entity.module, entity.plural))
       } else {
-        navigate(adminPath())
+        navigate(surfacePath())
       }
     } catch (err) {
       toast.error(

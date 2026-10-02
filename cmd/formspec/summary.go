@@ -55,7 +55,10 @@ type summaryFlags struct {
 // parseSummaryFlags parses `formspec summary <sub>` arguments. Manual parsing
 // (like `seed`/`repl`) so flags may precede or follow the positional entity.
 func parseSummaryFlags(sub string, args []string, wantEntity bool) (*summaryFlags, error) {
-	f := &summaryFlags{specPath: "spec", dsn: "sqlite:.formspec/data.db"}
+	// Defaults from formspec-app.yaml (project_defaults.go), same as `formspec dev`:
+	// summary projections are rebuilt from the database the server reads.
+	d := loadProjectDefaults()
+	f := &summaryFlags{specPath: d.SpecPath, dsn: d.DSN, workspace: d.WorkspaceID}
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--spec", "-spec":

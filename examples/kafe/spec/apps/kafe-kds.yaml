@@ -15,6 +15,11 @@ spec:
   # harga, atau laporan — batas keamanan perangkat.
   modules:
     - cafe-order
+  # Permukaan App = target menu ∪ `registered_views` (plan registered-views.md).
+  # KDS sengaja tanpa menu (kiosk); satu-satunya view-nya adalah papan Kanban.
+  # Tanpa entri ini tidak ada route yang dibuat — KDS akan kosong.
+  registered_views:
+    - { view: cafe-order/order-board-kds }
   # Tanpa menu: `chrome.nav` default `none` pada no-nav.
   # Papan KDS = kind: Kanban `order-board-kds` (status_field: status,
   # realtime: true), ditulis di Tahap 3. Realtime Kanban sudah berfungsi hari

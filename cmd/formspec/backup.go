@@ -191,17 +191,20 @@ func runBackup(args []string) {
 }
 
 func runBackupCreate(args []string) {
-	specPath := "spec"
-	dsn := "sqlite:.formspec/data.db"
+	// Defaults from formspec-app.yaml (project_defaults.go), same as `formspec dev`.
+	// The workspace follows the config file too, so a project that names its
+	// tenant there is backed up from that tenant without extra flags.
+	d := loadProjectDefaults()
+	specPath := d.SpecPath
+	dsn := d.DSN
 	out := ""
 	full := false
 	filter := "" // "module" or "module/entity" (4.8.2)
-	// Workspace to read from. Default stays "demo" for backward compatibility,
-	// but a named deployment (kafe) must be able to point at its own tenant —
-	// without this the command reported "0 record(s)" for every real app while
-	// looking successful (todo 4.8.7).
-	workspace := "demo"
-	workspaceExplicit := false
+	// Workspace to read from. The literal "demo" used to sit here and made the
+	// command report "0 record(s)" for every real app while looking successful
+	// (todo 4.8.7); it now comes from the config file, then rule #48.
+	workspace := d.WorkspaceID
+	workspaceExplicit := d.WorkspaceExplicit
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--spec", "-spec":
@@ -512,12 +515,14 @@ func manifestRecordCount(m BackupManifest) int {
 
 func runRestore(args []string) {
 	from := ""
-	specPath := "spec"
-	dsn := "sqlite:.formspec/data.db"
+	// Defaults from formspec-app.yaml (project_defaults.go), same as `formspec dev`.
+	d := loadProjectDefaults()
+	specPath := d.SpecPath
+	dsn := d.DSN
 	conflict := "skip"
 	dryRun := false
 	workspace := ""
-	workspaceExplicit := false
+	workspaceExplicit := d.WorkspaceExplicit
 	var mapResource []string
 	for i := 0; i < len(args); i++ {
 		switch args[i] {

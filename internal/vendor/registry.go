@@ -293,7 +293,12 @@ func (c *RegistryClient) PublishModule(ctx context.Context, opts PublishOptions)
 	}
 	return &PublishResult{
 		VendorID: vendorID, ModuleID: moduleID, VersionID: versionID,
-		URL: fmt.Sprintf("%s/default/_admin", c.BaseURL),
+		// The published module is browsed in the registry's public catalog —
+		// the registry App owns the workspace root (root_url "/"), and the
+		// `/listing/module-catalog` Listing is its catalog route. This used to
+		// point at `/default/_admin`, the derived admin panel that was retired
+		// (plan app-scoped-login.md D4).
+		URL: fmt.Sprintf("%s/default/listing/module-catalog", c.BaseURL),
 	}, nil
 }
 

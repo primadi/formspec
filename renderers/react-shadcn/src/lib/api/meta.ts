@@ -51,9 +51,8 @@ function createMetaClient(
  * scoped to one resolved App (Core §4.4). `appName` is required whenever the
  * workspace resolves to more than one App — see fetchMetaApps/detectAppName.
  *
- * Pass `{ admin: true }` instead for the `_admin` surface: an unscoped bundle
- * (every module's entities, no App concept) gated by a single binary
- * permission (`_admin.access`) rather than the App's `?app=` scoping.
+ * There is no unscoped/admin variant any more (plan app-scoped-login.md D4):
+ * the derived admin panel was retired, so a bundle is ALWAYS App-scoped.
  *
  * Pass `{ grants: true }` (with `appName`) for the grants-editor bundle:
  * app-scoped but NOT permission-filtered — the role form must list every
@@ -64,7 +63,6 @@ export async function fetchMetaBundle(
   workspace: string,
   opts?: {
     appName?: string
-    admin?: boolean
     grants?: boolean
     token?: string
     getToken?: () => string
@@ -74,11 +72,9 @@ export async function fetchMetaBundle(
   },
 ): Promise<MetaBundle> {
   const client = createMetaClient(workspace, opts?.token, opts)
-  const searchParams = opts?.admin
-    ? { admin: "true" }
-    : opts?.appName
-      ? { app: opts.appName, ...(opts.grants ? { grants: "true" } : {}) }
-      : undefined
+  const searchParams = opts?.appName
+    ? { app: opts.appName, ...(opts.grants ? { grants: "true" } : {}) }
+    : undefined
   const response = await client.get(
     "_meta/ui",
     searchParams ? { searchParams } : undefined,

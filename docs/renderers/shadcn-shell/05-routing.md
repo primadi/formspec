@@ -24,8 +24,9 @@ yang sudah ada, dan item yang route-nya tidak ada justru dibuang (§5).
 | 4   | Param         | `:id`                                        | pola route dinamis                    |
 | 5   | Query overlay | `?action=create&form=promo-form&mode=drawer` | aksi UI (jalur D)                     |
 
-Khusus `_admin`, lapis 2 diganti literal `_admin` dan seluruh bundle tidak
-di-scope App (`?admin=true`).
+Setiap permukaan adalah **App** — tidak ada lapis 2 khusus. **(Historis: dulu
+`_admin` mengganti lapis 2 dengan literal `_admin` dan bundle unscoped
+`?admin=true`; keduanya sudah dipensiunkan — plan `app-scoped-login.md` D4.)**
 
 ### Cara prefix dipasang, dan satu jebakannya
 
@@ -54,10 +55,11 @@ dengan membuang `mountPrefix`, bukan `surfacePath`.
 
 ### Resolusi App pada URL tak ber-App
 
-`RootSurface` (`App.tsx`) melayani `/{ws}/*` dan memilih App lewat
+`WorkspaceRoute` (`App.tsx`) melayani `/{ws}/*` dan memilih App lewat
 `detectApp()` (`stores/meta.ts`) — **prefix `root_url` terpanjang** yang cocok,
 dengan `root_url: "/"` sebagai kecocokan terakhir. Kalau tidak ada App yang
-mengklaim path itu, pengguna diarahkan ke `_admin`. Ini penting untuk workspace
+mengklaim path itu, pengguna melihat halaman 404 jujur (dulu dialihkan ke
+`_admin`, yang sudah dipensiunkan). Ini penting untuk workspace
 dengan banyak App (kafe: `kafe-pos` `/app/pos`, `kafe-kds` `/app/kds`,
 `kafe-qr` `/`).
 
@@ -146,6 +148,24 @@ key sebagai fallback. Keduanya diterima oleh endpoint detail/action.
 | Dibaca oleh       | `OverlayHost` (`shell/OverlayHost.tsx`)                                                  |
 | Form dipilih oleh | `getForm(formName)`; fallback `resolveForm` bila hanya `entity=`                         |
 | Mode              | dari URL (`action==="edit" ? "edit" : "create"`), container dari `spec.render.mode`      |
+
+### E. Auth screen — root permukaan
+
+Bukan salah satu jalur A–D: **tidak dihasilkan `buildRoutes`**, melainkan
+didaftarkan langsung di `App.tsx`.
+
+| Aspek         | Nilai                                                                                          |
+| ------------- | ---------------------------------------------------------------------------------------------- |
+| Slot          | `change_password_page` (login/register/setup/reset/oauth punya jalurnya sendiri)               |
+| Path `_admin` | `/{ws}/_admin/change-password` — route statis top-level, di luar `SurfaceShell` (tanpa chrome) |
+| Path App      | `/{ws}{root_url}/change-password` — route bersarang di dalam `SurfaceShell` (dengan chrome)    |
+| Komponen      | `AuthPage` — Page override dari `App.spec.auth.<slot>` bila ada, jika tidak aset bawaan shell  |
+
+Path App **tidak bisa** dideklarasikan statis karena `root_url` bebas; ia
+dihitung sebagai `surfacePath − mountPrefix` (§1) dan karena itu ikut aturan
+yang sama dengan route root App. Tanpa pendaftaran per-permukaan, item
+"Change Password" di user menu (`useSurface().surfacePath`) menabrak catch-all
+"Page not found" di setiap permukaan App.
 
 Cara `TableRenderer` memilih Form yang dikirim inilah satu-satunya pemilihan
 yang **tidak deterministik** hari ini:
@@ -355,12 +375,12 @@ test.
 1. **`routeExists` bertanya ke daftar Form, bukan ke `bundle.pages`.**
    Ketika derived Page disuppress (§2 jalur B), item menu ber-`view: <form>`
    tetap lolos filter sementara route-nya tidak terdaftar → 404. Todo 5.22.6.
-2. **`_admin` buta `permissions`/`when`.** Bundle `?admin=true` memakai
-   checker always-true dan menu `_admin` dibangun klien dari `bundle.entities`
-   (`deriveMenuItems`), bukan dari `App.spec.menu`. Pemegang `_admin.access`
-   melihat semua entity di sidebar; klik-nya lalu 403 dari endpoint data. UX
-   buruk, bukan kebocoran. Todo 5.22.7.
-3. **`MenuItem.when` tidak berlaku di `_admin`** (konsekuensi butir 2).
+2. **~~`_admin` buta `permissions`/`when`~~ — SELESAI** dengan dihapusnya
+   surface `_admin` (plan `app-scoped-login.md` D4). Tidak ada lagi bundle
+   always-true: setiap bundle App-scoped dan permission-filtered, jadi sidebar
+   tidak mungkin menampilkan entity yang endpoint-nya akan 403.
+3. **~~`MenuItem.when` tidak berlaku di `_admin`~~ — Selesai** bersama butir 2
+   (permukaan yang bersangkutan sudah tidak ada).
 4. **Pemilihan Form jalur D tidak deterministik** saat >1 Form untuk satu entity
    (§2 jalur D). Tidak ada field manifest untuk menyatakannya; solusi hari ini
    hanya penamaan/`form.ref` eksplisit.

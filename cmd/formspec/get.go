@@ -24,7 +24,12 @@ import (
 )
 
 func runGet(args []string) {
-	specPath := "spec"
+	// The spec path comes from formspec-app.yaml (project_defaults.go). `get` never
+	// opens the database, but it still reads the spec tree — and in a project whose
+	// config points somewhere other than `spec`, the literal would inspect a
+	// different tree than the one the server serves. That is the same class of
+	// divergence, one step earlier.
+	specPath := loadProjectDefaults().SpecPath
 	output := "table"
 	var positional []string
 	for i := 0; i < len(args); i++ {
@@ -103,7 +108,8 @@ func runGet(args []string) {
 }
 
 func runDescribe(args []string) {
-	specPath := "spec"
+	// Same reason as runGet above: the spec path is a project setting.
+	specPath := loadProjectDefaults().SpecPath
 	var positional []string
 	for i := 0; i < len(args); i++ {
 		switch args[i] {

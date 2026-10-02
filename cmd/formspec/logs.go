@@ -16,22 +16,28 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/primadi/formspec/pkg/spec"
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
 )
 
 func runLogs(args []string) {
-	workspace := spec.DefaultWorkspaceSlug
+	// Defaults from formspec-app.yaml (project_defaults.go), same as `formspec dev`:
+	// reading the event log of a different database than the server writes to is
+	// the same class of failure as repairing the wrong one.
+	d := loadProjectDefaults()
+	specPath := d.SpecPath
+	workspace := d.WorkspaceID
+	workspaceExplicit := d.WorkspaceExplicit
 	module := ""
 	entityName := ""
 	limit := 50
 	output := "pretty"
-	dsn := "sqlite:.formspec/data.db"
+	dsn := d.DSN
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--workspace", "-workspace":
 			if i+1 < len(args) {
 				workspace = args[i+1]
+				workspaceExplicit = true
 				i++
 			}
 		case "--module", "-module":
@@ -60,13 +66,14 @@ func runLogs(args []string) {
 				i++
 			}
 		case "--help", "-h":
-			_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec logs [--workspace <ws>] [--module <m>] [--entity <e>] [--limit <n>] [--output pretty|json] [--dsn <dsn>]\n")
+			_, _ = fmt.Fprintf(os.Stderr, "Usage: formspec logs [--workspace <ws>] [--module <m>] [--entity <e>] [--limit <n>] [--output pretty|json] [--spec <path>] [--dsn <dsn>]\n")
 			os.Exit(0)
 		default:
 			_, _ = fmt.Fprintf(os.Stderr, "formspec logs: unknown flag %q\n", args[i])
 			os.Exit(2)
 		}
 	}
+	_, dsn, workspace = finishProjectDefaults(specPath, dsn, workspace, workspaceExplicit)
 	if output != "pretty" && output != "json" {
 		_, _ = fmt.Fprintf(os.Stderr, "formspec logs: --output must be pretty|json\n")
 		os.Exit(2)

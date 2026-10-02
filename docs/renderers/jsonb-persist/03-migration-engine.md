@@ -94,7 +94,7 @@ diff` tetap murni dry-run — pembuangannya terjadi saat apply.
   module atau entity ber-plural tidak beraturan bisa diam-diam lolos dari
   guard referenceability (§1.2 core-basic) alih-alih ditolak.
 - **Data repair & backfill** — di luar engine: operator menjalankannya sekali
-  lewat `formspec repl -f`.
+  lewat `formspec repl --no-sync -f`.
 
 ## 5. Keamanan Migrasi
 

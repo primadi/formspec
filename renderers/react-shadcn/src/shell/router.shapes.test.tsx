@@ -284,3 +284,39 @@ describe("route resolution vs the menu's expectations", () => {
     }
   })
 })
+
+describe("Jalur C — the App surface allowlist withholds derived routes", () => {
+  // registered_views (plan docs_internal/plan/registered-views.md): the server
+  // ships an unexposed entity for relations/pickers but marks it `routable:
+  // false`. The client must register NO derived route for it, so a direct URL
+  // falls through to the surface catch-all (404).
+  it("registers no derived route for a non-routable entity", () => {
+    const bundle = makeBundle({
+      entities: [
+        makeEntity({ name: "category", plural: "categories", routable: false }),
+      ],
+    })
+    const paths = routePaths(bundle)
+    expect(paths).not.toContain("/kafe/app/pos/cafe-master/categories")
+    expect(paths).not.toContain("/kafe/app/pos/cafe-master/categories/new")
+    expect(paths).not.toContain("/kafe/app/pos/cafe-master/categories/:id")
+    expect(paths).not.toContain("/kafe/app/pos/cafe-master/categories/:id/edit")
+    expect(matches(bundle, "/kafe/app/pos/cafe-master/categories")).toBe(false)
+  })
+
+  it("still registers routes for a routable entity", () => {
+    const bundle = makeBundle({
+      entities: [
+        makeEntity({ name: "category", plural: "categories", routable: true }),
+      ],
+    })
+    expect(routePaths(bundle)).toContain("/kafe/app/pos/cafe-master/categories")
+  })
+
+  it("keeps legacy behaviour when routable is unresolved (older server)", () => {
+    const bundle = makeBundle({
+      entities: [makeEntity({ name: "category", plural: "categories" })],
+    })
+    expect(routePaths(bundle)).toContain("/kafe/app/pos/cafe-master/categories")
+  })
+})

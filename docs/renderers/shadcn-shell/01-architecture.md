@@ -41,30 +41,29 @@ tapi tidak dipakai** — lihat §5.
 
 ## 3. Bootstrap & Resolusi App
 
-`Root()` (`App.tsx`) mendaftarkan dua route top-level:
-`/:workspace/_admin/*` dan `/:workspace/app/*`. `SurfaceShell({surface})`
+`Root()` (`App.tsx`) mendaftarkan route framework (`/:workspace/_admin/setup`,
+`/oauth/*`, `/change-password`) dan `/:workspace/*` untuk permukaan App.
+`WorkspaceRoute` me-resolve App pemilik path, lalu `SurfaceShell({app})`
 menjalankan boot:
 
-1. `useSessionStore.boot(workspace)` — fetch `/_meta/me`; gagal/401 → sesi dev
-   sintetis `{roles:["admin"], permissions:["*"]}` (bukan blocking error).
-2. Muat bundle lewat `useMetaStore.load()`, **beda per surface**:
-   - `_admin` — `fetchMetaBundle({admin:true})`: bundle unscoped-App,
-     digerbangi satu permission `_admin.access` (bukan filter per-manifest).
-   - `app` — panggil `fetchMetaApps()` (`GET .../_meta/apps`) dulu untuk
-     enumerasi App yang resolved di workspace, pilih satu lewat
-     `detectAppName()` (cocokkan `root_url` terpanjang terhadap path
-     browser saat ini), baru `fetchMetaBundle({appName})`.
+1. `useSessionStore.boot(workspace, app)` — fetch `/_meta/me` dengan sesi App
+   tersebut (satu slot sessionStorage per `(workspace, App)`).
+2. Muat bundle lewat `useMetaStore.load()` — **semua App-scoped**: panggil
+   `fetchMetaApps()` (`GET .../_meta/apps`) untuk enumerasi App yang resolved,
+   pilih satu lewat `detectAppName()` (cocokkan `root_url` terpanjang terhadap
+   path browser saat ini), baru `fetchMetaBundle({appName})`. Varian unscoped
+   `{admin:true}` (`_admin.access`) sudah **tidak ada** (plan
+   `app-scoped-login.md` D4).
 3. `buildRoutes()` ([`02-derivation-engine.md`](02-derivation-engine.md) §4)
    membangun route table dari bundle: route `kind: Page` dari `spec.route`,
    route CRUD turunan per entity, satu route per entry
    Dashboard/Widget/Wizard/Kanban/Timeline/Report/Print
    (`/dashboard/{name}`, dst).
-4. `<SideNavShell>` membungkus seluruhnya. Path tak cocok dan index jatuh ke
-   `DefaultRedirect`: surface `app` menelusuri `bundle.menu` depth-first
-   (mendarat di item menu authored pertama); surface `_admin` jatuh ke list
-   derived entity non-summary pertama.
-5. 403 (`_admin.access` tidak dimiliki) dan error koneksi adalah layar
-   eksplisit, bukan crash.
+4. `RegionShell` membungkus seluruhnya. Path tak cocok dan index jatuh ke
+   `DefaultRedirect`: telusuri `bundle.menu` depth-first (mendarat di item menu
+   authored pertama), fallback ke list derived entity non-summary pertama.
+5. 403 (bundle App ditolak) dan error koneksi adalah layar eksplisit, bukan
+   crash.
 
 Resolusi multi-App-per-workspace (`_meta/apps`, `root_url`,
 `detectAppName()`) mengonsumsi kontrak App yang lebih baru dari yang
@@ -98,8 +97,11 @@ modal|drawer` di manifest karena itu benar-benar mengubah presentasi. Jalur
 - **`engine/registry.tsx` sudah dihapus.** Wiring aktual memakai `lazy()` map
   hardcoded di `shell/router.tsx`; tidak ada file registry generik lagi. (Item
   ini dulu menyebutnya "kode mati" — sekarang tidak ada sama sekali.)
-- **`deriveMenuItems()` sudah dipakai** — `hooks/useResolvedMenu.ts` memanggilnya
-  untuk cabang `_admin`, bukan lagi membangun menu inline di `Sidebar.tsx`.
+- **`deriveMenuItems()` kini TIDAK dipakai lagi.** Ia dulu membangun sidebar
+  `_admin` dari `bundle.entities`; surface itu dipensiunkan (plan
+  `app-scoped-login.md` D4), jadi menu selalu berasal dari `App.spec.menu` yang
+  authored. Helper-nya tetap ada untuk pemakai yang ingin pohon module→entity
+  mekanis, tapi shell tidak memanggilnya lagi.
 - **`TableRenderer` tidak lagi hardcode prefiks `/_admin`** — navigasi memakai
   `useSurface().surfacePath`, sehingga tabel di surface `app` tetap di `app`.
 - **Realtime sudah ada** — `hooks/useRealtime.ts` (subscriber union + delta) dan

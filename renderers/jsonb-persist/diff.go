@@ -493,7 +493,14 @@ func DiffShapes(entity string, old, desired *EntitySnapshot, decls Declarations)
 		remedy := ""
 		if ni.Unique {
 			detail = "new unique index"
-			remedy = "repair the duplicates first — run the repair once via `formspec repl`, then apply again"
+			// The repair has to open a database whose schema sync is *refused*
+			// — which is exactly what this message is about — so the command it
+			// names must be the one that opens without syncing. Naming plain
+			// `formspec repl` sent operators into the same refusal, and that
+			// surface cannot resolve entity fields either (its resource.* is not
+			// wired), so the writer is ctx.db().
+			remedy = "repair the duplicates first — run the repair once via " +
+				"`formspec repl --no-sync -f repair.star` (write through ctx.db()), then apply again"
 		}
 		changes = append(changes, Change{
 			Class:  ClassAdditive,

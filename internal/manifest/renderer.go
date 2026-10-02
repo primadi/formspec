@@ -157,6 +157,12 @@ func (r *RendererRegistry) ResolveRenderer(implements, stackFamily, explicit str
 
 // ValidateSlotTiers enforces 5.16.2: `accepts_slots` only from tier page|app,
 // `implements_slot` only from tier component.
+//
+// `implements_slot` may name either a slot declared by some VisualSpecKind or
+// one of the intrinsic App chrome regions — topbar/sidebar/rightbar/bottombar/
+// footer (frontend/05-app-kinds.md §5, spec.ChromeRegionNames). The regions
+// need no `accepts_slots` declaration because the App shell already provides
+// the hole; the tier rule is the only thing that applies to them.
 func (r *RendererRegistry) ValidateSlotTiers() []string {
 	var errs []string
 	for _, vk := range r.VisualKinds {

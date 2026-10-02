@@ -29,15 +29,41 @@ export function SetupScreen() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // The login screen this wizard chains into (carries the original URL as
-  // `returnTo` so the user lands back where they came from after signing in).
-  const loginPath =
-    forward &&
-    forward.startsWith("/") &&
-    !forward.startsWith("//") &&
-    forward !== "/"
-      ? `/${workspace}/_admin/login?returnTo=${encodeURIComponent(forward)}`
-      : `/${workspace}/_admin/login`
+  // The login screen this wizard chains into. Login is per-App (plan
+  // app-scoped-login.md D1), so the target must be an App that ACTUALLY accepts
+  // login — resolved from /_meta/apps, which is public (no session needed). The
+  // original URL rides along as `returnTo` so the user lands back where they
+  // came from after signing in.
+  const [loginPath, setLoginPath] = useState(`/${workspace}`)
+  useEffect(() => {
+    let cancelled = false
+    fetch(`/${workspace}/_ui/_meta/apps`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => {
+        if (cancelled) return
+        const apps = (body?.data ??
+          []) as import("@/types/manifest").AppSummary[]
+        const target = apps.find((a) => a.accepts_login) ?? apps[0]
+        if (!target) return // no App yet — the base path is the best we have
+        const root = (target.root_url ?? "/app").replace(/\/+$/, "")
+        const path = `/${workspace}${root}/login`
+        setLoginPath(
+          forward &&
+            forward.startsWith("/") &&
+            !forward.startsWith("//") &&
+            forward !== "/"
+            ? `${path}?returnTo=${encodeURIComponent(forward)}`
+            : path,
+        )
+      })
+      .catch(() => {
+        // App list unreachable — the POST will surface a proper error and the
+        // user can navigate manually.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [workspace, forward])
 
   // Setup is one-time: when the workspace already has users, the wizard is a
   // dead end (POST would fail with 409 SETUP_COMPLETE) — send the visitor

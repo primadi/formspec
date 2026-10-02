@@ -4,7 +4,7 @@
 // 1. Parse URL → workspace + surface
 // 2. Fetch _meta/me + _meta/ui → fill stores
 // 3. Build route table from meta bundle
-// 4. Render SideNavShell with router
+// 4. Render RegionShell with router
 
 import { lazy, Suspense, useEffect, useMemo, useState } from "react"
 import {
@@ -25,14 +25,14 @@ import { detectApp, useMetaStore } from "@/stores/meta"
 import { usePrefsStore } from "@/stores/prefs"
 import { usePageTransitionEffect } from "@/lib/navigation"
 import {
-  SideNavShell,
-  NoNavShell,
-  TopNavShell,
+  RegionShell,
   OAuthLinkCallback,
   AuthPage,
+  NoAccessState,
   buildRoutes,
 } from "@/shell"
 import { SwitchContextScreen } from "@/shell/SwitchContextScreen"
+import { pickLandingEntity } from "@/shell/landing"
 import ThemeRenderer from "@/kinds/theme/ThemeRenderer"
 import { useTheme } from "@/hooks/useTheme"
 import { useAutoLogout } from "@/hooks/useAutoLogout"
@@ -43,13 +43,15 @@ const PageRenderer = lazy(() => import("@/kinds/page/PageRenderer"))
 import type { AppSummary } from "@/types/manifest"
 
 // ── Shell registry ──
-// Maps the App renderer archetype (frontend/05-app-kinds.md) to its concrete
-// implementation in this shell. Today react-shadcn fills all three; other
-// stack_families register their own implementations later.
+// All three App archetypes now render through RegionShell, which composes the
+// resolved chrome REGIONS (frontend/05-app-kinds.md §4.2): the archetype is a
+// preset over one region map, so `sidebar-nav` is `no-nav` + a filled sidebar.
+// The per-archetype components are gone; the archetype is passed through as
+// the preset selector.
 const APP_SHELLS: Record<string, React.ComponentType> = {
-  "sidebar-nav": SideNavShell,
-  topnav: TopNavShell,
-  "no-nav": NoNavShell,
+  "sidebar-nav": RegionShell,
+  topnav: RegionShell,
+  "no-nav": RegionShell,
 }
 
 // ── Root: Parse URL and route to surface ──
@@ -70,26 +72,19 @@ function Root() {
     <BrowserRouter useTransitions={false}>
       <Routes>
         <Route path="/" element={<Navigate to="/default" replace />} />
-        <Route
-          path="/:workspace/_admin/*"
-          element={<SurfaceShell surface="admin" />}
-        />
-        {/* First-run setup wizard — the resolved auth setup page (default:
-            formspec.core/setup, overridable via App.spec.auth.setup_page).
-            Reached via redirect when the workspace has no users yet. */}
+        {/* Framework routes (plan app-scoped-login.md D5). These are auth
+            infrastructure, not tabs of an entity admin panel: first-run setup,
+            the OAuth callbacks and change-password stay reachable even when the
+            workspace has no usable App yet. No entity browsing lives under
+            `_admin` any more (D4) — the derived panel is gone. */}
         <Route
           path="/:workspace/_admin/setup"
           element={<AuthPage slot="setup_page" />}
         />
-        {/* Change password — the resolved auth change-password page (default:
-            formspec.core/change-password, overridable via
-            App.spec.auth.change_password_page). Reached from the user menu. */}
         <Route
           path="/:workspace/_admin/change-password"
           element={<AuthPage slot="change_password_page" />}
         />
-        {/* OAuth callback — reads the token pair from the URL fragment and
-            boots the session (auth redesign Fase 5). */}
         <Route
           path="/:workspace/_admin/oauth/callback"
           element={<AuthPage slot="oauth_callback_page" />}
@@ -107,19 +102,12 @@ function Root() {
           path="/:workspace/reset-password"
           element={<AuthPage slot="reset_password_page" />}
         />
-        <Route
-          path="/:workspace/app/*"
-          element={<SurfaceShell surface="app" />}
-        />
-        {/* Root surface: resolve the App owning this path by longest
-            root_url prefix (root_url is a free-form mount inside the
-            workspace). No match → redirect to _admin. */}
-        <Route path="/:workspace/*" element={<RootSurface />} />
-        <Route path="/login" element={<AuthPage slot="login_page" />} />
-        <Route
-          path="/register"
-          element={<AuthPage slot="login_page" mode="register" />}
-        />
+        {/* Every other path belongs to an App. The owning App is resolved by
+            longest root_url prefix (root_url is a free-form mount inside the
+            workspace), which is why there is no static `/app/*` route: an App
+            may own `/{ws}` itself. No App claims the path → an honest 404; the
+            old fallback to the `_admin` surface no longer exists (D4). */}
+        <Route path="/:workspace/*" element={<WorkspaceRoute />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
       <Toaster position="top-right" richColors />
@@ -131,9 +119,16 @@ function Root() {
 
 export default Root
 
-// ── Root Surface: detect public App at the workspace root ──
+// ── Workspace Route: resolve the App owning this path ──
+//
+// Login and rendering are both App-scoped (plan app-scoped-login.md D1): the
+// App is the unit the URL belongs to, so it is resolved ONCE here — from
+// /_meta/apps (a public endpoint, available before any session) — and handed to
+// SurfaceShell. The session is then booted for that App's name, which is what
+// makes switching App switch sessions instead of reusing whatever token was in
+// the tab.
 
-function RootSurface() {
+function WorkspaceRoute() {
   const { workspace = "default" } = useParams<{ workspace: string }>()
   const [apps, setApps] = useState<AppSummary[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -169,55 +164,55 @@ function RootSurface() {
     )
   }
 
-  // Find the winning App by longest root_url prefix match. Delegated to
+  // Find the winning App by longest root_url prefix match (delegated to
   // detectApp so the router, the login screen and the meta store cannot drift
-  // apart: this loop used to duplicate the logic, and the copy scored a
-  // `root_url: "/"` App as a FULL-LENGTH match, so it beat every other App on
-  // every path — `/{ws}/menu` (the public App's own surface) was served by
-  // whichever App happened to be listed first, and the public catalog answered
-  // "Page not found" inside an unrelated App's chrome.
+  // apart).
   const best = detectApp(window.location.pathname, apps)
 
   if (!best) {
-    // No App claims this path — fall back to the admin surface.
-    return <Navigate to={`/${workspace}/_admin`} replace />
+    // No App claims this path. There used to be a fallback to the `_admin`
+    // surface here; it is gone (D4), and inventing a replacement would hide a
+    // dead link. State the truth.
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-2">
+        <h2 className="text-xl font-semibold">Page not found</h2>
+        <p className="max-w-md text-center text-sm text-muted-foreground">
+          No app is mounted at this path in workspace{" "}
+          <span className="font-mono">{workspace}</span>.
+        </p>
+      </div>
+    )
   }
 
-  // root_url is a free-form mount prefix inside the workspace
-  // (docs/plan/flexible-root-url.md): any App matched here renders on the
-  // catch-all route with mountPrefix "/{ws}". Public Apps boot anonymously;
-  // private Apps boot a session and redirect to their in-app login
-  // ({surfacePath}/login) when unauthenticated.
-  return (
-    <SurfaceShell
-      surface="app"
-      public={best.access === "public"}
-      mountPrefix={`/${workspace}`}
-    />
-  )
+  // mountPrefix is the fixed prefix consumed by the outer `/:workspace/*`
+  // route. root_url is a free-form mount INSIDE the workspace, so every nested
+  // route is derived from `surfacePath − mountPrefix`, never from surfacePath
+  // (which for root_url "/app/pos" would double the "app" segment).
+  return <SurfaceShell app={best} mountPrefix={`/${workspace}`} />
 }
 
-// ── Surface Shell: boot + render for admin or app surface ──
+// ── Surface Shell: boot + render one App ──
 //
-// `public` marks an App whose surface boots anonymously (`access: public`).
-// Auth is orthogonal to the shell (app_renderer) — a no-nav App can be
-// private, and a sidebar-nav App could be public.
+// `app` is the resolved App this path belongs to; its `root_url` is the surface
+// path and its `access` decides whether the surface boots anonymously.
 
 function SurfaceShell({
-  surface,
-  public: isPublic = false,
+  app,
   mountPrefix: mountPrefixOverride,
 }: {
-  surface: "admin" | "app"
-  public?: boolean
+  app: AppSummary
   /**
-   * Fixed pathname prefix consumed by the OUTER route. Default: admin →
-   * "/{ws}/_admin", app → "/{ws}/app". A public App that owns the workspace
-   * root (RootSurface, mounted at "/:workspace/*") must pass "/{ws}" — its
-   * nested routes are relative to the workspace, not to "/{ws}/app".
+   * Fixed pathname prefix consumed by the OUTER route. Defaults to the App's
+   * own root_url — an App that owns the workspace root (root_url "/") collapses
+   * to "/{ws}".
    */
   mountPrefix?: string
 }) {
+  const isPublic = app.access === "public"
+  // Whether this App takes a login at all — the server's own test
+  // (chrome.auth !== none), used to decide whether a login route exists
+  // (plan app-scoped-login.md D3).
+  const acceptsLogin = app.accepts_login !== false
   const { workspace = "default" } = useParams<{ workspace: string }>()
   const location = useLocation()
   const sessionLoaded = useSessionStore((s) => s.loaded)
@@ -227,14 +222,12 @@ function SurfaceShell({
   const boot = useSessionStore((s) => s.boot)
   const pendingContext = useSessionStore((s) => s.pendingContext)
   const storedBundle = useMetaStore((s) => s.bundle)
-  const metaSurface = useMetaStore((s) => s.loadedSurface)
-  // The meta store holds ONE bundle for the whole SPA. A bundle fetched for
-  // the other surface (e.g. the app bundle while rendering the admin
-  // surface) is stale here — treat it as absent so the boot effect reloads
-  // for this surface and the guards never misread it. (Reading
-  // setup_required=true from the app bundle used to loop the admin login
-  // route back to the setup wizard forever after first-run setup.)
-  const bundle = metaSurface === surface ? storedBundle : null
+  const metaApp = useMetaStore((s) => s.loadedApp)
+  // The meta store holds ONE bundle for the whole SPA. A bundle resolved for a
+  // DIFFERENT App is stale here (each App has its own modules, menu and
+  // permissions) — treat it as absent so the boot effect reloads for this App
+  // and the guards never misread another App's bundle.
+  const bundle = metaApp === app.name ? storedBundle : null
   const metaLoading = useMetaStore((s) => s.loading)
   const metaError = useMetaStore((s) => s.error)
   const metaForbidden = useMetaStore((s) => s.forbidden)
@@ -252,25 +245,51 @@ function SurfaceShell({
   const activeTheme = usePrefsStore((s) => s.activeTheme)
   const themeTouched = usePrefsStore((s) => s.themeTouched)
   const setActiveTheme = usePrefsStore((s) => s.setActiveTheme)
-  // The app surface uses this resolved App's own root_url (Core §4.4) —
-  // a workspace can resolve to more than one App, each mounted at its own
-  // root_url under the shared /{ws}/app/* renderer SPA. Falls back to a
-  // bare "/app" before the bundle (and thus root_url) is known. A public App
-  // that owns the workspace root (root_url "/") collapses to "/{ws}".
-  const surfacePath =
-    surface === "admin"
-      ? `/${workspace}/_admin`
-      : `/${workspace}${bundle?.app.root_url ?? "/app"}`.replace(/\/+$/, "")
-  // mountPrefix is the FIXED prefix actually consumed by the outer splat
-  // route ("/:workspace/app/*" or "/:workspace/_admin/*"). The nested
-  // <Routes> below only ever sees the remainder after that fixed prefix —
-  // root_url is NOT part of it, even though it IS part of surfacePath — so
-  // relative route paths must strip mountPrefix, never surfacePath.
-  const mountPrefix =
-    mountPrefixOverride ??
-    (surface === "admin" ? `/${workspace}/_admin` : `/${workspace}/app`)
+  // The surface path is this App's own root_url (Core §4.4). One workspace may
+  // resolve several Apps, each mounted at its own root_url; the App that owns
+  // the current path was already resolved by WorkspaceRoute, so the path does
+  // not depend on the bundle having loaded. A public App that owns the
+  // workspace root (root_url "/") collapses to "/{ws}".
+  const surfacePath = `/${workspace}${app.root_url ?? "/app"}`.replace(
+    /\/+$/,
+    "",
+  )
+  // mountPrefix is the FIXED prefix consumed by the outer `/:workspace/*`
+  // route — root_url is a free-form mount INSIDE the workspace, so it is part
+  // of surfacePath but NOT of mountPrefix. Nested route paths must therefore
+  // strip mountPrefix, never surfacePath.
+  const mountPrefix = mountPrefixOverride ?? `/${workspace}`
   // The App's home page (spec.route "/") — rendered as the surface index.
   const homePage = bundle?.pages?.find((p) => p.spec.route === "/")
+  // This surface's own root expressed RELATIVE to mountPrefix: "app/pos" for
+  // root_url "/app/pos", "" for an App that owns the workspace root
+  // (root_url "/"). The nested <Routes> only ever sees the remainder after
+  // mountPrefix, so every path registered here (the home route and the auth
+  // screens below) is derived from surfacePath minus mountPrefix — never from
+  // surfacePath itself, which for root_url "/app/pos" would double the "app"
+  // segment.
+  const surfaceRelative = surfacePath.startsWith(mountPrefix)
+    ? surfacePath.slice(mountPrefix.length).replace(/^\/+/, "")
+    : ""
+  // Path of the change-password auth screen inside this surface. It is
+  // registered per-surface because an App's mount is free-form (root_url) and
+  // cannot be declared statically: the top-level /{ws}/_admin/change-password
+  // route covers only the framework path, so on /{ws}{root_url} the user
+  // menu's "Change Password" item would fall through to the catch-all 404.
+  const changePasswordPath = surfaceRelative
+    ? `${surfaceRelative}/change-password`
+    : "change-password"
+  // Login lives at {surfacePath}/login — the App's own root + "/login"
+  // (e.g. /{ws}/app/pos/login). Register is the same mount + "/register":
+  // self-service sign-up is App-scoped too (the account lands in this
+  // workspace, then signs into THIS App).
+  //
+  // An App with no auth entry point (a public catalog) has NO login route at
+  // all (plan app-scoped-login.md D3): the server refuses an App-scoped login
+  // there and the surface boots anonymously, so a form would only offer a
+  // button that 400s.
+  const loginPath = `${surfacePath}/login`
+  const registerPath = `${surfacePath}/register`
   const surfaceRoutes = useMemo(
     () =>
       bundle
@@ -303,54 +322,54 @@ function SurfaceShell({
     }
   }, [bundle, themeTouched, setActiveTheme])
 
-  // Boot: fetch session + meta, then start spec version polling.
-  // A `public` surface is anonymous — no session boot, meta fetched without
-  // a token (the server serves the public bundle for an `access: public`
-  // App).
+  // Boot: restore THIS App's session (if any), then load its bundle.
+  //
+  // "Loaded" is checked PER APP, not per workspace. `useSessionStore.loaded`
+  // is global (one store), but a session belongs to exactly one App — reusing
+  // it on another App's path attached the wrong token and the server answered
+  // 403 APP_MISMATCH, so a public catalog rendered empty. `sessionApp` is the
+  // App the loaded session belongs to; the effect re-boots whenever the path
+  // moves to a different App.
+  const appName = app.name
+  const sessionApp = useSessionStore((s) => s.app)
+  const sessionReady = sessionLoaded && sessionApp === appName
   useEffect(() => {
     if (isPublic) {
-      if (!sessionLoaded) {
-        // boot() restores a persisted session for this workspace when present
-        // (a signed-in user keeps their identity on the public surface —
-        // permissions apply, e.g. updating own modules); otherwise it boots
-        // anonymously. Either way it marks the session loaded.
-        boot(workspace).then(() => {
+      if (!sessionReady) {
+        boot({ workspace, app: appName }).then(() => {
           const { token } = useSessionStore.getState()
-          loadMeta(workspace, "app", token)
+          loadMeta(workspace, token)
         })
       } else if (!bundle && !metaLoading) {
         const { token } = useSessionStore.getState()
-        loadMeta(workspace, "app", token)
+        loadMeta(workspace, token)
       }
       return
     }
-    if (!sessionLoaded && !token) {
-      // Boot only when there is no session AND no token in flight. The `!token`
-      // guard prevents a re-boot (without a token) when LoginPage's
-      // boot(token) briefly resets loaded=false — that would overwrite the
+    if (!sessionReady && !token) {
+      // Boot only when this App has no session AND no token is in flight. The
+      // `!token` guard prevents a re-boot (without a token) when LoginPage's
+      // boot() briefly resets loaded=false — that would overwrite the
       // authenticated session with an anonymous one.
-      boot(workspace).then(() => {
-        // Always load the meta bundle — even when unauthenticated — so the
-        // resolved App's root_url is known and the auth guard can redirect to
-        // the correct in-app login path ({surfacePath}/login).
+      boot({ workspace, app: appName }).then(() => {
         const { token } = useSessionStore.getState()
-        loadMeta(workspace, surface, token)
+        loadMeta(workspace, token)
       })
     } else if (!bundle && !metaLoading && !metaError && !metaForbidden) {
-      // Session already loaded (e.g. navigated here after a login redirect) —
-      // boot() ran in LoginPage, so just load the bundle if it's missing.
-      // Skip when the bundle was rejected (error/forbidden) to avoid a reload
-      // loop (403 → forbidden → effect re-run → reload → 403).
+      // Session already loaded for this App (e.g. navigated here after a login
+      // redirect) — boot() ran in LoginPage, so just load the bundle if it's
+      // missing. Skip when the bundle was rejected (error/forbidden) to avoid a
+      // reload loop (403 → forbidden → effect re-run → reload → 403).
       const { token } = useSessionStore.getState()
-      loadMeta(workspace, surface, token)
+      loadMeta(workspace, token)
     }
   }, [
     workspace,
-    sessionLoaded,
+    appName,
+    sessionReady,
     token,
     boot,
     loadMeta,
-    surface,
     bundle,
     metaLoading,
     metaError,
@@ -369,18 +388,14 @@ function SurfaceShell({
       const state = useMetaStore.getState()
       if (state.bundle) {
         const { token } = useSessionStore.getState()
-        state.refresh(workspace, surface, token)
+        state.refresh(workspace, token)
       }
     }
     hot.on("formspec:spec-reloaded", handler)
     return () => {
       hot.off("formspec:spec-reloaded", handler)
     }
-  }, [workspace, surface])
-
-  // Auto-logout: expire the session after a configurable idle timeout. Only
-  // armed for a real authenticated session (non-public, not already
-  // unauthenticated, token present). On expiry the session store marks the
+  }, [workspace])
   // session unauthenticated and the auth guard below redirects to login.
   const autoLogoutEnabled =
     !isPublic && !unauthenticated && sessionLoaded && !!token
@@ -436,7 +451,8 @@ function SurfaceShell({
       <SwitchContextScreen
         workspace={workspace}
         choices={pendingContext}
-        app={bundle?.app?.name}
+        app={appName}
+        loginPath={loginPath}
       />
     )
   }
@@ -456,17 +472,12 @@ function SurfaceShell({
     )
   }
 
-  // In-app login lives at {surfacePath}/login (e.g. /{ws}/app/kafe/login for
-  // the app surface, /{ws}/_admin/login for admin). On that route: show the
-  // form when unauthenticated, otherwise bounce to the surface root.
-  // Public surfaces always show the form: their anonymous boot may still
-  // resolve to an identity (dev-mode auto-auth fabricates "developer" for
-  // every request), and an authenticated visitor may legitimately want to
-  // (re-)authenticate — bouncing them away makes the Sign in link dead.
-  const loginPath = `${surfacePath}/login`
-  const registerPath = `${surfacePath}/register`
-  const isLoginRoute = location.pathname === loginPath
-  const isRegisterRoute = location.pathname === registerPath
+  // Login/register routes: show the form when unauthenticated, otherwise
+  // bounce to the App root. Neither route exists for an App with no auth entry
+  // point (e.g. a public catalog), so an anonymous visitor there is never
+  // redirected to a form that cannot succeed.
+  const isLoginRoute = acceptsLogin && location.pathname === loginPath
+  const isRegisterRoute = acceptsLogin && location.pathname === registerPath
 
   // A page explicitly marked `public: true` is reachable anonymously even in
   // a private App (auth redesign Fase 3 — App access is the default, pages
@@ -487,10 +498,10 @@ function SurfaceShell({
   })
 
   if (isLoginRoute || isRegisterRoute) {
-    // First-run guard: while the workspace has no users, the register form
-    // is a trap — it would create a non-admin user and lock the setup
-    // wizard (409 SETUP_COMPLETE) with no admin left. Route the visitor to
-    // the setup wizard instead; it chains back through login afterwards.
+    // First-run guard: while the workspace has no users, the register form is
+    // a trap — it would create a non-admin user and lock the setup wizard
+    // (409 SETUP_COMPLETE) with no admin left. Send the visitor to the setup
+    // wizard instead; it chains back through login afterwards.
     if (isRegisterRoute && bundle?.setup_required && !token) {
       const forward = location.pathname + location.search
       return (
@@ -500,14 +511,10 @@ function SurfaceShell({
         />
       )
     }
-    // Show the auth form only when there is something to authenticate. An
-    // authenticated visitor on either route is bounced to the surface root —
-    // in particular the register route must not re-show the sign-up form to
-    // a signed-in user (e.g. after setup chained returnTo=.../register).
-    if (unauthenticated || isPublic) {
+    if (unauthenticated) {
       return (
         <AuthPage
-          slot="login_page"
+          slot={isRegisterRoute ? "login_page" : "login_page"}
           mode={isRegisterRoute ? "register" : "login"}
         />
       )
@@ -515,12 +522,12 @@ function SurfaceShell({
     return <Navigate to={surfacePath} replace />
   }
 
-  // Not logged in — redirect to the in-app login page with a returnTo so the
-  // user lands back here after authenticating. Public surfaces boot
-  // anonymously and never reach this state. A private surface still renders
-  // routes when the current page is explicitly public (the per-page guard in
-  // buildRoutes keeps the other routes session-gated).
-  if (!isPublic && unauthenticated && !currentPageIsPublic) {
+  // Not logged in — redirect to the App's own login page with a returnTo so
+  // the user lands back here after authenticating. An App with no auth entry
+  // point (a public catalog) boots anonymously and never reaches this state;
+  // a private App still renders routes when the current page is explicitly
+  // public (the per-page guard in buildRoutes keeps the other routes gated).
+  if (acceptsLogin && !isPublic && unauthenticated && !currentPageIsPublic) {
     const returnTo = location.pathname + location.search
     return (
       <Navigate
@@ -530,13 +537,15 @@ function SurfaceShell({
     )
   }
 
-  // Forbidden: authenticated, but lacks _admin.access (or equivalent gate)
+  // Forbidden: authenticated, but the bundle was refused (403). With the
+  // unscoped admin bundle gone (plan app-scoped-login.md D4) this means the
+  // session's App does not permit this request.
   if (metaForbidden) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4">
         <h1 className="text-2xl font-bold">Access Denied</h1>
         <p className="text-sm text-muted-foreground">
-          You don&apos;t have permission to access this area.
+          You don&apos;t have permission to access this app.
         </p>
       </div>
     )
@@ -558,10 +567,11 @@ function SurfaceShell({
     : null
 
   // Shell selection (frontend/05-app-kinds.md): the App renderer archetype
-  // picks the chrome for the whole surface. Falls back to the sidebar shell
-  // for any unknown/absent archetype.
+  // picks the chrome preset for the whole surface — all three archetypes are
+  // composed by RegionShell. Falls back to the sidebar preset for any
+  // unknown/absent archetype.
   const archetype = bundle.app.app_renderer ?? "sidebar-nav"
-  const Shell = APP_SHELLS[archetype] ?? SideNavShell
+  const Shell = APP_SHELLS[archetype] ?? RegionShell
 
   return (
     <>
@@ -570,7 +580,7 @@ function SurfaceShell({
         <Route element={<Shell />}>
           {surfaceRoutes.map((route, idx) => (
             <Route
-              key={`${surface}-${idx}`}
+              key={`${appName}-${idx}`}
               path={route.path?.replace(`${mountPrefix}/`, "") || "/"}
               Component={route.Component}
             />
@@ -587,26 +597,31 @@ function SurfaceShell({
               from surfacePath minus mountPrefix yields "app/pos" here (and ""
               for mountPrefixOverride, where it degrades to the index case). */}
           {(() => {
-            const relative = surfacePath.startsWith(mountPrefix)
-              ? surfacePath.slice(mountPrefix.length).replace(/^\/+/, "")
-              : ""
             const element = homePage ? (
               <Suspense fallback={null}>
                 <PageRenderer entry={homePage} />
               </Suspense>
             ) : (
-              <DefaultRedirect
-                bundle={bundle}
-                workspace={workspace}
-                surface={surface}
-              />
+              <DefaultRedirect bundle={bundle} workspace={workspace} />
             )
-            return relative ? (
-              <Route path={relative} element={element} />
+            return surfaceRelative ? (
+              <Route path={surfaceRelative} element={element} />
             ) : (
               <Route index element={element} />
             )
           })()}
+          {/* Change Password — the resolved auth change-password page
+              (default: formspec.core/change-password, overridable via
+              App.spec.auth.change_password_page). Registered inside EVERY
+              surface, so the user menu's item works on the App surface too
+              (the admin-only top-level route originally left
+              /{ws}{root_url}/change-password to the catch-all). Admin keeps
+              rendering the top-level route: React Router ranks it above
+              /:workspace/_admin/*, so this one is simply unreachable there. */}
+          <Route
+            path={changePasswordPath}
+            element={<AuthPage slot="change_password_page" />}
+          />
           {/* Catch-all: the route does not exist FOR THIS SESSION.
               This used to silently redirect to the surface root, which made a
               dead link indistinguishable from a working one: an authored menu
@@ -654,45 +669,38 @@ function firstMenuRoute(
 function DefaultRedirect({
   bundle,
   workspace,
-  surface = "admin",
 }: {
   bundle: import("@/types/manifest").MetaBundle
   workspace: string
-  surface?: string
 }) {
-  const prefix =
-    surface === "admin" ? "_admin" : bundle.app.root_url.replace(/^\//, "")
-  // Normalize: a public App owns the workspace root (root_url "/"), so
-  // prefix is "" and base collapses to "/{ws}" — never "/{ws}//...".
-  const base = `/${workspace}/${prefix}`.replace(/\/+$/, "")
+  // Normalize: an App that owns the workspace root (root_url "/") collapses to
+  // "/{ws}" — never "/{ws}//...".
+  const base = `/${workspace}${bundle.app.root_url}`.replace(/\/+$/, "")
 
-  // App surface: land on the App's own first authored menu item (e.g. its
-  // Dashboard or home hero) rather than an arbitrary derived entity list.
-  if (surface === "app") {
-    const menuRoute = firstMenuRoute(bundle.menu)
-    if (menuRoute) {
-      return <Navigate to={`${base}${menuRoute}`} replace />
-    }
+  // Land on the App's own first authored menu item (e.g. its Dashboard or home
+  // hero) rather than an arbitrary derived entity list.
+  const menuRoute = firstMenuRoute(bundle.menu)
+  if (menuRoute) {
+    return <Navigate to={`${base}${menuRoute}`} replace />
   }
 
-  // Fallback (admin surface, or an app with no menu at all): first
-  // non-summary/read-only entity's derived list.
-  const entity =
-    bundle.entities.find((e) => e.characteristic !== "summary") ??
-    bundle.entities[0]
+  // Fallback for an App with no menu at all: the first entity whose derived
+  // LIST route is actually registered for this caller.
+  //
+  // `authorized_actions` is resolved server-side with the same checker that
+  // decides whether the entity ships (kafe 10.23). Landing on the first entity
+  // REGARDLESS of it — the old behaviour — sent an anonymous visitor to a
+  // public App to a list route that was never registered (the grant was
+  // `find` only), i.e. straight to "Page not found" (kafe 10.20).
+  const entity = pickLandingEntity(bundle.entities)
   if (entity) {
     return <Navigate to={`${base}/${entity.module}/${entity.plural}`} replace />
   }
-  return (
-    <div className="flex min-h-[60vh] items-center justify-center">
-      <div className="text-center">
-        <h2 className="text-xl font-semibold">Welcome to FormSpec</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          No entities found. Load a manifest to get started.
-        </p>
-      </div>
-    </div>
-  )
+
+  // Nothing to land on: say so honestly, inside the shell, and keep a way out
+  // (sign out / sign in). Never "No entities found. Load a manifest" — that
+  // blames the manifest when the truth is a permission gap (kafe 10.20/10.22).
+  return <NoAccessState appName={bundle.app.title ?? bundle.app.name} />
 }
 
 // ── 404 ──

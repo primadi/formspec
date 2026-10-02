@@ -115,6 +115,13 @@ func main() {
 		"freeze", "rollback", "lock":
 		_, _ = fmt.Fprintf(os.Stderr, "formspec %s: not implemented yet — see docs/cli-tools/01-formspec-cli.md\n", os.Args[1])
 		os.Exit(1)
+	case "help", "--help", "-h":
+		// Asking for help succeeded — exit 0. Sharing the unknown-command path
+		// (which exits 1) made `formspec help` report failure for a request it
+		// had just answered, so a script or an operator checking "did it work"
+		// read the help output as an error.
+		usage()
+		os.Exit(0)
 	default:
 		usage()
 		os.Exit(1)
@@ -170,6 +177,7 @@ func usage() {
 	_, _ = fmt.Fprintf(os.Stderr, "  spa                 Download & cache the SPA UI (install/path/remove)\n")
 	_, _ = fmt.Fprintf(os.Stderr, "  upgrade             Self-update the binary from GitHub Releases\n")
 	_, _ = fmt.Fprintf(os.Stderr, "  version             Print the binary version\n")
+	_, _ = fmt.Fprintf(os.Stderr, "  help                Print this usage (exit 0)\n")
 	_, _ = fmt.Fprintf(os.Stderr, "\nNot yet implemented (see docs/cli-tools/01-formspec-cli.md):\n")
 	_, _ = fmt.Fprintf(os.Stderr, "  saga, script, freeze, rollback, lock\n")
 }

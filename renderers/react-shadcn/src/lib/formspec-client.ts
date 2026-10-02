@@ -186,9 +186,12 @@ export function createAuth(workspace: string): FormspecAuth {
       if (opts?.assignment) {
         writeContextPreference(workspace, opts?.app, opts.assignment)
       }
-      await useSessionStore
-        .getState()
-        .boot(workspace, accessToken, refreshToken, opts?.app)
+      await useSessionStore.getState().boot({
+        workspace,
+        app: opts?.app ?? "",
+        token: accessToken,
+        refreshToken,
+      })
       return { accessToken, refreshToken }
     },
     async register(username, password, opts) {

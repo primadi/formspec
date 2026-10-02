@@ -43,53 +43,49 @@ func setupMetaTestRouter(t *testing.T) *RouterBuilder {
 	return b
 }
 
-func TestHandleMetaUI_AdminMode_RequiresPermission(t *testing.T) {
+func TestHandleMetaUI_AdminBundleRemoved(t *testing.T) {
 	b := setupMetaTestRouter(t)
 	handler := b.HandleMetaUI()
 
-	identity := &auth.Identity{UserID: "user-1", WorkspaceID: "demo", Permissions: []string{}}
+	// Even a caller holding the old binary gate gets the bundle removed: the
+	// unscoped all-modules bundle no longer exists (plan app-scoped-login.md D4).
+	identity := &auth.Identity{UserID: "user-1", WorkspaceID: "demo", Permissions: []string{"_admin.access"}}
 	req := httptest.NewRequest("GET", "/demo/_ui/_meta/ui?admin=true", nil)
+	req = req.WithContext(WithIdentity(context.Background(), identity))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != 400 {
+		t.Fatalf("expected 400 for the removed admin bundle, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var errResp ErrorResponse
+	_ = json.NewDecoder(rec.Body).Decode(&errResp)
+	if errResp.Error.Code != "ADMIN_BUNDLE_REMOVED" {
+		t.Errorf("expected ADMIN_BUNDLE_REMOVED, got %s", errResp.Error.Code)
+	}
+}
+
+func TestHandleMetaUI_AppScoped_RejectsMismatchedApp(t *testing.T) {
+	b := setupMetaTestRouter(t)
+	handler := b.HandleMetaUI()
+
+	// A session scoped to one App must not render another App's bundle
+	// (plan app-scoped-login.md D7) — the App is not a free query param.
+	identity := &auth.Identity{UserID: "user-1", WorkspaceID: "demo", App: "other-app"}
+	req := httptest.NewRequest("GET", "/demo/_ui/_meta/ui?app=storefront", nil)
 	req = req.WithContext(WithIdentity(context.Background(), identity))
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
 	if rec.Code != 403 {
-		t.Fatalf("expected 403 without _admin.access, got %d: %s", rec.Code, rec.Body.String())
+		t.Fatalf("expected 403 for an App-mismatched request, got %d: %s", rec.Code, rec.Body.String())
 	}
 
 	var errResp ErrorResponse
 	_ = json.NewDecoder(rec.Body).Decode(&errResp)
-	if errResp.Error.Code != "FORBIDDEN" {
-		t.Errorf("expected FORBIDDEN, got %s", errResp.Error.Code)
-	}
-}
-
-func TestHandleMetaUI_AdminMode_AllowedWithPermission(t *testing.T) {
-	b := setupMetaTestRouter(t)
-	handler := b.HandleMetaUI()
-
-	identity := &auth.Identity{UserID: "user-1", WorkspaceID: "demo", Permissions: []string{adminAccessPermission}}
-	req := httptest.NewRequest("GET", "/demo/_ui/_meta/ui?admin=true", nil)
-	req = req.WithContext(WithIdentity(context.Background(), identity))
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	if rec.Code != 200 {
-		t.Fatalf("expected 200 with _admin.access, got %d: %s", rec.Code, rec.Body.String())
-	}
-
-	var resp SingleResponse
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	data, _ := json.Marshal(resp.Data)
-	var bundle ui.Bundle
-	if err := json.Unmarshal(data, &bundle); err != nil {
-		t.Fatalf("decode bundle: %v", err)
-	}
-	// Admin mode is unscoped by any App (Core §4.4 — _admin isn't App-scoped).
-	if bundle.App.Name != "" {
-		t.Errorf("expected unscoped bundle (no App name), got %q", bundle.App.Name)
+	if errResp.Error.Code != "APP_MISMATCH" {
+		t.Errorf("expected APP_MISMATCH, got %s", errResp.Error.Code)
 	}
 }
 
@@ -271,8 +267,17 @@ func TestHandleMetaUI_PrivateApp_PublicPageShipsToAnonymous(t *testing.T) {
 	b := setupMetaTestRouter(t)
 	b.SetApps(map[string]*formspec_app.ResolvedApp{
 		"backoffice": {
-			Name:    "backoffice",
-			Spec:    &spec.AppSpec{RootURL: "/app", AppRenderer: "topnav", Access: spec.AppAccessPrivate, Modules: []string{"sales"}},
+			Name: "backoffice",
+			Spec: &spec.AppSpec{
+				RootURL: "/app", AppRenderer: "topnav", Access: spec.AppAccessPrivate,
+				Modules: []string{"sales"},
+				// The App surface allowlist (plan registered-views.md): an App
+				// exposes only what its menu ∪ registered_views names. Declare
+				// the public landing page so it is reachable at all — the test
+				// is about AUTH (does a public page ship anonymously), not about
+				// surface curation.
+				RegisteredViews: []spec.RegisteredViewDecl{{View: "sales/landing"}},
+			},
 			Modules: map[string]bool{"sales": true},
 		},
 	})

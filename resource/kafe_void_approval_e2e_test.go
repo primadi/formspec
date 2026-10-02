@@ -61,7 +61,7 @@ func seedKafeRoleToken(t *testing.T, app *App, username string, roles []string) 
 		t.Fatalf("insert user %s: %v", username, err)
 	}
 	status, body := doJSON(t, app, http.MethodPost, "/kafe/_ui/auth/login", map[string]any{
-		"username": username, "password": "kafe123",
+		"username": username, "password": "kafe123", "app": "kafe-pos",
 	})
 	if status != http.StatusOK {
 		t.Fatalf("login %s: status %d body %v", username, status, body)

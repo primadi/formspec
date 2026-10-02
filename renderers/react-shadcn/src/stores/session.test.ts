@@ -39,10 +39,11 @@ describe("session expiry", () => {
   })
 
   it("setSession stores the refresh token", () => {
-    useSessionStore.getState().setSession("acme", "tok", "ref")
+    useSessionStore.getState().setSession("acme", "tok", "ref", "kafe-pos")
     const s = useSessionStore.getState()
     expect(s.token).toBe("tok")
     expect(s.refreshToken).toBe("ref")
+    expect(s.app).toBe("kafe-pos")
     expect(s.unauthenticated).toBe(false)
   })
 

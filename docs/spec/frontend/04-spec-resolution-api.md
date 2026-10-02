@@ -31,12 +31,24 @@ GET /{ws}/api/v1/_meta/ui?app={name}
     dan Menu (sudah resolved) — permission-filtered
     per caller (§4), scoped ke App tersebut (manifest dari Module yang tidak
     di-depends_on App tidak ikut). `?app=` boleh dilewatkan kalau workspace
-    cuma punya satu App. ETag di response body men-dukung conditional GET
+    cuma punya satu App ATAU kalau caller membawa sesi (sesi mengikat App —
+    lihat di bawah). ETag di response body men-dukung conditional GET
     (304 kalau bundle tidak berubah) — mekanisme caching, bukan mekanisme
     kompatibilitas versi (lihat §6).
-  → `?admin=true`: varian unscoped-App (seluruh Module, dipakai `_admin`
-    surface), digerbangi permission tunggal `_admin.access` alih-alih
-    filtering per-entity.
+  → Sesi **mengikat App**: token yang di-issue untuk satu App menolak
+    `?app=` yang berbeda dengan **403** (`APP_MISMATCH`). App bukan pilihan
+    bebas bagi pemanggil terautentikasi; ia ditentukan saat login
+    (`docs_internal/plan/app-scoped-login.md` D7).
+  → Varian unscoped-App `?admin=true` (permukaan `_admin`, gerbang biner
+    `_admin.access`) **sudah tidak ada** — permukaan panel admin derived
+    dipensiunkan (`app-scoped-login.md` D4); permintaan dibalas 400
+    `ADMIN_BUNDLE_REMOVED`.
+
+GET /{ws}/api/v1/_meta/apps
+  → daftar App yang resolved di workspace ini (name, root_url, access,
+    accepts_login) — Shell mencocokkan window.location.pathname terhadap
+    tiap root_url untuk menentukan App mana yang aktif, lalu memakai
+    `accepts_login` untuk memutuskan apakah App itu punya rute login.
 
 GET /{ws}/api/v1/_meta/me
   → identitas caller: user_id, workspace, roles, effective permissions —

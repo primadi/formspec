@@ -204,6 +204,7 @@ spec:
   modules: [billing, acme-corp/general-ledger]
   app_renderer: sidebar-nav # pilih App renderer — lihat spec/frontend/05-app-kinds.md
   menu: [] # lihat §4
+  registered_views: [] # permukaan tambahan di luar menu — lihat frontend/05-app-kinds.md §1.2
   publishes: # interface lintas-app yang ditawarkan
     - service: icd-lookup
       actions: [search, find]
@@ -368,6 +369,14 @@ create/edit gunakan blok `form:` di sebuah Page dengan `mode` eksplisit.
 Tidak ada `kind: Menu` standalone — sudah dilebur seluruhnya ke
 `App.spec.menu` (otoritatif) dan `Module.spec.menu` (saran default).
 
+**Menu adalah deklarasi permukaan, bersama `registered_views`.** Permukaan App
+yang dapat diakses adalah **setiap target leaf menu ∪ `registered_views`** — menu
+yang dipakai (`view:` maupun `route:`) mendaftarkan targetnya sendiri, dan
+`registered_views` menambah view yang tidak dijangkau navigasi (khususnya App
+tanpa menu). Route di luar himpunan itu tidak didaftarkan (404). Batasan, tiga
+state, dan exemption `_admin`/grants ada di
+[`../frontend/05-app-kinds.md`](../frontend/05-app-kinds.md) §1.2.
+
 ### Visibilitas item menu — dua sumbu
 
 `MenuItem` membawa dua field yang **tidak boleh saling menggantikan**:
@@ -384,9 +393,10 @@ entity di bundle. `when` dievaluasi klien karena kondisinya bisa bergantung wakt
 (`today()`), sedangkan bundle `/_meta/ui` di-cache lewat ETag. Untuk membatasi
 siapa yang boleh melihat/membuka sesuatu, pakai `permissions`.
 
-Konsekuensi yang perlu diketahui: surface `_admin` memakai bundle unscoped
-(`?admin=true`) dan menu yang dibangun dari daftar entity, sehingga
-`permissions`/`when` tidak berlaku di sana — gerbangnya biner (`_admin.access`).
+Konsekuensi yang perlu diketahui: **setiap bundle kini App-scoped** — surface
+unscoped `_admin` (`?admin=true`) sudah dipensiunkan, jadi `permissions`/`when`
+selalu berlaku dan tidak ada lagi gerbang biner yang membuka seluruh module
+(`docs_internal/plan/app-scoped-login.md` D4).
 
 Grammar `when` mengikuti [`../frontend/08-formspec-expr.md`](../frontend/08-formspec-expr.md),
 termasuk himpunan callable tertutupnya; `formspec check` menolak ekspresi di

@@ -11,7 +11,7 @@ import (
 // loginAsAdmin logs in via the API and returns the access token.
 func loginAsAdmin(t *testing.T, handler http.Handler) string {
 	t.Helper()
-	body := bytes.NewBufferString(`{"username":"admin","password":"admin"}`)
+	body := bytes.NewBufferString(`{"username":"admin","password":"admin","app":"demo-app"}`)
 	req := httptest.NewRequest(http.MethodPost, "/demo/_ui/auth/login", body)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -45,7 +45,7 @@ func TestChangePassword_Success(t *testing.T) {
 	}
 
 	// Old password must no longer work.
-	body2 := bytes.NewBufferString(`{"username":"admin","password":"admin"}`)
+	body2 := bytes.NewBufferString(`{"username":"admin","password":"admin","app":"demo-app"}`)
 	req2 := httptest.NewRequest(http.MethodPost, "/demo/_ui/auth/login", body2)
 	req2.Header.Set("Content-Type", "application/json")
 	rec2 := httptest.NewRecorder()

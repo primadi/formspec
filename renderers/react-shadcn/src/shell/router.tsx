@@ -183,7 +183,12 @@ export function buildRoutes(options: RouteBuilderOptions): RouteObject[] {
 
   // 2. Derived CRUD routes per entity — each gated by the caller's authorized
   // actions, so the surface never offers an operation the server would refuse.
+  // An entity the App does not expose (`routable === false`, resolved from the
+  // App's menu ∪ registered_views, plan registered-views.md) registers NO
+  // derived route at all: the bundle still ships it for relations/pickers, but
+  // the URL stays a 404. `undefined` means an older server — keep the route.
   for (const entity of bundle.entities ?? []) {
+    if (entity.routable === false) continue
     const base = `${basePath}/${entity.module}/${entity.plural}`
 
     // List route

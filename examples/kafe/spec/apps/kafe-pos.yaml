@@ -43,6 +43,24 @@ spec:
       module: cafe-report
     - type: module
       module: cafe-master
+  # Permukaan App = target menu ∪ `registered_views` (plan registered-views.md).
+  # Menu di atas (via Adopt node) sudah mendaftarkan seluruh entity master/stok/
+  # loyality/laporan. Yang TIDAK tercakup menu dan tetap dibutuhkan POS:
+  # workbench kasir, inbox approval, dan struk.
+  #
+  # `close-shift-wizard` SENGAJA tidak didaftarkan: wizard itu mengikat dirinya
+  # ke transisi `close-shift` pada entity `shift` (`entity:` + `action:` di
+  # manifest wizard), dan entity `shift` sudah reachable lewat menu "Kas & Shift
+  # → Shift Kasir". Wizard yang mengikat transisi **mewarisi** reachability
+  # entity-nya (todo 5.25.7) — mendaftarkannya di sini hanya duplikasi.
+  registered_views:
+    # Page kasir (route /pos) — entri POS di menu cafe-order masih dikomentari.
+    - { view: cafe-order/pos-workbench }
+    # Inbox approval supervisor (void pesanan).
+    - { view: cafe-order/supervisor-inbox }
+    # Struk dicetak dari detail pesanan.
+    - { view: cafe-order/receipt-thermal }
+    - { view: cafe-order/receipt-digital }
   confirm:
     create: "Buat {name} baru?"
     update: "Simpan perubahan {name} ini?"

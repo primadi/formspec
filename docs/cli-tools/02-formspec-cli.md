@@ -304,24 +304,119 @@ formspec dev
 
 Referensi lengkap flag, mode `--listen`/`--app-endpoint`, dan arsitektur proses: [`01-formspec-dev.md`](01-formspec-dev.md).
 
+### Default project: `formspec-app.yaml`
+
+**Semua command yang membaca spec tree atau database memakai default yang sama
+dengan `formspec dev`**: spec, DSN, dan workspace diambil dari
+`formspec-app.yaml` di direktori kerja, lalu flag CLI menimpanya. Urutannya:
+
+1. **flag CLI** (menang atas semuanya);
+2. **`formspec-app.yaml`** — mengisi nilai yang belum di-set flag
+   (`spec:`, `dsn:`, `workspace-id:`);
+3. **fallback** bila tidak ada config file: `spec`, `sqlite:.formspec/data.db`,
+   workspace `default`;
+4. **DSN SQLite relatif** di-anchor ke project root (diturunkan dari lokasi spec,
+   [`../../docs_internal/plan/dsn-spec-anchored.md`]) — file db statis di
+   `<project-root>/.formspec/…` di mana pun command dijalankan;
+5. **workspace** mengikuti aturan #48: eksplisit → dipakai (dengan peringatan bila
+   tidak dideklarasikan); tidak eksplisit & spec mendeklarasikan **tepat satu** →
+   diadopsi; **beberapa** → tetap default + peringatan (tidak menebak tenant).
+
+Yang berlaku: `dev`, `serve`, `repl`, `migrate`, `diff`, `seed`, `backup`,
+`restore`, `archive`, `summary`, `logs`, `get`, `describe`, `delete`.
+
+**Kenapa ini penting, bukan kosmetik.** Sebelum 2026-09-29 command-command itu
+membawa literal sendiri (`spec`, `sqlite:.formspec/data.db`, `demo`) — yaitu nilai
+yang `formspec dev` pakai justru ketika config file **tidak ada**. Di setiap
+project yang punya `formspec-app.yaml` (semua hasil `formspec init`), menjalankan
+command dari direktori project menyasar **database/tenant yang berbeda** dari yang
+disajikan server. Terukur di `examples/kafe` (config: `spec: spec`,
+`dsn: sqlite:.formspec/kafe.db`):
+
+| | `formspec dev` | sebelum | sesudah |
+| --- | --- | --- | --- |
+| database | `.formspec/kafe.db` | `.formspec/data.db` | `.formspec/kafe.db` |
+| workspace | `kafe` | `demo` | `kafe` |
+
+Akibat nyatanya: alur repair (`repl -f repair.star` → `migrate apply`) mengerjakan
+database yang tidak dibaca siapa pun, dan `formspec seed` tanpa flag membuat tenant
+**ketiga** (`demo`) yang tak pernah dibaca App — sementara perintahnya melaporkan
+sukses. Guard kelasnya: `TestNoCommandHardcodesProjectDefaults`
+(`cmd/formspec/project_defaults_guard_test.go`) menolak literal-literal itu kembali
+muncul di command mana pun.
+
 ### `formspec repl`
 
 Console Starlark interaktif dengan akses `ctx.*` penuh — fitur first-class (bukan alat debug darurat sekali pakai), termasuk sebagai permukaan untuk AI Agent Skill debugging.
 
 ```bash
-formspec repl --environment staging
->>> invoice.load("inv-001")
->>> ctx.db.query("...")
-
+formspec repl                                     # interactive console
 formspec repl -e 'ctx.config.get("currency")'     # one-shot expression
-formspec repl -f migrations/dedupe.star           # one-shot script file
+formspec repl --no-sync -f migrations/dedupe.star  # repair a refused migration
 ```
+
+Default spec/DSN/workspace dari `formspec-app.yaml` (lihat [Default project](#default-project-formspec-appyaml));
+artinya `formspec repl` di direktori project membuka database dan tenant yang
+**sama** dengan `formspec dev`. Console mencetak
+`[formspec] repl: spec=… dsn=… workspace=…` supaya hal itu terlihat, bukan
+ditemukan belakangan lewat query.
+
+Predeclared di console: `ctx.*` (wired ke datastore aplikasi), `resource`
+(kosong — `resource.find`/`fetch`/`save` **belum ter-wire** di console; untuk
+perbaikan data pakai `ctx.db().query(...)`), `ok`, `fail`.
+
+| Flag            | Default                    | Fungsi                                                     |
+| --------------- | -------------------------- | ---------------------------------------------------------- |
+| `--spec`        | `spec` *(atau `spec:` di config)* | Path ke direktori YAML manifests                    |
+| `--dsn`         | `sqlite:.formspec/data.db` *(atau `dsn:` di config)* | Database DSN              |
+| `--workspace`   | workspace aktif *(config / #48 / `default`)* | Tenant scope untuk `ctx.workspace` dan `ctx.db()` |
+| `--environment` | —                          | Diterima untuk forward-compat; policy-nya masih deferred   |
+| `--no-sync`     | `false`                    | Buka datastore **tanpa** sync schema (lihat di bawah)      |
+| `-e`            | —                          | One-shot ekspresi (scriptable)                             |
+| `-f`            | —                          | One-shot script file                                       |
 
 `-f` adalah permukaan resmi untuk **perbaikan data sekali jalan**: migrasi yang
 ditolak karena datanya belum memenuhi syarat (mis. masih ada duplikat) tidak
 menyediakan tempat untuk DML di spec, jadi repair dijalankan operator di sini,
 lalu `formspec migrate apply` diulang — lihat
 [`../spec/backend/01-core-basic.md`](../spec/backend/01-core-basic.md) §4.4.
+
+**`--no-sync` — kenapa repair butuh flag ini.** Penolakan migrasi berlaku juga
+pada boot console: `formspec repl` memanggil `formspec.New`, dan `New`
+menyelaraskan schema — penolakan yang sama. Tanpa `--no-sync`, operator
+diperintahkan menjalankan perintah yang gagal dengan pesan yang seharusnya ia
+selesaikan. `--no-sync` membuka datastore **tanpa** menyentuh schema; ia
+**tidak** melewati gerbang untuk boot normal (`dev`/`serve` tetap menolak), dan
+hanya untuk repair. Contoh pesan penolakan:
+
+```
+apply migrations: 1 destructive change(s) refused
+  - [lossy] index_added idx_cafe_order_table_sessions_dining_table_id: new unique index (12 row(s) affected)
+    repair the duplicates first — run the repair once via
+    `formspec repl --no-sync -f repair.star` (write through ctx.db()), then apply again
+```
+
+Alur lengkapnya:
+
+```bash
+formspec repl --spec spec --dsn sqlite:.formspec/data.db --no-sync -f repair.star
+formspec migrate apply      # gerbang yang sama, sekarang lolos
+```
+
+**Bahasa script repair = subset Starlark yang sama dengan script action.**
+Console memakai opsi parse yang identik (`syntax.LegacyFileOptions()`), jadi dua
+batasan berikut berlaku dan mudah terlewat karena contoh umum di internet sering
+tidak mematuhinya:
+
+- **tanpa implicit string concatenation.** `"a" "b"` adalah **syntax error**
+  (`got string literal, want ','`), bukan penggabungan — tulis satu literal
+  panjang atau pakai `+`.
+- **tanpa `for`/`if` di top-level.** Loop harus di dalam `def` yang lalu
+  dipanggil (`for loop not within a function`).
+
+`scripts/` pada spec tidak diperiksa secara statis: `formspec validate` dan
+`formspec check` **tidak** mem-parse `.star`, sehingga script yang rusak sintaksis
+lolos keduanya dan baru gagal saat action-nya dipanggil (terukur 2026-09-28).
 
 Scope environment policy (tabel akses per profil environment, jaminan "bukan superuser shell"): [`docs/spec/platform/04-control-plane.md`](../spec/platform/04-control-plane.md) §7.
 
@@ -354,9 +449,11 @@ formspec migrate plan     # tampilkan perubahan berklasifikasi + jumlah baris, t
 formspec migrate apply    # eksekusi (biasanya otomatis lewat formspec dev / apply)
 ```
 
+Default spec/DSN dari `formspec-app.yaml` ([Default project](#default-project-formspec-appyaml)) — `migrate apply` adalah paruh kedua dari alur repair yang paruh pertamanya `repl --no-sync -f`, jadi keduanya harus menyasar database yang sama dengan yang disajikan server.
+
 Setiap perubahan dinilai sebelum dieksekusi: **aditif** dan **derived** (kolom turunan dibangun ulang, index dihapus) berjalan otomatis; yang **lossy** — field dihapus, type change yang nilainya gagal cast, unique index sementara duplikat masih ada — ditolak sampai manifest menyatakannya (`removed: true` / `accept_data_loss: true` + `reason`). **Tabel tidak pernah di-drop dari manifest**: backup, drop manual, lalu hapus manifest-nya.
 
-Perbaikan data (duplikat sebelum constraint, backfill) dijalankan operator **sekali** di luar spec lewat `formspec repl -f repair.star` — bukan bagian dari migrasi. Alasan dan aturan lengkap: [`docs/spec/backend/01-core-basic.md`](../spec/backend/01-core-basic.md) §4.
+Perbaikan data (duplikat sebelum constraint, backfill) dijalankan operator **sekali** di luar spec lewat `formspec repl --no-sync -f repair.star` (flag wajib ada justru saat migrasinya belum bisa diterapkan) — bukan bagian dari migrasi. Alasan dan aturan lengkap: [`docs/spec/backend/01-core-basic.md`](../spec/backend/01-core-basic.md) §4.
 
 ### `formspec seed`
 
@@ -364,8 +461,11 @@ Jalankan seeder & factory (`formspec/seed` official module) untuk data dev/testi
 
 ```bash
 formspec seed --module billing
-formspec seed --spec examples/kafe/spec --dsn sqlite:.formspec/kafe.db --workspace kafe
+formspec seed                     # workspace project dari config / #48
+formspec seed --workspace staging # pilih tenant lain secara eksplisit
 ```
+
+Default spec/DSN/**workspace** dari `formspec-app.yaml` ([Default project](#default-project-formspec-appyaml)). Ini bukan detail: baris seed mendarat di satu tenant, dan dulu defaultnya literal `"demo"` — sehingga `formspec seed` tanpa flag di project bernama (kafe) menulis seluruh data ke tenant yang tak pernah dibaca App sambil melaporkan sukses. `make seed-kafe` menghindarinya hanya karena eksplisit `--workspace kafe`.
 
 **Record yang sudah ada di-reconcile, bukan sekadar dilewati.** Record yang
 natural key-nya sudah ada tetapi field-nya berbeda dari seed akan di-**update**

@@ -20,12 +20,16 @@ export function OAuthCallback() {
   useEffect(() => {
     let cancelled = false
     const run = async () => {
-      // Parse the fragment (#token=...&refresh_token=...).
+      // Parse the fragment (#token=...&refresh_token=...&app=...).
       const hash = window.location.hash.replace(/^#/, "")
       const params = new URLSearchParams(hash)
       const token = params.get("token")
       const refreshToken = params.get("refresh_token")
-      if (params.get("oauth") === "error" || !token) {
+      // The App the session is scoped to — the backend put it in the fragment
+      // because login is per-App (plan app-scoped-login.md D1). Without it the
+      // session cannot be booted under the right App.
+      const app = params.get("app") ?? ""
+      if (params.get("oauth") === "error" || !token || !app) {
         if (!cancelled) setError("Authentication failed. Please try again.")
         return
       }
@@ -48,8 +52,13 @@ export function OAuthCallback() {
         return
       }
       try {
-        await boot(workspace, token, refreshToken ?? undefined)
-        if (!cancelled) navigate(`/${workspace}/_admin`, { replace: true })
+        await boot({
+          workspace,
+          app,
+          token,
+          refreshToken: refreshToken ?? undefined,
+        })
+        if (!cancelled) navigate(`/${workspace}`, { replace: true })
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "Authentication failed")

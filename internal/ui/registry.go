@@ -211,7 +211,15 @@ func (r *Registry) Count() int {
 func (r *Registry) ResolveViewRoute(module, name string) (string, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	return r.resolveViewRouteLocked(module, name)
+}
 
+// resolveViewRouteLocked is ResolveViewRoute without the read lock. It exists
+// for callers that already hold r.mu (notably BuildBundle, which reads the
+// whole registry under one RLock): Go's RWMutex can deadlock on a recursive
+// RLock when a writer is waiting, so those callers must not re-enter the public
+// wrapper.
+func (r *Registry) resolveViewRouteLocked(module, name string) (string, error) {
 	if e, ok := r.Pages[name]; ok && e.Module == module {
 		return e.Spec.Route, nil
 	}

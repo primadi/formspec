@@ -327,6 +327,14 @@
           "description": "ProfileRoute is the in-app route to the signed-in user's profile",
           "type": "string"
         },
+        "regions": {
+          "description": "Chrome regions — topbar/sidebar/rightbar/bottombar/footer → none | auto | \u003ccomponent-ref\u003e",
+          "type": "object",
+          "additionalProperties": {},
+          "examples": [
+            "sidebar: auto"
+          ]
+        },
         "theme_switcher": {
           "description": "Theme switcher control (sidebar-nav/topnav).",
           "type": "string",
@@ -3124,6 +3132,27 @@
         },
         "window": {
           "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "RegisteredViewDecl": {
+      "description": "RegisteredViewDecl is one extra view an App exposes beyond its menu\n(App.spec.registered_views — plan docs_internal/plan/registered-views.md).\nExactly one of Entity/View is set:\n\n  - Entity grants every derived view of one entity (list/detail/create/edit);\n  - View grants one registered navigable view by name.\n\nEntity accepts \"module/entity\" or \"module.entity\" (normalized via\nNormalizeEntityRef); View accepts \"module/name\". The module MUST be one of the\nApp's spec.modules, so a declaration can never reach outside the App bundle.\nExistence of the referenced entity/view is checked at resolve time (it needs\nthe UI/entity registries).\n",
+      "type": "object",
+      "properties": {
+        "entity": {
+          "description": "@schema {example: \"cafe-master/menu-item\"}",
+          "type": "string",
+          "examples": [
+            "cafe-master/menu-item"
+          ]
+        },
+        "view": {
+          "description": "@schema {example: \"cafe-order/menu-catalog\"}",
+          "type": "string",
+          "examples": [
+            "cafe-order/menu-catalog"
+          ]
         }
       },
       "additionalProperties": false
@@ -4893,6 +4922,14 @@
           "description": "ProfileRoute is the in-app route to the signed-in user's profile",
           "type": "string"
         },
+        "regions": {
+          "description": "Chrome regions — topbar/sidebar/rightbar/bottombar/footer → none | auto | \u003ccomponent-ref\u003e",
+          "type": "object",
+          "additionalProperties": {},
+          "examples": [
+            "sidebar: auto"
+          ]
+        },
         "theme_switcher": {
           "description": "Theme switcher control (sidebar-nav/topnav).",
           "type": "string",
@@ -7694,6 +7731,27 @@
       },
       "additionalProperties": false
     },
+    "RegisteredViewDecl": {
+      "description": "RegisteredViewDecl is one extra view an App exposes beyond its menu\n(App.spec.registered_views — plan docs_internal/plan/registered-views.md).\nExactly one of Entity/View is set:\n\n  - Entity grants every derived view of one entity (list/detail/create/edit);\n  - View grants one registered navigable view by name.\n\nEntity accepts \"module/entity\" or \"module.entity\" (normalized via\nNormalizeEntityRef); View accepts \"module/name\". The module MUST be one of the\nApp's spec.modules, so a declaration can never reach outside the App bundle.\nExistence of the referenced entity/view is checked at resolve time (it needs\nthe UI/entity registries).\n",
+      "type": "object",
+      "properties": {
+        "entity": {
+          "description": "@schema {example: \"cafe-master/menu-item\"}",
+          "type": "string",
+          "examples": [
+            "cafe-master/menu-item"
+          ]
+        },
+        "view": {
+          "description": "@schema {example: \"cafe-order/menu-catalog\"}",
+          "type": "string",
+          "examples": [
+            "cafe-order/menu-catalog"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
     "RegistrationSettings": {
       "description": "RegistrationSettings configures the workspace-level self-service sign-up\npolicy (auth redesign Fase 4). Per-workspace — applies to every App in the\nworkspace.\n\n  - open     (default): sign-up creates an active user with DefaultRole.\n  - approval: sign-up creates a pending user; an admin approves + assigns\n    the role before the user can log in.\n  - closed:   self-service sign-up is disabled; admins create users.\n",
       "type": "object",
@@ -9349,6 +9407,16 @@
               "items": {
                 "$ref": "#/$defs/AppInterface"
               }
+            },
+            "registered_views": {
+              "description": "Extra views this App exposes beyond its menu: exactly one of entity (module/entity) or view (module/name) per entry",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/RegisteredViewDecl"
+              },
+              "examples": [
+                "[{view: cafe-order/menu-catalog}, {entity: cafe-master/menu-item}]"
+              ]
             },
             "renderers": {
               "description": "Renderers maps a VisualSpecKind name → renderer for the whole App",

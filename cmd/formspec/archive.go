@@ -46,7 +46,9 @@ func runArchive(args []string) {
 //
 //	formspec archive view --batch-id <id> [--spec <path>] [--dsn <dsn>]
 func runArchiveView(args []string) {
-	dsn := "sqlite:.formspec/data.db"
+	// Defaults from formspec-app.yaml (project_defaults.go) — archive batches live
+	// in the project's .formspec state dir, which is derived from this DSN.
+	dsn := loadProjectDefaults().DSN
 	batchID := ""
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -115,8 +117,11 @@ func runArchiveView(args []string) {
 }
 
 func runArchiveRun(args []string) {
-	specPath := "spec"
-	dsn := "sqlite:.formspec/data.db"
+	// Defaults from formspec-app.yaml (project_defaults.go), same as `formspec dev`:
+	// the archivable rows live in the database the config file names.
+	d := loadProjectDefaults()
+	specPath := d.SpecPath
+	dsn := d.DSN
 	maxAge := ""
 	dryRun := false
 	for i := 0; i < len(args); i++ {

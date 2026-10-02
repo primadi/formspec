@@ -97,11 +97,42 @@ func login(t *testing.T, app *App, username, password string) string {
 	return access
 }
 
+// loginAppName discovers the App a test's logins must be scoped to. Login is
+// per-App (plan app-scoped-login.md D1) and each fixture declares its own App
+// name, so the helper reads /_meta/apps and prefers a non-public App (the ones
+// that require login).
+func loginAppName(t *testing.T, app *App) string {
+	t.Helper()
+	status, out := doJSON(t, app, "GET", "/default/_ui/_meta/apps", nil)
+	if status != 200 {
+		t.Fatalf("meta/apps: status %d, body %v", status, out)
+	}
+	list, _ := out["data"].([]any)
+	pick := ""
+	for _, raw := range list {
+		m, _ := raw.(map[string]any)
+		name, _ := m["name"].(string)
+		if name == "" {
+			continue
+		}
+		if pick == "" {
+			pick = name
+		}
+		if access, _ := m["access"].(string); access != "public" {
+			return name // a private App accepts login
+		}
+	}
+	if pick == "" {
+		t.Fatal("no App in the workspace to scope login to")
+	}
+	return pick
+}
+
 // loginPair returns the access + refresh token pair for a username/password.
 func loginPair(t *testing.T, app *App, username, password string) (string, string) {
 	t.Helper()
 	status, out := doJSON(t, app, "POST", "/default/_ui/auth/login", map[string]any{
-		"username": username, "password": password,
+		"username": username, "password": password, "app": loginAppName(t, app),
 	})
 	if status != 200 {
 		t.Fatalf("login %s: status %d, body %v", username, status, out)
@@ -197,7 +228,7 @@ func TestAuthAuthz_E2E(t *testing.T) {
 	// ── 1. Authentication: login success + wrong password ──
 	adminTok := login(t, app, "admin", "admin")
 	if status, _ := doJSON(t, app, "POST", "/default/_ui/auth/login", map[string]any{
-		"username": "admin", "password": "wrong",
+		"username": "admin", "password": "wrong", "app": loginAppName(t, app),
 	}); status != 401 {
 		t.Fatalf("expected 401 for wrong password, got %d", status)
 	}
@@ -538,14 +569,14 @@ func TestAuthRateLimit_E2E(t *testing.T) {
 	// Burst is 5 — the first 5 logins succeed.
 	for i := 0; i < 5; i++ {
 		if status, _ := doJSON(t, app, "POST", "/default/_ui/auth/login", map[string]any{
-			"username": "admin", "password": "admin",
+			"username": "admin", "password": "admin", "app": loginAppName(t, app),
 		}); status != 200 {
 			t.Fatalf("login %d: expected 200, got %d", i, status)
 		}
 	}
 	// The 6th login is rate-limited → 429.
 	if status, _ := doJSON(t, app, "POST", "/default/_ui/auth/login", map[string]any{
-		"username": "admin", "password": "admin",
+		"username": "admin", "password": "admin", "app": loginAppName(t, app),
 	}); status != 429 {
 		t.Fatalf("expected 429 after burst exhausted, got %d", status)
 	}
@@ -675,7 +706,7 @@ func TestAuthAuditLog_E2E(t *testing.T) {
 	loginPair(t, app, "admin", "admin")
 	// Failed login.
 	doJSON(t, app, "POST", "/default/_ui/auth/login", map[string]any{
-		"username": "admin", "password": "wrong",
+		"username": "admin", "password": "wrong", "app": loginAppName(t, app),
 	})
 
 	// Verify both appear in the audit log.

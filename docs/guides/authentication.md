@@ -121,7 +121,10 @@ spec:
 Plus gate `permissions` pada page (list of permission strings — caller harus
 punya minimal satu; difilter server-side di meta bundle).
 
-Surface admin (`/{ws}/_admin`) digate permission biner `_admin.access`.
+Surface admin `/{ws}/_admin` **sudah dipensiunkan** (plan
+`docs_internal/plan/app-scoped-login.md` D4): login adalah per-App, dan
+administrasi dilakukan di dalam App yang bersangkutan. Yang tersisa di path itu
+hanya rute framework (`/setup`, `/oauth/*`, `/change-password`).
 
 ---
 

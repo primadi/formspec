@@ -46,6 +46,18 @@ type EntitySchema struct {
 	// permission checker) — the renderer then falls back to the caller's own
 	// permission list. An empty but non-nil slice means "resolved: nothing".
 	AuthorizedActions []string `json:"authorized_actions,omitempty"`
+
+	// Routable reports whether the App's surface exposes this entity — i.e.
+	// whether a derived CRUD route exists for it. It is decided by the App's
+	// reachable set (menu targets ∪ `registered_views`, plan registered-views.md).
+	//
+	// A non-routable entity STILL SHIPS in the bundle so relations and pickers
+	// that reference it keep resolving; only its derived routes are withheld
+	// (the SPA registers none of them), so a direct URL answers 404. NO
+	// `omitempty`: `false` must be serialized, or the client cannot tell
+	// "not routable" from "older server that never sent this field" — the same
+	// trap `HasRoute` documents.
+	Routable bool `json:"routable"`
 }
 
 // ActionSummary is the renderer-facing view of one entity action.
@@ -160,6 +172,12 @@ type ChromeConfig struct {
 	Footer        string `json:"footer"`         // show | hide
 	Breadcrumbs   string `json:"breadcrumbs"`    // show | hide
 	ThemeSwitcher string `json:"theme_switcher"` // show | hide
+	// Regions is the resolved region → content map (frontend/05-app-kinds.md
+	// §4.2) — the archetype preset with explicit `chrome.regions` applied.
+	// Each value is `none` (region absent), `auto` (the archetype's predefined
+	// fill) or a component reference. Authoritative for which regions exist;
+	// `Footer` mirrors `regions.footer` for backward compatibility.
+	Regions map[string]string `json:"regions"`
 	// ProfileRoute is the in-app route to the signed-in user's profile page
 	// (opt-in via manifest `profile_route`; empty = no Profile menu item).
 	ProfileRoute string `json:"profile_route,omitempty"`
@@ -265,6 +283,16 @@ type AppContext struct {
 	// Settings is the resolved global presentation/config namespace (spec §10).
 	// Always non-nil — resolved with standard defaults by the caller.
 	Settings *spec.Settings
+	// RegisteredViews is the raw manifest declaration (App.spec.registered_views)
+	// — the App's extra surface beyond its menu (plan registered-views.md).
+	// BuildBundle unions it with the menu targets to decide which routes exist.
+	RegisteredViews []spec.RegisteredViewDecl
+	// Unfiltered bypasses the registered_views surface allowlist. It is set by
+	// callers that MUST see the whole App regardless of surface curation — the
+	// grants editor (`?grants=true`), so an admin can grant access to a view
+	// that is not currently registered. The `_admin` surface uses a zero
+	// AppContext (Modules nil), which is already ungated.
+	Unfiltered bool
 }
 
 // allows reports whether a manifest belonging to module may ship in this
@@ -421,12 +449,72 @@ type EntityDescriptor struct {
 	Spec        *spec.EntitySpec
 }
 
+// chromeRegionPreset returns the archetype's predefined region map
+// (frontend/05-app-kinds.md §4.2). `auto` = the archetype's own fill, `none` =
+// the region is absent. Archetypes are presets over this one map: `sidebar-nav`
+// is `no-nav` plus a filled sidebar, `topnav` is `no-nav` plus a filled topbar.
+func chromeRegionPreset(appRenderer string) map[string]string {
+	switch appRenderer {
+	case "no-nav":
+		// Chrome EXISTS (a minimal brand bar) but no default navigation.
+		return map[string]string{
+			"topbar":    spec.ChromeAuto,
+			"sidebar":   spec.ChromeNone,
+			"rightbar":  spec.ChromeNone,
+			"bottombar": spec.ChromeNone,
+			"footer":    spec.ChromeAuto,
+		}
+	case "topnav":
+		return map[string]string{
+			"topbar":    spec.ChromeAuto,
+			"sidebar":   spec.ChromeNone,
+			"rightbar":  spec.ChromeNone,
+			"bottombar": spec.ChromeNone,
+			"footer":    spec.ChromeNone,
+		}
+	default: // sidebar-nav
+		return map[string]string{
+			"topbar":    spec.ChromeAuto,
+			"sidebar":   spec.ChromeAuto,
+			"rightbar":  spec.ChromeNone,
+			"bottombar": spec.ChromeNone,
+			"footer":    spec.ChromeNone,
+		}
+	}
+}
+
+// footerRegion maps the legacy `footer` show/hide flag onto its region content.
+func footerRegion(footer string) string {
+	if footer == spec.ChromeShow {
+		return spec.ChromeAuto
+	}
+	return spec.ChromeNone
+}
+
+// ChromeAcceptsLogin reports whether an App advertises an auth entry point —
+// i.e. its resolved `chrome.auth` is not `none` (plan app-scoped-login.md D3).
+//
+// Login is per-App, so the App must be able to present a way in. A public App
+// with no auth entry point (`access: public` + `no-nav`, e.g. the kafe QR
+// catalog) must NOT accept login: signing in there yields a session that is
+// weaker than the anonymous grant, and the surface has no place to type
+// credentials anyway. A public App that DOES advertise auth (e.g. the registry
+// portal, `chrome.auth: links`) legitimately accepts login for its portal
+// users — the rule is declared, not inferred from `access`.
+func ChromeAcceptsLogin(appRenderer string, c *spec.AppChrome) bool {
+	return resolveChrome(appRenderer, c).Auth != spec.ChromeNone
+}
+
 // resolveChrome applies the chrome default matrix (frontend/05-app-kinds.md
-// §4.1) on top of the raw manifest declaration. Unknown/empty values are
+// §4.1/§4.2) on top of the raw manifest declaration. Unknown/empty values are
 // treated as "auto" (strict validation happens at manifest load time via
 // ValidateAppSpec + JSON Schema).
+//
+// `Regions` is the authoritative region map; the boolean fields are sugar over
+// the same composition (they tune the CONTENT of an `auto` region or toggle
+// the footer region) and are mirrored so older renderers keep working.
 func resolveChrome(appRenderer string, c *spec.AppChrome) *ChromeConfig {
-	cfg := &ChromeConfig{}
+	cfg := &ChromeConfig{Regions: chromeRegionPreset(appRenderer)}
 	if appRenderer == "no-nav" {
 		cfg.Brand, cfg.Nav, cfg.Auth = spec.ChromeShow, spec.ChromeNone, spec.ChromeNone
 		cfg.Footer, cfg.Breadcrumbs, cfg.ThemeSwitcher = spec.ChromeShow, spec.ChromeHide, spec.ChromeHide
@@ -435,30 +523,55 @@ func resolveChrome(appRenderer string, c *spec.AppChrome) *ChromeConfig {
 		cfg.Brand, cfg.Nav, cfg.Auth = spec.ChromeShow, spec.ChromeMenu, spec.ChromeLinks
 		cfg.Footer, cfg.Breadcrumbs, cfg.ThemeSwitcher = spec.ChromeHide, spec.ChromeShow, spec.ChromeShow
 	}
-	if c == nil {
-		return cfg
+	if c != nil {
+		if c.Brand == spec.ChromeShow || c.Brand == spec.ChromeHide {
+			cfg.Brand = c.Brand
+		}
+		if c.Nav == spec.ChromeMenu || c.Nav == spec.ChromeNone {
+			cfg.Nav = c.Nav
+		}
+		if c.Auth == spec.ChromeLinks || c.Auth == spec.ChromeButton || c.Auth == spec.ChromeNone {
+			cfg.Auth = c.Auth
+		}
+		if c.Footer == spec.ChromeShow || c.Footer == spec.ChromeHide {
+			cfg.Footer = c.Footer
+		}
+		if c.Breadcrumbs == spec.ChromeShow || c.Breadcrumbs == spec.ChromeHide {
+			cfg.Breadcrumbs = c.Breadcrumbs
+		}
+		if c.ThemeSwitcher == spec.ChromeShow || c.ThemeSwitcher == spec.ChromeHide {
+			cfg.ThemeSwitcher = c.ThemeSwitcher
+		}
+		// Explicit regions override the archetype preset. Unknown/empty keys
+		// are rejected at manifest load; here they are ignored so a stale
+		// bundle can never invent a region the shell does not know.
+		footerExplicit := false
+		for region, content := range c.Regions {
+			if !spec.ChromeRegionSet[region] || content == "" {
+				continue
+			}
+			cfg.Regions[region] = content
+			if region == "footer" {
+				footerExplicit = true
+			}
+		}
+		// When `regions.footer` is not explicit the legacy `footer` boolean
+		// drives it — one value, no drift.
+		if !footerExplicit {
+			cfg.Regions["footer"] = footerRegion(cfg.Footer)
+		}
+		// ProfileRoute is a plain route string (no auto/show/hide matrix) —
+		// pass through as-is.
+		cfg.ProfileRoute = c.ProfileRoute
+	} else {
+		cfg.Regions["footer"] = footerRegion(cfg.Footer)
 	}
-	if c.Brand == spec.ChromeShow || c.Brand == spec.ChromeHide {
-		cfg.Brand = c.Brand
+	// Mirror the resolved footer region back onto the legacy flag so the two
+	// never disagree (Regions is the source of truth).
+	cfg.Footer = spec.ChromeHide
+	if cfg.Regions["footer"] != spec.ChromeNone {
+		cfg.Footer = spec.ChromeShow
 	}
-	if c.Nav == spec.ChromeMenu || c.Nav == spec.ChromeNone {
-		cfg.Nav = c.Nav
-	}
-	if c.Auth == spec.ChromeLinks || c.Auth == spec.ChromeButton || c.Auth == spec.ChromeNone {
-		cfg.Auth = c.Auth
-	}
-	if c.Footer == spec.ChromeShow || c.Footer == spec.ChromeHide {
-		cfg.Footer = c.Footer
-	}
-	if c.Breadcrumbs == spec.ChromeShow || c.Breadcrumbs == spec.ChromeHide {
-		cfg.Breadcrumbs = c.Breadcrumbs
-	}
-	if c.ThemeSwitcher == spec.ChromeShow || c.ThemeSwitcher == spec.ChromeHide {
-		cfg.ThemeSwitcher = c.ThemeSwitcher
-	}
-	// ProfileRoute is a plain route string (no auto/show/hide matrix) —
-	// pass through as-is.
-	cfg.ProfileRoute = c.ProfileRoute
 	return cfg
 }
 
@@ -540,6 +653,121 @@ func (r *Registry) BuildBundle(entities EntityLister, can PermissionChecker, app
 			can = derived
 		}
 	}
+
+	// ── App surface allowlist (plan docs_internal/plan/registered-views.md) ──
+	//
+	// An App's reachable surface is "every menu leaf target ∪ registered_views".
+	// Anything outside it gets NO route: the SPA registers none (shell/router.tsx
+	// buildRoutes), so a direct URL answers 404 even for a caller who holds the
+	// permission. This is SURFACE curation (least privilege) — not a data
+	// authorization boundary. Entity data routes are workspace/module-scoped;
+	// RBAC and `public_entities` remain the data guards.
+	//
+	// Inactive when the App is unknown (a zero AppContext — the `_admin` surface)
+	// or explicitly ungated (`?grants=true`, so an admin can grant a view that is
+	// not currently registered). The gate applies only to modules the App
+	// EXPLICITLY mounts (appCtx.owns) — framework/implicit modules (formspec.core,
+	// core) are cross-cutting and stay reachable as before.
+	surfaceGate := appCtx.Modules != nil && !appCtx.Unfiltered
+	reachableViewRoutes := map[string]bool{}
+	reachableEntities := map[string]bool{} // canonical "module/name"
+	if surfaceGate {
+		var addMenu func(items []spec.MenuItem)
+		addMenu = func(items []spec.MenuItem) {
+			for _, it := range items {
+				if len(it.Children) > 0 {
+					addMenu(it.Children)
+					continue
+				}
+				if it.Route == "" {
+					continue
+				}
+				reachableViewRoutes[it.Route] = true
+				// A "/<module>/<plural>" route targets a derived entity page —
+				// register the entity it displays.
+				if parts := strings.Split(strings.Trim(it.Route, "/"), "/"); len(parts) == 2 {
+					if ref, ok := ix.moduleOfPlural(parts[0], parts[1]); ok {
+						reachableEntities[ref] = true
+					}
+				}
+			}
+		}
+		addMenu(menu)
+		for _, rv := range appCtx.RegisteredViews {
+			if rv.View != "" {
+				mod, name, ok := strings.Cut(rv.View, "/")
+				if !ok {
+					continue
+				}
+				if route, err := r.resolveViewRouteLocked(mod, name); err == nil {
+					reachableViewRoutes[route] = true
+				}
+				continue
+			}
+			if canonical, ok := spec.NormalizeEntityRef(rv.Entity); ok {
+				reachableEntities[canonical] = true
+			}
+		}
+	}
+	// gated reports whether module is subject to the App surface allowlist.
+	gated := func(module string) bool { return surfaceGate && appCtx.owns(module) }
+	// entityRoutable reports whether the entity's derived routes exist.
+	entityRoutable := func(module, name string) bool {
+		return !gated(module) || reachableEntities[module+"/"+name]
+	}
+	// viewRoutable reports whether a derived route for a non-entity kind exists.
+	viewRoutable := func(module, route string) bool {
+		return !gated(module) || reachableViewRoutes[route]
+	}
+
+	// Wizard reachability (plan docs_internal/plan/wizard-commit-patch-dan-
+	// peluncur.md, todo 5.25.7).
+	//
+	// A wizard that BINDS itself to a transition (`spec.entity` + `spec.action`
+	// matching the transition's `via`) is the UI FOR THAT TRANSITION, not an
+	// independent destination: if the entity is reachable, the wizard is too.
+	//
+	// Without this the binding was invisible to the surface allowlist, so a
+	// manifest had to list the wizard in `registered_views` — and forgetting
+	// that had no symptom until a user clicked the transition: the launcher
+	// (DetailPage) reads `bundle.wizards`, found nothing, and silently fell back
+	// to the raw state write, skipping the inputs the wizard exists to collect.
+	entitySpecByRef := map[string]*spec.EntitySpec{}
+	if surfaceGate {
+		for _, d := range entities() {
+			if d.Spec != nil {
+				entitySpecByRef[d.Module+"/"+d.Name] = d.Spec
+			}
+		}
+	}
+	wizardRoutable := func(e *Entry[spec.WizardSpec]) bool {
+		if viewRoutable(e.Module, "/wizard/"+e.Name) {
+			return true
+		}
+		if !surfaceGate || e.Spec == nil || e.Spec.Entity == "" || e.Spec.Action == "" {
+			return false
+		}
+		// Same resolution as registry.go resolveEntityRef: a bare ref is
+		// module-local, a dotted ref is cross-module.
+		mod, name := e.Module, e.Spec.Entity
+		if i := strings.LastIndexByte(e.Spec.Entity, '.'); i > 0 {
+			mod, name = e.Spec.Entity[:i], e.Spec.Entity[i+1:]
+		}
+		if !entityRoutable(mod, name) {
+			return false
+		}
+		es := entitySpecByRef[mod+"/"+name]
+		if es == nil || es.StateMachine == nil {
+			return false
+		}
+		for _, t := range es.StateMachine.Transitions {
+			if t.Action == e.Spec.Action {
+				return true
+			}
+		}
+		return false
+	}
+
 	b := &Bundle{
 		App: AppSummary{
 			Name:           appCtx.Name,
@@ -600,6 +828,9 @@ func (r *Registry) BuildBundle(entities EntityLister, can PermissionChecker, app
 		// SAME checker that just decided the entity ships, so the bundle and
 		// the endpoints can never disagree about it.
 		schema.AuthorizedActions = authorizedActions(d, schema, can)
+		// Surface allowlist: the entity still ships (relations/pickers resolve it)
+		// but its derived routes are withheld unless it is reachable.
+		schema.Routable = entityRoutable(d.Module, d.Name)
 		visible[d.Module+"/"+d.Name] = true
 		b.Entities = append(b.Entities, schema)
 	}
@@ -618,6 +849,13 @@ func (r *Registry) BuildBundle(entities EntityLister, can PermissionChecker, app
 			continue
 		}
 		if publicScope && !appCtx.owns(e.Module) && !isAuthScreen(e) {
+			continue
+		}
+		// Surface allowlist: an authored page ships only when its route is
+		// reachable. The App home ("/") always ships — the SPA always renders a
+		// route for it — and the framework auth screens are exempt so a visitor
+		// can still sign in.
+		if gated(e.Module) && !isAuthScreen(e) && e.Spec.Route != "/" && !reachableViewRoutes[e.Spec.Route] {
 			continue
 		}
 		b.Pages = append(b.Pages, e)
@@ -667,42 +905,52 @@ func (r *Registry) BuildBundle(entities EntityLister, can PermissionChecker, app
 		if e.Spec.RequiredPermission != "" && !can(qualifyPerm(e.Module, e.Spec.RequiredPermission)) {
 			continue
 		}
+		if !viewRoutable(e.Module, "/report/"+e.Name) {
+			continue
+		}
 		if entityVisible(e.Module, e.Spec.Entity) {
 			b.Reports = append(b.Reports, e)
 		}
 	}
 	for _, k := range sortedKeys(r.Kanbans) {
-		if e := r.Kanbans[k]; appCtx.allows(e.Module) && entityVisible(e.Module, e.Spec.Entity) {
+		if e := r.Kanbans[k]; appCtx.allows(e.Module) && entityVisible(e.Module, e.Spec.Entity) &&
+			viewRoutable(e.Module, "/kanban/"+e.Name) {
 			b.Kanbans = append(b.Kanbans, e)
 		}
 	}
 	for _, k := range sortedKeys(r.Timelines) {
-		if e := r.Timelines[k]; appCtx.allows(e.Module) && entityVisible(e.Module, e.Spec.Entity) {
+		if e := r.Timelines[k]; appCtx.allows(e.Module) && entityVisible(e.Module, e.Spec.Entity) &&
+			viewRoutable(e.Module, "/timeline/"+e.Name) {
 			b.Timelines = append(b.Timelines, e)
 		}
 	}
 	for _, k := range sortedKeys(r.Prints) {
-		if e := r.Prints[k]; appCtx.allows(e.Module) && entityVisible(e.Module, e.Spec.Entity) {
+		if e := r.Prints[k]; appCtx.allows(e.Module) && entityVisible(e.Module, e.Spec.Entity) &&
+			viewRoutable(e.Module, "/print/"+e.Name) {
 			b.Prints = append(b.Prints, e)
 		}
 	}
 	for _, k := range sortedKeys(r.Listings) {
-		if e := r.Listings[k]; appCtx.allows(e.Module) && entityVisible(e.Module, e.Spec.Entity) {
+		if e := r.Listings[k]; appCtx.allows(e.Module) && entityVisible(e.Module, e.Spec.Entity) &&
+			viewRoutable(e.Module, "/listing/"+e.Name) {
 			b.Listings = append(b.Listings, e)
 		}
 	}
 	for _, k := range sortedKeys(r.Calendars) {
-		if e := r.Calendars[k]; appCtx.allows(e.Module) && entityVisible(e.Module, e.Spec.Entity) {
+		if e := r.Calendars[k]; appCtx.allows(e.Module) && entityVisible(e.Module, e.Spec.Entity) &&
+			viewRoutable(e.Module, "/calendar/"+e.Name) {
 			b.Calendars = append(b.Calendars, e)
 		}
 	}
 	for _, k := range sortedKeys(r.ApprovalInboxes) {
-		if e := r.ApprovalInboxes[k]; appCtx.allows(e.Module) {
+		if e := r.ApprovalInboxes[k]; appCtx.allows(e.Module) &&
+			viewRoutable(e.Module, "/approval-inbox/"+e.Name) {
 			b.ApprovalInboxes = append(b.ApprovalInboxes, e)
 		}
 	}
 	for _, k := range sortedKeys(r.NotificationCenters) {
-		if e := r.NotificationCenters[k]; appCtx.allows(e.Module) {
+		if e := r.NotificationCenters[k]; appCtx.allows(e.Module) &&
+			viewRoutable(e.Module, "/notification-center/"+e.Name) {
 			b.NotificationCenters = append(b.NotificationCenters, e)
 		}
 	}
@@ -723,12 +971,16 @@ func (r *Registry) BuildBundle(entities EntityLister, can PermissionChecker, app
 		if publicScope && !appCtx.owns(e.Module) {
 			continue
 		}
+		if !viewRoutable(e.Module, "/dashboard/"+e.Name) {
+			continue
+		}
 		if r.dashboardHasVisibleWidget(e, ix, can) {
 			b.Dashboards = append(b.Dashboards, e)
 		}
 	}
 	for _, k := range sortedKeys(r.Wizards) {
-		if e := r.Wizards[k]; appCtx.allows(e.Module) && (!publicScope || appCtx.owns(e.Module)) {
+		if e := r.Wizards[k]; appCtx.allows(e.Module) && (!publicScope || appCtx.owns(e.Module)) &&
+			wizardRoutable(e) {
 			b.Wizards = append(b.Wizards, e)
 		}
 	}
@@ -794,6 +1046,9 @@ func (r *Registry) BuildBundle(entities EntityLister, can PermissionChecker, app
 		if !spec.IsPublic(e.Spec.Public) {
 			continue
 		}
+		if !viewRoutable(e.Module, "/"+e.Module+"/form/"+e.Name) {
+			continue
+		}
 		key := e.Module + "/form/" + e.Name
 		if covered[key] {
 			continue
@@ -814,6 +1069,9 @@ func (r *Registry) BuildBundle(entities EntityLister, can PermissionChecker, app
 			continue
 		}
 		if !spec.IsPublic(e.Spec.Public) {
+			continue
+		}
+		if !viewRoutable(e.Module, "/"+e.Module+"/table/"+e.Name) {
 			continue
 		}
 		key := e.Module + "/table/" + e.Name
@@ -1019,10 +1277,12 @@ func (r *Registry) routeExists(module, route string, b *Bundle) bool {
 
 	// 4. Derived entity routes: /<module>/<plural>[/new|/:id[/edit]]. The SPA
 	//    generates these for every entity in the bundle, so the entity list —
-	//    not the router — is the source of truth.
+	//    not the router — is the source of truth. A non-routable entity (one the
+	//    App's surface allowlist excluded) ships for relations/pickers but has NO
+	//    derived route, so it must not answer as if it did.
 	if len(parts) >= 2 {
 		for _, e := range b.Entities {
-			if e.Module == parts[0] && e.Plural == parts[1] {
+			if e.Module == parts[0] && e.Plural == parts[1] && e.Routable {
 				return true
 			}
 		}

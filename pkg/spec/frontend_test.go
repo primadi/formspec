@@ -119,6 +119,56 @@ func TestValidateAppSpec_Chrome(t *testing.T) {
 	}
 }
 
+func TestValidateAppSpec_ChromeRegions(t *testing.T) {
+	// Empty regions and the reserved values pass.
+	ok := []map[string]string{
+		nil,
+		{},
+		{"topbar": ChromeAuto, "sidebar": ChromeNone, "rightbar": "cafe/components/help"},
+		{"bottombar": "cafe/components/status", "footer": ChromeNone},
+	}
+	for _, regions := range ok {
+		if err := ValidateAppSpec(&AppSpec{RootURL: "/app", Chrome: &AppChrome{Regions: regions}}); err != nil {
+			t.Errorf("expected no error for regions %+v, got %v", regions, err)
+		}
+	}
+
+	// Unknown region names are rejected (they would be a silent no-op at
+	// runtime — the shell has no such region).
+	err := ValidateAppSpec(&AppSpec{RootURL: "/app", Chrome: &AppChrome{
+		Regions: map[string]string{"center": ChromeAuto},
+	}})
+	if err == nil || !strings.Contains(err.Error(), "unknown region") {
+		t.Errorf("expected unknown-region error, got %v", err)
+	}
+	if err != nil && !strings.Contains(err.Error(), "center") {
+		t.Errorf("error should name the offending region, got %v", err)
+	}
+
+	// An empty value is not a valid way to remove a region — say so, and name
+	// the reserved `none` value instead.
+	err = ValidateAppSpec(&AppSpec{RootURL: "/app", Chrome: &AppChrome{
+		Regions: map[string]string{"sidebar": ""},
+	}})
+	if err == nil || !strings.Contains(err.Error(), "must not be empty") {
+		t.Errorf("expected empty-value error, got %v", err)
+	}
+
+	// A component ref must be a well-formed `module/name`.
+	for _, bad := range []string{"/leading", "trailing/", "noseparator"} {
+		err := ValidateAppSpec(&AppSpec{RootURL: "/app", Chrome: &AppChrome{
+			Regions: map[string]string{"rightbar": bad},
+		}})
+		if err == nil {
+			t.Errorf("expected error for regions.rightbar = %q", bad)
+			continue
+		}
+		if !strings.Contains(err.Error(), "chrome.regions.rightbar") {
+			t.Errorf("error should name chrome.regions.rightbar, got: %v", err)
+		}
+	}
+}
+
 func TestValidatePageSpec_BlocksAndTabsMutuallyExclusive(t *testing.T) {
 	p := &PageSpec{
 		Route:  "/x",

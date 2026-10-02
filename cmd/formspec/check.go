@@ -204,6 +204,13 @@ func runCheck(args []string) {
 	checkRenderers(result, res.Manifests)
 	checkAppWorkspaces(result, res.Manifests)
 
+	// Check 9: an App that mounts modules but declares no reachable surface —
+	// neither a menu nor `registered_views` (plan registered-views.md). The
+	// reachable surface is "menu targets ∪ registered_views", so such an App
+	// exposes nothing: no route is registered and every direct URL 404s. Legal
+	// (an App can be staged), but easy to write by accident — warning, not error.
+	checkAppSurface(result, res.Manifests)
+
 	// Check 3+4: cross-module uses.resources existence + unused.
 	brokenRefs := checkUses(result, idx, res.Manifests)
 
@@ -922,6 +929,38 @@ func checkAppWorkspaces(result *checkResult, manifests []manifest.RawManifest) {
 			result.add(m.Source, "warning",
 				"app %q is staged — explicit empty `workspaces: []` mounts it in no workspace (intentional? fill the allowlist or remove the field)",
 				m.Metadata.Name)
+		}
+	}
+}
+
+// checkAppSurface warns when an App mounts modules but declares no reachable
+// surface (plan docs_internal/plan/registered-views.md).
+//
+// An App's reachable surface is "every menu leaf target ∪ registered_views"; a
+// route outside it is never registered, so a direct URL answers 404. An App with
+// modules but neither a menu nor `registered_views` therefore exposes NOTHING —
+// legal (an App can be staged like `workspaces: []`), but easy to write by
+// accident, so it surfaces as a warning.
+func checkAppSurface(result *checkResult, manifests []manifest.RawManifest) {
+	for _, m := range manifests {
+		if spec.Kind(m.Kind) != spec.KindApp || m.Spec == nil {
+			continue
+		}
+		specMap, ok := m.Spec.(map[string]any)
+		if !ok {
+			continue
+		}
+		appSpec, err := manifest.RawSpecToAppSpec(specMap)
+		if err != nil {
+			continue
+		}
+		if len(appSpec.Modules) == 0 {
+			continue
+		}
+		if len(appSpec.Menu) == 0 && len(appSpec.RegisteredViews) == 0 {
+			result.add(m.Source, "warning",
+				"app %q mounts %d module(s) but declares no menu and no `registered_views` — nothing is reachable (add a menu, or register the views the App exposes)",
+				m.Metadata.Name, len(appSpec.Modules))
 		}
 	}
 }

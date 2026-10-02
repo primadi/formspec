@@ -53,13 +53,20 @@ import (
 const userEntity = "user"
 
 func runSeed(args []string) {
-	specPath := "spec"
-	dsn := "sqlite:.formspec/data.db"
+	// Defaults from formspec-app.yaml (project_defaults.go), same as `formspec dev`.
+	//
+	// The old literal `workspaceID := "demo"` was the sharp edge here: seeded
+	// rows land in a tenant scope, so a bare `formspec seed` in a named
+	// deployment wrote every row into a tenant the App never reads (`demo`),
+	// while the command reported success. `make seed-kafe` avoided it only by
+	// passing `--workspace kafe` explicitly, which hid the default behind the
+	// Makefile.
+	d := loadProjectDefaults()
+	specPath := d.SpecPath
+	dsn := d.DSN
 	moduleFilter := ""
-	// Seeded rows land in a workspace (tenant scope). Default stays "demo" for
-	// backward compatibility, but a named deployment (kafe) must pass its own
-	// slug or the rows exist in a tenant the App never reads.
-	workspaceID := "demo"
+	workspaceID := d.WorkspaceID
+	workspaceExplicit := d.WorkspaceExplicit
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--spec", "-spec":
@@ -80,6 +87,7 @@ func runSeed(args []string) {
 		case "--workspace", "-workspace":
 			if i+1 < len(args) {
 				workspaceID = args[i+1]
+				workspaceExplicit = true
 				i++
 			}
 		case "--help", "-h":
@@ -91,19 +99,18 @@ func runSeed(args []string) {
 		}
 	}
 
+	// Anchor a relative SQLite path to the project root derived from the spec
+	// path, like every other lifecycle verb (dev/backup/repl/archive), and adopt
+	// the only declared workspace when the caller did not name one (#48) — the
+	// same rule the server applies to its own tenant.
+	specPath, dsn, workspaceID = finishProjectDefaults(specPath, dsn, workspaceID, workspaceExplicit)
+
 	loader := manifest.NewLoader(specPath)
 	res, err := loader.LoadAll()
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "Error: load manifests: %v\n", err)
 		os.Exit(1)
 	}
-
-	// Anchor a relative SQLite path to the project root derived from the spec
-	// path, like every other lifecycle verb (dev/backup/repl/archive). Without
-	// this, `formspec seed` run from a different CWD writes a DIFFERENT database
-	// than the one the server reads — a seed that reports success while the app
-	// stays empty (plan dsn-spec-anchored.md).
-	dsn = resolveDSN(dsn, specPath)
 
 	database, err := db.Open(dsn)
 	if err != nil {

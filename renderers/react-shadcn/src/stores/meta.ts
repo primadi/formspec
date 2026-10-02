@@ -84,31 +84,22 @@ export function detectAppName(
 
 export interface MetaState {
   bundle: MetaBundle | null
-  // Which surface the loaded bundle belongs to ("admin" | "app"). The store
-  // holds ONE bundle — navigating between surfaces must ignore (and reload)
-  // a bundle fetched for the other surface, otherwise guards read stale data
-  // (e.g. setup_required=true from the app bundle blocking the admin login
-  // route → setup↔login redirect loop after first-run setup).
-  loadedSurface: "admin" | "app" | null
+  // Which App the loaded bundle belongs to (the resolved App NAME). The store
+  // holds ONE bundle — navigating to another App must ignore (and reload) a
+  // bundle resolved for a different App, otherwise guards read another App's
+  // modules/menu/permissions as if they were this one's.
+  loadedApp: string | null
   loading: boolean
   error: string | null
-  // Set when the server rejected the request with 403 (e.g. `_admin` without
-  // the `_admin.access` permission) — distinct from `error` so the UI can
-  // show "Access Denied" instead of a generic connection-error screen.
+  // Set when the server rejected the request with 403 (e.g. an App the caller
+  // cannot see) — distinct from `error` so the UI can show "Access Denied"
+  // instead of a generic connection-error screen.
   forbidden: boolean
 
   // ── Actions ──
-  load: (
-    workspace: string,
-    surface: "admin" | "app",
-    token?: string,
-  ) => Promise<void>
+  load: (workspace: string, token?: string) => Promise<void>
   reset: () => void
-  refresh: (
-    workspace: string,
-    surface: "admin" | "app",
-    token?: string,
-  ) => Promise<void>
+  refresh: (workspace: string, token?: string) => Promise<void>
 
   // ── Entity Lookups ──
   getEntity: (module: string, name: string) => EntitySchema | undefined
@@ -224,12 +215,12 @@ function getOrBuildLookups(bundle: MetaBundle | null) {
 
 export const useMetaStore = create<MetaState>((set, get) => ({
   bundle: null,
-  loadedSurface: null,
+  loadedApp: null,
   loading: false,
   error: null,
   forbidden: false,
 
-  load: async (workspace: string, surface: "admin" | "app", token?: string) => {
+  load: async (workspace: string, token?: string) => {
     set({ loading: true, error: null, forbidden: false })
     try {
       // Live auth callbacks so a 401 during meta load can refresh the token.
@@ -239,42 +230,31 @@ export const useMetaStore = create<MetaState>((set, get) => ({
       // this the auth hook would expire a still-valid session.
       const needsContext = () =>
         useSessionStore.getState().pendingContext !== null
-      // `_admin` isn't scoped to any App (Core §4.4) — skip App detection
-      // entirely and fetch the unscoped, binary-gated bundle.
-      let bundle: MetaBundle
-      if (surface === "admin") {
-        bundle = await fetchMetaBundle(workspace, {
-          admin: true,
-          token,
-          getToken,
-          onUnauthorized,
-          needsContext,
-        })
-      } else {
-        const apps = await fetchMetaApps(workspace, token, {
-          getToken,
-          onUnauthorized,
-        })
-        const appName = detectAppName(window.location.pathname, apps)
-        bundle = await fetchMetaBundle(workspace, {
-          appName,
-          token,
-          getToken,
-          onUnauthorized,
-        })
-      }
+      // A bundle is ALWAYS App-scoped (plan app-scoped-login.md D4): resolve
+      // the App owning the current URL, then ask for its bundle.
+      const apps = await fetchMetaApps(workspace, token, {
+        getToken,
+        onUnauthorized,
+      })
+      const appName = detectAppName(window.location.pathname, apps)
+      const bundle = await fetchMetaBundle(workspace, {
+        appName,
+        token,
+        getToken,
+        onUnauthorized,
+        needsContext,
+      })
       set({
         bundle,
         loading: false,
         error: null,
         forbidden: false,
-        loadedSurface: surface,
+        loadedApp: appName ?? null,
       })
     } catch (err) {
-      // 403 → forbidden (distinct from a connection error): the `_admin`
-      // surface without `_admin.access`, or an app the caller can't see.
-      // fetchMetaBundle throws a ky HTTPError (not FormaApiError), so check
-      // both.
+      // 403 → forbidden (distinct from a connection error): an App the caller
+      // cannot see. fetchMetaBundle throws a ky HTTPError (not FormaApiError),
+      // so check both.
       const status =
         err instanceof FormaApiError
           ? err.status
@@ -283,13 +263,13 @@ export const useMetaStore = create<MetaState>((set, get) => ({
             : undefined
       if (status === 403) {
         // Drop any previously loaded bundle — a failed load must not leave a
-        // wrong-surface bundle behind for the guards to misread.
+        // wrong-App bundle behind for the guards to misread.
         set({
           loading: false,
           error: null,
           forbidden: true,
           bundle: null,
-          loadedSurface: null,
+          loadedApp: null,
         })
         return
       }
@@ -303,7 +283,7 @@ export const useMetaStore = create<MetaState>((set, get) => ({
           error: null,
           forbidden: false,
           bundle: null,
-          loadedSurface: null,
+          loadedApp: null,
         })
         return
       }
@@ -313,46 +293,31 @@ export const useMetaStore = create<MetaState>((set, get) => ({
         loading: false,
         error: message,
         bundle: null,
-        loadedSurface: null,
+        loadedApp: null,
       })
     }
   },
 
-  refresh: async (
-    workspace: string,
-    surface: "admin" | "app",
-    token?: string,
-  ) => {
+  refresh: async (workspace: string, token?: string) => {
     try {
       const getToken = () => useSessionStore.getState().token
       const onUnauthorized = () => useSessionStore.getState().refreshSession()
       const needsContext = () =>
         useSessionStore.getState().pendingContext !== null
-      let bundle: MetaBundle
-      if (surface === "admin") {
-        bundle = await fetchMetaBundle(workspace, {
-          admin: true,
-          token,
-          getToken,
-          onUnauthorized,
-          needsContext,
-        })
-      } else {
-        const apps = await fetchMetaApps(workspace, token, {
-          getToken,
-          onUnauthorized,
-          needsContext,
-        })
-        const appName = detectAppName(window.location.pathname, apps)
-        bundle = await fetchMetaBundle(workspace, {
-          appName,
-          token,
-          getToken,
-          onUnauthorized,
-          needsContext,
-        })
-      }
-      set({ bundle, error: null, loadedSurface: surface })
+      const apps = await fetchMetaApps(workspace, token, {
+        getToken,
+        onUnauthorized,
+        needsContext,
+      })
+      const appName = detectAppName(window.location.pathname, apps)
+      const bundle = await fetchMetaBundle(workspace, {
+        appName,
+        token,
+        getToken,
+        onUnauthorized,
+        needsContext,
+      })
+      set({ bundle, error: null, loadedApp: appName ?? null })
     } catch (err) {
       // A 401 means the token expired — expire the session (login redirect).
       // Other refresh errors are silently ignored — keep the old bundle.
@@ -371,7 +336,7 @@ export const useMetaStore = create<MetaState>((set, get) => ({
   reset: () => {
     set({
       bundle: null,
-      loadedSurface: null,
+      loadedApp: null,
       loading: false,
       error: null,
       forbidden: false,

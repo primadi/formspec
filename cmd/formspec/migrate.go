@@ -32,8 +32,13 @@ import (
 )
 
 func runMigrate(args []string) {
-	specPath := "spec"
-	dsn := "sqlite:.formspec/data.db"
+	// Defaults from formspec-app.yaml (project_defaults.go) — the same resolution
+	// `formspec dev` performs. `migrate apply` is the second half of the repair
+	// loop whose first half is `repl --no-sync -f`, so it has to reach the same
+	// database the server serves; with a literal default it reached another one.
+	d := loadProjectDefaults()
+	specPath := d.SpecPath
+	dsn := d.DSN
 	var positional []string
 	for i := 0; i < len(args); i++ {
 		switch args[i] {

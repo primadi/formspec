@@ -14,11 +14,17 @@ import { KeyRound } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useSessionStore } from "@/stores/session"
+import { useSurface } from "@/hooks/useSurface"
 
 export function ChangePasswordPage() {
   const { workspace = "default" } = useParams<{ workspace: string }>()
   const navigate = useAppNavigate()
   const token = useSessionStore((s) => s.token)
+  // Return to the surface the page was opened from. This page is reachable on
+  // the admin surface AND on every App surface ({ws}{root_url}) — a hardcoded
+  // `/{ws}/_admin` return threw an App user out of their App (and 403s when
+  // they have no admin grant).
+  const { surfacePath } = useSurface()
 
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
@@ -61,7 +67,7 @@ export function ChangePasswordPage() {
         )
       }
       toast.success("Password changed")
-      navigate(`/${workspace}/_admin`, { replace: true })
+      navigate(surfacePath(), { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to change password")
     } finally {

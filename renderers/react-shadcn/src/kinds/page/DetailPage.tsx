@@ -17,6 +17,7 @@ import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
 import { canDoEntityAction } from "@/engine/permissions"
 import { resolveEntityRef } from "@/engine/entityRef"
+import { findWizardForTransition } from "@/engine/wizardCommit"
 import { deriveDetailFields, entityFieldLabel } from "@/engine/derive"
 import { getLifecycle, getAvailableTransitions } from "@/engine/lifecycle"
 import { apiGet, apiPatch } from "@/lib/api"
@@ -121,6 +122,7 @@ export default function DetailPage({ entity }: DetailPageProps) {
   // Select the raw value (stable reference) and fall back outside the selector
   // — a `?? []` inside would return a fresh array every render and loop forever.
   const entities = useMetaStore((s) => s.bundle?.entities) ?? []
+  const wizards = useMetaStore((s) => s.bundle?.wizards) ?? []
   const settings = useMetaStore((s) => s.bundle?.settings)
   const formatter = useMemo(() => createFormatter(settings), [settings])
 
@@ -148,6 +150,24 @@ export default function DetailPage({ entity }: DetailPageProps) {
     if (!me) return
     if (!canDoEntityAction(me, entity, action)) {
       toast.error("You don't have permission")
+      return
+    }
+
+    // A wizard bound to this transition (same entity, `spec.action === via`)
+    // OWNS the flow: it collects the inputs the transition needs (a counted
+    // cash, a reason, an approver) before the state write. Running the PATCH
+    // here instead — the old behaviour — applied the transition with none of
+    // them, so `counted_cash` stayed empty and a computed `difference` was
+    // evaluated from nothing.
+    //
+    // Checked BEFORE the input/confirm dialogs: the wizard is the one that
+    // asks, so opening a generic dialog first would double-prompt.
+    const wizard = findWizardForTransition(wizards, entity, action)
+    if (wizard) {
+      const query = new URLSearchParams()
+      if (id) query.set("id", id)
+      const qs = query.toString()
+      navigate(`${surfacePath("wizard", wizard.name)}${qs ? `?${qs}` : ""}`)
       return
     }
 

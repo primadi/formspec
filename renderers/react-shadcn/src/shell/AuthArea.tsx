@@ -5,9 +5,15 @@
 // backend already applied archetype defaults, so this component renders
 // final values only:
 //
-// - "links":  anon → Sign in link + Sign up button · signed-in → logout
-// - "button": anon → single Sign in button · signed-in → logout
-// - "none":   renders nothing (private Apps still guard via surface boot)
+// - "links":  anon → Sign in link + Sign up button · signed-in → user menu
+// - "button": anon → single Sign in button · signed-in → user menu
+// - "none":   anon → nothing · signed-in → STILL the user menu (see below)
+//
+// `chrome.auth` tunes the ANONYMOUS entry points only. It never removes the
+// exit: a signed-in session always gets its user menu (→ Sign out), whatever
+// the mode. `no-nav` resolves `auth: none`, and the old "none → render nothing"
+// rule left a signed-in visitor on a public App with no Sign out at all, and
+// no way back in once signed out (kafe 10.18).
 //
 // `undefined` (bundle not loaded yet) renders nothing — never guess.
 
@@ -29,10 +35,14 @@ export function AuthArea({ mode }: { mode: string | undefined }) {
     return <AssetRenderer asset={chromeAuth} />
   }
 
-  if (mode !== "links" && mode !== "button") return null
-
   // Signed-in → avatar user menu (Profile identity + Sign out).
+  //
+  // This runs BEFORE the mode check on purpose: a session must always have an
+  // exit. `chrome.auth` (incl. its `none` default on `no-nav`) governs the
+  // anonymous Sign in / Sign up affordances, never the signed-in exit.
   if (token) return <UserMenu />
+
+  if (mode !== "links" && mode !== "button") return null
 
   if (mode === "button") {
     return (

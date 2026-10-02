@@ -9,10 +9,31 @@ import (
 	"path/filepath"
 	"testing"
 
+	formspec_app "github.com/primadi/formspec/internal/app"
 	"github.com/primadi/formspec/internal/auth"
 	"github.com/primadi/formspec/internal/entity"
+	"github.com/primadi/formspec/pkg/spec"
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
 )
+
+// testLoginApps returns a minimal App set for tests that exercise App-scoped
+// login (plan app-scoped-login.md): one login-capable App. Login now requires
+// `app`, and the App must advertise an auth entry point
+// (ui.ChromeAcceptsLogin) — the sidebar-nav archetype does.
+func testLoginApps(access spec.AppAccess) map[string]*formspec_app.ResolvedApp {
+	return map[string]*formspec_app.ResolvedApp{
+		"demo-app": {
+			Name: "demo-app",
+			Spec: &spec.AppSpec{
+				RootURL:     "/app/demo",
+				AppRenderer: "sidebar-nav",
+				Access:      access,
+				Modules:     []string{"demo"},
+			},
+			Modules: map[string]bool{"demo": true},
+		},
+	}
+}
 
 // setupAuthAPIEnv builds a router with core entities registered and the auth
 // service wired, backed by an in-memory SQLite database.
@@ -52,6 +73,7 @@ func setupAuthAPIEnv(t *testing.T) http.Handler {
 	t.Cleanup(func() { SetAuthValidator(prev) })
 
 	rb := NewRouterBuilder(reg)
+	rb.SetApps(testLoginApps(spec.AppAccessPrivate))
 	rb.BuildRoutes()
 	return rb.BuildHTTP()
 }
@@ -59,7 +81,7 @@ func setupAuthAPIEnv(t *testing.T) http.Handler {
 func TestAuthLogin_Success(t *testing.T) {
 	handler := setupAuthAPIEnv(t)
 
-	body := bytes.NewBufferString(`{"username":"admin","password":"admin"}`)
+	body := bytes.NewBufferString(`{"username":"admin","password":"admin","app":"demo-app"}`)
 	req := httptest.NewRequest(http.MethodPost, "/demo/_ui/auth/login", body)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -87,7 +109,7 @@ func TestAuthLogin_Success(t *testing.T) {
 func TestAuthLogin_WrongPassword(t *testing.T) {
 	handler := setupAuthAPIEnv(t)
 
-	body := bytes.NewBufferString(`{"username":"admin","password":"wrong"}`)
+	body := bytes.NewBufferString(`{"username":"admin","password":"wrong","app":"demo-app"}`)
 	req := httptest.NewRequest(http.MethodPost, "/demo/_ui/auth/login", body)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -102,7 +124,7 @@ func TestAuthRefresh_Rotation(t *testing.T) {
 	handler := setupAuthAPIEnv(t)
 
 	// Login first.
-	loginBody := bytes.NewBufferString(`{"username":"admin","password":"admin"}`)
+	loginBody := bytes.NewBufferString(`{"username":"admin","password":"admin","app":"demo-app"}`)
 	loginReq := httptest.NewRequest(http.MethodPost, "/demo/_ui/auth/login", loginBody)
 	loginReq.Header.Set("Content-Type", "application/json")
 	loginRec := httptest.NewRecorder()

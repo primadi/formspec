@@ -44,7 +44,7 @@ func TestLogin_RecordsAudit(t *testing.T) {
 	handler := setupAuthAPIEnv(t)
 
 	// Successful login.
-	body := bytes.NewBufferString(`{"username":"admin","password":"admin"}`)
+	body := bytes.NewBufferString(`{"username":"admin","password":"admin","app":"demo-app"}`)
 	req := httptest.NewRequest(http.MethodPost, "/demo/_ui/auth/login", body)
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -54,7 +54,7 @@ func TestLogin_RecordsAudit(t *testing.T) {
 	}
 
 	// Failed login.
-	body2 := bytes.NewBufferString(`{"username":"admin","password":"wrong"}`)
+	body2 := bytes.NewBufferString(`{"username":"admin","password":"wrong","app":"demo-app"}`)
 	req2 := httptest.NewRequest(http.MethodPost, "/demo/_ui/auth/login", body2)
 	req2.Header.Set("Content-Type", "application/json")
 	rr2 := httptest.NewRecorder()

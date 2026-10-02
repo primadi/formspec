@@ -178,9 +178,9 @@ bukan gate biner di depannya:
   (any-of, `allowedPage`, `meta.go:216-226`); kind navigasi-saja (Dashboard,
   Theme, Wizard) selalu ikut, elemen di dalamnya digerbangi client-side.
   ETag dihitung dari SHA-256 body data (`meta.go:150-159`), mendukung
-  conditional GET (`If-None-Match` → 304). `?admin=true` menyajikan varian
-  unscoped-App (semua module, tanpa filter per-entity), digerbangi satu
-  permission biner `_admin.access` (`meta.go:102-116,125-131`).
+  conditional GET (`If-None-Match` → 304). Setiap bundle **App-scoped** dan
+  permission-filtered; varian unscoped-App `?admin=true` (gerbang biner
+  `_admin.access`) sudah dipensiunkan — plan `app-scoped-login.md` D4.
 - **`GET /_meta/me`** (`meta.go:171-197`) — identitas caller: `user_id`,
   `workspace`, `roles`, `permissions` — sumber gating client-side. Caller
   anonim mendapat `user_id: "anonymous"`, roles/permissions kosong (bukan

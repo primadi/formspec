@@ -60,12 +60,20 @@ Module → Resource`: dimiliki satu Data Owner (Workspace Owner), menampung
 - **App renderer** — Tingkat kedua hirarki visual: menentukan bentuk
   chrome/navigasi subtree sebuah App — chrome penuh (menu persisten, header)
   versus minimal (tanpa nav standar). Contoh:
-  `sidebar-nav`, `topnav`, `no-nav` — dipilih lewat field `app_renderer`
-  (`no-nav` = tanpa navigasi sama sekali). Komposisi elemen chrome (brand,
-  nav, auth, footer, breadcrumbs, theme_switcher) dikontrol `App.spec.chrome`
-  — ortogonal terhadap archetype dan `access`; default di-resolve backend
-  (`spec/frontend/05-app-kinds.md` §5).
-  di manifest App. Auth adalah sumbu terpisah (`access`: `private`/`public`).
+  `sidebar-nav`, `topnav`, `no-nav` — dipilih lewat field `app_renderer`.
+  Archetype ini hanyalah **preset** di atas peta **chrome region**; `no-nav`
+  = tanpa bar default, bukan tanpa chrome.
+- **Chrome region** — Himpunan tetap region App shell: `topbar`, `sidebar`,
+  `rightbar`, `bottombar`, `footer` (+ `content` implicit, tidak bisa
+  diganti). Isi tiap region `none` | `auto` | `<component-ref>`; diatur lewat
+  `App.spec.chrome.regions`, di-resolve backend menjadi
+  `bundle.app.chrome.regions`. Menggantikan model boolean per-elemen lama
+  (yang tetap berlaku sebagai gula untuk **isi** region `auto`). Kontrol
+  sesi (user menu → Sign out) selalu dirender bila ada sesi, terlepas dari
+  `chrome` (`spec/frontend/05-app-kinds.md` §5).
+- **Auth (App)** — Sumbu terpisah dari archetype (`access`:
+  `private`/`public`). `chrome.auth` hanya mengatur titik masuk **anonim**
+  (Sign in/Sign up); bukan jalan keluar.
 - **Page renderer** — Tingkat ketiga hirarki visual: mengisi konten utama
   sebuah route di dalam App renderer, mis. `data-entry`, `wizard`, `kanban`,
   `table-list`, `report`, `listing`.

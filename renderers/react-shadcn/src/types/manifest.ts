@@ -1392,6 +1392,15 @@ export interface EntitySchema {
    *  `undefined` means not resolved (older server) — the renderer falls back
    *  to the caller's permission list. `[]` means resolved: nothing allowed. */
   authorized_actions?: string[]
+  /** Whether the App's surface exposes this entity — i.e. whether a derived
+   *  CRUD route exists for it. Decided server-side by the App's reachable set
+   *  (menu targets ∪ `registered_views`, plan registered-views.md).
+   *
+   *  A non-routable entity still SHIPS in the bundle so relations and pickers
+   *  keep resolving; only its derived routes are withheld, so a direct URL
+   *  answers 404. `undefined` means an older server that never sent the field —
+   *  keep the previous behaviour (the routes exist). */
+  routable?: boolean
 }
 
 export interface ActionSummary {
@@ -1436,6 +1445,13 @@ export interface AppSummary {
   app_renderer?: string
   /** Auth axis: private | public. Public Apps boot anonymously. */
   access?: "private" | "public"
+  /**
+   * Whether this App presents an auth entry point (resolved `chrome.auth` !==
+   * "none"). Login is per-App (plan app-scoped-login.md D1/D3); this is the
+   * server's own test, so the client never infers it from `access` — a public
+   * App may still accept login (e.g. the registry portal).
+   */
+  accepts_login?: boolean
   /** Shell implementation (frontend/03-renderer-kind.md): react-shadcn */
   stack_family?: string
   /** Entity persist backend (backend/04-persist-backend.md): jsonb-persist */
@@ -1486,8 +1502,23 @@ export interface AuthConfig {
   chrome_auth?: string
 }
 
-/** Effective chrome composition (frontend/05-app-kinds.md §4.1). Resolved by
- *  the meta API — every "auto" in the manifest is replaced by the archetype
+/** Chrome region names (frontend/05-app-kinds.md §4.2). `content` is implicit
+ *  (the page Outlet) and is deliberately not addressable. */
+export type ChromeRegion =
+  | "topbar"
+  | "sidebar"
+  | "rightbar"
+  | "bottombar"
+  | "footer"
+
+/** A region's content: `none` (region absent), `auto` (the archetype's
+ *  predefined fill), or a component reference (`module/name`). The intersection
+ *  with `string` keeps editor autocomplete for the two reserved values while
+ *  still accepting any component ref. */
+export type ChromeRegionContent = "none" | "auto" | (string & {})
+
+/** Effective chrome composition (frontend/05-app-kinds.md §4.1/§4.2). Resolved
+ *  by the meta API — every "auto" in the manifest is replaced by the archetype
  *  default, so renderers read final values and never guess. */
 export interface ChromeConfig {
   /** show | hide */
@@ -1502,6 +1533,11 @@ export interface ChromeConfig {
   breadcrumbs: string
   /** show | hide */
   theme_switcher: string
+  /** Resolved region → content map (§4.2) — the archetype preset with explicit
+   *  `chrome.regions` applied. Authoritative for which regions exist; the
+   *  boolean fields above tune the CONTENT of an `auto` region (and `footer`
+   *  mirrors `regions.footer`). */
+  regions?: Partial<Record<ChromeRegion, ChromeRegionContent>>
   /** In-app route to the signed-in user's profile page (optional —
    *  when set, the auth-area user menu renders a Profile item). */
   profile_route?: string

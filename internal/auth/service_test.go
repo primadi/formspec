@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 
@@ -147,5 +148,36 @@ func TestRoleResolver_Override(t *testing.T) {
 	roles.SetOverride(RoleUser, "nope/missing")
 	if _, err := roles.Resolve(RoleUser); err == nil {
 		t.Fatal("expected error for unresolvable override")
+	}
+}
+
+// TestService_LoginAppScope_NoPermissions: an App-scoped login for a principal
+// whose roles grant nothing inside that App fails closed with ErrNoAppAccess
+// instead of issuing a dead 0-permission token (plan app-scoped-login.md D6;
+// kafe 10.22 — "authenticated, lands on an empty page").
+func TestService_LoginAppScope_NoPermissions(t *testing.T) {
+	svc, _, _ := setupAuthService(t)
+	ctx := context.Background()
+
+	// A user with no roles and no direct permissions.
+	if err := svc.users.CreateUser(ctx, "demo", &User{
+		Username:     "norole",
+		PasswordHash: "norole123",
+		WorkspaceID:  "demo",
+		Active:       true,
+	}); err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	if _, err := svc.Login(ctx, "demo", "kafe-pos", "norole", "norole123"); !errors.Is(err, ErrNoAppAccess) {
+		t.Fatalf("expected ErrNoAppAccess, got %v", err)
+	}
+
+	// The same principal with a wildcard grant passes the app gate.
+	if err := svc.GrantRoles(ctx, "demo", "norole", nil, []string{"*"}); err != nil {
+		t.Fatalf("GrantRoles: %v", err)
+	}
+	if _, err := svc.Login(ctx, "demo", "kafe-pos", "norole", "norole123"); err != nil {
+		t.Fatalf("expected login to succeed after grant, got %v", err)
 	}
 }

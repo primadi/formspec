@@ -1,4 +1,71 @@
-**Last Updated**: 2026-09-28 (**Tier 2 ditutup sebagai tidak diperlukan + 1 sisa
+**Last Updated**: 2026-10-02 (**Login per-App & pensiun panel `_admin` ✅ —
+D1–D8.** `POST /_ui/auth/login` wajib ber-`app`; App tak dikenal → 400
+`UNKNOWN_APP`, App tanpa entry point auth → 400 `APP_PUBLIC_NO_LOGIN`, 0
+permission di App itu → 403 `NO_APP_ACCESS` (kafe 10.21/10.22 ✅); sesi mengikat
+`_meta/ui` (403 `APP_MISMATCH`) dan disimpan per `(workspace, App)`. Panel entity
+`?admin=true` + gerbang biner `_admin.access` **dihapus** (5.22.7 ✅, 14.c.4
+ditutup sebagai digantikan); rute framework `_admin/{setup,oauth/*,change-password}`
+dipertahankan. Invarian "App privat wajib punya jalan masuk" (14.c.1 ✅) ditegakkan
+saat resolve App. Plan `docs_internal/plan/app-scoped-login.md`, changelog
+`2026-10-02-006`.)
+**Change Password di permukaan App ✅ — 14.c.**
+route `change-password` kini didaftarkan per-permukaan di `SurfaceShell`
+(`surfacePath − mountPrefix`), jadi user menu tidak lagi menabrak catch-all di
+App dengan `root_url` bebas (`/kafe/app/pos/change-password` dulu "Page not
+found"); `_admin` tak berubah. Changelog `2026-10-02-005`.)
+**Permukaan App = menu ∪ `registered_views` ✅ — 5.25.**
+`App.spec.registered_views` menutup celah "entity yang tidak dipakai App tetap
+bisa dibuka lewat URL langsung": route hanya dibuat untuk target menu ∪
+`registered_views`; entity non-routable ditandai `routable: false` (tetap
+dikirim untuk relasi/picker). Contoh kafe dimigrasikan. Sisa: 5.25.2/5.25.3/5.25.6.
+**Wizard: peluncur + commit + warisan reachability ✅ — 5.25.4/5.25.5/5.25.7.**
+Tombol transisi membuka wizard bila ada wizard ber-`action` yang sama; wizard
+bisa commit transisi `via` lewat PATCH (terukur: `counted_cash`/`note` ikut
+tersimpan); wizard **mewarisi** reachability entity-nya sehingga tak perlu lagi
+didaftarkan di `registered_views`; dan **tutup shift kini 1 klik dari daftar**
+(row action "Tutup Shift", 5.25.8). **Sisa gerbang App 14.c.4.**)
+**Chrome jadi model REGION ✅ — 14.c.** `App.spec.
+chrome.regions` (topbar/sidebar/rightbar/bottombar/footer) menggantikan model
+boolean; archetype = preset (`sidebar-nav` = `no-nav` + sidebar). Dua bug kafe
+tertutup: landing `/kafe` tak lagi ke rute yang tak terdaftar, dan kontrol sesi
+selalu punya jalan keluar. Sisa: invarian validator + gerbang App. **Command CLI kini memakai default project yang sama
+dengan `formspec dev` ✅ — 3.10.** Pertanyaan pemilik "apa tidak sebaiknya `repl`
+disamakan dengan `dev`, termasuk membaca `formspec-app.yaml` yang berisi dsn?"
+jawabannya **ya, dan bug-nya lebih luas dari `repl`**: setiap command membawa
+literal sendiri (`spec`, `sqlite:.formspec/data.db`, workspace `"demo"`) — nilai
+yang `dev` pakai justru saat config file **tidak ada**. **Terukur di
+`examples/kafe`:** binary lama `repl` membuka `.formspec/data.db` dengan workspace
+`demo`, sementara `dev` menyajikan `.formspec/kafe.db` sebagai `kafe`. Akibat
+nyata: alur repair yang baru saja diperbaiki (4.2.7) mengerjakan DB yang tidak
+dibaca `dev`, sehingga terbaca "repair tidak berefek"; dan `formspec seed` tanpa
+flag membuat tenant **ketiga** (`[default:1, demo:2, kafe:2]`) yang tak pernah
+dibaca App — `make seed-kafe` menutupinya hanya karena eksplisit `--workspace`.
+Ditutup dengan satu helper (`loadProjectDefaults`/`finishProjectDefaults`)
+menerapkan urutan `dev` di 12 command, plus **guard kelasnya** yang langsung
+menemukan 3 tersangka tambahan (`get`/`describe`/`delete`). Dibuka **3.10.1 ⏸️**:
+config hanya dicari di CWD, jadi menjalankan command dari luar project tetap jatuh
+ke fallback.) (**Migrasi yang ditolak: permukaan repair akhirnya
+bisa dibuka ✅ — 4.2.7.** `formspec dev` kafe gagal boot dengan
+`1 destructive change(s) refused` (partial unique index `table-session` atas
+`dining_table_id WHERE status='open'`, sementara DB dev memuat **19 sesi `open`
+pada satu meja** — data menumpuk sebelum 10.34c + subscription penutup sesi ada).
+Penolakannya **benar**, tetapi `Remedy`-nya menunjuk perintah yang tidak bisa
+start: `formspec repl` juga menyelaraskan schema, jadi ia mati dengan pesan yang
+identik — deadlock, bukan sekadar pesan kurang jelas. Ditutup dengan
+`Config.SkipSchemaSync` + `formspec repl --no-sync` (boot normal tetap
+menolak), `Remedy` menyebut perintah yang bisa dijalankan, dan hint saat
+penolakan. **Dua bug permukaan ditemukan tepat karena akhirnya dipakai:** (a)
+`-f` melewati `syntax.ParseCompoundStmt` — parser **modal** REPL — sehingga
+mengeksekusi paling banyak statement pertama; file yang diawali komentar
+mengeksekusi **nol** sementara exit **0** dan mencetak `Ran <file>.`, jadi
+permukaan repair resmi melaporkan sukses tanpa mengubah data (kini
+`starlark.ExecFileOptions`, dengan test yang dibuktikan gagal saat di-inject);
+(b) `formspec help` **exit 1** karena berbagi jalur "unknown command".
+**Bukti E2E:** DB pra-repair menolak + hint → `--no-sync` membuka → repair 18 sesi
+→ `migrate apply` → `Applied 1 migration(s)`, index ada & menegakkan →
+`formspec dev --dev-ui` `engine loaded: 178 routes`. Dibuka **4.2.8 ⏸️** (script
+`.star` tidak diperiksa statis: `def broken_repair(` di dalam script kafe → hidup
+`0 problem(s)` di validate **dan** check).) (**Tier 2 ditutup sebagai tidak diperlukan + 1 sisa
 nyata menggantikannya.** Pertanyaan pengguna "kenapa 5.24.2 masih terbuka?"
 jawabannya: **karena saya salah membiarkannya terbuka.** Alasan deferralnya
 melingkar — "keputusan D7" adalah rekomendasi saya sendiri di percakapan yang
@@ -414,8 +481,12 @@ plane (2.11.9–2.12.8, 8.x, 10.5.x, 13.x), atau verifikasi browser manusia
 > mati di permukaan publik, `private`+`no-nav`+`auth: none` **lolos validasi**) —
 > "hak akses menu" jadi _mandatory-by-omission_; tiga pertanyaan keputusan di
 > `docs_internal/plan/chrome-composition-spec.md`, rencana gerbang App di
-> `docs_internal/plan/app-entry-gate.md`. Kafe sisa: 10.11/10.12/10.13/10.15/
-> 10.16/10.17/**10.18**/10.20/10.21/10.22 (semua ⏸️, bukan blocker).
+> `docs_internal/plan/app-entry-gate.md`. **Diperbarui 2026-09-29** (plan
+> `chrome-regions.md`, §14.c): kontrol auth kini punya **region** tempat hidup dan
+> **selalu** dirender bila ada token — jadi "tidak ada jalan keluar" sudah
+> tertutup; yang masih terbuka adalah invarian validator dan `logout` di
+> `auth_action` (14.c.1/14.c.3). Kafe sisa: 10.11/10.12/10.13/10.15/
+> 10.16/10.17/**10.18**/20/21/22 (semua ⏸️, bukan blocker).
 > Sebelumnya 2026-09-23: grant publik jadi **floor** — pemanggil yang sudah login
 > tidak lagi lebih buruk daripada tamu; plan
 > `docs_internal/plan/public-grant-signed-in-floor.md`, changelog `2026-09-23-003`.
@@ -1464,6 +1535,9 @@ generate-kind-docs` karena itu menyentuh `Seed.md` (generated block
 
 ### 3.7 Data lifecycle CLI ops
 
+- [x] **3.10 ✅ 2026-09-29 — Command CLI memakai default project yang sama dengan `formspec dev` (config file).** Sebelumnya setiap command membawa literal sendiri (`specPath := "spec"`, `dsn := "sqlite:.formspec/data.db"`, workspace `"demo"`) — nilai yang `dev` pakai justru saat `formspec-app.yaml` **tidak ada**. Di setiap project yang punya config file, command dari direktori project menyasar database/tenant berbeda dari yang disajikan server. **Terukur di `examples/kafe`** (config `spec: spec`, `dsn: sqlite:.formspec/kafe.db`): binary lama → `repl` membuka `.formspec/data.db` dengan workspace `demo`; `dev` menyajikan `.formspec/kafe.db` sebagai `kafe`. **Akibat nyata:** alur repair 4.2.7 (`repl --no-sync -f` → `migrate apply`) mengerjakan DSN default masing-masing sehingga repair tidak pernah menyentuh DB yang dibaca `dev`; `formspec seed` tanpa flag membuat tenant **ketiga** (`74 inserted`, cabang → `[default:1, demo:2, kafe:2]`) yang tak pernah dibaca App. Ditutup dengan `loadProjectDefaults()`+`finishProjectDefaults()` (`cmd/formspec/project_defaults.go`) menerapkan urutan `dev` (flag → config → fallback → anchor DSN → aturan #48) di 12 command; `repl` mencetak `spec=… dsn=… workspace=…`. **Guard kelasnya** `TestNoCommandHardcodesProjectDefaults` — langsung menemukan 3 tersangka tambahan (`get`/`describe`/`delete`) yang juga diperbaiki. Plan `docs_internal/plan/cli-command-config-parity.md`, changelog `2026-09-29-001`. Effort selesai: medium.
+- [⏸️] **3.10.1 Config file hanya dicari di CWD.** Sama seperti `dev` (parity disengaja), tetapi berarti menjalankan command dari luar direktori project (`cd /tmp && formspec migrate --spec …/examples/kafe/spec`) jatuh ke fallback (`spec`, `data.db`, workspace `default`) — dan tetap terlihat sukses. Menutupnya menuntut keputusan: mencari `formspec-app.yaml` di sebelah spec membuat CLI **menyimpang** dari `dev`, sedangkan menaikkan keduanya sekaligus mengubah perilaku `dev` (yang punya `chdirIfPositionalArg` untuk kasus ini). Effort: small–medium setelah keputusannya.
+
 - [x] 3.7.1 `formspec backup create [--full|--incremental|--filter]` — backup DB + artifacts, open format — `--full` implemented (tar: manifest.json + `<module>_<entity>.jsonl`). **Dikoreksi 2026-09-26:** kalimat lama "`--incremental`/`--filter` belum (gap)" **setengah salah** — `--filter` **sudah jalan** (lihat 3.7.6, ditutup), sedangkan `--incremental` **ditolak secara eksplisit** dengan pesan jujur (`backup.go:230`: "`--full` is required (incremental not yet implemented)"), bukan diperlakukan sebagai `--full`. Sisa `--incremental` → 3.7.5 ⏸️ / 4.8.6 ⏸️. Lihat `docs_internal/plan/formspec-repl-seed-diff.md`. ✅ 2026-08-17
 - [x] 3.7.2 `formspec backup inspect <file>` — inspect backup contents — baca manifest.json (created_at, driver, tables + counts). ✅ 2026-08-17
 - [x] 3.7.3 `formspec restore --from <file> [--map-resource] [--conflict skip|overwrite|remap] [--dry-run]` — restore with conflict resolution — `--conflict skip|overwrite` + `--dry-run` implemented; `--map-resource` (memetakan `module/entity` sumber → target, **berbeda** dari `--conflict remap` yang mengganti natural key) belum → 3.7.7 ⏸️. ✅ 2026-08-17 (**Diperjelas 2026-09-26:** kalimat lama "`--map-resource`/`remap` belum" mencampur dua hal; `remap` **sudah** jalan sebagai nilai `--conflict`.)
@@ -1510,8 +1584,11 @@ tapi belum melakukan apa pun: CLI tampak mendukung, perilakunya tidak.
 - [x] 4.2.2 `renamed_from` field — two-phase removal (deprecate then drop) — `Field.RenamedFrom` ditambahkan + validasi (tidak boleh reserved/collide). Diff field-add tidak menandai kolom lama sebagai removal (rename ≠ drop+add). Drop dua-fase penuh tetap enhancement. ✅ 2026-08-17
 - [x] 4.2.3 Per-Entity migration in one transaction — fail = full rollback; data in `data` JSONB never rewritten by structural migration — `ApplyMigrations` kini wrap DDL + record per entity dalam satu `BeginTx`/`Commit` (rollback on error). ✅ 2026-08-17
 - [x] 4.2.4 `kind: Migration` — custom DDL (index, function, trigger, extension, materialized view); DML rejected at runtime — **DICABUT 2026-09-16** (changelog `2026-09-16-012`). Penggantinya `Entity.spec.persist.raw_ddl` (`pkg/spec/entity.go:2219`, `ValidateRawDDL`): DDL-only, `reason` wajib, `ddl` **atau** `ddl_by` per-dialek, forward-only, dan ikut jalur sync normal (`renderers/jsonb-persist/alter.go` langkah 6). **Dikoreksi 2026-09-26:** teks lama item ini masih menyatakan verb `formspec migrate plan|apply` "load `kind: Migration` manifests" — tidak lagi benar. ✅ 2026-08-17 → digantikan.
-- [x] 4.2.5 Data migration ber-versi — script backfill dengan run/rollback manual — **DICABUT 2026-09-16** bersama `kind: DataMigration` (changelog `2026-09-16-012`). Keputusan penggantinya **eksplisit: perbaikan data TIDAK punya permukaan spec.** `formspec migrate` menolak perubahan yang butuh perbaikan data **dengan hitungan** (`RefuseUndeclared`, `renderers/jsonb-persist/diff.go:563` — menyebut jumlah baris/grup duplikat + `Remedy`), operator merapikannya sekali lewat `formspec repl -f <script>` (verb nyata, `cmd/formspec/repl.go:56`), lalu apply diulang. Alasan pencabutan: script backfill ber-versi di dalam spec berarti _framework menjalankan SQL/DML yang ditulis tangan pada data produksi_, yang justru ingin dihindari. **Dikoreksi 2026-09-26:** teks lama item ini masih menyatakan `kind: DataMigration` + `formspec migrate data <name> run|rollback` ada. ✅ 2026-08-17 → digantikan.
-- [x] 4.2.6 ✅ **2026-09-26: TIDAK BERLAKU LAGI (moot) — subjeknya sudah dicabut.** Item ini meminta `dml`+`ddl` dalam satu manifest `kind: Migration` dibungkus satu transaksi. Tetapi **`kind: Migration` (beserta `DataMigrationSpec`, `MigrationSpec`, `ValidateMigrationSpec`, `MigrationDialects`, `dml`, `ddl_by`, schema, kind doc, dan verb `formspec migrate data`) DICABUT SELURUHNYA** pada changelog `2026-09-16-012` — **satu hari setelah** 4.2.6 difile (`2026-09-16-008`). Terverifikasi di kode hari ini: `grep -rn '"dml"\|yaml:"dml\|DDLByDialect' --include='*.go'` → **0 hasil**; `kind: Migration` **bukan** anggota `KnownKinds` (`internal/manifest/loader.go:309`); `formspec migrate` hanya punya verb `plan|apply` (`cmd/formspec/migrate.go:51`); `docs/kind/` tidak punya halaman `Migration`; dan **terukur**: manifest `kind: Migration` pada spec uji ditolak `formspec validate` dengan `unknown kind "Migration" for spec version v1` + `read Migration.schema.json: no such file`. **Penggantinya tidak punya `dml` sama sekali:** DDL di luar bahasa spec hidup di `Entity.spec.persist.raw_ddl` (DDL-only, `reason` wajib, **forward-only**) dan ikut jalur sync normal — jadi ia dijalankan di dalam tx per-entity yang sama dengan DDL struktural (`alter.go` langkah 1–6 dibangun jadi satu string lalu dieksekusi dalam tx `applyPlans`), sehingga masalah "dua pernyataan tidak atomik" yang item ini khawatirkan tidak punya bentuk lagi. Perbaikan data sengaja **tidak** punya permukaan spec: `formspec migrate` menolak dengan hitungan, operator merapikan lewat `formspec repl -f <script>` (verb yang memang ada), lalu apply diulang. Tidak ada aksi lanjutan.
+- [x] 4.2.5 Data migration ber-versi — script backfill dengan run/rollback manual — **DICABUT 2026-09-16** bersama `kind: DataMigration` (changelog `2026-09-16-012`). Keputusan penggantinya **eksplisit: perbaikan data TIDAK punya permukaan spec.** `formspec migrate` menolak perubahan yang butuh perbaikan data **dengan hitungan** (`RefuseUndeclared`, `renderers/jsonb-persist/diff.go:563` — menyebut jumlah baris/grup duplikat + `Remedy`), operator merapikannya sekali lewat `formspec repl -f <script>` (verb nyata, `cmd/formspec/repl.go:56`), lalu apply diulang. Alasan pencabutan: script backfill ber-versi di dalam spec berarti _framework menjalankan SQL/DML yang ditulis tangan pada data produksi_, yang justru ingin dihindari. **Dikoreksi 2026-09-28:** `formspec repl -f` **tidak cukup** — console juga menyelaraskan schema, sehingga gagal dengan penolakan yang sama; perintah yang benar `formspec repl --no-sync -f <script>` (4.2.7). **Dikoreksi 2026-09-26:** teks lama item ini masih menyatakan `kind: DataMigration` + `formspec migrate data <name> run|rollback` ada. ✅ 2026-08-17 → digantikan.
+- [x] 4.2.6 ✅ **2026-09-26: TIDAK BERLAKU LAGI (moot) — subjeknya sudah dicabut.** Item ini meminta `dml`+`ddl` dalam satu manifest `kind: Migration` dibungkus satu transaksi. Tetapi **`kind: Migration` (beserta `DataMigrationSpec`, `MigrationSpec`, `ValidateMigrationSpec`, `MigrationDialects`, `dml`, `ddl_by`, schema, kind doc, dan verb `formspec migrate data`) DICABUT SELURUHNYA** pada changelog `2026-09-16-012` — **satu hari setelah** 4.2.6 difile (`2026-09-16-008`). Terverifikasi di kode hari ini: `grep -rn '"dml"\|yaml:"dml\|DDLByDialect' --include='*.go'` → **0 hasil**; `kind: Migration` **bukan** anggota `KnownKinds` (`internal/manifest/loader.go:309`); `formspec migrate` hanya punya verb `plan|apply` (`cmd/formspec/migrate.go:51`); `docs/kind/` tidak punya halaman `Migration`; dan **terukur**: manifest `kind: Migration` pada spec uji ditolak `formspec validate` dengan `unknown kind "Migration" for spec version v1` + `read Migration.schema.json: no such file`. **Penggantinya tidak punya `dml` sama sekali:** DDL di luar bahasa spec hidup di `Entity.spec.persist.raw_ddl` (DDL-only, `reason` wajib, **forward-only**) dan ikut jalur sync normal — jadi ia dijalankan di dalam tx per-entity yang sama dengan DDL struktural (`alter.go` langkah 1–6 dibangun jadi satu string lalu dieksekusi dalam tx `applyPlans`), sehingga masalah "dua pernyataan tidak atomik" yang item ini khawatirkan tidak punya bentuk lagi. Perbaikan data sengaja **tidak** punya permukaan spec: `formspec migrate` menolak dengan hitungan, operator merapikan lewat `formspec repl -f <script>` (verb yang memang ada), lalu apply diulang. Tidak ada aksi lanjutan. **Dikoreksi 2026-09-28:** perintahnya `formspec repl --no-sync -f <script>` — tanpa `--no-sync` console gagal dengan penolakan yang sama (4.2.7).
+
+- [x] **4.2.7 ✅ 2026-09-28 — Permukaan repair bisa dibuka saat migrasi ditolak (deadlock gerbang).** Penolakan migrasi berlaku juga pada boot console: `formspec repl` → `formspec.New` → `SyncSchema` → penolakan yang sama, sehingga `Remedy` menunjuk perintah yang **tidak bisa start**. Terukur di kafe: `formspec dev` gagal `1 destructive change(s) refused` (partial unique index `table-session`, 19 sesi `open` pada satu meja, data menumpuk sebelum 10.34c), dan `formspec repl ... -e 'print("alive")'` gagal dengan pesan yang identik. Ditutup dengan `Config.SkipSchemaSync` (`resource/formspec.go`) + flag `formspec repl --no-sync` (bukan melewati gerbang: `dev`/`serve` tetap menolak) + `Remedy` menyebut perintah yang bisa dijalankan + hint saat penolakan. **Dua bug permukaan ditemukan saat memakainya dan ikut ditutup:** (a) `-f` melewati `syntax.ParseCompoundStmt` (parser modal REPL) sehingga mengeksekusi paling banyak statement pertama — file yang diawali komentar mengeksekusi **nol** sementara exit 0 dan mencetak `Ran <file>.`; kini `starlark.ExecFileOptions` + test yang dibuktikan gagal saat di-inject; (b) `formspec help` exit 1 karena berbagi jalur "unknown command". **Bukti E2E:** DB pra-repair (`/tmp/refuse/kafe.db`) → tanpa `--no-sync` menolak + hint; dengan `--no-sync` `alive`; repair 18 sesi → `open dupes: []`; `migrate apply` → `Applied 1 migration(s)`; index `idx_cafe_order_table_sessions_dining_table_id` ada & menegakkan; `formspec dev --dev-ui` → `engine loaded: 178 routes`. Plan `docs_internal/plan/migrasi-ditolak-permukaan-repair.md`, changelog `2026-09-28-008`. Effort selesai: small.
+- [⏸️] **4.2.8 Script `.star` tidak diperiksa statis.** `formspec validate` dan `formspec check` tidak mem-parse file script, jadi script yang **rusak sintaksis** lolos keduanya dan baru gagal saat action-nya dipanggil. Terukur 2026-09-28: `def broken_repair(` disisipkan ke `examples/kafe/.../close_session_on_clear.star` → `89 manifest(s) validated, 0 problem(s) found` dan `0 error(s), 0 warning(s)`. Repair manual ikut terdampak (skrip repair sesi ini gagal karena implicit string concatenation, yang kini syntax error). Effort: small–medium (parse tiap `script`/`script_ref` dengan `starlark.SourceProgramOptions` + laporkan sebagai problem `validate`; batasi pada file yang memang direferensikan manifest).
 
 ### 4.3 Entity extension
 
@@ -1968,17 +2045,19 @@ deliverable utama.
       family kind navigasi, resep diagnosis, divergensi). ✅ 2026-09-25. Changelog
       `2026-09-25-005`.
 - [x] 5.22.6 ✅ **2026-09-26** **`routeExists` kini membaca `bundle.pages`, bukan registri Form/Table.** Dua sumber yang tidak sepakat: `BuildBundle` **tidak** menurunkan `<name>-page` untuk Form/Table yang sudah direferensikan blok Page lain (`covered[...]`) atau yang `public: false` → SPA tidak mendaftarkan route-nya, tetapi registri masih memuat Form/Table-nya, sehingga `routeExists` menjawab "ada" dan item menu mengarah ke 404 yang terlihat hidup. Kini cabang 2 memeriksa `b.Pages` — **persis** apa yang di-iterasi `buildRoutes` (`shell/router.tsx`). Bonus tanpa kode tambahan: `b.Pages` sudah disaring per pemanggil (`allowedPage`), jadi item yang menunjuk page yang tidak boleh dibuka ikut turun dengan alasan yang sama. **Dua assertion di `menu_filter_test.go` ikut diperbarui** — keduanya mengharapkan `"Order table"` muncul padahal `order-table` direferensikan Page `order-list` di fixture, jadi keduanya mem-pin bug-nya. **Bukti:** `TestRouteExists_FormTableFollowBundlePages` (fixture sendiri: dua Table untuk satu entity, satu Page mereferensikan hanya salah satunya — asimetri yang membuat bug terlihat) **dibuktikan gagal** saat `routeExists` dikembalikan ke versi registri, dan kedua sub-test lama kembali memunculkan `"Order table"`; `go test ./...` 0 FAIL; kafe `validate` 85/0, `check` 0/0. Changelog `2026-09-26-009`. Effort selesai: small.
-- [ ] 5.22.7 ⏸️ **Surface `_admin` buta `permissions`/`when` menu — gerbangnya
-      biner.** `?admin=true` memakai `alwaysVisible := func(string) bool { return
-true }` (`internal/api/meta.go`) dan menu `_admin` dibangun klien dari
-      `bundle.entities` (`deriveMenuItems`), bukan dari `App.spec.menu`. Jadi
-      pemegang `_admin.access` melihat **semua** entity di sidebar tanpa
-      `list`/`view`-nya, lalu klik-nya 403 dari endpoint data — UX buruk, bukan
-      kebocoran (enforcement tetap di resource). **Teramati**: `useResolvedMenu`
-      cabang `isAdmin` memanggil `deriveMenuItems(bundle.entities)` dan tidak
-      menyaring `permissions`/`when`. Effort: medium (putuskan apakah `_admin`
-      memang sengaja unscoped — bila ya, dokumentasikan; bila tidak, salurkan
-      menu beserta permission entity).
+- [x] 5.22.7 ✅ **2026-10-02** **Surface `_admin` buta `permissions`/`when` —
+      DITUTUP dengan dihapusnya surface-nya, bukan dengan menyaring menunya.**
+      Keputusan pemilik proyek 2026-10-02: varian bundle unscoped `?admin=true` + gerbang biner `_admin.access` adalah **attack surface** (satu permission
+      membuka seluruh module; role `app-owner` wildcard `"*"` otomatis
+      memegangnya) — jadi panel entity `_admin` dipensiunkan, rute framework
+      (`setup`, `oauth/*`, `change-password`) dipertahankan. Setiap bundle kini
+      App-scoped dan permission-filtered, sehingga tidak mungkin lagi sidebar
+      `_admin` menampilkan entity yang endpoint-nya akan 403. Kode: cabang
+      `alwaysVisible` + `adminAccessPermission` dibuang (`internal/api/meta.go`,
+      → 400 `ADMIN_BUNDLE_REMOVED`); cabang `isAdmin`/`deriveMenuItems` dibuang
+      (`useResolvedMenu.ts`); route `:_admin/*` panel dibuang (`App.tsx`). Plan
+      `docs_internal/plan/app-scoped-login.md` D4. ✅ 2026-10-02 · changelog
+      `2026-10-02-006`
 - [x] 5.22.8 ✅ **2026-09-26** **`docs/renderers/shadcn-shell/01-architecture.md` §5 memuat klaim usang — DIPERBAIKI, dan ternyata ENAM klaim, bukan tiga.** Item ini menyebut tiga (OverlayHost tidak terhubung · `deriveMenuItems()` kode mati · `TableRenderer` hardcode `/_admin`); verifikasi ke kode menemukan **tiga lagi**: `engine/registry.tsx` **sudah dihapus** (`ls` → tidak ada), realtime **sudah ada** (`hooks/useRealtime.ts` dipakai 7 renderer), dan component contract `asset` **sudah ada** (`shell/AssetRenderer.tsx` memanggil `mount`/`unmount` + `formspec` client). Yang membuat ini bukan sekadar catatan basi: §5 **bertentangan dengan `03-kind-renderers.md:60`** di repo yang sama, yang sudah lama menulis dengan benar ("navigasi memakai `useSurface().surfacePath`", "`Form.render` **dihormati**") — dua halaman memberi jawaban berlawanan. §5 ditulis ulang dengan bukti per baris + paragraf "cara memakai section ini" (hapus baris saat tertutup, jangan tumpuk narasi historis). Changelog `2026-09-26-005`. Effort selesai: small.
 
 ### 5.23 Field `help` — warisan `description` entity + situs bolong
@@ -2070,6 +2149,19 @@ Plan: `docs_internal/plan/action-input-contract.md`. Changelog `2026-09-28-004`.
   approval, dan lebih layak dilacak daripada "Tier 2" yang tidak punya
   permintaan. Effort: small–medium (nama field bisa dideklarasikan pada
   `Workflow`/step, atau engine mengisi konvensi `{prefix}_approved_by`).
+- [⏸️] 5.24.7 **`resource.*` di console belum ter-wire, sehingga repair data
+  terpaksa SQL mentah.** `formspec repl` membuat `resource` dengan
+  `fsstarlark.NewResourceAPI("", "", "", 0, map[string]any{})` dan **tidak**
+  memanggil `SetFindFunc`/`SetLoadFunc`/`SetSaveFunc`/`SetCreateFunc`, jadi
+  `resource.find`/`fetch`/`save` gagal — terbukti 2026-09-28 saat menulis repair
+  kafe: satu-satunya jalur yang bekerja adalah `ctx.db().query(...)` dengan SQL
+  mentah, yang justru **dilarang konvensi repo ini** untuk business logic. Dua
+  konsekuensi nyata pada repair yang jadi contoh resmi: (a) menulis field
+  `status` lewat SQL **tidak memicu transisi** (`emit`/subscription tidak jalan,
+  `updated_by` tidak terisi) — bandingkan jalur `resource.save()`; (b) perbaikan
+  duplikat jadi tanggung jawab operator sepenuhnya, tanpa validasi entity.
+  Effort: medium (wire `resource` dari registry yang sama dengan
+  `CtxPrimitiveResolver`; `SetFindFunc` sudah arah yang benar).
 - [x] 5.24.3 ✅ **2026-09-28** **Transisi `via`+`impl` kini dapat route REST dan
       muncul di `formspec generate`.** `GenerateCustomActionRoutes` dipindah ke
       `ActionSources()` — menyamakannya dengan tiga situs lain yang sudah memakai
@@ -2123,6 +2215,156 @@ Plan: `docs_internal/plan/action-input-contract.md`. Changelog `2026-09-28-004`.
       **atomik**. Terkunci oleh `TestKafe_VoidOrder_EmitsOnCancel` (gagal dulu
       dengan timeout). Changelog `2026-09-28-006`; kontraknya kini ditulis di
       `01-core-basic.md` (S13) dan `02-core-extended.md` §2.
+
+### 5.25 Permukaan App — `registered_views` (allowlist view per App)
+
+Plan: `docs_internal/plan/registered-views.md` · Changelog `2026-10-02-001`
+
+`App.spec.modules` memilih modul, tetapi bundle mengirim **semua** entity
+modul yang lolos permission; klien mendaftarkan route CRUD turunan untuk setiap
+entity — jadi entity yang tidak dipakai App tetap bisa dibuka lewat URL
+langsung. `registered_views` menutupnya: **permukaan App = setiap target leaf
+menu ∪ `registered_views`**; route di luar itu tidak didaftarkan (SPA 404).
+Entity non-routable tetap dikirim (relasi/picker tetap resolve) dengan penanda
+`routable: false`.
+
+- [x] 5.25.1 ✅ **2026-10-02** **`App.spec.registered_views` + gating permukaan.**
+      Tipe `RegisteredViewDecl{entity|view}`; `ValidateAppSpec` (tepat satu field,
+      modul ter-mount, tolak duplikat); resolusi existence di `app.Resolve`
+      (view/entity harus ada → tolak saat boot). Gating di `BuildBundle`:
+      `reachableViewRoutes`/`reachableEntities` dari menu ∪ `registered_views`;
+      entity → `EntitySchema.Routable`; Page authored (kecuali home `"/"` & auth
+      screen), derived wrapper Form/Table, dan seluruh nav kind digerbang route.
+      `routeExists` menghormati `Routable`. Surface `_admin`/editor grants
+      (`?grants=true`) **tidak** digerbang. Klien: `buildRoutes` tidak
+      mendaftarkan route entity `routable === false`; `canLandOnList` menolaknya.
+      Warning `formspec check` bila App memount modul tanpa menu &
+      `registered_views`. Contoh kafe dimigrasikan (`kafe-qr` 3 Page,
+      `kafe-kds` board, `kafe-pos` view non-menu). Test: `registered_views_test.go`
+      (spec/ui/app, termasuk `TestResolve_KafeSpec` nyata) + vitest. Effort
+      selesai: medium.
+- [⏸️] 5.25.2 Entity non-routable yang dinavigasi dari picker/detail → 404.
+  Entity yang tidak didaftarkan tetap dikirim (`routable: false`) agar
+  relasi/picker resolve, tetapi picker yang menautkan ke **halaman detail**
+  entity itu akan mendarat di 404 (route-nya tidak ada). Trade-off sengaja;
+  yang terbuka: memberi picker tahu `routable` sehingga tautan detailnya
+  tidak dirender. Effort: small.
+- [⏸️] 5.25.3 Lint **pre-existing** (bukan efek 5.25): `(*entityIndex).isModule`
+  di `internal/ui/meta.go` dan `assetSource` di `cmd/formspec/seed_asset.go`
+  tak terpakai → `make lint` gagal (2 issue `unused`). Keduanya sudah mati di
+  `HEAD` (diverifikasi `git show HEAD:… | grep`), jadi bukan regresi sesi ini.
+  Effort: small (hapus, atau pakai kembali bila memang disiapkan).
+- [⏸️] 5.25.4 **`kind: Wizard` tidak punya peluncur di UI** — wizard hanya bisa
+  dibuka lewat URL langsung. `close-shift-wizard` (kafe) mengikat dirinya ke UI
+  lewat `entity: cafe-order.shift` + `action: close-shift` (transisi
+  `via: close-shift` pada entity `shift`), **tetapi tidak ada konsumen** yang
+  me-resolve edge itu: `DetailPage`/`engine/lifecycle.ts` merender transisi
+  sebagai `PATCH`/`ActionInputDialog`, tanpa memeriksa apakah ada Wizard untuk
+  action itu (diverifikasi — `getWizard` tidak dipanggil dari jalur transisi).
+  Juga tidak ada Page "Shift Kasir": yang ada hanya derived entity page
+  `/cafe-order/shifts` (Jalur C), yang tidak menautkan ke wizard. Akibatnya
+  `registered_views` hanya membuat route-nya _ada_, bukan _terjangkau_.
+  Dua pilihan: (a) sambungkan tombol transisi → wizard bila ada Wizard
+  ber-`action` yang sama; (b) transisi/action menyatakan `wizard:` eksplisit.
+  Efek samping ke desain gate: bila (a)/(b) landing, wizard bisa **inherit**
+  reachability dari entity-nya (opsi A diskusi 2026-10-02) sehingga tidak perlu
+  lagi masuk `registered_views`. Effort: medium.
+- [⏸️] 5.25.5 **`close-shift-wizard` tidak bisa commit — `spec.action` menunjuk
+  action yang tidak punya route.** Terverifikasi 2026-10-02:
+  - `close-shift` hanya ada sebagai transisi `via: close-shift`
+    (`shift/entity.yaml`), BUKAN action di `actions:` (isinya hanya
+    `delete`/`submit`, keduanya `disabled: true`), dan tanpa `impl`.
+  - `internal/api/generator.go`: route aksi hanya dipancarkan untuk action
+    ber-`impl` (`GenerateUICustomActionRoutes` dari `ActionSources()`) + action
+    standar; `via` tanpa `impl` = action sintetis **tanpa route**. Jadi
+    `POST .../{id}/close-shift` **tidak ada** (jalur sahnya `PATCH status`).
+  - `WizardRenderer.handleSubmit` juga mem-POST `entry.spec.action` mentah ke
+    client ber-prefix `/{ws}/_ui/entity` → `POST /…/_ui/entity/close-shift`,
+    padahal router mengharapkan `/{module}/{entity}/{id}/{action}` → bentuknya
+    salah walau route-nya ada.
+  - Wizard juga tidak pernah membawa **id record** (shift mana yang ditutup).
+    **Konsekuensi terukur:** di halaman detail shift (`DetailPage`) tombol
+    transisi MEMANG dirender (label dari `description`, tampil bila pemanggil
+    memegang `cafe-order.shifts.close-shift`; `authorized_actions` memuat
+    `close-shift` lewat `ActionSources()` — `internal/ui/meta.go:1586`), dan
+    karena `HasRoute: false` (`meta.go:1462`, `impl == nil`) kliknya menjalankan
+    **`PATCH status=closed` langsung** — **melompati wizard sepenuhnya**:
+    `counted_cash`/`note`/`supervisor_id` tidak pernah dikumpulkan, sehingga
+    `difference` (computed `counted_cash - expected_cash`) dihitung dari field
+    kosong. Jadi bukan "tidak ada jalan menutup shift", melainkan "jalan yang ada
+    melewati wizard-nya". Perbaikan: (a) `close-shift` jadi action ber-`impl`
+    (pola `gl/journal_post.star`), wizard diberi id + path lengkap; atau (b)
+    tambah mode commit `PATCH {state_field: to}` di WizardRenderer; atau (c)
+    sambungkan tombol transisi ke wizard bila ada Wizard ber-`action` yang sama
+    (5.25.4). Effort: medium.
+- [x] 5.25.4 ✅ **2026-10-02** **Wizard kini punya peluncur: tombol transisi →
+      wizard.** `DetailPage.handleTransition` memeriksa `findWizardForTransition`
+      (wizard dengan `spec.entity` menunjuk entity ini **dan** `spec.action ===
+via`) SEBELUM dialog input/konfirmasi, lalu menavigasi ke
+      `surfacePath("wizard", name)?id=<record-id>` — wizard sendirilah yang
+      mengumpulkan input, jadi membuka dialog generik dulu akan bertanya dua kali.
+      Aturan matching ditaruh di `src/engine/wizardCommit.ts` (murni, teruji).
+      **Terukur di browser (kafe-pos, kasir):** klik "Tutup shift: hitung fisik…"
+      di `/cafe-order/shifts/<id>` → URL
+      `/kafe/app/pos/wizard/close-shift-wizard?id=01a0bf96-…` (Step 1 of 3).
+      Changelog `2026-10-02-002`. Effort selesai: small.
+- [x] 5.25.5 ✅ **2026-10-02** **Wizard bisa commit transisi `via` (PATCH) dan
+      path action diperbaiki.** `resolveWizardCommit` memilih call dengan aturan
+      yang sama yang sudah dipakai `DetailPage` (kafe 10.48, `has_route` dari
+      bundle): `has_route` → `POST /{module}/{entity}/{id}/{action}`; selain itu,
+      bila `action` cocok transisi (`via`) → `PATCH /{module}/{entity}/{id}` dengan
+      `{state_field: to, …field terkumpul}`. Id dibaca dari `?id=`. Sekaligus:
+      (i) path POST tidak lagi mengirim `spec.action` mentah (dulu
+      `…/_ui/entity/close-shift` — mustahil); (ii) payload hanya memuat field
+      entity; (iii) `on_complete` default mendarat di **daftar entity wizard di
+      surface saat ini** (sebelumnya `adminPath()` — salah untuk App surface;
+      kasir kafe-pos tidak punya `_admin.access`). **Terukur di browser:**
+      `PATCH /kafe/_ui/entity/cafe-order/shift/01a0bf96-… -> 200`, toast
+      "Wizard completed successfully", dan record: `status=closed`,
+      `counted_cash={amount:"150000",currency:"IDR"}` (sebelumnya selalu `None`),
+      `note="kurang 10000"`, `version` 1→3. Unit: `src/engine/wizardCommit.test.ts`
+      (11 test). Changelog `2026-10-02-002`. Effort selesai: small.
+- [⏸️] 5.25.6 **Seed role usang menyembunyikan action (kafe).** Saat verifikasi
+  5.25.4/5.25.5, `cafe-order.shifts.close-shift` **tidak ada** di
+  `authorized_actions`/JWT kasir meski `examples/kafe/spec/modules/formspec.core/
+seeds/roles.yaml` mendeklarasikannya di `{page: shift-page, actions: […,
+{name: close-shift}]}`: DB seed lama menyimpan grant tanpa action itu. Otoritas
+  adalah **DB grant**, bukan file seed; permission role dimaterialisasi saat
+  boot, jadi urutannya `make seed-kafe` → **restart server** (sudah dicatat di
+  memori repo). Yang belum tertutup: **tak ada sinyal** bahwa seed file dan DB
+  menyimpang — gejalanya adalah action yang hilang diam-diam. Usulan: `formspec
+check`/`validate` membandingkan grant seed vs DB (atau `seed --dry-run`
+  melaporkan drift). Effort: medium.
+- [x] 5.25.7 ✅ **2026-10-02** **Wizard yang mengikat transisi mewarisi
+      reachability entity-nya.** Sebelumnya wizard hanya masuk bundle bila
+      didaftarkan di `registered_views` (`viewRoutable`), sehingga melepas
+      pendaftaran itu diam-diam menghidupkan lagi jalur bypass: peluncur
+      (`DetailPage`) membaca `bundle.wizards`, tidak menemukan apa pun, lalu jatuh
+      ke `PATCH status` mentah. Kini `BuildBundle` menambahkan aturan: wizard dengan
+      `spec.entity` + `spec.action` yang cocok dengan transisi (`via`) dari entity
+      yang **routable** ikut reachable. Pendaftaran eksplisit tetap berlaku
+      (aditif), dan `_admin`/`?grants=true` tak terpengaruh. **Terukur:** daftar
+      `registered_views` kafe-pos dihapus barisnya → `wizards:
+['close-shift-wizard']` untuk kafe-pos (shift routable lewat menu), `wizards:
+[]` untuk kafe-kds (shift tidak ada di permukaannya). Unit: 4 test di
+      `internal/ui/wizard_reachability_test.go`. Changelog `2026-10-02-003`.
+      Effort selesai: small.
+
+- [x] 5.25.8 ✅ **2026-10-02** **Tutup shift bisa dari daftar (1 klik dari
+      menu).** Dua perubahan: (1) `TableRenderer.handleRowAction` memakai
+      `findWizardForTransition` seperti `DetailPage` (dulu jatuh ke
+      `POST /{entity}/{id}/{action}` — route yang transisi `via` tidak punya, jadi
+      404); (2) transisi `close-shift` diberi `ui: {button_label: "Tutup Shift",
+icon: clock}` sehingga derived table menawarkannya sebagai row action
+      (`engine/derive.ts` hanya menambahkan custom action ber-`ui`). Baris non-`open`
+      tetap tidak menawarkannya (`isActionAllowedForRow` menyaring per `from`).
+      **Terukur di browser (kasir):** daftar Shift Kasir → baris **Open**
+      menampilkan tombol **"Tutup Shift"**, tiga baris **Closed** tidak; klik →
+      `/kafe/app/pos/wizard/close-shift-wizard?id=01a0fc5b-…`; selesai →
+      `counted_cash={amount:"260000"}` + `note="lebih 10000"` tersimpan,
+      `status=closed`, dan tombolnya hilang dari baris itu. Guard test
+      `src/kinds/table/wizard-row-action.test.ts` (3) — **dibuktikan gagal** saat
+      cabang wizard disuntik-keluar. Changelog `2026-10-02-004`. Effort selesai: small.
 
 ## Fase 6: Auth & Authorization ✅ COMPLETE (inti) — sebagian item ⏸️ deferred (dogfooding — `docs_internal/plan/fase6-dogfooding-auth-module.md`)
 
@@ -2895,6 +3137,20 @@ sampai itu, validasi pakai `--schema schemas`.
 - [x] Frontend — komponen bersama `AuthArea`; `NoNavShell` tanpa hardcode auth/nav/footer; `SideNavShell`/`TopNavShell` hormati override breadcrumbs/theme_switcher/auth. ✅ 2026-08-29
 - [x] `registry.yaml` — `chrome: {nav: menu, auth: links}` eksplisit (perilaku portal tetap). ✅ 2026-08-29
 - [x] Docs — `05-app-kinds.md` §4 rewrite + §5 Chrome Composition (renumber §5→§6, §6→§7 + cross-ref), `03-kind-renderers.md`, glossary. ✅ 2026-08-29
+
+### 14.c Chrome Regions + landing & auth-exit (2026-09-29)
+
+> Plan: `docs_internal/plan/chrome-regions.md` · changelog `2026-09-29-002`
+
+- [x] Fase A — `DefaultRedirect` sadar permission (`src/shell/landing.ts`); `NoAccessState` menggantikan "No entities found"; `AuthArea` merender user menu bila ada token (sebelum cek `mode`). ✅ 2026-09-29
+- [x] Fase B — `App.spec.chrome.regions` (`topbar/sidebar/rightbar/bottombar/footer` → `none|auto|<ref>`) di `pkg/spec` + validasi; `internal/ui.resolveChrome` preset per-archetype + gula boolean; `tier: component` boleh `implements_slot: <region>`. ✅ 2026-09-29
+- [x] Fase B — renderer: satu `RegionShell` menggantikan `SideNavShell`/`TopNavShell`/`NoNavShell` (dihapus); `OverlayHost` di semua komposisi; `types/manifest.ts` union literal. ✅ 2026-09-29
+- [x] Fase C — `kafe-qr` `chrome.regions` (topbar/footer `auto`); docs §4–§5 + `02-visual-spec-kind` §4 + renderer doc + glossary; `make generate-schema`/`generate-kind-docs`. ✅ 2026-09-29
+- [x] 14.c.1 Invarian validator "App privat wajib punya jalan masuk" — **DITUTUP 2026-10-02** dengan bentuk yang berbeda dari rencana: invariannya ditegakkan saat **resolve App** (`internal/app/resolve.go` → `ui.ChromeAcceptsLogin`), bukan di loader validator. App `private` yang chrome-nya tak punya entry point auth (mis. `access: private` + `app_renderer: no-nav` tanpa `chrome.auth`) ditolak dengan pesan yang menyebut jalan keluarnya. Satu implementasi dipakai bersama oleh `/_meta/apps`, endpoint login, dan invarian ini. Plan `docs_internal/plan/app-scoped-login.md`. ✅ 2026-10-02 · changelog `2026-10-02-006`
+- [⏸️] 14.c.2 `useAutoLogout` masih mati di permukaan publik (`!isPublic` di `App.tsx`), jadi sesi di App publik tidak kedaluwarsa. Effort: small.
+- [⏸️] 14.c.3 `auth_action` belum punya `logout`; Page/Form belum bisa menyatakan aksi auth (kafe 10.18b). Effort: medium.
+- [x] 14.c.4 Gerbang App backend — **DITUTUP 2026-10-02 sebagai digantikan, bukan dikerjakan.** Field `access_permission` (`app-entry-gate.md`) tidak dipakai; gerbangnya adalah **validasi saat login**: `app` tak dikenal → 400 `UNKNOWN_APP`, App tanpa entry point auth → 400 `APP_PUBLIC_NO_LOGIN`, kredensial benar tapi 0 permission di App itu → 403 `NO_APP_ACCESS` (kafe 10.22), plus sesi mengikat `_meta/ui` (403 `APP_MISMATCH`). Efek yang dituju `app-entry-gate.md` (kafe 10.21/10.22) tertutup tanpa skema baru. Plan `docs_internal/plan/app-scoped-login.md` D6/D7. ✅ 2026-10-02 · changelog `2026-10-02-006`
+- [x] 14.c.5 Change Password di permukaan App — route `change-password` hanya ada top-level untuk `_admin`, sedangkan permukaan App (`root_url` bebas) tak bisa dideklarasikan statis → item user menu menabrak catch-all "Page not found" (juga return `/{ws}/_admin` hardcoded setelah sukses). Didaftarkan di `<Routes>` bersarang `SurfaceShell` sebagai `surfacePath − mountPrefix + "/change-password"`; sukses kembali ke root permukaan aktif. ✅ 2026-10-02 · changelog `2026-10-02-005` · plan `docs_internal/plan/auth-screens-app-surface.md`
 
 ## Fase 15: Migrasi Otomatis + Gerbang Perubahan Destruktif ✅ (2026-09-16)
 

@@ -72,4 +72,13 @@ describe("AuthArea", () => {
     expect(screen.getByLabelText("User menu")).toBeInTheDocument()
     expect(screen.queryByText("Sign in")).not.toBeInTheDocument()
   })
+
+  // kafe 10.18: `no-nav` resolves `auth: none`, which must still leave a
+  // signed-in session a way OUT. `auth` tunes the anonymous entry points only.
+  it('renders the user menu (Sign out) for a signed-in session even at "none"', () => {
+    useSessionStore.setState({ token: "tok-123", workspace: "default" })
+    renderAuthArea("none")
+    expect(screen.getByLabelText("User menu")).toBeInTheDocument()
+    expect(screen.queryByText("Sign in")).not.toBeInTheDocument()
+  })
 })

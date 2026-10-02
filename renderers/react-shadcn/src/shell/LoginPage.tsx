@@ -60,7 +60,15 @@ export function LoginPage({ mode = "login" }: { mode?: "login" | "register" }) {
     token: string,
     refreshToken?: string,
   ) => {
-    await boot(workspace, token, refreshToken, resolvedApp?.name)
+    // boot() takes an options object — every field is a string, so a
+    // positional call would silently put the token in the `app` slot and the
+    // session would be restored under a bogus App with an anonymous bundle.
+    await boot({
+      workspace,
+      app: resolvedApp?.name ?? "",
+      token,
+      refreshToken,
+    })
     // The bundle may have been loaded anonymously (empty entities) while on
     // the login route — reset it so it reloads with the authenticated
     // identity's permissions after the redirect.
@@ -74,10 +82,10 @@ export function LoginPage({ mode = "login" }: { mode?: "login" | "register" }) {
         !returnTo.startsWith("//") &&
         returnTo !== "/"
         ? returnTo
-        // Land on the App's own root_url, not on `/{workspace}` — see the note
-        // above about the prefix loss. Falls back to workspace root only when
-        // the app list is unavailable.
-        : `/${workspace}${resolvedApp && resolvedApp.root_url !== "/" ? resolvedApp.root_url : ""}`,
+        : // Land on the App's own root_url, not on `/{workspace}` — see the note
+          // above about the prefix loss. Falls back to workspace root only when
+          // the app list is unavailable.
+          `/${workspace}${resolvedApp && resolvedApp.root_url !== "/" ? resolvedApp.root_url : ""}`,
       { replace: true },
     )
   }

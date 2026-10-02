@@ -58,6 +58,12 @@ type appMetaSummary struct {
 	AppRenderer string `json:"app_renderer,omitempty"`
 	// Access is the resolved auth axis: private | public.
 	Access string `json:"access,omitempty"`
+	// AcceptsLogin reports whether this App presents an auth entry point — its
+	// resolved `chrome.auth` is not `none` (ui.ChromeAcceptsLogin). Login is
+	// per-App (plan app-scoped-login.md D1/D3), and this is the same test the
+	// login endpoint enforces, so the client never has to infer it from
+	// `access` (a public App may still accept login — e.g. the registry portal).
+	AcceptsLogin bool `json:"accepts_login"`
 	// StackFamily is the shell implementation (e.g. react-shadcn).
 	StackFamily string `json:"stack_family,omitempty"`
 	// PersistBackend is the entity persist backend (e.g. jsonb-persist).
@@ -93,6 +99,7 @@ func (b *RouterBuilder) HandleMetaApps() http.HandlerFunc {
 				RootURL:        a.Spec.RootURL,
 				AppRenderer:    a.Spec.AppRenderer,
 				Access:         string(a.Spec.Access),
+				AcceptsLogin:   ui.ChromeAcceptsLogin(a.Spec.AppRenderer, a.Spec.Chrome),
 				StackFamily:    a.Spec.StackFamily,
 				PersistBackend: a.Spec.PersistBackend,
 				Version:        a.Spec.Version,
@@ -107,14 +114,46 @@ func (b *RouterBuilder) HandleMetaApps() http.HandlerFunc {
 	}
 }
 
+// loginAppCheck validates the App named by an App-scoped login (plan
+// app-scoped-login.md D6). It returns an empty code when the App is a valid
+// login target, or a machine code + message when it is not:
+//
+//   - APP_REQUIRED        — the workspace has no App to sign in to at all
+//   - UNKNOWN_APP         — no such App, or it is not mounted in this
+//     workspace (indistinguishable from missing — anti-enumeration)
+//   - APP_PUBLIC_NO_LOGIN — the App advertises no auth entry point, so it
+//     accepts no login (D3: a public App with `chrome.auth: none`)
+func (b *RouterBuilder) loginAppCheck(workspace, name string) (string, string) {
+	if len(b.apps) == 0 {
+		return "APP_REQUIRED", "this workspace has no App to sign in to"
+	}
+	a, ok := b.apps[name]
+	if !ok || a.Spec == nil || !a.Spec.MountsWithin(workspace) {
+		return "UNKNOWN_APP", "unknown app " + name
+	}
+	// The App must present a way in. An auth-less App has no login form, and a
+	// session minted for it could not be used (D3).
+	if !ui.ChromeAcceptsLogin(a.Spec.AppRenderer, a.Spec.Chrome) {
+		return "APP_PUBLIC_NO_LOGIN", "app " + name + " does not accept login"
+	}
+	return "", ""
+}
+
 // resolveAppContext picks which App a /_meta/ui request is scoped to: the
-// `app` query param if given, or the workspace's only App if there's exactly
-// one. Returns an error message when the request is ambiguous.
+// `app` query param if given, the session's own App scope when the request is
+// authenticated (plan app-scoped-login.md D7 — the App is not a free choice),
+// or the workspace's only App if there's exactly one. Returns an error message
+// when the request is ambiguous.
 func (b *RouterBuilder) resolveAppContext(r *http.Request) (ui.AppContext, string) {
 	if len(b.apps) == 0 {
 		return ui.AppContext{}, ""
 	}
 	name := r.URL.Query().Get("app")
+	if name == "" {
+		if id := IdentityFromContext(r.Context()); id != nil && id.App != "" {
+			name = id.App
+		}
+	}
 	if name == "" {
 		if len(b.apps) == 1 {
 			for n := range b.apps {
@@ -141,15 +180,16 @@ func (b *RouterBuilder) resolveAppContext(r *http.Request) (ui.AppContext, strin
 		RootURL:     resolved.Spec.RootURL,
 		AppRenderer: resolved.Spec.AppRenderer,
 		Access:      string(resolved.Spec.Access), PublicEntities: resolved.Spec.PublicEntities, StackFamily: resolved.Spec.StackFamily,
-		PersistBackend: resolved.Spec.PersistBackend,
-		ThemeRef:       resolved.Spec.ThemeRef,
-		Chrome:         resolved.Spec.Chrome,
-		Auth:           resolved.Spec.Auth,
-		PageTransition: resolved.Spec.PageTransition,
-		Confirm:        resolved.Spec.Confirm,
-		Modules:        resolved.Modules,
-		Menu:           resolved.Menu,
-		Settings:       b.mergeRunningSettings(r.Context(), b.settings),
+		PersistBackend:  resolved.Spec.PersistBackend,
+		ThemeRef:        resolved.Spec.ThemeRef,
+		Chrome:          resolved.Spec.Chrome,
+		Auth:            resolved.Spec.Auth,
+		PageTransition:  resolved.Spec.PageTransition,
+		Confirm:         resolved.Spec.Confirm,
+		Modules:         resolved.Modules,
+		Menu:            resolved.Menu,
+		RegisteredViews: resolved.Spec.RegisteredViews,
+		Settings:        b.mergeRunningSettings(r.Context(), b.settings),
 	}, ""
 }
 
@@ -215,12 +255,6 @@ func (b *RouterBuilder) mergeRunningSettings(ctx context.Context, base *spec.Set
 	return out
 }
 
-// adminAccessPermission gates the `_admin` surface (Core §4.4 discussion):
-// a single, binary "may see the unscoped, all-modules bundle" check — not a
-// per-entity RBAC mechanism. Per-entity/per-view RBAC stays exclusive to
-// authored Apps (menu.permissions).
-const adminAccessPermission = "_admin.access"
-
 // roleManagePermissions gate the `?grants=true` bundle variant: the caller
 // must be able to manage roles (create or update) in the App. The grants
 // editor is an admin tool — it must show every page/action in the App
@@ -246,11 +280,10 @@ func canManageRoles(can ui.PermissionChecker) bool {
 // is permission-filtered per caller and scoped to one resolved App (see
 // resolveAppContext), so the ETag is computed per response.
 //
-// `?admin=true` requests the `_admin` surface's bundle instead: unscoped by
-// any App (every module's entities, Core §4.4 — _admin isn't App-scoped)
-// and unfiltered by per-entity list/view permission (the binary
-// adminAccessPermission gate is the only check). Gated separately since
-// _admin has no AppContext to resolve in the first place.
+// The unscoped `_admin` bundle (`?admin=true`) was REMOVED (plan
+// app-scoped-login.md D4): a single binary permission that unlocked every
+// module's entities was an attack surface, and the admin panel is no longer
+// a surface. Callers must name the App they want.
 func (b *RouterBuilder) HandleMetaUI() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if b.uiRegistry == nil {
@@ -258,59 +291,68 @@ func (b *RouterBuilder) HandleMetaUI() http.HandlerFunc {
 			return
 		}
 
-		var bundle *ui.Bundle
 		if r.URL.Query().Get("admin") == "true" {
-			if !callerChecker(r)(adminAccessPermission) {
-				writeError(w, http.StatusForbidden, "FORBIDDEN", "missing permission: "+adminAccessPermission)
+			writeError(w, http.StatusBadRequest, "ADMIN_BUNDLE_REMOVED",
+				"the unscoped admin bundle (?admin=true) was removed; use ?app=<name>")
+			return
+		}
+
+		// A session is scoped to ONE App (D1), so the App cannot be a free
+		// query param: a token issued for App A must never render App B's
+		// bundle (plan app-scoped-login.md D7).
+		if id := IdentityFromContext(r.Context()); id != nil && id.App != "" {
+			if reqApp := r.URL.Query().Get("app"); reqApp != "" && reqApp != id.App {
+				writeError(w, http.StatusForbidden, "APP_MISMATCH",
+					"this session is scoped to app "+id.App)
+				return
+			}
+		}
+
+		appCtx, errMsg := b.resolveAppContext(r)
+		if errMsg != "" {
+			writeError(w, http.StatusBadRequest, "BAD_REQUEST", errMsg)
+			return
+		}
+
+		var bundle *ui.Bundle
+		// `?grants=true` serves the grants-editor bundle: app-scoped (only the
+		// App's modules) but NOT permission-filtered — the role form must list
+		// every page/action in the App so an admin can grant access to things
+		// they may not personally hold. Gated by role-management permission.
+		if r.URL.Query().Get("grants") == "true" {
+			if !canManageRoles(callerChecker(r)) {
+				writeError(w, http.StatusForbidden, "FORBIDDEN",
+					"missing permission: formspec.core.roles.create/update")
 				return
 			}
 			alwaysVisible := func(string) bool { return true }
-			bundle = b.uiRegistry.BuildBundle(b.listEntityDescriptors, alwaysVisible, ui.AppContext{})
+			appCtx.Unfiltered = true
+			bundle = b.uiRegistry.BuildBundle(b.listEntityDescriptors, alwaysVisible, appCtx)
 		} else {
-			appCtx, errMsg := b.resolveAppContext(r)
-			if errMsg != "" {
-				writeError(w, http.StatusBadRequest, "BAD_REQUEST", errMsg)
-				return
+			// An `access: public` App serves its bundle to anonymous
+			// callers, so there is no session to check permissions against —
+			// but "no session" must not mean "everything". The App's
+			// `public_entities` allowlist is exactly the answer to what an
+			// anonymous caller may see, and skipping it shipped the WHOLE
+			// mounted module set.
+			//
+			// Measured on kafe (`kafe-qr`, which mounts cafe-master +
+			// cafe-order behind a narrow allowlist): the anonymous bundle
+			// carried 13 entities including `cafe-master.members` (customer
+			// phone numbers), `employees`, `menu-item-prices`,
+			// `cafe-order.shifts` and `cash-movements`. The data endpoints
+			// still enforced the allowlist, so no row leaked — but the
+			// schema of private data was handed out and the SPA generated
+			// routes for it.
+			can := callerChecker(r)
+			if appCtx.Access == string(spec.AppAccessPublic) {
+				// The App's `public_entities` allowlist decides what an
+				// anonymous caller may see; BuildBundle derives the checker
+				// from appCtx.PublicEntities (it owns the route/entity
+				// conventions the allowlist is expressed in).
+				can = nil
 			}
-			// `?grants=true` serves the grants-editor bundle: app-scoped
-			// (only the App's modules) but NOT permission-filtered — the
-			// role form must list every page/action in the App so an admin
-			// can grant access to things they may not personally hold.
-			// Gated by role-management permission (create/update).
-			if r.URL.Query().Get("grants") == "true" {
-				if !canManageRoles(callerChecker(r)) {
-					writeError(w, http.StatusForbidden, "FORBIDDEN",
-						"missing permission: formspec.core.roles.create/update")
-					return
-				}
-				alwaysVisible := func(string) bool { return true }
-				bundle = b.uiRegistry.BuildBundle(b.listEntityDescriptors, alwaysVisible, appCtx)
-			} else {
-				// An `access: public` App serves its bundle to anonymous
-				// callers, so there is no session to check permissions against —
-				// but "no session" must not mean "everything". The App's
-				// `public_entities` allowlist is exactly the answer to what an
-				// anonymous caller may see, and skipping it shipped the WHOLE
-				// mounted module set.
-				//
-				// Measured on kafe (`kafe-qr`, which mounts cafe-master +
-				// cafe-order behind a narrow allowlist): the anonymous bundle
-				// carried 13 entities including `cafe-master.members` (customer
-				// phone numbers), `employees`, `menu-item-prices`,
-				// `cafe-order.shifts` and `cash-movements`. The data endpoints
-				// still enforced the allowlist, so no row leaked — but the
-				// schema of private data was handed out and the SPA generated
-				// routes for it.
-				can := callerChecker(r)
-				if appCtx.Access == string(spec.AppAccessPublic) {
-					// The App's `public_entities` allowlist decides what an
-					// anonymous caller may see; BuildBundle derives the checker
-					// from appCtx.PublicEntities (it owns the route/entity
-					// conventions the allowlist is expressed in).
-					can = nil
-				}
-				bundle = b.uiRegistry.BuildBundle(b.listEntityDescriptors, can, appCtx)
-			}
+			bundle = b.uiRegistry.BuildBundle(b.listEntityDescriptors, can, appCtx)
 		}
 
 		// First-run setup flag: the workspace has no users yet → the SPA

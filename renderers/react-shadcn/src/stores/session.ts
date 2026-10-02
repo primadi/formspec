@@ -10,33 +10,47 @@
 
 import { create } from "zustand"
 import ky, { type KyInstance } from "ky"
-import { FormaApiError, type ContextChoice, type MeResponse } from "@/types/manifest"
+import {
+  FormaApiError,
+  type ContextChoice,
+  type MeResponse,
+} from "@/types/manifest"
 import { createApiClient, fetchMe } from "@/lib/api"
 import { onSessionExpired } from "@/lib/api/sessionEvents"
 import { can } from "@/engine/permissions"
 
 // KyInstance is a generic HTTP client type from the ky library
 
-// ── Session persistence (sessionStorage) ──
+// ── Session persistence (sessionStorage, one slot per App) ──
 //
-// Tokens are workspace-scoped and short-lived (access 15m, refresh 7d).
-// Persisting them to sessionStorage lets a page refresh restore the session
-// without re-authenticating, while keeping them out of localStorage (which
-// would survive browser restarts).
+// Login is per-App (plan app-scoped-login.md D1/D2): a session is scoped to
+// exactly one App, so the storage is keyed by `(workspace, app)` instead of
+// holding a single token. Switching App therefore switches to THAT App's
+// session — no password re-entry while it is still alive, and never a token
+// from another App (the server binds `_meta/ui` to the token's App).
+//
+// Tokens are short-lived (access 15m, refresh 7d). sessionStorage is per-tab
+// and cleared when the tab closes — tokens never survive a browser restart.
+const SESSION_STORAGE_PREFIX = "formspec-session:"
 
-const SESSION_STORAGE_KEY = "formspec-session"
+function storageKey(workspace: string, app: string): string {
+  return `${SESSION_STORAGE_PREFIX}${workspace}:${app}`
+}
 
 interface StoredSession {
   workspace: string
   token: string
   refreshToken: string
-  /** App scope for this session (empty = workspace-level, e.g. _admin). */
-  app?: string
+  /** App scope for this session — required: login is per-App. */
+  app: string
 }
 
-function readStoredSession(): StoredSession | null {
+function readStoredSession(
+  workspace: string,
+  app: string,
+): StoredSession | null {
   try {
-    const raw = sessionStorage.getItem(SESSION_STORAGE_KEY)
+    const raw = sessionStorage.getItem(storageKey(workspace, app))
     if (!raw) return null
     const parsed = JSON.parse(raw) as StoredSession
     return parsed?.token ? parsed : null
@@ -47,15 +61,15 @@ function readStoredSession(): StoredSession | null {
 
 function writeStoredSession(s: StoredSession): void {
   try {
-    sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(s))
+    sessionStorage.setItem(storageKey(s.workspace, s.app), JSON.stringify(s))
   } catch {
     // Ignore (private mode / storage disabled).
   }
 }
 
-function clearStoredSession(): void {
+function clearStoredSession(workspace: string, app: string): void {
   try {
-    sessionStorage.removeItem(SESSION_STORAGE_KEY)
+    sessionStorage.removeItem(storageKey(workspace, app))
   } catch {
     // Ignore.
   }
@@ -64,7 +78,7 @@ function clearStoredSession(): void {
 export interface SessionState {
   /** The workspace slug from the URL (e.g. "acme") */
   workspace: string
-  /** App scope for this session (empty = workspace-level, e.g. _admin). */
+  /** App scope for this session — required: login is per-App. */
   app: string
   /** JWT access token (may be empty in dev mode) */
   token: string
@@ -90,18 +104,26 @@ export interface SessionState {
   setSession: (
     workspace: string,
     token: string,
-    refreshToken?: string,
-    app?: string,
+    refreshToken: string,
+    app: string,
   ) => void
   clearSession: () => void
   /** Mark the session unauthenticated (401 / idle timeout) → login redirect */
   expireSession: () => void
-  boot: (
-    workspace: string,
-    token?: string,
-    refreshToken?: string,
-    app?: string,
-  ) => Promise<void>
+  /**
+   * Restore (or establish) the session for ONE App. An options object, not
+   * positional strings: every field is a string, so a misordered call would
+   * silently put the token in the `app` slot and fetch an anonymous bundle
+   * (that exact bug shipped once — see plan app-scoped-login.md §Sisa).
+   */
+  boot: (opts: {
+    workspace: string
+    /** The App this session is scoped to — required (login is per-App). */
+    app: string
+    /** Explicit tokens (login / OAuth callback). Omitted → restore from storage. */
+    token?: string
+    refreshToken?: string
+  }) => Promise<void>
   /** Refresh the access token (single-flight). Resolves true on success. */
   refreshSession: () => Promise<boolean>
   getClient: () => KyInstance
@@ -119,7 +141,10 @@ let refreshInFlight: Promise<boolean> | null = null
 // login boot is still in flight; the anonymous one finishes last and
 // overwrites the authenticated session (in dev auto-auth the tokenless
 // /_meta/me returns a real identity, so the anonymous guard never fires).
+// The in-flight boot is keyed by App: a boot for App A must never be reused
+// for App B, or B would be handed A's session (one store, many Apps).
 let bootInFlight: Promise<void> | null = null
+let bootInFlightApp = ""
 let bootGeneration = 0
 
 export const useSessionStore = create<SessionState>((set, get) => ({
@@ -136,35 +161,33 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   setSession: (
     workspace: string,
     token: string,
-    refreshToken?: string,
-    app?: string,
+    refreshToken: string,
+    app: string,
   ) => {
     set({
       workspace,
-      app: app ?? "",
+      app,
       token,
-      refreshToken: refreshToken ?? "",
+      refreshToken,
       loaded: true,
       error: null,
       unauthenticated: false,
     })
     if (token) {
-      writeStoredSession({
-        workspace,
-        token,
-        refreshToken: refreshToken ?? "",
-        app: app ?? "",
-      })
-    } else if (readStoredSession()?.workspace === workspace) {
-      // Anonymous (public surface) on the same workspace — drop the session.
-      clearStoredSession()
+      writeStoredSession({ workspace, token, refreshToken, app })
+    } else {
+      // Anonymous entry for this App — drop this App's slot only. Other Apps'
+      // sessions are untouched (that is the point of per-App scoping).
+      clearStoredSession(workspace, app)
     }
   },
 
   clearSession: () => {
-    clearStoredSession()
+    const { workspace, app } = get()
+    if (workspace && app) clearStoredSession(workspace, app)
     set({
       workspace: "",
+      app: "",
       token: "",
       refreshToken: "",
       me: null,
@@ -176,7 +199,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   expireSession: () => {
-    clearStoredSession()
+    const { workspace, app } = get()
+    if (workspace && app) clearStoredSession(workspace, app)
     set({
       token: "",
       refreshToken: "",
@@ -188,32 +212,26 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     })
   },
 
-  boot: (
-    workspace: string,
-    token?: string,
-    refreshToken?: string,
-    app?: string,
-  ) => {
-    // Single-flight: an anonymous re-entry (the AppSurface boot effect
-    // re-running while a login boot is still in flight) must not start a
-    // second concurrent boot — the anonymous one would finish last and
-    // overwrite the authenticated session. A boot with an explicit token
-    // (login) always proceeds so it can invalidate older boots below.
-    if (!token && bootInFlight) return bootInFlight
+  boot: ({ workspace, app, token, refreshToken }) => {
+    // Single-flight: an anonymous re-entry (the surface boot effect re-running
+    // while a login boot is still in flight) must not start a second
+    // concurrent boot — the anonymous one would finish last and overwrite the
+    // authenticated session. A boot with an explicit token (login) always
+    // proceeds so it can invalidate older boots below, and a boot for a
+    // DIFFERENT App always proceeds (it is a different session, not a repeat).
+    if (!token && bootInFlight && bootInFlightApp === app) return bootInFlight
     const gen = ++bootGeneration
     const run = (async () => {
-      // Restore a persisted session (same workspace) when no explicit token is
-      // given — this is what survives a browser refresh.
-      const stored = readStoredSession()
-      const restore = stored !== null && stored.workspace === workspace
-      const effectiveToken = token ?? (restore ? stored.token : "")
-      const effectiveRefresh =
-        refreshToken ?? (restore ? stored.refreshToken : "")
-      const effectiveApp = app ?? (restore ? (stored.app ?? "") : "")
+      // Restore THIS App's persisted session when no explicit token is given —
+      // this is what survives a browser refresh, and what makes switching App
+      // reuse a live session rather than demanding the password again.
+      const stored = readStoredSession(workspace, app)
+      const effectiveToken = token ?? stored?.token ?? ""
+      const effectiveRefresh = refreshToken ?? stored?.refreshToken ?? ""
 
       set({
         workspace,
-        app: effectiveApp,
+        app,
         token: effectiveToken,
         refreshToken: effectiveRefresh,
         loaded: false,
@@ -243,10 +261,11 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       // discard the stale result instead of overwriting the newer state.
       if (gen !== bootGeneration) return
       if (!me) {
-        // fetchMe returns null on 401 — invalid / expired token. Clear the
-        // persisted session and treat as unauthenticated so the auth guard
-        // redirects to the login page instead of showing a connection error.
-        clearStoredSession()
+        // fetchMe returns null on 401 — invalid / expired token. Clear THIS
+        // App's persisted session and treat as unauthenticated so the auth
+        // guard redirects to the login page instead of showing a connection
+        // error. Other Apps' sessions are untouched.
+        clearStoredSession(workspace, app)
         set({
           token: "",
           refreshToken: "",
@@ -261,7 +280,7 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       // as unauthenticated so the auth guard redirects to /login — do NOT
       // fabricate a synthetic identity (that would bypass authorization).
       if (me.user_id === "anonymous") {
-        clearStoredSession()
+        clearStoredSession(workspace, app)
         set({
           token: "",
           refreshToken: "",
@@ -278,12 +297,13 @@ export const useSessionStore = create<SessionState>((set, get) => ({
           workspace,
           token: effectiveToken,
           refreshToken: effectiveRefresh,
-          app: effectiveApp,
+          app,
         })
       }
       set({ me, loaded: true, error: null, unauthenticated: false })
     })()
     bootInFlight = run
+    bootInFlightApp = app
     void run.then(
       () => {
         if (bootInFlight === run) bootInFlight = null

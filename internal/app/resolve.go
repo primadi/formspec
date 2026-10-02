@@ -110,6 +110,21 @@ func Resolve(manifests []manifest.RawManifest, uiReg *ui.Registry) (map[string]*
 		if err := spec.ValidateAppSpec(as); err != nil {
 			return nil, fmt.Errorf("app %q: %w", name, err)
 		}
+		// A private App that presents no auth entry point is a locked door with
+		// no key: login is per-App (plan app-scoped-login.md D1), so the App's
+		// own chrome is the ONLY way in. `chrome.auth: none` on a private App
+		// (or a preset that resolves to it) would leave every user stranded —
+		// and the frontend would render no login route to send them to.
+		//
+		// The check lives here, where the resolved App is built, and reuses the
+		// same `ui.ChromeAcceptsLogin` the /_meta/apps payload and the login
+		// endpoint use: one rule, one implementation, no drift.
+		if as.Access == spec.AppAccessPrivate && !ui.ChromeAcceptsLogin(as.AppRenderer, as.Chrome) {
+			return nil, fmt.Errorf(
+				"app %q: access is private but the chrome exposes no auth entry point "+
+					"(chrome.auth resolves to \"none\") — a private App must provide a way to sign in",
+				name)
+		}
 		// root_url is a free-form mount prefix inside the workspace: "/"
 		// (workspace root — a public landing App may own it, private Apps
 		// boot their session there too) or any "/segment/..." path. The
@@ -135,6 +150,7 @@ func Resolve(manifests []manifest.RawManifest, uiReg *ui.Registry) (map[string]*
 	}
 
 	result := map[string]*ResolvedApp{}
+	knownEntities := entityRefs(manifests)
 	for _, name := range sortedAppNames(apps) {
 		as := apps[name]
 
@@ -151,6 +167,10 @@ func Resolve(manifests []manifest.RawManifest, uiReg *ui.Registry) (map[string]*
 			return nil, fmt.Errorf("app %q: menu: %w", name, err)
 		}
 
+		if err := validateRegisteredViews(name, as, moduleSet, knownEntities, uiReg); err != nil {
+			return nil, err
+		}
+
 		result[name] = &ResolvedApp{
 			Name:    name,
 			Spec:    as,
@@ -160,6 +180,55 @@ func Resolve(manifests []manifest.RawManifest, uiReg *ui.Registry) (map[string]*
 	}
 
 	return result, nil
+}
+
+// entityRefs collects "module/name" for every Entity manifest, so a
+// `registered_views` entry can be checked against what the App can actually
+// mount.
+func entityRefs(manifests []manifest.RawManifest) map[string]bool {
+	refs := map[string]bool{}
+	for _, raw := range manifests {
+		if spec.Kind(raw.Kind) == spec.KindEntity {
+			refs[raw.Metadata.Module+"/"+raw.Metadata.Name] = true
+		}
+	}
+	return refs
+}
+
+// validateRegisteredViews checks that every `registered_views` entry resolves
+// (plan docs_internal/plan/registered-views.md). Existence is a resolve-time
+// concern because it needs the UI and entity registries; ValidateAppSpec only
+// checks shape and module membership.
+//
+// Blocker, not a warning: an entry naming a view/entity that does not exist
+// contributes nothing to the reachable set — the App would silently expose less
+// than its manifest claims.
+func validateRegisteredViews(appName string, as *spec.AppSpec, moduleSet, entities map[string]bool, uiReg *ui.Registry) error {
+	for i, rv := range as.RegisteredViews {
+		if rv.View != "" {
+			mod, vname, ok := strings.Cut(rv.View, "/")
+			if !ok {
+				return fmt.Errorf("app %q: registered_views[%d]: view %q must be \"<module>/<name>\"", appName, i, rv.View)
+			}
+			if !moduleSet[mod] {
+				return fmt.Errorf("app %q: registered_views[%d]: module %q is not in this App's spec.modules", appName, i, mod)
+			}
+			if _, err := uiReg.ResolveViewRoute(mod, vname); err != nil {
+				return fmt.Errorf("app %q: registered_views[%d]: %w", appName, i, err)
+			}
+			continue
+		}
+		canonical, ok := spec.NormalizeEntityRef(rv.Entity)
+		if !ok {
+			return fmt.Errorf("app %q: registered_views[%d]: entity %q must be \"<module>/<entity>\" (or \"<module>.<entity>\")", appName, i, rv.Entity)
+		}
+		if !entities[canonical] {
+			mod, _ := spec.NormalizeEntityRef(rv.Entity)
+			m, _, _ := strings.Cut(mod, "/")
+			return fmt.Errorf("app %q: registered_views[%d]: entity %q not found in module %q", appName, i, rv.Entity, m)
+		}
+	}
+	return nil
 }
 
 func sortedAppNames(apps map[string]*spec.AppSpec) []string {

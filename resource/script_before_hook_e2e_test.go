@@ -33,6 +33,16 @@ func buildHookSpecDir(t *testing.T, dir string) {
 		}
 	}
 
+	write("apps/acme.yaml", `apiVersion: formspec.dev/v1
+kind: App
+metadata:
+  name: acme-app
+spec:
+  version: 1.0.0
+  root_url: /app/acme
+  modules: [acme]
+`)
+
 	write("modules/acme/module.yaml", `apiVersion: formspec.dev/v1
 kind: Module
 metadata: { name: acme }

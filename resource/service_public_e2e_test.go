@@ -72,8 +72,12 @@ func TestServiceAction_PublicActionIsAnonymousCallable(t *testing.T) {
 func TestServiceAction_PublicRouteDoesNotInvertSignedInCallers(t *testing.T) {
 	app := bootPublicServiceApp(t)
 
-	// A real user holding NO grant on this service.
-	seedUser(t, app, "nobody", "pw123456", nil)
+	// A real user holding NO grant on this service. They do hold one harmless
+	// permission elsewhere in the App: login is App-scoped and an App with zero
+	// permissions is refused at the door (plan app-scoped-login.md D6), so
+	// "no grant on this service" is the strongest case that can still hold a
+	// session.
+	seedUser(t, app, "nobody", "pw123456", []string{"demo.invoice.list"})
 	token := login(t, app, "nobody", "pw123456")
 
 	status, out := doAuthed(t, app, http.MethodPost,
@@ -186,6 +190,18 @@ func writePublicServiceSpec(t *testing.T, dir string) {
 			t.Fatal(err)
 		}
 	}
+
+	// Login is per-App (plan app-scoped-login.md D1) — the fixture needs an App
+	// to scope test logins to.
+	write("apps/demo.yaml", `apiVersion: formspec.dev/v1
+kind: App
+metadata:
+  name: demo-app
+spec:
+  version: 1.0.0
+  root_url: /app/demo
+  modules: [demo]
+`)
 
 	write("modules/demo/module.yaml", `apiVersion: formspec.dev/v1
 kind: Module

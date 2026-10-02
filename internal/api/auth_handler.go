@@ -46,9 +46,11 @@ func clientIP(r *http.Request) string {
 type loginRequest struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
-	// App scopes the session to one App (role management is per-App). Empty =
-	// workspace-level session (e.g. the _admin surface).
-	App string `json:"app,omitempty"`
+	// App is REQUIRED: login is per-App (plan app-scoped-login.md D1). The
+	// session — and therefore the permissions baked into the token — is scoped
+	// to exactly one App; a workspace-level session is no longer obtainable
+	// through the login endpoint.
+	App string `json:"app"`
 	// Assignment is the session context the caller wants to act in (TODO 3.8),
 	// as returned in a previous CONTEXT_REQUIRED response (`<role>@<value>`).
 	// Empty = let the server decide: no assignments → boundary-less session,
@@ -117,8 +119,33 @@ func (b *RouterBuilder) HandleLogin() http.HandlerFunc {
 		}
 
 		workspaceID := workspaceFromContext(r.Context())
+		// The App is the login target, not an optional qualifier: refuse before
+		// touching credentials so the contract is unambiguous (D1), and refuse
+		// unknown / public Apps so a mistyped or public App never mints a
+		// useless session (kafe 10.21; plan app-scoped-login.md D6).
+		if req.App == "" {
+			writeError(w, http.StatusBadRequest, "APP_REQUIRED",
+				"app is required — login is scoped to one App")
+			return
+		}
+		if code, msg := b.loginAppCheck(workspaceID, req.App); code != "" {
+			writeError(w, http.StatusBadRequest, code, msg)
+			return
+		}
+
 		pair, err := authService.LoginWithContext(r.Context(), workspaceID, req.App, req.Username, req.Password, req.Assignment)
 		if err != nil {
+			// Authenticated but holds nothing inside this App: close the door
+			// with an honest 403 instead of issuing a dead session (D6).
+			if errors.Is(err, auth.ErrNoAppAccess) {
+				authAuditLog.record(AuthAuditEntry{
+					Timestamp: time.Now().UTC(), Method: "login", Username: req.Username,
+					IP: ip, Result: "failure", Reason: "no_app_access",
+				})
+				writeError(w, http.StatusForbidden, "NO_APP_ACCESS",
+					"you do not have access to this app")
+				return
+			}
 			// A principal with several session contexts must choose one before a
 			// token is issued (TODO 3.8). This is not a credential failure: the
 			// password was already verified, so answering with the choices leaks

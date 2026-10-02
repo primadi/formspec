@@ -40,6 +40,10 @@ func TestUserPasswordHashHook(t *testing.T) {
 		"password":     "secret123",
 		"display_name": "Alice",
 		"active":       true,
+		// Login is App-scoped and an App with zero permissions is refused
+		// (plan app-scoped-login.md D6) — grant alice something in acme-app so
+		// this test stays about the password hook, not authorization.
+		"permissions": []string{"acme.customers.list"},
 	})
 	if status != 201 {
 		t.Fatalf("create user: status %d, body %v", status, out)

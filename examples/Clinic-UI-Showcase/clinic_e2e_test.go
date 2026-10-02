@@ -70,7 +70,9 @@ func newTestApp(t *testing.T) *formspec.App {
 		t.Fatalf("insert admin: %v", err)
 	}
 	status, env := do(t, app.Handler(), "POST", "/default/_ui/auth/login", map[string]any{
-		"username": "admin", "password": "admin",
+		// Login is per-App (plan app-scoped-login.md D1): the internal clinic
+		// App owns the workspace root.
+		"username": "admin", "password": "admin", "app": "klinik-internal",
 	})
 	if status != http.StatusOK {
 		t.Fatalf("login admin: status %d, body %v", status, env)

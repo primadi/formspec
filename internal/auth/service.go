@@ -22,6 +22,14 @@ var ErrInvalidCredentials = errors.New("auth: invalid credentials")
 // ErrSessionRevoked is returned when a refresh token's session no longer exists.
 var ErrSessionRevoked = errors.New("auth: session revoked")
 
+// ErrNoAppAccess is returned when a login is scoped to an App (app != "") but
+// the principal's roles grant no permission inside it. Login is the entry gate
+// for an App (plan app-scoped-login.md D6): issuing a token that can do nothing
+// would strand the user on an empty surface, so the door is closed with an
+// honest 403 instead. Public Apps are exempt (see SetAppAccessFunc) — their
+// anonymous floor keeps a 0-permission session usable.
+var ErrNoAppAccess = errors.New("auth: no access to this app")
+
 // ErrUsernameTaken is returned by Register when the username already exists
 // in the workspace (self-service sign-up, registry portal B.3).
 var ErrUsernameTaken = errors.New("auth: username already taken")
@@ -201,6 +209,13 @@ type Service struct {
 	oauth       map[string]oauth.Provider
 	mailer      Mailer
 
+	// appAllowsAnonymous reports whether an App accepts anonymous access
+	// (`access: public`). Public Apps are exempt from the 0-permission login
+	// gate: their public_entities floor is what authorizes the surface, so a
+	// session without permissions is still useful (registry portal). Wired by
+	// the resource layer, which owns the resolved App set; nil = no exemption.
+	appAllowsAnonymous func(workspace, app string) bool
+
 	// resetTokens holds single-use password-reset tokens (workspace-scoped,
 	// TTL'd). In-memory — adequate for a single resource process; a
 	// distributed deployment would back this with ctx.cache/ctx.db.
@@ -325,6 +340,13 @@ func (s *Service) GetUserByID(ctx context.Context, workspaceID, id string) (*Use
 // SetMaterializer wires the materializer that expands role grants into
 // concrete permission strings (todo 5.12.5).
 func (s *Service) SetMaterializer(m *Materializer) { s.materialize = m }
+
+// SetAppAccessFunc wires the lookup that reports whether an App accepts
+// anonymous access (`access: public`). Used to exempt public Apps from the
+// 0-permission login gate (see ErrNoAppAccess). Nil disables the exemption.
+func (s *Service) SetAppAccessFunc(fn func(workspace, app string) bool) {
+	s.appAllowsAnonymous = fn
+}
 
 // SetMaxSessionsPerUser sets the concurrent session limit per user
 // (todo 6.5.3). 0 (default) means unlimited. When exceeded, the oldest
@@ -637,7 +659,11 @@ func (s *Service) GrantRoles(ctx context.Context, workspaceID, username string, 
 //
 // Returns ErrInvalidCredentials when the provider is unknown or the user is
 // inactive/pending.
-func (s *Service) OAuthLogin(ctx context.Context, workspaceID, providerName, code string) (*TokenPair, error) {
+//
+// app scopes the resulting session to one App (plan app-scoped-login.md D1):
+// permissions are resolved for that App, and an App-scoped session with no
+// permission is refused (ErrNoAppAccess) rather than issued dead.
+func (s *Service) OAuthLogin(ctx context.Context, workspaceID, app, providerName, code string) (*TokenPair, error) {
 	prov := s.OAuthProvider(providerName)
 	if prov == nil {
 		return nil, ErrInvalidCredentials
@@ -657,6 +683,7 @@ func (s *Service) OAuthLogin(ctx context.Context, workspaceID, providerName, cod
 			if !user.Active || user.Status == UserStatusPending {
 				return nil, ErrInvalidCredentials
 			}
+			user.App = app
 			return s.issuePair(ctx, user)
 		}
 	}
@@ -683,6 +710,7 @@ func (s *Service) OAuthLogin(ctx context.Context, workspaceID, providerName, cod
 			user.OAuthProvider = providerName
 			user.OAuthSub = info.ID
 			s.notifyAccountLinked(ctx, user)
+			user.App = app
 			return s.issuePair(ctx, user)
 		}
 		// Verified email. A password account is never silently merged with a
@@ -697,6 +725,7 @@ func (s *Service) OAuthLogin(ctx context.Context, workspaceID, providerName, cod
 			}
 		}
 		s.notifyAccountLinked(ctx, user)
+		user.App = app
 		return s.issuePair(ctx, user)
 	}
 
@@ -741,6 +770,7 @@ func (s *Service) OAuthLogin(ctx context.Context, workspaceID, providerName, cod
 	if err != nil {
 		return nil, err
 	}
+	user.App = app
 	return s.issuePair(ctx, user)
 }
 
@@ -1219,6 +1249,14 @@ func (s *Service) issuePair(ctx context.Context, user *User) (*TokenPair, error)
 	if err != nil {
 		return nil, fmt.Errorf("auth: resolve permissions: %w", err)
 	}
+	// An App-scoped session with zero permissions is a dead session: the App's
+	// own surface would render empty (kafe 10.22). Refuse it at the door so
+	// "logged in but sees nothing" can never happen (plan app-scoped-login.md D6)
+	// — except on a public App, where the anonymous floor is the authorization
+	// and the session is therefore usable.
+	if user.App != "" && len(perms) == 0 && !s.appAllowsAnonymousFor(user.WorkspaceID, user.App) {
+		return nil, ErrNoAppAccess
+	}
 	user.Permissions = perms
 
 	access, err := s.issuer.IssueAccessToken(user)
@@ -1255,7 +1293,7 @@ func (s *Service) issuePair(ctx context.Context, user *User) (*TokenPair, error)
 	}
 	// Concurrent session limit (todo 6.5.3): evict oldest sessions beyond the cap.
 	if s.maxSessions > 0 {
-		if err := s.enforceSessionLimit(ctx, user.ID, user.WorkspaceID); err != nil {
+		if err := s.enforceSessionLimit(ctx, user.ID, user.WorkspaceID, user.App); err != nil {
 			return nil, err
 		}
 	}
@@ -1267,17 +1305,29 @@ func (s *Service) issuePair(ctx context.Context, user *User) (*TokenPair, error)
 	}, nil
 }
 
+// appAllowsAnonymousFor reports whether an App accepts anonymous access.
+// Unknown Apps and an unwired lookup report false (fail closed — the gate
+// applies), so a missing hook can only ever be stricter, never looser.
+func (s *Service) appAllowsAnonymousFor(workspace, app string) bool {
+	if s.appAllowsAnonymous == nil {
+		return false
+	}
+	return s.appAllowsAnonymous(workspace, app)
+}
+
 // enforceSessionLimit evicts the oldest sessions when a user exceeds the
-// configured concurrent session limit (todo 6.5.3).
-func (s *Service) enforceSessionLimit(ctx context.Context, userID, workspaceID string) error {
-	count, err := s.session.CountForUser(ctx, workspaceID, userID)
+// configured concurrent session limit (todo 6.5.3). The limit is applied PER
+// (user, App): logging into App B must not silently sign the user out of
+// App A (plan app-scoped-login.md D2).
+func (s *Service) enforceSessionLimit(ctx context.Context, userID, workspaceID, app string) error {
+	count, err := s.session.CountForUser(ctx, workspaceID, userID, app)
 	if err != nil {
 		return fmt.Errorf("auth: count sessions: %w", err)
 	}
 	if count <= s.maxSessions {
 		return nil
 	}
-	sessions, err := s.session.ListForUser(ctx, workspaceID, userID)
+	sessions, err := s.session.ListForUser(ctx, workspaceID, userID, app)
 	if err != nil {
 		return fmt.Errorf("auth: list sessions: %w", err)
 	}

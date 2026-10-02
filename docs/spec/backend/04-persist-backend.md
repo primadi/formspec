@@ -45,7 +45,7 @@ internalnya):
 
   Perbaikan data (backfill, dedupe sebelum constraint) **bukan** bagian
   structural diff dan bukan pula tipe manifest: ia tindakan operasional sekali
-  jalan di luar spec (`formspec repl -f`).
+  jalan di luar spec (`formspec repl --no-sync -f`).
 
 - **Query resolution.** Memenuhi seluruh filter operator kontrak (`eq`, `gt`,
   `between`, dst. — [`01-core-basic.md`](01-core-basic.md) §6) identik antar

@@ -21,7 +21,9 @@ import (
 )
 
 func runDelete(args []string) {
-	specPath := "spec"
+	// Spec path from formspec-app.yaml (project_defaults.go), like every other
+	// command: `delete` must not resolve a different tree than the server reads.
+	specPath := loadProjectDefaults().SpecPath
 	confirm := false
 	var positional []string
 	for i := 0; i < len(args); i++ {

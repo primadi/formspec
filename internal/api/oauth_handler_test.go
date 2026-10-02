@@ -13,6 +13,7 @@ import (
 	"github.com/primadi/formspec/internal/auth"
 	"github.com/primadi/formspec/internal/auth/oauth"
 	"github.com/primadi/formspec/internal/entity"
+	"github.com/primadi/formspec/pkg/spec"
 	db "github.com/primadi/formspec/renderers/jsonb-persist"
 )
 
@@ -79,7 +80,13 @@ func setupOAuthEnv(t *testing.T) (http.Handler, string) {
 	}
 	svc.SetOAuthProviders(map[string]oauth.Provider{"mock": prov})
 
+	// The App is public, like the registry portal: it accepts login for its
+	// vendor accounts, and a 0-permission session is legitimate because the
+	// anonymous floor authorizes the surface (plan app-scoped-login.md D6).
+	svc.SetAppAccessFunc(func(_, app string) bool { return app == "demo-app" })
+
 	rb := NewRouterBuilder(reg)
+	rb.SetApps(testLoginApps(spec.AppAccessPublic))
 	rb.BuildRoutes()
 	return rb.BuildHTTP(), mockSrv.URL
 }
@@ -87,7 +94,7 @@ func setupOAuthEnv(t *testing.T) (http.Handler, string) {
 func TestOAuth_AuthorizeRedirects(t *testing.T) {
 	handler, _ := setupOAuthEnv(t)
 
-	req := httptest.NewRequest(http.MethodGet, "/demo/_ui/auth/oauth/mock/authorize", nil)
+	req := httptest.NewRequest(http.MethodGet, "/demo/_ui/auth/oauth/mock/authorize?app=demo-app", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -107,7 +114,7 @@ func TestOAuth_Callback_CreatesUserAndIssuesToken(t *testing.T) {
 	handler, _ := setupOAuthEnv(t)
 
 	// 1. Authorize → capture state.
-	req := httptest.NewRequest(http.MethodGet, "/demo/_ui/auth/oauth/mock/authorize", nil)
+	req := httptest.NewRequest(http.MethodGet, "/demo/_ui/auth/oauth/mock/authorize?app=demo-app", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	loc, err := url.Parse(rec.Header().Get("Location"))
@@ -176,7 +183,7 @@ func TestOAuth_Callback_LinkMode_PassesCodeThrough(t *testing.T) {
 
 	// 1. Authorize with ?mode=link → capture state.
 	req := httptest.NewRequest(http.MethodGet,
-		"/demo/_ui/auth/oauth/mock/authorize?mode=link", nil)
+		"/demo/_ui/auth/oauth/mock/authorize?mode=link&app=demo-app", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusFound {
@@ -233,7 +240,7 @@ func (f *apiFakeMailer) BaseURL() string { return f.baseURL }
 // callback's redirect Location.
 func runOAuthCallback(t *testing.T, handler http.Handler) string {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodGet, "/demo/_ui/auth/oauth/mock/authorize", nil)
+	req := httptest.NewRequest(http.MethodGet, "/demo/_ui/auth/oauth/mock/authorize?app=demo-app", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	loc, err := url.Parse(rec.Header().Get("Location"))

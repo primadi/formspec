@@ -158,7 +158,7 @@ func seedKafeAdminToken(t *testing.T, app *App) string {
 		t.Fatalf("insert admin: %v", err)
 	}
 	status, body := doJSON(t, app, http.MethodPost, "/kafe/_ui/auth/login", map[string]any{
-		"username": "admin", "password": "admin",
+		"username": "admin", "password": "admin", "app": "kafe-pos",
 	})
 	if status != http.StatusOK {
 		t.Fatalf("login: status %d body %v", status, body)

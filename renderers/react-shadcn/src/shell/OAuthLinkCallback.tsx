@@ -2,10 +2,10 @@
 //
 // Landing route after the explicit account-linking flow (todo 5.2.21). The
 // backend redirects here (from the provider callback) with the OAuth code in
-// the URL fragment (#code=...&provider=...) when the authorize step was
-// started with ?mode=link. This component restores the signed-in session,
-// POSTs the code to the authenticated link endpoint, and returns to the
-// admin surface.
+// in the URL fragment (#code=...&provider=...&app=...) when the authorize step
+// was started with ?mode=link. This component restores the signed-in session
+// for that App, POSTs the code to the authenticated link endpoint, and returns
+// to the App surface.
 
 import { useEffect, useState } from "react"
 import { useAppNavigate } from "@/lib/navigation"
@@ -27,15 +27,17 @@ export function OAuthLinkCallback() {
       const params = new URLSearchParams(hash)
       const code = params.get("code")
       const provider = params.get("provider")
-      if (!code || !provider) {
+      const app = params.get("app") ?? ""
+      if (!code || !provider || !app) {
         if (!cancelled) {
-          setError("Invalid link callback — missing code or provider.")
+          setError("Invalid link callback — missing code, provider or app.")
         }
         return
       }
-      // Restore the signed-in session (tokens live in sessionStorage). The
-      // link endpoint is authenticated — the user must still be signed in.
-      await boot(workspace)
+      // Restore the signed-in session for this App (tokens live in
+      // sessionStorage, one slot per App). The link endpoint is authenticated
+      // — the user must still be signed in.
+      await boot({ workspace, app })
       const token = useSessionStore.getState().token
       if (!token) {
         if (!cancelled) {
@@ -65,7 +67,10 @@ export function OAuthLinkCallback() {
           toast.success(
             `Linked ${provider.charAt(0).toUpperCase() + provider.slice(1)} account`,
           )
-          navigate(`/${workspace}/_admin`, { replace: true })
+          // Return to the App the user was in. The App's surface path is
+          // unknown here (root_url is free-form), so land on the workspace and
+          // let WorkspaceRoute resolve the App from the path.
+          navigate(`/${workspace}`, { replace: true })
         }
       } catch (err) {
         if (!cancelled) {

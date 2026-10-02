@@ -14,41 +14,34 @@ sudah **dihapus**, isi `src/engine/` kini `derive.ts`, `entityRef.ts`,
 
 ## 2. Tier App
 
-Ketiga archetype App renderer diimplementasikan di shell ini
-([`../../spec/frontend/05-app-kinds.md`](../../spec/frontend/05-app-kinds.md)
-§1). Pemilihan shell per surface dilakukan di `src/App.tsx` dari
-`bundle.app.app_renderer` lewat registry `APP_SHELLS`
-(`sidebar-nav` → `SideNavShell`, `topnav` → `TopNavShell`, `no-nav` →
-`NoNavShell`). Auth (`access`) adalah sumbu terpisah — boot anonim saat
-`access: public`, boot session saat `private`.
+Chrome App dirakit oleh **satu** shell — `src/shell/RegionShell.tsx` — dari
+peta **region** yang di-resolve backend (`bundle.app.chrome.regions`,
+[`../../spec/frontend/05-app-kinds.md`](../../spec/frontend/05-app-kinds.md)
+§5): `topbar`, `sidebar`, `rightbar`, `bottombar`, `footer` (+ `content`
+implicit dari `Outlet`). Setiap region bernilai `none`, `auto` (isi
+archetype), atau `<component-ref>` (dirender lewat `src/shell/AssetRenderer.tsx`).
 
-`sidebar-nav` (default): sidebar statis di desktop, overlay slide-in dengan
-backdrop di mobile (`useMediaQuery("(max-width: 767px)")`, tertutup otomatis
-saat route berganti) — **lengkap**. Nav dibungkus `ScrollArea` (`flex-1 py-2`)
-yang tinggi-nya dibatasi sisa tinggi sidebar, jadi menu yang lebih panjang dari
-viewport bisa di-scroll; primitif `components/ui/scroll-area.tsx` memakai
-`min-h-0` di Root supaya `flex-1` benar-benar meng-clamp (tanpa itu Root tumbuh
-mengikuti isi dan item bawah tak terjangkau) — `src/components/ui/scroll-area.test.tsx`
-mengunci invarian ini untuk kedua varian sidebar.
+**Archetype = preset**, bukan komponen terpisah: `sidebar-nav` = `no-nav` +
+`sidebar: auto`, `topnav` = `no-nav` + `topbar: auto`. Registry `APP_SHELLS`
+(`src/App.tsx`) memetakan ketiganya ke `RegionShell`; perilaku warna lama
+dipertahankan per region (sidebar statis di desktop / overlay di mobile via
+`useMediaQuery("(max-width: 767px)")`, isi topbar berbeda untuk sidebar-nav vs
+topnav vs brand-bar). Preset/derivasi gula berada di `src/shell/regions.ts`
+(paritas dengan `chromeRegionPreset` di `internal/ui/meta.go`).
 
-`topnav`: chrome penuh dengan navigasi atas — brand + nav horizontal
-(item level-1; group → dropdown) + breadcrumb + theme switcher + avatar,
-tanpa sidebar kiri. Mobile → hamburger membuka drawer berisi tree yang sama.
-Menu di-resolve lewat hook bersama `useResolvedMenu` (sama dengan Sidebar).
-Contoh: `examples/arisan/` (`app_renderer: topnav`). **Lengkap.**
+`OverlayHost` kini dipasang untuk **semua** komposisi (dulu absen di
+`no-nav`, sehingga form modal/drawer diam-diam mati di sana).
 
-`no-nav`: chrome minimal **tanpa navigasi sama sekali** — brand bar + footer
-
-- `Outlet`, tanpa sidebar/breadcrumb, tanpa nav link, tanpa auth controls
-  secara default. Komposisi dikontrol `bundle.app.chrome` (frontend/
-  05-app-kinds.md §5, di-resolve backend): App opt-in nav link via
-  `chrome.nav: menu` dan auth controls via `chrome.auth: links|button`
-  (komponen bersama `src/shell/AuthArea.tsx`). Dipakai untuk App `access:
-public` (marketing/landing) maupun `private` (kiosk/full-screen — tetap
-  di-guard surface boot). Blok `section:` pada `kind: Page` dirender oleh
-  `src/components/sections/SectionBlocks.tsx` (hero, feature_grid, card,
-  carousel, cta). Contoh: `examples/storefront/` (`no-nav` + `public`),
-  `registry/` (`no-nav` + `chrome: {nav: menu, auth: links}`). **Lengkap.**
+`no-nav`: tanpa bar **default** — tapi chrome tetap ada dan boleh diisi
+(`regions.topbar: auto` memberi brand bar). Ini yang memberi App publik seperti
+`kafe-qr` tempat menaruh kontrol sesi. Kontrol auth anonim dikendalikan
+`chrome.auth`; user menu (→ Sign out) **selalu** dirender bila ada token
+(`src/shell/AuthArea.tsx`), jadi tak ada lagi App yang mengurung pengguna tanpa
+jalan keluar. Komponen bersama `src/shell/AuthArea.tsx`; blok `section:` pada
+`kind: Page` dirender `src/components/sections/SectionBlocks.tsx`. Contoh:
+`examples/storefront/` (`no-nav` + `public`), `registry/`
+(`no-nav` + `chrome: {nav: menu, auth: links}`), `examples/kafe/`
+(`kafe-qr` publik + brand bar; `kafe-kds` kiosk + tombol auth). **Lengkap.**
 
 ## 3. Tier Page
 

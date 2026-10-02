@@ -29,13 +29,17 @@ import type { ContextChoice } from "@/types/manifest"
 interface SwitchContextScreenProps {
   workspace: string
   choices: ContextChoice[]
-  app?: string
+  /** The App this session is scoped to — login is per-App (D1). */
+  app: string
+  /** In-App login path, for the "sign in again" escape hatch. */
+  loginPath: string
 }
 
 export function SwitchContextScreen({
   workspace,
   choices,
   app,
+  loginPath,
 }: SwitchContextScreenProps) {
   const navigate = useAppNavigate()
   const refreshToken = useSessionStore((s) => s.refreshToken)
@@ -54,7 +58,7 @@ export function SwitchContextScreen({
         body: JSON.stringify({
           refresh_token: refreshToken,
           assignment,
-          ...(app ? { app } : {}),
+          app,
         }),
       })
       if (!res.ok) {
@@ -116,7 +120,7 @@ export function SwitchContextScreen({
             type="button"
             onClick={() => {
               useSessionStore.getState().clearSession()
-              navigate(`/${workspace}/_admin/login`, { replace: true })
+              navigate(loginPath, { replace: true })
             }}
             className="cursor-pointer text-muted-foreground underline"
           >

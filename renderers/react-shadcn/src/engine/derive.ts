@@ -207,7 +207,15 @@ function deriveFormRenderMode(
 }
 
 /**
- * Derive default menu entries for an entity.
+ * Derive default menu entries for an entity list, grouped by module.
+ *
+ * UNUSED since the derived admin surface was retired (plan
+ * `docs_internal/plan/app-scoped-login.md` D4): it existed solely to build the
+ * `_admin` sidebar from `bundle.entities`. App menus are authored
+ * (`App.spec.menu`), so nothing derives navigation any more. Kept exported for
+ * callers that want a mechanical module→entity tree (e.g. a custom asset); do
+ * not wire it back into the shell — an unscoped generated menu is exactly the
+ * affordance that was removed.
  */
 export function deriveMenuItems(entities: EntitySchema[]): MenuItem[] {
   const byModule = new Map<string, EntitySchema[]>()

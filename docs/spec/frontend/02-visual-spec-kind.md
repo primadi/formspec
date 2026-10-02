@@ -6,7 +6,8 @@
 > eksplisit sebagai **Open**.
 
 ## 1. Peran
-Meta-kind untuk mendeklarasikan *jenis view baru* tanpa mengubah framework
+
+Meta-kind untuk mendeklarasikan _jenis view baru_ tanpa mengubah framework
 inti: skema instance + kontrak yang wajib dipenuhi renderernya. Precedent-nya
 `MockupModule` kind — pola meta-kind yang sama, diterapkan ke lapisan visual.
 
@@ -16,24 +17,26 @@ kind: VisualSpecKind
 metadata:
   name: kanban
 spec:
-  tier: page                 # WAJIB — app | page | component
-  schema: {...}              # field wajib di instance spec (mis. columns, card_fields)
-  renderer_contract: {...}   # interface yang WAJIB dipenuhi renderer manapun
+  tier: page # WAJIB — app | page | component
+  schema: { ... } # field wajib di instance spec (mis. columns, card_fields)
+  renderer_contract: { ... } # interface yang WAJIB dipenuhi renderer manapun
 ```
 
 Instance yang ditulis app developer tetap seperti Form kind sekarang — cuma
 `kind: Kanban` alih-alih `kind: Form`.
 
 ## 2. Field `tier` (wajib)
+
 `app | page | component` — menentukan di mana kind ini boleh dipakai/
 dikomposisi:
+
 - Tanpa `tier` eksplisit, `formspec apply` tidak tahu apakah `kind: Kanban` boleh
   dipasang langsung sebagai isi route App (perlu `tier: page`), atau cuma boleh
   mengisi slot milik Page lain (`tier: component`).
 - `tier` juga jadi dasar validasi slot compatibility (§4): `accepts_slots`
   hanya sah dideklarasikan `VisualSpecKind` bertier `page` (atau `app`, bila
   App-level slot dibutuhkan); `implements_slot` hanya sah dari `tier:
-  component`.
+component`.
 - Shell **tidak** termasuk nilai `tier` — Shell bukan sesuatu yang
   dideklarasikan lewat VisualSpecKind sama sekali; ia wadah yang menghosting
   App/Page/Component renderer via `Renderer.stack_family`
@@ -41,6 +44,7 @@ dikomposisi:
   [`01-visual-hierarchy.md`](01-visual-hierarchy.md) §2).
 
 ## 3. Skema Instance — Shell-Agnostic
+
 `spec.schema` adalah kontrak instance yang ditulis app developer — **satu
 definisi dipakai semua Shell** tanpa ditulis ulang (mis. Kanban yang sama
 dipakai baik oleh Shell shadcn/React maupun Shell Flutter, hanya dengan
@@ -49,6 +53,7 @@ menulis kontrak sekali, dapat web app dan mobile app dari spec yang sama —
 lihat [`01-visual-hierarchy.md`](01-visual-hierarchy.md) §5.
 
 ## 4. Slot System
+
 Perluasan `VisualSpecKind` untuk pola "Page tertentu menerima Component
 tertentu di posisi tertentu" (mis. Dashboard menerima Widget) — dideklarasikan
 sebagai **slot**: lubang dengan kontrak data-shape, bukan referensi ke
@@ -61,7 +66,7 @@ metadata:
   name: dashboard
 spec:
   tier: page
-  schema: {...}
+  schema: { ... }
   accepts_slots:
     - name: widget
       contract:
@@ -75,8 +80,8 @@ kind: VisualSpecKind
 metadata:
   name: kpi-widget
 spec:
-  tier: component            # WAJIB component — formspec apply menolak implements_slot dari tier lain
-  schema: {...}
+  tier: component # WAJIB component — formspec apply menolak implements_slot dari tier lain
+  schema: { ... }
   implements_slot: widget
 ```
 
@@ -92,7 +97,19 @@ spec:
       data_binding: sales-summary
 ```
 
+**Region chrome standar (`tier: app`).** Selain slot yang dideklarasikan
+`VisualSpecKind`, `kind: App` memiliki himpunan region **intrinsik** — `topbar`,
+`sidebar`, `rightbar`, `bottombar`, `footer`
+([`05-app-kinds.md`](05-app-kinds.md) §5). Region ini tidak perlu
+dideklarasikan `accepts_slots`: setiap komponen `tier: component` boleh
+mendeklarasikan `implements_slot: <region>` dan dipasang lewat
+`App.spec.chrome.regions.<region>`. Kontraknya mengikuti slot biasa
+(`contract.required_props` global, mis. `user`/`settings` dari context) —
+perbedaan satu-satunya adalah lubangnya sudah disediakan shell, bukan
+dideklarasikan per-App.
+
 **Batasan v1:**
+
 1. Slot filling hanya valid dalam satu Shell yang sama (mengisi slot = berbagi
    render tree, aturan yang sama dengan `stack_family` —
    [`01-visual-hierarchy.md`](01-visual-hierarchy.md) §3).
@@ -102,6 +119,7 @@ spec:
    Component-di-dalam-Component didefer sampai ada use case mendesak).
 
 ## 5. Validasi `formspec apply`
+
 `formspec apply` memvalidasi `tier` sebelum menerima slot binding:
 `accepts_slots` hanya sah dari `tier: page` (atau `app`); `implements_slot`
 hanya sah dari `tier: component`. Kombinasi lain (mis. Page mendeklarasikan
@@ -109,6 +127,7 @@ hanya sah dari `tier: component`. Kombinasi lain (mis. Page mendeklarasikan
 apply — tidak dibiarkan lolos ke runtime.
 
 ## 6. Menambah Jenis View Baru
+
 Siapa pun bisa mendefinisikan `VisualSpecKind` baru sama sekali (mis.
 `seat-map-booking`) plus Renderer resminya
 ([`03-renderer-kind.md`](03-renderer-kind.md)). Distribusi lewat marketplace

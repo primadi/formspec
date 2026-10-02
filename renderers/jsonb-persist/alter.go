@@ -347,7 +347,10 @@ func (r *MigrationRunner) measureChanges(ctx context.Context, ti *TableInfo, ent
 			if err != nil {
 				return nil, err
 			}
-			c.Measure(n, "repair the duplicates first — run the repair once via `formspec repl`, then apply again")
+			// `defs` holds the index as *declared*, so the remedy an operator is
+			// handed must be runnable: `--no-sync` is what opens a datastore whose
+			// schema sync this change is refusing.
+			c.Measure(n, "repair the duplicates first — run the repair once via `formspec repl --no-sync -f repair.star` (write through ctx.db()), then apply again")
 
 		case c.Kind == ChangeTypeChanged && c.Projected:
 			f := fieldByName(entity, c.Name)

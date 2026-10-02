@@ -59,9 +59,9 @@ export function LoginScreen({
   const [error, setError] = useState<string | null>(null)
   // Set when the server answers 409 CONTEXT_REQUIRED: the principal holds
   // several assignments (role × branch) and must state which one to act in.
-  const [contextChoices, setContextChoices] = useState<
-    ContextChoice[] | null
-  >(null)
+  const [contextChoices, setContextChoices] = useState<ContextChoice[] | null>(
+    null,
+  )
 
   // Configured external auth providers (auth redesign Fase 5) — a button per
   // provider redirects to the authorize endpoint. Select the raw value (stable
@@ -509,7 +509,10 @@ export function LoginScreen({
                 {oauthProviders.map((name) => (
                   <a
                     key={name}
-                    href={`/${effectiveWorkspace}/_ui/auth/oauth/${name}/authorize`}
+                    href={
+                      `/${effectiveWorkspace}/_ui/auth/oauth/${name}/authorize` +
+                      (app ? `?app=${encodeURIComponent(app)}` : "")
+                    }
                     className="flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/50"
                   >
                     Sign in with {name.charAt(0).toUpperCase() + name.slice(1)}

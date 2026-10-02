@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -24,6 +25,10 @@ import (
 type oauthState struct {
 	Workspace string
 	Provider  string
+	// App is the App the login was started from (plan app-scoped-login.md D1):
+	// the callback issues an App-scoped session and lands the user on that
+	// App's surface.
+	App string
 	// Mode distinguishes the two authorize flows: "" = login (the callback
 	// runs OAuthLogin and redirects with a token pair), "link" = explicit
 	// account linking (the callback passes the code through to the SPA link
@@ -39,7 +44,7 @@ var (
 	oauthStateClean = time.Now()
 )
 
-func newOAuthState(workspace, provider, mode string) string {
+func newOAuthState(workspace, provider, mode, app string) string {
 	b := make([]byte, 16)
 	_, _ = rand.Read(b)
 	state := hex.EncodeToString(b)
@@ -47,6 +52,7 @@ func newOAuthState(workspace, provider, mode string) string {
 	oauthStates[state] = oauthState{
 		Workspace: workspace,
 		Provider:  provider,
+		App:       app,
 		Mode:      mode,
 		Expires:   time.Now().Add(oauthStateTTL),
 	}
@@ -101,7 +107,20 @@ func (b *RouterBuilder) HandleOAuthAuthorize() http.HandlerFunc {
 		// the callback redirects to the SPA link callback instead of running
 		// OAuthLogin. Any other value (or none) is the normal login flow.
 		mode := r.URL.Query().Get("mode")
-		state := newOAuthState(workspaceID, providerName, mode)
+		// ?app= names the App being signed into. Login is per-App (plan
+		// app-scoped-login.md D1), so it is required and validated here — a
+		// public or unknown App never starts a flow that cannot finish.
+		app := r.URL.Query().Get("app")
+		if app == "" {
+			writeError(w, http.StatusBadRequest, "APP_REQUIRED",
+				"app is required — login is scoped to one App")
+			return
+		}
+		if code, msg := b.loginAppCheck(workspaceID, app); code != "" {
+			writeError(w, http.StatusBadRequest, code, msg)
+			return
+		}
+		state := newOAuthState(workspaceID, providerName, mode, app)
 		redirectURL := "/" + workspaceID + "/_ui/auth/oauth/" + providerName + "/callback"
 		http.Redirect(w, r, prov.AuthorizeURL(state, redirectURL), http.StatusFound)
 	}
@@ -148,10 +167,10 @@ func (b *RouterBuilder) HandleOAuthCallback() http.HandlerFunc {
 			return
 		}
 
-		pair, err := authService.OAuthLogin(r.Context(), st.Workspace, providerName, code)
+		pair, err := authService.OAuthLogin(r.Context(), st.Workspace, st.App, providerName, code)
 		if err != nil {
-			// Redirect to login with an error fragment so the SPA can show it.
-			// Distinct fragments let the SPA explain the account
+			// Redirect to the App's own login with an error fragment so the SPA
+			// can show it. Distinct fragments let the SPA explain the account
 			// pre-hijacking cases (unverified email / explicit link required).
 			frag := "oauth=error"
 			switch {
@@ -159,19 +178,34 @@ func (b *RouterBuilder) HandleOAuthCallback() http.HandlerFunc {
 				frag = "oauth=email_unverified"
 			case errors.Is(err, auth.ErrAccountLinkRequired):
 				frag = "oauth=link_required"
+			case errors.Is(err, auth.ErrNoAppAccess):
+				frag = "oauth=no_app_access"
 			}
-			http.Redirect(w, r,
-				"/"+st.Workspace+"/_admin/login#"+frag,
-				http.StatusFound)
+			http.Redirect(w, r, b.appLoginPath(st.Workspace, st.App)+"#"+frag, http.StatusFound)
 			return
 		}
 
-		// Deliver tokens via the URL fragment (not sent to the server).
+		// Deliver tokens via the URL fragment (not sent to the server). The app
+		// tells the SPA which App-scoped session to boot and which surface to
+		// land on; the callback route itself stays a framework route (D5).
 		http.Redirect(w, r,
 			"/"+st.Workspace+"/_admin/oauth/callback#token="+pair.AccessToken+
-				"&refresh_token="+pair.RefreshToken,
+				"&refresh_token="+pair.RefreshToken+
+				"&app="+url.QueryEscape(st.App),
 			http.StatusFound)
 	}
+}
+
+// appLoginPath builds the in-App login path for a resolved App: the App's own
+// root_url + "/login" (plan app-scoped-login.md D1). Falls back to the
+// workspace + "/app/login" when the App is unknown — the surface will 404 the
+// App anyway, but the redirect must never point at the retired `_admin` login.
+func (b *RouterBuilder) appLoginPath(workspace, app string) string {
+	root := "/app"
+	if a, ok := b.apps[app]; ok && a.Spec != nil && a.Spec.RootURL != "" {
+		root = strings.TrimSuffix(a.Spec.RootURL, "/")
+	}
+	return "/" + workspace + root + "/login"
 }
 
 // oauthLinkRequest is the POST /auth/oauth/{provider}/link body.

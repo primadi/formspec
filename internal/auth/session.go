@@ -41,14 +41,19 @@ type SessionStore interface {
 	Get(ctx context.Context, workspace, jti string) (*Session, bool)
 	// Delete removes the session for jti within the given workspace.
 	Delete(ctx context.Context, workspace, jti string) error
-	// DeleteForUser revokes all sessions for a user within a workspace.
+	// DeleteForUser revokes all sessions for a user within a workspace
+	// (logout-all-devices — spans every App).
 	DeleteForUser(ctx context.Context, workspace, userID string) error
-	// CountForUser returns the number of active sessions for a user
-	// (concurrent session limit, todo 6.5.3).
-	CountForUser(ctx context.Context, workspace, userID string) (int, error)
-	// ListForUser returns the active sessions for a user, oldest first
-	// (used to evict the oldest when the concurrent limit is exceeded).
-	ListForUser(ctx context.Context, workspace, userID string) ([]Session, error)
+	// CountForUser returns the number of active sessions for a user within
+	// ONE App (concurrent session limit, todo 6.5.3). An empty app counts
+	// workspace-level sessions. Scoping per App is what lets per-App login
+	// coexist with the limit: signing into App B must never evict the
+	// user's session in App A (plan app-scoped-login.md D2).
+	CountForUser(ctx context.Context, workspace, userID, app string) (int, error)
+	// ListForUser returns the active sessions for a user within one App,
+	// oldest first (used to evict the oldest when the concurrent limit is
+	// exceeded).
+	ListForUser(ctx context.Context, workspace, userID, app string) ([]Session, error)
 	// PurgeExpired deletes all sessions whose expires_at is in the past
 	// (cleanup job, todo 6.5.5). Returns the number purged.
 	PurgeExpired(ctx context.Context) (int, error)
@@ -139,18 +144,18 @@ func (s *EntitySessionStore) DeleteForUser(ctx context.Context, workspace, userI
 	return nil
 }
 
-// CountForUser returns the number of active sessions for a user.
-func (s *EntitySessionStore) CountForUser(ctx context.Context, workspace, userID string) (int, error) {
-	res, err := s.listForUser(ctx, workspace, userID)
+// CountForUser returns the number of active sessions for a user within one App.
+func (s *EntitySessionStore) CountForUser(ctx context.Context, workspace, userID, app string) (int, error) {
+	res, err := s.listForUser(ctx, workspace, userID, app)
 	if err != nil {
 		return 0, err
 	}
 	return len(res), nil
 }
 
-// ListForUser returns the active sessions for a user, oldest first.
-func (s *EntitySessionStore) ListForUser(ctx context.Context, workspace, userID string) ([]Session, error) {
-	recs, err := s.listForUser(ctx, workspace, userID)
+// ListForUser returns the active sessions for a user within one App, oldest first.
+func (s *EntitySessionStore) ListForUser(ctx context.Context, workspace, userID, app string) ([]Session, error) {
+	recs, err := s.listForUser(ctx, workspace, userID, app)
 	if err != nil {
 		return nil, err
 	}
@@ -168,15 +173,23 @@ func (s *EntitySessionStore) ListForUser(ctx context.Context, workspace, userID 
 	return out, nil
 }
 
-// listForUser returns the raw session records for a user, oldest first.
-func (s *EntitySessionStore) listForUser(ctx context.Context, workspace, userID string) ([]db.EntityRecord, error) {
+// listForUser returns the raw session records for a user, oldest first,
+// optionally narrowed to one App. The app filter is applied ONLY when app is
+// non-empty: legacy/workspace-level sessions store an empty app, and an
+// `eq ""` filter would silently exclude every App-scoped session instead
+// (the caller that passes "" wants the workspace-level bucket).
+func (s *EntitySessionStore) listForUser(ctx context.Context, workspace, userID, app string) ([]db.EntityRecord, error) {
+	filters := map[string]db.FilterOp{
+		"user_id": {Op: "eq", Value: userID},
+	}
+	if app != "" {
+		filters["app"] = db.FilterOp{Op: "eq", Value: app}
+	}
 	res, err := s.store.List(ctx, db.ListParams{
 		WorkspaceID: workspace,
 		PerPage:     100,
 		Sort:        "created_at",
-		Filters: map[string]db.FilterOp{
-			"user_id": {Op: "eq", Value: userID},
-		},
+		Filters:     filters,
 	})
 	if err != nil {
 		return nil, err

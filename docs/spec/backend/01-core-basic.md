@@ -767,8 +767,14 @@ Sebuah constraint hanya bisa ditambahkan setelah datanya memenuhi syarat, dan
 duplikat muncul justru **karena** constraint-nya belum ada. Spec tidak
 menyediakan tempat untuk DML: kalau masih ada duplikat, migrasi **ditolak dengan
 hitungannya** ("3 grup duplikat"), operator merapikan datanya sekali lewat
-`formspec repl -f repair.star`, lalu apply dijalankan lagi. Backfill besar
+`formspec repl --no-sync -f repair.star`, lalu apply dijalankan lagi. Backfill besar
 berjalan lewat jalur yang sama.
+
+`--no-sync` bukan kenyamanan: penolakan migrasi berlaku juga pada boot console
+(`formspec repl` menyelaraskan schema seperti boot lain), sehingga tanpa flag itu
+perintah yang ditunjuk pesan penolakan gagal dengan pesan penolakan yang sama.
+Flag itu **hanya** membuka datastore tanpa menyentuh schema — ia tidak melewati
+gerbang untuk boot normal.
 
 Pemisahan ini disengaja: spec menyatakan **bentuk storage**, sedangkan perbaikan
 data adalah tindakan operasional yang jejaknya ada di riwayat shell/ops, bukan di

@@ -46,6 +46,7 @@ import type {
 import { FormaApiError } from "@/types/manifest"
 import { useSessionStore } from "@/stores/session"
 import { useMetaStore } from "@/stores/meta"
+import { findWizardForTransition } from "@/engine/wizardCommit"
 import { canDoEntityAction } from "@/engine/permissions"
 import {
   deriveTable,
@@ -124,6 +125,11 @@ export default function TableRenderer({
   const me = useSessionStore((s) => s.me)
   const getClient = useSessionStore((s) => s.getClient)
   const metaBundle = useMetaStore((s) => s.bundle)
+  // Wizards ship in the bundle; one bound to an action (`spec.action === via`)
+  // is the UI for that transition, so this table launches it instead of POSTing
+  // the action route — which a via-only transition does not have (`has_route:
+  // false`). Same rule as DetailPage (plan wizard-commit-patch-dan-peluncur.md).
+  const wizards = useMetaStore((s) => s.bundle?.wizards) ?? []
 
   // Resolved global settings → centralized formatter (spec §10).
   const formatter = useMemo(
@@ -806,6 +812,19 @@ export default function TableRenderer({
     if (!me) return
     if (!canDoEntityAction(me, entity, action.action)) {
       toast.error("You don't have permission to perform this action")
+      return
+    }
+
+    // A wizard bound to this action OWNS the flow (same rule as DetailPage):
+    // it collects the inputs the transition needs. Without this the click fell
+    // through to `POST /{entity}/{id}/{action}` — a route a via-only transition
+    // does not have — so the row action 404'd.
+    const wizard = findWizardForTransition(wizards, entity, action.action)
+    if (wizard) {
+      const query = new URLSearchParams()
+      const rowId = getEntityRouteSegment(entity, row)
+      if (rowId) query.set("id", rowId)
+      navigate(`${surfacePath("wizard", wizard.name)}?${query.toString()}`)
       return
     }
 

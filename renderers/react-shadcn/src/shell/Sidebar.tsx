@@ -97,7 +97,7 @@ export function Sidebar({
   const bundle = useMetaStore((s) => s.bundle)
   const me = useSessionStore((s) => s.me)
 
-  // Resolved menu shared with TopNavShell (permission + when filtered).
+  // Resolved menu shared with the topbar fill (permission + when filtered).
   const { items: menuItems, basePath: surfacePrefix } = useResolvedMenu()
 
   if (!bundle || !me) return null

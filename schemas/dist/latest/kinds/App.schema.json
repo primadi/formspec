@@ -115,6 +115,16 @@
         "$ref": "#/$defs/AppInterface"
       }
     },
+    "registered_views": {
+      "description": "Extra views this App exposes beyond its menu: exactly one of entity (module/entity) or view (module/name) per entry",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/RegisteredViewDecl"
+      },
+      "examples": [
+        "[{view: cafe-order/menu-catalog}, {entity: cafe-master/menu-item}]"
+      ]
+    },
     "renderers": {
       "description": "Renderers maps a VisualSpecKind name → renderer for the whole App",
       "type": "object",

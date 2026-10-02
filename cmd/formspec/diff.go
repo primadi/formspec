@@ -21,8 +21,12 @@ import (
 )
 
 func runDiff(args []string) {
-	specPath := "spec"
-	dsn := "sqlite:.formspec/data.db"
+	// Defaults from formspec-app.yaml (project_defaults.go) — `diff` is documented
+	// as "compare local spec against DEPLOYED state", and the deployed state is
+	// the database the config file names, not a literal default.
+	d := loadProjectDefaults()
+	specPath := d.SpecPath
+	dsn := d.DSN
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "-f", "--spec", "-spec":

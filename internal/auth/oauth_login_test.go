@@ -39,7 +39,7 @@ func TestService_OAuthLogin_NewUser(t *testing.T) {
 		"github": &mockOAuthProvider{name: "github", info: oauthInfo("gh-1", "dev@example.com")},
 	})
 
-	pair, err := svc.OAuthLogin(ctx, "demo", "github", "code123")
+	pair, err := svc.OAuthLogin(ctx, "demo", "", "github", "code123")
 	if err != nil {
 		t.Fatalf("OAuthLogin: %v", err)
 	}
@@ -88,7 +88,7 @@ func TestService_OAuthLogin_SameIdentity(t *testing.T) {
 		"github": &mockOAuthProvider{name: "github", info: oauthInfo("gh-1", "dev@example.com")},
 	})
 
-	pair, err := svc.OAuthLogin(ctx, "demo", "github", "code123")
+	pair, err := svc.OAuthLogin(ctx, "demo", "", "github", "code123")
 	if err != nil {
 		t.Fatalf("OAuthLogin: %v", err)
 	}
@@ -131,7 +131,7 @@ func TestService_OAuthLogin_UnverifiedEmail_Blocked(t *testing.T) {
 	})
 
 	// The real owner's OAuth login must NOT land in the unverified account.
-	if _, err := svc.OAuthLogin(ctx, "demo", "google", "code123"); err != ErrEmailUnverified {
+	if _, err := svc.OAuthLogin(ctx, "demo", "", "google", "code123"); err != ErrEmailUnverified {
 		t.Fatalf("expected ErrEmailUnverified, got %v", err)
 	}
 }
@@ -158,7 +158,7 @@ func TestService_OAuthLogin_UnverifiedEmail_Takeover(t *testing.T) {
 		"google": &mockOAuthProvider{name: "google", info: oauthInfo("g-1", "victim@example.com")},
 	})
 
-	pair, err := svc.OAuthLogin(ctx, "demo", "google", "code123")
+	pair, err := svc.OAuthLogin(ctx, "demo", "", "google", "code123")
 	if err != nil {
 		t.Fatalf("OAuthLogin: %v", err)
 	}
@@ -208,7 +208,7 @@ func TestService_OAuthLogin_VerifiedPasswordAccount_LinkRequired(t *testing.T) {
 		"google": &mockOAuthProvider{name: "google", info: oauthInfo("g-1", "owner@example.com")},
 	})
 
-	if _, err := svc.OAuthLogin(ctx, "demo", "google", "code123"); err != ErrAccountLinkRequired {
+	if _, err := svc.OAuthLogin(ctx, "demo", "", "google", "code123"); err != ErrAccountLinkRequired {
 		t.Fatalf("expected ErrAccountLinkRequired, got %v", err)
 	}
 }
@@ -236,7 +236,7 @@ func TestService_OAuthLogin_VerifiedNoPassword_AttachIdentity(t *testing.T) {
 		"google": &mockOAuthProvider{name: "google", info: oauthInfo("g-1", "dev@example.com")},
 	})
 
-	pair, err := svc.OAuthLogin(ctx, "demo", "google", "code123")
+	pair, err := svc.OAuthLogin(ctx, "demo", "", "google", "code123")
 	if err != nil {
 		t.Fatalf("OAuthLogin: %v", err)
 	}
@@ -257,7 +257,7 @@ func TestService_OAuthLogin_UnknownProvider(t *testing.T) {
 	svc, _, _ := setupAuthService(t)
 	ctx := context.Background()
 
-	_, err := svc.OAuthLogin(ctx, "demo", "nonexistent", "code")
+	_, err := svc.OAuthLogin(ctx, "demo", "", "nonexistent", "code")
 	if err != ErrInvalidCredentials {
 		t.Fatalf("expected ErrInvalidCredentials, got %v", err)
 	}
@@ -276,7 +276,7 @@ func TestService_OAuthLogin_ApprovalPolicy_Pending(t *testing.T) {
 	})
 
 	// New user under approval policy → pending → cannot log in yet.
-	_, err := svc.OAuthLogin(ctx, "demo", "github", "code123")
+	_, err := svc.OAuthLogin(ctx, "demo", "", "github", "code123")
 	if err != ErrInvalidCredentials {
 		t.Fatalf("expected ErrInvalidCredentials (pending), got %v", err)
 	}
@@ -319,7 +319,7 @@ func TestService_LinkOAuthIdentity(t *testing.T) {
 	}
 
 	// The identity is now linked — a subsequent OAuth login works directly.
-	pair, err := svc.OAuthLogin(ctx, "demo", "google", "code123")
+	pair, err := svc.OAuthLogin(ctx, "demo", "", "google", "code123")
 	if err != nil {
 		t.Fatalf("OAuthLogin after link: %v", err)
 	}

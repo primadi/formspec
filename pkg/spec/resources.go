@@ -182,6 +182,49 @@ type AppSpec struct {
 	//     else in the same modules requires authentication.
 	// @schema {example: "[{entity: catalog/product, actions: [list, find]}]", description: "Allowlist of anonymous entity actions for a public App: absent = legacy module-wide, [] = none, list = exactly those pairs"}
 	PublicEntities *[]PublicEntityDecl `yaml:"public_entities,omitempty" json:"public_entities,omitempty"`
+
+	// RegisteredViews declares the extra views this App exposes beyond its
+	// menu (plan docs_internal/plan/registered-views.md). The reachable surface
+	// of an App is "every menu leaf target ∪ RegisteredViews": anything in
+	// neither is NOT routable — the SPA registers no route, so a direct URL
+	// answers 404 even when the caller holds its permissions.
+	//
+	// Menu targets register themselves (both `view:` leaves, resolved through
+	// ResolveViewRoute, and raw `route:` leaves), so this field exists for views
+	// that navigation does not reach — chiefly an App with no menu at all, or a
+	// route reached from an authored page.
+	//
+	// Each entry names exactly one of:
+	//   - entity: "<module>/<entity>" — every derived view of the entity
+	//     (list/detail/create/edit). Action-level limits remain a job for RBAC.
+	//   - view:   "<module>/<name>"   — one registered navigable view (Page,
+	//     Form, Table, Dashboard, Report, Wizard, Kanban, Timeline, Calendar,
+	//     Listing, Print, ApprovalInbox, NotificationCenter).
+	//
+	// This is SURFACE curation (least privilege), not a data authorization
+	// boundary: entity data routes are workspace/module-scoped, not per-App.
+	// RBAC and `public_entities` remain the data guards.
+	// @schema {example: "[{view: cafe-order/menu-catalog}, {entity: cafe-master/menu-item}]", description: "Extra views this App exposes beyond its menu: exactly one of entity (module/entity) or view (module/name) per entry"}
+	RegisteredViews []RegisteredViewDecl `yaml:"registered_views,omitempty" json:"registered_views,omitempty"`
+}
+
+// RegisteredViewDecl is one extra view an App exposes beyond its menu
+// (App.spec.registered_views — plan docs_internal/plan/registered-views.md).
+// Exactly one of Entity/View is set:
+//
+//   - Entity grants every derived view of one entity (list/detail/create/edit);
+//   - View grants one registered navigable view by name.
+//
+// Entity accepts "module/entity" or "module.entity" (normalized via
+// NormalizeEntityRef); View accepts "module/name". The module MUST be one of the
+// App's spec.modules, so a declaration can never reach outside the App bundle.
+// Existence of the referenced entity/view is checked at resolve time (it needs
+// the UI/entity registries).
+type RegisteredViewDecl struct {
+	// @schema {example: "cafe-master/menu-item"}
+	Entity string `yaml:"entity,omitempty" json:"entity,omitempty"`
+	// @schema {example: "cafe-order/menu-catalog"}
+	View string `yaml:"view,omitempty" json:"view,omitempty"`
 }
 
 // PublicEntityDecl grants anonymous access to one entity's actions on a public
@@ -272,6 +315,24 @@ const (
 	ChromeButton = "button"
 )
 
+// ChromeRegionNames are the fixed regions of the App shell
+// (frontend/05-app-kinds.md §4.2). `content` is implicit (the page Outlet) and
+// is deliberately not addressable: a manifest never replaces the page area.
+//
+// A region's content is `none` (region absent), `auto` (the archetype's
+// predefined fill) or a component reference (`module/name` of a
+// `tier: component` visual spec declaring `implements_slot: <region>`).
+var ChromeRegionNames = []string{"topbar", "sidebar", "rightbar", "bottombar", "footer"}
+
+// ChromeRegionSet is the membership test for ChromeRegionNames.
+var ChromeRegionSet = map[string]bool{
+	"topbar":    true,
+	"sidebar":   true,
+	"rightbar":  true,
+	"bottombar": true,
+	"footer":    true,
+}
+
 // AppChrome fine-tunes which chrome elements the App shell renders
 // (frontend/05-app-kinds.md §4.1). Orthogonal to AppRenderer (layout
 // archetype) and Access (auth axis): every element defaults to "auto" —
@@ -303,6 +364,19 @@ type AppChrome struct {
 	// page (e.g. "/portal/profile"). When set, the auth-area user menu
 	// renders a Profile item navigating there; empty = no Profile item.
 	ProfileRoute string `yaml:"profile_route,omitempty" json:"profile_route,omitempty"`
+	// Regions is the general chrome model (§4.2): a region → content map over
+	// the fixed region set (ChromeRegionNames). Each value is `none` (region
+	// absent), `auto` (the archetype's predefined fill) or a component
+	// reference (`module/name`, validated like a Page ref). Explicit regions
+	// override the archetype preset; `none` is how you *remove* a predefined
+	// region (e.g. `{sidebar: none}` on sidebar-nav).
+	//
+	// The boolean fields above are sugar over the same composition: they tune
+	// the CONTENT of an `auto` region (brand/nav/breadcrumbs/theme_switcher/
+	// auth) or toggle a region wholesale (`footer`), and never conflict —
+	// an explicit `regions` entry always wins.
+	// @schema {example: "sidebar: auto", description: "Chrome regions — topbar/sidebar/rightbar/bottombar/footer → none | auto | <component-ref>"}
+	Regions map[string]string `yaml:"regions,omitempty" json:"regions,omitempty"`
 }
 
 // AppAuth overrides the auth screens and chrome auth area for one App
@@ -1184,6 +1258,50 @@ func ValidateAppSpec(a *AppSpec) error {
 			}
 		}
 	}
+	// registered_views (S4): the App's extra surface beyond its menu. Each entry
+	// names exactly one of entity/view, must reference a module the App mounts,
+	// and may not be duplicated. Existence of the referenced entity/view is
+	// checked at resolve time (it needs the UI/entity registries).
+	if len(a.RegisteredViews) > 0 {
+		mounted := make(map[string]bool, len(a.Modules))
+		for _, m := range a.Modules {
+			mounted[m] = true
+		}
+		seen := make(map[string]bool, len(a.RegisteredViews))
+		for i, rv := range a.RegisteredViews {
+			hasEntity := rv.Entity != ""
+			hasView := rv.View != ""
+			if hasEntity == hasView {
+				return fmt.Errorf("registered_views[%d]: exactly one of `entity` or `view` is required", i)
+			}
+			if hasEntity {
+				canonical, ok := NormalizeEntityRef(rv.Entity)
+				if !ok {
+					return fmt.Errorf("registered_views[%d]: entity %q must be \"<module>/<entity>\" (or \"<module>.<entity>\")", i, rv.Entity)
+				}
+				mod, _, _ := strings.Cut(canonical, "/")
+				if !mounted[mod] {
+					return fmt.Errorf("registered_views[%d]: module %q is not mounted by this App (spec.modules)", i, mod)
+				}
+				if seen["entity/"+canonical] {
+					return fmt.Errorf("registered_views[%d]: %q is declared more than once", i, rv.Entity)
+				}
+				seen["entity/"+canonical] = true
+				continue
+			}
+			if err := validatePageRef(fmt.Sprintf("registered_views[%d].view", i), rv.View); err != nil {
+				return err
+			}
+			mod, _, _ := strings.Cut(rv.View, "/")
+			if !mounted[mod] {
+				return fmt.Errorf("registered_views[%d]: module %q is not mounted by this App (spec.modules)", i, mod)
+			}
+			if seen["view/"+rv.View] {
+				return fmt.Errorf("registered_views[%d]: %q is declared more than once", i, rv.View)
+			}
+			seen["view/"+rv.View] = true
+		}
+	}
 	if a.PersistBackend != "" && !InstalledPersistBackends[a.PersistBackend] {
 		return fmt.Errorf("persist_backend %q is not installed (installed: %s — implements %s)", a.PersistBackend, DefaultPersistBackend, EntityPersistContract)
 	}
@@ -1205,6 +1323,22 @@ func ValidateAppSpec(a *AppSpec) error {
 		}
 		if err := validateChromeValue("chrome.theme_switcher", c.ThemeSwitcher, ChromeAuto, ChromeShow, ChromeHide); err != nil {
 			return err
+		}
+		for region, content := range c.Regions {
+			if !ChromeRegionSet[region] {
+				return fmt.Errorf("chrome.regions: unknown region %q (valid: %s)", region, strings.Join(ChromeRegionNames, ", "))
+			}
+			if strings.TrimSpace(content) == "" {
+				return fmt.Errorf("chrome.regions.%s: value must not be empty (use %q to remove the region)", region, ChromeNone)
+			}
+			// `none`/`auto` are the two reserved values; anything else is a
+			// component reference and must be a well-formed `module/name`.
+			if content == ChromeNone || content == ChromeAuto {
+				continue
+			}
+			if err := validatePageRef("chrome.regions."+region, content); err != nil {
+				return err
+			}
 		}
 	}
 	if a.Auth != nil {
